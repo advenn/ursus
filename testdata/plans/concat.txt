@@ -1,0 +1,7 @@
+UNION diagonal (2 inputs)
+  PROJECT [col("k").cast(Int64).alias("k"), col("v"), lit(null:Float64).alias("x")]
+    MEMORY SCAN 1 rows
+      projection: [k, v] (2/2 cols)
+  PROJECT [col("k"), lit(null:String).alias("v"), col("x")]
+    MEMORY SCAN 1 rows
+      projection: [k, x] (2/2 cols)

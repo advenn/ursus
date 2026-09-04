@@ -1,0 +1,107 @@
+# Suite definitions.
+#
+# `min_free_gb_per_unit` is what the preflight gate multiplies by the requested
+# size to decide whether this machine can run the suite honestly. The multiplier
+# is deliberately generous: the eager engines in the field need several times the
+# on-disk footprint, and a run that dips into swap produces numbers that look
+# real and are not.
+
+[suites.pdsh]
+label   = "PDS-H (TPC-H, 22 queries)"
+unit    = "scale"          # SF; 1.0 ~= 1.05 GB of raw table data
+queries = ["q1","q2","q3","q4","q5","q6","q7","q8","q9","q10","q11",
+           "q12","q13","q14","q15","q16","q17","q18","q19","q20","q21","q22"]
+# Approximate on-disk size of the normalised parquet tree, per SF.
+gb_per_unit          = 0.25
+# Free RAM required per SF before the gate lets a run start.
+min_free_gb_per_unit = 5.0
+min_free_gb_floor    = 2.0
+min_disk_gb_per_unit = 3.0
+
+[suites.h2o]
+label   = "h2o.ai db-benchmark (groupby + join)"
+unit    = "rows"
+queries = ["gb1","gb2","gb3","gb4","gb5","gb6","gb7","gb8","gb9","gb10",
+           "j1","j2","j3","j4","j5"]
+# 1e7 rows ~= 0.5 GB CSV.
+gb_per_unit          = 5.0e-8
+min_free_gb_per_unit = 4.0e-7
+min_free_gb_floor    = 3.0
+min_disk_gb_per_unit = 3.0e-7
+
+[suites.micro]
+label   = "ursus micro-ops (Go, benchstat)"
+unit    = "none"
+queries = []
+gb_per_unit          = 0.0
+min_free_gb_per_unit = 0.0
+min_free_gb_floor    = 2.0
+min_disk_gb_per_unit = 0.0
+
+# Human-readable descriptions, used by the report generator.
+[queries.pdsh]
+q1  = "Pricing summary: filter + 2-key groupby with 8 aggregates + sort"
+q2  = "Minimum cost supplier: correlated min() rewritten as groupby + join"
+q3  = "Shipping priority: 3-way join, filter, groupby, top-10"
+q4  = "Order priority checking: EXISTS -> semi join"
+q5  = "Local supplier volume: 6-way join + groupby"
+q6  = "Forecasting revenue change: single-table filter + sum (scan-bound)"
+q7  = "Volume shipping: 5-way join, date extraction, 3-key groupby"
+q8  = "National market share: 7-way join, conditional aggregate"
+q9  = "Product type profit measure: 6-way join, substring match, groupby"
+q10 = "Returned item reporting: 4-way join, groupby, top-20"
+q11 = "Important stock identification: scalar-subquery threshold via two collects"
+q12 = "Shipping modes and order priority: join + conditional aggregates"
+q13 = "Customer distribution: left join + count + groupby of a groupby"
+q14 = "Promotion effect: join + conditional sum ratio"
+q15 = "Top supplier: aggregate view + max threshold + join"
+q16 = "Parts/supplier relationship: anti join + n_unique groupby"
+q17 = "Small-quantity-order revenue: correlated avg -> groupby + join + filter"
+q18 = "Large volume customer: having-subquery -> semi join, top-100"
+q19 = "Discounted revenue: equi join on partkey then an OR-of-conjunctions filter"
+q20 = "Potential part promotion: nested correlated subqueries -> groupby + semi joins"
+q21 = "Suppliers who kept orders waiting: self semi join + self anti join"
+q22 = "Global sales opportunity: phone prefix substring + scalar avg + anti join"
+
+# How a query's answer is turned into something comparable across engines.
+#
+# PDS-H answers are at most a few hundred rows, so they are compared in full.
+# h2o answers are not: a join at N=1e7 produces tens of millions of rows and
+# gb10 groups by all six keys. For those the comparison is on row count plus the
+# sum of a fixed column list — the same check the h2o benchmark itself applies.
+# The list is fixed here rather than derived from each engine's output so that a
+# difference in which non-key columns an engine happens to carry through a join
+# cannot turn into a false mismatch.
+[checksum.h2o]
+gb1  = ["v1"]
+gb2  = ["v1"]
+gb3  = ["v1", "v3"]
+gb4  = ["v1", "v2", "v3"]
+gb5  = ["v1", "v2", "v3"]
+gb6  = ["median_v3", "sd_v3"]
+gb7  = ["range_v1_v2"]
+gb8  = ["largest2_v3"]
+gb9  = ["r2"]
+gb10 = ["v3", "cnt"]
+j1   = ["v1", "v2"]
+j2   = ["v1", "v2"]
+j3   = ["v1", "v2"]
+j4   = ["v1", "v2"]
+j5   = ["v1", "v2"]
+
+[queries.h2o]
+gb1  = "sum v1 by id1 (large-cardinality string groups)"
+gb2  = "sum v1 by id1, id2 (medium-cardinality string groups)"
+gb3  = "sum v1, mean v3 by id3 (small-cardinality string groups)"
+gb4  = "mean v1, v2, v3 by id4 (large-cardinality integer groups)"
+gb5  = "sum v1, v2, v3 by id6 (small-cardinality integer groups)"
+gb6  = "median v3, sd v3 by id4, id5"
+gb7  = "max v1 - min v2 by id3 (range over small groups)"
+gb8  = "largest two v3 by id6 (top-n within group)"
+gb9  = "regression: sum(v1*v2)/... by id2, id4"
+gb10 = "sum v3, count by id1..id6 (six-key grouping)"
+j1   = "inner join large to small on integer"
+j2   = "inner join large to medium on integer"
+j3   = "left join large to medium on integer"
+j4   = "join large to medium on varchar"
+j5   = "join large to large on integer"

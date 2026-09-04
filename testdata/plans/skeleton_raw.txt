@@ -1,0 +1,4 @@
+PROJECT [col("id"), col("price")]
+  FILTER [(col("price") > lit(5))]
+    MEMORY SCAN 6 rows
+      projection: * (6 cols)

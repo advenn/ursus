@@ -1,0 +1,4 @@
+PROJECT [col("id"), col("__win0").alias("region_total"), col("__win1").alias("rk")]
+  WINDOW [col("price").sum().over(col("region")).alias("__win0"), col("price").rank(dense, desc).over(col("region")).alias("__win1")]
+    MEMORY SCAN 6 rows
+      projection: [id, region, price] (3/6 cols)

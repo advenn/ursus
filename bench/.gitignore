@@ -1,0 +1,7 @@
+data/
+answers/
+results/
+bin/
+.venv/
+__pycache__/
+*.pyc

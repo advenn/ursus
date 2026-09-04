@@ -1,0 +1,130 @@
+# Engine registry.
+#
+# `lang`    go | python        — decides how the driver builds the command line
+# `kind`    dataframe | sql    — sql engines share engines/sql/<suite>/<q>.sql
+# `binary`  runner | runner-cgo — go only; runner-cgo needs `make setup-cgo`
+# `entry`   python only; module executed with `python -m <entry>`
+# `group`   uv dependency group that must be synced first (optional)
+# `max_scale` / `max_rows`      hard ceiling; above it the engine is skipped
+#                               with status=unsupported rather than OOM-ing the box
+# `skip_queries`                queries this engine cannot express at all
+#
+# Setting `enabled = false` keeps an engine in the registry but out of the
+# default run; `make bench ENGINES=<name>` still selects it explicitly.
+
+# ------------------------------------------------------------- the subject --
+
+[engines.ursus]
+lang    = "go"
+kind    = "dataframe"
+binary  = "runner"
+enabled = true
+suites  = ["pdsh", "h2o"]
+label   = "ursus (Go)"
+notes   = "The library under test. Public API only, reached via a replace directive."
+
+# --------------------------------------------------------- python contenders
+
+[engines.polars]
+lang    = "python"
+kind    = "dataframe"
+entry   = "engines.py.polars_runner"
+enabled = true
+suites  = ["pdsh", "h2o"]
+label   = "polars"
+notes   = "Lazy API + collect(). The reference ursus is modelled on."
+
+[engines.pandas]
+lang    = "python"
+kind    = "dataframe"
+entry   = "engines.py.pandas_runner"
+enabled = true
+suites  = ["pdsh", "h2o"]
+label   = "pandas"
+max_scale = 1.0
+max_rows  = 1e7
+notes   = "Fully eager. Ceilings are low on purpose: pandas needs roughly 10x the on-disk size in RAM."
+
+[engines.duckdb]
+lang    = "python"
+kind    = "sql"
+entry   = "engines.py.duckdb_runner"
+enabled = true
+suites  = ["pdsh", "h2o"]
+label   = "duckdb"
+notes   = "Also produces the reference answers every other engine is validated against."
+
+[engines.datafusion]
+lang    = "python"
+kind    = "sql"
+entry   = "engines.py.datafusion_runner"
+group   = "datafusion"
+enabled = true
+suites  = ["pdsh", "h2o"]
+label   = "datafusion"
+notes   = "Enable after `uv sync --group datafusion`."
+
+[engines.chdb]
+lang    = "python"
+kind    = "sql"
+entry   = "engines.py.chdb_runner"
+group   = "chdb"
+enabled = true
+suites  = ["pdsh", "h2o"]
+label   = "chdb"
+notes   = "Enable after `uv sync --group chdb`. Large wheel (~500 MB)."
+
+# ------------------------------------------------------------- go contenders
+
+[engines.duckdbgo]
+lang    = "go"
+kind    = "sql"
+binary  = "runner-cgo"
+tag     = "duckdb"
+enabled = true
+suites  = ["pdsh", "h2o"]
+label   = "duckdb-go"
+notes   = "github.com/duckdb/duckdb-go via database/sql, running the same SQL as the Python duckdb engine. The honest ceiling for a Go program. Reports `unsupported` until `make setup-cgo` builds runner-cgo."
+
+[engines.chdbgo]
+lang    = "go"
+kind    = "sql"
+binary  = "runner-cgo"
+tag     = "chdb"
+enabled = false
+suites  = ["pdsh", "h2o"]
+label   = "chdb-go"
+notes   = "github.com/chdb-io/chdb-go. Needs libchdb.so (upstream update_libchdb.sh) plus `make setup-cgo`; off by default because the shared library is a large separate download."
+
+[engines.arrowgo]
+lang    = "go"
+kind    = "dataframe"
+binary  = "runner"
+enabled = true
+suites  = ["pdsh"]
+label   = "arrow-go"
+skip_queries = ["q1","q2","q3","q4","q5","q7","q8","q9","q10","q11",
+                "q12","q13","q14","q15","q16","q17","q18","q19","q20","q21","q22"]
+notes   = "Not a competitor: arrow-go's compute package has no aggregate, hash-aggregate or join kernels, so only q6 (scan + filter + total) is expressible. It is the raw-Arrow floor. ursus is built on arrow-go, so the q6 gap between the two is what ursus's plan, evaluator and pipeline cost over the layer they sit on."
+
+[engines.gota]
+lang    = "go"
+kind    = "dataframe"
+binary  = "runner"
+enabled = true
+suites  = ["h2o"]
+label   = "gota"
+max_rows = 1e7
+skip_queries = ["gb7","gb8","gb9","gb10","j1","j2","j3","j4","j5"]
+notes   = "go-gota/gota. Eager, CSV-only (no Parquet reader), no expression language. Runs the six basic group-bys; everything else needs a window, a join or arithmetic over aggregates. Needs IO=csv."
+
+[engines.qframe]
+lang    = "go"
+kind    = "dataframe"
+binary  = "runner"
+enabled = true
+suites  = ["h2o"]
+label   = "qframe"
+max_rows = 1e7
+skip_queries = ["gb6","gb7","gb8","gb9","gb10","j1","j2","j3","j4","j5"]
+notes   = "tobgu/qframe. Immutable and faster than gota, but CSV-only and its built-in aggregations are sum/max/min (+avg for floats only). Runs gb1-gb5; no median, stddev, window or join. Needs IO=csv."

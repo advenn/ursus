@@ -1,0 +1,3 @@
+AGGREGATE [col("region")] -> [col("price").sum().alias("s")]
+  MEMORY SCAN 6 rows
+    projection: [region, price] (2/6 cols)

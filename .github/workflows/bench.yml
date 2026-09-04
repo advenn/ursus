@@ -1,0 +1,88 @@
+name: bench
+
+# Correctness regression gate for the benchmark suite, not a performance gate.
+#
+# Timings from a shared GitHub runner are not worth recording — the machine is
+# noisy, its core count varies, and this suite goes to some trouble elsewhere to
+# make measurements comparable. What IS worth checking on a schedule is that
+# every ported query still produces the right answer: 22 PDS-H queries across
+# ursus, polars, pandas and duckdb, all validated against the duckdb reference.
+# A change to the optimiser, a kernel or a join can break one of those without
+# breaking a unit test.
+#
+# Opt-in: manual dispatch, plus a nightly run. It does not gate pull requests.
+
+on:
+  workflow_dispatch:
+    inputs:
+      scale:
+        description: 'PDS-H scale factor'
+        default: '0.1'
+      engines:
+        description: 'comma-separated engines (empty = all enabled)'
+        default: 'ursus,polars,pandas,duckdb'
+  schedule:
+    # 04:00 UTC daily.
+    - cron: '0 4 * * *'
+
+env:
+  GOEXPERIMENT: simd
+  GOAMD64: v3
+
+jobs:
+  correctness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: bench
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.0'
+          check-latest: false
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: setup
+        run: make setup
+
+      - name: generate SF${{ inputs.scale || '0.1' }}
+        run: make gen SF=${{ inputs.scale || '0.1' }} FORCE=1
+
+      - name: reference answers
+        run: make answers SF=${{ inputs.scale || '0.1' }}
+
+      # One iteration: this job asks whether the answers are right, not how
+      # fast they arrive. FORCE=1 because the preflight gate is calibrated for
+      # a machine someone is actually benchmarking on.
+      - name: run
+        run: |
+          make run \
+            SF=${{ inputs.scale || '0.1' }} \
+            ENGINES=${{ inputs.engines || 'ursus,polars,pandas,duckdb' }} \
+            ITERATIONS=1 FORCE=1
+
+      - name: validate
+        run: |
+          make validate \
+            SF=${{ inputs.scale || '0.1' }} \
+            ENGINES=${{ inputs.engines || 'ursus,polars,pandas,duckdb' }}
+
+      - name: report
+        if: always()
+        run: make report
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-results
+          path: |
+            bench/results/REPORT.md
+            bench/results/timings.csv
+            bench/results/validation.csv
+            bench/results/dashboard.html

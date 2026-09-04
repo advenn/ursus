@@ -1,0 +1,3 @@
+DISTINCT [region]
+  MEMORY SCAN 6 rows
+    projection: [region] (1/6 cols)

@@ -1,0 +1,4 @@
+LIMIT 3
+  SORT [col("price") DESC NULLS FIRST] top 3
+    MEMORY SCAN 6 rows
+      projection: [id, price] (2/6 cols)

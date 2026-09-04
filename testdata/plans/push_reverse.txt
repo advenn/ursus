@@ -1,0 +1,5 @@
+PROJECT [col("id")]
+  REVERSE
+    FILTER [(col("price") > lit(5))]
+      MEMORY SCAN 6 rows
+        projection: [id, price] (2/6 cols)

@@ -1,0 +1,31 @@
+[project]
+name = "ursus-bench"
+version = "0.0.0"
+description = "Benchmark harness for the ursus dataframe library"
+requires-python = ">=3.11"
+
+# The driver itself plus the engines that always participate. Kept deliberately
+# small: heavy or fragile engines live in dependency groups below so a broken
+# wheel for one of them cannot block the whole suite.
+dependencies = [
+    "duckdb>=1.1",
+    "jinja2>=3.1",
+    "matplotlib>=3.9",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "polars>=1.0",
+    "psutil>=6.0",
+    "pyarrow>=17.0",
+    "rich>=13.0",
+    "tpchgen-cli>=1.0",
+]
+
+[dependency-groups]
+# uv sync --group chdb        (ClickHouse embedded; large wheel)
+chdb = ["chdb>=2.0"]
+# uv sync --group datafusion  (Apache DataFusion python bindings)
+datafusion = ["datafusion>=43"]
+
+[tool.uv]
+# Not an installable package — just a dependency set plus scripts run from cwd.
+package = false

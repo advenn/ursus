@@ -1,0 +1,7 @@
+JOIN SEMI [col("k")] = [col("k")]
+  left:
+    MEMORY SCAN 5 rows
+      projection: [k, lv] (2/2 cols)
+  right:
+    MEMORY SCAN 1 rows
+      projection: [k] (1/3 cols)

@@ -1,0 +1,4 @@
+FILTER [col("id").is_in(lit(1), lit(3))]
+  PROJECT [col("id"), when((col("price") > lit(10))).then(lit("high")).otherwise(lit("low")).alias("band"), when(col("discount").is_not_null()).then(col("discount")).otherwise(lit(0)).alias("disc")]
+    MEMORY SCAN 6 rows
+      projection: * (6 cols)

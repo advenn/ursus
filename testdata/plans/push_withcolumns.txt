@@ -1,0 +1,4 @@
+PROJECT [col("id"), col("d")]
+  WITH_COLUMNS [(col("price") * lit(2)).alias("d")]
+    MEMORY SCAN 6 rows
+      projection: [id, price] (2/6 cols)

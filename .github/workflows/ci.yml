@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  # Mandatory: package `simd` does not compile without it.
+  GOEXPERIMENT: simd
+  GOAMD64: v3
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.0'
+          check-latest: false
+      - run: go build ./...
+      - run: go vet ./...
+      - name: import-level invariants
+        run: go run ./internal/gen/levels
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Vector width is a RUNTIME property (GODEBUG=simd=N reselects it at
+        # process start), so a single-width test run proves almost nothing.
+        #
+        #   512 — this hardware's native width; 8 float64 lanes == 1 bitmap byte,
+        #         the coincidence that hides sub-byte bitmap bugs.
+        #   256 — 4 lanes: catches ToArch() type assertions hardcoded to Mask64x8.
+        #   128 — 2 lanes: bitmap writes straddle bytes. The width that finds
+        #         accumulate-and-flush bugs in movemask packing.
+        #     0 — software emulation, where ToArch() returns an unnameable
+        #         simd/internal/bridge type. Exercises the scalar fallback path.
+        width: ['512', '256', '128', '0']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.0'
+      - name: test (GODEBUG=simd=${{ matrix.width }})
+        run: go test -count=1 ./...
+        env:
+          GODEBUG: simd=${{ matrix.width }}
+
+  scalar-only:
+    # Proves the library still builds and passes with the experiment off, i.e.
+    # that the scalar twin of every kernel is real and reachable.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.0'
+      - run: go test -count=1 ./...
+        env:
+          GOEXPERIMENT: ''
+
+  race:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.0'
+      - run: go test -race -count=1 ./...
+
+  riskgate:
+    # The arrow-go foundational claims. Allowed to be slow; must never be skipped.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.0'
+      - run: go test -run TestRiskGate -v ./internal/arrowx/

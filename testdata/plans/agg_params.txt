@@ -1,0 +1,3 @@
+AGGREGATE [col("region")] -> [col("amount").quantile(0.5, linear).alias("p50"), col("amount").quantile(0.99, nearest).alias("p99"), col("amount").std(1).alias("sd")]
+  MEMORY SCAN 7 rows
+    projection: [region, amount] (2/4 cols)
