@@ -6,7 +6,8 @@ execution, Arrow memory, SIMD kernels.
 
 | File | What it is | Read it when |
 | --- | --- | --- |
-| [`step-19-as-built.md`](./step-19-as-built.md) | **Start here.** gb7's wrong answer, fixed — and the cause was a bug in **arrow-go**, not ursus: an operator-precedence typo in `alignedBitmapOp` made `BitmapAnd`/`Or`/`AndNot` silently drop the last EIGHT bits of any result whose source had a non-zero offset. Read it for the bisect that overturned the obvious suspect, and for why a test that already swept unaligned offsets could not see it. h2o is now 15/15. | Always. Authoritative over everything below. |
+| [`step-20-as-built.md`](./step-20-as-built.md) | **Start here.** `extremumAcc` rewritten from one heap `*data.Column` per group to flat typed slices — h2o gb7 goes from 23x slower than polars to 1.6x, and from 1.91 GB to 0.23 GB. **h2o now validates 15/15**, so nothing in the report is struck through for the first time. Also: a test of mine that was vacuous until rewritten, a CI guard whose first version would have failed under `bash -e`, and `make run` silently timing a stale binary. | Always. Authoritative over everything below. |
+| [`step-19-as-built.md`](./step-19-as-built.md) | gb7's wrong answer, fixed — and the cause was a bug in **arrow-go**, not ursus: an operator-precedence typo in `alignedBitmapOp` made `BitmapAnd`/`Or`/`AndNot` silently drop the last EIGHT bits of any result whose source had a non-zero offset. Read it for the bisect that overturned the obvious suspect, and for why a test that already swept unaligned offsets could not see it. h2o is now 15/15. | Always. Authoritative over everything below. |
 | [`step-18-as-built.md`](./step-18-as-built.md) | The sort and the per-row string allocation — the first step scoped by a PROFILER rather than a design doc. `ArgSort` was 42% of hot-path CPU and 99.85% of that was `sort.SliceStable`; the fix was noticing that `OrderKeyF64` already produced exactly the key a radix sort wants and was being recomputed on every comparison. Window rank 5.1x, sort 3.2x, and 51x fewer allocations in the Parquet scan. Also: how the baseline had to be recorded twice, and two teeth checks that could not fire. | Always. Authoritative over everything below. |
 | [`step-17-as-built.md`](./step-17-as-built.md) | Parallel hash aggregation — `Sink.Merge` runs in production for the first time, sixteen steps after it was written. The group-id remap it had been waiting for, two gates (order-insensitivity and no memory limit) that decline rather than approximate, and the first step driven by a MEASUREMENT: `bench/` holds a full TPC-H + h2o harness whose report was stale by twenty queries. 4.76x in memory, 1.0–2.8x end to end, and a documented reason why one query gains nothing. Also finds a pre-existing wrong answer. | Always. Authoritative over everything below. |
 | [`step-16-as-built.md`](./step-16-as-built.md) | The optimizer's second half: constant folding, boolean identities, dead-filter removal and identity-`Project` removal, behind the `SimplifyExprs` flag that had been declared and unread since v0.1. Why folding is INJECTED through a `ConstEvaluator` interface rather than imported — `internal/plan` still has no Arrow dependency, and a test now asserts it. Two claims the design doc got wrong and the code disproves: the rule needs `Once`, not `UntilStable`, and division by zero is not the folding hazard. | Always. Authoritative over everything below. |
@@ -113,9 +114,13 @@ machinery and **h2o validates 15/15**. The suspected cause — `assembleRows`
 discarding a validity bitmap it computes — was innocent; step 19 §2 has the
 bisect.
 
-`extremumAcc` is still 76x slower than polars (a heap `*data.Column` per group, a
-map per batch, a `Take` and a `concatColumn` per group per batch). That is now a
-pure performance item with its own before/after, not a correctness one.
+**Step 20 removed `extremumAcc`'s per-group `*data.Column`**, which was the last
+large measured gap: gb7 went 28.5 s → 2.0 s and 1.91 GB → 0.23 GB, from 23x
+polars to 1.6x. The clearest remaining allocation win is now **the CSV reader**,
+which still makes 3,177,442 allocations per `ScanCSV` — the exact defect Parquet
+lost in step 18, fixable with the same `data.NewStringParts`. After that: the six
+`map[string]int32` hash tables (~11% of CPU), the serial join probe (j1–j5 at
+6–15x), and string sort keys still on the comparator fallback.
 
 Then, roughly in order: **`JoinWhere`**, the one §7 join with no implementation and
 no prerequisite left; **the join probe and parallel join build**; **CSE**, the last

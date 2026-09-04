@@ -111,8 +111,14 @@ bench: preflight setup
 	@$(DRIVER) report
 
 ## run              : run only (assumes data and answers already exist)
+#
+# Depends on setup-go, and that is not tidiness. Without it `make run` happily
+# times whatever binary happens to be in bin/ — which silently measured code from
+# a previous session and reported h2o gb7 as 38s and FAILING VALIDATION when the
+# working tree had it at 2.4s and correct. A benchmark that measures the wrong
+# build is worse than no benchmark, because the number looks real.
 .PHONY: run
-run:
+run: setup-go
 	@$(DRIVER) run $(COMMON)
 
 ## validate         : check every engine result against the duckdb reference

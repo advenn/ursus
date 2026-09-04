@@ -110,12 +110,19 @@ make bench        # gen -> reference answers -> run -> validate -> report
 
 See [`bench/README.md`](./bench/README.md) for what is timed and why.
 
-**On the published numbers:** `bench/results/REPORT.md` is generated from the last
-full harness run and currently predates the parallel-aggregation, sort and
-scan work, so it understates the engine. Treat it as a floor, and regenerate with
-`make bench` on a quiet machine for a current picture. ursus is not yet as fast as
-polars or duckdb; where it is behind and why is recorded rather than glossed —
-see [`context_files/`](./context_files/).
+[`bench/results/REPORT.md`](./bench/results/REPORT.md) is checked in. Every result
+in it is validated against a duckdb reference, and a disagreement is struck
+through rather than quietly reported as a fast number.
+
+**How current it is, precisely.** The PDS-H table and h2o's `gb7` row are freshly
+measured. The other fourteen h2o rows predate the parallel-aggregation, sort and
+min/max work, so the h2o geomean **understates the engine** — re-running that
+suite takes tens of minutes of full CPU and is not something to do casually.
+Timings come from a laptop under real conditions, so treat small differences as
+noise and the ordering as the signal.
+
+ursus is not as fast as polars or duckdb. Where it is behind and why is recorded
+rather than glossed — see [`context_files/`](./context_files/).
 
 ---
 

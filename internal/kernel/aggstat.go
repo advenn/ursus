@@ -495,15 +495,15 @@ func quantileOf(v []float64, q float64, interp expr.Interpolation) float64 {
 // newBoolExtremum builds Any and AllTrue.
 //
 // On a Boolean column false sorts below true, so the largest value is "any is true"
-// and the smallest is "all are true" — extremumAcc computes both already, over the
-// total order, with nulls skipped and an all-null group returning NULL. There is no
-// second implementation, only a second name.
+// and the smallest is "all are true" — extremumBool computes both already, with
+// nulls skipped and an all-null group returning NULL. There is no second
+// implementation, only a second name.
 //
 // They are separate AggOps rather than sugar for Min and Max so that Explain prints
 // any() and the type error for a non-Boolean operand names the function the user
 // actually called.
 func newBoolExtremum(op expr.AggOp) Accumulator {
-	return &extremumAcc{out: dtype.Bool, max: op == expr.AggAny}
+	return &extremumBool{out: dtype.Bool, max: op == expr.AggAny}
 }
 
 func (a *varAcc) NBytes() int64 {

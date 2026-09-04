@@ -5,3 +5,11 @@ bin/
 .venv/
 __pycache__/
 *.pyc
+
+# REPORT.md is the one artefact worth publishing: it is the human-readable
+# summary the README points at, and small. Everything else under results/ stays
+# ignored — timings.csv and summary.json churn on every run, plots/ and raw/ are
+# binary, and dashboard.html is generated from the same data.
+!results/
+results/*
+!results/REPORT.md

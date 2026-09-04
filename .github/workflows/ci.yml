@@ -49,7 +49,37 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.27.0'
+
+      # ubuntu-latest is a MIX of hardware. Asking for a width the CPU does not
+      # have is not a soft failure — package simd panics in its init:
+      #
+      #   panic: Requested GODEBUG=gosimd=512 is larger than the simd length
+      #          (256) supported on this cpu
+      #
+      # so the 512 leg went red or green purely by which runner it drew. Skipping
+      # rather than clamping is deliberate: clamping to 256 would run that width
+      # twice and report it as 512 coverage, which is a worse lie than an honest
+      # skip. All four widths still run locally via `make test-all`.
+      - name: detect supported vector width
+        id: simdcap
+        run: |
+          # `if` rather than `grep ... && have=256`: GitHub runs this under
+          # bash -e, so a failing grep at the end of an && chain would fail the
+          # step on exactly the runners this exists to protect.
+          have=128
+          if grep -qw avx2    /proc/cpuinfo; then have=256; fi
+          if grep -qw avx512f /proc/cpuinfo; then have=512; fi
+          want='${{ matrix.width }}'
+          echo "runner supports up to ${have}-bit vectors"
+          if [ "$want" = "0" ] || [ "$want" -le "$have" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=simd=$want skipped::this runner supports at most ${have}-bit vectors"
+          fi
+
       - name: test (GODEBUG=simd=${{ matrix.width }})
+        if: steps.simdcap.outputs.run == 'true'
         run: go test -count=1 ./...
         env:
           GODEBUG: simd=${{ matrix.width }}
