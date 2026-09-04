@@ -32,7 +32,7 @@ package expr
 import (
 	"errors"
 
-	"ursus/dtype"
+	"github.com/advenn/ursus/dtype"
 )
 
 // ErrUnexpanded is returned when a tree still containing a *Match reaches Field.

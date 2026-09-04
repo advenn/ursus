@@ -4,11 +4,11 @@ import (
 	"strconv"
 	"testing"
 
-	"ursus"
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/source/memsrc"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/source/memsrc"
 )
 
 // Engine benchmarks.

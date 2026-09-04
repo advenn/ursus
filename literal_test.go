@@ -3,7 +3,7 @@ package ursus_test
 import (
 	"testing"
 
-	"ursus"
+	"github.com/advenn/ursus"
 )
 
 // TestLiteralExpressionsInEveryOperator is the regression test for a crash found

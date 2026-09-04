@@ -5,9 +5,9 @@ import (
 	"regexp"
 	"time"
 
-	"ursus/dtype"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Expr is a lazy description of a column transformation.

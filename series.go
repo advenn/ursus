@@ -4,10 +4,10 @@ import (
 	"reflect"
 	"time"
 
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/source/memsrc"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/source/memsrc"
 )
 
 // Column is a named, typed, nullable run of values.

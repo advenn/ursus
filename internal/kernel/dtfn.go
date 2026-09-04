@@ -3,11 +3,11 @@ package kernel
 import (
 	"time"
 
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Temporal kernels.

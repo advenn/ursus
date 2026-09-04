@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/internal/plan"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // TestLimitPushdownReachesSort wakes up a path that was written, documented,

@@ -5,7 +5,7 @@ package kernel
 import (
 	"simd"
 
-	"ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/bitmap"
 )
 
 // SIMD comparison kernels for float64 — the proof family.

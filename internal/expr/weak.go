@@ -3,7 +3,7 @@ package expr
 import (
 	"math"
 
-	"ursus/dtype"
+	"github.com/advenn/ursus/dtype"
 )
 
 // Weak literal typing.

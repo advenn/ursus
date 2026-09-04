@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Resolve is the entry point for expression type resolution.

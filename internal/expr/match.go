@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Matcher selects zero or more columns from a schema.

@@ -1,11 +1,11 @@
 package kernel
 
 import (
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // The k-way merge core: comparing rows that live in DIFFERENT column sets, and

@@ -34,7 +34,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/bitutil"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"ursus/internal/arrowx"
+	"github.com/advenn/ursus/internal/arrowx"
 )
 
 // View is a read-only window onto a bit buffer.

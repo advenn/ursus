@@ -1,6 +1,6 @@
 package ursusengine
 
-import "ursus"
+import "github.com/advenn/ursus"
 
 // h2oQueries holds the ported h2o.ai db-benchmark queries. Answer column names
 // are part of the contract: config/suites.toml names the columns the checksum

@@ -9,10 +9,10 @@ import (
 	"sort"
 	"strconv"
 
-	"ursus/dtype"
-	"ursus/internal/exec"
-	"ursus/internal/source/csv"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/exec"
+	"github.com/advenn/ursus/internal/source/csv"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // CSVOption configures ScanCSV.

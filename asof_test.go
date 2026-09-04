@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/dtype"
-	"ursus/internal/plan"
-	"ursus/internal/uerr"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/uerr"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // tickFrame builds a numeric as-of fixture: an Int64 key, a group and a value.

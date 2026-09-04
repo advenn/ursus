@@ -3,9 +3,9 @@ package data
 import (
 	"iter"
 
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Series is a typed view over a Column.

@@ -31,7 +31,7 @@
 package kernel
 
 import (
-	"ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/bitmap"
 )
 
 // Numeric is the set of physical storage types the kernels operate on.

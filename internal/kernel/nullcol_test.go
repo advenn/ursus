@@ -3,10 +3,10 @@ package kernel_test
 import (
 	"testing"
 
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/data"
-	"ursus/internal/kernel"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/kernel"
 )
 
 // TestNullColumnIsGatherable is the regression test for a bug that reached a

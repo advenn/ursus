@@ -4,10 +4,10 @@ import (
 	"math"
 	"slices"
 
-	"ursus/dtype"
-	"ursus/internal/data"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Statistical and positional accumulators: var, std, product, arg_min, arg_max,

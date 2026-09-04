@@ -21,7 +21,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/bitmap"
 )
 
 // lengths covers every interesting relationship between a slice length and the

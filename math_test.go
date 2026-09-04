@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
+	"github.com/advenn/ursus"
 )
 
 // mathCorpus is built to hit the cases where a naive implementation diverges.

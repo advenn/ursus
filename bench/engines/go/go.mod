@@ -8,7 +8,7 @@ require (
 	github.com/duckdb/duckdb-go/v2 v2.10505.0
 	github.com/go-gota/gota v0.12.0
 	github.com/tobgu/qframe v0.4.0
-	ursus v0.0.0
+	github.com/advenn/ursus v0.0.0
 )
 
 require (
@@ -45,8 +45,11 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-// ursus declares `module ursus` with no domain path, so it cannot be fetched —
-// it can only be reached from inside the repository. That is also why the
-// benchmark runners use nothing but the public API: ursus/internal/... is not
-// importable from here even with the replace in place.
-replace ursus => ../../..
+// Benchmark the WORKING TREE, not a published version. Without this, `go test`
+// here would resolve github.com/advenn/ursus from the proxy and quietly measure
+// whatever was last tagged — the same class of mistake as timing a stale
+// bin/runner, and just as invisible in the numbers.
+//
+// The runners still use nothing but the public API: internal/... is not
+// importable from another module, replace or no replace.
+replace github.com/advenn/ursus => ../../..

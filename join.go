@@ -1,8 +1,8 @@
 package ursus
 
 import (
-	"ursus/internal/plan"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // JoinKind is the shape of a join: which rows survive.

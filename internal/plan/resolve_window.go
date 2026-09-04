@@ -3,8 +3,8 @@ package plan
 import (
 	"strconv"
 
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // winTempPrefix names the columns a Window node publishes. Callers that must not

@@ -1,8 +1,8 @@
 package ursus
 
 import (
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // MappingStrategy decides how a window's per-partition result returns to the frame.

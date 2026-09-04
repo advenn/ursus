@@ -22,7 +22,7 @@ import (
 	"sort"
 	"time"
 
-	"ursus"
+	"github.com/advenn/ursus"
 )
 
 const (

@@ -7,13 +7,13 @@ import (
 	"sort"
 	"time"
 
-	"ursus/dtype"
-	"ursus/internal/data"
-	"ursus/internal/execopt"
-	"ursus/internal/expr"
-	"ursus/internal/kernel"
-	"ursus/internal/plan"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/execopt"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/kernel"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // The as-of join: for each left row, the NEAREST right row rather than an equal one.

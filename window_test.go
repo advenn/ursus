@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // wf is the window fixture: three partitions of different sizes, a null value, a

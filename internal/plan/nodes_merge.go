@@ -1,9 +1,9 @@
 package plan
 
 import (
-	"ursus/dtype"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // MergeSorted interleaves two frames that are already sorted on a key, keeping the

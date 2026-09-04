@@ -3,9 +3,9 @@ package ursus
 import (
 	"reflect"
 
-	"ursus/dtype"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // litNodeReflect handles literals whose type is a DEFINED type over a permitted

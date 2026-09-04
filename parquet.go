@@ -12,9 +12,9 @@ import (
 	arrowpq "github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/compress"
 
-	"ursus/internal/exec"
-	"ursus/internal/source/parquet"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/exec"
+	"github.com/advenn/ursus/internal/source/parquet"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // ParquetOption configures ScanParquet.

@@ -5,12 +5,12 @@ import (
 	"errors"
 	"io"
 
-	"ursus/dtype"
-	"ursus/internal/data"
-	"ursus/internal/execopt"
-	"ursus/internal/kernel"
-	"ursus/internal/plan"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/execopt"
+	"github.com/advenn/ursus/internal/kernel"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // concatOp emits every child's rows, in order.

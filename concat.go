@@ -1,8 +1,8 @@
 package ursus
 
 import (
-	"ursus/internal/plan"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // ConcatMode says how much Concat will reconcile differing schemas.

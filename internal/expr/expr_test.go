@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"ursus/dtype"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // schema is the fixture every test resolves against. Note there is no data

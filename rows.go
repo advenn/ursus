@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"ursus/dtype"
-	"ursus/internal/data"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // decodeRows converts a batch into a slice of Go structs.
@@ -95,7 +95,7 @@ func buildSetters(rt reflect.Type, b *data.Batch) ([]setter, error) {
 }
 
 func columnName(f reflect.StructField) (name string, skip bool) {
-	tag, ok := f.Tag.Lookup("ursus")
+	tag, ok := f.Tag.Lookup("github.com/advenn/ursus")
 	if !ok {
 		return f.Name, false
 	}

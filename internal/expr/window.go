@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // OrderKey is one component of an ordering: an expression and how to sort by it.

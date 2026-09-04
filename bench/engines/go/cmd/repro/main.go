@@ -32,7 +32,7 @@ import (
 	"context"
 	"fmt"
 
-	"ursus"
+	"github.com/advenn/ursus"
 )
 
 const n = 100_000

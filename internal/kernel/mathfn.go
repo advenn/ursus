@@ -3,10 +3,10 @@ package kernel
 import (
 	"math"
 
-	"ursus/dtype"
-	"ursus/internal/data"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // MathCall evaluates the parameterised maths family.

@@ -4,12 +4,12 @@ import (
 	"context"
 	"io"
 
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/execopt"
-	"ursus/internal/kernel"
-	"ursus/internal/plan"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/execopt"
+	"github.com/advenn/ursus/internal/kernel"
+	"github.com/advenn/ursus/internal/plan"
 )
 
 // sliceOp skips rows and then keeps a bounded number of them.

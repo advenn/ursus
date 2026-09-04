@@ -17,7 +17,7 @@
 package csv
 
 import (
-	"ursus/dtype"
+	"github.com/advenn/ursus/dtype"
 )
 
 // Options configures a CSV source. The zero value is not usable; call

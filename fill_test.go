@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/internal/uerr"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/internal/uerr"
+	"github.com/advenn/ursus/ursustest"
 )
 
 func nullable[T ursus.Literal](name string, vals []T, ok []bool) *ursus.Column {

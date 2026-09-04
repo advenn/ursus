@@ -6,8 +6,8 @@ import (
 	"io"
 	"sync"
 
-	"ursus/dtype"
-	"ursus/internal/data"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
 )
 
 // SinkFactory builds one worker's Sink. Every sink a factory returns must be

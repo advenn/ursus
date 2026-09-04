@@ -3,10 +3,10 @@ package kernel_test
 import (
 	"testing"
 
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/kernel"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/kernel"
 )
 
 // mask builds a Boolean column from values and validity.

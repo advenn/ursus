@@ -3,8 +3,8 @@ package ursus_test
 import (
 	"testing"
 
-	"ursus"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // TestGoldenPlan exercises the plan-snapshot machinery on the query the whole

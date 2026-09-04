@@ -4,7 +4,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/bitmap"
 )
 
 // ref is the obvious, slow, obviously-correct model every test compares against.

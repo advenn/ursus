@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/dtype"
-	"ursus/internal/plan"
-	"ursus/internal/uerr"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/uerr"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // The join fixture is built so that all seven kinds produce DIFFERENT row counts.

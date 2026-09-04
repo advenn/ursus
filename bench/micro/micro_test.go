@@ -3,7 +3,7 @@ package micro
 import (
 	"testing"
 
-	"ursus"
+	"github.com/advenn/ursus"
 )
 
 // ---------------------------------------------------------------------- IO --

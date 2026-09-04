@@ -26,7 +26,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"ursus/internal/arrowx"
+	"github.com/advenn/ursus/internal/arrowx"
 )
 
 // TestRiskGateAlignment asserts claim (1) across the size classes where Go's

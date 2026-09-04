@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"ursus/dtype"
-	"ursus/internal/expr"
-	"ursus/internal/plan"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/plan"
 )
 
 // fakeSource proves the central claim: a plan can be built, resolved, optimized

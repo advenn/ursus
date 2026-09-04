@@ -7,12 +7,12 @@ import (
 	"strconv"
 	"testing"
 
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/expr"
-	"ursus/internal/kernel"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/kernel"
 )
 
 func mkF64(name string, vals []float64, valid []bool) *data.Column {

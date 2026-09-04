@@ -1,8 +1,8 @@
 package ursus
 
 import (
-	"ursus/dtype"
-	"ursus/internal/expr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
 )
 
 // StrExpr is the string namespace: `Col("name").Str().ToLower()`.

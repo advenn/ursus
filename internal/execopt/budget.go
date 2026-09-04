@@ -30,8 +30,8 @@ import (
 	"strconv"
 	"sync"
 
-	"ursus/internal/data"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Budget is one query's memory ceiling and spill location.

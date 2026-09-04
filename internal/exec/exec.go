@@ -19,10 +19,10 @@ import (
 	"io"
 	"iter"
 
-	"ursus/dtype"
-	"ursus/internal/data"
-	"ursus/internal/kernel"
-	"ursus/internal/physical"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/kernel"
+	"github.com/advenn/ursus/internal/physical"
 )
 
 // Collect runs the tree to completion and concatenates every batch.

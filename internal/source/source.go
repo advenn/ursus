@@ -14,9 +14,9 @@ package source
 import (
 	"context"
 
-	"ursus/dtype"
-	"ursus/internal/data"
-	"ursus/internal/expr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
 )
 
 // ScanSpec is what the physical planner asks a source to produce.

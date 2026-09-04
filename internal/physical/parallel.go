@@ -6,8 +6,8 @@ import (
 	"io"
 	"sync"
 
-	"ursus/dtype"
-	"ursus/internal/data"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
 )
 
 // parallelOp runs a pure pipeline — a source plus a chain of stateless BatchOps —

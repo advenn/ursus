@@ -5,9 +5,9 @@ import (
 
 	"context"
 
-	"ursus/dtype"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Resolve prepares a freshly built plan for optimization and execution.

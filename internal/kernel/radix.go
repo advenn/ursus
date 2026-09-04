@@ -1,8 +1,8 @@
 package kernel
 
 import (
-	"ursus/dtype"
-	"ursus/internal/data"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
 )
 
 // This file is the answer to a profile. ArgSort was 42% of the engine's hot-path

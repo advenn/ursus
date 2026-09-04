@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Interval is a calendar-aware span of time.

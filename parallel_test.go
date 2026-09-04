@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"ursus"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // parFrame builds a frame big enough to span many batches, so thread counts

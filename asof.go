@@ -1,9 +1,9 @@
 package ursus
 
 import (
-	"ursus/internal/expr"
-	"ursus/internal/plan"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // AsOfStrategy picks which neighbouring right row a left row matches.

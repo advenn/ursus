@@ -3,9 +3,9 @@ package parquet
 import (
 	"github.com/apache/arrow-go/v18/parquet/metadata"
 
-	"ursus/dtype"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Row-group pruning: the one part of this package that can change which rows come

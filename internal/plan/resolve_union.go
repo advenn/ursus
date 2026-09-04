@@ -1,8 +1,8 @@
 package plan
 
 import (
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // resolveUnion reconciles the inputs' schemas and makes every child produce the

@@ -2,7 +2,7 @@ module ursusmicro
 
 go 1.27
 
-require ursus v0.0.0
+require github.com/advenn/ursus v0.0.0
 
 require (
 	github.com/andybalholm/brotli v1.2.2 // indirect
@@ -21,6 +21,6 @@ require (
 	golang.org/x/sys v0.47.0 // indirect
 )
 
-// Same replace as engines/go: `module ursus` has no domain path, so it can only
-// be reached from inside the repository.
-replace ursus => ../..
+// Same replace as engines/go, for the same reason: measure the working tree
+// rather than whatever version the proxy would hand back.
+replace github.com/advenn/ursus => ../..

@@ -8,7 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/parquet/metadata"
 	"github.com/apache/arrow-go/v18/parquet/schema"
 
-	"ursus/internal/expr"
+	"github.com/advenn/ursus/internal/expr"
 )
 
 // bound is one endpoint of a column's statistics, or a literal converted to the

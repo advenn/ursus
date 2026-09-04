@@ -1,4 +1,4 @@
-module ursus
+module github.com/advenn/ursus
 
 go 1.27
 

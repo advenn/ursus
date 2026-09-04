@@ -6,11 +6,11 @@ import (
 	"slices"
 	"testing"
 
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/kernel"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/kernel"
 )
 
 // mergeCol builds one key column of dt over n rows, with nulls every 7th row.

@@ -1,11 +1,11 @@
 package kernel
 
 import (
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // SelectionFromMask turns a Boolean column into the list of row indices to keep.

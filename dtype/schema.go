@@ -4,7 +4,7 @@ import (
 	"iter"
 	"strings"
 
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Schema is an ordered, name-unique sequence of Fields.

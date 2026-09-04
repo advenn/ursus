@@ -4,9 +4,9 @@ import (
 	"strconv"
 	"strings"
 
-	"ursus/dtype"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // --- Scan --------------------------------------------------------------------

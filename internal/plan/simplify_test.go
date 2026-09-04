@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"ursus/dtype"
-	"ursus/internal/expr"
-	"ursus/internal/plan"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/plan"
 )
 
 func and(l, r expr.Node) expr.Node { return &expr.Binary{Op: expr.OpAnd, L: l, R: r} }
@@ -341,10 +341,10 @@ func TestPlanPackageNeedsNoArrow(t *testing.T) {
 	for _, dep := range strings.Split(string(out), "\n") {
 		switch {
 		case strings.Contains(dep, "arrow"),
-			strings.Contains(dep, "ursus/internal/kernel"),
-			strings.Contains(dep, "ursus/internal/data"),
-			strings.Contains(dep, "ursus/internal/arrowx"),
-			strings.Contains(dep, "ursus/internal/bitmap"):
+			strings.Contains(dep, "github.com/advenn/ursus/internal/kernel"),
+			strings.Contains(dep, "github.com/advenn/ursus/internal/data"),
+			strings.Contains(dep, "github.com/advenn/ursus/internal/arrowx"),
+			strings.Contains(dep, "github.com/advenn/ursus/internal/bitmap"):
 			t.Errorf("internal/plan depends on %q; folding is injected through "+
 				"ConstEvaluator precisely so it does not", dep)
 		}

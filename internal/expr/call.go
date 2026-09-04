@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // CallFn names a namespaced function — the `.str` and `.dt` families.

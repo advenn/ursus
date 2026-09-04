@@ -5,7 +5,7 @@ import (
 	"slices"
 	"sort"
 
-	"ursus/internal/data"
+	"github.com/advenn/ursus/internal/data"
 )
 
 // ArgSort returns the permutation that orders n rows under cmp.

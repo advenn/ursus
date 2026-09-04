@@ -3,8 +3,8 @@ package plan
 import (
 	"strconv"
 
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Slice keeps Len rows starting at Offset.

@@ -3,8 +3,8 @@ package csv
 import (
 	"strconv"
 
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // inferred is one column's running type during inference. It is ordered as a

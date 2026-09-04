@@ -1,8 +1,8 @@
 package expr
 
 import (
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Expand rewrites one written expression into the concrete expressions it denotes.

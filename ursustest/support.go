@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"testing"
 
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/data"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/data"
 )
 
 // update rewrites golden files instead of comparing against them.

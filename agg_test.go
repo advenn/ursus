@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
+	"github.com/advenn/ursus"
 )
 
 // sales is the fixture for the analytics tests. `amount` has nulls, and region

@@ -1,8 +1,8 @@
 package plan
 
 import (
-	"ursus/dtype"
-	"ursus/internal/expr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
 )
 
 // ConstEvaluator folds an all-literal expression to a single literal.

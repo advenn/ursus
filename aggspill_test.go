@@ -10,13 +10,13 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/source/memsrc"
-	"ursus/internal/uerr"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/source/memsrc"
+	"github.com/advenn/ursus/internal/uerr"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // allNineteen builds one expression per AggOp.

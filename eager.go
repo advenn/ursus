@@ -3,7 +3,7 @@ package ursus
 import (
 	"context"
 
-	"ursus/internal/source/memsrc"
+	"github.com/advenn/ursus/internal/source/memsrc"
 )
 
 // Lazy turns a materialised frame back into a query.

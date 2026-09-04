@@ -11,8 +11,8 @@ import (
 	"context"
 	"fmt"
 
-	"ursus"
-	"ursus/dtype"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
 
 	"ursusbench/engine"
 )
@@ -23,7 +23,7 @@ type Scan func(table string) *ursus.LazyFrame
 // Query builds a lazy plan for one benchmark query.
 type Query func(scan Scan) *ursus.LazyFrame
 
-func init() { engine.Register("ursus", Build) }
+func init() { engine.Register("github.com/advenn/ursus", Build) }
 
 // Build resolves the query and returns a closure that runs it once.
 func Build(a engine.Args) (engine.Once, error) {

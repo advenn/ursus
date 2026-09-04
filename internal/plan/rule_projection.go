@@ -1,8 +1,8 @@
 package plan
 
 import (
-	"ursus/dtype"
-	"ursus/internal/expr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
 )
 
 // projectionPushdown narrows every Scan to the columns actually used above it.

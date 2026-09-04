@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"ursus"
-	"ursus/dtype"
-	"ursus/internal/uerr"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // hourly builds a UTC Datetime index at the given wall-clock stamps.

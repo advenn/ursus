@@ -5,7 +5,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/bitmap"
 )
 
 // BufferID identifies one allocation by the address of its first byte.

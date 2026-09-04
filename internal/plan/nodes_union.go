@@ -3,8 +3,8 @@ package plan
 import (
 	"strconv"
 
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // ConcatMode says how much a Union will reconcile.

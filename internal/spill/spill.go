@@ -29,11 +29,11 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"ursus/dtype"
-	"ursus/internal/arrowx"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/arrowx"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // magic identifies a spill file and pins the layout. A mismatch is a bug in

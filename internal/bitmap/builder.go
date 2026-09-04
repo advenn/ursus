@@ -3,7 +3,7 @@ package bitmap
 import (
 	"github.com/apache/arrow-go/v18/arrow/bitutil"
 
-	"ursus/internal/arrowx"
+	"github.com/advenn/ursus/internal/arrowx"
 )
 
 // Builder accumulates bits and produces a View.

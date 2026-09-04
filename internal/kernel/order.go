@@ -3,10 +3,10 @@ package kernel
 import (
 	"math"
 
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/data"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // OrderKeyF64 maps a float64 onto a uint64 whose UNSIGNED ordering is ursus's

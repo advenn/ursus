@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 func TestIsInSelectsMembers(t *testing.T) {

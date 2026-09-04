@@ -1,8 +1,8 @@
 package expr
 
 import (
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Binding is the resolved form of a binary operation: the type each operand must

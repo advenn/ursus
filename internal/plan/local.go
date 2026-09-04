@@ -1,8 +1,8 @@
 package plan
 
 import (
-	"ursus/dtype"
-	"ursus/internal/expr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
 )
 
 // LocalRule is the easy case: a pure node-to-node replacement, applied bottom-up

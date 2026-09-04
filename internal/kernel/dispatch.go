@@ -5,13 +5,13 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/arrowx"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/arrowx"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Binary applies op to two columns, producing a new column named name with type

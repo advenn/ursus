@@ -12,10 +12,10 @@ import (
 	"slices"
 	"testing"
 
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/kernel"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/kernel"
 )
 
 // column builds a column of T with the given validity, using the physical type

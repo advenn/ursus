@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // scanner splits a CSV stream into records and fields WITHOUT materialising

@@ -36,10 +36,10 @@ import (
 	"strconv"
 	"time"
 
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Re-exported type system. These aliases are the blessed spellings: write

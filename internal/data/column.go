@@ -23,11 +23,11 @@ package data
 import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/arrowx"
-	"ursus/internal/bitmap"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/arrowx"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Primitive is the set of Go types that back a fixed-width column AND support

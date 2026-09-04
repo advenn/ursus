@@ -3,7 +3,7 @@ package kernel
 import (
 	"math"
 
-	"ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/bitmap"
 )
 
 // This file holds the SCALAR implementations of every kernel.

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"ursus/dtype"
+	"github.com/advenn/ursus/dtype"
 )
 
 // stubNode is a Node with no children and a fixed schema. Enough to drive the

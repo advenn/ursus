@@ -3,9 +3,9 @@ package plan
 import (
 	"strings"
 
-	"ursus/dtype"
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Window computes windowed expressions and APPENDS them to its input's schema.

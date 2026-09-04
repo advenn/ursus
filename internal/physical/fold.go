@@ -3,10 +3,10 @@ package physical
 import (
 	"context"
 
-	"ursus/dtype"
-	"ursus/internal/data"
-	"ursus/internal/expr"
-	"ursus/internal/plan"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/plan"
 )
 
 // KernelFolder evaluates constant expressions for the optimizer's simplification

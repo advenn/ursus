@@ -3,8 +3,8 @@ package data
 import (
 	"iter"
 
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Batch is a horizontal slice of a frame: N equal-length columns with a schema.

@@ -11,13 +11,13 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/plan"
-	"ursus/internal/source/memsrc"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/source/memsrc"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // aggFrame is 4000 rows in 128-row BATCHES, and the batching is the whole point.

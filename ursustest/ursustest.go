@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/dtype"
-	"ursus/internal/data"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
 )
 
 // Option configures an assertion.

@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // TestComparable is the load-bearing test for the whole type system.

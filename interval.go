@@ -3,7 +3,7 @@ package ursus
 import (
 	"time"
 
-	"ursus/dtype"
+	"github.com/advenn/ursus/dtype"
 )
 
 // Interval is a calendar-aware span: months, days and nanoseconds, kept apart because

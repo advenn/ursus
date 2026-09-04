@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // stats is the fixture for the statistical aggregates.

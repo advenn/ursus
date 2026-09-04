@@ -3,9 +3,9 @@ package data_test
 import (
 	"testing"
 
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
 )
 
 // TestValuesRejectsTypePunning is a regression test for a bug that shipped a

@@ -1,7 +1,7 @@
 package plan
 
 import (
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Rule is one optimizer rewrite.

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/internal/plan"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // noSimplify is DefaultFlags with just this step's rule off, so a comparison

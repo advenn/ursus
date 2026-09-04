@@ -1,7 +1,7 @@
 package ursus
 
 import (
-	"ursus/internal/expr"
+	"github.com/advenn/ursus/internal/expr"
 )
 
 // DtExpr is the temporal namespace: `Col("ts").Dt().Year()`.

@@ -3,10 +3,10 @@ package kernel
 import (
 	"encoding/binary"
 
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/data"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // GroupKeyEncoder turns a row's key columns into a byte string that can be used

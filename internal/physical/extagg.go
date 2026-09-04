@@ -7,13 +7,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/execopt"
-	"ursus/internal/kernel"
-	"ursus/internal/spill"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/execopt"
+	"github.com/advenn/ursus/internal/kernel"
+	"github.com/advenn/ursus/internal/spill"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Spilling hash aggregation: radix partitioning of the keys admitted after the

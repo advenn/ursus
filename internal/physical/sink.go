@@ -5,8 +5,8 @@ import (
 	"errors"
 	"io"
 
-	"ursus/dtype"
-	"ursus/internal/data"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
 )
 
 // Sink is a PIPELINE BREAKER: an operator that must consume all of its input

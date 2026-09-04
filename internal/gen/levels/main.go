@@ -19,7 +19,7 @@ import (
 	"strings"
 )
 
-const modulePath = "ursus"
+const modulePath = "github.com/advenn/ursus"
 
 // levels maps a package path (module-relative) to its level. Longest-prefix wins,
 // so "internal/source/parquet" inherits from "internal/source" unless listed.

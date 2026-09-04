@@ -31,8 +31,8 @@ package plan
 import (
 	"context"
 
-	"ursus/dtype"
-	"ursus/internal/expr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
 )
 
 // Node is one relational operation.

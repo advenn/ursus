@@ -3,8 +3,8 @@ package expr
 import (
 	"strconv"
 
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // AggOp is an aggregate function.

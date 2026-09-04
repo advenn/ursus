@@ -3,9 +3,9 @@ package data_test
 import (
 	"testing"
 
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
 )
 
 // TestNBytesDoesNotDoubleCount is the test everything else in step 10 rests on.

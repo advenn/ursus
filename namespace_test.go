@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"ursus"
-	"ursus/dtype"
-	"ursus/internal/uerr"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // --- the temporal defects, one regression test each ---------------------------------

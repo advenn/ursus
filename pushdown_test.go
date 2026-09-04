@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/internal/plan"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/internal/plan"
 )
 
 // TestPushdownSoundness is the ONLY mechanism that can catch a bad predicate push.

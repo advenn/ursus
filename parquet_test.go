@@ -11,16 +11,16 @@ import (
 
 	arrowpq "github.com/apache/arrow-go/v18/parquet"
 
-	"ursus"
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/plan"
-	"ursus/internal/source/memsrc"
-	"ursus/internal/source/parquet"
-	"ursus/internal/uerr"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/source/memsrc"
+	"github.com/advenn/ursus/internal/source/parquet"
+	"github.com/advenn/ursus/internal/uerr"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // TestParquetRoundTrip is the strongest correctness check available for a reader:

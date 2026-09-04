@@ -8,9 +8,9 @@ import (
 	"github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/schema"
 
-	"ursus/dtype"
-	"ursus/i128"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // mustNode takes the (node, error) pair directly so it can wrap a constructor

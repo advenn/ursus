@@ -1,8 +1,8 @@
 package expr
 
 import (
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Cond is a conditional: the value of Then where Pred is true, of Else otherwise.

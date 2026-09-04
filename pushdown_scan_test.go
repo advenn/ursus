@@ -4,14 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/expr"
-	"ursus/internal/plan"
-	"ursus/internal/source/memsrc"
-	"ursus/internal/source/testsrc"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/source/memsrc"
+	"github.com/advenn/ursus/internal/source/testsrc"
 )
 
 // The tests in this file cover the branch of predicatePushdown that decides what a

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"ursus/dtype"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 func TestEveryParses(t *testing.T) {

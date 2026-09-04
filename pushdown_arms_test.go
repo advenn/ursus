@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"ursus"
-	"ursus/internal/plan"
-	"ursus/ursustest"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // The projection-pushdown arms, deferred in steps 11, 12, 13 and 14 — and the list

@@ -6,7 +6,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"ursus/i128"
+	"github.com/advenn/ursus/i128"
 )
 
 // The oracle is math/big, which is a genuinely independent implementation — this

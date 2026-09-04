@@ -3,7 +3,7 @@ package ursusengine
 import (
 	"time"
 
-	"ursus"
+	"github.com/advenn/ursus"
 )
 
 // pdshQueries holds the ported PDS-H (TPC-H) queries. A query that is absent is

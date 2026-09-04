@@ -1,8 +1,8 @@
 package ursus
 
 import (
-	"ursus/internal/expr"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Null repair, and the weak-literal machinery that makes it not widen columns.

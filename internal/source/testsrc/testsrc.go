@@ -33,14 +33,14 @@ import (
 	"context"
 	"sync"
 
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/expr"
-	"ursus/internal/kernel"
-	"ursus/internal/plan"
-	"ursus/internal/source"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/kernel"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/source"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Inner is what this package decorates: a source that can both plan and produce.

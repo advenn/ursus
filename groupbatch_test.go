@@ -13,11 +13,11 @@ package ursus_test
 import (
 	"testing"
 
-	"ursus"
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/source/memsrc"
+	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/source/memsrc"
 )
 
 // batchSpanningGroups is deliberately larger than the 8192-row output batch, and

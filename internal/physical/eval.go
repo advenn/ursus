@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/expr"
-	"ursus/internal/kernel"
-	"ursus/internal/uerr"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/kernel"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Eval computes an expression over a batch, producing one column.

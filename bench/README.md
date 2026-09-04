@@ -165,7 +165,7 @@ a gap in this suite.
 
 | engine | notes |
 |---|---|
-| **ursus** | the subject. Public API only; `module ursus` has no domain path, so `internal/...` is not importable from here even with the replace in place |
+| **ursus** | the subject. Public API only — `internal/...` is not importable from another module, replace or no replace, so the runners exercise what a user would |
 | polars | lazy API + `collect()`, the model ursus is built against |
 | pandas | fully eager; capped at SF1 and N=1e7 |
 | duckdb | also produces the reference answers |

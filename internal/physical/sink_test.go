@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"ursus/dtype"
-	"ursus/internal/bitmap"
-	"ursus/internal/data"
-	"ursus/internal/expr"
-	"ursus/internal/kernel"
-	"ursus/internal/plan"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/kernel"
+	"github.com/advenn/ursus/internal/plan"
 )
 
 // internal/physical had no tests at all before step 5.
