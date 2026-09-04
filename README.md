@@ -1,3 +1,8 @@
+# preamble from human author
+
+this project is not production ready, and currently it is noticeably slower than other similar tools, like duckdb go or polars py.
+
+
 # ursus
 
 A Polars-class dataframe library for Go 1.27 — lazy execution with a query
