@@ -108,28 +108,58 @@ func (b *boolBuilder) finish(name string) *data.Column {
 	return c
 }
 
+// stringBuilder accumulates Arrow's string layout directly: one offsets slice and
+// one character buffer.
+//
+// It used to append a Go string per value — one heap allocation per row — and
+// then hand the []string to data.NewString, which copied every byte a second time
+// into these same two buffers. A million-row scan of a file with three string
+// columns spent 3.15M allocations there, 99% of everything the CSV reader
+// allocated. It is the defect the Parquet reader carried until byteArrayCol was
+// rewritten this way, and the fix is the same one.
+//
+// offs carries the usual n+1 entries: it holds a single zero before the first
+// append and gains one entry per value, null or not.
 type stringBuilder struct {
-	dt    dtype.DataType
-	vals  []string
+	offs  []int32
+	chars []byte
 	valid *bitmap.Builder
 }
 
 func (b *stringBuilder) appendField(f []byte) error {
-	b.vals = append(b.vals, string(f)) // must copy: f aliases the scanner buffer
+	// The copy is not optional and never was: f aliases the scanner's buffer,
+	// which is valid only until the next call to Next.
+	b.chars = append(b.chars, f...)
+	b.offs = append(b.offs, int32(len(b.chars)))
 	b.valid.Append(true)
 	return nil
 }
 
+// appendNull records an absent value as an empty slice — chars does not advance,
+// so a null costs nothing beyond its offset entry.
+//
+// A null that DID advance chars would not corrupt itself, since nothing reads a
+// null's bytes; it would corrupt the value after it, whose window starts at the
+// offset this call recorded. That makes the failure appear one row away from its
+// cause, which is why the test for it puts a null between two multi-byte values.
 func (b *stringBuilder) appendNull() {
-	b.vals = append(b.vals, "")
+	b.offs = append(b.offs, int32(len(b.chars)))
 	b.valid.Append(false)
 }
 
-func (b *stringBuilder) len() int { return len(b.vals) }
+func (b *stringBuilder) len() int { return len(b.offs) - 1 }
 
 func (b *stringBuilder) finish(name string) *data.Column {
-	c := data.NewString(name, b.vals, b.valid.Finish())
-	b.vals = nil
+	c := data.NewStringParts(name, b.offs, b.chars, b.valid.Finish())
+	// Both buffers are reused with their capacity intact, which is safe here for a
+	// reason fixedBuilder cannot rely on: NewStringParts COPIES into fresh arrow
+	// buffers, so the column we just produced does not alias what the next batch
+	// overwrites. NewFixed wraps its slice without copying, which is why
+	// fixedBuilder has to drop its own.
+	//
+	// Truncating to [:1] keeps the leading zero, so offs is never re-seeded.
+	b.offs = b.offs[:1]
+	b.chars = b.chars[:0]
 	b.valid = bitmap.NewBuilder(0)
 	return c
 }
@@ -167,7 +197,9 @@ func newBuilder(dt dtype.DataType) (colBuilder, error) {
 		return &fixedBuilder[float64]{dt: dt, valid: bitmap.NewBuilder(0),
 			parse: func(b []byte) (float64, error) { return strconv.ParseFloat(str(b), 64) }}, nil
 	case dtype.TypeString:
-		return &stringBuilder{dt: dt, valid: bitmap.NewBuilder(0)}, nil
+		// offs is seeded with its leading zero here rather than branched on per
+		// append; finish preserves it, so the hot path never tests for it.
+		return &stringBuilder{offs: make([]int32, 1), valid: bitmap.NewBuilder(0)}, nil
 
 	case dtype.TypeDate, dtype.TypeTime, dtype.TypeDatetime, dtype.TypeDuration:
 		// Parsing goes through dtype.ParseTemporal, the same function the frame

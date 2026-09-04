@@ -441,6 +441,92 @@ func TestSinkCSVStreamsWithoutMaterialising(t *testing.T) {
 	}
 }
 
+// TestScanCSVStringBufferIntegrity targets the reader's string LAYOUT rather than
+// its parsing, which is what the rest of this file covers.
+//
+// stringBuilder accumulates Arrow's offsets and character buffer directly instead
+// of building a []string — one heap allocation per value became none, 3.18M per
+// scan of the benchmark fixture down to 25K. Three properties of that layout are
+// easy to break in ways that yield plausible data rather than an error:
+//
+//   - offsets are BYTE offsets, so anything rune-aware corrupts multi-byte text;
+//   - a null and an empty string both leave the offset unmoved, and only the
+//     validity bit separates them, so an offsets slip makes them swap;
+//   - the field passed to appendField ALIASES the scanner's buffer, which is
+//     reallocated and copied whenever a record outgrows it — scanner.go grows by
+//     doubling from 64 KiB. Retaining that slice rather than copying its bytes
+//     produces garbage that depends on how large the file happens to be.
+func TestScanCSVStringBufferIntegrity(t *testing.T) {
+	// Comfortably past the scanner's 64 KiB starting buffer, so reading this value
+	// forces several grow-and-copy cycles while the field is being assembled.
+	huge := strings.Repeat("xyz", 40_000)
+
+	rows := []struct {
+		text string // as written to the file
+		want string
+		null bool
+	}{
+		{text: "", want: ""},
+		{text: "héllo", want: "héllo"},
+		{text: `\N`, null: true}, // between two multi-byte values on purpose
+		{text: "日本語", want: "日本語"},
+		{text: "🌍🌎", want: "🌍🌎"},
+		{text: huge, want: huge},
+		{text: "tail", want: "tail"}, // proves the offsets recover after the big one
+	}
+
+	var buf strings.Builder
+	buf.WriteString("s,n\n")
+	for i, r := range rows {
+		buf.WriteString(r.text)
+		buf.WriteByte(',')
+		buf.WriteString(strconv.Itoa(i))
+		buf.WriteByte('\n')
+	}
+	path := writeFile(t, "strings.csv", buf.String())
+
+	schema := ursus.MustSchema(ursus.Of("s", ursus.String), ursus.Of("n", ursus.Int64))
+
+	// Every batch size, because finish reuses both buffers across batches and keeps
+	// the leading zero by truncating offsets to [:1]. Truncating to [:0] instead
+	// drops it, and every batch after the first is then short by a value.
+	for _, size := range []int{1, 2, 7, 1024} {
+		df, err := ursus.ScanCSV(path,
+			ursus.WithSchema(schema), ursus.WithNullValues(`\N`)).
+			Collect(t.Context(), ursus.WithBatchSize(size), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch size %d: %v", size, err)
+		}
+		if df.Height() != len(rows) {
+			t.Fatalf("batch size %d: got %d rows, want %d", size, df.Height(), len(rows))
+		}
+
+		for i, r := range rows {
+			got, ok, err := df.At[string](i, "s")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ok == r.null {
+				t.Errorf("batch size %d: row %d valid = %v, want %v — a null and an "+
+					"empty string differ only in the validity bit", size, i, ok, !r.null)
+				continue
+			}
+			if !r.null && got != r.want {
+				t.Errorf("batch size %d: row %d = %s (%d bytes), want %s (%d bytes)",
+					size, i, elide(got), len(got), elide(r.want), len(r.want))
+			}
+		}
+	}
+}
+
+// elide keeps a failure message readable when the value is 120 KB long.
+func elide(s string) string {
+	if len(s) <= 40 {
+		return strconv.Quote(s)
+	}
+	return strconv.Quote(s[:20]) + "..." + strconv.Quote(s[len(s)-20:])
+}
+
 // TestScanCSVIsLazy: constructing a frame over a missing file must not fail until
 // the query runs, or `lf := ScanCSV(path)` would be an I/O call in disguise.
 func TestScanCSVIsLazy(t *testing.T) {

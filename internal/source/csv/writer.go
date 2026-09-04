@@ -280,10 +280,12 @@ func (w *Writer) formatter(c *data.Column) (func([]byte, int) []byte, error) {
 		})
 
 	default:
-		// Temporal, Enum and nested types are refused rather than written as their
-		// storage integers. Writing a Datetime as 1735689600000000 would produce a
-		// file this package cannot read back, and a writer whose output its own
-		// reader rejects is worse than one that says so up front.
+		// Enum, Binary and the nested types are refused rather than written as their
+		// storage representation. Writing an Enum as its category index 3 would
+		// produce a file this package cannot read back, and a writer whose output its
+		// own reader rejects is worse than one that says so up front. Temporal used to
+		// be refused for exactly that reason and no longer is, because the case above
+		// formats it the same way the reader parses it.
 		return nil, uerr.New(uerr.KindUnsupported, "sink_csv",
 			"cannot write column %q of type %s to CSV", c.Name(), dt).
 			Hint("CSV supports Bool, the integer and float types, Decimal, the " +

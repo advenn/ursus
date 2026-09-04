@@ -199,8 +199,10 @@ cgo and `-tags duckdb,chdb` pulls the heavy engines only when asked. It is a
 separate module from ursus so that duckdb-go and chdb-go never enter the root
 `go.mod`.
 
-`GOEXPERIMENT=simd` is exported by the Makefile and is mandatory: package `simd`
-does not compile without it.
+`GOEXPERIMENT=simd` is exported by the Makefile. It is not required to build
+ursus — the two files that import `simd` are behind `//go:build goexperiment.simd`
+and have scalar twins — but a benchmark should measure the vector path rather
+than the fallback, so it is on by default here.
 
 ## Adding a query or an engine
 

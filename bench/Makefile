@@ -10,8 +10,10 @@
 # that does not have the free memory the requested scale needs, because a run
 # that swaps measures the swap, not the engine.
 #
-# GOEXPERIMENT=simd is MANDATORY for anything that links ursus: package `simd`
-# does not compile without it. Exported below, same as the root Makefile.
+# GOEXPERIMENT=simd is exported below, same as the root Makefile. It is not
+# required to BUILD ursus — the two files that import `simd` are behind
+# //go:build goexperiment.simd and have scalar twins — but a benchmark should
+# measure the vector path rather than the fallback, so it is on by default here.
 
 export GOEXPERIMENT := simd
 export GOAMD64      ?= v3
