@@ -27,24 +27,27 @@ query.
 
 ---
 
-## Requirements
-
-**Go 1.27 or newer, and `GOEXPERIMENT=simd` is mandatory** — package `simd` does
-not compile without it, so neither does ursus.
+## Install
 
 ```sh
-export GOEXPERIMENT=simd
-go build ./...
+go get github.com/advenn/ursus
 ```
 
-Every SIMD kernel has a scalar twin behind `//go:build !goexperiment.simd`, and CI
-proves it by running the whole suite with the experiment off. But the *default*
-build needs the flag.
+**Go 1.27 or newer is required.** Two of its changes are load-bearing: generic
+methods are why `Series[T].Map[U]` and `df.Column[T](name)` exist at all, and
+because a generic method still cannot satisfy an interface, every public type is
+a concrete struct with polymorphism kept in unexported interfaces.
 
-Two of Go 1.27's changes are load-bearing here. Generic methods are why
-`Series[T].Map[U]` and `df.Column[T](name)` exist at all; and because a generic
-method still cannot satisfy an interface, every public type is a concrete struct
-with polymorphism kept in unexported interfaces.
+**`GOEXPERIMENT=simd` is optional.** It switches on the SIMD kernels:
+
+```sh
+GOEXPERIMENT=simd go build ./...
+```
+
+Without it every kernel falls back to its scalar twin, behind
+`//go:build !(goexperiment.simd && amd64)`. That is not a claim — CI runs the
+entire suite with the experiment off on every push, and `make test-all` includes
+an experiment-off leg locally. The flag buys speed, not correctness.
 
 ---
 
@@ -67,12 +70,8 @@ Not done: `JoinWhere` (non-equi join), common subexpression elimination, nested
 types (List/Struct/Map), and the long tail of `Expr.Rolling*`, `Upsample`,
 `Interpolate` and the trigonometric block.
 
-### A note on using it
-
-The module path is `ursus`, not `github.com/advenn/ursus`, so `go get` will not
-work against this repository as-is. It is developed as a self-contained module;
-publishing it as an importable package is a deliberate step that has not been
-taken yet.
+Version numbers follow Go's own rule for v0: **nothing is promised.** The API is
+still moving, and the preamble above says why.
 
 ---
 
@@ -159,5 +158,4 @@ did not survive contact with the code. Start with the newest.
 
 ## Licence
 
-Not yet chosen. Until one is added, no permission to use, copy or distribute is
-granted — see the note in the repository's issues if you need one.
+[MIT](./LICENSE).

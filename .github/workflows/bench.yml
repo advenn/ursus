@@ -10,7 +10,15 @@ name: bench
 # A change to the optimiser, a kernel or a join can break one of those without
 # breaking a unit test.
 #
-# Opt-in: manual dispatch, plus a nightly run. It does not gate pull requests.
+# MANUAL DISPATCH ONLY, and that is deliberate rather than timid.
+#
+# This workflow had a nightly cron and had never executed once — `gh run list
+# --workflow=bench.yml` returned nothing at all. A 45-minute four-engine job that
+# has never been seen to pass is not something to schedule unattended; it would
+# just mail a failure every morning until someone debugged it. Watch it pass by
+# hand a few times, then put a schedule back if it earns one.
+#
+# It does not gate pull requests either way.
 
 on:
   workflow_dispatch:
@@ -21,12 +29,14 @@ on:
       engines:
         description: 'comma-separated engines (empty = all enabled)'
         default: 'ursus,polars,pandas,duckdb'
-  schedule:
-    # 04:00 UTC daily.
-    - cron: '0 4 * * *'
 
 env:
   GOEXPERIMENT: simd
+  # A COMPILE target requiring AVX2, so the binary would SIGILL on a CPU without
+  # it — the same hardware-lottery class as the GODEBUG=simd=512 panic ci.yml
+  # guards against. Left as-is because the runner that builds is the runner that
+  # runs, and every current ubuntu-latest has AVX2. Noted so the next person does
+  # not have to re-derive that.
   GOAMD64: v3
 
 jobs:
@@ -73,8 +83,12 @@ jobs:
             SF=${{ inputs.scale || '0.1' }} \
             ENGINES=${{ inputs.engines || 'ursus,polars,pandas,duckdb' }}
 
+      # continue-on-error because this runs even when `run` failed, and in that
+      # case results/timings.csv may not exist — so `make report` fails too and
+      # replaces an informative failure with a confusing one two steps later.
       - name: report
         if: always()
+        continue-on-error: true
         run: make report
 
       - uses: actions/upload-artifact@v4
