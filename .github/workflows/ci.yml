@@ -2,7 +2,11 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    # Both, deliberately: this repository's default branch is master, and the
+    # workflow triggered only on main — so CI had never run on a push. Listing
+    # both keeps it working through a future rename instead of silently going
+    # quiet again.
+    branches: [main, master]
   pull_request:
 
 env:
