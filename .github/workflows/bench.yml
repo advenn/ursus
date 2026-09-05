@@ -54,7 +54,7 @@ jobs:
           go-version: '1.27.0'
           check-latest: false
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
@@ -91,7 +91,7 @@ jobs:
         continue-on-error: true
         run: make report
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: bench-results

@@ -73,10 +73,19 @@ pass, in about 6 minutes at SF=0.1 with three engines.
 surfaced an annotation: `actions/checkout@v4`, `actions/setup-go@v5`,
 `actions/upload-artifact@v4` and `astral-sh/setup-uv@v5` all target Node 20 and
 are being forced onto Node 24. Fourteen occurrences across `ci.yml` and
-`bench.yml`. Bumped one major each — v5 / v6 / v5 / v6 — rather than to the
-current heads (v7 / v7 / v7 / v10), because one major is the minimum that clears
-the deprecation and the smallest blast radius, and because both workflows can
-verify it empirically rather than by reading changelogs.
+`bench.yml`.
+
+The intent was the smallest bump that clears it, and the first attempt — one
+major each — was checked by running both workflows rather than by reading
+changelogs. Just as well: `checkout@v5` and `setup-go@v6` came back clean, but
+**the annotation survived for `upload-artifact@v5` and `setup-uv@v6`**, which are
+still Node 20. Reading `action.yml` at each tag gives the actual thresholds:
+`upload-artifact` reaches node24 at **v6**, `setup-uv` at **v7**. Those are what
+landed, and a second bench run confirms the annotation is gone.
+
+Worth stating because the reasoning was right and the answer was still wrong:
+"one major" is a guess about someone else's release policy, and the only way to
+know was to look at `using:` in each tag — or to run it, which is what caught it.
 
 **`REPORT.md` was regenerated mid-step, exactly as the plan warned.** The plan said
 in bold not to run `make report`, because `_append_timings` APPENDS and a
