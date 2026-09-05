@@ -18,10 +18,16 @@
 //
 // # What is supported
 //
-// FLAT schemas of the primitive types, plus DECIMAL. Nested and repeated columns
-// are refused with an error naming the column: data.Column has no child columns,
-// so a List or a Struct has nowhere to land and pretending otherwise would mean
-// silently flattening someone's data.
+// FLAT schemas of the primitive types, plus DECIMAL. data.Column has no child
+// columns, so a List or a Struct has nowhere to land and pretending otherwise
+// would mean silently flattening someone's data.
+//
+// A nested column is therefore NAMED in the schema — `tags: List(Int64)` — and
+// refused when a query asks to read it. It used to abort the whole file, which
+// meant a file with twenty flat columns and one struct had no readable columns at
+// all. Narrowing the refusal from the file to the column keeps the guarantee that
+// mattered (nothing is silently missing: selecting it, or selecting everything,
+// still fails) without the collateral damage.
 package parquet
 
 import (
@@ -54,7 +60,20 @@ func toDataType(c *schema.Column) (dtype.DataType, error) {
 			"nested (struct or map) columns are not supported").
 			Hint("column path is %q", c.Path())
 	}
+	return leafType(c)
+}
 
+// leafType maps a leaf's physical and logical type, and asks nothing about where
+// it sits.
+//
+// The separation is not cosmetic. toDataType answers two questions at once — what
+// type is this, and can ursus read it as a flat column — and inside a nested
+// column the second one is meaningless: every leaf under a struct has a
+// definition level above 1, and every leaf under a list has a repetition level
+// above 0, because that is what being nested MEANS. Asking toDataType for the
+// type of `user.city` therefore returned Null, and the schema named it
+// `Struct(age: Int64, city: Null)` — the right shape with the inside erased.
+func leafType(c *schema.Column) (dtype.DataType, error) {
 	p := c.PhysicalType()
 	switch lt := c.LogicalType().(type) {
 	case schema.StringLogicalType:
@@ -335,4 +354,156 @@ func ursusTimeUnit(u schema.TimeUnitType) (dtype.TimeUnit, bool) {
 	default:
 		return dtype.Second, false
 	}
+}
+// --- nested schema mapping ------------------------------------------------------
+
+// fieldType maps ONE top-level Parquet field to an ursus type.
+//
+// It returns the type it managed to name, the leaf column index when the field is
+// a readable flat column, and — when it is not readable — the error explaining
+// why, ready to be returned if a query ever asks for it.
+//
+// # Naming a type ursus cannot read is the point
+//
+// dtype already has List, Array and Struct: they were declared in step 1 and have
+// never been produced by anything. Naming a nested column here costs little and
+// buys two things. A user sees `tags: List(Int64)` in Schema() instead of an
+// opaque refusal, so they know what is in their file. And the mapping is what any
+// real nested support has to do first, so this is a down-payment rather than a
+// placeholder.
+//
+// What it does NOT buy is the ability to read one. That is refused in Open, per
+// column, and the message is the one toDataType has always produced.
+func fieldType(sc *schema.Schema, n schema.Node) (dtype.DataType, int, error) {
+	dt := nodeType(sc, n)
+
+	// Readable means exactly one thing: a primitive, not repeated, sitting
+	// directly under the root, whose physical type maps. Everything else is named
+	// and refused.
+	if n.Type() == schema.Primitive && n.RepetitionType() != parquet.Repetitions.Repeated {
+		if leaf := sc.ColumnIndexByNode(n); leaf >= 0 {
+			c := sc.Column(leaf)
+			if _, err := leafType(c); err != nil {
+				return dt, -1, err // a physical type ursus has no mapping for
+			}
+			if c.MaxDefinitionLevel() <= 1 && c.MaxRepetitionLevel() == 0 {
+				return dt, leaf, nil
+			}
+		}
+	}
+	return dt, -1, unsupportedNode(n, refusalFor(n))
+}
+
+// refusalFor keeps the wording a user sees identical to what toDataType has
+// always produced, so the diagnostic did not change — only when it appears.
+func refusalFor(n schema.Node) string {
+	if n.RepetitionType() == parquet.Repetitions.Repeated {
+		return "repeated (list) columns are not supported"
+	}
+	if g, ok := n.(*schema.GroupNode); ok {
+		switch g.LogicalType().(type) {
+		case schema.ListLogicalType:
+			return "repeated (list) columns are not supported"
+		case schema.MapLogicalType:
+			return "map columns are not supported"
+		}
+	}
+	return "nested (struct or map) columns are not supported"
+}
+
+// nodeType names a node's type and makes no judgement about readability.
+//
+// Recursive, and total: a shape it cannot name becomes Null rather than an error,
+// because failing to name the INSIDE of a column is no reason to hide the column
+// itself — the read is refused either way, and a user is better served by
+// `Struct(age: Int64, city: Null)` than by nothing at all.
+func nodeType(sc *schema.Schema, n schema.Node) dtype.DataType {
+	if n.Type() == schema.Primitive {
+		leaf := sc.ColumnIndexByNode(n)
+		if leaf < 0 {
+			return dtype.Null
+		}
+		dt, err := leafType(sc.Column(leaf))
+		if err != nil {
+			return dtype.Null
+		}
+		// A repeated primitive is a list of scalars with no wrapper group — legal
+		// Parquet. The test is the node's OWN repetition, not its max repetition
+		// level: an element inside a LIST group inherits a level above zero from
+		// its parent, and wrapping there would give List(List(T)).
+		if n.RepetitionType() == parquet.Repetitions.Repeated {
+			return dtype.List(dt)
+		}
+		return dt
+	}
+
+	g, ok := n.(*schema.GroupNode)
+	if !ok {
+		return dtype.Null
+	}
+	switch g.LogicalType().(type) {
+	case schema.ListLogicalType:
+		if el, ok := listElement(sc, g); ok {
+			return dtype.List(el)
+		}
+		return dtype.List(dtype.Null)
+	case schema.MapLogicalType:
+		// Arrow represents a MAP as a list of key/value structs, and so does this.
+		if kv, ok := mapEntry(sc, g); ok {
+			return dtype.List(kv)
+		}
+		return dtype.List(dtype.Null)
+	}
+	return structType(sc, g)
+}
+
+// structType maps a group's fields, naming what it can.
+//
+// An inner field this cannot name becomes Null rather than aborting: failing to
+// name the inside of a column is no reason to hide the column, and the read is
+// refused either way.
+func structType(sc *schema.Schema, g *schema.GroupNode) dtype.DataType {
+	fields := make([]dtype.Field, g.NumFields())
+	for i := range g.NumFields() {
+		f := g.Field(i)
+		fields[i] = dtype.Field{
+			Name:     f.Name(),
+			Type:     nodeType(sc, f),
+			Nullable: f.RepetitionType() != parquet.Repetitions.Required,
+		}
+	}
+	return dtype.Struct(fields...)
+}
+
+// listElement unwraps list -> repeated group -> element, returning the element
+// type. ok is false for any other shape.
+func listElement(sc *schema.Schema, g *schema.GroupNode) (dtype.DataType, bool) {
+	if g.NumFields() != 1 {
+		return dtype.Null, false
+	}
+	rep, ok := g.Field(0).(*schema.GroupNode)
+	if !ok || rep.NumFields() != 1 {
+		return dtype.Null, false
+	}
+	return nodeType(sc, rep.Field(0)), true
+}
+
+// mapEntry unwraps map -> repeated key_value -> {key, value} into a Struct.
+func mapEntry(sc *schema.Schema, g *schema.GroupNode) (dtype.DataType, bool) {
+	if g.NumFields() != 1 {
+		return dtype.Null, false
+	}
+	kv, ok := g.Field(0).(*schema.GroupNode)
+	if !ok || kv.NumFields() != 2 {
+		return dtype.Null, false
+	}
+	return structType(sc, kv), true
+}
+
+// unsupportedNode is unsupportedColumn for a node that may not be a leaf, so it
+// cannot take a *schema.Column. The message and hint match what a flat refusal
+// has always produced.
+func unsupportedNode(n schema.Node, msg string) error {
+	return uerr.New(uerr.KindUnsupported, "scan_parquet", "%s", msg).
+		Hint("column path is %q", n.Path())
 }

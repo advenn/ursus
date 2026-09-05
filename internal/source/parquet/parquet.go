@@ -44,6 +44,14 @@ type Source struct {
 	schema *dtype.Schema
 	err    error
 
+	// leaves[i] is the file LEAF column that schema field i is read from, or -1
+	// when the field cannot be read. Field index and leaf index are the same
+	// number only for a flat file; see fileSchema.
+	leaves []int
+	// unread holds, per unreadable field, the refusal to return if a query asks
+	// for it. Non-nil entries are the nested columns.
+	unread map[int]error
+
 	// Row groups read and skipped, across every reader this source has opened.
 	//
 	// Without a counter, "the pruner works" is untestable: an inexact pushdown
@@ -130,7 +138,7 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 			return
 		}
 		defer closer()
-		s.schema, s.err = fileSchema(r.MetaData().Schema)
+		s.schema, s.leaves, s.unread, s.err = fileSchema(r.MetaData().Schema)
 		if s.err != nil {
 			s.err = uerr.Annotate(s.err, "scan_parquet", s.desc)
 		}
@@ -160,24 +168,55 @@ func (s *Source) openFile(i int) (*file.Reader, func(), error) {
 	}, nil
 }
 
-// fileSchema maps every column of a Parquet schema, refusing the whole file if any
-// column is unsupported.
+// fileSchema maps a Parquet schema to an ursus one, per TOP-LEVEL FIELD.
 //
-// Refusing the FILE rather than the column is deliberate. Dropping an unreadable
-// column would give a frame that silently lacks data the user asked for, and the
-// most likely reaction is not to notice.
-func fileSchema(sc *schema.Schema) (*dtype.Schema, error) {
-	n := sc.NumColumns()
+// It also returns, per field, the leaf column index to read it from, and for the
+// fields that cannot be read, the error saying why.
+//
+// # Why it iterates fields and not columns
+//
+// It used to iterate sc.NumColumns(), which counts LEAVES. For a flat file the
+// two coincide, which is why that worked; for a file with one struct in it they
+// do not, and every later use of the index — Open's `cols`, the reader's column
+// order — would be reading the wrong chunk.
+//
+// # Refusing the COLUMN rather than the file
+//
+// This used to refuse the whole file if any column was unsupported, and the
+// reason given was sound: "dropping an unreadable column would give a frame that
+// silently lacks data the user asked for, and the most likely reaction is not to
+// notice." That guarantee is kept and the refusal is narrowed. A nested column
+// stays VISIBLE in the schema with the type it actually has, and asking to read
+// it fails in Open with the message it always produced. Nothing is dropped
+// silently; a file with twenty flat columns and one struct is simply no longer
+// unopenable, which it was.
+func fileSchema(sc *schema.Schema) (*dtype.Schema, []int, map[int]error, error) {
+	root := sc.Root()
+	n := root.NumFields()
+
 	fields := make([]dtype.Field, n)
+	leaves := make([]int, n)
+	var unread map[int]error
+
 	for i := range n {
-		c := sc.Column(i)
-		dt, err := toDataType(c)
+		f := root.Field(i)
+		dt, leaf, err := fieldType(sc, f)
+		leaves[i] = leaf
 		if err != nil {
-			return nil, err
+			if unread == nil {
+				unread = make(map[int]error)
+			}
+			unread[i] = err
 		}
-		fields[i] = dtype.Field{Name: c.Name(), Type: dt, Nullable: c.MaxDefinitionLevel() > 0}
+		fields[i] = dtype.Field{
+			Name:     f.Name(),
+			Type:     dt,
+			Nullable: f.RepetitionType() != parquet.Repetitions.Required,
+		}
 	}
-	return dtype.NewSchema(fields...)
+
+	out, err := dtype.NewSchema(fields...)
+	return out, leaves, unread, err
 }
 
 // --- source.Openable -----------------------------------------------------------
@@ -198,11 +237,22 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 	// Which file columns to open. A column outside the projection is never opened,
 	// so its pages are never read or decompressed — the entire point of pushing a
 	// projection into a columnar reader.
+	//
+	// This is also where an unreadable column is refused. fileSchema names nested
+	// columns rather than rejecting the file, so the refusal has to happen at the
+	// point of READING one — and only for a column this query actually wants. A
+	// nil Projection means every column, so a select-all over a file with a nested
+	// column still fails, which is the behaviour that keeps "nothing is silently
+	// missing" true.
 	var cols []int
 	for i := range full.Len() {
-		if out.IndexOf(full.Field(i).Name) >= 0 {
-			cols = append(cols, i)
+		if out.IndexOf(full.Field(i).Name) < 0 {
+			continue
 		}
+		if err := s.unread[i]; err != nil {
+			return nil, uerr.Annotate(err, "scan_parquet", s.desc)
+		}
+		cols = append(cols, s.leaves[i])
 	}
 
 	batchSize := spec.BatchSize
