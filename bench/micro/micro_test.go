@@ -209,9 +209,12 @@ func BenchmarkGroupByStringKey(b *testing.B) {
 }
 
 // BenchmarkGroupByThreads is the one number the design docs lean on hardest:
-// step-5-as-built.md records 2.97x from 1 to 8 threads for the pipeline, and
-// ~2x here because the aggregate is a serial breaker. Parallel aggregation is
-// implemented but not wired up, so this is the ceiling until it is.
+// step-5-as-built.md records 2.97x from 1 to 8 threads for the pipeline.
+//
+// The aggregate is no longer a serial breaker: step 17 wired parallel aggregation
+// up, and aggBreaker hands out one sink per thread whenever aggWorkers' two gates
+// pass — no MaintainOrder or order-dependent aggregate, and no memory limit. This
+// query trips neither, so it runs on all of them.
 func BenchmarkGroupByThreads(b *testing.B) {
 	f := load(b)
 	for _, threads := range []int{1, 2, 4, 8} {

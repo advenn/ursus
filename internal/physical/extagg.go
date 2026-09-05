@@ -235,7 +235,7 @@ func (s *hashAggSink) overBudget() error {
 	return uerr.New(uerr.KindResource, "group_by",
 		"memory limit of %s exceeded: group_by has already partitioned its keys to "+
 			"disk and is still holding %s of per-group state for %d resident groups",
-		execopt.Bytes(limit), execopt.Bytes(s.accBytes), len(s.ids)).
+		execopt.Bytes(limit), execopt.Bytes(s.accBytes), s.ids.Len()).
 		Hint("radix partitioning divides work across KEYS, never within one — " +
 			"quantile and median keep every value of a group, and n_unique every " +
 			"distinct value, so a single hot key cannot be spilled").
@@ -268,7 +268,7 @@ func (s *hashAggSink) newSub(path string) (*hashAggSink, error) {
 	}
 	return &hashAggSink{
 		schema: s.schema, keys: s.keys, specs: s.specs, keySchema: s.keySchema,
-		ids:  make(map[string]int32),
+		ids:  kernel.NewKeyTable(),
 		accs: accs,
 		mem:  s.budget.Account("group_by"),
 

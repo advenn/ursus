@@ -59,7 +59,7 @@ type windowSink struct {
 // of every row seen so far.
 type winPartition struct {
 	keys   []expr.Node
-	ids    map[string]int32
+	ids    *kernel.KeyTable
 	perRow []int32 // one entry per input row, in input order
 }
 
@@ -109,8 +109,8 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 		if len(p.keys) == 0 {
 			// No partition keys: the whole frame is one partition, and it exists
 			// even before any row arrives.
-			if len(p.ids) == 0 {
-				p.ids[""] = 0
+			if p.ids.Len() == 0 {
+				p.ids.GetOrInsert(nil)
 			}
 		} else {
 			cols := make([]*data.Column, len(p.keys))
@@ -126,13 +126,7 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 				return err
 			}
 			for i := range n {
-				k := enc.Encode(i)
-				id, seen := p.ids[string(k)]
-				if !seen {
-					id = int32(len(p.ids))
-					p.ids[string(k)] = id
-				}
-				gids[i] = id
+				gids[i], _ = p.ids.GetOrInsert(enc.Encode(i))
 			}
 		}
 		batchIDs[pi] = gids
@@ -148,7 +142,7 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 		if err != nil {
 			return err
 		}
-		sp.acc.Reserve(len(s.parts[sp.part].ids))
+		sp.acc.Reserve(s.parts[sp.part].ids.Len())
 		if err := sp.acc.AddBatch(batchIDs[sp.part], col); err != nil {
 			return err
 		}
@@ -238,7 +232,7 @@ func (s *windowSink) Finish(ctx context.Context) (Operator, error) {
 // construction.
 func (s *windowSink) finishAggregate(sp *winSpec) (*data.Column, error) {
 	p := s.parts[sp.part]
-	nGroups := len(p.ids)
+	nGroups := p.ids.Len()
 	sp.acc.Reserve(nGroups)
 	res, err := sp.acc.Finish(sp.name, nGroups)
 	if err != nil {
@@ -328,7 +322,7 @@ func (s *windowSink) segments(ctx context.Context, sp *winSpec, all *data.Batch,
 	}
 
 	// Partitions are contiguous in perm, so a boundary is wherever the id changes.
-	bounds := make([]int32, 0, len(p.ids)+1)
+	bounds := make([]int32, 0, p.ids.Len()+1)
 	bounds = append(bounds, 0)
 	for j := 1; j < nRows; j++ {
 		if p.perRow[perm[j]] != p.perRow[perm[j-1]] {
@@ -386,7 +380,7 @@ func planWindow(ctx context.Context, w *plan.Window, opts Options) (Operator, er
 			pi = len(sink.parts)
 			byKeys[key] = pi
 			sink.parts = append(sink.parts, &winPartition{
-				keys: win.PartitionBy, ids: map[string]int32{},
+				keys: win.PartitionBy, ids: kernel.NewKeyTable(),
 			})
 		}
 

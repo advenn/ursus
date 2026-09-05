@@ -165,7 +165,7 @@ func newTestAggSink(t *testing.T) *hashAggSink {
 		schema:    out,
 		keys:      []expr.Node{&expr.Col{Name: "k"}},
 		specs:     []aggSpec{spec},
-		ids:       map[string]int32{},
+		ids:       kernel.NewKeyTable(),
 		accs:      []kernel.Accumulator{acc},
 		keySchema: keySchema,
 		inSchema:  in,
@@ -347,7 +347,11 @@ func TestHashAggSinkMergeDoesNotDuplicateKeyRows(t *testing.T) {
 		return b
 	}
 
-	ids := map[string]int32{"a": 0, "b": 1}
+	// One table shared by both sinks, so every key b has, a already has: the case
+	// where Merge inserts nothing and only the key ROWS have to line up.
+	ids := kernel.NewKeyTable()
+	ids.GetOrInsert([]byte("a"))
+	ids.GetOrInsert([]byte("b"))
 	a := &hashAggSink{ids: ids, keySchema: ks, keyParts: []*data.Batch{keyRows()}}
 	b := &hashAggSink{ids: ids, keySchema: ks, keyParts: []*data.Batch{keyRows()}}
 
@@ -359,8 +363,8 @@ func TestHashAggSinkMergeDoesNotDuplicateKeyRows(t *testing.T) {
 	for _, p := range a.keyParts {
 		rows += p.Rows()
 	}
-	if rows != len(ids) {
+	if rows != ids.Len() {
 		t.Errorf("after Merge the sink holds %d key rows for %d groups; Finish pairs "+
-			"them positionally with one aggregate row per group", rows, len(ids))
+			"them positionally with one aggregate row per group", rows, ids.Len())
 	}
 }

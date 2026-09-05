@@ -40,7 +40,7 @@ import (
 //
 // # Spilling, by RESIDENCY FREEZE
 //
-// Past the memory budget the sink freezes its `ids` map. From that point a row
+// Past the memory budget the sink freezes its `ids` table. From that point a row
 // whose key is already resident feeds the resident accumulators exactly as before,
 // and a row with a NEW key is routed to one of sixteen partition files by a hash
 // of its encoded key. At Finish the resident groups are emitted, then each
@@ -74,7 +74,7 @@ type hashAggSink struct {
 	keys   []expr.Node
 	specs  []aggSpec
 
-	ids  map[string]int32
+	ids  *kernel.KeyTable
 	accs []kernel.Accumulator
 
 	keyParts  []*data.Batch // one per batch that introduced groups, in id order
@@ -222,7 +222,7 @@ func planAggregate(ctx context.Context, a *plan.Aggregate, opts Options) (Operat
 			schema:    sinkSchema,
 			keys:      a.Keys,
 			specs:     specs,
-			ids:       make(map[string]int32),
+			ids:       kernel.NewKeyTable(),
 			accs:      accs,
 			keySchema: keySchema,
 			mem:       opts.Budget.Account("group_by"),
@@ -350,8 +350,8 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 			s.groups = append(s.groups, 0)
 			keep = append(keep, int32(i))
 		}
-		if len(s.ids) == 0 {
-			s.ids[""] = 0
+		if s.ids.Len() == 0 {
+			s.ids.GetOrInsert(nil)
 			if s.ordered {
 				s.firstSeen = append(s.firstSeen, s.ordinalOf(in, 0))
 			}
@@ -361,30 +361,41 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 		if err != nil {
 			return err
 		}
-		for i := range n {
-			k := enc.Encode(i)
-			// A map lookup on string(bytes) does not allocate in Go, so only a
-			// genuinely new group pays for the key copy.
-			id, seen := s.ids[string(k)]
-			if !seen {
-				if s.frozen {
-					// Residency is closed. This row and every later row of the same key
-					// go to the same file: partitionOf is a pure function of the encoded
-					// key, and ids can never admit it now.
+		// The freeze is tested at a batch boundary (see below), so `frozen` cannot
+		// change while this loop runs and the two cases are separate loops rather
+		// than a branch on every row.
+		if s.frozen {
+			// Residency is closed: a key already resident behaves exactly as before,
+			// and a NEW key is routed. Get is the lookup-only form precisely so a miss
+			// here cannot admit the key — partitionOf is a pure function of the
+			// encoded key, so every later row of that key lands in the same file.
+			for i := range n {
+				k := enc.Encode(i)
+				id, seen := s.ids.Get(k)
+				if !seen {
 					p := partitionOf(k, s.level)
 					s.pend[p] = append(s.pend[p], int32(i))
 					routed++
 					continue
 				}
-				id = int32(len(s.ids))
-				s.ids[string(k)] = id
-				newRows = append(newRows, int32(i))
-				if s.ordered {
-					s.firstSeen = append(s.firstSeen, s.ordinalOf(in, i))
-				}
+				keep = append(keep, int32(i))
+				s.groups = append(s.groups, id)
 			}
-			keep = append(keep, int32(i))
-			s.groups = append(s.groups, id)
+		} else {
+			for i := range n {
+				// One hash and one probe, whether or not the key is new: the probe that
+				// misses is the one that fills the slot. The key bytes alias the
+				// encoder's buffer and are copied into the table's arena on insert.
+				id, inserted := s.ids.GetOrInsert(enc.Encode(i))
+				if inserted {
+					newRows = append(newRows, int32(i))
+					if s.ordered {
+						s.firstSeen = append(s.firstSeen, s.ordinalOf(in, i))
+					}
+				}
+				keep = append(keep, int32(i))
+				s.groups = append(s.groups, id)
+			}
 		}
 	}
 	s.keep = keep
@@ -427,7 +438,7 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 				return err
 			}
 		}
-		nGroups := len(s.ids)
+		nGroups := s.ids.Len()
 		for i, spec := range s.specs {
 			// evalColumn broadcasts a literal input so it lines up with `groups`. That
 			// is what makes Len() — which aggregates over a literal precisely so it
@@ -490,23 +501,21 @@ func (s *hashAggSink) Merge(other Sink) error {
 
 	// The remap: o's group ids expressed in this sink's numbering.
 	//
-	// o's keys are visited in o's OWN ID ORDER rather than by ranging its map,
-	// which matters for more than tidiness. Group ids are assigned by first
-	// appearance and Finish emits in id order, so the serial path produces
-	// first-appearance ordering as a side effect; ranging a Go map here would make
-	// the merged ordering vary from run to run, turning a deterministic output into
-	// a random one for every query that aggregates without MaintainOrder.
-	oKeys := make([]string, len(o.ids))
-	for k, oid := range o.ids {
-		oKeys[oid] = k
-	}
-	remap := make([]int32, len(o.ids))
+	// o's keys are visited in o's OWN ID ORDER, which matters for more than
+	// tidiness. Group ids are assigned by first appearance and Finish emits in id
+	// order, so the serial path produces first-appearance ordering as a side
+	// effect; visiting in any other order would make the merged ordering vary from
+	// run to run, turning a deterministic output into a random one for every query
+	// that aggregates without MaintainOrder.
+	//
+	// KeyAt indexes by id directly. This used to invert the map into a []string
+	// first, purely because a Go map cannot be indexed by value.
+	nOther := o.ids.Len()
+	remap := make([]int32, nOther)
 	var newRows []int32 // o's row index, for keys this sink has never seen
-	for oid, k := range oKeys {
-		id, seen := s.ids[k]
-		if !seen {
-			id = int32(len(s.ids))
-			s.ids[k] = id
+	for oid := range nOther {
+		id, inserted := s.ids.GetOrInsert(o.ids.KeyAt(int32(oid)))
+		if inserted {
 			newRows = append(newRows, int32(oid))
 		}
 		remap[oid] = id
@@ -690,7 +699,7 @@ func (s *hashAggSink) releaseState() {
 
 // residentResult builds the answer for the groups this sink holds in memory.
 func (s *hashAggSink) residentResult() (*data.Batch, error) {
-	nGroups := len(s.ids)
+	nGroups := s.ids.Len()
 
 	// A GLOBAL aggregate emits exactly one row even over an empty input:
 	// `count(*)` of nothing is 0, not no rows. A hash table gets this wrong by

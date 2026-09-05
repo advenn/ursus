@@ -223,9 +223,10 @@ func (s *joinBuildSink) escalate(ctx context.Context) error {
 // change.
 func (s *joinBuildSink) repartition(ctx context.Context) error {
 	old := s.parts
-	s.parts, s.ids = nil, make(map[string]int32)
+	s.parts = nil
+	s.ids.Reset()
 	s.counts, s.rowKey = nil, nil
-	s.keyBytes, s.nBuild = 0, 0
+	s.nBuild = 0
 	s.mem.Release()
 	s.stateBytes = 0
 
@@ -268,7 +269,9 @@ func (s *joinBuildSink) classify(ctx context.Context, in *data.Batch) error {
 			continue
 		}
 		k := enc.Encode(i)
-		_, seen := s.ids[string(k)]
+		// Lookup-only: this decides residency, and a key that turns out to be routed
+		// must not have been admitted by asking the question.
+		_, seen := s.ids.Get(k)
 		if !s.residentKey(k, seen) {
 			p := partitionOf(k, s.level)
 			s.pend[p] = append(s.pend[p], int32(i))
@@ -332,13 +335,9 @@ func (s *joinBuildSink) admit(ctx context.Context, in *data.Batch, rowBase int) 
 			}
 			continue
 		}
-		k := enc.Encode(i)
-		id, seen := s.ids[string(k)]
-		if !seen {
-			id = int32(len(s.ids))
-			s.ids[string(k)] = id
+		id, inserted := s.ids.GetOrInsert(enc.Encode(i))
+		if inserted {
 			s.counts = append(s.counts, 0)
-			s.keyBytes += int64(len(k)) + idsBytesPerKey
 		} else if s.spec.validate.RequiresRightUnique() {
 			row := -1
 			if rowBase >= 0 {
@@ -361,7 +360,7 @@ func (s *joinBuildSink) admit(ctx context.Context, in *data.Batch, rowBase int) 
 
 // reaccount re-charges the sink's plain-Go state after it has been rebuilt.
 func (s *joinBuildSink) reaccount() {
-	st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + s.keyBytes
+	st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + s.ids.NBytes()
 	s.mem.RetainBytes(st - s.stateBytes)
 	s.stateBytes = st
 }
@@ -428,7 +427,7 @@ func (s *joinBuildSink) newSub() (*joinBuildSink, error) {
 	return &joinBuildSink{
 		out: s.out, layout: s.layout, left: s.left, right: s.right,
 		keys: s.keys, leftKeys: s.leftKeys, spec: s.spec,
-		ids: make(map[string]int32),
+		ids: kernel.NewKeyTable(),
 		mem: s.budget.Account("join"),
 
 		budget: s.budget, level: s.level + 1,
@@ -608,7 +607,13 @@ func (p *joinProbeOp) releaseTable() {
 	p.matched, p.seen = nil, nil
 	p.probeBytes = 0
 	p.sink.mem.Release()
-	p.sink.stateBytes, p.sink.tableBytes, p.sink.keyBytes = 0, 0, 0
+	// Reset, not just un-account. The sink and the table shared one ids instance, so
+	// dropping p.t left the keys reachable from the sink and only the ACCOUNTING was
+	// zeroed — this doc's "both are dead" was true of the table and not of the
+	// memory. Consume is over by the time a partition is replayed, so nothing reads
+	// it again.
+	p.sink.ids.Reset()
+	p.sink.stateBytes, p.sink.tableBytes = 0, 0
 }
 
 // replayStep re-joins one spilled bucket.

@@ -57,7 +57,7 @@ func joinFixture(t *testing.T, kind plan.JoinKind) *joinBuildSink {
 		keys:     j.RightOn,
 		leftKeys: j.LeftOn,
 		spec:     newJoinSpec(j, 1024),
-		ids:      make(map[string]int32),
+		ids:      kernel.NewKeyTable(),
 		mem:      (*execopt.Budget)(nil).Account("join"),
 	}
 }
@@ -237,7 +237,7 @@ func TestJoinBuildSinkMergeRemapsIds(t *testing.T) {
 	if err := b.Consume(ctx, second(b)); err != nil {
 		t.Fatal(err)
 	}
-	if b.ids[string(encodeOne(t, 2))] != 0 {
+	if id, _ := b.ids.Get(encodeOne(t, 2)); id != 0 {
 		t.Fatal("the fixture no longer diverges: b assigned key 2 an id other than 0")
 	}
 	if err := a.Merge(b); err != nil {

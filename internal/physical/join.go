@@ -114,15 +114,19 @@ func (j *joinBreaker) Close() error {
 
 // --- the table ------------------------------------------------------------------
 
-// idsBytesPerKey is what one entry in a map[string]int32 costs beyond the key bytes
-// themselves: a 16-byte string header, a 4-byte value, a tophash byte, and Go's
+// seenBytesPerKey is what one entry in the probe side's map[string]struct{} costs
+// beyond the key bytes: a 16-byte string header, a tophash byte, and Go's
 // load-factor slack, which keeps a map roughly a third empty.
 //
 // An estimate, and deliberately so. Measuring exactly would mean walking every key
 // on every batch, which is the trade nuniqueAcc.NBytes documents making in the other
 // direction. Being approximately right is the point; being ZERO — which is what this
 // was until step 13 — is the bug.
-const idsBytesPerKey = 48
+//
+// It used to cover the build side's ids map as well, at 48 bytes for the extra
+// 4-byte value. That map is now a kernel.KeyTable, which owns four slices and
+// reports NBytes EXACTLY, so no estimate is involved on that side any more.
+const seenBytesPerKey = 44
 
 // noKey marks a build row whose key contained a null while NullsEqual is off. It
 // is in no bucket, so it matches nothing — and Right/Full still emit it unmatched.
@@ -150,7 +154,7 @@ const noKey = int32(-1)
 // Nothing mutates it after freeze, which is what would let a future morsel
 // scheduler share one table across N probe workers with no lock.
 type joinTable struct {
-	ids   map[string]int32 // encoded key -> key id
+	ids   *kernel.KeyTable // encoded key -> key id
 	off   []int32          // len nKeys+1; rows[off[id]:off[id+1]] are id's build rows
 	rows  []int32          // build row indices, ascending within each key
 	nKeys int
@@ -229,7 +233,7 @@ type joinBuildSink struct {
 	leftKeys []expr.Node // LEFT-side key expressions, carried to the probe operator
 	spec     joinSpec
 
-	ids    map[string]int32
+	ids    *kernel.KeyTable
 	counts []int32
 	rowKey []int32
 	parts  []*data.Batch
@@ -246,7 +250,6 @@ type joinBuildSink struct {
 	// whole memory story is "one entry per distinct key".
 	mem        *execopt.Account
 	stateBytes int64
-	keyBytes   int64 // running estimate of the ids map, see idsBytesPerKey
 	tableBytes int64 // the CSR arrays, charged at freeze
 
 	finished bool
@@ -299,10 +302,9 @@ func (s *joinBuildSink) Consume(ctx context.Context, in *data.Batch) error {
 		// Cross join: one key, every row in it. The same shape hashAggSink uses for
 		// a global aggregate, which puts every row in group 0 and creates group 0
 		// lazily. It never splits — see overBudget.
-		if len(s.ids) == 0 {
-			s.ids[""] = 0
+		if s.ids.Len() == 0 {
+			s.ids.GetOrInsert(nil)
 			s.counts = append(s.counts, 0)
-			s.keyBytes += idsBytesPerKey
 		}
 		if s.spec.tracksRows() {
 			for range n {
@@ -368,14 +370,15 @@ func (s *joinBuildSink) Merge(other Sink) error {
 		return uerr.Internalf("physical: cannot merge joinBuildSinks that have spilled")
 	}
 
-	remap := make([]int32, len(o.ids))
-	for k, oid := range o.ids {
-		id, seen := s.ids[k]
-		if !seen {
-			id = int32(len(s.ids))
-			s.ids[k] = id
+	// Visited in o's own ID ORDER. Ranging a Go map here made two things vary run
+	// to run: the ids this sink assigned to o's new keys, and — when Validate is on
+	// — WHICH duplicate key the error below happened to name first.
+	nOther := o.ids.Len()
+	remap := make([]int32, nOther)
+	for oid := range nOther {
+		id, inserted := s.ids.GetOrInsert(o.ids.KeyAt(int32(oid)))
+		if inserted {
 			s.counts = append(s.counts, 0)
-			s.keyBytes += int64(len(k)) + idsBytesPerKey
 		} else if s.spec.validate.RequiresRightUnique() {
 			// A key unique within each partial sink can still be duplicated across
 			// them. Omitting this makes Validate silently weaker under parallelism.
@@ -405,7 +408,7 @@ func (s *joinBuildSink) Merge(other Sink) error {
 	for _, b := range o.parts {
 		s.mem.Retain(b)
 	}
-	st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + s.keyBytes
+	st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + s.ids.NBytes()
 	s.mem.RetainBytes(st - s.stateBytes)
 	s.stateBytes = st
 	return nil
@@ -460,7 +463,7 @@ func (s *joinBuildSink) freeze() (*joinTable, error) {
 	if err := s.closeBuildParts(); err != nil {
 		return nil, err
 	}
-	nKeys := len(s.ids)
+	nKeys := s.ids.Len()
 	t := &joinTable{ids: s.ids, nKeys: nKeys}
 
 	// Rebase UNCONDITIONALLY. This release used to sit inside the needBuildRows
@@ -757,7 +760,10 @@ func (p *joinProbeOp) enter() error {
 		}
 		k := p.enc.Encode(p.row)
 		var ok bool
-		id, ok = p.t.ids[string(k)]
+		// Get, not GetOrInsert: the probe must never add a key. It also mutates
+		// nothing, which is what keeps the frozen table safe to read from several
+		// probe workers at once.
+		id, ok = p.t.ids.Get(k)
 		if !ok {
 			// Not resident. Three lines decide the rest, and they need no split-state
 			// branch:
@@ -892,9 +898,7 @@ func (p *joinProbeOp) flushStep() (*data.Batch, error) {
 func (p *joinProbeOp) account() {
 	b := int64(cap(p.matched))
 	if p.seen != nil {
-		// The same estimate the build side's ids map uses, minus the 4-byte value a
-		// struct{} does not have. See idsBytesPerKey.
-		b += int64(len(p.seen)) * (idsBytesPerKey - 4)
+		b += int64(len(p.seen)) * seenBytesPerKey
 	}
 	p.mem.RetainBytes(b - p.probeBytes)
 	p.probeBytes = b
@@ -1111,7 +1115,7 @@ func planJoin(ctx context.Context, j *plan.Join, opts Options) (Operator, error)
 		keys:     j.RightOn,
 		leftKeys: j.LeftOn,
 		spec:     newJoinSpec(j, batchSize),
-		ids:      make(map[string]int32),
+		ids:      kernel.NewKeyTable(),
 		mem:      opts.Budget.Account("join"),
 
 		budget: opts.Budget,
