@@ -17,8 +17,11 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
+	"runtime"
+	"runtime/pprof"
 	"sort"
 	"time"
 
@@ -31,10 +34,48 @@ const (
 	iterations = 3
 )
 
+// The flags exist because this file is the only place an ursus operation can be
+// profiled without a Parquet reader in the way.
+//
+// bench/micro reaches every operation through a file, so a profile of it is
+// mostly arrow-go: BenchmarkJoinInner spends 87% of its samples outside the join.
+// The suite proper has the same property by design — it measures what a real
+// query does, IO included. Neither can answer "where does the JOIN go", which is
+// the question that matters once an operation is known to be slow.
+//
+//	GOEXPERIMENT=simd go run ./cmd/opbench -only join -cpuprofile /tmp/j.cpu
+//	go tool pprof -top /tmp/j.cpu
+var (
+	cpuProfile = flag.String("cpuprofile", "", "write a CPU profile here")
+	memProfile = flag.String("memprofile", "", "write an allocation profile here")
+	only       = flag.String("only", "", "run only the named operation")
+	threads    = flag.Int("threads", 0, "ursus worker threads; 0 leaves the default")
+)
+
 func main() {
+	flag.Parse()
 	ctx := context.Background()
 
+	// The fixture is built BEFORE the profile starts, so materialising 5M rows
+	// does not appear in it. That is the same reason the timed region excludes it.
 	left, right := build(ctx)
+
+	if *cpuProfile != "" {
+		f, err := os.Create(*cpuProfile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "cpuprofile:", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			fmt.Fprintln(os.Stderr, "cpuprofile:", err)
+			os.Exit(1)
+		}
+		defer pprof.StopCPUProfile()
+	}
+	if *memProfile != "" {
+		defer writeMemProfile(*memProfile)
+	}
 
 	run("filter", func() { collect(ctx, left.Lazy().Filter(ursus.Col("qty").Gt(int64(50)))) })
 
@@ -122,14 +163,36 @@ func build(ctx context.Context) (*ursus.DataFrame, *ursus.DataFrame) {
 }
 
 func collect(ctx context.Context, lf *ursus.LazyFrame) {
-	df, err := lf.Collect(ctx)
+	var opts []ursus.CollectOption
+	if *threads > 0 {
+		opts = append(opts, ursus.WithThreads(*threads))
+	}
+	df, err := lf.Collect(ctx, opts...)
 	fatal(err)
 	if df.Height() < 0 {
 		os.Exit(1)
 	}
 }
 
+// writeMemProfile writes the live heap after a GC, which is what makes the
+// numbers comparable between runs.
+func writeMemProfile(path string) {
+	f, err := os.Create(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "memprofile:", err)
+		return
+	}
+	defer f.Close()
+	runtime.GC()
+	if err := pprof.WriteHeapProfile(f); err != nil {
+		fmt.Fprintln(os.Stderr, "memprofile:", err)
+	}
+}
+
 func run(name string, fn func()) {
+	if *only != "" && *only != name {
+		return
+	}
 	fn() // warm-up
 
 	timings := make([]float64, 0, iterations)
