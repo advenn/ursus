@@ -40,6 +40,30 @@ var (
 	fixtureErr  error
 )
 
+// TestMain removes the fixture directory when the process exits.
+//
+// It has to be here rather than in load(): b.TempDir() is per-BENCHMARK, and this
+// fixture is deliberately process-scoped — built once under sync.Once and shared
+// by every benchmark in the package — so a per-benchmark directory would be
+// deleted the moment the first benchmark finished, with the rest still reading
+// the files. That is why build() reaches for os.MkdirTemp, and TestMain is the
+// process-scoped counterpart it was missing.
+//
+// It was missing for a while, and the bill came due: 38 abandoned fixtures at
+// 172 MB each, 6.5 GB, on a /tmp that is a RAM-backed tmpfs — which pushed a
+// 15 GB machine into 15 GB of swap and made the h2o suite unrunnable. One
+// leak per `go test` invocation is invisible; forty is a broken laptop.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	// shared may be nil if no benchmark ran, or if build() failed partway — in
+	// which case dir is empty and there is nothing to remove. Neither case should
+	// turn a benchmark failure into a panic here.
+	if shared != nil && shared.dir != "" {
+		os.RemoveAll(shared.dir)
+	}
+	os.Exit(code)
+}
+
 func load(b *testing.B) *fixture {
 	b.Helper()
 	fixtureOnce.Do(func() { shared, fixtureErr = build() })
@@ -61,15 +85,23 @@ func build() (*fixture, error) {
 		wide:    filepath.Join(dir, "wide.parquet"),
 	}
 
+	// A failure partway leaves a directory TestMain will never see, because build
+	// returns nil and `shared` stays nil. Clean up here rather than widening what
+	// TestMain has to know about.
+	fail := func(err error) (*fixture, error) {
+		os.RemoveAll(dir)
+		return nil, err
+	}
+
 	ctx := context.Background()
 	if err := frame().SinkParquet(ctx, f.parquet); err != nil {
-		return nil, err
+		return fail(err)
 	}
 	if err := frame().SinkCSV(ctx, f.csv); err != nil {
-		return nil, err
+		return fail(err)
 	}
 	if err := wideFrame().SinkParquet(ctx, f.wide); err != nil {
-		return nil, err
+		return fail(err)
 	}
 	return f, nil
 }

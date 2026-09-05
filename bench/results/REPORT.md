@@ -2,12 +2,18 @@
 
 Produced from `8bb1ad1` — Rewrite min/max to flat typed storage; publish the benchmark report — on 2026-09-04.
 
-> **These timings predate four commits.** `7aab95b` rewrote the CSV reader's
-> string path, `9afc578` replaced the group-key hash table in six operators, and
-> `921fc38` rewrote the radix sort's inner loop — so the numbers below understate
-> the current engine by an unmeasured amount. The ANSWERS are current: ursus
-> validates 22/22 against the duckdb reference at SF=0.1 and SF=1 as of
-> `921fc38`. Refreshing the timings needs a full multi-engine run.
+> **These timings predate four commits and understate the engine by roughly
+> 2.3x.** `7aab95b` rewrote the CSV reader's string path, `9afc578` replaced the
+> group-key hash table in six operators, and `921fc38` rewrote the radix sort's
+> inner loop. A one-iteration ursus-only re-run of h2o at `921fc38` puts the
+> geomean at 2,801 ms against the 6,470 ms below — and gb8 at 5,646 ms against
+> 27,973 ms, a 4.95x change on the suite's worst query. Those are single
+> iterations on a loaded machine, so treat them as indicative; the tables below
+> are the last coherent multi-engine measurement and are left as they were.
+>
+> The ANSWERS are current as of `921fc38`: 22/22 against the duckdb reference on
+> PDS-H at SF=0.1 and SF=1, and 15/15 on h2o in both parquet and CSV.
+> Refreshing the timings needs a full multi-engine run.
 
 Median wall-clock over the timed iterations, in milliseconds; lower is better.
 IO is included in the measurement.
