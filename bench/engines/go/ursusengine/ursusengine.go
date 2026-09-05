@@ -23,7 +23,11 @@ type Scan func(table string) *ursus.LazyFrame
 // Query builds a lazy plan for one benchmark query.
 type Query func(scan Scan) *ursus.LazyFrame
 
-func init() { engine.Register("github.com/advenn/ursus", Build) }
+// The name here is the engine's key in config/engines.toml, not the import
+// path. A module rename that rewrites this string unregisters the engine: the
+// driver asks for "ursus", the runner answers "unknown engine", and the subject
+// of the whole suite turns into 22 ERR cells. It has happened once already.
+func init() { engine.Register("ursus", Build) }
 
 // Build resolves the query and returns a closure that runs it once.
 func Build(a engine.Args) (engine.Once, error) {

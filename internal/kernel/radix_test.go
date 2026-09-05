@@ -186,6 +186,93 @@ func TestRadixFallsBackForUnorderableKeys(t *testing.T) {
 	})
 }
 
+// TestRadixSkippedRoundsKeepKeysAligned is the hazard the key-carrying rewrite
+// introduced, and the only one.
+//
+// radixByKey gathers the keys into permutation order ONCE and then swaps its key
+// buffer alongside its permutation buffer on every round that runs. A round that
+// is SKIPPED — because that byte takes one value everywhere, which is the
+// optimisation that makes a narrow key cheap — must not swap either. Swapping one
+// and not the other leaves the keys one permutation behind, and every later round
+// then reads another row's key.
+//
+// A uniform byte in the MIDDLE is what exposes it: rounds run on both sides of it,
+// so the desynchronisation has somewhere to show up. Byte 1 here is always zero
+// while bytes 0 and 2 vary.
+func TestRadixSkippedRoundsKeepKeysAligned(t *testing.T) {
+	const n = 400
+	rng := rand.New(rand.NewPCG(3, 9))
+	vals := make([]uint64, n)
+	for i := range vals {
+		vals[i] = uint64(rng.IntN(200)) | uint64(rng.IntN(200))<<16
+	}
+	col := fixedCol("u", dtype.Uint64, vals, allValid(n))
+
+	// Descending too: inverting every bit moves which byte is the uniform one, so
+	// the two directions skip different rounds.
+	for _, desc := range []bool{false, true} {
+		assertAgrees(t, []*data.Column{col},
+			[]kernel.SortSpec{{Descending: desc}}, n)
+	}
+}
+
+// TestRadixEveryRoundSkipped: a constant key sorts nothing, so the gather is the
+// only thing that runs and the permutation must come back exactly as it went in.
+// That is the stability claim in its purest form.
+func TestRadixEveryRoundSkipped(t *testing.T) {
+	const n = 100
+	col := fixedCol("z", dtype.Int64, make([]int64, n), allValid(n))
+
+	got, err := kernel.ArgSortColumns([]*data.Column{col}, []kernel.SortSpec{{}}, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range n {
+		if got[i] != int32(i) {
+			t.Fatalf("a constant key must leave the permutation identical, "+
+				"but got[%d] = %d", i, got[i])
+		}
+	}
+}
+
+// TestRadixTinyInputs covers the sizes that return before the gather loop, and the
+// smallest one that reaches it.
+func TestRadixTinyInputs(t *testing.T) {
+	for _, n := range []int{1, 2, 3} {
+		vals := make([]int64, n)
+		for i := range vals {
+			vals[i] = int64(n - i) // reversed, so n >= 2 actually has work to do
+		}
+		col := fixedCol("v", dtype.Int64, vals, allValid(n))
+		assertAgrees(t, []*data.Column{col}, []kernel.SortSpec{{}}, n)
+	}
+}
+
+// TestRadixNullPartitionSubset: sortPass hands radixByKey r.nonNull, which is a
+// SUBSET of the permutation. The gather must index that subset BY POSITION —
+// ka[i], not ka[row] — and a mostly-null column whose surviving values need many
+// rounds is what tells the two apart.
+func TestRadixNullPartitionSubset(t *testing.T) {
+	const n = 500
+	rng := rand.New(rand.NewPCG(5, 13))
+	vals := make([]int64, n)
+	valid := make([]bool, n)
+	for i := range n {
+		vals[i] = rng.Int64N(1 << 40) // wide enough to need six rounds
+		valid[i] = i%7 == 0           // ~14% present, so the subset is far from all
+	}
+	col := fixedCol("sparse", dtype.Int64, vals, valid)
+
+	for _, nullsLast := range []bool{false, true} {
+		assertAgrees(t, []*data.Column{col},
+			[]kernel.SortSpec{{NullsLast: nullsLast}}, n)
+	}
+	// And with a second key, so the subset pass is not the first thing to run.
+	dense := fixedCol("d", dtype.Int32, make([]int32, n), allValid(n))
+	assertAgrees(t, []*data.Column{dense, col},
+		[]kernel.SortSpec{{}, {NullsLast: true}}, n)
+}
+
 // assertAgrees is the whole point: ArgSortColumns and the comparator path must
 // produce IDENTICAL permutations, not merely equivalent orderings. Comparing the
 // permutations rather than the sorted values is what makes tie order observable.

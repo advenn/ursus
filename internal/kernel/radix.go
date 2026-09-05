@@ -163,16 +163,27 @@ func radixable(cols []*data.Column) bool {
 
 // radixSorter owns the scratch buffers, which are reused across column passes.
 //
-// scratch is needed by every sort; the other three exist only to split nulls out
-// and put them back, so they are allocated on first use. A sort with no nulls
-// anywhere — the common one — therefore pays for ONE extra permutation buffer
-// rather than four, which on a million rows is 4 MB against 16.
+// scratch and keys are needed by every sort; the other three exist only to split
+// nulls out and put them back, so they are allocated on first use. A sort with no
+// nulls anywhere — the common one — therefore pays for one extra permutation
+// buffer and one key buffer rather than four permutation buffers, which on a
+// million rows is 12 MB against 16.
 type radixSorter struct {
 	scratch []int32
+	keys    []uint64 // keys gathered into permutation order; see radixByKey
 
 	nonNull []int32
 	nulls   []int32
 	out     []int32
+}
+
+// keyBuf returns the gathered-key buffer, grown as needed and reused across
+// column passes exactly as scratch is.
+func (r *radixSorter) keyBuf(n int) []uint64 {
+	if cap(r.keys) < n {
+		r.keys = make([]uint64, n)
+	}
+	return r.keys[:n]
 }
 
 // needNullBuffers allocates the null-partition scratch the first time a column
@@ -251,7 +262,7 @@ func (r *radixSorter) sortPass(idx []int32, keys []uint64, c *data.Column, nulls
 	if c.NullCount() == 0 {
 		// The common case, and worth its own branch: a partition that separates
 		// nothing still walks and copies the whole permutation.
-		copy(idx, radixByKey(idx, r.scratch, keys))
+		copy(idx, r.radixByKey(idx, r.scratch, keys))
 		return
 	}
 
@@ -265,7 +276,7 @@ func (r *radixSorter) sortPass(idx []int32, keys []uint64, c *data.Column, nulls
 			r.nulls = append(r.nulls, row)
 		}
 	}
-	sorted := radixByKey(r.nonNull, r.scratch[:len(r.nonNull)], keys)
+	sorted := r.radixByKey(r.nonNull, r.scratch[:len(r.nonNull)], keys)
 
 	out := r.out[:0]
 	if nullsLast {
@@ -284,17 +295,44 @@ func (r *radixSorter) sortPass(idx []int32, keys []uint64, c *data.Column, nulls
 // Returns either src or dst depending on how many rounds ran, which is why the
 // caller must treat the return value as the live buffer and the argument as
 // scrap.
-func radixByKey(src, dst []int32, keys []uint64) []int32 {
+//
+// # The keys travel WITH their rows
+//
+// `keys` is indexed by ROW and `src` is a permutation, so the obvious loop body —
+//
+//	d := byte(keys[row] >> (8 * b))
+//
+// — is a RANDOM read into an n*8-byte array. On the first round the permutation is
+// the identity and that read is sequential; from the second round on it is
+// scattered, over an array that is 80 MB at ten million rows. A two-key window
+// sort runs ten or eleven rounds and all but the first read that way, which made
+// this loop the single hottest thing in the engine: 0.52s of the 0.62s
+// windowSink costs, with the group-id work it sits next to at 0.05s.
+//
+// So the keys are gathered into src order ONCE, and from then on each round reads
+// them sequentially and scatters the key alongside the row it belongs to. A fully
+// random read becomes a sequential read plus a second bucketed write, and a
+// bucketed write touches 256 active cache lines where the read touched n.
+//
+// The second key buffer is `keys` ITSELF. Nothing reads it in row order after the
+// gather, and argSortRadix allocates a fresh one per column, so it is free to be
+// overwritten — worth saying out loud, because it is the one thing here that
+// would surprise a reader.
+func (r *radixSorter) radixByKey(src, dst []int32, keys []uint64) []int32 {
 	n := len(src)
 	if n < 2 {
 		return src
 	}
 
+	ka, kb := r.keyBuf(n), keys[:n]
+	for i, row := range src {
+		ka[i] = keys[row]
+	}
+
 	// All eight histograms in ONE pass over the data. Eight separate passes would
 	// read the key array eight times for no reason.
 	var hist [8][256]int32
-	for _, row := range src {
-		k := keys[row]
+	for _, k := range ka {
 		for b := range 8 {
 			hist[b][byte(k>>(8*b))]++
 		}
@@ -304,7 +342,12 @@ func radixByKey(src, dst []int32, keys []uint64) []int32 {
 		// A byte that takes one value everywhere sorts nothing. Skipping it is
 		// what makes a narrow key cheap: an Int32 partition id spends two rounds
 		// here rather than eight, and a Bool spends one.
-		if hist[b][byte(keys[src[0]]>>(8*b))] == int32(n) {
+		//
+		// A skipped round must not swap the key buffers either. ka is indexed by
+		// POSITION now, so if it were swapped while src was not, every later round
+		// would read another row's key — silently, and only for keys that happen to
+		// have a uniform byte in the middle.
+		if hist[b][byte(ka[0]>>(8*b))] == int32(n) {
 			continue
 		}
 
@@ -316,12 +359,14 @@ func radixByKey(src, dst []int32, keys []uint64) []int32 {
 		}
 		// Distributing in INPUT ORDER is the whole stability argument: equal bytes
 		// land in the bucket in the order they were read.
-		for _, row := range src {
-			d := byte(keys[row] >> (8 * b))
+		for i, row := range src {
+			d := byte(ka[i] >> (8 * b))
 			dst[off[d]] = row
+			kb[off[d]] = ka[i]
 			off[d]++
 		}
 		src, dst = dst, src
+		ka, kb = kb, ka
 	}
 	return src
 }

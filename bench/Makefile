@@ -64,9 +64,20 @@ preflight:
 .PHONY: setup
 setup: setup-py setup-go
 
+# --inexact so that syncing does not uninstall the optional engine groups.
+# A plain `uv sync` removes anything outside the selected groups, so running
+# `make bench` after `make setup-extras` silently deleted chdb and datafusion
+# and turned 44 timed queries into `unsupported` rows. The failure is quiet:
+# every runner reports "not installed", which reads exactly like an engine that
+# was never enabled.
 .PHONY: setup-py
 setup-py:
-	$(UV) sync
+	$(UV) sync --inexact
+
+## setup-extras     : add the optional engines (datafusion, chdb)
+.PHONY: setup-extras
+setup-extras:
+	$(UV) sync --inexact --group datafusion --group chdb
 
 .PHONY: setup-go
 setup-go:

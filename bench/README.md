@@ -11,6 +11,7 @@ Everything that measures ursus lives here. Three tiers, one Makefile.
 ```sh
 make preflight          # will refuse to run on a busy machine — that is the feature
 make setup              # uv venv + build the Go runners
+make setup-extras       # add the optional engines (datafusion, chdb)
 make bench              # gen -> reference answers -> run -> validate -> report
 make bench SF=10        # PDS-H at scale factor 10
 make bench SUITE=h2o    # the group-by/join suite at N=1e7
@@ -163,14 +164,20 @@ default run without removing it. Anything an engine genuinely cannot express is
 recorded as `unsupported` with the reason — a real fact about that library, not
 a gap in this suite.
 
+That same status is also what a *missing* engine reports, which is worth knowing
+before you read a column of `n/a`. `setup-py` syncs with `--inexact` precisely so
+it cannot uninstall the optional groups: a plain `uv sync` removes everything
+outside the selected groups, and `make bench` after `make setup-extras` once
+deleted chdb and datafusion and turned 44 timed queries into "not installed".
+
 | engine | notes |
 |---|---|
 | **ursus** | the subject. Public API only — `internal/...` is not importable from another module, replace or no replace, so the runners exercise what a user would |
 | polars | lazy API + `collect()`, the model ursus is built against |
 | pandas | fully eager; capped at SF1 and N=1e7 |
 | duckdb | also produces the reference answers |
-| datafusion | `uv sync --group datafusion` |
-| chdb | `uv sync --group chdb`. ClickHouse does not accept the standard TPC-H text: inputs are registered as session views and two settings are appended (`joined_subquery_requires_alias`, `enable_analyzer`), plus `extract(year FROM x)` → `toYear(x)`. All mechanical, all listed in `sql_runner.py` |
+| datafusion | `make setup-extras` |
+| chdb | `make setup-extras`. ClickHouse does not accept the standard TPC-H text: inputs are registered as session views and two settings are appended (`joined_subquery_requires_alias`, `enable_analyzer`), plus `extract(year FROM x)` → `toYear(x)`. All mechanical, all listed in `sql_runner.py` |
 | duckdb-go | the honest ceiling for a Go program. Same SQL as the Python duckdb, so the gap between those two rows is the cost of the binding. Needs `make setup-cgo` |
 | chdb-go | ClickHouse embedded in Go. Needs libchdb.so plus `make setup-cgo`; off by default |
 | arrow-go | **not a competitor.** No aggregate, hash-aggregate or join kernels exist, so only PDS-H q6 is expressible. ursus is built on arrow-go, so the q6 gap between them is what ursus's plan, evaluator and pipeline cost over the layer they sit on, with the Parquet reader and memory format held constant |
@@ -189,10 +196,32 @@ driver/gen/           dataset generation (tpchgen-cli + duckdb; numpy for h2o)
 engines/sql/          one SQL text per query, shared by every SQL engine
 engines/py/           polars, pandas, duckdb, datafusion, chdb runners
 engines/go/           one module: ursus, arrow-go, gota, qframe (+ cgo behind tags)
-engines/go/cmd/repro/ a standalone reproducer for a bug this suite found
-micro/                the ursus-only Go microbenchmarks
+engines/go/cmd/repro/   regression test for the validity bug this suite found
+engines/go/cmd/opbench/ operations with no IO at all; twin of scripts/opbench_polars.py
+micro/                  the ursus-only Go microbenchmarks
 answers/  data/  results/    generated, gitignored
 ```
+
+### `opbench` — operations with the reader taken out
+
+The suite proper always includes reading, because that is what a real query
+does. It also means a slow Parquet reader can hide a slow engine: PDS-H q6 puts
+ursus within 15% of hand-written arrow-go kernels, which says more about
+arrow-go's reader than about ursus.
+
+`opbench` asks the other question. Both halves build the same 5M-row frame from
+the same deterministic formulas — no RNG, so Go and Python produce identical
+values — materialise it once outside the timed region, then time only the
+operation.
+
+```sh
+GOEXPERIMENT=simd go run ./cmd/opbench      # in engines/go
+uv run python scripts/opbench_polars.py
+```
+
+Not wired into the harness: it answers a diagnostic question rather than
+producing a comparable timing, and it is the fastest way to tell an operator
+problem from a reader problem before reaching for a profiler.
 
 The Go engines are one module with build tags, so the pure-Go set builds with no
 cgo and `-tags duckdb,chdb` pulls the heavy engines only when asked. It is a

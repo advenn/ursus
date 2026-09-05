@@ -1,31 +1,45 @@
-// Command repro is a standalone reproducer for a correctness bug the h2o suite
-// found in ursus. It is not part of the benchmark; it exists so the finding can
-// be handed over without the benchmark harness attached.
+// Command repro is a standalone regression test for the validity-bitmap bug the
+// h2o suite found. It is not part of the benchmark; it exists so the finding can
+// be reproduced, and now re-checked, without the harness attached.
 //
 //	GOEXPERIMENT=simd go run ./cmd/repro
 //
-// The bug: binary arithmetic between two columns produced by a group-by drops
-// the validity of the last 8 rows of every 8192-row output batch. Both inputs
-// are non-null and the result is arithmetically defined, but it comes back NULL.
+// All five cases should print `unexpected nulls=0`. They do as of step 19.
 //
-//	case A: non-nullable literal columns, a - b
-//	  rows=100000 unexpected nulls=0
-//	case B: all-valid nullable literal columns, a - b
-//	  rows=100000 unexpected nulls=0
+// # What it found
+//
+// Binary arithmetic between two columns produced by a group-by dropped the
+// validity of the last 8 rows of every 8192-row output batch. Both inputs were
+// non-null and the result arithmetically defined, but it came back NULL:
+//
 //	case C: group-by Max/Min then subtract
 //	  rows=100000 unexpected nulls=96 first=[16376..16383 24568 24569]
 //	case D: group-by Mean (Float64) then subtract
 //	  rows=100000 unexpected nulls=96 first=[16376..16383 24568 24569]
-//	case E: group-by Max/Min, no arithmetic (control)
-//	  rows=100000 unexpected nulls=0
 //
-// The null runs are exactly the last 8 rows before each multiple of 8192 — one
-// byte of the validity bitmap per output batch. It reproduces at Int32 and
-// Float64, at 1 and 8 threads, and under GODEBUG=simd=0 and URSUS_KERNELS=scalar,
-// so it is not a vector-width bug in a SIMD kernel; the scalar path has it too.
+// The null runs were exactly the last 8 rows before each multiple of 8192 — one
+// byte of the validity bitmap per output batch. Cases A, B and E stayed clean,
+// which is what narrowed it: the inputs had to come from a group-by (so the
+// column carried a non-zero offset) and arithmetic had to combine two bitmaps.
 //
-// Where it shows up in the suite: h2o gb7 (`max(v1) - min(v2) by id3`), whose
-// answer disagrees with the duckdb reference by 96 groups out of 100,000.
+// # Where the bug actually was
+//
+// Not in ursus. `arrow-go v18.7.0`, `arrow/bitutil/bitmaps.go:535`, inside
+// `alignedBitmapOp`:
+//
+//	endMask := (lOffset + length%8)     // parses as lOffset + (length % 8)
+//
+// It means `(lOffset + length) % 8` — does this range end mid-byte? With the
+// typo, a range starting at a non-zero offset and ending ON a byte boundary gets
+// a spuriously non-zero endMask, `lastByteMask` becomes `TrailingBitmask[0]` =
+// 0xFF, and the final byte is masked out entirely. So BitmapAnd, BitmapOr and
+// BitmapAndNot silently dropped the last eight bits of any result whose source
+// offset was non-zero. At offset 0 the typo is harmless, which is why nothing
+// else in the suite tripped it.
+//
+// Worth keeping: this is the shape of bug that unit tests miss and a
+// cross-engine differential check catches. h2o gb7 was the only query in 37 that
+// disagreed with duckdb, by 96 groups out of 100,000.
 package main
 
 import (

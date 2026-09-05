@@ -208,13 +208,20 @@ def run(cfg: Config, spec: RunSpec, budget: Budget, console,
     console.rule(f"[bold]{suite.label}[/] at {spec.size:g} {suite.unit} — {budget.describe()}")
 
     rows: list[dict] = []
+    written = 0
     failures = 0
     for engine in engines:
+        # Everything for one engine is buffered, then flushed before moving to
+        # the next. Holding the whole run in memory and writing once at the end
+        # means a suite that dies on its last engine — an OOM kill, a Ctrl-C, a
+        # laptop lid — throws away every measurement that already succeeded.
+        # That happened, and it cost a full h2o pass.
+        engine_rows: list[dict] = []
         for query in queries:
             ok, reason = engine.supports(spec.suite, query, spec.size)
             if not ok:
                 console.print(f"  [dim]{engine.label:<12} {query:<5} skipped — {reason}[/]")
-                rows.append({
+                engine_rows.append({
                     "timestamp": stamp, "engine": engine.name, "suite": spec.suite,
                     "query": query, "size": spec.size, "io": spec.io,
                     "threads": spec.threads, "mem_limit": spec.mem_limit or "",
@@ -227,7 +234,7 @@ def run(cfg: Config, spec: RunSpec, budget: Budget, console,
                 cfg, engine, spec, query, budget,
                 checksums.get(query, ()), answer_root, console,
             )
-            _record(rows, spec, engine, query, payload, stamp)
+            _record(engine_rows, spec, engine, query, payload, stamp)
 
             status = payload.get("status", "error")
             times = payload.get("iterations") or []
@@ -246,9 +253,13 @@ def run(cfg: Config, spec: RunSpec, budget: Budget, console,
                     f"  [red]{status}[/] {engine.label:<12} {query:<5} {payload.get('error')}"
                 )
 
+        rows.extend(engine_rows)
+        if record_timings and engine_rows:
+            _append_timings(cfg.paths.timings, engine_rows)
+            written += len(engine_rows)
+
     if record_timings:
-        _append_timings(cfg.paths.timings, rows)
-        console.print(f"\n[dim]{len(rows)} rows appended to {cfg.paths.timings}[/]")
+        console.print(f"\n[dim]{written} rows appended to {cfg.paths.timings}[/]")
     return 1 if failures else 0
 
 
