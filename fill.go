@@ -292,3 +292,16 @@ func (e Expr) FillNull(s FillStrategy) Expr {
 			"unknown fill strategy %s", s)})
 	}
 }
+
+// Explode is refused as an expression for the reason DropNulls is: it changes the
+// frame's height, and an expression produces one value per input row.
+//
+// It is the same refusal rather than a new one on purpose. A caller who reaches
+// for `Col("tags").Explode()` has made the height mistake, not a list mistake,
+// and the answer is the same shape as it is for DropNulls.
+func (e Expr) Explode() Expr {
+	return wrap(&expr.Err{E: uerr.New(uerr.KindUnsupported, "explode",
+		"Explode is not an expression; it changes the frame's height").
+		Hint("use the frame-level form: lf.Explode(\"tags\")").
+		Hint("an expression produces one value per input row, so it cannot add rows")})
+}

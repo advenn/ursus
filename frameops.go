@@ -148,6 +148,43 @@ func (lf *LazyFrame) Slice(offset, length int) *LazyFrame {
 	return lf.derive(&plan.Slice{Input: lf.node, Offset: offset, Len: length})
 }
 
+// Explode turns each row's list into one row per element, repeating every other
+// column.
+//
+//	id | tags        ->   id | tags
+//	 1 | [10, 11]          1 | 10
+//	 2 | []                1 | 11
+//	 3 | null              2 | null
+//	 4 | [12]              3 | null
+//	                       4 | 12
+//
+// An empty list and a null list each produce ONE row holding a null, rather than
+// vanishing. Dropping them would silently lower the height — which is only
+// visible to someone who checks it — and would make two columns disagree about
+// how many rows a pair of empty lists gives. It is also what polars does.
+//
+// The consequence is worth knowing: **explode erases the difference between an
+// empty list and a null list.** A List column keeps those apart deliberately;
+// after this they are the same row. The distinction belongs to the list, and the
+// list is what explode consumes.
+//
+// Several columns explode TOGETHER — zipped, not multiplied. Exploding twice in
+// sequence would give the cross product instead, so the lists must be the same
+// length in every row, and a row where they disagree is an error rather than a
+// truncation.
+func (lf *LazyFrame) Explode(names ...string) *LazyFrame {
+	if lf.err != nil {
+		return lf
+	}
+	if len(names) == 0 {
+		return &LazyFrame{err: uerr.New(uerr.KindValue, "explode",
+			"explode needs at least one column").
+			Hint("there is no sensible default: exploding every list column at " +
+				"once would zip columns the caller never said were parallel")}
+	}
+	return lf.derive(&plan.Explode{Input: lf.node, Columns: names})
+}
+
 // Tail keeps the last n rows.
 //
 // Unlike Head it cannot stream to completion: which rows are the last n is unknown

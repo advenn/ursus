@@ -353,6 +353,9 @@ func Plan(ctx context.Context, n plan.Node, opts Options) (Operator, error) {
 	case *plan.WithColumns:
 		return planWithColumns(ctx, t, opts)
 
+	case *plan.Explode:
+		return planExplode(ctx, t, opts)
+
 	case *plan.Aggregate:
 		return planAggregate(ctx, t, opts)
 
