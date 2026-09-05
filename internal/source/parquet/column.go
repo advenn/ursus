@@ -327,3 +327,152 @@ func decimalFromBytes(b []byte) (i128.Int128, error) {
 		Lo: binary.BigEndian.Uint64(buf[8:16]),
 	}, nil
 }
+
+// listCol reads a repeated column into offsets plus a child column.
+//
+// # Rows do not line up with ReadBatch
+//
+// Every other reader here can treat one level as one row. A repeated column
+// cannot: ReadBatch's budget is in LEVELS, one row holds as many levels as it has
+// elements, and a row may therefore straddle two calls. That is the whole reason
+// lists were not readable before this.
+//
+// The fix is a persistent cursor. Levels are refilled a block at a time and
+// consumed across calls; a row is closed only when the NEXT rep == 0 arrives, or
+// at end of chunk. `open` survives a refill, so a row split across two ReadBatch
+// calls is assembled correctly — which is exactly the case a fixture with short
+// lists never produces, so the test uses a list longer than the read block.
+//
+// # The four states of a row
+//
+// For the standard three-level encoding
+//
+//	optional group tags (LIST) { repeated group list { optional T element } }
+//
+// maxDef is 3 and maxRep is 1, and definition level alone distinguishes:
+//
+//	def == 3        an element is present
+//	def == 2        an element that is NULL, inside a present list
+//	def == 1        the list is present and EMPTY  <- no element consumed
+//	def == 0        the list itself is null
+//
+// The two that get confused are the last two: both append no elements and leave
+// the offset unmoved, and only the validity bit tells them apart. That is the same
+// trap as an empty string against a null string, and it fails the same way — one
+// row quietly holding the wrong answer.
+type listCol[P any, T data.Fixed] struct {
+	cr     batchReader[P]
+	maxDef int16 // element present
+	maxRep int16
+	conv   func(P) T
+	dt     dtype.DataType // the LIST type; the child gets its element
+
+	// Level/value scratch, and a cursor into it that survives across read calls.
+	vals []P
+	defs []int16
+	reps []int16
+	nLev int // levels currently in scratch
+	pos  int // next unconsumed level
+	vpos int // next unconsumed value in vals
+	eof  bool
+
+	open bool // a row has been started and not yet closed
+
+	offs  []int32 // n+1 entries; the leading zero is planted once
+	elems []T
+	evalid *bitmap.Builder // validity of the ELEMENTS
+	valid  *bitmap.Builder // validity of the ROWS
+}
+
+const listLevelBlock = 4096
+
+func (c *listCol[P, T]) refill() error {
+	if c.eof {
+		return nil
+	}
+	if cap(c.vals) < listLevelBlock {
+		c.vals = make([]P, listLevelBlock)
+		c.defs = make([]int16, listLevelBlock)
+		c.reps = make([]int16, listLevelBlock)
+	}
+	total, _, err := c.cr.ReadBatch(int64(listLevelBlock),
+		c.vals[:listLevelBlock], c.defs[:listLevelBlock], c.reps[:listLevelBlock])
+	if err != nil {
+		return uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a repeated column")
+	}
+	c.nLev, c.pos, c.vpos = int(total), 0, 0
+	if total == 0 {
+		c.eof = true
+	}
+	return nil
+}
+
+func (c *listCol[P, T]) read(n int) (int, error) {
+	if c.offs == nil {
+		c.offs = make([]int32, 1, n+1)
+	}
+	rows := 0
+	for rows < n {
+		if c.pos >= c.nLev {
+			if err := c.refill(); err != nil {
+				return 0, err
+			}
+			if c.eof {
+				break
+			}
+		}
+		for ; c.pos < c.nLev; c.pos++ {
+			def, rep := c.defs[c.pos], c.reps[c.pos]
+			if rep == 0 {
+				// A new row starts here. Close the previous one first — and stop if
+				// the caller has all it asked for, leaving the cursor on this level
+				// so the next call resumes exactly here.
+				if c.open {
+					c.offs = append(c.offs, int32(len(c.elems)))
+					rows++
+					if rows == n {
+						c.open = false
+						goto done
+					}
+				}
+				c.open = true
+				c.valid.Append(def > 0) // def 0 is a null list
+			}
+			if def == c.maxDef {
+				c.elems = append(c.elems, c.conv(c.vals[c.vpos]))
+				c.evalid.Append(true)
+				c.vpos++
+			} else if def == c.maxDef-1 && c.maxDef >= 2 {
+				// A null ELEMENT inside a present list. It occupies a slot; an empty
+				// list does not, which is the whole distinction.
+				var zero T
+				c.elems = append(c.elems, zero)
+				c.evalid.Append(false)
+			}
+			// Anything shallower is an empty or null list: no element, and the
+			// offset does not move.
+		}
+	}
+	// End of chunk closes whatever row is still open.
+	if c.eof && c.open {
+		c.offs = append(c.offs, int32(len(c.elems)))
+		c.open = false
+		rows++
+	}
+done:
+	return rows, nil
+}
+
+func (c *listCol[P, T]) finish(name string) *data.Column {
+	child := data.NewFixed("item", c.dt.Inner(), c.elems, c.evalid.Finish())
+	col := data.NewList(name, c.offs, child, c.valid.Finish())
+	// Fresh buffers per batch, for the reason fixedCol gives: NewFixed wraps
+	// without copying, so reusing the slice would rewrite a batch the consumer is
+	// still holding.
+	c.offs, c.elems = nil, nil
+	c.evalid = bitmap.NewBuilder(0)
+	c.valid = bitmap.NewBuilder(0)
+	return col
+}
+
+func (c *listCol[P, T]) close() error { return c.cr.Close() }

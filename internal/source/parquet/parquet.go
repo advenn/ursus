@@ -525,6 +525,13 @@ func newColReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataT
 	maxDef := desc.MaxDefinitionLevel()
 	name := desc.Name()
 
+	// A List is read by listCol, which owns the level machine; the element type
+	// decides which instantiation. desc is the ELEMENT's leaf descriptor, so its
+	// levels are the ones the machine needs.
+	if dt.ID() == dtype.TypeList {
+		return newListReader(cr, desc, dt)
+	}
+
 	switch t := cr.(type) {
 	case *file.BooleanColumnChunkReader:
 		return &boolCol{cr: t, maxDef: maxDef,
@@ -625,3 +632,48 @@ func newFixed[P any, T data.Fixed](cr batchReader[P], maxDef int16, dt dtype.Dat
 }
 
 func identity[T any](v T) T { return v }
+
+// newListReader builds the listCol instantiation for a List's element type.
+//
+// Only fixed-width elements are read for now. A List(String) needs the offsets
+// machinery of byteArrayCol underneath the level machine of listCol, which is a
+// second problem rather than a bigger one; refusing it names the gap instead of
+// half-reading it.
+func newListReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataType) (colReader, error) {
+	maxDef, maxRep := desc.MaxDefinitionLevel(), desc.MaxRepetitionLevel()
+	elem := dt.Inner()
+
+	newList := func(c colReader) (colReader, error) { return c, nil }
+	switch t := cr.(type) {
+	case *file.Int32ColumnChunkReader:
+		switch elem.ID() {
+		case dtype.TypeInt8, dtype.TypeInt16, dtype.TypeInt32, dtype.TypeDate:
+			return newList(&listCol[int32, int32]{cr: t, maxDef: maxDef, maxRep: maxRep,
+				conv: identity[int32], dt: dt,
+				evalid: bitmap.NewBuilder(0), valid: bitmap.NewBuilder(0)})
+		}
+	case *file.Int64ColumnChunkReader:
+		switch elem.ID() {
+		case dtype.TypeInt64, dtype.TypeDatetime, dtype.TypeDuration, dtype.TypeTime:
+			return newList(&listCol[int64, int64]{cr: t, maxDef: maxDef, maxRep: maxRep,
+				conv: identity[int64], dt: dt,
+				evalid: bitmap.NewBuilder(0), valid: bitmap.NewBuilder(0)})
+		}
+	case *file.Float32ColumnChunkReader:
+		if elem.ID() == dtype.TypeFloat32 {
+			return newList(&listCol[float32, float32]{cr: t, maxDef: maxDef, maxRep: maxRep,
+				conv: identity[float32], dt: dt,
+				evalid: bitmap.NewBuilder(0), valid: bitmap.NewBuilder(0)})
+		}
+	case *file.Float64ColumnChunkReader:
+		if elem.ID() == dtype.TypeFloat64 {
+			return newList(&listCol[float64, float64]{cr: t, maxDef: maxDef, maxRep: maxRep,
+				conv: identity[float64], dt: dt,
+				evalid: bitmap.NewBuilder(0), valid: bitmap.NewBuilder(0)})
+		}
+	}
+	return nil, uerr.New(uerr.KindUnsupported, "scan_parquet",
+		"column %q is a %s, and only lists of fixed-width elements can be read",
+		desc.Name(), dt).
+		Hint("lists of String, Decimal or nested elements are not read yet")
+}

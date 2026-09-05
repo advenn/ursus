@@ -61,10 +61,17 @@ type Fixed interface {
 //	fixed-width types  → fixed        (a flat values buffer)
 //	Bool               → bits         (a packed bitmap, NOT one byte per value)
 //	String, Binary     → offs + chars (int32 offsets plus a character buffer)
+//	List               → offs + child (the same offsets, into a child COLUMN)
 //
 // Bool having a distinct representation is not an accident of implementation: a
 // Boolean column has TWO bitmaps, values and validity, and keeping them the same
 // shape is what makes `null > 5` expressible as "value bit 0, validity bit 0".
+//
+// List reuses offs rather than inventing a second offsets field, so the n+1
+// entries with a leading zero — and everything that already knows that shape,
+// Slice included — carry over unchanged. What differs is only what the offsets
+// index INTO: a flat character buffer for String, a whole Column for List, which
+// is what lets the element be any type the child can be, nested lists included.
 type Column struct {
 	name  string
 	dt    dtype.DataType
@@ -75,6 +82,7 @@ type Column struct {
 	bits  bitmap.View    // Bool payload
 	offs  *memory.Buffer // []int32, len+1 entries
 	chars *memory.Buffer // String/Binary character data
+	child *Column        // List elements; offs indexes into this
 }
 
 // Name returns the column name.
@@ -105,7 +113,7 @@ func (c *Column) IsValid(i int) bool { return c.valid.Get(i) }
 // That rule was previously enforced only by remembering it. A kernel handed a
 // column from an unknown source can now ask.
 func (c *Column) IsPayloadFree() bool {
-	return c.fixed == nil && c.offs == nil && c.bits.Len() == 0
+	return c.fixed == nil && c.offs == nil && c.bits.Len() == 0 && c.child == nil
 }
 
 // Rename returns a copy with a new name. O(1): the payload is shared.
@@ -220,6 +228,88 @@ func NewStringBuffers(name string, offs, chars *memory.Buffer, n int, valid bitm
 	}
 	return &Column{name: name, dt: dtype.String, len: n, valid: valid, offs: offs, chars: chars}
 }
+
+// NewList builds a List column from offsets and a child column holding every
+// element of every row, concatenated.
+//
+// offs must have n+1 entries with offs[0] == 0 and offs[n] == child.Len() — the
+// ordinary Arrow invariant, and the same one NewStringParts documents, because
+// this is the same offsets buffer pointing at a different kind of payload.
+//
+// # An empty list and a null list are not the same row
+//
+// Both leave the offset unmoved: offs[i] == offs[i+1] either way. Only the
+// validity bit tells them apart, exactly as it does for an empty string against a
+// null string. Getting it wrong is not a crash — it is one row quietly holding
+// the wrong answer, and the failure surfaces wherever the row is finally read
+// rather than where it was built.
+//
+// The type is DERIVED from the child rather than passed in. A List whose declared
+// element type disagrees with the column actually holding the elements would be a
+// lie no caller could detect, and there is no case where the two should differ.
+func NewList(name string, offs []int32, child *Column, valid bitmap.View) *Column {
+	n := len(offs) - 1
+	if n < 0 {
+		n = 0
+	}
+	ob := arrowx.NewBuffer(len(offs) * 4)
+	copy(unsafeData[int32](ob.Bytes()), offs)
+
+	if valid.Len() == 0 && n > 0 {
+		valid = bitmap.AllSet(n)
+	}
+	return &Column{
+		name:  name,
+		dt:    dtype.List(child.DType()),
+		len:   n,
+		valid: valid,
+		offs:  ob,
+		child: child,
+	}
+}
+
+// Child returns a List column's element column, or nil.
+//
+// The result is the elements of EVERY row concatenated; row i occupies
+// child[offs[i]:offs[i+1]]. Use Lists to walk it without doing that arithmetic by
+// hand.
+func (c *Column) Child() *Column { return c.child }
+
+// Lists returns an accessor over a List column's rows.
+func (c *Column) Lists() ListAccessor {
+	return ListAccessor{offs: c.RawOffsets(), child: c.child, valid: c.valid, n: c.len}
+}
+
+// ListAccessor reads one row's element range at a time.
+//
+// It returns a RANGE rather than a sliced column because slicing per row would
+// allocate per row, and every caller so far — rendering, Take, Concat — wants the
+// bounds so it can copy a span in one move.
+type ListAccessor struct {
+	offs  []byte
+	child *Column
+	valid bitmap.View
+	n     int
+}
+
+// Get returns the half-open element range for row i, and whether the row is
+// non-null.
+//
+// The range is ALWAYS the real one, including for a null row — where it is empty,
+// because a null list consumes no elements and leaves the offset unmoved. That
+// matters to any caller walking a column end to end: returning a zeroed range for
+// a null row would collapse every offset after it, and Concat did exactly that
+// before this note existed.
+//
+// So a present-but-empty list and a null list return the SAME range, and `ok` is
+// the only thing that separates them. That is the distinction, not an accident.
+func (a ListAccessor) Get(i int) (start, end int32, ok bool) {
+	o := unsafeData[int32](a.offs)
+	return o[i], o[i+1], a.valid.Get(i)
+}
+
+// Child is the column the ranges index into.
+func (a ListAccessor) Child() *Column { return a.child }
 
 // NewNull builds an all-null column of the given type and length. It carries no
 // payload buffer, which makes a typed null literal free.
@@ -408,14 +498,17 @@ func (c *Column) Slice(offset, length int) *Column {
 	case c.bits.Len() > 0:
 		d.bits = c.bits.Slice(offset, length)
 	case c.offs != nil:
-		// Offsets are relative to the character buffer, so a slice can keep the
-		// same chars and re-window the offsets.
+		// Offsets are relative to the payload, so a slice can keep the same payload
+		// and re-window the offsets. That holds whether the payload is a character
+		// buffer or a child column: the offsets are not rebased, so the child stays
+		// whole and the slice stays O(1).
 		o := unsafeData[int32](c.offs.Bytes())
 		nb := arrowx.NewBuffer((length + 1) * 4)
 		no := unsafeData[int32](nb.Bytes())
 		copy(no, o[offset:offset+length+1])
 		d.offs = nb
 		d.chars = c.chars
+		d.child = c.child
 	case c.fixed != nil:
 		width := c.dt.Physical().BitWidth() / 8
 		nb := arrowx.NewBuffer(length * width)

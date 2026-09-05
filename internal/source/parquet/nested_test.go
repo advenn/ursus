@@ -243,10 +243,14 @@ func TestNestedFileReadsItsFlatColumns(t *testing.T) {
 	}
 }
 
-// TestNestedColumnIsRefusedNotHidden: asking for it fails, and fails the way it
-// always did. This is what keeps "nothing is silently missing" true.
+// TestNestedColumnIsRefusedNotHidden: asking for one that still cannot be read
+// fails, and fails the way it always did. This is what keeps "nothing is silently
+// missing" true.
+//
+// `tags` used to be in this list. It is readable now — a List of fixed-width
+// elements — which is what step 29 added; `user` is a Struct and still is not.
 func TestNestedColumnIsRefusedNotHidden(t *testing.T) {
-	for _, col := range []string{"tags", "user"} {
+	for _, col := range []string{"user"} {
 		t.Run(col, func(t *testing.T) {
 			s := openSource(t, writeNested(t))
 			sch, err := s.Schema(t.Context())

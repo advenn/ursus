@@ -29,24 +29,27 @@ type BufferID = *byte
 // Size is the buffer's CAPACITY, not the bytes in use: the allocation is what is
 // actually held, and an under-filled buffer still occupies all of it.
 //
-// A column has at most five slots — fixed, offs, chars and the two bitmaps — so
-// the within-column deduplication below is a linear scan over a fixed array
-// rather than a map. Deduplication ACROSS columns is BufferSet's job.
+// A column has five slots of its own — fixed, offs, chars and the two bitmaps —
+// so the within-column deduplication below is a linear scan rather than a map.
+// Deduplication ACROSS columns is BufferSet's job.
+//
+// The scan is over a SLICE rather than a fixed array because a List column also
+// yields its child's buffers, and a child may itself be a List: the count is
+// bounded by nesting depth, not by five. It was a [5]BufferID, which a single
+// list column would have run off the end of.
 func (c *Column) Buffers() iter.Seq2[BufferID, int64] {
 	return func(yield func(BufferID, int64) bool) {
-		var seen [5]BufferID
-		n := 0
+		seen := make([]BufferID, 0, 5)
 		emit := func(id BufferID, size int64) bool {
 			if id == nil || size == 0 {
 				return true
 			}
-			for _, s := range seen[:n] {
+			for _, s := range seen {
 				if s == id {
 					return true
 				}
 			}
-			seen[n] = id
-			n++
+			seen = append(seen, id)
 			return yield(id, size)
 		}
 		for _, b := range [...]*memory.Buffer{c.fixed, c.offs, c.chars} {
@@ -57,6 +60,16 @@ func (c *Column) Buffers() iter.Seq2[BufferID, int64] {
 		for _, v := range [...]bitmap.View{c.valid, c.bits} {
 			if !emit(viewID(v)) {
 				return
+			}
+		}
+		// A List's elements live in a child column, and its buffers are as real as
+		// any other. Omitting them would under-report a list column by everything
+		// it actually holds — the offsets are the small part.
+		if c.child != nil {
+			for id, size := range c.child.Buffers() {
+				if !emit(id, size) {
+					return
+				}
 			}
 		}
 	}

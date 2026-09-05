@@ -156,6 +156,26 @@ func renderCell(c *data.Column, row int) string {
 	if !c.IsValid(row) {
 		return "null"
 	}
+	// A List has to be answered before the typed probes below: its child may be
+	// Int64, and TypedColumn reads the COLUMN's payload, so a list of integers
+	// would otherwise fall through and print nothing sensible.
+	//
+	// An empty list renders "[]" and a null list "null", which is the distinction
+	// the whole type has to keep — and the cheapest place to see it broken.
+	if c.DType().ID() == dtype.TypeList {
+		acc := c.Lists()
+		start, end, _ := acc.Get(row)
+		var b strings.Builder
+		b.WriteByte('[')
+		for e := start; e < end; e++ {
+			if e > start {
+				b.WriteString(", ")
+			}
+			b.WriteString(renderCell(acc.Child(), int(e)))
+		}
+		b.WriteByte(']')
+		return b.String()
+	}
 	if s, err := data.TypedColumn[string](c); err == nil {
 		v, _ := s.Get(row)
 		return strconv.Quote(v)

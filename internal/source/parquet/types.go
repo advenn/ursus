@@ -377,9 +377,18 @@ func ursusTimeUnit(u schema.TimeUnitType) (dtype.TimeUnit, bool) {
 func fieldType(sc *schema.Schema, n schema.Node) (dtype.DataType, int, error) {
 	dt := nodeType(sc, n)
 
-	// Readable means exactly one thing: a primitive, not repeated, sitting
-	// directly under the root, whose physical type maps. Everything else is named
-	// and refused.
+	// A LIST of fixed-width elements is readable: listCol owns the level machine,
+	// and the leaf it reads from is the ELEMENT's, not the group's. Everything
+	// else nested is still named and refused.
+	if dt.ID() == dtype.TypeList {
+		if leaf, ok := listElementLeaf(sc, n); ok && dt.Inner().IsFixedWidth() {
+			return dt, leaf, nil
+		}
+		return dt, -1, unsupportedNode(n, refusalFor(n))
+	}
+
+	// Otherwise readable means exactly one thing: a primitive, not repeated,
+	// sitting directly under the root, whose physical type maps.
 	if n.Type() == schema.Primitive && n.RepetitionType() != parquet.Repetitions.Repeated {
 		if leaf := sc.ColumnIndexByNode(n); leaf >= 0 {
 			c := sc.Column(leaf)
@@ -392,6 +401,28 @@ func fieldType(sc *schema.Schema, n schema.Node) (dtype.DataType, int, error) {
 		}
 	}
 	return dt, -1, unsupportedNode(n, refusalFor(n))
+}
+
+// listElementLeaf finds the leaf column a LIST's elements live in.
+//
+// Only the three-level encoding is recognised: list -> repeated group -> element.
+// A shape this does not match is still NAMED as a list by nodeType; it simply
+// cannot be read, which is the same answer as before this step.
+func listElementLeaf(sc *schema.Schema, n schema.Node) (int, bool) {
+	g, ok := n.(*schema.GroupNode)
+	if !ok || g.NumFields() != 1 {
+		return -1, false
+	}
+	rep, ok := g.Field(0).(*schema.GroupNode)
+	if !ok || rep.NumFields() != 1 {
+		return -1, false
+	}
+	el := rep.Field(0)
+	if el.Type() != schema.Primitive {
+		return -1, false
+	}
+	leaf := sc.ColumnIndexByNode(el)
+	return leaf, leaf >= 0
 }
 
 // refusalFor keeps the wording a user sees identical to what toDataType has

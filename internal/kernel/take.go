@@ -70,6 +70,9 @@ func Take(c *data.Column, sel []int32) (*data.Column, error) {
 		}
 		return data.NewBool(c.Name(), out.Finish(), outValid), nil
 
+	case c.DType().ID() == dtype.TypeList:
+		return takeList(c, sel, outValid)
+
 	case c.DType().IsString() || c.DType().ID() == dtype.TypeBinary:
 		acc := c.Strings()
 		vals := make([]string, n)
@@ -318,6 +321,9 @@ func concatColumn(parts []*data.Column, total int) (*data.Column, error) {
 		}
 		return data.NewBool(first.Name(), bits.Finish(), outValid), nil
 
+	case first.DType().ID() == dtype.TypeList:
+		return concatList(parts, total, outValid)
+
 	case first.DType().IsString() || first.DType().ID() == dtype.TypeBinary:
 		vals := make([]string, 0, total)
 		for _, p := range parts {
@@ -375,4 +381,81 @@ func concatT[T data.Fixed](parts []*data.Column, total int, valid bitmap.View) (
 		pos += p.Len()
 	}
 	return data.NewFixedBuffer(parts[0].Name(), parts[0].DType(), buf, total, valid), nil
+}
+
+// takeList gathers a List column: rebuild the offsets from the selection, and
+// gather the child rows those offsets name.
+//
+// The child selection is built first and gathered ONCE, rather than a slice per
+// row. A row's elements are contiguous in the child, so the whole gather is one
+// Take over a flat index list — which also means every element type the child can
+// be is handled by the recursion rather than by another type switch here.
+func takeList(c *data.Column, sel []int32, outValid bitmap.View) (*data.Column, error) {
+	acc := c.Lists()
+
+	offs := make([]int32, 1, len(sel)+1)
+	var childSel []int32
+	for _, i := range sel {
+		if i != NullIndex {
+			// A null ROW still contributes an offset entry and no elements, which is
+			// what makes it indistinguishable from an empty list except by validity —
+			// the distinction outValid already carries.
+			if start, end, ok := acc.Get(int(i)); ok {
+				for e := start; e < end; e++ {
+					childSel = append(childSel, e)
+				}
+			}
+		}
+		offs = append(offs, int32(len(childSel)))
+	}
+
+	child, err := Take(acc.Child(), childSel)
+	if err != nil {
+		return nil, err
+	}
+	return data.NewList(c.Name(), offs, child, outValid), nil
+}
+
+// concatList concatenates List columns.
+//
+// Every part after the first has offsets relative to ITS OWN child, so they are
+// shifted by the number of elements already accumulated. Forgetting that shift
+// does not crash: part two's rows read part one's elements, which is data that
+// looks entirely plausible.
+func concatList(parts []*data.Column, total int, outValid bitmap.View) (*data.Column, error) {
+	offs := make([]int32, 1, total+1)
+	children := make([]*data.Column, 0, len(parts))
+	base := int32(0)
+
+	for _, p := range parts {
+		acc := p.Lists()
+		for i := range p.Len() {
+			// The END offset of each row, shifted. Validity is carried separately in
+			// outValid, and a null row's range is empty, so this is right for every
+			// row state without a branch.
+			_, end, _ := acc.Get(i)
+			offs = append(offs, base+end)
+		}
+		base += int32(acc.Child().Len())
+		children = append(children, acc.Child())
+	}
+
+	child, err := concatChild(children)
+	if err != nil {
+		return nil, err
+	}
+	return data.NewList(parts[0].Name(), offs, child, outValid), nil
+}
+
+// concatChild concatenates the element columns, reusing concatColumn so the
+// element type needs no separate dispatch.
+func concatChild(children []*data.Column) (*data.Column, error) {
+	if len(children) == 1 {
+		return children[0], nil
+	}
+	n := 0
+	for _, c := range children {
+		n += c.Len()
+	}
+	return concatColumn(children, n)
 }
