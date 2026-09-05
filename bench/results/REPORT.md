@@ -1,5 +1,14 @@
 # ursus benchmark results
 
+Produced from `8bb1ad1` — Rewrite min/max to flat typed storage; publish the benchmark report — on 2026-09-04.
+
+> **These timings predate four commits.** `7aab95b` rewrote the CSV reader's
+> string path, `9afc578` replaced the group-key hash table in six operators, and
+> `921fc38` rewrote the radix sort's inner loop — so the numbers below understate
+> the current engine by an unmeasured amount. The ANSWERS are current: ursus
+> validates 22/22 against the duckdb reference at SF=0.1 and SF=1 as of
+> `921fc38`. Refreshing the timings needs a full multi-engine run.
+
 Median wall-clock over the timed iterations, in milliseconds; lower is better.
 IO is included in the measurement.
 

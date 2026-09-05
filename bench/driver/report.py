@@ -22,7 +22,9 @@ import csv
 import html
 import json
 import math
+import subprocess
 from collections import defaultdict
+from datetime import date
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -168,9 +170,40 @@ def _query_order(name: str) -> tuple:
     return (prefix, int(digits) if digits else 0)
 
 
+def _provenance() -> str:
+    """One line saying which ursus this report describes.
+
+    REPORT.md is the one results file that is committed, and README.md links to
+    it, so a reader meets these numbers with no way of knowing how old they are.
+    It had no date and no commit for its whole life: the published tables
+    described the engine as it stood at the min/max rewrite, while three later
+    commits changed the CSV reader, the group-key table in six operators and the
+    radix sort. Every one of those could move a number in here.
+
+    Stale numbers are not the problem — regenerating them costs a full
+    multi-engine run. Stale numbers that do not SAY they are stale are.
+    """
+    try:
+        sha = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        subject = subprocess.run(
+            ["git", "log", "-1", "--format=%s"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        return f"Produced from `{sha}` — {subject} — on {date.today().isoformat()}."
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # Not a checkout, or no git. Say so rather than omitting the line, which
+        # is the state this function exists to end.
+        return f"Produced on {date.today().isoformat()}; source revision unknown."
+
+
 def markdown(cfg: Config, cells: list[Cell]) -> str:
     out: list[str] = [
         "# ursus benchmark results",
+        "",
+        _provenance(),
         "",
         "Median wall-clock over the timed iterations, in milliseconds; lower is better.",
         "IO is included in the measurement.",

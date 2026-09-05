@@ -18,8 +18,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.27.0'
           check-latest: false
@@ -45,8 +45,8 @@ jobs:
         #         simd/internal/bridge type. Exercises the scalar fallback path.
         width: ['512', '256', '128', '0']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.27.0'
 
@@ -89,8 +89,8 @@ jobs:
     # that the scalar twin of every kernel is real and reachable.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.27.0'
       - run: go test -count=1 ./...
@@ -100,8 +100,8 @@ jobs:
   race:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.27.0'
       - run: go test -race -count=1 ./...
@@ -110,8 +110,8 @@ jobs:
     # The arrow-go foundational claims. Allowed to be slow; must never be skipped.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.27.0'
       - run: go test -run TestRiskGate -v ./internal/arrowx/
