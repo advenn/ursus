@@ -355,6 +355,7 @@ func ursusTimeUnit(u schema.TimeUnitType) (dtype.TimeUnit, bool) {
 		return dtype.Second, false
 	}
 }
+
 // --- nested schema mapping ------------------------------------------------------
 
 // fieldType maps ONE top-level Parquet field to an ursus type.
@@ -381,7 +382,15 @@ func fieldType(sc *schema.Schema, n schema.Node) (dtype.DataType, int, error) {
 	// and the leaf it reads from is the ELEMENT's, not the group's. Everything
 	// else nested is still named and refused.
 	if dt.ID() == dtype.TypeList {
-		if leaf, ok := listElementLeaf(sc, n); ok && dt.Inner().IsFixedWidth() {
+		// Readable elements are the fixed-width types plus String and Binary. The
+		// gate was IsFixedWidth alone, which excluded String — the most common
+		// element type in real Parquet after the integers — because String has no
+		// entry in bitWidths.
+		//
+		// The precise refusal for an element that still cannot be read comes from
+		// newListElems, which knows which accumulators exist; this only has to
+		// decide whether to hand the column a leaf.
+		if leaf, ok := listElementLeaf(sc, n); ok && readableElem(dt.Inner()) {
 			return dt, leaf, nil
 		}
 		return dt, -1, unsupportedNode(n, refusalFor(n))
@@ -401,6 +410,18 @@ func fieldType(sc *schema.Schema, n schema.Node) (dtype.DataType, int, error) {
 		}
 	}
 	return dt, -1, unsupportedNode(n, refusalFor(n))
+}
+
+// readableElem reports whether a List element type has an accumulator.
+//
+// It mirrors newListElems and must stay in step with it: this decides whether the
+// column gets a leaf, and that one decides whether the leaf can be decoded.
+func readableElem(elem dtype.DataType) bool {
+	switch elem.ID() {
+	case dtype.TypeString, dtype.TypeBinary:
+		return true
+	}
+	return elem.IsFixedWidth()
 }
 
 // listElementLeaf finds the leaf column a LIST's elements live in.

@@ -46,9 +46,9 @@ func sortFixture(n int, twoKey bool) ([]*data.Column, []kernel.SortSpec) {
 		gid[i] = int32(rng.IntN(10_000))
 	}
 	return []*data.Column{
-			data.NewFixed("gid", dtype.Int32, gid, bitmap.AllSet(n)),
-			val,
-		}, []kernel.SortSpec{{}, {Descending: true}}
+		data.NewFixed("gid", dtype.Int32, gid, bitmap.AllSet(n)),
+		val,
+	}, []kernel.SortSpec{{}, {Descending: true}}
 }
 
 func BenchmarkArgSortColumns(b *testing.B) {

@@ -633,47 +633,67 @@ func newFixed[P any, T data.Fixed](cr batchReader[P], maxDef int16, dt dtype.Dat
 
 func identity[T any](v T) T { return v }
 
-// newListReader builds the listCol instantiation for a List's element type.
+// newListReader builds the reader for a List column.
 //
-// Only fixed-width elements are read for now. A List(String) needs the offsets
-// machinery of byteArrayCol underneath the level machine of listCol, which is a
-// second problem rather than a bigger one; refusing it names the gap instead of
-// half-reading it.
+// The level machine is listCol and is element-agnostic; all that varies is the
+// accumulator underneath it, so this picks one and hands it over.
 func newListReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataType) (colReader, error) {
-	maxDef, maxRep := desc.MaxDefinitionLevel(), desc.MaxRepetitionLevel()
-	elem := dt.Inner()
+	elems, err := newListElems(cr, desc, dt.Inner())
+	if err != nil {
+		return nil, err
+	}
+	return &listCol{
+		elems:  elems,
+		maxDef: desc.MaxDefinitionLevel(),
+		maxRep: desc.MaxRepetitionLevel(),
+		dt:     dt,
+		valid:  bitmap.NewBuilder(0),
+	}, nil
+}
 
-	newList := func(c colReader) (colReader, error) { return c, nil }
+// newListElems picks the accumulator for a List's element type.
+//
+// The refusals name what is missing rather than saying "not a list ursus can
+// read": each remaining case is one more accumulator, and saying so is the
+// difference between a gap and a wall.
+func newListElems(cr file.ColumnChunkReader, desc *schema.Column,
+	elem dtype.DataType) (listElems, error) {
+
+	fixed := func() *bitmap.Builder { return bitmap.NewBuilder(0) }
+
 	switch t := cr.(type) {
+	case *file.ByteArrayColumnChunkReader:
+		// String and Binary share the physical reader and differ only in the type
+		// the child column is finished with.
+		switch elem.ID() {
+		case dtype.TypeString, dtype.TypeBinary:
+			return &byteArrayElems{cr: t, valid: fixed()}, nil
+		}
+
 	case *file.Int32ColumnChunkReader:
 		switch elem.ID() {
 		case dtype.TypeInt8, dtype.TypeInt16, dtype.TypeInt32, dtype.TypeDate:
-			return newList(&listCol[int32, int32]{cr: t, maxDef: maxDef, maxRep: maxRep,
-				conv: identity[int32], dt: dt,
-				evalid: bitmap.NewBuilder(0), valid: bitmap.NewBuilder(0)})
+			return &fixedElems[int32, int32]{cr: t, conv: identity[int32], valid: fixed()}, nil
 		}
+
 	case *file.Int64ColumnChunkReader:
 		switch elem.ID() {
 		case dtype.TypeInt64, dtype.TypeDatetime, dtype.TypeDuration, dtype.TypeTime:
-			return newList(&listCol[int64, int64]{cr: t, maxDef: maxDef, maxRep: maxRep,
-				conv: identity[int64], dt: dt,
-				evalid: bitmap.NewBuilder(0), valid: bitmap.NewBuilder(0)})
+			return &fixedElems[int64, int64]{cr: t, conv: identity[int64], valid: fixed()}, nil
 		}
+
 	case *file.Float32ColumnChunkReader:
 		if elem.ID() == dtype.TypeFloat32 {
-			return newList(&listCol[float32, float32]{cr: t, maxDef: maxDef, maxRep: maxRep,
-				conv: identity[float32], dt: dt,
-				evalid: bitmap.NewBuilder(0), valid: bitmap.NewBuilder(0)})
+			return &fixedElems[float32, float32]{cr: t, conv: identity[float32], valid: fixed()}, nil
 		}
+
 	case *file.Float64ColumnChunkReader:
 		if elem.ID() == dtype.TypeFloat64 {
-			return newList(&listCol[float64, float64]{cr: t, maxDef: maxDef, maxRep: maxRep,
-				conv: identity[float64], dt: dt,
-				evalid: bitmap.NewBuilder(0), valid: bitmap.NewBuilder(0)})
+			return &fixedElems[float64, float64]{cr: t, conv: identity[float64], valid: fixed()}, nil
 		}
 	}
 	return nil, uerr.New(uerr.KindUnsupported, "scan_parquet",
-		"column %q is a %s, and only lists of fixed-width elements can be read",
-		desc.Name(), dt).
-		Hint("lists of String, Decimal or nested elements are not read yet")
+		"column %q is a list of %s, which cannot be read yet", desc.Name(), elem).
+		Hint("lists of the integer, float, temporal, String and Binary types are " +
+			"read; Bool, Decimal and nested elements are not")
 }

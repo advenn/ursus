@@ -198,3 +198,146 @@ func TestListConcatShiftsOffsets(t *testing.T) {
 		}
 	}
 }
+
+// writeStringListFile builds `id: int64` beside `tags: List(String)`.
+func writeStringListFile(t *testing.T, ids []int64, tags [][]string) string {
+	t.Helper()
+	opt, req := parquet.Repetitions.Optional, parquet.Repetitions.Required
+
+	idNode, err := schema.NewPrimitiveNodeLogical("id", req,
+		schema.NewIntLogicalType(64, true), parquet.Types.Int64, -1, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	el, err := schema.NewPrimitiveNodeLogical("element", opt,
+		schema.StringLogicalType{}, parquet.Types.ByteArray, -1, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lst, err := schema.ListOf(el, opt, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tagsNode, err := schema.NewGroupNodeLogical("tags", opt,
+		schema.FieldList{lst.Field(0)}, schema.NewListLogicalType(), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := schema.NewGroupNode("schema", req,
+		schema.FieldList{idNode, tagsNode}, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var vals []parquet.ByteArray
+	var defs, reps []int16
+	for _, r := range tags {
+		if len(r) == 0 {
+			defs, reps = append(defs, 1), append(reps, 0)
+			continue
+		}
+		for j, v := range r {
+			vals = append(vals, parquet.ByteArray(v))
+			defs = append(defs, 3)
+			if j == 0 {
+				reps = append(reps, 0)
+			} else {
+				reps = append(reps, 1)
+			}
+		}
+	}
+
+	path := filepath.Join(t.TempDir(), "strlists.parquet")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := file.NewParquetWriter(f, root)
+	rg := w.AppendRowGroup()
+
+	cw, err := rg.NextColumn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cw.(*file.Int64ColumnChunkWriter).WriteBatch(ids, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := cw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cw, err = rg.NextColumn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cw.(*file.ByteArrayColumnChunkWriter).WriteBatch(vals, defs, reps); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []interface{ Close() error }{cw, rg, w} {
+		if err := c.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return path
+}
+
+// TestStringListThroughTheEngine is the claim that nothing outside the reader
+// needed changing: Take, Concat, rendering and Explode all reach the child
+// through kernels that already handle String, so a List(String) should work
+// everywhere a List(Int64) does with no further code.
+func TestStringListThroughTheEngine(t *testing.T) {
+	path := writeStringListFile(t,
+		[]int64{1, 2, 3},
+		[][]string{{"go", "rust"}, {"go"}, {"zig", "go"}},
+	)
+
+	t.Run("read and render", func(t *testing.T) {
+		df, err := ursus.ScanParquet(path).Collect(t.Context(), ursus.WithVerify())
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := df.String()
+		if !strings.Contains(out, `["go", "rust"]`) {
+			t.Errorf("a List(String) should render its elements quoted:\n%s", out)
+		}
+	})
+
+	t.Run("explode and group", func(t *testing.T) {
+		df, err := ursus.ScanParquet(path).
+			Explode("tags").
+			GroupBy(ursus.Col("tags")).
+			Agg(ursus.Col("id").Count().Alias("n")).
+			Sort(ursus.Asc(ursus.Col("tags"))).
+			Collect(t.Context(), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("exploded string elements must group like any other column: %v", err)
+		}
+		if df.Height() != 3 { // go, rust, zig
+			t.Fatalf("got %d groups, want 3\n%s", df.Height(), df)
+		}
+		tag, _, err := df.At[string](0, "tags")
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, _, err := df.At[uint64](0, "n")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tag != "go" || n != 3 {
+			t.Errorf("first group = (%q, %d), want (\"go\", 3)\n%s", tag, n, df)
+		}
+	})
+
+	t.Run("filter after explode", func(t *testing.T) {
+		df, err := ursus.ScanParquet(path).
+			Explode("tags").
+			Filter(ursus.Col("tags").Eq("go")).
+			Collect(t.Context(), ursus.WithBatchSize(1), ursus.WithVerify())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if df.Height() != 3 {
+			t.Fatalf("got %d rows, want 3\n%s", df.Height(), df)
+		}
+	})
+}

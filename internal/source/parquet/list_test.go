@@ -242,3 +242,216 @@ func TestListIsBatchSizeInvariant(t *testing.T) {
 		}
 	}
 }
+
+// --- List(String) --------------------------------------------------------------
+
+// srow is one row of a string list. elems carries the values; null[i] marks an
+// element that is NULL rather than empty, which is a state only a nullable
+// element type has.
+type srow struct {
+	elems []string
+	null  []bool
+	ok    bool // the ROW is non-null
+}
+
+// writeStringLists mirrors writeLists for BYTE_ARRAY elements.
+//
+//	def 3  an element is present     def 1  a present but EMPTY list
+//	def 2  a NULL element            def 0  a null list
+func writeStringLists(t *testing.T, rows []srow) string {
+	t.Helper()
+
+	opt := parquet.Repetitions.Optional
+	el, err := schema.NewPrimitiveNodeLogical("element", opt,
+		schema.StringLogicalType{}, parquet.Types.ByteArray, -1, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lst, err := schema.ListOf(el, opt, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tags, err := schema.NewGroupNodeLogical("tags", opt,
+		schema.FieldList{lst.Field(0)}, schema.NewListLogicalType(), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := schema.NewGroupNode("schema", parquet.Repetitions.Required,
+		schema.FieldList{tags}, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var vals []parquet.ByteArray
+	var defs, reps []int16
+	for _, r := range rows {
+		switch {
+		case !r.ok:
+			defs, reps = append(defs, 0), append(reps, 0)
+		case len(r.elems) == 0:
+			defs, reps = append(defs, 1), append(reps, 0)
+		default:
+			for j, v := range r.elems {
+				isNull := j < len(r.null) && r.null[j]
+				if isNull {
+					defs = append(defs, 2)
+				} else {
+					vals = append(vals, parquet.ByteArray(v))
+					defs = append(defs, 3)
+				}
+				if j == 0 {
+					reps = append(reps, 0)
+				} else {
+					reps = append(reps, 1)
+				}
+			}
+		}
+	}
+
+	path := filepath.Join(t.TempDir(), "strlists.parquet")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := file.NewParquetWriter(f, root)
+	rg := w.AppendRowGroup()
+	cw, err := rg.NextColumn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cw.(*file.ByteArrayColumnChunkWriter).WriteBatch(vals, defs, reps); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []interface{ Close() error }{cw, rg, w} {
+		if err := c.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return path
+}
+
+func readStringLists(t *testing.T, path string, batch int) []srow {
+	t.Helper()
+	s := openSource(t, path)
+	bs, err := s.Open(t.Context(), source.ScanSpec{BatchSize: batch})
+	if err != nil {
+		t.Fatalf("a List(String) column must be readable: %v", err)
+	}
+	defer bs.Close()
+
+	var out []srow
+	for {
+		b, err := bs.Next(t.Context())
+		if err == io.EOF {
+			return out
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := b.Columns()[0]
+		if c.DType() != dtype.List(dtype.String) {
+			t.Fatalf("column typed %s, want List(String)", c.DType())
+		}
+		acc := c.Lists()
+		child, err := data.TypedColumn[string](acc.Child())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range c.Len() {
+			start, end, ok := acc.Get(i)
+			if !ok {
+				out = append(out, srow{ok: false})
+				continue
+			}
+			r := srow{ok: true}
+			for e := start; e < end; e++ {
+				v, present := child.Get(int(e))
+				r.elems = append(r.elems, v)
+				r.null = append(r.null, !present)
+			}
+			out = append(out, r)
+		}
+	}
+}
+
+func sameSRows(a, b []srow) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].ok != b[i].ok || len(a[i].elems) != len(b[i].elems) {
+			return false
+		}
+		for j := range a[i].elems {
+			an := j < len(a[i].null) && a[i].null[j]
+			bn := j < len(b[i].null) && b[i].null[j]
+			if an != bn {
+				return false
+			}
+			if !an && a[i].elems[j] != b[i].elems[j] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// TestStringListRoundTrips covers the four row states plus the two an element type
+// with a length adds: an EMPTY STRING element, which is not an empty list and not
+// a null; and a NULL element, which occupies a slot and moves the element offset
+// but not the byte offset.
+func TestStringListRoundTrips(t *testing.T) {
+	want := []srow{
+		{elems: []string{"a", "bb"}, null: []bool{false, false}, ok: true},
+		{ok: true},  // present but EMPTY list
+		{ok: false}, // NULL list
+		{elems: []string{""}, null: []bool{false}, ok: true},            // an empty STRING
+		{elems: []string{"x", ""}, null: []bool{true, false}, ok: true}, // a NULL element
+		{elems: []string{"héllo", "日本語", "🌍"}, null: []bool{false, false, false}, ok: true},
+		{elems: []string{"tail"}, null: []bool{false}, ok: true},
+	}
+	for _, size := range []int{1, 2, 3, 8192} {
+		got := readStringLists(t, writeStringLists(t, want), size)
+		if !sameSRows(got, want) {
+			t.Errorf("batch size %d changed the rows\n got: %+v\nwant: %+v",
+				size, got, want)
+		}
+	}
+}
+
+// TestStringListSpansTheReadBlock is the cursor, for the new accumulator: a row
+// longer than listLevelBlock is assembled across two refills.
+func TestStringListSpansTheReadBlock(t *testing.T) {
+	long := make([]string, listLevelBlock+37)
+	nulls := make([]bool, len(long))
+	for i := range long {
+		long[i] = "e" + itoa(i) // multi-byte lengths, so byte offsets vary per element
+	}
+	want := []srow{
+		{elems: []string{"first"}, null: []bool{false}, ok: true},
+		{elems: long, null: nulls, ok: true},
+		{elems: []string{"last"}, null: []bool{false}, ok: true},
+	}
+	got := readStringLists(t, writeStringLists(t, want), 8192)
+	if len(got) != 3 {
+		t.Fatalf("got %d rows, want 3 — a row split at the block boundary", len(got))
+	}
+	if !sameSRows(got, want) {
+		t.Errorf("the long row was not reassembled: lengths %d, %d, %d",
+			len(got[0].elems), len(got[1].elems), len(got[2].elems))
+	}
+}
+
+func itoa(i int) string {
+	if i == 0 {
+		return "0"
+	}
+	var b [20]byte
+	p := len(b)
+	for i > 0 {
+		p--
+		b[p] = byte('0' + i%10)
+		i /= 10
+	}
+	return string(b[p:])
+}

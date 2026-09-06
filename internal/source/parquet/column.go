@@ -360,54 +360,114 @@ func decimalFromBytes(b []byte) (i128.Int128, error) {
 // the offset unmoved, and only the validity bit tells them apart. That is the same
 // trap as an empty string against a null string, and it fails the same way — one
 // row quietly holding the wrong answer.
-type listCol[P any, T data.Fixed] struct {
-	cr     batchReader[P]
+// listElems owns the typed buffer ReadBatch fills, and knows how to append one
+// element or one null. The level machine above it never sees an element type.
+//
+// The split exists because listCol.read is fifty lines of repetition-level state
+// machine of which exactly three were element-specific: the typed value buffer,
+// appending a present value, and appending a null. Everything else — the
+// persistent cursor, the row boundaries, the four row states, the offsets — is
+// element-agnostic, and was being re-instantiated per element type for no reason.
+//
+// It also means List(Bool) and List(Decimal) are one more accumulator each rather
+// than another instantiation of the whole machine.
+type listElems interface {
+	// readLevels fills defs and reps, and its own value buffer, returning the
+	// number of LEVELS read. Zero means end of chunk.
+	readLevels(defs, reps []int16) (int, error)
+	// appendVal appends the next buffered value, advancing its own cursor.
+	appendVal()
+	// appendNull appends a null ELEMENT — one that occupies a slot inside a
+	// present list, as distinct from a list that is empty or null.
+	appendNull()
+	// count is the number of ELEMENTS accumulated, which is what the list's
+	// offsets are built from.
+	//
+	// Worth stating because it is the one place the implementations differ in a
+	// way that is easy to get wrong: a byte-array accumulator holds TWO offset
+	// arrays, one counting elements and one counting bytes, and the list wants
+	// the first.
+	count() int
+	// resetCursor is called after a refill, when the value cursor restarts.
+	resetCursor()
+	finish(name string, elem dtype.DataType) *data.Column
+	close() error
+}
+
+// listCol reads a repeated column into offsets plus a child column.
+//
+// # Rows do not line up with ReadBatch
+//
+// Every other reader here can treat one level as one row. A repeated column
+// cannot: ReadBatch's budget is in LEVELS, one row holds as many levels as it has
+// elements, and a row may therefore straddle two calls. That is the whole reason
+// lists were not readable before step 29.
+//
+// The fix is a persistent cursor. Levels are refilled a block at a time and
+// consumed across calls; a row is closed only when the NEXT rep == 0 arrives, or
+// at end of chunk. `open` survives a refill, so a row split across two ReadBatch
+// calls is assembled correctly — which is exactly the case a fixture with short
+// lists never produces, so the test uses a list longer than the read block.
+//
+// # The four states of a row
+//
+// For the standard three-level encoding
+//
+//	optional group tags (LIST) { repeated group list { optional T element } }
+//
+// maxDef is 3 and maxRep is 1, and definition level alone distinguishes:
+//
+//	def == 3        an element is present
+//	def == 2        an element that is NULL, inside a present list
+//	def == 1        the list is present and EMPTY  <- no element consumed
+//	def == 0        the list itself is null
+//
+// The two that get confused are the last two: both append no elements and leave
+// the offset unmoved, and only the validity bit tells them apart. That is the same
+// trap as an empty string against a null string, and it fails the same way — one
+// row quietly holding the wrong answer.
+type listCol struct {
+	elems  listElems
 	maxDef int16 // element present
 	maxRep int16
-	conv   func(P) T
 	dt     dtype.DataType // the LIST type; the child gets its element
 
-	// Level/value scratch, and a cursor into it that survives across read calls.
-	vals []P
+	// Level scratch, and a cursor into it that survives across read calls.
 	defs []int16
 	reps []int16
 	nLev int // levels currently in scratch
 	pos  int // next unconsumed level
-	vpos int // next unconsumed value in vals
 	eof  bool
 
 	open bool // a row has been started and not yet closed
 
 	offs  []int32 // n+1 entries; the leading zero is planted once
-	elems []T
-	evalid *bitmap.Builder // validity of the ELEMENTS
-	valid  *bitmap.Builder // validity of the ROWS
+	valid *bitmap.Builder
 }
 
 const listLevelBlock = 4096
 
-func (c *listCol[P, T]) refill() error {
+func (c *listCol) refill() error {
 	if c.eof {
 		return nil
 	}
-	if cap(c.vals) < listLevelBlock {
-		c.vals = make([]P, listLevelBlock)
+	if cap(c.defs) < listLevelBlock {
 		c.defs = make([]int16, listLevelBlock)
 		c.reps = make([]int16, listLevelBlock)
 	}
-	total, _, err := c.cr.ReadBatch(int64(listLevelBlock),
-		c.vals[:listLevelBlock], c.defs[:listLevelBlock], c.reps[:listLevelBlock])
+	total, err := c.elems.readLevels(c.defs[:listLevelBlock], c.reps[:listLevelBlock])
 	if err != nil {
-		return uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a repeated column")
+		return err
 	}
-	c.nLev, c.pos, c.vpos = int(total), 0, 0
+	c.nLev, c.pos = total, 0
+	c.elems.resetCursor()
 	if total == 0 {
 		c.eof = true
 	}
 	return nil
 }
 
-func (c *listCol[P, T]) read(n int) (int, error) {
+func (c *listCol) read(n int) (int, error) {
 	if c.offs == nil {
 		c.offs = make([]int32, 1, n+1)
 	}
@@ -428,7 +488,7 @@ func (c *listCol[P, T]) read(n int) (int, error) {
 				// the caller has all it asked for, leaving the cursor on this level
 				// so the next call resumes exactly here.
 				if c.open {
-					c.offs = append(c.offs, int32(len(c.elems)))
+					c.offs = append(c.offs, int32(c.elems.count()))
 					rows++
 					if rows == n {
 						c.open = false
@@ -439,15 +499,11 @@ func (c *listCol[P, T]) read(n int) (int, error) {
 				c.valid.Append(def > 0) // def 0 is a null list
 			}
 			if def == c.maxDef {
-				c.elems = append(c.elems, c.conv(c.vals[c.vpos]))
-				c.evalid.Append(true)
-				c.vpos++
+				c.elems.appendVal()
 			} else if def == c.maxDef-1 && c.maxDef >= 2 {
 				// A null ELEMENT inside a present list. It occupies a slot; an empty
 				// list does not, which is the whole distinction.
-				var zero T
-				c.elems = append(c.elems, zero)
-				c.evalid.Append(false)
+				c.elems.appendNull()
 			}
 			// Anything shallower is an empty or null list: no element, and the
 			// offset does not move.
@@ -455,7 +511,7 @@ func (c *listCol[P, T]) read(n int) (int, error) {
 	}
 	// End of chunk closes whatever row is still open.
 	if c.eof && c.open {
-		c.offs = append(c.offs, int32(len(c.elems)))
+		c.offs = append(c.offs, int32(c.elems.count()))
 		c.open = false
 		rows++
 	}
@@ -463,16 +519,138 @@ done:
 	return rows, nil
 }
 
-func (c *listCol[P, T]) finish(name string) *data.Column {
-	child := data.NewFixed("item", c.dt.Inner(), c.elems, c.evalid.Finish())
+func (c *listCol) finish(name string) *data.Column {
+	child := c.elems.finish("item", c.dt.Inner())
 	col := data.NewList(name, c.offs, child, c.valid.Finish())
-	// Fresh buffers per batch, for the reason fixedCol gives: NewFixed wraps
-	// without copying, so reusing the slice would rewrite a batch the consumer is
+	// Fresh buffers per batch, for the reason fixedCol gives: the constructors
+	// wrap without copying, so reusing them would rewrite a batch the consumer is
 	// still holding.
-	c.offs, c.elems = nil, nil
-	c.evalid = bitmap.NewBuilder(0)
+	c.offs = nil
 	c.valid = bitmap.NewBuilder(0)
 	return col
 }
 
-func (c *listCol[P, T]) close() error { return c.cr.Close() }
+func (c *listCol) close() error { return c.elems.close() }
+
+// fixedElems accumulates fixed-width list elements.
+type fixedElems[P any, T data.Fixed] struct {
+	cr   batchReader[P]
+	conv func(P) T
+
+	vals  []P
+	vpos  int
+	out   []T
+	valid *bitmap.Builder
+}
+
+func (e *fixedElems[P, T]) readLevels(defs, reps []int16) (int, error) {
+	if cap(e.vals) < len(defs) {
+		e.vals = make([]P, len(defs))
+	}
+	total, _, err := e.cr.ReadBatch(int64(len(defs)), e.vals[:len(defs)], defs, reps)
+	if err != nil {
+		return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
+			"reading a repeated column")
+	}
+	return int(total), nil
+}
+
+func (e *fixedElems[P, T]) appendVal() {
+	e.out = append(e.out, e.conv(e.vals[e.vpos]))
+	e.valid.Append(true)
+	e.vpos++
+}
+
+func (e *fixedElems[P, T]) appendNull() {
+	var zero T
+	e.out = append(e.out, zero)
+	e.valid.Append(false)
+}
+
+func (e *fixedElems[P, T]) count() int   { return len(e.out) }
+func (e *fixedElems[P, T]) resetCursor() { e.vpos = 0 }
+func (e *fixedElems[P, T]) close() error { return e.cr.Close() }
+
+func (e *fixedElems[P, T]) finish(name string, elem dtype.DataType) *data.Column {
+	col := data.NewFixed(name, elem, e.out, e.valid.Finish())
+	e.out = nil
+	e.valid = bitmap.NewBuilder(0)
+	return col
+}
+
+// byteArrayElems accumulates String or Binary list elements.
+//
+// It is byteArrayCol's arena, unchanged: characters appended into one buffer and
+// an offset pushed per element, finished through data.NewStringParts. Step 22
+// established that shape to kill a per-value allocation, and it is reused rather
+// than rewritten.
+//
+// The two offset arrays are the thing to keep straight. THIS one counts BYTES and
+// belongs to the string child; the one listCol builds counts ELEMENTS and belongs
+// to the list. count() returns the second, which is why it is len(offs)-1 and not
+// len(chars).
+type byteArrayElems struct {
+	cr *file.ByteArrayColumnChunkReader
+
+	vals []parquet.ByteArray
+	vpos int
+
+	offs  []int32
+	chars []byte
+	valid *bitmap.Builder
+}
+
+func (e *byteArrayElems) readLevels(defs, reps []int16) (int, error) {
+	if cap(e.vals) < len(defs) {
+		e.vals = make([]parquet.ByteArray, len(defs))
+	}
+	total, _, err := e.cr.ReadBatch(int64(len(defs)), e.vals[:len(defs)], defs, reps)
+	if err != nil {
+		return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
+			"reading a repeated byte-array column")
+	}
+	return int(total), nil
+}
+
+// seed plants the mandatory leading zero once, so finish hands offs straight over.
+func (e *byteArrayElems) seed() {
+	if e.offs == nil {
+		e.offs = make([]int32, 1, listLevelBlock+1)
+	}
+}
+
+func (e *byteArrayElems) appendVal() {
+	e.seed()
+	// The copy is not optional: the ByteArray points into a decode buffer arrow-go
+	// reuses across batches.
+	e.chars = append(e.chars, e.vals[e.vpos]...)
+	e.offs = append(e.offs, int32(len(e.chars)))
+	e.valid.Append(true)
+	e.vpos++
+}
+
+func (e *byteArrayElems) appendNull() {
+	e.seed()
+	// The byte offset does not advance — a null element is an empty slice — but an
+	// offset entry is still pushed, because the element occupies a slot.
+	e.offs = append(e.offs, int32(len(e.chars)))
+	e.valid.Append(false)
+}
+
+func (e *byteArrayElems) count() int {
+	if e.offs == nil {
+		return 0
+	}
+	return len(e.offs) - 1
+}
+
+func (e *byteArrayElems) resetCursor() { e.vpos = 0 }
+func (e *byteArrayElems) close() error { return e.cr.Close() }
+
+func (e *byteArrayElems) finish(name string, elem dtype.DataType) *data.Column {
+	e.seed()
+	col := data.NewStringParts(name, e.offs, e.chars, e.valid.Finish())
+	e.offs, e.chars = nil, nil
+	e.valid = bitmap.NewBuilder(0)
+	return col.WithDType(elem)
+}
