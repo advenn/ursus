@@ -82,8 +82,21 @@ func writeNested(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// meta is a struct whose field is itself a group, which is what keeps this file
+	// containing something unreadable now that `user` can be read. Step 29 removed
+	// `tags` from that role and step 34 removed `user`; the guarantee being defended
+	// — a column that cannot be read is refused rather than silently dropped — has
+	// outlived both.
+	inner, err := schema.NewGroupNode("inner", opt, schema.FieldList{i64("x", opt)}, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, err := schema.NewGroupNode("meta", opt, schema.FieldList{inner}, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	root, err := schema.NewGroupNode("schema", req, schema.FieldList{
-		i64("id", req), str("name", opt), tags, user,
+		i64("id", req), str("name", opt), tags, user, meta,
 	}, -1)
 	if err != nil {
 		t.Fatal(err)
@@ -148,6 +161,13 @@ func writeNested(t *testing.T) string {
 			t.Fatal(err)
 		}
 	})
+	write(func(cw file.ColumnChunkWriter) { // meta.inner.x, def 3 = all present
+		_, err := cw.(*file.Int64ColumnChunkWriter).WriteBatch(
+			[]int64{30, 31, 32}, []int16{3, 3, 3}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
 
 	if err := rg.Close(); err != nil {
 		t.Fatal(err)
@@ -179,8 +199,8 @@ func TestNestedFileOpensAndNamesItsColumns(t *testing.T) {
 	// One field per TOP-LEVEL field, not per leaf. `user` alone contributes two
 	// leaves, so a schema built by iterating leaves would have five fields here
 	// and would name them "age" and "city".
-	if sch.Len() != 4 {
-		t.Fatalf("got %d fields, want 4 (one per top-level field)\n%s", sch.Len(), sch)
+	if sch.Len() != 5 {
+		t.Fatalf("got %d fields, want 5 (one per top-level field)\n%s", sch.Len(), sch)
 	}
 
 	want := map[string]dtype.DataType{
@@ -247,10 +267,12 @@ func TestNestedFileReadsItsFlatColumns(t *testing.T) {
 // fails, and fails the way it always did. This is what keeps "nothing is silently
 // missing" true.
 //
-// `tags` used to be in this list. It is readable now — a List of fixed-width
-// elements — which is what step 29 added; `user` is a Struct and still is not.
+// The list has been shrinking as the arc progressed: `tags` left it in step 29 when
+// a List of fixed-width elements became readable, and `user` left it in step 34 when
+// a Struct of flat fields did. `meta` is a struct of a struct — the reader's leaf
+// readers have no level machine for that — and it is what keeps this test honest.
 func TestNestedColumnIsRefusedNotHidden(t *testing.T) {
-	for _, col := range []string{"user"} {
+	for _, col := range []string{"meta"} {
 		t.Run(col, func(t *testing.T) {
 			s := openSource(t, writeNested(t))
 			sch, err := s.Schema(t.Context())

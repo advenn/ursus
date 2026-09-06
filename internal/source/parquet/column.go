@@ -42,6 +42,34 @@ type colReader interface {
 	close() error
 }
 
+// parentTracker is a leaf reader that can also report whether the GROUP enclosing it
+// was present on each row.
+//
+// It exists because a struct's own validity cannot be recovered from its fields. For
+// `optional group person { optional int64 age }` the definition levels say three
+// different things:
+//
+//	def 2   person present, age present
+//	def 1   person present, age NULL
+//	def 0   person NULL
+//
+// Once the levels are consumed, def 1 and def 0 leave identical evidence behind —
+// a null age either way — so the parent's answer has to be recorded while the levels
+// are still in hand. Inferring it afterwards from "every field is null" is wrong for
+// exactly the row that is a real struct holding nothing.
+//
+// Any ONE leaf can answer it: every leaf under the group shares the group's
+// definition level, whatever its own optionality adds on top. So a struct asks its
+// first field and the rest just read values.
+type parentTracker interface {
+	// trackParent starts recording `def >= level` alongside the column's own
+	// validity. Called before the first read.
+	trackParent(level int16)
+	// parentValidity takes the accumulated bits and resets, the way finish does for
+	// the column's own — one batch's worth per call.
+	parentValidity() bitmap.View
+}
+
 // batchReader is the ReadBatch shape shared by every typed column chunk reader.
 type batchReader[P any] interface {
 	ReadBatch(batchSize int64, values []P, defLvls, repLvls []int16) (int64, int, error)
@@ -60,6 +88,19 @@ type fixedCol[P any, T data.Fixed] struct {
 	out   []T
 	valid *bitmap.Builder
 	dt    dtype.DataType
+
+	parentDef int16 // 0 when nothing above this column can be null
+	parent    *bitmap.Builder
+}
+
+func (c *fixedCol[P, T]) trackParent(level int16) {
+	c.parentDef, c.parent = level, bitmap.NewBuilder(0)
+}
+
+func (c *fixedCol[P, T]) parentValidity() bitmap.View {
+	v := c.parent.Finish()
+	c.parent = bitmap.NewBuilder(0)
+	return v
 }
 
 func (c *fixedCol[P, T]) read(n int) (int, error) {
@@ -108,6 +149,11 @@ func (c *fixedCol[P, T]) read(n int) (int, error) {
 			} else {
 				c.out = append(c.out, zero)
 			}
+			if c.parent != nil {
+				// >=, not ==: the enclosing group is present for every level at or
+				// above its own, including the ones where this field is null.
+				c.parent.Append(defs[i+b] >= c.parentDef)
+			}
 		}
 		c.valid.AppendBits(word, w)
 		i += w
@@ -145,6 +191,19 @@ type boolCol struct {
 	out   *bitmap.Builder
 	valid *bitmap.Builder
 	n     int
+
+	parentDef int16
+	parent    *bitmap.Builder
+}
+
+func (c *boolCol) trackParent(level int16) {
+	c.parentDef, c.parent = level, bitmap.NewBuilder(0)
+}
+
+func (c *boolCol) parentValidity() bitmap.View {
+	v := c.parent.Finish()
+	c.parent = bitmap.NewBuilder(0)
+	return v
 }
 
 func (c *boolCol) read(n int) (int, error) {
@@ -188,6 +247,9 @@ func (c *boolCol) read(n int) (int, error) {
 			c.out.Append(false)
 			c.valid.Append(false)
 		}
+		if c.parent != nil {
+			c.parent.Append(defs[i] >= c.parentDef)
+		}
 	}
 	c.n += rows
 	return rows, nil
@@ -224,6 +286,19 @@ type byteArrayCol struct {
 	offs  []int32
 	chars []byte
 	valid *bitmap.Builder
+
+	parentDef int16
+	parent    *bitmap.Builder
+}
+
+func (c *byteArrayCol) trackParent(level int16) {
+	c.parentDef, c.parent = level, bitmap.NewBuilder(0)
+}
+
+func (c *byteArrayCol) parentValidity() bitmap.View {
+	v := c.parent.Finish()
+	c.parent = bitmap.NewBuilder(0)
+	return v
 }
 
 // appendVal records one present value. The copy is not optional: the ByteArray
@@ -284,6 +359,9 @@ func (c *byteArrayCol) read(n int) (int, error) {
 		} else {
 			c.appendNull()
 			c.valid.Append(false)
+		}
+		if c.parent != nil {
+			c.parent.Append(defs[i] >= c.parentDef)
 		}
 	}
 	return rows, nil
@@ -653,4 +731,118 @@ func (e *byteArrayElems) finish(name string, elem dtype.DataType) *data.Column {
 	e.offs, e.chars = nil, nil
 	e.valid = bitmap.NewBuilder(0)
 	return col.WithDType(elem)
+}
+
+// --- struct -----------------------------------------------------------------------
+
+// structCol reads a Struct of flat fields: one ordinary leaf reader per field, read
+// in lockstep, plus the group's own validity.
+//
+// The lockstep is safe because a struct introduces no REPETITION — every leaf under
+// it emits exactly one level per row, so `read(n)` consumes the same n rows from each.
+// That is the whole difference from listCol, which needs a cursor precisely because a
+// row can straddle a ReadBatch call.
+//
+// The struct's validity comes from field 0 through parentTracker; see the note there
+// for why it cannot be recovered from the fields afterwards.
+type structCol struct {
+	fields []colReader
+	names  []string
+
+	// parent is field 0 when the struct is nullable, nil when it is required.
+	// A required struct has no null rows to record, and its leaves carry no level
+	// for the group at all.
+	parent parentTracker
+	rows   int
+}
+
+func (c *structCol) read(n int) (int, error) {
+	rows := -1
+	for i, f := range c.fields {
+		got, err := f.read(n)
+		if err != nil {
+			return 0, err
+		}
+		// Every field of a struct is one value per row by construction. A
+		// disagreement means the file's leaves are inconsistent, and continuing
+		// would build fields that describe different rows under one validity bit.
+		if rows == -1 {
+			rows = got
+		} else if got != rows {
+			return 0, uerr.New(uerr.KindValue, "scan_parquet",
+				"struct fields %q and %q disagree on row count (%d vs %d)",
+				c.names[0], c.names[i], rows, got)
+		}
+	}
+	c.rows += rows
+	return rows, nil
+}
+
+func (c *structCol) finish(name string) *data.Column {
+	fields := make([]*data.Column, len(c.fields))
+	for i, f := range c.fields {
+		fields[i] = f.finish(c.names[i])
+	}
+	var valid bitmap.View
+	if c.parent != nil {
+		valid = c.parent.parentValidity()
+	} else {
+		valid = bitmap.AllSet(c.rows)
+	}
+	c.rows = 0
+	return data.NewStruct(name, fields, valid)
+}
+
+func (c *structCol) close() error {
+	var first error
+	for _, f := range c.fields {
+		if err := f.close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+// newStructReader opens one leaf reader per struct field.
+//
+// The group's definition level is 1 for an optional struct and 0 for a required one,
+// because this step reads only structs sitting directly under the root — a required
+// root contributes nothing, so the struct's own optionality is the entire level.
+// Nested structs would have to walk their ancestors instead, and they are refused at
+// schema time (structFieldLeaves) rather than mis-read here.
+func newStructReader(f dtype.Field, leaves []int,
+	open func(ci int, dt dtype.DataType) (colReader, error)) (colReader, error) {
+
+	sub := f.Type.Fields()
+	if len(sub) != len(leaves) {
+		return nil, uerr.Internalf("scan_parquet: struct %q has %d fields but %d leaves",
+			f.Name, len(sub), len(leaves))
+	}
+
+	c := &structCol{
+		fields: make([]colReader, len(leaves)),
+		names:  make([]string, len(leaves)),
+	}
+	for i, ci := range leaves {
+		r, err := open(ci, sub[i].Type)
+		if err != nil {
+			return nil, err
+		}
+		c.fields[i] = r
+		c.names[i] = sub[i].Name
+	}
+
+	if f.Nullable {
+		t, ok := c.fields[0].(parentTracker)
+		if !ok {
+			// Every leaf reader implements it; a shape that does not could only
+			// answer "never null" for the struct, which is a wrong answer rather
+			// than a missing feature.
+			return nil, uerr.Internalf(
+				"scan_parquet: %q cannot report the presence of struct %q", c.names[0], f.Name)
+		}
+		t.trackParent(1)
+		c.parent = t
+	}
+	return c, nil
 }

@@ -360,9 +360,14 @@ func ursusTimeUnit(u schema.TimeUnitType) (dtype.TimeUnit, bool) {
 
 // fieldType maps ONE top-level Parquet field to an ursus type.
 //
-// It returns the type it managed to name, the leaf column index when the field is
-// a readable flat column, and — when it is not readable — the error explaining
-// why, ready to be returned if a query ever asks for it.
+// It returns the type it managed to name, the file leaf columns the field is built
+// from when it is readable, and — when it is not — the error explaining why, ready
+// to be returned if a query ever asks for it.
+//
+// The leaves are a SLICE because a struct is the first shape that needs more than
+// one: a flat column and a list each consume exactly one leaf, so until now a
+// column index and a leaf index were interchangeable. They are not, and the reader
+// used to rely on their agreeing.
 //
 // # Naming a type ursus cannot read is the point
 //
@@ -375,7 +380,7 @@ func ursusTimeUnit(u schema.TimeUnitType) (dtype.TimeUnit, bool) {
 //
 // What it does NOT buy is the ability to read one. That is refused in Open, per
 // column, and the message is the one toDataType has always produced.
-func fieldType(sc *schema.Schema, n schema.Node) (dtype.DataType, int, error) {
+func fieldType(sc *schema.Schema, n schema.Node) (dtype.DataType, []int, error) {
 	dt := nodeType(sc, n)
 
 	// A LIST of fixed-width elements is readable: listCol owns the level machine,
@@ -391,9 +396,23 @@ func fieldType(sc *schema.Schema, n schema.Node) (dtype.DataType, int, error) {
 		// newListElems, which knows which accumulators exist; this only has to
 		// decide whether to hand the column a leaf.
 		if leaf, ok := listElementLeaf(sc, n); ok && readableElem(dt.Inner()) {
-			return dt, leaf, nil
+			return dt, []int{leaf}, nil
 		}
-		return dt, -1, unsupportedNode(n, refusalFor(n))
+		return dt, nil, unsupportedNode(n, refusalFor(n))
+	}
+
+	// A STRUCT of flat fields is readable: each field is an ordinary leaf, and the
+	// only thing structCol adds is the struct's OWN validity, which none of the leaf
+	// readers produce because until now nothing above them could be null.
+	//
+	// A field that is itself nested makes structFieldLeaves decline, so struct in
+	// struct and list in struct keep the refusal they have always had — named in the
+	// schema, refused on read.
+	if dt.ID() == dtype.TypeStruct {
+		if leaves, ok := structFieldLeaves(sc, n); ok {
+			return dt, leaves, nil
+		}
+		return dt, nil, unsupportedNode(n, refusalFor(n))
 	}
 
 	// Otherwise readable means exactly one thing: a primitive, not repeated,
@@ -402,14 +421,49 @@ func fieldType(sc *schema.Schema, n schema.Node) (dtype.DataType, int, error) {
 		if leaf := sc.ColumnIndexByNode(n); leaf >= 0 {
 			c := sc.Column(leaf)
 			if _, err := leafType(c); err != nil {
-				return dt, -1, err // a physical type ursus has no mapping for
+				return dt, nil, err // a physical type ursus has no mapping for
 			}
 			if c.MaxDefinitionLevel() <= 1 && c.MaxRepetitionLevel() == 0 {
-				return dt, leaf, nil
+				return dt, []int{leaf}, nil
 			}
 		}
 	}
-	return dt, -1, unsupportedNode(n, refusalFor(n))
+	return dt, nil, unsupportedNode(n, refusalFor(n))
+}
+
+// structFieldLeaves gives the leaf column index of every field of a struct, in
+// order, or declines.
+//
+// It declines for a field that is not a plain primitive — a nested struct, a list, a
+// repeated field — because structCol reads its fields through the ordinary leaf
+// readers, which have no level machine. Declining here rather than failing later is
+// what keeps the refusal a schema-time decision with a message that names the shape.
+//
+// A leaf's own MaxDefinitionLevel is NOT checked against 1 the way a top-level
+// primitive's is: inside an optional group it is legitimately 2, and that extra
+// level is precisely what carries the struct's presence.
+func structFieldLeaves(sc *schema.Schema, n schema.Node) ([]int, bool) {
+	g, ok := n.(*schema.GroupNode)
+	if !ok || g.NumFields() == 0 {
+		return nil, false
+	}
+	leaves := make([]int, g.NumFields())
+	for i := range g.NumFields() {
+		f := g.Field(i)
+		if f.Type() != schema.Primitive ||
+			f.RepetitionType() == parquet.Repetitions.Repeated {
+			return nil, false
+		}
+		leaf := sc.ColumnIndexByNode(f)
+		if leaf < 0 {
+			return nil, false
+		}
+		if _, err := leafType(sc.Column(leaf)); err != nil {
+			return nil, false // a physical type ursus has no mapping for
+		}
+		leaves[i] = leaf
+	}
+	return leaves, true
 }
 
 // readableElem reports whether a List element type has an accumulator.

@@ -73,6 +73,9 @@ func Take(c *data.Column, sel []int32) (*data.Column, error) {
 	case c.DType().ID() == dtype.TypeList:
 		return takeList(c, sel, outValid)
 
+	case c.DType().ID() == dtype.TypeStruct:
+		return takeStruct(c, sel, outValid)
+
 	case c.DType().IsString() || c.DType().ID() == dtype.TypeBinary:
 		acc := c.Strings()
 		vals := make([]string, n)
@@ -87,6 +90,56 @@ func Take(c *data.Column, sel []int32) (*data.Column, error) {
 	default:
 		return takeFixed(c, sel, outValid)
 	}
+}
+
+// takeStruct gathers a Struct column: every field gathered by the SAME selection.
+//
+// There is no offset arithmetic here, which is the whole difference from takeList: a
+// struct's fields are parallel to it rather than indexed by it, so row i of the
+// output is row sel[i] of each field. Gathering the fields with different selections
+// — or gathering only some of them — would leave the fields describing different
+// rows, which reads as plausible data rather than as an error.
+//
+// A NullIndex slot lands in the struct's own validity (built by the caller) AND in
+// each field's, because the recursive Take sees the same -1. That is correct: a row
+// gathered from nowhere has no fields either.
+func takeStruct(c *data.Column, sel []int32, valid bitmap.View) (*data.Column, error) {
+	fields := make([]*data.Column, len(c.Fields()))
+	for i, f := range c.Fields() {
+		out, err := Take(f, sel)
+		if err != nil {
+			return nil, err
+		}
+		fields[i] = out
+	}
+	return data.NewStruct(c.Name(), fields, valid), nil
+}
+
+// concatStruct concatenates Struct columns field by field.
+//
+// Unlike concatList there is nothing to rebase — a struct holds no offsets — so this
+// is the recursive case in its simplest form. Parts are assumed to agree on their
+// field names and types, which Concat's caller has already established through the
+// schema.
+func concatStruct(parts []*data.Column, total int, valid bitmap.View) (*data.Column, error) {
+	nf := len(parts[0].Fields())
+	fields := make([]*data.Column, nf)
+	for i := range nf {
+		col := make([]*data.Column, len(parts))
+		for j, p := range parts {
+			if len(p.Fields()) != nf {
+				return nil, uerr.Internalf(
+					"kernel: concat of structs with %d and %d fields", nf, len(p.Fields()))
+			}
+			col[j] = p.Fields()[i]
+		}
+		out, err := concatColumn(col, total)
+		if err != nil {
+			return nil, err
+		}
+		fields[i] = out
+	}
+	return data.NewStruct(parts[0].Name(), fields, valid), nil
 }
 
 // NullIndex marks a gather slot that should produce a null.
@@ -323,6 +376,9 @@ func concatColumn(parts []*data.Column, total int) (*data.Column, error) {
 
 	case first.DType().ID() == dtype.TypeList:
 		return concatList(parts, total, outValid)
+
+	case first.DType().ID() == dtype.TypeStruct:
+		return concatStruct(parts, total, outValid)
 
 	case first.DType().IsString() || first.DType().ID() == dtype.TypeBinary:
 		vals := make([]string, 0, total)

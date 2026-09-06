@@ -72,6 +72,15 @@ func (c *Column) Buffers() iter.Seq2[BufferID, int64] {
 				}
 			}
 		}
+		// A Struct is ALL child, having no payload buffer of its own — so omitting
+		// these would report a struct column as costing only its validity bitmap.
+		for _, f := range c.fields {
+			for id, size := range f.Buffers() {
+				if !emit(id, size) {
+					return
+				}
+			}
+		}
 	}
 }
 

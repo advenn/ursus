@@ -62,6 +62,7 @@ type Fixed interface {
 //	Bool               → bits         (a packed bitmap, NOT one byte per value)
 //	String, Binary     → offs + chars (int32 offsets plus a character buffer)
 //	List               → offs + child (the same offsets, into a child COLUMN)
+//	Struct             → fields       (N COLUMNS, no payload buffer at all)
 //
 // Bool having a distinct representation is not an accident of implementation: a
 // Boolean column has TWO bitmaps, values and validity, and keeping them the same
@@ -72,17 +73,24 @@ type Fixed interface {
 // Slice included — carry over unchanged. What differs is only what the offsets
 // index INTO: a flat character buffer for String, a whole Column for List, which
 // is what lets the element be any type the child can be, nested lists included.
+//
+// A Struct's children are a DIFFERENT relationship and get their own field. A list
+// has one child of some other length that its offsets index into; a struct has N
+// children each exactly as long as the struct, addressed by the same row number and
+// sharing one validity bit. Storing both in one slice would mean every use site
+// needed a comment saying which meaning applied.
 type Column struct {
 	name  string
 	dt    dtype.DataType
 	len   int
 	valid bitmap.View
 
-	fixed *memory.Buffer // fixed-width payload
-	bits  bitmap.View    // Bool payload
-	offs  *memory.Buffer // []int32, len+1 entries
-	chars *memory.Buffer // String/Binary character data
-	child *Column        // List elements; offs indexes into this
+	fixed  *memory.Buffer // fixed-width payload
+	bits   bitmap.View    // Bool payload
+	offs   *memory.Buffer // []int32, len+1 entries
+	chars  *memory.Buffer // String/Binary character data
+	child  *Column        // List elements; offs indexes into this
+	fields []*Column      // Struct fields, each of length len
 }
 
 // Name returns the column name.
@@ -113,7 +121,8 @@ func (c *Column) IsValid(i int) bool { return c.valid.Get(i) }
 // That rule was previously enforced only by remembering it. A kernel handed a
 // column from an unknown source can now ask.
 func (c *Column) IsPayloadFree() bool {
-	return c.fixed == nil && c.offs == nil && c.bits.Len() == 0 && c.child == nil
+	return c.fixed == nil && c.offs == nil && c.bits.Len() == 0 &&
+		c.child == nil && c.fields == nil
 }
 
 // Rename returns a copy with a new name. O(1): the payload is shared.
@@ -310,6 +319,61 @@ func (a ListAccessor) Get(i int) (start, end int32, ok bool) {
 
 // Child is the column the ranges index into.
 func (a ListAccessor) Child() *Column { return a.child }
+
+// NewStruct builds a Struct column from its field columns.
+//
+// Every field must be as long as the struct itself: a struct row IS row i of each
+// field, and the struct's own validity is the only thing they share. That is not
+// checked here — the constructors do not validate — but it is the invariant every
+// reader below relies on.
+//
+// # A null struct is not a struct of nulls
+//
+// The two hold identical field values (none) and differ only in this column's
+// validity bit, exactly as an empty list differs from a null list. It matters
+// because the difference cannot be recovered afterwards: a struct whose fields all
+// happen to be null is a REAL struct, and inferring "null struct" from "every field
+// is null" turns it into an absent one, silently and for one row in a fixture that
+// does not deliberately contain it.
+//
+// The type is DERIVED from the fields, for the reason NewList gives: a declared type
+// that disagreed with the columns actually holding the values would be a lie no
+// caller could detect.
+func NewStruct(name string, fields []*Column, valid bitmap.View) *Column {
+	n := 0
+	if len(fields) > 0 {
+		n = fields[0].Len()
+	}
+	fs := make([]dtype.Field, len(fields))
+	for i, f := range fields {
+		fs[i] = dtype.Field{Name: f.Name(), Type: f.DType(), Nullable: true}
+	}
+	if valid.Len() == 0 && n > 0 {
+		valid = bitmap.AllSet(n)
+	}
+	return &Column{
+		name:   name,
+		dt:     dtype.Struct(fs...),
+		len:    n,
+		valid:  valid,
+		fields: fields,
+	}
+}
+
+// Fields returns a Struct column's field columns, or nil.
+//
+// The result aliases the column's own slice; callers must not reorder it.
+func (c *Column) Fields() []*Column { return c.fields }
+
+// Field returns the field column with this name, and whether there is one.
+func (c *Column) Field(name string) (*Column, bool) {
+	for _, f := range c.fields {
+		if f.name == name {
+			return f, true
+		}
+	}
+	return nil, false
+}
 
 // NewNull builds an all-null column of the given type and length. It carries no
 // payload buffer, which makes a typed null literal free.
@@ -509,6 +573,16 @@ func (c *Column) Slice(offset, length int) *Column {
 		d.offs = nb
 		d.chars = c.chars
 		d.child = c.child
+	case c.fields != nil:
+		// A struct has no payload buffer of its own, so without this arm it would fall
+		// through every case and produce a column of the right length holding nothing.
+		// Each field is as long as the struct, so slicing them at the same window is
+		// the whole operation.
+		d.fields = make([]*Column, len(c.fields))
+		for i, f := range c.fields {
+			d.fields[i] = f.Slice(offset, length)
+		}
+
 	case c.fixed != nil:
 		width := c.dt.Physical().BitWidth() / 8
 		nb := arrowx.NewBuffer(length * width)

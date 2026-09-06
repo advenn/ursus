@@ -44,10 +44,10 @@ type Source struct {
 	schema *dtype.Schema
 	err    error
 
-	// leaves[i] is the file LEAF column that schema field i is read from, or -1
+	// leaves[i] is the file LEAF column set that schema field i is read from, or nil
 	// when the field cannot be read. Field index and leaf index are the same
 	// number only for a flat file; see fileSchema.
-	leaves []int
+	leaves [][]int
 	// unread holds, per unreadable field, the refusal to return if a query asks
 	// for it. Non-nil entries are the nested columns.
 	unread map[int]error
@@ -190,12 +190,12 @@ func (s *Source) openFile(i int) (*file.Reader, func(), error) {
 // it fails in Open with the message it always produced. Nothing is dropped
 // silently; a file with twenty flat columns and one struct is simply no longer
 // unopenable, which it was.
-func fileSchema(sc *schema.Schema) (*dtype.Schema, []int, map[int]error, error) {
+func fileSchema(sc *schema.Schema) (*dtype.Schema, [][]int, map[int]error, error) {
 	root := sc.Root()
 	n := root.NumFields()
 
 	fields := make([]dtype.Field, n)
-	leaves := make([]int, n)
+	leaves := make([][]int, n)
 	var unread map[int]error
 
 	for i := range n {
@@ -244,7 +244,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 	// nil Projection means every column, so a select-all over a file with a nested
 	// column still fails, which is the behaviour that keeps "nothing is silently
 	// missing" true.
-	var cols []int
+	var cols []colPlan
 	for i := range full.Len() {
 		if out.IndexOf(full.Field(i).Name) < 0 {
 			continue
@@ -252,7 +252,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		if err := s.unread[i]; err != nil {
 			return nil, uerr.Annotate(err, "scan_parquet", s.desc)
 		}
-		cols = append(cols, s.leaves[i])
+		cols = append(cols, colPlan{field: i, leaves: s.leaves[i]})
 	}
 
 	batchSize := spec.BatchSize
@@ -282,7 +282,7 @@ type reader struct {
 	src       *Source
 	full      *dtype.Schema
 	out       *dtype.Schema
-	cols      []int // file column indexes to read, in output order
+	cols      []colPlan // what to read, in output order
 	batchSize int
 	remaining int // rows left to produce; 0 means unlimited
 	preds     []expr.Node
@@ -368,16 +368,8 @@ func (r *reader) openNext() error {
 
 		rg := r.pf.RowGroup(r.rgIndex)
 		chunks := make([]colReader, len(r.cols))
-		for i, ci := range r.cols {
-			if err := checkEncodings(rgMeta, ci, r.full.Field(ci).Name); err != nil {
-				return err
-			}
-			cr, err := rg.Column(ci)
-			if err != nil {
-				return uerr.Wrap(err, uerr.KindIO, "scan_parquet",
-					"opening column %q", r.full.Field(ci).Name)
-			}
-			c, err := newColReader(cr, r.pf.MetaData().Schema.Column(ci), r.full.Field(ci).Type)
+		for i, p := range r.cols {
+			c, err := r.openColumn(rg, rgMeta, p)
 			if err != nil {
 				return err
 			}
@@ -387,6 +379,49 @@ func (r *reader) openNext() error {
 		r.rgLeft = int(rgMeta.NumRows())
 		return nil
 	}
+}
+
+// colPlan is one OUTPUT column and the file leaves it is built from.
+//
+// The two numbers used to be one. Every column readable before this step consumed
+// exactly one leaf — a flat column obviously, a List because its single element leaf
+// carries the whole thing — so the schema's field index and the file's leaf index
+// happened to agree, and openNext indexed the schema with a leaf number. A struct
+// with two fields ends the agreement for every column after it, and the symptom
+// would have been reading the wrong column under the right name rather than an error.
+type colPlan struct {
+	field  int   // index into the file schema
+	leaves []int // file column indexes, in field order
+}
+
+// openColumn opens the chunk readers for one output column.
+//
+// A struct needs one per field plus the group's own definition level, which is what
+// separates "this struct is absent" from "this struct is here and its fields are
+// null". Every other shape is a single leaf.
+func (r *reader) openColumn(rg *file.RowGroupReader,
+	rgMeta *metadata.RowGroupMetaData, p colPlan) (colReader, error) {
+
+	f := r.full.Field(p.field)
+
+	// dt is passed in rather than read off f, because a struct's fields each have
+	// their own type and the leaf reader is what decodes them.
+	leafReader := func(ci int, dt dtype.DataType) (colReader, error) {
+		if err := checkEncodings(rgMeta, ci, f.Name); err != nil {
+			return nil, err
+		}
+		cr, err := rg.Column(ci)
+		if err != nil {
+			return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
+				"opening column %q", f.Name)
+		}
+		return newColReader(cr, r.pf.MetaData().Schema.Column(ci), dt)
+	}
+
+	if f.Type.ID() != dtype.TypeStruct {
+		return leafReader(p.leaves[0], f.Type)
+	}
+	return newStructReader(f, p.leaves, leafReader)
 }
 
 // shouldSkip asks the pruner whether this row group can be ruled out.

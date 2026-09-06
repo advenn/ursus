@@ -123,6 +123,12 @@ const (
 	fnListEnd
 )
 
+// The `.struct` family.
+const (
+	FnStructField CallFn = iota + 500
+	fnStructEnd
+)
+
 // IsString, IsTemporal and IsGeneral classify a function by family.
 //
 // These are range comparisons over declaration order, which is why the enum is
@@ -132,6 +138,7 @@ func (f CallFn) IsTemporal() bool { return f >= FnDtYear && f < fnDtEnd }
 func (f CallFn) IsGeneral() bool  { return f >= FnIsIn && f < fnGenEnd }
 func (f CallFn) IsMath() bool     { return f >= FnMathRound && f < fnMathEnd }
 func (f CallFn) IsList() bool     { return f >= FnListLen && f < fnListEnd }
+func (f CallFn) IsStruct() bool   { return f >= FnStructField && f < fnStructEnd }
 
 var callNames = map[CallFn]string{
 	FnStrContains: "str.contains", FnStrStartsWith: "str.starts_with",
@@ -164,6 +171,8 @@ var callNames = map[CallFn]string{
 	FnListTail: "list.tail", FnListSlice: "list.slice",
 	FnListSort: "list.sort", FnListUnique: "list.unique",
 	FnListDropNulls: "list.drop_nulls",
+
+	FnStructField: "struct.field",
 }
 
 func (f CallFn) String() string {
@@ -210,7 +219,7 @@ func (c *Call) Field(in *dtype.Schema) (dtype.Field, error) {
 	if err != nil {
 		return dtype.Field{}, err
 	}
-	out, err := ResolveCall(c.Fn, recv.Type)
+	out, err := ResolveCall(c, recv.Type)
 	if err != nil {
 		return dtype.Field{}, err
 	}
@@ -219,12 +228,18 @@ func (c *Call) Field(in *dtype.Schema) (dtype.Field, error) {
 	return dtype.Field{Name: recv.Name, Type: out, Nullable: true}, nil
 }
 
-// ResolveCall gives the output type of fn applied to a receiver of type in.
+// ResolveCall gives the output type of a call applied to a receiver of type in.
 //
 // It is the single authority, consulted by Field for the plan's schema and by the
 // evaluator for the kernel's output type. Two copies would drift, which is the
 // Binding lesson.
-func ResolveCall(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
+//
+// It takes the whole Call rather than just the function because `.struct.field` is
+// the first call whose output type depends on an ARGUMENT — `field("age")` is Int64
+// and `field("city")` is String, from the same receiver. Every other family answers
+// from the receiver's type alone.
+func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
+	fn := c.Fn
 	switch {
 	case fn.IsString():
 		// HasStringStorage, not IsString. IsString is TRUE FOR ENUM, whose values are
@@ -252,6 +267,9 @@ func ResolveCall(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 
 	case fn.IsList():
 		return listCallOut(fn, in)
+
+	case fn.IsStruct():
+		return structCallOut(c, in)
 
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown call %d", fn)
@@ -379,6 +397,53 @@ func CallArgs(c *Call) ([]any, error) {
 		out = append(out, l.Value)
 	}
 	return out, nil
+}
+
+// structCallOut gives the output type of a `.struct` call.
+//
+// `field(name)` answers with the FIELD's type, which is why ResolveCall takes the
+// whole Call: the answer is in the argument, not the receiver. Resolving it here
+// rather than at execution time is what lets an unknown field name be refused while
+// the query is still being planned, with the names that do exist listed.
+func structCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
+	if in.ID() != dtype.TypeStruct {
+		return dtype.Null, uerr.New(uerr.KindType, "struct",
+			"%s requires a Struct operand, got %s", c.Fn, in).
+			Hint("only a Struct column has fields")
+	}
+	switch c.Fn {
+	case FnStructField:
+		name, ok := callLitString(c, 1)
+		if !ok {
+			return dtype.Null, uerr.Internalf("expr: struct.field has no name argument")
+		}
+		for _, f := range in.Fields() {
+			if f.Name == name {
+				return f.Type, nil
+			}
+		}
+		names := make([]string, 0, len(in.Fields()))
+		for _, f := range in.Fields() {
+			names = append(names, f.Name)
+		}
+		return dtype.Null, uerr.New(uerr.KindSchema, "struct",
+			"no field %q in %s", name, in).
+			Hint("the fields are: %s", strings.Join(names, ", "))
+	}
+	return dtype.Null, uerr.Internalf("expr: unknown struct call %d", c.Fn)
+}
+
+// callLitString reads a constant string argument.
+func callLitString(c *Call, i int) (string, bool) {
+	if i < 0 || i >= len(c.Args) {
+		return "", false
+	}
+	l, ok := c.Args[i].(*Lit)
+	if !ok {
+		return "", false
+	}
+	s, ok := l.Value.(string)
+	return s, ok
 }
 
 // listCallOut gives the output type of a `.list` call.

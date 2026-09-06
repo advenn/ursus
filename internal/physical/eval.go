@@ -349,7 +349,7 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 		return nil, cc.err
 	}
 
-	out, err := expr.ResolveCall(c.Fn, recv.DType())
+	out, err := expr.ResolveCall(c, recv.DType())
 	if err != nil {
 		return nil, err
 	}
@@ -366,6 +366,8 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 		return kernel.MathCall(c.Fn, name, out, recv, cc.args)
 	case c.Fn.IsList():
 		return kernel.ListCall(c.Fn, name, out, recv, cc.args, cc.needle)
+	case c.Fn.IsStruct():
+		return kernel.StructCall(c.Fn, name, recv, cc.args)
 	default:
 		return nil, uerr.Internalf("physical: no kernel for %s", c.Fn)
 	}

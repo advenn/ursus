@@ -176,6 +176,27 @@ func renderCell(c *data.Column, row int) string {
 		b.WriteByte(']')
 		return b.String()
 	}
+	// A Struct, like a List, has to be answered before the typed probes: it has no
+	// payload buffer of its own at all, so every probe below would miss and the cell
+	// would render empty.
+	//
+	// A NULL struct printed `null` above; a struct whose fields are all null prints
+	// `{age: null, city: null}`. Those two rows are the distinction the type exists
+	// to keep, and this is the cheapest place to see it broken.
+	if c.DType().ID() == dtype.TypeStruct {
+		var b strings.Builder
+		b.WriteByte('{')
+		for i, f := range c.Fields() {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(f.Name())
+			b.WriteString(": ")
+			b.WriteString(renderCell(f, row))
+		}
+		b.WriteByte('}')
+		return b.String()
+	}
 	if s, err := data.TypedColumn[string](c); err == nil {
 		v, _ := s.Get(row)
 		return strconv.Quote(v)
