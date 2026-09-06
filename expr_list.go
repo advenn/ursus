@@ -9,12 +9,18 @@ import (
 // The same wrapper shape `.str` and `.dt` use, for the reason ursus-api.md §4.5
 // gives: methods return Expr, so chaining continues naturally through it.
 //
-// # These reduce a list to a SCALAR
+// # Two halves, told apart by what they return
 //
-// Every method here answers a question ABOUT a list and hands back an ordinary
-// column — a length, an element, a total. None of them build a list. The
-// operations that do (`sort`, `unique`, `reverse`, `slice`, the set operations)
-// are a separate problem and are not here yet.
+// Len, Get, Contains, Min, Max, Sum and Mean answer a question ABOUT a list and
+// hand back an ordinary column — a length, an element, a total.
+//
+// Reverse, Head, Tail, Slice, Sort, Unique and DropNulls RESHAPE the list and hand
+// back a list, so they chain into each other and into the first half:
+// `Sort().Head(3).Get(0)`. The element type is unchanged by all seven — reshaping
+// a list cannot change what it is a list OF.
+//
+// The set operations (`set_union` and friends) and `gather` take a SECOND list and
+// are not here yet.
 //
 // # A null list is not an empty list
 //
@@ -100,3 +106,54 @@ func (l ListExpr) Sum() Expr { return l.call(expr.FnListSum) }
 // Mean averages each list, as a Float64. Null elements are skipped, so the
 // divisor is the count of PRESENT elements.
 func (l ListExpr) Mean() Expr { return l.call(expr.FnListMean) }
+
+// Reverse puts each list's elements in the opposite order. Null elements move with
+// everything else — they occupy a slot.
+func (l ListExpr) Reverse() Expr { return l.call(expr.FnListReverse) }
+
+// Head keeps the first n elements of each list, Tail the last n.
+//
+// Asking for more than a row holds returns the whole row, not an error and not a
+// padded list. Lists are ragged by nature, so asking for three tags from a column
+// whose rows mostly have two is an ordinary question — the same reasoning Get uses
+// for an index past the end.
+//
+// A negative n is refused: "the first -2 elements" has no reading worth guessing
+// at. Slice is where a negative number means something.
+func (l ListExpr) Head(n int) Expr { return l.call(expr.FnListHead, int64(n)) }
+
+// Tail keeps the last n elements. See Head.
+func (l ListExpr) Tail(n int) Expr { return l.call(expr.FnListTail, int64(n)) }
+
+// Slice takes length elements from offset.
+//
+// A negative OFFSET counts from the end, matching Get and `.str.slice`; the
+// clamping is `.str.slice`'s too, so an offset past either edge lands in range and
+// a length running off the end stops there. A negative length is refused.
+func (l ListExpr) Slice(offset, length int) Expr {
+	return l.call(expr.FnListSlice, int64(offset), int64(length))
+}
+
+// Sort orders each list's elements ascending; SortDesc orders them descending.
+//
+// The ordering is ursus's own — the same comparator a column-wide Sort uses — so a
+// list of values and a column of the same values order identically. That includes
+// null placement: nulls come FIRST, matching the default of `Asc()`. Both
+// placements are defensible and this is the one ursus picked.
+//
+// Equal elements keep their input order.
+func (l ListExpr) Sort() Expr     { return l.call(expr.FnListSort, false) }
+func (l ListExpr) SortDesc() Expr { return l.call(expr.FnListSort, true) }
+
+// Unique drops repeated elements, keeping the FIRST occurrence and leaving the
+// order alone — sorting as a side effect would make `Unique().Head(2)` mean
+// something different from `Head(2)` on the same data.
+//
+// Equality is ursus's, as it is for Contains: NaN dedupes against NaN. A null
+// element counts as a value here, so a list of three nulls keeps one.
+func (l ListExpr) Unique() Expr { return l.call(expr.FnListUnique) }
+
+// DropNulls removes the null ELEMENTS from each list. A null LIST stays null —
+// there is nothing to drop from, which is not the same as having dropped
+// everything.
+func (l ListExpr) DropNulls() Expr { return l.call(expr.FnListDropNulls) }

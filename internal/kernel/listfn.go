@@ -1,6 +1,8 @@
 package kernel
 
 import (
+	"slices"
+
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
@@ -8,7 +10,13 @@ import (
 	"github.com/advenn/ursus/internal/uerr"
 )
 
-// List kernels: the `.list` namespace, reducing a list to a scalar.
+// List kernels: the `.list` namespace.
+//
+// Two halves with different shapes. One REDUCES a list to a scalar — len, get,
+// contains, and the aggregates — and one RESHAPES it and hands back a list —
+// reverse, head, tail, slice, sort, unique, drop_nulls. The second half is
+// listRebuild plus a closure each, because picking which element indices survive
+// is the only thing that differs between them.
 //
 // # A null list is not an empty list, and that is the whole difficulty
 //
@@ -33,8 +41,13 @@ import (
 // wrong about the other.
 //
 // Null ELEMENTS are a third thing again: they occupy a slot, so len counts them,
-// and the aggregates skip them exactly as the column-wide aggregates skip null
-// rows.
+// the aggregates skip them exactly as the column-wide aggregates skip null rows,
+// reverse and sort keep them, and drop_nulls is the one function that removes
+// them.
+//
+// For the reshaping half the null list is the EASY case — pick is simply not
+// called, so the list stays null without anything having to say so. That only
+// holds because listRebuild skips it; see the note there.
 
 // ListCall applies a list function to a column.
 //
@@ -70,8 +83,217 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 
 	case expr.FnListMin, expr.FnListMax, expr.FnListSum, expr.FnListMean:
 		return listReduce(fn, name, out, c)
+
+	case expr.FnListReverse:
+		return listRebuild(name, c, func(start, end int32, out []int32) []int32 {
+			for e := end - 1; e >= start; e-- {
+				out = append(out, e)
+			}
+			return out
+		})
+
+	case expr.FnListHead, expr.FnListTail:
+		return listEnds(fn, name, c, args)
+
+	case expr.FnListSlice:
+		return listSlice(name, c, args)
+
+	case expr.FnListSort:
+		return listSort(name, c, args)
+
+	case expr.FnListUnique:
+		return listUnique(name, c)
+
+	case expr.FnListDropNulls:
+		child := acc.Child()
+		return listRebuild(name, c, func(start, end int32, out []int32) []int32 {
+			for e := start; e < end; e++ {
+				if child.IsValid(int(e)) {
+					out = append(out, e)
+				}
+			}
+			return out
+		})
 	}
 	return nil, uerr.Internalf("kernel: unknown list call %s", fn)
+}
+
+// listRebuild is every list -> LIST function in the namespace, once.
+//
+// Reverse, Head, Tail, Slice, Sort, Unique and DropNulls all do the same thing:
+// choose which of a row's element indices survive, and in what order. Nothing
+// else differs between them, so pick is the only part each one writes.
+//
+// A NULL LIST STAYS NULL because c.Validity() is carried through unchanged. That
+// is the whole of it, and it is worth being exact about which line does the work:
+// removing the `ok` guard below and calling pick for a null row changes NOTHING —
+// a null row's element range is empty, so every pick here produces nothing from it
+// anyway. That was checked by doing it. The guard is a precondition for whatever
+// pick is written next ("you are only asked about lists that exist"), not the
+// defence; replacing c.Validity() with an all-set bitmap is the mistake that turns
+// every null list into an empty one, and it breaks all seven functions at once.
+//
+// THE ELEMENT TYPE NEVER APPEARS. Take does the gather, so List(String) works for
+// exactly the reason List(Int64) does and a new element type needs nothing here.
+func listRebuild(name string, c *data.Column,
+	pick func(start, end int32, out []int32) []int32) (*data.Column, error) {
+
+	acc := c.Lists()
+	offs := make([]int32, 1, c.Len()+1)
+	var sel []int32
+	for i := range c.Len() {
+		if start, end, ok := acc.Get(i); ok {
+			sel = pick(start, end, sel)
+		}
+		offs = append(offs, int32(len(sel)))
+	}
+	child, err := Take(acc.Child(), sel)
+	if err != nil {
+		return nil, err
+	}
+	return data.NewList(name, offs, child, c.Validity()), nil
+}
+
+// listEnds is head and tail: the first or last n elements of each row.
+//
+// Asking for more elements than a row holds returns the whole row rather than an
+// error or a padded list. Lists are ragged by nature — asking for three tags from
+// a column whose rows mostly have two is an ordinary question, the same reasoning
+// list.get uses for an out-of-range index.
+//
+// A NEGATIVE n is refused, because there is no reading of "the first -2 elements"
+// worth guessing at. list.slice's OFFSET is different and does allow a negative
+// value, where it counts from the end.
+func listEnds(fn expr.CallFn, name string, c *data.Column, args []any) (*data.Column, error) {
+	n, ok := argInt(args, 0)
+	if !ok {
+		return nil, uerr.Internalf("kernel: %s has no count argument", fn)
+	}
+	if n < 0 {
+		return nil, uerr.New(uerr.KindValue, "list",
+			"%s(%d): the number of elements cannot be negative", fn, n).
+			Hint("use list.slice for a range measured from the end")
+	}
+	head := fn == expr.FnListHead
+	return listRebuild(name, c, func(start, end int32, out []int32) []int32 {
+		// Clamped in int64 before narrowing: start+int32(n) would wrap for a large
+		// n, and the wrap would produce a silently empty list.
+		k := int32(min(n, int64(end-start)))
+		if head {
+			end = start + k
+		} else {
+			start = end - k
+		}
+		for e := start; e < end; e++ {
+			out = append(out, e)
+		}
+		return out
+	})
+}
+
+// listSlice takes a sub-range of each row.
+//
+// The clamping is str.slice's, deliberately: a negative offset counts from the
+// end, an offset past either edge clamps into range, and a length running past
+// the end stops there. Two slice operations in one library that disagreed about
+// the edges would be worse than either rule alone.
+func listSlice(name string, c *data.Column, args []any) (*data.Column, error) {
+	off, ok := argInt(args, 0)
+	length, hasLen := argInt(args, 1)
+	if !ok || !hasLen {
+		return nil, uerr.Internalf("kernel: list.slice needs an offset and a length")
+	}
+	if length < 0 {
+		return nil, uerr.New(uerr.KindValue, "list",
+			"list.slice(%d, %d): the length cannot be negative", off, length)
+	}
+	return listRebuild(name, c, func(start, end int32, out []int32) []int32 {
+		n := int64(end - start)
+		at := off
+		if at < 0 {
+			at += n
+		}
+		at = max(0, min(at, n))
+		stop := n
+		if length < n-at {
+			stop = at + length
+		}
+		for e := start + int32(at); e < start+int32(stop); e++ {
+			out = append(out, e)
+		}
+		return out
+	})
+}
+
+// listSort orders each row's elements.
+//
+// It uses the same Comparator a column-wide Sort does, which is what makes a list
+// of values and a column of the same values order identically — including where
+// the nulls land. Nulls come FIRST by default, matching SortSpec's zero value and
+// so the public Asc(); it is a choice, not an accident, and both placements are
+// defensible.
+//
+// The comparator is built ONCE for the whole column rather than per row: it
+// resolves a type switch into a closure, which is the entire reason it exists.
+//
+// The sort is STABLE, so elements that compare equal keep their input order. For
+// Int64 or String that is unobservable — two elements of one column that compare
+// equal ARE the same value — and swapping in the unstable sort passes every test
+// here. It stops being unobservable the moment two DISTINGUISHABLE values compare
+// equal, and -0.0 against +0.0 already does: the comparator answers 0 for them
+// (checked directly), so on a List(Float64) stability is what decides which sign
+// comes out first.
+func listSort(name string, c *data.Column, args []any) (*data.Column, error) {
+	desc, _ := args[0].(bool)
+	cmp, err := NewComparator([]*data.Column{c.Lists().Child()},
+		[]SortSpec{{Descending: desc}})
+	if err != nil {
+		return nil, err
+	}
+	return listRebuild(name, c, func(start, end int32, out []int32) []int32 {
+		base := len(out)
+		for e := start; e < end; e++ {
+			out = append(out, e)
+		}
+		// Sorted in place inside the selection being built, so there is no scratch
+		// slice and nothing to allocate per row.
+		slices.SortStableFunc(out[base:], func(a, b int32) int {
+			return cmp(int(a), int(b))
+		})
+		return out
+	})
+}
+
+// listUnique drops repeats, keeping the FIRST occurrence and the input order.
+//
+// Keeping the first matches distinctOp's documented rule for whole rows, and
+// leaving the order alone matters because sorting as a side effect would make
+// unique().head(2) mean something different from head(2) on the same data.
+//
+// Equality is the group-key encoder's, the same authority is_in and list.contains
+// use: floats go through OrderKey first, so NaN dedupes against NaN. A null
+// element is a value like any other here — it encodes distinctly, so a row of
+// three nulls keeps one.
+func listUnique(name string, c *data.Column) (*data.Column, error) {
+	enc, err := NewGroupKeyEncoder("list.unique", []*data.Column{c.Lists().Child()})
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{})
+	return listRebuild(name, c, func(start, end int32, out []int32) []int32 {
+		clear(seen) // one map for the column; lists are short
+		for e := start; e < end; e++ {
+			k := enc.Encode(int(e))
+			if _, dup := seen[string(k)]; dup {
+				continue
+			}
+			// Encode aliases its buffer, so the key has to be copied to be kept —
+			// which the string conversion in an assignment does.
+			seen[string(k)] = struct{}{}
+			out = append(out, e)
+		}
+		return out
+	})
 }
 
 // listGet picks one element per row, by index.

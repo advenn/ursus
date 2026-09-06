@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/uerr"
 )
 
@@ -249,5 +251,372 @@ func TestListNamespaceRefusals(t *testing.T) {
 		Select(ursus.Col("tags").List().Contains("nope")).Collect(t.Context())
 	if err == nil {
 		t.Fatal("Contains with an incompatible value must be refused")
+	}
+}
+
+// The reshaping half of the namespace: the seven functions that hand back a LIST.
+//
+// A null list is the case that keeps needing defence, and here it is the easy one
+// — the helper never asks a null list which elements to keep, so it stays null
+// without anything having to say so. The table checks that for all seven, since
+// "easy" is not the same as "checked".
+
+// reshapeFixture:
+//
+//	row 0  [3, 1, 2]         ordering
+//	row 1  [2, 1, 3, 2]      a duplicate that is NOT adjacent, and a tie to sort
+//	row 2  [1, null]         a null ELEMENT
+//	row 3  []                empty
+//	row 4  null              a null LIST
+//	row 5  [null, null, 4]   a REPEATED null
+//
+// Row 1's duplicate is deliberately not adjacent: with `[2, 1, 1]`, keeping the
+// first occurrence and keeping the last give the same answer, and a Unique that
+// kept the wrong one would pass.
+func reshapeFixture(t *testing.T) string {
+	t.Helper()
+	return writeElemLists(t, []int64{1, 2, 3, 4, 5, 6}, []lrow{
+		{vals: elems(3, 1, 2), ok: true},
+		{vals: elems(2, 1, 3, 2), ok: true},
+		{vals: []elem{val(1), nullElem}, ok: true},
+		{ok: true}, // present but EMPTY
+		{},         // NULL
+		{vals: []elem{nullElem, nullElem, val(4)}, ok: true},
+	})
+}
+
+func elems(vs ...int64) []elem {
+	out := make([]elem, len(vs))
+	for i, v := range vs {
+		out[i] = val(v)
+	}
+	return out
+}
+
+// listCell reads one row of a List(Int64) column as its elements.
+//
+// Reading the column rather than matching rendered text is what lets the table
+// below distinguish a null list from an empty one — they render the same width and
+// differ only in a validity bit, which is the whole difficulty.
+func listCell(t *testing.T, df *ursus.DataFrame, name string, row int) ([]elem, bool) {
+	t.Helper()
+	c, found := df.Batch().ByName(name)
+	if !found {
+		t.Fatalf("no column %q in\n%s", name, df)
+	}
+	if c.DType().ID() != dtype.TypeList {
+		t.Fatalf("%s came back as %s: a reshaping call must return a LIST", name, c.DType())
+	}
+	s, err := data.TypedColumn[int64](c.Child())
+	if err != nil {
+		t.Fatal(err)
+	}
+	start, end, valid := c.Lists().Get(row)
+	out := []elem{}
+	for e := start; e < end; e++ {
+		if v, ok := s.Get(int(e)); ok {
+			out = append(out, val(v))
+		} else {
+			out = append(out, nullElem)
+		}
+	}
+	return out, valid
+}
+
+func checkList(t *testing.T, df *ursus.DataFrame, col string, row int, want lrow) {
+	t.Helper()
+	got, valid := listCell(t, df, col, row)
+	if valid != want.ok {
+		t.Errorf("%s row %d: valid = %v, want %v — a null list and an empty one are "+
+			"NOT the same\n%s", col, row, valid, want.ok, df)
+		return
+	}
+	if !valid {
+		return // a null list has no elements to compare
+	}
+	if len(got) != len(want.vals) {
+		t.Errorf("%s row %d: %v, want %v\n%s", col, row, got, want.vals, df)
+		return
+	}
+	for i := range got {
+		if got[i] != want.vals[i] {
+			t.Errorf("%s row %d: %v, want %v\n%s", col, row, got, want.vals, df)
+			return
+		}
+	}
+}
+
+// TestListReshapeSemantics is the whole table, every function against every row
+// shape, at four batch sizes — the batch sizes because a List that spans batches is
+// concatenated, and concatenation has to shift the child offsets.
+func TestListReshapeSemantics(t *testing.T) {
+	path := reshapeFixture(t)
+
+	cases := []struct {
+		col  string
+		e    ursus.Expr
+		want []lrow
+	}{
+		{"rev", ursus.Col("tags").List().Reverse(), []lrow{
+			{vals: elems(2, 1, 3), ok: true},
+			{vals: elems(2, 3, 1, 2), ok: true},
+			{vals: []elem{nullElem, val(1)}, ok: true},
+			{ok: true},
+			{},
+			{vals: []elem{val(4), nullElem, nullElem}, ok: true},
+		}},
+		{"head", ursus.Col("tags").List().Head(2), []lrow{
+			{vals: elems(3, 1), ok: true},
+			{vals: elems(2, 1), ok: true},
+			{vals: []elem{val(1), nullElem}, ok: true},
+			{ok: true},
+			{},
+			{vals: []elem{nullElem, nullElem}, ok: true},
+		}},
+		{"tail", ursus.Col("tags").List().Tail(2), []lrow{
+			{vals: elems(1, 2), ok: true},
+			{vals: elems(3, 2), ok: true},
+			{vals: []elem{val(1), nullElem}, ok: true},
+			{ok: true},
+			{},
+			{vals: []elem{nullElem, val(4)}, ok: true},
+		}},
+		{"slice", ursus.Col("tags").List().Slice(1, 2), []lrow{
+			{vals: elems(1, 2), ok: true},
+			{vals: elems(1, 3), ok: true},
+			{vals: []elem{nullElem}, ok: true},
+			{ok: true},
+			{},
+			{vals: []elem{nullElem, val(4)}, ok: true},
+		}},
+		// Nulls come FIRST, and they come first in BOTH directions: placement is
+		// applied before direction, so SortDesc does not silently move them.
+		{"sort", ursus.Col("tags").List().Sort(), []lrow{
+			{vals: elems(1, 2, 3), ok: true},
+			{vals: elems(1, 2, 2, 3), ok: true},
+			{vals: []elem{nullElem, val(1)}, ok: true},
+			{ok: true},
+			{},
+			{vals: []elem{nullElem, nullElem, val(4)}, ok: true},
+		}},
+		{"desc", ursus.Col("tags").List().SortDesc(), []lrow{
+			{vals: elems(3, 2, 1), ok: true},
+			{vals: elems(3, 2, 2, 1), ok: true},
+			{vals: []elem{nullElem, val(1)}, ok: true},
+			{ok: true},
+			{},
+			{vals: []elem{nullElem, nullElem, val(4)}, ok: true},
+		}},
+		// Unique keeps the FIRST occurrence and leaves the order alone. Row 1 is
+		// where that is visible: keeping the last would give [1, 3, 2].
+		{"uniq", ursus.Col("tags").List().Unique(), []lrow{
+			{vals: elems(3, 1, 2), ok: true},
+			{vals: elems(2, 1, 3), ok: true},
+			{vals: []elem{val(1), nullElem}, ok: true},
+			{ok: true},
+			{},
+			{vals: []elem{nullElem, val(4)}, ok: true}, // one null survives
+		}},
+		{"drop", ursus.Col("tags").List().DropNulls(), []lrow{
+			{vals: elems(3, 1, 2), ok: true},
+			{vals: elems(2, 1, 3, 2), ok: true},
+			{vals: elems(1), ok: true},
+			{ok: true},
+			{}, // still NULL, not emptied
+			{vals: elems(4), ok: true},
+		}},
+	}
+
+	for _, size := range []int{1, 2, 4, 8192} {
+		sel := make([]ursus.Expr, len(cases))
+		for i, c := range cases {
+			sel[i] = c.e.Alias(c.col)
+		}
+		df, err := ursus.ScanParquet(path).Select(sel...).
+			Collect(t.Context(), ursus.WithBatchSize(size), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch size %d: %v", size, err)
+		}
+		if df.Height() != 6 {
+			t.Fatalf("batch size %d: %d rows, want 6\n%s", size, df.Height(), df)
+		}
+		for _, c := range cases {
+			for row, want := range c.want {
+				checkList(t, df, c.col, row, want)
+			}
+		}
+	}
+}
+
+// TestListReshapeEdges: the clamping, which is where an off-by-one hides.
+func TestListReshapeEdges(t *testing.T) {
+	path := writeListFile(t, []int64{1}, [][]int64{{10, 20, 30}}, []bool{true})
+
+	df, err := ursus.ScanParquet(path).Select(
+		ursus.Col("tags").List().Head(0).Alias("h0"),
+		ursus.Col("tags").List().Head(99).Alias("h99"),
+		ursus.Col("tags").List().Tail(0).Alias("t0"),
+		ursus.Col("tags").List().Tail(99).Alias("t99"),
+		ursus.Col("tags").List().Slice(-2, 1).Alias("back"),
+		ursus.Col("tags").List().Slice(1, 99).Alias("rest"),
+		ursus.Col("tags").List().Slice(9, 2).Alias("past"),
+		ursus.Col("tags").List().Slice(-99, 2).Alias("before"),
+	).Collect(t.Context(), ursus.WithVerify())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []struct {
+		col  string
+		want []elem
+	}{
+		{"h0", nil},                // asking for none gives an EMPTY list, not null
+		{"h99", elems(10, 20, 30)}, // past the end is the whole list, not an error
+		{"t0", nil},                //
+		{"t99", elems(10, 20, 30)}, //
+		{"back", elems(20)},        // -2 is measured from the end
+		{"rest", elems(20, 30)},    // a length past the end stops there
+		{"past", nil},              // an offset past the end selects nothing
+		{"before", elems(10, 20)},  // an offset before the start clamps to it
+	} {
+		checkList(t, df, c.col, 0, lrow{vals: c.want, ok: true})
+	}
+}
+
+// TestListSortOnStrings: sorting goes through the same Comparator a column-wide
+// Sort uses, which is why it is not integer-only — the order-key path the radix
+// sort takes cannot handle strings at all.
+func TestListSortOnStrings(t *testing.T) {
+	path := writeStringListFile(t,
+		[]int64{1, 2},
+		[][]string{{"rust", "c", "go"}, {}},
+	)
+	df, err := ursus.ScanParquet(path).Select(
+		ursus.Col("tags").List().Sort().Alias("s"),
+		ursus.Col("tags").List().SortDesc().Alias("d"),
+		ursus.Col("tags").List().Reverse().Alias("r"),
+	).Collect(t.Context(), ursus.WithVerify())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		col  string
+		want []string
+	}{
+		{"s", []string{"c", "go", "rust"}},
+		{"d", []string{"rust", "go", "c"}},
+		{"r", []string{"go", "c", "rust"}},
+	} {
+		col, ok := df.Batch().ByName(c.col)
+		if !ok {
+			t.Fatalf("no column %q\n%s", c.col, df)
+		}
+		s, err := data.TypedColumn[string](col.Child())
+		if err != nil {
+			t.Fatal(err)
+		}
+		start, end, _ := col.Lists().Get(0)
+		var got []string
+		for e := start; e < end; e++ {
+			v, _ := s.Get(int(e))
+			got = append(got, v)
+		}
+		if strings.Join(got, ",") != strings.Join(c.want, ",") {
+			t.Errorf("%s = %v, want %v\n%s", c.col, got, c.want, df)
+		}
+	}
+}
+
+// TestListReshapeChains: the output is a real List, so the reducing half of the
+// namespace works on it and the functions compose with each other.
+//
+// Each step reopens the namespace — `.List().Sort().List().Head(2)` — because a
+// method has to return Expr for the rest of the language to reach it. polars reads
+// the same way for the same reason.
+func TestListReshapeChains(t *testing.T) {
+	df, err := ursus.ScanParquet(reshapeFixture(t)).Select(
+		ursus.Col("tags").List().Sort().List().Head(2).List().Len().Alias("n"),
+		ursus.Col("tags").List().Sort().List().Head(2).List().Get(0).Alias("smallest"),
+		ursus.Col("tags").List().DropNulls().List().Len().Alias("present"),
+	).Collect(t.Context(), ursus.WithVerify())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// row 0 [3,1,2] | 1 [2,1,3,2] | 2 [1,null] | 3 [] | 4 null | 5 [null,null,4]
+	for i, w := range []struct {
+		n  uint32
+		ok bool
+	}{{2, true}, {2, true}, {2, true}, {0, true}, {0, false}, {2, true}} {
+		v, ok, err := df.At[uint32](i, "n")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok != w.ok || (ok && v != w.n) {
+			t.Errorf("row %d: len = (%d, valid %v), want (%d, valid %v)\n%s",
+				i, v, ok, w.n, w.ok, df)
+		}
+	}
+	// Sorted ascending with nulls first, so element 0 is null wherever the row has
+	// one — Head did not drop it and Get did not skip it.
+	for i, w := range []struct {
+		v  int64
+		ok bool
+	}{{1, true}, {1, true}, {0, false}, {0, false}, {0, false}, {0, false}} {
+		v, ok, err := df.At[int64](i, "smallest")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok != w.ok || (ok && v != w.v) {
+			t.Errorf("row %d: smallest = (%d, valid %v), want (%d, valid %v)\n%s",
+				i, v, ok, w.v, w.ok, df)
+		}
+	}
+	for i, w := range []struct {
+		n  uint32
+		ok bool
+	}{{3, true}, {4, true}, {1, true}, {0, true}, {0, false}, {1, true}} {
+		v, ok, err := df.At[uint32](i, "present")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok != w.ok || (ok && v != w.n) {
+			t.Errorf("row %d: present = (%d, valid %v), want (%d, valid %v)\n%s",
+				i, v, ok, w.n, w.ok, df)
+		}
+	}
+}
+
+// TestListReshapeRefusals: a count with no reading is refused rather than guessed
+// at. Slice's OFFSET is the one place a negative number means something.
+func TestListReshapeRefusals(t *testing.T) {
+	path := reshapeFixture(t)
+
+	for _, c := range []struct {
+		what string
+		e    ursus.Expr
+	}{
+		{"Head(-1)", ursus.Col("tags").List().Head(-1)},
+		{"Tail(-1)", ursus.Col("tags").List().Tail(-1)},
+		{"Slice(0, -1)", ursus.Col("tags").List().Slice(0, -1)},
+	} {
+		_, err := ursus.ScanParquet(path).Select(c.e).Collect(t.Context())
+		if err == nil {
+			t.Errorf("%s must be refused", c.what)
+			continue
+		}
+		if !errors.Is(err, uerr.ErrValue) {
+			t.Errorf("%s: kind should be Value: %v", c.what, err)
+		}
+	}
+
+	// A non-List receiver, the same refusal the reducing half gives.
+	_, err := ursus.ScanParquet(path).Select(ursus.Col("id").List().Reverse()).
+		Collect(t.Context())
+	if err == nil {
+		t.Fatal("`.list.reverse` on a non-List column must be refused")
+	}
+	if !errors.Is(err, uerr.ErrType) {
+		t.Errorf("kind should be Type: %v", err)
 	}
 }

@@ -16,14 +16,48 @@ import (
 	"github.com/advenn/ursus"
 )
 
-// writeListFile builds `id: int64` beside `tags: List(Int64)`, with the def/rep
-// levels written by hand — ursus cannot write nested Parquet, so the fixture has
-// to come from the layer below.
+// elem is one list ELEMENT: a value, or a null sitting in a slot.
+type elem struct {
+	v  int64
+	ok bool
+}
+
+func val(v int64) elem { return elem{v, true} }
+
+// nullElem is a null element — def level 2, which is neither an absent list nor a
+// present value.
+var nullElem = elem{}
+
+// lrow is one row of the list column: its elements, and whether the ROW itself is
+// non-null. A present-but-empty row is {ok: true} with no elements.
+type lrow struct {
+	vals []elem
+	ok   bool
+}
+
+// writeListFile builds `id: int64` beside `tags: List(Int64)` from plain slices,
+// where every element is present. Rows that need a null ELEMENT go through
+// writeElemLists directly.
+func writeListFile(t *testing.T, ids []int64, tags [][]int64, present []bool) string {
+	t.Helper()
+	rows := make([]lrow, len(tags))
+	for i, r := range tags {
+		rows[i] = lrow{ok: present[i]}
+		for _, v := range r {
+			rows[i].vals = append(rows[i].vals, val(v))
+		}
+	}
+	return writeElemLists(t, ids, rows)
+}
+
+// writeElemLists writes the same file with the def/rep levels spelled out — ursus
+// cannot write nested Parquet, so the fixture has to come from the layer below,
+// and the level encoding is what distinguishes the four row states:
 //
 //	def 3  element present     def 1  present but EMPTY list
 //	def 2  null element        def 0  null list
 //	rep 0  starts a row        rep 1  continues the open row
-func writeListFile(t *testing.T, ids []int64, tags [][]int64, present []bool) string {
+func writeElemLists(t *testing.T, ids []int64, rows []lrow) string {
 	t.Helper()
 	opt, req := parquet.Repetitions.Optional, parquet.Repetitions.Required
 
@@ -54,16 +88,20 @@ func writeListFile(t *testing.T, ids []int64, tags [][]int64, present []bool) st
 
 	var vals []int64
 	var defs, reps []int16
-	for i := range tags {
+	for _, r := range rows {
 		switch {
-		case !present[i]:
+		case !r.ok:
 			defs, reps = append(defs, 0), append(reps, 0)
-		case len(tags[i]) == 0:
+		case len(r.vals) == 0:
 			defs, reps = append(defs, 1), append(reps, 0)
 		default:
-			for j, v := range tags[i] {
-				vals = append(vals, v)
-				defs = append(defs, 3)
+			for j, e := range r.vals {
+				if e.ok {
+					vals = append(vals, e.v)
+					defs = append(defs, 3)
+				} else {
+					defs = append(defs, 2) // a slot with no value in it
+				}
 				if j == 0 {
 					reps = append(reps, 0)
 				} else {

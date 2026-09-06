@@ -109,6 +109,17 @@ const (
 	FnListMax
 	FnListSum
 	FnListMean
+
+	// list -> LIST. These reshape the list and hand back a list, which is the
+	// distinction that split the namespace across two steps: everything above
+	// answers a question ABOUT a list, everything here returns one.
+	FnListReverse
+	FnListHead
+	FnListTail
+	FnListSlice
+	FnListSort
+	FnListUnique
+	FnListDropNulls
 	fnListEnd
 )
 
@@ -149,6 +160,10 @@ var callNames = map[CallFn]string{
 	FnListLen: "list.len", FnListGet: "list.get",
 	FnListContains: "list.contains", FnListMin: "list.min",
 	FnListMax: "list.max", FnListSum: "list.sum", FnListMean: "list.mean",
+	FnListReverse: "list.reverse", FnListHead: "list.head",
+	FnListTail: "list.tail", FnListSlice: "list.slice",
+	FnListSort: "list.sort", FnListUnique: "list.unique",
+	FnListDropNulls: "list.drop_nulls",
 }
 
 func (f CallFn) String() string {
@@ -368,9 +383,11 @@ func CallArgs(c *Call) ([]any, error) {
 
 // listCallOut gives the output type of a `.list` call.
 //
-// Every one of these reduces a list to a SCALAR, so the output is either a fixed
-// type or the ELEMENT type — never a List. That is the seam the namespace was cut
-// on: the operations that build a list are a different problem.
+// The namespace has two halves and the output type is what tells them apart. One
+// reduces a list to a SCALAR, giving a fixed type or the ELEMENT type; the other
+// reshapes it and gives back the RECEIVER'S type, unchanged. A caller can read
+// which half a function is in from this switch alone, which is the point of
+// keeping the rule in one place.
 func listCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 	if in.ID() != dtype.TypeList {
 		return dtype.Null, uerr.New(uerr.KindType, "list",
@@ -395,6 +412,14 @@ func listCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 
 	case FnListMean:
 		return dtype.Float64, nil
+
+	case FnListReverse, FnListHead, FnListTail, FnListSlice,
+		FnListSort, FnListUnique, FnListDropNulls:
+		// The receiver's type, unchanged. Reshaping a list cannot change what it is
+		// a list OF — and returning `in` rather than rebuilding List(elem) means a
+		// future parameterised list type carries through without this needing to
+		// know about it.
+		return in, nil
 
 	case FnListSum:
 		// Delegated to the AGGREGATE's rule rather than restated, so a per-row sum
