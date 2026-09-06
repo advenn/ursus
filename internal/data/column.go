@@ -140,6 +140,21 @@ func (c *Column) WithDType(dt dtype.DataType) *Column {
 	return &d
 }
 
+// WithValidity returns a copy with a different validity bitmap and the same payload.
+//
+// The values are untouched, so a row that becomes null keeps whatever was stored in
+// its slot — which is exactly the contract every constructor here already has, since
+// a null row's payload is never read.
+//
+// Unnest is the caller: a field of an absent struct is absent, and that has to be
+// applied to the field on its way out rather than assumed of whoever built the
+// struct.
+func (c *Column) WithValidity(valid bitmap.View) *Column {
+	d := *c
+	d.valid = valid
+	return &d
+}
+
 // --- construction ------------------------------------------------------------
 
 // NewFixed builds a fixed-width column over vals.

@@ -185,6 +185,42 @@ func (lf *LazyFrame) Explode(names ...string) *LazyFrame {
 	return lf.derive(&plan.Explode{Input: lf.node, Columns: names})
 }
 
+// Unnest replaces a struct column with its fields, in place.
+//
+//	id | person                  ->   id | age  | city
+//	 1 | {age: 30, city: "NY"}         1 | 30   | "NY"
+//	 2 | {age: null, city: null}       2 | null | null
+//	 3 | null                          3 | null | null
+//
+// It is to a struct what Explode is to a list: afterwards the nested column is gone
+// and the fields are ordinary columns, so every filter, aggregate, join and sort
+// applies to them directly rather than through `.Struct().Field(...)`.
+//
+// The fields land where the struct was and keep their OWN names. A name that would
+// collide with a column already in the frame is refused, naming both — renaming a
+// field the caller cannot see yet is not something this can guess at.
+//
+// **Unnest erases the difference between a null struct and a struct of nulls**, the
+// way Explode erases the difference between a null list and an empty one (rows 2 and
+// 3 above). The distinction belongs to the struct, and this is what consumes it —
+// `Col("person").IsNull()` is how to keep it, before unnesting.
+//
+// At least one column must be named. "Every struct column" is well defined here,
+// unlike for Explode, but it would silently widen the frame the day a file grows a
+// struct.
+func (lf *LazyFrame) Unnest(names ...string) *LazyFrame {
+	if lf.err != nil {
+		return lf
+	}
+	if len(names) == 0 {
+		return &LazyFrame{err: uerr.New(uerr.KindValue, "unnest",
+			"unnest needs at least one column").
+			Hint("naming them keeps the frame's width a property of the query " +
+				"rather than of whatever the file happens to contain")}
+	}
+	return lf.derive(&plan.Unnest{Input: lf.node, Columns: names})
+}
+
 // Tail keeps the last n rows.
 //
 // Unlike Head it cannot stream to completion: which rows are the last n is unknown

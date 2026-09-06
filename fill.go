@@ -305,3 +305,18 @@ func (e Expr) Explode() Expr {
 		Hint("use the frame-level form: lf.Explode(\"tags\")").
 		Hint("an expression produces one value per input row, so it cannot add rows")})
 }
+
+// Unnest is refused as an expression, and for a DIFFERENT reason than Explode.
+//
+// Explode is not an expression because it changes the frame's HEIGHT. Unnest leaves
+// the height alone and changes the WIDTH: an expression produces exactly one column,
+// and this produces one per field. Saying which of the two rules was broken is the
+// difference between a message that teaches and one that just refuses.
+//
+// The single-column form exists and is spelled `Col("person").Struct().Field("age")`.
+func (e Expr) Unnest() Expr {
+	return wrap(&expr.Err{E: uerr.New(uerr.KindUnsupported, "unnest",
+		"Unnest is not an expression; it produces one column per struct field").
+		Hint("use the frame-level form: lf.Unnest(\"person\")").
+		Hint("for a single field, use Col(\"person\").Struct().Field(\"age\")")})
+}
