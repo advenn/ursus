@@ -32,6 +32,22 @@ const (
 	rows       = 5_000_000
 	joinRows   = 100_000
 	iterations = 3
+
+	// leftChunks splits the probe side into that many source batches.
+	//
+	// It has to be more than one, and that is the whole point. ursus.Frame hands its
+	// batches to memsrc, which returns them as given and ignores WithBatchSize — so a
+	// frame built from one set of slices is ONE batch however small the batch size.
+	// A join whose probe side is one batch has exactly one unit of work to hand out,
+	// so no number of threads can help it.
+	//
+	// That is what step 27 measured when it reported the join as "1,098 ms on one
+	// thread, 1,253 ms on eight": the extra threads had nothing to do and only added
+	// dispatch cost. The negative result was real; its cause was the FIXTURE, not the
+	// join. A real query's probe side comes from a scan, which yields a batch every
+	// few thousand rows, so this is the more representative shape as well as the
+	// measurable one.
+	leftChunks = 64
 )
 
 // The flags exist because this file is the only place an ursus operation can be
@@ -59,6 +75,9 @@ func main() {
 	// The fixture is built BEFORE the profile starts, so materialising 5M rows
 	// does not appear in it. That is the same reason the timed region excludes it.
 	left, right := build(ctx)
+	// Only the join uses the chunked probe side; the other five operations keep the
+	// single-batch frame so their numbers stay comparable with earlier runs.
+	chunked := chunkLeft(ctx, left)
 
 	if *cpuProfile != "" {
 		f, err := os.Create(*cpuProfile)
@@ -109,7 +128,7 @@ func main() {
 	})
 
 	run("join", func() {
-		collect(ctx, left.Lazy().
+		collect(ctx, chunked.
 			Select(ursus.Col("key"), ursus.Col("val")).
 			Join(right.Lazy(), ursus.JoinOn(ursus.Col("key"))))
 	})
@@ -210,4 +229,21 @@ func fatal(err error) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// chunkLeft re-expresses a frame as leftChunks separate frames concatenated, so the
+// source yields that many batches instead of one. See leftChunks.
+func chunkLeft(ctx context.Context, df *ursus.DataFrame) *ursus.LazyFrame {
+	per := df.Height() / leftChunks
+	parts := make([]*ursus.LazyFrame, 0, leftChunks)
+	for c := range leftChunks {
+		n := per
+		if c == leftChunks-1 {
+			n = df.Height() - c*per // the tail keeps the remainder
+		}
+		out, err := df.Lazy().Slice(c*per, n).Collect(ctx)
+		fatal(err)
+		parts = append(parts, out.Lazy())
+	}
+	return ursus.Concat(parts)
 }

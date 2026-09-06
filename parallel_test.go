@@ -30,6 +30,36 @@ func parFrame(rows int) *ursus.LazyFrame {
 	)
 }
 
+// parChunked builds the same frame as N SEPARATE frames concatenated, so the source
+// really yields N batches.
+//
+// It exists because parFrame does not. memsrc hands back the batches it was given
+// and ignores WithBatchSize, so a frame built from one set of slices is ONE batch
+// however small the batch size — which means a query over it has exactly one job to
+// distribute and every worker but the first sits idle.
+//
+// That is not a detail of this test. It is why the join cases below could pass with
+// all N workers sharing one probe operator, and it is why step 27 measured the join
+// as "slower on 8 threads": opbench's 5M-row left side is a single ursus.Frame, so
+// there was never more than one probe job to hand out.
+func parChunked(rows, chunks int) *ursus.LazyFrame {
+	per := rows / chunks
+	parts := make([]*ursus.LazyFrame, chunks)
+	for c := range chunks {
+		ids := make([]int64, per)
+		qty := make([]int64, per)
+		tag := make([]string, per)
+		for i := range per {
+			n := c*per + i
+			ids[i], qty[i] = int64(n), int64(n%97)
+			tag[i] = "t" + strconv.Itoa(n%7)
+		}
+		parts[c] = ursus.Frame(ursus.Values("id", ids),
+			ursus.Values("qty", qty), ursus.Values("tag", tag))
+	}
+	return ursus.Concat(parts)
+}
+
 // TestParallelIsOrderPreserving is the whole of the step's central promise, stated
 // as a test: the same query at any thread count returns byte-identical output.
 //
@@ -68,9 +98,65 @@ func TestParallelIsOrderPreserving(t *testing.T) {
 			return parFrame(5_000).Sort(ursus.Asc(ursus.Col("tag"))).Head(50)
 		}},
 		{"join — left-input order is a guarantee", func() *ursus.LazyFrame {
-			return parFrame(5_000).
+			return parChunked(5_000, 20).
 				Join(parFrame(200), ursus.JoinOn(ursus.Col("id"))).
 				Select(ursus.Col("id"), ursus.Col("qty"))
+		}},
+		// The case above has fan-out 1: one probe row, one output row, so a probe
+		// worker emits exactly one batch per input batch and the terminator that
+		// separates one input batch's output from the next is never load-bearing.
+		// These join on `tag`, which has seven distinct values, so 5,000 probe rows
+		// against 700 build rows produce roughly 500,000 output rows — many output
+		// batches per input batch, from every worker at once.
+		{"join with fan-out — many output batches per input batch", func() *ursus.LazyFrame {
+			return parChunked(5_000, 20).
+				Join(parFrame(700), ursus.JoinOn(ursus.Col("tag"))).
+				Select(ursus.Col("id"), ursus.Col("qty")).
+				Head(4_000)
+		}},
+		{"left join with fan-out", func() *ursus.LazyFrame {
+			return parChunked(2_000, 16).
+				Join(parFrame(700).Filter(ursus.Col("tag").Ne("t3")),
+					ursus.JoinOn(ursus.Col("tag")), ursus.JoinHow(ursus.JoinLeft)).
+				Head(3_000)
+		}},
+		{"semi join", func() *ursus.LazyFrame {
+			return parChunked(5_000, 20).
+				Join(parFrame(700).Filter(ursus.Col("tag").Ne("t3")),
+					ursus.JoinOn(ursus.Col("tag")), ursus.JoinHow(ursus.JoinSemi))
+		}},
+		{"anti join", func() *ursus.LazyFrame {
+			return parChunked(5_000, 20).
+				Join(parFrame(700).Filter(ursus.Col("tag").Ne("t3")),
+					ursus.JoinOn(ursus.Col("tag")), ursus.JoinHow(ursus.JoinAnti))
+		}},
+		// Right and Full take the SERIAL path, because `matched` is written by the
+		// probe and read by a flush the parallel path does not run at all. So these
+		// check the fallback — and they only can if the build side has rows the probe
+		// side never matches. The LEFT side drops t5 while the right keeps it, so 100
+		// build rows must come back null-padded. Without that the flush can be removed
+		// entirely and every assertion still passes.
+		// Small frames and NO Head, so every row is compared. With Head(3000) over a
+		// 171,000-row join the unmatched build rows fell outside the window and the
+		// tooth for this — removing the Right/Full gate, which skips the flush
+		// entirely — passed against the Right case.
+		{"right join — build rows with no match", func() *ursus.LazyFrame {
+			return parFrame(70).Filter(ursus.Col("tag").Ne("t5")).
+				Join(parFrame(70), ursus.JoinOn(ursus.Col("tag")),
+					ursus.JoinHow(ursus.JoinRight))
+		}},
+		{"full join — unmatched on both sides", func() *ursus.LazyFrame {
+			return parFrame(70).Filter(ursus.Col("tag").Ne("t5")).
+				Join(parFrame(70).Filter(ursus.Col("tag").Ne("t2")),
+					ursus.JoinOn(ursus.Col("tag")), ursus.JoinHow(ursus.JoinFull))
+		}},
+		{"join with an empty probe side", func() *ursus.LazyFrame {
+			return parFrame(0).Join(parFrame(200), ursus.JoinOn(ursus.Col("id")))
+		}},
+		{"join with an empty build side", func() *ursus.LazyFrame {
+			return parChunked(2_000, 16).
+				Join(parFrame(0), ursus.JoinOn(ursus.Col("id")), ursus.JoinHow(ursus.JoinLeft)).
+				Head(500)
 		}},
 		{"filtered to nothing", func() *ursus.LazyFrame {
 			return parFrame(20_000).Filter(ursus.Col("qty").Gt(1000))

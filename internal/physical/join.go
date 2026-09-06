@@ -233,6 +233,12 @@ type joinBuildSink struct {
 	leftKeys []expr.Node // LEFT-side key expressions, carried to the probe operator
 	spec     joinSpec
 
+	// threads is how many probe workers to run, and is set ONLY by planJoin. newSub
+	// builds its sub-sink field by field and does not carry it, which is what keeps
+	// spill replay serial without anyone having to remember to zero it — a replay is
+	// one bucket at a time anyway, and its probe side is a spill file read serially.
+	threads int
+
 	ids    *kernel.KeyTable
 	counts []int32
 	rowKey []int32
@@ -419,6 +425,11 @@ func (s *joinBuildSink) Finish(ctx context.Context) (Operator, error) {
 	return s.Probe(ctx, emptyOperator{schema: s.left})
 }
 
+// Probe returns the probe-side operator, serial or parallel.
+//
+// The parallel path is a fleet of the SAME operator over one frozen table, so the
+// choice is made once here and nothing downstream knows which it got. See
+// parallelProbe for the four conditions that force the serial one.
 func (s *joinBuildSink) Probe(ctx context.Context, probe Operator) (Operator, error) {
 	t, err := s.freeze()
 	if err != nil {
@@ -430,6 +441,53 @@ func (s *joinBuildSink) Probe(ctx context.Context, probe Operator) (Operator, er
 		return nil, err
 	}
 
+	if n := s.parallelProbe(); n > 1 {
+		workers := make([]*joinProbeOp, n)
+		for i := range n {
+			// Each worker gets its own cursor and selection arrays and shares only the
+			// table. probe is nil on a worker: it is HANDED batches by parProbeOp
+			// rather than pulling them, which is the whole difference.
+			workers[i] = s.newProbeOp(t, nil, pad)
+		}
+		return newParProbeOp(s.out, probe, workers), nil
+	}
+
+	op := s.newProbeOp(t, probe, pad)
+	op.account()
+	return op, nil
+}
+
+// parallelProbe gives the worker count, or 1 when this join must stay serial.
+//
+// Three kinds of state make a join unparallelisable, and each is a real dependency
+// rather than caution:
+//
+//   - Right and Full write `matched` during the probe and read it during the flush.
+//     Per-worker arrays ORed before the flush would work, and needs a flush phase
+//     that runs after every worker drains — a second mechanism, not in this step.
+//
+//   - A one-to-one or one-to-many validation keeps `seen`, a map over the WHOLE
+//     probe stream that detects a duplicate left key across batches. Sharding it
+//     would change what it detects, not just how fast it detects it.
+//
+//   - A spilled build side means the probe writes rows to per-bucket files through
+//     routeProbe. Concurrent writers would corrupt them, and replay is one bucket at
+//     a time regardless.
+//
+// What is left — Inner, Left, Semi, Anti, unvalidated, resident — is every join in
+// h2o and every join in PDS-H.
+func (s *joinBuildSink) parallelProbe() int {
+	switch {
+	case s.threads <= 1,
+		s.spec.emitBuildUnmatched,
+		s.spec.validate.RequiresLeftUnique(),
+		s.spilled():
+		return 1
+	}
+	return s.threads
+}
+
+func (s *joinBuildSink) newProbeOp(t *joinTable, probe Operator, pad *data.Batch) *joinProbeOp {
 	op := &joinProbeOp{
 		schema:  s.out,
 		layout:  s.layout,
@@ -453,8 +511,7 @@ func (s *joinBuildSink) Probe(ctx context.Context, probe Operator) (Operator, er
 	if s.spec.validate.RequiresLeftUnique() {
 		op.seen = make(map[string]struct{})
 	}
-	op.account()
-	return op, nil
+	return op
 }
 
 // freeze scatters the CSR arrays and concatenates the build side.
@@ -669,27 +726,48 @@ func (p *joinProbeOp) Next(ctx context.Context) (*data.Batch, error) {
 
 // probeStep fills one output batch from the probe stream, or returns (nil, nil)
 // when it needs another input batch or the stream ended.
+//
+// It is fillCurrent then stepCurrent, split at the seam between "get a batch" and
+// "drain the batch I have". A parallel probe worker is handed its batch rather than
+// pulling one, so it calls only the second half — which is what keeps the resume
+// logic below written once. Two copies of hit/nHit would drift, and the symptom
+// would be output that changes with batch size.
 func (p *joinProbeOp) probeStep(ctx context.Context) (*data.Batch, error) {
 	if p.cur == nil {
-		in, err := p.probe.Next(ctx)
-		if errors.Is(err, io.EOF) {
-			if err := p.closeProbeParts(); err != nil {
-				return nil, err
-			}
-			p.phase = p.afterProbe()
-			if p.phase == phaseReplay {
-				p.releaseTable()
-			}
-			return nil, nil
-		}
-		if err != nil {
-			return nil, err
-		}
-		if err := p.startBatch(ctx, in); err != nil {
+		ok, err := p.fillCurrent(ctx)
+		if err != nil || !ok {
 			return nil, err
 		}
 	}
+	return p.stepCurrent()
+}
 
+// fillCurrent pulls the next probe batch. false means the stream ended, and the
+// phase has already moved on.
+func (p *joinProbeOp) fillCurrent(ctx context.Context) (bool, error) {
+	in, err := p.probe.Next(ctx)
+	if errors.Is(err, io.EOF) {
+		if err := p.closeProbeParts(); err != nil {
+			return false, err
+		}
+		p.phase = p.afterProbe()
+		if p.phase == phaseReplay {
+			p.releaseTable()
+		}
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if err := p.startBatch(ctx, in); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// stepCurrent drains the CURRENT batch by at most one output batch, and clears it
+// when the batch is spent. (nil, nil) means this batch produced nothing more.
+func (p *joinProbeOp) stepCurrent() (*data.Batch, error) {
 	p.reset()
 	for p.row < p.cur.Rows() && p.outLen() < p.spec.batchSize {
 		if !p.entered {
@@ -1115,6 +1193,7 @@ func planJoin(ctx context.Context, j *plan.Join, opts Options) (Operator, error)
 		keys:     j.RightOn,
 		leftKeys: j.LeftOn,
 		spec:     newJoinSpec(j, batchSize),
+		threads:  opts.Threads,
 		ids:      kernel.NewKeyTable(),
 		mem:      opts.Budget.Account("join"),
 
