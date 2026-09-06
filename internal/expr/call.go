@@ -95,6 +95,21 @@ const (
 	// renders its arguments structurally, so the same class is impossible here.
 	FnMathRound CallFn = iota + 300
 	fnMathEnd
+
+	// --- list ---
+	//
+	// A fifth family, keyed to a List receiver. These all reduce a list to a
+	// SCALAR: nothing here builds a list, which is the seam the step was cut on —
+	// sort, unique, reverse, slice and the set operations construct a new List
+	// column and are a different problem.
+	FnListLen CallFn = iota + 400
+	FnListGet
+	FnListContains
+	FnListMin
+	FnListMax
+	FnListSum
+	FnListMean
+	fnListEnd
 )
 
 // IsString, IsTemporal and IsGeneral classify a function by family.
@@ -105,6 +120,7 @@ func (f CallFn) IsString() bool   { return f < fnStrEnd }
 func (f CallFn) IsTemporal() bool { return f >= FnDtYear && f < fnDtEnd }
 func (f CallFn) IsGeneral() bool  { return f >= FnIsIn && f < fnGenEnd }
 func (f CallFn) IsMath() bool     { return f >= FnMathRound && f < fnMathEnd }
+func (f CallFn) IsList() bool     { return f >= FnListLen && f < fnListEnd }
 
 var callNames = map[CallFn]string{
 	FnStrContains: "str.contains", FnStrStartsWith: "str.starts_with",
@@ -129,6 +145,10 @@ var callNames = map[CallFn]string{
 	FnIsIn: "is_in",
 
 	FnMathRound: "round",
+
+	FnListLen: "list.len", FnListGet: "list.get",
+	FnListContains: "list.contains", FnListMin: "list.min",
+	FnListMax: "list.max", FnListSum: "list.sum", FnListMean: "list.mean",
 }
 
 func (f CallFn) String() string {
@@ -214,6 +234,9 @@ func ResolveCall(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 
 	case fn.IsMath():
 		return mathCallOut(fn, in)
+
+	case fn.IsList():
+		return listCallOut(fn, in)
 
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown call %d", fn)
@@ -341,4 +364,50 @@ func CallArgs(c *Call) ([]any, error) {
 		out = append(out, l.Value)
 	}
 	return out, nil
+}
+
+// listCallOut gives the output type of a `.list` call.
+//
+// Every one of these reduces a list to a SCALAR, so the output is either a fixed
+// type or the ELEMENT type — never a List. That is the seam the namespace was cut
+// on: the operations that build a list are a different problem.
+func listCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
+	if in.ID() != dtype.TypeList {
+		return dtype.Null, uerr.New(uerr.KindType, "list",
+			"%s requires a List operand, got %s", fn, in).
+			Hint("only a List column has elements to reduce")
+	}
+	elem := in.Inner()
+
+	switch fn {
+	case FnListLen:
+		// Uint32, matching str.len_bytes and str.len_chars. A length is never
+		// negative and never needs 64 bits.
+		return dtype.Uint32, nil
+
+	case FnListContains:
+		return dtype.Bool, nil
+
+	case FnListGet, FnListMin, FnListMax:
+		// The element type unchanged: picking one element out, or the smallest or
+		// largest of them, cannot change what type it is.
+		return elem, nil
+
+	case FnListMean:
+		return dtype.Float64, nil
+
+	case FnListSum:
+		// Delegated to the AGGREGATE's rule rather than restated, so a per-row sum
+		// and a column-wide sum agree about their type. That rule widens an integer
+		// to Int128, which step 2 chose deliberately: a per-row sum that overflowed
+		// where the column-wide one does not would be the worse surprise.
+		b, err := ResolveAggBinding(AggSum, elem)
+		if err != nil {
+			return dtype.Null, err
+		}
+		return b.Out, nil
+
+	default:
+		return dtype.Null, uerr.Internalf("expr: unknown list call %d", fn)
+	}
 }

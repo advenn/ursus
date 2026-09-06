@@ -325,7 +325,11 @@ type compiledCall struct {
 	args []any
 	re   *regexp.Regexp
 	set  map[string]struct{} // is_in's probe set, encoded against the receiver's type
-	err  error
+	// needle is list.contains's value, encoded against the ELEMENT type. Prepared
+	// here for the reason the set is: the cast has to be strict and the encoding
+	// has to match the child's, and doing it per batch would repeat both.
+	needle []byte
+	err    error
 }
 
 func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, error) {
@@ -360,6 +364,8 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 		return kernel.InSet(name, recv, cc.set)
 	case c.Fn.IsMath():
 		return kernel.MathCall(c.Fn, name, out, recv, cc.args)
+	case c.Fn.IsList():
+		return kernel.ListCall(c.Fn, name, out, recv, cc.args, cc.needle)
 	default:
 		return nil, uerr.Internalf("physical: no kernel for %s", c.Fn)
 	}
@@ -377,6 +383,40 @@ func compileCall(c *expr.Call, recvType dtype.DataType) compiledCall {
 	if cc.err == nil && c.Fn.IsString() {
 		cc.re, cc.err = kernel.CompilePattern(c.Fn, cc.args)
 	}
+	if cc.err == nil && c.Fn == expr.FnListContains {
+		cc.needle, cc.err = buildListNeedle(c, recvType)
+	}
 	callCache.Store(c, cc)
 	return cc
+}
+
+// buildListNeedle encodes list.contains's value against the ELEMENT type.
+//
+// It is buildInSet for a single value, and strict for the same reason: comparing
+// against a value the element type cannot hold is a question with no meaningful
+// answer, and "5000 is not representable as Int8" is more use than silently
+// matching nothing.
+//
+// The receiver here is the LIST, so the cast target is its Inner — getting that
+// wrong would encode against List(Int8) and match nothing at all.
+func buildListNeedle(c *expr.Call, recvType dtype.DataType) ([]byte, error) {
+	if len(c.Args) < 2 {
+		return nil, uerr.Internalf("physical: list.contains has no value argument")
+	}
+	l, ok := c.Args[1].(*expr.Lit)
+	if !ok {
+		return nil, uerr.Internalf("physical: list.contains argument %s is not a literal",
+			c.Args[1])
+	}
+	col, err := litColumn(l)
+	if err != nil {
+		return nil, err
+	}
+	elem := recvType.Inner()
+	if col.DType() != elem {
+		if col, err = kernel.Cast(col.Name(), elem, true, col); err != nil {
+			return nil, err
+		}
+	}
+	return kernel.EncodeOne(col)
 }
