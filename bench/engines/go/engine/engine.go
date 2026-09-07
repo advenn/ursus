@@ -15,9 +15,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -157,6 +160,10 @@ func ParseArgs() Args {
 	flag.StringVar(&a.Out, "out", "", "where to write the result JSON")
 	flag.StringVar(&a.Result, "result", "", "where to write the answer parquet")
 	flag.StringVar(&checksum, "checksum-cols", "", "comma list; empty = compare the full frame")
+	flag.StringVar(&heapProfile, "heapprofile", "",
+		"write an inuse_space profile when the live heap first exceeds -heapprofile-at")
+	flag.Int64Var(&heapProfileAt, "heapprofile-at", 1<<30,
+		"live-heap threshold in bytes for -heapprofile")
 	flag.Parse()
 
 	for _, name := range strings.Split(checksum, ",") {
@@ -176,10 +183,30 @@ type payload struct {
 	Iterations   []float64 `json:"iterations"`
 	Rows         int       `json:"rows"`
 	PeakRSSBytes int64     `json:"peak_rss_bytes"`
-	StartupS     float64   `json:"startup_s"`
-	Status       string    `json:"status"`
-	Error        *string   `json:"error"`
-	ResultPath   *string   `json:"result_path"`
+
+	// Three numbers instead of one, because VmHWM alone cannot say WHY.
+	//
+	//	AccountedBytes  what the engine believes it retains across batches
+	//	HeapInuseBytes  the PEAK live heap, sampled while the query runs
+	//	PeakRSSBytes    what the OS saw, and never gives back
+	//
+	// The two gaps are the two explanations. Accounted -> HeapInuse is allocation
+	// the engine does not track: kernel transients, which ursus's MemoryStats doc
+	// says outright it cannot see, plus batches in flight in the parallel lanes.
+	// HeapInuse -> PeakRSS is the GC's heap-growth target plus a high-water mark
+	// that only ever rises.
+	//
+	// Zero for an engine that reports no accounting of its own, which is every
+	// engine except ursus.
+	AccountedBytes  int64   `json:"accounted_bytes"`
+	HeapInuseBytes  int64   `json:"heap_inuse_bytes"`
+	HeapSysBytes    int64   `json:"heap_sys_bytes"`
+	TotalAllocBytes int64   `json:"total_alloc_bytes"`
+	NumGC           int64   `json:"num_gc"`
+	StartupS        float64 `json:"startup_s"`
+	Status          string  `json:"status"`
+	Error           *string `json:"error"`
+	ResultPath      *string `json:"result_path"`
 }
 
 // PeakRSS reads VmHWM, the same number the Python harness reports, from the
@@ -207,6 +234,88 @@ func PeakRSS() int64 {
 	return 0
 }
 
+// heapSampler records the PEAK live heap while a query runs.
+//
+// Reading MemStats once at the end answers a different question and looks identical:
+// by then the answer has been released and HeapInuse is near zero, which says
+// nothing about what the query held at its worst moment. The first version of this
+// instrument did exactly that and reported 0.00 GB of live heap against 3.85 GB of
+// HeapSys — a number that is true and useless.
+//
+// HeapSys is not a substitute either. It is the arena the runtime has taken from the
+// OS, which grows to accommodate the ALLOCATION RATE between collections rather than
+// the live set, so the gap between this peak and HeapSys is exactly the quantity
+// worth naming.
+type heapSampler struct {
+	stop chan struct{}
+	done chan struct{}
+	peak atomic.Int64
+}
+
+// heapProfile names a file to receive an inuse_space profile taken AT THE PEAK.
+//
+// Not at the end: by then the answer is released and the profile is empty. A peak
+// this instrument has already measured but cannot explain is the reason it exists —
+// VmHWM says how much, and only a profile says what.
+var (
+	heapProfile   string
+	heapProfileAt int64
+)
+
+func startHeapSampler() *heapSampler {
+	h := &heapSampler{stop: make(chan struct{}), done: make(chan struct{})}
+	go func() {
+		defer close(h.done)
+		t := time.NewTicker(5 * time.Millisecond)
+		defer t.Stop()
+		var m runtime.MemStats
+		written := false
+		for {
+			select {
+			case <-h.stop:
+				return
+			case <-t.C:
+				runtime.ReadMemStats(&m)
+				v := int64(m.HeapInuse)
+				if v > h.peak.Load() {
+					h.peak.Store(v)
+				}
+				if heapProfile != "" && !written && v >= heapProfileAt {
+					written = true
+					writeHeapProfile(heapProfile)
+				}
+			}
+		}
+	}()
+	return h
+}
+
+// writeHeapProfile dumps the live objects at this instant.
+func writeHeapProfile(path string) {
+	f, err := os.Create(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	// WriteHeapProfile runs a GC first, so what lands in the file is live rather
+	// than merely allocated — which is the whole question.
+	_ = pprof.WriteHeapProfile(f)
+}
+
+// Stop ends the sampling and returns the peak live heap, the arena taken from the
+// OS, the cumulative bytes allocated, and the number of collections.
+//
+// TotalAlloc is the one that separates "holds a lot" from "churns a lot": a query
+// retaining under a gigabyte while allocating tens of them is a garbage problem, not
+// a retention one, and VmHWM cannot tell the two apart.
+func (h *heapSampler) Stop() (peak, sys, total, ngc int64) {
+	close(h.stop)
+	<-h.done
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return h.peak.Load(), int64(m.HeapSys), int64(m.TotalAlloc), int64(m.NumGC)
+}
+
 // Run drives one engine end to end and writes the result JSON.
 //
 // The exit code is 0 for a completed or legitimately-unsupported run and 1 for
@@ -225,7 +334,10 @@ func Run(a Args, build Build, startup time.Duration) int {
 		Status:     "ok",
 	}
 
-	if err := execute(a, build, &out); err != nil {
+	sampler := startHeapSampler()
+	err := execute(a, build, &out)
+	out.HeapInuseBytes, out.HeapSysBytes, out.TotalAllocBytes, out.NumGC = sampler.Stop()
+	if err != nil {
 		var unsupported *ErrUnsupported
 		if errors.As(err, &unsupported) {
 			out.Status = "unsupported"
@@ -272,6 +384,14 @@ func execute(a Args, build Build, out *payload) error {
 			return err
 		}
 		out.Iterations = append(out.Iterations, time.Since(started).Seconds())
+		// The MAX across iterations, to pair with PeakRSS — which is a high-water
+		// mark over the whole process and so covers every iteration too. Taking the
+		// last one instead would compare a single run against the worst of several.
+		if acc, ok := next.(Accounted); ok {
+			if b := acc.AccountedBytes(); b > out.AccountedBytes {
+				out.AccountedBytes = b
+			}
+		}
 		// Some engines hold a live connection or an allocator arena behind
 		// their Answer. Dropping the reference is not enough to give it back,
 		// and keeping four of them alive would distort the peak-RSS figure this
@@ -283,6 +403,17 @@ func execute(a Args, build Build, out *payload) error {
 	out.Rows = answer.Rows()
 	defer release(answer)
 	return writeAnswer(ctx, a, answer)
+}
+
+// Accounted is implemented by an Answer whose engine tracks its own memory.
+//
+// Only ursus does. The point of asking is that VmHWM cannot distinguish "the engine
+// is holding this" from "the Go heap has not given it back yet", and an engine that
+// already counts what it retains can say which.
+type Accounted interface {
+	// AccountedBytes is the engine's own peak retention for the query that
+	// produced this answer, or 0 if it does not track one.
+	AccountedBytes() int64
 }
 
 // release frees an answer that is being superseded, if it holds anything.

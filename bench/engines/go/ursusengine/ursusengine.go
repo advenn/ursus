@@ -57,11 +57,18 @@ func Build(a engine.Args) (engine.Once, error) {
 		// The plan is rebuilt every iteration: for a lazy engine, planning and
 		// reading file metadata are part of the query, and reusing a LazyFrame
 		// across iterations would hide both.
-		df, err := query(scan).Collect(ctx, opts...)
+		// WithMemoryStats is passed HERE and deliberately not stored on the answer:
+		// the answer reuses opts for its checksum aggregation, and that second,
+		// far smaller Collect would overwrite the query's figure with its own.
+		var mem ursus.MemoryStats
+		df, err := query(scan).Collect(ctx, append(opts, ursus.WithMemoryStats(&mem))...)
 		if err != nil {
 			return nil, err
 		}
-		return &answer{frame: df, opts: opts}, nil
+		// Read after Collect returns. WithMemoryStats writes at the END of the
+		// query, so reading it earlier gives a partial figure — which is the shape
+		// of wrong answer that looks entirely plausible.
+		return &answer{frame: df, opts: opts, accounted: mem.Peak}, nil
 	}, nil
 }
 
@@ -103,9 +110,17 @@ func csvDateOverrides(suite, table string) map[string]dtype.DataType {
 type answer struct {
 	frame *ursus.DataFrame
 	opts  []ursus.CollectOption
+
+	// accounted is the query's own peak retention, captured before the checksum
+	// aggregation below could overwrite it. See where it is set.
+	accounted int64
 }
 
 func (a *answer) Rows() int { return a.frame.Height() }
+
+// AccountedBytes implements engine.Accounted: what ursus believes it retained,
+// against the VmHWM the harness reports beside it.
+func (a *answer) AccountedBytes() int64 { return a.accounted }
 
 func (a *answer) WriteFrame(ctx context.Context, path string) error {
 	return a.frame.Lazy().SinkParquet(ctx, path)
