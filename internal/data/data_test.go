@@ -121,3 +121,79 @@ func TestNullsAreSkippedNotZeroed(t *testing.T) {
 		t.Errorf("Fold = %d, want 40 (nulls skipped, not zero-filled)", sum)
 	}
 }
+
+// TestSliceSharesTheFixedPayload pins the change step 37 made, in both directions:
+// the slice must SEE the right rows, and it must be a view rather than a copy.
+//
+// Sharing is what makes splitting an in-memory frame into batches free, and it is
+// only safe because nothing writes into an existing column's payload — the two
+// data.Reinterpret call sites write into a freshly allocated buffer and read offsets
+// for spilling. That is a property of the codebase rather than of this type, so the
+// half of this test that matters most is the first: if a future kernel starts
+// mutating in place, a slice reading its parent's bytes is how it will show up.
+func TestSliceSharesTheFixedPayload(t *testing.T) {
+	vals := []int64{10, 11, 12, 13, 14, 15, 16, 17}
+	c := data.NewFixed("v", dtype.Int64, vals, bitmap.AllSet(len(vals)))
+
+	s := c.Slice(3, 4)
+	got, err := data.Values[int64](s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []int64{13, 14, 15, 16}
+	if len(got) != len(want) {
+		t.Fatalf("slice has %d rows, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("slice = %v, want %v — the sub-buffer starts at the wrong offset",
+				got, want)
+		}
+	}
+
+	// A view, not a copy: the slice's bytes are inside the parent's. Values reads
+	// from the START of the buffer, so a shared buffer that was not re-based would
+	// have returned the parent's first four values above.
+	pb, sb := c.RawFixed(), s.RawFixed()
+	if len(sb) != 4*8 {
+		t.Fatalf("slice payload is %d bytes, want 32", len(sb))
+	}
+	if &pb[3*8] != &sb[0] {
+		t.Error("Slice copied the fixed payload; it should share the parent's buffer")
+	}
+}
+
+// TestSliceMovesValidityWithValues: the values and the validity bitmap are sliced by
+// separate code, so a slice whose values move while its nulls do not is wrong for
+// every row after the first batch — and it is wrong QUIETLY, since the shape is
+// right either way.
+func TestSliceMovesValidityWithValues(t *testing.T) {
+	// An IRREGULAR null pattern, deliberately. With an alternating one — i%2 == 0 —
+	// slicing the validity from 0 instead of from the offset gives the same bits
+	// whenever the offset is even, so the tooth for this passed against the obvious
+	// fixture and proved nothing.
+	vals := []int64{0, 1, 2, 3, 4, 5}
+	pattern := []bool{true, true, false, true, false, false}
+	valid := bitmap.NewBuilder(len(vals))
+	for _, v := range pattern {
+		valid.Append(v)
+	}
+	c := data.NewFixed("v", dtype.Int64, vals, valid.Finish())
+
+	s := c.Slice(2, 3) // rows 2, 3, 4 -> null, valid, null
+	for i, want := range []bool{false, true, false} {
+		if s.IsValid(i) != want {
+			t.Errorf("slice row %d valid = %v, want %v (parent rows 2..4 are "+
+				"null, valid, null)", i, s.IsValid(i), want)
+		}
+	}
+	got, err := data.Values[int64](s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []int64{2, 3, 4} {
+		if got[i] != want {
+			t.Errorf("slice row %d = %d, want %d", i, got[i], want)
+		}
+	}
+}

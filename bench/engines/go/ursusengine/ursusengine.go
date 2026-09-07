@@ -88,8 +88,8 @@ func csvDateOverrides(suite, table string) map[string]dtype.DataType {
 	switch table {
 	case "lineitem":
 		return map[string]dtype.DataType{
-			"l_shipdate":   ursus.Date,
-			"l_commitdate": ursus.Date,
+			"l_shipdate":    ursus.Date,
+			"l_commitdate":  ursus.Date,
 			"l_receiptdate": ursus.Date,
 		}
 	case "orders":

@@ -557,12 +557,32 @@ func (c *Column) RawChars() []byte {
 
 // Slice returns rows [offset, offset+length) as a zero-copy view.
 //
-// For fixed-width columns this needs a real offset on the values buffer, which the
-// current representation does not carry, so fixed-width slicing copies. Bool and
-// String slicing is genuinely O(1). This asymmetry is deliberate: Slice is not on
-// any hot path in v0.1 (Filter uses Take, which must copy anyway), and adding an
-// offset field to Column would put a `+ c.offset` in every kernel's inner loop to
-// buy nothing today.
+// Every payload shape shares rather than copies: Bool and the validity bitmap
+// re-window their views, String and List re-window the offsets and keep the
+// character buffer or child column whole, a Struct slices its fields, and a
+// fixed-width column takes a SUB-BUFFER of the values.
+//
+// # The fixed-width case used to copy, and step 37 is why it stopped
+//
+// It copied because Column carries no offset into its values buffer, and adding one
+// would put a `+ c.offset` in every kernel's inner loop. It does not need one:
+// memory.SliceBuffer produces a buffer whose base IS the sliced range, so
+// Values[T] — which reads unsafeData(c.fixed.Bytes())[:c.len] from the start of the
+// buffer — sees the right rows without knowing anything happened.
+//
+// Sharing is what makes splitting an in-memory frame into batches free. memsrc used
+// to hand back one batch however large, so an in-memory frame had one unit of work
+// and WithThreads did nothing; splitting it while Slice copied would have traded
+// that for a full copy of the frame.
+//
+// Two things make this safe, and both were checked rather than assumed. Nothing
+// writes into an existing column's payload — the only two data.Reinterpret call
+// sites write into a freshly allocated buffer and read offsets for spilling. And a
+// sub-buffer may be aligned to less than 64 bytes, which internal/arrowx's own doc
+// already requires kernels to tolerate: "Kernels must treat 64-byte alignment as an
+// optimization hint, never as a precondition." In practice the address is
+// base + offset*width over a 64-byte-aligned base, so it is usually still aligned,
+// and arrowx.IsAligned is what a kernel asks.
 func (c *Column) Slice(offset, length int) *Column {
 	if offset < 0 || length < 0 || offset+length > c.len {
 		panic("data: Column.Slice out of range")
@@ -600,9 +620,7 @@ func (c *Column) Slice(offset, length int) *Column {
 
 	case c.fixed != nil:
 		width := c.dt.Physical().BitWidth() / 8
-		nb := arrowx.NewBuffer(length * width)
-		copy(nb.Bytes(), c.fixed.Bytes()[offset*width:(offset+length)*width])
-		d.fixed = nb
+		d.fixed = memory.SliceBuffer(c.fixed, offset*width, length*width)
 	}
 	return d
 }

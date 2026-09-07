@@ -30,36 +30,6 @@ func parFrame(rows int) *ursus.LazyFrame {
 	)
 }
 
-// parChunked builds the same frame as N SEPARATE frames concatenated, so the source
-// really yields N batches.
-//
-// It exists because parFrame does not. memsrc hands back the batches it was given
-// and ignores WithBatchSize, so a frame built from one set of slices is ONE batch
-// however small the batch size — which means a query over it has exactly one job to
-// distribute and every worker but the first sits idle.
-//
-// That is not a detail of this test. It is why the join cases below could pass with
-// all N workers sharing one probe operator, and it is why step 27 measured the join
-// as "slower on 8 threads": opbench's 5M-row left side is a single ursus.Frame, so
-// there was never more than one probe job to hand out.
-func parChunked(rows, chunks int) *ursus.LazyFrame {
-	per := rows / chunks
-	parts := make([]*ursus.LazyFrame, chunks)
-	for c := range chunks {
-		ids := make([]int64, per)
-		qty := make([]int64, per)
-		tag := make([]string, per)
-		for i := range per {
-			n := c*per + i
-			ids[i], qty[i] = int64(n), int64(n%97)
-			tag[i] = "t" + strconv.Itoa(n%7)
-		}
-		parts[c] = ursus.Frame(ursus.Values("id", ids),
-			ursus.Values("qty", qty), ursus.Values("tag", tag))
-	}
-	return ursus.Concat(parts)
-}
-
 // TestParallelIsOrderPreserving is the whole of the step's central promise, stated
 // as a test: the same query at any thread count returns byte-identical output.
 //
@@ -98,7 +68,7 @@ func TestParallelIsOrderPreserving(t *testing.T) {
 			return parFrame(5_000).Sort(ursus.Asc(ursus.Col("tag"))).Head(50)
 		}},
 		{"join — left-input order is a guarantee", func() *ursus.LazyFrame {
-			return parChunked(5_000, 20).
+			return parFrame(5_000).
 				Join(parFrame(200), ursus.JoinOn(ursus.Col("id"))).
 				Select(ursus.Col("id"), ursus.Col("qty"))
 		}},
@@ -109,24 +79,24 @@ func TestParallelIsOrderPreserving(t *testing.T) {
 		// against 700 build rows produce roughly 500,000 output rows — many output
 		// batches per input batch, from every worker at once.
 		{"join with fan-out — many output batches per input batch", func() *ursus.LazyFrame {
-			return parChunked(5_000, 20).
+			return parFrame(5_000).
 				Join(parFrame(700), ursus.JoinOn(ursus.Col("tag"))).
 				Select(ursus.Col("id"), ursus.Col("qty")).
 				Head(4_000)
 		}},
 		{"left join with fan-out", func() *ursus.LazyFrame {
-			return parChunked(2_000, 16).
+			return parFrame(2_000).
 				Join(parFrame(700).Filter(ursus.Col("tag").Ne("t3")),
 					ursus.JoinOn(ursus.Col("tag")), ursus.JoinHow(ursus.JoinLeft)).
 				Head(3_000)
 		}},
 		{"semi join", func() *ursus.LazyFrame {
-			return parChunked(5_000, 20).
+			return parFrame(5_000).
 				Join(parFrame(700).Filter(ursus.Col("tag").Ne("t3")),
 					ursus.JoinOn(ursus.Col("tag")), ursus.JoinHow(ursus.JoinSemi))
 		}},
 		{"anti join", func() *ursus.LazyFrame {
-			return parChunked(5_000, 20).
+			return parFrame(5_000).
 				Join(parFrame(700).Filter(ursus.Col("tag").Ne("t3")),
 					ursus.JoinOn(ursus.Col("tag")), ursus.JoinHow(ursus.JoinAnti))
 		}},
@@ -154,7 +124,7 @@ func TestParallelIsOrderPreserving(t *testing.T) {
 			return parFrame(0).Join(parFrame(200), ursus.JoinOn(ursus.Col("id")))
 		}},
 		{"join with an empty build side", func() *ursus.LazyFrame {
-			return parChunked(2_000, 16).
+			return parFrame(2_000).
 				Join(parFrame(0), ursus.JoinOn(ursus.Col("id")), ursus.JoinHow(ursus.JoinLeft)).
 				Head(500)
 		}},

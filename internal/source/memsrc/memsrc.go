@@ -116,8 +116,16 @@ func (s *Source) Open(_ context.Context, spec source.ScanSpec) (source.BatchSour
 	s.projected = append(s.projected, append([]string(nil), spec.Projection...))
 	s.mu.Unlock()
 
-	return &reader{parent: s, schema: out, batches: s.batches}, nil
+	size := spec.BatchSize
+	if size <= 0 {
+		size = defaultBatchSize
+	}
+	return &reader{parent: s, schema: out, batches: s.batches, size: size}, nil
 }
+
+// defaultBatchSize matches the Parquet reader's, so the two sources behave the same
+// when a caller does not say.
+const defaultBatchSize = 8192
 
 // Projections returns the column lists this source has been opened with.
 func (s *Source) Projections() [][]string {
@@ -128,15 +136,35 @@ func (s *Source) Projections() [][]string {
 
 // --- source.BatchSource ------------------------------------------------------
 
+// reader walks the source's batches, splitting any that are larger than the
+// requested batch size.
+//
+// # Why splitting, and not just handing the batches over
+//
+// It used to hand them over exactly as given, and both public ways into in-memory
+// data build exactly ONE batch — ursus.Frame through FromColumns, and
+// DataFrame.Lazy through FromBatch. So an in-memory frame was a single batch of
+// however many rows, the pipeline had one unit of work to distribute, and
+// WithThreads did nothing at all: a query over a five-million-row frame ran on one
+// worker whatever it was told.
+//
+// That also made WithBatchSize a lie on this source while CSV and Parquet both
+// honoured it, and it is why step 36's join measurements had to chunk their fixture
+// by hand before the fleet did anything.
+//
+// Splitting is cheap because data.Batch.Slice shares every payload rather than
+// copying it — see Column.Slice, which stopped copying fixed-width values for this.
 type reader struct {
 	parent  *Source
 	schema  *dtype.Schema
 	batches []*data.Batch
+	size    int
 
 	// Guarded because BatchSource must be safe for concurrent Next: v0.1 has one
 	// consumer, v0.2's morsel scheduler will have several.
-	mu sync.Mutex
-	i  int
+	mu  sync.Mutex
+	i   int // the batch to read from
+	off int // rows already emitted from it
 }
 
 func (r *reader) Schema() *dtype.Schema { return r.schema }
@@ -148,12 +176,27 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 	}
 
 	r.mu.Lock()
+	// Skip past any empty batches rather than returning one: a zero-row batch is not
+	// end of stream, and a consumer that treated it as one would truncate.
+	for r.i < len(r.batches) && r.off >= r.batches[r.i].Rows() {
+		r.i++
+		r.off = 0
+	}
 	if r.i >= len(r.batches) {
 		r.mu.Unlock()
 		return nil, io.EOF
 	}
 	b := r.batches[r.i]
-	r.i++
+	if n := b.Rows() - r.off; n > r.size {
+		b = b.Slice(r.off, r.size)
+		r.off += r.size
+	} else {
+		if r.off > 0 {
+			b = b.Slice(r.off, n)
+		}
+		r.i++
+		r.off = 0
+	}
 	r.mu.Unlock()
 
 	if r.schema.Equal(b.Schema()) {
