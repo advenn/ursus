@@ -256,14 +256,65 @@ func (a *countAcc) Finish(name string, nGroups int) (*data.Column, error) {
 // distinct value and returns 1; every other engine, and every other aggregate in
 // ursus, skips nulls. Internal consistency wins: an n_unique that treated nulls
 // differently from sum, mean, min, max and count would be a permanent trap.
+// nuniqueAcc counts the distinct values in each group.
+//
+// # One table, not one map per group
+//
+// It used to be `sets []map[string]struct{}` — a Go map for every group — which is
+// the layout joinTable's doc rejected for the join and never had applied here:
+// "a map to a slice costs a slice header plus a backing array per distinct key: at
+// 5M keys that is ~120 MB of headers, 5M allocations, and 5M pointers for the GC to
+// trace on every cycle". Measured on PDS-H q21, whose group-by on l_orderkey makes
+// about 1.5 million groups, it was 74% of the query's live heap.
+//
+// So it is one KeyTable keyed by the group AND the value, and distinctness per group
+// falls out of GetOrInsert reporting `inserted`. Same structure the six operators
+// that identify groups already use.
+//
+// # The prefix is four raw bytes
+//
+// The group id has to be unambiguously separable from the value, and fixed width is
+// the simplest thing that is.
+//
+// A weaker claim than it first appears, and worth stating accurately: a DECIMAL
+// prefix would also be unambiguous here, because GroupKeyEncoder already frames its
+// output — a validity byte, then a big-endian length for variable-width types — so
+// the byte after the prefix is never a digit. The tooth aimed at this (spell the
+// prefix with strconv.Itoa) could not be made to bite for exactly that reason.
+//
+// Fixed width is still the right choice: it makes this key's framing independent of
+// how another type happens to frame its own, rather than correct by a coincidence
+// between two decisions that nothing links.
 type nuniqueAcc struct {
-	sets []map[string]struct{}
+	// tab holds group ++ value; the zero value is usable, since GetOrInsert inits
+	// lazily and Len guards on a nil offs.
+	tab    KeyTable
+	counts []int32
+	key    []byte // scratch, reused across rows
+}
+
+// groupPrefixLen is the width of the group id inside a key.
+const groupPrefixLen = 4
+
+// putGroup writes the fixed-width prefix and returns the buffer ready for a value.
+func putGroup(dst []byte, g int32) []byte {
+	u := uint32(g)
+	return append(dst[:0], byte(u), byte(u>>8), byte(u>>16), byte(u>>24))
+}
+
+// takeGroup reads the prefix back out of a stored key.
+func takeGroup(key []byte) int32 {
+	return int32(uint32(key[0]) | uint32(key[1])<<8 | uint32(key[2])<<16 | uint32(key[3])<<24)
 }
 
 func (a *nuniqueAcc) Reserve(n int) {
-	for len(a.sets) < n {
-		a.sets = append(a.sets, nil)
+	for len(a.counts) < n {
+		a.counts = append(a.counts, 0)
 	}
+	// Size the table by the GROUP count. It is a lower bound on the distinct pairs —
+	// every group contributes at least one — and it skips most of the doublings that
+	// otherwise rehash the whole table on the way up from 64 slots.
+	a.tab.Reserve(n)
 }
 
 func (a *nuniqueAcc) AddBatch(groups []int32, col *data.Column) error {
@@ -279,32 +330,46 @@ func (a *nuniqueAcc) AddBatch(groups []int32, col *data.Column) error {
 		if !valid.Get(i) {
 			continue
 		}
-		if a.sets[g] == nil {
-			a.sets[g] = make(map[string]struct{}, 4)
+		a.key = append(putGroup(a.key, g), enc.Encode(i)...)
+		if _, inserted := a.tab.GetOrInsert(a.key); inserted {
+			a.counts[g]++
 		}
-		a.sets[g][string(enc.Encode(i))] = struct{}{}
 	}
 	return nil
 }
 
+// Merge walks the other accumulator's ENTRIES rather than its groups.
+//
+// There is no per-group set to union any more, so this reads each stored key, swaps
+// its group prefix for this accumulator's id, and re-inserts. Sources at or past
+// len(remap) are dropped, which is what mergeEach does and what this has to
+// reproduce by hand now that it cannot use it.
 func (a *nuniqueAcc) Merge(other Accumulator, remap []int32) error {
 	o, ok := other.(*nuniqueAcc)
 	if !ok {
 		return uerr.Internalf("kernel: cannot merge %T into nuniqueAcc", other)
 	}
-	a.Reserve(mergeCap(remap, len(o.sets)))
-	mergeEach(remap, len(o.sets), func(dst, src int) {
-		s := o.sets[src]
-		if s == nil {
-			return
+	a.Reserve(mergeCap(remap, len(o.counts)))
+	for id := int32(0); id < int32(o.tab.Len()); id++ {
+		k := o.tab.KeyAt(id)
+		if len(k) < groupPrefixLen {
+			return uerr.Internalf("kernel: n_unique key of %d bytes", len(k))
 		}
-		if a.sets[dst] == nil {
-			a.sets[dst] = make(map[string]struct{}, len(s))
+		dst := takeGroup(k)
+		if remap != nil {
+			if int(dst) >= len(remap) {
+				continue
+			}
+			dst = remap[dst]
 		}
-		for k := range s {
-			a.sets[dst][k] = struct{}{}
+		if int(dst) >= len(a.counts) {
+			continue
 		}
-	})
+		a.key = append(putGroup(a.key, dst), k[groupPrefixLen:]...)
+		if _, inserted := a.tab.GetOrInsert(a.key); inserted {
+			a.counts[dst]++
+		}
+	}
 	return nil
 }
 
@@ -312,7 +377,7 @@ func (a *nuniqueAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
 	out := make([]uint64, nGroups)
 	for i := range nGroups {
-		out[i] = uint64(len(a.sets[i]))
+		out[i] = uint64(a.counts[i])
 	}
 	return data.NewFixed(name, dtype.Uint64, out, bitmap.AllSet(nGroups)), nil
 }
@@ -1110,12 +1175,14 @@ func (a *countAcc) NBytes() int64 { return int64(len(a.n)) * 8 }
 // slice, plus a per-entry constant covering the string header and the bucket slot.
 // The key BYTES are not counted, so a group-by over long strings under-reports;
 // counting them exactly would mean walking every key on every batch.
+// NBytes is EXACT now, where it used to estimate 48 bytes an entry.
+//
+// On q21 the estimate predicted about 300 MB against roughly 800 MB actually
+// resident. That matters more here than for most accumulators: n_unique is one of
+// the two that REFUSE to spill rather than spilling, so this number is what decides
+// when the refusal fires, and an under-count makes it fire late.
 func (a *nuniqueAcc) NBytes() int64 {
-	n := int64(len(a.sets)) * 8
-	for _, s := range a.sets {
-		n += int64(len(s)) * 48
-	}
-	return n
+	return a.tab.NBytes() + int64(len(a.counts))*4
 }
 
 func (a *sumAcc) NBytes() int64 {

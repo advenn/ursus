@@ -583,3 +583,74 @@ func TestMinOverAnAllNullStringGroup(t *testing.T) {
 		t.Errorf("min = %q (valid %v), want \"z\"", v, ok)
 	}
 }
+
+// n_unique keeps one shared table keyed by GROUP ++ VALUE rather than a map per
+// group, so the framing of that key is now load-bearing in a way it never was. The
+// three tests below exist for mistakes the old representation could not make.
+
+// strCol builds a String column, for the framing cases where the value's BYTES are
+// the point.
+func strCol(vals []string) *data.Column {
+	return data.NewString("v", vals, bitmap.AllSet(len(vals)))
+}
+
+// TestNUniqueSeparatesGroupsThatShareValues is the first thing a missing group
+// prefix breaks: without it every group reports the GLOBAL distinct count.
+//
+// The values deliberately overlap across groups. With distinct values per group the
+// two designs agree and this proves nothing.
+func TestNUniqueSeparatesGroupsThatShareValues(t *testing.T) {
+	col := strCol([]string{"a", "b", "a", "b", "c", "a"})
+	groups := []int32{0, 0, 1, 1, 1, 2}
+
+	out := run(t, expr.AggNUnique, dtype.String, col, groups, 3)
+	for i, want := range []uint64{2, 3, 1} {
+		got, ok := data.MustValues[uint64](out)[i], out.IsValid(i)
+		if !ok || got != want {
+			t.Errorf("group %d has %d distinct values, want %d — the groups are "+
+				"sharing one set", i, got, want)
+		}
+	}
+}
+
+// TestNUniqueFramesTheGroupPrefix: group ids whose spellings are prefixes of each
+// other stay separate, and a group nothing was fed reports zero.
+//
+// It was written to prove the four-byte prefix must be fixed width, and it does not:
+// swapping in a decimal prefix keeps it passing, because GroupKeyEncoder frames its
+// own output with a validity byte and a length, so the byte after the prefix is never
+// a digit. The case is worth keeping anyway — it pins that these groups are distinct
+// — but the reason for fixed width is stated where the code is, not here.
+func TestNUniqueFramesTheGroupPrefix(t *testing.T) {
+	// With a decimal prefix these all collapse to "10x", "10x", "10x".
+	col := strCol([]string{"0x", "x", "x"})
+	groups := []int32{1, 10, 10}
+
+	out := run(t, expr.AggNUnique, dtype.String, col, groups, 11)
+	vals := data.MustValues[uint64](out)
+	if vals[1] != 1 {
+		t.Errorf("group 1 has %d distinct values, want 1", vals[1])
+	}
+	if vals[10] != 1 {
+		t.Errorf("group 10 has %d distinct values, want 1", vals[10])
+	}
+	// And a group that was never fed must be zero, not borrowed from a neighbour.
+	if vals[0] != 0 {
+		t.Errorf("group 0 was never fed but has %d distinct values", vals[0])
+	}
+}
+
+// TestNUniqueCountsTheEmptyString: an empty value is a value, and a null is not.
+// The encoder distinguishes them; the key framing must not.
+func TestNUniqueCountsTheEmptyString(t *testing.T) {
+	b := bitmap.NewBuilder(3)
+	b.Append(true)
+	b.Append(true)
+	b.Append(false) // null
+	col := data.NewString("v", []string{"", "x", "ignored"}, b.Finish())
+
+	out := run(t, expr.AggNUnique, dtype.String, col, []int32{0, 0, 0}, 1)
+	if got := data.MustValues[uint64](out)[0]; got != 2 {
+		t.Errorf("n_unique = %d, want 2 (the empty string counts, the null does not)", got)
+	}
+}

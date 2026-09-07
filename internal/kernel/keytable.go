@@ -188,6 +188,34 @@ func (t *KeyTable) Reset() { *t = KeyTable{} }
 // grow doubles the slot ring and re-places every id from the stored hashes. No
 // key is read and no key is moved — the arena and offs are untouched, so every id
 // keeps its meaning.
+// Reserve sizes the table for at least n keys, if it is not already that big.
+//
+// Growth is doubling from 64 slots and each doubling REHASHES every entry, so a
+// table that ends up with millions of keys pays about seventeen full rehashes to get
+// there — random probes, every time. A caller that knows its rough scale up front can
+// skip almost all of it.
+//
+// It is a hint: the table still grows on demand, and passing a number that turns out
+// too small costs nothing but the doublings it did not save.
+func (t *KeyTable) Reserve(n int) {
+	if n <= 0 {
+		return
+	}
+	// The same 3/4 load factor GetOrInsert grows at, so a table reserved for n keys
+	// does not immediately grow on the nth insert.
+	want := 1
+	for want < n*4/3 {
+		want *= 2
+	}
+	if t.slots == nil {
+		t.init(want)
+		return
+	}
+	for len(t.slots) < want {
+		t.grow()
+	}
+}
+
 func (t *KeyTable) grow() {
 	slots := make([]int32, len(t.slots)*2)
 	for i := range slots {

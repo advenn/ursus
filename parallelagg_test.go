@@ -394,3 +394,60 @@ func itoaBench(n int) string {
 	}
 	return string(b[i:])
 }
+
+// TestNUniqueMergeRemapsGroups reaches a code path nothing else does.
+//
+// TestParallelAggregationMatchesSerial covers n_unique at every thread count and
+// never calls nuniqueAcc.Merge once: its frame is small enough that the work lands
+// in a single sink, so there is nothing to fold. Instrumenting Merge to print on
+// entry produced no output for the whole of that test — while the same method is 28%
+// of PDS-H q21's heap profile.
+//
+// This fixture does reach it, seven times, with a NON-IDENTITY remap: 200,000 rows
+// over 5,000 groups at a batch size of 512 gives the scheduler enough batches to
+// spread across sinks, and two sinks that saw different keys first number their
+// groups differently. Without the remap the folded counts land in the wrong groups.
+//
+// It only became reachable in step 37. Before that memsrc handed back one batch
+// however large, so an in-memory frame produced one sink and the merge never ran.
+//
+// The values overlap across groups on purpose — `g` cycles independently of `k` —
+// because a fixture where each group holds its own private values would agree
+// whether or not the group survives the fold.
+func TestNUniqueMergeRemapsGroups(t *testing.T) {
+	const (
+		rows   = 200_000
+		groups = 5_000
+		vals   = 37
+	)
+	k := make([]string, rows)
+	g := make([]int64, rows)
+	for i := range rows {
+		k[i] = "k" + itoa64(int64(i%groups))
+		g[i] = int64(i % vals)
+	}
+	frame := func() *ursus.LazyFrame {
+		return ursus.Frame(ursus.Values("k", k), ursus.Values("g", g)).
+			GroupBy(ursus.Col("k")).
+			Agg(ursus.Col("g").NUnique().Alias("u")).
+			Sort(ursus.Asc(ursus.Col("k")))
+	}
+
+	want, err := frame().Collect(t.Context(),
+		append(serial(), ursus.WithBatchSize(512))...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want.Height() != groups {
+		t.Fatalf("got %d groups, want %d", want.Height(), groups)
+	}
+
+	for _, n := range []int{2, 4, 8} {
+		got, err := frame().Collect(t.Context(),
+			append(parallel(n), ursus.WithBatchSize(512))...)
+		if err != nil {
+			t.Fatalf("threads=%d: %v", n, err)
+		}
+		ursustest.AssertFrameEqual(t, got, want)
+	}
+}
