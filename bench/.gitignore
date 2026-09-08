@@ -13,3 +13,8 @@ __pycache__/
 !results/
 results/*
 !results/REPORT.md
+
+# Scratch notebooks. Exploration belongs in the working tree, not in a repo
+# people clone — and .ipynb_checkpoints/ is pure editor state.
+*.ipynb
+.ipynb_checkpoints/
