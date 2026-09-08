@@ -65,6 +65,19 @@ type ScanSpec struct {
 	// say. A Limit operator above the scan always enforces the real bound.
 	MaxRows int
 
+	// Threads is how many workers the query is running on, so a source that can
+	// use more than one core knows whether it may. 0 or 1 means stay serial.
+	//
+	// A source is free to ignore it — most have nothing to parallelise, because
+	// reading is I/O and the work above them is where the CPU goes. The CSV reader
+	// is the exception: turning text into typed columns is real per-field compute,
+	// and it used to do all of it on one core while eight sat idle.
+	//
+	// It must be honoured in the direction that matters: WithThreads(1) is
+	// documented as reproducing the serial operator tree exactly, so a source that
+	// parallelised regardless would make that knob a lie.
+	Threads int
+
 	// BatchSize is the requested rows per batch. A source may return fewer.
 	BatchSize int
 }

@@ -195,6 +195,8 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		batchSize: batchSize,
 		remaining: spec.MaxRows,
 		isNull:    s.nullTest(),
+		stage:     make([]colStage, out.Len()),
+		threads:   spec.Threads,
 	}
 	if err := r.openNext(); err != nil {
 		return nil, err
@@ -217,6 +219,15 @@ type reader struct {
 	builders  []colBuilder
 	batchSize int
 	remaining int // rows left to produce; 0 means unlimited
+
+	// stage holds the batch's raw fields, by OUTPUT position, so conversion can
+	// happen per column after the scan instead of per field inside it. See
+	// colStage. startRow and lines exist only so a value error raised during the
+	// deferred conversion can still name the row and the physical line.
+	stage    []colStage
+	lines    []int
+	startRow int
+	threads  int
 
 	// row counts DATA rows across all parts, 1-based, which is the number that
 	// matches the position in the resulting frame. scanner.Record counts records
@@ -307,6 +318,16 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 		want = r.remaining
 	}
 
+	// Staging exists to let conversion go wide; with one worker it is pure cost.
+	staged := r.threads > 1
+	if staged {
+		for i := range r.stage {
+			r.stage[i].reset()
+		}
+		r.lines = r.lines[:0]
+		r.startRow = r.row + 1
+	}
+
 	rows := 0
 	for rows < want {
 		if !r.sc.Next() {
@@ -325,10 +346,23 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 			break
 		}
 		r.row++
-		if err := r.appendRecord(); err != nil {
+		if staged {
+			if err := r.stageRecord(); err != nil {
+				return nil, err
+			}
+			r.lines = append(r.lines, r.sc.Line())
+		} else if err := r.appendRecord(); err != nil {
 			return nil, err
 		}
 		rows++
+	}
+
+	// The scan is over, so every field of the batch is now held in stage and the
+	// scanner's buffer may move again. This is the part that goes wide.
+	if staged {
+		if err := r.convertAll(); err != nil {
+			return nil, err
+		}
 	}
 	if r.remaining > 0 {
 		r.remaining -= rows
@@ -347,18 +381,19 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 	return data.NewBatch(r.out, cols)
 }
 
-// appendRecord parses the current record into the builders, parsing only the
-// columns in the projection.
+// appendRecord converts the current record's fields straight into the builders,
+// with no staging and no copy.
+//
+// This is the path a serial query takes, and it is the original one. Staging
+// costs a copy of every field, which buys nothing when there is no second core
+// to spend it on — and WithThreads(1) is documented as reproducing the serial
+// operator tree exactly, so it must not quietly get slower to make the parallel
+// path tidier. Measured: staging every field cost the serial read up to 15%.
 func (r *reader) appendRecord() error {
 	n := r.sc.NumFields()
 	if n != len(r.wanted) && !r.src.opts.TruncateRaggedLines {
-		return uerr.New(uerr.KindValue, "scan_csv",
-			"row %d (line %d) has %d fields, but the schema has %d",
-			r.row, r.sc.Line(), n, len(r.wanted)).
-			Hint("in %s", r.src.desc).
-			Hint("pass WithTruncateRaggedLines(true) to pad and truncate instead")
+		return r.raggedError(n)
 	}
-
 	for i := range min(n, len(r.wanted)) {
 		pos := r.wanted[i]
 		if pos < 0 {
@@ -376,14 +411,57 @@ func (r *reader) appendRecord() error {
 			return r.valueError(i, pos, f, err)
 		}
 	}
-	// A short record pads the missing columns with nulls; only reachable with
-	// TruncateRaggedLines, since the check above rejects it otherwise.
 	for i := n; i < len(r.wanted); i++ {
 		if pos := r.wanted[i]; pos >= 0 {
 			r.builders[pos].appendNull()
 		}
 	}
 	return nil
+}
+
+// stageRecord copies the current record's wanted fields into the per-column
+// stages, parsing nothing. Only the columns in the projection are touched: one
+// outside it was split past and is never even copied.
+//
+// It used to convert each field here, inside the scan. Doing that made the whole
+// parse serial — the conversion is two thirds of the reader's time by profile,
+// and it was running on one core while the query above it ran on eight.
+func (r *reader) stageRecord() error {
+	n := r.sc.NumFields()
+	if n != len(r.wanted) && !r.src.opts.TruncateRaggedLines {
+		return r.raggedError(n)
+	}
+
+	for i := range min(n, len(r.wanted)) {
+		pos := r.wanted[i]
+		if pos < 0 {
+			continue // outside the projection: split past, never parsed
+		}
+		f := r.sc.Field(i)
+		// An empty field is null for every type except String, where "" is a
+		// value and losing the distinction would be unrecoverable.
+		isNull := r.isNull(f) ||
+			(len(f) == 0 && r.out.Field(pos).Type.ID() != dtype.TypeString)
+		r.stage[pos].add(f, isNull)
+	}
+	// A short record pads the missing columns with nulls; only reachable with
+	// TruncateRaggedLines, since the check above rejects it otherwise.
+	for i := n; i < len(r.wanted); i++ {
+		if pos := r.wanted[i]; pos >= 0 {
+			r.stage[pos].add(nil, true)
+		}
+	}
+	return nil
+}
+
+// raggedError is the record-shape error, shared by both record paths so that the
+// message cannot depend on whether the query happened to be parallel.
+func (r *reader) raggedError(n int) error {
+	return uerr.New(uerr.KindValue, "scan_csv",
+		"row %d (line %d) has %d fields, but the schema has %d",
+		r.row, r.sc.Line(), n, len(r.wanted)).
+		Hint("in %s", r.src.desc).
+		Hint("pass WithTruncateRaggedLines(true) to pad and truncate instead")
 }
 
 // valueError is the error the CSV reader exists to produce well.
@@ -406,6 +484,138 @@ func (r *reader) valueError(fileCol, pos int, f []byte, cause error) error {
 	return uerr.Wrap(cause, uerr.KindValue, "scan_csv",
 		"row %d (line %d), column %q: cannot read %s as %s",
 		r.row, r.sc.Line(), name, strconv.Quote(string(f)), want).
+		Hint("in %s", r.src.desc).
+		Hint("field %d of %d in the file", fileCol+1, len(r.wanted)).
+		Hint("pass a schema override for %q, or add the text to WithNullValues", name)
+}
+
+// --- staged conversion ----------------------------------------------------------
+
+// colStage holds one column's raw field bytes for a whole batch, so that turning
+// them into typed values can happen after the scan rather than inside it.
+//
+// # Why the bytes are copied
+//
+// scanner.Field aliases the scanner's read buffer, which slides as records are
+// consumed — "must not be retained", as colBuilder.appendField says. Converting
+// a column at a time means holding a whole batch's fields at once, so they are
+// appended into one arena per column: contiguous, sequential to write, and
+// sequential to read back.
+//
+// It is the same offs+chars shape stringBuilder already uses, which is why a
+// String column costs nothing extra here — it was being copied either way.
+type colStage struct {
+	chars []byte
+	offs  []int32 // n+1 entries, the usual leading zero
+	null  []bool  // this field was null or an empty non-string
+}
+
+func (c *colStage) reset() {
+	c.chars = c.chars[:0]
+	c.offs = append(c.offs[:0], 0)
+	c.null = c.null[:0]
+}
+
+func (c *colStage) add(f []byte, isNull bool) {
+	c.chars = append(c.chars, f...)
+	c.offs = append(c.offs, int32(len(c.chars)))
+	c.null = append(c.null, isNull)
+}
+
+func (c *colStage) field(i int) []byte { return c.chars[c.offs[i]:c.offs[i+1]] }
+
+// convert drains one staged column into its builder.
+//
+// Errors carry the row and line recorded during the scan rather than the
+// scanner's current position, which by now points at the end of the batch. The
+// promise valueError exists to keep — "a bad value on row 10,001 tells you which
+// column, what it found, and what it wanted" — has to survive being answered
+// later than it was asked.
+// It returns the batch-relative row it failed on, which is what lets convertAll
+// reproduce the serial path's choice of WHICH error to report.
+func (r *reader) convert(pos int, st *colStage, fileCol int) (int, error) {
+	b := r.builders[pos]
+	for i := range st.null {
+		if st.null[i] {
+			b.appendNull()
+			continue
+		}
+		if err := b.appendField(st.field(i)); err != nil {
+			return i, r.stagedValueError(fileCol, pos, st.field(i), i, err)
+		}
+	}
+	return 0, nil
+}
+
+// convertAll turns the staged batch into columns, on several goroutines when the
+// query is running on several and there is more than one column to spread.
+//
+// The axis is COLUMNS rather than row ranges, and that is what makes it cheap:
+// two columns never touch the same builder, so there is nothing to synchronise
+// and nothing to merge afterwards. The ceiling is the column count, which is the
+// honest limit of this design — a two-column file gets two-way parallelism.
+func (r *reader) convertAll() error {
+	type job struct{ pos, fileCol int }
+	jobs := make([]job, 0, len(r.stage))
+	for fileCol, pos := range r.wanted {
+		if pos >= 0 {
+			jobs = append(jobs, job{pos, fileCol})
+		}
+	}
+
+	if r.threads <= 1 || len(jobs) < 2 {
+		for _, j := range jobs {
+			if _, err := r.convert(j.pos, &r.stage[j.pos], j.fileCol); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	var wg sync.WaitGroup
+	errs := make([]error, len(jobs))
+	rows := make([]int, len(jobs))
+	sem := make(chan struct{}, r.threads)
+	for i, j := range jobs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			rows[i], errs[i] = r.convert(j.pos, &r.stage[j.pos], j.fileCol)
+		}()
+	}
+	wg.Wait()
+
+	// Which error to report is a decision, and the only defensible answer is the
+	// one the serial path gives: it converts row by row and left to right, so it
+	// stops at the EARLIEST BAD ROW, and within a row at the leftmost column.
+	//
+	// Reporting the first failing column instead is what this code did first, and
+	// it made the same file report a different error depending on how many threads
+	// the query happened to run on. Picking by completion order would be worse
+	// still — a different error on different runs of the SAME command.
+	best := -1
+	for i, err := range errs {
+		// jobs are in file order, so > rather than >= keeps the leftmost column
+		// on a tie, which is where the serial path stops too.
+		if err != nil && (best < 0 || rows[i] < rows[best]) {
+			best = i
+		}
+	}
+	if best >= 0 {
+		return errs[best]
+	}
+	return nil
+}
+
+// stagedValueError is valueError for a row that was scanned earlier in the batch.
+func (r *reader) stagedValueError(fileCol, pos int, f []byte, i int, cause error) error {
+	name := r.out.Field(pos).Name
+	want := r.out.Field(pos).Type
+	return uerr.Wrap(cause, uerr.KindValue, "scan_csv",
+		"row %d (line %d), column %q: cannot read %s as %s",
+		r.startRow+i, r.lines[i], name, strconv.Quote(string(f)), want).
 		Hint("in %s", r.src.desc).
 		Hint("field %d of %d in the file", fileCol+1, len(r.wanted)).
 		Hint("pass a schema override for %q, or add the text to WithNullValues", name)

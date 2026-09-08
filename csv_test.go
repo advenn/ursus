@@ -550,3 +550,301 @@ func heapInUse() uint64 {
 	runtime.ReadMemStats(&m)
 	return m.HeapAlloc
 }
+
+// threadCounts are the two reader paths. Step 42 split the record loop in two:
+// one thread converts fields inline as it scans, more than one stages the raw
+// bytes and converts columns concurrently. Everything below reads the SAME file
+// through both and asserts they agree, because a second path that disagrees with
+// the first is worse than no second path at all.
+var threadCounts = []int{1, 8}
+
+// awkwardCSV is a file built to be hostile to a parallel converter: quoted fields
+// holding the delimiter, a newline and an escaped quote, so the physical line and
+// the logical record disagree; nulls in a numeric column; and an "ord" column
+// carrying the input order so a frame that comes back interleaved is visible
+// rather than merely suspected.
+func awkwardCSV(rows int) string {
+	var b strings.Builder
+	b.WriteString("ord,name,amount,qty,flag,note,ratio\n")
+	for i := range rows {
+		amount := strconv.Itoa(i) + ".5"
+		if i%7 == 0 {
+			amount = "" // null, in the middle of a numeric column
+		}
+		name := "n" + strconv.Itoa(i)
+		switch i % 5 {
+		case 1:
+			name = `"a,b"` // the delimiter, quoted
+		case 2:
+			name = "\"line\none\"" // a newline inside a field
+		case 3:
+			name = `"say ""hi"""` // an escaped quote
+		}
+		b.WriteString(strconv.Itoa(i) + "," + name + "," + amount + "," +
+			strconv.Itoa(i%1000) + "," + strconv.FormatBool(i%2 == 0) + "," +
+			`"note ` + strconv.Itoa(i) + `"` + "," +
+			strconv.FormatFloat(float64(i)/3, 'f', 6, 64) + "\n")
+	}
+	return b.String()
+}
+
+// TestScanCSVThreadCountsProduceIdenticalFrames is the load-bearing test of step
+// 42. Row order is a CSV's data, and the concurrent path converts columns on
+// separate goroutines — an index captured by reference, or results collected as
+// they finish, produces a frame of exactly the right shape holding the wrong data.
+// AssertFrameEqual checks order, so only a value-by-value comparison catches it.
+func TestScanCSVThreadCountsProduceIdenticalFrames(t *testing.T) {
+	path := writeFile(t, "awkward.csv", awkwardCSV(2000))
+
+	// A small batch size so the file crosses many batch boundaries: the staged
+	// path converts per batch, so one batch would exercise it exactly once.
+	serial, err := ursus.ScanCSV(path).
+		Collect(t.Context(), ursus.WithThreads(1), ursus.WithBatchSize(64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if serial.Height() != 2000 {
+		t.Fatalf("got %d rows, want 2000", serial.Height())
+	}
+
+	for _, n := range []int{2, 3, 8, 16} {
+		got, err := ursus.ScanCSV(path).
+			Collect(t.Context(), ursus.WithThreads(n), ursus.WithBatchSize(64))
+		if err != nil {
+			t.Fatalf("%d threads: %v", n, err)
+		}
+		ursustest.AssertFrameEqual(t, got, serial, ursustest.CheckNullability())
+	}
+
+	// The ordering column, checked directly rather than only through the frame
+	// comparison, so a failure says WHICH row moved.
+	for _, i := range []int{0, 1, 63, 64, 65, 1999} {
+		v, ok, err := serial.At[int64](i, "ord")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok || v != int64(i) {
+			t.Errorf("row %d: ord = %v (ok=%v), want %d", i, v, ok, i)
+		}
+	}
+	// And the quoted awkwardness actually survived, so the fixture is testing
+	// what it claims to.
+	if v, _, err := serial.At[string](2, "name"); err != nil {
+		t.Fatal(err)
+	} else if v != "line\none" {
+		t.Errorf("embedded newline: got %q", v)
+	}
+	if v, _, err := serial.At[string](3, "name"); err != nil {
+		t.Fatal(err)
+	} else if v != `say "hi"` {
+		t.Errorf("escaped quote: got %q", v)
+	}
+	if _, ok, err := serial.At[float64](7, "amount"); err != nil {
+		t.Fatal(err)
+	} else if ok {
+		t.Error("the empty numeric field should be null")
+	}
+}
+
+// TestScanCSVErrorsAreIdenticalAcrossThreads pins the error paths across the
+// split. A concurrent converter finds errors in whatever order the goroutines
+// finish, so the SAME malformed file must still report the same column and the
+// same row every run — otherwise a user chasing a bad file gets a different
+// answer each time they run.
+func TestScanCSVErrorsAreIdenticalAcrossThreads(t *testing.T) {
+	t.Run("ragged", func(t *testing.T) {
+		path := writeFile(t, "ragged.csv", "a,b,c\n1,2,3\n4,5\n")
+		var msgs []string
+		for _, n := range threadCounts {
+			_, err := ursus.ScanCSV(path).Collect(t.Context(), ursus.WithThreads(n))
+			if err == nil {
+				t.Fatalf("%d threads: a short record should be an error", n)
+			}
+			msgs = append(msgs, err.Error())
+		}
+		if msgs[0] != msgs[1] {
+			t.Errorf("the two paths disagree:\n 1 thread:  %s\n 8 threads: %s", msgs[0], msgs[1])
+		}
+
+		// And the recovery option behaves the same on both.
+		for _, n := range threadCounts {
+			df, err := ursus.ScanCSV(path, ursus.WithTruncateRaggedLines(true)).
+				Collect(t.Context(), ursus.WithThreads(n))
+			if err != nil {
+				t.Fatalf("%d threads: %v", n, err)
+			}
+			if df.Height() != 2 {
+				t.Fatalf("%d threads: got %d rows, want 2\n%s", n, df.Height(), df)
+			}
+			if _, ok, err := df.At[int64](1, "c"); err != nil {
+				t.Fatal(err)
+			} else if ok {
+				t.Errorf("%d threads: the missing field should be null:\n%s", n, df)
+			}
+		}
+	})
+
+	t.Run("bad value, two columns at once", func(t *testing.T) {
+		// TWO bad fields in one record. The concurrent path converts columns on
+		// different goroutines, so without an explicit rule the reported column
+		// would be whichever goroutine lost the race. The rule is file order, and
+		// that is what makes this file report "a" and never "b".
+		var b strings.Builder
+		b.WriteString("a,b,c\n")
+		for i := range 300 {
+			b.WriteString(strconv.Itoa(i) + "," + strconv.Itoa(i*2) + ",ok\n")
+		}
+		b.WriteString("nope,alsonope,ok\n")
+		path := writeFile(t, "twobad.csv", b.String())
+
+		var msgs []string
+		for _, n := range threadCounts {
+			_, err := ursus.ScanCSV(path, ursus.WithInferRows(10)).
+				Collect(t.Context(), ursus.WithThreads(n), ursus.WithBatchSize(64))
+			if err == nil {
+				t.Fatalf("%d threads: expected a parse error", n)
+			}
+			if !errors.Is(err, uerr.ErrValue) {
+				t.Errorf("%d threads: kind should be Value: %v", n, err)
+			}
+			if !strings.Contains(err.Error(), `"a"`) {
+				t.Errorf("%d threads: should name the FIRST bad column in file order: %v", n, err)
+			}
+			if strings.Contains(err.Error(), `"b"`) {
+				t.Errorf("%d threads: named the second bad column, so the choice is racy: %v", n, err)
+			}
+			// Rows are 1-indexed, so 300 good rows put the bad one at 301.
+			if !strings.Contains(err.Error(), "row 301") {
+				t.Errorf("%d threads: should name the data row: %v", n, err)
+			}
+			msgs = append(msgs, err.Error())
+		}
+		if msgs[0] != msgs[1] {
+			t.Errorf("the two paths disagree:\n 1 thread:  %s\n 8 threads: %s", msgs[0], msgs[1])
+		}
+	})
+
+	t.Run("bad values on different rows", func(t *testing.T) {
+		// The case that caught step 42's real defect. The serial path converts row
+		// by row, so it stops at the earliest bad ROW; the first parallel version
+		// reported the earliest bad COLUMN, and this file makes those two answers
+		// different — column "b" fails on row 11, column "a" on row 251. The same
+		// file then reported a different error depending on how many threads the
+		// query happened to be running on.
+		var b strings.Builder
+		b.WriteString("a,b,c\n")
+		for i := range 300 {
+			av, bv := strconv.Itoa(i), strconv.Itoa(i*2)
+			if i == 10 {
+				bv = "badB" // later column, earlier row
+			}
+			if i == 250 {
+				av = "badA" // earlier column, later row
+			}
+			b.WriteString(av + "," + bv + ",ok\n")
+		}
+		path := writeFile(t, "cross.csv", b.String())
+
+		var msgs []string
+		for _, n := range threadCounts {
+			_, err := ursus.ScanCSV(path, ursus.WithInferRows(5)).
+				Collect(t.Context(), ursus.WithThreads(n), ursus.WithBatchSize(512))
+			if err == nil {
+				t.Fatalf("%d threads: expected a parse error", n)
+			}
+			if !strings.Contains(err.Error(), "row 11") || !strings.Contains(err.Error(), `"b"`) {
+				t.Errorf("%d threads: should stop at the earliest bad ROW (row 11, column b): %v", n, err)
+			}
+			msgs = append(msgs, err.Error())
+		}
+		if msgs[0] != msgs[1] {
+			t.Errorf("the two paths disagree:\n 1 thread:  %s\n 8 threads: %s", msgs[0], msgs[1])
+		}
+	})
+}
+
+// TestScanCSVDegenerateShapesAcrossThreads covers the boundaries every CSV parser
+// gets wrong once, on both paths: a last line with no newline after it, a file
+// that is only a header, and a file with nothing in it.
+func TestScanCSVDegenerateShapesAcrossThreads(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		rows    int
+		cols    int
+	}{
+		{"no trailing newline", "a,b\n1,x\n2,y", 2, 2},
+		{"header only", "a,b\n", 0, 2},
+		{"header only, no newline", "a,b", 0, 2},
+		// A file with no header at all is rejected while reading the schema,
+		// before either record path runs, so it is not a case this split can
+		// change — it has its own sub-test below.
+		{"one row, no newline", "a,b\n1,x", 1, 2},
+		{"trailing blank line", "a,b\n1,x\n\n", 1, 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeFile(t, "d.csv", tc.content)
+			for _, n := range threadCounts {
+				df, err := ursus.ScanCSV(path).Collect(t.Context(), ursus.WithThreads(n))
+				if err != nil {
+					t.Fatalf("%d threads: %v", n, err)
+				}
+				if df.Height() != tc.rows || df.Width() != tc.cols {
+					t.Errorf("%d threads: got %dx%d, want %dx%d\n%s",
+						n, df.Height(), df.Width(), tc.rows, tc.cols, df)
+				}
+			}
+		})
+	}
+
+	t.Run("empty file", func(t *testing.T) {
+		path := writeFile(t, "empty.csv", "")
+		var msgs []string
+		for _, n := range threadCounts {
+			_, err := ursus.ScanCSV(path).Collect(t.Context(), ursus.WithThreads(n))
+			if err == nil {
+				t.Fatalf("%d threads: an empty file has no header to read", n)
+			}
+			msgs = append(msgs, err.Error())
+		}
+		if msgs[0] != msgs[1] {
+			t.Errorf("the two paths disagree:\n 1 thread:  %s\n 8 threads: %s", msgs[0], msgs[1])
+		}
+	})
+}
+
+// TestScanCSVThreadsWithProjection is the case the staged path handles
+// differently from the serial one: a projection means the reader stages only
+// SOME columns, so the stage index and the file index diverge. Getting that
+// mapping wrong puts one column's bytes into another column's builder.
+func TestScanCSVThreadsWithProjection(t *testing.T) {
+	path := writeFile(t, "proj.csv", awkwardCSV(500))
+
+	want, err := ursus.ScanCSV(path).Select(ursus.Col("ratio"), ursus.Col("ord")).
+		Collect(t.Context(), ursus.WithThreads(1), ursus.WithBatchSize(64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ursus.ScanCSV(path).Select(ursus.Col("ratio"), ursus.Col("ord")).
+		Collect(t.Context(), ursus.WithThreads(8), ursus.WithBatchSize(64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
+
+	// Assert the values themselves, not only that the two paths agree: two paths
+	// that share a mapping bug agree with each other and are both wrong.
+	for _, i := range []int{0, 1, 250, 499} {
+		v, ok, err := got.At[float64](i, "ratio")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The fixture writes ratio at six decimals, so the expectation has to
+		// round-trip the same way rather than use the full-precision quotient.
+		wantV, _ := strconv.ParseFloat(strconv.FormatFloat(float64(i)/3, 'f', 6, 64), 64)
+		if !ok || v != wantV {
+			t.Errorf("row %d: ratio = %v (ok=%v), want %v", i, v, ok, wantV)
+		}
+	}
+}

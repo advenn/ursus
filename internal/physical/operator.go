@@ -419,6 +419,7 @@ func planScan(ctx context.Context, s *plan.Scan, opts Options) (Operator, error)
 		Predicate:  s.Predicate,
 		MaxRows:    s.MaxRows,
 		BatchSize:  opts.BatchSize,
+		Threads:    opts.Threads,
 	}
 	src, err := op.Open(ctx, spec)
 	if err != nil {
