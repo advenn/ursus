@@ -113,10 +113,17 @@ See [`bench/README.md`](./bench/README.md) for what is timed and why.
 in it is validated against a duckdb reference, and a disagreement is struck
 through rather than quietly reported as a fast number.
 
-**How current it is, precisely.** The PDS-H table and h2o's `gb7` row are freshly
-measured. The other fourteen h2o rows predate the parallel-aggregation, sort and
-min/max work, so the h2o geomean **understates the engine** — re-running that
-suite takes tens of minutes of full CPU and is not something to do casually.
+**How current it is, precisely.** Every table was measured in one session, on one
+commit, with every engine re-run together — so the numbers are comparable across
+engines rather than stitched from different days.
+
+The caveat that applies to *this* run: the machine had 9 GiB of swap in use, and
+three PDS-H queries (`q1`, `q2`, `q6`) show iteration spreads of up to 2.6x where
+they were previously tight. Their medians are inflated by contention — the minimum
+of iterations puts them within 7–16% of their old values rather than 29–74% worse.
+The published table keeps the median anyway, because switching estimator after
+seeing which one flatters you is how a benchmark stops being one.
+
 Timings come from a laptop under real conditions, so treat small differences as
 noise and the ordering as the signal.
 
