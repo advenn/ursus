@@ -1,11 +1,6 @@
-# preamble from human author
-
-this project is not production ready, and currently it is noticeably slower than other similar tools, like duckdb go or polars py.
-
-
 # ursus
 
-A Polars-class dataframe library for Go 1.27 — lazy execution with a query
+A dataframe library for Go 1.27, modelled on Polars — lazy execution with a query
 optimizer, Arrow memory layout, SIMD kernels, and streaming execution that spills
 to disk rather than falling over.
 
@@ -24,6 +19,40 @@ df, err := ursus.ScanParquet("events.parquet").
 The projection reaches the Parquet reader, the filter becomes a row-group
 predicate, and the group-by runs on every core. None of that is visible in the
 query.
+
+---
+
+## Is this for you?
+
+**It is pure Go.** No cgo, no C++ toolchain, no Python runtime, no sidecar
+process. It cross-compiles and links into a static binary like any other Go
+dependency, and `go get` is the whole install.
+
+That is the reason to pick it, and the cost should be just as plain: **ursus is
+slower than the serious analytical engines.** On the h2o.ai benchmark at ten
+million rows it is roughly 4x Polars; on TPC-H at scale factor 1 it is about 10x.
+CSV parsing is worse than that. It is not trying to beat Polars or DuckDB, and on
+current evidence it is not going to.
+
+**Where that trade is a good one**
+
+- Data that fits comfortably in memory — up to tens of millions of rows, where the
+  difference is half a second against a tenth of a second and nobody is waiting.
+- A Go service that needs real dataframe work — joins, group-bys, window functions
+  — and cannot take on cgo, a Python sidecar, or a large C++ dependency to get it.
+- Anywhere the deployment story is worth more than the last multiple of speed.
+
+**Where it is not**
+
+- Interactive analytics over hundreds of millions of rows. Use DuckDB or Polars.
+- Anywhere you can link cgo freely: `duckdb-go` is around 10x faster than this and
+  is a binding to a mature engine.
+- Anything production-critical today. This is v0.2, the API still moves, and
+  nothing here is promised.
+
+The honest summary is that Go has not had a dataframe library of this shape, and
+one that is correct and a few times slower is more useful than none — for the
+sizes most services actually handle.
 
 ---
 
@@ -66,9 +95,13 @@ an experiment-off leg locally. The flag buys speed, not correctness.
 | **Optimizer** | predicate pushdown (including through joins), projection pushdown, limit/top-k pushdown, constant folding and expression simplification |
 | **Execution** | order-preserving pipeline parallelism, parallel hash aggregation, and spilling for sort, hash aggregation and hash join |
 
-Not done: `JoinWhere` (non-equi join), common subexpression elimination, nested
-types (List/Struct/Map), and the long tail of `Expr.Rolling*`, `Upsample`,
-`Interpolate` and the trigonometric block.
+Nested types are partly there: **List and Struct read from Parquet**, with
+`Explode`, `Unnest`, a `.list` namespace and `.struct.field()`. Map and Array are
+not, and nested columns cannot yet be written.
+
+Not done: `JoinWhere` (non-equi join), common subexpression elimination, SQL,
+pivot/unpivot, and the long tail of `Expr.Rolling*`, `Upsample`, `Interpolate`
+and the trigonometric block.
 
 Version numbers follow Go's own rule for v0: **nothing is promised.** The API is
 still moving, and the preamble above says why.
@@ -127,8 +160,21 @@ seeing which one flatters you is how a benchmark stops being one.
 Timings come from a laptop under real conditions, so treat small differences as
 noise and the ordering as the signal.
 
-ursus is not as fast as polars or duckdb. Where it is behind and why is recorded
-rather than glossed — see [`context_files/`](./context_files/).
+**Where it stands, in one place.** Against Polars, on the current report:
+
+| | ursus | Polars | |
+| --- | --: | --: | --- |
+| h2o.ai, 10M rows | 2,401 ms | 601 ms | 4.0x |
+| TPC-H SF=1 | 936 ms | 86 ms | 10.8x |
+| TPC-H SF=0.1 | 160 ms | 76 ms | 2.1x |
+| TPC-H SF=1 peak memory | 2.26 GB | 0.81 GB | 2.8x |
+
+Geomeans over queries every engine passed. The gap narrows as the data gets
+smaller, which is the shape of the trade described at the top of this file.
+
+Where ursus is behind and why is recorded rather than glossed — every step of
+construction has an as-built document in [`context_files/`](./context_files/),
+including the optimisations that were tried and reverted for being slower.
 
 ---
 
