@@ -56,6 +56,22 @@ sizes most services actually handle.
 
 ---
 
+## Docs
+
+The API reference is on **[pkg.go.dev](https://pkg.go.dev/github.com/advenn/ursus)**,
+generated from the source — nothing to host and nothing to keep in sync.
+
+Start with the [runnable examples](./example_test.go): filter, group-by, join,
+computed columns, whole-frame aggregation, and reading typed values back out.
+They render beside the methods they document, and `go test` checks each one's
+output, so an example that stops being true breaks the build rather than
+misleading someone quietly.
+
+Beyond that, the doc comments are the documentation. They are unusually long on
+purpose: each explains why a thing is the way it is, not only what it does.
+
+---
+
 ## Install
 
 ```sh

@@ -1,5 +1,8 @@
-// Package ursus is a Polars-class dataframe library for Go: an expression DSL,
-// lazy execution with a query optimizer, Arrow memory, and SIMD kernels.
+// Package ursus is a dataframe library for Go modelled on Polars: an expression
+// DSL, lazy execution with a query optimizer, Arrow memory, and SIMD kernels.
+//
+// Runnable examples for the common tasks — filter, group-by, join, reading values
+// back out — are in example_test.go and render beside each method on pkg.go.dev.
 //
 // # A tour
 //
