@@ -384,9 +384,28 @@ func planWindow(ctx context.Context, w *plan.Window, opts Options) (Operator, er
 			})
 		}
 
-		spec := winSpec{name: alias.Name, part: pi, order: win.OrderBy}
+		spec := winSpec{name: alias.Name, part: pi}
 		switch body := win.Child.(type) {
 		case *expr.Agg:
+			// order is deliberately NOT carried here, and the refusal below is why.
+			//
+			// It used to be set for both branches, in the shared initializer above,
+			// and only finishOrdered ever read it — so an OrderBy over an aggregate
+			// was accepted and silently dropped. That is worse than not supporting
+			// it: the user asked for something and got no answer either way.
+			//
+			// Honouring it means an ordered aggregate, which needs a per-expression
+			// order key that exists nowhere in the aggregate path. Refusing is the
+			// honest state until it does.
+			if len(win.OrderBy) > 0 {
+				return nil, uerr.New(uerr.KindUnsupported, "over",
+					"an ordering is not yet honoured over an aggregate").
+					Hint("%s is order-independent over a partition, so the ordering "+
+						"would change nothing — except for first, last, arg_min, "+
+						"arg_max and implode, where it would, and is not applied",
+						body.Op).
+					Hint("drop the ordering, or use an ordered window function")
+			}
 			cf, err := body.Child.Field(in)
 			if err != nil {
 				return nil, err
@@ -402,6 +421,7 @@ func planWindow(ctx context.Context, w *plan.Window, opts Options) (Operator, er
 			spec.acc, spec.input = acc, body.Child
 
 		case *expr.WinFn:
+			spec.order = win.OrderBy
 			cf, err := body.Child.Field(in)
 			if err != nil {
 				return nil, err

@@ -60,7 +60,8 @@ const (
 	MapExplode
 
 	// MapJoin aggregates each partition into a List repeated across its rows.
-	// Refused: there is no List column layout.
+	// Refused, and from step 46 the refusal names the thing that does it:
+	// Col("v").Implode().Over(k) IS this, under the default mapping.
 	MapJoin
 
 	mappingCount
@@ -186,13 +187,6 @@ func (w *Window) Field(in *dtype.Schema) (dtype.Field, error) {
 				"produces yet").
 			Hint("use the default mapping to get one value per row in the original order")
 	}
-	if w.Mapping == MapJoin {
-		return dtype.Field{}, uerr.New(uerr.KindUnsupported, "over",
-			"the join mapping strategy is not implemented").
-			Hint("it aggregates each partition into a List, and no aggregate " +
-				"builds one yet — the layout exists, the accumulator does not").
-			Hint("use the default mapping to get one value per row")
-	}
 
 	// The partition keys become group keys, so they must be hashable — the same
 	// constraint GroupBy applies, checked here so the message names `over`.
@@ -217,6 +211,24 @@ func (w *Window) Field(in *dtype.Schema) (dtype.Field, error) {
 				"cannot order by %q of type %s", f.Name, f.Type).
 				Hint("only numeric, temporal, string and boolean types have an ordering")
 		}
+	}
+
+	if w.Mapping == MapJoin {
+		// Still refused, and step 46 changed why rather than whether.
+		//
+		// It was "there is no List column layout", then "no aggregate builds one
+		// yet". Both are now false, and implementing it revealed a third answer:
+		// MapJoin is a SYNONYM. "Each partition's values as a list, repeated across
+		// its rows" is exactly Col("v").Implode().Over(k) under the default
+		// mapping — implode produces the list and the ordinary broadcast repeats
+		// it. A second spelling would be a second thing to keep correct for no
+		// expressive gain, and it has no coherent reading over a non-imploding
+		// aggregate: Col("v").Sum() with this mapping would have to discard the sum.
+		return dtype.Field{}, uerr.New(uerr.KindUnsupported, "over",
+			"the join mapping strategy is not implemented").
+			Hint("it is Col(...).Implode().Over(...), which does this under the " +
+				"default mapping").
+			Hint("use the default mapping to get one value per row")
 	}
 
 	cf, err := w.Child.Field(in)

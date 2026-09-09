@@ -34,6 +34,7 @@ const (
 	AggArgMax
 	AggMedian
 	AggQuantile
+	AggImplode // every value of the group, as a List
 
 	aggOpCount
 )
@@ -46,6 +47,7 @@ var aggOpNames = [aggOpCount]string{
 	AggVar: "var", AggStd: "std", AggProduct: "product",
 	AggArgMin: "arg_min", AggArgMax: "arg_max",
 	AggMedian: "median", AggQuantile: "quantile",
+	AggImplode: "implode",
 }
 
 func (o AggOp) String() string {
@@ -76,13 +78,15 @@ func (o AggOp) IsCounting() bool {
 //
 // Every other aggregate is commutative: a sum, a count, a minimum and a quantile
 // are the same however the rows are shuffled, which is what lets a group-by run on
-// several workers and fold the partials together. These four are not.
+// several workers and fold the partials together. These five are not.
 //
 //	First, Last     name a position outright
 //	ArgMin, ArgMax  report an INDEX, and kernel.argExtremumAcc.Merge shifts the
 //	                other accumulator's positions by this one's row count — which
 //	                is only meaningful if `other` saw a strictly later contiguous
 //	                portion
+//	Implode         a list's element ORDER is its data, so a shuffled input is a
+//	                different answer rather than the same one computed differently
 //
 // The parallel aggregation driver dispatches round-robin, so no worker holds a
 // contiguous portion and none of those four can be honoured. It declines the whole
@@ -92,7 +96,8 @@ func (o AggOp) IsCounting() bool {
 // Not the same question as IsCounting: Median and Quantile buffer every value and
 // are expensive, but they sort in Finish and are perfectly order-insensitive.
 func (o AggOp) IsOrderDependent() bool {
-	return o == AggFirst || o == AggLast || o == AggArgMin || o == AggArgMax
+	return o == AggFirst || o == AggLast || o == AggArgMin || o == AggArgMax ||
+		o == AggImplode
 }
 
 // AggParams carries an aggregate's configuration — ddof for Var and Std, the
@@ -220,6 +225,16 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 	case AggFirst, AggLast:
 		// Positional, so the type is unchanged. Defined for every type.
 		return AggBinding{Acc: in, Out: in}, nil
+
+	case AggImplode:
+		// The one aggregate whose output type is CONSTRUCTED rather than being the
+		// input, a physical relative of it, or a fixed scalar. Defined for every
+		// type including nested ones: imploding a List gives List(List(T)), which
+		// falls out of Take and NewList being recursive rather than needing a case.
+		//
+		// Acc is the input type because nothing is widened — the accumulator retains
+		// the values it was handed. Only sum and mean read Acc at all.
+		return AggBinding{Acc: in, Out: dtype.List(in)}, nil
 
 	case AggMin, AggMax:
 		if !in.IsOrdered() {

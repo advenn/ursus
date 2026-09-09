@@ -217,10 +217,10 @@ func (s *hashAggSink) ordinalOf(in *data.Batch, i int) int64 {
 //
 // keyParts cannot grow, because new keys are routed. Reserve(nGroups) is a no-op
 // once nGroups is fixed, so every O(groups) accumulator's NBytes goes flat at the
-// freeze. The only things that can still grow are the two holistic accumulators —
-// quantile keeps every value of a group, n_unique every distinct value — and radix
-// partitioning divides across KEYS, never within one, so there is nothing left to
-// try.
+// freeze. The only things that can still grow are the holistic accumulators —
+// quantile keeps every value of a group, n_unique every distinct value, and implode
+// every value again as the answer itself — and radix partitioning divides across
+// KEYS, never within one, so there is nothing left to try.
 //
 // So the property this states is exact rather than heuristic: a spilling group-by
 // refuses exactly when an accumulator's state is O(rows), and never otherwise.
@@ -237,8 +237,9 @@ func (s *hashAggSink) overBudget() error {
 			"disk and is still holding %s of per-group state for %d resident groups",
 		execopt.Bytes(limit), execopt.Bytes(s.accBytes), s.ids.Len()).
 		Hint("radix partitioning divides work across KEYS, never within one — " +
-			"quantile and median keep every value of a group, and n_unique every " +
-			"distinct value, so a single hot key cannot be spilled").
+			"quantile and median keep every value of a group, n_unique every " +
+			"distinct value, and implode every value as its answer, so a single " +
+			"hot key cannot be spilled").
 		Hint("raise the limit with WithMemoryLimit, or use a bounded aggregate")
 }
 

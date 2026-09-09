@@ -19,7 +19,8 @@ const (
 	MapExplode = expr.MapExplode
 
 	// MapJoin would aggregate each partition into a List repeated across its rows.
-	// Refused: ursus has no List column layout yet.
+	// Refused, because it is a synonym: Col(...).Implode().Over(...) is exactly
+	// this under the default mapping.
 	MapJoin = expr.MapJoin
 )
 

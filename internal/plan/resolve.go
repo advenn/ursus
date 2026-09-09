@@ -426,6 +426,20 @@ func resolveAggregate(a *Aggregate) (Node, error) {
 			err.Hint("every column in an aggregate expression must be reduced")
 			return nil, err
 		}
+		// A window inside Agg() has to be refused HERE, and until step 46 it was
+		// refused nowhere. hashAggSink's own comment asserted this check existed —
+		// "A window inside Agg() is refused at plan time, so there is no
+		// non-row-local case to worry about" — and it did not: rejectWindow covered
+		// filter, sort, join keys and the group-by KEYS, never the aggregates.
+		//
+		// The result was that Agg(Col("v").CumSum().Sum()) resolved cleanly, Explain
+		// printed a plan, and Collect died with "a window reached the evaluator",
+		// which announces itself as an ursus bug. Refusing at resolve time is the
+		// discipline Expr.DropNulls documents: a refusal only Collect notices lets
+		// Explain print a plan that cannot run.
+		if err := rejectWindow(e, "agg"); err != nil {
+			return nil, err
+		}
 		f, err := expr.Resolve(e, in)
 		if err != nil {
 			return nil, uerr.Annotate(err, "agg", "Aggregate")

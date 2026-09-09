@@ -185,7 +185,11 @@ func (w *Writer) putDType(d dtype.DataType) error {
 	case dtype.TypeList, dtype.TypeArray, dtype.TypeStruct, dtype.TypeCategorical:
 		return uerr.New(uerr.KindUnsupported, "spill",
 			"cannot spill a %s column", d).
-			Hint("nested types have no data.Column representation yet")
+			// The reason, corrected in step 46: List has had a data.Column
+			// representation since step 28 and a mid-query producer since step 45.
+			// What is missing is a putColumn arm — the serialisation format, not
+			// the layout.
+			Hint("the spill format has no encoding for a nested column yet")
 	}
 	w.putByte(uint8(d.ID()))
 	w.putByte(uint8(d.TimeUnit()))

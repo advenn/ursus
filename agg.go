@@ -195,6 +195,39 @@ func (e Expr) Quantile(q float64, interp Interpolation) Expr {
 	return e.aggP(expr.AggQuantile, expr.AggParams{Q: q, Interp: interp})
 }
 
+// Implode collects every value of the group into a List, in input order.
+//
+//	GroupBy(Col("k")).Agg(
+//	    Col("v").Implode().Alias("all"),
+//	    Col("v").Implode().List().Sort().List().Head(3).Alias("smallest3"),
+//	)
+//
+// It is what makes the .list namespace available inside a group-by: everything
+// list.go can do to a list, this can now do to a group.
+//
+// # Nulls are kept
+//
+// Every other aggregate skips them — the sum of an all-null group is null, not
+// zero. Implode is a selection rather than a reduction, so a null is a value that
+// takes a slot, and an all-null group implodes to a list OF nulls rather than to an
+// empty list or a null one.
+//
+// # It makes the group-by single-threaded
+//
+// A list's element order is its data, and the parallel driver dispatches batches
+// round-robin, so a shuffled input would be a different answer rather than the same
+// one computed differently. The whole Agg list runs on one worker as a result —
+// including the aggregates beside this one, because a query's aggregates share one
+// hash table.
+//
+// # Its memory is the data
+//
+// Implode holds every value of every group, so a group-by containing one is O(rows)
+// rather than O(distinct keys), and under WithMemoryLimit it refuses once a single
+// key grows past the budget. Partitioning divides the key space and cannot divide
+// one key.
+func (e Expr) Implode() Expr { return e.agg(expr.AggImplode) }
+
 func (e Expr) agg(op expr.AggOp) Expr {
 	return wrap(&expr.Agg{Op: op, Child: e.n})
 }

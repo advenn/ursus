@@ -363,10 +363,17 @@ func (a *argExtremumAcc) Finish(name string, nGroups int) (*data.Column, error) 
 // spilling group-by refuses exactly when an accumulator's state is O(rows) — see
 // hashAggSink.overBudget, which states that as a property rather than a heuristic.
 //
-// The symmetry that names the next step: quantileAcc.Merge is an append and
-// nuniqueAcc.Merge is a set union, so the two accumulators the freeze cannot bound
-// are exactly the two whose Merge is ORDER-INDEPENDENT. Spilling within a hot key
-// is therefore possible for precisely the two aggregates that need it.
+// A symmetry that USED to name the next step, and no longer holds: quantileAcc.Merge
+// is an append and nuniqueAcc.Merge is a set union, so for two steps the accumulators
+// the freeze could not bound were exactly the ones whose Merge is ORDER-INDEPENDENT,
+// and spilling within a hot key looked possible for precisely the aggregates that
+// need it.
+//
+// Step 46 added a third. implodeAcc is O(rows) for the same reason these two are, and
+// its Merge is order-DEPENDENT — a list's element order is its data, so folding two
+// partial groups requires the second to have seen a strictly later portion. The
+// biconditional is gone: within-key spilling would cover quantile and n_unique and
+// would have to refuse implode, which makes it a narrower prize than it looked.
 //
 // An approximate variant (t-digest, or a sampling sketch) would bound this, at the
 // cost of an error term that has to be specified and defended. Nothing in the
