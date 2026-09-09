@@ -84,6 +84,19 @@ func TestGoldenJoinWherePlan(t *testing.T) {
 	ursustest.AssertPlan(t, lf, "testdata/plans/join_where.txt")
 }
 
+// TestGoldenWhereExistsPlan snapshots the residual semi join. The raw plan carries
+// every predicate inside the join; the optimized one has the equality as a key and
+// the rest still inside. That split is the only place a user can see whether their
+// WhereExists is a hash join or a scan of every pair.
+func TestGoldenWhereExistsPlan(t *testing.T) {
+	lf := joinLeft().WhereExists(joinRight(),
+		ursus.Col("k").Eq(ursus.Col("k_right")),
+		ursus.Col("lv").Lt(ursus.Col("rv")),
+	)
+	ursustest.AssertPlan(t, lf, "testdata/plans/where_exists_raw.txt", ursus.Optimized(false))
+	ursustest.AssertPlan(t, lf, "testdata/plans/where_exists.txt")
+}
+
 // TestGoldenConditionalPlan snapshots a conditional and an is_in.
 //
 // A node's String() is load-bearing beyond display: predicatePushdown detects its

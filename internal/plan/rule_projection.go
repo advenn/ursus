@@ -498,6 +498,37 @@ func pushdownJoin(j *Join, required map[string]struct{}) (Node, bool, error) {
 		}
 	}
 
+	// The residual reads columns from BOTH sides, and it is the one place the
+	// paragraph above about semi joins stops being true: "a SEMI or ANTI join emits
+	// no right column at all, so the right side needs only the key columns" is
+	// exactly the optimisation that would DELETE what the residual reads.
+	//
+	// Its names are in the PAIR namespace, so a right column may carry the suffix
+	// and must be translated back before it means anything to the right input. The
+	// pair layout is the only thing that knows which — the same argument
+	// rewriteForSide makes for predicate pushdown.
+	if j.HasResidual() {
+		pair, err := j.PairLayout()
+		if err != nil {
+			return nil, false, err
+		}
+		for _, e := range j.Residual {
+			for _, n := range expr.RootNames(e) {
+				i := pair.Schema.IndexOf(n)
+				if i < 0 {
+					// Not a pair column. Nothing can prune what it does not
+					// recognise, so keep both sides whole rather than guess.
+					return j, false, nil
+				}
+				if jc := pair.Columns[i]; jc.Side == FromRight {
+					rightNeed[rs.Field(jc.Index).Name] = struct{}{}
+				} else {
+					leftNeed[ls.Field(jc.Index).Name] = struct{}{}
+				}
+			}
+		}
+	}
+
 	// The naming-stability clause.
 	for n := range rightNeed {
 		if ls.Has(n) {

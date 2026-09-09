@@ -314,7 +314,13 @@ func Expressions(n Node) []expr.Node {
 		// name left columns and right keys name right columns, so a rule that hands
 		// this set to both children asks each side for columns it does not have.
 		// rule_projection reads LeftOn and RightOn directly for exactly that reason.
-		return append(append([]expr.Node(nil), t.LeftOn...), t.RightOn...)
+		//
+		// The residual belongs here too, and it is the one part with no side
+		// attribution even in principle: it is written in the PAIR namespace, where
+		// a right column may carry a suffix that exists in neither input. Liveness
+		// safety only needs "which names appear anywhere", which is what this is.
+		out := append(append([]expr.Node(nil), t.LeftOn...), t.RightOn...)
+		return append(out, t.Residual...)
 	default:
 		return nil
 	}

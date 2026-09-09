@@ -48,6 +48,19 @@ func (collapseCrossJoin) Name() string { return "collapse_cross_join" }
 func (collapseCrossJoin) Apply(n Node, _ Flags) (Node, bool, error) {
 	changed := false
 	out, err := TransformUp(n, func(x Node) (Node, error) {
+		// Two entry shapes, one decision. `Filter` over a cross join is JoinWhere's,
+		// where the conjuncts sit above the join; a keyless semi/anti join with a
+		// residual is WhereExists's, where they sit inside it. Both ask which
+		// conjuncts are equalities straddling the two sides, which is equiKeys.
+		if j, ok := x.(*Join); ok && j.HasResidual() && len(j.LeftOn) == 0 {
+			c, moved, err := collapseResidual(j)
+			if err != nil {
+				return nil, err
+			}
+			changed = changed || moved
+			return c, nil
+		}
+
 		f, ok := x.(*Filter)
 		if !ok {
 			return x, nil
@@ -117,6 +130,60 @@ func (collapseCrossJoin) Apply(n Node, _ Flags) (Node, bool, error) {
 		return nil, false, err
 	}
 	return out, changed, nil
+}
+
+// collapseResidual moves the equality conjuncts of a keyless semi/anti join out of
+// the residual and into the join keys.
+//
+// The residual namespace and the pair namespace are the same thing, which is what
+// lets this share equiKeys with the Filter-over-Cross arm: WhereExists writes its
+// predicates in the names a join of the two frames would publish, and PairLayout is
+// that layout.
+//
+// The keys are extracted rather than copied. Leaving an equality in BOTH places
+// would be correct but would test per pair what the hash table has already
+// guaranteed, which is the whole cost this rule exists to remove.
+func collapseResidual(j *Join) (Node, bool, error) {
+	pair, err := j.PairLayout()
+	if err != nil {
+		return nil, false, err
+	}
+	ls, err := j.Left.Schema()
+	if err != nil {
+		return nil, false, err
+	}
+	rs, err := j.Right.Schema()
+	if err != nil {
+		return nil, false, err
+	}
+
+	var leftOn, rightOn, residual []expr.Node
+	for _, p := range j.Residual {
+		l, r, ok := equiKeys(p, pair, ls, rs)
+		if !ok {
+			residual = append(residual, p)
+			continue
+		}
+		leftOn = append(leftOn, l)
+		rightOn = append(rightOn, r)
+	}
+	if len(leftOn) == 0 {
+		// No equality: the join stays keyless and every pair is tested. That is the
+		// honest cost of the predicate the user wrote, not a failure of this rule.
+		return j, false, nil
+	}
+
+	c := *j
+	c.LeftOn, c.RightOn = leftOn, rightOn
+	c.Residual = residual
+	// No Coalesce to force off, unlike the Filter-over-Cross arm: Layout gives
+	// Semi and Anti the bare left schema, so no key column is ever merged and the
+	// output shape cannot change. The residual's namespace comes from PairLayout,
+	// which sets CoalesceOff itself.
+	if _, err := c.Layout(); err != nil {
+		return j, false, nil
+	}
+	return &c, true, nil
 }
 
 // equiKeys splits `left_expr == right_expr` into the two child-namespace keys, or

@@ -424,11 +424,20 @@ func (s *joinBuildSink) newSub() (*joinBuildSink, error) {
 				"split this one — one key's rows do not fit", maxSpillDepth).
 			Hint("raise the limit with WithMemoryLimit")
 	}
+	// Every field the sub-sink needs is copied BY HAND, which is what makes this
+	// list a standing hazard: a field added to joinBuildSink and forgotten here is
+	// silently absent from every replayed bucket. pairLayout is the sharp one —
+	// spec carries the residual predicate, so a sub-sink with the predicate and
+	// without the namespace it is written in cannot evaluate it, and a sub-sink
+	// with neither would answer "does a partner exist" for the spilled buckets and
+	// "does a satisfying partner exist" for the resident ones. No error, no length
+	// mismatch, just a different question per bucket.
 	return &joinBuildSink{
 		out: s.out, layout: s.layout, left: s.left, right: s.right,
 		keys: s.keys, leftKeys: s.leftKeys, spec: s.spec,
-		ids: kernel.NewKeyTable(),
-		mem: s.budget.Account("join"),
+		pairLayout: s.pairLayout,
+		ids:        kernel.NewKeyTable(),
+		mem:        s.budget.Account("join"),
 
 		budget: s.budget, level: s.level + 1,
 		dir: s.dir, dirOwner: false, prefix: s.prefix + "s" + itoa(s.level+1),

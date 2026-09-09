@@ -95,7 +95,7 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 | **Types**       | Bool, Int8–64, Uint8–64, Float32/64, String, Binary, Date, Time, Datetime (unit + zone), Duration, Decimal (128-bit), Enum                        |
 | **Expressions** | arithmetic, comparison, Kleene three-valued logic, conditionals, casts, null repair, `.str` and `.dt` namespaces, 19 aggregates, window functions |
 | **Frame ops**   | filter, select, with-columns, sort, top-k, distinct, concat/vstack/hstack, slice/tail/reverse/row-index, drop/rename/drop-nulls                   |
-| **Joins**       | all seven equi-join kinds with `Validate`, `JoinWhere` (non-equi), as-of join with tolerance and `by` keys, merge-sorted                          |
+| **Joins**       | all seven equi-join kinds with `Validate`, `JoinWhere` and `WhereExists`/`WhereNotExists` (non-equi), as-of join with tolerance and `by` keys, merge-sorted                          |
 | **Grouping**    | group-by, `GroupByDynamic`, `Rolling`, calendar-aware intervals                                                                                   |
 | **Optimizer**   | predicate pushdown (including through joins), projection pushdown, limit/top-k pushdown, cross-join collapse, constant folding and simplification |
 | **Execution**   | order-preserving pipeline parallelism, parallel hash aggregation, and spilling for sort, hash aggregation and hash join                           |

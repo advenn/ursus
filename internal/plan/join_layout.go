@@ -166,6 +166,29 @@ func (j *Join) Layout() (*JoinLayout, error) {
 	return &JoinLayout{Schema: s, Columns: cols, KeyTypes: keyTypes}, nil
 }
 
+// PairLayout is the namespace a residual predicate is written in: both sides'
+// columns, with the right ones suffixed on collision.
+//
+// # Why Semi and Anti need a second layout at all
+//
+// Layout gives them the bare left schema, and says so as an equality rather than an
+// approximation — no right column is ever added. That is right for their OUTPUT and
+// useless for their PREDICATE, which must be able to name `k_right`. A residual
+// resolved against Layout would report every right-hand column as unknown.
+//
+// So the pair namespace is the one an INNER join of the same two inputs would
+// publish, with coalescing off so that a key named the same on both sides stays two
+// columns and the predicate can tell them apart. Synthesising a *Join to borrow the
+// real implementation is AsOfJoin.asJoin's move, for AsOfJoin's reason: there is
+// then exactly one definition of the collision and suffixing rules.
+func (j *Join) PairLayout() (*JoinLayout, error) {
+	c := *j
+	c.Kind = JoinInner
+	c.Coalesce = CoalesceOff
+	c.Residual = nil
+	return c.Layout()
+}
+
 // keyTypes resolves each key pair against its OWN side and promotes.
 func (j *Join) keyTypes(ls, rs *dtype.Schema) ([]dtype.DataType, error) {
 	if len(j.LeftOn) != len(j.RightOn) {

@@ -231,6 +231,99 @@ func (lf *LazyFrame) JoinWhere(other *LazyFrame, preds ...Expr) *LazyFrame {
 	return lf.Join(other, JoinHow(JoinCross)).Filter(preds...)
 }
 
+// WhereExists keeps the rows of this frame that have at least one row in other
+// satisfying every predicate.
+//
+//	orders.WhereExists(lineitem,
+//	    ursus.Col("o_orderkey").Eq(ursus.Col("l_orderkey")),
+//	    ursus.Col("l_quantity").Gt(40.0),
+//	)
+//
+// It is SQL's `EXISTS (SELECT ... WHERE ...)`, and the output is this frame: same
+// columns, same order, fewer rows. No column of other appears in the result, which
+// is why this is not a join you can write as one — see below.
+//
+// # Why it is not JoinWhere plus a filter
+//
+// JoinWhere pairs rows, so filtering its output filters pairs. This asks whether a
+// satisfying partner EXISTS, which is a question about the left row, and a left row
+// with three partners must come back once rather than three times. The predicate is
+// therefore evaluated before the verdict, inside the join, and no combination of
+// JoinWhere and Filter expresses that without a deduplication.
+//
+// # Which names the predicates use
+//
+// The names a JOIN of the two frames would produce: this frame's columns by their
+// own name, and a colliding column of other with the suffix — `k` and `k_right`.
+// The output has no such column, but the predicate is evaluated on pairs, so it can
+// name both.
+//
+// # What it costs
+//
+// An equality between the two sides becomes a hash join key and the rest is tested
+// per matching pair; with no equality among the predicates, every pair is tested.
+// Explain shows which. A partner is found by scanning the candidates, so this stops
+// at the first satisfying one — WhereNotExists cannot.
+func (lf *LazyFrame) WhereExists(other *LazyFrame, preds ...Expr) *LazyFrame {
+	return lf.whereExists(other, plan.JoinSemi, preds, "where_exists", "WhereExists")
+}
+
+// WhereNotExists keeps the rows of this frame that have NO row in other satisfying
+// every predicate.
+//
+//	// customers who never ordered anything large
+//	customers.WhereNotExists(orders,
+//	    ursus.Col("c_custkey").Eq(ursus.Col("o_custkey")),
+//	    ursus.Col("o_totalprice").Gt(1000.0),
+//	)
+//
+// SQL's `NOT EXISTS`, and the exact complement of WhereExists: for any frame and
+// any predicates, the two partition this frame's rows.
+//
+// It is strictly more work than WhereExists on the same inputs. Finding one
+// satisfying partner ends the search; proving there is none means examining every
+// candidate.
+func (lf *LazyFrame) WhereNotExists(other *LazyFrame, preds ...Expr) *LazyFrame {
+	return lf.whereExists(other, plan.JoinAnti, preds, "where_not_exists", "WhereNotExists")
+}
+
+// whereExists builds the keyless semi/anti join both spellings reduce to.
+//
+// The predicates go in whole. Splitting off the equalities is collapse_cross_join's
+// job, because deciding which conjunct straddles the two sides needs the join's
+// layout, which the builder has no schema to compute. Left alone the join is still
+// correct — one key group, every pair tested — so the rule is an optimisation
+// rather than a requirement, which is what makes the with-rule/without-rule
+// differential a real test.
+func (lf *LazyFrame) whereExists(other *LazyFrame, kind plan.JoinKind, preds []Expr, op, name string) *LazyFrame {
+	if lf.err != nil {
+		return lf
+	}
+	if other == nil {
+		return &LazyFrame{err: uerr.New(uerr.KindValue, op,
+			"the frame to test against is nil")}
+	}
+	if other.err != nil {
+		return &LazyFrame{err: other.err}
+	}
+	if len(preds) == 0 {
+		return &LazyFrame{err: uerr.New(uerr.KindValue, op,
+			"%s requires at least one predicate", name).
+			Hint("with no predicate every row of the other frame is a partner, so " +
+				"the answer is either every row or none")}
+	}
+	ns, err := nodes(preds)
+	if err != nil {
+		return &LazyFrame{err: uerr.Annotate(err, op, name)}
+	}
+	return lf.derive(&plan.Join{
+		Left:     lf.node,
+		Right:    other.node,
+		Kind:     kind,
+		Residual: ns,
+	})
+}
+
 // validateOpts checks the whole configuration once, so one call produces one good
 // error rather than each option carrying an error slot.
 func (c *joinCfg) validateOpts() error {

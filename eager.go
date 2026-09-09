@@ -102,6 +102,16 @@ func (df *DataFrame) JoinWhere(ctx context.Context, other *DataFrame, preds ...E
 	return df.Lazy().JoinWhere(other.Lazy(), preds...).Collect(ctx)
 }
 
+// WhereExists keeps rows with at least one satisfying partner in other.
+func (df *DataFrame) WhereExists(ctx context.Context, other *DataFrame, preds ...Expr) (*DataFrame, error) {
+	return df.Lazy().WhereExists(other.Lazy(), preds...).Collect(ctx)
+}
+
+// WhereNotExists keeps rows with no satisfying partner in other.
+func (df *DataFrame) WhereNotExists(ctx context.Context, other *DataFrame, preds ...Expr) (*DataFrame, error) {
+	return df.Lazy().WhereNotExists(other.Lazy(), preds...).Collect(ctx)
+}
+
 // Concat stacks frames vertically.
 func (df *DataFrame) Concat(ctx context.Context, others ...*DataFrame) (*DataFrame, error) {
 	lfs := make([]*LazyFrame, len(others))

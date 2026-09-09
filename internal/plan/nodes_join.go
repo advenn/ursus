@@ -152,7 +152,32 @@ type Join struct {
 	Coalesce   CoalesceMode
 	NullsEqual bool // zero value false: a null key matches nothing, as in SQL
 	Validate   JoinValidation
+
+	// Residual is evaluated per candidate PAIR, before the match verdict, and is
+	// SEMI/ANTI ONLY.
+	//
+	// # Why it cannot be a Filter above the join
+	//
+	// A semi join emits a left row once if ANY right row matches. Filtering its
+	// output filters left rows that already survived, which answers a different
+	// question: `EXISTS(r : k(r) == k(l) AND p(l, r))` is not
+	// `EXISTS(r : k(r) == k(l)) AND p(l, ...)` — the second has no r to name.
+	//
+	// Inner needs none of this. There a pair IS the output row, so the residual is
+	// exactly a Filter above the join, which is what JoinWhere and
+	// collapse_cross_join do and why they needed no operator change.
+	//
+	// Names resolve against PairLayout, not Layout: Semi and Anti output the left
+	// schema alone, so the predicate's right-hand columns exist in no schema this
+	// node publishes.
+	Residual []expr.Node
 }
+
+// HasResidual reports whether the match verdict depends on more than the keys.
+//
+// The physical layer branches on this in several places, and spelling it as a
+// method rather than a len() keeps "what makes a join residual" in one place.
+func (j *Join) HasResidual() bool { return len(j.Residual) > 0 }
 
 func (j *Join) planNode()        {}
 func (j *Join) Children() []Node { return []Node{j.Left, j.Right} }
@@ -264,7 +289,7 @@ func (j *Join) Label() string {
 	b.WriteString("JOIN ")
 	b.WriteString(j.Kind.String())
 
-	if j.Kind.Keyed() {
+	if j.Kind.Keyed() && len(j.LeftOn) > 0 {
 		b.WriteString(" [")
 		b.WriteString(expr.StringAll(j.LeftOn))
 		b.WriteString("] = [")
@@ -279,6 +304,14 @@ func (j *Join) Label() string {
 				b.WriteString(" no coalesce")
 			}
 		}
+	}
+	// The residual is rendered because Explain is the only place a user can see
+	// which conjuncts became hash keys and which stayed a per-pair test — the
+	// difference between an O(|L|+|R|) query and an O(|L|x|R|) one.
+	if j.HasResidual() {
+		b.WriteString(" residual [")
+		b.WriteString(expr.StringAll(j.Residual))
+		b.WriteString("]")
 	}
 	if j.NullsEqual {
 		b.WriteString(" nulls_equal")

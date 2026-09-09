@@ -987,6 +987,17 @@ a colliding right column takes the suffix, so `k` and `k_right`. There is no
 frame-qualified form — this sketch previously showed `Col("events.ts")`, which
 nothing can resolve, because `expr.Col` is a bare name looked up in one schema.
 
+`WhereExists` and `WhereNotExists` are the semi and anti forms — SQL's `EXISTS` and
+`NOT EXISTS`. They take the same predicates and return the LEFT frame, so a row with
+three satisfying partners comes back once:
+
+```go
+customers.WhereNotExists(orders,
+    ursus.Col("c_custkey").Eq(ursus.Col("o_custkey")),
+    ursus.Col("o_totalprice").Gt(1000.0),
+)
+```
+
 An equality between the two sides becomes a hash join key
 (`collapse_cross_join`); the remaining predicates are evaluated per surviving pair.
 With no equality among them every pair is tested, which is the loop join. `Explain`

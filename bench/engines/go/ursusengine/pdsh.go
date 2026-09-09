@@ -608,33 +608,37 @@ func q20(scan Scan) *ursus.LazyFrame {
 
 // q21 — suppliers who kept orders waiting.
 //
-// EXISTS(another supplier on this order) and NOT EXISTS(another *late* supplier
-// on this order) are both statements about distinct supplier counts per order,
-// so two group-bys replace two correlated subqueries. A self semi join and a
-// self anti join would express the same thing but would each require a non-equi
-// predicate (l2.l_suppkey <> l1.l_suppkey), which no dataframe API can push.
+// The query is two correlated subqueries: EXISTS(another supplier on this order)
+// and NOT EXISTS(another *late* supplier on this order). This is now written as
+// exactly that, with the non-equi predicate l2.l_suppkey <> l1.l_suppkey that
+// WhereExists exists to carry.
+//
+// # What it replaced, and why the old form was here
+//
+// Until step 44 ursus had no way to push that predicate, so both subqueries were
+// expressed as NUnique() over l_suppkey grouped by l_orderkey — "how many distinct
+// suppliers" instead of "is there another one". That worked and was expensive: step
+// 38 measured the two accumulators at 74% of this query's live heap, over about 2.9
+// million groups, and named it "the cost of working around a missing feature".
+//
+// The comment that used to sit here said the non-equi predicate was one "no
+// dataframe API can push". That was true of ursus and of polars' join_where, which
+// is inner-only; it is no longer true of this one.
 func q21(scan Scan) *ursus.LazyFrame {
-	late := scan("lineitem").
-		Filter(ursus.Col("l_receiptdate").Gt(ursus.Col("l_commitdate")))
+	late := func() *ursus.LazyFrame {
+		return scan("lineitem").
+			Filter(ursus.Col("l_receiptdate").Gt(ursus.Col("l_commitdate")))
+	}
+	sameOrderOtherSupplier := []ursus.Expr{
+		ursus.Col("l_orderkey").Eq(ursus.Col("l_orderkey_right")),
+		ursus.Col("l_suppkey").Ne(ursus.Col("l_suppkey_right")),
+	}
 
-	suppliersPerOrder := scan("lineitem").
-		GroupBy(ursus.Col("l_orderkey")).
-		Agg(ursus.Col("l_suppkey").NUnique().Alias("n_suppliers"))
-
-	lateSuppliersPerOrder := scan("lineitem").
-		Filter(ursus.Col("l_receiptdate").Gt(ursus.Col("l_commitdate"))).
-		GroupBy(ursus.Col("l_orderkey")).
-		Agg(ursus.Col("l_suppkey").NUnique().Alias("n_late_suppliers"))
-
-	return late.
-		Join(suppliersPerOrder, ursus.JoinOn(ursus.Col("l_orderkey"))).
-		Join(lateSuppliersPerOrder, ursus.JoinOn(ursus.Col("l_orderkey"))).
-		Filter(
-			// somebody else is on this order ...
-			ursus.Col("n_suppliers").Gt(uint64(1)),
-			// ... and this supplier is the only late one
-			ursus.Col("n_late_suppliers").Eq(uint64(1)),
-		).
+	return late().
+		// somebody else is on this order ...
+		WhereExists(scan("lineitem"), sameOrderOtherSupplier...).
+		// ... and this supplier is the only late one
+		WhereNotExists(late(), sameOrderOtherSupplier...).
 		Join(
 			scan("orders").Filter(ursus.Col("o_orderstatus").Eq("F")),
 			on("l_orderkey", "o_orderkey")...,

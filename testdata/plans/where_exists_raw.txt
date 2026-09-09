@@ -1,0 +1,7 @@
+JOIN SEMI residual [(col("k") == col("k_right")), (col("lv") < col("rv"))]
+  left:
+    MEMORY SCAN 5 rows
+      projection: * (2 cols)
+  right:
+    MEMORY SCAN 4 rows
+      projection: * (2 cols)

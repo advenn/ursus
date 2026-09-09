@@ -510,12 +510,29 @@ func resolveJoin(j *Join) (Node, error) {
 				"them needs a coalesce expression ursus does not have").
 			Hint("the default keeps both key columns; the right one is suffixed %q",
 				j.suffix())
-	} else if len(j.LeftOn) == 0 && len(j.RightOn) == 0 {
+	} else if len(j.LeftOn) == 0 && len(j.RightOn) == 0 && !j.HasResidual() {
 		// An equi-join with no keys must be an error, never a silent cross join:
 		// the cardinality difference is |L| vs |L|x|R|.
+		//
+		// A RESIDUAL semi/anti join is the exception, and it is not a silent
+		// anything: WhereExists builds one deliberately, the predicate is the match
+		// rule, and collapse_cross_join turns whichever conjuncts are equalities
+		// into keys afterwards. Before that rule runs the join is keyless and
+		// correct — one key group, every pair tested — which is what keeps the rule
+		// an optimisation rather than a requirement.
 		return nil, uerr.New(uerr.KindValue, "join",
 			"a %s join requires at least one key", j.Kind).
 			Hint("use JoinOn(...), or JoinHow(ursus.JoinCross) for a cartesian product")
+	}
+
+	if j.HasResidual() && !j.Kind.filtersLeft() {
+		// Inner needs no residual: a pair is the output row, so the predicate is a
+		// Filter above the join. Right and Full would need `matched` per build ROW
+		// rather than per key id — see joinProbeOp — which is a different step.
+		return nil, uerr.New(uerr.KindUnsupported, "join",
+			"a %s join cannot carry a residual predicate", j.Kind).
+			Hint("only semi and anti joins evaluate a predicate before the match verdict").
+			Hint("for an inner join, write the predicate as a filter: JoinWhere does this")
 	}
 
 	// 2. Expand, each side against ITS OWN schema.
@@ -554,6 +571,47 @@ func resolveJoin(j *Join) (Node, error) {
 
 	c := *j
 	c.LeftOn, c.RightOn = left, right
+
+	// 4b. The residual, against the PAIR schema.
+	//
+	// It is resolved here rather than left to the evaluator for the same reason
+	// step 5 computes a layout it throws away: an unknown column or a non-Boolean
+	// predicate should be reported against the query the user wrote, not as a rule
+	// failure or an internal evaluator error two phases later.
+	if c.HasResidual() {
+		pair, err := c.PairLayout()
+		if err != nil {
+			return nil, err
+		}
+		preds, err := expr.ExpandAll(c.Residual, pair.Schema)
+		if err != nil {
+			return nil, uerr.Annotate(err, "join", "join residual")
+		}
+		if len(preds) == 0 {
+			return nil, uerr.New(uerr.KindValue, "join",
+				"the join predicate expanded to nothing")
+		}
+		for _, p := range preds {
+			if err := rejectAggregate(p, "join"); err != nil {
+				return nil, err
+			}
+			if err := rejectWindow(p, "join"); err != nil {
+				return nil, err
+			}
+			fl, err := expr.Resolve(p, pair.Schema)
+			if err != nil {
+				return nil, uerr.Annotate(err, "join", "join residual")
+			}
+			if !fl.Type.IsBool() {
+				return nil, uerr.New(uerr.KindType, "join",
+					"join predicate must be Boolean, got %s", fl.Type).
+					Hint("predicate: %s", p.String()).
+					Hint("columns are named as they would be after the join: "+
+						"left names as they are, colliding right names suffixed %q", j.suffix())
+			}
+		}
+		c.Residual = preds
+	}
 
 	// 5. Compute the layout and discard it.
 	//

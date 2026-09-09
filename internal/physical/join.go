@@ -191,9 +191,20 @@ type joinSpec struct {
 
 	emitProbeUnmatched bool // Left, Full, Anti
 	emitBuildUnmatched bool // Right, Full
-	needBuildRows      bool // false for Semi/Anti, whose build memory is O(keys)
+	needBuildRows      bool // false for Semi/Anti, UNLESS they carry a residual
 	maskOnly           bool // Semi/Anti emit probe columns only, at most one per row
 	emitMatched        bool // false for Anti
+
+	// residual is evaluated per candidate PAIR before the match verdict, and is
+	// what makes a semi join answer "does a partner satisfying p exist" rather than
+	// "does a partner exist".
+	//
+	// It is why needBuildRows is no longer a pure function of the kind. Reading a
+	// right-hand value requires the rows to be there, so a residual semi join
+	// retains its build side and its memory becomes O(build rows) like every other
+	// kind's. That is a real cost and it is the price of the feature: without the
+	// rows there is nothing for the predicate to look at.
+	residual []expr.Node
 }
 
 // tracksRows reports whether this kind needs the per-build-row rowKey array.
@@ -208,6 +219,7 @@ func (s joinSpec) tracksRows() bool { return s.needBuildRows || s.emitBuildUnmat
 
 func newJoinSpec(j *plan.Join, batchSize int) joinSpec {
 	k := j.Kind
+	filters := k == plan.JoinSemi || k == plan.JoinAnti
 	return joinSpec{
 		kind:               k,
 		nullsEqual:         j.NullsEqual,
@@ -215,9 +227,10 @@ func newJoinSpec(j *plan.Join, batchSize int) joinSpec {
 		batchSize:          batchSize,
 		emitProbeUnmatched: k == plan.JoinLeft || k == plan.JoinFull || k == plan.JoinAnti,
 		emitBuildUnmatched: k == plan.JoinRight || k == plan.JoinFull,
-		needBuildRows:      k != plan.JoinSemi && k != plan.JoinAnti,
-		maskOnly:           k == plan.JoinSemi || k == plan.JoinAnti,
+		needBuildRows:      !filters || j.HasResidual(),
+		maskOnly:           filters,
 		emitMatched:        k != plan.JoinAnti,
+		residual:           j.Residual,
 	}
 }
 
@@ -232,6 +245,14 @@ type joinBuildSink struct {
 	keys     []expr.Node // RIGHT-side key expressions
 	leftKeys []expr.Node // LEFT-side key expressions, carried to the probe operator
 	spec     joinSpec
+
+	// pairLayout is the namespace spec.residual is written in — both sides, right
+	// names suffixed on collision — which for Semi and Anti is NOT `layout`, whose
+	// schema is the left frame alone. nil when there is no residual.
+	//
+	// It must be copied in newSub. A replayed spill bucket that lost it would
+	// evaluate nothing and answer a different question with no error anywhere.
+	pairLayout *plan.JoinLayout
 
 	// threads is how many probe workers to run, and is set ONLY by planJoin. newSub
 	// builds its sub-sink field by field and does not carry it, which is what keeps
@@ -496,6 +517,10 @@ func (s *joinBuildSink) newProbeOp(t *joinTable, probe Operator, pad *data.Batch
 		spec:    s.spec,
 		keys:    s.leftKeys,
 		leftPad: pad,
+		// Per worker, so nothing here is shared: the residual's scratch is exactly
+		// as private as lsel/rsel, which the parallel probe's doc says is the whole
+		// reason N workers can share one frozen table with no lock.
+		pairLayout: s.pairLayout,
 	}
 	op.mem = s.mem
 	op.sink, op.level = s, s.level
@@ -506,6 +531,12 @@ func (s *joinBuildSink) newProbeOp(t *joinTable, probe Operator, pad *data.Batch
 		// Per KEY id, not per build row: if a key is matched at all, every build row
 		// under it is emitted. Smaller by the average fan-out factor, and identical
 		// in meaning.
+		//
+		// That equivalence holds only WITHOUT a residual. With one, "matched" is a
+		// per-PAIR verdict — two build rows can share a key and disagree — so a
+		// per-key bool cannot express it. Right and Full are the only kinds that
+		// allocate this and resolveJoin refuses a residual on both, so the two never
+		// meet; if that ever changes, this array has to become per build row.
 		op.matched = make([]bool, t.nKeys)
 	}
 	if s.spec.validate.RequiresLeftUnique() {
@@ -624,6 +655,18 @@ type joinProbeOp struct {
 
 	lsel, rsel []int32
 
+	// csel/rcand are the residual's candidate pair vectors, kept separate from
+	// lsel/rsel because those two carry the OUTPUT and these carry a question. Per
+	// worker, like lsel/rsel, since each worker resolves its own probe rows.
+	csel, rcand []int32
+	// pend, rowAny and alive are stepResidual's scratch: the probe rows whose
+	// verdict this chunk decides, their folded answers, and the per-pair AND of the
+	// conjuncts. Reused across chunks so the loop allocates nothing steady-state.
+	pend       []int32
+	rowAny     []bool
+	alive      []bool
+	pairLayout *plan.JoinLayout
+
 	matched []bool
 	seen    map[string]struct{}
 
@@ -739,7 +782,7 @@ func (p *joinProbeOp) probeStep(ctx context.Context) (*data.Batch, error) {
 			return nil, err
 		}
 	}
-	return p.stepCurrent()
+	return p.stepCurrent(ctx)
 }
 
 // fillCurrent pulls the next probe batch. false means the stream ended, and the
@@ -767,7 +810,10 @@ func (p *joinProbeOp) fillCurrent(ctx context.Context) (bool, error) {
 
 // stepCurrent drains the CURRENT batch by at most one output batch, and clears it
 // when the batch is spent. (nil, nil) means this batch produced nothing more.
-func (p *joinProbeOp) stepCurrent() (*data.Batch, error) {
+func (p *joinProbeOp) stepCurrent(ctx context.Context) (*data.Batch, error) {
+	if p.spec.maskOnly && len(p.spec.residual) > 0 {
+		return p.stepResidual(ctx)
+	}
 	p.reset()
 	for p.row < p.cur.Rows() && p.outLen() < p.spec.batchSize {
 		if !p.entered {
@@ -775,7 +821,9 @@ func (p *joinProbeOp) stepCurrent() (*data.Batch, error) {
 				return nil, err
 			}
 		}
-		p.appendMatches()
+		if err := p.appendMatches(ctx); err != nil {
+			return nil, err
+		}
 		if p.hit >= p.nHit {
 			p.row++
 			p.entered = false
@@ -787,6 +835,115 @@ func (p *joinProbeOp) stepCurrent() (*data.Batch, error) {
 	if done {
 		// Route BEFORE p.cur goes: routeProbe gathers out of it, and this is the last
 		// moment it is live.
+		if rerr := p.routeProbe(); rerr != nil {
+			return nil, rerr
+		}
+		p.cur, p.curOK, p.enc = nil, bitmap.View{}, nil
+		p.row = 0
+		p.account()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// stepResidual is stepCurrent for a semi or anti join carrying a residual.
+//
+// It is a separate loop rather than another branch inside stepCurrent because the
+// two resume differently, and mixing them is how hit/nHit/entered would come to
+// mean two things. The ordinary loop cuts its OUTPUT at batchSize and resumes
+// mid-row; this one cuts its CANDIDATES at batchSize, because the output is at most
+// one row per probe row and the expensive thing is the predicate.
+//
+// A probe row is never split across chunks here: its candidates are gathered whole,
+// so the verdict is complete the moment its chunk is evaluated and nothing has to
+// survive a Next boundary. The exception is a row whose fan-out alone exceeds the
+// chunk — that one is resolved by residualMatch, which chunks within the row and
+// keeps memory bounded. Two paths, each doing the thing it is good at: batching
+// across rows when fan-out is small, and within a row when it is enormous.
+func (p *joinProbeOp) stepResidual(ctx context.Context) (*data.Batch, error) {
+	p.reset()
+	for p.row < p.cur.Rows() && p.outLen() < p.spec.batchSize {
+		p.csel = p.csel[:0]
+		p.rcand = p.rcand[:0]
+		p.pend = p.pend[:0]
+		base := p.row
+
+		for p.row < p.cur.Rows() && len(p.csel) < p.spec.batchSize {
+			if !p.entered {
+				if err := p.enter(); err != nil {
+					return nil, err
+				}
+			}
+			if p.routed {
+				// The sub-join owns this row's verdict. Emitting one here as well
+				// would duplicate it, which is appendMatches' third-outcome rule.
+				p.hit, p.row, p.entered = p.nHit, p.row+1, false
+				continue
+			}
+
+			need := int(p.nHit - p.hit)
+			if need > p.spec.batchSize {
+				// One key with more partners than a chunk holds. Resolving it here
+				// would make the pair batch as large as the fan-out; residualMatch
+				// walks it in bounded pieces instead.
+				if len(p.csel) > 0 {
+					break // evaluate what is already gathered first
+				}
+				any, err := p.residualMatch(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if any == p.spec.emitMatched {
+					p.lsel = append(p.lsel, int32(p.row))
+				}
+				p.row, p.entered = p.row+1, false
+				continue
+			}
+			// A SIZE bound, not the row-completeness invariant. That invariant is
+			// enforced by the unbounded loop below, which always drains a row whole
+			// — removing this break changes how big a chunk gets and no answer at
+			// all, which a tooth confirmed. Its job is to keep the pair batch near
+			// batchSize rather than overshooting it by one row's fan-out.
+			if len(p.csel) > 0 && len(p.csel)+need > p.spec.batchSize {
+				break
+			}
+
+			for p.hit < p.nHit {
+				p.csel = append(p.csel, int32(p.row))
+				p.rcand = append(p.rcand, p.t.rows[p.hit])
+				p.hit++
+			}
+			p.pend = append(p.pend, int32(p.row))
+			p.row, p.entered = p.row+1, false
+		}
+
+		if len(p.pend) == 0 {
+			continue
+		}
+		// rowAny spans base..p.row, which is at most one chunk of probe rows.
+		p.rowAny = p.rowAny[:0]
+		for range p.row - base {
+			p.rowAny = append(p.rowAny, false)
+		}
+		if len(p.csel) > 0 {
+			if err := p.residualFold(ctx, base, p.rowAny); err != nil {
+				return nil, err
+			}
+		}
+		for _, r := range p.pend {
+			// A row with no candidates at all folds to false, which is exactly what
+			// "no partner" means — and is why WhereNotExists emits it.
+			if p.rowAny[int(r)-base] == p.spec.emitMatched {
+				p.lsel = append(p.lsel, r)
+			}
+		}
+	}
+
+	done := p.row >= p.cur.Rows()
+	out, err := p.emit()
+	if done {
 		if rerr := p.routeProbe(); rerr != nil {
 			return nil, rerr
 		}
@@ -874,6 +1031,8 @@ func (p *joinProbeOp) enter() error {
 	}
 	if p.t.off == nil {
 		// Semi/Anti keep no row lists; presence in the table is the whole answer.
+		// With a residual they DO keep row lists — needBuildRows is true — so this
+		// arm is not taken and the real range below is used instead.
 		p.nHit = 1
 		return nil
 	}
@@ -885,7 +1044,7 @@ func (p *joinProbeOp) enter() error {
 }
 
 // appendMatches emits as much of the current row's match list as fits.
-func (p *joinProbeOp) appendMatches() {
+func (p *joinProbeOp) appendMatches(ctx context.Context) error {
 	if p.routed {
 		// A THIRD outcome, and it has to be explicit. Without it a routed row falls
 		// into the !matched arm below, which emits (row, NullIndex) whenever the kind
@@ -893,9 +1052,20 @@ func (p *joinProbeOp) appendMatches() {
 		// row here AND again from its sub-join. Duplicates, no error, no length
 		// mismatch.
 		p.hit = p.nHit
-		return
+		return nil
 	}
 	matched := p.nHit > p.hit
+
+	// The residual turns "a partner exists" into "a partner satisfying p exists",
+	// and it has to be decided HERE, before the verdict below, rather than by
+	// filtering the output afterwards. Filtering the output filters left rows that
+	// already survived, which answers a different question.
+	if p.spec.maskOnly && len(p.spec.residual) > 0 {
+		var err error
+		if matched, err = p.residualMatch(ctx); err != nil {
+			return err
+		}
+	}
 
 	if p.spec.maskOnly {
 		// Semi and Anti emit at most ONE row per probe row and no right column. A
@@ -917,7 +1087,7 @@ func (p *joinProbeOp) appendMatches() {
 			p.lsel = append(p.lsel, int32(p.row))
 		}
 		p.hit = p.nHit // consume the row
-		return
+		return nil
 	}
 
 	if !matched {
@@ -926,13 +1096,147 @@ func (p *joinProbeOp) appendMatches() {
 			p.rsel = append(p.rsel, kernel.NullIndex)
 		}
 		p.hit = p.nHit
-		return
+		return nil
 	}
 	for p.hit < p.nHit && p.outLen() < p.spec.batchSize {
 		p.lsel = append(p.lsel, int32(p.row))
 		p.rsel = append(p.rsel, p.t.rows[p.hit])
 		p.hit++
 	}
+	return nil
+}
+
+// residualMatch answers "does a partner satisfying the residual exist" for the
+// current probe row, consuming its whole match list.
+//
+// # Why the row is resolved in one call rather than resumed across Next
+//
+// The rest of the probe resumes mid-row because one probe row can produce
+// thousands of OUTPUT rows. A semi join produces at most one, so there is nothing
+// to cut: the output is bounded by probe rows, not by candidates. That removes the
+// entire class of bug hit/nHit/entered exist to prevent — a verdict cannot be
+// half-formed at a batch boundary because it never crosses one.
+//
+// What is bounded instead is MEMORY: candidates are materialised a batch at a time,
+// so a probe row with a million partners costs one batch of pairs, not a million.
+// The work in one call is unbounded, which is a latency property rather than a
+// correctness one, and the kernels check ctx.
+//
+// # Both kinds stop at the first satisfying pair, which is not what it looks like
+//
+// The obvious story is that semi can early-exit and anti cannot, because proving
+// that NO partner satisfies the predicate means testing every one. A tooth
+// disproved it: one satisfying partner decides both verdicts — the row is kept by
+// WhereExists and excluded by WhereNotExists — so the loop breaks on the same
+// condition for both, and the emitMatched guard that used to be here bought
+// nothing.
+//
+// The real asymmetry is in the OTHER case, and it is a property of the data rather
+// than of the loop: a row with no satisfying partner is only known to have none
+// after every candidate has been tested. That is the common case for
+// WhereNotExists and the rare one for WhereExists, which is why an anti join
+// against a high-fan-out key is the expensive shape.
+func (p *joinProbeOp) residualMatch(ctx context.Context) (bool, error) {
+	any := false
+	for p.hit < p.nHit {
+		p.csel = p.csel[:0]
+		p.rcand = p.rcand[:0]
+		for p.hit < p.nHit && len(p.csel) < p.spec.batchSize {
+			p.csel = append(p.csel, int32(p.row))
+			p.rcand = append(p.rcand, p.t.rows[p.hit])
+			p.hit++
+		}
+		ok, err := p.residualHolds(ctx)
+		if err != nil {
+			return false, err
+		}
+		if ok {
+			any = true
+			break // One satisfying partner decides both verdicts.
+		}
+	}
+	p.hit = p.nHit
+	return any, nil
+}
+
+// residualHolds reports whether any pair in the current candidate chunk satisfies
+// every conjunct.
+//
+// The body is filterOp.Apply's, and deliberately so: conjuncts applied in sequence,
+// each shrinking the batch, with an early exit at zero rows. Because every pair in
+// the chunk belongs to the SAME probe row, "any pair satisfies" is exactly "the
+// filtered batch is non-empty" — so no mask survives the call and there is nothing
+// to reduce per row.
+func (p *joinProbeOp) residualHolds(ctx context.Context) (bool, error) {
+	pairs, err := gatherOut(p.pairLayout.Schema, p.pairLayout, p.cur, p.t.build,
+		p.csel, p.rcand, false)
+	if err != nil {
+		return false, err
+	}
+	for _, e := range p.spec.residual {
+		mask, err := evalColumn(ctx, e, pairs)
+		if err != nil {
+			return false, err
+		}
+		pairs, err = kernel.FilterBatch(pairs, mask)
+		if err != nil {
+			return false, err
+		}
+		if pairs.Rows() == 0 {
+			return false, nil
+		}
+	}
+	return pairs.Rows() > 0, nil
+}
+
+// residualFold evaluates one chunk holding candidates from MANY probe rows and
+// records, per row, whether any of its pairs satisfied every conjunct.
+//
+// # Why this exists rather than just calling residualMatch per row
+//
+// Evaluating one probe row at a time is correct, simpler, and was measured **6.8x
+// slower** on PDS-H q21: 333 ms became 2,450. The fan-out there is about four rows
+// per l_orderkey, so every gather and every expression call was operating on a
+// four-row batch — a vectorised engine running at scalar granularity, paying batch
+// setup 3.8 million times.
+//
+// So candidates from as many probe rows as fit go into one pair batch. rowAny is
+// indexed by (probe row - base), and csel says which row each pair belongs to.
+//
+// Conjuncts are ANDed over the WHOLE batch rather than filtered in sequence, which
+// is the one place this differs from filterOp: filtering discards the mapping from
+// surviving pairs back to probe rows, and that mapping is the entire output.
+func (p *joinProbeOp) residualFold(ctx context.Context, base int, rowAny []bool) error {
+	pairs, err := gatherOut(p.pairLayout.Schema, p.pairLayout, p.cur, p.t.build,
+		p.csel, p.rcand, false)
+	if err != nil {
+		return err
+	}
+	n := len(p.csel)
+
+	p.alive = p.alive[:0]
+	for range n {
+		p.alive = append(p.alive, true)
+	}
+	for _, e := range p.spec.residual {
+		mask, err := evalColumn(ctx, e, pairs)
+		if err != nil {
+			return err
+		}
+		bits, valid := mask.Bools(), mask.Validity()
+		for i := range n {
+			// A null predicate is not a match, which is Filter's rule and SQL's.
+			if !valid.Get(i) || !bits.Get(i) {
+				p.alive[i] = false
+			}
+		}
+	}
+	for i := range n {
+		if p.alive[i] {
+			rowAny[int(p.csel[i])-base] = true
+		}
+	}
+	return nil
 }
 
 // flushStep emits build rows no probe row matched. Right and Full only.
@@ -1185,17 +1489,27 @@ func planJoin(ctx context.Context, j *plan.Join, opts Options) (Operator, error)
 		batchSize = DefaultOptions().BatchSize
 	}
 
+	// The residual's namespace, computed once here rather than per probe row. Nil
+	// when there is no residual, which is every join but a WhereExists.
+	var pairLayout *plan.JoinLayout
+	if j.HasResidual() {
+		if pairLayout, err = j.PairLayout(); err != nil {
+			return nil, err
+		}
+	}
+
 	sink := &joinBuildSink{
-		out:      layout.Schema,
-		layout:   layout,
-		left:     ls,
-		right:    rs,
-		keys:     j.RightOn,
-		leftKeys: j.LeftOn,
-		spec:     newJoinSpec(j, batchSize),
-		threads:  opts.Threads,
-		ids:      kernel.NewKeyTable(),
-		mem:      opts.Budget.Account("join"),
+		out:        layout.Schema,
+		layout:     layout,
+		left:       ls,
+		right:      rs,
+		keys:       j.RightOn,
+		leftKeys:   j.LeftOn,
+		spec:       newJoinSpec(j, batchSize),
+		threads:    opts.Threads,
+		pairLayout: pairLayout,
+		ids:        kernel.NewKeyTable(),
+		mem:        opts.Budget.Account("join"),
 
 		budget: opts.Budget,
 		bparts: make([]*partWriter, nBuckets),

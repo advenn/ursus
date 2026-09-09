@@ -205,7 +205,7 @@ func (p *parProbeOp) runJob(ctx context.Context, w *joinProbeOp, job parJob, lan
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		out, err := w.stepCurrent()
+		out, err := w.stepCurrent(ctx)
 		if err != nil {
 			send(probeResult{err: err})
 			return err
