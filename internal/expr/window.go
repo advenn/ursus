@@ -189,8 +189,8 @@ func (w *Window) Field(in *dtype.Schema) (dtype.Field, error) {
 	if w.Mapping == MapJoin {
 		return dtype.Field{}, uerr.New(uerr.KindUnsupported, "over",
 			"the join mapping strategy is not implemented").
-			Hint("it aggregates each partition into a List, and ursus has no List " +
-				"column layout yet").
+			Hint("it aggregates each partition into a List, and no aggregate " +
+				"builds one yet — the layout exists, the accumulator does not").
 			Hint("use the default mapping to get one value per row")
 	}
 

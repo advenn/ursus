@@ -159,10 +159,18 @@ the same argument the hand-rolled CSV scanner makes:
 
 ## 6. Honest gaps
 
-- **Anything returning a List is out**: `Split`, `SplitExact`, `SplitN`,
+- ~~**Anything returning a List is out**: `Split`, `SplitExact`, `SplitN`,
   `ExtractAll`, `ExtractGroups`, `FindMany`. `data.Column` has four payload slots —
   fixed, bits, offsets, chars — and none is a list. Adding one is a storage-layer
-  step, and `Take`, `Concat`, `NullColumn` and `GroupKeyEncoder` would all need arms.
+  step, and `Take`, `Concat`, `NullColumn` and `GroupKeyEncoder` would all need
+  arms.~~ **Superseded.** The list payload landed in step 28; `Take` and `Concat`
+  got their arms in steps 29–33, and step 45 shipped `Split`, `SplitN` and
+  `ExtractAll` along with `NullColumn`'s. This paragraph read as a standing
+  impossibility for a long time after it stopped being one, which is why it is
+  struck through rather than deleted. `GroupKeyEncoder` is still the odd one out and
+  is still open: grouping by a list is a decision about list equality, not a missing
+  arm. `ExtractGroups` remains out for a different reason — it returns a Struct
+  computed from the pattern's named groups.
 - **Parquet still refuses `Time`, `Datetime` and `Duration`.** `Date` round-trips,
   as it did before. This was the piece the plan named as first to drop, and it was
   dropped: CSV is where the temporal gap actually bites.

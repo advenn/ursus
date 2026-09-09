@@ -111,6 +111,75 @@ func (s StrExpr) StripSuffix(suffix string) Expr {
 // Reverse reverses by RUNE, not by byte.
 func (s StrExpr) Reverse() Expr { return s.call(expr.FnStrReverse) }
 
+// Split splits each value on a literal separator, producing a List(String).
+//
+//	lf.WithColumns(ursus.Col("tags").Str().Split(",").Alias("tag")).
+//	    Explode("tag")
+//
+// That two-stage form is the canonical use, and it is two stages because Explode
+// changes the frame's height, which an expression may not.
+//
+// # Three cases that are not the same
+//
+//	"a,b"   ->  ["a", "b"]
+//	""      ->  [""]      one empty element, matching strings.Split
+//	NULL    ->  NULL      a null list, not an empty one
+//
+// The separator is LITERAL. A regex split would be a different function, and
+// splitting on "." meaning "any character" is the mistake it would invite.
+func (s StrExpr) Split(by string) Expr {
+	return s.call(expr.FnStrSplit, by)
+}
+
+// SplitN is Split with at most n parts; the last part keeps the rest, separators
+// and all. n <= 0 means unlimited, as in strings.SplitN.
+func (s StrExpr) SplitN(by string, n int) Expr {
+	return s.call(expr.FnStrSplitN, by, int64(n))
+}
+
+// ExtractAll returns every non-overlapping match of a regex as a List(String).
+//
+// Regex only, for the reason Extract is: extracting every literal occurrence of a
+// pattern returns that many copies of the pattern.
+func (s StrExpr) ExtractAll(pattern string) Expr {
+	return s.call(expr.FnStrExtractAll, pattern)
+}
+
+// PadStart and PadEnd pad each value to width, counted in RUNES, using the first
+// rune of fill. A value already that wide is returned unchanged — padding never
+// truncates.
+func (s StrExpr) PadStart(width int, fill string) Expr {
+	return s.call(expr.FnStrPadStart, int64(width), fill)
+}
+
+func (s StrExpr) PadEnd(width int, fill string) Expr {
+	return s.call(expr.FnStrPadEnd, int64(width), fill)
+}
+
+// ZFill left-pads with zeros to width, keeping any leading sign in front of them:
+// -5 at width 4 is "-005", not "0-05". That is what makes it different from
+// PadStart with a '0', and it is the reason it is a separate function.
+func (s StrExpr) ZFill(width int) Expr {
+	return s.call(expr.FnStrZFill, int64(width))
+}
+
+// StripCharsStart and StripCharsEnd are the one-sided forms of StripChars: they
+// remove any leading (or trailing) character in the cutset. An empty cutset means
+// whitespace.
+func (s StrExpr) StripCharsStart(chars string) Expr {
+	return s.call(expr.FnStrStripCharsStart, chars)
+}
+
+func (s StrExpr) StripCharsEnd(chars string) Expr {
+	return s.call(expr.FnStrStripCharsEnd, chars)
+}
+
+// EscapeRegex quotes every regex metacharacter, so the result matches itself
+// literally when used as a pattern.
+func (s StrExpr) EscapeRegex() Expr {
+	return s.call(expr.FnStrEscapeRegex)
+}
+
 // ToInteger, ToDate and ToDatetime parse. They are ordinary casts, which is why
 // they are spelled as casts rather than as new kernels — and unparseable values
 // become NULL rather than failing the query.

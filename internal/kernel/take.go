@@ -176,6 +176,22 @@ func NullColumn(name string, dt dtype.DataType, n int) (*data.Column, error) {
 		// StringAccessor.Get needs in order to return "" rather than panic.
 		return data.NewString(name, make([]string, n), valid).WithDType(dt), nil
 
+	case dt.ID() == dtype.TypeList:
+		// n+1 zero offsets over an EMPTY child, which is the list shape of the
+		// String arm above and is what ListAccessor needs to report a zero-length
+		// range rather than index past the end.
+		//
+		// Unreachable until step 45. Every List column came out of a Parquet file,
+		// and nothing joined, unioned or aggregated one into existence — so a List
+		// operand that had to be null could not arise. Str().Split() is the first
+		// way to produce one mid-query, and a left join whose right side misses is
+		// then one call away. The arm belongs to the step that made it reachable.
+		child, err := NullColumn(name, dt.Inner(), 0)
+		if err != nil {
+			return nil, err
+		}
+		return data.NewList(name, make([]int32, n+1), child, valid), nil
+
 	default:
 		return nullFixed(name, dt, n, valid)
 	}

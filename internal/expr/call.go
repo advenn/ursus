@@ -48,6 +48,15 @@ const (
 	FnStrStripPrefix
 	FnStrStripSuffix
 	FnStrReverse
+	FnStrPadStart
+	FnStrPadEnd
+	FnStrZFill
+	FnStrStripCharsStart
+	FnStrStripCharsEnd
+	FnStrEscapeRegex
+	FnStrSplit
+	FnStrSplitN
+	FnStrExtractAll
 	fnStrEnd
 
 	// --- temporal ---
@@ -149,7 +158,12 @@ var callNames = map[CallFn]string{
 	FnStrLenBytes: "str.len_bytes", FnStrLenChars: "str.len_chars",
 	FnStrSlice: "str.slice", FnStrStripChars: "str.strip_chars",
 	FnStrStripPrefix: "str.strip_prefix", FnStrStripSuffix: "str.strip_suffix",
-	FnStrReverse: "str.reverse",
+	FnStrReverse: "str.reverse", FnStrPadStart: "str.pad_start",
+	FnStrPadEnd: "str.pad_end", FnStrZFill: "str.zfill",
+	FnStrStripCharsStart: "str.strip_chars_start",
+	FnStrStripCharsEnd:   "str.strip_chars_end",
+	FnStrEscapeRegex:     "str.escape_regex", FnStrSplit: "str.split",
+	FnStrSplitN: "str.splitn", FnStrExtractAll: "str.extract_all",
 
 	FnDtYear: "dt.year", FnDtMonth: "dt.month", FnDtDay: "dt.day",
 	FnDtHour: "dt.hour", FnDtMinute: "dt.minute", FnDtSecond: "dt.second",
@@ -328,6 +342,17 @@ func strCallOut(fn CallFn) dtype.DataType {
 		return dtype.Bool
 	case FnStrFind, FnStrCountMatches, FnStrLenBytes, FnStrLenChars:
 		return dtype.Uint32
+	case FnStrSplit, FnStrSplitN, FnStrExtractAll:
+		// The first calls in the namespace whose output is a NESTED type, and the
+		// only place that fact is written down. The kernel never names List(String)
+		// — data.NewList derives the element type from the child column it is
+		// handed, deliberately, so that the declared type cannot disagree with the
+		// data. This is the other half of that contract, and the two agreeing is
+		// what ResolveCall means by being the single authority.
+		//
+		// Constant for every receiver, because the family has already normalised
+		// Enum and Binary receivers down to String by the time this is reached.
+		return dtype.List(dtype.String)
 	default:
 		return dtype.String
 	}
