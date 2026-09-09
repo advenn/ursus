@@ -48,6 +48,12 @@ type Flags struct {
 	// piece of the optimizer — the legality table has four barrier cells whose
 	// violation returns different rows with no error — so it gets its own switch.
 	JoinPredicatePushdown bool
+
+	// CollapseCrossJoin folds a filter above a cross join into a real join
+	// condition. It is what turns JoinWhere from an O(|L|x|R|) loop into a hash
+	// join, so switching it off is how you measure what it is worth — and how you
+	// check that it is an optimisation rather than a change of answer.
+	CollapseCrossJoin bool
 }
 
 // DefaultFlags enables every rule that exists.
@@ -59,6 +65,7 @@ func DefaultFlags() Flags {
 		SimplifyExprs:      true,
 
 		JoinPredicatePushdown: true,
+		CollapseCrossJoin:     true,
 	}
 }
 
@@ -101,6 +108,22 @@ func NewOptimizer() *Optimizer {
 				rule:    predicatePushdown{},
 				mode:    Once,
 				enabled: func(f Flags) bool { return f.PredicatePushdown },
+			},
+			// Collapsing a cross join runs between the two pushdowns, and the
+			// ordering is about plan QUALITY rather than correctness — which was
+			// checked rather than assumed. Moving this rule ahead of predicate
+			// pushdown changes no answer in the suite, because a one-sided conjunct
+			// turned into a join key against a constant means the same thing as the
+			// filter it came from (see equiKeys). It is a worse plan, not a wrong
+			// one: every right row lands in one hash bucket.
+			//
+			// So: after predicate pushdown, so the one-sided conjuncts have already
+			// left; before projection pushdown, for the reason given above it, since
+			// this rule changes which node reads the key columns.
+			{
+				rule:    collapseCrossJoin{},
+				mode:    Once,
+				enabled: func(f Flags) bool { return f.CollapseCrossJoin },
 			},
 			{
 				rule:    projectionPushdown{},

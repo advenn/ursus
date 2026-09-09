@@ -71,6 +71,19 @@ func TestGoldenJoinPlan(t *testing.T) {
 	ursustest.AssertPlan(t, semi, "testdata/plans/join_semi.txt")
 }
 
+// TestGoldenJoinWherePlan snapshots the collapse, which is the only place a user
+// can SEE whether their JoinWhere became a hash join or stayed a loop over every
+// pair. The raw plan is the cross-plus-filter the API builds; the optimized one is
+// what actually runs, and the difference between the two files is the rule.
+func TestGoldenJoinWherePlan(t *testing.T) {
+	lf := joinLeft().JoinWhere(joinRight(),
+		ursus.Col("k").Eq(ursus.Col("k_right")),
+		ursus.Col("lv").Lt(ursus.Col("rv")),
+	)
+	ursustest.AssertPlan(t, lf, "testdata/plans/join_where_raw.txt", ursus.Optimized(false))
+	ursustest.AssertPlan(t, lf, "testdata/plans/join_where.txt")
+}
+
 // TestGoldenConditionalPlan snapshots a conditional and an is_in.
 //
 // A node's String() is load-bearing beyond display: predicatePushdown detects its

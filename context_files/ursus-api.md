@@ -977,10 +977,20 @@ trades.JoinAsOf(quotes,
 
 ```go
 sessions.JoinWhere(events,
-    ursus.Col("events.ts").Ge(ursus.Col("sessions.start")),
-    ursus.Col("events.ts").Lt(ursus.Col("sessions.end")),
+    ursus.Col("ts").Ge(ursus.Col("start")),
+    ursus.Col("ts").Lt(ursus.Col("end")),
 )
 ```
+
+Predicates name the join's **output** columns: left columns keep their own names and
+a colliding right column takes the suffix, so `k` and `k_right`. There is no
+frame-qualified form — this sketch previously showed `Col("events.ts")`, which
+nothing can resolve, because `expr.Col` is a bare name looked up in one schema.
+
+An equality between the two sides becomes a hash join key
+(`collapse_cross_join`); the remaining predicates are evaluated per surviving pair.
+With no equality among them every pair is tested, which is the loop join. `Explain`
+shows which happened — `JOIN INNER … no coalesce` against `JOIN CROSS`.
 
 ---
 

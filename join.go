@@ -184,6 +184,53 @@ func (lf *LazyFrame) Join(other *LazyFrame, opts ...JoinOption) *LazyFrame {
 	})
 }
 
+// JoinWhere joins every pair of rows that satisfies the predicates.
+//
+//	sessions.JoinWhere(events,
+//	    ursus.Col("ts").Ge(ursus.Col("start")),
+//	    ursus.Col("ts").Lt(ursus.Col("end")),
+//	)
+//
+// This is the non-equi join: the predicates may be any boolean expression over both
+// sides, and are AND-ed. Several predicates are the usual case, because an interval
+// match takes two.
+//
+// # Which names the predicates use
+//
+// The join's OUTPUT names, which is to say left columns by their own name and a
+// colliding right column with the suffix — `k` and `k_right` by default. There is no
+// separate left/right namespace to qualify with, and the same rule applies here as
+// to a Filter written after any other join. JoinSuffix changes the suffix.
+//
+// # What it costs
+//
+// A pair of rows for every pair that satisfies the predicates, which can be very
+// large — that is the nature of the operation and not a defect. When at least one
+// predicate is an EQUALITY between the two sides, the optimizer turns it into a hash
+// join key and evaluates the rest per matching pair; without one, every pair is
+// tested. Explain shows which happened.
+//
+// At least one predicate is required. A JoinWhere with none is a cartesian product
+// written as though it were a filtered one, and the cardinality difference is |L| vs
+// |L|x|R| — so it is an error rather than a silent cross join, for the same reason a
+// keyless equi-join is.
+func (lf *LazyFrame) JoinWhere(other *LazyFrame, preds ...Expr) *LazyFrame {
+	if lf.err != nil {
+		return lf
+	}
+	if len(preds) == 0 {
+		return &LazyFrame{err: uerr.New(uerr.KindValue, "join_where",
+			"JoinWhere requires at least one predicate").
+			Hint("use Join(other, JoinHow(ursus.JoinCross)) for an unfiltered cartesian product")}
+	}
+	// Definitionally a filtered cross product, and built as exactly that: the
+	// optimizer's collapse_cross_join rule is what turns the equality predicates
+	// into hash keys. Building the cross join and the filter separately is what
+	// lets every other rule — predicate pushdown into the inputs, projection
+	// pushdown, simplification — apply without knowing this method exists.
+	return lf.Join(other, JoinHow(JoinCross)).Filter(preds...)
+}
+
 // validateOpts checks the whole configuration once, so one call produces one good
 // error rather than each option carrying an error slot.
 func (c *joinCfg) validateOpts() error {

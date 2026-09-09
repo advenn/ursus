@@ -97,6 +97,11 @@ func (df *DataFrame) Join(ctx context.Context, other *DataFrame, opts ...JoinOpt
 	return df.Lazy().Join(other.Lazy(), opts...).Collect(ctx)
 }
 
+// JoinWhere joins every pair of rows that satisfies the predicates.
+func (df *DataFrame) JoinWhere(ctx context.Context, other *DataFrame, preds ...Expr) (*DataFrame, error) {
+	return df.Lazy().JoinWhere(other.Lazy(), preds...).Collect(ctx)
+}
+
 // Concat stacks frames vertically.
 func (df *DataFrame) Concat(ctx context.Context, others ...*DataFrame) (*DataFrame, error) {
 	lfs := make([]*LazyFrame, len(others))

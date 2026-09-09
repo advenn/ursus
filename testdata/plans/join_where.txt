@@ -1,0 +1,8 @@
+FILTER [(col("lv") < col("rv"))]
+  JOIN INNER [col("k")] = [col("k")] no coalesce
+    left:
+      MEMORY SCAN 5 rows
+        projection: [k, lv] (2/2 cols)
+    right:
+      MEMORY SCAN 4 rows
+        projection: [k, rv] (2/2 cols)
