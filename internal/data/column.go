@@ -629,3 +629,50 @@ func sizeOf[T Fixed]() uintptr {
 	var z T
 	return unsafeSizeof(z)
 }
+
+// FixedSlice returns the fixed-width payload as a typed slice inside an any —
+// []int64, []float64 and so on — or nil when the column has no fixed payload.
+//
+// It exists for GENERIC callers that cannot name the type. Values[T Fixed] is the
+// zero-copy reader, but a caller constrained to something wider than Fixed — the
+// UDF methods are constrained to Literal, which also admits string and bool —
+// cannot instantiate it at all, so without this it would fall back to Series.Get
+// and pay an interface boxing per row.
+//
+// The returned slice ALIASES the column's buffer, exactly as Values does. Callers
+// must not write to it.
+//
+// Logical types are returned as their physical storage, which is the same punning
+// Values documents: a Datetime column comes back as []int64.
+func (c *Column) FixedSlice() any {
+	if c.fixed == nil {
+		return nil
+	}
+	b := c.fixed.Bytes()
+	switch c.dt.Physical().ID() {
+	case dtype.TypeInt8:
+		return unsafeData[int8](b)[:c.len]
+	case dtype.TypeInt16:
+		return unsafeData[int16](b)[:c.len]
+	case dtype.TypeInt32:
+		return unsafeData[int32](b)[:c.len]
+	case dtype.TypeInt64:
+		return unsafeData[int64](b)[:c.len]
+	case dtype.TypeUint8:
+		return unsafeData[uint8](b)[:c.len]
+	case dtype.TypeUint16:
+		return unsafeData[uint16](b)[:c.len]
+	case dtype.TypeUint32:
+		return unsafeData[uint32](b)[:c.len]
+	case dtype.TypeUint64:
+		return unsafeData[uint64](b)[:c.len]
+	case dtype.TypeFloat32:
+		return unsafeData[float32](b)[:c.len]
+	case dtype.TypeFloat64:
+		return unsafeData[float64](b)[:c.len]
+	default:
+		// Int128 deliberately omitted: no Literal type maps to it, so a caller
+		// that could use this could not name the result anyway.
+		return nil
+	}
+}

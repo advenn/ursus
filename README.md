@@ -99,12 +99,27 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 | **Grouping**    | group-by, `GroupByDynamic`, `Rolling`, calendar-aware intervals                                                                                   |
 | **Optimizer**   | predicate pushdown (including through joins), projection pushdown, limit/top-k pushdown, cross-join collapse, constant folding and simplification |
 | **Execution**   | order-preserving pipeline parallelism, parallel hash aggregation, and spilling for sort, hash aggregation and hash join                           |
+| **UDFs**        | `MapElements` (per value) and `MapBatches` (per column) — generic methods, so the Go types are inferred from your function                        |
 
 Nested types are partly there: **List and Struct read from Parquet**, with
 `Explode`, `Unnest`, a `.list` namespace and `.struct.field()`. Map and Array are not, and nested columns cannot yet be
 written.
 
-Not done: common subexpression elimination, SQL, `Pivot` — whose output columns are the distinct values of a
+The escape hatch is real: a per-element UDF in Go is a function call, not a Python
+interpreter round trip, which is the one place this library can beat Polars outright
+rather than merely keep up.
+
+```go
+lf.Select(ursus.Col("celsius").MapElements("to_fahrenheit", ursus.Float64,
+    func(c float64) (float64, error) { return c*9/5 + 32, nil }))
+```
+
+Nulls pass through untouched, so your function never receives a zero value it cannot
+tell from a real one; use `MapBatches` when the null is the point. The name is
+required, and `Explain` shows it. Your function is called from several goroutines at
+once, so it must be safe for that.
+
+Not done: `MapGroups` and `RollingMap`, common subexpression elimination, SQL, `Pivot` — whose output columns are the distinct values of a
 column, so its schema would depend on data and no plan node here does; `Unpivot` (melt) ships — and the long tail of
 `Expr.Rolling*`, `Upsample`, `Interpolate`
 and the trigonometric block.

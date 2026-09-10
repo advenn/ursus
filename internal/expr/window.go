@@ -580,6 +580,19 @@ func Rebuild(n Node, kids []Node) Node {
 		}
 		return &c
 
+	case *UDF:
+		// Copying the struct carries Impl, Out, Nullable and Name across
+		// unchanged, which is the point: rebuilding must not alter what the user
+		// declared, only which child it applies to.
+		//
+		// This arm is not optional. Rebuild is reached by substitute during
+		// multi-column expansion — Col("a","b").MapElements(...) — and by
+		// simplify.walk on EVERY optimizer pass, and the default arm below panics
+		// rather than erroring.
+		c := *t
+		c.Child = kids[0]
+		return &c
+
 	default:
 		panic("expr: Rebuild: unhandled node type")
 	}

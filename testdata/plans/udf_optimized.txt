@@ -1,0 +1,5 @@
+PROJECT [col("id"), col("f"), col("w")]
+  FILTER [(col("w") > lit(1))]
+    WITH_COLUMNS [col("c").map_elements("to_f" -> Float64).alias("f"), col("s").map_batches("widths" -> Int64).alias("w")]
+      MEMORY SCAN 4 rows
+        projection: [id, c, s] (3/3 cols)

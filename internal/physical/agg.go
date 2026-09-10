@@ -823,6 +823,22 @@ func extractAggs(n expr.Node, in *dtype.Schema, specs *[]aggSpec, byKey map[stri
 		}
 		return &expr.Call{Fn: t.Fn, Args: args}, nil
 
+	case *expr.UDF:
+		// A UDF wrapping an aggregate — Agg(Col("x").Sum().MapElements(...)) — or an
+		// aggregate over a UDF — Agg(Col("x").MapElements(...).Sum()). Descending
+		// handles both: the inner aggregate becomes a temporary either way, and the
+		// UDF is rebuilt over the reference to run as a post-aggregation projection.
+		//
+		// Copying the struct rather than listing fields keeps Impl, Out, Nullable,
+		// Name and Kind — the user's declarations — carried across unchanged.
+		c, err := extractAggs(t.Child, in, specs, byKey)
+		if err != nil {
+			return nil, err
+		}
+		u := *t
+		u.Child = c
+		return &u, nil
+
 	case *expr.Cond:
 		// Conditional aggregation — Agg(When(c).Then(Col("x").Sum()).Otherwise(0)) —
 		// which is how a pivot is written. Each branch is descended independently,

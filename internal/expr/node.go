@@ -165,6 +165,30 @@ func FirstErr(n Node) error {
 	return found
 }
 
+// HasUDF reports whether the tree contains a user-defined function.
+//
+// The optimizer consults this before DUPLICATING an expression. Substituting a
+// column's definition into a predicate is how predicate pushdown rewrites a filter
+// into its child's namespace, and for ordinary expressions that trade is fine: the
+// definition is cheap and the pushdown saves downstream work.
+//
+// For a UDF it is a pure loss, and arithmetically so. Pushing `Filter(w > 1)` below
+// the WithColumns that defines w runs the function on every input row IN THE FILTER,
+// and the WithColumns still has to run it on every survivor to produce the column —
+// n + survivors calls where not pushing costs n. There is no input for which the
+// rewrite wins, and the function may be arbitrarily expensive.
+func HasUDF(n Node) bool {
+	found := false
+	Walk(n, func(x Node) bool {
+		if _, ok := x.(*UDF); ok {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
 // HasMatch reports whether the tree contains an unexpanded multi-column selector.
 func HasMatch(n Node) bool {
 	found := false

@@ -71,6 +71,9 @@ func Eval(ctx context.Context, n expr.Node, b *data.Batch) (*data.Column, error)
 		}
 		return kernel.Cast(c.Name(), t.To, t.Strict, c)
 
+	case *expr.UDF:
+		return evalUDF(ctx, t, b)
+
 	case *expr.Unary:
 		return evalUnary(ctx, t, b)
 
@@ -421,4 +424,63 @@ func buildListNeedle(c *expr.Call, recvType dtype.DataType) ([]byte, error) {
 		}
 	}
 	return kernel.EncodeOne(col)
+}
+
+// evalUDF runs a user's function and then CHECKS WHAT IT CLAIMED.
+//
+// Every other node in the evaluator derives its output type from types the engine
+// controls. A UDF is the first where the user supplies both sides of Eval's
+// contract — "Eval(ctx, n, b).DType() == n.Field(b.Schema()).Type" — and that
+// contract's own doc says what a violation costs: "the promise is a lie and the
+// failure surfaces far downstream as corrupted output".
+//
+// So all three declarations are verified here rather than trusted:
+//
+//   - the output TYPE, because expr.UDF.Field already told CollectSchema and
+//     Explain what it would be;
+//   - the ROW COUNT, because the alternative is worse than an error (see below);
+//
+// Nullability is NOT among them, because expr.UDF.Field declares every UDF
+// nullable and offers no way to say otherwise — the one claim the engine cannot
+// verify is the one it does not accept. A check here would be unreachable, and an
+// unreachable guard reads as protection that is not there.
+//
+// The row-count check has to happen HERE and not at the operator boundary.
+// evalColumn reports a length mismatch as Internalf, which reads as an ursus bug
+// rather than a user's, and it SILENTLY BROADCASTS a length-1 result — sensible for
+// a literal, and for a UDF a bug being papered over.
+func evalUDF(ctx context.Context, u *expr.UDF, b *data.Batch) (*data.Column, error) {
+	in, err := Eval(ctx, u.Child, b)
+	if err != nil {
+		return nil, err
+	}
+
+	impl, ok := u.Impl.(kernel.ColumnUDF)
+	if !ok {
+		// The only way here is a UDF node built outside the public constructors,
+		// so it is an ursus bug rather than a user's.
+		return nil, uerr.Internalf("physical: udf %q has no kernel (%T)", u.Name, u.Impl)
+	}
+
+	out, err := impl(ctx, in, in.Name())
+	if err != nil {
+		return nil, err
+	}
+	if out == nil {
+		return nil, uerr.New(uerr.KindValue, u.Kind,
+			"udf %q returned no column", u.Name)
+	}
+
+	if out.DType() != u.Out {
+		return nil, uerr.New(uerr.KindType, u.Kind,
+			"udf %q declared %s but produced %s", u.Name, u.Out, out.DType()).
+			Hint("the declared output type is what CollectSchema and Explain " +
+				"already reported, so it cannot be corrected after the fact")
+	}
+	if out.Len() != in.Len() {
+		return nil, uerr.New(uerr.KindValue, u.Kind,
+			"udf %q produced %d rows for %d input rows", u.Name, out.Len(), in.Len()).
+			Hint("a UDF is elementwise: one output row per input row")
+	}
+	return out, nil
 }

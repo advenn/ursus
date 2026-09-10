@@ -341,6 +341,13 @@ func substitutable(p expr.Node, defs map[string]expr.Node, in *dtype.Schema, pas
 		switch t := x.(type) {
 		case *expr.Col:
 			if def, defined := defs[t.Name]; defined {
+				// Substituting a definition DUPLICATES it: the predicate gets a
+				// copy and the defining node keeps its own. A UDF must not be
+				// duplicated — see expr.HasUDF for why it can only ever lose.
+				if expr.HasUDF(def) {
+					ok = false
+					return t
+				}
 				return def
 			}
 			if passthrough && in.Has(t.Name) {
