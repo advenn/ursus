@@ -345,6 +345,58 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 		}
 		return t.WithChildren([]Node{child}), true, nil
 
+	case *Explode:
+		// The output names are the input's, one for one — Explode retypes in place
+		// — so the parent's set passes straight through. The exploded columns are
+		// added unconditionally: they set the row count, so they are read whether or
+		// not anyone selects them.
+		need := cloneSet(required)
+		for _, name := range t.Columns {
+			need[name] = struct{}{}
+		}
+		child, changed, err := pushdown(t.Input, need)
+		if err != nil {
+			return nil, false, err
+		}
+		if !changed {
+			return t, false, nil
+		}
+		return t.WithChildren([]Node{child}), true, nil
+
+	case *Unnest:
+		// The parent asks for FIELD names, which exist in no input schema — Unnest
+		// splices a struct's fields in place of the struct. So required is filtered
+		// against the input, exactly as the Window arm filters its own invented
+		// temporaries, and the unnested structs are added back unconditionally.
+		//
+		// The aggressive version — drop a struct whose fields nobody reads — needs a
+		// field-to-struct owner map, and is not worth it: the struct is named in the
+		// query, so the caller has already said they want it.
+		in, err := t.Input.Schema()
+		if err != nil {
+			return nil, false, err
+		}
+		need := make(map[string]struct{}, len(required))
+		for name := range required {
+			if in.IndexOf(name) >= 0 {
+				need[name] = struct{}{}
+			}
+		}
+		for _, name := range t.Columns {
+			need[name] = struct{}{}
+		}
+		child, changed, err := pushdown(t.Input, need)
+		if err != nil {
+			return nil, false, err
+		}
+		if !changed {
+			return t, false, nil
+		}
+		return t.WithChildren([]Node{child}), true, nil
+
+	case *Unpivot:
+		return pushdownUnpivot(t, required)
+
 	default:
 		// Conservative: require everything this node's children can produce, and
 		// keep descending so that a Scan further down still gets *some* pruning
@@ -446,6 +498,74 @@ func cloneSet(s map[string]struct{}) map[string]struct{} {
 // Resolution succeeds and then the schema does not — exactly defect P2's
 // signature. So a left column that CAUSES a suffix is kept alive even when nothing
 // reads it. In the common no-collision case the set is empty and costs nothing.
+// pushdownUnpivot narrows the input of a melt.
+//
+// On is always required in full and is never prunable: it sets the row count — k
+// output rows per input row — and the value column's type is the promotion of every
+// On field, so dropping one changes both the height and the schema.
+//
+// # The explicit and implicit Index cases are not the same, and the join's shape is
+// WRONG for the first
+//
+// pushdownJoin iterates the layout and keeps what `required` asks for. Doing that
+// here with an explicit Index prunes an index column nobody selected — and then
+// Schema() fails with `unknown index column`, because IndexColumns returns the named
+// list verbatim without consulting the input. Resolution succeeds and then the
+// schema does not, which is defect P2's signature one node over. So an explicit
+// Index is required in full: the node NAMES those columns, therefore it reads them.
+//
+// # Why the implicit case is safe, which is a proof rather than a hope
+//
+// With no Index the index columns are computed from the input schema, so narrowing
+// the input narrows the output. That is sound because every one of Schema()'s
+// failure modes is MONOTONE under pruning:
+//
+//	unknown index column   vacuous — the list IS the surviving columns
+//	unknown On column      On is kept in full, so unchanged
+//	both melted and kept   `seen` shrinks, so it fires strictly less often
+//	no common value type   On is kept in full, so unchanged
+//	duplicate output name  pruning removes names; a collision can only disappear
+//
+// The last line is the argument the RowIndex arm above already makes. And the
+// columns that disappear are exactly the ones `required` did not name, so nobody
+// can observe the difference — Apply seeds the root with "everything it currently
+// produces", which is what stops this narrowing the user's own output.
+//
+// The residual, stated because it is contractual rather than structural: everywhere
+// else in this rule an under-stated `required` fails loudly at a Scan. Here it would
+// fail at the Unpivot's own Schema().
+func pushdownUnpivot(u *Unpivot, required map[string]struct{}) (Node, bool, error) {
+	in, err := u.Input.Schema()
+	if err != nil {
+		return nil, false, err
+	}
+
+	need := make(map[string]struct{}, len(required))
+	for _, name := range u.On {
+		need[name] = struct{}{}
+	}
+	if len(u.Index) > 0 {
+		for _, name := range u.Index {
+			need[name] = struct{}{}
+		}
+	} else {
+		for _, name := range u.IndexColumns(in) {
+			if _, want := required[name]; want {
+				need[name] = struct{}{}
+			}
+		}
+	}
+
+	child, changed, err := pushdown(u.Input, need)
+	if err != nil {
+		return nil, false, err
+	}
+	if !changed {
+		return u, false, nil
+	}
+	return u.WithChildren([]Node{child}), true, nil
+}
+
 func pushdownJoin(j *Join, required map[string]struct{}) (Node, bool, error) {
 	layout, err := j.Layout()
 	if err != nil {

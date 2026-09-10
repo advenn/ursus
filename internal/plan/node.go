@@ -299,6 +299,28 @@ func Expressions(n Node) []expr.Node {
 		}
 		return out
 
+	case *Explode, *Unnest:
+		// Both name their columns as strings, which is Distinct.Subset's case: a
+		// liveness rule that only walks expressions cannot see them, and a scan
+		// below would prune the very column being exploded or unnested.
+		//
+		// They went without an arm from steps 30 and 35 until step 48, and it cost
+		// nothing only because neither had a projection-pushdown arm either — so
+		// the rule's fail-safe default kept every column alive. Teaching one to
+		// prune without the other is what would have made it a defect.
+		var names []string
+		switch t := n.(type) {
+		case *Explode:
+			names = t.Columns
+		case *Unnest:
+			names = t.Columns
+		}
+		out := make([]expr.Node, len(names))
+		for i, name := range names {
+			out[i] = &expr.Col{Name: name}
+		}
+		return out
+
 	case *Unpivot:
 		// On and Index are Distinct.Subset's problem exactly: column references in
 		// string form, invisible to a liveness rule that only walks expressions.

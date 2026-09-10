@@ -74,12 +74,5 @@ func (m *MergeSorted) Label() string { return "MERGE SORTED [" + m.Key + "]" }
 func (m *MergeSorted) childLabels() []string { return []string{"left", "right"} }
 
 // resolveMergeSorted checks the key exists and the schemas agree.
-func resolveMergeSorted(m *MergeSorted) (Node, error) {
-	if _, err := m.Schema(); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 // mergeKeyExpr is the key as an expression, for the liveness walk.
 func (m *MergeSorted) mergeKeyExpr() expr.Node { return &expr.Col{Name: m.Key} }

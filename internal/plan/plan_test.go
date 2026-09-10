@@ -43,6 +43,25 @@ func wide() *fakeSource {
 	}
 }
 
+// nested is wide() plus the two column shapes the reshaping nodes need. It exists
+// because those nodes were added to this test in step 48, and Resolve now calls
+// their Schema(), which refuses a column of the wrong kind.
+func nested() *fakeSource {
+	return &fakeSource{
+		schema: dtype.MustSchema(
+			dtype.NotNull("id", dtype.Int64),
+			dtype.Of("region", dtype.String),
+			dtype.Of("tags", dtype.List(dtype.String)),
+			dtype.Of("person", dtype.Struct(
+				dtype.Field{Name: "age", Type: dtype.Int64, Nullable: true},
+			)),
+			dtype.Of("jan", dtype.Int64),
+			dtype.Of("feb", dtype.Int64),
+		),
+		caps: plan.Caps{Projection: true},
+	}
+}
+
 func col(n string) expr.Node { return &expr.Col{Name: n} }
 func lit(v any, d dtype.DataType) expr.Node {
 	return &expr.Lit{Value: v, DT: d}
@@ -166,6 +185,32 @@ func TestPushdownSoundness(t *testing.T) {
 	flags.SimplifyExprs = false
 
 	plans := []plan.Node{
+		// The three reshaping nodes gained projection-pushdown arms in step 48, so
+		// they can now prune — and this test is what stops one of them pruning a
+		// column something above it reads. Before the arms they were covered by the
+		// rule's fail-safe default and could not be wrong; after them they can.
+		&plan.Project{
+			Input: &plan.Explode{
+				Input:   &plan.Scan{Src: nested()},
+				Columns: []string{"tags"},
+			},
+			Exprs: []expr.Node{col("id"), col("tags")},
+		},
+		&plan.Project{
+			Input: &plan.Unnest{
+				Input:   &plan.Scan{Src: nested()},
+				Columns: []string{"person"},
+			},
+			Exprs: []expr.Node{col("age")},
+		},
+		&plan.Project{
+			Input: &plan.Unpivot{
+				Input: &plan.Scan{Src: nested()},
+				On:    []string{"jan", "feb"},
+				Index: []string{"id"},
+			},
+			Exprs: []expr.Node{col("value")},
+		},
 		&plan.Project{
 			Input: &plan.Scan{Src: wide()},
 			Exprs: []expr.Node{col("id")},

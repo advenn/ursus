@@ -261,6 +261,9 @@ func TestHStack(t *testing.T) {
 	if err == nil {
 		t.Fatal("colliding column names must be refused")
 	}
+	if errors.Is(err, uerr.ErrInternal) {
+		t.Errorf("a user mistake reported as an ursus bug: %v", err)
+	}
 	if !strings.Contains(err.Error(), "appears in both") {
 		t.Errorf("error should name the collision: %v", err)
 	}

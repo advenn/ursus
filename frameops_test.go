@@ -140,6 +140,9 @@ func TestWithRowIndexRejectsACollision(t *testing.T) {
 	if err == nil {
 		t.Fatal("an index name that already exists must be refused")
 	}
+	if errors.Is(err, uerr.ErrInternal) {
+		t.Errorf("a user mistake reported as an ursus bug: %v", err)
+	}
 	if !strings.Contains(err.Error(), "already has a column") {
 		t.Errorf("error should name the collision: %v", err)
 	}

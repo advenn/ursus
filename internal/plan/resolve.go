@@ -54,17 +54,37 @@ func Resolve(ctx context.Context, n Node) (Node, error) {
 			return resolveSort(t)
 		case *Distinct:
 			return resolveDistinct(t)
-		case *Unpivot:
-			return resolveUnpivot(t)
 		case *Join:
 			return resolveJoin(t)
 		case *AsOfJoin:
 			return resolveAsOfJoin(t)
-		case *MergeSorted:
-			return resolveMergeSorted(t)
 		case *Union:
 			return resolveUnion(t)
 		default:
+			// Enforce this function's own postcondition — "the result is a plan on
+			// which Schema() is total and cheap" — rather than assuming it.
+			//
+			// # Why a node with no arm still needs this
+			//
+			// Several nodes put their whole validation in Schema(): Explode refuses
+			// a column that is not a List, Unnest one that is not a Struct,
+			// RowIndex a name that already exists, HStack a name in two frames. With
+			// no arm, nothing calls Schema() during Resolve, so the FIRST caller is
+			// a rule inside Optimizer.Run — which wraps every rule failure as
+			// KindInternal, whose doc reads "a bug in ursus. Users should never
+			// legitimately see one." A typo, announced as an ursus bug.
+			//
+			// resolveJoin's step 5 is the same move, written out per node. One line
+			// here covers the four above and every node added later, which is the
+			// difference between fixing a defect and fixing one instance of it.
+			//
+			// The cost is that Schema() recurses into its input, so calling it at
+			// every node of a bottom-up walk is quadratic in depth. Every arm above
+			// already does exactly that, so this is a constant factor on an existing
+			// shape rather than a new one, and plans are tens of nodes deep.
+			if _, err := x.Schema(); err != nil {
+				return nil, err
+			}
 			return x, nil
 		}
 	})
@@ -173,25 +193,6 @@ func resolveFilter(f *Filter) (Node, error) {
 	c := *f
 	c.Preds = preds
 	return &c, nil
-}
-
-// resolveUnpivot computes the node's schema and throws it away.
-//
-// That is the whole function, and it is resolveJoin's step 5 for the same reason:
-// every check Unpivot has — the names exist, On is non-empty, nothing is both
-// melted and kept, the value types promote, the invented names do not collide —
-// lives in Schema(), and without this the first caller of Schema() is a rule inside
-// Optimizer.Run, which wraps the failure as `rule %q failed`. A user who melted a
-// column that does not exist would be told an optimizer rule broke.
-//
-// Explode and Unnest have the same shape and no such arm, so they have the same
-// defect; fixing theirs is not this step's business, but it is worth knowing that
-// this is a pattern rather than a one-off.
-func resolveUnpivot(u *Unpivot) (Node, error) {
-	if _, err := u.Schema(); err != nil {
-		return nil, err
-	}
-	return u, nil
 }
 
 func resolveProject(p *Project) (Node, error) {

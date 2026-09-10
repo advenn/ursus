@@ -228,6 +228,9 @@ func TestUnnestRefusals(t *testing.T) {
 	if err == nil {
 		t.Fatal("a field colliding with an existing column must be refused")
 	}
+	if errors.Is(err, uerr.ErrInternal) {
+		t.Errorf("a user mistake reported as an ursus bug: %v", err)
+	}
 	if !errors.Is(err, uerr.ErrSchema) {
 		t.Errorf("kind should be Schema: %v", err)
 	}
