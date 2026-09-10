@@ -44,16 +44,23 @@ import (
 // spills inside Consume and merges inside Finish (see extsort.go), and Merge keeps
 // the meaning it actually has.
 //
-// Note also that the five implementations give the "LATER portion" clause five
-// different readings — append (sort), PREPEND (reverse, because reversal turns
-// later into earlier), remap-and-append (join), refuse-unless-identical (group_by),
-// refuse-always (window). That is a per-operator rule rather than a universal one,
-// and it is incompatible with a radix-partitioned aggregation, whose partials are
-// disjoint by hash rather than ordered by input position.
+// Note also that the SEVEN implementations give the "LATER portion" clause four
+// different readings — append (sort AND reverse), remap-and-append (join),
+// refuse-unless-identical (group_by), refuse-always (window, temporal group, as-of
+// build). That is a per-operator rule rather than a universal one, and it is
+// incompatible with a radix-partitioned aggregation, whose partials are disjoint by
+// hash rather than ordered by input position.
+//
+// This paragraph used to claim five implementations and a fifth reading — "PREPEND
+// (reverse, because reversal turns later into earlier)". Both were wrong.
+// reverseSink buffers untouched and reverses the whole concatenation in Finish, so
+// it appends for the same reason sortSink does; prepending merely put the
+// concatenation in the wrong order, and the count was never five.
 //
 // Nothing calls Merge concurrently yet, and it is implemented and tested anyway,
 // because a Merge written later against forgotten invariants is a Merge that is
-// wrong.
+// wrong. reverseSink is the proof: it went from step 16 to step 50 with no test at
+// all, and it was not merely unverified but WRONG.
 type Sink interface {
 	Schema() *dtype.Schema
 

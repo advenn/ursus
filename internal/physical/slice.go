@@ -187,11 +187,23 @@ func (s *reverseSink) Merge(other Sink) error {
 	if !ok {
 		return uerrInternal("reverseSink", other)
 	}
-	// `other` saw a LATER portion of the input, and reversal turns later into
-	// earlier — so it goes in FRONT. Appending, which is right for sortSink, would
-	// silently produce a partially-reversed frame.
-	s.rows = append(append([]*data.Batch(nil), o.rows...), s.rows...)
-	return nil
+	// APPEND, exactly as sortSink does, and for exactly sortSink's reason: both
+	// sinks buffer their input untouched and defer the order-changing work to
+	// Finish, which reverses the whole concatenation once. So the buffer must be
+	// left in INPUT order, and `other` saw a later portion of it.
+	//
+	// The tempting argument — "reversal turns later into earlier, so it goes in
+	// FRONT" — would hold only if Consume or Merge reversed each batch. Neither
+	// does, so prepending merely concatenates in the wrong order: two sinks over
+	// [1,2] and [3,4] then yield [2,1,4,3] where one sink yields [4,3,2,1].
+	//
+	// Retained, not copied, so the batches must be accounted here too. Merging
+	// without retaining is the defect joinBuildSink.Merge was fixed for.
+	s.rows = append(s.rows, o.rows...)
+	for _, b := range o.rows {
+		s.mem.Retain(b)
+	}
+	return s.mem.Check()
 }
 
 func (s *reverseSink) Finish(_ context.Context) (Operator, error) {

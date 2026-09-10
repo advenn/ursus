@@ -368,3 +368,123 @@ func TestHashAggSinkMergeDoesNotDuplicateKeyRows(t *testing.T) {
 			"them positionally with one aggregate row per group", rows, ids.Len())
 	}
 }
+
+// TestReverseSinkMergeEquivalence is the test reverseSink never had.
+//
+// It is the last of the four real Merges to get one, and it found the Merge
+// WRONG rather than merely unverified. The argument is the same one
+// TestSortSinkMergeEquivalence makes, and it applies for the same reason: both
+// sinks buffer their input untouched and defer the order-changing work to
+// Finish, so both Merges are a plain append.
+//
+// The comment that used to sit on reverseSink.Merge said the opposite — that
+// `other` saw a LATER portion and "reversal turns later into earlier — so it
+// goes in FRONT". That would be true only if Consume or Merge reversed each
+// batch. Neither does: Finish reverses the whole concatenation exactly once, so
+// prepending merely puts the concatenation in the wrong order.
+//
+//	one sink over [1,2] ++ [3,4]   buffer [[1,2],[3,4]]   Finish [4,3,2,1]
+//	a.Merge(b), prepending          buffer [[3,4],[1,2]]   Finish [2,1,4,3]
+func TestReverseSinkMergeEquivalence(t *testing.T) {
+	s := testSchema(t)
+	b1 := testBatch(t, s, []int64{1, 2}, []int64{10, 20})
+	b2 := testBatch(t, s, []int64{3, 4}, []int64{30, 40})
+
+	newSink := func() *reverseSink { return &reverseSink{schema: s} }
+
+	ctx := context.Background()
+	single := newSink()
+	for _, b := range []*data.Batch{b1, b2} {
+		if err := single.Consume(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wantOp, err := single.Finish(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := drain(t, wantOp)
+
+	a, bb := newSink(), newSink()
+	if err := a.Consume(ctx, b1); err != nil {
+		t.Fatal(err)
+	}
+	// `other` consumed the LATER portion, which is Merge's stated precondition.
+	if err := bb.Consume(ctx, b2); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Merge(bb); err != nil {
+		t.Fatal(err)
+	}
+	gotOp, err := a.Finish(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := drain(t, gotOp)
+
+	if totalRows(got) != totalRows(want) {
+		t.Fatalf("merged %d rows, single pass %d", totalRows(got), totalRows(want))
+	}
+	if renderAll(t, got) != renderAll(t, want) {
+		t.Errorf("merging changed the reversal\n got: %s\nwant: %s",
+			renderAll(t, got), renderAll(t, want))
+	}
+}
+
+// TestReverseSinkMergeIsAssociative. Two sinks cannot distinguish every wrong
+// ordering — a swap of two parts is invisible when there are only two and the
+// operation is its own inverse. parallelSink folds left-to-right
+// (sinks[0].Merge(sinks[1]), then .Merge(sinks[2])), so three is the smallest
+// case that pins the fold.
+func TestReverseSinkMergeIsAssociative(t *testing.T) {
+	s := testSchema(t)
+	parts := []*data.Batch{
+		testBatch(t, s, []int64{1}, []int64{10}),
+		testBatch(t, s, []int64{2}, []int64{20}),
+		testBatch(t, s, []int64{3}, []int64{30}),
+	}
+
+	ctx := context.Background()
+	single := &reverseSink{schema: s}
+	for _, b := range parts {
+		if err := single.Consume(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wantOp, err := single.Finish(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := drain(t, wantOp)
+
+	sinks := make([]*reverseSink, len(parts))
+	for i, b := range parts {
+		sinks[i] = &reverseSink{schema: s}
+		if err := sinks[i].Consume(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, o := range sinks[1:] {
+		if err := sinks[0].Merge(o); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gotOp, err := sinks[0].Finish(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := drain(t, gotOp); renderAll(t, got) != renderAll(t, want) {
+		t.Errorf("three-way fold disagrees with one sink\n got: %s\nwant: %s",
+			renderAll(t, got), renderAll(t, want))
+	}
+}
+
+// TestReverseSinkMergeRejectsOtherSinks covers the type-mismatch arm, which is
+// the only branch of Merge the equivalence tests never reach.
+func TestReverseSinkMergeRejectsOtherSinks(t *testing.T) {
+	s := testSchema(t)
+	r := &reverseSink{schema: s}
+	if err := r.Merge(&sortSink{schema: s}); err == nil {
+		t.Fatal("reverseSink merged a sortSink")
+	}
+}
