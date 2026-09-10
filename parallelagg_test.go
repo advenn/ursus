@@ -187,23 +187,51 @@ func TestParallelAggregationMatchesSerial(t *testing.T) {
 // with the right value — but the group ordering would differ run to run, turning a
 // deterministic output into a random one. One comparison cannot see that; repeated
 // runs can.
+//
+// # It was blind in two independent ways, and fixing one was not enough
+//
+// FIRST, the assertion. It was `got.String() != first.String()`, and
+// DataFrame.String renders `min(Height(), 10)` rows — so it compared the first ten
+// groups, twelve times. This repository has been bitten by that cap twice before;
+// join_test.go and parallel_test.go each carry a comment about it, and each fix
+// stopped at the line that had failed.
+//
+// SECOND, and worse, the FIXTURE could not produce the condition the property
+// depends on. aggSource has 97 keys in 4000 rows; eight sinks take about 512 rows
+// each, which is ample to see all 97. Every key is therefore already present when
+// Merge runs, GetOrInsert never inserts, and the visit order it is so careful about
+// cannot affect anything. Shuffling that loop changed no output at all.
+//
+// It takes MORE KEYS THAN ONE SINK CAN SEE for the merge to introduce a group —
+// 2000 keys over 4000 rows, so each sink holds at most ~512 of them. Then shuffling
+// the visit order does reorder the output, and it first differs at ROW 352: past the
+// ten String() renders, which is how the two defects hid behind each other.
+//
+// Row order is checked by default, which is the entire point here.
 func TestParallelAggregationIsDeterministic(t *testing.T) {
+	src := aggSourceN(t, 4000, 128, 2000)
 	q := func() *ursus.LazyFrame {
-		return ursus.Scan(aggSource(t)).GroupBy(ursus.Col("k")).Agg(ursus.Col("v").Sum().Alias("s"))
+		return ursus.Scan(src).GroupBy(ursus.Col("k")).Agg(ursus.Col("v").Sum().Alias("s"))
 	}
 	first, err := q().Collect(t.Context(), parallel(8)...)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := range 12 {
+	// Anti-vacuity, and not decorative: with too few keys every sink sees every
+	// key, the merge inserts nothing, and this test silently stops testing. The
+	// quantity that matters is keys against one SINK's share of the rows.
+	if perSink := 4000 / 8; first.Height() < perSink {
+		t.Fatalf("the fixture has %d groups, fewer than one sink's %d rows — so "+
+			"every sink sees every key, Merge never inserts one, and the ordering "+
+			"this test is named for cannot vary", first.Height(), perSink)
+	}
+
+	for range 12 {
 		got, err := q().Collect(t.Context(), parallel(8)...)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.String() != first.String() {
-			t.Fatalf("run %d produced a different group order:\n%s\nfirst:\n%s",
-				i, got.String(), first.String())
-		}
+		ursustest.AssertFrameEqual(t, got, first, ursustest.CheckNullability())
 	}
 }
 
@@ -449,5 +477,129 @@ func TestNUniqueMergeRemapsGroups(t *testing.T) {
 			t.Fatalf("threads=%d: %v", n, err)
 		}
 		ursustest.AssertFrameEqual(t, got, want)
+	}
+}
+
+// TestParallelBooleanAggregatesMatchSerial reaches extremumBool.Merge, which had
+// ZERO coverage — measured with cross-package attribution, so not an artifact —
+// while being reachable on every parallel group-by by default.
+//
+// It is not order-dependent, so aggWorkers does not gate it, and threads default to
+// runtime.NumCPU(). The reason nothing reached it is the FIXTURE: aggSourceN has
+// k(Int64), g(String), v(Float64), w(Int64) and no Bool column at all, and
+// TestParallelAggregationMatchesSerial scopes itself to "every aggregate family the
+// h2o benchmark exercises" — h2o has no boolean aggregate.
+//
+// That is exactly the configuration reverseSink.Merge sat in for thirty-four steps:
+// reachable in production, non-trivial, never executed. Here the answer is the happy
+// one — the merge is correct — but it was unverified rather than verified, and those
+// look identical from the outside.
+//
+// Deriving the Bool columns with WithColumns rather than widening the shared fixture
+// keeps every other test in this file on the data it was written for.
+func TestParallelBooleanAggregatesMatchSerial(t *testing.T) {
+	src := aggSource(t)
+
+	// Two derived predicates, chosen so every asserted column VARIES across the 97
+	// groups. The first draft of this test used `v > 0.5` for everything, and four
+	// of its five subtests were vacuous: Any was true for every group, so an OR
+	// fold and an AND fold agreed and the case proved nothing. The anti-vacuity
+	// assertion below found that immediately, which is why it is here.
+	//
+	//	mostly = v > 0.5   true for ~99.6% of rows, so a group is all-true unless
+	//	                   it contains one of the rare small values — which makes
+	//	                   AllTrue and Min vary.
+	//	rare   = v < 1.0   true for ~0.7% of rows, so most groups contain none —
+	//	                   which makes Any and Max vary.
+	//
+	// Asserting Any on `mostly`, or AllTrue on `rare`, yields a constant column and
+	// is precisely the mistake the first draft made.
+	for _, c := range []struct {
+		name string
+		agg  func() []ursus.Expr
+	}{
+		{"any over a rare predicate", func() []ursus.Expr {
+			return []ursus.Expr{ursus.Col("rare").Any().Alias("a")}
+		}},
+		{"all_true over a common predicate", func() []ursus.Expr {
+			return []ursus.Expr{ursus.Col("mostly").AllTrue().Alias("t")}
+		}},
+		{"min and max over Bool", func() []ursus.Expr {
+			// Min saturates at false like AllTrue, Max at true like Any, so each
+			// needs the predicate whose fold it mirrors.
+			return []ursus.Expr{
+				ursus.Col("mostly").Min().Alias("lo"),
+				ursus.Col("rare").Max().Alias("hi")}
+		}},
+		{"any and all together", func() []ursus.Expr {
+			return []ursus.Expr{
+				ursus.Col("rare").Any().Alias("a"),
+				ursus.Col("mostly").AllTrue().Alias("t")}
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			q := func() *ursus.LazyFrame {
+				return ursus.Scan(src).
+					WithColumns(
+						ursus.Col("v").Gt(0.5).Alias("mostly"),
+						ursus.Col("v").Lt(1.0).Alias("rare")).
+					GroupBy(ursus.Col("k")).Agg(c.agg()...).
+					Sort(ursus.Asc(ursus.Col("k")))
+			}
+
+			want, err := q().Collect(t.Context(), serial()...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// 97 groups, so this must not go through String(), which renders ten.
+			if want.Height() != 97 {
+				t.Fatalf("fixture has %d groups, want 97", want.Height())
+			}
+			assertBothValuesPresent(t, want)
+
+			for _, threads := range []int{2, 4, 8} {
+				got, err := q().Collect(t.Context(), parallel(threads)...)
+				if err != nil {
+					t.Fatalf("threads=%d: %v", threads, err)
+				}
+				ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
+			}
+		})
+	}
+}
+
+// assertBothValuesPresent fails when a Bool column is constant over every group.
+//
+// A boolean aggregate that comes out constant cannot distinguish an OR fold from an
+// AND one: both agree when every partial holds the same value. Without this the
+// subtest passes whatever Merge does — which is the failure mode this whole step
+// exists to remove, and which it caught in this test's own first draft.
+//
+// Same shape as TestPushdownSoundness's vacuity counter and weakfit_test's "too few
+// for the agreement to mean anything".
+func assertBothValuesPresent(t *testing.T, df *ursus.DataFrame) {
+	t.Helper()
+	for _, f := range df.Schema().All() {
+		if f.Type != ursus.Bool {
+			continue
+		}
+		var sawTrue, sawFalse bool
+		for i := range df.Height() {
+			v, ok, err := df.At[bool](i, f.Name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				continue
+			}
+			sawTrue = sawTrue || v
+			sawFalse = sawFalse || !v
+		}
+		if !sawTrue || !sawFalse {
+			t.Errorf("column %q is constant across all %d groups (sawTrue=%v "+
+				"sawFalse=%v) — an OR fold and an AND fold agree on constant "+
+				"input, so this case cannot test the merge",
+				f.Name, df.Height(), sawTrue, sawFalse)
+		}
 	}
 }

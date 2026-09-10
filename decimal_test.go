@@ -112,7 +112,7 @@ func TestDecimalSortsAndFilters(t *testing.T) {
 	}
 }
 
-// TestDecimalGroupsAndAggregatesPositionally: Min, Max, First, Last, Count and
+// TestDecimalMinMaxAndCount: Min, Max, First, Last, Count and
 // NUnique all work, because they select or count rather than compute — the value
 // they carry keeps its own scale.
 func TestDecimalMinMaxAndCount(t *testing.T) {

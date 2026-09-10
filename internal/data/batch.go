@@ -75,32 +75,51 @@ func checkNonNullable(schema *dtype.Schema, cols []*Column) error {
 	return nil
 }
 
-func NewBatch(schema *dtype.Schema, cols []*Column) (*Batch, error) {
+// checkShape is the four structural checks: column count, per-column name, per-
+// column type, and equal lengths. It returns the row count it derived.
+//
+// It exists as a function rather than inline in NewBatch because NewBatchRows needs
+// exactly the same checks and used to perform NONE of them. Six operators build
+// populated batches through that constructor, so leaving the checks here would keep
+// a third of the engine unvalidated — the argument step 49 made for the nullability
+// check and did not apply to the other four.
+func checkShape(schema *dtype.Schema, cols []*Column) (int, error) {
 	if schema.Len() != len(cols) {
-		return nil, uerr.Internalf("data: batch has %d columns but schema has %d",
+		return 0, uerr.Internalf("data: batch has %d columns but schema has %d",
 			len(cols), schema.Len())
 	}
 	rows := -1
 	for i, c := range cols {
 		f := schema.Field(i)
+		if c == nil {
+			return 0, uerr.Internalf("data: batch column %d (%q) is nil", i, f.Name)
+		}
 		if c.Name() != f.Name {
-			return nil, uerr.Internalf("data: batch column %d is named %q, schema says %q",
+			return 0, uerr.Internalf("data: batch column %d is named %q, schema says %q",
 				i, c.Name(), f.Name)
 		}
 		if c.DType() != f.Type {
-			return nil, uerr.Internalf("data: batch column %q is %s, schema says %s",
+			return 0, uerr.Internalf("data: batch column %q is %s, schema says %s",
 				c.Name(), c.DType(), f.Type)
 		}
 		if rows == -1 {
 			rows = c.Len()
 		} else if c.Len() != rows {
-			return nil, uerr.Internalf(
+			return 0, uerr.Internalf(
 				"data: batch column %q has %d rows, but column %q has %d",
 				c.Name(), c.Len(), cols[0].Name(), rows)
 		}
 	}
 	if rows == -1 {
 		rows = 0
+	}
+	return rows, nil
+}
+
+func NewBatch(schema *dtype.Schema, cols []*Column) (*Batch, error) {
+	rows, err := checkShape(schema, cols)
+	if err != nil {
+		return nil, err
 	}
 	if CheckNonNullable {
 		if err := checkNonNullable(schema, cols); err != nil {
@@ -114,17 +133,37 @@ func NewBatch(schema *dtype.Schema, cols []*Column) (*Batch, error) {
 //
 // It exists for the zero-column case — a frame can legitimately have rows but no
 // columns after `Select()` with nothing — but six operators also use it with
-// populated columns, because it is the constructor that takes a row count. Those
-// six therefore skip the four checks NewBatch performs, which is worth knowing:
-// explode, unnest, unpivot, hstack, the nothing-selected filter path and the
-// concat-of-zero-batches path are all unvalidated on names and types.
+// populated columns, because it is the constructor that takes a row count: explode,
+// unnest, unpivot, hstack, the nothing-selected filter path and the concat-of-zero-
+// batches path.
 //
-// The nullability check is applied here anyway, because leaving it out would make
-// the instrument blind to a third of the engine and blind in exactly the newest
-// operators. It PANICS rather than returning an error because this signature has no
-// error to return and an invariant violation is not a condition a caller can
-// handle — and because it only ever runs when CheckNonNullable is on.
+// # It now runs every check NewBatch runs
+//
+// It used to run NONE of the four structural ones. Step 49 extended the nullability
+// check into it with the argument that a check living only in NewBatch "would be
+// blind to a third of the engine and blind in exactly the newest operators" — and
+// that argument applies verbatim to name, type, column count and row length, which
+// were left behind. So all five run here now.
+//
+// It PANICS rather than returning an error because this signature has no error to
+// return, and a batch whose columns disagree with its schema is an invariant
+// violation rather than a condition a caller can handle. Every one of these is an
+// Internalf: they are unreachable from any user input.
+//
+// The explicit row count is still honoured rather than re-derived, because the
+// zero-column case is the whole reason this constructor exists — checkShape reports
+// 0 for it, and a frame with rows and no columns must keep its height.
 func NewBatchRows(schema *dtype.Schema, cols []*Column, rows int) *Batch {
+	if len(cols) > 0 {
+		derived, err := checkShape(schema, cols)
+		if err != nil {
+			panic(err)
+		}
+		if derived != rows {
+			panic(uerr.Internalf(
+				"data: batch declares %d rows but its columns hold %d", rows, derived))
+		}
+	}
 	if CheckNonNullable {
 		if err := checkNonNullable(schema, cols); err != nil {
 			panic(err)

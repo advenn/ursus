@@ -139,7 +139,7 @@ func TestConcatPromotesTypes(t *testing.T) {
 	}
 }
 
-// TestConcatDiagonal: the union of the columns, with nulls in the gaps.
+// TestConcatDiagonalColumnOrder: the union of the columns, with nulls in the gaps.
 //
 // Column order is FIRST APPEARANCE across the inputs. Anything derived from map
 // iteration would make the same query produce a different schema between runs,

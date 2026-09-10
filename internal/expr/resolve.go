@@ -113,6 +113,24 @@ func resolveArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 			Hint("cast to Float64 first if approximate arithmetic is acceptable")
 	}
 
+	// Int128 is the same trap one type over, and it was live: Int64 * Uint64
+	// promotes to Int128 because neither can hold the other's range, but arithI128
+	// implements ONLY add and sub. Field therefore promised Int128 and Eval refused
+	// with "operator * is not implemented for Int128" — a refusal that CollectSchema
+	// and Explain do not see, so a plan printed cleanly and then would not run.
+	//
+	// Step 49's own comment in op.go asserted "resolveArithmetic refuses the rest
+	// before that". It did not. TestEvaluatorContract is what found it, on the first
+	// run after the test the docs had promised for dozens of steps was finally
+	// written.
+	if common.ID() == dtype.TypeInt128 && op != OpAdd && op != OpSub &&
+		op != OpDiv && op != OpPow {
+		return Binding{}, uerr.New(uerr.KindType, "",
+			"operator %s is not implemented for %s", op, common).
+			Hint("%s and %s promote to Int128, where only + and - are implemented", l, r).
+			Hint("cast to Int64 or Float64 first")
+	}
+
 	switch op {
 	case OpDiv, OpPow:
 		// True division always produces a float, even for two integers. 7/2 == 3.5.
@@ -200,7 +218,20 @@ func resolveTemporalArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error
 	// Casting to Int64 makes it a truncating scale: 90m * 1.5 is 135m, but
 	// 1ns * 2.5 is 2ns. That is the honest reading of an integer tick count, and it
 	// is what the output type already promised.
-	case (op == OpMul || op == OpDiv || op == OpFloorDiv) && isDur(l) && r.IsNumeric():
+	// OpDiv is deliberately NOT here. A duration is an integer tick count, so
+	// dividing one by a number is truncating — and this file's own rule for that is
+	// "integer-truncating division is spelled FloorDiv, so the surprising behaviour
+	// has to be asked for by name". Binding it to Out: Duration sent it to arithNum,
+	// which implements no integer OpDiv, so Field promised a Duration and Eval
+	// refused with "operator / is not implemented for Duration(ns)". Refusing here
+	// says the same thing at plan time, where Explain can see it.
+	case op == OpDiv && isDur(l) && r.IsNumeric():
+		return Binding{}, uerr.New(uerr.KindType, "",
+			"operator / is not defined for %s and %s", l, r).
+			Hint("dividing a duration by a number truncates; spell it FloorDiv").
+			Hint("or cast the duration to Float64 for an approximate result")
+
+	case (op == OpMul || op == OpFloorDiv) && isDur(l) && r.IsNumeric():
 		if err := integralScale(op, l, r); err != nil {
 			return Binding{}, err
 		}
@@ -211,10 +242,27 @@ func resolveTemporalArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error
 		}
 		return Binding{CastL: dtype.Int64, CastR: r, Out: r}, nil
 
-	// duration / duration → a dimensionless ratio
+	// duration / duration → a dimensionless ratio, SAME UNIT ONLY.
+	//
+	// The operands are cast to Float64, because kernel.arithmetic dispatches on
+	// Out.Physical() and that is Float64 here — binding them as Duration handed
+	// Int64 storage to a float kernel, and Field promised a Float64 the evaluator
+	// could not produce.
+	//
+	// A mixed-unit pair is REFUSED rather than converted, and the reason is that a
+	// Binding carries one cast per side. Getting 1s / 1000000000ns to equal 1 needs
+	// two: retime to the finer unit, then widen to float. Doing only the second —
+	// which is what "cast both to Float64" means — divides 1.0 by 1e9 and returns
+	// 1e-09. That was measured, not assumed: it is what this arm did before the
+	// refusal was added, and a wrong ratio is worse than the type error it replaced.
 	case op == OpDiv && isDur(l) && isDur(r):
-		u := dtype.Duration(finerUnit(l, r))
-		return Binding{CastL: u, CastR: u, Out: dtype.Float64}, nil
+		if l.TimeUnit() != r.TimeUnit() {
+			return Binding{}, uerr.New(uerr.KindType, "",
+				"operator / is not defined for %s and %s", l, r).
+				Hint("a ratio of durations needs both sides at the same resolution").
+				Hint("cast one explicitly, e.g. .Cast(ursus.Duration(ursus.Nano))")
+		}
+		return Binding{CastL: dtype.Float64, CastR: dtype.Float64, Out: dtype.Float64}, nil
 
 	default:
 		e := uerr.New(uerr.KindType, "",

@@ -91,7 +91,7 @@ func TestMeanOfAllNullIsNullNotNaN(t *testing.T) {
 	}
 }
 
-// TestMinIgnoresNullsWithoutZeroFilling is the regression test for the identity
+// TestMinMaxSkipNulls is the regression test for the identity
 // trap the step-1 docs record: a SIMD implementation using Masked would zero-fill
 // the null lanes and make Min([3,null,5]) return 0.
 func TestMinMaxSkipNulls(t *testing.T) {

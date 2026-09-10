@@ -445,7 +445,7 @@ func TestParquetMultipleFiles(t *testing.T) {
 func TestParquetRefusesUnsupported(t *testing.T) {
 	// Writing an unsupported type is the reachable half; a nested or oddly-encoded
 	// FILE needs a writer ursus does not have, and the refusal for those lives in
-	// toDataType, covered by TestParquetTypeRefusals in the parquet package.
+	// toDataType, covered by TestTypeRefusals in the parquet package.
 	//
 	// The type here is Duration, which has no Parquet logical type at all —
 	// arrow-go's IntervalLogicalType.toThrift panics — rather than Datetime, which

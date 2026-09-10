@@ -121,3 +121,68 @@ func TestNonNullableCheckIsOffByDefault(t *testing.T) {
 		t.Errorf("with the toggle off the check must not run: %v", err)
 	}
 }
+
+// TestNewBatchRowsRunsEveryCheck. NewBatchRows used to run NONE of NewBatch's four
+// structural checks, and step 49 added only the fifth.
+//
+// The argument step 49 made for the nullability check — that a check living only in
+// NewBatch "would be blind to a third of the engine and blind in exactly the newest
+// operators" — applies verbatim to the other four, because the same six operators
+// build populated batches through this constructor. It PANICS because the signature
+// has no error to return.
+func TestNewBatchRowsRunsEveryCheck(t *testing.T) {
+	schema := dtype.MustSchema(
+		dtype.Of("a", dtype.Int64),
+		dtype.Of("b", dtype.Int64),
+	)
+	col := func(name string, dt dtype.DataType, n int) *data.Column {
+		vals := make([]int64, n)
+		return data.NewFixed(name, dt, vals, bitmap.AllSet(n))
+	}
+
+	for _, tc := range []struct {
+		name string
+		cols []*data.Column
+		rows int
+		want string
+	}{
+		{"wrong column count", []*data.Column{col("a", dtype.Int64, 2)}, 2,
+			"1 columns but schema has 2"},
+		{"wrong name", []*data.Column{
+			col("a", dtype.Int64, 2), col("nope", dtype.Int64, 2)}, 2, `named "nope"`},
+		{"wrong type", []*data.Column{
+			col("a", dtype.Int64, 2), col("b", dtype.Int32, 2)}, 2, "schema says Int64"},
+		{"ragged lengths", []*data.Column{
+			col("a", dtype.Int64, 2), col("b", dtype.Int64, 3)}, 2, "has 3 rows"},
+		{"row count disagrees with the columns", []*data.Column{
+			col("a", dtype.Int64, 2), col("b", dtype.Int64, 2)}, 7,
+			"declares 7 rows but its columns hold 2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("NewBatchRows accepted a malformed batch")
+				}
+				err, ok := r.(error)
+				if !ok || !strings.Contains(err.Error(), tc.want) {
+					t.Errorf("panic should mention %q, got %v", tc.want, r)
+				}
+			}()
+			data.NewBatchRows(schema, tc.cols, tc.rows)
+		})
+	}
+}
+
+// TestNewBatchRowsKeepsTheZeroColumnCase is why the checks are gated on len(cols).
+//
+// The constructor exists for "a frame can legitimately have rows but no columns
+// after Select() with nothing" — checkShape reports 0 rows for an empty column list,
+// so deriving the height there would erase exactly the case it was written for.
+func TestNewBatchRowsKeepsTheZeroColumnCase(t *testing.T) {
+	schema := dtype.MustSchema()
+	b := data.NewBatchRows(schema, nil, 5)
+	if b.Rows() != 5 {
+		t.Errorf("a zero-column batch kept %d rows, want 5", b.Rows())
+	}
+}
