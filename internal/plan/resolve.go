@@ -54,6 +54,8 @@ func Resolve(ctx context.Context, n Node) (Node, error) {
 			return resolveSort(t)
 		case *Distinct:
 			return resolveDistinct(t)
+		case *Unpivot:
+			return resolveUnpivot(t)
 		case *Join:
 			return resolveJoin(t)
 		case *AsOfJoin:
@@ -171,6 +173,25 @@ func resolveFilter(f *Filter) (Node, error) {
 	c := *f
 	c.Preds = preds
 	return &c, nil
+}
+
+// resolveUnpivot computes the node's schema and throws it away.
+//
+// That is the whole function, and it is resolveJoin's step 5 for the same reason:
+// every check Unpivot has — the names exist, On is non-empty, nothing is both
+// melted and kept, the value types promote, the invented names do not collide —
+// lives in Schema(), and without this the first caller of Schema() is a rule inside
+// Optimizer.Run, which wraps the failure as `rule %q failed`. A user who melted a
+// column that does not exist would be told an optimizer rule broke.
+//
+// Explode and Unnest have the same shape and no such arm, so they have the same
+// defect; fixing theirs is not this step's business, but it is worth knowing that
+// this is a pattern rather than a one-off.
+func resolveUnpivot(u *Unpivot) (Node, error) {
+	if _, err := u.Schema(); err != nil {
+		return nil, err
+	}
+	return u, nil
 }
 
 func resolveProject(p *Project) (Node, error) {

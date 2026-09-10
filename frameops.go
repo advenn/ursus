@@ -221,6 +221,72 @@ func (lf *LazyFrame) Unnest(names ...string) *LazyFrame {
 	return lf.derive(&plan.Unnest{Input: lf.node, Columns: names})
 }
 
+// UnpivotOptions configures Unpivot.
+//
+// On is required; everything else has a working default, so the common call is
+// UnpivotOptions{On: []string{...}}.
+type UnpivotOptions struct {
+	// On names the value columns to melt into the variable/value pair.
+	On []string
+
+	// Index names the columns carried through unchanged. Empty means every column
+	// that is not in On.
+	Index []string
+
+	// VariableName and ValueName name the two invented columns. Empty means
+	// "variable" and "value", which are Polars' names.
+	VariableName string
+	ValueName    string
+}
+
+// Unpivot turns several value columns into two: which column, and what it held.
+//
+//	sales.Unpivot(ursus.UnpivotOptions{On: []string{"jan", "feb"}})
+//
+//	id  jan  feb            id  variable  value
+//	1   10   20     ->      1   jan       10
+//	2   30   40             1   feb       20
+//	                        2   jan       30
+//	                        2   feb       40
+//
+// Known elsewhere as melt. Every melted column shares one value column, so their
+// types must promote to a common one — an Int32 beside an Int64 gives an Int64, and
+// two types with no common one is an error naming both.
+//
+// # The row order is not Polars'
+//
+// Polars emits every row's first variable, then every row's second. This emits
+// every variable for one row, then the next row.
+//
+// The reason is that ursus streams: unpivot transforms one batch at a time, so
+// Polars' order would interleave differently at different batch sizes — the row
+// order would depend on how the query ran rather than on what it asked for. Sort
+// afterwards if a particular order matters.
+//
+// # Index defaults; On does not
+//
+// Leaving Index empty keeps every column that is not melted, so adding a column to
+// the source keeps it. Unnest refuses the equivalent default for the opposite
+// reason: there, a new column would silently start being CONSUMED.
+func (lf *LazyFrame) Unpivot(opts UnpivotOptions) *LazyFrame {
+	if lf.err != nil {
+		return lf
+	}
+	if len(opts.On) == 0 {
+		return &LazyFrame{err: uerr.New(uerr.KindValue, "unpivot",
+			"unpivot needs at least one column to melt").
+			Hint("On names the columns that become variable/value pairs").
+			Hint("Index may be left empty; it defaults to everything else")}
+	}
+	return lf.derive(&plan.Unpivot{
+		Input:        lf.node,
+		On:           opts.On,
+		Index:        opts.Index,
+		VariableName: opts.VariableName,
+		ValueName:    opts.ValueName,
+	})
+}
+
 // Tail keeps the last n rows.
 //
 // Unlike Head it cannot stream to completion: which rows are the last n is unknown

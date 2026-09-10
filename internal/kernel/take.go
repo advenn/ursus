@@ -373,6 +373,26 @@ func Concat(schema *dtype.Schema, batches []*data.Batch) (*data.Batch, error) {
 	return data.NewBatch(schema, cols)
 }
 
+// ConcatColumns stacks columns of the same type end to end.
+//
+// Concat's per-COLUMN half, exported because unpivot needs exactly this and nothing
+// else: it has k columns to lay end to end and no batches to build them from. The
+// name is the caller's, because the parts' names are the ones being melted away.
+func ConcatColumns(name string, parts []*data.Column) (*data.Column, error) {
+	if len(parts) == 0 {
+		return nil, uerr.Internalf("kernel: ConcatColumns of nothing")
+	}
+	total := 0
+	for _, p := range parts {
+		total += p.Len()
+	}
+	c, err := concatColumn(parts, total)
+	if err != nil {
+		return nil, err
+	}
+	return c.Rename(name), nil
+}
+
 func concatColumn(parts []*data.Column, total int) (*data.Column, error) {
 	first := parts[0]
 

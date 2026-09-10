@@ -356,6 +356,9 @@ func Plan(ctx context.Context, n plan.Node, opts Options) (Operator, error) {
 	case *plan.Explode:
 		return planExplode(ctx, t, opts)
 
+	case *plan.Unpivot:
+		return planUnpivot(ctx, t, opts)
+
 	case *plan.Unnest:
 		return planUnnest(ctx, t, opts)
 

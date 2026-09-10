@@ -298,6 +298,23 @@ func Expressions(n Node) []expr.Node {
 			out[i] = &expr.Col{Name: name}
 		}
 		return out
+
+	case *Unpivot:
+		// On and Index are Distinct.Subset's problem exactly: column references in
+		// string form, invisible to a liveness rule that only walks expressions.
+		//
+		// Index is deliberately NOT expanded to its default here. An empty Index
+		// means "everything else", so there is nothing this could name that the
+		// input does not already have to keep — and naming the input's whole schema
+		// would defeat the pushdown it is meant to inform.
+		out := make([]expr.Node, 0, len(t.On)+len(t.Index))
+		for _, name := range t.On {
+			out = append(out, &expr.Col{Name: name})
+		}
+		for _, name := range t.Index {
+			out = append(out, &expr.Col{Name: name})
+		}
+		return out
 	case *Window:
 		// The arm that was missing, and its absence made a SAFETY TEST VACUOUS:
 		// plan_test walks the tree asserting no scan prunes a column read above it,

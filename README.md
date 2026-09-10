@@ -94,7 +94,7 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 | **Sources**     | Parquet and CSV (read and write), in-memory frames                                                                                                |
 | **Types**       | Bool, Int8–64, Uint8–64, Float32/64, String, Binary, Date, Time, Datetime (unit + zone), Duration, Decimal (128-bit), Enum                        |
 | **Expressions** | arithmetic, comparison, Kleene three-valued logic, conditionals, casts, null repair, `.str` (incl. `Split` → List) and `.dt` namespaces, 20 aggregates including `Implode`, window functions |
-| **Frame ops**   | filter, select, with-columns, sort, top-k, distinct, concat/vstack/hstack, slice/tail/reverse/row-index, drop/rename/drop-nulls                   |
+| **Frame ops**   | filter, select, with-columns, sort, top-k, distinct, concat/vstack/hstack, slice/tail/reverse/row-index, drop/rename/drop-nulls, unpivot                   |
 | **Joins**       | all seven equi-join kinds with `Validate`, `JoinWhere` and `WhereExists`/`WhereNotExists` (non-equi), as-of join with tolerance and `by` keys, merge-sorted                          |
 | **Grouping**    | group-by, `GroupByDynamic`, `Rolling`, calendar-aware intervals                                                                                   |
 | **Optimizer**   | predicate pushdown (including through joins), projection pushdown, limit/top-k pushdown, cross-join collapse, constant folding and simplification |
@@ -104,7 +104,8 @@ Nested types are partly there: **List and Struct read from Parquet**, with
 `Explode`, `Unnest`, a `.list` namespace and `.struct.field()`. Map and Array are not, and nested columns cannot yet be
 written.
 
-Not done: common subexpression elimination, SQL, pivot/unpivot, and the long tail of
+Not done: common subexpression elimination, SQL, `Pivot` — whose output columns are the distinct values of a
+column, so its schema would depend on data and no plan node here does; `Unpivot` (melt) ships — and the long tail of
 `Expr.Rolling*`, `Upsample`, `Interpolate`
 and the trigonometric block.
 
@@ -121,7 +122,7 @@ make race       # the whole suite under -race
 make levels     # import-level invariants
 ```
 
-**1386 test cases**, and the matrix is not decoration. Vector width is a *runtime*
+**1610 test cases**, and the matrix is not decoration. Vector width is a *runtime*
 property, so a single-width run proves very little: 512-bit gives 8 float64 lanes, which happens to be exactly one
 bitmap byte — a coincidence that hides an entire class of sub-byte bitmap bug. The 128-bit leg is where those surface.
 

@@ -1,0 +1,3 @@
+UNPIVOT jan, feb index id into month/sales
+  MEMORY SCAN 1 rows
+    projection: [id, region, jan, feb] (4/4 cols)

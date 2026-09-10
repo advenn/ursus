@@ -84,6 +84,24 @@ func TestGoldenJoinWherePlan(t *testing.T) {
 	ursustest.AssertPlan(t, lf, "testdata/plans/join_where.txt")
 }
 
+// TestGoldenUnpivotPlan snapshots the node's rendering, which is the only place a
+// reader can see which columns are melted, which are kept, and what the two
+// invented columns are called.
+func TestGoldenUnpivotPlan(t *testing.T) {
+	lf := ursus.Frame(
+		ursus.Values("id", []int64{1}),
+		ursus.Values("region", []string{"eu"}),
+		ursus.Values("jan", []int64{10}),
+		ursus.Values("feb", []int64{20}),
+	).Unpivot(ursus.UnpivotOptions{
+		On:           []string{"jan", "feb"},
+		Index:        []string{"id"},
+		VariableName: "month",
+		ValueName:    "sales",
+	})
+	ursustest.AssertPlan(t, lf, "testdata/plans/unpivot.txt")
+}
+
 // TestGoldenWhereExistsPlan snapshots the residual semi join. The raw plan carries
 // every predicate inside the join; the optimized one has the equality as a key and
 // the rest still inside. That split is the only place a user can see whether their
