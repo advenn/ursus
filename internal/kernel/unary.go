@@ -398,7 +398,7 @@ func Cast(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Co
 		if fn == tn {
 			return c.Rename(name).WithDType(to), nil
 		}
-		return rescaleTemporal(name, to, c, fn, tn)
+		return rescaleTemporal(name, to, c, fn, tn, strict)
 
 	case (fok || tok) && from.Physical() == to.Physical():
 		// The tick-count escape hatch: Int64 <-> Datetime(u), Int32 <-> Date. The
@@ -816,7 +816,22 @@ func convUint[T data.Primitive](c *data.Column, out []uint64) ([]uint64, error) 
 // 3.2e10, which times 1e9 exceeds int64. Overflow produces a NULL rather than a
 // wrapped instant, because a wrapped timestamp is a plausible-looking wrong answer
 // and a null is not.
-func rescaleTemporal(name string, to dtype.DataType, c *data.Column, fromNanos, toNanos int64) (*data.Column, error) {
+//
+// # Strict, which this ignored until step 49
+//
+// The four other lossy paths in this file — narrow, both castI128 arms and
+// parseFromString — all refuse under strict and name the offending row, and Cast's
+// own doc states the contract as a fact about the kernel: "Strict casts fail the
+// query and name the offending row." This one took no strict parameter at all, so
+// Cast.Field's `Nullable: cf.Nullable || !c.Strict` declared a strict widening cast
+// non-nullable and the kernel then handed it nulls.
+//
+// It matters beyond a user-written Cast: evalBinary casts operands to the binding
+// with strict=true, and three arms of the temporal algebra widen — `Datetime(s) -
+// Datetime(ns)` retimes the seconds column to nanoseconds — so an ordinary
+// subtraction over two non-nullable columns could produce nulls with no cast
+// anywhere in the query to explain them.
+func rescaleTemporal(name string, to dtype.DataType, c *data.Column, fromNanos, toNanos int64, strict bool) (*data.Column, error) {
 	src, err := readTicks(c)
 	if err != nil {
 		return nil, err
@@ -833,6 +848,13 @@ func rescaleTemporal(name string, to dtype.DataType, c *data.Column, fromNanos, 
 		ok := bitmap.NewBuilder(n)
 		for i, v := range src {
 			fits := v <= limit && v >= -limit
+			if !fits && strict && valid.Get(i) {
+				return nil, uerr.New(uerr.KindValue, "cast",
+					"instant %d at row %d overflows %s", v, i, to).
+					Hint("widening to a finer unit multiplies the tick count, and " +
+						"int64 nanoseconds only span about 1677 to 2262").
+					Hint("use a non-strict cast to turn unrepresentable instants into nulls")
+			}
 			ok.Append(fits && valid.Get(i))
 			overflowed = overflowed || !fits
 			if fits {
@@ -855,10 +877,33 @@ func rescaleTemporal(name string, to dtype.DataType, c *data.Column, fromNanos, 
 	}
 
 	if to.Physical().ID() == dtype.TypeInt32 {
-		// Date is int32 days.
+		// Date is int32 days, and this used to be a bare int32(v).
+		//
+		// The finer-to-coarser branch above has no overflow guard because dividing
+		// cannot overflow — but the NARROWING to int32 can, and did so silently.
+		// Datetime(s) -> Date divides by 86400 and still leaves room for a tick
+		// count far past int32, so the truncation produced a wrapped date: verbatim
+		// the outcome this function's own doc says it exists to prevent, "a
+		// plausible-looking wrong answer".
 		d32 := make([]int32, n)
+		ok := bitmap.NewBuilder(n)
+		wrapped := false
 		for i, v := range out {
-			d32[i] = int32(v)
+			fits := v >= math.MinInt32 && v <= math.MaxInt32
+			if !fits && strict && valid.Get(i) {
+				return nil, uerr.New(uerr.KindValue, "cast",
+					"day %d at row %d does not fit in %s", v, i, to).
+					Hint("Date is a signed 32-bit day count, spanning about " +
+						"5.88 million years either side of 1970")
+			}
+			ok.Append(fits && valid.Get(i))
+			wrapped = wrapped || !fits
+			if fits {
+				d32[i] = int32(v)
+			}
+		}
+		if wrapped {
+			valid = ok.Finish()
 		}
 		return data.NewFixed(name, to, d32, valid), nil
 	}

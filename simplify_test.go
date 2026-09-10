@@ -166,18 +166,24 @@ func TestFoldingRefusesOnError(t *testing.T) {
 	})
 }
 
-// TestFoldingRefusesWhenNullabilityChanges is the guard in its other role.
+// TestIntegerDivisionByZeroNowFolds is this test in its third life, and the change
+// is the point of step 49.
 //
-// `lit(1) // lit(0)` is integer division by zero, which the kernel answers with a
-// NULL rather than an error — "a wrapped timestamp is a plausible-looking wrong
-// answer and a null is not", the same choice rescaleTemporal makes. But
-// Binary.Field says the result of dividing two non-null literals is non-null, so
-// the folded literal would be nullable where the expression it replaced was not.
+// It used to assert the OPPOSITE — that the folder refuses `lit(1) // lit(0)` — and
+// its own doc explained why: "Binary.Field says the result of dividing two non-null
+// literals is non-null, so the folded literal would be nullable where the expression
+// it replaced was not." The refusal was not a property of folding. It was the
+// constant folder correctly declining to make a schema lie visible.
 //
-// Nothing about that is caught by a value comparison: the null IS what the query
-// returns either way. It is caught by comparing fields, and the consequence of
-// missing it is Optimizer.Verify failing on a query that was fine.
-func TestFoldingRefusesWhenNullabilityChanges(t *testing.T) {
+// Binary.Field now consults MayProduceNull, so the expression is declared nullable
+// before anything is folded, the folded literal matches it, fieldEqual permits the
+// rewrite, and the fold happens. **The lie was costing the optimizer a fold**, which
+// is the concrete answer to "what does a schema-only defect actually break".
+//
+// local.go describes exactly this mechanism from the other side: the guard "does
+// rather than a blanket refusal: when x is NOT nullable both sides are non-null, the
+// fold is sound, and it is allowed."
+func TestIntegerDivisionByZeroNowFolds(t *testing.T) {
 	q := func() *ursus.LazyFrame {
 		return frame().Select(ursus.Lit(1).FloorDiv(0).Alias("k"))
 	}
@@ -186,8 +192,12 @@ func TestFoldingRefusesWhenNullabilityChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(txt, "(lit(1) // lit(0))") {
-		t.Errorf("the division was folded even though it changes nullability:\n%s", txt)
+	if strings.Contains(txt, "(lit(1) // lit(0))") {
+		t.Errorf("the division is now declared nullable, so the fold is sound "+
+			"and should happen:\n%s", txt)
+	}
+	if !strings.Contains(txt, "lit(null") {
+		t.Errorf("it should have folded to a null literal:\n%s", txt)
 	}
 
 	on, err := q().Collect(t.Context(), ursus.WithVerify())

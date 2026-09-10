@@ -1,5 +1,7 @@
 package expr
 
+import "github.com/advenn/ursus/dtype"
+
 // BinaryOp is a two-operand operation.
 type BinaryOp uint8
 
@@ -82,6 +84,50 @@ func (o BinaryOp) IsLogical() bool { return o >= OpAnd && o <= OpXor }
 // which is exactly the trap call.go's "Appending only" note warns about. A dead
 // classifier that lies is worse than no classifier, and the next op to be appended
 // would have inherited the lie.
+
+// MayProduceNull reports whether the kernel for this op, at this output type, can
+// manufacture a null its operands did not contain.
+//
+// # Why this exists
+//
+// internal/kernel splits kernels into classes by how they relate to nulls, and a
+// PARTIAL kernel "may itself produce nulls (integer division by zero, a narrowing
+// cast, sqrt of a negative)". Binary.Field propagated only — `lf.Nullable ||
+// rf.Nullable` — which is conservative about PROPAGATION and says nothing about
+// MANUFACTURE, the axis the kernel layer actually splits on. So `a % b` over two
+// non-nullable integer columns was declared non-nullable and held a null wherever
+// b was zero.
+//
+// # It takes the OUTPUT type, and that is not a detail
+//
+// kernel.arithmetic dispatches on `Binding.Out.Physical()`, so the output type is
+// what decides which kernel runs, and the operands' logical types can be
+// misleading in both directions:
+//
+//	Int64 % Int64        Out Int64      -> arithNum   -> PARTIAL
+//	Float64 % Float64    Out Float64    -> arithFloat -> total (math.Mod, NaN)
+//	Int64 / Int64        Out Float64    -> arithFloat -> total (true division)
+//	Duration // Int64    Out Duration   -> arithNum   -> PARTIAL, though the left
+//	                                       operand is not an integer type at all
+//
+// A predicate written against the operands would get the last two backwards.
+//
+// # Explicit membership, not a range
+//
+// OpDiv sits immediately above OpFloorDiv, so `o >= OpFloorDiv && o <= OpMod`
+// would be one constant away from wrong — and this file already carries the
+// post-mortem of that exact mistake under "There is deliberately no IsArithmetic".
+func (o BinaryOp) MayProduceNull(out dtype.DataType) bool {
+	if o != OpFloorDiv && o != OpMod {
+		return false
+	}
+	// Int128 is included by IsInteger and is unreachable: arithI128 implements only
+	// add and sub, and resolveArithmetic refuses the rest before that. Over-declaring
+	// an unreachable case is the safe direction anyway — "claiming a column has no
+	// nulls when it does causes silent wrong answers, while the reverse only costs a
+	// little speed".
+	return out.Physical().IsInteger()
+}
 
 // IsOrdering reports whether the op uses < / > semantics, as opposed to equality.
 // Ordering comparisons are undefined for types that have no order.

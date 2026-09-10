@@ -150,12 +150,18 @@ func (b *Binary) Field(in *dtype.Schema) (dtype.Field, error) {
 		return dtype.Field{}, err
 	}
 
-	// Nullability propagates conservatively: the result may be null if either
-	// operand may be. The exception is a missing-comparison, whose whole point is
-	// that it is total.
+	// Nullability has two sources and this used to model only the first.
+	//
+	// PROPAGATION: the result may be null if either operand may be. MANUFACTURE: a
+	// PARTIAL kernel produces nulls of its own — integer division by zero — which no
+	// amount of conservatism about the operands predicts. res.Out is what
+	// kernel.arithmetic dispatches on, so it is the right question to ask.
 	nullable := lf.Nullable || rf.Nullable
 	if b.Op.IsMissingComparison() {
 		nullable = false
+	}
+	if b.Op.MayProduceNull(res.Out) {
+		nullable = true
 	}
 	return dtype.Field{Name: OutputName(b), Type: res.Out, Nullable: nullable}, nil
 }

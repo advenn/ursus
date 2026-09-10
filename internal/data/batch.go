@@ -25,6 +25,56 @@ type Batch struct {
 // something other than what the plan's schema resolution promised, which is
 // exactly the class of bug that would otherwise surface as corrupted output far
 // downstream. Failing at the boundary makes it a one-line diagnosis.
+// CheckNonNullable turns on the fifth boundary check: a column whose field says
+// Nullable: false must actually hold no nulls.
+//
+// # Why it is a toggle rather than one of the other four
+//
+// The four checks in NewBatch are unconditional because they are O(columns) on
+// values already in registers. This one may cost a popcount per column per batch —
+// bitmap.Builder.Finish never returns the no-storage all-set form, so a scanned or
+// concatenated column carries a materialised bitmap even when nothing is null, and
+// the O(1) fast path misses exactly there.
+//
+// It is a package var rather than a CollectOption because the option would have to
+// reach here from the root package, and nothing does: WithVerify stops at
+// Optimizer.Verify, and physical.Options carries only BatchSize, Threads and Budget.
+// Threading a flag to forty-six construction sites — several of them in kernel and
+// source, which never see Options — would be a large change to buy a check that
+// only tests run. Set it once from a test binary's init, never during a query.
+//
+// # What a violation means
+//
+// Field.Nullable is a permission — "a non-nullable field is one where the engine
+// may skip validity handling entirely" — and the optimizer already acts on it:
+// rule_simplify's boolIdentity folds `x AND lit(false)` to `lit(false)` EXACTLY
+// when x is declared non-nullable. So a lie here is a potentially unsound rewrite,
+// not a cosmetic mismatch, and it will not show up in the final frame of the query
+// that told it.
+var CheckNonNullable bool
+
+// checkNonNullable is the fifth clause, shared by both constructors.
+func checkNonNullable(schema *dtype.Schema, cols []*Column) error {
+	for i, c := range cols {
+		if c == nil || i >= schema.Len() {
+			continue
+		}
+		f := schema.Field(i)
+		// IsAllSet is O(1) and answers "definitely no nulls"; it is a fast path and
+		// never a decision, which is what its own doc insists on. A materialised
+		// bitmap that happens to be all ones returns false here and needs the count.
+		if f.Nullable || c.Validity().IsAllSet() {
+			continue
+		}
+		if n := c.NullCount(); n > 0 {
+			return uerr.Internalf(
+				"data: column %q (position %d) is declared non-nullable and holds %d nulls of %d",
+				f.Name, i, n, c.Len())
+		}
+	}
+	return nil
+}
+
 func NewBatch(schema *dtype.Schema, cols []*Column) (*Batch, error) {
 	if schema.Len() != len(cols) {
 		return nil, uerr.Internalf("data: batch has %d columns but schema has %d",
@@ -52,12 +102,34 @@ func NewBatch(schema *dtype.Schema, cols []*Column) (*Batch, error) {
 	if rows == -1 {
 		rows = 0
 	}
+	if CheckNonNullable {
+		if err := checkNonNullable(schema, cols); err != nil {
+			return nil, err
+		}
+	}
 	return &Batch{schema: schema, cols: cols, rows: rows}, nil
 }
 
-// NewBatchRows builds a zero-column batch that still has a row count. A frame can
-// legitimately have rows but no columns after `Select()` with nothing.
+// NewBatchRows builds a batch with an explicit row count.
+//
+// It exists for the zero-column case — a frame can legitimately have rows but no
+// columns after `Select()` with nothing — but six operators also use it with
+// populated columns, because it is the constructor that takes a row count. Those
+// six therefore skip the four checks NewBatch performs, which is worth knowing:
+// explode, unnest, unpivot, hstack, the nothing-selected filter path and the
+// concat-of-zero-batches path are all unvalidated on names and types.
+//
+// The nullability check is applied here anyway, because leaving it out would make
+// the instrument blind to a third of the engine and blind in exactly the newest
+// operators. It PANICS rather than returning an error because this signature has no
+// error to return and an invariant violation is not a condition a caller can
+// handle — and because it only ever runs when CheckNonNullable is on.
 func NewBatchRows(schema *dtype.Schema, cols []*Column, rows int) *Batch {
+	if CheckNonNullable {
+		if err := checkNonNullable(schema, cols); err != nil {
+			panic(err)
+		}
+	}
 	return &Batch{schema: schema, cols: cols, rows: rows}
 }
 
