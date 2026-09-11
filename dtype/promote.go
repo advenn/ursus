@@ -169,6 +169,18 @@ func CanCast(from, to DataType) bool {
 		return true
 	}
 	switch {
+	// DECIMAL first, because IsNumeric includes it and the numeric arm below would
+	// otherwise promise every numeric -> Decimal conversion. The kernel refuses all
+	// of them, and says why: "a decimal is stored as an unscaled integer, so this
+	// cast would be wrong by a factor of 10^scale rather than merely imprecise."
+	//
+	// That was the DANGEROUS direction of this divergence — CanCast promising what
+	// the evaluator cannot do, so CollectSchema and Explain succeeded and Collect
+	// failed. It was the standing "numeric <-> Decimal" item, and there were sixteen
+	// of them. Decimal -> String is the one conversion that is exact and
+	// implemented: the scale is known, so the unscaled integer can be formatted.
+	case from.ID() == TypeDecimal || to.ID() == TypeDecimal:
+		return from.ID() == TypeDecimal && to.id == TypeString
 	case from.IsNumeric() && to.IsNumeric():
 		return true
 	case from.IsNumeric() && to.IsBool(), from.IsBool() && to.IsNumeric():

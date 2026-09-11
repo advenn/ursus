@@ -166,10 +166,16 @@ func TestDecimalGuards(t *testing.T) {
 		},
 		{
 			// Would hand back the unscaled integer: 12.34 as 1234.
+			//
+			// The refusal MOVED, from the kernel to plan time, when step 52 stopped
+			// CanCast promising what the kernel refuses. So the kind is ErrType
+			// rather than ErrUnsupported and the message is the type checker's.
+			// Earlier and with the same meaning is the improvement; "unscaled" now
+			// lives in the hint rather than the summary.
 			name: "cast to Int64 would return unscaled units",
 			lf:   func() *ursus.LazyFrame { return prices(t).Select(ursus.Col("price").Cast(dtype.Int64)) },
-			kind: uerr.ErrUnsupported,
-			want: "unscaled",
+			kind: uerr.ErrType,
+			want: "cannot cast Decimal",
 		},
 		{
 			// Would bind Acc: Float64 and then ask an Int128 column for []float64,

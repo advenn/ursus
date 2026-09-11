@@ -424,6 +424,20 @@ func Cast(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Co
 				"be wrong by a factor of 10^scale rather than merely imprecise")
 	}
 
+	// String <-> Binary is a RELABEL. Both are offsets plus a character buffer, so
+	// there is nothing to convert; CanCast has a deliberate arm promising both
+	// directions and the kernel refused both — "not implemented yet" one way and
+	// "cannot format a Binary column as text" the other.
+	//
+	// Here the KERNEL moves, which is the opposite resolution from Bool <-> temporal
+	// above, and that asymmetry is the point: which side is right is a judgement
+	// about the types, not a lookup. Three of the four historical instances of this
+	// divergence were also resolved by implementing what CanCast promised.
+	if (from.ID() == dtype.TypeString && to.ID() == dtype.TypeBinary) ||
+		(from.ID() == dtype.TypeBinary && to.ID() == dtype.TypeString) {
+		return c.Rename(name).WithDType(to), nil
+	}
+
 	// --- parsing and formatting -----------------------------------------------------
 	//
 	// dtype.CanCast has always permitted string<->numeric and string<->temporal, and
@@ -449,6 +463,22 @@ func Cast(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Co
 	// string casts. Step 11 made it reachable with no user-written cast at all:
 	// IsClose casts its operands to Float64.
 	if from.IsBool() != to.IsBool() {
+		// TEMPORAL is excluded, and this is the direction where the KERNEL is
+		// wrong rather than CanCast. Bool -> Date reached boolToNumeric, went to
+		// Int64 and came back relabelled Date; Date -> Bool read the day count and
+		// compared it to zero. Both are physical puns: a date is not a truth value,
+		// and 1970-01-01 is not "false".
+		//
+		// CanCast has refused these all along — its temporal arms cover numeric and
+		// string, never Bool — so the two answers disagreed in the SAFE direction,
+		// with the planner refusing what the kernel would have done. Narrowing the
+		// kernel is what makes them agree; see TestCanCastAgreesWithTheKernel.
+		if from.IsTemporal() || to.IsTemporal() {
+			return nil, uerr.New(uerr.KindUnsupported, "cast",
+				"cannot cast %s to %s", from, to).
+				Hint("a temporal value is not a truth value; compare it instead, " +
+					"e.g. .IsNotNull() or a comparison against an instant")
+		}
 		if from.IsBool() {
 			return boolToNumeric(name, to, c)
 		}

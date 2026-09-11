@@ -49,6 +49,11 @@ func contractBatch(t *testing.T) *data.Batch {
 		dtype.Of("bo", dtype.Bool), dtype.Of("st", dtype.String),
 		dtype.Of("dt", dtype.Date), dtype.Of("ts", dtype.Datetime(dtype.Micro, "UTC")),
 		dtype.Of("du", dtype.Duration(dtype.Nano)),
+		// A NAIVE datetime and a Time, neither of which the matrix had. Their
+		// absence is why it could not see that arithmetic and comparison disagreed
+		// about zones: with one Datetime column there is no pair to disagree about.
+		dtype.Of("tn", dtype.Datetime(dtype.Micro, "")),
+		dtype.Of("tm", dtype.Time(dtype.Nano)),
 	}
 	cols := []*data.Column{
 		data.NewFixed("i8", dtype.Int8, []int8{1, 2, 3}, valid(n)),
@@ -68,6 +73,8 @@ func contractBatch(t *testing.T) *data.Batch {
 		data.NewFixed("dt", dtype.Date, []int32{1, 2, 3}, valid(n)),
 		data.NewFixed("ts", dtype.Datetime(dtype.Micro, "UTC"), []int64{1, 2, 3}, valid(n)),
 		data.NewFixed("du", dtype.Duration(dtype.Nano), []int64{1, 2, 3}, valid(n)),
+		data.NewFixed("tn", dtype.Datetime(dtype.Micro, ""), []int64{1, 2, 3}, valid(n)),
+		data.NewFixed("tm", dtype.Time(dtype.Nano), []int64{1, 2, 3}, valid(n)),
 	}
 	schema, err := dtype.NewSchema(fields...)
 	if err != nil {
@@ -82,7 +89,7 @@ func contractBatch(t *testing.T) *data.Batch {
 
 var contractCols = []string{
 	"i8", "i16", "i32", "i64", "u8", "u32", "u64",
-	"f32", "f64", "bo", "st", "dt", "ts", "du",
+	"f32", "f64", "bo", "st", "dt", "ts", "du", "tn", "tm",
 }
 
 var contractBinaryOps = []expr.BinaryOp{
@@ -157,43 +164,22 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 	return true
 }
 
-// knownContractGaps is where Field and Eval currently DISAGREE, with the mechanism.
+// knownContractGaps is EMPTY, and that is the result of step 52.
 //
-// It is a ratchet, not an allow-list. Every entry is asserted to still be a gap, so
-// fixing one FAILS this test until the entry is removed — the property every other
-// list in this repository lacks, and the reason they go quiet instead of failing.
+// It held ten entries when this test was written: four Date arithmetic bindings
+// that mixed an Int32 Date with an Int64 Duration, and six Bool <-> temporal casts
+// where CanCast and the kernel disagreed.
 //
-// # The six casts: CanCast and the cast kernel disagree
+// All ten are fixed, and both classes now have a check that is total rather than a
+// list — expr's TestBindingsArePhysicallyCoherent over the binding cross-product,
+// and kernel's TestCanCastAgreesWithTheKernel over every TypeID pair. The second
+// found seventeen MORE disagreements than this ratchet ever recorded, including
+// sixteen in the dangerous direction, because this fixture has no Decimal column.
 //
-// Cast.Field consults dtype.CanCast, which refuses Bool ↔ temporal. kernel.Cast
-// performs it anyway, by physical punning. The direction is the safe one — the
-// planner refuses, so no query reaches the kernel — and it is the same standing item
-// already recorded for numeric ↔ Decimal. The fix is one guard in kernel.Cast so the
-// two agree by construction rather than by coincidence.
-//
-// # The four Date cases: a real binding bug, and a semantic question under it
-//
-// Date - Date binds CastL/CastR to Date (physical Int32) and Out to Duration(s)
-// (physical Int64). kernel.arithmetic dispatches on Out.Physical(), so the kernel
-// reads Int32 storage as Int64 and refuses.
-//
-// Widening the cast is not the whole fix, because Date counts DAYS and Duration(s)
-// counts seconds: making the widths agree would turn a type error into an answer
-// wrong by 86400. That is a semantic decision about Date's unit, which is its own
-// step. resolveTemporalArithmetic's own comment already records that this area went
-// untested — "nothing caught it because no test touched temporal arithmetic".
-var knownContractGaps = map[string]string{
-	"cast(bo->Date)":              "CanCast refuses Bool->Date; kernel.Cast puns it",
-	"cast(bo->Datetime(ns, UTC))": "CanCast refuses Bool->Datetime; kernel.Cast puns it",
-	"cast(bo->Duration(s))":       "CanCast refuses Bool->Duration; kernel.Cast puns it",
-	"cast(dt->Bool)":              "CanCast refuses Date->Bool; kernel.Cast puns it",
-	"cast(du->Bool)":              "CanCast refuses Duration->Bool; kernel.Cast puns it",
-	"cast(ts->Bool)":              "CanCast refuses Datetime->Bool; kernel.Cast puns it",
-	"-(dt,dt)":                    "Date is Int32, Duration(s) is Int64; and days vs seconds",
-	"+(dt,du)":                    "Date is Int32, Duration is Int64; and days vs seconds",
-	"-(dt,du)":                    "Date is Int32, Duration is Int64; and days vs seconds",
-	"+(du,dt)":                    "Date is Int32, Duration is Int64; and days vs seconds",
-}
+// It is kept, empty, because the mechanism is the useful part: an entry asserts a
+// gap still EXISTS, so fixing one without deleting its line fails the test. That is
+// the property a plain allow-list does not have.
+var knownContractGaps = map[string]string{}
 
 var seenContractGaps = map[string]bool{}
 

@@ -33,7 +33,7 @@ var boolCastTypes = []dtype.DataType{
 	dtype.Int8, dtype.Int16, dtype.Int32, dtype.Int64, dtype.Int128,
 	dtype.Uint8, dtype.Uint16, dtype.Uint32, dtype.Uint64,
 	dtype.Float32, dtype.Float64,
-	// Decimal is deliberately NOT here. See TestDecimalCastDivergenceIsKnown.
+	// Decimal is deliberately NOT here. See TestDecimalCastDivergenceIsClosed.
 }
 
 func TestBoolCastAgreesWithCanCast(t *testing.T) {
@@ -170,46 +170,47 @@ func mustVals[T data.Fixed](t *testing.T, c *data.Column) []T {
 	return v
 }
 
-// TestDecimalCastDivergenceIsKnown is a tripwire, not an assertion of correctness.
+// TestDecimalCastDivergenceIsClosed is what the tripwire became.
 //
-// Running the bool differential over everything CanCast calls numeric surfaced a
-// FOURTH instance of the plan-accepts / kernel-rejects divergence, and this one is
-// not a bug in the kernel: CanCast's `from.IsNumeric() && to.IsNumeric()` arm
-// admits Decimal, and kernel.Cast refuses it on purpose with a reason that is
-// right —
+// It was named for the divergence being KNOWN rather than closed, and it pinned
+// BOTH sides of a
+// disagreement step 12 found and deliberately did not resolve: CanCast's
+// `from.IsNumeric() && to.IsNumeric()` arm admitted Decimal, and kernel.Cast
+// refused every one of those casts on purpose, because "a decimal is stored as an
+// unscaled integer, so this cast would be wrong by a factor of 10^scale rather than
+// merely imprecise".
 //
-//	a decimal is stored as an unscaled integer, so this cast would be wrong by a
-//	factor of 10^scale rather than merely imprecise
-//
-// So the two sides disagree about a whole family of casts, and every numeric ->
-// Decimal cast plans cleanly and fails at execution. Reconciling them is a
-// deliberate change with reach: dropping Decimal from CanCast's numeric arm moves
-// the refusal to plan time, which is where it belongs, but it also changes the
-// fixture path decimal_test.go and TestDecimalMathIsRefusedAtPlanTime use to build
-// a Decimal column at all. That is its own decision, not a side effect of a bool
-// cast, so step 12 records it rather than making it.
-//
-// This test pins the current state of BOTH sides. Whichever one moves first, it
-// fires, and the pair has to be reconciled rather than drifting further apart.
-func TestDecimalCastDivergenceIsKnown(t *testing.T) {
+// Its closing line was "whichever one moves first, it fires, and the pair has to be
+// reconciled rather than drifting further apart". Step 52 moved CanCast, it fired,
+// and it named the consequence in advance — the fixture path math_test.go used to
+// build a Decimal column at all. That is a tripwire working exactly as designed,
+// and it is the reason this one is rewritten rather than deleted: the pair still
+// needs pinning, just from the other side.
+func TestDecimalCastDivergenceIsClosed(t *testing.T) {
 	dec := dtype.Decimal(10, 2)
 	for _, c := range []struct{ from, to dtype.DataType }{
 		{dtype.Int64, dec}, {dec, dtype.Int64},
 		{dtype.Bool, dec}, {dec, dtype.Bool},
 		{dtype.Float64, dec},
 	} {
-		if !dtype.CanCast(c.from, c.to) {
-			t.Errorf("CanCast(%s, %s) is now false — the kernel already refuses this, "+
-				"so drop this pair and the divergence is closed", c.from, c.to)
-			continue
+		if dtype.CanCast(c.from, c.to) {
+			t.Errorf("CanCast(%s, %s) is true again — the kernel still refuses it, "+
+				"so the divergence has reopened", c.from, c.to)
 		}
 		in, err := kernel.NullColumn("v", c.from, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if _, err := kernel.Cast("v", c.to, false, in); err == nil {
-			t.Errorf("the kernel now implements %s -> %s — update this tripwire and "+
-				"fold the pair into TestBoolCastAgreesWithCanCast", c.from, c.to)
+			t.Errorf("the kernel now implements %s -> %s — CanCast should promise "+
+				"it again, and this test should go", c.from, c.to)
 		}
+	}
+
+	// The one Decimal conversion that IS exact and implemented, kept here so the
+	// rule above cannot be read as "Decimal casts nowhere".
+	if !dtype.CanCast(dec, dtype.String) {
+		t.Error("Decimal -> String is exact: the scale is known, so the unscaled " +
+			"integer can be formatted")
 	}
 }

@@ -156,8 +156,28 @@ func resolveArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 // resolveTemporalArithmetic implements the small algebra of instants and durations.
 //
 //	Datetime - Datetime  → Duration      Date - Date          → Duration(s)
-//	Datetime ± Duration  → Datetime      Date ± Duration      → Datetime
-//	Duration ± Duration  → Duration      Duration * / number  → Duration
+//	Datetime ± Duration  → Datetime      Date ± Duration      → Datetime(s, naive)
+//	Duration ± Duration  → Duration      Duration * number    → Duration
+//
+// # Date is days, and that is why it cannot stay Date
+//
+// Date is a signed 32-bit DAY count; every other temporal type is an Int64 tick
+// count. kernel.arithmetic dispatches on Out.Physical() and reads BOTH operands at
+// that width, so any binding mixing them is a guaranteed runtime refusal — which is
+// what all three Date arms used to be. They are also the only arms in this switch
+// that could be: everything else is Int64 throughout.
+//
+// The fix is to leave Date behind in the binding rather than to widen the kernel.
+// Casting Date to a Duration or a Datetime multiplies by 86400 through
+// rescaleTemporal, because NanosPerTick(Date) is 24h — so the operands arrive as
+// seconds and the arithmetic is exact. Publishing Duration(s) while leaving the
+// operands in days would make 19001 - 19000 come out as 1s rather than 86400s.
+//
+// Date ± Duration yields a NAIVE Datetime, which is what this doc has always said
+// and what the code did not do. The zone is empty on the principle Promote states:
+// "A date is not an instant at midnight until someone chooses a zone." Staying a
+// Date is not implementable anyway — it would need an Int32-physical duration — and
+// flooring `date + 12h` to `date` is a silent precision loss.
 //
 // Notably Datetime + Datetime is rejected: adding two instants is meaningless,
 // and silently reinterpreting it as integer addition would produce a plausible
@@ -171,15 +191,30 @@ func resolveTemporalArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error
 	switch {
 	// instant - instant → duration, at the finer of the two resolutions.
 	case op == OpSub && isInstant(l) && isInstant(r):
-		if l.ID() != r.ID() {
+		// Same ID and same ZONE, which is Promote's rule for comparing the pair.
+		//
+		// The zone half was missing, and that made this the one place in the engine
+		// that answered a question differently from the type system: Promote refuses
+		// Datetime(us,"UTC") against Datetime(us,"") because it is "an instant
+		// against a wall clock, and reconciling them would have to invent an
+		// offset", while this accepted it and retimed preserved the LEFT operand's
+		// zone — silently reinterpreting a naive wall clock as UTC and producing a
+		// plausible duration wrong by the offset.
+		//
+		// TestTemporalArithmeticAndComparisonAgree exists to prevent exactly that
+		// and could not see it: it varies the unit with both sides "UTC".
+		if l.ID() != r.ID() || l.TimeZone() != r.TimeZone() {
 			return Binding{}, mismatch(op, l, r)
 		}
 		unit := finerUnit(l, r)
 		out := dtype.Duration(unit)
 		common := l
 		if l.ID() == dtype.TypeDate {
-			// Date has no unit of its own; differences are whole seconds.
+			// Date has no unit of its own; differences are whole seconds. The
+			// operands are cast to that Duration rather than left as Date, so the
+			// 86400 conversion happens and the widths agree — see the note above.
 			out = dtype.Duration(dtype.Second)
+			common = out
 		} else {
 			common = retimed(l, unit)
 		}
@@ -197,11 +232,13 @@ func resolveTemporalArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error
 	// instant would change the output type, so `ts + 1h` would silently return a
 	// nanosecond-resolution column for a second-resolution input.
 	case (op == OpAdd || op == OpSub) && isInstant(l) && isDur(r):
-		return Binding{CastL: l, CastR: durationLike(l), Out: l}, nil
+		out := instantResult(l)
+		return Binding{CastL: out, CastR: durationLike(out), Out: out}, nil
 
 	// duration + instant → instant (addition only; instant - duration is above)
 	case op == OpAdd && isDur(l) && isInstant(r):
-		return Binding{CastL: durationLike(r), CastR: r, Out: r}, nil
+		out := instantResult(r)
+		return Binding{CastL: durationLike(out), CastR: out, Out: out}, nil
 
 	// duration ± duration → duration at the finer resolution
 	case (op == OpAdd || op == OpSub) && isDur(l) && isDur(r):
@@ -313,13 +350,29 @@ func opVerb(op BinaryOp) string {
 	}
 }
 
+// instantResult is the type an instant becomes when a duration is added to it.
+//
+// Every instant but Date is returned unchanged, so `ts + 1h` keeps ts's own
+// resolution — widening it would make a second-resolution input silently come back
+// at nanosecond resolution.
+//
+// A DATE becomes a naive Datetime at second resolution, because a Date is an Int32
+// day count and a Duration is an Int64 tick count: there is no binding in which the
+// result stays a Date and the kernel can still read both operands. The zone is
+// empty because a date is not an instant until someone chooses one.
+func instantResult(d dtype.DataType) dtype.DataType {
+	if d.ID() == dtype.TypeDate {
+		return dtype.Datetime(dtype.Second, "")
+	}
+	return d
+}
+
 // durationLike returns a Duration at the same resolution as the instant d, so an
 // instant and a duration can be added without either one silently changing scale.
-// Date has no TimeUnit of its own; its differences are whole seconds.
+//
+// The Date branch is gone: instantResult promotes a Date to a Datetime before this
+// is ever asked, so no caller can reach it with one.
 func durationLike(d dtype.DataType) dtype.DataType {
-	if d.ID() == dtype.TypeDate {
-		return dtype.Duration(dtype.Second)
-	}
 	return dtype.Duration(d.TimeUnit())
 }
 

@@ -437,9 +437,14 @@ func TestMathRefusals(t *testing.T) {
 // so flooring it would floor 1234 rather than 12.34. Refused where the user can
 // see it rather than half-applied.
 func TestDecimalMathIsRefusedAtPlanTime(t *testing.T) {
-	dec := ursus.Decimal(10, 2)
-	f := ursus.Frame(ursus.Values("g", []string{"a"}), ursus.Values("v", []int64{1}))
-	casted := f.Select(ursus.Col("v").Cast(dec).Alias("d"))
+	// The Decimal column is CONSTRUCTED, not cast into existence. It used to be
+	// `Col("v").Cast(Decimal(10,2))`, and step 52 moved that refusal to plan time:
+	// CanCast no longer promises numeric -> Decimal, because the kernel has always
+	// refused it and said why ("wrong by a factor of 10^scale"). The tripwire in
+	// castbool_test.go predicted this exact consequence — "it also changes the
+	// fixture path decimal_test.go and TestDecimalMathIsRefusedAtPlanTime use to
+	// build a Decimal column at all".
+	casted := prices(t).Select(ursus.Col("price").Alias("d"))
 
 	for _, c := range []struct {
 		name string
