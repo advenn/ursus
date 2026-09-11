@@ -153,8 +153,15 @@ func TestReverseCommutesWithFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if i, j := strings.Index(txt, "REVERSE"), strings.Index(txt, "FILTER"); i >= 0 && j >= 0 && j < i {
-		t.Errorf("the filter is still above the reverse:\n%s", txt)
+	// ABSENCE FAILS, not just wrong order. The guard used to be
+	// `i >= 0 && j >= 0 && j < i`, which is vacuous whenever either node is missing
+	// — including the case this test exists for, where the filter was dropped
+	// entirely rather than moved. Two siblings in pushdown_test.go already have the
+	// total form; this was the odd one out. Note the direction is reversed from
+	// theirs: here FILTER must end up BELOW reverse.
+	i, j := strings.Index(txt, "REVERSE"), strings.Index(txt, "FILTER")
+	if i < 0 || j < 0 || j < i {
+		t.Errorf("expected REVERSE above FILTER, got i=%d j=%d:\n%s", i, j, txt)
 	}
 }
 

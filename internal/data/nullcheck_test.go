@@ -100,8 +100,15 @@ func TestNonNullableCheckIsOneDirectional(t *testing.T) {
 // "Use it to take a fast path, never to decide correctness."
 func TestNonNullableCheckNeedsTheCount(t *testing.T) {
 	schema, cols := nullCheckCols(t, false)
+	// FATAL, not Skip. This used to skip when the premise stopped holding, which
+	// means the day Builder.Finish starts returning the no-storage form this test
+	// would have gone GREEN rather than red — announcing success for a check it had
+	// silently stopped performing. The premise is the point of the test, so losing
+	// it is a failure to report, not a reason to stand down.
 	if cols[0].Validity().IsAllSet() {
-		t.Skip("Builder.Finish now returns the no-storage form; this test's premise is gone")
+		t.Fatal("Builder.Finish now returns the no-storage all-set form, so this " +
+			"test's premise is gone and checkNonNullable's NullCount fallback may " +
+			"no longer be needed — re-derive it rather than deleting this test")
 	}
 	if _, err := data.NewBatch(schema, cols); err != nil {
 		t.Errorf("a materialised all-ones bitmap is not a null: %v", err)

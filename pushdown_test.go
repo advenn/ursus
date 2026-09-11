@@ -6,6 +6,7 @@ import (
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // TestPushdownSoundness is the ONLY mechanism that can catch a bad predicate push.
@@ -82,13 +83,32 @@ func TestPushdownSoundness(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unoptimized: %v", err)
 			}
-			if on.String() != off.String() {
-				optPlan, _ := q.lf().Explain(t.Context())
-				t.Errorf("optimizer changed the result\n optimized:\n%s\n unoptimized:\n%s\n plan:\n%s",
-					on, off, optPlan)
+
+			// ANTI-VACUITY, and it has to be PER QUERY rather than a total — the
+			// same argument the plan-package twin makes at plan_test.go, where a
+			// total "stays comfortably above zero while case 0 quietly contributed
+			// nothing". A query that returns no rows agrees with itself whatever
+			// the optimizer did, so each case must produce something to compare.
+			if on.Height() == 0 {
+				t.Fatalf("the query returned no rows, so comparing optimized "+
+					"against unoptimized proves nothing\nplan:\n%s", planOf(t, q.lf()))
 			}
+
+			// AssertFrameEqual, not String(). String renders ten rows, so a value
+			// difference past row 10 would be invisible; these fixtures are seven
+			// rows today and nothing stops one growing.
+			ursustest.AssertFrameEqual(t, on, off, ursustest.CheckNullability())
 		})
 	}
+}
+
+func planOf(t *testing.T, lf *ursus.LazyFrame) string {
+	t.Helper()
+	p, err := lf.Explain(t.Context())
+	if err != nil {
+		return "<explain failed: " + err.Error() + ">"
+	}
+	return p
 }
 
 // TestLimitIsAPushdownBarrier pins the classic bug with a limit that BINDS.

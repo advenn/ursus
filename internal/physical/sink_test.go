@@ -123,6 +123,12 @@ func TestSortSinkMergeEquivalence(t *testing.T) {
 	}
 	got := drain(t, gotOp)
 
+	// Pinned. `totalRows(got) != totalRows(want)` is satisfied by 0 == 0, and
+	// renderAll of two empty frames is "" == "" — so on a sink that produced
+	// nothing, every claim below passes.
+	if n := totalRows(want); n != 6 {
+		t.Fatalf("the single-pass sink produced %d rows, want 6 (3 + 3)", n)
+	}
 	if totalRows(got) != totalRows(want) {
 		t.Fatalf("merged %d rows, single pass %d", totalRows(got), totalRows(want))
 	}
@@ -422,6 +428,11 @@ func TestReverseSinkMergeEquivalence(t *testing.T) {
 	}
 	got := drain(t, gotOp)
 
+	// Pinned, for the reason given in TestSortSinkMergeEquivalence: 0 == 0 passes
+	// and two empty renderings compare equal.
+	if n := totalRows(want); n != 4 {
+		t.Fatalf("the single-pass sink produced %d rows, want 4 (2 + 2)", n)
+	}
 	if totalRows(got) != totalRows(want) {
 		t.Fatalf("merged %d rows, single pass %d", totalRows(got), totalRows(want))
 	}

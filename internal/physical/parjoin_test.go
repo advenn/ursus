@@ -116,6 +116,17 @@ func TestParProbeKeepsInputOrder(t *testing.T) {
 		serial := runProbe(t, 1, nBatch, rows, keys, dup)
 		par := runProbe(t, threads, nBatch, rows, keys, dup)
 
+		// Pinned, because `len(par) != len(serial)` is satisfied by 0 == 0 and the
+		// ordering loop below then runs zero times — every claim this test makes
+		// would be vacuous on a join that produced nothing.
+		//
+		// 12 batches x 64 rows = 768 probe rows, keys n%8 so every one matches, and
+		// the build side holds dup=4 rows per key: 768 x 4.
+		const wantRows = nBatch * rows * dup
+		if len(serial) != wantRows {
+			t.Fatalf("the serial probe produced %d rows, want %d — the fixture no "+
+				"longer exercises what this test claims", len(serial), wantRows)
+		}
 		if len(par) != len(serial) {
 			t.Fatalf("threads=%d: %d rows, want %d", threads, len(par), len(serial))
 		}

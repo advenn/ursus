@@ -6,6 +6,7 @@
 package ursustest
 
 import (
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -246,28 +247,67 @@ func cell(c *data.Column, row int) string {
 	return renderValue(c, row)
 }
 
+// assertFloatsClose compares float columns numerically, and must handle BOTH
+// widths.
+//
+// It used to read only float64. renderRows drops every float column when a
+// tolerance is set — isFloat covers Float32 and Float64 alike — so a Float32 column
+// was then compared by NEITHER path: skipped in the rendering, and `continue`d here
+// because TypedColumn[float64] refuses a Float32 column by design. Any two Float32
+// columns of equal height compared equal, however wrong their values.
+//
+// Latent, because no caller passed a Float32 column with a tolerance. That is the
+// same shape as this option's other gap, which its own doc records: written, with
+// no caller, until step 17 needed one.
 func assertFloatsClose(t testing.TB, got, want *ursus.DataFrame, cfg config) {
 	t.Helper()
 	gb, wb := got.Batch(), want.Batch()
 	for ci := range wb.NumCols() {
-		gs, err1 := data.TypedColumn[float64](gb.Column(ci))
-		ws, err2 := data.TypedColumn[float64](wb.Column(ci))
-		if err1 != nil || err2 != nil {
+		gc, wc := gb.Column(ci), wb.Column(ci)
+		if !isFloat(wc.DType()) {
+			continue
+		}
+		gv, gerr := floatsOf(gc)
+		wv, werr := floatsOf(wc)
+		if gerr != nil || werr != nil {
+			t.Errorf("column %q is %s and cannot be compared numerically: %v%v",
+				wc.Name(), wc.DType(), gerr, werr)
 			continue
 		}
 		for r := range wb.Rows() {
-			gv, gok := gs.Get(r)
-			wv, wok := ws.Get(r)
+			gok, wok := gc.Validity().Get(r), wc.Validity().Get(r)
 			if gok != wok {
-				t.Errorf("column %q row %d: valid = %v, want %v", gs.Name(), r, gok, wok)
+				t.Errorf("column %q row %d: valid = %v, want %v", wc.Name(), r, gok, wok)
 				continue
 			}
-			if !gok || close(gv, wv, cfg.absTol, cfg.relTol) {
+			if !gok || close(gv[r], wv[r], cfg.absTol, cfg.relTol) {
 				continue
 			}
 			t.Errorf("column %q row %d = %v, want %v (diff %v, tolerance abs=%v rel=%v)",
-				gs.Name(), r, gv, wv, math.Abs(gv-wv), cfg.absTol, cfg.relTol)
+				wc.Name(), r, gv[r], wv[r], math.Abs(gv[r]-wv[r]), cfg.absTol, cfg.relTol)
 		}
+	}
+}
+
+// floatsOf widens a float column to []float64 so one comparison loop serves both
+// widths. A Float32 is exactly representable as a Float64, so widening cannot
+// manufacture or hide a difference.
+func floatsOf(c *data.Column) ([]float64, error) {
+	switch c.DType().ID() {
+	case dtype.TypeFloat64:
+		return data.Values[float64](c)
+	case dtype.TypeFloat32:
+		v, err := data.Values[float32](c)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]float64, len(v))
+		for i, x := range v {
+			out[i] = float64(x)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("not a float column: %s", c.DType())
 	}
 }
 

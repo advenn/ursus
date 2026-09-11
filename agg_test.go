@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // sales is the fixture for the analytics tests. `amount` has nulls, and region
@@ -467,7 +468,7 @@ func TestAggregateBatchSizeInvariance(t *testing.T) {
 }
 
 func TestSortBatchSizeInvariance(t *testing.T) {
-	var ref string
+	var ref *ursus.DataFrame
 	for _, size := range []int{1, 2, 3, 7, 8192} {
 		df, err := sales().
 			Sort(ursus.Asc(ursus.Col("region")), ursus.Desc(ursus.Col("qty"))).
@@ -475,14 +476,15 @@ func TestSortBatchSizeInvariance(t *testing.T) {
 		if err != nil {
 			t.Fatalf("batch size %d: %v", size, err)
 		}
-		got := df.String()
-		if ref == "" {
-			ref = got
+		// AssertFrameEqual, not String(). String renders only ten rows, and this
+		// is a sort-STABILITY test, where the tail is exactly where a defect
+		// shows. `sales()` is seven rows today; the eleventh would have made this
+		// check silently partial.
+		if ref == nil {
+			ref = df
 			continue
 		}
-		if got != ref {
-			t.Errorf("batch size %d changed the sort:\n%s\nwant:\n%s", size, got, ref)
-		}
+		ursustest.AssertFrameEqual(t, df, ref, ursustest.CheckNullability())
 	}
 }
 

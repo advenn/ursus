@@ -131,16 +131,17 @@ func TestClosedBoundaries(t *testing.T) {
 			"2024-01-01T02:00:00")
 	}
 	for _, c := range []struct {
-		closed ursus.Closed
-		total  uint64
-		note   string
+		closed  ursus.Closed
+		total   uint64
+		note    string
+		windows int
 	}{
-		{ursus.ClosedLeft, 3, "each row starts its own window"},
-		{ursus.ClosedRight, 3, "each row ends the previous window"},
+		{ursus.ClosedLeft, 3, "each row starts its own window", 3},
+		{ursus.ClosedRight, 3, "each row ends the previous window", 4},
 		// Five, not six: the row at the very first boundary has no window before it,
 		// so it is in one window where the other two are in two.
-		{ursus.ClosedBoth, 5, "the interior rows are in two windows each"},
-		{ursus.ClosedNone, 0, "each row is in neither"},
+		{ursus.ClosedBoth, 5, "the interior rows are in two windows each", 3},
+		{ursus.ClosedNone, 0, "each row is in neither", 4},
 	} {
 		t.Run(c.closed.String(), func(t *testing.T) {
 			df, err := f().GroupByDynamic(ursus.Col("ts"), ursus.DynamicOptions{
@@ -149,9 +150,28 @@ func TestClosedBoundaries(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			// The WINDOW COUNT is pinned, and for ClosedNone that is the whole
+			// assertion. Its expected total is 0, which an empty frame satisfies
+			// just as well as the correct answer — and so does an At that errors
+			// on every row, since the error used to be discarded and `n` is then
+			// the zero value. A sum of zero proves nothing on its own.
+			//
+			// ClosedRight and ClosedNone emit FOUR windows, not three: both are
+			// lower-open, so gridWindows steps the grid back one interval and the
+			// empty 23:00 window is emitted rather than filtered.
+			if df.Height() != c.windows {
+				t.Fatalf("closed=%s emitted %d windows, want %d",
+					c.closed, df.Height(), c.windows)
+			}
 			var total uint64
 			for i := range df.Height() {
-				n, _, _ := df.At[uint64](i, "n")
+				n, ok, err := df.At[uint64](i, "n")
+				if err != nil {
+					t.Fatalf("row %d: %v", i, err)
+				}
+				if !ok {
+					t.Fatalf("row %d: a window count is never null", i)
+				}
 				total += n
 			}
 			if total != c.total {

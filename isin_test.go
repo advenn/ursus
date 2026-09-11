@@ -8,6 +8,7 @@ import (
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/internal/uerr"
+	"github.com/advenn/ursus/ursustest"
 )
 
 func TestIsInSelectsMembers(t *testing.T) {
@@ -189,7 +190,7 @@ func TestIsInIsParallelSafe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := ref.String()
+	want := ref
 
 	for _, bs := range []int{1, 2, 8192} {
 		for _, th := range []int{1, 2, 4, 8} {
@@ -198,10 +199,10 @@ func TestIsInIsParallelSafe(t *testing.T) {
 			if err != nil {
 				t.Fatalf("batch %d threads %d: %v", bs, th, err)
 			}
-			if got.String() != want {
-				t.Errorf("batch %d threads %d changed the answer:\n%s\nwant:\n%s",
-					bs, th, got, want)
-			}
+			// AssertFrameEqual, not String(): String renders ten rows, so a value
+			// difference past row 10 would be invisible. This fixture is under
+			// that today and nothing stops it growing.
+			ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
 		}
 	}
 }
