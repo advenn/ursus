@@ -1,0 +1,5 @@
+HSTACK (2 inputs)
+  MEMORY SCAN 2 rows
+    projection: [k] (1/1 cols)
+  MEMORY SCAN 2 rows
+    projection: [hv] (1/1 cols)

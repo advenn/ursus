@@ -1,0 +1,4 @@
+EXPLODE t
+  WITH_COLUMNS [col("tags").str.split(lit(",")).alias("t")]
+    MEMORY SCAN 2 rows
+      projection: [id, tags] (2/2 cols)

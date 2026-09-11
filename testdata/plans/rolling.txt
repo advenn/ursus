@@ -1,0 +1,3 @@
+ROLLING [col("ts")] period=1h closed=default -> [lit(1).len().alias("n")]
+  MEMORY SCAN 2 rows
+    projection: [ts] (1/2 cols)

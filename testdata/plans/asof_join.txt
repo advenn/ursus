@@ -1,0 +1,7 @@
+ASOF JOIN backward on col("k")
+  left:
+    MEMORY SCAN 2 rows
+      projection: [k, lv] (2/2 cols)
+  right:
+    MEMORY SCAN 2 rows
+      projection: [k, rv] (2/2 cols)

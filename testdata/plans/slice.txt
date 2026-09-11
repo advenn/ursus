@@ -1,0 +1,3 @@
+SLICE offset 1 len 2
+  MEMORY SCAN 6 rows
+    projection: [id, region, qty, price, note, discount] (6/6 cols)

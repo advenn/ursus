@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/advenn/ursus/dtype"
@@ -456,6 +457,29 @@ func renderRow(c *data.Column, i int) (string, error) {
 		return strconv.FormatBool(c.Bools().Get(i)), nil
 	case dtype.TypeString, dtype.TypeBinary, dtype.TypeEnum:
 		return strconv.Quote(c.Strings().Get(i)), nil
+	case dtype.TypeList:
+		// Implode is the only aggregate that returns a List, and the hand-written
+		// op list in TestMergeEquivalence omitted it — so this arm was never needed
+		// until the enumeration in mergecover_test.go reached it. Rendering the
+		// child elements is what makes the comparison mean anything: a merge that
+		// concatenated the parts in the wrong ORDER produces the same lengths and
+		// the same multiset, and only the rendered sequence tells them apart.
+		lists := c.Lists()
+		lo, hi, _ := lists.Get(i)
+		child := lists.Child()
+		parts := make([]string, 0, hi-lo)
+		for j := lo; j < hi; j++ {
+			if !child.IsValid(int(j)) {
+				parts = append(parts, "null")
+				continue
+			}
+			e, err := renderRow(child, int(j))
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, e)
+		}
+		return "[" + strings.Join(parts, ",") + "]", nil
 	}
 
 	switch c.DType().Physical().ID() {

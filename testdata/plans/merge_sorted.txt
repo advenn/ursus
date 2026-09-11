@@ -1,0 +1,7 @@
+MERGE SORTED [k]
+  left:
+    MEMORY SCAN 2 rows
+      projection: [k, v] (2/2 cols)
+  right:
+    MEMORY SCAN 2 rows
+      projection: [k, v] (2/2 cols)
