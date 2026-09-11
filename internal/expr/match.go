@@ -119,9 +119,12 @@ func (m *DTypeMatcher) String() string {
 
 // --- predicate over fields ---------------------------------------------------
 
-// FieldMatcher selects columns whose field satisfies a predicate. It backs the
-// selector package's dtype families (numeric, temporal, string, ...) without
-// requiring an enumeration of concrete types.
+// FieldMatcher selects columns whose field satisfies a predicate.
+//
+// It is groundwork for the selector package's dtype families (numeric, temporal,
+// string, ...), which want a predicate rather than an enumeration of concrete
+// types. NOTHING CONSTRUCTS ONE TODAY — that package does not exist yet, and this
+// doc used to claim in the present tense that it did.
 type FieldMatcher struct {
 	Label string
 	Pred  func(dtype.Field) bool

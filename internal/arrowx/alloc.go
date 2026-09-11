@@ -63,8 +63,13 @@ func NewBuffer(n int) *memory.Buffer {
 	return b
 }
 
-// IsAligned reports whether b starts on an Alignment boundary. Kernels use it to
-// choose an aligned fast path; it is never required for correctness.
+// IsAligned reports whether b starts on an Alignment boundary. It is available for
+// a kernel to choose an aligned fast path, and is never required for correctness.
+//
+// NO KERNEL CALLS IT. The only caller in the module is this package's own test. The
+// present tense here used to claim otherwise, and data/column.go repeated the claim
+// — two comments asserting a property the code did not have, which is the single
+// largest category of defect this project has recorded.
 func IsAligned(b []byte) bool {
 	if len(b) == 0 {
 		return true

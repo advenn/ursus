@@ -37,8 +37,16 @@ func (k JoinKind) String() string {
 		return "ANTI"
 	case JoinCross:
 		return "CROSS"
-	default:
+	case JoinInner:
 		return "INNER"
+	default:
+		// NOT "INNER". An out-of-range kind used to render as INNER, so a forgotten
+		// entry would produce a plausible label and every golden would still pass —
+		// the hazard the ConcatMode.String() comment above documents for eight other
+		// enums, with this one left as its unfixed instance. AggOp.String() takes the
+		// same care and says why: two ops rendering identically collide in the three
+		// maps that dedup on String().
+		return "JoinKind(" + strconv.Itoa(int(k)) + ")"
 	}
 }
 
@@ -223,33 +231,6 @@ func (j *Join) coalescesKey(leftName, rightName string) bool {
 		// a coalesce expression.
 		return j.Kind != JoinFull && j.Kind != JoinCross && leftName == rightName
 	}
-}
-
-// CoalesceSide says which input a merged key column takes its value from.
-//
-// # Why this is a side and not a merge
-//
-// coalesce(left.k, right.k) sounds like it needs a real two-column merge, and for
-// one kind it does. For the rest the answer is a single side, exactly:
-//
-//	Inner  both keys are present and EQUAL, so either side works
-//	Left   the left key is always present, so it is the answer
-//	Right  the left key is null on an unmatched right row, and the right key is
-//	       always present — and on a matched row the two are equal, so the RIGHT
-//	       side is the answer for every row
-//	Full   a row can be unmatched on EITHER side, so neither column alone has it
-//
-// So only Full needs a merge, and Full does not coalesce by default. That is what
-// lets the operator gather a coalesced key with one ordinary Take rather than a
-// merge kernel that does not exist yet.
-func (j *Join) CoalesceSide() (JoinSide, bool) {
-	if j.Kind == JoinRight {
-		return FromRight, true
-	}
-	if j.Kind == JoinFull {
-		return FromLeft, false // no single side has it
-	}
-	return FromLeft, true
 }
 
 // coalescesAny reports the effective coalesce state for rendering. A pure function

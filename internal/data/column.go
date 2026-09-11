@@ -582,7 +582,8 @@ func (c *Column) RawChars() []byte {
 // already requires kernels to tolerate: "Kernels must treat 64-byte alignment as an
 // optimization hint, never as a precondition." In practice the address is
 // base + offset*width over a 64-byte-aligned base, so it is usually still aligned,
-// and arrowx.IsAligned is what a kernel asks.
+// and arrowx.IsAligned is what a kernel WOULD ask — no kernel asks today; its only
+// caller in the module is arrowx's own package test.
 func (c *Column) Slice(offset, length int) *Column {
 	if offset < 0 || length < 0 || offset+length > c.len {
 		panic("data: Column.Slice out of range")

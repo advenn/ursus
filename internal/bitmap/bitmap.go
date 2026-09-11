@@ -107,8 +107,11 @@ func (v View) Slice(offset, length int) View {
 // Returns (nil, 0) for the all-set form.
 func (v View) RawBits() (buf []byte, bitOffset int) { return v.buf, v.offset }
 
-// IsByteAligned reports whether the view starts on a byte boundary, which lets a
-// kernel use the simple indexing path.
+// IsByteAligned reports whether the view starts on a byte boundary.
+//
+// No caller today. Kept because the offset arithmetic it encapsulates is easy to
+// get wrong by hand, and because a View that is byte-aligned admits whole-byte
+// copies that a shifted one does not.
 func (v View) IsByteAligned() bool { return v.buf == nil || v.offset%8 == 0 }
 
 // Words iterates the view as 64-bit little-endian words, LSB = lowest bit index,

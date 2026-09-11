@@ -144,7 +144,15 @@ func (s *sortSink) Merge(other Sink) error {
 	// a merge as well as within one.
 	s.rows = append(s.rows, o.rows...)
 	s.keyB = append(s.keyB, o.keyB...)
-	return nil
+
+	// Retained, not copied, so the batches must be accounted here. Merging without
+	// retaining is the defect joinBuildSink.Merge was fixed for at step 13 and
+	// reverseSink.Merge at step 51; this was the third instance, latent for the
+	// same reason as the second — nothing calls it.
+	for _, b := range o.rows {
+		s.mem.Retain(b)
+	}
+	return s.mem.Check()
 }
 
 // order sorts the buffered rows and returns them as references into s.rows.
