@@ -322,7 +322,7 @@ func buildInSet(c *expr.Call, recvType dtype.DataType) (map[string]struct{}, err
 // sync.Map rather than a plain map because parallelise hands BatchOp chains to N
 // workers, so several goroutines evaluate the same Call node concurrently.
 // regexp.Regexp is itself documented as safe for concurrent use.
-var callCache sync.Map // *expr.Call -> compiledCall
+var callCache sync.Map // callKey -> compiledCall
 
 type compiledCall struct {
 	args []any
@@ -376,8 +376,33 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 	}
 }
 
+// callKey identifies a compiled call.
+//
+// The RECEIVER TYPE is part of it, and leaving it out was a silent wrong answer.
+// `set` and `needle` are encoded against recvType — is_in's probe set through
+// GroupKeyEncoder, list.contains's needle through the element type — so a cache
+// keyed on the node alone hands the first frame's encoding to the second.
+//
+// An Expr is a plain value, so hoisting one is ordinary use:
+//
+//	probe := Col("id").IsIn(2, 3)
+//	frameA.Filter(probe)   // id is Int64: encodes, caches
+//	frameB.Filter(probe)   // id is Int32: probed against the Int64 encoding
+//
+// The second filter returned ZERO rows rather than two. No error, because nothing
+// is wrong with the encoding — it is simply an encoding of a different type.
+//
+// The old comment claimed "that type is fixed for the plan's lifetime, so the
+// cached entry stays valid", which is true of one plan and false of a reused
+// expression.
+type callKey struct {
+	node *expr.Call
+	recv dtype.DataType
+}
+
 func compileCall(c *expr.Call, recvType dtype.DataType) compiledCall {
-	if v, ok := callCache.Load(c); ok {
+	k := callKey{node: c, recv: recvType}
+	if v, ok := callCache.Load(k); ok {
 		return v.(compiledCall)
 	}
 	var cc compiledCall
@@ -391,7 +416,7 @@ func compileCall(c *expr.Call, recvType dtype.DataType) compiledCall {
 	if cc.err == nil && c.Fn == expr.FnListContains {
 		cc.needle, cc.err = buildListNeedle(c, recvType)
 	}
-	callCache.Store(c, cc)
+	callCache.Store(k, cc)
 	return cc
 }
 

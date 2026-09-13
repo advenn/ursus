@@ -47,25 +47,40 @@ const (
 	// response is to change a knob and retry, and a caller should be able to
 	// detect that without matching on a message.
 	KindResource
+
+	// kindCount is one past the last Kind, so the name table below is sized by the
+	// enum rather than by hand.
+	kindCount
 )
 
+var kindNames = [kindCount]string{
+	KindInternal:    "internal",
+	KindSchema:      "schema",
+	KindType:        "type",
+	KindValue:       "value",
+	KindUnsupported: "unsupported",
+	KindIO:          "io",
+	KindResource:    "resource",
+}
+
+// String names the kind, or reports the number for one that has no name.
+//
+// The fallback used to be `default: return "internal"`, which is worse here than
+// the identical hazard fixed for JoinKind in step 51 — because KindInternal is the
+// ZERO VALUE, the default arm was legitimately reached for it and the omission read
+// as deliberate. An eighth kind added without a table entry would have rendered as
+// "internal", whose own doc says "a bug in ursus; users should never legitimately
+// see one". A resource or IO failure mislabelled as an ursus bug is the wrong advice
+// to give a user, and it is the failure mode ConcatMode.String's comment documents
+// for eight enums; this is the ninth.
+//
+// The `!= ""` half is the load-bearing one: the array is sized by kindCount, so a
+// forgotten entry is the empty string rather than a missing index.
 func (k Kind) String() string {
-	switch k {
-	case KindSchema:
-		return "schema"
-	case KindType:
-		return "type"
-	case KindValue:
-		return "value"
-	case KindUnsupported:
-		return "unsupported"
-	case KindIO:
-		return "io"
-	case KindResource:
-		return "resource"
-	default:
-		return "internal"
+	if int(k) < len(kindNames) && kindNames[k] != "" {
+		return kindNames[k]
 	}
+	return "Kind(" + strconv.Itoa(int(k)) + ")"
 }
 
 // Error is ursus's error type.

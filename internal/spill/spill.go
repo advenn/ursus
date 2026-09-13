@@ -24,6 +24,7 @@ package spill
 import (
 	"bufio"
 	"encoding/binary"
+	"errors"
 	"io"
 	"os"
 
@@ -265,6 +266,11 @@ type Reader struct {
 	f   *os.File
 	r   *bufio.Reader
 	sch *dtype.Schema
+
+	// path outlives f, which Close sets to nil. wrap and the unknown-tag error
+	// both name the file, and reading r.f.Name() after Close dereferenced a nil
+	// *os.File. Keeping the name separately is what makes those messages total.
+	path string
 }
 
 // Open opens a spill file and reads its header.
@@ -273,7 +279,7 @@ func Open(path string) (*Reader, error) {
 	if err != nil {
 		return nil, uerr.Wrap(err, uerr.KindIO, "spill", "opening spill file %s", path)
 	}
-	r := &Reader{f: f, r: bufio.NewReaderSize(f, 1<<16)}
+	r := &Reader{f: f, r: bufio.NewReaderSize(f, 1<<16), path: path}
 	var m [len(magic)]byte
 	if _, err := io.ReadFull(r.r, m[:]); err != nil || string(m[:]) != magic {
 		f.Close()
@@ -293,6 +299,21 @@ func (r *Reader) Schema() *dtype.Schema { return r.sch }
 
 // Next returns the next batch, or io.EOF once the file is exhausted.
 func (r *Reader) Next() (*data.Batch, error) {
+	// A CLOSED reader must refuse, and the reason is not hypothetical.
+	//
+	// Close sets r.f = nil but leaves the 64 KiB bufio buffer holding whatever it
+	// had already read, so Next went on serving batches from a closed file with no
+	// error at all — measured: four rows and two columns after Close. On a file
+	// larger than the buffer the refill instead returns os.ErrClosed, which is not
+	// EOF, so wrap took its second arm and dereferenced the nil r.f.
+	//
+	// Silent stale data on a small file and a panic on a large one, from the same
+	// defect. No consumer reads after Close today, but mergeOperator.Close closes
+	// every run including live ones, so a cancellation path is one refactor away.
+	if r.f == nil {
+		return nil, uerr.New(uerr.KindIO, "spill",
+			"reading %s after it was closed", r.path)
+	}
 	tag, err := r.r.ReadByte()
 	if err != nil {
 		return nil, r.wrap(err)
@@ -301,7 +322,7 @@ func (r *Reader) Next() (*data.Batch, error) {
 		return nil, io.EOF
 	}
 	if tag != recBatch {
-		return nil, uerr.Internalf("spill: unknown record tag %d in %s", tag, r.f.Name())
+		return nil, uerr.Internalf("spill: unknown record tag %d in %s", tag, r.path)
 	}
 	rows, err := r.getUint()
 	if err != nil {
@@ -341,13 +362,38 @@ func (r *Reader) Close() error {
 	return nil
 }
 
+// wrap turns a read failure into a spill error that says what actually happened.
+//
+// Both truncation shapes get a message, and they are DIFFERENT messages, because
+// the two branches used to be swapped relative to their text:
+//
+//   - io.EOF means a read began with nothing left, which happens at a field or
+//     record boundary. The file simply STOPS — most often without its terminator.
+//     The old code called that "ends mid-record", which is the one thing it is not.
+//   - io.ErrUnexpectedEOF means a read began and ran out partway: mid-varint,
+//     mid-name, mid-bitmap, mid-payload. That IS mid-record, and it fell to the
+//     generic arm, producing verbatim the "opaque unexpected-EOF" the old comment
+//     claimed to have replaced. In a minimal one-column file it is reproducible at
+//     twenty-three consecutive byte offsets.
+//
+// errOverflow from binary.ReadUvarint is corruption rather than IO, and is named as
+// such rather than reported as a read failure.
+//
+// Neither arm wraps io.EOF, and that is load-bearing: extsort, extjoin and extagg
+// all end their read loops on errors.Is(err, io.EOF), so wrapping it would turn a
+// truncated spill into a silent short read across the engine.
 func (r *Reader) wrap(err error) error {
-	if err == io.EOF {
-		// A file that ends without its terminator was truncated: the writer failed
-		// or the process died. Saying so beats an opaque unexpected-EOF.
-		return uerr.New(uerr.KindIO, "spill", "spill file %s ends mid-record", r.f.Name())
+	switch {
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return uerr.New(uerr.KindIO, "spill",
+			"spill file %s ends mid-record", r.path).
+			Hint("the writer failed or the process died before the record was complete")
+	case errors.Is(err, io.EOF):
+		return uerr.New(uerr.KindIO, "spill",
+			"spill file %s ends without its terminator", r.path).
+			Hint("the writer failed or the process died between records")
 	}
-	return uerr.Wrap(err, uerr.KindIO, "spill", "reading %s", r.f.Name())
+	return uerr.Wrap(err, uerr.KindIO, "spill", "reading %s", r.path)
 }
 
 func (r *Reader) getUint() (uint64, error) {

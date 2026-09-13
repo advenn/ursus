@@ -13,9 +13,10 @@ import (
 //
 //   - Edit distance catches transpositions and single-character slips
 //     ("reveune" → "revenue"), which are what people actually type.
-//   - Case-insensitive equality and prefix containment catch the other common
+//   - Case-insensitive equality and SEPARATOR SQUASHING catch the other common
 //     failure, which is not a typo at all but a naming-convention mismatch
-//     ("userid" → "user_id", "TS" → "ts").
+//     ("userid" → "user_id", "TS" → "ts"). This used to say "prefix containment",
+//     which is not implemented and never was; squash() strips _ - . and space.
 //
 // The distance budget scales with length: one edit for short names, up to three
 // for long ones. A fixed budget either floods short-name suggestions or misses
@@ -58,6 +59,12 @@ func NearMatches(want string, candidates []string, n int) []string {
 	// runs. Golden error files depend on this.
 	sort.SliceStable(out, func(i, j int) bool { return out[i].rank < out[j].rank })
 
+	// A negative n used to panic here on out[:n]. Only one caller exists and it
+	// passes a constant, but this is exported, and "slice bounds out of range" from
+	// an error-formatting helper is a poor way to learn that.
+	if n <= 0 {
+		return nil
+	}
 	if len(out) > n {
 		out = out[:n]
 	}
