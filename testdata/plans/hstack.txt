@@ -1,6 +1,5 @@
-PROJECT [col("k"), col("ka"), col("hv"), col("ha")]
-  HSTACK (2 inputs)
-    MEMORY SCAN 2 rows
-      projection: [k, ka, kb] (3/3 cols)
-    MEMORY SCAN 2 rows
-      projection: [hv, ha, hb] (3/3 cols)
+HSTACK (2 inputs)
+  MEMORY SCAN 2 rows
+    projection: [k, ka] (2/3 cols)
+  MEMORY SCAN 2 rows
+    projection: [hv, ha] (2/3 cols)

@@ -1,8 +1,7 @@
-PROJECT [col("k"), col("v")]
-  MERGE SORTED [k]
-    left:
-      MEMORY SCAN 2 rows
-        projection: [k, v, x] (3/3 cols)
-    right:
-      MEMORY SCAN 2 rows
-        projection: [k, v, x] (3/3 cols)
+MERGE SORTED [k]
+  left:
+    MEMORY SCAN 2 rows
+      projection: [k, v] (2/3 cols)
+  right:
+    MEMORY SCAN 2 rows
+      projection: [k, v] (2/3 cols)

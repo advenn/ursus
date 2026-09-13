@@ -397,6 +397,15 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 	case *Unpivot:
 		return pushdownUnpivot(t, required)
 
+	case *AsOfJoin:
+		return pushdownAsOfJoin(t, required)
+
+	case *MergeSorted:
+		return pushdownMergeSorted(t, required)
+
+	case *HStack:
+		return pushdownHStack(t, required)
+
 	default:
 		// Conservative: require everything this node's children can produce, and
 		// keep descending so that a Scan further down still gets *some* pruning
@@ -567,21 +576,44 @@ func pushdownUnpivot(u *Unpivot, required map[string]struct{}) (Node, bool, erro
 }
 
 func pushdownJoin(j *Join, required map[string]struct{}) (Node, bool, error) {
-	layout, err := j.Layout()
+	leftNeed, rightNeed, ok, err := joinNeeds(j, required)
 	if err != nil {
 		return nil, false, err
+	}
+	if !ok {
+		return j, false, nil
+	}
+	return pushIntoPair(j, leftNeed, rightNeed)
+}
+
+// joinNeeds splits a required set into the two sides of a join.
+//
+// It is separate from pushdownJoin for one reason, and it is not tidiness: an
+// AsOfJoin can borrow this whole computation through asJoin(), but pushdownJoin
+// itself ends in j.WithChildren, which returns a *Join. Calling it on a synthesised
+// join would replace the AsOfJoin with an equi-join — nearest-match semantics gone,
+// SCHEMA IDENTICAL, and not one existing test would notice. Splitting the analysis
+// from the rebuild is what makes the reuse safe.
+//
+// ok == false means "cannot prune"; the caller returns the node untouched.
+func joinNeeds(j *Join, required map[string]struct{}) (
+	leftNeed, rightNeed map[string]struct{}, ok bool, err error,
+) {
+	layout, err := j.Layout()
+	if err != nil {
+		return nil, nil, false, err
 	}
 	ls, err := j.Left.Schema()
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	rs, err := j.Right.Schema()
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 
-	leftNeed := map[string]struct{}{}
-	rightNeed := map[string]struct{}{}
+	leftNeed = map[string]struct{}{}
+	rightNeed = map[string]struct{}{}
 
 	// Iterate the LAYOUT and test membership in required — never iterate required
 	// and look it up — so a stray name is ignored rather than an error. pushdownScan
@@ -630,7 +662,7 @@ func pushdownJoin(j *Join, required map[string]struct{}) (Node, bool, error) {
 	if j.HasResidual() {
 		pair, err := j.PairLayout()
 		if err != nil {
-			return nil, false, err
+			return nil, nil, false, err
 		}
 		for _, e := range j.Residual {
 			for _, n := range expr.RootNames(e) {
@@ -638,7 +670,7 @@ func pushdownJoin(j *Join, required map[string]struct{}) (Node, bool, error) {
 				if i < 0 {
 					// Not a pair column. Nothing can prune what it does not
 					// recognise, so keep both sides whole rather than guess.
-					return j, false, nil
+					return nil, nil, false, nil
 				}
 				if jc := pair.Columns[i]; jc.Side == FromRight {
 					rightNeed[rs.Field(jc.Index).Name] = struct{}{}
@@ -655,19 +687,25 @@ func pushdownJoin(j *Join, required map[string]struct{}) (Node, bool, error) {
 			leftNeed[n] = struct{}{}
 		}
 	}
+	return leftNeed, rightNeed, true, nil
+}
 
-	left, lc, err := pushdown(j.Left, leftNeed)
+// pushIntoPair descends into a two-child node and rebuilds it through its OWN
+// WithChildren, so the node type survives the rewrite.
+func pushIntoPair(n Node, leftNeed, rightNeed map[string]struct{}) (Node, bool, error) {
+	kids := n.Children()
+	left, lc, err := pushdown(kids[0], leftNeed)
 	if err != nil {
 		return nil, false, err
 	}
-	right, rc, err := pushdown(j.Right, rightNeed)
+	right, rc, err := pushdown(kids[1], rightNeed)
 	if err != nil {
 		return nil, false, err
 	}
 	if !lc && !rc {
-		return j, false, nil
+		return n, false, nil
 	}
-	return j.WithChildren([]Node{left, right}), true, nil
+	return n.WithChildren([]Node{left, right}), true, nil
 }
 
 // requiredOf is the set of input columns a list of expressions reads.
@@ -700,4 +738,157 @@ func withColumnsDefs(in *dtype.Schema, es []expr.Node) ([]string, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// pushdownAsOfJoin borrows the equi-join's analysis through asJoin().
+//
+// Every part of joinNeeds is correct for an as-of join, and two of them are worth
+// naming rather than trusting. The residual block is DEAD: AsOfJoin has no residual
+// and asJoin leaves it nil, so HasResidual is false. And the key loop is what keeps
+// the ordering key and the `by` keys alive when nobody selects them — asJoin packs
+// them as LeftOn = [LeftOn] ++ LeftBy and the mirror on the right, so they route to
+// the correct sides. Without it an as-of join would prune away its own `on` column.
+//
+// The rebuild goes through AsOfJoin's own WithChildren. Calling pushdownJoin here
+// would hand back a *Join with an identical schema and no nearest-match semantics.
+func pushdownAsOfJoin(a *AsOfJoin, required map[string]struct{}) (Node, bool, error) {
+	leftNeed, rightNeed, ok, err := joinNeeds(a.asJoin(), required)
+	if err != nil {
+		return nil, false, err
+	}
+	if !ok {
+		return a, false, nil
+	}
+	return pushIntoPair(a, leftNeed, rightNeed)
+}
+
+// pushdownMergeSorted prunes both sides, and then CHECKS ITSELF.
+//
+// MergeSorted.Schema requires its two inputs to be Equal exactly — it interleaves
+// rows, so a column present on one side and not the other has no meaning. That makes
+// this the one arm where pruning can break a query that worked: push the same set
+// into both children and one may prune while the other cannot, because its subtree
+// contains a node whose own arm must keep everything. The result is [k,v] against
+// [k,v,x], resolution having already succeeded — defect P2's signature.
+//
+// So the arm re-derives both children's schemas and falls back to the conservative
+// descent unless they still agree. Falling back rather than returning the node
+// untouched keeps whatever pruning a Project deeper in either subtree had earned.
+//
+// It validates ITSELF rather than leaning on Optimizer.Verify, which is off in the
+// golden inventory and in Explain — so a broken plan would render a clean golden
+// file that `go test -update` would happily check in. And the user-visible failure
+// is not an internal error: it surfaces as a KindSchema "the two frames have
+// different schemas", i.e. the optimizer desynchronising the user's matching frames
+// and then blaming the user.
+func pushdownMergeSorted(m *MergeSorted, required map[string]struct{}) (Node, bool, error) {
+	// The key is read by Schema() whether or not anyone selected it.
+	need := make(map[string]struct{}, len(required)+1)
+	for n := range required {
+		need[n] = struct{}{}
+	}
+	need[m.Key] = struct{}{}
+
+	out, changed, err := pushIntoPair(m, need, need)
+	if err != nil {
+		return nil, false, err
+	}
+	if !changed {
+		return m, false, nil
+	}
+
+	kids := out.Children()
+	ls, lerr := kids[0].Schema()
+	rs, rerr := kids[1].Schema()
+	if lerr != nil || rerr != nil || !ls.Equal(rs) {
+		// Asymmetric. Hand back the ORIGINAL node and let the conservative default
+		// descend instead, so a Project below either side still prunes.
+		return pushdownConservative(m)
+	}
+	return out, true, nil
+}
+
+// pushdownHStack splits the required set per child by name.
+//
+// The children own disjoint name sets — HStack.Schema refuses a collision — so the
+// split is by membership in each child's schema, the shape pushdownUnnest uses.
+// Pruning is sound for the RowIndex argument verbatim: it only REMOVES names, and a
+// duplicate-name refusal can only become less likely.
+//
+// The one subtlety is the height. HStack pairs rows POSITIONALLY, and hstackOp
+// derives the output height from its children and errors when they disagree — so a
+// child must be read even when no column of it survives. Requiring its first column
+// is what guarantees that: an empty need set would make pushdownScan produce a nil
+// projection, which means "every column", so the prune would silently become a
+// no-op that still reports changed.
+func pushdownHStack(h *HStack, required map[string]struct{}) (Node, bool, error) {
+	kids := h.Children()
+	needs := make([]map[string]struct{}, len(kids))
+	for i, c := range kids {
+		cs, err := c.Schema()
+		if err != nil {
+			return nil, false, err
+		}
+		need := map[string]struct{}{}
+		for _, name := range cs.Names() {
+			if _, want := required[name]; want {
+				need[name] = struct{}{}
+			}
+		}
+		if len(need) == 0 && cs.Len() > 0 {
+			// Read this child for its HEIGHT. Deterministic: the first column in
+			// the child's own order, so the plan does not depend on map iteration.
+			need[cs.Field(0).Name] = struct{}{}
+		}
+		needs[i] = need
+	}
+
+	newKids := make([]Node, len(kids))
+	anyChanged := false
+	for i, c := range kids {
+		nk, changed, err := pushdown(c, needs[i])
+		if err != nil {
+			return nil, false, err
+		}
+		newKids[i] = nk
+		anyChanged = anyChanged || changed
+	}
+	if !anyChanged {
+		return h, false, nil
+	}
+	return h.WithChildren(newKids), true, nil
+}
+
+// pushdownConservative is the default arm's behaviour, callable by name.
+//
+// pushdownMergeSorted needs it as a fallback, and a second copy of "require
+// everything the children can produce, then keep descending" would be a second thing
+// to keep in step.
+func pushdownConservative(n Node) (Node, bool, error) {
+	kids := n.Children()
+	if len(kids) == 0 {
+		return n, false, nil
+	}
+	newKids := make([]Node, len(kids))
+	anyChanged := false
+	for i, c := range kids {
+		cs, err := c.Schema()
+		if err != nil {
+			return nil, false, err
+		}
+		all := make(map[string]struct{}, cs.Len())
+		for _, name := range cs.Names() {
+			all[name] = struct{}{}
+		}
+		nk, changed, err := pushdown(c, all)
+		if err != nil {
+			return nil, false, err
+		}
+		newKids[i] = nk
+		anyChanged = anyChanged || changed
+	}
+	if !anyChanged {
+		return n, false, nil
+	}
+	return n.WithChildren(newKids), true, nil
 }

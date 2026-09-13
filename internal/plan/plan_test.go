@@ -43,6 +43,44 @@ func wide() *fakeSource {
 	}
 }
 
+// rightSide is a second source sharing ONLY the key with wide().
+//
+// TestPushdownSoundness collects `needed` across the whole tree and then asserts it
+// against every scan whose Full schema contains the name. That is sound only while
+// no plan has two children — which was true until step 54 added AsOfJoin,
+// MergeSorted and HStack. Two sides built from wide() would make the test demand
+// that the RIGHT scan project left-only columns, so a correct arm would fail.
+//
+// Disjoint names make the global set unambiguous again.
+func rightSide() *fakeSource {
+	return &fakeSource{
+		schema: dtype.MustSchema(
+			dtype.NotNull("id", dtype.Int64),
+			dtype.Of("tag", dtype.String),
+			dtype.Of("score", dtype.Float64),
+		),
+		caps: plan.Caps{Projection: true},
+	}
+}
+
+// rightSide2 shares NO name with wide(). HStack refuses a duplicate outright, so
+// even the key cannot be common.
+func rightSide2() *fakeSource {
+	return &fakeSource{
+		schema: dtype.MustSchema(
+			dtype.Of("tag2", dtype.String),
+			dtype.Of("score2", dtype.Float64),
+		),
+		caps: plan.Caps{Projection: true},
+	}
+}
+
+// mirror is wide()'s schema exactly, for MergeSorted, which refuses two sides whose
+// schemas are not Equal. Its names are NOT disjoint, so a MergeSorted plan is the
+// one case the global-`needed` shape still cannot express — and it does not need to,
+// because both sides are pruned identically by construction.
+func mirror() *fakeSource { return wide() }
+
 // nested is wide() plus the two column shapes the reshaping nodes need. It exists
 // because those nodes were added to this test in step 48, and Resolve now calls
 // their Schema(), which refuses a column of the wrong kind.
@@ -189,6 +227,36 @@ func TestPushdownSoundness(t *testing.T) {
 		// they can now prune — and this test is what stops one of them pruning a
 		// column something above it reads. Before the arms they were covered by the
 		// rule's fail-safe default and could not be wrong; after them they can.
+		// The three join-shaped arms, added in step 54. Each is a two-child node,
+		// which is why rightSide() exists — see its doc.
+		&plan.Project{
+			Input: &plan.AsOfJoin{
+				Left:    &plan.Scan{Src: wide()},
+				Right:   &plan.Scan{Src: rightSide()},
+				LeftOn:  col("id"),
+				RightOn: col("id"),
+			},
+			Exprs: []expr.Node{col("region"), col("tag")},
+		},
+		&plan.Project{
+			Input: &plan.HStack{
+				Inputs: []plan.Node{
+					&plan.Scan{Src: wide()},
+					&plan.Scan{Src: rightSide2()},
+				},
+			},
+			Exprs: []expr.Node{col("region"), col("tag2")},
+		},
+		&plan.Project{
+			Input: &plan.MergeSorted{
+				Left:  &plan.Scan{Src: wide()},
+				Right: &plan.Scan{Src: mirror()},
+				Key:   "id",
+			},
+			// Deliberately does NOT select the key: the arm has to add it itself,
+			// because MergeSorted.Schema reads it whether or not anyone asked.
+			Exprs: []expr.Node{col("region")},
+		},
 		&plan.Project{
 			Input: &plan.Explode{
 				Input:   &plan.Scan{Src: nested()},
