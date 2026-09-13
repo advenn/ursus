@@ -248,19 +248,42 @@ var planCoverage = []struct {
 	{"slice", "testdata/plans/slice.txt", func(t *testing.T) *ursus.LazyFrame {
 		return frame().Slice(1, 2)
 	}},
+	// The three below each carry an UNSELECTED column and a Select above the node.
+	//
+	// They did not, and that made their goldens unable to observe the thing they
+	// were added for: with nothing selected, projectionPushdown seeds `required`
+	// with the root's whole schema, so every scan reads (N/N cols) and landing a
+	// pushdown arm changes zero bytes. A golden that cannot move is not evidence,
+	// and this is the sixth recorded instance of the fixture rather than the test
+	// being the unit of coverage.
 	{"hstack", "testdata/plans/hstack.txt", func(t *testing.T) *ursus.LazyFrame {
-		return ursus.Frame(ursus.Values("k", []int64{1, 2})).
-			HStack(ursus.Frame(ursus.Values("hv", []string{"x", "y"})))
+		return ursus.Frame(
+			ursus.Values("k", []int64{1, 2}),
+			ursus.Values("ka", []int64{3, 4}),
+			ursus.Values("kb", []int64{5, 6}),
+		).HStack(ursus.Frame(
+			ursus.Values("hv", []string{"x", "y"}),
+			ursus.Values("ha", []string{"p", "q"}),
+			ursus.Values("hb", []string{"s", "t"}),
+		)).Select(ursus.Col("k"), ursus.Col("ka"), ursus.Col("hv"), ursus.Col("ha"))
 	}},
 	{"merge sorted", "testdata/plans/merge_sorted.txt", func(t *testing.T) *ursus.LazyFrame {
-		a := ursus.Frame(ursus.Values("k", []int64{1, 3}), ursus.Values("v", []int64{10, 30}))
-		b := ursus.Frame(ursus.Values("k", []int64{2, 4}), ursus.Values("v", []int64{20, 40}))
-		return a.MergeSorted(b, "k")
+		// Both sides widen SYMMETRICALLY: MergeSorted.Schema requires the two
+		// schemas to be Equal exactly, so an asymmetric fixture would be testing
+		// the refusal rather than the pruning.
+		a := ursus.Frame(ursus.Values("k", []int64{1, 3}),
+			ursus.Values("v", []int64{10, 30}), ursus.Values("x", []int64{100, 300}))
+		b := ursus.Frame(ursus.Values("k", []int64{2, 4}),
+			ursus.Values("v", []int64{20, 40}), ursus.Values("x", []int64{200, 400}))
+		return a.MergeSorted(b, "k").Select(ursus.Col("k"), ursus.Col("v"))
 	}},
 	{"asof join", "testdata/plans/asof_join.txt", func(t *testing.T) *ursus.LazyFrame {
-		l := ursus.Frame(ursus.Values("k", []int64{10, 20}), ursus.Values("lv", []int64{1, 2}))
-		r := ursus.Frame(ursus.Values("k", []int64{8, 20}), ursus.Values("rv", []int64{8, 9}))
-		return l.JoinAsOf(r, ursus.AsOfOn(ursus.Col("k")))
+		l := ursus.Frame(ursus.Values("k", []int64{10, 20}),
+			ursus.Values("lv", []int64{1, 2}), ursus.Values("lx", []int64{7, 8}))
+		r := ursus.Frame(ursus.Values("k", []int64{8, 20}),
+			ursus.Values("rv", []int64{8, 9}), ursus.Values("rx", []int64{5, 6}))
+		return l.JoinAsOf(r, ursus.AsOfOn(ursus.Col("k"))).
+			Select(ursus.Col("k"), ursus.Col("lv"), ursus.Col("rv"))
 	}},
 	{"explode", "testdata/plans/explode.txt", func(t *testing.T) *ursus.LazyFrame {
 		return ursus.Frame(
