@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"math"
 	"unsafe"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -519,9 +520,27 @@ func arithFloat[T ~float32 | ~float64](op expr.BinaryOp, name string, out dtype.
 		// purpose, and matches every other numeric library.
 		divFloatScalar(dst, lv, rv)
 	case expr.OpFloorDiv:
+		// math.Floor, NOT a round trip through int64.
+		//
+		// This used to be `dst[i] = T(int64(dst[i]))`, and a conversion from a float
+		// to an integer is IMPLEMENTATION-DEFINED when the value does not fit. On
+		// amd64 it yields -9223372036854775808, so three ordinary inputs produced a
+		// plausible finite number instead of the right answer:
+		//
+		//	1.0  // 0.0   ->  +Inf, became -9.22e18
+		//	0.0  // 0.0   ->  NaN,  became -9.22e18
+		//	1e300 // 1.0  ->  1e300, became -9.22e18
+		//
+		// The last one is the damning case: nothing about it is a corner. It also
+		// broke the totality the OpDiv arm above deliberately establishes — IEEE
+		// division never traps, so the float path is total and a floor of it must
+		// stay total. math.Floor is: Floor(±Inf) is ±Inf and Floor(NaN) is NaN.
+		//
+		// The integer arm keeps its own behaviour: divIntScalar consults validity and
+		// NULLS a division by zero, because there is no integer +Inf to return.
 		divFloatScalar(dst, lv, rv)
 		for i := range dst {
-			dst[i] = T(int64(dst[i]))
+			dst[i] = T(math.Floor(float64(dst[i])))
 		}
 	case expr.OpPow:
 		// Pow only ever arrives here: resolveArithmetic gives it OpDiv's binding, so

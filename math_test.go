@@ -332,10 +332,53 @@ func TestFloatModAndFloorDiv(t *testing.T) {
 			t.Errorf("fmod row %d = %v, want %v", i, got, want)
 		}
 	}
+	// FloorDiv, which this test NAMED and never asserted. "fdiv" was selected on
+	// the line above and then read by nothing — the column was computed and thrown
+	// away, including the row where b is zero.
+	//
+	// What it was hiding: the arm did `dst[i] = T(int64(dst[i]))`, and a float-to-
+	// integer conversion is IMPLEMENTATION-DEFINED when the value does not fit. On
+	// amd64 every one of these came back as -9223372036854775808.
+	//
+	// Float division is TOTAL by design — the OpDiv arm says so — so flooring it
+	// must stay total: +Inf and NaN survive, and a value too large to be an int64
+	// is simply already an integer.
+	for i, want := range []float64{3, -4, math.Inf(1), 2} {
+		got, ok, _ := df.At[float64](i, "fdiv")
+		if !ok {
+			t.Fatalf("fdiv row %d is null; float floor division is TOTAL", i)
+		}
+		if math.Float64bits(got) != math.Float64bits(want) {
+			t.Errorf("fdiv row %d = %v, want %v", i, got, want)
+		}
+	}
 	// Integer mod by zero is NULL, and that disagreement with the float case is a
 	// decision: Go panics on integer division by zero, IEEE does not.
 	if _, ok, _ := df.At[int64](2, "imod"); ok {
 		t.Error("integer mod by zero must be null")
+	}
+}
+
+// TestFloatFloorDivStaysFinite is the case that makes the defect not a corner.
+//
+// 1e300 // 1 is an ordinary computation on ordinary input. Through an int64 round
+// trip it returned -9.22e18 — a plausible finite number, with no error and no null.
+func TestFloatFloorDivStaysFinite(t *testing.T) {
+	df, err := ursus.Frame(
+		ursus.Values("a", []float64{1e300, -1e300, 1e18}),
+		ursus.Values("b", []float64{1, 1, 1}),
+	).Select(ursus.Col("a").FloorDiv(ursus.Col("b")).Alias("fd")).
+		Collect(t.Context(), ursus.WithVerify())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []float64{1e300, -1e300, 1e18} {
+		got, ok, _ := df.At[float64](i, "fd")
+		if !ok || got != want {
+			t.Errorf("row %d = %v (present %v), want %v — a value past int64's "+
+				"range is already an integer; flooring it changes nothing",
+				i, got, ok, want)
+		}
 	}
 }
 
