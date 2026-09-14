@@ -54,6 +54,15 @@ func contractBatch(t *testing.T) *data.Batch {
 		// about zones: with one Datetime column there is no pair to disagree about.
 		dtype.Of("tn", dtype.Datetime(dtype.Micro, "")),
 		dtype.Of("tm", dtype.Time(dtype.Nano)),
+		// A NULL column, which the matrix had no way to reach. ResolveUnary admits
+		// Null for eleven ops and kernel.Unary implements none of them; the row-count
+		// assertion below was already written and could not fire, because the unit of
+		// coverage is the fixture and this fixture had sixteen types and not this one.
+		//
+		// It is also the only column here with no payload buffer at all — data.NewNull
+		// carries validity and nothing else — so it is the only one that tests what a
+		// kernel does when there is nothing to read.
+		dtype.Of("nu", dtype.Null),
 	}
 	cols := []*data.Column{
 		data.NewFixed("i8", dtype.Int8, []int8{1, 2, 3}, valid(n)),
@@ -75,6 +84,7 @@ func contractBatch(t *testing.T) *data.Batch {
 		data.NewFixed("du", dtype.Duration(dtype.Nano), []int64{1, 2, 3}, valid(n)),
 		data.NewFixed("tn", dtype.Datetime(dtype.Micro, ""), []int64{1, 2, 3}, valid(n)),
 		data.NewFixed("tm", dtype.Time(dtype.Nano), []int64{1, 2, 3}, valid(n)),
+		data.NewNull("nu", dtype.Null, n),
 	}
 	schema, err := dtype.NewSchema(fields...)
 	if err != nil {
@@ -89,20 +99,44 @@ func contractBatch(t *testing.T) *data.Batch {
 
 var contractCols = []string{
 	"i8", "i16", "i32", "i64", "u8", "u32", "u64",
-	"f32", "f64", "bo", "st", "dt", "ts", "du", "tn", "tm",
+	"f32", "f64", "bo", "st", "dt", "ts", "du", "tn", "tm", "nu",
 }
 
-var contractBinaryOps = []expr.BinaryOp{
-	expr.OpAdd, expr.OpSub, expr.OpMul, expr.OpDiv, expr.OpFloorDiv, expr.OpMod,
-	expr.OpEq, expr.OpNe, expr.OpLt, expr.OpLe, expr.OpGt, expr.OpGe,
-	expr.OpEqMissing, expr.OpNeMissing, expr.OpAnd, expr.OpOr, expr.OpXor,
+// The op lists are DERIVED, not written down.
+//
+// They used to be hand-written, and a hand-written list of an enum goes quiet
+// exactly the way an allow-list does. Three declared ops were missing from it —
+// OpPow, OpLog10 and OpLog1p — so `**`, `log10` and `log1p` had never once been
+// through this matrix, and nothing could say so.
+//
+// Both String() methods return "?" for an undeclared value and are sized by their
+// enum's own sentinel, which makes the range walk total: every op that exists is
+// covered, and one added tomorrow is covered the day it is named. Same trick as
+// AggOp's coverage check in step 51, and it is available here only because op.go
+// fixed the empty-string fallback that would have made "?" unreachable.
+var (
+	contractBinaryOps = allBinaryOps()
+	contractUnaryOps  = allUnaryOps()
+)
+
+func allBinaryOps() []expr.BinaryOp {
+	var ops []expr.BinaryOp
+	for i := range 256 {
+		if op := expr.BinaryOp(i); op.String() != "?" {
+			ops = append(ops, op)
+		}
+	}
+	return ops
 }
 
-var contractUnaryOps = []expr.UnaryOp{
-	expr.OpNeg, expr.OpAbs, expr.OpNot, expr.OpIsNull, expr.OpIsNotNull,
-	expr.OpIsNan, expr.OpIsNotNan, expr.OpIsFinite, expr.OpIsInfinite,
-	expr.OpSqrt, expr.OpCbrt, expr.OpExp, expr.OpLn, expr.OpSign,
-	expr.OpFloor, expr.OpCeil,
+func allUnaryOps() []expr.UnaryOp {
+	var ops []expr.UnaryOp
+	for i := range 256 {
+		if op := expr.UnaryOp(i); op.String() != "?" {
+			ops = append(ops, op)
+		}
+	}
+	return ops
 }
 
 var contractCastTargets = []dtype.DataType{
@@ -128,6 +162,20 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 		seenContractGaps[label] = true
 	}
 
+	// fail records a gap. A LISTED gap is expected, so it is silent; an unlisted one
+	// is the failure this test exists for. Routing every assertion through here is
+	// what lets the ratchet cover the SHAPE checks below and not only the
+	// Field/Eval switch — which it did not, and `not(nu)` is why that mattered: both
+	// halves succeeded, the promised type was right, and the row count was zero.
+	agreed := true
+	fail := func(format string, args ...any) {
+		t.Helper()
+		agreed = false
+		if !known {
+			t.Errorf(format, args...)
+		}
+	}
+
 	switch {
 	case ferr != nil && eerr != nil:
 		if known {
@@ -136,30 +184,27 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 		}
 		return false // agreed refusal; nothing to compare
 	case ferr != nil && eerr == nil:
-		if known {
-			return false
-		}
-		t.Errorf("%s: Field refused (%v) but Eval produced %s — the planner would "+
+		fail("%s: Field refused (%v) but Eval produced %s — the planner would "+
 			"reject a query the engine can run", label, ferr, c.DType())
 		return false
 	case ferr == nil && eerr != nil:
-		if known {
-			return false
-		}
-		t.Errorf("%s: Field promised %s but Eval failed: %v — CollectSchema and "+
+		fail("%s: Field promised %s but Eval failed: %v — CollectSchema and "+
 			"Explain would report a plan that cannot run", label, f.Type, eerr)
 		return false
 	}
-	if known {
-		t.Errorf("%s is listed in knownContractGaps but now agrees — delete the entry",
-			label)
-	}
 
 	if c.DType() != f.Type {
-		t.Errorf("%s: Field promised %s, Eval produced %s", label, f.Type, c.DType())
+		fail("%s: Field promised %s, Eval produced %s", label, f.Type, c.DType())
 	}
+	// The SHAPE half. A kernel that returns the promised type over the wrong number
+	// of rows has satisfied the type contract and broken the batch, and the type
+	// contract is the half that gets read. Length 1 is the literal broadcast.
 	if c.Len() != b.Rows() && c.Len() != 1 {
-		t.Errorf("%s: produced %d rows for a %d-row batch", label, c.Len(), b.Rows())
+		fail("%s: produced %d rows for a %d-row batch", label, c.Len(), b.Rows())
+	}
+	if known && agreed {
+		t.Errorf("%s is listed in knownContractGaps but now agrees — delete the entry",
+			label)
 	}
 	return true
 }
@@ -179,7 +224,69 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 // It is kept, empty, because the mechanism is the useful part: an entry asserts a
 // gap still EXISTS, so fixing one without deleting its line fails the test. That is
 // the property a plain allow-list does not have.
-var knownContractGaps = map[string]string{}
+//
+// # It is not empty any more, and these twenty-two were measured
+//
+// Adding one Null column produced every entry below. They are checked in BEFORE the
+// fix, in their own commit, because a list of gaps written down is evidence and a
+// list of gaps described is a claim — the same reason step 54 widened its fixtures
+// in a commit of their own.
+//
+// The common cause is that ResolveUnary admits Null for eleven ops and kernel.Unary
+// implements none of them, while dispatchCompare has no arm for a Null physical
+// type. Nothing here is exotic: `ursus.Null(ursus.NullT)` is the spelling cond.go
+// recommends.
+var knownContractGaps = map[string]string{
+	// Field succeeds, Eval returns a column of the promised type Bool with ZERO
+	// rows and a nil error. data.NewNull carries no payload bitmap, so c.Bools() is
+	// the zero View, bitmap.Not is length-driven, and data.NewBool takes its length
+	// from the payload and discards the 3-bit validity it was handed.
+	"not(nu)": "kernel.Unary has no Null arm; NOT null is null and must stay n rows",
+
+	// Internalf — the planner promised Bool and the user is told it is a bug in
+	// ursus. nanPredicate dispatches on Physical().ID(), and Null's physical type is
+	// Null, so every one of them falls to its default.
+	"is_nan(nu)":      "nanPredicate has no Null arm; null.is_nan() is null",
+	"is_not_nan(nu)":  "nanPredicate has no Null arm; null.is_nan() is null",
+	"is_finite(nu)":   "nanPredicate has no Null arm; null.is_nan() is null",
+	"is_infinite(nu)": "nanPredicate has no Null arm; null.is_nan() is null",
+
+	// ResolveUnary returns Float64 for a Null operand three lines above the
+	// IsNumeric() check that would have refused it. toFloat64 then has nothing to
+	// widen. Nothing argues for this promise anywhere; neg and abs refuse.
+	"sqrt(nu)":  "ResolveUnary promises Float64 for Null; toFloat64 cannot widen it",
+	"cbrt(nu)":  "ResolveUnary promises Float64 for Null; toFloat64 cannot widen it",
+	"exp(nu)":   "ResolveUnary promises Float64 for Null; toFloat64 cannot widen it",
+	"ln(nu)":    "ResolveUnary promises Float64 for Null; toFloat64 cannot widen it",
+	"log10(nu)": "ResolveUnary promises Float64 for Null; toFloat64 cannot widen it",
+	"log1p(nu)": "ResolveUnary promises Float64 for Null; toFloat64 cannot widen it",
+
+	// The same arm as neg and abs, which refuse Null — these three accept it and
+	// promise to return it. unaryArith then dispatches on Null's physical type and
+	// finds no case.
+	"sign(nu)":  "ResolveUnary promises Null for Null; unaryArith has no such case",
+	"floor(nu)": "ResolveUnary promises Null for Null; unaryArith has no such case",
+	"ceil(nu)":  "ResolveUnary promises Null for Null; unaryArith has no such case",
+
+	// Two Null operands: Promote returns Null, equality does not require an
+	// ordering, so the binding is CastL = CastR = Null with Out Bool and nothing
+	// casts. dispatchCompare then refuses a Null physical type.
+	//
+	// <=> and <!> are the interesting pair. They are the operators for which null
+	// IS data — "null == null is true and the result is never null" — so they are
+	// the two here whose answer is already written down.
+	"==(nu,nu)":  "dispatchCompare has no Null arm; null == null is null",
+	"!=(nu,nu)":  "dispatchCompare has no Null arm; null != null is null",
+	"<=>(nu,nu)": "dispatchCompare has no Null arm; null <=> null is TRUE",
+	"<!>(nu,nu)": "dispatchCompare has no Null arm; null <!> null is FALSE",
+
+	// The same four against ursus.Null(ursus.NullT), which is the user-facing
+	// spelling and reaches the identical binding through the length-1 literal path.
+	"==(nu,null)":  "dispatchCompare has no Null arm; null == null is null",
+	"!=(nu,null)":  "dispatchCompare has no Null arm; null != null is null",
+	"<=>(nu,null)": "dispatchCompare has no Null arm; null <=> null is TRUE",
+	"<!>(nu,null)": "dispatchCompare has no Null arm; null <!> null is FALSE",
+}
 
 var seenContractGaps = map[string]bool{}
 
@@ -200,9 +307,15 @@ func TestEvaluatorContract(t *testing.T) {
 				}
 			}
 		}
-		// Anti-vacuity. 17 ops × 14 × 14 is 3332 combinations; if promotion ever
-		// starts refusing everything, the loop still completes and every assertion
-		// is skipped. A count that cannot see that is no guard at all.
+		// Anti-vacuity, on both axes. The op list is derived, so a String() that
+		// stopped returning "?" would shrink it silently; the column list is
+		// written down, so it can only shrink by hand. Then the count: if
+		// promotion ever starts refusing everything, the loop still completes and
+		// every assertion is skipped, and a count is what sees that.
+		if len(contractBinaryOps) < 18 || len(contractCols) < 17 {
+			t.Fatalf("the matrix is %d ops × %d columns, which is smaller than it "+
+				"has ever been", len(contractBinaryOps), len(contractCols))
+		}
 		if ran < 500 {
 			t.Errorf("only %d binary combinations resolved — too few for this "+
 				"matrix to mean anything", ran)
@@ -218,6 +331,10 @@ func TestEvaluatorContract(t *testing.T) {
 					ran++
 				}
 			}
+		}
+		if len(contractUnaryOps) < 18 {
+			t.Fatalf("only %d unary ops derived; the enum declares more",
+				len(contractUnaryOps))
 		}
 		if ran < 50 {
 			t.Errorf("only %d unary combinations resolved", ran)
@@ -246,16 +363,32 @@ func TestEvaluatorContract(t *testing.T) {
 		}
 	})
 
-	// A literal against every column: the broadcast path, and the one where weak
-	// literal typing decides the result type rather than the operands alone.
+	// A literal against every column: the broadcast path, where one operand is a
+	// length-1 column and the result must still be batch-height.
+	//
+	// The typed literal used to be `&expr.Lit{Value: int64(2)}` with DT left at its
+	// zero value — which is dtype.Null. litNode NEVER builds that: Lit.Field reports
+	// DT while litColumn switches on Value, so such a node DECLARES Null and
+	// EVALUATES to Int64, and the matrix survived it only because Promote(T, Null)
+	// is T for every column it had. Against a Null column there is no T to adopt,
+	// and it surfaced as four failures belonging to the fixture rather than to the
+	// engine. Both literals below are now what the public surface actually builds.
 	t.Run("binary against a literal", func(t *testing.T) {
+		lits := []struct {
+			label string
+			node  *expr.Lit
+		}{
+			{"lit", &expr.Lit{Value: int64(2), DT: dtype.Int64}}, // ursus.Lit(int64(2))
+			{"null", &expr.Lit{Value: nil, DT: dtype.Null}},      // ursus.Null(ursus.NullT)
+		}
 		var ran int
 		for _, op := range contractBinaryOps {
 			for _, c := range contractCols {
-				n := &expr.Binary{
-					Op: op, L: &expr.Col{Name: c}, R: &expr.Lit{Value: int64(2)}}
-				if checkContract(t, n, b, op.String()+"("+c+",lit)") {
-					ran++
+				for _, l := range lits {
+					n := &expr.Binary{Op: op, L: &expr.Col{Name: c}, R: l.node}
+					if checkContract(t, n, b, op.String()+"("+c+","+l.label+")") {
+						ran++
+					}
 				}
 			}
 		}
