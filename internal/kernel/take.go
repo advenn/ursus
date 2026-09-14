@@ -62,6 +62,19 @@ func Take(c *data.Column, sel []int32) (*data.Column, error) {
 	}
 
 	switch {
+	// Gathering from a column whose TYPE says there are no values. Every output row
+	// is null whichever input row it names, so there is nothing to index and the
+	// selection's own nulls make no difference — this is nullFixed's argument
+	// below, on the other side of the same wall.
+	//
+	// Without it, `Select(ursus.Null(ursus.NullT))` failed. Not an exotic spelling:
+	// cond.go recommends it, and a literal evaluates to a LENGTH-1 column, so
+	// broadcasting it to the batch height is a Take and every use of an untyped
+	// null went through here. It surfaced as "take is not implemented for Null"
+	// after Explain had printed the plan cleanly.
+	case c.DType().IsNull():
+		return data.NewNull(c.Name(), c.DType(), n), nil
+
 	case c.DType().ID() == dtype.TypeBool:
 		bits := c.Bools()
 		out := bitmap.NewBuilder(n)

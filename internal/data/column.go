@@ -178,8 +178,28 @@ func NewFixedBuffer(name string, dt dtype.DataType, buf *memory.Buffer, n int, v
 }
 
 // NewBool builds a Boolean column from a packed payload bitmap.
+//
+// # The length comes from the payload, and a disagreeing validity is a panic
+//
+// It used to be taken from the payload SILENTLY. `NewBool(name, bitmap.Not(c.Bools()),
+// c.Validity())` over a Null column handed this a zero-length payload and an n-bit
+// validity, and got back a Bool column of length 0 carrying n validity bits — a
+// structurally impossible value, returned with no error, from a kernel that had
+// satisfied its type contract. It surfaced three layers away as "expression produced
+// 0 rows for a 3-row batch; this is a bug in ursus".
+//
+// Two integer compares against the cost of building the bitmap, so there is no case
+// for hiding this behind CheckNonNullable's debug flag. A panic rather than a
+// clamp for the reason NewBatchRows gives for the same shape of violation: this
+// signature has no error to return, and the caller cannot handle it — two buffers
+// of different lengths are not a condition, they are a bug in whoever built them.
 func NewBool(name string, bits bitmap.View, valid bitmap.View) *Column {
 	n := bits.Len()
+	if valid.Len() != 0 && valid.Len() != n {
+		panic(uerr.Internalf(
+			"data: bool column %q has a %d-bit payload and a %d-bit validity bitmap",
+			name, n, valid.Len()))
+	}
 	if valid.Len() == 0 && n > 0 {
 		valid = bitmap.AllSet(n)
 	}

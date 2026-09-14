@@ -145,10 +145,16 @@ func evalCond(ctx context.Context, c *expr.Cond, b *data.Batch) (*data.Column, e
 
 	// An untyped null literal as the condition: Field admits it, meaning every row
 	// takes neither branch, so it must reach the kernel as an all-null Bool rather
-	// than as a Null column the mask check would reject. Cast cannot do this — a
-	// data.NewNull has no payload to reinterpret.
+	// than as a Null column the mask check would reject.
+	//
+	// This used to call kernel.NullColumn directly, under a comment asserting that
+	// "Cast cannot do this — a data.NewNull has no payload to reinterpret". That
+	// stopped being true when Cast gained its from.IsNull() arm, which does exactly
+	// this and for the same stated reason. One mechanism, and the doc claim goes
+	// with the duplicate: a false comment about a neighbouring function is how the
+	// next person writes a second workaround for a hole that was already filled.
 	if pred.DType().IsNull() {
-		if pred, err = kernel.NullColumn(pred.Name(), dtype.Bool, pred.Len()); err != nil {
+		if pred, err = kernel.Cast(pred.Name(), dtype.Bool, true, pred); err != nil {
 			return nil, err
 		}
 	}
@@ -342,6 +348,25 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 	recv, err := evalColumn(ctx, c.Args[0], b)
 	if err != nil {
 		return nil, err
+	}
+
+	// is_in against a NULL receiver, which has to be answered BEFORE compiling.
+	//
+	// ResolveCall admits it — the guard there is `!in.IsHashable() && !in.IsNull()`
+	// — and promises Bool. But the probe set is encoded against the receiver's
+	// type, so compileCall tried to cast the probes TO Null and failed with "cast
+	// from Int64 to Null is not implemented yet". Field promised, Explain printed a
+	// clean plan, and Collect refused.
+	//
+	// The answer is the three-valued one this engine gives everywhere else: whether
+	// a value that is not there belongs to a set is not false, it is unknown. Same
+	// rule the NaN predicates state in three files.
+	//
+	// Only is_in needs this. Every string call was measured against a Null receiver
+	// and already produces its promised type; is_in is the one that encodes
+	// something against the receiver before it runs.
+	if c.Fn == expr.FnIsIn && recv.DType().IsNull() {
+		return kernel.NullColumn(recv.Name(), dtype.Bool, recv.Len())
 	}
 
 	// The receiver's type is needed before compiling, because is_in encodes its
