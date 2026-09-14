@@ -108,6 +108,25 @@ func compare(op expr.BinaryOp, name string, l, r *data.Column, n int) (*data.Col
 func dispatchCompare(op expr.BinaryOp, l, r *data.Column, n int, out *bitmap.Builder) error {
 	p := l.DType().Physical()
 
+	// TWO NULL OPERANDS, which is not the same as two null values.
+	//
+	// Promote returns Null for Null against Null and equality needs no ordering, so
+	// the binding is CastL = CastR = Null with Out Bool — nothing casts, and a
+	// column with no payload at all arrives here. There is nothing to compare.
+	//
+	// Appending zeros is not a decision about semantics, because neither caller
+	// reads these bits for a row where both sides are null. compare() masks them
+	// with combinedValidity, which is all-zero when both operands are all-null, so
+	// `null == null` is NULL. missingCompare patches every lane where both sides
+	// are invalid to true before it looks at them, so `null <=> null` is TRUE. Both
+	// are the answers op.go writes down, and neither was reachable: the default arm
+	// below refused the whole family with "comparison is not implemented for Null",
+	// after Field had already promised Bool.
+	if l.DType().IsNull() && r.DType().IsNull() {
+		out.AppendView(bitmap.Zeros(n))
+		return nil
+	}
+
 	// String comparison has no numeric kernel; handle it before the numeric switch.
 	if p.IsString() || p.ID() == dtype.TypeString {
 		return compareStrings(op, l, r, n, out)

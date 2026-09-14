@@ -315,9 +315,11 @@ func genCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 func mathCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 	switch fn {
 	case FnMathRound:
-		if in.IsNull() {
-			return in, nil
-		}
+		// Null is refused, as it is for floor() and ceil() — round is their
+		// Call-surface twin and shared their old mistake of promising `in` for a
+		// Null operand, which is a type no rounding kernel can dispatch on. The
+		// matrix cannot see this one: it has no Call arm, so it was found by
+		// following floor and ceil rather than by measurement.
 		if !in.IsNumeric() {
 			return dtype.Null, uerr.New(uerr.KindType, "round",
 				"round() requires a numeric operand, got %s", in).

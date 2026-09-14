@@ -225,68 +225,20 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 // gap still EXISTS, so fixing one without deleting its line fails the test. That is
 // the property a plain allow-list does not have.
 //
-// # It is not empty any more, and these twenty-two were measured
+// # It held twenty-two again, for one commit, and is empty again
 //
-// Adding one Null column produced every entry below. They are checked in BEFORE the
+// Adding one Null column produced all twenty-two. They were checked in BEFORE the
 // fix, in their own commit, because a list of gaps written down is evidence and a
 // list of gaps described is a claim — the same reason step 54 widened its fixtures
-// in a commit of their own.
+// in a commit of their own. Read `git show` on the commit below this one to see
+// them.
 //
-// The common cause is that ResolveUnary admits Null for eleven ops and kernel.Unary
-// implements none of them, while dispatchCompare has no arm for a Null physical
-// type. Nothing here is exotic: `ursus.Null(ursus.NullT)` is the spelling cond.go
-// recommends.
-var knownContractGaps = map[string]string{
-	// Field succeeds, Eval returns a column of the promised type Bool with ZERO
-	// rows and a nil error. data.NewNull carries no payload bitmap, so c.Bools() is
-	// the zero View, bitmap.Not is length-driven, and data.NewBool takes its length
-	// from the payload and discards the 3-bit validity it was handed.
-	"not(nu)": "kernel.Unary has no Null arm; NOT null is null and must stay n rows",
-
-	// Internalf — the planner promised Bool and the user is told it is a bug in
-	// ursus. nanPredicate dispatches on Physical().ID(), and Null's physical type is
-	// Null, so every one of them falls to its default.
-	"is_nan(nu)":      "nanPredicate has no Null arm; null.is_nan() is null",
-	"is_not_nan(nu)":  "nanPredicate has no Null arm; null.is_nan() is null",
-	"is_finite(nu)":   "nanPredicate has no Null arm; null.is_nan() is null",
-	"is_infinite(nu)": "nanPredicate has no Null arm; null.is_nan() is null",
-
-	// ResolveUnary returns Float64 for a Null operand three lines above the
-	// IsNumeric() check that would have refused it. toFloat64 then has nothing to
-	// widen. Nothing argues for this promise anywhere; neg and abs refuse.
-	"sqrt(nu)":  "ResolveUnary promises Float64 for Null; toFloat64 cannot widen it",
-	"cbrt(nu)":  "ResolveUnary promises Float64 for Null; toFloat64 cannot widen it",
-	"exp(nu)":   "ResolveUnary promises Float64 for Null; toFloat64 cannot widen it",
-	"ln(nu)":    "ResolveUnary promises Float64 for Null; toFloat64 cannot widen it",
-	"log10(nu)": "ResolveUnary promises Float64 for Null; toFloat64 cannot widen it",
-	"log1p(nu)": "ResolveUnary promises Float64 for Null; toFloat64 cannot widen it",
-
-	// The same arm as neg and abs, which refuse Null — these three accept it and
-	// promise to return it. unaryArith then dispatches on Null's physical type and
-	// finds no case.
-	"sign(nu)":  "ResolveUnary promises Null for Null; unaryArith has no such case",
-	"floor(nu)": "ResolveUnary promises Null for Null; unaryArith has no such case",
-	"ceil(nu)":  "ResolveUnary promises Null for Null; unaryArith has no such case",
-
-	// Two Null operands: Promote returns Null, equality does not require an
-	// ordering, so the binding is CastL = CastR = Null with Out Bool and nothing
-	// casts. dispatchCompare then refuses a Null physical type.
-	//
-	// <=> and <!> are the interesting pair. They are the operators for which null
-	// IS data — "null == null is true and the result is never null" — so they are
-	// the two here whose answer is already written down.
-	"==(nu,nu)":  "dispatchCompare has no Null arm; null == null is null",
-	"!=(nu,nu)":  "dispatchCompare has no Null arm; null != null is null",
-	"<=>(nu,nu)": "dispatchCompare has no Null arm; null <=> null is TRUE",
-	"<!>(nu,nu)": "dispatchCompare has no Null arm; null <!> null is FALSE",
-
-	// The same four against ursus.Null(ursus.NullT), which is the user-facing
-	// spelling and reaches the identical binding through the length-1 literal path.
-	"==(nu,null)":  "dispatchCompare has no Null arm; null == null is null",
-	"!=(nu,null)":  "dispatchCompare has no Null arm; null != null is null",
-	"<=>(nu,null)": "dispatchCompare has no Null arm; null <=> null is TRUE",
-	"<!>(nu,null)": "dispatchCompare has no Null arm; null <!> null is FALSE",
-}
+// Fourteen were unary: ResolveUnary admitted Null for eleven ops and kernel.Unary
+// implemented none of them, `not` by returning a ZERO-ROW Bool column with a nil
+// error. Eight were the equality family against a Null operand, which
+// dispatchCompare refused after Field had promised Bool. Both classes are closed,
+// not exempted.
+var knownContractGaps = map[string]string{}
 
 var seenContractGaps = map[string]bool{}
 

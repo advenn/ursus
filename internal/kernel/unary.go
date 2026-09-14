@@ -16,6 +16,31 @@ import (
 func Unary(op expr.UnaryOp, name string, out dtype.DataType, c *data.Column) (*data.Column, error) {
 	n := c.Len()
 
+	// A NULL OPERAND, which is not the same question as a null value.
+	//
+	// The two null predicates below are TOTAL — the answer is the validity bit
+	// itself — so they read a Null column like any other and are excluded here.
+	// Every other op ResolveUnary admits for Null is null-in/null-out, and a Null
+	// column has nothing to read: data.NewNull carries validity and no payload at
+	// all, so Bools() is the zero View and any length taken from it is zero. That is
+	// how `not` returned a Bool column of ZERO rows from an n-row input, with a nil
+	// error, for as long as this file has existed.
+	//
+	// The answer is not a computation. It is n nulls labelled with the type
+	// ResolveUnary promised, which is exactly the shape Cast's `from.IsNull()` arm
+	// already takes — and NullColumn rather than data.NewNull for the reason
+	// take.go gives: this is an operand somebody will gather from, not only an
+	// answer.
+	//
+	// After ResolveUnary stopped admitting Null for sign/floor/ceil and the maths
+	// family, the only ops that reach here with one are not and the four NaN
+	// predicates, all of which promise Bool. Both of those answers are written down
+	// — "Kleene NOT: NOT null is null" below, and "null.is_nan() is NULL, not
+	// false" in three separate files — and neither was implemented.
+	if c.DType().IsNull() && op != expr.OpIsNull && op != expr.OpIsNotNull {
+		return NullColumn(name, out, n)
+	}
+
 	switch op {
 	// Null predicates are TOTAL: the answer is the validity bit itself, so the
 	// result is never null. This is the one place where reading the validity

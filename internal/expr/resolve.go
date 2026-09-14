@@ -475,7 +475,13 @@ func ResolveUnary(op UnaryOp, in dtype.DataType) (dtype.DataType, error) {
 		// Duration is excluded even though abs() admits it: a Duration of -1, 0 or 1
 		// TICKS is not a sign, it is a nanosecond, and returning one would be a unit
 		// error dressed up as an answer.
-		if !in.IsNumeric() && !in.IsNull() {
+		// Null is refused here exactly as neg() and abs() refuse it thirty lines
+		// above. It used to be admitted, and the promise was `in` — so Field said
+		// Null, unaryArith dispatched on Null's physical type and found no case, and
+		// CollectSchema had already reported a plan that could not run. Nothing
+		// anywhere argued for it; two arms of one family answered one question two
+		// ways and the third answered it a third way.
+		if !in.IsNumeric() {
 			return dtype.Null, uerr.New(uerr.KindType, "",
 				"%s() requires a numeric operand, got %s", op, in)
 		}
@@ -490,9 +496,16 @@ func ResolveUnary(op UnaryOp, in dtype.DataType) (dtype.DataType, error) {
 			// already does for two Float32 operands — a user who chose a narrow float
 			// chose it, and silently doubling every column's width would be a memory
 			// regression nobody asked for.
-			if in.IsNull() {
-				return dtype.Float64, nil
-			}
+			// A Null operand used to short-circuit to Float64 here, one line before
+			// the IsNumeric() check that refuses it. toFloat64 has nothing to widen,
+			// so every one of the six failed at execution with "cannot widen Null" —
+			// an Internalf, which tells the user that the expression the planner
+			// accepted is a bug in ursus.
+			//
+			// kernel.Unary's Null arm would now answer this one, so the narrowing is
+			// not what makes the contract hold. It is the semantic choice: sqrt of a
+			// value that is not there has no answer, and neg() and abs() have said so
+			// since they were written.
 			if !in.IsNumeric() {
 				return dtype.Null, uerr.New(uerr.KindType, "",
 					"%s() requires a numeric operand, got %s", op, in).
