@@ -250,8 +250,14 @@ func (c *Call) Field(in *dtype.Schema) (dtype.Field, error) {
 //
 // It takes the whole Call rather than just the function because `.struct.field` is
 // the first call whose output type depends on an ARGUMENT — `field("age")` is Int64
-// and `field("city")` is String, from the same receiver. Every other family answers
-// from the receiver's type alone.
+// and `field("city")` is String, from the same receiver.
+//
+// It used to add "Every other family answers from the receiver's type alone", and
+// that was false. `.dt.truncate` is the second, and the divergence lived exactly in
+// the sentence: the kernel routes on the interval — `truncate(Time, 1 month)` has no
+// answer while `truncate(Time, 1 hour)` does — so a resolver that saw only the
+// receiver promised both. The argument is a CONSTANT of the expression, not data, so
+// there was never a reason the planner could not see it.
 func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 	fn := c.Fn
 	switch {
@@ -271,7 +277,7 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		return strCallOut(fn), nil
 
 	case fn.IsTemporal():
-		return dtCallOut(fn, in)
+		return dtCallOut(c, in)
 
 	case fn.IsGeneral():
 		return genCallOut(fn, in)
@@ -360,7 +366,10 @@ func strCallOut(fn CallFn) dtype.DataType {
 	}
 }
 
-func dtCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
+// dtCallOut takes the Call rather than the CallFn because truncate's answer depends
+// on its INTERVAL and not only on its receiver. See ResolveCall's doc.
+func dtCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
+	fn := c.Fn
 	isDur := in.ID() == dtype.TypeDuration
 	isInstant := in.ID() == dtype.TypeDate || in.ID() == dtype.TypeDatetime ||
 		in.ID() == dtype.TypeTime
@@ -379,7 +388,7 @@ func dtCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 			return dtype.Null, uerr.New(uerr.KindType, "dt",
 				"%s requires a Date, Time or Datetime operand, got %s", fn, in)
 		}
-		return in, nil
+		return truncateOut(c, in)
 
 	case FnDtEpoch:
 		if !isInstant {
@@ -404,6 +413,59 @@ func dtCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 		// negative. Int32 throughout keeps one kernel shape.
 		return dtype.Int32, nil
 	}
+}
+
+// truncateOut types dt.truncate, the one temporal call whose answer depends on its
+// argument rather than only on its receiver.
+//
+// # It reproduces the kernel's rule, it does not paraphrase it
+//
+// The interval is rebuilt with dtype.IntervalOf exactly as truncateTemporal does, and
+// both refusals are the kernel's own — the same predicates, the same messages, the
+// same hints. A plan-time check that drifted from the kernel would be worse than no
+// check at all, which is the Binding lesson one file over, so
+// TestTruncateRefusalsAgree in internal/kernel pins the two together rather than
+// trusting them to stay aligned.
+//
+// A missing argument reads as zero, which the first refusal then catches — the same
+// answer the kernel's argInt gives, and a truncate node with no interval is not a
+// thing any builder produces.
+func truncateOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
+	args, err := CallArgs(c)
+	if err != nil {
+		return dtype.Null, err
+	}
+	iv := dtype.IntervalOf(
+		int32(callLitInt(args, 0)), int32(callLitInt(args, 1)), callLitInt(args, 2))
+
+	// Reachable from the public API, which is why it is worth moving. dtype.FromDuration
+	// does no validation, so `Truncate(time.Duration(0))` and `Truncate(-time.Hour)`
+	// carry no error out of DtExpr.Truncate's iv.Err() check — they planned, rendered
+	// in Explain, and failed at Collect.
+	if iv.IsZero() || iv.Negative() {
+		return dtype.Null, uerr.New(uerr.KindValue, "dt",
+			"truncate needs a positive interval, got %s", iv).
+			Hint(`pass a time.Duration or an interval, e.g. .Dt().Truncate(time.Hour) ` +
+				`or .Dt().Truncate(ursus.Every("1mo"))`)
+	}
+	// A Time is a wall clock with no date. The kernel routes on IsCalendar() and
+	// refuses this pair; a sub-day interval on the same column is fine, which is
+	// exactly why the receiver's type alone could never decide it.
+	if iv.IsCalendar() && in.ID() == dtype.TypeTime {
+		return dtype.Null, uerr.New(uerr.KindType, "dt",
+			"truncate by %s is not defined for %s", iv, in).
+			Hint("a Time has no date, so it cannot be floored to a day or a month").
+			Hint("use a sub-day interval, or cast to Datetime first")
+	}
+	return in, nil
+}
+
+func callLitInt(args []any, i int) int64 {
+	if i >= len(args) {
+		return 0
+	}
+	v, _ := args[i].(int64)
+	return v
 }
 
 // CallArgs extracts the literal arguments of a Call, requiring each to be a

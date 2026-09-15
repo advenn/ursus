@@ -390,37 +390,15 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 // dispatchCompare refused after Field had promised Bool. Both classes are closed,
 // not exempted.
 //
-// # Step 56: nine, and every one of them is dt.truncate
+// # Step 56 held nine, for one commit, and every one was dt.truncate
 //
-// The call arm below covers 62 functions over 17 receivers and found exactly one
-// broken function — which is a far better result than the operator surface gave, and
-// worth saying rather than burying. But that one is broken three ways, and all three
-// have the same cause: ResolveCall takes the whole Call node precisely so a call's
-// output can depend on an ARGUMENT, and dtCallOut throws the arguments away.
-//
-// Checked in before the fix, as step 55's Null column was.
-var knownContractGaps = map[string]string{
-	// The interval decides which kernel runs. truncateTemporal routes on
-	// iv.IsCalendar(), and truncateCalendar refuses a Time — "a Time has no date, so
-	// it cannot be floored to a day or a month" — while the nanosecond path on the
-	// same column works. dtCallOut sees only the receiver, so it promises `in` for
-	// both and Explain prints a plan that runs for one interval and not the other.
-	"dt.truncate(tm,calendar)": "dtCallOut ignores the interval; a calendar grid has no meaning on a clock",
-
-	// A zero interval, refused by the kernel with KindValue. Reachable from the
-	// public API: dtype.FromDuration does no validation, so `Truncate(time.Duration(0))`
-	// carries no error out of the builder and DtExpr.Truncate's iv.Err() check passes.
-	"dt.truncate(dt,zero)": "a zero interval is a constant of the expression and is refused only at execution",
-	"dt.truncate(ts,zero)": "a zero interval is a constant of the expression and is refused only at execution",
-	"dt.truncate(tn,zero)": "a zero interval is a constant of the expression and is refused only at execution",
-	"dt.truncate(tm,zero)": "a zero interval is a constant of the expression and is refused only at execution",
-
-	// The same, one sign over. `Truncate(-time.Hour)` builds, plans and renders.
-	"dt.truncate(dt,negative)": "a negative interval is refused only at execution",
-	"dt.truncate(ts,negative)": "a negative interval is refused only at execution",
-	"dt.truncate(tn,negative)": "a negative interval is refused only at execution",
-	"dt.truncate(tm,negative)": "a negative interval is refused only at execution",
-}
+// The call arm below covers 62 functions over 17 receivers — 155 combinations run —
+// and found exactly one broken function. That is a far better result than the
+// operator surface gave and is worth saying rather than burying. But that one was
+// broken three ways, and all three had one cause: ResolveCall takes the whole Call
+// node precisely so an output type can depend on an ARGUMENT, and dtCallOut threw
+// the arguments away. `git show` the commit below this one for the list.
+var knownContractGaps = map[string]string{}
 
 var seenContractGaps = map[string]bool{}
 
