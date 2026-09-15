@@ -244,6 +244,16 @@ func listSlice(name string, c *data.Column, args []any) (*data.Column, error) {
 // (checked directly), so on a List(Float64) stability is what decides which sign
 // comes out first.
 func listSort(name string, c *data.Column, args []any) (*data.Column, error) {
+	// A bare args[0] until step 56, and the only member of this family without a
+	// guard — listGet, listEnds and listSlice all return an Internalf on a short
+	// slice. listCallOut does not inspect arguments, so Field succeeds for a node
+	// with none and the process went down instead of the query.
+	//
+	// Unreachable from ListExpr.Sort, which always passes the flag. Reachable from
+	// the IR, and that is the same distance the contract matrix drives calls from.
+	if len(args) == 0 {
+		return nil, uerr.Internalf("kernel: list.sort has no direction argument")
+	}
 	desc, _ := args[0].(bool)
 	cmp, err := NewComparator([]*data.Column{c.Lists().Child()},
 		[]SortSpec{{Descending: desc}})

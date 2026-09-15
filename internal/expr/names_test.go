@@ -7,6 +7,7 @@ package expr
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -35,67 +36,190 @@ import (
 //
 // This test is what makes appending a constant safe. Step 11 alone appends to
 // three of these tables.
-func TestEveryEnumConstantHasADistinctName(t *testing.T) {
-	tables := []struct {
-		enum  string
-		count int
-		str   func(int) string
-	}{
-		{"UnaryOp", int(unaryOpCount), func(i int) string { return UnaryOp(i).String() }},
-		{"BinaryOp", int(binaryOpCount), func(i int) string { return BinaryOp(i).String() }},
-		{"AggOp", int(aggOpCount), func(i int) string { return AggOp(i).String() }},
-		{"WinFnOp", int(winFnCount), func(i int) string { return WinFnOp(i).String() }},
-		{"RankMethod", int(rankMethodCount), func(i int) string { return RankMethod(i).String() }},
-		{"MappingStrategy", int(mappingCount), func(i int) string { return MappingStrategy(i).String() }},
-		{"Interpolation", int(interpCount), func(i int) string { return Interpolation(i).String() }},
-	}
+// # CallFn is the eighth, and it did not fit the table as written
+//
+// Seven enums here are one contiguous block sized by one sentinel, and render "?"
+// when they run off the end. CallFn is neither. It has SIX family sentinels with
+// hundred-wide gaps between them, and its fallback is "call(N)".
+//
+// The honest reading is that CallFn's fallback is the BETTER of the two. "?" makes
+// every unnamed constant render identically, which is precisely the collision this
+// file exists to catch — the guard against it is that the name tables are arrays
+// sized by a sentinel, so "?" is unreachable for a declared constant. CallFn's
+// names live in a MAP, where a missing entry is perfectly reachable, and "call(247)"
+// and "call(248)" are distinct. So the test generalises and the enum does not move:
+// a range list instead of a count, and a per-enum predicate for "this is the
+// fallback" instead of a hard-coded "?".
+type enumTable struct {
+	enum    string
+	ranges  [][2]int // half-open [lo, hi)
+	str     func(int) string
+	unknown func(string) bool // reports whether a name is the fallback rendering
+}
 
-	for _, tab := range tables {
+func isQuestionMark(s string) bool { return s == "?" }
+
+func upTo(n int) [][2]int { return [][2]int{{0, n}} }
+
+func enumTables() []enumTable {
+	return []enumTable{
+		{"UnaryOp", upTo(int(unaryOpCount)), func(i int) string { return UnaryOp(i).String() }, isQuestionMark},
+		{"BinaryOp", upTo(int(binaryOpCount)), func(i int) string { return BinaryOp(i).String() }, isQuestionMark},
+		{"AggOp", upTo(int(aggOpCount)), func(i int) string { return AggOp(i).String() }, isQuestionMark},
+		{"WinFnOp", upTo(int(winFnCount)), func(i int) string { return WinFnOp(i).String() }, isQuestionMark},
+		{"RankMethod", upTo(int(rankMethodCount)), func(i int) string { return RankMethod(i).String() }, isQuestionMark},
+		{"MappingStrategy", upTo(int(mappingCount)), func(i int) string { return MappingStrategy(i).String() }, isQuestionMark},
+		{"Interpolation", upTo(int(interpCount)), func(i int) string { return Interpolation(i).String() }, isQuestionMark},
+		{
+			enum: "CallFn",
+			ranges: [][2]int{
+				{int(FnStrContains), int(fnStrEnd)},
+				{int(FnDtYear), int(fnDtEnd)},
+				{int(FnIsIn), int(fnGenEnd)},
+				{int(FnMathRound), int(fnMathEnd)},
+				{int(FnListLen), int(fnListEnd)},
+				{int(FnStructField), int(fnStructEnd)},
+			},
+			str:     func(i int) string { return CallFn(i).String() },
+			unknown: func(s string) bool { return strings.HasPrefix(s, "call(") },
+		},
+	}
+}
+
+func TestEveryEnumConstantHasADistinctName(t *testing.T) {
+	for _, tab := range enumTables() {
 		t.Run(tab.enum, func(t *testing.T) {
-			if tab.count == 0 {
-				t.Fatalf("%s has no constants, so this test proves nothing", tab.enum)
+			var count int
+			seen := make(map[string]int)
+			for _, r := range tab.ranges {
+				for i := r[0]; i < r[1]; i++ {
+					count++
+					name := tab.str(i)
+					switch {
+					case name == "":
+						t.Errorf("%s(%d) renders as the empty string — add it to the name "+
+							"table; two unnamed constants render alike and collide in the "+
+							"three maps that dedup on String()", tab.enum, i)
+					case tab.unknown(name):
+						t.Errorf("%s(%d) renders as %q, the unknown-constant fallback — "+
+							"it is declared but has no name", tab.enum, i, name)
+					}
+					if prev, dup := seen[name]; dup {
+						t.Errorf("%s(%d) and %s(%d) both render as %q — one of them will "+
+							"silently take the other's computation", tab.enum, prev, tab.enum, i, name)
+					}
+					seen[name] = i
+				}
 			}
-			seen := make(map[string]int, tab.count)
-			for i := range tab.count {
-				name := tab.str(i)
-				switch {
-				case name == "":
-					t.Errorf("%s(%d) renders as the empty string — add it to the name "+
-						"table; two unnamed constants render alike and collide in the "+
-						"three maps that dedup on String()", tab.enum, i)
-				case name == "?":
-					t.Errorf("%s(%d) renders as %q, the unknown-constant fallback",
-						tab.enum, i, name)
-				}
-				if prev, dup := seen[name]; dup {
-					t.Errorf("%s(%d) and %s(%d) both render as %q — one of them will "+
-						"silently take the other's computation", tab.enum, prev, tab.enum, i, name)
-				}
-				seen[name] = i
+			if count == 0 {
+				t.Fatalf("%s has no constants, so this test proves nothing", tab.enum)
 			}
 		})
 	}
 }
 
+// TestTheEnumSweepCoversEveryEnumItClaimsTo is the anti-vacuity guard on the table
+// above, and CallFn is why it exists: a range list can be short in a way a count
+// cannot. Dropping one of the six family ranges would leave that family unswept and
+// nothing else would say so.
+func TestTheEnumSweepCoversEveryEnumItClaimsTo(t *testing.T) {
+	want := map[string]int{
+		"UnaryOp": 18, "BinaryOp": 18, "AggOp": 19, "WinFnOp": 5,
+		"RankMethod": 5, "MappingStrategy": 3, "Interpolation": 4,
+		"CallFn": 62,
+	}
+	for _, tab := range enumTables() {
+		var count int
+		for _, r := range tab.ranges {
+			count += r[1] - r[0]
+		}
+		w, ok := want[tab.enum]
+		if !ok {
+			t.Errorf("%s is swept but not counted here; add it", tab.enum)
+			continue
+		}
+		if count < w {
+			t.Errorf("%s sweeps %d constants, want at least %d — a range is missing "+
+				"or a sentinel moved", tab.enum, count, w)
+		}
+		delete(want, tab.enum)
+	}
+	for enum := range want {
+		t.Errorf("%s is counted here but no longer swept", enum)
+	}
+}
+
 // TestUnknownConstantsRenderAsUnknown pins the other half: a value BEYOND the
 // sentinel must reach the fallback rather than panic on an out-of-range index.
+//
+// CallFn is included through the same predicate the sweep uses, so the two halves
+// cannot disagree about what "the fallback" means. Its value is taken from the gap
+// between two families, which is where an undeclared CallFn actually lives —
+// fnStrEnd+1 is not past the end of anything, it is between the string block and the
+// temporal one.
 func TestUnknownConstantsRenderAsUnknown(t *testing.T) {
 	cases := []struct {
-		enum string
-		got  string
+		enum    string
+		got     string
+		unknown func(string) bool
 	}{
-		{"UnaryOp", UnaryOp(unaryOpCount).String()},
-		{"BinaryOp", BinaryOp(binaryOpCount).String()},
-		{"AggOp", AggOp(aggOpCount).String()},
-		{"WinFnOp", WinFnOp(winFnCount).String()},
-		{"RankMethod", RankMethod(rankMethodCount).String()},
-		{"MappingStrategy", MappingStrategy(mappingCount).String()},
-		{"Interpolation", Interpolation(interpCount).String()},
+		{"UnaryOp", UnaryOp(unaryOpCount).String(), isQuestionMark},
+		{"BinaryOp", BinaryOp(binaryOpCount).String(), isQuestionMark},
+		{"AggOp", AggOp(aggOpCount).String(), isQuestionMark},
+		{"WinFnOp", WinFnOp(winFnCount).String(), isQuestionMark},
+		{"RankMethod", RankMethod(rankMethodCount).String(), isQuestionMark},
+		{"MappingStrategy", MappingStrategy(mappingCount).String(), isQuestionMark},
+		{"Interpolation", Interpolation(interpCount).String(), isQuestionMark},
+		{"CallFn", CallFn(fnStrEnd + 1).String(),
+			func(s string) bool { return strings.HasPrefix(s, "call(") }},
 	}
 	for _, c := range cases {
-		if c.got != "?" {
-			t.Errorf("%s past its sentinel renders as %q, want %q", c.enum, c.got, "?")
+		if !c.unknown(c.got) {
+			t.Errorf("%s past its sentinel renders as %q, which is not the "+
+				"unknown-constant fallback", c.enum, c.got)
 		}
+	}
+}
+
+// TestCallFnFamiliesDoNotOverlap guards the six range comparisons the classifiers
+// are built on, as TestMathOpsAreClassified guards IsMath.
+//
+// Every dispatcher that touches a call — ResolveCall, evalCall, compileCall — is a
+// chain of `case fn.IsString():` arms, so a constant that answered yes to two of them
+// would take whichever arm came first and a constant that answered no to all of them
+// would fall to an Internalf. Both are silent until the call is used.
+func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
+	var classified int
+	for i := range 600 {
+		fn := CallFn(i)
+		var claims []string
+		for _, c := range []struct {
+			name string
+			ok   bool
+		}{
+			{"string", fn.IsString()}, {"temporal", fn.IsTemporal()},
+			{"general", fn.IsGeneral()}, {"maths", fn.IsMath()},
+			{"list", fn.IsList()}, {"struct", fn.IsStruct()},
+		} {
+			if c.ok {
+				claims = append(claims, c.name)
+			}
+		}
+		if len(claims) > 1 {
+			t.Errorf("CallFn(%d) is claimed by %v; the dispatchers are chains of "+
+				"classifier arms and would take whichever comes first", i, claims)
+		}
+		if len(claims) == 1 {
+			classified++
+			if name := fn.String(); strings.HasPrefix(name, "call(") {
+				t.Errorf("CallFn(%d) is inside a family range but has no name (%s) — "+
+					"a sentinel moved or the block is no longer contiguous", i, name)
+			}
+		}
+	}
+	if classified != 62 {
+		t.Errorf("%d call functions are classified, want 62 — the families and the "+
+			"name table disagree about what exists", classified)
 	}
 }
 
