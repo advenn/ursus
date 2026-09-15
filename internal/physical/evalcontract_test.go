@@ -19,6 +19,7 @@ package physical
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
@@ -139,6 +140,156 @@ func allUnaryOps() []expr.UnaryOp {
 	return ops
 }
 
+// allCallFns cannot use the `!= "?"` trick above, because CallFn.String() falls back
+// to "call(N)" rather than "?". That fallback is the BETTER of the two — two unnamed
+// constants render differently and so cannot collide in the three maps that dedup on
+// String() — so the derivation moves rather than the enum.
+//
+// The six classifiers are exported and are range tests over contiguous blocks, which
+// makes this total by construction: `IsString()` is `f < fnStrEnd`, so every declared
+// string function is claimed and nothing between the families is.
+//
+// The values are NOT at round offsets. iota counts ConstSpecs across the whole block,
+// so FnDtYear is 127, FnIsIn 247, FnMathRound 349, FnListLen 451 and FnStructField
+// 500. A driver that walked 0..120 would find twenty-six functions and report nothing
+// wrong, which is the failure this file exists to prevent.
+func allCallFns() []expr.CallFn {
+	var fns []expr.CallFn
+	for i := range 600 {
+		fn := expr.CallFn(i)
+		if fn.IsString() || fn.IsTemporal() || fn.IsGeneral() ||
+			fn.IsMath() || fn.IsList() || fn.IsStruct() {
+			fns = append(fns, fn)
+		}
+	}
+	return fns
+}
+
+// callArgSet is one argument tuple to drive a call with, and a label suffix for the
+// calls that need more than one.
+type callArgSet struct {
+	label string
+	args  []any
+}
+
+// contractCallArgs supplies the literal arguments each call needs.
+//
+// # Some calls need TWO sets, and that is the whole point
+//
+// A matrix that drives one fixed argument per call asks a smaller question than it
+// looks like it is asking. The first divergence this arm found is invisible to one:
+// dt.truncate takes an interval, and `Truncate(time.Hour)` on a Time column works
+// while `Truncate(Every("1mo"))` does not — the kernel routes on iv.IsCalendar() and
+// refuses a calendar grid on a clock with no date. One set sees one of those.
+//
+// The five flag-bearing string calls are the same shape one layer down: the trailing
+// `literal` flag decides whether CompilePattern compiles a regex at all, so a single
+// literal=true table would leave every regex path in the family unexercised.
+//
+// Values are chosen to be legal for the fixture rather than interesting: "1" is a
+// string that actually occurs in the `st` column, and a regex "1" compiles.
+var contractCallArgs = map[expr.CallFn][]callArgSet{
+	// string, one literal argument
+	expr.FnStrStartsWith:      {{args: []any{"1"}}},
+	expr.FnStrEndsWith:        {{args: []any{"1"}}},
+	expr.FnStrStripChars:      {{args: []any{" "}}},
+	expr.FnStrStripCharsStart: {{args: []any{" "}}},
+	expr.FnStrStripCharsEnd:   {{args: []any{" "}}},
+	expr.FnStrStripPrefix:     {{args: []any{"1"}}},
+	expr.FnStrStripSuffix:     {{args: []any{"1"}}},
+	expr.FnStrSplit:           {{args: []any{","}}},
+
+	// string, regex-only: there is no literal form, so there is one set
+	expr.FnStrExtract:    {{args: []any{"1", int64(0)}}},
+	expr.FnStrExtractAll: {{args: []any{"1"}}},
+
+	// string, pattern + the literal flag that decides whether a regex is compiled
+	expr.FnStrContains: {
+		{label: ",literal", args: []any{"1", true}},
+		{label: ",regex", args: []any{"1", false}},
+	},
+	expr.FnStrFind: {
+		{label: ",literal", args: []any{"1", true}},
+		{label: ",regex", args: []any{"1", false}},
+	},
+	expr.FnStrCountMatches: {
+		{label: ",literal", args: []any{"1", true}},
+		{label: ",regex", args: []any{"1", false}},
+	},
+	expr.FnStrReplace: {
+		{label: ",literal", args: []any{"1", "x", true}},
+		{label: ",regex", args: []any{"1", "x", false}},
+	},
+	expr.FnStrReplaceAll: {
+		{label: ",literal", args: []any{"1", "x", true}},
+		{label: ",regex", args: []any{"1", "x", false}},
+	},
+
+	// string, numeric arguments
+	expr.FnStrSlice:    {{args: []any{int64(0), int64(1)}}},
+	expr.FnStrSplitN:   {{args: []any{",", int64(2)}}},
+	expr.FnStrZFill:    {{args: []any{int64(4)}}},
+	expr.FnStrPadStart: {{args: []any{int64(4), " "}}},
+	expr.FnStrPadEnd:   {{args: []any{int64(4), " "}}},
+
+	// The interval, as three int64s: months, days, nanoseconds.
+	expr.FnDtTruncate: {
+		{label: ",nanos", args: []any{int64(0), int64(0), int64(time.Hour)}},
+		{label: ",calendar", args: []any{int64(1), int64(0), int64(0)}},
+		// Zero and negative intervals are refused by the kernel, and both are
+		// reachable from the public API: FromDuration does not validate, so
+		// `Truncate(time.Duration(0))` and `Truncate(-time.Hour)` carry no error out
+		// of the builder. They are CONSTANTS of the expression, not data, so unlike a
+		// strict cast's value refusal the planner can see them — which makes them this
+		// test's business rather than an exemption.
+		{label: ",zero", args: []any{int64(0), int64(0), int64(0)}},
+		{label: ",negative", args: []any{int64(0), int64(0), int64(-time.Hour)}},
+	},
+
+	expr.FnMathRound: {{args: []any{int64(1)}}},
+
+	// The list and struct families are unreachable against this fixture, which has
+	// no List and no Struct column — every combination is an agreed refusal. The
+	// arguments are here so that the day a List column is added the arm drives them
+	// correctly rather than with a short slice, which listSort would index bare.
+	expr.FnListGet:      {{args: []any{int64(0)}}},
+	expr.FnListHead:     {{args: []any{int64(1)}}},
+	expr.FnListTail:     {{args: []any{int64(1)}}},
+	expr.FnListSlice:    {{args: []any{int64(0), int64(1)}}},
+	expr.FnListSort:     {{args: []any{false}}},
+	expr.FnListContains: {{args: []any{int64(1)}}},
+	expr.FnStructField:  {{args: []any{"f"}}},
+}
+
+// noCallArgs is the default: one set, no arguments. is_in takes it deliberately —
+// see the comment in the subtest.
+var noCallArgs = []callArgSet{{}}
+
+func contractArgSets(fn expr.CallFn) []callArgSet {
+	if sets, ok := contractCallArgs[fn]; ok {
+		return sets
+	}
+	return noCallArgs
+}
+
+// callLit builds a literal argument the way litNode does, DT and all.
+//
+// Setting DT matters less here than it does for an operand — CallArgs reads Value and
+// ignores DT — but a fixture that builds a node the public API cannot build is how the
+// literal arm of this matrix spent its whole life asserting the wrong thing.
+func callLit(v any) expr.Node {
+	switch x := v.(type) {
+	case string:
+		return &expr.Lit{Value: x, DT: dtype.String}
+	case int64:
+		return &expr.Lit{Value: x, DT: dtype.Int64}
+	case bool:
+		return &expr.Lit{Value: x, DT: dtype.Bool}
+	default:
+		panic("contractCallArgs holds a value callLit cannot type")
+	}
+}
+
 var contractCastTargets = []dtype.DataType{
 	dtype.Int8, dtype.Int32, dtype.Int64, dtype.Uint32, dtype.Uint64,
 	dtype.Float32, dtype.Float64, dtype.Bool, dtype.String,
@@ -238,7 +389,38 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 // error. Eight were the equality family against a Null operand, which
 // dispatchCompare refused after Field had promised Bool. Both classes are closed,
 // not exempted.
-var knownContractGaps = map[string]string{}
+//
+// # Step 56: nine, and every one of them is dt.truncate
+//
+// The call arm below covers 62 functions over 17 receivers and found exactly one
+// broken function — which is a far better result than the operator surface gave, and
+// worth saying rather than burying. But that one is broken three ways, and all three
+// have the same cause: ResolveCall takes the whole Call node precisely so a call's
+// output can depend on an ARGUMENT, and dtCallOut throws the arguments away.
+//
+// Checked in before the fix, as step 55's Null column was.
+var knownContractGaps = map[string]string{
+	// The interval decides which kernel runs. truncateTemporal routes on
+	// iv.IsCalendar(), and truncateCalendar refuses a Time — "a Time has no date, so
+	// it cannot be floored to a day or a month" — while the nanosecond path on the
+	// same column works. dtCallOut sees only the receiver, so it promises `in` for
+	// both and Explain prints a plan that runs for one interval and not the other.
+	"dt.truncate(tm,calendar)": "dtCallOut ignores the interval; a calendar grid has no meaning on a clock",
+
+	// A zero interval, refused by the kernel with KindValue. Reachable from the
+	// public API: dtype.FromDuration does no validation, so `Truncate(time.Duration(0))`
+	// carries no error out of the builder and DtExpr.Truncate's iv.Err() check passes.
+	"dt.truncate(dt,zero)": "a zero interval is a constant of the expression and is refused only at execution",
+	"dt.truncate(ts,zero)": "a zero interval is a constant of the expression and is refused only at execution",
+	"dt.truncate(tn,zero)": "a zero interval is a constant of the expression and is refused only at execution",
+	"dt.truncate(tm,zero)": "a zero interval is a constant of the expression and is refused only at execution",
+
+	// The same, one sign over. `Truncate(-time.Hour)` builds, plans and renders.
+	"dt.truncate(dt,negative)": "a negative interval is refused only at execution",
+	"dt.truncate(ts,negative)": "a negative interval is refused only at execution",
+	"dt.truncate(tn,negative)": "a negative interval is refused only at execution",
+	"dt.truncate(tm,negative)": "a negative interval is refused only at execution",
+}
 
 var seenContractGaps = map[string]bool{}
 
@@ -312,6 +494,50 @@ func TestEvaluatorContract(t *testing.T) {
 		}
 		if ran < 100 {
 			t.Errorf("only %d cast combinations resolved", ran)
+		}
+	})
+
+	// The CALL arm, which did not exist until step 56.
+	//
+	// internal/expr declares 62 call functions across six namespaces and NO TEST FILE
+	// in the repository referenced a single CallFn constant. The surface was covered
+	// only behaviourally, by hand-written cases — and step 55 probed six of them by
+	// hand, found one broken (is_in on a Null receiver) and wrote down that the arm
+	// was separate work. One in six is not a rate a hand list can be trusted at.
+	//
+	// is_in is driven with an EMPTY probe set, and that is a limitation written down
+	// rather than left quiet. A fixed probe is strict-cast to the receiver, so one
+	// int64 against `bo`, `dt` or `tm` fails on the VALUE — the same trap the cast arm
+	// above sidesteps — and a value refusal is not a contract violation. An empty set
+	// is legal and type-independent, so it asks the type question for all 17
+	// receivers; real probes stay isin_test.go's business.
+	t.Run("call", func(t *testing.T) {
+		fns := allCallFns()
+		// Anti-vacuity on the derivation itself. A classifier whose range broke would
+		// drop a whole family and the loop would still complete.
+		if len(fns) < 62 {
+			t.Fatalf("only %d call functions derived; the enum declares 62", len(fns))
+		}
+		var ran int
+		for _, fn := range fns {
+			for _, set := range contractArgSets(fn) {
+				for _, c := range contractCols {
+					args := []expr.Node{&expr.Col{Name: c}}
+					for _, a := range set.args {
+						args = append(args, callLit(a))
+					}
+					n := &expr.Call{Fn: fn, Args: args}
+					if checkContract(t, n, b, fn.String()+"("+c+set.label+")") {
+						ran++
+					}
+				}
+			}
+		}
+		// 62 fns over 17 columns is 1054 labels, but .list and .struct are
+		// unreachable against this fixture and every string call refuses a numeric
+		// receiver, so most are agreed refusals. Around 142 actually run.
+		if ran < 100 {
+			t.Errorf("only %d call combinations resolved", ran)
 		}
 	})
 
