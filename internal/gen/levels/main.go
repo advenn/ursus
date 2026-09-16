@@ -43,6 +43,9 @@ var levels = map[string]int{
 	"internal/expr": 20, // + dtype, uerr — the expression IR
 
 	"internal/spill": 25, // + data, dtype, bitmap, arrowx — the run format
+	// Same level and the same shape as spill: both turn a Batch into a foreign
+	// representation and need exactly data, dtype, bitmap, arrowx to do it.
+	"internal/arrowout": 25, // + data, dtype, bitmap, arrowx, i128 — Arrow export
 
 	"internal/kernel":  30, // + data, bitmap
 	"internal/source":  30, // + dtype, data, expr, uerr
