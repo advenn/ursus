@@ -305,9 +305,32 @@ func writeInt32(cw *file.Int32ColumnChunkWriter, c *data.Column, defs []int16) e
 		// stores every Time as int64 ticks — so this narrows where Date, whose ursus
 		// storage is already 32 bits, does not. narrow[int32] cannot do it: Values
 		// checks the column's PHYSICAL id, which is Int64 here.
+		//
+		// The bare `int32(v)` this used to be is the construct step 49 replaced in
+		// rescaleTemporal, where it was "a silently wrapped date". Here it also wrote
+		// an out-of-spec TIME(MILLIS): Parquet's range is 0..86_399_999 and nothing
+		// bounded the tick.
+		//
+		// Step 57 makes the value always fit, by wrapping at both producers, so this
+		// guard is a PROOF rather than a repair — and that is the right order. It is
+		// reachable only through a Time column that never went near a cast or the
+		// arithmetic kernel, which is exactly the case a future source could produce.
+		perDay, ok := dtype.TicksPerDay(c.DType())
+		if !ok {
+			return uerr.Internalf("sink_parquet: %s has no tick length", c.DType())
+		}
 		s, err := data.TypedColumn[int64](c)
 		if err != nil {
 			return err
+		}
+		for row := range c.Len() {
+			v, valid := s.Get(row)
+			if valid && (v < 0 || v >= perDay) {
+				return uerr.New(uerr.KindValue, "sink_parquet",
+					"time %s at row %d is outside [0, 24h) and cannot be written as "+
+						"TIME(MILLIS)", dtype.FormatTemporal(c.DType(), v), row).
+					Hint("a Time is a time of day; this column holds tick %d", v)
+			}
 		}
 		return writeVals(cw, c, defs, func(row int) int32 {
 			v, _ := s.Get(row)

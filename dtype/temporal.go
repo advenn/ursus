@@ -1,6 +1,7 @@
 package dtype
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -82,12 +83,31 @@ func TicksPerDay(d DataType) (int64, bool) {
 }
 
 // ToDuration converts a stored tick count of a Duration type into a
-// time.Duration. Reports false for any other type.
+// time.Duration. Reports false for any other type, and for a span time.Duration
+// cannot hold.
+//
+// # The unrepresentable case is not hypothetical
+//
+// `ticks * npt` was an unchecked int64 multiply five lines below ToTime, which
+// documents and implements exactly this defence. A time.Duration IS int64
+// nanoseconds, so it spans about 292 years — and a Duration(Second) column reaches
+// that at 9.2e9 ticks, which `Datetime - Datetime` produces from two instants three
+// centuries apart. The product wrapped and the span rendered NEGATIVE.
+//
+// Reporting false rather than saturating, because FormatTemporal's fallback is the
+// raw tick count: an integer a reader can see is unusual is a better answer than a
+// duration that looks ordinary and has the wrong sign.
 func (d DataType) ToDuration(ticks int64) (time.Duration, bool) {
 	if d.ID() != TypeDuration {
 		return 0, false
 	}
-	npt, _ := d.NanosPerTick()
+	npt, ok := d.NanosPerTick()
+	if !ok || npt <= 0 {
+		return 0, false
+	}
+	if ticks > math.MaxInt64/npt || ticks < math.MinInt64/npt {
+		return 0, false
+	}
 	return time.Duration(ticks * npt), true
 }
 
@@ -126,7 +146,13 @@ func FormatTemporal(d DataType, ticks int64) string {
 		return t.Format("2006-01-02T15:04:05" + fracLayout(d.TimeUnit()) + "Z07:00")
 
 	case TypeDuration:
-		dur, _ := d.ToDuration(ticks)
+		dur, ok := d.ToDuration(ticks)
+		if !ok {
+			// Past time.Duration's ~292-year span. The raw tick count with its unit
+			// is unusual enough to read as unusual, which a wrapped negative span is
+			// not. The `_` this used to discard is why it rendered as one.
+			return strconv.FormatInt(ticks, 10) + d.TimeUnit().String()
+		}
 		return dur.String()
 
 	default:
