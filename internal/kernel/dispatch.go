@@ -419,6 +419,21 @@ func arithmetic(op expr.BinaryOp, name string, out dtype.DataType, l, r *data.Co
 	p := out.Physical()
 	valid := combinedValidity(l, r, n)
 
+	// A Time result wraps, because a Time is a time of day and 25:00 is not one.
+	//
+	// It needs its own arm rather than a pass over arithNum's output, and that is
+	// the whole subtlety: addScalar is `dst[i] = a[i] + b[i]` on int64 with no
+	// check, so a large Duration wraps int64 BEFORE any modulo could see it and the
+	// modulo then returns a wrong answer that is comfortably IN RANGE. Measured:
+	// 23:50 plus 106751 whole days gave 00:15:26.290448384, which no range check can
+	// catch because nothing about it is out of range.
+	//
+	// Time - Time is untouched. It produces a Duration, which is signed and unbounded
+	// by design, and wrapping it would be this same mistake one type over.
+	if out.ID() == dtype.TypeTime && (op == expr.OpAdd || op == expr.OpSub) {
+		return timeOfDayArith(op, name, out, l, r, n, valid)
+	}
+
 	switch p.ID() {
 	case dtype.TypeInt8:
 		return arithNum[int8](op, name, out, l, r, n, valid)
@@ -462,6 +477,51 @@ func newValuesBuffer[T data.Fixed](n int) (*memory.Buffer, []T) {
 		return buf, nil
 	}
 	return buf, data.Reinterpret[T](buf.Bytes())[:n]
+}
+
+// timeOfDayArith adds or subtracts a Duration from a Time, wrapping the result into
+// [0, 24h).
+//
+// # It reduces before it adds, and that is not an optimisation
+//
+// Both operands arrive at the output's unit, because the binding casts them
+// (`CastL: Time(u), CastR: Duration(u)`). A time.Duration is itself int64
+// nanoseconds, so at nanosecond resolution the right operand can be within a day or
+// so of the int64 ceiling — and a tick plus that operand overflows before any modulo
+// runs. Reducing the duration first keeps |v| and |d| below the modulus, so the sum
+// is below twice a day and cannot overflow at any supported unit.
+//
+// Go's % is truncated rather than floored, so a negative intermediate needs the
+// modulus added back before the second reduction. That is what makes 01:00 - 2h come
+// out as 23:00 rather than as a negative tick that only PRINTS as 23:00 by rolling
+// backwards through the epoch.
+func timeOfDayArith(op expr.BinaryOp, name string, out dtype.DataType,
+	l, r *data.Column, n int, valid bitmap.View) (*data.Column, error) {
+
+	m, ok := dtype.TicksPerDay(out)
+	if !ok || m <= 0 {
+		return nil, uerr.Internalf("kernel: %s has no tick length", out)
+	}
+	lv, err := data.Values[int64](l)
+	if err != nil {
+		return nil, err
+	}
+	rv, err := data.Values[int64](r)
+	if err != nil {
+		return nil, err
+	}
+	lv, rv = broadcastVals(lv, rv, n)
+
+	buf, dst := newValuesBuffer[int64](n)
+	for i := range n {
+		v, d := lv[i]%m, rv[i]%m
+		s := v + d
+		if op == expr.OpSub {
+			s = v - d
+		}
+		dst[i] = ((s % m) + m) % m
+	}
+	return data.NewFixedBuffer(name, out, buf, n, valid), nil
 }
 
 func arithNum[T Integer](op expr.BinaryOp, name string, out dtype.DataType,

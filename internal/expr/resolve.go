@@ -157,7 +157,21 @@ func resolveArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 //
 //	Datetime - Datetime  → Duration      Date - Date          → Duration(s)
 //	Datetime ± Duration  → Datetime      Date ± Duration      → Datetime(s, naive)
+//	Time - Time          → Duration      Time ± Duration      → Time, WRAPPED
 //	Duration ± Duration  → Duration      Duration * number    → Duration
+//
+// # The Time row was missing, and so was the wrap
+//
+// This table listed Datetime, Date and Duration and never mentioned Time, while
+// isInstant below has always included TypeTime — so `Time ± Duration` was reachable,
+// undesigned and unbounded. It produced tick counts outside [0, 24h), which no layer
+// rejected: 23:00 + 2h stored 25h, rendered as 01:00:00 because FormatTemporal rolls
+// over through time.Unix, and sorted AFTER 23:00:00 because comparison is a raw
+// integer compare. Display and ordering contradicted each other.
+//
+// A time of day that is 25:00 is not a time of day, so kernel.arithmetic wraps the
+// result. The binding is unchanged: it is the KERNEL that restores the invariant,
+// because it is the kernel that produces the value.
 //
 // # Date is days, and that is why it cannot stay Date
 //
