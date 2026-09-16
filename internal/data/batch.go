@@ -75,6 +75,58 @@ func checkNonNullable(schema *dtype.Schema, cols []*Column) error {
 	return nil
 }
 
+// CheckTimeRange turns on the sixth boundary check: a Time column's ticks must lie
+// in [0, 24h).
+//
+// # The invariant was written down and enforced nowhere
+//
+// dtype says TypeTime is "time of day since midnight, int64 in the type's unit". That
+// sentence was the whole of the enforcement. Nothing asserted it at construction, in
+// the resolver, in the kernel, or in any cast, writer or spill path — and the
+// consequence was not an error but a contradiction: `23:00 + 2h` rendered as
+// 01:00:00 and sorted AFTER 23:00:00, while comparing unequal to a genuine 01:00:00
+// that rendered identically to it.
+//
+// Fixing the two producers — the arithmetic kernel and Cast — is a point fix. This is
+// what makes the invariant total, and it earned its keep immediately: it fired on
+// code already checked in, which is how the Cast relabel was found.
+//
+// A toggle for the same reason CheckNonNullable is one, and with a worse constant: it
+// is O(rows) per Time column rather than O(columns). Set it once from a test binary's
+// init, never during a query.
+var CheckTimeRange bool
+
+// checkTimeRange is the sixth clause, shared by both constructors.
+func checkTimeRange(cols []*Column) error {
+	for _, c := range cols {
+		if c == nil || c.DType().ID() != dtype.TypeTime {
+			continue
+		}
+		perDay, ok := dtype.TicksPerDay(c.DType())
+		if !ok {
+			continue
+		}
+		v, err := Values[int64](c)
+		if err != nil {
+			// A payload-free Time column is all nulls and has no ticks to check.
+			continue
+		}
+		for i, t := range v {
+			if !c.IsValid(i) {
+				continue
+			}
+			if t < 0 || t >= perDay {
+				return uerr.Internalf(
+					"data: column %q (%s) holds tick %d at row %d, outside [0, %d) — "+
+						"a Time is a time of day and %s is not one",
+					c.Name(), c.DType(), t, i, perDay,
+					dtype.FormatTemporal(c.DType(), t))
+			}
+		}
+	}
+	return nil
+}
+
 // checkShape is the four structural checks: column count, per-column name, per-
 // column type, and equal lengths. It returns the row count it derived.
 //
@@ -126,6 +178,11 @@ func NewBatch(schema *dtype.Schema, cols []*Column) (*Batch, error) {
 			return nil, err
 		}
 	}
+	if CheckTimeRange {
+		if err := checkTimeRange(cols); err != nil {
+			return nil, err
+		}
+	}
 	return &Batch{schema: schema, cols: cols, rows: rows}, nil
 }
 
@@ -166,6 +223,11 @@ func NewBatchRows(schema *dtype.Schema, cols []*Column, rows int) *Batch {
 	}
 	if CheckNonNullable {
 		if err := checkNonNullable(schema, cols); err != nil {
+			panic(err)
+		}
+	}
+	if CheckTimeRange {
+		if err := checkTimeRange(cols); err != nil {
 			panic(err)
 		}
 	}

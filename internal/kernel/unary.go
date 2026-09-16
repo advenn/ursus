@@ -383,7 +383,63 @@ func uintSign[T ~uint8 | ~uint16 | ~uint32 | ~uint64](name string, out dtype.Dat
 // Non-strict casts turn an unrepresentable value into a null, which is why the
 // type checker marks every non-strict cast nullable regardless of its input.
 // Strict casts fail the query and name the offending row.
+//
+// # A Time target is normalised, and that is a fix rather than tidiness
+//
+// Cast is one of the two producers of a Time value, and it relabels whenever the two
+// sides carry the same tick length — so `Datetime(s) -> Time(s)` reinterpreted
+// SECONDS SINCE THE EPOCH as a time of day. It printed correctly by accident, because
+// ToTime rebuilds the real instant and the "15:04:05" layout throws the date away,
+// while the stored tick stayed a full epoch offset. Sorting such a column therefore
+// ordered by DATE, and equality across two days never matched.
+//
+// Normalising into [0, 24h) does not merely restore an invariant here; it makes
+// `Cast(Datetime -> Time)` mean what the user asked for. The wrapping is done once,
+// after every arm, rather than in each of the four that can produce a Time.
 func Cast(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
+	out, err := castTo(name, to, strict, c)
+	if err != nil {
+		return nil, err
+	}
+	if to.ID() == dtype.TypeTime {
+		return normaliseTime(out)
+	}
+	return out, nil
+}
+
+// normaliseTime folds a Time column's ticks into [0, 24h).
+//
+// It SCANS before it allocates: every cast whose target is a Time comes through here,
+// and the overwhelming majority are already in range, so the common case is one pass
+// and no copy. It does not write through the input's buffer, which may be shared.
+func normaliseTime(c *data.Column) (*data.Column, error) {
+	m, ok := dtype.TicksPerDay(c.DType())
+	if !ok {
+		return c, nil
+	}
+	v, err := data.Values[int64](c)
+	if err != nil {
+		// A payload-free Time column is all nulls and has no ticks to fold.
+		return c, nil
+	}
+	need := false
+	for i, t := range v {
+		if (t < 0 || t >= m) && c.IsValid(i) {
+			need = true
+			break
+		}
+	}
+	if !need {
+		return c, nil
+	}
+	buf, dst := newValuesBuffer[int64](len(v))
+	for i, t := range v {
+		dst[i] = ((t % m) + m) % m
+	}
+	return data.NewFixedBuffer(c.Name(), c.DType(), buf, len(v), c.Validity()), nil
+}
+
+func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
 	from := c.DType()
 	if from == to {
 		return c.Rename(name), nil

@@ -587,24 +587,35 @@ func fileOpener(t *testing.T, path string) parquet.Opener {
 // be readable by its own reader. No WithSchema here, because Parquet carries its
 // schema in the footer where CSV has to be told.
 func TestTemporalParquetRoundTrip(t *testing.T) {
+	// The tick values used to be ONE list shared by all seven types, and three of
+	// them have a range it violated: 86_400_000 is exactly midnight-tomorrow in
+	// milliseconds and -1 is a negative time of day. Nothing noticed, because until
+	// step 57 nothing checked — so this round-trip test was asserting that a value a
+	// Time cannot hold survives a round trip, which it does, and that is the bug.
+	//
+	// An instant has no such range, so the original list stays for Datetime and Date.
+	instants := []int64{0, 1, 86_400_000, 0, -1}
+	timesOfDay := []int64{0, 1, 86_399_999, 0, 3_600_000}
+
 	for _, c := range []struct {
 		name string
 		dt   dtype.DataType
+		vals []int64
 	}{
-		{"datetime_ms_naive", dtype.Datetime(dtype.Milli, "")},
-		{"datetime_us_naive", dtype.Datetime(dtype.Micro, "")},
-		{"datetime_ns_utc", dtype.Datetime(dtype.Nano, "UTC")},
-		{"time_ms", dtype.Time(dtype.Milli)}, // the one Parquet puts on INT32
-		{"time_us", dtype.Time(dtype.Micro)},
-		{"time_ns", dtype.Time(dtype.Nano)},
-		{"date", dtype.Date},
+		{"datetime_ms_naive", dtype.Datetime(dtype.Milli, ""), instants},
+		{"datetime_us_naive", dtype.Datetime(dtype.Micro, ""), instants},
+		{"datetime_ns_utc", dtype.Datetime(dtype.Nano, "UTC"), instants},
+		{"time_ms", dtype.Time(dtype.Milli), timesOfDay}, // the one Parquet puts on INT32
+		{"time_us", dtype.Time(dtype.Micro), timesOfDay},
+		{"time_ns", dtype.Time(dtype.Nano), timesOfDay},
+		{"date", dtype.Date, instants},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "t.parquet")
 			// A null in the middle, because def-level expansion is where a temporal
 			// reader would go wrong without anyone noticing the values shifted.
 			want := ursus.Frame(ursus.ValuesNullable("t",
-				[]int64{0, 1, 86_400_000, 0, -1},
+				c.vals,
 				[]bool{true, true, true, false, true})).
 				Select(ursus.Col("t").CastLossy(c.dt))
 

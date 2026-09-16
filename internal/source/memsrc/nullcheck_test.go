@@ -9,4 +9,7 @@ import "github.com/advenn/ursus/internal/data"
 // of the two legal shapes — a NULLABLE column holding no nulls, which the whole
 // design goes out of its way to preserve — so this package's tests are exactly where
 // a regression in that distinction would show.
-func init() { data.CheckNonNullable = true }
+func init() {
+	data.CheckNonNullable = true
+	data.CheckTimeRange = true
+}

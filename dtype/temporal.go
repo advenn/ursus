@@ -63,6 +63,24 @@ func (d DataType) FromTime(t time.Time) (int64, bool) {
 	return q, true
 }
 
+// TicksPerDay is 24 hours expressed in d's own unit.
+//
+// It is the modulus that makes a Time a time of day, and it lives here so there is
+// one definition of a day: the arithmetic kernel that wraps, the cast that
+// normalises, and data's boundary check all ask this rather than each deriving it.
+// Two copies of a modulus is two chances to disagree about whether midnight belongs
+// to today or tomorrow.
+//
+// Reports false for a type with no tick length. Date has one — 24h exactly — so this
+// answers 1 for it, which is true and useless; callers gate on TypeTime.
+func TicksPerDay(d DataType) (int64, bool) {
+	npt, ok := d.NanosPerTick()
+	if !ok || npt <= 0 {
+		return 0, false
+	}
+	return int64(24*time.Hour) / npt, true
+}
+
 // ToDuration converts a stored tick count of a Duration type into a
 // time.Duration. Reports false for any other type.
 func (d DataType) ToDuration(ticks int64) (time.Duration, bool) {

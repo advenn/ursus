@@ -10,7 +10,10 @@ import (
 )
 
 // See data.CheckNonNullable. One line per test binary, run before any test starts.
-func init() { data.CheckNonNullable = true }
+func init() {
+	data.CheckNonNullable = true
+	data.CheckTimeRange = true
+}
 
 // honest and lying build a one-column Int64 batch input, differing only in whether
 // the column actually holds a null.

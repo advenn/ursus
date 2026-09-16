@@ -16,7 +16,10 @@ import (
 // package that wants the check gets one line rather than a boilerplate function.
 // The var is written once here, before any test starts, and never again — which is
 // what keeps a package-level toggle safe under WithThreads(>1).
-func init() { data.CheckNonNullable = true }
+func init() {
+	data.CheckNonNullable = true
+	data.CheckTimeRange = true
+}
 
 // The two tests below close teeth that did not bite: without them, the step would
 // have fixed two defects and proved only one.
