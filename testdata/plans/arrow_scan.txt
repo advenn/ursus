@@ -1,0 +1,2 @@
+ARROW SCAN
+  projection: [id] (1/6 cols)

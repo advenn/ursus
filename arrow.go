@@ -18,10 +18,12 @@ import (
 	"iter"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
 
 	"github.com/advenn/ursus/internal/arrowin"
 	"github.com/advenn/ursus/internal/arrowout"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/source/arrowsrc"
 	"github.com/advenn/ursus/internal/source/memsrc"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -127,6 +129,37 @@ func ScanArrowRecords(recs ...arrow.RecordBatch) *LazyFrame {
 		return &LazyFrame{err: err}
 	}
 	return Scan(src)
+}
+
+// ScanArrow reads a stream of Arrow records.
+//
+// open must return a NEW, independent reader every time it is called: ursus opens
+// one to learn the schema when the query is planned, and one per scan each time it
+// runs — a self-join scans twice in one query, and a LazyFrame can be collected
+// again. A reader cannot be rewound, so handing over one reader would be read once
+// and then be empty.
+//
+//	stream, err := os.ReadFile("data.arrows") // an Arrow IPC stream
+//	if err != nil { return err }
+//	lf := ursus.ScanArrow(func() (array.RecordReader, error) {
+//	    return ipc.NewReader(bytes.NewReader(stream))
+//	})
+//
+// Returning the same reader twice is refused by name rather than read as an empty
+// stream.
+//
+// Records are copied a batch at a time, and the reader is not advanced until its
+// current record has been copied in full, so nothing ursus returns refers to
+// memory the reader reuses or frees. Explain and CollectSchema open a reader and
+// release it without reading a record. Head(n) stops asking for records once it has
+// n rows. A reader blocked inside Next cannot be interrupted by the query's context.
+//
+// Every column is nullable, and types are mapped as ScanArrowRecords describes.
+func ScanArrow(open func() (array.RecordReader, error)) *LazyFrame {
+	if open == nil {
+		return &LazyFrame{err: uerr.New(uerr.KindValue, "scan_arrow", "ScanArrow needs an open function")}
+	}
+	return Scan(arrowsrc.New(open))
 }
 
 func recordsSource(recs []arrow.RecordBatch) (*memsrc.Source, error) {

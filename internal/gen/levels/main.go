@@ -55,11 +55,12 @@ var levels = map[string]int{
 	"internal/scanopt": 30,
 	"internal/execopt": 30,
 
-	"internal/plan":           40, // + expr, source, dtype
-	"internal/source/memsrc":  45, // concrete sources sit above the contract
-	"internal/source/parquet": 45,
-	"internal/source/csv":     45,
-	"internal/source/testsrc": 45, // the deliberately-misbehaving source
+	"internal/plan":            40, // + expr, source, dtype
+	"internal/source/memsrc":   45, // concrete sources sit above the contract
+	"internal/source/parquet":  45,
+	"internal/source/csv":      45,
+	"internal/source/testsrc":  45, // the deliberately-misbehaving source
+	"internal/source/arrowsrc": 45, // + arrowin: an Arrow stream, copied a window at a time
 
 	"internal/physical": 50, // + plan, kernel, data, source
 	"internal/exec":     60, // + physical, plan
