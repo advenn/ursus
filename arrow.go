@@ -1,19 +1,29 @@
 package ursus
 
-// Arrow export: how anything outside this module reads ursus's output.
+// Arrow interop.
 //
-// The conversion shares memory rather than copying it — ursus already stores Arrow's
-// layout, so a column is an Arrow array with a different Go type around the same
-// bytes. internal/arrowout has the details, including the two places where the
-// layouts genuinely differ and a copy is unavoidable.
+// Export shares memory rather than copying it — ursus already stores Arrow's layout,
+// so a column is an Arrow array with a different Go type around the same bytes.
+// internal/arrowout has the details, including the two places where the layouts
+// genuinely differ and a copy is unavoidable.
+//
+// Import copies, always. internal/arrowin says why: sharing would tie a frame's
+// lifetime to memory an IPC reader reuses on its next record, or a C producer frees
+// on release, and nothing in ursus's column types could keep that memory alive.
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"iter"
 
 	"github.com/apache/arrow-go/v18/arrow"
 
+	"github.com/advenn/ursus/internal/arrowin"
 	"github.com/advenn/ursus/internal/arrowout"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/source/memsrc"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // ArrowSchema returns the frame's schema as an Arrow schema.
@@ -86,4 +96,77 @@ func (lf *LazyFrame) CollectRecords(ctx context.Context, opts ...CollectOption) 
 			}
 		}
 	}
+}
+
+// ScanArrowRecords reads Arrow records already in memory.
+//
+// The records are COPIED before this returns, so the caller may release them, or let
+// the reader they came from move on, as soon as it likes:
+//
+//	var recs []arrow.RecordBatch
+//	for rdr.Next() {
+//	    rec := rdr.RecordBatch()
+//	    rec.Retain() // an IPC reader reuses the record on its next Next
+//	    recs = append(recs, rec)
+//	}
+//	lf := ursus.ScanArrowRecords(recs...)
+//	for _, rec := range recs {
+//	    rec.Release()
+//	}
+//
+// Every record must convert to the same schema. Every column is nullable whatever
+// the Arrow schema declares, because arrow-go never checks that flag and producers
+// routinely leave it false while writing nulls. A type ursus cannot represent — a
+// 256-bit decimal, an interval, a union — is refused by name.
+//
+// With no records there is no schema, so that is an error too; hand over an empty
+// record instead. For a stream too large to copy up front, use ScanArrow.
+func ScanArrowRecords(recs ...arrow.RecordBatch) *LazyFrame {
+	src, err := recordsSource(recs)
+	if err != nil {
+		return &LazyFrame{err: err}
+	}
+	return Scan(src)
+}
+
+func recordsSource(recs []arrow.RecordBatch) (*memsrc.Source, error) {
+	if len(recs) == 0 {
+		return nil, uerr.New(uerr.KindValue, "arrow", "ScanArrowRecords needs at least one record").
+			Hint("a scan needs a schema; pass an empty record that carries one")
+	}
+	if recs[0] == nil {
+		return nil, uerr.New(uerr.KindValue, "arrow", "record 0 is nil")
+	}
+	schema, err := arrowin.Schema(recs[0].Schema())
+	if err != nil {
+		return nil, err
+	}
+	check := arrowin.NewChecker(schema)
+	cols := make([]int, schema.Len())
+	for i := range cols {
+		cols[i] = i
+	}
+	batches := make([]*data.Batch, 0, len(recs))
+	for i, rec := range recs {
+		if err := check.Check(rec); err != nil {
+			return nil, inRecord(err, i)
+		}
+		b, err := arrowin.Batch(rec, schema, cols, 0, int(rec.NumRows()))
+		if err != nil {
+			return nil, inRecord(err, i)
+		}
+		batches = append(batches, b)
+	}
+	return memsrc.New(schema, batches...)
+}
+
+// inRecord says which record an import error came from, keeping its kind.
+func inRecord(err error, i int) error {
+	var e *uerr.Error
+	if !errors.As(err, &e) {
+		return err
+	}
+	out := *e
+	out.Msg = fmt.Sprintf("record %d: %s", i, e.Msg)
+	return &out
 }
