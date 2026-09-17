@@ -46,6 +46,9 @@ var levels = map[string]int{
 	// Same level and the same shape as spill: both turn a Batch into a foreign
 	// representation and need exactly data, dtype, bitmap, arrowx to do it.
 	"internal/arrowout": 25, // + data, dtype, bitmap, arrowx, i128 — Arrow export
+	// Import is the mirror, and must stay beside export rather than above it: the
+	// shared field-metadata key lives in arrowx so neither imports the other.
+	"internal/arrowin": 25, // + data, dtype, bitmap, arrowx, i128 — Arrow import
 
 	"internal/kernel":  30, // + data, bitmap
 	"internal/source":  30, // + dtype, data, expr, uerr
