@@ -523,10 +523,23 @@ func takeList(c *data.Column, sel []int32, outValid bitmap.View) (*data.Column, 
 
 // concatList concatenates List columns.
 //
-// Every part after the first has offsets relative to ITS OWN child, so they are
-// shifted by the number of elements already accumulated. Forgetting that shift
-// does not crash: part two's rows read part one's elements, which is data that
-// looks entirely plausible.
+// # Each part is rebased to its OWN WINDOW, not to its own child
+//
+// This used to say "every part after the first has offsets relative to ITS OWN child",
+// and the code acted on it: it shifted each part's end offsets by the previous parts'
+// whole child lengths and concatenated the whole children. That is right only for a
+// List whose offsets start at zero and whose child is exactly its elements — which is
+// what NewList builds and NOT what Column.Slice produces. A sliced part keeps absolute
+// offsets into its parent's entire child.
+//
+// So on the most ordinary path in the engine — df.Lazy().Collect with a batch size
+// smaller than the frame, which slices in the memory source and concatenates here —
+// rows read other rows' elements, an empty list came back with eight of them, and the
+// child grew by a whole copy per part. Plausible data, no error.
+//
+// Now each part contributes only [lo, hi) of its child, and its offsets are shifted by
+// the elements already accumulated relative to lo. That fixes the contents and the
+// doubled memory together; ListAccessor.Window states the invariant.
 func concatList(parts []*data.Column, total int, outValid bitmap.View) (*data.Column, error) {
 	offs := make([]int32, 1, total+1)
 	children := make([]*data.Column, 0, len(parts))
@@ -534,15 +547,16 @@ func concatList(parts []*data.Column, total int, outValid bitmap.View) (*data.Co
 
 	for _, p := range parts {
 		acc := p.Lists()
+		lo, hi := acc.Window()
 		for i := range p.Len() {
-			// The END offset of each row, shifted. Validity is carried separately in
-			// outValid, and a null row's range is empty, so this is right for every
-			// row state without a branch.
+			// The END offset of each row, rebased to the window and shifted. Validity
+			// is carried separately in outValid, and a null row's range is empty, so
+			// this is right for every row state without a branch.
 			_, end, _ := acc.Get(i)
-			offs = append(offs, base+end)
+			offs = append(offs, base+(end-lo))
 		}
-		base += int32(acc.Child().Len())
-		children = append(children, acc.Child())
+		base += hi - lo
+		children = append(children, acc.Child().Slice(int(lo), int(hi-lo)))
 	}
 
 	child, err := concatChild(children)

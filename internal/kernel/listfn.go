@@ -429,13 +429,20 @@ func listReduce(fn expr.CallFn, name string, out dtype.DataType,
 		return nil, err
 	}
 
+	// Only the WINDOW is this column's elements. The whole child used to be handed to
+	// the accumulator with a zero-initialised group array, so every element outside
+	// the window stayed in group 0 — and on a sliced List (Tail, a memory source at a
+	// small batch size) row 0 absorbed all of them. Tail(2) then Sum returned 163
+	// where 100 belonged; at batch size 1 every row, the null one included, reported
+	// the sum of the entire column.
 	lists := c.Lists()
-	child := lists.Child()
-	groups := make([]int32, child.Len())
+	lo, hi := lists.Window()
+	child := lists.Child().Slice(int(lo), int(hi-lo))
+	groups := make([]int32, hi-lo)
 	for i := range c.Len() {
 		start, end, _ := lists.Get(i)
 		for e := start; e < end; e++ {
-			groups[e] = int32(i)
+			groups[e-lo] = int32(i)
 		}
 	}
 

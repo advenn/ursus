@@ -244,10 +244,12 @@ func NewString(name string, vals []string, valid bitmap.View) *Column {
 // byte a second time. Both costs vanish if the decoder appends into offs and
 // chars as it goes, which is what this constructor is for.
 //
-// offs must have n+1 entries with offs[0] == 0 and offs[n] == len(chars), the
-// ordinary Arrow invariant. The int32 write goes through unsafeData rather than
-// encoding/binary because the buffer is native-endian, which is what every reader
-// of it assumes.
+// offs must have n+1 monotonic entries, and a column CONSTRUCTED here starts at zero
+// with offs[n] == len(chars). That is a property of this constructor, not of every
+// String column: a derived one — any Column.Slice — keeps its offsets absolute, so
+// offs[0] may be non-zero. See ListAccessor.Window for why that sentence matters. The
+// int32 write goes through unsafeData rather than encoding/binary because the buffer
+// is native-endian, which is what every reader of it assumes.
 func NewStringParts(name string, offs []int32, chars []byte, valid bitmap.View) *Column {
 	n := len(offs) - 1
 	if n < 0 {
@@ -276,9 +278,17 @@ func NewStringBuffers(name string, offs, chars *memory.Buffer, n int, valid bitm
 // NewList builds a List column from offsets and a child column holding every
 // element of every row, concatenated.
 //
-// offs must have n+1 entries with offs[0] == 0 and offs[n] == child.Len() — the
-// ordinary Arrow invariant, and the same one NewStringParts documents, because
-// this is the same offsets buffer pointing at a different kind of payload.
+// offs must have n+1 monotonic entries, and a column CONSTRUCTED here starts at zero
+// with offs[n] == child.Len().
+//
+// That is a property of this constructor and NOT the invariant of a List column, and
+// this doc used to say otherwise — "offs[0] == 0 and offs[n] == child.Len(), the
+// ordinary Arrow invariant". Column.Slice produces Lists violating both clauses by
+// design, and two kernels believed this sentence over that one: listReduce credited
+// every element before a slice to its first row, and concatList concatenated whole
+// children at shifted offsets. Neither is Arrow's rule either — Arrow reads offsets as
+// absolute and a sliced array's first offset is routinely non-zero. The invariant is
+// stated once, on ListAccessor.Window.
 //
 // # An empty list and a null list are not the same row
 //
@@ -314,9 +324,11 @@ func NewList(name string, offs []int32, child *Column, valid bitmap.View) *Colum
 
 // Child returns a List column's element column, or nil.
 //
-// The result is the elements of EVERY row concatenated; row i occupies
-// child[offs[i]:offs[i+1]]. Use Lists to walk it without doing that arithmetic by
-// hand.
+// Row i occupies child[offs[i]:offs[i+1]], with ABSOLUTE offsets. The child may hold
+// elements belonging to no row of this column at all — a sliced List shares its
+// parent's whole child — so it is not "every row's elements concatenated", and code
+// that treats it that way is wrong on any derived column. Use Lists to walk it, and
+// ListAccessor.Window for the part that belongs to this column.
 func (c *Column) Child() *Column { return c.child }
 
 // Lists returns an accessor over a List column's rows.
@@ -334,6 +346,36 @@ type ListAccessor struct {
 	child *Column
 	valid bitmap.View
 	n     int
+}
+
+// Window returns the half-open range of child elements that belong to this column:
+// [offs[0], offs[n]).
+//
+// # This is the List invariant, stated once
+//
+// Offsets are ABSOLUTE indices into the child. A List built by NewList starts at zero
+// and ends at child.Len(), but that is a property of the constructor, not of a List:
+// Column.Slice keeps the offsets absolute and the child whole — "the offsets are not
+// rebased, so the child stays whole and the slice stays O(1)" — so a derived column
+// has offs[0] > 0 and offs[n] < child.Len(), and the child holds elements that belong
+// to rows this column does not have.
+//
+// Any code that treats the whole child as this column's elements is therefore wrong
+// on every sliced List, and two kernels were: listReduce credited every element before
+// the window to row 0, and concatList concatenated whole children at shifted offsets.
+// It went unnoticed because every List batch-size test read from Parquet, which builds
+// a fresh column per batch and never produces a sliced one. Measured before the fix,
+// through the public API: Tail(2) then list.sum returned 163 where 100 belonged, and
+// re-lazying a six-row frame at batch size 1 put eight elements in an empty list.
+//
+// Code that reads rows one at a time through Get is unaffected. Code that works on the
+// child in bulk must restrict itself to Window.
+func (a ListAccessor) Window() (lo, hi int32) {
+	if a.n == 0 || len(a.offs) == 0 {
+		return 0, 0
+	}
+	o := unsafeData[int32](a.offs)
+	return o[0], o[a.n]
 }
 
 // Get returns the half-open element range for row i, and whether the row is
