@@ -124,8 +124,8 @@ func AssertFrameEqual(t testing.TB, got, want *ursus.DataFrame, opts ...Option) 
 			"sort the frames on a key instead, so the rows line up")
 	}
 
-	gotRows := renderRows(got, approx)
-	wantRows := renderRows(want, approx)
+	gotRows := renderRows(t, got, approx)
+	wantRows := renderRows(t, want, approx)
 
 	if !cfg.checkRowOrder {
 		sortStrings(gotRows)
@@ -214,7 +214,8 @@ func apply(opts []Option) config {
 // skipFloats leaves floating-point columns OUT of the rendering, for the
 // tolerance path only — see AssertFrameEqual for why that is the difference
 // between a working WithTolerance and a decorative one.
-func renderRows(df *ursus.DataFrame, skipFloats bool) []string {
+func renderRows(t testing.TB, df *ursus.DataFrame, skipFloats bool) []string {
+	t.Helper()
 	b := df.Batch()
 	out := make([]string, b.Rows())
 	var sb strings.Builder
@@ -229,7 +230,12 @@ func renderRows(df *ursus.DataFrame, skipFloats bool) []string {
 				sb.WriteString(" | ")
 			}
 			first = false
-			sb.WriteString(cell(b.Column(c), r))
+			s, err := cell(b.Column(c), r)
+			if err != nil {
+				t.Fatalf("%v — AssertFrameEqual cannot compare this frame, and passing "+
+					"on values it cannot read would be a false pass", err)
+			}
+			sb.WriteString(s)
 		}
 		out[r] = sb.String()
 	}
@@ -240,9 +246,11 @@ func isFloat(dt dtype.DataType) bool {
 	return dt.ID() == dtype.TypeFloat32 || dt.ID() == dtype.TypeFloat64
 }
 
-func cell(c *data.Column, row int) string {
+// cell renders one value or "null". It is also how nested values render their
+// elements and fields, so a null element inside a list reads "null" too.
+func cell(c *data.Column, row int) (string, error) {
 	if !c.IsValid(row) {
-		return "null"
+		return "null", nil
 	}
 	return renderValue(c, row)
 }
