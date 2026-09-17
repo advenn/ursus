@@ -91,7 +91,7 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 
 |                 |                                                                                                                                                   |
 |-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Sources**     | Parquet and CSV (read and write), in-memory frames                                                                                                |
+| **Sources**     | Parquet and CSV (read and write), in-memory frames, Arrow (records and streams in; records out, zero-copy)                                        |
 | **Types**       | Bool, Int8–64, Uint8–64, Float32/64, String, Binary, Date, Time, Datetime (unit + zone), Duration, Decimal (128-bit), Enum                        |
 | **Expressions** | arithmetic, comparison, Kleene three-valued logic, conditionals, casts, null repair, `.str` (incl. `Split` → List) and `.dt` namespaces, 20 aggregates including `Implode`, window functions |
 | **Frame ops**   | filter, select, with-columns, sort, top-k, distinct, concat/vstack/hstack, slice/tail/reverse/row-index, drop/rename/drop-nulls, unpivot                   |
@@ -101,9 +101,22 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 | **Execution**   | order-preserving pipeline parallelism, parallel hash aggregation, and spilling for sort, hash aggregation and hash join                           |
 | **UDFs**        | `MapElements` (per value) and `MapBatches` (per column) — generic methods, so the Go types are inferred from your function                        |
 
-Nested types are partly there: **List and Struct read from Parquet**, with
-`Explode`, `Unnest`, a `.list` namespace and `.struct.field()`. Map and Array are not, and nested columns cannot yet be
-written.
+Nested types are partly there: **List and Struct read from Parquet and Arrow**, with
+`Explode`, `Unnest`, a `.list` namespace and `.struct.field()`. An Arrow Map arrives as a list of key/value structs.
+Array is not there, and nested columns cannot yet be written to Parquet.
+
+**Arrow** goes both ways, in pure Go. `df.Record()` and `lf.CollectRecords(ctx)` export without copying;
+`ScanArrow` reads any `array.RecordReader` — an IPC stream, Flight, the C Data Interface — and `ScanArrowRecords` reads
+records already in memory. Import copies, so nothing you release afterwards can reach a frame:
+
+```go
+lf := ursus.ScanArrow(func() (array.RecordReader, error) {
+    return ipc.NewReader(bytes.NewReader(stream)) // a new reader every call
+})
+```
+
+The function is called once to plan the query and once per scan, because a reader cannot be rewound. 38 of Arrow's 45
+types map; Decimal256, intervals, unions and run-end encoding are refused by name.
 
 The escape hatch is real: a per-element UDF in Go is a function call, not a Python
 interpreter round trip, which is the one place this library can beat Polars outright

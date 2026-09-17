@@ -914,6 +914,13 @@ func (a *StringAccessor) Str(i int) string {
 
 ### 4.5 Ownership and lifetime rules
 
+> **Superseded for import by step 60** ([`step-60-as-built.md`](../step-60-as-built.md)).
+> There is no zero-copy `FromArrow` and no `Release` on any `DataFrame`. Import copies
+> every buffer into ursus's allocator — sharing would tie a column to memory an IPC
+> reader reuses on its next record or a C producer frees on release, and nothing in
+> `data.Column`'s accessors can keep that memory alive. Rule 6 below is what made the
+> copy cheap to adopt: nothing in the engine depends on `Release`.
+
 Given the verified facts — `GoAllocator.Free` is a no-op, buffers are plain Go heap, there are **zero finalizers** in `arrow`/`arrow/array`/`arrow/memory` — refcounting is *advisory* and is hidden entirely behind a GC-managed API. The rules:
 
 1. A `*Column` is **immutable after construction**. Kernels write into buffers they allocated, before the Column wrapping them is published.
@@ -2536,7 +2543,7 @@ Hard requirements:
 2. **`Physical()` must be total for every `TypeID` we ship**, because kernel dispatch keys on `dt.Physical().ID`. A `Categorical` that does not map to `Uint32` silently fails to find a kernel.
 3. **Do not import `arrow/cdata`, and do not build with `-tags mallocator` or `-tags ccalloc`.** Those are the only three ways buffers stop being plain Go heap; the entire "hide refcounting behind a GC-managed API" decision depends on avoiding them.
 4. `Allocator()` must guarantee 64-byte alignment (`GoAllocator` already does, by over-allocating and shifting) so SIMD loops need no scalar prologue.
-5. `BatchFromRecord` must **retain** the incoming buffers, so the physical layer's ownership rules hold even if the reader releases.
+5. `BatchFromRecord` must **retain** the incoming buffers, so the physical layer's ownership rules hold even if the reader releases. *(Superseded by step 60: import copies instead — `arrowin.Batch` — so there is nothing to retain.)*
 
 ---
 

@@ -198,3 +198,36 @@ func ExampleDataFrame_Column() {
 	// values: [10 4 7 2 9]
 	// row 0 region: "north" present=true
 }
+
+// Arrow both ways. Record shares a frame's memory with arrow-go; ScanArrowRecords
+// copies records in, so the record can be released straight away.
+func ExampleScanArrowRecords() {
+	ctx := context.Background()
+	big, err := exampleSales().Filter(ursus.Col("qty").Gt(5)).Collect(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rec, err := big.Record()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	lf := ursus.ScanArrowRecords(rec)
+	rec.Release()
+
+	df, err := lf.Select(ursus.Col("region"), ursus.Col("qty")).Collect(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(df)
+	// Output:
+	// shape: (3, 2)
+	// ┌─────────┬───────┐
+	// │ region  │ qty   │
+	// │ String  │ Int64 │
+	// ├─────────┼───────┤
+	// │ "north" │ 10    │
+	// │ "north" │ 7     │
+	// │ "south" │ 9     │
+	// └─────────┴───────┘
+}

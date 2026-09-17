@@ -20,9 +20,13 @@ func unsafeSizeof[T any](v T) uintptr { return unsafe.Sizeof(v) }
 // unsafeData reinterprets a byte buffer as a typed slice, without copying.
 //
 // This replaces arrow.GetData, whose constraint enumerates arrow's own fixed-width
-// types and therefore excludes ursus's Int128. The mechanics are identical; every
-// buffer comes from arrowx and is 64-byte aligned, which satisfies the alignment
-// requirement of every T here.
+// types and therefore excludes ursus's Int128. The mechanics are identical.
+//
+// Alignment: a fixed-width payload is an arrowx buffer (64-byte aligned) or a
+// whole-element slice of one (Column.Slice), so it is aligned for its own T — which is
+// all this needs. It used to say every buffer is 64-byte aligned, which a slice is
+// not; nothing depends on 64. Arrow import copies into arrowx buffers rather than
+// wrapping foreign memory, so no payload arrives with a producer's alignment.
 func unsafeData[T Fixed](b []byte) []T {
 	if len(b) == 0 {
 		return nil

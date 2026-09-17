@@ -15,7 +15,7 @@ No Write tool is available in this read-only planning mode, so here is the compl
 | D5 | `context` at execution boundaries | `LazyFrame.Schema()` → **`CollectSchema(ctx)`**; `Explain(ctx, …)`. Eager façade takes `ctx` as first param and is **not generated in step 1**. |
 | D14 | SIMD differential test unsatisfiable | Scalar impls compile **unconditionally** under `xxxScalar`; only the ~3-line dispatch wrapper is build-tagged. |
 | D16 | ~45 undeclared types | 11 declared now (§10), 34 backlogged with owners. `ursus.Field(name) Expr` deleted (collides with `type Field`). |
-| OQ2 | Arrow ownership | **Hidden entirely.** No `Release()` on any public type. `Adopt` uses `Retain` + `runtime.AddCleanup`. Never use `memory.DefaultAllocator`. |
+| OQ2 | Arrow ownership | **Hidden entirely.** No `Release()` on any public type. `Adopt` uses `Retain` + `runtime.AddCleanup`. Never use `memory.DefaultAllocator`. *Superseded for import by step 60: `Adopt` was never built; import copies. See the note at §4.2.* |
 | OQ7 | Generate eager façade | **No.** Not in step 1, not until `LazyFrame` stabilizes, and never with `context.Background()`. |
 | OQ8 | Categorical string cache | **Deferred.** `Enum` ships (frozen categories are part of the type → internable). `Categorical` cannot be, because its mapping mutates. `TypeCategorical` reserved. |
 | — | Parquet dep blast radius | `pqarrow` for step 1 (~18 modules, incl. gRPC), confined to **two files** behind a `recordSource` seam; exit plan to `parquet/file` (~12 modules) is tech-debt item #1. |
@@ -1114,6 +1114,16 @@ var Alloc memory.Allocator = memory.NewGoAllocator()
 
 ### 4.2 Ownership model — OQ2 resolved
 
+> **Superseded for import by step 60** ([`step-60-as-built.md`](../step-60-as-built.md)).
+> Nothing below about `Adopt` was built, and as written it is unsafe.
+> `runtime.AddCleanup(b, …)` ties the record's lifetime to one `*Batch`, but
+> `Batch.Slice` and every rename build new objects that never reference `b` — so the
+> cleanup can release the record while a slice of the batch is still being read. A
+> retain can be anchored only to the buffers, and `bitmap.View`, `StringAccessor` and
+> `ListAccessor` hold raw `[]byte` that cannot carry an owner. **Import copies**
+> (`internal/arrowin`), a window at a time for a stream (`internal/source/arrowsrc`).
+> The export half — no public `Release`, Go allocator pinned — stands as described.
+
 ```go
 // # Ownership
 //
@@ -1925,6 +1935,8 @@ func ScanParquetPaths(paths []string, opts ...ParquetScanOption) *LazyFrame {
 }
 
 // ScanArrow scans an arrow-go RecordReader with zero copies.
+// (Superseded by step 60: shipped as ScanArrow(open func() (array.RecordReader, error)),
+// a factory because a scan is opened more than once, and copying — see §4.2.)
 func ScanArrow(rdr array.RecordReader) *LazyFrame
 
 // ScanFunc scans a caller-supplied source.
@@ -2654,7 +2666,9 @@ func TestSoakNoRelease(t *testing.T) {
 // bookkeeping with no memory effect — which is exactly the claim we are relying on.
 func TestSoakWithRelease(t *testing.T) { … }
 
-// And the cleanup path itself.
+// And the cleanup path itself. (Never written: Adopt was superseded by copying in
+// step 60; the lifetime tests are the poisoning-allocator tests in arrowimport_test.go
+// and arrowscan_test.go.)
 func TestAdoptCleanupReleases(t *testing.T) {
 	released := make(chan struct{})
 	rec := instrumentedRecord(func() { close(released) })
@@ -2712,7 +2726,7 @@ make check-imports
 **To agent 2 (`bitmap` / `batch` / `kernel` / `physical` / `exec`):**
 
 1. `bitmap.Bitmap` **must carry a bit offset** (`{buf []byte, off, len int}`). `array.Data.Offset()` is an element offset, so a zero-copy slice starts mid-byte; without it every sliced adoption pays a bitmap copy.
-2. `batch.New(schema, rows, cols) *Batch` returns a heap-allocated pointer not embedded in another object — `runtime.AddCleanup` in `arrowx.Adopt` requires it.
+2. `batch.New(schema, rows, cols) *Batch` returns a heap-allocated pointer not embedded in another object — `runtime.AddCleanup` in `arrowx.Adopt` requires it. *(Moot since step 60: `Adopt` was superseded by copying.)*
 3. `batch.NewColumnFromBuffers(dt, length, nullCount, validity []byte, validityBitOffset int, buffers ...[]byte) (Column, error)` must exist; `arrowx.Adopt` and `arrowx.Export` are written against it.
 4. **Kernels must treat 64-byte alignment as a hint, not a precondition.** Only allocator-produced buffers are guaranteed aligned; `memory.NewBufferBytes`, `memory.SliceBuffer` and mmap'd IPC buffers may be 8-byte aligned.
 5. Kernels never call `memory.DefaultAllocator`; they use `arrowx.Alloc`.
@@ -2749,5 +2763,5 @@ Items 1b–1e and 1g have no dependency on either other agent and can start imme
 - `/home/beck/GolandProjects/ursus/dtype/schema.go` — `Schema`, `Project`, `UnknownColumnError`
 - `/home/beck/GolandProjects/ursus/options_scan.go` — the embedded-interface options scheme (the pattern every other option family copies)
 - `/home/beck/GolandProjects/ursus/internal/source/source.go` — `Source`/`Scan`/`ScanRequest`/`Term`, the contract between the optimizer and every format
-- `/home/beck/GolandProjects/ursus/internal/arrowx/adopt.go` — the ownership model (`Retain` + `runtime.AddCleanup`, `Alloc` pinned to `GoAllocator`)
+- `/home/beck/GolandProjects/ursus/internal/arrowx/adopt.go` — the ownership model (`Retain` + `runtime.AddCleanup`, `Alloc` pinned to `GoAllocator`) *(never created; import is `internal/arrowin` since step 60)*
 - `/home/beck/GolandProjects/ursus/Makefile` — the `GOEXPERIMENT=simd` discipline and the mandatory no-experiment build

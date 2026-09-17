@@ -21,7 +21,9 @@ import (
 //
 // It is a *byte rather than a uintptr on purpose. A real pointer stays meaningful
 // to the garbage collector, so an identity held in a ledger can never be recycled
-// by a later allocation while the entry is still live.
+// by a later allocation while the entry is still live. That holds because every
+// payload is Go heap: Arrow import copies rather than adopting C Data memory, whose
+// addresses the collector knows nothing about.
 type BufferID = *byte
 
 // Buffers yields each distinct allocation the column holds, with its size.

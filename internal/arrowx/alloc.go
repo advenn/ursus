@@ -1,8 +1,9 @@
-// Package arrowx is the only package in ursus that imports arrow-go.
+// Package arrowx owns ursus's allocator and the few Arrow facts shared across packages.
 //
-// Everything above it speaks ursus types (dtype.DataType, data.Column). Keeping
-// the dependency in one package means the Arrow version can move, or the storage
-// layer can be replaced wholesale, without touching the engine.
+// It used to say it was the only package importing arrow-go. That was never true once
+// the column layer existed — bitmap and data hold *memory.Buffer, and arrowout,
+// arrowin, arrowsrc and the root package speak arrow types at the boundary. The
+// dependency is confined to storage and to the interop boundary, not to one package.
 //
 // # Ownership
 //
@@ -20,10 +21,13 @@
 // Refcounting is advisory. TestRiskGateGCReclaims asserts this empirically; if it
 // ever fails, the ownership model — and this comment — must change.
 //
-// The one place refcounting is real is memory imported across the C Data
-// Interface, where Release calls back into the producer. ursus does not import
-// foreign Arrow memory in v0.1; when it does, Adopt must Retain and attach a
-// runtime.AddCleanup.
+// The one place refcounting is real is foreign memory — the C Data Interface, where
+// Release calls back into the producer, or an IPC reader that reuses a record's body
+// on its next Next. ursus never holds any: import COPIES into this allocator
+// (internal/arrowin, step 60). An Adopt that retained a record and attached a
+// runtime.AddCleanup was designed and never built, and would have been unsafe:
+// Batch.Slice and every rename build objects that never reference the batch the
+// cleanup is attached to.
 package arrowx
 
 import (

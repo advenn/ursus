@@ -1018,7 +1018,8 @@ func ScanNDJSON(paths ...string) *LazyFrame
 func ScanAvro(paths ...string) *LazyFrame
 func ScanDelta(uri string, opts ...DeltaOption) *LazyFrame
 func ScanIceberg(table string, opts ...IcebergOption) *LazyFrame
-func ScanArrow(rdr array.RecordReader) *LazyFrame      // zero-copy from arrow-go
+func ScanArrow(open func() (array.RecordReader, error)) *LazyFrame // a fresh reader per scan; copies (step 60)
+func ScanArrowRecords(recs ...arrow.RecordBatch) *LazyFrame        // records in memory; copies (step 60)
 func ScanFunc(schema Schema, fn ScanFunc) *LazyFrame   // custom source (TableProvider)
 
 // With options
@@ -1098,9 +1099,22 @@ func HTTP(client *http.Client) Store
 `GetRange` is the important method — Parquet footer + selective row-group reads over the
 network are what make cloud scans fast.
 
-### Arrow interop (zero-copy, both directions)
+### Arrow interop
+
+> As built (steps 58 and 60): export shares memory, import copies. The sketch below it
+> was not built; `ToArrowTable`, `FromArrowTable` and `ArrowStream` have no equivalent
+> yet. Import copies because sharing would tie a frame to memory an IPC reader reuses
+> on its next record or a C producer frees on release — see `step-60-as-built.md`.
 
 ```go
+// Shipped.
+func (df *DataFrame) ArrowSchema() (*arrow.Schema, error)
+func (df *DataFrame) Record() (arrow.Record, error)                    // zero-copy
+func (lf *LazyFrame) CollectRecords(ctx context.Context, opts ...CollectOption) iter.Seq2[arrow.Record, error]
+func ScanArrow(open func() (array.RecordReader, error)) *LazyFrame     // copies
+func ScanArrowRecords(recs ...arrow.RecordBatch) *LazyFrame            // copies
+
+// The original sketch.
 func (df *DataFrame) ToArrow() arrow.RecordBatch
 func (df *DataFrame) ToArrowTable() arrow.Table
 func FromArrow(rec arrow.RecordBatch) (*DataFrame, error)
@@ -1448,7 +1462,7 @@ func AssertPlan(t testing.TB, lf *ursus.LazyFrame, goldenFile string)
 | `collect_batches` | `CollectBatches(ctx)` → `iter.Seq2` | |
 | `explain()` | `Explain()` | returns `(string, error)` |
 | `map_elements` | `MapElements[In, Out]` | fast in Go |
-| `to_arrow` | `ToArrow` | zero-copy |
+| `to_arrow` | `Record` | zero-copy (shipped as `Record`, step 58) |
 | `pl.SQLContext` | `sql.Context` | |
 | *(none)* | `Validate(ManyToOne)` on joins | promoted; catches fan-out |
 | *(none)* | `WithStrictStreaming()` | no silent fallback |
@@ -1569,6 +1583,8 @@ fmt.Println(plan)
 2. **Arrow ownership.** `arrow-go` uses explicit `Retain`/`Release`. Do we expose that,
    or wrap everything in GC-managed handles and accept the finalizer cost? Leaning:
    hide it, expose `Release()` only on frames obtained via zero-copy `FromArrow`.
+   **Resolved (steps 58 and 60):** hidden entirely. Export shares memory and needs no
+   `Release`; import copies, so no frame ever holds Arrow memory it would have to release.
 3. **`Series[T]` vs erased `Column`.** Two representations means two code paths. Proposal:
    `Column` is the only engine-facing type; `Series[T]` is a typed *view* over it,
    constructed on demand and free.
