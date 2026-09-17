@@ -32,6 +32,21 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 )
 
+// FieldTypeKey is the Arrow field-metadata key under which ursus records a type
+// Arrow cannot spell on its own, and FieldTypeInt128 is its one value today.
+//
+// Arrow has no 128-bit integer. Export writes an Int128 as Decimal128(38, 0), which
+// is also exactly what a Decimal(38, 0) exports as, so without a mark an import
+// cannot tell them apart and an integer Sum read back becomes a Decimal. Field
+// metadata survives both IPC and the C Data Interface, at every nesting level.
+//
+// It lives here because export and import are both level 25 and neither may import
+// the other; a key spelled twice is a key that drifts.
+const (
+	FieldTypeKey    = "ursus:type"
+	FieldTypeInt128 = "Int128"
+)
+
 // Alignment is the byte alignment every ursus-allocated buffer is guaranteed to
 // have. It matches Arrow's recommended alignment and is the width that lets a
 // SIMD loop start without a scalar prologue.

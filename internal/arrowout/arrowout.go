@@ -161,22 +161,22 @@ func Type(d dtype.DataType) (arrow.DataType, error) {
 		return &arrow.Decimal128Type{Precision: 38, Scale: 0}, nil
 
 	case dtype.TypeList:
-		inner, err := Type(d.Inner())
+		// "item", nullable: the element field arrow.ListOf builds, spelled out so the
+		// element can carry an Int128 mark like any other field.
+		elem, err := Field("item", d.Inner(), true)
 		if err != nil {
 			return nil, err
 		}
-		return arrow.ListOf(inner), nil
+		return arrow.ListOfField(elem), nil
 
 	case dtype.TypeStruct:
 		fields := make([]arrow.Field, 0, len(d.Fields()))
 		for _, f := range d.Fields() {
-			ft, err := Type(f.Type)
+			af, err := Field(f.Name, f.Type, f.Nullable)
 			if err != nil {
 				return nil, err
 			}
-			fields = append(fields, arrow.Field{
-				Name: f.Name, Type: ft, Nullable: f.Nullable,
-			})
+			fields = append(fields, af)
 		}
 		return arrow.StructOf(fields...), nil
 	}
@@ -203,17 +203,35 @@ func timeUnit(d dtype.DataType) (arrow.TimeUnit, error) {
 	return 0, uerr.Internalf("arrow: %s has an unknown time unit", d)
 }
 
+// Field maps one ursus field to an Arrow field.
+//
+// An Int128 is marked with arrowx.FieldTypeKey, because its Arrow type alone is
+// indistinguishable from a Decimal(38, 0). Every field this package builds goes
+// through here — a schema's, a list's element, a struct's children — so the mark is
+// present at whatever depth the Int128 sits, and TestInt128IsMarkedAtEveryDepth
+// walks each of those arms.
+func Field(name string, d dtype.DataType, nullable bool) (arrow.Field, error) {
+	t, err := Type(d)
+	if err != nil {
+		return arrow.Field{}, err
+	}
+	f := arrow.Field{Name: name, Type: t, Nullable: nullable}
+	if d.ID() == dtype.TypeInt128 {
+		f.Metadata = arrow.NewMetadata(
+			[]string{arrowx.FieldTypeKey}, []string{arrowx.FieldTypeInt128})
+	}
+	return f, nil
+}
+
 // Schema maps an ursus schema to an Arrow schema.
 func Schema(s *dtype.Schema) (*arrow.Schema, error) {
 	fields := make([]arrow.Field, 0, s.Len())
 	for _, f := range s.All() {
-		t, err := Type(f.Type)
+		af, err := Field(f.Name, f.Type, f.Nullable)
 		if err != nil {
 			return nil, err
 		}
-		fields = append(fields, arrow.Field{
-			Name: f.Name, Type: t, Nullable: f.Nullable,
-		})
+		fields = append(fields, af)
 	}
 	return arrow.NewSchema(fields, nil), nil
 }
