@@ -147,3 +147,28 @@ func TestSplitListSurvivesReLazy(t *testing.T) {
 		}
 	}
 }
+
+// TestExplodeOfASlicedListIsBatchSizeInvariant is the Explode operator on the same
+// path. It reads each row's range and gathers from the whole child with Take, which is
+// correct for absolute offsets — this pins that it stays so, since the consumer set
+// for this contract was enumerated and Explode is the one outside the kernel package.
+func TestExplodeOfASlicedListIsBatchSizeInvariant(t *testing.T) {
+	df := slicedListFrame(t)
+
+	ref, err := df.Lazy().Explode("tags").Collect(t.Context(), ursus.WithBatchSize(8192))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ref.String()
+
+	for _, size := range listBatchSizes {
+		got, err := df.Lazy().Explode("tags").
+			Collect(t.Context(), ursus.WithBatchSize(size))
+		if err != nil {
+			t.Fatalf("batch size %d: %v", size, err)
+		}
+		if got.String() != want {
+			t.Errorf("batch size %d:\n got:\n%s\nwant:\n%s", size, got.String(), want)
+		}
+	}
+}
