@@ -131,10 +131,9 @@ func defaultParams(op expr.AggOp) expr.AggParams {
 // ways from then on: an unlisted disagreement fails, and a listed pair that now
 // agrees fails as stale.
 var knownInexactMerges = map[string]bool{
-	"sum/Duration(ns)":  true,
-	"sum/Duration(s)":   true,
-	"mean/Duration(ns)": true,
-	"mean/Duration(s)":  true,
+	// Empty since the Duration accumulators became exact: merging partitions now
+	// equals a single pass for every family here, so the thread count can no longer
+	// change an answer.
 }
 
 // TestEveryAggregateMergeIsCovered walks the whole AggOp space against every dtype

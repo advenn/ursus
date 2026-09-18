@@ -246,7 +246,17 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 
 	case AggSum:
 		if in.ID() == dtype.TypeDuration {
-			return AggBinding{Acc: in, Out: in}, nil // durations add; instants do not
+			// Durations add; instants do not. The ACCUMULATOR is 128 bits while the
+			// OUTPUT stays a Duration, and the gap between them is deliberate: the
+			// result must remain a Duration, so Out cannot widen, and the total must
+			// stay exact, so Acc cannot narrow. A Duration sum therefore refuses when
+			// the total leaves int64 — which is what Col("d").Add(Col("d")) already
+			// does on the same data — rather than wrapping what an addition refuses.
+			//
+			// Acc used to be `in`, physically Int64, while sumAcc read it as "not
+			// Int128" and held float64s: a group past 2^53 ticks lost precision, and
+			// one past int64's range came back with the wrong sign.
+			return AggBinding{Acc: dtype.Int128, Out: in}, nil
 		}
 		if in.ID() == dtype.TypeDecimal {
 			return AggBinding{}, decimalAggUnsupported(op, in)
@@ -273,7 +283,11 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 
 	case AggMean:
 		if in.ID() == dtype.TypeDuration {
-			return AggBinding{Acc: dtype.Float64, Out: in}, nil
+			// Exact, for the reason sum gives — and mean needs the 128-bit
+			// accumulator even more than sum does: its SUM may legitimately leave
+			// int64 while the mean itself cannot, so narrowing before the division
+			// would refuse an answer that is perfectly representable.
+			return AggBinding{Acc: dtype.Int128, Out: in}, nil
 		}
 		if in.ID() == dtype.TypeDecimal {
 			return AggBinding{}, decimalAggUnsupported(op, in)

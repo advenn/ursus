@@ -196,14 +196,10 @@ func aggregate(op expr.AggOp, in dtype.DataType, col *data.Column) (*data.Column
 // implementation-defined, which dispatch.go documents as the construct it removed
 // from FloorDiv.
 var knownInexactAggregates = map[string]bool{
-	"sum/Duration(s)":   true,
-	"sum/Duration(ms)":  true,
-	"sum/Duration(us)":  true,
-	"sum/Duration(ns)":  true,
-	"mean/Duration(s)":  true,
-	"mean/Duration(ms)": true,
-	"mean/Duration(us)": true,
-	"mean/Duration(ns)": true,
+	// Empty since sum and mean accumulate at 128 bits. Eight arms were listed here —
+	// sum and mean over a Duration at each of the four units — measured before the
+	// repair; see step-62-as-built.md. The check runs both ways, so an arm that goes
+	// lossy again must be listed, and a listed one that is exact is stale.
 }
 
 // knownWindowTypeConfusions is worse than imprecision: winCumFloat writes a []float64

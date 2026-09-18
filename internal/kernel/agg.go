@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"math"
 	"strings"
 
 	"github.com/advenn/ursus/dtype"
@@ -499,13 +500,23 @@ func (a *sumAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	valid := seenBitmap(a.seen, nGroups)
 
 	if a.isInt {
-		return data.NewFixed(name, a.bind.Out, a.i[:nGroups], valid), nil
-	}
-	// Duration sums accumulate as float64 but output as an integer tick count.
-	if a.bind.Out.ID() == dtype.TypeDuration {
+		if !a.bind.Out.IsTemporal() {
+			return data.NewFixed(name, a.bind.Out, a.i[:nGroups], valid), nil
+		}
+		// A temporal output is NARROWER than its accumulator, so this is the
+		// boundary i128.Int64's doc names: "where a 128-bit accumulator becomes a
+		// user-visible number, and where an overflow that was impossible internally
+		// must be reported rather than truncated."
 		out := make([]int64, nGroups)
-		for i := range nGroups {
-			out[i] = int64(a.f[i])
+		for g := range nGroups {
+			if !a.seen[g] {
+				continue // null: there is no total to narrow
+			}
+			v, ok := a.i[g].Int64()
+			if !ok {
+				return nil, durationSumOverflow(a.bind.Out, g, nGroups, a.i[g])
+			}
+			out[g] = v
 		}
 		return data.NewFixed(name, a.bind.Out, out, valid), nil
 	}
@@ -517,6 +528,31 @@ func (a *sumAcc) Finish(name string, nGroups int) (*data.Column, error) {
 		return data.NewFixed(name, a.bind.Out, out, valid), nil
 	}
 	return data.NewFixed(name, a.bind.Out, a.f[:nGroups], valid), nil
+}
+
+// durationSumOverflow refuses a group total that no longer fits the output type.
+//
+// Refusing rather than wrapping is what makes the aggregate agree with the
+// arithmetic: Col("d").Add(Col("d")) has refused on this data since step 61, so a sum
+// that quietly wrapped it would leave the two paths contradicting each other over the
+// same values. The op string is "sum" so a caller can tell this refusal from an
+// arithmetic one without matching on the message.
+//
+// The group ORDINAL is reported rather than the group's key: the key columns exist at
+// the call site, but there is no value formatter outside the test helpers and
+// inventing one inside an error path is a second subject. The ordinal is also not
+// stable across a parallel merge or a spilled replay, which is why nothing asserts it.
+func durationSumOverflow(out dtype.DataType, g, nGroups int, total i128.Int128) error {
+	return uerr.New(uerr.KindValue, "sum",
+		"the sum of group %d of %d is %s%s, which overflows %s",
+		g, nGroups, total, out.TimeUnit(), out).
+		Hint("%s holds tick counts from %s to %s", out,
+			dtype.FormatTemporal(out, math.MinInt64),
+			dtype.FormatTemporal(out, math.MaxInt64)).
+		Hint("a coarser unit covers a wider span: cast the column with " +
+			".Cast(ursus.Duration(ursus.Micro)) before summing").
+		Hint("or sum the ticks themselves: .Cast(ursus.Int64).Sum() accumulates at " +
+			"128 bits and returns an Int128, which cannot overflow")
 }
 
 // --- mean --------------------------------------------------------------------
@@ -532,28 +568,51 @@ func (a *sumAcc) Finish(name string, nGroups int) (*data.Column, error) {
 // mean was computed and came out undefined, when in fact there was nothing to
 // compute.
 type meanAcc struct {
-	bind expr.AggBinding
-	sum  []float64
-	n    []uint64
+	bind  expr.AggBinding
+	isInt bool
+
+	sum []float64
+	i   []i128.Int128
+	n   []uint64
 }
 
 func newMeanAcc(_ dtype.DataType, bind expr.AggBinding) (Accumulator, error) {
-	return &meanAcc{bind: bind}, nil
+	return &meanAcc{bind: bind, isInt: bind.Acc.ID() == dtype.TypeInt128}, nil
 }
 
 func (a *meanAcc) Reserve(n int) {
 	for len(a.n) < n {
-		a.sum = append(a.sum, 0)
 		a.n = append(a.n, 0)
+		if a.isInt {
+			a.i = append(a.i, i128.Zero)
+		} else {
+			a.sum = append(a.sum, 0)
+		}
 	}
 }
 
 func (a *meanAcc) AddBatch(groups []int32, col *data.Column) error {
+	valid := col.Validity()
+	if a.isInt {
+		// The exact path, for an output type that cannot absorb a rounding: a
+		// Duration mean must equal sum // count, and the sum is exact.
+		src, err := widenToInt128(col)
+		if err != nil {
+			return err
+		}
+		for i, g := range groups {
+			if valid.Get(i) {
+				a.i[g] = a.i[g].Add(src[i])
+				a.n[g]++
+			}
+		}
+		return nil
+	}
+
 	src, err := widenFloat(col)
 	if err != nil {
 		return err
 	}
-	valid := col.Validity()
 	for i, g := range groups {
 		if valid.Get(i) {
 			a.sum[g] += src[i]
@@ -572,7 +631,11 @@ func (a *meanAcc) Merge(other Accumulator, remap []int32) error {
 	// all: averaging two averages would weight the smaller group equally.
 	a.Reserve(mergeCap(remap, len(o.n)))
 	mergeEach(remap, len(o.n), func(dst, src int) {
-		a.sum[dst] += o.sum[src]
+		if a.isInt {
+			a.i[dst] = a.i[dst].Add(o.i[src])
+		} else {
+			a.sum[dst] += o.sum[src]
+		}
 		a.n[dst] += o.n[src]
 	})
 	return nil
@@ -580,6 +643,10 @@ func (a *meanAcc) Merge(other Accumulator, remap []int32) error {
 
 func (a *meanAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
+	if a.isInt {
+		return a.finishExact(name, nGroups)
+	}
+
 	vb := bitmap.NewBuilder(nGroups)
 	out := make([]float64, nGroups)
 	for i := range nGroups {
@@ -600,14 +667,42 @@ func (a *meanAcc) Finish(name string, nGroups int) (*data.Column, error) {
 		}
 		return data.NewFixed(name, a.bind.Out, f32, valid), nil
 	}
-	if a.bind.Out.ID() == dtype.TypeDuration {
-		i64 := make([]int64, nGroups)
-		for i := range nGroups {
-			i64[i] = int64(out[i])
-		}
-		return data.NewFixed(name, a.bind.Out, i64, valid), nil
-	}
 	return data.NewFixed(name, a.bind.Out, out, valid), nil
+}
+
+// finishExact divides an exact 128-bit sum by the count.
+//
+// It never refuses, and that is a theorem rather than a hope: for a non-empty group
+// min <= mean <= max, and truncating a value inside [min, max] toward zero leaves it
+// inside — so the mean of int64 values is always an int64. The !fits arm is a bug
+// detector, not a user-facing refusal.
+//
+// It TRUNCATES toward zero, which is what Duration // Int64 does ("integer-truncating
+// division") and what .dt.Total* does. Flooring is right for an INSTANT —
+// rescaleTemporal's doc explains why — and wrong for a span: a Duration has a true
+// origin at zero, so nothing collapses asymmetrically around it, and the symmetry
+// that matters is mean(-x) == -mean(x).
+func (a *meanAcc) finishExact(name string, nGroups int) (*data.Column, error) {
+	vb := bitmap.NewBuilder(nGroups)
+	out := make([]int64, nGroups)
+	for g := range nGroups {
+		if a.n[g] == 0 {
+			vb.Append(false) // NULL, not NaN
+			continue
+		}
+		q, _, ok := a.i[g].DivUint64(a.n[g])
+		if !ok {
+			return nil, uerr.Internalf("kernel: mean divided group %d by a zero count", g)
+		}
+		v, fits := q.Int64()
+		if !fits {
+			return nil, uerr.Internalf(
+				"kernel: the mean of %s values is %s, which left int64", a.bind.Out, q)
+		}
+		out[g] = v
+		vb.Append(true)
+	}
+	return data.NewFixed(name, a.bind.Out, out, vb.Finish()), nil
 }
 
 // --- min / max ---------------------------------------------------------------
@@ -1192,7 +1287,9 @@ func (a *sumAcc) NBytes() int64 {
 	return int64(len(a.i))*16 + int64(len(a.f))*8 + int64(len(a.seen))
 }
 
-func (a *meanAcc) NBytes() int64 { return int64(len(a.sum))*8 + int64(len(a.n))*8 }
+func (a *meanAcc) NBytes() int64 {
+	return int64(len(a.sum))*8 + int64(len(a.i))*16 + int64(len(a.n))*8
+}
 
 func (a *positionAcc) NBytes() int64 { return colBytes(a.rows) }
 
