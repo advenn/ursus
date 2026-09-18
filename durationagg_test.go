@@ -189,3 +189,76 @@ func TestDurationSumAgreesWithArithmetic(t *testing.T) {
 		t.Errorf("sum and + disagree about the same data:\n  sum: %v\n  add: %v", sumErr, addErr)
 	}
 }
+
+// TestCumSumOfADurationIsADuration. winCumFloat handed its []float64 to
+// data.NewFixed under a Duration dtype: data.NewFixed does not check the two against
+// each other, data.Values does — but only on the way back out — and float64 and
+// int64 are the same width, so neither the dtype nor the row count could disagree.
+// One hour read back as 1331860h53m23.894837248s.
+func TestCumSumOfADurationIsADuration(t *testing.T) {
+	got, err := durations("d", time.Hour, 30*time.Minute, time.Duration(p53)).
+		Select(ursus.Col("d").CumSum(false).Alias("running")).
+		Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := ursus.Frame(ursus.Values("running", []time.Duration{
+		time.Hour, 90 * time.Minute, 90*time.Minute + time.Duration(p53),
+	})).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, got, want)
+}
+
+// TestCumSumRefusesOnAPrefixThatLeavesInt64: a cumulative publishes every prefix, so
+// it refuses where sum() does not — the total here is zero, which sum accepts.
+func TestCumSumRefusesOnAPrefixThatLeavesInt64(t *testing.T) {
+	const max = time.Duration(math.MaxInt64)
+	vals := []time.Duration{max, max, -max, -max}
+
+	_, err := durations("d", vals...).
+		Select(ursus.Col("d").CumSum(false).Alias("running")).
+		Collect(t.Context(), ursus.WithThreads(1))
+	var ue *uerr.Error
+	if !errors.As(err, &ue) || !errors.Is(&uerr.Error{Kind: ue.Kind}, uerr.ErrValue) {
+		t.Fatalf("a running total past int64 must be refused, got %v", err)
+	}
+	if ue.Op != "cum_sum" {
+		t.Errorf("op is %q, want \"cum_sum\"", ue.Op)
+	}
+
+	// The same data summed is zero, and that asymmetry is deliberate.
+	if _, err := durations("d", vals...).GroupBy().
+		Agg(ursus.Col("d").Sum()).Collect(t.Context(), ursus.WithThreads(1)); err != nil {
+		t.Errorf("sum of the same values must still succeed: %v", err)
+	}
+}
+
+// TestCumSumLastRowEqualsSum is the property Expr.CumSum's doc promises.
+func TestCumSumLastRowEqualsSum(t *testing.T) {
+	vals := []time.Duration{time.Duration(p53), 1, 1, -3, 7}
+	run, err := durations("d", vals...).
+		Select(ursus.Col("d").CumSum(false).Alias("running")).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	total, err := durations("d", vals...).GroupBy().
+		Agg(ursus.Col("d").Sum().Alias("sum")).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := run.Column[int64]("running")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := total.Column[int64]("sum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	last, _ := r.Get(len(vals) - 1)
+	sum, _ := s.Get(0)
+	if last != sum {
+		t.Errorf("cum_sum's last row is %d and sum is %d", last, sum)
+	}
+}

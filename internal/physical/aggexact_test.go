@@ -206,10 +206,9 @@ var knownInexactAggregates = map[string]bool{
 // into a column declared Duration (window.go:291-298), and data.NewFixed does not
 // check the two against each other, so one hour reads back as about 152 years.
 var knownWindowTypeConfusions = map[string]bool{
-	"cum_sum/Duration(s)":  true,
-	"cum_sum/Duration(ms)": true,
-	"cum_sum/Duration(us)": true,
-	"cum_sum/Duration(ns)": true,
+	// Empty since cum_sum over a Duration takes the exact path. Four arms were listed
+	// here — one per unit — each of which wrote float64 bits into a column declared
+	// Duration, so an hour read back as about 152 years.
 }
 
 // --- the sweep ------------------------------------------------------------------------

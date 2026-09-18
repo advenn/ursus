@@ -7,6 +7,7 @@ import (
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/uerr"
+	"math"
 )
 
 // Ordered window kernels: rank, running reductions, and shift.
@@ -221,9 +222,21 @@ func winCumulative(fn expr.WinFnOp, params expr.WinParams, name string,
 	}
 
 	// Sum and product accumulate arithmetically, so they need a value type rather
-	// than a row index. Int128 for integer sums — the width Sum already uses, so the
-	// last row of cum_sum equals sum — and Float64 for everything else.
-	if out.ID() == dtype.TypeInt128 {
+	// than a row index. Sum accumulates at 128 bits whenever its output is EXACT —
+	// Int128 for integers, a tick count for a Duration — so the last row of cum_sum
+	// equals sum by construction rather than by a coincidence of width. Float64 is
+	// for the genuinely approximate cases: float sums and every product.
+	//
+	// A Duration used to land in winCumFloat, which finishes by handing its
+	// []float64 to data.NewFixed under the OUTPUT type — and data.NewFixed does not
+	// check the two against each other, while data.Values checks on the way back
+	// out. Since float64 and int64 are the same width, neither the dtype nor the row
+	// count could disagree, so one hour came back as about 152 years.
+	//
+	// The `fn ==` half of the gate is not belt and braces: winCumInt128 ignores fn
+	// and always ADDS, so an exact Product binding added later would route a
+	// cum_prod into a sum.
+	if fn == expr.WinCumSum && (out.ID() == dtype.TypeInt128 || out.IsTemporal()) {
 		return winCumInt128(params, name, out, col, seg)
 	}
 	return winCumFloat(fn, params, name, out, col, seg)
@@ -241,18 +254,65 @@ func winCumInt128(params expr.WinParams, name string, out dtype.DataType,
 	vals := make([]i128.Int128, n)
 	ok := make([]bool, n)
 
+	// A temporal output is narrower than the accumulator, so every row is narrowed
+	// as it is produced. Per row is not a choice here: a cumulative PUBLISHES each
+	// prefix, so a running total that transiently leaves int64 has no value to emit
+	// for those rows, even if it comes back. That makes cum_sum deliberately
+	// stricter than sum over the same column — sum publishes only the total — and
+	// the refusal says so.
+	narrow := out.IsTemporal()
+	ticks := make([]int64, 0)
+	if narrow {
+		ticks = make([]int64, n)
+	}
+	var failed error
+
 	forEachOrdered(seg, params.Reverse, func(rows []int32) {
+		if failed != nil {
+			return
+		}
 		var acc i128.Int128
 		for _, row := range rows {
 			if !valid.Get(int(row)) {
 				continue // skipped by the running total, still null in the output
 			}
 			acc = acc.Add(src[row])
+			if narrow {
+				v, ok64 := acc.Int64()
+				if !ok64 {
+					failed = cumSumOverflow(out, int(row), acc)
+					return
+				}
+				ticks[row] = v
+			}
 			vals[row] = acc
 			ok[row] = true
 		}
 	})
+	if failed != nil {
+		return nil, failed
+	}
+	if narrow {
+		return data.NewFixed(name, out, ticks, seenBitmap(ok, n)), nil
+	}
 	return data.NewFixed(name, out, vals, seenBitmap(ok, n)), nil
+}
+
+// cumSumOverflow refuses a running total that no longer fits the output type.
+//
+// It names the frame row, which a window kernel has and an aggregate does not —
+// forEachOrdered walks original row indices. That matches checkTemporalOverflow's
+// vocabulary for the same class of refusal one layer down.
+func cumSumOverflow(out dtype.DataType, row int, acc i128.Int128) error {
+	return uerr.New(uerr.KindValue, "cum_sum",
+		"the running total at row %d is %s%s, which overflows %s",
+		row, acc, out.TimeUnit(), out).
+		Hint("%s holds tick counts from %s to %s", out,
+			dtype.FormatTemporal(out, math.MinInt64),
+			dtype.FormatTemporal(out, math.MaxInt64)).
+		Hint("a cumulative publishes every prefix, so it refuses where sum() would " +
+			"not: sum() only has to represent the total").
+		Hint("a coarser unit covers a wider span: .Cast(ursus.Duration(ursus.Micro))")
 }
 
 func winCumFloat(fn expr.WinFnOp, params expr.WinParams, name string,
