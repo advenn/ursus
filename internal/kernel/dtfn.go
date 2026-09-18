@@ -48,25 +48,55 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 		if !has {
 			return nil, uerr.Internalf("kernel: %s on %s", fn, dt)
 		}
+		// The goal the old comment stated — a coarse unit must not floor to zero —
+		// was implemented as `t * npt / per`, and the multiply wrapped: a
+		// Duration(s) of three centuries total_days'd to -103928. It never needed a
+		// multiply. Every total is a whole number of ticks (per >= 1e9 >= npt at
+		// every unit), so per/npt is an integer and t/(per/npt) is the SAME rational
+		// floored the same way, with nothing to overflow.
+		ticksPer := per / npt
+		if ticksPer <= 0 || per%npt != 0 {
+			return nil, uerr.Internalf("kernel: %s on %s has no whole tick ratio", fn, dt)
+		}
 		vals := make([]int64, n)
 		for i, t := range ticks {
 			if !valid.Get(i) {
 				continue
 			}
-			// Multiply before dividing so a coarse unit does not floor to zero:
-			// Duration(s) total_minutes must not compute (t/60e9)*... first.
-			vals[i] = t * npt / per
+			vals[i] = t / ticksPer
 		}
 		return data.NewFixed(name, out, vals, valid), nil
 	}
 
 	if fn == expr.FnDtEpoch {
-		npt, _ := dt.NanosPerTick()
+		npt, has := dt.NanosPerTick()
+		if !has {
+			return nil, uerr.Internalf("kernel: %s on %s", fn, dt)
+		}
+		// Same defect, one function over, and this one is reachable from an ordinary
+		// column: a Date is 86_400e9 nanos per tick, so `t * npt` wrapped for every
+		// date past 2262-04-11 and Dt().Epoch() on 2300-06-01 answered -8019905673.
+		//
+		// A tick is either a whole number of seconds (Date, Datetime(s)) or a whole
+		// fraction of one, so exactly one of these is a multiply and it is bounded:
+		// int32 days times 86_400 cannot leave int64.
+		const nsPerSec = int64(time.Second)
 		vals := make([]int64, n)
 		for i, t := range ticks {
-			if valid.Get(i) {
-				vals[i] = t * npt / int64(time.Second)
+			if !valid.Get(i) {
+				continue
 			}
+			if npt >= nsPerSec {
+				secPerTick := npt / nsPerSec
+				if overflowsI64(expr.OpMul, t, secPerTick) {
+					return nil, uerr.New(uerr.KindValue, "dt",
+						"%s at row %d is too far from the epoch to count in seconds",
+						dtype.FormatTemporal(dt, t), i)
+				}
+				vals[i] = t * secPerTick
+				continue
+			}
+			vals[i] = t / (nsPerSec / npt)
 		}
 		return data.NewFixed(name, out, vals, valid), nil
 	}
