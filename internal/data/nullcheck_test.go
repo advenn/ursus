@@ -1,10 +1,12 @@
 package data_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 )
@@ -145,9 +147,16 @@ func TestNewBatchRowsRunsEveryCheck(t *testing.T) {
 		dtype.Of("a", dtype.Int64),
 		dtype.Of("b", dtype.Int64),
 	)
+	// Built at the dtype's OWN storage width. This used to make every column from
+	// []int64, including the Int32 one in the "wrong type" case below — a column
+	// whose values did not match its declared type, which is the structural mistake
+	// NewFixed now panics on. The case still tests what it always tested: a column
+	// whose type disagrees with the SCHEMA.
 	col := func(name string, dt dtype.DataType, n int) *data.Column {
-		vals := make([]int64, n)
-		return data.NewFixed(name, dt, vals, bitmap.AllSet(n))
+		if dt.Physical().ID() == dtype.TypeInt32 {
+			return data.NewFixed(name, dt, make([]int32, n), bitmap.AllSet(n))
+		}
+		return data.NewFixed(name, dt, make([]int64, n), bitmap.AllSet(n))
 	}
 
 	for _, tc := range []struct {
@@ -195,4 +204,54 @@ func TestNewBatchRowsKeepsTheZeroColumnCase(t *testing.T) {
 	if b.Rows() != 5 {
 		t.Errorf("a zero-column batch kept %d rows, want 5", b.Rows())
 	}
+}
+
+// TestNewFixedChecksItsValuesAgainstItsType is the write-side half of the check
+// Values has always performed on the read side.
+//
+// The asymmetry was not academic: a cumulative sum handed NewFixed a []float64 under
+// a Duration dtype, and since the two are the same width, neither the declared type
+// nor the row count could disagree — an hour came back as about 152 years. Values
+// would have caught it on the way out, but the column had already been published.
+func TestNewFixedChecksItsValuesAgainstItsType(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		call func()
+		want string
+	}{
+		{"float values under a temporal type", func() {
+			data.NewFixed("d", dtype.Duration(dtype.Nano), []float64{1}, bitmap.AllSet(1))
+		}, "values are Float64"},
+		{"int64 values under a Date", func() {
+			data.NewFixed("d", dtype.Date, []int64{1}, bitmap.AllSet(1))
+		}, "values are Int64"},
+		{"int64 values under a Decimal", func() {
+			data.NewFixed("d", dtype.Decimal(10, 2), []int64{1}, bitmap.AllSet(1))
+		}, "values are Int64"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("a column whose values disagree with its type was built")
+				}
+				if msg := fmt.Sprint(r); !strings.Contains(msg, tc.want) {
+					t.Errorf("panic should say %q: %v", tc.want, msg)
+				}
+			}()
+			tc.call()
+		})
+	}
+}
+
+// TestNewFixedPermitsTheIntendedPuns: every column stored as a different type than it
+// declares must still be buildable, which is what Physical() is for.
+func TestNewFixedPermitsTheIntendedPuns(t *testing.T) {
+	data.NewFixed("date", dtype.Date, []int32{1}, bitmap.AllSet(1))
+	data.NewFixed("time", dtype.Time(dtype.Nano), []int64{1}, bitmap.AllSet(1))
+	data.NewFixed("ts", dtype.Datetime(dtype.Micro, "UTC"), []int64{1}, bitmap.AllSet(1))
+	data.NewFixed("dur", dtype.Duration(dtype.Second), []int64{1}, bitmap.AllSet(1))
+	data.NewFixed("dec", dtype.Decimal(10, 2), []i128.Int128{{}}, bitmap.AllSet(1))
+	data.NewFixed("i128", dtype.Int128, []i128.Int128{{}}, bitmap.AllSet(1))
+	data.NewFixed("enum", dtype.Enum("a", "b"), []uint32{1}, bitmap.AllSet(1))
 }

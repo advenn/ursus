@@ -161,7 +161,33 @@ func (c *Column) WithValidity(valid bitmap.View) *Column {
 //
 // The values slice must alias a buffer obtained from arrowx so that alignment and
 // lifetime are right; NewFixedBuffer is the lower-level entry point.
+//
+// # T must be dt's physical type, and that used to go unchecked
+//
+// Values checks on the way OUT — its doc spells out why a width-only check is not
+// enough: "Int64 and Float64 are both 64 bits, so a width-only check lets
+// Values[float64] succeed on an Int64 column". Nothing checked on the way IN, and
+// that asymmetry cost a whole defect: a cumulative sum handed this a []float64 under
+// a Duration dtype, and because the two are the same width, neither the dtype nor the
+// row count could disagree. One hour read back as about 152 years.
+//
+// A panic rather than an error for the reason NewBool gives for the same shape of
+// violation: this signature has no error to return, and a caller cannot handle it —
+// values of the wrong type are not a condition, they are a bug in whoever built them.
+// The pun this does NOT forbid is the legitimate one: Physical() maps Date to Int32,
+// the temporal types to Int64, Enum to Uint32 and Decimal to Int128, so every column
+// stored as a different type than it declares still passes.
 func NewFixed[T Fixed](name string, dt dtype.DataType, vals []T, valid bitmap.View) *Column {
+	// physicalID is the same helper Values consults on the way out; this is the
+	// matching check on the way in. A Go type it does not know — a DEFINED type over
+	// a primitive, which the Fixed constraint admits with its tildes — is let
+	// through rather than refused, because its width is all that is knowable and
+	// convertNamedSlice already converts those before they reach here.
+	if want, ok := physicalID[T](); ok && want != dt.Physical().ID() {
+		panic(uerr.Internalf(
+			"data: column %q declares %s, stored as %s, but its values are %s",
+			name, dt, dt.Physical().ID(), want))
+	}
 	buf := arrowx.NewBuffer(len(vals) * int(sizeOf[T]()))
 	copy(unsafeData[T](buf.Bytes()), vals)
 	return NewFixedBuffer(name, dt, buf, len(vals), valid)
