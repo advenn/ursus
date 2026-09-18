@@ -4,6 +4,7 @@ package physical
 
 import (
 	"context"
+	"math"
 	"regexp"
 	"sync"
 	"time"
@@ -250,7 +251,20 @@ func litColumn(l *expr.Lit) (*data.Column, error) {
 		return data.NewString("literal", []string{string(v)}, valid).
 			WithDType(dtype.Binary), nil
 	case time.Time:
-		return data.NewFixed("literal", l.DT, []int64{v.UnixNano()}, valid), nil
+		// Through FromTime, which range-checks: t.UnixNano() is undefined outside
+		// 1678..2262 and this used to take it at its word, so Lit(year 2300) was a
+		// wrapped instant in every query that mentioned it. A literal is one value
+		// the user wrote, so it is named and refused rather than nulled.
+		tick, ok := l.DT.FromTime(v)
+		if !ok {
+			return nil, uerr.New(uerr.KindValue, "lit",
+				"%s cannot be held by %s", v.Format(time.RFC3339Nano), l.DT).
+				Hint("%s spans %s to %s", l.DT,
+					dtype.FormatTemporal(l.DT, math.MinInt64),
+					dtype.FormatTemporal(l.DT, math.MaxInt64)).
+				Hint("a coarser unit covers a wider span, e.g. ursus.Datetime(ursus.Micro, \"UTC\")")
+		}
+		return data.NewFixed("literal", l.DT, []int64{tick}, valid), nil
 
 	case int8:
 		return data.NewFixed("literal", l.DT, []int8{v}, valid), nil

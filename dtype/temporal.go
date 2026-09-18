@@ -40,28 +40,46 @@ func (d DataType) ToTime(ticks int64) (time.Time, bool) {
 
 // FromTime converts an instant into a tick count of type d, flooring toward
 // negative infinity so the mapping stays monotone across the epoch.
+//
+// It reports false for an instant d cannot hold, and callers must honour that. The
+// fine-unit branch used to call t.UnixNano(), whose result Go documents as UNDEFINED
+// before 1678 or after 2262, and then returned true regardless — so every caller that
+// dutifully checked the flag was told a wrapped value was fine, and 2300-06-01 became
+// 1715-11-11T00:25:26.290448384Z through Values, through Lit and through a cast.
+//
+// Deriving the ticks from Unix SECONDS rather than from a nanosecond count also
+// widens what actually fits: a millisecond instant in the year 3000 is an ordinary
+// tick count and only the intermediate was ever the problem.
 func (d DataType) FromTime(t time.Time) (int64, bool) {
 	npt, ok := d.NanosPerTick()
 	if !ok || d.ID() == TypeDuration {
 		return 0, false
 	}
-	if npt >= int64(time.Second) {
-		// Date, and second-resolution instants: derive from Unix seconds so that
-		// dates far from the epoch do not route through a nanosecond count.
-		per := npt / int64(time.Second)
-		sec := t.Unix()
+	const nsPerSec = int64(time.Second)
+	sec := t.Unix()
+
+	if npt >= nsPerSec {
+		// Date, and second-resolution instants: whole seconds per tick.
+		per := npt / nsPerSec
 		q := sec / per
 		if sec%per != 0 && sec < 0 {
 			q--
 		}
 		return q, true
 	}
-	ns := t.UnixNano()
-	q := ns / npt
-	if ns%npt != 0 && ns < 0 {
-		q--
+
+	// Whole ticks per second, so the instant is sec*perSec plus the sub-second part.
+	// Only the multiply can leave int64, and it is checked rather than assumed.
+	perSec := nsPerSec / npt
+	if sec > math.MaxInt64/perSec || sec < math.MinInt64/perSec {
+		return 0, false
 	}
-	return q, true
+	ticks := sec * perSec
+	sub := int64(t.Nanosecond()) / npt // Nanosecond() is in [0, 1e9), so this floors
+	if ticks > math.MaxInt64-sub {
+		return 0, false
+	}
+	return ticks + sub, true
 }
 
 // TicksPerDay is 24 hours expressed in d's own unit.

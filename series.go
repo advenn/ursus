@@ -69,11 +69,32 @@ func valuesWith[T Literal](name string, vals []T, valid bitmap.View) *Column {
 		return data.NewFixed(name, dtype.Duration(dtype.Nano), ns, valid)
 
 	case []time.Time:
+		// An instant Datetime(ns) cannot hold becomes NULL, not a wrapped one.
+		//
+		// This used to be t.UnixNano(), whose result Go documents as undefined before
+		// 1678 or after 2262: 2300-06-01 arrived as 1715-11-11T00:25:26.290448384Z,
+		// wrong before any query ran. A constructor has no error to return and the
+		// rows are the user's data, not a bug in the caller, so a panic would be
+		// wrong too — and rescaleTemporal already states the principle this follows:
+		// a wrapped timestamp is a plausible-looking wrong answer and a null is not.
+		//
+		// The limitation that remains is real and worth naming: Values always builds
+		// nanoseconds, so there is no coarser unit to ask for at construction. Build
+		// the ticks and Cast, or parse from strings, for instants outside that window.
+		dt := dtype.Datetime(dtype.Nano, "UTC")
 		ns := make([]int64, len(v))
+		fits := bitmap.NewBuilder(len(v))
+		lost := false
 		for i, t := range v {
-			ns[i] = t.UnixNano()
+			tick, ok := dt.FromTime(t)
+			ns[i] = tick
+			fits.Append(ok)
+			lost = lost || !ok
 		}
-		return data.NewFixed(name, dtype.Datetime(dtype.Nano, "UTC"), ns, valid)
+		if lost {
+			valid = bitmap.And(valid, fits.Finish())
+		}
+		return data.NewFixed(name, dt, ns, valid)
 
 	case []int:
 		i64 := make([]int64, len(v))
