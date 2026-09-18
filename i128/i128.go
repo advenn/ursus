@@ -198,6 +198,51 @@ func (a Int128) String() string {
 	return string(buf[pos:])
 }
 
+// DivUint64 divides by a positive count, truncating toward zero. r is the
+// remainder's MAGNITUDE; the remainder itself carries a's sign.
+//
+// It is deliberately not called Div and is not general division: the package doc
+// refuses Knuth algorithm D, and 128÷64 needs none — it is two bits.Div64 calls, the
+// shape divmod10 below has used since step 1. What it exists for is `mean`, whose
+// exact sum can leave int64 while the mean itself cannot, so the division has to
+// happen at 128 bits.
+//
+// Truncation rather than flooring, and the caller gets r so it can choose otherwise.
+// A Duration is a span with a true origin at zero, so the symmetry that matters is
+// mean(-x) == -mean(x), which truncation has; rescaleTemporal floors instead because
+// an INSTANT's epoch is arbitrary and flooring keeps the mapping monotone across it.
+//
+// ok is false only for d == 0.
+func (a Int128) DivUint64(d uint64) (q Int128, r uint64, ok bool) {
+	if d == 0 {
+		return Zero, 0, false
+	}
+	neg := a.Hi < 0
+	m := a
+	if neg {
+		m = a.Neg()
+	}
+	// m now holds the MAGNITUDE, read as an unsigned pair — correct even for Min,
+	// whose Neg is itself: Min's bit pattern IS 2^127 unsigned, which is exactly
+	// |Min|. Reading it as signed here would give the wrong sign and the right bits,
+	// which is the plausible wrong answer this package exists to prevent.
+	hi, lo := uint64(m.Hi), m.Lo
+
+	// bits.Div64 panics for a zero divisor or a quotient that overflows, i.e. when
+	// its high word is >= the divisor. Neither call can reach that: the first passes
+	// the CONSTANT 0 as its high word and d >= 1, and the second passes a remainder
+	// of a division by d, which is < d by definition. That is divmod10's argument
+	// with 10 generalised.
+	qhi, rem := bits.Div64(0, hi, d)
+	qlo, rem := bits.Div64(rem, lo, d)
+
+	q = Int128{Hi: int64(qhi), Lo: qlo}
+	if neg {
+		q = q.Neg()
+	}
+	return q, rem, true
+}
+
 // divmod10 divides the 128-bit value (hi,lo) by 10.
 //
 // bits.Div64 panics unless its high word is less than the divisor, so the division
