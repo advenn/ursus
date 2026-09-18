@@ -139,8 +139,10 @@ func temporalArms() []arm {
 // probes sit on every int64 boundary, plus one ordinary calendar magnitude (a day in
 // nanoseconds). Every ordered pair is tried.
 var probes = []int64{
-	math.MinInt64, math.MinInt64 + 1, -1 << 62, -86_400_000_000_000, -1,
-	0, 1, 86_400_000_000_000, 1 << 62, math.MaxInt64 - 1, math.MaxInt64,
+	math.MinInt64, math.MinInt64 + 1, -1 << 62, -86_400_000_000_000,
+	-(1 << 53) - 1, -(1 << 53), -1,
+	0, 1, 1 << 53, (1 << 53) + 1,
+	86_400_000_000_000, 1 << 62, math.MaxInt64 - 1, math.MaxInt64,
 }
 
 // buildOperand makes a 3-row column of type d holding [a, null, ordinary].
