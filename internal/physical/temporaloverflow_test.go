@@ -143,7 +143,12 @@ var probes = []int64{
 	0, 1, 86_400_000_000_000, 1 << 62, math.MaxInt64 - 1, math.MaxInt64,
 }
 
-// buildOperand makes a 3-row column of type d holding [a, null, b].
+// buildOperand makes a 3-row column of type d holding [a, null, ordinary].
+//
+// Row 2 is a neutral value rather than the reversed pair, and that is not cosmetic: a
+// column holding BOTH orders of a pair refuses on either one, so a predicate that
+// misses (-1, MinInt64) but catches (MinInt64, -1) looked correct. The outer loops
+// already walk every ordered pair, so nothing is lost by keeping one per column.
 //
 // Row 1 is null in BOTH operands and carries extreme payload, so "a null row is never
 // judged" is asserted once per case rather than once per suite. A null slot's payload
@@ -307,18 +312,9 @@ func exact(op expr.BinaryOp, out dtype.DataType, a, b int64) (*big.Int, bool) {
 // on: a wrap that is fixed and left listed fails, and a wrap that appears unlisted
 // fails.
 var knownTemporalWraps = map[string]bool{
-	// Measured, 2026-09-18, before any repair. Every one of these produces a
-	// plausible in-range value: 9e18ns - -9e18ns, two instants 570 years apart,
-	// comes back as -124095h34m33.709551616s.
-	"Datetime - Datetime -> Duration": true, // reachable from two valid ns instants
-	"Datetime + Duration -> Datetime": true,
-	"Datetime - Duration -> Datetime": true,
-	"Duration + Datetime -> Datetime": true,
-	"Duration + Duration -> Duration": true,
-	"Duration - Duration -> Duration": true,
-	"Duration * Int64 -> Duration":    true, // 1s * 1e10 overflows; so does any ns span past 0.93s
-	"Int64 * Duration -> Duration":    true,
-	"Duration // Int64 -> Duration":   true, // the single pair MinInt64 // -1
+	// Empty since the guard landed. Nine shapes were listed here, measured before the
+	// repair; see step-61-as-built.md. The assertion below runs both ways, so a wrap
+	// that comes back must be listed, and a listed one that stops wrapping is stale.
 }
 
 // wrapShape names an arm by its TYPES rather than its units, so the ratchet is a
@@ -346,8 +342,8 @@ func TestTemporalArithmeticNeverWraps(t *testing.T) {
 
 		for _, x := range probes {
 			for _, y := range probes {
-				l := buildOperand("l", a.bind.CastL, x, y)
-				r := buildOperand("r", a.bind.CastR, y, x)
+				l := buildOperand("l", a.bind.CastL, x, 0)
+				r := buildOperand("r", a.bind.CastR, y, 1)
 				if l == nil || r == nil {
 					t.Fatalf("%s: no fixture for %s / %s", a, a.bind.CastL, a.bind.CastR)
 				}
@@ -471,22 +467,8 @@ func firstN(xs []string, n int) []string {
 // Emptied by the commit that fixes them; stale entries fail, so a fix cannot be left
 // undocumented and a new divergence cannot appear unnoticed.
 var knownArmDivergences = map[string]bool{
-	// Measured, 2026-09-18. resolveArithmetic refuses Decimal for * thirty lines
-	// before integralScale accepts it, so the binding promises a Duration and
-	// kernel.Cast refuses Decimal -> Int64. Two arms of one file answering one
-	// question two ways; fixed in the next commit.
-	"Decimal(18, 3) * Duration(s)":   true,
-	"Duration(s) * Decimal(18, 3)":   true,
-	"Duration(s) // Decimal(18, 3)":  true,
-	"Decimal(18, 3) * Duration(ms)":  true,
-	"Duration(ms) * Decimal(18, 3)":  true,
-	"Duration(ms) // Decimal(18, 3)": true,
-	"Decimal(18, 3) * Duration(us)":  true,
-	"Duration(us) * Decimal(18, 3)":  true,
-	"Duration(us) // Decimal(18, 3)": true,
-	"Decimal(18, 3) * Duration(ns)":  true,
-	"Duration(ns) * Decimal(18, 3)":  true,
-	"Duration(ns) // Decimal(18, 3)": true,
+	// Empty since integralScale started refusing a Decimal multiplier: those twelve
+	// arms no longer resolve at all, so they are not in the enumeration either.
 }
 
 func TestEveryTemporalArmRuns(t *testing.T) {

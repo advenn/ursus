@@ -434,6 +434,17 @@ func arithmetic(op expr.BinaryOp, name string, out dtype.DataType, l, r *data.Co
 		return timeOfDayArith(op, name, out, l, r, n, valid)
 	}
 
+	// Every other temporal result is an int64 tick count that addScalar would wrap
+	// without noticing. A wrapped instant or span is IN RANGE and plausible — two
+	// valid nanosecond timestamps 570 years apart subtracted to minus fourteen years
+	// — so it is refused before the arithmetic runs rather than inspected after,
+	// which is the mistake the Time arm above exists to avoid one type over.
+	if out.IsTemporal() && out.Physical().ID() == dtype.TypeInt64 {
+		if err := checkTemporalOverflow(op, out, l, r, n, valid); err != nil {
+			return nil, err
+		}
+	}
+
 	switch p.ID() {
 	case dtype.TypeInt8:
 		return arithNum[int8](op, name, out, l, r, n, valid)
@@ -522,6 +533,98 @@ func timeOfDayArith(op expr.BinaryOp, name string, out dtype.DataType,
 		dst[i] = ((s % m) + m) % m
 	}
 	return data.NewFixedBuffer(name, out, buf, n, valid), nil
+}
+
+// checkTemporalOverflow refuses arithmetic whose exact result does not fit int64.
+//
+// It writes nothing: it returns an error or nil, so it cannot change an answer, and
+// arithNum stays the single implementation of add, sub and mul. Ordinary integer
+// columns are untouched — the gate is on the OUTPUT type, and only
+// resolveTemporalArithmetic produces a temporal one.
+//
+// # Validity comes from the combined view, never from the operands
+//
+// A length-1 broadcast operand's validity holds a single bit, and bitmap.View.Get(i)
+// for i > 0 does not panic — with no backing buffer it returns true. combinedValidity
+// has already resolved broadcasting, so `ts + Lit(null)` is null in every row here
+// and no row is judged. That matters because a null slot's payload is arbitrary
+// (Arrow does not guarantee it is zero), and judging it would refuse a query over
+// data the user cannot see.
+func checkTemporalOverflow(op expr.BinaryOp, out dtype.DataType,
+	l, r *data.Column, n int, valid bitmap.View) error {
+
+	switch op {
+	case expr.OpAdd, expr.OpSub, expr.OpMul, expr.OpFloorDiv:
+	default:
+		return nil
+	}
+	lv, err := data.Values[int64](l)
+	if err != nil {
+		return err
+	}
+	rv, err := data.Values[int64](r)
+	if err != nil {
+		return err
+	}
+	// Indexed rather than broadcast: materialising a scalar operand here would
+	// allocate a second full copy of it for a pass that only reads.
+	at := func(v []int64, i int) int64 {
+		if len(v) == 1 {
+			return v[0]
+		}
+		return v[i]
+	}
+
+	for i := range n {
+		if !valid.Get(i) {
+			continue
+		}
+		a, b := at(lv, i), at(rv, i)
+		if !overflowsI64(op, a, b) {
+			continue
+		}
+		return uerr.New(uerr.KindValue, "arith",
+			"%s %s %s at row %d overflows %s",
+			dtype.FormatTemporal(l.DType(), a), op, dtype.FormatTemporal(r.DType(), b),
+			i, out).
+			Hint("%s holds tick counts from %s to %s", out,
+				dtype.FormatTemporal(out, math.MinInt64),
+				dtype.FormatTemporal(out, math.MaxInt64)).
+			Hint("a coarser unit covers a wider span: cast the operands with " +
+				".Cast(ursus.Datetime(ursus.Micro, \"UTC\")) or .Cast(ursus.Duration(ursus.Micro))")
+	}
+	return nil
+}
+
+// overflowsI64 reports whether the exact result of a op b leaves int64.
+//
+// The two -1 cases in multiplication are load-bearing rather than defensive: for
+// -1 * MinInt64 the wrapped product is MinInt64 and p/a == b, so the division test
+// alone reports no overflow.
+func overflowsI64(op expr.BinaryOp, a, b int64) bool {
+	switch op {
+	case expr.OpAdd:
+		return (b > 0 && a > math.MaxInt64-b) || (b < 0 && a < math.MinInt64-b)
+	case expr.OpSub:
+		return (b < 0 && a > math.MaxInt64+b) || (b > 0 && a < math.MinInt64+b)
+	case expr.OpMul:
+		if a == 0 || b == 0 {
+			return false
+		}
+		if a == -1 {
+			return b == math.MinInt64
+		}
+		if b == -1 {
+			return a == math.MinInt64
+		}
+		p := a * b
+		return p/a != b
+	case expr.OpFloorDiv:
+		// Go defines MinInt64 / -1 as MinInt64 rather than trapping, and
+		// divIntScalar only guards a zero divisor.
+		return a == math.MinInt64 && b == -1
+	}
+	return false
 }
 
 func arithNum[T Integer](op expr.BinaryOp, name string, out dtype.DataType,
