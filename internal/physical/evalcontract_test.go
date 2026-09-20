@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/expr"
@@ -29,63 +30,21 @@ import (
 
 // contractBatch is one column per dtype worth exercising, all length 3, all with a
 // materialised validity bitmap so no kernel takes a no-nulls shortcut by accident.
+//
+// # The columns are built first and the schema is derived from them
+//
+// data.NewList and data.NewStruct DERIVE their dtype from the child column and the
+// field columns, and both say why: a declared type that disagreed with the columns
+// actually holding the values would be a lie no caller could detect. Writing the
+// fields out separately would reintroduce exactly that, so the fields come from
+// c.DType() and there is no parallel list to keep in step.
 func contractBatch(t *testing.T) *data.Batch {
 	t.Helper()
+	cols := contractColumns(t)
 
-	valid := func(n int) bitmap.View {
-		b := bitmap.NewBuilder(n)
-		for range n {
-			b.Append(true)
-		}
-		return b.Finish()
-	}
-	const n = 3
-
-	fields := []dtype.Field{
-		dtype.Of("i8", dtype.Int8), dtype.Of("i16", dtype.Int16),
-		dtype.Of("i32", dtype.Int32), dtype.Of("i64", dtype.Int64),
-		dtype.Of("u8", dtype.Uint8), dtype.Of("u32", dtype.Uint32),
-		dtype.Of("u64", dtype.Uint64),
-		dtype.Of("f32", dtype.Float32), dtype.Of("f64", dtype.Float64),
-		dtype.Of("bo", dtype.Bool), dtype.Of("st", dtype.String),
-		dtype.Of("dt", dtype.Date), dtype.Of("ts", dtype.Datetime(dtype.Micro, "UTC")),
-		dtype.Of("du", dtype.Duration(dtype.Nano)),
-		// A NAIVE datetime and a Time, neither of which the matrix had. Their
-		// absence is why it could not see that arithmetic and comparison disagreed
-		// about zones: with one Datetime column there is no pair to disagree about.
-		dtype.Of("tn", dtype.Datetime(dtype.Micro, "")),
-		dtype.Of("tm", dtype.Time(dtype.Nano)),
-		// A NULL column, which the matrix had no way to reach. ResolveUnary admits
-		// Null for eleven ops and kernel.Unary implements none of them; the row-count
-		// assertion below was already written and could not fire, because the unit of
-		// coverage is the fixture and this fixture had sixteen types and not this one.
-		//
-		// It is also the only column here with no payload buffer at all — data.NewNull
-		// carries validity and nothing else — so it is the only one that tests what a
-		// kernel does when there is nothing to read.
-		dtype.Of("nu", dtype.Null),
-	}
-	cols := []*data.Column{
-		data.NewFixed("i8", dtype.Int8, []int8{1, 2, 3}, valid(n)),
-		data.NewFixed("i16", dtype.Int16, []int16{1, 2, 3}, valid(n)),
-		data.NewFixed("i32", dtype.Int32, []int32{1, 2, 3}, valid(n)),
-		data.NewFixed("i64", dtype.Int64, []int64{1, 2, 3}, valid(n)),
-		data.NewFixed("u8", dtype.Uint8, []uint8{1, 2, 3}, valid(n)),
-		data.NewFixed("u32", dtype.Uint32, []uint32{1, 2, 3}, valid(n)),
-		data.NewFixed("u64", dtype.Uint64, []uint64{1, 2, 3}, valid(n)),
-		data.NewFixed("f32", dtype.Float32, []float32{1, 2, 3}, valid(n)),
-		data.NewFixed("f64", dtype.Float64, []float64{1, 2, 3}, valid(n)),
-		data.NewBool("bo", valid(n), valid(n)),
-		// Numeric text, so a strict cast to a numeric type fails on the TYPE
-		// rules or not at all. "a" would fail on the VALUE, which is correct
-		// behaviour and not a contract violation — the contract is about types.
-		data.NewString("st", []string{"1", "2", "3"}, valid(n)),
-		data.NewFixed("dt", dtype.Date, []int32{1, 2, 3}, valid(n)),
-		data.NewFixed("ts", dtype.Datetime(dtype.Micro, "UTC"), []int64{1, 2, 3}, valid(n)),
-		data.NewFixed("du", dtype.Duration(dtype.Nano), []int64{1, 2, 3}, valid(n)),
-		data.NewFixed("tn", dtype.Datetime(dtype.Micro, ""), []int64{1, 2, 3}, valid(n)),
-		data.NewFixed("tm", dtype.Time(dtype.Nano), []int64{1, 2, 3}, valid(n)),
-		data.NewNull("nu", dtype.Null, n),
+	fields := make([]dtype.Field, len(cols))
+	for i, c := range cols {
+		fields[i] = dtype.Of(c.Name(), c.DType())
 	}
 	schema, err := dtype.NewSchema(fields...)
 	if err != nil {
@@ -98,9 +57,176 @@ func contractBatch(t *testing.T) *data.Batch {
 	return b
 }
 
-var contractCols = []string{
-	"i8", "i16", "i32", "i64", "u8", "u32", "u64",
-	"f32", "f64", "bo", "st", "dt", "ts", "du", "tn", "tm", "nu",
+const contractRows = 3
+
+func contractValid(n int) bitmap.View {
+	b := bitmap.NewBuilder(n)
+	for range n {
+		b.Append(true)
+	}
+	return b.Finish()
+}
+
+// contractList builds a three-row List column holding [w, x], [y, z] and [].
+//
+// The child is FOUR elements long against three rows, deliberately: a kernel that
+// confuses an element count with a row count cannot be right here by coincidence.
+// The empty row is the other half — an empty list and a null list leave the offset
+// unmoved either way, and only the validity bit tells them apart.
+func contractList(name string, child *data.Column) *data.Column {
+	return data.NewList(name, []int32{0, 2, 4, 4}, child, contractValid(contractRows))
+}
+
+// contractColumns is the fixture's type axis.
+//
+// # Why this is not buildOperand
+//
+// temporaloverflow_test.go's builder hides an EXTREME value in a null slot on
+// purpose. This fixture has no null slots, so that value would be visible — and a
+// visible MinInt64 in a Date column makes the cast arm refuse on the VALUE, which is
+// correct behaviour rather than a contract violation, and this arm asks only about
+// types. The two builders answer different questions, so the duplication is
+// deliberate.
+//
+// What is NOT left to chance is completeness. TestContractColumnsCoverTheEnum walks
+// TypeIDCount against this list, so a type it forgets fails the suite instead of
+// going quiet — which is the property the op lists below have always had and this
+// axis did not.
+func contractColumns(t *testing.T) []*data.Column {
+	t.Helper()
+	v := contractValid(contractRows)
+	wide := []i128.Int128{i128.FromInt64(1), i128.FromInt64(2), i128.FromInt64(3)}
+
+	return []*data.Column{
+		data.NewFixed("i8", dtype.Int8, []int8{1, 2, 3}, v),
+		data.NewFixed("i16", dtype.Int16, []int16{1, 2, 3}, v),
+		data.NewFixed("i32", dtype.Int32, []int32{1, 2, 3}, v),
+		data.NewFixed("i64", dtype.Int64, []int64{1, 2, 3}, v),
+		data.NewFixed("u8", dtype.Uint8, []uint8{1, 2, 3}, v),
+		// Uint16 was absent for no reason beyond the list having been written by
+		// hand: it is an ordinary operand type every one of its neighbours covers.
+		data.NewFixed("u16", dtype.Uint16, []uint16{1, 2, 3}, v),
+		data.NewFixed("u32", dtype.Uint32, []uint32{1, 2, 3}, v),
+		data.NewFixed("u64", dtype.Uint64, []uint64{1, 2, 3}, v),
+		data.NewFixed("f32", dtype.Float32, []float32{1, 2, 3}, v),
+		data.NewFixed("f64", dtype.Float64, []float64{1, 2, 3}, v),
+		// Int128 is Sum's accumulator and output type. Decimal is the absence this
+		// file's own ratchet comment blames for seventeen cast disagreements it
+		// could not see — "because this fixture has no Decimal column".
+		data.NewFixed("i128", dtype.Int128, wide, v),
+		data.NewFixed("dec", dtype.Decimal(18, 3), wide, v),
+		data.NewBool("bo", v, v),
+		// Numeric text, so a strict cast to a numeric type fails on the TYPE
+		// rules or not at all. "a" would fail on the VALUE, which is correct
+		// behaviour and not a contract violation — the contract is about types.
+		data.NewString("st", []string{"1", "2", "3"}, v),
+		// Binary shares String's storage and is a different type, which is the whole
+		// reason to carry both: a kernel switching on the physical layout rather
+		// than on the type would agree here and only here.
+		data.NewString("bin", []string{"1", "2", "3"}, v).WithDType(dtype.Binary),
+		data.NewFixed("dt", dtype.Date, []int32{1, 2, 3}, v),
+		data.NewFixed("ts", dtype.Datetime(dtype.Micro, "UTC"), []int64{1, 2, 3}, v),
+		data.NewFixed("du", dtype.Duration(dtype.Nano), []int64{1, 2, 3}, v),
+		// A NAIVE datetime and a Time, neither of which the matrix had. Their
+		// absence is why it could not see that arithmetic and comparison disagreed
+		// about zones: with one Datetime column there is no pair to disagree about.
+		data.NewFixed("tn", dtype.Datetime(dtype.Micro, ""), []int64{1, 2, 3}, v),
+		data.NewFixed("tm", dtype.Time(dtype.Nano), []int64{1, 2, 3}, v),
+		// THREE List columns, because the ELEMENT type decides what the .list
+		// namespace answers. list.mean is the case: internal/expr/call.go answers
+		// Float64 for every element type without reading Inner(), while
+		// internal/kernel/listfn.go derives ResolveAggBinding(AggMean, elem). Those
+		// agree for Int64 and disagree for both of the others — Duration since step
+		// 62 made its mean exact, Float32 for as long as the function has existed.
+		// A fixture carrying only List(Int64) would add three hundred combinations
+		// and let the one known defect walk straight through.
+		contractList("li",
+			data.NewFixed("item", dtype.Int64, []int64{1, 2, 3, 4}, contractValid(4))),
+		contractList("lidur",
+			data.NewFixed("item", dtype.Duration(dtype.Nano), []int64{1, 2, 3, 4}, contractValid(4))),
+		contractList("lif32",
+			data.NewFixed("item", dtype.Float32, []float32{1, 2, 3, 4}, contractValid(4))),
+
+		// A Struct with TWO fields of DIFFERENT types. One field would not be
+		// enough: struct.field's whole claim is that the output type comes from the
+		// ARGUMENT rather than from the receiver, and against a single-field struct
+		// "the argument's type" and "the receiver's only type" are the same answer.
+		// The field named "f" is mandatory — that is the name contractCallArgs hands
+		// struct.field, and without it the one struct combination stays an agreed
+		// refusal and the column proves nothing.
+		data.NewStruct("sr", []*data.Column{
+			data.NewFixed("f", dtype.Int64, []int64{1, 2, 3}, v),
+			data.NewString("g", []string{"a", "b", "c"}, v),
+		}, v),
+
+		// A NULL column, which the matrix had no way to reach until step 52.
+		// ResolveUnary admits Null for eleven ops and kernel.Unary implements none
+		// of them; the row-count assertion below was already written and could not
+		// fire, because the unit of coverage is the fixture and this fixture had
+		// sixteen types and not this one.
+		//
+		// It is also the only column here with no payload buffer at all —
+		// data.NewNull carries validity and nothing else — so it is the only one
+		// that tests what a kernel does when there is nothing to read.
+		data.NewNull("nu", dtype.Null, contractRows),
+	}
+}
+
+// noContractColumn names every TypeID this fixture cannot hold, with the reason.
+//
+// It is deliberately NOT noOperand from temporaloverflow_test.go, though it is the
+// same shape. That map excuses List, Struct and Enum because arithmetic on them goes
+// through the .list and .struct namespaces — sound for an arithmetic sweep, and the
+// wrong reason here, where those namespaces are precisely what is being checked.
+// Two maps, two questions, two sets of reasons.
+var noContractColumn = map[dtype.TypeID]string{
+	dtype.TypeArray:       "declared but not constructible: there is no data.Column for it",
+	dtype.TypeCategorical: "reserved; its mapping grows at runtime",
+	dtype.TypeUint128:     "reserved; Int128 covers every unsigned value",
+
+	// Enum is CONSTRUCTIBLE — data.NewFixed under dtype.Enum, physically Uint32,
+	// which internal/data/nullcheck_test.go builds today — and it is excused anyway
+	// because adding it does not produce a gap, it produces a PANIC, in the cast
+	// arm, before any gap can be recorded:
+	//
+	//	panic: runtime error: index out of range [0] with length 0
+	//
+	// dtype.IsString() is true for an Enum, so CanCast admits Enum -> numeric;
+	// kernel.castTo then routes it to parseFromString, which opens with c.Strings()
+	// on a column that has no offsets buffer because its payload is uint32 indices.
+	// ResolveCall names the identical hazard and calls it "latent today only because
+	// Enum columns cannot yet be built from the public API".
+	//
+	// This entry is a DEBT, not an exemption: it is the one type whose absence is
+	// now measured rather than assumed, and the walk below fails the day someone
+	// deletes the line without building the column.
+	dtype.TypeEnum: "constructible, but CanCast admits Enum -> numeric through " +
+		"IsString and parseFromString then calls Strings() on a uint32 payload, " +
+		"which panics before the matrix can judge anything; its own step",
+}
+
+// TestContractColumnsCoverTheEnum is the check the type axis never had.
+//
+// The op lists below are derived from their enums precisely because a hand-written
+// list goes quiet, and three declared ops had in fact been missing from them. The
+// COLUMN list was hand-written for twelve steps, and List and Struct were missing
+// from it the whole time — so every .list function and struct.field was an agreed
+// refusal against a fixture that had no receiver to offer them.
+func TestContractColumnsCoverTheEnum(t *testing.T) {
+	seen := map[dtype.TypeID]bool{}
+	for _, c := range contractColumns(t) {
+		seen[c.DType().ID()] = true
+	}
+	for id := dtype.TypeID(0); id < dtype.TypeIDCount; id++ {
+		why, excused := noContractColumn[id]
+		switch {
+		case seen[id] && excused:
+			t.Errorf("%s is both built and excused (%q)", id, why)
+		case !seen[id] && !excused:
+			t.Errorf("%s is neither built by contractColumns nor named in "+
+				"noContractColumn — the matrix cannot see it", id)
+		}
+	}
 }
 
 // The op lists are DERIVED, not written down.
@@ -258,7 +384,14 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 	expr.FnListSlice:    {{args: []any{int64(0), int64(1)}}},
 	expr.FnListSort:     {{args: []any{false}}},
 	expr.FnListContains: {{args: []any{int64(1)}}},
-	expr.FnStructField:  {{args: []any{"f"}}},
+	// THREE sets, following FnDtTruncate above: the answer must come from the
+	// argument, so a second field of a different type is what proves it, and a name
+	// that is not there must refuse at plan time rather than inside the kernel.
+	expr.FnStructField: {
+		{label: ",f", args: []any{"f"}},
+		{label: ",g", args: []any{"g"}},
+		{label: ",absent", args: []any{"nope"}},
+	},
 }
 
 // noCallArgs is the default: one set, no arguments. is_in takes it deliberately —
@@ -290,10 +423,32 @@ func callLit(v any) expr.Node {
 	}
 }
 
-var contractCastTargets = []dtype.DataType{
-	dtype.Int8, dtype.Int32, dtype.Int64, dtype.Uint32, dtype.Uint64,
-	dtype.Float32, dtype.Float64, dtype.Bool, dtype.String,
-	dtype.Date, dtype.Datetime(dtype.Nano, "UTC"), dtype.Duration(dtype.Second),
+// contractCastTargets was the fixture's SECOND hand-written list, twelve entries
+// with no Decimal, no Binary, no Int128, no Time and nothing nested. It is derived
+// from the column axis now, plus the two temporal variants worth naming that no
+// column carries — a cast target needs no column, only a type.
+//
+// Cast x nested was invisible to both of this repository's cast instruments at once:
+// dtype.CanCast promises List -> List while the kernel refuses anything non-numeric,
+// and TestCanCastAgreesWithTheKernel names List and Struct as unsamplable SOURCES.
+// Deriving this axis is what closes that.
+func contractCastTargetsOf(cols []*data.Column) []dtype.DataType {
+	seen := map[string]bool{}
+	var out []dtype.DataType
+	add := func(d dtype.DataType) {
+		if k := d.String(); !seen[k] {
+			seen[k] = true
+			out = append(out, d)
+		}
+	}
+	for _, c := range cols {
+		add(c.DType())
+	}
+	// A different unit and a different zone from the columns', so a cast that
+	// relabels instead of converting has somewhere to show it.
+	add(dtype.Datetime(dtype.Nano, "UTC"))
+	add(dtype.Duration(dtype.Second))
+	return out
 }
 
 // checkContract is the assertion, and it has TWO halves.
@@ -398,7 +553,170 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 // broken three ways, and all three had one cause: ResolveCall takes the whole Call
 // node precisely so an output type can depend on an ARGUMENT, and dtCallOut threw
 // the arguments away. `git show` the commit below this one for the list.
-var knownContractGaps = map[string]string{}
+// # Step 64 derived the TYPE axis, and it held a hundred and six
+//
+// The op lists above are derived because a hand-written list of an enum goes quiet.
+// The COLUMN list was hand-written anyway, for twelve steps, and the binary arm's own
+// anti-vacuity comment said so out loud — "the column list is written down, so it can
+// only shrink by hand". List and Struct were missing the whole time, so fourteen
+// .list functions and struct.field were agreed refusals against a fixture with no
+// receiver to offer them, and Uint16, Decimal, Binary and Int128 were missing with no
+// reason at all.
+//
+// Step 58 predicted "~32 disagreements" and that number was carried forward five
+// times without once being measured. Deriving both type axes produced 106, in seven
+// classes, and only two of them are about the nested types the prediction was about.
+// The estimate was not wrong so much as scoped to what its author could see.
+var knownContractGaps = map[string]string{
+	// BINARY HAS NO COMPARISON, AND NOTHING SAID SO. 32 labels, and the only class
+	// here that is not about a nested type: Binary is an ordinary scalar a Parquet
+	// or Arrow file produces, and `Col("blob").Eq(Col("blob"))` type-checks and then
+	// fails in the kernel. resolveComparison admits it — Binary is ordered and
+	// promotes with itself — while kernel.dispatch has no Binary arm and falls to
+	// "comparison is not implemented for %s". All EIGHT comparison operators, not
+	// just equality. The fixture could not see it because it had no Binary column.
+	"!=(bin,bin)":   "Binary resolves to Bool and the kernel has no Binary comparison",
+	"!=(bin,nu)":    "Binary resolves to Bool and the kernel has no Binary comparison",
+	"!=(bin,null)":  "Binary resolves to Bool and the kernel has no Binary comparison",
+	"!=(nu,bin)":    "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<!>(bin,bin)":  "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<!>(bin,nu)":   "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<!>(bin,null)": "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<!>(nu,bin)":   "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<(bin,bin)":    "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<(bin,nu)":     "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<(bin,null)":   "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<(nu,bin)":     "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<=(bin,bin)":   "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<=(bin,nu)":    "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<=(bin,null)":  "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<=(nu,bin)":    "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<=>(bin,bin)":  "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<=>(bin,nu)":   "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<=>(bin,null)": "Binary resolves to Bool and the kernel has no Binary comparison",
+	"<=>(nu,bin)":   "Binary resolves to Bool and the kernel has no Binary comparison",
+	"==(bin,bin)":   "Binary resolves to Bool and the kernel has no Binary comparison",
+	"==(bin,nu)":    "Binary resolves to Bool and the kernel has no Binary comparison",
+	"==(bin,null)":  "Binary resolves to Bool and the kernel has no Binary comparison",
+	"==(nu,bin)":    "Binary resolves to Bool and the kernel has no Binary comparison",
+	">(bin,bin)":    "Binary resolves to Bool and the kernel has no Binary comparison",
+	">(bin,nu)":     "Binary resolves to Bool and the kernel has no Binary comparison",
+	">(bin,null)":   "Binary resolves to Bool and the kernel has no Binary comparison",
+	">(nu,bin)":     "Binary resolves to Bool and the kernel has no Binary comparison",
+	">=(bin,bin)":   "Binary resolves to Bool and the kernel has no Binary comparison",
+	">=(bin,nu)":    "Binary resolves to Bool and the kernel has no Binary comparison",
+	">=(bin,null)":  "Binary resolves to Bool and the kernel has no Binary comparison",
+	">=(nu,bin)":    "Binary resolves to Bool and the kernel has no Binary comparison",
+
+	// EQUALITY OVER A LIST. 48 labels. resolveComparison's rule is that "equality
+	// is defined for anything with a common type", and Promote(List(T), List(T))
+	// returns List(T) — so Field promises Bool and dispatchCompare, which switches
+	// on the PHYSICAL type and gets a List back unchanged, has no arm for it.
+	// Ordering is correctly refused by both halves; it is equality and the two
+	// missing-value operators that resolve and then fail.
+	"!=(li,li)":        "equality over a List resolves and the kernel has no nested arm",
+	"!=(li,nu)":        "equality over a List resolves and the kernel has no nested arm",
+	"!=(li,null)":      "equality over a List resolves and the kernel has no nested arm",
+	"!=(lidur,lidur)":  "equality over a List resolves and the kernel has no nested arm",
+	"!=(lidur,nu)":     "equality over a List resolves and the kernel has no nested arm",
+	"!=(lidur,null)":   "equality over a List resolves and the kernel has no nested arm",
+	"!=(lif32,lif32)":  "equality over a List resolves and the kernel has no nested arm",
+	"!=(lif32,nu)":     "equality over a List resolves and the kernel has no nested arm",
+	"!=(lif32,null)":   "equality over a List resolves and the kernel has no nested arm",
+	"!=(nu,li)":        "equality over a List resolves and the kernel has no nested arm",
+	"!=(nu,lidur)":     "equality over a List resolves and the kernel has no nested arm",
+	"!=(nu,lif32)":     "equality over a List resolves and the kernel has no nested arm",
+	"<!>(li,li)":       "equality over a List resolves and the kernel has no nested arm",
+	"<!>(li,nu)":       "equality over a List resolves and the kernel has no nested arm",
+	"<!>(li,null)":     "equality over a List resolves and the kernel has no nested arm",
+	"<!>(lidur,lidur)": "equality over a List resolves and the kernel has no nested arm",
+	"<!>(lidur,nu)":    "equality over a List resolves and the kernel has no nested arm",
+	"<!>(lidur,null)":  "equality over a List resolves and the kernel has no nested arm",
+	"<!>(lif32,lif32)": "equality over a List resolves and the kernel has no nested arm",
+	"<!>(lif32,nu)":    "equality over a List resolves and the kernel has no nested arm",
+	"<!>(lif32,null)":  "equality over a List resolves and the kernel has no nested arm",
+	"<!>(nu,li)":       "equality over a List resolves and the kernel has no nested arm",
+	"<!>(nu,lidur)":    "equality over a List resolves and the kernel has no nested arm",
+	"<!>(nu,lif32)":    "equality over a List resolves and the kernel has no nested arm",
+	"<=>(li,li)":       "equality over a List resolves and the kernel has no nested arm",
+	"<=>(li,nu)":       "equality over a List resolves and the kernel has no nested arm",
+	"<=>(li,null)":     "equality over a List resolves and the kernel has no nested arm",
+	"<=>(lidur,lidur)": "equality over a List resolves and the kernel has no nested arm",
+	"<=>(lidur,nu)":    "equality over a List resolves and the kernel has no nested arm",
+	"<=>(lidur,null)":  "equality over a List resolves and the kernel has no nested arm",
+	"<=>(lif32,lif32)": "equality over a List resolves and the kernel has no nested arm",
+	"<=>(lif32,nu)":    "equality over a List resolves and the kernel has no nested arm",
+	"<=>(lif32,null)":  "equality over a List resolves and the kernel has no nested arm",
+	"<=>(nu,li)":       "equality over a List resolves and the kernel has no nested arm",
+	"<=>(nu,lidur)":    "equality over a List resolves and the kernel has no nested arm",
+	"<=>(nu,lif32)":    "equality over a List resolves and the kernel has no nested arm",
+	"==(li,li)":        "equality over a List resolves and the kernel has no nested arm",
+	"==(li,nu)":        "equality over a List resolves and the kernel has no nested arm",
+	"==(li,null)":      "equality over a List resolves and the kernel has no nested arm",
+	"==(lidur,lidur)":  "equality over a List resolves and the kernel has no nested arm",
+	"==(lidur,nu)":     "equality over a List resolves and the kernel has no nested arm",
+	"==(lidur,null)":   "equality over a List resolves and the kernel has no nested arm",
+	"==(lif32,lif32)":  "equality over a List resolves and the kernel has no nested arm",
+	"==(lif32,nu)":     "equality over a List resolves and the kernel has no nested arm",
+	"==(lif32,null)":   "equality over a List resolves and the kernel has no nested arm",
+	"==(nu,li)":        "equality over a List resolves and the kernel has no nested arm",
+	"==(nu,lidur)":     "equality over a List resolves and the kernel has no nested arm",
+	"==(nu,lif32)":     "equality over a List resolves and the kernel has no nested arm",
+
+	// EQUALITY OVER A STRUCT. The same shape as the List class, four labels, listed
+	// apart because a Struct is not ordered — so only the four equality-family
+	// operators reach the kernel at all.
+	"!=(sr,sr)":  "equality over a Struct resolves and the kernel has no nested arm",
+	"<!>(sr,sr)": "equality over a Struct resolves and the kernel has no nested arm",
+	"<=>(sr,sr)": "equality over a Struct resolves and the kernel has no nested arm",
+	"==(sr,sr)":  "equality over a Struct resolves and the kernel has no nested arm",
+
+	// kernel.NullColumn CANNOT BUILD A NULL STRUCT. 13 labels, and a different fix
+	// site from the class above: these fail EARLIER, in the cast that lifts a Null
+	// operand to the common type, before any comparison is attempted. NullColumn has
+	// arms for Bool, for string storage and for List, then falls through to
+	// nullFixed's "cannot build a null column of %s". A Struct in a conditional or
+	// on the null side of an outer join hits the same wall.
+	"!=(nu,sr)":                             "kernel.NullColumn has no Struct arm",
+	"!=(sr,nu)":                             "kernel.NullColumn has no Struct arm",
+	"!=(sr,null)":                           "kernel.NullColumn has no Struct arm",
+	"<!>(nu,sr)":                            "kernel.NullColumn has no Struct arm",
+	"<!>(sr,nu)":                            "kernel.NullColumn has no Struct arm",
+	"<!>(sr,null)":                          "kernel.NullColumn has no Struct arm",
+	"<=>(nu,sr)":                            "kernel.NullColumn has no Struct arm",
+	"<=>(sr,nu)":                            "kernel.NullColumn has no Struct arm",
+	"<=>(sr,null)":                          "kernel.NullColumn has no Struct arm",
+	"==(nu,sr)":                             "kernel.NullColumn has no Struct arm",
+	"==(sr,nu)":                             "kernel.NullColumn has no Struct arm",
+	"==(sr,null)":                           "kernel.NullColumn has no Struct arm",
+	"cast(nu->Struct(f: Int64, g: String))": "kernel.NullColumn has no Struct arm",
+
+	// CAST BETWEEN LIST TYPES. 6 labels. dtype.CanCast promises List -> List;
+	// kernel.castTo refuses anything whose physical types are not both numeric. This
+	// pair was invisible to BOTH cast instruments at once: this fixture had no List
+	// column and no List cast target, and TestCanCastAgreesWithTheKernel names List
+	// and Struct as unsamplable SOURCES. Deriving the target axis is what found it.
+	"cast(li->List(Duration(ns)))":    "CanCast promises List -> List and the kernel refuses it",
+	"cast(li->List(Float32))":         "CanCast promises List -> List and the kernel refuses it",
+	"cast(lidur->List(Float32))":      "CanCast promises List -> List and the kernel refuses it",
+	"cast(lidur->List(Int64))":        "CanCast promises List -> List and the kernel refuses it",
+	"cast(lif32->List(Duration(ns)))": "CanCast promises List -> List and the kernel refuses it",
+	"cast(lif32->List(Int64))":        "CanCast promises List -> List and the kernel refuses it",
+
+	// STRING -> INT128. One label, and nothing to do with nested types: it appeared
+	// because Int128 became a cast target when the axis was derived. CanCast
+	// promises it, and the kernel answers "cannot narrow to Int128".
+	"cast(st->Int128)": "CanCast promises String -> Int128 and the kernel cannot narrow",
+
+	// list.mean PROMISES Float64 WITHOUT READING THE ELEMENT TYPE. Two labels, and
+	// the only class here where Eval SUCCEEDS and returns the wrong type rather than
+	// failing. internal/expr/call.go answers Float64 for every element type;
+	// internal/kernel/listfn.go ignores the `out` it is handed and derives
+	// ResolveAggBinding(AggMean, elem). They agree for Int64 — which is exactly why
+	// a fixture with only a List(Int64) column would have reported a clean run.
+	"list.mean(lidur)": "listCallOut hard-codes Float64 instead of deriving from the element",
+	"list.mean(lif32)": "listCallOut hard-codes Float64 instead of deriving from the element",
+}
 
 var seenContractGaps = map[string]bool{}
 
@@ -406,6 +724,10 @@ var seenContractGaps = map[string]bool{}
 // evaluator was written.
 func TestEvaluatorContract(t *testing.T) {
 	b := contractBatch(t)
+	// The name axis comes from the fixture, so the two cannot drift: a column added
+	// to contractColumns is swept the moment it is built, with no second list to
+	// remember to update.
+	contractCols := b.Schema().Names()
 
 	t.Run("binary", func(t *testing.T) {
 		var ran int
@@ -424,7 +746,7 @@ func TestEvaluatorContract(t *testing.T) {
 		// written down, so it can only shrink by hand. Then the count: if
 		// promotion ever starts refusing everything, the loop still completes and
 		// every assertion is skipped, and a count is what sees that.
-		if len(contractBinaryOps) < 18 || len(contractCols) < 17 {
+		if len(contractBinaryOps) < 18 || len(contractCols) < 25 {
 			t.Fatalf("the matrix is %d ops × %d columns, which is smaller than it "+
 				"has ever been", len(contractBinaryOps), len(contractCols))
 		}
@@ -455,7 +777,7 @@ func TestEvaluatorContract(t *testing.T) {
 
 	t.Run("cast", func(t *testing.T) {
 		var ran int
-		for _, to := range contractCastTargets {
+		for _, to := range contractCastTargetsOf(contractColumns(t)) {
 			for _, c := range contractCols {
 				// NON-STRICT only. A strict cast may legitimately fail on a
 				// VALUE — "2" is not a Bool, 1<<40 is not an Int8 — and that is
