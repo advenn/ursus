@@ -220,6 +220,23 @@ func resolveAsOfJoin(a *AsOfJoin) (Node, error) {
 				"measure in").
 			Hint("drop the tolerance, or cast the key to a temporal type")
 	}
+	// A CALENDAR tolerance needs more than a temporal key: it needs an INSTANT.
+	// "One month after a five-second span" is not a question, and neither is "one
+	// month after 14:30" — a Time is a wall clock with no date to carry a month.
+	//
+	// This is the refusal truncateCalendar makes one layer down, for the same reason
+	// and in the same words. Without it the tolerance went silently INERT: the sink
+	// cannot build a bound from a non-instant, and every candidate matched.
+	if c.Tolerance.IsCalendar() &&
+		(lf.Type.ID() == dtype.TypeDuration || lf.Type.ID() == dtype.TypeTime) {
+		return nil, uerr.New(uerr.KindType, "join_asof",
+			"a calendar tolerance of %s is not defined for a %s key",
+			c.Tolerance, lf.Type).
+			Hint("months and days are measured from a date, and a %s has none",
+				lf.Type).
+			Hint("use a fixed tolerance such as ursus.Every(\"24h\"), or join on a " +
+				"Datetime key")
+	}
 
 	// Computed and thrown away, exactly as resolveJoin does: it is where the key
 	// types are promoted and the output collisions are checked, and the message is

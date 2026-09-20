@@ -7,7 +7,10 @@ import (
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/source/memsrc"
 	"github.com/advenn/ursus/internal/uerr"
 	"github.com/advenn/ursus/ursustest"
 )
@@ -451,4 +454,78 @@ func TestMergeSortedRefusesUnsorted(t *testing.T) {
 	if _, err := sorted.MergeSorted(sorted, "nope").Collect(t.Context()); err == nil {
 		t.Error("an unknown key column was accepted")
 	}
+}
+
+// TestAsOfCalendarToleranceNeedsAnInstant. A calendar tolerance needs more than a
+// temporal key: it needs a date to count months from. A Duration is a span and a Time
+// is a wall clock, and for both the sink cannot build a bound at all — so the
+// tolerance went silently inert and every candidate matched.
+//
+// truncateCalendar refuses the same thing one layer down, in the same words.
+func TestAsOfCalendarToleranceNeedsAnInstant(t *testing.T) {
+	for _, key := range []dtype.DataType{
+		dtype.Duration(dtype.Second),
+		dtype.Time(dtype.Nano),
+	} {
+		t.Run(key.String(), func(t *testing.T) {
+			left := keyedFrame(t, "tv", key, 0)
+			right := keyedFrame(t, "qv", key, 1)
+
+			_, err := ursus.Scan(left).Select(ursus.Col("ts"), ursus.Col("tv")).
+				JoinAsOf(ursus.Scan(right).Select(ursus.Col("ts"), ursus.Col("qv")),
+					ursus.AsOfOn(ursus.Col("ts")),
+					ursus.AsOfTolerance(ursus.Every("1mo"))).
+				Collect(t.Context())
+			if err == nil {
+				t.Fatalf("a calendar tolerance on a %s key was accepted", key)
+			}
+			if !strings.Contains(err.Error(), "calendar tolerance") {
+				t.Errorf("the refusal should name what it refuses: %v", err)
+			}
+			if errors.Is(err, uerr.ErrInternal) {
+				t.Errorf("a user's option is not an ursus bug: %v", err)
+			}
+
+			// A FIXED tolerance on the same key stays legal: it is only the calendar
+			// half that needs a date.
+			if _, err := ursus.Scan(left).Select(ursus.Col("ts"), ursus.Col("tv")).
+				JoinAsOf(ursus.Scan(right).Select(ursus.Col("ts"), ursus.Col("qv")),
+					ursus.AsOfOn(ursus.Col("ts")),
+					ursus.AsOfTolerance(ursus.Every("24h"))).
+				Collect(t.Context()); err != nil {
+				t.Errorf("a fixed tolerance on a %s key must still work: %v", key, err)
+			}
+		})
+	}
+}
+
+// keyedFrame builds a two-column source at exact tick counts, which tsFrame cannot:
+// it parses wall clocks, and these fixtures live at the edges of a type's domain.
+func keyedFrame(t *testing.T, val string, dt dtype.DataType, ticks ...int64) *memsrc.Source {
+	t.Helper()
+	schema := dtype.MustSchema(dtype.NotNull("ts", dt), dtype.NotNull(val, dtype.Int64))
+	vs := make([]int64, len(ticks))
+	for i := range ticks {
+		vs[i] = int64(i)
+	}
+	var keys *data.Column
+	if dt.Physical().ID() == dtype.TypeInt32 {
+		days := make([]int32, len(ticks))
+		for i, v := range ticks {
+			days[i] = int32(v)
+		}
+		keys = data.NewFixed("ts", dt, days, bitmap.AllSet(len(ticks)))
+	} else {
+		keys = data.NewFixed("ts", dt, ticks, bitmap.AllSet(len(ticks)))
+	}
+	b, err := data.NewBatch(schema, []*data.Column{keys,
+		data.NewFixed(val, dtype.Int64, vs, bitmap.AllSet(len(ticks)))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := memsrc.New(schema, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return src
 }
