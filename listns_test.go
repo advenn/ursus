@@ -690,3 +690,46 @@ func TestListMeanOfFloat32StaysFloat32(t *testing.T) {
 		t.Errorf("mean = %v (valid=%v), want 2.5", v, valid)
 	}
 }
+
+// TestNestedEqualityRefusesAtPlanTime. "Equality is defined for anything with a
+// common type" was resolveComparison's rule, and Promote(List(T), List(T)) succeeds
+// — so `a == b` over two List columns type-checked, promised a Bool, and then failed
+// in the kernel, which dispatches on the PHYSICAL type and gets a List back
+// unchanged. Field and Eval have to agree about what is LEGAL, not just about types.
+//
+// The refusal is at plan time now, so Explain and Collect answer the same way. It is
+// a refusal rather than an implementation because element-wise nested equality has
+// to decide what a null element does to a list's equality, and recurse: a feature,
+// not this fix.
+func TestNestedEqualityRefusesAtPlanTime(t *testing.T) {
+	src := nsFixture(t)
+	q := ursus.ScanParquet(src).Select(
+		ursus.Col("tags").Eq(ursus.Col("tags")).Alias("same"))
+
+	// Explain, so this is the planner refusing rather than a kernel failing.
+	if _, err := q.Explain(t.Context()); err == nil {
+		t.Error("equality over two List columns was planned")
+	}
+	_, err := q.Collect(t.Context())
+	var ue *uerr.Error
+	if !errors.As(err, &ue) || !errors.Is(&uerr.Error{Kind: ue.Kind}, uerr.ErrUnsupported) {
+		t.Fatalf("want a KindUnsupported refusal, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "List(Int64)") {
+		t.Errorf("the refusal should name the type: %v", err)
+	}
+
+	// The complement, and the reason Promote was left alone rather than narrowed:
+	// Concat of two frames carrying a List column unifies their schemas through
+	// Promote(List(T), List(T)), and it must still work. Narrowing Promote would
+	// have broken a working feature to fix a broken one.
+	got, err := ursus.Concat([]*ursus.LazyFrame{
+		ursus.ScanParquet(src), ursus.ScanParquet(src),
+	}).Collect(t.Context())
+	if err != nil {
+		t.Fatalf("concatenating two frames with a List column must still work: %v", err)
+	}
+	if got.Height() != 8 {
+		t.Errorf("concat produced %d rows, want 8", got.Height())
+	}
+}

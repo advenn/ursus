@@ -56,7 +56,38 @@ func resolveMissingComparison(op BinaryOp, l, r dtype.DataType) (Binding, error)
 	if !ok {
 		return Binding{}, mismatch(op, l, r)
 	}
+	if err := nestedEquality(op, common); err != nil {
+		return Binding{}, err
+	}
 	return Binding{CastL: common, CastR: common, Out: dtype.Bool}, nil
+}
+
+// nestedEquality refuses equality over a List, an Array or a Struct.
+//
+// "Equality is defined for anything with a common type" is the rule below, and
+// Promote(List(T), List(T)) succeeds — so this family resolved, promised a Bool, and
+// then failed in the kernel, which dispatches on the PHYSICAL type and gets a List
+// back unchanged. Field and Eval have to agree about what is LEGAL, not merely about
+// types, so the refusal moves to where the judgement lives.
+//
+// It is a refusal and not an implementation because element-wise nested equality is
+// a feature — it has to decide what a null element does to a list's equality, and
+// recurse — and this is the commit that makes the planner and the engine say the
+// same thing. KindUnsupported rather than KindType: the operands are fine, the
+// operation is missing.
+//
+// Promote is deliberately left alone. When().Then(list).Otherwise(list) and a Union
+// of two List columns both depend on Promote(List, List) succeeding, so narrowing it
+// would break two working features to fix a third.
+func nestedEquality(op BinaryOp, common dtype.DataType) error {
+	if !common.IsNested() {
+		return nil
+	}
+	return uerr.New(uerr.KindUnsupported, "",
+		"operator %s is not implemented for %s", op, common).
+		Hint("comparing nested values element by element is not supported yet").
+		Hint("compare a field or an element instead, e.g. " +
+			"col.Struct().Field(\"x\").Eq(...) or col.List().Get(0).Eq(...)")
 }
 
 func resolveComparison(op BinaryOp, l, r dtype.DataType) (Binding, error) {
@@ -71,6 +102,11 @@ func resolveComparison(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 		return Binding{}, uerr.New(uerr.KindType, "",
 			"operator %s is not defined for %s", op, common).
 			Hint("only numeric, temporal, string and boolean types have an ordering")
+	}
+	// ...and equality needs the kernel to have an arm for it. See nestedEquality:
+	// the rule above is true of a List, and the engine could not act on it.
+	if err := nestedEquality(op, common); err != nil {
+		return Binding{}, err
 	}
 	return Binding{CastL: common, CastR: common, Out: dtype.Bool}, nil
 }

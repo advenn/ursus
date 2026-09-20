@@ -568,87 +568,13 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 // classes, and only two of them are about the nested types the prediction was about.
 // The estimate was not wrong so much as scoped to what its author could see.
 var knownContractGaps = map[string]string{
-	// EQUALITY OVER A LIST. 48 labels. resolveComparison's rule is that "equality
-	// is defined for anything with a common type", and Promote(List(T), List(T))
-	// returns List(T) — so Field promises Bool and dispatchCompare, which switches
-	// on the PHYSICAL type and gets a List back unchanged, has no arm for it.
-	// Ordering is correctly refused by both halves; it is equality and the two
-	// missing-value operators that resolve and then fail.
-	"!=(li,li)":        "equality over a List resolves and the kernel has no nested arm",
-	"!=(li,nu)":        "equality over a List resolves and the kernel has no nested arm",
-	"!=(li,null)":      "equality over a List resolves and the kernel has no nested arm",
-	"!=(lidur,lidur)":  "equality over a List resolves and the kernel has no nested arm",
-	"!=(lidur,nu)":     "equality over a List resolves and the kernel has no nested arm",
-	"!=(lidur,null)":   "equality over a List resolves and the kernel has no nested arm",
-	"!=(lif32,lif32)":  "equality over a List resolves and the kernel has no nested arm",
-	"!=(lif32,nu)":     "equality over a List resolves and the kernel has no nested arm",
-	"!=(lif32,null)":   "equality over a List resolves and the kernel has no nested arm",
-	"!=(nu,li)":        "equality over a List resolves and the kernel has no nested arm",
-	"!=(nu,lidur)":     "equality over a List resolves and the kernel has no nested arm",
-	"!=(nu,lif32)":     "equality over a List resolves and the kernel has no nested arm",
-	"<!>(li,li)":       "equality over a List resolves and the kernel has no nested arm",
-	"<!>(li,nu)":       "equality over a List resolves and the kernel has no nested arm",
-	"<!>(li,null)":     "equality over a List resolves and the kernel has no nested arm",
-	"<!>(lidur,lidur)": "equality over a List resolves and the kernel has no nested arm",
-	"<!>(lidur,nu)":    "equality over a List resolves and the kernel has no nested arm",
-	"<!>(lidur,null)":  "equality over a List resolves and the kernel has no nested arm",
-	"<!>(lif32,lif32)": "equality over a List resolves and the kernel has no nested arm",
-	"<!>(lif32,nu)":    "equality over a List resolves and the kernel has no nested arm",
-	"<!>(lif32,null)":  "equality over a List resolves and the kernel has no nested arm",
-	"<!>(nu,li)":       "equality over a List resolves and the kernel has no nested arm",
-	"<!>(nu,lidur)":    "equality over a List resolves and the kernel has no nested arm",
-	"<!>(nu,lif32)":    "equality over a List resolves and the kernel has no nested arm",
-	"<=>(li,li)":       "equality over a List resolves and the kernel has no nested arm",
-	"<=>(li,nu)":       "equality over a List resolves and the kernel has no nested arm",
-	"<=>(li,null)":     "equality over a List resolves and the kernel has no nested arm",
-	"<=>(lidur,lidur)": "equality over a List resolves and the kernel has no nested arm",
-	"<=>(lidur,nu)":    "equality over a List resolves and the kernel has no nested arm",
-	"<=>(lidur,null)":  "equality over a List resolves and the kernel has no nested arm",
-	"<=>(lif32,lif32)": "equality over a List resolves and the kernel has no nested arm",
-	"<=>(lif32,nu)":    "equality over a List resolves and the kernel has no nested arm",
-	"<=>(lif32,null)":  "equality over a List resolves and the kernel has no nested arm",
-	"<=>(nu,li)":       "equality over a List resolves and the kernel has no nested arm",
-	"<=>(nu,lidur)":    "equality over a List resolves and the kernel has no nested arm",
-	"<=>(nu,lif32)":    "equality over a List resolves and the kernel has no nested arm",
-	"==(li,li)":        "equality over a List resolves and the kernel has no nested arm",
-	"==(li,nu)":        "equality over a List resolves and the kernel has no nested arm",
-	"==(li,null)":      "equality over a List resolves and the kernel has no nested arm",
-	"==(lidur,lidur)":  "equality over a List resolves and the kernel has no nested arm",
-	"==(lidur,nu)":     "equality over a List resolves and the kernel has no nested arm",
-	"==(lidur,null)":   "equality over a List resolves and the kernel has no nested arm",
-	"==(lif32,lif32)":  "equality over a List resolves and the kernel has no nested arm",
-	"==(lif32,nu)":     "equality over a List resolves and the kernel has no nested arm",
-	"==(lif32,null)":   "equality over a List resolves and the kernel has no nested arm",
-	"==(nu,li)":        "equality over a List resolves and the kernel has no nested arm",
-	"==(nu,lidur)":     "equality over a List resolves and the kernel has no nested arm",
-	"==(nu,lif32)":     "equality over a List resolves and the kernel has no nested arm",
-
-	// EQUALITY OVER A STRUCT. The same shape as the List class, four labels, listed
-	// apart because a Struct is not ordered — so only the four equality-family
-	// operators reach the kernel at all.
-	"!=(sr,sr)":  "equality over a Struct resolves and the kernel has no nested arm",
-	"<!>(sr,sr)": "equality over a Struct resolves and the kernel has no nested arm",
-	"<=>(sr,sr)": "equality over a Struct resolves and the kernel has no nested arm",
-	"==(sr,sr)":  "equality over a Struct resolves and the kernel has no nested arm",
-
-	// kernel.NullColumn CANNOT BUILD A NULL STRUCT. 13 labels, and a different fix
-	// site from the class above: these fail EARLIER, in the cast that lifts a Null
-	// operand to the common type, before any comparison is attempted. NullColumn has
-	// arms for Bool, for string storage and for List, then falls through to
-	// nullFixed's "cannot build a null column of %s". A Struct in a conditional or
-	// on the null side of an outer join hits the same wall.
-	"!=(nu,sr)":                             "kernel.NullColumn has no Struct arm",
-	"!=(sr,nu)":                             "kernel.NullColumn has no Struct arm",
-	"!=(sr,null)":                           "kernel.NullColumn has no Struct arm",
-	"<!>(nu,sr)":                            "kernel.NullColumn has no Struct arm",
-	"<!>(sr,nu)":                            "kernel.NullColumn has no Struct arm",
-	"<!>(sr,null)":                          "kernel.NullColumn has no Struct arm",
-	"<=>(nu,sr)":                            "kernel.NullColumn has no Struct arm",
-	"<=>(sr,nu)":                            "kernel.NullColumn has no Struct arm",
-	"<=>(sr,null)":                          "kernel.NullColumn has no Struct arm",
-	"==(nu,sr)":                             "kernel.NullColumn has no Struct arm",
-	"==(sr,nu)":                             "kernel.NullColumn has no Struct arm",
-	"==(sr,null)":                           "kernel.NullColumn has no Struct arm",
+	// kernel.NullColumn CANNOT BUILD A NULL STRUCT. This was 13 labels; twelve of
+	// them went when nested equality started refusing at plan time, because they
+	// never reached the cast. This one is the cast itself, and it is the real
+	// defect: NullColumn has arms for Bool, for string storage and for List, then
+	// falls through to nullFixed's "cannot build a null column of %s". A Struct in
+	// a conditional, or on the null side of an outer join, hits the same wall with
+	// no comparison involved.
 	"cast(nu->Struct(f: Int64, g: String))": "kernel.NullColumn has no Struct arm",
 
 	// CAST BETWEEN LIST TYPES. 6 labels. dtype.CanCast promises List -> List;
