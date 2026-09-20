@@ -1,6 +1,6 @@
 # ursus
 
-A dataframe library for Go 1.27, modelled on Polars — lazy execution with a query optimizer, Arrow memory layout, SIMD
+A (experimental) dataframe library for Go 1.27, modelled on Polars — lazy execution with a query optimizer, Arrow memory layout, SIMD
 kernels, and streaming execution that spills to disk rather than falling over.
 
 ```go
