@@ -567,33 +567,18 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 // times without once being measured. Deriving both type axes produced 106, in seven
 // classes, and only two of them are about the nested types the prediction was about.
 // The estimate was not wrong so much as scoped to what its author could see.
-var knownContractGaps = map[string]string{
-	// kernel.NullColumn CANNOT BUILD A NULL STRUCT. This was 13 labels; twelve of
-	// them went when nested equality started refusing at plan time, because they
-	// never reached the cast. This one is the cast itself, and it is the real
-	// defect: NullColumn has arms for Bool, for string storage and for List, then
-	// falls through to nullFixed's "cannot build a null column of %s". A Struct in
-	// a conditional, or on the null side of an outer join, hits the same wall with
-	// no comparison involved.
-	"cast(nu->Struct(f: Int64, g: String))": "kernel.NullColumn has no Struct arm",
-
-	// CAST BETWEEN LIST TYPES. 6 labels. dtype.CanCast promises List -> List;
-	// kernel.castTo refuses anything whose physical types are not both numeric. This
-	// pair was invisible to BOTH cast instruments at once: this fixture had no List
-	// column and no List cast target, and TestCanCastAgreesWithTheKernel names List
-	// and Struct as unsamplable SOURCES. Deriving the target axis is what found it.
-	"cast(li->List(Duration(ns)))":    "CanCast promises List -> List and the kernel refuses it",
-	"cast(li->List(Float32))":         "CanCast promises List -> List and the kernel refuses it",
-	"cast(lidur->List(Float32))":      "CanCast promises List -> List and the kernel refuses it",
-	"cast(lidur->List(Int64))":        "CanCast promises List -> List and the kernel refuses it",
-	"cast(lif32->List(Duration(ns)))": "CanCast promises List -> List and the kernel refuses it",
-	"cast(lif32->List(Int64))":        "CanCast promises List -> List and the kernel refuses it",
-
-	// STRING -> INT128. One label, and nothing to do with nested types: it appeared
-	// because Int128 became a cast target when the axis was derived. CanCast
-	// promises it, and the kernel answers "cannot narrow to Int128".
-	"cast(st->Int128)": "CanCast promises String -> Int128 and the kernel cannot narrow",
-}
+//
+// All 106 are closed and the map is empty again, in five fixes: list.mean derives
+// its element type, Binary compares on the storage predicate, nested equality is
+// refused at the resolver, NullColumn learned a Struct arm, a List casts by casting
+// its elements, and CanCast stopped promising String -> Int128.
+//
+// One limitation of this instrument, found by reaching for a tooth: it cannot see
+// an over-broad REFUSAL. A refusal both halves agree on satisfies the contract, so
+// a resolver that rejected every comparison would leave this file green. It proves
+// Field and Eval agree, not that either is right — the anti-vacuity counters below
+// are what stand between it and a matrix that refuses everything.
+var knownContractGaps = map[string]string{}
 
 var seenContractGaps = map[string]bool{}
 

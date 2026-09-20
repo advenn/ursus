@@ -138,6 +138,25 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 func listRebuild(name string, c *data.Column,
 	pick func(start, end int32, out []int32) []int32) (*data.Column, error) {
 
+	offs, child, err := listGather(c, pick)
+	if err != nil {
+		return nil, err
+	}
+	return data.NewList(name, offs, child, c.Validity()), nil
+}
+
+// listGather walks the column's own window, applies pick per row, and returns fresh
+// ZERO-BASED offsets beside a child holding exactly the elements they index.
+//
+// Split out of listRebuild so the List cast can share it. The walk is the part that
+// must not be copied: offsets are absolute and a sliced List has offs[0] > 0 with a
+// child that still holds elements belonging to rows this column does not have, so a
+// second copy of this loop is a second chance to credit those elements to row 0 —
+// which is the defect step 59 measured, twice, in two kernels that had each written
+// their own version.
+func listGather(c *data.Column,
+	pick func(start, end int32, out []int32) []int32) ([]int32, *data.Column, error) {
+
 	acc := c.Lists()
 	offs := make([]int32, 1, c.Len()+1)
 	var sel []int32
@@ -149,9 +168,17 @@ func listRebuild(name string, c *data.Column,
 	}
 	child, err := Take(acc.Child(), sel)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return data.NewList(name, offs, child, c.Validity()), nil
+	return offs, child, nil
+}
+
+// listElements is the identity pick: every element of the row, in order.
+func listElements(start, end int32, out []int32) []int32 {
+	for e := start; e < end; e++ {
+		out = append(out, e)
+	}
+	return out
 }
 
 // listEnds is head and tail: the first or last n elements of each row.

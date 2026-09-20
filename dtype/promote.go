@@ -193,7 +193,19 @@ func CanCast(from, to DataType) bool {
 		return true
 	// Parsing and formatting.
 	case from.IsString() && (to.IsNumeric() || to.IsTemporal() || to.IsBool()):
-		return true
+		// ...but not INTO Int128, which is the Decimal arm above one type over and
+		// the same dangerous direction: CanCast promising what the kernel cannot do.
+		// parseFromString resolves one parser per column and its integer parser is
+		// strconv.ParseInt at 64 bits, so a 128-bit target walks past it into
+		// fromFloat64's narrow and ends at an Internalf — "this is a bug in ursus",
+		// raised by an ordinary user cast.
+		//
+		// Both ways of making it "work" are wrong. Through int64 it would cap at
+		// exactly the range Int128 exists to exceed; through float64 it would round
+		// above 2^53, which is the loss unary.go refuses in as many words when it
+		// routes Int128 around the float path. A real 128-bit parse needs i128
+		// multiplication, which i128 does not have and its own doc declines.
+		return to.id != TypeInt128
 	case (from.IsNumeric() || from.IsTemporal() || from.IsBool()) && to.id == TypeString:
 		return true
 	// IsString includes Enum, so this arm used to promise String -> Enum and

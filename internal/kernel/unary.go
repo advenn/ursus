@@ -566,6 +566,33 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 		return numericToBool(name, c)
 	}
 
+	// A List casts by casting its ELEMENTS. CanCast has promised List -> List all
+	// along and the kernel refused it — the FOURTH plan-accepts / kernel-rejects
+	// divergence this file records, after null casts, string casts and bool casts,
+	// and the one that hid longest: the contract matrix had no List column and no
+	// List cast target, and TestCanCastAgreesWithTheKernel names List as an
+	// unsamplable source, so neither cast instrument could reach it.
+	//
+	// It gathers through listGather rather than casting the child in place, and the
+	// reason is STRICTNESS rather than indexing. A sliced List keeps absolute
+	// offsets over a whole child, so casting that child and keeping the offsets
+	// would in fact line up — but the child holds elements belonging to rows this
+	// column does not have, and a strict cast fails on a value the target cannot
+	// hold. Casting in place therefore rejects a slice because of a row outside it.
+	// Measured: a strict cast of [[999],[1,2,3]] sliced to its second row refuses
+	// with "value 999 at row 0 is not representable as Int8".
+	if from.ID() == dtype.TypeList && to.ID() == dtype.TypeList {
+		offs, elems, err := listGather(c, listElements)
+		if err != nil {
+			return nil, err
+		}
+		child, err := Cast(elems.Name(), to.Inner(), strict, elems)
+		if err != nil {
+			return nil, err
+		}
+		return data.NewList(name, offs, child, c.Validity()), nil
+	}
+
 	fp, tp := from.Physical(), to.Physical()
 	if !fp.IsNumeric() || !tp.IsNumeric() {
 		return nil, uerr.New(uerr.KindUnsupported, "cast",

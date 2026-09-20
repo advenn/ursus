@@ -205,6 +205,38 @@ func NullColumn(name string, dt dtype.DataType, n int) (*data.Column, error) {
 		}
 		return data.NewList(name, make([]int32, n+1), child, valid), nil
 
+	case dt.ID() == dtype.TypeStruct:
+		// Every field a null column of the same height, under an all-zero validity
+		// of its own. The List arm above is the same move one shape over, and its
+		// reasoning carries: a null value of a nested type still needs the payload
+		// its accessors will read.
+		//
+		// A null struct and a struct of nulls are different things, exactly as an
+		// empty list differs from a null list, and this builds both at once — which
+		// is right, because no field of an absent struct has a value either.
+		//
+		// Reachable the same way the List arm became reachable: a Struct on the null
+		// side of a left join, or in a conditional. It was NOT reachable through a
+		// comparison, which is how it hid — the twelve labels that looked like this
+		// defect were really the nested-equality one, and only the cast is left.
+		fields := dt.Fields()
+		if len(fields) == 0 {
+			// data.NewStruct takes its height from fields[0], so it cannot express
+			// n rows of a struct with no fields. Nothing produces one today.
+			return nil, uerr.New(uerr.KindUnsupported, "",
+				"cannot build a null column of %s: it has no fields to carry its "+
+					"height", dt)
+		}
+		cols := make([]*data.Column, len(fields))
+		for i, f := range fields {
+			c, err := NullColumn(f.Name, f.Type, n)
+			if err != nil {
+				return nil, err
+			}
+			cols[i] = c
+		}
+		return data.NewStruct(name, cols, valid), nil
+
 	default:
 		return nullFixed(name, dt, n, valid)
 	}
