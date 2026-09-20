@@ -568,46 +568,6 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 // classes, and only two of them are about the nested types the prediction was about.
 // The estimate was not wrong so much as scoped to what its author could see.
 var knownContractGaps = map[string]string{
-	// BINARY HAS NO COMPARISON, AND NOTHING SAID SO. 32 labels, and the only class
-	// here that is not about a nested type: Binary is an ordinary scalar a Parquet
-	// or Arrow file produces, and `Col("blob").Eq(Col("blob"))` type-checks and then
-	// fails in the kernel. resolveComparison admits it — Binary is ordered and
-	// promotes with itself — while kernel.dispatch has no Binary arm and falls to
-	// "comparison is not implemented for %s". All EIGHT comparison operators, not
-	// just equality. The fixture could not see it because it had no Binary column.
-	"!=(bin,bin)":   "Binary resolves to Bool and the kernel has no Binary comparison",
-	"!=(bin,nu)":    "Binary resolves to Bool and the kernel has no Binary comparison",
-	"!=(bin,null)":  "Binary resolves to Bool and the kernel has no Binary comparison",
-	"!=(nu,bin)":    "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<!>(bin,bin)":  "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<!>(bin,nu)":   "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<!>(bin,null)": "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<!>(nu,bin)":   "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<(bin,bin)":    "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<(bin,nu)":     "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<(bin,null)":   "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<(nu,bin)":     "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<=(bin,bin)":   "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<=(bin,nu)":    "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<=(bin,null)":  "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<=(nu,bin)":    "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<=>(bin,bin)":  "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<=>(bin,nu)":   "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<=>(bin,null)": "Binary resolves to Bool and the kernel has no Binary comparison",
-	"<=>(nu,bin)":   "Binary resolves to Bool and the kernel has no Binary comparison",
-	"==(bin,bin)":   "Binary resolves to Bool and the kernel has no Binary comparison",
-	"==(bin,nu)":    "Binary resolves to Bool and the kernel has no Binary comparison",
-	"==(bin,null)":  "Binary resolves to Bool and the kernel has no Binary comparison",
-	"==(nu,bin)":    "Binary resolves to Bool and the kernel has no Binary comparison",
-	">(bin,bin)":    "Binary resolves to Bool and the kernel has no Binary comparison",
-	">(bin,nu)":     "Binary resolves to Bool and the kernel has no Binary comparison",
-	">(bin,null)":   "Binary resolves to Bool and the kernel has no Binary comparison",
-	">(nu,bin)":     "Binary resolves to Bool and the kernel has no Binary comparison",
-	">=(bin,bin)":   "Binary resolves to Bool and the kernel has no Binary comparison",
-	">=(bin,nu)":    "Binary resolves to Bool and the kernel has no Binary comparison",
-	">=(bin,null)":  "Binary resolves to Bool and the kernel has no Binary comparison",
-	">=(nu,bin)":    "Binary resolves to Bool and the kernel has no Binary comparison",
-
 	// EQUALITY OVER A LIST. 48 labels. resolveComparison's rule is that "equality
 	// is defined for anything with a common type", and Promote(List(T), List(T))
 	// returns List(T) — so Field promises Bool and dispatchCompare, which switches

@@ -127,8 +127,24 @@ func dispatchCompare(op expr.BinaryOp, l, r *data.Column, n int, out *bitmap.Bui
 		return nil
 	}
 
-	// String comparison has no numeric kernel; handle it before the numeric switch.
-	if p.IsString() || p.ID() == dtype.TypeString {
+	// Offset-and-character storage has no numeric kernel; handle it before the
+	// numeric switch.
+	//
+	// The predicate is HasStringStorage because the question here is STORAGE — it is
+	// what decides whether Column.Strings() is the right accessor, and its doc says
+	// so. It was IsString(), which is the different question of whether a value is
+	// TEXT, and the gap between them is Binary: ordered at plan time by IsOrdered,
+	// promoted with itself, promised a Bool by resolveComparison — and then refused
+	// here, for all eight comparison operators, on a type Parquet and Arrow both
+	// produce. IsOrdered's own doc warned about this exact split: "the plan layer's
+	// copies decide what is REJECTED AT PLAN TIME, and the kernel layer's copies
+	// decide what actually works".
+	//
+	// Bytewise is the right order for Binary and is what compareStrings already
+	// does, Go's string comparison being a memcmp. The two predicates differ on Enum
+	// in the other direction, and that does not reach here: Enum's PHYSICAL type is
+	// Uint32, so it lands in the numeric switch below and compares its indices.
+	if p.HasStringStorage() {
 		return compareStrings(op, l, r, n, out)
 	}
 	if p.ID() == dtype.TypeBool {
