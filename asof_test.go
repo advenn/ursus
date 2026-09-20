@@ -684,3 +684,69 @@ func TestAsOfCalendarToleranceRespectsDST(t *testing.T) {
 		t.Error("a calendar day did not reach a quote 30 minutes inside it")
 	}
 }
+
+// TestAsOfKeyThatDoesNotSurvivePromotionSaysSo. Both sides cast to the promoted key
+// type, and that cast was NON-strict: a value the promotion cannot hold became a
+// null, and the null check below it then reported "the as-of key is null at row 0"
+// — with a hint to filter the nulls out — on a not-null column containing none.
+// The advice was impossible to follow and the row named was innocent.
+func TestAsOfKeyThatDoesNotSurvivePromotionSaysSo(t *testing.T) {
+	sec := dtype.Datetime(dtype.Second, "UTC")
+	ns := dtype.Datetime(dtype.Nano, "UTC")
+
+	// 9223372037s is 2262-04-11T23:47:17Z: a fine instant in seconds, one second past
+	// what nanoseconds can hold. Joining it to a nanosecond key promotes to ns.
+	trades := keyedFrame(t, "tv", sec, 9_223_372_037)
+	quotes := keyedFrame(t, "qv", ns, 0)
+
+	_, err := ursus.Scan(trades).Select(ursus.Col("ts"), ursus.Col("tv")).
+		JoinAsOf(ursus.Scan(quotes).Select(ursus.Col("ts"), ursus.Col("qv")),
+			ursus.AsOfOn(ursus.Col("ts"))).Collect(t.Context())
+	if err == nil {
+		t.Fatal("an instant the promoted key type cannot hold was joined anyway")
+	}
+	var ue *uerr.Error
+	if !errors.As(err, &ue) || ue.Op != "join_asof" {
+		t.Fatalf("want a join_asof refusal, got %v", err)
+	}
+	// The defect in one assertion: this used to be the null message, on a column
+	// with no nulls.
+	if strings.Contains(ue.Msg, "null") {
+		t.Errorf("a value that does not fit is not a null: %v", err)
+	}
+	// The cause keeps what only the cast knows.
+	for _, want := range []string{"9223372037", "row 0", "overflows"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal should name %q: %v", want, err)
+		}
+	}
+}
+
+// TestAsOfNullKeyStillSaysNull: the strict cast must not swallow the common case.
+// This key is null AND needs promoting, so both checks are live on the same column.
+func TestAsOfNullKeyStillSaysNull(t *testing.T) {
+	sec := dtype.Datetime(dtype.Second, "UTC")
+	schema := dtype.MustSchema(dtype.Of("ts", sec), dtype.NotNull("tv", dtype.Int64))
+	vb := bitmap.NewBuilder(1)
+	vb.Append(false)
+	b, err := data.NewBatch(schema, []*data.Column{
+		data.NewFixed("ts", sec, []int64{0}, vb.Finish()),
+		data.NewFixed("tv", dtype.Int64, []int64{1}, bitmap.AllSet(1))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := memsrc.New(schema, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quotes := keyedFrame(t, "qv", dtype.Datetime(dtype.Nano, "UTC"), 0)
+
+	_, err = ursus.Scan(src).Select(ursus.Col("ts"), ursus.Col("tv")).
+		JoinAsOf(ursus.Scan(quotes).Select(ursus.Col("ts"), ursus.Col("qv")),
+			ursus.AsOfOn(ursus.Col("ts"))).Collect(t.Context())
+	var ue *uerr.Error
+	if !errors.As(err, &ue) || ue.Op != "join_asof" ||
+		!strings.Contains(err.Error(), "null at row 0") {
+		t.Fatalf("a genuinely null key must still say so: %v", err)
+	}
+}

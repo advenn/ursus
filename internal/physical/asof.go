@@ -182,9 +182,27 @@ func asOfKeys(ctx context.Context, on expr.Node, in *data.Batch, to dtype.DataTy
 		return nil, err
 	}
 	if c.DType() != to {
-		if c, err = kernel.Cast(c.Name(), to, false, c); err != nil {
-			return nil, err
+		// STRICTLY. A non-strict cast turns a value the promoted type cannot hold
+		// into a NULL, and the loop below then reports it as "the as-of key is null
+		// at row N" with a hint to filter the nulls out — on a not-null column
+		// containing no nulls, where filtering is not something the caller can do.
+		// A key that does not survive promotion is a value error about that value,
+		// and Cast already names the row.
+		cast, err := kernel.Cast(c.Name(), to, true, c)
+		if err != nil {
+			// Wrapped, because a bare "cast: ..." never mentions the join that asked
+			// for it, and its own hint — use a non-strict cast — is advice this
+			// caller cannot take: the promotion is the join's, not the user's, and
+			// following it is precisely how the value became a null. The cause keeps
+			// the row and the value.
+			return nil, uerr.Wrap(err, uerr.KindValue, "join_asof",
+				"the as-of key %q does not fit %s, the type the two sides are "+
+					"compared in", c.Name(), to).
+				Hint("both sides of an as-of join cast to one promoted key type").
+				Hint("give the two sides the same key type, or narrow the one whose " +
+					"range is too wide, before joining")
 		}
+		c = cast
 	}
 	for i := range c.Len() {
 		if !c.IsValid(i) {
