@@ -105,6 +105,13 @@ func (d DataType) FromTime(t time.Time) (int64, bool) {
 //
 // The as-of join's tolerance is the caller: a bound one month past 2262 is beyond
 // every nanosecond instant that exists, so the window is open on that side.
+//
+// What it guarantees is exactly what FromTime reports, and FromTime is exact for any
+// VALID time.Time. It is not a defence against an invalid one: Go's calendar
+// arithmetic wraps silently past year 292277026596, and such an instant still prints
+// a plausible date while its Unix() has gone negative — so a bound computed from it
+// saturates to nothing at all. See step 63's as-built; the as-of join reaches this
+// only with a Datetime(s) key within a month of that year.
 func (d DataType) FromTimeBound(t time.Time, up bool) int64 {
 	if v, ok := d.FromTime(t); ok {
 		return v
