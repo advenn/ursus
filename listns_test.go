@@ -9,8 +9,10 @@ package ursus_test
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/dtype"
@@ -618,5 +620,73 @@ func TestListReshapeRefusals(t *testing.T) {
 	}
 	if !errors.Is(err, uerr.ErrType) {
 		t.Errorf("kind should be Type: %v", err)
+	}
+}
+
+// TestListMeanKeepsTheElementType. list.mean answered Float64 for every element
+// type without ever reading the element type, while the kernel derived the real one
+// from ResolveAggBinding and ignored the declared one it was handed. They agree for
+// an integer element — ResolveAggBinding(AggMean, Int64) IS Float64 — which is why
+// every fixture in the repository agreed and the contract matrix, once it finally
+// had a List column, did not.
+//
+// Eval SUCCEEDED and returned a column of the wrong type, so this is the direction
+// that matters: checkShape catches it as an internal error rather than a wrong
+// answer, but only because every publishing operator goes through a declared schema.
+func TestListMeanKeepsTheElementType(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		vals []time.Duration
+		want time.Duration
+	}{
+		{"an exact duration mean", []time.Duration{time.Hour, 3 * time.Hour}, 2 * time.Hour},
+		// The mean of a list whose sum leaves int64 still fits, for the reason
+		// step 62 proved for the aggregate: min <= mean <= max.
+		{"a mean whose sum does not fit", []time.Duration{
+			math.MaxInt64, math.MaxInt64, math.MaxInt64}, math.MaxInt64},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := ursus.Frame(ursus.Values("d", c.vals)).
+				GroupBy().Agg(ursus.Col("d").Implode().Alias("ds")).
+				Select(ursus.Col("ds").List().Mean().Alias("m")).
+				Collect(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if f, ok := got.Schema().ByName("m"); !ok || f.Type.ID() != dtype.TypeDuration {
+				t.Fatalf("list.mean of a List(Duration) is %v, want a Duration", f.Type)
+			}
+			v, ok, err := got.At[int64](0, "m")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || time.Duration(v) != c.want {
+				t.Errorf("mean = %v (ok=%v), want %v", time.Duration(v), ok, c.want)
+			}
+		})
+	}
+}
+
+// TestListMeanOfFloat32StaysFloat32 is the arm that predates step 62: the aggregate
+// has always answered Float32 for a Float32 operand, so this disagreement has been
+// reachable for as long as list.mean has existed.
+func TestListMeanOfFloat32StaysFloat32(t *testing.T) {
+	got, err := ursus.Frame(ursus.Values("x", []float32{1, 2, 3, 4})).
+		GroupBy().Agg(ursus.Col("x").Implode().Alias("xs")).
+		Select(ursus.Col("xs").List().Mean().Alias("m")).
+		Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, ok := got.Schema().ByName("m")
+	if !ok || f.Type.ID() != dtype.TypeFloat32 {
+		t.Fatalf("list.mean of a List(Float32) is %v, want a Float32", f.Type)
+	}
+	v, valid, err := got.At[float32](0, "m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !valid || v != 2.5 {
+		t.Errorf("mean = %v (valid=%v), want 2.5", v, valid)
 	}
 }

@@ -82,7 +82,7 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 		return listContains(name, c, needle)
 
 	case expr.FnListMin, expr.FnListMax, expr.FnListSum, expr.FnListMean:
-		return listReduce(fn, name, out, c)
+		return listReduce(fn, name, c)
 
 	case expr.FnListReverse:
 		return listRebuild(name, c, func(start, end int32, out []int32) []int32 {
@@ -412,7 +412,12 @@ func listContains(name string, c *data.Column, needle []byte) (*data.Column, err
 // It would be needed the moment an accumulator answered 0 for an empty group
 // instead. TestListNamespaceSemantics pins both rows for exactly that reason, so
 // the equivalence is deliberate rather than something that happens to hold.
-func listReduce(fn expr.CallFn, name string, out dtype.DataType,
+// It takes no `out`: the output type is ResolveAggBinding's answer and nothing else,
+// which is now also what expr.listCallOut returns. Carrying the declared type here
+// as well would be a second copy of a fact with one owner — and while it WAS carried,
+// it was silently ignored, which is how list.mean promised Float64 for a decade of
+// element types and delivered whatever the binding said.
+func listReduce(fn expr.CallFn, name string,
 	c *data.Column) (*data.Column, error) {
 
 	op, err := listAggOp(fn)

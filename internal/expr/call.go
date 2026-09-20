@@ -565,7 +565,22 @@ func listCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 		return elem, nil
 
 	case FnListMean:
-		return dtype.Float64, nil
+		// Delegated for the reason FnListSum gives below, and it was not: this arm
+		// answered Float64 for every element type without reading elem at all.
+		// listReduce has always derived the real type from ResolveAggBinding, so the
+		// two disagreed wherever the aggregate's own rule is not Float64 — a
+		// Duration mean is a Duration since step 62, and a Float32 mean has been a
+		// Float32 for as long as the function has existed. Both are the dangerous
+		// direction: Eval SUCCEEDS and hands back a column of the wrong type.
+		//
+		// Int64 is why it survived. ResolveAggBinding(AggMean, Int64) is Float64,
+		// so every integer element agreed, and an integer element is what every
+		// fixture had.
+		b, err := ResolveAggBinding(AggMean, elem)
+		if err != nil {
+			return dtype.Null, err
+		}
+		return b.Out, nil
 
 	case FnListReverse, FnListHead, FnListTail, FnListSlice,
 		FnListSort, FnListUnique, FnListDropNulls:

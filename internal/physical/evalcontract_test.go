@@ -707,15 +707,6 @@ var knownContractGaps = map[string]string{
 	// because Int128 became a cast target when the axis was derived. CanCast
 	// promises it, and the kernel answers "cannot narrow to Int128".
 	"cast(st->Int128)": "CanCast promises String -> Int128 and the kernel cannot narrow",
-
-	// list.mean PROMISES Float64 WITHOUT READING THE ELEMENT TYPE. Two labels, and
-	// the only class here where Eval SUCCEEDS and returns the wrong type rather than
-	// failing. internal/expr/call.go answers Float64 for every element type;
-	// internal/kernel/listfn.go ignores the `out` it is handed and derives
-	// ResolveAggBinding(AggMean, elem). They agree for Int64 — which is exactly why
-	// a fixture with only a List(Int64) column would have reported a clean run.
-	"list.mean(lidur)": "listCallOut hard-codes Float64 instead of deriving from the element",
-	"list.mean(lif32)": "listCallOut hard-codes Float64 instead of deriving from the element",
 }
 
 var seenContractGaps = map[string]bool{}
