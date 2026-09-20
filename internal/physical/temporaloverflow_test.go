@@ -167,13 +167,7 @@ func buildOperand(name string, d dtype.DataType, a, b int64) *data.Column {
 	vb.Append(true)
 	v := vb.Finish()
 
-	fit := func(x int64) int64 {
-		if d.ID() == dtype.TypeTime {
-			per, _ := dtype.TicksPerDay(d)
-			return ((x % per) + per) % per
-		}
-		return x
-	}
+	fit := func(x int64) int64 { return fitTick(d, x) }
 	wide := func(x int64) i128.Int128 { return i128.Int128{Hi: x >> 63, Lo: uint64(x)} }
 
 	switch d.ID() {
@@ -218,6 +212,22 @@ func buildOperand(name string, d dtype.DataType, a, b int64) *data.Column {
 		return data.NewFixed(name, d, []float32{float32(a), 0, float32(b)}, v)
 	}
 	return nil
+}
+
+// fitTick brings a probe into a type's own domain: a Time is a time of day, and
+// data.CheckTimeRange rejects a column outside [0, 24h) in every test binary. It is
+// package-level so the as-of sweep shares it rather than copying the modulus — two
+// copies of a modulus is two chances to disagree about whether midnight belongs to
+// the day before, which is the argument TicksPerDay's own doc makes.
+func fitTick(d dtype.DataType, x int64) int64 {
+	if d.ID() != dtype.TypeTime {
+		return x
+	}
+	per, ok := dtype.TicksPerDay(d)
+	if !ok || per <= 0 {
+		return x
+	}
+	return ((x % per) + per) % per
 }
 
 func clamp32(x int64) int32 {
