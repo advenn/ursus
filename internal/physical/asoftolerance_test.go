@@ -174,6 +174,9 @@ var knownToleranceFailOpen = map[string]bool{
 	"Datetime dur": true, // the same multiply, plus the subtraction and -MinInt64
 	"Duration dur": true, // the same multiply at second resolution
 	"Datetime cal": true, // FromTime fails near 2262 and the bound returns true
+	"Date cal":     true, // ToTime now refuses a day count that is no year, and the
+	//                       bound returns true — the same flip step 61 caused by
+	//                       making FromTime honest, one conversion over
 	"Duration cal": true, // ToTime refuses a Duration, so the tolerance is inert
 	"Time cal":     true, // a calendar bound leaves [0, 24h) in both directions
 }

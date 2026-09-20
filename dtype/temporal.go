@@ -27,8 +27,16 @@ func (d DataType) ToTime(ticks int64) (time.Time, bool) {
 	// epoch does not overflow: seconds and nanos are accumulated separately.
 	perSec := int64(time.Second) / npt
 	if perSec == 0 {
-		// Coarser than a second — only Date, whose tick is a whole day.
-		return time.Unix(ticks*(npt/int64(time.Second)), 0).UTC(), true
+		// Coarser than a second — only Date, whose tick is a whole day. The multiply
+		// is checked rather than assumed: a Date COLUMN is int32 days and cannot
+		// reach it, but this is an exported method on DataType and
+		// dtype.Date.ToTime(math.MaxInt64) would otherwise wrap, which is the
+		// defence ToDuration's doc argues for four functions below.
+		secPerTick := npt / int64(time.Second)
+		if ticks > math.MaxInt64/secPerTick || ticks < math.MinInt64/secPerTick {
+			return time.Time{}, false
+		}
+		return time.Unix(ticks*secPerTick, 0).UTC(), true
 	}
 	sec, rem := ticks/perSec, ticks%perSec
 	if rem < 0 {
@@ -80,6 +88,31 @@ func (d DataType) FromTime(t time.Time) (int64, bool) {
 		return 0, false
 	}
 	return ticks + sub, true
+}
+
+// FromTimeBound converts an instant into a tick count the way FromTime does, but
+// SATURATES at d's extremes instead of reporting failure. up picks which extreme an
+// unrepresentable instant becomes.
+//
+// A value that does not fit is a lie; a bound that does not fit is the type's own
+// extreme. That is the whole distinction, and it is why this is a second function
+// rather than a flag on the first: a caller storing a DATUM must be told it cannot
+// (FromTime, and ToDuration's doc argues the same for the other direction), while a
+// caller computing the EDGE of a window wants the widest edge the type can express.
+// Clamping is not an approximation there — every value it will be compared against is
+// itself a representable tick, so a clamped bound admits exactly the set an unbounded
+// one would.
+//
+// The as-of join's tolerance is the caller: a bound one month past 2262 is beyond
+// every nanosecond instant that exists, so the window is open on that side.
+func (d DataType) FromTimeBound(t time.Time, up bool) int64 {
+	if v, ok := d.FromTime(t); ok {
+		return v
+	}
+	if up {
+		return math.MaxInt64
+	}
+	return math.MinInt64
 }
 
 // TicksPerDay is 24 hours expressed in d's own unit.
