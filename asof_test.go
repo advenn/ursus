@@ -750,3 +750,76 @@ func TestAsOfNullKeyStillSaysNull(t *testing.T) {
 		t.Fatalf("a genuinely null key must still say so: %v", err)
 	}
 }
+
+// TestAsOfNumericKeyRefusesAToleranceAtPlanTime pins the refusal that keeps
+// prepareTolerance's internal error unreachable. An Interval measures time; a
+// numeric key has no tick length, so NanosPerTick answers false — and the tolerance
+// used to DROP that answer, treat npt <= 0 as "no bound", and match everything.
+//
+// It is asserted through the resolver rather than the sink because that is where the
+// guarantee lives: if this refusal ever moves, the sink's Internalf is what fires,
+// and it is the only thing standing between a numeric key and an inert tolerance.
+func TestAsOfNumericKeyRefusesAToleranceAtPlanTime(t *testing.T) {
+	trades := tickFrame(t, "tv", []int64{100}, nil)
+	quotes := tickFrame(t, "qv", []int64{99}, nil)
+	tol := ursus.AsOfTolerance(ursus.FromDuration(time.Hour))
+
+	// Explain, so this is the resolver refusing rather than the operator running.
+	if _, err := trades.JoinAsOf(quotes, ursus.AsOfOn(ursus.Col("k")), tol).
+		Explain(t.Context()); err == nil {
+		t.Error("a tolerance on an Int64 key was planned")
+	}
+	_, err := trades.JoinAsOf(quotes, ursus.AsOfOn(ursus.Col("k")), tol).Collect(t.Context())
+	var ue *uerr.Error
+	if !errors.As(err, &ue) || !errors.Is(&uerr.Error{Kind: ue.Kind}, uerr.ErrUnsupported) {
+		t.Fatalf("want a KindUnsupported refusal, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "Int64") {
+		t.Errorf("the refusal should name the key type: %v", err)
+	}
+
+	// The complement: the refusal is about the tolerance, not about numeric keys.
+	// Without one, an Int64 as-of join is ordinary and must still work.
+	got, err := trades.JoinAsOf(quotes, ursus.AsOfOn(ursus.Col("k"))).Collect(t.Context())
+	if err != nil {
+		t.Fatalf("a numeric key with no tolerance must still join: %v", err)
+	}
+	if _, ok, err := got.At[int64](0, "qv"); err != nil || !ok {
+		t.Errorf("the numeric join matched nothing (ok=%v, err=%v)", ok, err)
+	}
+}
+
+// TestAsOfNearestTiesBackward. Step 63 rewrote the tie-break in unsigned distances;
+// "<=" is what sends an equal pair backward, and nothing asserted it, so ">" would
+// have passed every existing test.
+func TestAsOfNearestTiesBackward(t *testing.T) {
+	nearest := ursus.AsOfStrategyOpt(ursus.AsOfNearest)
+	for _, c := range []struct {
+		name  string
+		quote []int64
+		want  int64 // the qv of the expected row, which is its index
+	}{
+		{"equidistant either side", []int64{95, 105}, 0},
+		// The control: without it, "always pick the backward candidate" would pass
+		// the case above, and the tie assertion would mean nothing.
+		{"a closer neighbour ahead still wins", []int64{90, 101}, 1},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			trades := tickFrame(t, "tv", []int64{100}, nil)
+			quotes := tickFrame(t, "qv", c.quote, nil)
+			got, err := trades.JoinAsOf(quotes, ursus.AsOfOn(ursus.Col("k")), nearest).
+				Collect(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			v, ok, err := got.At[int64](0, "qv")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || v != c.want {
+				t.Errorf("nearest picked qv=%v (ok=%v), want %d — ties go backward",
+					v, ok, c.want)
+			}
+		})
+	}
+}
