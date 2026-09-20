@@ -365,13 +365,15 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 	}
 }
 
-// decimalAggUnsupported refuses sum and mean over a Decimal.
+// decimalAggUnsupported refuses the COMPUTING aggregates over a Decimal: sum, mean,
+// var, std, median, quantile and product. Seven, not the two this comment used to
+// name — the list grew and the sentence did not.
 //
 // Min, Max, First, Last, Count and NUnique all work: they select or count rather
 // than compute, so the unscaled integer they carry around is still the right
 // number with the right scale.
 //
-// Sum and mean are different. Without this the generic path would bind
+// The computing ones are different. Without this the generic path would bind
 // Acc: Float64 and the accumulator would ask a Decimal column — physically Int128
 // — for []float64 and fail at runtime as an internal error, which is the
 // plan-accepts / kernel-rejects divergence this codebase already has one scar
@@ -381,11 +383,31 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 // which is a decision better made deliberately than by whichever branch happened
 // to be reached first.
 func decimalAggUnsupported(op AggOp, in dtype.DataType) error {
-	return uerr.New(uerr.KindUnsupported, "",
+	return decimalRemedy(uerr.New(uerr.KindUnsupported, "",
 		"%s() is not implemented for %s", op, in).
 		Hint("decimal aggregation needs a precision and scale rule ursus has not " +
-			"committed to yet").
-		Hint("cast to Float64 first if approximate arithmetic is acceptable")
+			"committed to yet"))
+}
+
+// decimalRemedy appends the one thing a caller can actually DO about a Decimal
+// refusal, and it exists because the thing they were being told to do did not exist.
+//
+// Five refusals across three files ended with "cast to Float64 first if approximate
+// arithmetic is acceptable", and CanCast refuses EVERY Decimal-to-numeric cast —
+// promote.go's Decimal arm returns true only for Decimal -> String, because "a
+// decimal is stored as an unscaled integer, so this cast would be wrong by a factor
+// of 10^scale rather than merely imprecise". The refusals were right; the remedy
+// they named was impossible, in exactly the shape step 63 found in the as-of join,
+// where a not-null column was told to filter its nulls out.
+//
+// So the advice lives in one place now. Five copies of a sentence is five chances
+// for it to stop being true, and it had already stopped being true in all five.
+func decimalRemedy(e *uerr.Error) *uerr.Error {
+	return e.
+		Hint("+ and -, comparisons, min, max, first, last, count and n_unique are " +
+			"exact on a Decimal and need no such rule").
+		Hint("to compute one yourself, collect the frame and read the unscaled " +
+			"integers with df.Column[ursus.Int128Value](name), then apply the scale")
 }
 
 // ResolveAgg returns just the output type, for callers that do not run the

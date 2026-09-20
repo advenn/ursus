@@ -142,11 +142,10 @@ func resolveArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 	// scale 2 while holding scale-4 digits, and 152.2756 would print as 15227.56.
 	// Off by 10^scale, entirely plausible, and no error anywhere.
 	if common.ID() == dtype.TypeDecimal && op != OpAdd && op != OpSub {
-		return Binding{}, uerr.New(uerr.KindType, "",
+		return Binding{}, decimalRemedy(uerr.New(uerr.KindType, "",
 			"operator %s is not defined for %s", op, common).
 			Hint("%s changes a decimal's scale and ursus does not implement the "+
-				"precision calculus yet; only + and - are exact", op).
-			Hint("cast to Float64 first if approximate arithmetic is acceptable")
+				"precision calculus yet; only + and - are exact", op))
 	}
 
 	// Int128 is the same trap one type over, and it was live: Int64 * Uint64
@@ -520,11 +519,10 @@ func ResolveUnary(op UnaryOp, in dtype.DataType) (dtype.DataType, error) {
 		// Duration of -1, 0 or 1 TICKS is not a sign, it is a nanosecond — is the
 		// same argument, and it was written three lines from the code that ignored it.
 		if in.ID() == dtype.TypeDecimal {
-			return dtype.Null, uerr.New(uerr.KindType, "",
+			return dtype.Null, decimalRemedy(uerr.New(uerr.KindType, "",
 				"%s() is not defined for %s", op, in).
 				Hint("a decimal is stored as an unscaled integer, so %s() would "+
-					"answer about the unscaled value rather than the decimal one", op).
-				Hint("cast to Float64 first if approximate arithmetic is acceptable")
+					"answer about the unscaled value rather than the decimal one", op))
 		}
 		// Sign keeps the operand's type, so sign(Int64) is Int64 rather than a float.
 		// Duration is excluded even though abs() admits it: a Duration of -1, 0 or 1
@@ -567,10 +565,10 @@ func ResolveUnary(op UnaryOp, in dtype.DataType) (dtype.DataType, error) {
 					Hint("cast it first, e.g. .Cast(ursus.Float64)")
 			}
 			if in.ID() == dtype.TypeDecimal {
-				return dtype.Null, uerr.New(uerr.KindType, "",
+				return dtype.Null, decimalRemedy(uerr.New(uerr.KindType, "",
 					"%s() is not defined for %s", op, in).
-					Hint("a decimal is stored as an unscaled integer; cast to Float64 " +
-						"if approximate arithmetic is acceptable")
+					Hint("a decimal is stored as an unscaled integer, so %s() would "+
+						"answer about the unscaled value rather than the decimal one", op))
 			}
 			if in.ID() == dtype.TypeFloat32 {
 				return dtype.Float32, nil

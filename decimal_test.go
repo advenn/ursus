@@ -232,3 +232,150 @@ func TestDecimalAdditionIsExact(t *testing.T) {
 		t.Errorf("12.34 + 12.34 should be 24.68:\n%s", df)
 	}
 }
+
+// A refusal must not recommend something the library refuses.
+//
+// Five Decimal refusals across three files ended with "cast to Float64 first if
+// approximate arithmetic is acceptable", and CanCast permits exactly one cast out of
+// a Decimal — to String. Every refusal was correct and every remedy was impossible,
+// which is the shape step 63 found in the as-of join when a not-null column was told
+// to filter its nulls out. The refusals are the engine being careful; advice that
+// cannot be followed turns that care into a dead end.
+
+// castTargetsNamed returns every type a message recommends casting to.
+//
+// It matches the two forms the codebase actually writes — "cast to Float64" and
+// ".Cast(ursus.Float64)" — over the types a numeric refusal might plausibly name.
+// A name it does not know is skipped, which is why the test below asserts the
+// scanner found something rather than trusting an empty result.
+func castTargetsNamed(msg string) []dtype.DataType {
+	known := map[string]dtype.DataType{
+		"Float64": dtype.Float64, "Float32": dtype.Float32,
+		"Int64": dtype.Int64, "Int32": dtype.Int32, "Int16": dtype.Int16,
+		"Int8": dtype.Int8, "Int128": dtype.Int128,
+		"Uint64": dtype.Uint64, "Uint32": dtype.Uint32,
+		"Bool": dtype.Bool, "String": dtype.String,
+	}
+	var out []dtype.DataType
+	for name, dt := range known {
+		if strings.Contains(msg, "cast to "+name) ||
+			strings.Contains(msg, ".Cast(ursus."+name+")") {
+			out = append(out, dt)
+		}
+	}
+	return out
+}
+
+func TestDecimalRefusalsRecommendOnlyPossibleCasts(t *testing.T) {
+	d := dtype.Decimal(10, 2)
+	price := ursus.Col("price")
+
+	sel := func(e ursus.Expr) func() *ursus.LazyFrame {
+		return func() *ursus.LazyFrame { return prices(t).Select(e) }
+	}
+	agg := func(e ursus.Expr) func() *ursus.LazyFrame {
+		return func() *ursus.LazyFrame {
+			return prices(t).GroupBy(ursus.Col("sku")).Agg(e.Alias("a"))
+		}
+	}
+	cases := map[string]func() *ursus.LazyFrame{
+		"mul":      sel(price.Mul(price)),
+		"div":      sel(price.Div(price)),
+		"floor":    sel(price.Floor()),
+		"ceil":     sel(price.Ceil()),
+		"sign":     sel(price.Sign()),
+		"sqrt":     sel(price.Sqrt()),
+		"round":    sel(price.Round(1)),
+		"cast_i64": sel(price.Cast(dtype.Int64)),
+		"sum":      agg(price.Sum()),
+		"mean":     agg(price.Mean()),
+		"var":      agg(price.Var(1)),
+		"std":      agg(price.Std(1)),
+		"median":   agg(price.Median()),
+		"product":  agg(price.Product()),
+	}
+
+	refused := 0
+	for name, build := range cases {
+		_, err := build().Collect(t.Context())
+		if err == nil {
+			continue // the operation is supported; not this test's business
+		}
+		refused++
+		for _, to := range castTargetsNamed(err.Error()) {
+			if !dtype.CanCast(d, to) {
+				t.Errorf("%s: the refusal recommends casting %s to %s, and CanCast "+
+					"refuses that cast — the remedy does not exist:\n%v",
+					name, d, to, err)
+			}
+		}
+	}
+	// Anti-vacuity. A sweep where nothing refused, or where every message was
+	// scanned and none named a type, proves nothing either way.
+	if refused < 10 {
+		t.Errorf("only %d of %d operations refused; the fixture has stopped "+
+			"reaching the Decimal guards", refused, len(cases))
+	}
+}
+
+// TestCastScannerFindsARecommendation is the control for the test above.
+//
+// After the fix no Decimal refusal names a cast target at all, so that sweep would
+// pass against a scanner that always returned nothing. This drives a refusal that
+// SHOULD name one — Int128 arithmetic, where "cast to Int64 or Float64 first" is
+// sound because CanCast permits both — and asserts the scanner sees it.
+func TestCastScannerFindsARecommendation(t *testing.T) {
+	_, err := ursus.Frame(ursus.Values("a", []int64{1, 2})).
+		Select(ursus.Col("a").Cast(dtype.Int128).Mul(ursus.Col("a").Cast(dtype.Int128))).
+		Collect(t.Context())
+	if err == nil {
+		t.Fatal("Int128 multiplication is implemented now; this control needs a new op")
+	}
+	found := castTargetsNamed(err.Error())
+	if len(found) == 0 {
+		t.Fatalf("the scanner found no cast recommendation in:\n%v", err)
+	}
+	for _, to := range found {
+		if !dtype.CanCast(dtype.Int128, to) {
+			t.Errorf("Int128 refusal recommends %s, which CanCast refuses:\n%v", to, err)
+		}
+	}
+}
+
+// TestDecimalRemedyIsFollowable does what the refusal now tells a caller to do, and
+// checks the answer. Advice nobody has run is a claim.
+func TestDecimalRemedyIsFollowable(t *testing.T) {
+	_, err := prices(t).GroupBy(ursus.Col("sku")).Agg(ursus.Col("price").Sum()).
+		Collect(t.Context())
+	if err == nil {
+		t.Skip("sum(Decimal) is implemented; this test has served its purpose")
+	}
+	if !strings.Contains(err.Error(), "Int128Value") {
+		t.Fatalf("the refusal no longer names the escape hatch:\n%v", err)
+	}
+
+	df, cerr := prices(t).Collect(t.Context())
+	if cerr != nil {
+		t.Fatal(cerr)
+	}
+	s, cerr := df.Column[ursus.Int128Value]("price")
+	if cerr != nil {
+		t.Fatalf("the recommended read does not work: %v", cerr)
+	}
+	// 12.34 + 5.00 + null + -0.05 + 100.00 = 117.29, unscaled 11729 at scale 2.
+	var total int64
+	for i := range s.Len() {
+		v, ok := s.Get(i)
+		if !ok {
+			continue // a null price contributes nothing, exactly as sum() would
+		}
+		n, fits := v.Int64()
+		if !fits {
+			t.Fatalf("row %d does not fit an int64: %v", i, v)
+		}
+		total += n
+	}
+	if total != 11729 {
+		t.Errorf("unscaled total = %d, want 11729 (117.29 at scale 2)", total)
+	}
+}

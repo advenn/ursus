@@ -332,11 +332,10 @@ func mathCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 				Hint("cast it first, e.g. .Cast(ursus.Float64)")
 		}
 		if in.ID() == dtype.TypeDecimal {
-			return dtype.Null, uerr.New(uerr.KindType, "round",
+			return dtype.Null, decimalRemedy(uerr.New(uerr.KindType, "round",
 				"round() is not defined for %s", in).
 				Hint("a decimal is stored as an unscaled integer, so rounding it would " +
-					"scale the wrong number").
-				Hint("cast to Float64 first if approximate arithmetic is acceptable")
+					"scale the wrong number"))
 		}
 		return in, nil
 	default:
