@@ -48,6 +48,7 @@ type asOfBuildSink struct {
 
 	strategy   plan.AsOfStrategy
 	tolerance  dtype.Interval
+	tolTicks   uint64 // a fixed tolerance in the KEY's own ticks; see prepareTolerance
 	allowExact bool
 	keyType    dtype.DataType
 	loc        *time.Location
@@ -277,7 +278,10 @@ func (p *asOfProbeOp) match(ctx context.Context, in *data.Batch) (*data.Batch, e
 		if byEnc != nil {
 			key = string(byEnc.Encode(i))
 		}
-		rsel[i] = s.nearest(p.buckets[key], lk[i])
+		var err error
+		if rsel[i], err = s.nearest(p.buckets[key], lk[i]); err != nil {
+			return nil, err
+		}
 	}
 	p.nRows += n
 	p.lastSeen = lk[n-1]
@@ -296,9 +300,9 @@ func (p *asOfProbeOp) lastKey(lk []int64, i int) int64 {
 //
 // This is the whole of the as-of rule, in one place, so the three strategies and the
 // exact-match flag cannot disagree with each other about what "nearest" means.
-func (s *asOfBuildSink) nearest(bucket []int32, k int64) int32 {
+func (s *asOfBuildSink) nearest(bucket []int32, k int64) (int32, error) {
 	if len(bucket) == 0 {
-		return kernel.NullIndex
+		return kernel.NullIndex, nil
 	}
 	keys := s.keys
 
@@ -335,7 +339,15 @@ func (s *asOfBuildSink) nearest(bucket []int32, k int64) int32 {
 			// Ties go BACKWARD, matching the default strategy: with an exact match
 			// available both distances are zero, and "the most recent" is the answer
 			// the operator is named for.
-			if k-keys[bucket[back]] <= keys[bucket[fwd]]-k {
+			// Unsigned distances, because both subtractions can wrap: with k at
+			// 0, a backward candidate at MinInt64 and a forward one at +1 — all
+			// valid instants — the left side became MinInt64 and nearest chose the
+			// candidate 292 YEARS away over the one a nanosecond away. Under the
+			// default options, with no tolerance involved.
+			//
+			// back and fwd bracket k by construction of the two searches above, so
+			// these are the exact distances and <= still sends a tie backward.
+			if absDiffU64(k, keys[bucket[back]]) <= absDiffU64(keys[bucket[fwd]], k) {
 				pick = back
 			} else {
 				pick = fwd
@@ -347,13 +359,65 @@ func (s *asOfBuildSink) nearest(bucket []int32, k int64) int32 {
 		}
 	}
 	if pick < 0 {
-		return kernel.NullIndex
+		return kernel.NullIndex, nil
 	}
 	row := bucket[pick]
-	if !s.withinTolerance(k, keys[row]) {
-		return kernel.NullIndex
+	ok, err := s.withinTolerance(k, keys[row])
+	if err != nil {
+		return kernel.NullIndex, err
 	}
-	return row
+	if !ok {
+		return kernel.NullIndex, nil
+	}
+	return row, nil
+}
+
+// absDiffU64 is |a - b|, exactly.
+//
+// The true difference of two int64s lies in [0, 2^64), so the unsigned subtraction
+// holds it whatever the operands are — including the pair whose signed difference is
+// MinInt64, where negating leaves the value negative and every comparison against a
+// bound then succeeds. Nothing here can overflow, so there is no overflow case to
+// get right.
+func absDiffU64(a, b int64) uint64 {
+	if a >= b {
+		return uint64(a) - uint64(b)
+	}
+	return uint64(b) - uint64(a)
+}
+
+// prepareTolerance converts a fixed tolerance into the key's own ticks, once.
+//
+// The per-row test then compares two tick counts and never multiplies. That is the
+// whole fix: it used to scale the DATA up to nanoseconds — d*npt, where npt is
+// 8.64e13 for a Date — so two ordinary dates 292 years apart wrapped to a negative
+// product and matched a one-hour bound.
+//
+// Flooring the tolerance is not a rounding policy, it is an identity: for integers
+// d >= 0, npt >= 1 and T >= 0, `d*npt <= T` holds exactly when `d <= T/npt` floored.
+// So wherever the old test did not overflow, the admitted set is unchanged — every
+// behaviour change here is a change away from a wrong answer. A sub-tick tolerance
+// floors to zero, which admits only an exact tick match, exactly as before.
+//
+// T >= 0 is load-bearing and is asserted rather than assumed: resolveAsOfJoin refuses
+// a negative tolerance three files away, and if that check ever moved, a negative T
+// would make Go's truncating division stop being a floor and the identity would fail.
+func (s *asOfBuildSink) prepareTolerance() error {
+	if s.tolerance.IsZero() || s.tolerance.IsCalendar() {
+		return nil // nothing fixed to convert
+	}
+	nanos := s.tolerance.Nanos()
+	if nanos < 0 {
+		return uerr.Internalf("physical: as-of tolerance %s is negative", s.tolerance)
+	}
+	npt, ok := s.keyType.NanosPerTick()
+	if !ok || npt <= 0 {
+		// The resolver admits a tolerance only on a temporal key, and every temporal
+		// type has a tick length. Reaching here is an ursus bug, not a user error.
+		return uerr.Internalf("physical: as-of key %s has no tick length", s.keyType)
+	}
+	s.tolTicks = uint64(nanos / npt)
+	return nil
 }
 
 // withinTolerance reports whether a candidate is close enough to be a match.
@@ -362,34 +426,42 @@ func (s *asOfBuildSink) nearest(bucket []int32, k int64) int32 {
 // count, because "one month" is not a number of ticks — the same reason Interval has
 // three fields. So the bound is recomputed per row, which is what makes
 // Every("1mo") differ from Every("30d") on a February.
-func (s *asOfBuildSink) withinTolerance(left, right int64) bool {
+func (s *asOfBuildSink) withinTolerance(left, right int64) (bool, error) {
 	if s.tolerance.IsZero() {
-		return true
+		return true, nil
 	}
 	if !s.tolerance.IsCalendar() {
-		d := left - right
-		if d < 0 {
-			d = -d
-		}
-		npt, _ := s.keyType.NanosPerTick()
-		if npt <= 0 {
-			return true
-		}
-		return d*npt <= s.tolerance.Nanos()
+		// Both sides in the key's own ticks: a comparison, and nothing else.
+		return absDiffU64(left, right) <= s.tolTicks, nil
 	}
+
 	lt, ok := s.keyType.ToTime(left)
-	if !ok {
-		return true
+	if !ok || s.keyType.ID() == dtype.TypeTime {
+		// resolveAsOfJoin refuses a calendar tolerance on a key that is not an
+		// instant, and a representable tick of an instant type always converts — so
+		// reaching here is an ursus bug rather than a user error. It used to return
+		// true, which made the tolerance inert.
+		//
+		// The Time arm is stated here rather than left to the resolver because
+		// ToTime ACCEPTS a Time, placing a wall clock on 1970-01-01 — so a month
+		// either side of it spans every time of day and the bound admits
+		// everything. A check in another file is not something this function should
+		// depend on to avoid answering a question that has no answer.
+		return false, uerr.Internalf(
+			"physical: a %s is not an instant, so a calendar tolerance has no bound "+
+				"to measure from (tick %d)", s.keyType, left)
 	}
 	if s.loc != nil {
 		lt = lt.In(s.loc)
 	}
-	lo, hiOK := s.keyType.FromTime(s.tolerance.Neg().AddTo(lt))
-	hi, loOK := s.keyType.FromTime(s.tolerance.AddTo(lt))
-	if !hiOK || !loOK {
-		return true
-	}
-	return right >= lo && right <= hi
+	// SATURATING, and each bound independently — which is why the two ok results
+	// this code used to bind (and swap) are gone. A bound past the end of the type is
+	// the end of the type: every candidate is itself a representable tick, so a
+	// clamped edge admits exactly the set an unbounded one would. Reporting failure
+	// here is what made a 2262 trade match a 1970 quote.
+	lo := s.keyType.FromTimeBound(s.tolerance.Neg().AddTo(lt), false)
+	hi := s.keyType.FromTimeBound(s.tolerance.AddTo(lt), true)
+	return right >= lo && right <= hi, nil
 }
 
 // --- planning ---------------------------------------------------------------------
@@ -429,5 +501,8 @@ func planAsOfJoin(ctx context.Context, a *plan.AsOfJoin, opts Options) (Operator
 		sorted:  true,
 	}
 	sink.loc = temporalLocation(sink.keyType)
+	if err := sink.prepareTolerance(); err != nil {
+		return nil, err
+	}
 	return &joinBreaker{build: right, probe: left, builder: sink}, nil
 }

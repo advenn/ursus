@@ -2,8 +2,10 @@ package ursus_test
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/dtype"
@@ -528,4 +530,157 @@ func keyedFrame(t *testing.T, val string, dt dtype.DataType, ticks ...int64) *me
 		t.Fatal(err)
 	}
 	return src
+}
+
+// The tolerance used to scale the DATA up to nanoseconds — d*npt, where npt is
+// 8.64e13 for a Date — so ordinary keys wrapped into a negative product that
+// satisfied every bound. These are the four measured fixtures.
+
+func TestAsOfToleranceDoesNotReachAcrossCenturies(t *testing.T) {
+	ns := dtype.Datetime(dtype.Nano, "UTC")
+	for _, c := range []struct {
+		name        string
+		key         dtype.DataType
+		left, right int64
+		tol         ursus.Interval
+	}{
+		// 106752 days * 8.64e13 wraps negative: 1970-01-01 against 2262-04-12.
+		{"a Date key is measured in days", dtype.Date, 106_752, 0, ursus.Every("1h")},
+		// The subtraction itself wraps: the two ends of the nanosecond domain.
+		{"the two ends of the nanosecond range", ns, math.MaxInt64, math.MinInt64,
+			ursus.FromDuration(1)},
+		// -d leaves MinInt64 negative, which satisfies any bound at all.
+		{"a difference of exactly MinInt64", ns, 0, math.MinInt64, ursus.FromDuration(1)},
+		// The calendar bound cannot be represented, and that used to mean "match".
+		{"a calendar bound past the end of the type", ns,
+			9_222_422_400_000_000_000, 0, ursus.Every("1mo")},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			trades := keyedFrame(t, "tv", c.key, c.left)
+			quotes := keyedFrame(t, "qv", c.key, c.right)
+
+			got, err := ursus.Scan(trades).Select(ursus.Col("ts"), ursus.Col("tv")).
+				JoinAsOf(ursus.Scan(quotes).Select(ursus.Col("ts"), ursus.Col("qv")),
+					ursus.AsOfOn(ursus.Col("ts")),
+					ursus.AsOfStrategyOpt(ursus.AsOfNearest),
+					ursus.AsOfTolerance(c.tol)).
+				Collect(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok, err := got.At[int64](0, "qv"); err != nil {
+				t.Fatal(err)
+			} else if ok {
+				t.Error("a candidate centuries away matched")
+			}
+		})
+	}
+}
+
+// TestAsOfNearestPrefersTheCloserNeighbour needs no tolerance at all: the tie-break
+// subtracted the two distances and both subtractions could wrap.
+func TestAsOfNearestPrefersTheCloserNeighbour(t *testing.T) {
+	ns := dtype.Datetime(dtype.Nano, "UTC")
+	trades := keyedFrame(t, "tv", ns, 0)
+	quotes := keyedFrame(t, "qv", ns, math.MinInt64, 1) // 292 years back, 1ns forward
+
+	got, err := ursus.Scan(trades).Select(ursus.Col("ts"), ursus.Col("tv")).
+		JoinAsOf(ursus.Scan(quotes).Select(ursus.Col("ts"), ursus.Col("qv")),
+			ursus.AsOfOn(ursus.Col("ts")),
+			ursus.AsOfStrategyOpt(ursus.AsOfNearest)).
+		Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, ok, err := got.At[int64](0, "qv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || v != 1 {
+		t.Errorf("nearest picked qv=%v (ok=%v); the candidate one nanosecond away is "+
+			"row 1, not the one 292 years back", v, ok)
+	}
+}
+
+// TestAsOfSubTickToleranceMatchesOnlyExactTicks pins the floor identity: converting
+// the tolerance into ticks admits exactly what scaling the data up admitted, and no
+// fixture in the repo covered a tolerance that is not a whole number of key ticks.
+func TestAsOfSubTickToleranceMatchesOnlyExactTicks(t *testing.T) {
+	sec := dtype.Datetime(dtype.Second, "UTC")
+	for _, c := range []struct {
+		tol   string
+		match bool
+	}{
+		{"1500ms", true}, // floor(1.5e9 / 1e9) = 1 tick
+		{"500ms", false}, // floor(5e8 / 1e9) = 0 ticks: only an exact match
+		{"1s", true},
+	} {
+		trades := keyedFrame(t, "tv", sec, 10)
+		quotes := keyedFrame(t, "qv", sec, 9) // exactly one tick earlier
+
+		got, err := ursus.Scan(trades).Select(ursus.Col("ts"), ursus.Col("tv")).
+			JoinAsOf(ursus.Scan(quotes).Select(ursus.Col("ts"), ursus.Col("qv")),
+				ursus.AsOfOn(ursus.Col("ts")),
+				ursus.AsOfTolerance(ursus.Every(c.tol))).
+			Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, ok, err := got.At[int64](0, "qv")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok != c.match {
+			t.Errorf("tolerance %s over a one-tick gap: matched=%v, want %v",
+				c.tol, ok, c.match)
+		}
+	}
+}
+
+// TestAsOfCalendarToleranceRespectsDST: a calendar day across spring-forward is 23
+// elapsed hours, not 24, so a fixed 24h reaches a quote the calendar day does not.
+// Nothing asserted that the calendar branch still has a calendar.
+func TestAsOfCalendarToleranceRespectsDST(t *testing.T) {
+	const tz = "America/New_York"
+	if _, err := time.LoadLocation(tz); err != nil {
+		t.Skipf("no tzdata: %v", err)
+	}
+	// 2024-03-10 is spring-forward in New York: 02:00 jumps to 03:00, so the hour
+	// between them does not exist and the calendar day is 23 hours long.
+	trades := tsFrame(t, tz, dtype.Second, "2024-03-10T12:00:00")
+
+	match := func(quote string, tol ursus.Interval) bool {
+		t.Helper()
+		quotes := tsFrame(t, tz, dtype.Second, quote)
+		got, err := ursus.Scan(trades).Select(ursus.Col("ts"), ursus.Col("v").Alias("tv")).
+			JoinAsOf(ursus.Scan(quotes).Select(ursus.Col("ts"), ursus.Col("v").Alias("qv")),
+				ursus.AsOfOn(ursus.Col("ts")), ursus.AsOfTolerance(tol)).
+			Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, ok, err := got.At[int64](0, "qv")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+
+	// 11:30 on the 9th is 23h30m of ELAPSED time before noon on the 10th, because an
+	// hour was skipped — so a fixed 24h reaches it.
+	const outsideTheDay = "2024-03-09T11:30:00"
+	if !match(outsideTheDay, ursus.FromDuration(24*time.Hour)) {
+		t.Error("a fixed 24h did not reach a quote 23.5 elapsed hours earlier")
+	}
+	// But a calendar day back from noon on the 10th is noon on the 9th, and 11:30 is
+	// before that. A fixed count of hours cannot express this difference.
+	if match(outsideTheDay, ursus.Every("1d")) {
+		t.Error("a calendar day reached past midnight-to-midnight, so the tolerance " +
+			"is being measured in fixed hours rather than on a calendar")
+	}
+	// A quote inside the calendar day still matches, so the bound is not simply
+	// refusing everything.
+	if !match("2024-03-09T12:30:00", ursus.Every("1d")) {
+		t.Error("a calendar day did not reach a quote 30 minutes inside it")
+	}
 }

@@ -170,15 +170,10 @@ func oracleTicks(key dtype.DataType, t time.Time, up bool) int64 {
 // the oracle today, measured before any repair. Emptied by the commit that fixes it;
 // an unlisted disagreement fails, and a listed one that now agrees is stale.
 var knownToleranceFailOpen = map[string]bool{
-	"Date dur":     true, // d*npt wraps at 106752 days, so 1970 matches 2262 under 1h
-	"Datetime dur": true, // the same multiply, plus the subtraction and -MinInt64
-	"Duration dur": true, // the same multiply at second resolution
-	"Datetime cal": true, // FromTime fails near 2262 and the bound returns true
-	"Date cal":     true, // ToTime now refuses a day count that is no year, and the
-	//                       bound returns true — the same flip step 61 caused by
-	//                       making FromTime honest, one conversion over
-	"Duration cal": true, // ToTime refuses a Duration, so the tolerance is inert
-	"Time cal":     true, // a calendar bound leaves [0, 24h) in both directions
+	// Empty since the tolerance is measured in the key's own ticks and an
+	// unrepresentable bound saturates. Seven shapes were listed here — Date, Datetime
+	// and Duration under a fixed tolerance, and Date, Datetime, Duration and Time
+	// under a calendar one — each measured before the repair; see step-63-as-built.md.
 }
 
 func failShape(key dtype.DataType, tc toleranceCase) string {
@@ -203,12 +198,18 @@ func TestAsOfToleranceAgreesWithTheOracle(t *testing.T) {
 		for _, tc := range asOfTolerances() {
 			sink := &asOfBuildSink{keyType: key, tolerance: tc.tol, allowExact: true}
 			sink.loc = temporalLocation(key)
+			// Through prepareTolerance, not by filling tolTicks here: a sink built by
+			// hand would leave it zero and the sweep would exercise a path production
+			// never takes.
+			if err := sink.prepareTolerance(); err != nil {
+				t.Fatalf("%s tol=%s: %v", key, tc.label, err)
+			}
 
 			for _, a := range asOfProbes {
 				for _, b := range asOfProbes {
 					left, right := fitTick(key, a), fitTick(key, b)
 					want := oracleTolerance(key, tc, left, right)
-					got := sink.withinTolerance(left, right)
+					got, err := sink.withinTolerance(left, right)
 					compared++
 
 					if seen[key.String()] == nil {
@@ -220,13 +221,12 @@ func TestAsOfToleranceAgreesWithTheOracle(t *testing.T) {
 						subTickCell++
 					}
 
-					agrees := (want == within) == got
+					// A question with no answer must not be answered: a refusal is
+					// the only agreement. Every one of these used to return true,
+					// which made the tolerance silently inert.
+					agrees := (want == within) == got && err == nil
 					if want == meaningless {
-						// A question with no answer must not be answered. Today every
-						// one of these returns true — the tolerance silently goes
-						// inert — so ANY bool is a disagreement; after the fix the
-						// question is refused before it is ever asked.
-						agrees = false
+						agrees = err != nil
 					}
 					if agrees {
 						continue
@@ -236,7 +236,7 @@ func TestAsOfToleranceAgreesWithTheOracle(t *testing.T) {
 					if !knownToleranceFailOpen[shape] && len(wrong) < 12 {
 						wrong = append(wrong, key.String()+" tol="+tc.label+
 							" left="+strconv.FormatInt(left, 10)+" right="+strconv.FormatInt(right, 10)+
-							": engine="+boolStr(got)+", oracle="+want.String())
+							": engine="+boolStr(got)+errStr(err)+", oracle="+want.String())
 					}
 				}
 			}
@@ -272,6 +272,13 @@ func TestAsOfToleranceAgreesWithTheOracle(t *testing.T) {
 		}
 	}
 	t.Logf("keys=%d comparisons=%d shapes=%d", len(keys), compared, len(observed))
+}
+
+func errStr(err error) string {
+	if err == nil {
+		return ""
+	}
+	return " (refused)"
 }
 
 func boolStr(b bool) string {

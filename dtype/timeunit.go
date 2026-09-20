@@ -53,8 +53,14 @@ func (u TimeUnit) Finer(v TimeUnit) bool { return u > v }
 // one place. Date is included at whole days: it stores days since the epoch, so
 // its tick is 86400 seconds even though it carries no TimeUnit of its own.
 //
-// The widest value is Date's 8.64e13, so a tick count times this stays inside
-// int64 for any instant within ~10^5 years of the epoch.
+// The widest value is Date's 8.64e13, and multiplying a tick count by it is how a
+// caller loses. That product leaves int64 at 106_751 ticks — 292 years for a Date,
+// and the same 292 years for every Datetime unit, because the product is a
+// nanosecond count either way. The as-of join scaled its keys up like that and
+// matched two dates three centuries apart against a one-hour tolerance; the fix was
+// to scale the TOLERANCE down into ticks instead, where nothing can overflow. This
+// comment used to claim the product was safe within ~10^5 years, which is the false
+// premise that made it look fine.
 func (d DataType) NanosPerTick() (int64, bool) {
 	switch d.ID() {
 	case TypeDate:
