@@ -2,6 +2,7 @@ package expr
 
 import (
 	"strconv"
+	"sync/atomic"
 
 	"github.com/advenn/ursus/dtype"
 )
@@ -49,9 +50,11 @@ type UDFImpl interface{ UDFKernel() }
 // # Name is required, and that is a correctness argument rather than a style one
 //
 // Node.String is load-bearing: "it appears in Explain output, in golden test files,
-// and in error messages". Worse, three separate maps deduplicate expressions on
-// their rendering — plan.resolveWindow's temporaries, physical.extractAggs' byKey,
-// and physical's partition sharing — and names_test.go states the consequence:
+// and in error messages". Worse, FOUR maps deduplicate expressions on their
+// rendering, over three code sites, because extractAggs is instantiated twice —
+// plan.resolveWindow's temporaries, physical.extractAggs' byKey for a hash
+// aggregate AND for a temporal group, and physical's partition sharing — and
+// names_test.go states the consequence:
 // "two expressions that RENDER THE SAME become one computation, and both names get
 // the first one's answer".
 //
@@ -63,6 +66,12 @@ type UDFImpl interface{ UDFKernel() }
 //
 // A monotonic counter would deduplicate correctly too, and would make every golden
 // plan file depend on allocation order. So: a name, supplied by the caller.
+//
+// That objection is about a counter that RENDERS. The id field below is a monotonic
+// counter which never renders — String is unchanged and the golden plans with it —
+// and it is what lets plan.CheckUDFNames refuse a collision instead of merging one.
+// The name still does the deduplicating; the id only tells the planner when two
+// names that look alike are not.
 type UDF struct {
 	Child Node
 
@@ -78,7 +87,51 @@ type UDF struct {
 	Kind string
 
 	Impl UDFImpl
+
+	// id is what tells two UDFs apart when their renderings cannot. Unexported, so
+	// NewUDF is the only way to get one; a node built by a bare composite literal
+	// carries 0, and CheckUDFNames reports that as an ursus bug rather than
+	// treating two unidentified UDFs as the same one.
+	//
+	// It is NOT derived from Impl, and the obvious derivation does not work.
+	// reflect.ValueOf(impl).Pointer() returns the same CODE pointer for every
+	// MapElements udf in the program — they all close over the one func literal in
+	// udf.go — so a check built on it matches always and detects nothing. Four
+	// design documents in context_files record that remedy; it is a trap, and step
+	// 65's as-built says so. Nor can Impl itself be compared: == on two UDFImpl
+	// values compiles, because the field is an interface, and PANICS at runtime
+	// with "comparing uncomparable type kernel.ColumnUDF".
+	//
+	// It must survive `c := *t`, which is how Rebuild here and extractAggs in
+	// internal/physical copy this node — node-POINTER identity would be useless,
+	// because those make a fresh pointer for the same udf on every rewrite. A plain
+	// field is carried across for free, which is the whole reason it is one.
+	//
+	// It must also be SHARED by the copies multi-column expansion makes:
+	// Col("a","b").MapElements("neg", ...) becomes two nodes with one name and one
+	// closure, which is legal and must stay legal. Rebuild's struct copy gives them
+	// one id, so the check never sees them as a collision.
+	id uint64
 }
+
+// udfSeq mints UDF identities. Monotonic because it never has to be stable across
+// runs — only distinct within one.
+var udfSeq atomic.Uint64
+
+// NewUDF builds a UDF node with a fresh identity, and is the only way to mint one.
+//
+// The fields stay exported because plan and physical read them and copy the struct
+// wholesale. The id does not, so it cannot be forged onto a different Impl.
+func NewUDF(child Node, out dtype.DataType, name, kind string, impl UDFImpl) *UDF {
+	// Add returns the NEW value, so the first id is 1 and 0 is reliably "never
+	// minted by this constructor".
+	return &UDF{Child: child, Out: out, Name: name, Kind: kind, Impl: impl,
+		id: udfSeq.Add(1)}
+}
+
+// ID is the node's identity: distinct for every UDF the constructor ever built, and
+// EQUAL for every copy of one. Zero means the node did not come from NewUDF.
+func (u *UDF) ID() uint64 { return u.id }
 
 func (u *UDF) node()            {}
 func (u *UDF) Children() []Node { return []Node{u.Child} }

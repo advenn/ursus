@@ -177,13 +177,9 @@ func (e Expr) MapBatches[In, Out Literal](name string, out DataType,
 
 // udf wraps the erased closure in a node. The one place the two methods converge.
 func (e Expr) udf(name, kind string, out DataType, impl kernel.ColumnUDF) Expr {
-	return wrap(&expr.UDF{
-		Child: e.n,
-		Out:   out,
-		Name:  name,
-		Kind:  kind,
-		Impl:  impl,
-	})
+	// Through NewUDF, not a literal: it mints the identity that tells this udf from
+	// another one sharing its name, which a rendering cannot.
+	return wrap(expr.NewUDF(e.n, out, name, kind, impl))
 }
 
 func checkUDF(name string, nilFn bool, kind string) error {
