@@ -1,6 +1,7 @@
 package dtype
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -164,11 +165,29 @@ func Every(s string) Interval {
 		}
 		s = s[len(u.suffix):]
 
-		out.months += int32(v) * u.months
-		out.days += int32(v) * u.days
-		out.nanos += v * u.nanos
+		months, ok := addMul(int64(out.months), v, int64(u.months), math.MaxInt32)
+		if !ok {
+			return Interval{err: everyErr(raw, "%d%s overflows the month count",
+				v, u.suffix)}
+		}
+		days, ok := addMul(int64(out.days), v, int64(u.days), math.MaxInt32)
+		if !ok {
+			return Interval{err: everyErr(raw, "%d%s overflows the day count",
+				v, u.suffix)}
+		}
+		nanos, ok := addMul(out.nanos, v, u.nanos, math.MaxInt64)
+		if !ok {
+			return Interval{err: everyErr(raw, "%d%s overflows the nanosecond count",
+				v, u.suffix)}
+		}
+		out.months, out.days, out.nanos = int32(months), int32(days), nanos
 	}
 
+	// No overflow check on the negation, and that is not an omission. addMul bounds
+	// every component to [0, limit] where limit is the type's MAXIMUM, so negating
+	// lands in [-limit, 0] and can never reach MinInt32 or MinInt64 — the one place
+	// negation is a fixed point. Bounding the accumulation is what makes this line
+	// safe, which is why the bound is stated as the max rather than the min.
 	if neg {
 		out.months, out.days, out.nanos = -out.months, -out.days, -out.nanos
 	}
@@ -176,6 +195,30 @@ func Every(s string) Interval {
 		return Interval{err: everyErr(raw, "it spans no time")}
 	}
 	return out
+}
+
+// addMul returns acc + v*mult, or false if that leaves [0, limit].
+//
+// Every term is non-negative — the parser takes digits only, and the sign belongs to
+// the whole interval rather than to a component — so one comparison bounds the
+// product and one bounds the sum, with neither able to overflow on the way. The
+// multiply and the add are SEPARATE failures: "178956970y" fits and "178956970y" a
+// second time does not, which a check on the product alone would miss.
+//
+// limit is the type's maximum rather than its minimum, deliberately: that is what
+// keeps the negation at the end of Every a total operation. See the comment there.
+func addMul(acc, v, mult, limit int64) (int64, bool) {
+	if mult == 0 {
+		return acc, true
+	}
+	if v > limit/mult { // floor division, so this is exactly v*mult > limit
+		return 0, false
+	}
+	p := v * mult
+	if acc > limit-p {
+		return 0, false
+	}
+	return acc + p, true
 }
 
 func cutUnit(s string) (struct {

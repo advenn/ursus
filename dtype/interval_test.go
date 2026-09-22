@@ -349,18 +349,10 @@ func TestIntervalRenderingIsNotAlwaysParseable(t *testing.T) {
 		t.Error("the defect is that this does NOT parse back")
 	}
 
-	// MinInt32 months, where negation is a fixed point, reachable from Every in
-	// twelve characters: 536870912 * 12 is 2^31 modulo 2^32.
-	wrapped := dtype.Every("536870912y")
-	if wrapped.Err() != nil {
-		t.Fatalf("the fixture stopped wrapping: %v", wrapped.Err())
-	}
-	if got := wrapped.String(); got != "--178956970y-8mo" {
-		t.Errorf("Every(%q) renders %q, want the defect %q",
-			"536870912y", got, "--178956970y-8mo")
-	}
-	// And it is its own negation, which no interval should be.
-	if wrapped.Neg() != wrapped {
-		t.Error("the defect is that Neg() returns the value unchanged")
+	// The parser's route to MinInt32 months — 536870912 * 12 is 2^31 modulo 2^32,
+	// twelve characters — is closed. What remains is everything that does not go
+	// through the parser.
+	if dtype.Every("536870912y").Err() == nil {
+		t.Error("Every no longer refuses a count that wraps to MinInt32 months")
 	}
 }

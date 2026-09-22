@@ -108,38 +108,7 @@ func componentOf(iv Interval, field string) int64 {
 // Thirty entries, and they are EVERY unrepresentable input the sweep reaches — not
 // one of them is refused today. That is the measurement: the bound does not exist,
 // rather than existing and leaking.
-var knownEveryOverflows = map[string]bool{
-	"1431655764q": true,
-	"1431655766q": true,
-	"153722868m":  true,
-	"153722869m":  true,
-	"178956971y":  true,
-	"178956972y":  true,
-	"2147483646q": true,
-	"2147483647h": true,
-	"2147483647m": true,
-	"2147483647q": true,
-	"2147483647w": true,
-	"2147483647y": true,
-	"2562048h":    true,
-	"2562049h":    true,
-	"306783379w":  true,
-	"306783380w":  true,
-	"307445734m":  true,
-	"307445736m":  true,
-	"357913940y":  true,
-	"357913942y":  true,
-	"461168601m":  true,
-	"5124094h":    true,
-	"5124096h":    true,
-	"536870910y":  true,
-	"613566756w":  true,
-	"613566758w":  true,
-	"715827883q":  true,
-	"715827884q":  true,
-	"7686141h":    true,
-	"920350134w":  true,
-}
+var knownEveryOverflows = map[string]bool{}
 
 func TestEveryAgreesWithTheMagnitudeOracle(t *testing.T) {
 	var checked, wrapped int
@@ -203,15 +172,18 @@ func TestEveryAgreesWithTheMagnitudeOracle(t *testing.T) {
 // operations and a fix that checks only one leaves this behind.
 func TestEverySumsAreBoundedToo(t *testing.T) {
 	for _, in := range []string{
-		"2000000000ms2000000000ms", // nanos: 2e18 + 2e18 exceeds int64
-		"178956970y178956970y",     // months: each fits, the sum does not
-		"306783378w306783378w",     // days: likewise
+		// Each term is the largest hour count that fits (MaxInt64/3.6e12), so each
+		// passes the multiply check and only their SUM does not. My first attempt
+		// here used milliseconds and did not overflow at all: 2e9 ms is 2e15 ns,
+		// nowhere near int64, and ParseInt caps a count at 2^31 so no single ms
+		// term can reach it.
+		"2562047h2562047h",
+		"178956970y178956970y", // months: each fits, the sum does not
+		"306783378w306783378w", // days: likewise
 	} {
-		// Asserting the DEFECT, as the ratchet above does: each of these parses
-		// today and must not. The commit that bounds the arithmetic flips this.
-		if iv := Every(in); iv.Err() != nil {
-			t.Errorf("%s now refuses (%v) — flip this test to assert the refusal",
-				in, iv.Err())
+		if iv := Every(in); iv.Err() == nil {
+			t.Errorf("%s parsed to {%d,%d,%d}; the sum is not representable",
+				in, iv.months, iv.days, iv.nanos)
 		}
 	}
 }
@@ -287,4 +259,58 @@ func FuzzEvery(f *testing.F) {
 				iv.months, iv.days, iv.nanos)
 		}
 	})
+}
+
+// TestEveryNegationIsTotal is why the accumulation is bounded by each type's MAXIMUM
+// rather than its minimum.
+//
+// Every holds its three accumulators non-negative — the parser refuses a
+// per-component sign, so the '-' belongs to the whole interval and is applied once
+// at the end. Capping at MaxInt32 therefore means the negation lands in
+// [-MaxInt32, 0] and can never reach MinInt32, the one int32 with no negation.
+//
+// The cost is one representable value per component, and the purchase is a negation
+// that needs no check of its own. Widening the cap by one to include MinInt32 would
+// be invisible to every other test here, because they all parse positive counts.
+func TestEveryNegationIsTotal(t *testing.T) {
+	// The compound route, which no single term can take: reaching MinInt32 exactly
+	// needs v*mult == 2^31, and no unit's multiplier divides it with v inside the
+	// count's own int32 bound. Two terms do. Without this case, widening the cap by
+	// one to admit MinInt32 is invisible to every test in this file.
+	for _, in := range []string{"1073741824mo1073741824mo", "-1073741824mo1073741824mo"} {
+		if iv := Every(in); iv.Err() == nil {
+			t.Errorf("%s parsed to {%d,%d,%d}; the month total is 2^31, which is "+
+				"MinInt32 once stored and has no negation",
+				in, iv.months, iv.days, iv.nanos)
+		}
+	}
+
+	var checked int
+	for _, a := range axes(t) {
+		for _, v := range counts(a) {
+			for _, in := range []string{
+				strconv.FormatInt(v, 10) + a.suffix,
+				"-" + strconv.FormatInt(v, 10) + a.suffix,
+			} {
+				iv := Every(in)
+				if iv.Err() != nil {
+					continue
+				}
+				checked++
+				if iv.months == math.MinInt32 || iv.days == math.MinInt32 ||
+					iv.nanos == math.MinInt64 {
+					t.Errorf("%s reached a component's minimum {%d,%d,%d}, where "+
+						"negation is a fixed point", in, iv.months, iv.days, iv.nanos)
+				}
+				if twice := iv.Neg().Neg(); twice != iv {
+					t.Errorf("%s: Neg().Neg() = {%d,%d,%d}, want {%d,%d,%d}",
+						in, twice.months, twice.days, twice.nanos,
+						iv.months, iv.days, iv.nanos)
+				}
+			}
+		}
+	}
+	if checked < 80 {
+		t.Errorf("only %d inputs parsed; the sweep is not reaching both signs", checked)
+	}
 }
