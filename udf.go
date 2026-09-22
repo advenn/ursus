@@ -44,12 +44,17 @@ import (
 // called for it. That is deliberate — the alternative hands fn a zero value it
 // cannot distinguish from a real one. Use MapBatches when the null matters.
 //
-// # name must be unique within the query, and this is not cosmetic
+// # name must be unique within the query, and this is CHECKED
 //
-// Three separate parts of the engine deduplicate expressions by their rendered
-// form, and a Go closure has no rendered form. Two different functions sharing a
-// name over the same column are one computation to the planner, and both results
-// come from whichever it saw first. The name is what keeps them apart.
+// Four maps in the engine deduplicate expressions by their rendered form, and a Go
+// closure has no rendered form. Two different functions sharing a name would be one
+// computation to the planner, with both results coming from whichever it saw first.
+//
+// plan.CheckUDFNames refuses that at plan time, before any data is read, so the
+// sentence above is a guarantee rather than advice. Two udfs with one name are an
+// error; ONE udf used twice is not, so if two calls are meant to be the same
+// function, hold the Expr in a variable and use it twice rather than calling a
+// helper that builds a fresh closure each time.
 //
 // # fn must be safe to call from several goroutines
 //
@@ -186,7 +191,7 @@ func checkUDF(name string, nilFn bool, kind string) error {
 	if name == "" {
 		return uerr.New(uerr.KindValue, kind, "a udf needs a name").
 			Hint("the name distinguishes this function from every other udf in " +
-				"the query; two udfs sharing one name become one computation")
+				"the query, and plan.CheckUDFNames refuses two that share one")
 	}
 	if nilFn {
 		return uerr.New(uerr.KindValue, kind, "udf %q has no function", name)

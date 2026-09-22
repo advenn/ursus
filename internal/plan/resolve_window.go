@@ -23,6 +23,12 @@ const winTempPrefix = "__win"
 // windows that rendered the same would become one computation and every row would
 // get the wrong partition's answer.
 //
+// A udf is the one expression whose rendering cannot distinguish it — a Go closure
+// has no printable identity — so what makes this dedup safe in its presence is
+// plan.CheckUDFNames, which refuses two udfs sharing a name before this runs. It
+// has to run before, not after: the merge below DROPS the losing subtree rather
+// than sharing it, so afterwards the second udf is not in the tree to be found.
+//
 // It returns input unchanged and exprs unchanged when there is no window, so the
 // ordinary path pays one HasWindow walk and nothing else.
 func extractWindows(input Node, exprs []expr.Node, op string) (Node, []expr.Node, []string, error) {

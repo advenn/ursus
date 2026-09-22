@@ -16,11 +16,16 @@ import (
 //
 // # Why an empty name is a wrong answer, not a cosmetic one
 //
-// Three maps key on a rendered String():
+// FOUR maps key on a rendered String(), over three code sites, because
+// extractAggs is instantiated once per aggregate and once per temporal group:
 //
 //	internal/plan/resolve_window.go   window temporaries
 //	internal/physical/agg.go          aggregate temporaries
+//	internal/physical/tempgroup.go    the same, for GroupByDynamic and Rolling
 //	internal/physical/window.go       partition-key sharing
+//
+// The fourth went unlisted here, in udf.go and in expr/udf.go at once, until step
+// 65 counted them — which is the same way an enum name goes quiet.
 //
 // So two expressions that RENDER THE SAME become one computation, and both names
 // get the first one's answer. Step 7 shipped exactly that — Agg.String() hid its

@@ -495,6 +495,8 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 		return nil, err
 	}
 
+	// The second instantiation of extractAggs' dedup, one per temporal group. It is
+	// the map that three doc comments omitted while calling the total "three".
 	var specs []aggSpec
 	byKey := map[string]string{}
 	rewritten := make([]expr.Node, len(t.Aggs))
