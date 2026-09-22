@@ -2,6 +2,7 @@ package dtype_test
 
 import (
 	"errors"
+	"math"
 	"testing"
 	"time"
 
@@ -330,8 +331,8 @@ func mustStamp(t *testing.T, s string) time.Time {
 	return v
 }
 
-// TestIntervalRenderingIsNotAlwaysParseable records two intervals whose String()
-// output Every cannot read back, both reachable without the parser.
+// TestIntervalCannotBuildWhatItCannotRender: the two intervals whose String() output
+// Every could not read back are no longer constructible.
 //
 // String() writes a leading '-' when Negative() is true and then negates all three
 // components — which is right only when the non-zero ones share a sign. Negative()
@@ -339,14 +340,29 @@ func mustStamp(t *testing.T, s string) time.Time {
 //
 // Both assertions are of the WRONG answer. The commit that makes these values
 // unconstructible turns them into assertions that they cannot be built.
-func TestIntervalRenderingIsNotAlwaysParseable(t *testing.T) {
-	// Mixed sign, no overflow anywhere: one month forward and one day back.
+func TestIntervalCannotBuildWhatItCannotRender(t *testing.T) {
+	// Mixed sign, no overflow anywhere: one month forward and one day back. It used
+	// to build and render "--1mo1d"; it is refused at construction now, so String's
+	// single hoisted '-' is correct for everything that exists.
 	mixed := dtype.IntervalOf(1, -1, 0)
-	if got := mixed.String(); got != "--1mo1d" {
-		t.Errorf("IntervalOf(1, -1, 0) renders %q, want the defect %q", got, "--1mo1d")
+	if mixed.Err() == nil {
+		t.Errorf("IntervalOf(1, -1, 0) built and renders %q", mixed.String())
 	}
-	if dtype.Every(mixed.String()).Err() == nil {
-		t.Error("the defect is that this does NOT parse back")
+	// The most negative Duration, which has no negation, likewise.
+	if dtype.FromDuration(time.Duration(math.MinInt64)).Err() == nil {
+		t.Error("FromDuration(MinInt64) built; it is its own Neg()")
+	}
+	// And the minimum reached directly rather than through a sign clash. This is a
+	// separate arm: it is not mixed — nothing in it is positive — so the sign check
+	// above lets it through and only the minimum check stops it.
+	for _, iv := range []dtype.Interval{
+		dtype.IntervalOf(math.MinInt32, 0, 0),
+		dtype.IntervalOf(0, math.MinInt32, 0),
+		dtype.IntervalOf(0, 0, math.MinInt64),
+	} {
+		if iv.Err() == nil {
+			t.Errorf("%s built; it is its own Neg()", iv)
+		}
 	}
 
 	// The parser's route to MinInt32 months — 536870912 * 12 is 2^31 modulo 2^32,

@@ -18,6 +18,7 @@ package kernel_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,27 @@ import (
 	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/uerr"
 )
+
+// TestTruncateRefusalSaysWhyTheIntervalIsBad. An interval that failed to BUILD is
+// zero-valued, so the IsZero check below would refuse it anyway — with "truncate
+// needs a positive interval, got <invalid>", which says nothing. The Err() check
+// ordered ahead of it is what keeps the reason, and ordering is the whole of it.
+func TestTruncateRefusalSaysWhyTheIntervalIsBad(t *testing.T) {
+	args := []expr.Node{&expr.Col{Name: "c"}}
+	for _, v := range []int64{1, -1, 0} {
+		args = append(args, &expr.Lit{Value: v, DT: dtype.Int64})
+	}
+	_, err := expr.ResolveCall(&expr.Call{Fn: expr.FnDtTruncate, Args: args}, dtype.Date)
+	if err == nil {
+		t.Fatal("a mixed-sign interval must be refused")
+	}
+	if !strings.Contains(err.Error(), "mixes signs") {
+		t.Errorf("the refusal should say why, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "<invalid>") {
+		t.Errorf("the refusal rendered the interval instead of reporting it: %v", err)
+	}
+}
 
 func TestTruncateRefusalsAgree(t *testing.T) {
 	const n = 3
@@ -56,6 +78,11 @@ func TestTruncateRefusalsAgree(t *testing.T) {
 		{"1mo1d", []any{int64(1), int64(1), int64(0)}},
 		{"zero", []any{int64(0), int64(0), int64(0)}},
 		{"-1h", []any{int64(0), int64(0), int64(-time.Hour)}},
+		// Mixed sign, which dtype.IntervalOf refuses to build at all. It reaches
+		// both sites only through a hand-built call like this one — DtExpr.Truncate
+		// checks Err() before it ever gets here — so this row is what drives the
+		// Err() check the two of them gained, and what holds them in step.
+		{"1mo-1d", []any{int64(1), int64(-1), int64(0)}},
 		{"missing", nil},
 	}
 

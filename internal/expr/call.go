@@ -441,6 +441,13 @@ func truncateOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 	// does no validation, so `Truncate(time.Duration(0))` and `Truncate(-time.Hour)`
 	// carry no error out of DtExpr.Truncate's iv.Err() check — they planned, rendered
 	// in Explain, and failed at Collect.
+	// Before the range check, because an interval that failed to BUILD renders as
+	// <invalid> and the message below would then say nothing useful. Ordering is
+	// the whole of it: after, this would be unreachable, since a refused interval
+	// is zero-valued and IsZero fires first.
+	if err := iv.Err(); err != nil {
+		return dtype.Null, err
+	}
 	if iv.IsZero() || iv.Negative() {
 		return dtype.Null, uerr.New(uerr.KindValue, "dt",
 			"truncate needs a positive interval, got %s", iv).

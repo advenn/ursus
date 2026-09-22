@@ -74,19 +74,33 @@ func (i Interval) Negative() bool {
 
 // Neg reverses the interval. Used to walk a window grid backwards and to turn a
 // window's width into the offset from its end to its start.
+//
+// Total, with no check, and that rests on an invariant rather than on luck: no
+// interval holds a component at its type's minimum. Every bounds its accumulators
+// by each type's MAXIMUM, so a negated total lands in [-max, 0]; IntervalOf and
+// FromDuration refuse the minimum outright. A guard here could not fire, and this
+// codebase treats an unreachable guard as protection that is not there.
 func (i Interval) Neg() Interval {
 	return Interval{months: -i.months, days: -i.days, nanos: -i.nanos, err: i.err}
 }
 
 // FromDuration builds an absolute interval. The result is never calendar-aware —
 // 24*time.Hour is twenty-four hours, not one day.
-func FromDuration(d time.Duration) Interval { return Interval{nanos: int64(d)} }
-
-// Months builds a calendar interval of n months. Years and quarters are months.
-func MonthsInterval(n int32) Interval { return Interval{months: n} }
-
-// DaysInterval builds a calendar interval of n days.
-func DaysInterval(n int32) Interval { return Interval{days: n} }
+//
+// The single most negative Duration is refused, and it is the only one. MinInt64 has
+// no negation, so an interval holding it would be its own Neg() — see the invariant
+// on Neg. Refusing the one value keeps that invariant true of every interval that
+// exists, which is worth more than a Duration nobody means: it is about -292 years,
+// and every consumer refuses it as negative anyway.
+func FromDuration(d time.Duration) Interval {
+	if int64(d) == math.MinInt64 {
+		return Interval{err: uerr.New(uerr.KindValue, "interval",
+			"a duration of %d nanoseconds has no negation", int64(d)).
+			Hint("the most negative Duration cannot be reversed; use -(MaxInt64) " +
+				"if a bound is what you want")}
+	}
+	return Interval{nanos: int64(d)}
+}
 
 // IntervalOf rebuilds an interval from its three components.
 //
@@ -96,6 +110,30 @@ func DaysInterval(n int32) Interval { return Interval{days: n} }
 // literal path about a struct type, which would be a second construction route for a
 // value whose whole point is that its three fields are not interchangeable.
 func IntervalOf(months, days int32, nanos int64) Interval {
+	// Two invariants, and this is the only construction route that could break
+	// them, now that Every bounds its accumulation and the two unvalidated
+	// helpers beside this one are gone.
+	//
+	// No component at its type's minimum, so every interval can be negated. And no
+	// MIXED sign, because Negative() is an OR over the three fields while String()
+	// hoists a single leading '-' — so an interval of one month minus one day would
+	// render "--1mo1d", which Every cannot read back. A mixed span is a real
+	// quantity and some databases store one; it is simply not in this notation, and
+	// printing it as though it were is the lie.
+	if months == math.MinInt32 || days == math.MinInt32 || nanos == math.MinInt64 {
+		return Interval{err: uerr.New(uerr.KindValue, "interval",
+			"interval component {%d, %d, %d} is at its type's minimum and has no "+
+				"negation", months, days, nanos)}
+	}
+	pos := months > 0 || days > 0 || nanos > 0
+	neg := months < 0 || days < 0 || nanos < 0
+	if pos && neg {
+		return Interval{err: uerr.New(uerr.KindValue, "interval",
+			"interval {%d months, %d days, %d nanoseconds} mixes signs",
+			months, days, nanos).
+			Hint("an interval runs one way; build the two parts separately if you " +
+				"need to add one and subtract the other")}
+	}
 	return Interval{months: months, days: days, nanos: nanos}
 }
 
@@ -242,7 +280,15 @@ func everyErr(raw, format string, args ...any) error {
 		Hint(`units are ns, us, ms, s, m (minutes), h, d, w, mo (months), q, y`)
 }
 
-// String renders the interval in Every's own notation, so String and Every round-trip.
+// String renders the interval in Every's own notation, so String and Every round-trip
+// over every interval that can be built.
+//
+// It hoists ONE leading '-' and then negates all three components, which is correct
+// because no interval mixes signs — IntervalOf refuses that pair, and Every cannot
+// produce it since the parser gives the sign to the whole interval rather than to a
+// component. And the negation cannot be a fixed point, by the invariant on Neg.
+// Both halves used to be false: IntervalOf(1, -1, 0) rendered "--1mo1d", and a
+// count that wrapped to MinInt32 months rendered "--178956970y-8mo".
 func (i Interval) String() string {
 	if i.err != nil {
 		return "<invalid>"

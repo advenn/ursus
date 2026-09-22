@@ -215,11 +215,6 @@ func join(xs []string) string {
 // The third is what catches the MinInt32 fixed point, which the round-trip alone
 // would miss on a value whose String() happens to re-parse. The second is what
 // catches the "--178956970y-8mo" rendering.
-// knownBadRenderings names the seeds whose rendering does not round-trip today.
-var knownBadRenderings = map[string]bool{
-	"536870912y": true,
-}
-
 func FuzzEvery(f *testing.F) {
 	for _, s := range []string{
 		"1h", "1y6mo", "-1d", "3mo", "1500ms", "0s", "", "-", "banana", "1h30",
@@ -232,13 +227,6 @@ func FuzzEvery(f *testing.F) {
 	f.Fuzz(func(t *testing.T, in string) {
 		iv := Every(in) // must not panic
 		if iv.Err() != nil {
-			return
-		}
-		if knownBadRenderings[in] {
-			// Listed because it fails TODAY, for the reason this step exists: the
-			// count wraps to MinInt32 months, where negation is a fixed point, so
-			// String() writes a leading '-' and then negates into itself. Emptied
-			// by the commit that bounds the arithmetic.
 			return
 		}
 		rendered := iv.String()

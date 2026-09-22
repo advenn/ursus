@@ -259,6 +259,12 @@ func truncateTemporal(name string, out, dt dtype.DataType, ticks []int64,
 	dd, _ := argInt(args, 1)
 	ns, _ := argInt(args, 2)
 	iv := dtype.IntervalOf(int32(mo), int32(dd), ns)
+	// Ahead of the range check, for the reason expr's truncateOut gives: a refused
+	// interval is zero-valued, so IsZero would fire first and the message would
+	// lose why. TestTruncateRefusalsAgree holds the two in step.
+	if err := iv.Err(); err != nil {
+		return nil, err
+	}
 	if iv.IsZero() || iv.Negative() {
 		return nil, uerr.New(uerr.KindValue, "dt",
 			"truncate needs a positive interval, got %s", iv).
