@@ -33,6 +33,13 @@ import (
 // optimizer, rather than teaching every rule about matchers, is what keeps the
 // rules simple and correct by default.
 func Resolve(ctx context.Context, n Node) (Node, error) {
+	// FIRST, before anything rewrites the tree. extractWindows runs inside the walk
+	// below and DELETES the losing subtree on a merge, so a udf-name check placed
+	// after it passes on the very query it exists to refuse. CheckUDFNames says so
+	// at length.
+	if err := CheckUDFNames(n); err != nil {
+		return nil, err
+	}
 	return TransformUp(n, func(x Node) (Node, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err

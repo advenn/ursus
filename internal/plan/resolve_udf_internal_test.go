@@ -12,10 +12,13 @@ package plan
 // the tests that keep the others honest.
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // udfNode builds a UDF over col("v") with the given name. The Impl is nil, which is
@@ -93,5 +96,59 @@ func TestPartitionKeysRenderAlike(t *testing.T) {
 	if sum.String() == max.String() {
 		t.Fatal("the two windows render alike, so the window temporary map would " +
 			"merge them before the partition map could")
+	}
+}
+
+// TestCheckUDFNamesRejectsAnUnidentifiedUDF pins the detectable failure mode.
+//
+// A composite literal outside internal/expr still compiles — Go forbids NAMING an
+// unexported field, not omitting it — so a UDF built without expr.NewUDF carries
+// id 0. Two of those would look identical to each other, and the check would merge
+// exactly what it exists to keep apart. So it refuses instead, loudly, as an ursus
+// bug rather than a user error.
+func TestCheckUDFNamesRejectsAnUnidentifiedUDF(t *testing.T) {
+	p := &Project{Input: &Scan{}, Exprs: []expr.Node{udfNode("f")}}
+
+	err := CheckUDFNames(p)
+	if err == nil {
+		t.Fatal("a udf with no identity must be refused")
+	}
+	if !errors.Is(err, uerr.ErrInternal) {
+		t.Errorf("want an internal error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "expr.NewUDF") {
+		t.Errorf("the error should name the constructor: %v", err)
+	}
+}
+
+// TestCheckUDFNamesAcceptsOneUDFTwice: the same node in two slots is one udf, and
+// the check must not refuse it. It is reachable by holding an Expr in a variable
+// and using it twice, which is also the workaround the refusal recommends.
+func TestCheckUDFNamesAcceptsOneUDFTwice(t *testing.T) {
+	u := expr.NewUDF(&expr.Col{Name: "v"}, dtype.Int64, "f", "map_elements", nil)
+	p := &Project{Input: &Scan{}, Exprs: []expr.Node{
+		&expr.Alias{Child: u, Name: "a"},
+		&expr.Alias{Child: u, Name: "b"},
+	}}
+	if err := CheckUDFNames(p); err != nil {
+		t.Errorf("one udf used twice must be legal: %v", err)
+	}
+}
+
+// TestCheckUDFNamesRefusesTwoIdentities is the check in one line, without a query.
+func TestCheckUDFNamesRefusesTwoIdentities(t *testing.T) {
+	mk := func() expr.Node {
+		return expr.NewUDF(&expr.Col{Name: "v"}, dtype.Int64, "f", "map_elements", nil)
+	}
+	p := &Project{Input: &Scan{}, Exprs: []expr.Node{
+		&expr.Alias{Child: mk(), Name: "a"},
+		&expr.Alias{Child: mk(), Name: "b"},
+	}}
+	err := CheckUDFNames(p)
+	if err == nil {
+		t.Fatal("two different udfs named \"f\" must be refused")
+	}
+	if !strings.Contains(err.Error(), `two different udfs are both named "f"`) {
+		t.Errorf("refused for the wrong reason: %v", err)
 	}
 }
