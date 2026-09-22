@@ -52,6 +52,15 @@ test-all: test-widths
 	@echo "=== GOEXPERIMENT off (scalar only) ==="
 	GOEXPERIMENT= $(GO) test -count=$(COUNT) $(PKGS)
 
+# The interval parser is the only place a user's text becomes arithmetic, and
+# FuzzEvery is the module's only fuzz target. `make test` already runs its SEED
+# corpus — go test does that for every fuzz target — which is the part that has to
+# be deterministic. This generates, so it is opt-in and out of the pre-merge gate.
+FUZZTIME ?= 60s
+.PHONY: fuzz
+fuzz:
+	$(GO) test -run '^$$' -fuzz 'FuzzEvery' -fuzztime $(FUZZTIME) ./dtype/
+
 .PHONY: bench
 bench:
 	$(GO) test -run '^$$' -bench . -benchmem $(PKGS)
