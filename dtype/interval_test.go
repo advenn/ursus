@@ -329,3 +329,38 @@ func mustStamp(t *testing.T, s string) time.Time {
 	}
 	return v
 }
+
+// TestIntervalRenderingIsNotAlwaysParseable records two intervals whose String()
+// output Every cannot read back, both reachable without the parser.
+//
+// String() writes a leading '-' when Negative() is true and then negates all three
+// components — which is right only when the non-zero ones share a sign. Negative()
+// is an OR over the three fields, so it is not.
+//
+// Both assertions are of the WRONG answer. The commit that makes these values
+// unconstructible turns them into assertions that they cannot be built.
+func TestIntervalRenderingIsNotAlwaysParseable(t *testing.T) {
+	// Mixed sign, no overflow anywhere: one month forward and one day back.
+	mixed := dtype.IntervalOf(1, -1, 0)
+	if got := mixed.String(); got != "--1mo1d" {
+		t.Errorf("IntervalOf(1, -1, 0) renders %q, want the defect %q", got, "--1mo1d")
+	}
+	if dtype.Every(mixed.String()).Err() == nil {
+		t.Error("the defect is that this does NOT parse back")
+	}
+
+	// MinInt32 months, where negation is a fixed point, reachable from Every in
+	// twelve characters: 536870912 * 12 is 2^31 modulo 2^32.
+	wrapped := dtype.Every("536870912y")
+	if wrapped.Err() != nil {
+		t.Fatalf("the fixture stopped wrapping: %v", wrapped.Err())
+	}
+	if got := wrapped.String(); got != "--178956970y-8mo" {
+		t.Errorf("Every(%q) renders %q, want the defect %q",
+			"536870912y", got, "--178956970y-8mo")
+	}
+	// And it is its own negation, which no interval should be.
+	if wrapped.Neg() != wrapped {
+		t.Error("the defect is that Neg() returns the value unchanged")
+	}
+}
