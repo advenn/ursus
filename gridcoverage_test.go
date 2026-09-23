@@ -19,6 +19,8 @@ package ursus_test
 // everything, or starts being refused, fails as stale.
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,11 +63,10 @@ func gridCoverage(t *testing.T, lf *ursus.LazyFrame, opts ursus.DynamicOptions) 
 }
 
 // knownGridDrops names each case that loses rows today, with what it loses.
-var knownGridDrops = map[string]string{
-	"every=1s offset=2h":   "142 of 200 — the back-step gave up after 4096 of 7200",
-	"every=1s offset=10h":  "0 of 200 — the grid starts 8.86h past a 3h span",
-	"every=1m offset=100h": "0 of 200 — the same, one unit coarser",
-}
+// Empty since the grid refuses rather than truncating. The three entries were
+// every=1s offset=2h (142 of 200), every=1s offset=10h and every=1m offset=100h
+// (0 of 200 each), measured before the repair; see step-67-as-built.md.
+var knownGridDrops = map[string]string{}
 
 func TestGridCoversEveryRow(t *testing.T) {
 	const rows = 200
@@ -121,5 +122,84 @@ func TestGridCoversEveryRow(t *testing.T) {
 					"range, so every row belongs to some window", covered, rows)
 			}
 		})
+	}
+}
+
+// TestGridTooLargeIsRefused: a grid the operator cannot build is an error, not a
+// prefix of itself.
+//
+// Both shapes are CHEAP to refuse, which is the point of predicting the count
+// instead of discovering it. Two rows a year apart with a one-second every want
+// 31.5 million windows; at 24 bytes each that is 756 MiB of grid derived from two
+// rows of input, and the old code built 16.7 million of them and returned.
+func TestGridTooLargeIsRefused(t *testing.T) {
+	lo := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	frame := func(hi time.Time) *ursus.LazyFrame {
+		return ursus.Frame(
+			ursus.Values("ts", []time.Time{lo, hi}),
+			ursus.Values("v", []int64{1, 2}))
+	}
+
+	for _, c := range []struct {
+		name   string
+		hi     time.Time
+		every  string
+		offset string
+	}{
+		{"a year of seconds", lo.AddDate(1, 0, 0), "1s", ""},
+		{"a day of microseconds", lo.AddDate(0, 0, 1), "1us", ""},
+		// The grid walks forward from a negative offset, so this one never touches
+		// the back-step and reaches the ceiling on the forward walk alone.
+		{"a negative offset of a year", lo.Add(time.Hour), "1s", "-1y"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			opts := ursus.DynamicOptions{Every: ursus.Every(c.every)}
+			if c.offset != "" {
+				opts.Offset = ursus.Every(c.offset)
+			}
+			_, err := frame(c.hi).GroupByDynamic(ursus.Col("ts"), opts).
+				Agg(ursus.Len().Alias("n")).Collect(t.Context())
+
+			if err == nil {
+				t.Fatal("a grid of tens of millions of windows must be refused")
+			}
+			if !errors.Is(err, ursus.ErrResource) {
+				t.Errorf("want ErrResource so a caller can tell this from a bad "+
+					"query, got %v", err)
+			}
+			// The message must be about the GRID, not the input — the input is two
+			// rows, and "buffers its whole input" would be a false diagnosis.
+			if !strings.Contains(err.Error(), "window grid") {
+				t.Errorf("the refusal should name the grid: %v", err)
+			}
+			if strings.Contains(err.Error(), "buffers its whole input") {
+				t.Errorf("the refusal blames the input, which is two rows: %v", err)
+			}
+		})
+	}
+}
+
+// TestBackStepRefusesRatherThanGivingUp pins the other exit. An offset that needs
+// more steps than the ceiling allows is refused; one that needs fewer is not, and
+// the second half is what stops the fix from being "refuse everything".
+func TestBackStepRefusesRatherThanGivingUp(t *testing.T) {
+	lf := evenlySpaced(t, 200, 3*time.Hour)
+
+	// 7200 steps: past the old 4096 cap, far inside the new ceiling, and must work.
+	if _, covered := gridCoverage(t, lf, ursus.DynamicOptions{
+		Every: ursus.Every("1s"), Offset: ursus.Every("2h"),
+	}); covered != 200 {
+		t.Errorf("covered %d of 200 with a 7200-step offset", covered)
+	}
+
+	// Past the ceiling: refused rather than truncated.
+	_, err := lf.GroupByDynamic(ursus.Col("ts"), ursus.DynamicOptions{
+		Every: ursus.Every("1ns"), Offset: ursus.Every("1h"),
+	}).Agg(ursus.Len().Alias("n")).Collect(t.Context())
+	if err == nil {
+		t.Fatal("3.6e12 back-steps must be refused")
+	}
+	if !errors.Is(err, ursus.ErrResource) {
+		t.Errorf("want ErrResource, got %v", err)
 	}
 }

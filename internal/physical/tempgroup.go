@@ -317,8 +317,22 @@ func (s *temporalSink) gridWindows(bts []int64) ([]window, error) {
 	back := s.every.Neg()
 	// A positive offset can push the first window past the first row, which would
 	// leave early rows in no window at all. Step back until it does not.
-	for guard := 0; start.After(first) && guard < 4096; guard++ {
-		start = back.AddTo(start)
+	//
+	// The bound is the same one the forward walk uses, because it is the same
+	// quantity: how many grid points this query is asking for. It used to be 4096,
+	// which is not a number anything derives — Every("1s") with Offset("2h") needs
+	// 7200 steps and is an ordinary request, so 4096 stopped early and left the
+	// invariant this loop exists to establish quietly broken. Exhausting it is a
+	// REFUSAL now, not a shrug.
+	for steps := 0; start.After(first); steps++ {
+		if steps >= s.maxWindows() {
+			return nil, s.gridTooLarge("stepping back from the offset to the first row")
+		}
+		prev := start
+		if start = back.AddTo(start); !start.Before(prev) {
+			return nil, uerr.Internalf(
+				"physical: every=%s does not step backwards from %s", s.every, prev)
+		}
 	}
 	// And when the LOWER end is open, a row sitting exactly on the first boundary is
 	// in no window either — the grid has to reach one step further back to catch it.
@@ -329,8 +343,22 @@ func (s *temporalSink) gridWindows(bts []int64) ([]window, error) {
 		start = back.AddTo(start)
 	}
 
+	// How many windows this will be, before building any of them.
+	//
+	// Only for a FIXED interval, where the count is a division: a calendar every
+	// cannot be divided into a tick range, and cannot reach the ceiling anyway
+	// without a span of millennia. Without this the ceiling would still be honest
+	// but expensive to reach — it would build sixteen million windows and then
+	// refuse, which is 384 MiB spent to say no.
+	if first, err := s.fromTime(start); err == nil {
+		if want, ok := s.gridPointsBetween(first, last); ok && want > int64(s.maxWindows()) {
+			return nil, s.gridTooLarge("walking from the first row to the last")
+		}
+	}
+
 	var out []window
-	for guard := 0; guard < 1<<24; guard++ {
+	accounted := int64(0)
+	for {
 		lo, err := s.fromTime(start)
 		if err != nil {
 			return nil, err
@@ -338,12 +366,27 @@ func (s *temporalSink) gridWindows(bts []int64) ([]window, error) {
 		if lo > last {
 			break
 		}
+		if len(out) >= s.maxWindows() {
+			return nil, s.gridTooLarge("walking from the first row to the last")
+		}
 		hi, err := s.fromTime(s.period.AddTo(start))
 		if err != nil {
 			return nil, err
 		}
 		l, h := s.rangeOf(bts, lo, hi)
 		out = append(out, window{start: lo, lo: l, hi: h})
+
+		// Account the grid as it grows, on capacity rather than length, which is the
+		// stateBytes shape windowSink uses: append grows geometrically, so this is a
+		// handful of retains over the whole walk rather than one per window.
+		if grown := int64(cap(out)) * windowBytes; grown != accounted {
+			s.mem.RetainBytes(grown - accounted)
+			accounted = grown
+			if err := s.mem.Check(); err != nil {
+				return nil, err
+			}
+		}
+
 		next := s.every.AddTo(start)
 		if !next.After(start) {
 			return nil, uerr.Internalf("physical: every=%s does not advance", s.every)
@@ -351,6 +394,74 @@ func (s *temporalSink) gridWindows(bts []int64) ([]window, error) {
 		start = next
 	}
 	return out, nil
+}
+
+// windowBytes is one grid point: {int64, int, int} on a 64-bit word.
+const windowBytes = 24
+
+// defaultMaxWindows bounds a grid when no memory limit is set.
+//
+// It is the value the old cap already used, kept on purpose — what changes is that
+// reaching it is an ERROR rather than a truncated return. The same number is
+// defaultMaxRecord in the CSV scanner, used the same way: a named constant, a
+// refusal, and a hint naming the knob.
+//
+// With a limit set, the account is what refuses first, because the grid is retained
+// as it grows. This is the backstop for an unlimited query, where 16.7 million
+// windows is 384 MiB of grid built from data that may be two rows long.
+const defaultMaxWindows = 1 << 24
+
+// gridPointsBetween is how many grid points span [from, to], when that is a
+// division rather than a walk.
+//
+// Reports false for a calendar interval, whose step is not a fixed number of ticks —
+// a month is not 30 days and the whole reason Interval has three fields. The caller
+// then falls back to counting as it walks.
+func (s *temporalSink) gridPointsBetween(from, to int64) (int64, bool) {
+	if s.every.IsCalendar() {
+		return 0, false
+	}
+	npt, ok := s.idxType.NanosPerTick()
+	if !ok || npt <= 0 {
+		return 0, false
+	}
+	step := s.every.Nanos() / npt
+	if step < 1 {
+		// An every finer than the index's own tick floors to the same tick for
+		// every point, so the walk does not advance in index space. That is its own
+		// defect and not this one's to fix; counting it as one step per tick at
+		// least keeps this estimate an under-count rather than an over-count.
+		step = 1
+	}
+	if to < from {
+		return 0, true
+	}
+	return (to-from)/step + 1, true
+}
+
+// maxWindows is the ceiling on grid points for one query.
+//
+// Query-wide rather than per call: Finish generates a grid per categorical bucket,
+// so a per-call cap let fifty buckets build fifty times the ceiling. s.gridPoints
+// carries the running total across buckets.
+func (s *temporalSink) maxWindows() int {
+	return defaultMaxWindows
+}
+
+// gridTooLarge refuses a grid rather than truncating one.
+//
+// KindResource, because this is "a limit ursus refused to exceed rather than a
+// request it could not understand" — the Kind's own doc — and because a caller can
+// then detect it with errors.Is(err, ursus.ErrResource) and change a knob.
+func (s *temporalSink) gridTooLarge(phase string) error {
+	return uerr.New(uerr.KindResource, s.op(),
+		"the window grid is larger than %s can build: %s with every=%s, offset=%s",
+		s.op(), phase, s.every, s.offset).
+		Hint("the grid has one point per every=%s between the first and last row, "+
+			"plus one per every=%s of offset — a coarser every, or a smaller "+
+			"offset, is what makes it smaller", s.every, s.every).
+		Hint("this is the grid, not the input: it is derived from the index range " +
+			"and the interval, so a small frame can still ask for a large one")
 }
 
 // rollingWindows gives every row a window ending at its own instant.
