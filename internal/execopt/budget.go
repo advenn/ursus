@@ -323,6 +323,16 @@ func holdsHint(op string) string {
 	case "unique":
 		return "unique holds one entry per distinct row; raise the limit with " +
 			"WithMemoryLimit, or reduce the subset of columns it is called on"
+	case "group_by_dynamic", "rolling":
+		// The default sentence is actively wrong here. What these hold that grows is
+		// the window GRID, which is derived from the index range and the interval
+		// rather than from the input — so a two-row frame can ask for sixteen
+		// million windows, and telling its author to reduce the input would send
+		// them nowhere. This is the same falsity holdsHint was written for when the
+		// generic line said tail "buffers its whole input".
+		return op + " holds one window per every= between the first and last row, " +
+			"plus the rows each window covers; a coarser every=, a smaller offset= " +
+			"or a narrower index range is what makes it smaller"
 	default:
 		return op + " buffers its whole input; raise the limit with WithMemoryLimit"
 	}

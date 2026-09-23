@@ -203,3 +203,77 @@ func TestBackStepRefusesRatherThanGivingUp(t *testing.T) {
 		t.Errorf("want ErrResource, got %v", err)
 	}
 }
+
+// TestGridAccountingIsQueryWide. Finish generates a grid per categorical bucket, so
+// a ceiling that reset per call would scale with the data's cardinality — which is
+// the opposite of what a ceiling is for.
+//
+// Each bucket's grid here is small enough to fit on its own and the two together are
+// not, which is the only shape that can tell a query-wide ceiling from a per-call
+// one. It is driven by the memory limit rather than by the window ceiling because
+// that keeps it cheap: proving the same thing against the unlimited ceiling would
+// mean building sixteen million windows, and the ceiling's own arithmetic is
+// asserted directly in internal/physical instead.
+func TestGridAccountingIsQueryWide(t *testing.T) {
+	lo := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	span := 4 * time.Hour // ~14,400 windows at 1s, ~346 KiB of grid
+
+	run := func(buckets int, limit int64) error {
+		var ts []time.Time
+		var key []string
+		for _, base := range []time.Time{lo, lo.Add(span)} {
+			for b := range buckets {
+				ts = append(ts, base.Add(time.Duration(b)*time.Second))
+				key = append(key, string(rune('a'+b)))
+			}
+		}
+		_, err := ursus.Frame(ursus.Values("ts", ts), ursus.Values("k", key)).
+			GroupByDynamic(ursus.Col("ts"), ursus.DynamicOptions{
+				Every: ursus.Every("1s"), GroupBy: []ursus.Expr{ursus.Col("k")},
+			}).Agg(ursus.Len().Alias("n")).Collect(t.Context(), ursus.WithMemoryLimit(limit))
+		return err
+	}
+
+	const limit = 600 << 10
+	if err := run(1, limit); err != nil {
+		t.Fatalf("one bucket's grid fits under %d bytes and must not be refused: %v",
+			limit, err)
+	}
+	err := run(3, limit)
+	if err == nil {
+		t.Fatal("three buckets of the same grid must not fit where one does")
+	}
+	if !errors.Is(err, ursus.ErrResource) {
+		t.Errorf("want ErrResource, got %v", err)
+	}
+}
+
+// TestGridRefusalHintNamesTheGrid: the budget's generic hint says the operator
+// "buffers its whole input", which is a false diagnosis when the input is two rows
+// and what grew is the grid.
+//
+// The grid here is deliberately UNDER the window ceiling and over the memory limit,
+// so the refusal comes from the budget rather than from the ceiling's own message.
+// Aimed at the ceiling instead, this test passes whatever holdsHint says — which is
+// how the first version of it went silent.
+func TestGridRefusalHintNamesTheGrid(t *testing.T) {
+	lo := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	_, err := ursus.Frame(
+		ursus.Values("ts", []time.Time{lo, lo.Add(4 * time.Hour)}),
+		ursus.Values("v", []int64{1, 2}),
+	).GroupByDynamic(ursus.Col("ts"), ursus.DynamicOptions{Every: ursus.Every("1s")}).
+		Agg(ursus.Len().Alias("n")).
+		Collect(t.Context(), ursus.WithMemoryLimit(64<<10))
+	if err == nil {
+		t.Fatal("14,400 windows of grid under a 64 KiB limit must be refused")
+	}
+	if !errors.Is(err, ursus.ErrResource) {
+		t.Fatalf("want ErrResource from the budget, got %v", err)
+	}
+	if strings.Contains(err.Error(), "buffers its whole input") {
+		t.Errorf("the hint blames a two-row input: %v", err)
+	}
+	if !strings.Contains(err.Error(), "one window per every=") {
+		t.Errorf("the hint should name the grid: %v", err)
+	}
+}

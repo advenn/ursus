@@ -68,6 +68,11 @@ type temporalSink struct {
 	mem   *execopt.Account
 	batch int
 
+	// gridPoints is how many window slots this query has already built, across
+	// every categorical bucket. Query-wide on purpose: Finish generates a grid per
+	// bucket, so a per-call ceiling let fifty buckets build fifty times it.
+	gridPoints int
+
 	parts  []*data.Batch
 	ticks  []int64 // the index column, whole stream, in input order
 	nRows  int
@@ -393,6 +398,7 @@ func (s *temporalSink) gridWindows(bts []int64) ([]window, error) {
 		}
 		start = next
 	}
+	s.gridPoints += len(out)
 	return out, nil
 }
 
@@ -445,7 +451,10 @@ func (s *temporalSink) gridPointsBetween(from, to int64) (int64, bool) {
 // so a per-call cap let fifty buckets build fifty times the ceiling. s.gridPoints
 // carries the running total across buckets.
 func (s *temporalSink) maxWindows() int {
-	return defaultMaxWindows
+	if left := defaultMaxWindows - s.gridPoints; left > 0 {
+		return left
+	}
+	return 0
 }
 
 // gridTooLarge refuses a grid rather than truncating one.
