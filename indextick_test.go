@@ -24,7 +24,9 @@ package ursus_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/dtype"
@@ -60,13 +62,25 @@ func gridShape(t *testing.T, df *ursus.DataFrame) (height, distinct, covered int
 	return df.Height(), len(seen), covered
 }
 
-// knownTickMismatches names each combination that answers wrongly today, with what
-// it answers. Emptied by the commit that refuses an interval finer than its index.
-var knownTickMismatches = map[string]string{
-	"1h/left": "48 rows over 2 distinct days, 23 of every 24 empty",
-	"1h/both": "48 rows, and 73 row-slots for 3 rows — each counted ~24 times",
-	"1h/none": "49 rows and 0 of 3 rows covered — every row dropped",
-	"1m/left": "2880 rows over 2 distinct days",
+// assertFinerThanIndex fails unless err is the resolution refusal, and not some
+// other error that happens to be non-nil.
+func assertFinerThanIndex(t *testing.T, err error, field string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("%s finer than the index must be refused", field)
+	}
+	var e *uerr.Error
+	if !errors.As(err, &e) || !errors.Is(&uerr.Error{Kind: e.Kind}, uerr.ErrType) {
+		t.Fatalf("want a KindType refusal, got %v", err)
+	}
+	if errors.Is(err, uerr.ErrInternal) {
+		t.Fatalf("a user-facing refusal, not a reported ursus bug: %v", err)
+	}
+	for _, want := range []string{field, "finer than the index", "Date"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal should name %q: %v", want, err)
+		}
+	}
 }
 
 func TestGridHasOneRowPerWindowStart(t *testing.T) {
@@ -75,13 +89,14 @@ func TestGridHasOneRowPerWindowStart(t *testing.T) {
 		every  string
 		offset string
 		closed ursus.Closed
+		finer  bool // finer than the Date index's one-day tick
 	}{
-		{"1d/left", "1d", "", ursus.ClosedLeft},
-		{"1mo/left", "1mo", "", ursus.ClosedLeft},
-		{"1h/left", "1h", "", ursus.ClosedLeft},
-		{"1h/both", "1h", "", ursus.ClosedBoth},
-		{"1h/none", "1h", "", ursus.ClosedNone},
-		{"1m/left", "1m", "", ursus.ClosedLeft},
+		{"1d/left", "1d", "", ursus.ClosedLeft, false},
+		{"1mo/left", "1mo", "", ursus.ClosedLeft, false},
+		{"1h/left", "1h", "", ursus.ClosedLeft, true},
+		{"1h/both", "1h", "", ursus.ClosedBoth, true},
+		{"1h/none", "1h", "", ursus.ClosedNone, true},
+		{"1m/left", "1m", "", ursus.ClosedLeft, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			opts := ursus.DynamicOptions{Every: ursus.Every(c.every), Closed: c.closed}
@@ -90,18 +105,15 @@ func TestGridHasOneRowPerWindowStart(t *testing.T) {
 			}
 			df, err := dateIdx(t).GroupByDynamic(ursus.Col("ts"), opts).
 				Agg(ursus.Len().Alias("n")).Collect(t.Context())
+
+			if c.finer {
+				assertFinerThanIndex(t, err, "every")
+				return
+			}
 			if err != nil {
 				t.Fatalf("%v", err)
 			}
 			height, distinct, covered := gridShape(t, df)
-			why, bad := knownTickMismatches[c.name]
-
-			if bad {
-				if height == distinct && covered == 3 {
-					t.Errorf("answers correctly now — delete the entry (%s)", why)
-				}
-				return
-			}
 			if height != distinct {
 				t.Errorf("%d rows over %d distinct window starts; a grid has one "+
 					"row per start", height, distinct)
@@ -123,7 +135,7 @@ func TestGridHasOneRowPerWindowStart(t *testing.T) {
 // assertion can see it — what is wrong is that a nine-hour shift was applied as a
 // twenty-four hour one, and only the window count shows it.
 func TestOffsetFinerThanTheIndexShiftsByAWholeTick(t *testing.T) {
-	heights := func(offset string) int {
+	run := func(offset string) (int, error) {
 		opts := ursus.DynamicOptions{Every: ursus.Every("1d")}
 		if offset != "" {
 			opts.Offset = ursus.Every(offset)
@@ -131,62 +143,75 @@ func TestOffsetFinerThanTheIndexShiftsByAWholeTick(t *testing.T) {
 		df, err := dateIdx(t).GroupByDynamic(ursus.Col("ts"), opts).
 			Agg(ursus.Len().Alias("n")).Collect(t.Context())
 		if err != nil {
+			return 0, err
+		}
+		return df.Height(), nil
+	}
+	heights := func(offset string) int {
+		h, err := run(offset)
+		if err != nil {
 			t.Fatalf("offset=%q: %v", offset, err)
 		}
-		return df.Height()
+		return h
 	}
-	if plain, shifted := heights(""), heights("9h"); plain != 2 || shifted != 3 {
-		t.Errorf("no offset gives %d windows and a 9h offset gives %d; the defect "+
-			"is 2 and 3 — a sub-day offset moving the grid by a whole day",
-			plain, shifted)
+	offsetErr := func(offset string) error {
+		_, err := run(offset)
+		return err
 	}
+	if plain := heights(""); plain != 2 {
+		t.Errorf("no offset gives %d windows, want 2", plain)
+	}
+	assertFinerThanIndex(t, offsetErr("9h"), "offset")
 }
 
-// TestRollingPeriodFinerThanTheIndexIsCoarsened is the case the grid fixtures cannot
+// TestRollingPeriodFinerThanTheIndexIsRefused is the case the grid fixtures cannot
 // reach: Rolling never consults Every, so only Period can be too fine — and the
 // failure is not an empty window or a duplicated one, it is a window of the WRONG
 // WIDTH, which looks entirely ordinary.
-func TestRollingPeriodFinerThanTheIndexIsCoarsened(t *testing.T) {
-	counts := func(period string) []uint64 {
+func TestRollingPeriodFinerThanTheIndexIsRefused(t *testing.T) {
+	run := func(period string) ([]uint64, error) {
 		df, err := dateIdx(t).
 			Rolling(ursus.Col("ts"), ursus.RollingOptions{Period: ursus.Every(period)}).
 			Agg(ursus.Len().Alias("n")).Collect(t.Context())
 		if err != nil {
-			t.Fatalf("period=%s: %v", period, err)
+			return nil, err
 		}
 		s, err := df.Column[uint64]("n")
 		if err != nil {
-			t.Fatal(err)
+			return nil, err
 		}
 		out := make([]uint64, df.Height())
 		for i := range df.Height() {
 			out[i], _ = s.Get(i)
 		}
+		return out, nil
+	}
+	counts := func(period string) []uint64 {
+		out, err := run(period)
+		if err != nil {
+			t.Fatalf("period=%s: %v", period, err)
+		}
 		return out
 	}
+	countsErr := func(period string) error {
+		_, err := run(period)
+		return err
+	}
 
-	day, hour := counts("1d"), counts("1h")
-	// The defect: an hour and a day give the same answer, because an hour floors to
-	// the same day boundary. [2 2 1] either way.
-	if len(day) != len(hour) {
-		t.Fatalf("different heights: %v and %v", day, hour)
+	// A day is the index's own tick and is legal.
+	if got := counts("1d"); len(got) != 3 {
+		t.Errorf("period=1d gives %v, want three rows", got)
 	}
-	same := true
-	for i := range day {
-		if day[i] != hour[i] {
-			same = false
-		}
-	}
-	if !same {
-		t.Errorf("period=1h gives %v and period=1d gives %v — they differ now, so "+
-			"the hour is no longer being floored to a day", hour, day)
-	}
+	// An hour used to give [2 2 1] — the same answer as a day, because it floored to
+	// the same boundary. A window of the wrong WIDTH looks entirely ordinary, which
+	// is why this one needed a refusal rather than an assertion about its output.
+	assertFinerThanIndex(t, countsErr("1h"), "period")
 }
 
-// TestDurationIndexIsAnInternalError: IsTemporal() admits a Duration, so the plan
-// resolves, the whole input is buffered, and then ToTime refuses it with an internal
-// error telling the user to report a bug in ursus.
-func TestDurationIndexIsAnInternalError(t *testing.T) {
+// TestDurationIndexIsRefusedAtPlanTime. IsTemporal() admits a Duration, so the plan
+// used to resolve, buffer the whole input, and only then fail — with an INTERNAL
+// error telling the user to report a bug in ursus for an ordinary type mistake.
+func TestDurationIndexIsRefusedAtPlanTime(t *testing.T) {
 	src := keyedFrame(t, "v", dtype.Duration(dtype.Nano), 0, 1, 2)
 	_, err := ursus.Scan(src).Select(ursus.Col("ts"), ursus.Col("v")).
 		GroupByDynamic(ursus.Col("ts"), ursus.DynamicOptions{Every: ursus.Every("1s")}).
@@ -194,7 +219,78 @@ func TestDurationIndexIsAnInternalError(t *testing.T) {
 	if err == nil {
 		t.Fatal("a Duration is not an instant and cannot be a window index")
 	}
-	if !errors.Is(err, uerr.ErrInternal) {
-		t.Errorf("the defect is that this is an INTERNAL error; got %v", err)
+	var e *uerr.Error
+	if !errors.As(err, &e) || !errors.Is(&uerr.Error{Kind: e.Kind}, uerr.ErrType) {
+		t.Fatalf("want a KindType refusal, got %v", err)
+	}
+	if errors.Is(err, uerr.ErrInternal) {
+		t.Error("an ordinary type mistake must not ask the user to report a bug")
+	}
+	if !strings.Contains(err.Error(), "span rather than an instant") {
+		t.Errorf("the refusal should say why a Duration cannot index: %v", err)
+	}
+}
+
+// TestMixedIntervalIsCheckedOnItsSubDayPart. A pure calendar interval carries no
+// nanoseconds, so the finer-than-tick comparison skips it without needing an
+// IsCalendar exclusion — a mixed one does not, and is checked on the part the index
+// cannot represent. Twelve hours is as unrepresentable on a Date index beside a
+// month as it is alone.
+func TestMixedIntervalIsCheckedOnItsSubDayPart(t *testing.T) {
+	// Pure calendar: legal, and the grid is one window.
+	df, err := dateIdx(t).GroupByDynamic(ursus.Col("ts"),
+		ursus.DynamicOptions{Every: ursus.Every("1mo")}).
+		Agg(ursus.Len().Alias("n")).Collect(t.Context())
+	if err != nil {
+		t.Fatalf("a month is coarser than a day and must be legal: %v", err)
+	}
+	if df.Height() != 1 {
+		t.Errorf("every=1mo gives %d windows, want 1", df.Height())
+	}
+
+	// Mixed, with a sub-day part the index cannot hold.
+	_, err = dateIdx(t).GroupByDynamic(ursus.Col("ts"),
+		ursus.DynamicOptions{Every: ursus.Every("1d"), Offset: ursus.Every("1mo12h")}).
+		Agg(ursus.Len().Alias("n")).Collect(t.Context())
+	assertFinerThanIndex(t, err, "offset")
+}
+
+// TestCalendarIntervalOnATimeIndexIsRefused is the family's other direction: not an
+// interval too fine for the index, but one whose unit the index has no way to
+// measure. A Time is a wall clock with no date, so every row truncates to the same
+// 1970-01-01 and one window spans the column.
+//
+// It is truncateOut's refusal for a different operator, in the same words — "a Time
+// has no date, so it cannot be floored to a day or a month" — which is why both
+// should keep saying it the same way.
+func TestCalendarIntervalOnATimeIndexIsRefused(t *testing.T) {
+	// Ticks inside [0, 24h), which is what a Time column holds.
+	const hour = int64(time.Hour)
+	src := keyedFrame(t, "v", dtype.Time(dtype.Nano), hour, 2*hour, 3*hour)
+	lf := ursus.Scan(src).Select(ursus.Col("ts"), ursus.Col("v"))
+
+	for _, every := range []string{"1mo", "1d", "1y"} {
+		_, err := lf.GroupByDynamic(ursus.Col("ts"),
+			ursus.DynamicOptions{Every: ursus.Every(every)}).
+			Agg(ursus.Len().Alias("n")).Collect(t.Context())
+		if err == nil {
+			t.Errorf("every=%s on a Time index must be refused", every)
+			continue
+		}
+		var e *uerr.Error
+		if !errors.As(err, &e) || !errors.Is(&uerr.Error{Kind: e.Kind}, uerr.ErrType) {
+			t.Errorf("every=%s: want a KindType refusal, got %v", every, err)
+		}
+		if !strings.Contains(err.Error(), "a Time has no date") {
+			t.Errorf("every=%s: the refusal should say why: %v", every, err)
+		}
+	}
+
+	// A sub-day interval on the same column is fine, which is exactly why the
+	// index's type alone could never decide this.
+	if _, err := lf.GroupByDynamic(ursus.Col("ts"),
+		ursus.DynamicOptions{Every: ursus.Every("1h")}).
+		Agg(ursus.Len().Alias("n")).Collect(t.Context()); err != nil {
+		t.Errorf("an hour on a Time(ns) index is representable and must be legal: %v", err)
 	}
 }

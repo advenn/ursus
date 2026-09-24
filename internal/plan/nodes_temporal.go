@@ -1,6 +1,8 @@
 package plan
 
 import (
+	"time"
+
 	"strings"
 
 	"github.com/advenn/ursus/dtype"
@@ -61,6 +63,86 @@ type TemporalGroup struct {
 	Closed                expr.Closed
 }
 
+// checkIndexResolution refuses a window an index column cannot represent.
+//
+// IsTemporal is not enough, and the gap between the two is a family of silent wrong
+// answers. A Date index is int32 DAYS, so Every("1h") asks for twenty-four windows
+// per day and dtype.FromTime floors every one of them to the same day number. What
+// comes out then depends on the Closed convention and all four are wrong differently:
+// the default duplicates the group twenty-four times with twenty-three empty,
+// ClosedBoth counts every row about twenty-four times, and ClosedNone drops every row.
+//
+// Rolling is worse to read, because nothing looks wrong: it never consults Every, so
+// only Period can be too fine, and a one-hour window silently becomes a one-day one.
+// A sub-day Offset is the mildest — it moves the grid by a whole tick rather than
+// being inert.
+//
+// This is the refusal nodes_asof.go makes for a calendar tolerance on a key that is
+// not an instant, and its comment applies verbatim with "grid" for "bound": without
+// it the interval went silently INERT.
+//
+// # It is deliberately NOT what dt.truncate does
+//
+// truncateTemporal ACCEPTS an interval finer than the tick, as a no-op, because
+// "every instant is already on a boundary". That is right there and wrong here, and
+// the difference is what the answer is made of: truncate's answer is the input, so a
+// no-op is the correct floor. A grid's answer is a window COUNT, and flooring
+// twenty-four windows onto one tick does not make one window, it makes twenty-four
+// indistinguishable ones.
+func (t *TemporalGroup) checkIndexResolution(idx dtype.Field) error {
+	// A Duration is temporal and is not an INSTANT, so there is nothing to cut
+	// windows from. IsTemporal admits it, the operator buffers the whole input, and
+	// ToTime then refuses with an internal error that asks the user to report a bug
+	// in ursus for what is an ordinary type mistake.
+	if idx.Type.ID() == dtype.TypeDuration {
+		return uerr.New(uerr.KindType, t.op(),
+			"the index column %q is %s, which is a span rather than an instant",
+			idx.Name, idx.Type).
+			Hint("a window grid is cut from points on a timeline; a Duration has no " +
+				"position on one").
+			Hint("group by a Date or Datetime column, or cast this one first")
+	}
+
+	npt, ok := idx.Type.NanosPerTick()
+	if !ok || npt <= 0 {
+		return nil // no tick length to compare against; nothing to say
+	}
+	for _, iv := range []struct {
+		name string
+		v    dtype.Interval
+	}{{"every", t.Every}, {"period", t.Period}, {"offset", t.Offset}} {
+		if iv.v.IsZero() {
+			continue // period defaults to every, and offset is optional
+		}
+		// The other direction, and truncateOut's refusal word for word: a Time is a
+		// wall clock with no date, so a month has nothing to measure from and the
+		// whole column truncates to one instant.
+		if iv.v.IsCalendar() && idx.Type.ID() == dtype.TypeTime {
+			return uerr.New(uerr.KindType, t.op(),
+				"%s=%s is a calendar interval and the index column %q is %s",
+				iv.name, iv.v, idx.Name, idx.Type).
+				Hint("a Time has no date, so it cannot be cut into days or months").
+				Hint("use a sub-day interval, or cast the index to Datetime first")
+		}
+		// No IsCalendar exclusion on the comparison below, because it would not
+		// change an answer: a PURE calendar interval carries no nanoseconds, so the
+		// n > 0 guard already skips it. A MIXED one — Offset("1mo12h") — is checked
+		// on its sub-day part, which is right: twelve hours is exactly as
+		// unrepresentable on a Date index alone as it is beside a month.
+		if n := iv.v.Nanos(); n > 0 && n < npt {
+			return uerr.New(uerr.KindType, t.op(),
+				"%s=%s is finer than the index column %q, which is %s and stores "+
+					"whole ticks of %s", iv.name, iv.v, idx.Name, idx.Type,
+				dtype.FromDuration(time.Duration(npt))).
+				Hint("every window would floor onto the same tick, so the grid " +
+					"would have many windows that cannot be told apart").
+				Hint("use an interval no finer than the index's own resolution, or " +
+					"cast the index to a finer type first")
+		}
+	}
+	return nil
+}
+
 func (t *TemporalGroup) planNode()        {}
 func (t *TemporalGroup) Children() []Node { return []Node{t.Input} }
 
@@ -95,6 +177,9 @@ func (t *TemporalGroup) Schema() (*dtype.Schema, error) {
 			"the index column %q is %s, which is not a temporal type",
 			idx.Name, idx.Type).
 			Hint("group by time needs a Date or Datetime column to cut windows from")
+	}
+	if err := t.checkIndexResolution(idx); err != nil {
+		return nil, err
 	}
 	// Never null: a window start always exists, and a row whose index is null belongs
 	// to no window at all — which the operator refuses rather than silently dropping.
