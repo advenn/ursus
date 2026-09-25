@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 	"strings"
@@ -547,8 +548,15 @@ func (a *sumAcc) Finish(name string, nGroups int) (*data.Column, error) {
 
 	if a.isInt {
 		if a.wide {
+			// A Decimal total must also fit its PRECISION, which is tighter than 128
+			// bits: 10^38 - 1 is below 2^127, so a total can fit the accumulator and
+			// still need a 39th digit.
+			dec := a.bind.Out.ID() == dtype.TypeDecimal
 			for g := range nGroups {
-				if a.seen[g] && a.carry[g] != 0 {
+				if !a.seen[g] {
+					continue // null: there is no total, and its slot is not checked
+				}
+				if a.carry[g] != 0 || (dec && !withinDigits(a.i[g], int(a.bind.Out.Precision()))) {
 					return nil, sumOverflow(a.bind.Out, g, nGroups, a.i[g], a.carry[g])
 				}
 			}
@@ -615,13 +623,19 @@ func trueTotal(i i128.Int128, carry int64) *big.Int {
 	return t.Add(t, c)
 }
 
-// sumOverflow refuses a group total of 128-bit values that no longer fits 128 bits.
+// sumOverflow refuses a group total of 128-bit values that its output cannot hold:
+// past 128 bits for an Int128, past 38 digits for a Decimal.
 func sumOverflow(out dtype.DataType, g, nGroups int, total i128.Int128, carry int64) error {
+	t := trueTotal(total, carry).String()
+	why := "values of 128 bits can sum past 128 bits"
+	if out.ID() == dtype.TypeDecimal {
+		t = dtype.FormatDecimal(t, out.Scale())
+		why = fmt.Sprintf("a Decimal holds at most %d digits", dtype.MaxDecimalPrecision)
+	}
 	return uerr.New(uerr.KindValue, "sum",
-		"the sum of group %d of %d is %s, which overflows %s",
-		g, nGroups, trueTotal(total, carry), out).
-		Hint("values of 128 bits can sum past 128 bits; for an approximate total, " +
-			"sum a Float64: .Cast(ursus.Float64).Sum()")
+		"the sum of group %d of %d is %s, which overflows %s", g, nGroups, t, out).
+		Hint("%s; for an approximate total, sum a Float64: "+
+			".Cast(ursus.Float64).Sum()", why)
 }
 
 // --- mean --------------------------------------------------------------------
@@ -636,17 +650,26 @@ func sumOverflow(out dtype.DataType, g, nGroups int, total i128.Int128, carry in
 // null-versus-NaN distinction must not be allowed to blur: NaN would claim the
 // mean was computed and came out undefined, when in fact there was nothing to
 // compute.
+//
+// A Decimal takes the exact path too, and counts its carries as sumAcc does: its
+// values are 128 bits wide, and its mean is a Float64 that exists even when the sum
+// would not fit. Finish divides once — see finishDecimal.
 type meanAcc struct {
+	in    dtype.DataType
 	bind  expr.AggBinding
 	isInt bool
+	wide  bool // a 128-bit input: carry is kept
 
-	sum []float64
-	i   []i128.Int128
-	n   []uint64
+	sum   []float64
+	i     []i128.Int128
+	carry []int64
+	n     []uint64
 }
 
-func newMeanAcc(_ dtype.DataType, bind expr.AggBinding) (Accumulator, error) {
-	return &meanAcc{bind: bind, isInt: bind.Acc.ID() == dtype.TypeInt128}, nil
+func newMeanAcc(in dtype.DataType, bind expr.AggBinding) (Accumulator, error) {
+	isInt := bind.Acc.ID() == dtype.TypeInt128
+	return &meanAcc{in: in, bind: bind, isInt: isInt,
+		wide: isInt && in.Physical().ID() == dtype.TypeInt128}, nil
 }
 
 func (a *meanAcc) Reserve(n int) {
@@ -654,6 +677,9 @@ func (a *meanAcc) Reserve(n int) {
 		a.n = append(a.n, 0)
 		if a.isInt {
 			a.i = append(a.i, i128.Zero)
+			if a.wide {
+				a.carry = append(a.carry, 0)
+			}
 		} else {
 			a.sum = append(a.sum, 0)
 		}
@@ -671,7 +697,13 @@ func (a *meanAcc) AddBatch(groups []int32, col *data.Column) error {
 		}
 		for i, g := range groups {
 			if valid.Get(i) {
-				a.i[g] = a.i[g].Add(src[i])
+				if a.wide {
+					var c int64
+					a.i[g], c = addCarry(a.i[g], src[i])
+					a.carry[g] += c
+				} else {
+					a.i[g] = a.i[g].Add(src[i])
+				}
 				a.n[g]++
 			}
 		}
@@ -700,9 +732,14 @@ func (a *meanAcc) Merge(other Accumulator, remap []int32) error {
 	// all: averaging two averages would weight the smaller group equally.
 	a.Reserve(mergeCap(remap, len(o.n)))
 	mergeEach(remap, len(o.n), func(dst, src int) {
-		if a.isInt {
+		switch {
+		case a.wide:
+			var c int64
+			a.i[dst], c = addCarry(a.i[dst], o.i[src])
+			a.carry[dst] += o.carry[src] + c
+		case a.isInt:
 			a.i[dst] = a.i[dst].Add(o.i[src])
-		} else {
+		default:
 			a.sum[dst] += o.sum[src]
 		}
 		a.n[dst] += o.n[src]
@@ -712,6 +749,9 @@ func (a *meanAcc) Merge(other Accumulator, remap []int32) error {
 
 func (a *meanAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
+	if a.in.ID() == dtype.TypeDecimal {
+		return a.finishDecimal(name, nGroups), nil
+	}
 	if a.isInt {
 		return a.finishExact(name, nGroups)
 	}
@@ -772,6 +812,38 @@ func (a *meanAcc) finishExact(name string, nGroups int) (*data.Column, error) {
 		vb.Append(true)
 	}
 	return data.NewFixed(name, a.bind.Out, out, vb.Finish()), nil
+}
+
+// finishDecimal is the mean of a Decimal: the exact sum divided by count * 10^scale,
+// rounded ONCE, to the double nearest the true mean.
+//
+// Once matters. Converting the sum to a float and then dividing rounds twice, and
+// can land a ulp away. So the fast path is the one where a single IEEE division is
+// the whole computation: the sum below 2^53, and count * 10^scale an exact integer
+// below 2^53, both exact doubles. Everything else — a big sum, a carry, a big count
+// — divides exact rationals and rounds that.
+func (a *meanAcc) finishDecimal(name string, nGroups int) *data.Column {
+	scale := int(a.in.Scale())
+	vb := bitmap.NewBuilder(nGroups)
+	out := make([]float64, nGroups)
+	for g := range nGroups {
+		if a.n[g] == 0 {
+			vb.Append(false) // NULL, not NaN
+			continue
+		}
+		vb.Append(true)
+		if scale <= 22 && a.carry[g] == 0 {
+			d := float64(a.n[g]) * math.Pow10(scale)
+			if x, ok := a.i[g].Int64(); ok && x >= -(1<<53) && x <= 1<<53 && d <= 1<<52 {
+				out[g] = float64(x) / d
+				continue
+			}
+		}
+		den := new(big.Int).Mul(new(big.Int).SetUint64(a.n[g]),
+			new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(scale)), nil))
+		out[g], _ = new(big.Rat).SetFrac(trueTotal(a.i[g], a.carry[g]), den).Float64()
+	}
+	return data.NewFixed(name, a.bind.Out, out, vb.Finish())
 }
 
 // --- min / max ---------------------------------------------------------------
@@ -1298,20 +1370,11 @@ func widenSigned(c *data.Column) ([]int64, error) { return widenToInt64(c) }
 
 func widenUnsigned(c *data.Column) ([]uint64, error) { return widenToUint64(c) }
 
-func widenFloat(c *data.Column) ([]float64, error) {
-	if c.DType().Physical().ID() == dtype.TypeInt128 {
-		src, err := data.Values[i128.Int128](c)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]float64, len(src))
-		for i, v := range src {
-			out[i] = v.Float64()
-		}
-		return out, nil
-	}
-	return toFloat64(c)
-}
+// widenFloat reads any numeric column as float64. It is toFloat64: it used to carry
+// its own copy of the Int128 arm, which a Decimal matched first — so every
+// aggregate reading through it would have got the unscaled integer, 10^scale too
+// large, with no error.
+func widenFloat(c *data.Column) ([]float64, error) { return toFloat64(c) }
 
 // --- accounting ----------------------------------------------------------------
 //

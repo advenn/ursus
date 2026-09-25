@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"fmt"
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/bitmap"
@@ -236,7 +237,9 @@ func winCumulative(fn expr.WinFnOp, params expr.WinParams, name string,
 	// The `fn ==` half of the gate is not belt and braces: winCumInt128 ignores fn
 	// and always ADDS, so an exact Product binding added later would route a
 	// cum_prod into a sum.
-	if fn == expr.WinCumSum && (out.ID() == dtype.TypeInt128 || out.IsTemporal()) {
+	// A Decimal output is physically Int128 and exact, so it is keyed on the
+	// PHYSICAL type: by ID alone it fell to winCumFloat and panicked in NewFixed.
+	if fn == expr.WinCumSum && (out.Physical().ID() == dtype.TypeInt128 || out.IsTemporal()) {
 		return winCumInt128(params, name, out, col, seg)
 	}
 	return winCumFloat(fn, params, name, out, col, seg)
@@ -266,6 +269,9 @@ func winCumInt128(params expr.WinParams, name string, out dtype.DataType,
 	// sum's: a cumulative publishes every prefix, so a total that leaves 128 bits and
 	// comes back still had rows in between with nothing to show.
 	wide := col.DType().Physical().ID() == dtype.TypeInt128
+	// A Decimal prefix must also fit the output's 38 digits, a tighter bound than
+	// 128 bits.
+	dec := out.ID() == dtype.TypeDecimal
 	ticks := make([]int64, 0)
 	if narrow {
 		ticks = make([]int64, n)
@@ -283,11 +289,15 @@ func winCumInt128(params expr.WinParams, name string, out dtype.DataType,
 			}
 			var carry int64
 			acc, carry = addCarry(acc, src[row])
-			if wide && carry != 0 {
+			if wide && (carry != 0 || (dec && !withinDigits(acc, int(out.Precision())))) {
+				why := "values of 128 bits can sum past 128 bits"
+				if dec {
+					why = fmt.Sprintf("a Decimal holds at most %d digits", dtype.MaxDecimalPrecision)
+				}
 				failed = uerr.New(uerr.KindValue, "cum_sum",
 					"the running total at row %d overflows %s", row, out).
-					Hint("values of 128 bits can sum past 128 bits; for an approximate " +
-						"running total, use a Float64: .Cast(ursus.Float64).CumSum(false)")
+					Hint("%s; for an approximate running total, use a Float64: "+
+						".Cast(ursus.Float64).CumSum(false)", why)
 				return
 			}
 			if narrow {

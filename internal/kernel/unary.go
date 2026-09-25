@@ -656,6 +656,13 @@ func numericToBool(name string, c *data.Column) (*data.Column, error) {
 }
 
 func toFloat64(c *data.Column) ([]float64, error) {
+	// A Decimal's physical type is Int128, so without this arm the switch below reads
+	// its UNSCALED integer — 12.34 as 1234. Every float consumer comes through here:
+	// the Float64 cast, mean, var, std, median, quantile, product, cum_prod. So this
+	// is the one place the scale can be applied, and the one place it can be forgotten.
+	if c.DType().ID() == dtype.TypeDecimal {
+		return decimalFloats(c)
+	}
 	n := c.Len()
 	out := make([]float64, n)
 	switch c.DType().Physical().ID() {

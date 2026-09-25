@@ -259,7 +259,14 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 			return AggBinding{Acc: dtype.Int128, Out: in}, nil
 		}
 		if in.ID() == dtype.TypeDecimal {
-			return AggBinding{}, decimalAggUnsupported(op, in)
+			// Decimal(38, s): the input's scale, and the widest precision there is.
+			// Polars, DuckDB and PyArrow all return exactly this. Acc is Int128 BY ID,
+			// because that is how sumAcc chooses its exact path, and a Decimal input
+			// is 128 bits wide, so the sum counts its carries: it is refused when the
+			// true total needs a 39th digit, whatever order the rows came in —
+			// Polars and DuckDB refuse there too, and PyArrow silently wraps.
+			return AggBinding{Acc: dtype.Int128,
+				Out: dtype.Decimal(dtype.MaxDecimalPrecision, in.Scale())}, nil
 		}
 		if !in.IsNumeric() {
 			return AggBinding{}, uerr.New(uerr.KindType, "",
@@ -290,7 +297,13 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 			return AggBinding{Acc: dtype.Int128, Out: in}, nil
 		}
 		if in.ID() == dtype.TypeDecimal {
-			return AggBinding{}, decimalAggUnsupported(op, in)
+			// Float64, as Polars and DuckDB return: a mean needs a scale nobody wrote,
+			// and PyArrow's answer — the input's scale, truncated — drops digits
+			// without saying so. The SUM stays exact (Acc: Int128, carrying) and is
+			// divided once, correctly rounded, so the mean is the double nearest the
+			// true mean. It never refuses: a Float64 mean exists even when the sum
+			// would need a 39th digit.
+			return AggBinding{Acc: dtype.Int128, Out: dtype.Float64}, nil
 		}
 		if !in.IsNumeric() {
 			return AggBinding{}, uerr.New(uerr.KindType, "",
@@ -316,9 +329,9 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		return AggBinding{Acc: dtype.Bool, Out: dtype.Bool}, nil
 
 	case AggVar, AggStd, AggMedian, AggQuantile:
-		if in.ID() == dtype.TypeDecimal {
-			return AggBinding{}, decimalAggUnsupported(op, in)
-		}
+		// A Decimal takes the Float64 path below, and reads its values through
+		// toFloat64 with the scale applied. Polars returns Float64 for all four;
+		// DuckDB keeps median as a DECIMAL, and a median of an even count is a mean.
 		if !in.IsNumeric() {
 			return AggBinding{}, uerr.New(uerr.KindType, "",
 				"%s() requires a numeric operand, got %s", op, in)
@@ -330,9 +343,10 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		return AggBinding{Acc: dtype.Float64, Out: dtype.Float64}, nil
 
 	case AggProduct:
-		if in.ID() == dtype.TypeDecimal {
-			return AggBinding{}, decimalAggUnsupported(op, in)
-		}
+		// A Decimal takes the Float64 path below, scaled, as DuckDB does. A Decimal
+		// product would need a scale of n*s for n rows, which is why the two engines
+		// that keep the input's scale both get it wrong — measured on 12.34, 5.00,
+		// -0.05 and 100.00, Polars answers -308.00 and PyArrow -309.00; it is -308.5.
 		if !in.IsNumeric() {
 			return AggBinding{}, uerr.New(uerr.KindType, "",
 				"product() requires a numeric operand, got %s", in)
@@ -365,30 +379,6 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 	}
 }
 
-// decimalAggUnsupported refuses the COMPUTING aggregates over a Decimal: sum, mean,
-// var, std, median, quantile and product. Seven, not the two this comment used to
-// name — the list grew and the sentence did not.
-//
-// Min, Max, First, Last, Count and NUnique all work: they select or count rather
-// than compute, so the unscaled integer they carry around is still the right
-// number with the right scale.
-//
-// The computing ones are different. Without this the generic path would bind
-// Acc: Float64 and the accumulator would ask a Decimal column — physically Int128
-// — for []float64 and fail at runtime as an internal error, which is the
-// plan-accepts / kernel-rejects divergence this codebase already has one scar
-// from. Refusing here, at plan time, with the reason and the workaround, is the
-// least-bad answer while the precision calculus for decimal aggregation is
-// undecided: sum's result needs a wider precision than its input, and guessing
-// which is a decision better made deliberately than by whichever branch happened
-// to be reached first.
-func decimalAggUnsupported(op AggOp, in dtype.DataType) error {
-	return decimalRemedy(uerr.New(uerr.KindUnsupported, "",
-		"%s() is not implemented for %s", op, in).
-		Hint("decimal aggregation needs a precision and scale rule ursus has not " +
-			"committed to yet"))
-}
-
 // decimalRemedy appends the one thing a caller can actually DO about a Decimal
 // refusal, and it exists because the thing they were being told to do did not exist.
 //
@@ -409,8 +399,8 @@ func decimalAggUnsupported(op AggOp, in dtype.DataType) error {
 // refusal names against CanCast, so it cannot go stale silently again.
 func decimalRemedy(e *uerr.Error) *uerr.Error {
 	return e.
-		Hint("+ and -, comparisons, min, max, first, last, count and n_unique are " +
-			"exact on a Decimal and need no such rule").
+		Hint("+ and -, comparisons, sum, min, max, first, last, count and n_unique " +
+			"are exact on a Decimal and need no such rule").
 		Hint("if approximate arithmetic is acceptable, cast to Float64 first: " +
 			".Cast(ursus.Float64)")
 }

@@ -3,6 +3,7 @@ package ursus_test
 import (
 	"errors"
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -143,12 +144,15 @@ func TestDecimalMinMaxAndCount(t *testing.T) {
 	}
 }
 
-// TestDecimalGuards covers the three narrowing guards. Each one blocks a path that
-// became REACHABLE the moment Decimal got a physical type, and each would return a
-// number wrong by a factor of 10^scale rather than merely imprecise.
+// TestDecimalGuards covers the narrowing guards. Each one blocks a path that became
+// REACHABLE the moment Decimal got a physical type, and each would return a number
+// wrong by a factor of 10^scale rather than merely imprecise.
 //
-// All three fail at plan time with an actionable message. That matters more than
-// usual here: the alternative is not an error, it is a plausible wrong number.
+// Each fails with an actionable message. That matters more than usual here: the
+// alternative is not an error, it is a plausible wrong number.
+//
+// sum and mean were guards here until step 69 committed to their precision rule;
+// TestDecimalAggregatesMatchTheReferenceEngines holds them now.
 func TestDecimalGuards(t *testing.T) {
 	cases := []struct {
 		name string
@@ -176,24 +180,6 @@ func TestDecimalGuards(t *testing.T) {
 			lf:   func() *ursus.LazyFrame { return prices(t).Select(ursus.Col("price").Cast(dtype.Int64)) },
 			kind: uerr.ErrValue,
 			want: "value 12.34 at row 0 is not representable as Int64",
-		},
-		{
-			// Would bind Acc: Float64 and then ask an Int128 column for []float64,
-			// failing at runtime as an internal error.
-			name: "sum has no committed precision rule",
-			lf: func() *ursus.LazyFrame {
-				return prices(t).GroupBy(ursus.Col("sku")).Agg(ursus.Col("price").Sum())
-			},
-			kind: uerr.ErrUnsupported,
-			want: "precision and scale",
-		},
-		{
-			name: "mean has no committed precision rule",
-			lf: func() *ursus.LazyFrame {
-				return prices(t).GroupBy(ursus.Col("sku")).Agg(ursus.Col("price").Mean())
-			},
-			kind: uerr.ErrUnsupported,
-			want: "precision and scale",
 		},
 	}
 
@@ -273,11 +259,6 @@ func TestDecimalRefusalsRecommendOnlyPossibleCasts(t *testing.T) {
 	sel := func(e ursus.Expr) func() *ursus.LazyFrame {
 		return func() *ursus.LazyFrame { return prices(t).Select(e) }
 	}
-	agg := func(e ursus.Expr) func() *ursus.LazyFrame {
-		return func() *ursus.LazyFrame {
-			return prices(t).GroupBy(ursus.Col("sku")).Agg(e.Alias("a"))
-		}
-	}
 	cases := map[string]func() *ursus.LazyFrame{
 		"mul":      sel(price.Mul(price)),
 		"div":      sel(price.Div(price)),
@@ -287,12 +268,6 @@ func TestDecimalRefusalsRecommendOnlyPossibleCasts(t *testing.T) {
 		"sqrt":     sel(price.Sqrt()),
 		"round":    sel(price.Round(1)),
 		"cast_i64": sel(price.Cast(dtype.Int64)),
-		"sum":      agg(price.Sum()),
-		"mean":     agg(price.Mean()),
-		"var":      agg(price.Var(1)),
-		"std":      agg(price.Std(1)),
-		"median":   agg(price.Median()),
-		"product":  agg(price.Product()),
 	}
 
 	refused := 0
@@ -312,7 +287,12 @@ func TestDecimalRefusalsRecommendOnlyPossibleCasts(t *testing.T) {
 	}
 	// Anti-vacuity. A sweep where nothing refused, or where every message was
 	// scanned and none named a type, proves nothing either way.
-	if refused < 10 {
+	//
+	// Every one of these refuses today. The six computing aggregates left this list
+	// when step 69 implemented them, which is the move this floor exists to force:
+	// an operation that starts working leaves the list on purpose, rather than
+	// quietly thinning the sweep.
+	if refused < len(cases) {
 		t.Errorf("only %d of %d operations refused; the fixture has stopped "+
 			"reaching the Decimal guards", refused, len(cases))
 	}
@@ -446,5 +426,217 @@ func TestCastToADecimalThatCannotExist(t *testing.T) {
 		CollectSchema(t.Context())
 	if !errors.Is(err, ursus.ErrType) || !strings.Contains(err.Error(), "1 to 38 digits") {
 		t.Errorf("Decimal(200, 3) = %v, want ErrType naming the precision range", err)
+	}
+}
+
+// TestDecimalAggregatesMatchTheReferenceEngines pins every computing aggregate over
+// a Decimal to the answer Polars 1.44, DuckDB 1.5 and PyArrow 25 were MEASURED to
+// give on this fixture — 12.34, 5.00, null, -0.05, 100.00 — and records where they
+// disagree and which of them ursus follows.
+//
+// These are absolute values, and that is the point: a scale applied twice, or not
+// at all, is invisible to any test that compares a Decimal aggregate with another
+// path through the same reader. 100x wrong looks exactly like right to a
+// consistency check.
+func TestDecimalAggregatesMatchTheReferenceEngines(t *testing.T) {
+	p := ursus.Col("price")
+	df, err := prices(t).GroupBy().Agg(
+		p.Sum().Alias("sum"),
+		p.Mean().Alias("mean"),
+		p.Median().Alias("median"),
+		p.Quantile(0.5, ursus.InterpLinear).Alias("q50"),
+		p.Var(1).Alias("var"),
+		p.Std(1).Alias("std"),
+		p.Product().Alias("product"),
+	).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// sum: Decimal(38, 2) in all three engines, and exact.
+	if got := df.Schema().String(); !strings.Contains(got, "sum: Decimal(38, 2)") {
+		t.Errorf("schema = %s, want sum: Decimal(38, 2)", got)
+	}
+	sum, _, err := df.At[ursus.Int128Value](0, "sum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.String() != "11729" {
+		t.Errorf("sum = %s unscaled, want 11729 (117.29)", sum)
+	}
+
+	// The rest are Float64: Polars returns Float64 for all of them; DuckDB for all
+	// but median. mean is the ONE division of the exact sum, so it is exactly the
+	// double nearest 29.3225 — PyArrow's Decimal answer, 29.32, truncates.
+	for _, c := range []struct {
+		col  string
+		want float64
+		tol  float64
+	}{
+		{"mean", 29.3225, 0},
+		{"median", 8.67, 0},
+		{"q50", 8.67, 0},
+		// Sample variance: 6738.042075 / 3. PyArrow reports the population
+		// variance, 1684.51, by default; Polars and DuckDB agree with this.
+		{"var", 2246.014025, 1e-12},
+		{"std", math.Sqrt(2246.014025), 1e-12},
+		// -308.5, which is DuckDB's answer. Polars returns Decimal -308.00 and
+		// PyArrow Decimal -309.00: keeping the input's scale for a product is the
+		// mistake, since its scale is really 4*2.
+		{"product", -308.5, 1e-12},
+	} {
+		got, _, err := df.At[float64](0, c.col)
+		if err != nil {
+			t.Fatalf("%s: %v", c.col, err)
+		}
+		if math.Abs(got-c.want) > c.tol*math.Abs(c.want) {
+			t.Errorf("%s = %v, want %v", c.col, got, c.want)
+		}
+	}
+}
+
+// TestDecimalSumOfNothingIsNull: sku "c" holds the one null price, so its group
+// has nothing to sum. That is NULL, as for every other sum in ursus, and as in
+// DuckDB and PyArrow — Polars answers 0.00, which cannot be told apart from values
+// that summed to zero.
+func TestDecimalSumOfNothingIsNull(t *testing.T) {
+	p := ursus.Col("price")
+	df, err := prices(t).Filter(ursus.Col("sku").Eq(ursus.Lit("c"))).
+		GroupBy(ursus.Col("sku")).Agg(p.Sum().Alias("sum"), p.Mean().Alias("mean")).
+		Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := df.At[ursus.Int128Value](0, "sum"); ok {
+		t.Error("sum over only a null is not null")
+	}
+	if _, ok, _ := df.At[float64](0, "mean"); ok {
+		t.Error("mean over only a null is not null")
+	}
+}
+
+// TestDecimalCumSumIsExact: cum_sum borrows sum's rule, so it is Decimal(38, 2) and
+// exact — and its last row equals sum by construction. Before its gate keyed on
+// the PHYSICAL type, a Decimal output fell to the float path and panicked.
+func TestDecimalCumSumIsExact(t *testing.T) {
+	df, err := prices(t).Select(ursus.Col("price").CumSum(false).Alias("run")).
+		Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := df.Schema().String(); got != "{run: Decimal(38, 2)}" {
+		t.Errorf("schema = %s", got)
+	}
+	run, err := df.Column[ursus.Int128Value]("run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []string{"1234", "1734", "null", "1729", "11729"} {
+		v, ok := run.Get(i)
+		got := "null"
+		if ok {
+			got = v.String()
+		}
+		if got != want {
+			t.Errorf("row %d = %s, want %s", i, got, want)
+		}
+	}
+}
+
+// decimals38 is one Decimal(38, 0) column, "v".
+func decimals38(t *testing.T, vals ...string) *ursus.LazyFrame {
+	t.Helper()
+	dt := dtype.Decimal(38, 0)
+	schema, err := dtype.NewSchema(dtype.Field{Name: "v", Type: dt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := make([]i128.Int128, len(vals))
+	for i, s := range vals {
+		u[i] = i128Of(t, s)
+	}
+	b, err := data.NewBatch(schema, []*data.Column{data.NewFixed("v", dt, u, bitmap.AllSet(len(u)))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := memsrc.New(schema, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ursus.Scan(src)
+}
+
+// TestDecimalSumNeedsAThirtyNinthDigitIsRefused: 10^38 - 1 is the largest
+// Decimal(38, 0), and it fits 128 bits with room to spare — so the refusal is the
+// PRECISION's, not the accumulator's. The mean of the same rows is not refused: a
+// Float64 exists when the sum would not.
+func TestDecimalSumNeedsAThirtyNinthDigitIsRefused(t *testing.T) {
+	const nines = "99999999999999999999999999999999999999" // 10^38 - 1
+	v := ursus.Col("v")
+
+	_, err := decimals38(t, nines, "1").GroupBy().Agg(v.Sum()).Collect(t.Context())
+	if !errors.Is(err, ursus.ErrValue) || !strings.Contains(err.Error(), "38 digits") {
+		t.Errorf("sum to 10^38 = %v, want ErrValue naming the 38 digits", err)
+	}
+	_, err = decimals38(t, nines, "1").Select(v.CumSum(false)).Collect(t.Context())
+	if !errors.Is(err, ursus.ErrValue) {
+		t.Errorf("cum_sum to 10^38 = %v, want ErrValue", err)
+	}
+
+	// The controls: the largest total is kept, and so is a sum that passes 10^38
+	// on the way and comes back.
+	for _, vals := range [][]string{{nines}, {nines, "1", "-1"}} {
+		got, err := only(t, decimals38(t, vals...).GroupBy().Agg(v.Sum()),
+			func(x i128.Int128) string { return x.String() })
+		if err != nil || got != nines {
+			t.Errorf("sum %v = %s, %v; want %s", vals, got, err, nines)
+		}
+	}
+	mean, err := only(t, decimals38(t, nines, nines).GroupBy().Agg(v.Mean()),
+		func(x float64) string { return strconv.FormatFloat(x, 'g', -1, 64) })
+	if err != nil || mean != "1e+38" {
+		t.Errorf("mean of two 10^38-1 = %s, %v; want 1e+38 — a Float64 mean exists", mean, err)
+	}
+}
+
+// TestDecimalListAggregatesFollowTheRule: list.sum and list.mean borrow sum's and
+// mean's rules, so a List(Decimal) — which a Parquet file can hold — sums exactly
+// to Decimal(38, s) and averages to the nearest Float64.
+func TestDecimalListAggregatesFollowTheRule(t *testing.T) {
+	dt := dtype.Decimal(10, 2)
+	lt := dtype.List(dt)
+	schema, err := dtype.NewSchema(dtype.Field{Name: "l", Type: lt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child := data.NewFixed("item", dt, []i128.Int128{dec(1234), dec(500), dec(-5)}, bitmap.AllSet(3))
+	b, err := data.NewBatch(schema, []*data.Column{
+		data.NewList("l", []int32{0, 2, 3}, child, bitmap.AllSet(2)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := memsrc.New(schema, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := ursus.Col("l").List()
+	df, err := ursus.Scan(src).Select(l.Sum().Alias("s"), l.Mean().Alias("m")).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := df.Schema().String(); !strings.Contains(got, "s: Decimal(38, 2)") ||
+		!strings.Contains(got, "m: Float64") {
+		t.Errorf("schema = %s", got)
+	}
+	for i, c := range []struct {
+		sum  string
+		mean float64
+	}{{"1734", 8.67}, {"-5", -0.05}} {
+		s, _, _ := df.At[ursus.Int128Value](i, "s")
+		m, _, _ := df.At[float64](i, "m")
+		if s.String() != c.sum || m != c.mean {
+			t.Errorf("row %d: sum %s, mean %v; want %s, %v", i, s, m, c.sum, c.mean)
+		}
 	}
 }
