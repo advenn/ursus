@@ -402,12 +402,17 @@ func decimalAggUnsupported(op AggOp, in dtype.DataType) error {
 //
 // So the advice lives in one place now. Five copies of a sentence is five chances
 // for it to stop being true, and it had already stopped being true in all five.
+//
+// Step 69 made the original advice TRUE — Decimal -> Float64 is implemented, and
+// is the nearest double — so it is back, as the one place that says it.
+// TestDecimalRefusalsRecommendOnlyPossibleCasts checks every cast a Decimal
+// refusal names against CanCast, so it cannot go stale silently again.
 func decimalRemedy(e *uerr.Error) *uerr.Error {
 	return e.
 		Hint("+ and -, comparisons, min, max, first, last, count and n_unique are " +
 			"exact on a Decimal and need no such rule").
-		Hint("to compute one yourself, collect the frame and read the unscaled " +
-			"integers with df.Column[ursus.Int128Value](name), then apply the scale")
+		Hint("if approximate arithmetic is acceptable, cast to Float64 first: " +
+			".Cast(ursus.Float64)")
 }
 
 // ResolveAgg returns just the output type, for callers that do not run the

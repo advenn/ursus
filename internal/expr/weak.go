@@ -61,8 +61,10 @@ func weakTarget(thenN, elseN Node, then, els dtype.DataType) (dtype.DataType, bo
 	if !ok {
 		// Promotion already refuses this pair — Decimal, a temporal, a String, a
 		// Bool. There is no silent widening here to prevent, so there is nothing for
-		// this rule to fix, and admitting it would move a plan-time error to
-		// execution: kernel.Cast implements no Decimal conversion at all.
+		// this rule to fix. For a Decimal it would also be a decision this rule has
+		// no business making: a literal 100 against a Decimal(10,2) needs a rule for
+		// the literal's precision and scale, and a float literal a rule for its
+		// digits, which is the binary-operator precision calculus still undecided.
 		return dtype.Null, false
 	}
 	if out == other {

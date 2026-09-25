@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/kernel"
@@ -104,6 +105,13 @@ func castSample(id dtype.TypeID) (*data.Column, bool) {
 		return fixed(dtype.Duration(dtype.Second), []int64{1, 2}), true
 	case dtype.TypeNull:
 		return data.NewNull("c", dtype.Null, n), true
+	case dtype.TypeInt128:
+		return data.NewFixed("c", dtype.Int128, []i128.Int128{i128.One, i128.FromInt64(2)}, v), true
+	case dtype.TypeDecimal:
+		// 0.01 and 0.02: fractional, so that a cast to an integer has to NULL them
+		// under CastLossy rather than deliver them — the check here is whether each
+		// conversion is implemented, and a null is a delivered answer.
+		return data.NewFixed("c", dtype.Decimal(10, 2), []i128.Int128{i128.One, i128.FromInt64(2)}, v), true
 	}
 	return nil, false
 }
@@ -182,15 +190,19 @@ func TestCanCastAgreesWithTheKernel(t *testing.T) {
 	// that is expected to be uncoverable. A count would let a newly-added type
 	// silently take the place of one that became samplable.
 	//
-	// Each of these needs more than a slice of values to build: a Decimal needs
-	// Int128 storage and a scale, an Enum needs its categories in the TYPE, and
-	// List, Struct and Array need a child column. Int128 and Uint128 have no Go
-	// literal. They are reachable through the CAST TARGET side — castTarget builds
-	// a Decimal(10,2), which is how the sixteen numeric -> Decimal disagreements
-	// were found — so what is missing is only their use as a SOURCE.
+	// Each of these needs more than a slice of values to build: an Enum needs its
+	// categories in the TYPE, and List, Struct and Array need a child column.
+	// Uint128 has no storage at all.
+	//
+	// Decimal and Int128 were on this list until step 69, excused because they
+	// "have no Go literal" — which was true and beside the point, since a column of
+	// them is one data.NewFixed call. Neither had been checked here as a cast
+	// SOURCE. This checks only that the two sides AGREE; whether the values survive
+	// is intcast_test.go's and castdec_test.go's question — and the first of those
+	// found Int128 -> Int64 rounding above 2^53.
 	expectedUnsampled := map[string]bool{
-		"Array": true, "Categorical": true, "Decimal": true, "Enum": true,
-		"Int128": true, "List": true, "Struct": true, "Uint128": true,
+		"Array": true, "Categorical": true, "Enum": true,
+		"List": true, "Struct": true, "Uint128": true,
 	}
 	for name := range unsampled {
 		if !expectedUnsampled[name] {

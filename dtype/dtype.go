@@ -67,8 +67,22 @@ func Datetime(u TimeUnit, tz string) DataType {
 
 // Decimal is a fixed-point decimal with the given precision (total digits) and
 // scale (digits after the point), stored in 128 bits.
+//
+// It does not refuse a precision and scale that no Decimal can have — the type is
+// a value, and constructors here do not return errors — so ValidDecimal is what a
+// consumer checks. Every consumer that builds a Decimal from outside does.
 func Decimal(precision, scale uint8) DataType {
 	return DataType{id: TypeDecimal, prec: precision, scale: scale}
+}
+
+// MaxDecimalPrecision is the most digits a Decimal holds. 10^38 - 1 is the largest
+// all-nines number below 2^127, so it is the widest precision 128 bits can promise.
+const MaxDecimalPrecision = 38
+
+// ValidDecimal reports whether a precision and scale describe a Decimal that can
+// exist: 1 to MaxDecimalPrecision digits, of which at most all follow the point.
+func ValidDecimal(precision, scale uint8) bool {
+	return precision >= 1 && precision <= MaxDecimalPrecision && scale <= precision
 }
 
 // List is a variable-length list of inner.

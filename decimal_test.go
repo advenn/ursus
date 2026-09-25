@@ -2,6 +2,7 @@ package ursus_test
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"testing"
 
@@ -167,15 +168,14 @@ func TestDecimalGuards(t *testing.T) {
 		{
 			// Would hand back the unscaled integer: 12.34 as 1234.
 			//
-			// The refusal MOVED, from the kernel to plan time, when step 52 stopped
-			// CanCast promising what the kernel refuses. So the kind is ErrType
-			// rather than ErrUnsupported and the message is the type checker's.
-			// Earlier and with the same meaning is the improvement; "unscaled" now
-			// lives in the hint rather than the summary.
-			name: "cast to Int64 would return unscaled units",
+			// The refusal has moved twice. Step 52 took it from the kernel to plan
+			// time, when CanCast stopped promising what the kernel refused. Step 69
+			// implemented the cast, exact or refused, so it is a VALUE refusal now:
+			// 12.34 has a fraction an integer cannot hold, while 5.00 would convert.
+			name: "cast to Int64 refuses a fraction rather than unscaling",
 			lf:   func() *ursus.LazyFrame { return prices(t).Select(ursus.Col("price").Cast(dtype.Int64)) },
-			kind: uerr.ErrType,
-			want: "cannot cast Decimal",
+			kind: uerr.ErrValue,
+			want: "value 12.34 at row 0 is not representable as Int64",
 		},
 		{
 			// Would bind Acc: Float64 and then ask an Int128 column for []float64,
@@ -344,38 +344,107 @@ func TestCastScannerFindsARecommendation(t *testing.T) {
 
 // TestDecimalRemedyIsFollowable does what the refusal now tells a caller to do, and
 // checks the answer. Advice nobody has run is a claim.
+//
+// Until step 69 the advice was to read the unscaled integers with Int128Value and
+// apply the scale by hand, because the cast every refusal used to recommend did not
+// exist. It does now, so the advice is the cast again — and multiplication is the
+// refusal followed, because it stays refused: its precision rule is still undecided.
 func TestDecimalRemedyIsFollowable(t *testing.T) {
-	_, err := prices(t).GroupBy(ursus.Col("sku")).Agg(ursus.Col("price").Sum()).
-		Collect(t.Context())
+	price := ursus.Col("price")
+	_, err := prices(t).Select(price.Mul(price)).Collect(t.Context())
 	if err == nil {
-		t.Skip("sum(Decimal) is implemented; this test has served its purpose")
+		t.Fatal("Decimal multiplication is implemented; follow a refusal that still exists")
 	}
-	if !strings.Contains(err.Error(), "Int128Value") {
-		t.Fatalf("the refusal no longer names the escape hatch:\n%v", err)
+	if !strings.Contains(err.Error(), ".Cast(ursus.Float64)") {
+		t.Fatalf("the refusal no longer names the cast:\n%v", err)
 	}
 
-	df, cerr := prices(t).Collect(t.Context())
-	if cerr != nil {
-		t.Fatal(cerr)
+	f := price.Cast(ursus.Float64)
+	df, err := prices(t).Select(f.Mul(f).Alias("sq")).Collect(t.Context())
+	if err != nil {
+		t.Fatalf("the recommended cast does not work: %v", err)
 	}
-	s, cerr := df.Column[ursus.Int128Value]("price")
-	if cerr != nil {
-		t.Fatalf("the recommended read does not work: %v", cerr)
+	sq, err := df.Column[float64]("sq")
+	if err != nil {
+		t.Fatal(err)
 	}
-	// 12.34 + 5.00 + null + -0.05 + 100.00 = 117.29, unscaled 11729 at scale 2.
-	var total int64
-	for i := range s.Len() {
-		v, ok := s.Get(i)
-		if !ok {
-			continue // a null price contributes nothing, exactly as sum() would
+	// The float64 product of the double nearest 12.34 with itself — computed at run
+	// time, because a Go constant expression would be exact. A missing scale would
+	// give 1234 * 1234 = 1522756.
+	x := 12.34
+	if v, _ := sq.Get(0); v != x*x {
+		t.Errorf("12.34 squared = %v, want %v", v, x*x)
+	}
+}
+
+// TestFloatToDecimalIsExactlyWhenRoundIsANoOp: a strict cast from a float keeps
+// every digit or refuses, and the condition is exactly "rounding it to the target's
+// scale changes nothing". So the rounding a caller may want is one they write — and
+// Round(2) then Cast gives the digits Polars and DuckDB give, 2.675 -> 2.68, because
+// both are Round's own arithmetic. The oracle is the public Round, not a copy of it.
+func TestFloatToDecimalIsExactlyWhenRoundIsANoOp(t *testing.T) {
+	floats := []float64{0, 0.1, 0.12, 0.123, 2.675, 1.005, 12.34, -0.05, 1.0 / 3,
+		99999999.99, 999999999.99, 123456.789}
+	var kept, refused int
+	for _, s := range []int{0, 1, 2, 3} {
+		dt := ursus.Decimal(10, uint8(s))
+		f := ursus.Col("f")
+		df, err := ursus.Frame(ursus.Values("f", floats)).Select(
+			f.Round(s).Alias("r"),
+			f.CastLossy(dt).Alias("d"),
+			f.CastLossy(dt).Cast(ursus.Float64).Alias("back"),
+		).Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
 		}
-		n, fits := v.Int64()
-		if !fits {
-			t.Fatalf("row %d does not fit an int64: %v", i, v)
+		r, _ := df.Column[float64]("r")
+		back, _ := df.Column[float64]("back")
+		for i, v := range floats {
+			rv, _ := r.Get(i)
+			bv, ok := back.Get(i)
+			inRange := math.Abs(v) < math.Pow10(10-s)
+			if want := rv == v && inRange; ok != want {
+				t.Errorf("%v -> %s: kept = %v, but Round(%d) == v is %v", v, dt, ok, s, rv == v)
+				continue
+			}
+			if ok && bv != v {
+				t.Errorf("%v -> %s -> Float64 = %v, want it back unchanged", v, dt, bv)
+			}
+			if ok {
+				kept++
+			} else {
+				refused++
+			}
 		}
-		total += n
 	}
-	if total != 11729 {
-		t.Errorf("unscaled total = %d, want 11729 (117.29 at scale 2)", total)
+	if kept < 10 || refused < 10 {
+		t.Fatalf("%d kept, %d refused — the sweep has gone vacuous", kept, refused)
+	}
+
+	df, err := ursus.Frame(ursus.Values("f", []float64{2.675, 1.005})).
+		Select(ursus.Col("f").Round(2).Cast(ursus.Decimal(10, 2))).Collect(t.Context())
+	if err != nil {
+		t.Fatalf("Round(2) then Cast must convert: %v", err)
+	}
+	for i, want := range []string{"2.68", "1.00"} {
+		if got := df.String(); !strings.Contains(got, want) {
+			t.Errorf("row %d: want %s in\n%s", i, want, got)
+		}
+	}
+	_, err = ursus.Frame(ursus.Values("f", []float64{2.675})).
+		Select(ursus.Col("f").Cast(ursus.Decimal(10, 2))).Collect(t.Context())
+	if !errors.Is(err, ursus.ErrValue) || !strings.Contains(err.Error(), ".Round(2)") {
+		t.Errorf("a strict cast of 2.675 should refuse and name .Round(2): %v", err)
+	}
+}
+
+// TestCastToADecimalThatCannotExist: dtype.Decimal returns no error, so
+// Decimal(200, 3) is a value a caller can hold, and the cast is where it is refused —
+// at plan time, saying why.
+func TestCastToADecimalThatCannotExist(t *testing.T) {
+	_, err := prices(t).Select(ursus.Col("price").Cast(ursus.Decimal(200, 3))).
+		CollectSchema(t.Context())
+	if !errors.Is(err, ursus.ErrType) || !strings.Contains(err.Error(), "1 to 38 digits") {
+		t.Errorf("Decimal(200, 3) = %v, want ErrType naming the precision range", err)
 	}
 }

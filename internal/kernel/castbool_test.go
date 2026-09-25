@@ -186,12 +186,15 @@ func mustVals[T data.Fixed](t *testing.T, c *data.Column) []T {
 // build a Decimal column at all. That is a tripwire working exactly as designed,
 // and it is the reason this one is rewritten rather than deleted: the pair still
 // needs pinning, just from the other side.
+//
+// Step 69 implemented the numeric pairs — exact or refused, in castdec.go — and
+// both sides moved together, so they left this list rather than reopening the
+// divergence; castdec_test.go asserts their VALUES, which agreement cannot. Bool is
+// what stays: a truth value is not an amount, in either direction.
 func TestDecimalCastDivergenceIsClosed(t *testing.T) {
 	dec := dtype.Decimal(10, 2)
 	for _, c := range []struct{ from, to dtype.DataType }{
-		{dtype.Int64, dec}, {dec, dtype.Int64},
 		{dtype.Bool, dec}, {dec, dtype.Bool},
-		{dtype.Float64, dec},
 	} {
 		if dtype.CanCast(c.from, c.to) {
 			t.Errorf("CanCast(%s, %s) is true again — the kernel still refuses it, "+

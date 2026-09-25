@@ -249,9 +249,14 @@ func (c *Cast) Field(in *dtype.Schema) (dtype.Field, error) {
 		return dtype.Field{}, err
 	}
 	if !dtype.CanCast(cf.Type, c.To) {
-		return dtype.Field{}, uerr.New(uerr.KindType, "cast",
+		e := uerr.New(uerr.KindType, "cast",
 			"cannot cast %s to %s", cf.Type, c.To).
 			Hint("column %q has type %s", cf.Name, cf.Type)
+		if c.To.ID() == dtype.TypeDecimal && !dtype.ValidDecimal(c.To.Precision(), c.To.Scale()) {
+			e = e.Hint("%s is not a type: a Decimal has 1 to %d digits of precision, "+
+				"and a scale no larger than its precision", c.To, dtype.MaxDecimalPrecision)
+		}
+		return dtype.Field{}, e
 	}
 	return dtype.Field{
 		Name:     OutputName(c),

@@ -487,22 +487,14 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 		return c.Rename(name).WithDType(to), nil
 	}
 
-	// A Decimal is stored as its UNSCALED integer, so every numeric cast below
-	// would silently return the wrong number by a factor of 10^scale:
-	// Decimal(10,2) holding 12.34 casts to Int64 as 1234, and Int64 5 casts to
-	// Decimal(10,2) as 0.05. The identity cast is already handled above; a change
-	// of precision or scale needs rescaling that is not written yet.
-	//
-	// Decimal TO STRING is the exception and is exact: the scale is known, so the
-	// unscaled integer can be pointed at rather than divided. dtype.CanCast has
-	// always promised it, and refusing it here was the same plan-accepts /
-	// kernel-rejects divergence this file records for null casts and string casts.
+	// A Decimal is stored as its UNSCALED integer, so every numeric cast below would
+	// return the wrong number by a factor of 10^scale — Decimal(10,2) 12.34 would
+	// cast to Int64 as 1234 — and castDecimal applies the scale instead. Decimal TO
+	// STRING falls through to formatToString, which is exact: the scale is known, so
+	// the unscaled digits can be pointed at rather than divided.
 	if (from.ID() == dtype.TypeDecimal || to.ID() == dtype.TypeDecimal) &&
 		to.ID() != dtype.TypeString {
-		return nil, uerr.New(uerr.KindUnsupported, "cast",
-			"cast from %s to %s is not implemented yet", from, to).
-			Hint("a decimal is stored as an unscaled integer, so this cast would " +
-				"be wrong by a factor of 10^scale rather than merely imprecise")
+		return castDecimal(name, to, strict, c)
 	}
 
 	// String <-> Binary is a RELABEL. Both are offsets plus a character buffer, so

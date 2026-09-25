@@ -79,8 +79,11 @@ func Promote(a, b DataType) (DataType, bool) {
 		return Null, false
 	}
 
-	// Decimal has no kernels yet; combining it with anything else would need a
-	// precision/scale calculus that is not worth guessing at.
+	// A Decimal promotes only to itself — the a == b arm above. + and - of two
+	// identical Decimals are exact, and CanCast converts between a Decimal and any
+	// numeric type; what does not exist is a rule for the precision and scale of
+	// Decimal(10,2) + Decimal(12,3), or of Decimal + Int64, and guessing one here
+	// would silently commit the whole binary-operator calculus.
 	if a.id == TypeDecimal || b.id == TypeDecimal {
 		return Null, false
 	}
@@ -169,18 +172,27 @@ func CanCast(from, to DataType) bool {
 		return true
 	}
 	switch {
-	// DECIMAL first, because IsNumeric includes it and the numeric arm below would
-	// otherwise promise every numeric -> Decimal conversion. The kernel refuses all
-	// of them, and says why: "a decimal is stored as an unscaled integer, so this
-	// cast would be wrong by a factor of 10^scale rather than merely imprecise."
+	// DECIMAL first, because it must not fall into the arms below: the numeric ->
+	// temporal arm would promise Decimal -> Date, which relabels an unscaled integer
+	// as a day count, and the numeric <-> Bool arm would promise a truth value.
 	//
-	// That was the DANGEROUS direction of this divergence — CanCast promising what
-	// the evaluator cannot do, so CollectSchema and Explain succeeded and Collect
-	// failed. It was the standing "numeric <-> Decimal" item, and there were sixteen
-	// of them. Decimal -> String is the one conversion that is exact and
-	// implemented: the scale is known, so the unscaled integer can be formatted.
+	// What it does promise is every numeric type in both directions, another Decimal,
+	// and String as a target. Each numeric conversion is EXACT OR REFUSED per value —
+	// 12.34 to an integer is refused, 0.1 to Decimal(10,2) is 0.10 — except a Float64
+	// target, which is approximate by definition, as it is from Int64. The kernel
+	// arm is castDecimal.
+	//
+	// A target that no Decimal can be — Decimal(200, 3) constructs, because a type
+	// constructor returns no error — is refused here, so the planner rejects it
+	// rather than the kernel.
 	case from.ID() == TypeDecimal || to.ID() == TypeDecimal:
-		return from.ID() == TypeDecimal && to.id == TypeString
+		if to.id == TypeDecimal && !ValidDecimal(to.prec, to.scale) {
+			return false
+		}
+		if from.ID() == TypeDecimal && to.id == TypeString {
+			return true
+		}
+		return from.IsNumeric() && to.IsNumeric()
 	case from.IsNumeric() && to.IsNumeric():
 		return true
 	case from.IsNumeric() && to.IsBool(), from.IsBool() && to.IsNumeric():
