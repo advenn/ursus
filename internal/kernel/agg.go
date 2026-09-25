@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"math"
+	"math/big"
 	"strings"
 
 	"github.com/advenn/ursus/dtype"
@@ -394,18 +395,36 @@ func (a *nuniqueAcc) Finish(name string, nGroups int) (*data.Column, error) {
 // an all-null group would be the accumulator's zero, which is wrong: ursus follows
 // SQL and returns NULL. The distinction is between "the values summed to zero" and
 // "there was nothing to sum", and once it is collapsed to 0 it cannot be recovered.
+//
+// # A 128-bit INPUT carries
+//
+// The i128 package argues its wrapping Add is safe, because reaching 2^127 takes
+// 2^63 rows of maximal Int64. That is true of every input of 64 bits or fewer, which
+// keep the plain Add. It is false of an Int128 column, where two rows are enough —
+// and wrapping can come all the way round: four values of 2^126+5 total 2^128+20,
+// which wraps to 20, a number no check on the result can tell from a true 20.
+//
+// So a 128-bit input counts its carries: the true total is i + carry·2^128, and it
+// is refused unless carry is zero. That is a statement about the TOTAL, not about
+// the order the rows arrived in — a checked add that refused on the first wrap would
+// accept [Max, 1, -1] in one order and refuse it in another, and a parallel merge
+// does not fix the order.
 type sumAcc struct {
 	in    dtype.DataType
 	bind  expr.AggBinding
 	isInt bool
+	wide  bool // the input is 128 bits wide, so carry is kept
 
-	i    []i128.Int128
-	f    []float64
-	seen []bool
+	i     []i128.Int128
+	carry []int64
+	f     []float64
+	seen  []bool
 }
 
 func newSumAcc(in dtype.DataType, bind expr.AggBinding) (Accumulator, error) {
-	return &sumAcc{in: in, bind: bind, isInt: bind.Acc.ID() == dtype.TypeInt128}, nil
+	isInt := bind.Acc.ID() == dtype.TypeInt128
+	return &sumAcc{in: in, bind: bind, isInt: isInt,
+		wide: isInt && in.Physical().ID() == dtype.TypeInt128}, nil
 }
 
 func (a *sumAcc) Reserve(n int) {
@@ -413,10 +432,29 @@ func (a *sumAcc) Reserve(n int) {
 		a.seen = append(a.seen, false)
 		if a.isInt {
 			a.i = append(a.i, i128.Zero)
+			if a.wide {
+				a.carry = append(a.carry, 0)
+			}
 		} else {
 			a.f = append(a.f, 0)
 		}
 	}
+}
+
+// addCarry returns a+b wrapped to 128 bits, and the carry out of it: +1 if the
+// true sum passed Max, -1 if it passed Min. The true sum is s + carry·2^128.
+//
+// Two operands of opposite sign cannot overflow, and two of the same sign have
+// overflowed exactly when the wrapped result's sign differs from theirs.
+func addCarry(a, b i128.Int128) (i128.Int128, int64) {
+	s := a.Add(b)
+	switch {
+	case a.Hi >= 0 && b.Hi >= 0 && s.Hi < 0:
+		return s, 1
+	case a.Hi < 0 && b.Hi < 0 && s.Hi >= 0:
+		return s, -1
+	}
+	return s, 0
 }
 
 func (a *sumAcc) AddBatch(groups []int32, col *data.Column) error {
@@ -445,7 +483,10 @@ func (a *sumAcc) AddBatch(groups []int32, col *data.Column) error {
 			}
 			for i, g := range groups {
 				if valid.Get(i) {
-					add(g, src[i])
+					var c int64
+					a.i[g], c = addCarry(a.i[g], src[i])
+					a.carry[g] += c
+					a.seen[g] = true
 				}
 			}
 		default:
@@ -485,9 +526,14 @@ func (a *sumAcc) Merge(other Accumulator, remap []int32) error {
 		if !o.seen[src] {
 			return
 		}
-		if a.isInt {
+		switch {
+		case a.wide:
+			var c int64
+			a.i[dst], c = addCarry(a.i[dst], o.i[src])
+			a.carry[dst] += o.carry[src] + c
+		case a.isInt:
 			a.i[dst] = a.i[dst].Add(o.i[src])
-		} else {
+		default:
 			a.f[dst] += o.f[src]
 		}
 		a.seen[dst] = true
@@ -500,6 +546,13 @@ func (a *sumAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	valid := seenBitmap(a.seen, nGroups)
 
 	if a.isInt {
+		if a.wide {
+			for g := range nGroups {
+				if a.seen[g] && a.carry[g] != 0 {
+					return nil, sumOverflow(a.bind.Out, g, nGroups, a.i[g], a.carry[g])
+				}
+			}
+		}
 		if !a.bind.Out.IsTemporal() {
 			return data.NewFixed(name, a.bind.Out, a.i[:nGroups], valid), nil
 		}
@@ -553,6 +606,22 @@ func durationSumOverflow(out dtype.DataType, g, nGroups int, total i128.Int128) 
 			".Cast(ursus.Duration(ursus.Micro)) before summing").
 		Hint("or sum the ticks themselves: .Cast(ursus.Int64).Sum() accumulates at " +
 			"128 bits and returns an Int128, which cannot overflow")
+}
+
+// trueTotal is i + carry·2^128, the value a carried 128-bit sum stands for.
+func trueTotal(i i128.Int128, carry int64) *big.Int {
+	t, _ := new(big.Int).SetString(i.String(), 10)
+	c := new(big.Int).Lsh(big.NewInt(carry), 128)
+	return t.Add(t, c)
+}
+
+// sumOverflow refuses a group total of 128-bit values that no longer fits 128 bits.
+func sumOverflow(out dtype.DataType, g, nGroups int, total i128.Int128, carry int64) error {
+	return uerr.New(uerr.KindValue, "sum",
+		"the sum of group %d of %d is %s, which overflows %s",
+		g, nGroups, trueTotal(total, carry), out).
+		Hint("values of 128 bits can sum past 128 bits; for an approximate total, " +
+			"sum a Float64: .Cast(ursus.Float64).Sum()")
 }
 
 // --- mean --------------------------------------------------------------------

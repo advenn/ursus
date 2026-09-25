@@ -185,6 +185,11 @@ func TestFloat64(t *testing.T) {
 			t.Errorf("Float64(%d) = %v, want %v", v, got, want)
 		}
 	}
+	// Min is the one value whose magnitude has no Int128, so it cannot convert by
+	// negating; it once recursed until the stack ran out.
+	if got, want := i128.Min.Float64(), -math.Ldexp(1, 127); got != want {
+		t.Errorf("Float64(Min) = %v, want %v", got, want)
+	}
 	// Values past 2^53 round, which is expected and must not be an error.
 	if got := i128.Max.Float64(); got <= 1.7e38 {
 		t.Errorf("Float64(Max) = %v, want ~1.70e38", got)

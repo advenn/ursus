@@ -599,17 +599,21 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 			"cast from %s to %s is not implemented yet", from, to)
 	}
 
-	// Int128 is handled before the float64 path below. Routing a 128-bit value
-	// through a float64 would round above 2^53 — precisely the silent precision
-	// loss that widening sums to 128 bits exists to prevent.
+	// Integer to integer never touches a float: a float64 holds every integer only
+	// up to 2^53, and the widest integers here are 128 bits. See castInt.
+	if from.IsInteger() && to.IsInteger() {
+		return castInt(name, to, strict, c)
+	}
+	// Int128 to or from a float, handled before the float64 path below because a
+	// float source needs castI128's fraction check.
 	if fp.ID() == dtype.TypeInt128 || tp.ID() == dtype.TypeInt128 {
 		return castI128(name, to, strict, c)
 	}
 
-	// Everything else widens through float64 as the common currency. Exact for
-	// every remaining pair: the widest non-128-bit integer ursus can produce is
-	// Uint64, and any value large enough to round is caught by the range check in
-	// narrow.
+	// Everything else has a float on at least one side, and widens through float64
+	// as the common currency. A float source is exact in a float64; an integer
+	// source bound for a float is approximate by definition, and a Float32 target is
+	// range- and round-trip-checked by narrow.
 	src, err := toFloat64(c)
 	if err != nil {
 		return nil, err
@@ -788,101 +792,152 @@ func narrow[T data.Primitive](name string, to dtype.DataType, src []float64,
 	return data.NewFixedBuffer(name, to, buf, n, valid), nil
 }
 
-// castI128 converts to or from Int128.
+// castInt converts between integer types — every width, signed or not, and Int128 —
+// without a float anywhere.
 //
-// Narrowing from Int128 uses the CHECKED conversions, so a sum that genuinely
-// exceeded int64 is reported rather than truncated. That check is the entire
-// payoff of accumulating at 128 bits: the overflow becomes impossible internally
-// and visible at the boundary.
-func castI128(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
-	n := c.Len()
-	from := c.DType()
-
-	// TO Int128 — always exact from any integer, and from a float by truncation.
-	if to.Physical().ID() == dtype.TypeInt128 {
-		buf, dst := newValuesBuffer[i128.Int128](n)
-		ok := bitmap.NewBuilder(n)
-		valid := c.Validity()
-
-		switch {
-		case from.IsSignedInteger():
-			src, err := widenToInt64(c)
-			if err != nil {
-				return nil, err
-			}
-			for i, v := range src {
-				dst[i] = i128.FromInt64(v)
-				ok.Append(true)
-			}
-		case from.IsUnsignedInteger():
-			src, err := widenToUint64(c)
-			if err != nil {
-				return nil, err
-			}
-			for i, v := range src {
-				dst[i] = i128.FromUint64(v)
-				ok.Append(true)
-			}
-		default:
-			src, err := toFloat64(c)
-			if err != nil {
-				return nil, err
-			}
-			for i, f := range src {
-				v, fits := i128.FromFloat64(f)
-				if !fits {
-					if strict && valid.Get(i) {
-						return nil, uerr.New(uerr.KindValue, "cast",
-							"value %v at row %d is not representable as Int128", f, i)
-					}
-					ok.Append(false)
-					continue
-				}
-				dst[i] = v
-				ok.Append(true)
-			}
-			valid = bitmap.And(valid, ok.Finish())
-		}
-		return data.NewFixedBuffer(name, to, buf, n, valid), nil
-	}
-
-	// FROM Int128.
-	src, err := data.Values[i128.Int128](c)
+// Every integer fits an Int128 exactly, so widening to one loses nothing, and
+// narrowI128 then range-checks against the TARGET's own bounds. Before this, only
+// Int128 went through here and the other pairs took the float64 path below, on the
+// argument that any value large enough to round would be caught by narrow's range
+// check. It was not: narrow checks the value after it has been rounded, against
+// itself. Int64 and Uint64 above 2^53 came back rounded, MaxInt64 cast to Uint64
+// came back as 2^63 — one MORE than the input, which fits a Uint64 and so passed —
+// and MaxInt64 cast from a Uint64 was refused. intcast_test.go sweeps every pair.
+func castInt(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
+	src, err := widenToInt128(c)
 	if err != nil {
 		return nil, err
 	}
-	if to.Physical().ID() == dtype.TypeFloat64 || to.Physical().ID() == dtype.TypeFloat32 {
-		f := make([]float64, n)
-		for i, v := range src {
-			f[i] = v.Float64()
-		}
-		return fromFloat64(name, to, f, c.Validity(), strict)
-	}
+	return narrowI128(name, to, c.DType(), src, c.Validity(), strict)
+}
 
-	// Narrowing to an integer: check every value.
-	f := make([]float64, n)
+// narrowI128 converts Int128 values to the integer type to, refusing (strict) or
+// nulling (lossy) any value outside its range. from is the source type, for the
+// refusal's hint.
+func narrowI128(name string, to, from dtype.DataType, src []i128.Int128,
+	valid bitmap.View, strict bool) (*data.Column, error) {
+
+	switch to.Physical().ID() {
+	case dtype.TypeInt8:
+		return narrowSigned[int8](name, to, from, src, valid, strict, math.MinInt8, math.MaxInt8)
+	case dtype.TypeInt16:
+		return narrowSigned[int16](name, to, from, src, valid, strict, math.MinInt16, math.MaxInt16)
+	case dtype.TypeInt32:
+		return narrowSigned[int32](name, to, from, src, valid, strict, math.MinInt32, math.MaxInt32)
+	case dtype.TypeInt64:
+		return narrowSigned[int64](name, to, from, src, valid, strict, math.MinInt64, math.MaxInt64)
+	case dtype.TypeUint8:
+		return narrowUnsigned[uint8](name, to, from, src, valid, strict, math.MaxUint8)
+	case dtype.TypeUint16:
+		return narrowUnsigned[uint16](name, to, from, src, valid, strict, math.MaxUint16)
+	case dtype.TypeUint32:
+		return narrowUnsigned[uint32](name, to, from, src, valid, strict, math.MaxUint32)
+	case dtype.TypeUint64:
+		return narrowUnsigned[uint64](name, to, from, src, valid, strict, math.MaxUint64)
+	case dtype.TypeInt128:
+		buf, dst := newValuesBuffer[i128.Int128](len(src))
+		copy(dst, src)
+		return data.NewFixedBuffer(name, to, buf, len(src), valid), nil
+	default:
+		return nil, uerr.Internalf("kernel: cannot narrow Int128 to %s", to)
+	}
+}
+
+func narrowSigned[T int8 | int16 | int32 | int64](name string, to, from dtype.DataType,
+	src []i128.Int128, valid bitmap.View, strict bool, lo, hi int64) (*data.Column, error) {
+
+	return narrowInto(name, to, from, src, valid, strict, func(v i128.Int128) (T, bool) {
+		x, ok := v.Int64()
+		return T(x), ok && x >= lo && x <= hi
+	})
+}
+
+func narrowUnsigned[T uint8 | uint16 | uint32 | uint64](name string, to, from dtype.DataType,
+	src []i128.Int128, valid bitmap.View, strict bool, hi uint64) (*data.Column, error) {
+
+	return narrowInto(name, to, from, src, valid, strict, func(v i128.Int128) (T, bool) {
+		x, ok := v.Uint64()
+		return T(x), ok && x <= hi
+	})
+}
+
+func narrowInto[T data.Primitive](name string, to, from dtype.DataType, src []i128.Int128,
+	valid bitmap.View, strict bool, conv func(i128.Int128) (T, bool)) (*data.Column, error) {
+
+	n := len(src)
+	buf, dst := newValuesBuffer[T](n)
 	ok := bitmap.NewBuilder(n)
-	valid := c.Validity()
 	lossy := false
 	for i, v := range src {
-		iv, fits := v.Int64()
+		t, fits := conv(v)
 		if !fits {
 			lossy = true
 			if strict && valid.Get(i) {
-				return nil, uerr.New(uerr.KindValue, "cast",
-					"value %s at row %d does not fit in %s", v, i, to).
-					Hint("the sum exceeded 64 bits; keep it as Int128 or cast to Float64")
+				e := uerr.New(uerr.KindValue, "cast",
+					"value %s at row %d is not representable as %s", v, i, to).
+					Hint("use a non-strict cast to turn unrepresentable values into nulls")
+				if from.ID() == dtype.TypeInt128 {
+					e = e.Hint("an integer sum is an Int128 so that it cannot overflow; " +
+						"keep it as one, or cast to Float64 for an approximate value")
+				}
+				return nil, e
 			}
 			ok.Append(false)
 			continue
 		}
-		f[i] = float64(iv)
+		dst[i] = t
 		ok.Append(true)
 	}
 	if lossy {
 		valid = bitmap.And(valid, ok.Finish())
 	}
-	return fromFloat64(name, to, f, valid, strict)
+	return data.NewFixedBuffer(name, to, buf, n, valid), nil
+}
+
+// castI128 converts between Int128 and a float. Integer pairs go through castInt.
+func castI128(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
+	n := c.Len()
+
+	// TO Int128, from a float: exact or refused, like every other float -> integer
+	// cast. i128.FromFloat64 truncates, and this used to take its answer, so a strict
+	// Cast(Int128) turned 3.7 into 3 where Cast(Int64) refuses it — two rules for one
+	// question, one of which broke Cast's promise to fail on an unrepresentable value.
+	if to.Physical().ID() == dtype.TypeInt128 {
+		src, err := toFloat64(c)
+		if err != nil {
+			return nil, err
+		}
+		buf, dst := newValuesBuffer[i128.Int128](n)
+		ok := bitmap.NewBuilder(n)
+		valid := c.Validity()
+		for i, f := range src {
+			v, fits := i128.FromFloat64(f)
+			if !fits || f != math.Trunc(f) {
+				if strict && valid.Get(i) {
+					return nil, uerr.New(uerr.KindValue, "cast",
+						"value %v at row %d is not representable as Int128", f, i).
+						Hint("use a non-strict cast to turn unrepresentable values into nulls").
+						Hint("to drop the fraction on purpose, apply .Floor() or .Ceil() first")
+				}
+				ok.Append(false)
+				continue
+			}
+			dst[i] = v
+			ok.Append(true)
+		}
+		return data.NewFixedBuffer(name, to, buf, n, bitmap.And(valid, ok.Finish())), nil
+	}
+
+	// FROM Int128, to a float.
+	src, err := data.Values[i128.Int128](c)
+	if err != nil {
+		return nil, err
+	}
+	f := make([]float64, n)
+	for i, v := range src {
+		f[i] = v.Float64()
+	}
+	return fromFloat64(name, to, f, c.Validity(), strict)
 }
 
 func widenToInt64(c *data.Column) ([]int64, error) {

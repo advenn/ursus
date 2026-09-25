@@ -79,16 +79,10 @@ func only[T any](t *testing.T, lf *ursus.LazyFrame, render func(T) string) (stri
 	return render(v), nil
 }
 
-// knownInexactInt128 names each case that answers wrongly today, with what it
-// answers. Emptied by the commit that makes these exact or refused.
-var knownInexactInt128 = map[string]string{
-	"sum-cast-int64":      "9007199254740992 — 2^53+1 rounded to 2^53 through a float64",
-	"sum-cast-uint64":     "refused, although 2^64-2 fits a Uint64",
-	"float-int128-strict": "3 — truncated, where Cast(Int64) refuses 3.7",
-	"float-int128-lossy":  "3 — truncated, where CastLossy(Int64) gives null",
-	"sum-wraps-once":      "-170141183460469231731687303715884105728 — Max+1 wrapped to Min",
-	"sum-wraps-fully":     "20 — 2^128+20 wrapped all the way round into range",
-}
+// knownInexactInt128 names each case that answers wrongly, with what it answers.
+// Empty since integer casts stopped going through a float and a 128-bit sum began
+// counting its carries; a case that regresses fails as unlisted.
+var knownInexactInt128 = map[string]string{}
 
 func TestInt128BoundaryIsExactOrRefused(t *testing.T) {
 	const twoTo53 = int64(1) << 53
@@ -155,5 +149,34 @@ func TestInt128BoundaryIsExactOrRefused(t *testing.T) {
 				t.Errorf("= %s (err %v), want %s", got, err, c.want)
 			}
 		})
+	}
+}
+
+// TestInt128CumSumRefusesAWrappedPrefix: a cumulative publishes every prefix, so a
+// running total that wraps has no value to show for that row — even if the total
+// comes back into range later. It is refused where sum() of the same rows is not.
+func TestInt128CumSumRefusesAWrappedPrefix(t *testing.T) {
+	df, err := int128Frame(t, i128.Max.Sub(i128.One), i128.One).
+		Select(ursus.Col("v").CumSum(false)).Collect(t.Context())
+	if err != nil {
+		t.Fatalf("a running total that reaches Max exactly was refused: %v", err)
+	}
+	col, err := df.Column[ursus.Int128Value]("v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := col.Get(1); v != i128.Max {
+		t.Errorf("last prefix = %s, want Max", v)
+	}
+
+	_, err = int128Frame(t, i128.Max, i128.One, i128.FromInt64(-1)).
+		Select(ursus.Col("v").CumSum(false)).Collect(t.Context())
+	if !errors.Is(err, ursus.ErrValue) {
+		t.Fatalf("a prefix of Max+1 = %v, want ErrValue", err)
+	}
+	sum, err := only(t, int128Frame(t, i128.Max, i128.One, i128.FromInt64(-1)).
+		GroupBy().Agg(ursus.Col("v").Sum()), func(v i128.Int128) string { return v.String() })
+	if err != nil || sum != i128.Max.String() {
+		t.Errorf("sum() of the same rows = %s, %v; want Max — only the prefix was out of range", sum, err)
 	}
 }

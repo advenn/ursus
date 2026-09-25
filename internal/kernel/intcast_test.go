@@ -191,14 +191,9 @@ func readInts[T data.Fixed](c *data.Column, f func(int, T)) error {
 	return nil
 }
 
-// knownInexactIntCasts names each pair that answers wrongly today, with what it
-// answers. Emptied by the commit that makes integer casts exact.
-var knownInexactIntCasts = map[string]string{
-	"Int64->Uint64":  "MaxInt64 becomes 2^63; 2^53+1 becomes 2^53",
-	"Uint64->Int64":  "MaxInt64 refused, or null under CastLossy; 2^53+1 becomes 2^53",
-	"Int128->Int64":  "MaxInt64 refused; ±(2^53+1) become ±2^53",
-	"Int128->Uint64": "MaxInt64 becomes 2^63; everything above it refused; 2^53+1 becomes 2^53",
-}
+// knownInexactIntCasts names each pair that answers wrongly, with what it answers.
+// Empty since castInt: all four entries were 64-bit pairs through a float64.
+var knownInexactIntCasts = map[string]string{}
 
 func TestIntegerCastsAreExactOrRefused(t *testing.T) {
 	types := integerTypes(t)

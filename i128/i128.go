@@ -156,6 +156,12 @@ func (a Int128) Uint64() (uint64, bool) {
 // Float64 converts to a float64, rounding when the value exceeds 2^53.
 func (a Int128) Float64() float64 {
 	if a.Hi < 0 {
+		// Min has no negation — Min.Neg() == Min — so without this arm the recursion
+		// below never ends, and a stack overflow is fatal rather than a recoverable
+		// panic. -2^127 is exactly representable.
+		if a == Min {
+			return -0x1p127
+		}
 		return -a.Neg().Float64()
 	}
 	return float64(a.Hi)*(1<<64) + float64(a.Lo)

@@ -261,6 +261,11 @@ func winCumInt128(params expr.WinParams, name string, out dtype.DataType,
 	// stricter than sum over the same column — sum publishes only the total — and
 	// the refusal says so.
 	narrow := out.IsTemporal()
+	// A 128-bit input can wrap the running total, and a wrapped prefix has no value
+	// to publish, so the first one that does is refused. No carry is kept, unlike
+	// sum's: a cumulative publishes every prefix, so a total that leaves 128 bits and
+	// comes back still had rows in between with nothing to show.
+	wide := col.DType().Physical().ID() == dtype.TypeInt128
 	ticks := make([]int64, 0)
 	if narrow {
 		ticks = make([]int64, n)
@@ -276,7 +281,15 @@ func winCumInt128(params expr.WinParams, name string, out dtype.DataType,
 			if !valid.Get(int(row)) {
 				continue // skipped by the running total, still null in the output
 			}
-			acc = acc.Add(src[row])
+			var carry int64
+			acc, carry = addCarry(acc, src[row])
+			if wide && carry != 0 {
+				failed = uerr.New(uerr.KindValue, "cum_sum",
+					"the running total at row %d overflows %s", row, out).
+					Hint("values of 128 bits can sum past 128 bits; for an approximate " +
+						"running total, use a Float64: .Cast(ursus.Float64).CumSum(false)")
+				return
+			}
 			if narrow {
 				v, ok64 := acc.Int64()
 				if !ok64 {
