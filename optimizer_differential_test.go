@@ -635,7 +635,6 @@ func classify(name, detail string, guilty []string) string {
 // today, by defect. Checked both ways: a class whose count changes is reported with
 // its queries, a class with none left is stale, and an unattributed mismatch fails.
 var knownDifferentialMismatches = map[string]knownMismatch{
-	"O2":      {29, "projection pushdown narrows a Concat's children to different widths"},
 	"O4":      {19, "the cross-join collapse turns IEEE == into hash equality: NaN matches NaN"},
 	"O5":      {9, "the cross-join collapse keeps NullsEqual, so null keys match"},
 	"O6":      {1, "a filter on a widened join key is pushed to the narrow side and runs there"},

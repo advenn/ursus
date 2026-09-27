@@ -3,6 +3,7 @@ package plan
 import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/expr"
+	"slices"
 )
 
 // projectionPushdown narrows every Scan to the columns actually used above it.
@@ -262,23 +263,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 		return t.WithChildren([]Node{child}), true, nil
 
 	case *Union:
-		// Every child produces the union's output schema, so what each needs is
-		// exactly what the parent asked for. The node holds no expressions of its
-		// own — reconciliation is a Project beneath it — so there is nothing to add.
-		kids := make([]Node, len(t.Inputs))
-		any := false
-		for i, c := range t.Inputs {
-			nk, ch, err := pushdown(c, required)
-			if err != nil {
-				return nil, false, err
-			}
-			kids[i] = nk
-			any = any || ch
-		}
-		if !any {
-			return t, false, nil
-		}
-		return t.WithChildren(kids), true, nil
+		return pushdownUnion(t, required)
 
 	case *Sort:
 		// Sort preserves its input's schema exactly, so it needs what the parent
@@ -781,6 +766,83 @@ func pushdownAsOfJoin(a *AsOfJoin, required map[string]struct{}) (Node, bool, er
 // off in a plain Collect, where the failure would surface as a KindSchema "the two
 // frames have different schemas" — the optimizer desynchronising the user's
 // matching frames and then blaming the user.
+// pushdownUnion asks every child for the same columns, and makes sure they answer
+// with the same columns.
+//
+// Asking is not enough, and that was O2 (audit.md §3). A child keeps what IT
+// needs, not only what it was asked for: a Filter keeps the column its predicate
+// reads, and resolveUnion's adaptation Project keeps every expression it has. So
+// `l.Concat(l.Filter(v > 15)).Select(k)` narrowed one child to [k] and the other to
+// [k, v], and the strict union refused the user's own matching frames — "frame 1
+// has 2 columns, frame 0 has 1 … use the diagonal mode". Under the diagonal mode
+// it was worse: the union reconciled the mismatch by taking the union of the
+// columns, and the physical union raised ErrInternal.
+//
+// So the target is fixed first, from the union's own schema, and every child whose
+// columns come back different is wrapped in a Project selecting exactly the target.
+// Only when they disagree: a union whose children already agree — frames with
+// identical shapes, the common case — gains no node, and every plan that worked
+// before renders as it did. Wrapping rather than falling back to the conservative
+// descent keeps each child's own pruning.
+//
+// An EMPTY target — a parent that reads no column, like GroupBy().Agg(Len()) — asks
+// for the first column instead, which is pushdownHStack's height trick. Asking for
+// nothing gives a Scan a nil projection, which means every column, while a Filter
+// child still keeps its predicate's: disagreement again.
+func pushdownUnion(u *Union, required map[string]struct{}) (Node, bool, error) {
+	out, err := u.Schema()
+	if err != nil {
+		return nil, false, err
+	}
+	var target []string
+	need := make(map[string]struct{}, len(required))
+	for _, f := range out.FieldSlice() {
+		if _, ok := required[f.Name]; ok {
+			target = append(target, f.Name)
+			need[f.Name] = struct{}{}
+		}
+	}
+	if len(target) == 0 && out.Len() > 0 {
+		first := out.Field(0).Name
+		target = []string{first}
+		need[first] = struct{}{}
+	}
+
+	kids := make([]Node, len(u.Inputs))
+	names := make([][]string, len(u.Inputs))
+	changed, agree := false, true
+	for i, c := range u.Inputs {
+		nk, ch, err := pushdown(c, need)
+		if err != nil {
+			return nil, false, err
+		}
+		ks, err := nk.Schema()
+		if err != nil {
+			return nil, false, err
+		}
+		kids[i], names[i] = nk, ks.Names()
+		changed = changed || ch
+		agree = agree && slices.Equal(names[i], names[0])
+	}
+	if !agree {
+		for i, k := range kids {
+			if slices.Equal(names[i], target) {
+				continue
+			}
+			cols := make([]expr.Node, len(target))
+			for j, name := range target {
+				cols[j] = &expr.Col{Name: name}
+			}
+			kids[i] = &Project{Input: k, Exprs: cols}
+		}
+		changed = true
+	}
+	if !changed {
+		return u, false, nil
+	}
+	return u.WithChildren(kids), true, nil
+}
+
 func pushdownMergeSorted(m *MergeSorted, required map[string]struct{}) (Node, bool, error) {
 	// The key is read by Schema() whether or not anyone selected it.
 	need := make(map[string]struct{}, len(required)+1)

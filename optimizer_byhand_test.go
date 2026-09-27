@@ -79,10 +79,6 @@ func doubled() func(int64) (int64, error) {
 // mode. Emptied, entry by entry, by the commits that fix them; a listed case that
 // answers correctly fails as stale, and an unlisted one that answers wrongly fails.
 var knownOptimizerDefects = map[string]string{
-	"O2 strict":        "optimized: concat: frame 1 has 2 columns, frame 0 has 1",
-	"O2 len":           "optimized: the same, under a Len that reads no column",
-	"O2 widening":      "optimized: the same, through resolveUnion's adaptation Project",
-	"O2 diagonal":      "optimized: ErrInternal at the physical union",
 	"O8 guard":         "optimized: the cast runs before the guard that protects it",
 	"O8b under unique": "optimized: the cast is pushed below the Distinct, ahead of the guard",
 	"P1 column order":  "optimized: w is appended at the end, not replaced in place",
@@ -146,6 +142,11 @@ func TestOptimizerByHand(t *testing.T) {
 
 		// 4 rows, plus the 3 with v > 15.
 		{"O2 strict", l.Concat(l.Filter(c("v").Gt(15))).Select(c("k")),
+			wantInts("k", 1, 2, 2, 3, 3, 4, 4)},
+		// The wide child FIRST. Every other O2 case has the narrowest child in
+		// front, so a fix that took its target from the first child rather than
+		// from the union would pass all of them.
+		{"O2 wide child first", l.Filter(c("v").Gt(15)).Concat(l).Select(c("k")),
 			wantInts("k", 1, 2, 2, 3, 3, 4, 4)},
 		{"O2 len", l.Concat(l.Filter(c("v").Gt(15))).GroupBy().Agg(ursus.Len().Alias("n")),
 			func(df *ursus.DataFrame) error {
@@ -252,5 +253,25 @@ func TestOptimizerByHand(t *testing.T) {
 		}) {
 			t.Errorf("knownOptimizerDefects names %q, which is not a case", name)
 		}
+	}
+}
+
+// TestConcatUnderLenReadsOneColumn: a parent that reads no column — Len — must not
+// make a union read every column, or stack zero-column Projects to reconcile.
+//
+// Without pushdownUnion's empty-target guard the answer is still right — seven
+// rows either way, because a zero-column batch keeps its row count — so this is
+// the only place the guard shows: one scan read every column, and both children
+// were wrapped in a `PROJECT []`. The rows cannot tell; the plan can.
+func TestConcatUnderLenReadsOneColumn(t *testing.T) {
+	c := ursus.Col
+	l := ursus.Frame(ursus.Values("k", []int64{1, 2, 3, 4}), ursus.Values("v", []int64{10, 20, 30, 40}))
+	p, err := l.Concat(l.Filter(c("v").Gt(15))).GroupBy().Agg(ursus.Len().Alias("n")).
+		Explain(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(p, "PROJECT []") || !strings.Contains(p, "projection: [k] (1/2 cols)") {
+		t.Errorf("the union's children should be asked for one column, not none:\n%s", p)
 	}
 }

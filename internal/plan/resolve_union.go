@@ -20,8 +20,10 @@ import (
 //     error.
 //   - Explain shows the padding, so "why is this column all null" has a visible
 //     answer in the plan.
-//   - Projection pushdown then narrows each child independently through an ordinary
-//     Project, with no Union-specific rule needed.
+//   - Projection pushdown narrows each child — though NOT independently, as this
+//     said until step 70: a child keeps what it needs as well as what it is asked
+//     for, and the adaptation Project added here keeps every expression it has, so
+//     the children come back at different widths. pushdownUnion reconciles them.
 //
 // A child whose schema already matches is left alone, so the common case — frames
 // with identical schemas — adds no node at all.
