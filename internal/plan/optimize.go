@@ -1,6 +1,10 @@
 package plan
 
 import (
+	"strings"
+
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/uerr"
 )
 
@@ -86,8 +90,11 @@ type Optimizer struct {
 	// rather than a field on the rule because registered.rule is an interface and
 	// rules are values, not pointers.
 	folder *constFolder
-	// Verify runs the schema-preservation check after every rule. On in tests,
-	// off in production, because it costs a full schema resolution per rule.
+	// Verify checks the plan after every rule: that the root schema is unchanged,
+	// and — see verifyStructure — the two properties the root schema cannot show.
+	// On in the tests and in Explain, where a broken plan would otherwise render as
+	// a clean golden file; off in Collect by default, because it costs a schema
+	// resolution per node per rule.
 	Verify bool
 }
 
@@ -240,7 +247,103 @@ func (o *Optimizer) Run(n Node, flags Flags) (Node, error) {
 					"rule %q changed the output schema\n  before: %s\n  after:  %s",
 					r.rule.Name(), want, got)
 			}
+			if err := verifyStructure(n); err != nil {
+				return nil, uerr.Wrap(err, uerr.KindInternal, "optimize",
+					"rule %q produced an inconsistent plan", r.rule.Name())
+			}
 		}
 	}
 	return n, nil
+}
+
+// verifyStructure checks the two properties of a plan that its root schema cannot
+// show, and that a rewrite has broken before.
+//
+//   - Every Filter's predicates resolve, to a Boolean, against the Filter's own
+//     input. Filter.Schema() is its input's schema and never looks at a predicate,
+//     so a predicate pushed below the node that defines a column it reads — O1's
+//     refusal form, `unknown column "revenue"` — left the root schema intact and
+//     failed at Collect.
+//   - Every Union child produces the union's columns, by name and type, in
+//     position. The union reconciles its children's schemas, and under the
+//     diagonal mode reconciliation takes their UNION — so a child narrowed to fewer
+//     columns than its siblings still reconciled, and the physical union raised
+//     ErrInternal.
+func verifyStructure(n Node) error {
+	var err error
+	Walk(n, func(x Node) bool {
+		if err != nil {
+			return false
+		}
+		switch t := x.(type) {
+		case *Filter:
+			in, e := t.Input.Schema()
+			if e != nil {
+				err = e
+				return false
+			}
+			for _, p := range t.Preds {
+				f, e := expr.Resolve(p, in)
+				if e != nil {
+					err = uerr.Wrap(e, uerr.KindInternal, "optimize",
+						"a filter predicate does not resolve against its input: %s", p)
+					return false
+				}
+				if !f.Type.IsBool() && !f.Type.IsNull() {
+					err = uerr.Internalf("a filter predicate is %s, not Boolean: %s", f.Type, p)
+					return false
+				}
+			}
+		case *Union:
+			out, e := t.Schema()
+			if e != nil {
+				err = e
+				return false
+			}
+			for i, c := range t.Inputs {
+				cs, e := c.Schema()
+				if e != nil {
+					err = e
+					return false
+				}
+				if !sameColumns(cs, out) {
+					err = uerr.Internalf("union child %d produces {%s}, and the union is {%s}",
+						i, columnList(cs), columnList(out))
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return err
+}
+
+// sameColumns reports whether a and b have the same names and types, in position.
+// Nullability is not compared: the physical union relabels it.
+func sameColumns(a, b interface {
+	Len() int
+	Field(int) dtype.Field
+}) bool {
+	if a.Len() != b.Len() {
+		return false
+	}
+	for i := range a.Len() {
+		fa, fb := a.Field(i), b.Field(i)
+		if fa.Name != fb.Name || !fa.Type.Equal(fb.Type) {
+			return false
+		}
+	}
+	return true
+}
+
+func columnList(s interface {
+	Len() int
+	Field(int) dtype.Field
+}) string {
+	parts := make([]string, s.Len())
+	for i := range s.Len() {
+		f := s.Field(i)
+		parts[i] = f.Name + ": " + f.Type.String()
+	}
+	return strings.Join(parts, ", ")
 }

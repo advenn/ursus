@@ -603,7 +603,12 @@ func classify(name, detail string, guilty []string) string {
 		return "O4"
 	case strings.Contains(detail, "changed the output schema"):
 		return "P1"
-	case strings.Contains(detail, "does not resolve") || strings.Contains(detail, "concat child"):
+	// The union-child half of Verify reports under projection pushdown's name;
+	// before Verify checked union children, the diagonal form got as far as the
+	// physical union ("concat child"), and the strict form failed resolution.
+	case strings.Contains(detail, "schema does not resolve") ||
+		strings.Contains(detail, "concat child") ||
+		strings.Contains(detail, `"projection_pushdown" produced an inconsistent plan`):
 		return "O2"
 	case has("join-widen"):
 		return "O6"

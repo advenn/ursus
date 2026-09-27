@@ -775,12 +775,12 @@ func pushdownAsOfJoin(a *AsOfJoin, required map[string]struct{}) (Node, bool, er
 // descent unless they still agree. Falling back rather than returning the node
 // untouched keeps whatever pruning a Project deeper in either subtree had earned.
 //
-// It validates ITSELF rather than leaning on Optimizer.Verify, which is off in the
-// golden inventory and in Explain — so a broken plan would render a clean golden
-// file that `go test -update` would happily check in. And the user-visible failure
-// is not an internal error: it surfaces as a KindSchema "the two frames have
-// different schemas", i.e. the optimizer desynchronising the user's matching frames
-// and then blaming the user.
+// It validates ITSELF rather than leaning on Optimizer.Verify. Verify was off in the
+// golden inventory and in Explain when this was written, so a broken plan would
+// have rendered a clean golden file; it is on in both since step 70, but it is still
+// off in a plain Collect, where the failure would surface as a KindSchema "the two
+// frames have different schemas" — the optimizer desynchronising the user's
+// matching frames and then blaming the user.
 func pushdownMergeSorted(m *MergeSorted, required map[string]struct{}) (Node, bool, error) {
 	// The key is read by Schema() whether or not anyone selected it.
 	need := make(map[string]struct{}, len(required)+1)

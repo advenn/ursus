@@ -375,7 +375,9 @@ func TestEveryPlanNodeIsCovered(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			n, err = plan.NewOptimizer().Run(n, plan.DefaultFlags())
+			o := plan.NewOptimizer()
+			o.Verify = true
+			n, err = o.Run(n, plan.DefaultFlags())
 			if err != nil {
 				t.Fatal(err)
 			}

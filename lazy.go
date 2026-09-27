@@ -202,7 +202,13 @@ func (lf *LazyFrame) Explain(ctx context.Context, opts ...ExplainOption) (string
 		return "", err
 	}
 	if cfg.optimized {
-		if n, err = optimizer().Run(n, plan.DefaultFlags()); err != nil {
+		// Verify, always: Explain is what the golden plans are made of, so without
+		// it a rule that broke a plan would render a clean golden file, and
+		// `-update` would check it in. It costs a schema resolution per node per
+		// rule, which a plan being rendered for a person can afford.
+		o := optimizer()
+		o.Verify = true
+		if n, err = o.Run(n, plan.DefaultFlags()); err != nil {
 			return "", err
 		}
 	}

@@ -180,9 +180,9 @@ func TestMergeSortedKeepsItsKey(t *testing.T) {
 // would fail — AFTER resolution succeeded, which is defect P2's signature.
 //
 // The user would see a KindSchema "the two frames have different schemas", i.e. the
-// optimizer desynchronising matching frames and then blaming the user. And the
-// backstop is thinner than it looks: Optimizer.Verify is off in the golden
-// inventory and in Explain, so a broken plan renders a clean golden file.
+// optimizer desynchronising matching frames and then blaming the user. Verify has
+// been on in Explain and the golden inventory since step 70, but not in a plain
+// Collect, so this test still asserts the behaviour rather than the verifier.
 func TestMergeSortedRefusesToDesynchronise(t *testing.T) {
 	q := func() *ursus.LazyFrame {
 		a, b := sortedSides()
