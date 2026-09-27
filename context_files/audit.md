@@ -50,18 +50,22 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 
 | | | finding | cause |
 | --- | --- | --- | --- |
-| O1 ✔ | **SW** | A `Filter` after a chained `WithColumns` returns wrong rows. `WithColumns(x+1 as w, w*2 as v).Filter(v>7)` gives x = 1, 3, 5, and the answer is 3, 4, 5. The in-place form returns 0 rows instead of 3; another form refuses with `unknown column`. | `rule_predicate.go:276-305`, `:343-351`: the definition is substituted verbatim, not recursively. `WithColumns` is documented as sequential. |
-| O2 ✔ | **FR** | `Concat` then a projection is refused: `concat: frame 1 has 2 columns, frame 0 has 1`. Also refused after `GroupBy`, `Sort`, `WithColumns` and `Unique`. `WithVerify` catches it: *"projection_pushdown produced a plan whose schema does not resolve"*. | `rule_projection.go:264-281`, the Union arm, which lacks `pushdownMergeSorted`'s symmetry check. |
+| O1 ✔ | ~~**SW**~~ **fixed, step 70** | A `Filter` after a chained `WithColumns` returns wrong rows. `WithColumns(x+1 as w, w*2 as v).Filter(v>7)` gives x = 1, 3, 5, and the answer is 3, 4, 5. The in-place form returns 0 rows instead of 3; another form refuses with `unknown column`. | `rule_predicate.go:276-305`, `:343-351`: the definition is substituted verbatim, not recursively. `WithColumns` is documented as sequential. |
+| O2 ✔ | ~~**FR**~~ **fixed, step 70** | `Concat` then a projection is refused: `concat: frame 1 has 2 columns, frame 0 has 1`. Also refused after `GroupBy`, `Sort`, `WithColumns` and `Unique`. `WithVerify` catches it: *"projection_pushdown produced a plan whose schema does not resolve"*. | `rule_projection.go:264-281`, the Union arm, which lacks `pushdownMergeSorted`'s symmetry check. |
 | O3 ✔ | **SW / CR** | Literals of different types merge into one computation: `Lit(int8(100))` and `Lit(int64(100))` both render `lit(100)`, as do `1` and `1.0`. A sum came back −111 instead of 401; `x*1` beside `x*1.0` raises `ErrInternal`. Affects `Agg`, `GroupByDynamic`, window temporaries and partition keys. | `Lit.String()` (`expr/nodes.go:98-116`) omits the type. The dedup maps are `physical/agg.go:753`, `plan/resolve_window.go:82` and `physical/window.go:382`. This is step 65's UDF bug, for literals. |
 | O4 | **SW** | Cross-join collapse turns IEEE `==` into hash equality, so NaN matches NaN: `JoinWhere`, cross join + `Filter`, `WhereExists` and `WhereNotExists` all answer differently with the rule off. | `rule_collapse.go:88-104`, `:214-216`. |
 | O5 | **SW** | Cross-join collapse copies `NullsEqual`, so a `JoinNullsEqual(true)` cross join followed by `Filter(k == k_right)` matches null keys. `JoinNullsEqual` on a cross join is accepted silently. | `rule_collapse.go:103` (`c := *j`), whose comment at `:113` says it "stays false". |
 | O6 ✔ | **SW** | A filter on a coalesced join key is pushed into the side with the narrower key type and runs at that width: Int32 `k*m > 1e9` returns 0 rows, and the answer is 1. | `rule_predicate.go:597-605`, `rewriteForSide`'s Col arm. |
 | O7 | **SW** | Parquet row-group pruning — see I2–I5. | |
-| O8 ✔ | **FR** | Merging stacked filters reverses their order, so a guard no longer protects the filter after it. `Filter(ok).Filter(s.Cast(Int64) > 1)` fails with a cast error when optimized. | `rule_predicate.go:86`. |
+| O8 ✔ | ~~**FR**~~ **fixed, step 70** | Merging stacked filters reverses their order, so a guard no longer protects the filter after it. `Filter(ok).Filter(s.Cast(Int64) > 1)` fails with a cast error when optimized. | `rule_predicate.go:86`. |
 | O9 | SW (edge) | A filter pushed below `Unique` can tell −0.0 from +0.0, which `Unique` merges. | `rule_predicate.go:420-431`. |
 | O10 | CR | `GroupByDynamic(Col("t").Shift(1), …)` raises `ErrInternal`. | `resolveTemporalGroup` never calls `rejectWindow` or `rejectAggregate`. |
 | O11 | ME | `Explain` and `CollectSchema` accept `Sum().OverWith(OrderBy…)`, which `Collect` refuses. | The refusal exists only at `physical/window.go:405`. |
 | O12 | info | The optimizer can turn a runtime error into a result, e.g. `cast OR true`. This is probably acceptable, but it contradicts the rule's own contract for `Validate`. | |
+| O8b | **FR** | Found when O8 was fixed: pushdown still moves a fallible conjunct *below* one that stays. `Unique("s").Filter(ok).Filter(s.Cast(Int64) > 1)` casts beneath the Distinct, ahead of the guard. Needs a rule about which conjuncts can fail, not an ordering. | `rule_predicate.go`, the Distinct arm. |
+| O8-join | FR | The same across a join: a fallible filter is pushed into a join side, onto rows the join would remove. Polars makes the same trade. | the join arm of predicate pushdown. |
+| **P1** | **SW** | **Found by step 70's differential.** Projection pushdown stops reading a column that a `WithColumns` redefines without reading it, and the redefinition then lands at the END instead of in place: `WithColumns(x+1 as w)` on `{x, w, y}` returns `{x, y, w}`, while `CollectSchema` promises `{x, w, y}`. Silent without `WithVerify`. 132 shapes in the differential. | the `WithColumns` arm of projection pushdown, against `WalkWithColumns`' replace-in-place. |
+| **W1** | **SW / FR** | **Found measuring step 70.** A window over a column defined earlier in the same `WithColumns` reads the input's column — a per-group sum of 200 where the answer is 30 — or, for a new name, is refused with `unknown column`. Wrong with the optimizer on AND off, so no on/off differential can see it. | windows are lifted below the whole node, `resolve.go:329`, `resolve_window.go:131`. |
 
 ## 4. Joins
 
@@ -235,10 +239,11 @@ recorded 30–60 behaviours that held. In summary:
 
 Ordered by harm per unit of fix, not by count.
 
-1. **O1 and O2, with the instrument that would have caught them.** Enable `Verify`
-   in the test suite, and add a permanent differential that runs a corpus of query
-   shapes with the optimizer on and off. O1 is the most ordinary query in this
-   document to answer wrongly.
+1. ~~**O1 and O2, with the instrument that would have caught them.**~~ **Done — step
+   70**, with O8, a stronger `Verify` that `Explain` now runs, and a generated
+   optimizer on/off differential over 1629 query shapes. That differential found P1,
+   and measuring the step found W1; both are above, and P1, O4, O5, O6, O8b and O9
+   are what it still counts.
 2. **I1–I7: read multiple files by name, and prune only what the statistics prove.**
    This is silent data corruption from ordinary file reads, and I1 alone makes
    `ScanParquetGlob` unsafe over any directory written by more than one tool.
