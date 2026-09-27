@@ -83,7 +83,18 @@ func push(n Node, preds []expr.Node, flags Flags) (Node, error) {
 	case *Filter:
 		// Conjoin and keep going. The Filter node itself disappears; whatever
 		// cannot descend further is re-emitted at the deepest legal point.
-		return push(t.Input, append(append([]expr.Node(nil), preds...), t.Preds...), flags)
+		//
+		// The INNER filter's predicates go first, because order is not cosmetic:
+		// the physical filter evaluates each conjunct only on the rows the ones
+		// before it kept. Outer-first was O8 (audit.md §3) —
+		//
+		//	Filter(Col("ok")).Filter(Col("s").Cast(Int64).Gt(1))
+		//
+		// ran the cast before the guard the user wrote to protect it, and failed on
+		// a row the guard removes. Order is kept only this far: pushdown can still
+		// move a fallible conjunct below one that stays (O8b), which needs a rule
+		// about fallibility rather than an ordering.
+		return push(t.Input, append(append([]expr.Node(nil), t.Preds...), preds...), flags)
 
 	case *Sort, *Reverse:
 		// Filtering and reordering commute: both of these permute rows, and a

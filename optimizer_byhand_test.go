@@ -79,7 +79,6 @@ func doubled() func(int64) (int64, error) {
 // mode. Emptied, entry by entry, by the commits that fix them; a listed case that
 // answers correctly fails as stale, and an unlisted one that answers wrongly fails.
 var knownOptimizerDefects = map[string]string{
-	"O8 guard":         "optimized: the cast runs before the guard that protects it",
 	"O8b under unique": "optimized: the cast is pushed below the Distinct, ahead of the guard",
 	"P1 column order":  "optimized: w is appended at the end, not replaced in place",
 	"W1 window":        "both: the window reads the input's w, not the one defined before it",

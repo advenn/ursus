@@ -638,10 +638,11 @@ var knownDifferentialMismatches = map[string]knownMismatch{
 	"O4":      {19, "the cross-join collapse turns IEEE == into hash equality: NaN matches NaN"},
 	"O5":      {9, "the cross-join collapse keeps NullsEqual, so null keys match"},
 	"O6":      {1, "a filter on a widened join key is pushed to the narrow side and runs there"},
-	"O8":      {32, "merging stacked filters runs the outer one first, ahead of its guard"},
 	"O8-join": {1, "a fallible filter is pushed into a join side, onto rows the join removes"},
-	"O8b":     {4, "a fallible filter is pushed below a Distinct, ahead of a guard that stays"},
-	"O9":      {1, "a filter below Unique can tell -0 from +0, which Unique merges"},
+	// 4 before O8 was fixed: two of them had the guard BELOW the Distinct, where
+	// merging the stacked filters was the whole problem.
+	"O8b": {2, "a fallible filter is pushed below a Distinct, ahead of a guard that stays"},
+	"O9":  {1, "a filter below Unique can tell -0 from +0, which Unique merges"},
 	// 106 before O1 was fixed. O1's wrong substitution made the pushed filter read
 	// the input's column, which kept projection pushdown reading it, which hid P1
 	// in 26 shapes.
