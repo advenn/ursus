@@ -279,17 +279,42 @@ func pushThroughProjection(n Node, exprs []expr.Node, preds []expr.Node, passthr
 		return nil, err
 	}
 
-	// Build name -> defining expression for everything this node produces.
+	// Build name -> defining expression for everything this node produces, as an
+	// expression over the node's INPUT — the only schema a pushed predicate sees.
 	//
-	// WithColumns threads a running schema, so a later expression may reference a
-	// column an earlier one added; resolving everything against the input schema
-	// would fail on exactly that case. WalkWithColumns is the single definition of
-	// that walk.
+	// A WithColumns is SEQUENTIAL: a later expression reads the columns an earlier
+	// one defined, not the input's. So each definition is composed through the ones
+	// before it as it is recorded. Recording them verbatim was O1 (audit.md §3):
+	//
+	//	WithColumns(Col("x").Add(1).Alias("w"), Col("w").Mul(2).Alias("v")).Filter(v > 7)
+	//
+	// pushed `w*2 > 7` below the node, where w is the input's column, and returned
+	// the rows where the OLD w was large — with no error. Composing in the walk, not
+	// in a second pass afterwards, is what keeps order right in the other direction:
+	// in `y+1 as z, x*2 as y`, z was defined before y was, and reads the input's y.
+	//
+	// A definition that cannot be composed — one holding a UDF, which a predicate
+	// must never duplicate — makes its name OPAQUE: a predicate reading it stays
+	// above the node. Opaque is its own set rather than a nil definition, because
+	// the name may exist in the input too, and falling back to the input's column
+	// would be O1 again: in `udf(x) as x, x+1 as y`, y reads the udf's x.
+	//
+	// A Project is not sequential — every expression reads the same input — so its
+	// definitions are recorded as written, and composing them would be the mirror
+	// image of the same bug.
 	defs := make(map[string]expr.Node, len(exprs))
+	var opaque map[string]bool
 	if passthrough {
+		opaque = map[string]bool{}
 		if _, err := WalkWithColumns(in, exprs,
 			func(e expr.Node, f dtype.Field, _ int, _ *dtype.Schema) error {
-				defs[f.Name] = stripNaming(e)
+				if def, ok := substitutable(stripNaming(e), defs, opaque, in, true); ok {
+					defs[f.Name] = def
+					delete(opaque, f.Name)
+				} else {
+					delete(defs, f.Name)
+					opaque[f.Name] = true
+				}
 				return nil
 			}); err != nil {
 			return nil, err
@@ -306,7 +331,7 @@ func pushThroughProjection(n Node, exprs []expr.Node, preds []expr.Node, passthr
 
 	var down, stay []expr.Node
 	for _, p := range preds {
-		sub, ok := substitutable(p, defs, in, passthrough)
+		sub, ok := substitutable(p, defs, opaque, in, passthrough)
 		if ok {
 			down = append(down, sub)
 		} else {
@@ -324,13 +349,19 @@ func pushThroughProjection(n Node, exprs []expr.Node, preds []expr.Node, passthr
 // substitutable rewrites a predicate in terms of the input schema, or reports
 // that it cannot be.
 //
-// A column reference resolves in one of three ways:
+// A column reference resolves in one of four ways, checked in this order:
+//   - the node computes it, opaquely        -> not pushable (a UDF's output)
 //   - it names something the node computes  -> replace with the defining expression
 //   - it exists unchanged in the input      -> keep (only for WithColumns, which
 //     passes its input through; a Project drops
 //     everything it does not select)
 //   - neither                               -> not pushable
-func substitutable(p expr.Node, defs map[string]expr.Node, in *dtype.Schema, passthrough bool) (expr.Node, bool) {
+//
+// The order is the point of the first line. An opaque name may ALSO exist in the
+// input, and reaching the input fallback first would read the column the node
+// replaced.
+func substitutable(p expr.Node, defs map[string]expr.Node, opaque map[string]bool,
+	in *dtype.Schema, passthrough bool) (expr.Node, bool) {
 	ok := true
 
 	var walk func(expr.Node) expr.Node
@@ -340,6 +371,10 @@ func substitutable(p expr.Node, defs map[string]expr.Node, in *dtype.Schema, pas
 		}
 		switch t := x.(type) {
 		case *expr.Col:
+			if opaque[t.Name] {
+				ok = false
+				return t
+			}
 			if def, defined := defs[t.Name]; defined {
 				// Substituting a definition DUPLICATES it: the predicate gets a
 				// copy and the defining node keeps its own. A UDF must not be

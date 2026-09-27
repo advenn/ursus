@@ -635,8 +635,6 @@ func classify(name, detail string, guilty []string) string {
 // today, by defect. Checked both ways: a class whose count changes is reported with
 // its queries, a class with none left is stale, and an unattributed mismatch fails.
 var knownDifferentialMismatches = map[string]knownMismatch{
-	"O1": {64, "predicate pushdown substitutes a WithColumns definition verbatim, so one " +
-		"that reads an earlier-defined column is evaluated against the input's column"},
 	"O2":      {29, "projection pushdown narrows a Concat's children to different widths"},
 	"O4":      {19, "the cross-join collapse turns IEEE == into hash equality: NaN matches NaN"},
 	"O5":      {9, "the cross-join collapse keeps NullsEqual, so null keys match"},
@@ -645,7 +643,10 @@ var knownDifferentialMismatches = map[string]knownMismatch{
 	"O8-join": {1, "a fallible filter is pushed into a join side, onto rows the join removes"},
 	"O8b":     {4, "a fallible filter is pushed below a Distinct, ahead of a guard that stays"},
 	"O9":      {1, "a filter below Unique can tell -0 from +0, which Unique merges"},
-	"P1": {106, "projection pushdown stops reading a column a WithColumns redefines, and " +
+	// 106 before O1 was fixed. O1's wrong substitution made the pushed filter read
+	// the input's column, which kept projection pushdown reading it, which hid P1
+	// in 26 shapes.
+	"P1": {132, "projection pushdown stops reading a column a WithColumns redefines, and " +
 		"the redefinition then lands at the end instead of in place"},
 }
 

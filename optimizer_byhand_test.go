@@ -79,11 +79,6 @@ func doubled() func(int64) (int64, error) {
 // mode. Emptied, entry by entry, by the commits that fix them; a listed case that
 // answers correctly fails as stale, and an unlisted one that answers wrongly fails.
 var knownOptimizerDefects = map[string]string{
-	"O1 chained":       "optimized: the filter reads the input's old w",
-	"O1 in place":      "optimized: the filter reads the un-added x",
-	"O1 new name":      "optimized: unknown column revenue",
-	"O1 udf chain":     "optimized: v's definition u+1 is pushed and reads the input's u",
-	"O1 udf in place":  "optimized: y's definition x+1 is pushed and reads the input's x",
 	"O2 strict":        "optimized: concat: frame 1 has 2 columns, frame 0 has 1",
 	"O2 len":           "optimized: the same, under a Len that reads no column",
 	"O2 widening":      "optimized: the same, through resolveUnion's adaptation Project",
