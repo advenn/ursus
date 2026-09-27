@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/advenn/ursus"
@@ -89,6 +90,7 @@ var knownOptimizerDefects = map[string]string{
 	"O2 diagonal":      "optimized: ErrInternal at the physical union",
 	"O8 guard":         "optimized: the cast runs before the guard that protects it",
 	"O8b under unique": "optimized: the cast is pushed below the Distinct, ahead of the guard",
+	"P1 column order":  "optimized: w is appended at the end, not replaced in place",
 	"W1 window":        "both: the window reads the input's w, not the one defined before it",
 	"W1 window new":    "both: unknown column w2",
 }
@@ -178,6 +180,20 @@ func TestOptimizerByHand(t *testing.T) {
 			wantInts("i", 3, 4)},
 		{"O8b under unique", sok.Unique("s").Filter(c("ok")).Filter(c("s").Cast(ursus.Int64).Gt(1)),
 			wantInts("i", 3, 4)},
+
+		// A WithColumns replaces an existing name IN PLACE, keeping its position
+		// (WalkWithColumns' doc). w is redefined without reading it, so projection
+		// pushdown stops reading the input's w — and w then lands at the end. The
+		// redefined column must not already be the last one, or moving it to the
+		// end changes nothing: the first version of this case redefined y.
+		{"P1 column order", byHandFrame().
+			WithColumns(c("x").Add(1).Alias("w")),
+			func(df *ursus.DataFrame) error {
+				if got, want := strings.Join(df.Schema().Names(), ","), "x,w,y"; got != want {
+					return fmt.Errorf("columns %s, want %s", got, want)
+				}
+				return nil
+			}},
 
 		// w = 10x, so the per-group sum is 30 for "a" and 30 for "b".
 		{"W1 window", win.
