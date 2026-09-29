@@ -87,21 +87,21 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 
 | | | finding | cause |
 | --- | --- | --- | --- |
-| I1 ✔ | **SW** | `ScanParquetFiles` / `ScanParquetGlob` apply the first file's column layout to every file. `{b, a}` after `{a, b}` swaps the values; a file with other column names is read silently; a file with fewer columns panics inside arrow-go. | `parquet.go:255`, `:422`; the panic comes from `checkEncodings`, `:529`. |
-| I2 ✔ | **SW** | Pruning reads another column's statistics when a struct comes before the filtered column: `c == 2` returns 0 rows, and the answer is 1. | `prune.go:74/81/162` use the top-level index; `:180` passes it to `rg.ColumnChunk`, which counts leaves. `s.leaves` has the right mapping. |
-| I3 ✔ | **SW** | `!=` pruning drops NaN rows. Statistics exclude NaN, so min == max == v does not prove every row is v. | `prune.go:262-264`. |
-| I4 | **SW** | A row group holding `""` and a string over 4096 bytes: the max is dropped and reads back as `""`, so the `lo > hi` guard cannot fire and `>`, `==` and `>=` prune the group. Affects files written by ursus and by pyarrow. | `prune.go:250`; `bound.go:85`. |
-| I5 | **SW** | `IsNotNull` pruning on Struct and List columns uses one leaf's null count — the struct's first field, or the list element, where an empty list counts as null. | `prune.go:63`, `:214-221`. |
-| I6 | **SW** | A List whose element is declared non-null reads `[]` as `[null]`. Spark writes this shape (`containsNull=false`). | `column.go:581`. |
-| I7 ✔ | **SW** | Multi-file CSV skips later headers without checking them: columns are matched by position. | `csv.go:292`. |
+| I1 ✔ | ~~**SW**~~ **fixed, step 71** | `ScanParquetFiles` / `ScanParquetGlob` apply the first file's column layout to every file. `{b, a}` after `{a, b}` swaps the values; a file with other column names is read silently; a file with fewer columns panics inside arrow-go. | `parquet.go:255`, `:422`; the panic comes from `checkEncodings`, `:529`. |
+| I2 ✔ | ~~**SW**~~ **fixed, step 71** | Pruning reads another column's statistics when a struct comes before the filtered column: `c == 2` returns 0 rows, and the answer is 1. | `prune.go:74/81/162` use the top-level index; `:180` passes it to `rg.ColumnChunk`, which counts leaves. `s.leaves` has the right mapping. |
+| I3 ✔ | ~~**SW**~~ **fixed, step 71** | `!=` pruning drops NaN rows. Statistics exclude NaN, so min == max == v does not prove every row is v. | `prune.go:262-264`. |
+| I4 | ~~**SW**~~ **fixed, step 71** | A row group holding `""` and a string over 4096 bytes: the max is dropped and reads back as `""`, so the `lo > hi` guard cannot fire and `>`, `==` and `>=` prune the group. Affects files written by ursus and by pyarrow. | `prune.go:250`; `bound.go:85`. |
+| I5 | ~~**SW**~~ **fixed, step 71** | `IsNotNull` pruning on Struct and List columns uses one leaf's null count — the struct's first field, or the list element, where an empty list counts as null. | `prune.go:63`, `:214-221`. |
+| I6 | ~~**SW**~~ **fixed, step 71** | A List whose element is declared non-null reads `[]` as `[null]`. Spark writes this shape (`containsNull=false`). | `column.go:581`. |
+| I7 ✔ | ~~**SW**~~ **fixed, step 71** | Multi-file CSV skips later headers without checking them: columns are matched by position. | `csv.go:292`. |
 | I8 | **SW** | The CSV writer drops the seconds of a UTC offset, so the written text names an instant 30 s away (Africa/Monrovia 1970, Europe/Amsterdam 1930). Parquet and Arrow are unaffected. | `temporal.go:204`, layout `"Z07:00"`. |
 | I9 | **SW** | CSV inference accepts Go-only syntax: `1_000` becomes 1000, `0x1p3` becomes 8. Polars, pandas and DuckDB all read these as String. | `infer.go:72`. |
 | I10 | SW (low) | In a one-column CSV, an empty line is dropped instead of read as null. | |
 | I11 ✔ | **CR** | A Parquet List of Int8 or Int16 panics. | `parquet.go:710` stores the elements in an `[]int32` buffer. |
 | I12 | **CR** | Corrupt Parquet: in a byte-flip sweep of 7458 runs, 118 panicked inside arrow-go, unrecovered and in a worker goroutine. One file with an inflated `num_rows` **hangs forever and ignores the context**. | `parquet.go:482-484` (`rows == 0 → continue`). |
-| I13 | CR | A required List (level 0 means empty) and a required struct field both raise `ErrInternal`. | `column.go:577`. |
+| I13 | ~~CR~~ **fixed, step 71** | A required List (level 0 means empty) and a required struct field both raise `ErrInternal`. | `column.go:577`. |
 | I14 | CR | `WithCompression(Lz4)` and `WithCompression(Lzo)` panic inside arrow-go. `Lz4Raw` works. | `writer.go:124`. |
-| I15 | FR | A UTF-8 BOM is not stripped from a CSV header, so `Col("a")` fails with *did you mean "﻿a"*. | |
+| I15 | ~~FR~~ **fixed, step 71** | A UTF-8 BOM is not stripped from a CSV header, so `Col("a")` fails with *did you mean "﻿a"*. | |
 | I16 | FR | An unannotated FIXED_LEN_BYTE_ARRAY is typed Binary by the schema and then refused by the reader. | `parquet.go:617`, `types.go:192`. |
 | I17 | FR / ME | List of Uint8, Uint32, Time(ms), Bool or Decimal is refused, with a hint claiming the unsigned and Time types are read. | `parquet.go:732`. |
 | I18 | FR | Null-typed columns are refused by both writers; Polars writes them. | |
@@ -109,6 +109,8 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | I20 | — | Invalid UTF-8 in a String column is never validated, so `SinkParquet` writes an out-of-spec STRING column that Polars and DuckDB refuse. | |
 | I21 | — | A CSV round trip changes float types: integral floats come back Int64, and NaN/Inf come back String. It is exact with `WithSchema`. | |
 | I22 | — | A zero-column frame loses its row count in Parquet, and in CSV becomes a column named `""`. | |
+| I23 | SW, unmeasured | **Recorded at step 71, not fixed.** arrow-go reports `HasNullCount()` true for every statistic read from a file, so a file written WITHOUT `null_count` reads as having no nulls, and `IsNull` pruning would drop rows; and a one-sided integer or float min/max reads its absent side as 0. Only a third-party writer reaches either — arrow-go and pyarrow always write both — and arrow-go's read API cannot detect them. | arrow-go `statistics_types.gen.go`; recorded in `prune.go`'s header. |
+| I24 | class | **Recorded at step 71.** `data.CheckNonNullable` is on only in test binaries. A null in a column declared non-nullable is therefore `ErrInternal` in the test suite and **silent in production**: I1's nullability case and I13 both reached it, and were loud only because tests ran them. | `internal/data/batch.go`; no production setter. |
 
 ## 6. Scalar expressions
 
@@ -244,7 +246,9 @@ Ordered by harm per unit of fix, not by count.
    optimizer on/off differential over 1629 query shapes. That differential found P1,
    and measuring the step found W1; both are above, and P1, O4, O5, O6, O8b and O9
    are what it still counts.
-2. **I1–I7: read multiple files by name, and prune only what the statistics prove.**
+2. ~~**I1–I7: read multiple files by name, and prune only what the statistics prove.**~~
+   **Done — step 71**, with I13 and I15 beside them, a generated pruning differential
+   and a several-files-against-one differential.
    This is silent data corruption from ordinary file reads, and I1 alone makes
    `ScanParquetGlob` unsafe over any directory written by more than one tool.
 3. **O3: literals carry their type in their identity.** One change, and it closes a

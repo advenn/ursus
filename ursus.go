@@ -93,7 +93,8 @@ var (
 // able to detect that without matching on a message" true only for callers inside
 // the module.
 var (
-	// ErrSchema is an unknown, duplicate or ambiguous column.
+	// ErrSchema is an unknown, duplicate or ambiguous column — or several files,
+	// read as one, whose columns differ in anything but their order.
 	ErrSchema = uerr.ErrSchema
 	// ErrType is an operation not defined for the given types.
 	ErrType = uerr.ErrType
