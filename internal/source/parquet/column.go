@@ -510,6 +510,17 @@ type listCol struct {
 	maxRep int16
 	dt     dtype.DataType // the LIST type; the child gets its element
 
+	// emptyDef is the level at which the list is present and EMPTY, and nullElem
+	// the level of a null element, or -1 when elements cannot be null. Both depend
+	// on the SHAPE, not only on maxDef: the comment above describes an optional
+	// list of optional elements, and a list of REQUIRED elements has no null-element
+	// level at all — its empty list sits at maxDef-1, which the old rule read as a
+	// null element, so [] came back as [null] (audit.md §5, I6). A REQUIRED list has
+	// no null-list level, so its empty list is def 0, which the old rule read as a
+	// null list, in a column declared non-nullable (I13). newListReader derives both.
+	emptyDef int16
+	nullElem int16
+
 	// Level scratch, and a cursor into it that survives across read calls.
 	defs []int16
 	reps []int16
@@ -574,11 +585,11 @@ func (c *listCol) read(n int) (int, error) {
 					}
 				}
 				c.open = true
-				c.valid.Append(def > 0) // def 0 is a null list
+				c.valid.Append(def >= c.emptyDef) // shallower is a null list
 			}
 			if def == c.maxDef {
 				c.elems.appendVal()
-			} else if def == c.maxDef-1 && c.maxDef >= 2 {
+			} else if def == c.nullElem {
 				// A null ELEMENT inside a present list. It occupies a slot; an empty
 				// list does not, which is the whole distinction.
 				c.elems.appendNull()

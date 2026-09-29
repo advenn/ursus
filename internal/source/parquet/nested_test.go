@@ -44,7 +44,8 @@ import (
 //	tags: optional group (LIST) { repeated group list { optional int64 element } }
 //	  max def 3, max rep 1
 //	  [10,11] -> (def 3, rep 0), (def 3, rep 1)
-//	  []      -> (def 2, rep 0)      <- present but empty: def stops one short
+//	  []      -> (def 1, rep 0)      <- present but empty: def stops at the list
+//	  [null]  -> (def 2, rep 0)      <- would be a null ELEMENT, a different row
 //	  [12]    -> (def 3, rep 0)
 func writeNested(t *testing.T) string {
 	t.Helper()
@@ -139,7 +140,7 @@ func writeNested(t *testing.T) string {
 	write(func(cw file.ColumnChunkWriter) { // tags.list.element
 		_, err := cw.(*file.Int64ColumnChunkWriter).WriteBatch(
 			[]int64{10, 11, 12},
-			[]int16{3, 3, 2, 3}, // the empty list is def 2
+			[]int16{3, 3, 1, 3}, // the empty list is def 1; def 2 is [null]
 			[]int16{0, 1, 0, 0},
 		)
 		if err != nil {
@@ -208,7 +209,9 @@ func TestNestedFileOpensAndNamesItsColumns(t *testing.T) {
 		"name": dtype.String,
 		"tags": dtype.List(dtype.Int64),
 		"user": dtype.Struct(
-			dtype.Field{Name: "age", Type: dtype.Int64},
+			// age is REQUIRED in the file, and nullable here anyway: struct fields
+			// read from Parquet always are (see structType).
+			dtype.Field{Name: "age", Type: dtype.Int64, Nullable: true},
 			dtype.Field{Name: "city", Type: dtype.String, Nullable: true},
 		),
 	}

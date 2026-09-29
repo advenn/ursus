@@ -677,13 +677,43 @@ func newListReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.Data
 	if err != nil {
 		return nil, err
 	}
+	// The element's own repetition decides where the empty list sits: an optional
+	// element adds a level for "a null element", a required one does not.
+	maxDef := desc.MaxDefinitionLevel()
+	emptyDef, nullElem := maxDef-1, int16(-1)
+	if desc.SchemaNode().RepetitionType() == parquet.Repetitions.Optional {
+		emptyDef, nullElem = maxDef-2, maxDef-1
+	}
+	// Cross-check against the list group itself: it is present, and the list
+	// empty, at exactly the number of non-required nodes from the root down to it.
+	// element -> repeated "list" -> the list group.
+	if group := desc.SchemaNode().Parent().Parent(); definedAt(group) != emptyDef {
+		return nil, uerr.New(uerr.KindUnsupported, "scan_parquet",
+			"column %q is a list whose definition levels do not match its shape "+
+				"(an empty list at %d, the list present at %d)",
+			desc.Path(), emptyDef, definedAt(group))
+	}
 	return &listCol{
-		elems:  elems,
-		maxDef: desc.MaxDefinitionLevel(),
-		maxRep: desc.MaxRepetitionLevel(),
-		dt:     dt,
-		valid:  bitmap.NewBuilder(0),
+		elems:    elems,
+		maxDef:   maxDef,
+		maxRep:   desc.MaxRepetitionLevel(),
+		dt:       dt,
+		emptyDef: emptyDef,
+		nullElem: nullElem,
+		valid:    bitmap.NewBuilder(0),
 	}, nil
+}
+
+// definedAt is the definition level at which n is present: the number of
+// non-required nodes from the root down to n, n included.
+func definedAt(n schema.Node) int16 {
+	var lvl int16
+	for ; n != nil && n.Parent() != nil; n = n.Parent() {
+		if n.RepetitionType() != parquet.Repetitions.Required {
+			lvl++
+		}
+	}
+	return lvl
 }
 
 // newListElems picks the accumulator for a List's element type.

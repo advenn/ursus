@@ -572,10 +572,15 @@ func structType(sc *schema.Schema, g *schema.GroupNode) dtype.DataType {
 	fields := make([]dtype.Field, g.NumFields())
 	for i := range g.NumFields() {
 		f := g.Field(i)
+		// Nullable, ALWAYS, whatever the file says. data.NewStruct builds every field
+		// nullable — a field of a null struct row has no value either — so a type
+		// declaring a REQUIRED field disagreed with every column it described, and
+		// reading one raised ErrInternal (audit.md §5, I13). A field that is required
+		// in the file simply never holds a null, which a nullable field allows.
 		fields[i] = dtype.Field{
 			Name:     f.Name(),
 			Type:     nodeType(sc, f),
-			Nullable: f.RepetitionType() != parquet.Repetitions.Required,
+			Nullable: true,
 		}
 	}
 	return dtype.Struct(fields...)

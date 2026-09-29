@@ -280,36 +280,32 @@ func refused(atPlan bool, names ...string) func(context.Context, *ursus.LazyFram
 // answers. Emptied by the commits that fix them; a listed case that answers
 // correctly fails as stale, and an unlisted one that answers wrongly fails.
 var knownScanDefects = map[string]string{
-	"I1 reordered":                         "a = 1, 2, 30, 40 and b = 10, 20, 3, 4: file 2 read by position",
-	"I1 reordered, other types":            "column a (String) has no reader",
-	"I1 renamed":                           "x and y read silently as a and b",
-	"I1 missing":                           "plans, then panics inside arrow-go at read time",
-	"I1 extra":                             "c silently ignored",
-	"I1 String vs Int64":                   "plans, then: column a (Int64) has no fixed-width payload",
-	"I1 Int32 vs Int64":                    "plans, then: column a is INT32 but mapped to Int64",
-	"I1 required then optional":            "a null in a column declared non-nullable (ErrInternal in tests, silent otherwise)",
-	"I1 struct optional then required":     "file 2's {a: null, b: 5} reads as a null struct",
-	"I1 struct required then optional":     "file 2's null struct reads as {null, null}",
-	"I2 struct before the column":          "c's statistics read from st.b: 0 rows, not 1",
-	"I3 NaN under !=":                      "the NaN row is pruned away",
-	"I4 big string, >":                     `the group holding "" and the big string is pruned`,
-	"I4 big string, >=":                    "the same: 0 rows, not 1",
-	"I4 big string, !=":                    "the same",
-	"I4 big string, ==":                    "the same: 0 rows, not 1",
-	"I5 struct, IsNotNull":                 "pruned on st.a's null count: 0 rows, not 2",
-	"I5 list, IsNotNull":                   "pruned on the element's null count, where [] counts as a null",
-	"I6 list of required elements":         "[] reads as [null]",
-	"I13 required list":                    "[] reads as a null list, in a column declared non-nullable",
-	"I13 required list, required elements": "the same",
-	"I13 required struct field":            "ErrInternal: the type declares a: Int64!, the column is built nullable",
-	"I7 reordered":                         "a = 1, 20 and b = 10, 2: file 2 read by position",
-	"I7 renamed":                           "a,c read silently as a,b",
-	"I7 missing":                           "refused, as a ragged row (ErrValue), not a different header",
-	"I7 extra":                             "the same",
-	"I7 headerless part":                   "the part's first row read as a header and lost: a = 1, 3",
-	"I7 reordered, WithSchema":             "read by position",
-	"I7 reordered, WithColumnNames":        "read by position",
-	"I15 a BOM on one part":                `the first column is named "\ufeffa"`,
+	"I1 reordered":                     "a = 1, 2, 30, 40 and b = 10, 20, 3, 4: file 2 read by position",
+	"I1 reordered, other types":        "column a (String) has no reader",
+	"I1 renamed":                       "x and y read silently as a and b",
+	"I1 missing":                       "plans, then panics inside arrow-go at read time",
+	"I1 extra":                         "c silently ignored",
+	"I1 String vs Int64":               "plans, then: column a (Int64) has no fixed-width payload",
+	"I1 Int32 vs Int64":                "plans, then: column a is INT32 but mapped to Int64",
+	"I1 required then optional":        "a null in a column declared non-nullable (ErrInternal in tests, silent otherwise)",
+	"I1 struct optional then required": "file 2's {a: null, b: 5} reads as a null struct",
+	"I1 struct required then optional": "file 2's null struct reads as {null, null}",
+	"I2 struct before the column":      "c's statistics read from st.b: 0 rows, not 1",
+	"I3 NaN under !=":                  "the NaN row is pruned away",
+	"I4 big string, >":                 `the group holding "" and the big string is pruned`,
+	"I4 big string, >=":                "the same: 0 rows, not 1",
+	"I4 big string, !=":                "the same",
+	"I4 big string, ==":                "the same: 0 rows, not 1",
+	"I5 struct, IsNotNull":             "pruned on st.a's null count: 0 rows, not 2",
+	"I5 list, IsNotNull":               "pruned on the element's null count, where [] counts as a null",
+	"I7 reordered":                     "a = 1, 20 and b = 10, 2: file 2 read by position",
+	"I7 renamed":                       "a,c read silently as a,b",
+	"I7 missing":                       "refused, as a ragged row (ErrValue), not a different header",
+	"I7 extra":                         "the same",
+	"I7 headerless part":               "the part's first row read as a header and lost: a = 1, 3",
+	"I7 reordered, WithSchema":         "read by position",
+	"I7 reordered, WithColumnNames":    "read by position",
+	"I15 a BOM on one part":            `the first column is named "\ufeffa"`,
 }
 
 type scanCase struct {
@@ -480,6 +476,21 @@ func scanCases() []scanCase {
 				[]rawCol{{vals: []int64{1, 2, 3}, defs: []int16{2, 2, 1, 0, 2}, reps: []int16{0, 1, 0, 0, 0}}})
 			return ursus.ScanParquet(p).Select(c("l").List().Len().Alias("n"))
 		}, reads(map[string][]string{"n": {"2", "0", "null", "1"}})},
+		// The same shape across the reader's 4096-level refill: 5000 elements, then
+		// an empty list, which must still be empty after the block boundary.
+		{"I6 a long list, then []", func(t *testing.T, dir string) *ursus.LazyFrame {
+			vals := make([]int64, 5000)
+			defs := make([]int16, 5001)
+			reps := make([]int16, 5001)
+			for i := range vals {
+				vals[i], defs[i], reps[i] = int64(i), 2, 1
+			}
+			reps[0], defs[5000], reps[5000] = 0, 1, 0
+			p := writeRaw(t, dir, "i6long.parquet",
+				schema.FieldList{listNode(t, "l", opt, i64Node(t, "element", req))},
+				[]rawCol{{vals: vals, defs: defs, reps: reps}})
+			return ursus.ScanParquet(p).Select(c("l").List().Len().Alias("n"))
+		}, reads(map[string][]string{"n": {"5000", "0"}})},
 		// I13: a REQUIRED list of optional elements. [1,null], [], [3].
 		{"I13 required list", func(t *testing.T, dir string) *ursus.LazyFrame {
 			p := writeRaw(t, dir, "i13a.parquet",
