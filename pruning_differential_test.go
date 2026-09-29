@@ -333,8 +333,8 @@ func generatePrunePreds(t *testing.T, flat, nested string) map[string][]prunePre
 // knownPruningMismatches counts, per defect, the generated predicates pruning
 // answers differently today. Checked both ways, like the optimizer differential.
 var knownPruningMismatches = map[string]knownMismatch{
-	"I2": {69, "a flat column after a struct or list reads another leaf's statistics"},
-	"I5": {1, "IsNotNull on a struct reads its first field's null count"},
+	// Empty since step 71: I3 and I4 (an empty string max, a float !=) and I2 and
+	// I5 (the wrong leaf, and nested columns) each had a class here.
 }
 
 func TestParquetPruningAgreesWithoutIt(t *testing.T) {

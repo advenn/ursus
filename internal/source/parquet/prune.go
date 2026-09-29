@@ -67,6 +67,12 @@ import (
 // PLAN time, to decide what to classify Inexact, and must agree with what
 // evalPredicate actually does — a conjunct claimed and then ignored is only a
 // wasted Filter, but a conjunct ignored here and used there would be a lie.
+//
+// Only FLAT columns are prunable. A struct or a list has no statistics of its
+// own, only its leaves', and no leaf says whether the column itself is null: a
+// struct's first field can be null in every row of a group of present structs,
+// and a list's element leaf counts an empty list as a null. Both pruned IsNotNull
+// groups that held matches (audit.md §5, I5).
 func prunable(e expr.Node, s *dtype.Schema) bool {
 	switch t := e.(type) {
 	case *expr.Binary:
@@ -74,36 +80,47 @@ func prunable(e expr.Node, s *dtype.Schema) bool {
 		case expr.OpAnd, expr.OpOr:
 			return prunable(t.L, s) && prunable(t.R, s)
 		case expr.OpEq, expr.OpNe, expr.OpLt, expr.OpLe, expr.OpGt, expr.OpGe:
-			_, _, ok := colAndLit(t, s)
-			return ok
+			name, _, ok := colAndLit(t)
+			return ok && flat(s, name)
 		}
 	case *expr.Unary:
 		if t.Op == expr.OpIsNull || t.Op == expr.OpIsNotNull {
 			c, ok := t.Child.(*expr.Col)
-			return ok && s.Has(c.Name)
+			return ok && flat(s, c.Name)
 		}
 	}
 	return false
 }
 
-// colAndLit matches `col OP literal` or `literal OP col`, returning the column
-// index and the literal with the operator normalised so the column is on the left.
-func colAndLit(b *expr.Binary, s *dtype.Schema) (col int, lit *expr.Lit, ok bool) {
+// flat reports whether name is a column of s that is not nested.
+func flat(s *dtype.Schema, name string) bool {
+	i := s.IndexOf(name)
+	return i >= 0 && !s.Field(i).Type.IsNested()
+}
+
+// leafOf resolves a column NAME to the index of its one leaf in the file being
+// read, or reports that it has no single leaf whose statistics describe it.
+//
+// By name, and per file, because a column's leaf index is neither its position in
+// the schema nor the same in every file. A struct or list before it adds leaves:
+// in {st: struct<a, b>, c}, c is field 1 and leaf 2, and reading leaf 1 took st.b's
+// statistics for c (audit.md §5, I2).
+type leafOf func(name string) (leaf int, ok bool)
+
+// colAndLit matches `col OP literal` or `literal OP col`, returning the column's
+// name and the literal.
+func colAndLit(b *expr.Binary) (name string, lit *expr.Lit, ok bool) {
 	if c, isCol := b.L.(*expr.Col); isCol {
 		if l, isLit := b.R.(*expr.Lit); isLit {
-			if i := s.IndexOf(c.Name); i >= 0 {
-				return i, l, true
-			}
+			return c.Name, l, true
 		}
 	}
 	if c, isCol := b.R.(*expr.Col); isCol {
 		if l, isLit := b.L.(*expr.Lit); isLit {
-			if i := s.IndexOf(c.Name); i >= 0 {
-				return i, l, true
-			}
+			return c.Name, l, true
 		}
 	}
-	return 0, nil, false
+	return "", nil, false
 }
 
 // flipped returns the operator with its operands swapped, so `5 < col` can be
@@ -125,9 +142,9 @@ func flipped(op expr.BinaryOp) expr.BinaryOp {
 
 // canSkipRowGroup reports whether every row of the group provably fails at least
 // one conjunct.
-func canSkipRowGroup(rg *metadata.RowGroupMetaData, s *dtype.Schema, preds []expr.Node) (bool, error) {
+func canSkipRowGroup(rg *metadata.RowGroupMetaData, leaf leafOf, preds []expr.Node) (bool, error) {
 	for _, p := range preds {
-		may, err := mayMatch(rg, s, p)
+		may, err := mayMatch(rg, leaf, p)
 		if err != nil {
 			return false, err
 		}
@@ -141,29 +158,33 @@ func canSkipRowGroup(rg *metadata.RowGroupMetaData, s *dtype.Schema, preds []exp
 
 // mayMatch reports whether any row of the group could satisfy e. "true" means
 // maybe; only "false" is a claim, and it must be provable.
-func mayMatch(rg *metadata.RowGroupMetaData, s *dtype.Schema, e expr.Node) (bool, error) {
+func mayMatch(rg *metadata.RowGroupMetaData, leaf leafOf, e expr.Node) (bool, error) {
 	switch t := e.(type) {
 	case *expr.Binary:
 		switch t.Op {
 		case expr.OpAnd:
-			l, err := mayMatch(rg, s, t.L)
+			l, err := mayMatch(rg, leaf, t.L)
 			if err != nil || !l {
 				return false, err
 			}
-			return mayMatch(rg, s, t.R)
+			return mayMatch(rg, leaf, t.R)
 
 		case expr.OpOr:
-			l, err := mayMatch(rg, s, t.L)
+			l, err := mayMatch(rg, leaf, t.L)
 			if err != nil {
 				return false, err
 			}
 			if l {
 				return true, nil
 			}
-			return mayMatch(rg, s, t.R)
+			return mayMatch(rg, leaf, t.R)
 
 		case expr.OpEq, expr.OpNe, expr.OpLt, expr.OpLe, expr.OpGt, expr.OpGe:
-			col, lit, ok := colAndLit(t, s)
+			name, lit, ok := colAndLit(t)
+			if !ok {
+				return true, nil
+			}
+			col, ok := leaf(name)
 			if !ok {
 				return true, nil
 			}
@@ -179,8 +200,8 @@ func mayMatch(rg *metadata.RowGroupMetaData, s *dtype.Schema, e expr.Node) (bool
 		if !ok {
 			return true, nil
 		}
-		col := s.IndexOf(c.Name)
-		if col < 0 {
+		col, ok := leaf(c.Name)
+		if !ok {
 			return true, nil
 		}
 		switch t.Op {
@@ -197,6 +218,11 @@ func mayMatch(rg *metadata.RowGroupMetaData, s *dtype.Schema, e expr.Node) (bool
 // statsFor returns the statistics for a column chunk, or nil if there are none to
 // trust.
 func statsFor(rg *metadata.RowGroupMetaData, col int) (metadata.TypedStatistics, *metadata.ColumnChunkMetaData, error) {
+	// arrow-go's ColumnChunk PANICS on an index past the last column, and a pruner
+	// with a wrong mapping would reach it. No statistics is the safe answer.
+	if col < 0 || col >= rg.NumColumns() {
+		return nil, nil, nil
+	}
 	cc, err := rg.ColumnChunk(col)
 	if err != nil {
 		return nil, nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",

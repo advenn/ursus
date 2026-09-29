@@ -290,9 +290,6 @@ var knownScanDefects = map[string]string{
 	"I1 required then optional":        "a null in a column declared non-nullable (ErrInternal in tests, silent otherwise)",
 	"I1 struct optional then required": "file 2's {a: null, b: 5} reads as a null struct",
 	"I1 struct required then optional": "file 2's null struct reads as {null, null}",
-	"I2 struct before the column":      "c's statistics read from st.b: 0 rows, not 1",
-	"I5 struct, IsNotNull":             "pruned on st.a's null count: 0 rows, not 2",
-	"I5 list, IsNotNull":               "pruned on the element's null count, where [] counts as a null",
 	"I7 reordered":                     "a = 1, 20 and b = 10, 2: file 2 read by position",
 	"I7 renamed":                       "a,c read silently as a,b",
 	"I7 missing":                       "refused, as a ragged row (ErrValue), not a different header",
@@ -574,6 +571,38 @@ func TestScansByHand(t *testing.T) {
 	for name := range knownScanDefects {
 		if !slices.ContainsFunc(cases, func(c scanCase) bool { return c.name == name }) {
 			t.Errorf("knownScanDefects names %q, which is not a case", name)
+		}
+	}
+}
+
+// TestNestedColumnsAreNotPushedToTheScan: a predicate on a struct or a list must
+// stay out of the Parquet scan altogether. The reader would refuse to prune on it
+// anyway, so what this pins is the plan-time half: a conjunct classified Inexact
+// and then never used is a pushdown the plan claims and does not perform.
+func TestNestedColumnsAreNotPushedToTheScan(t *testing.T) {
+	fields := schema.FieldList{
+		structNode(t, "st", opt, i64Node(t, "a", opt), i64Node(t, "b", opt)),
+		listNode(t, "l", opt, i64Node(t, "element", opt)),
+		i64Node(t, "c", opt),
+	}
+	p := writeRaw(t, t.TempDir(), "nested.parquet", fields, []rawCol{
+		{vals: []int64{1}, defs: []int16{2}}, {vals: []int64{2}, defs: []int16{2}},
+		{vals: []int64{3}, defs: []int16{3}, reps: []int16{0}}, {vals: []int64{4}, defs: []int16{1}}})
+	for _, tc := range []struct {
+		name   string
+		pred   ursus.Expr
+		pushed bool
+	}{
+		{"struct", ursus.Col("st").IsNotNull(), false},
+		{"list", ursus.Col("l").IsNotNull(), false},
+		{"flat, the control", ursus.Col("c").IsNotNull(), true},
+	} {
+		plan, err := ursus.ScanParquet(p).Filter(tc.pred).Explain(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(plan, "predicate:"); got != tc.pushed {
+			t.Errorf("%s: pushed to the scan = %v, want %v\n%s", tc.name, got, tc.pushed, plan)
 		}
 	}
 }

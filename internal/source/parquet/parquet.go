@@ -429,7 +429,16 @@ func (r *reader) shouldSkip(rg *metadata.RowGroupMetaData) (bool, error) {
 	if !r.src.opts.Prune || len(r.preds) == 0 {
 		return false, nil
 	}
-	return canSkipRowGroup(rg, r.full, r.preds)
+	return canSkipRowGroup(rg, r.statsLeaf, r.preds)
+}
+
+// statsLeaf is the leafOf for the file being read: a flat column's one leaf.
+func (r *reader) statsLeaf(name string) (int, bool) {
+	i := r.full.IndexOf(name)
+	if i < 0 || r.full.Field(i).Type.IsNested() || len(r.src.leaves[i]) != 1 {
+		return 0, false
+	}
+	return r.src.leaves[i][0], true
 }
 
 func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
@@ -526,6 +535,12 @@ var allowedEncodings = map[parquet.Encoding]bool{
 }
 
 func checkEncodings(rg *metadata.RowGroupMetaData, col int, name string) error {
+	// arrow-go's ColumnChunk panics past the last column. A wrong layout reached it:
+	// a later file with fewer columns, laid out as the first (audit.md §5, I1).
+	if col < 0 || col >= rg.NumColumns() {
+		return uerr.Internalf("scan_parquet: column %q maps to leaf %d, and the row "+
+			"group has %d", name, col, rg.NumColumns())
+	}
 	cc, err := rg.ColumnChunk(col)
 	if err != nil {
 		return uerr.Wrap(err, uerr.KindIO, "scan_parquet",
