@@ -208,8 +208,10 @@ func TestParquetPruningIsSound(t *testing.T) {
 			if err != nil {
 				t.Fatalf("pruning off: %v", err)
 			}
-			if on.String() != off.String() {
-				t.Errorf("pruning changed the result\nwith:\n%s\nwithout:\n%s", on, off)
+			// framesDiffer, not String(): String renders ten rows, and these results
+			// are up to 500 rows long.
+			if d := framesDiffer(t, on, off); d != "" {
+				t.Errorf("pruning changed the result: %s", d)
 			}
 		})
 	}
@@ -336,9 +338,8 @@ func TestParquetAllNullRowGroupIsPrunable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if on.String() != off.String() {
-		t.Errorf("pruning an all-null row group changed the result\nwith:\n%s\nwithout:\n%s",
-			on, off)
+	if d := framesDiffer(t, on, off); d != "" {
+		t.Errorf("pruning an all-null row group changed the result: %s", d)
 	}
 }
 
