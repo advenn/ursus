@@ -38,10 +38,30 @@ import (
 //     IsSetMin(). A column with one 5 KB string therefore reads back as
 //     HasMinMax() == true with Max == "". A pruner that trusts that would decide
 //     `col > "z"` cannot match and skip a group that is full of matches.
-//     The defence is the min > max sanity check in each comparison below.
+//
+//     This comment used to say the defence was the min > max check below. It is
+//     not, whenever the min is ALSO "": "" > "" is false, so a group holding ""
+//     and one long string read as a range holding only "" (audit.md §5, I4). The
+//     defence is statBounds: an empty string max is no bound at all.
 //
 //  3. Statistics are optional. A file written without them has no min or max at
 //     all, and every group must be read.
+//
+// # And two ways the values themselves mislead it
+//
+//  4. NaN is left out of a float's min and max, and NaN != v is true, so a
+//     group can hold a row matching != that its bounds say it cannot. See the Ne
+//     arm below (I3).
+//
+//  5. A NESTED column has no statistics of its own, only its leaves' — a
+//     struct's fields, a list's elements — and none of them states whether the
+//     column itself is null. Nested columns are never pruned (I5).
+//
+// Two more are recorded and not handled, because only a third-party writer
+// reaches them and nothing in arrow-go's read API can detect them: HasNullCount()
+// is true for every statistic read from a file, so a file written without
+// null_count reads as having no nulls; and a one-sided integer or float min or max
+// reads its absent side as 0.
 
 // prunable reports whether the pruner understands this conjunct at all. It runs at
 // PLAN time, to decide what to classify Inexact, and must agree with what
@@ -260,7 +280,14 @@ func compareToStats(rg *metadata.RowGroupMetaData, col int, op expr.BinaryOp, li
 	case expr.OpEq:
 		return lo.cmp(v) <= 0 && v.cmp(hi) <= 0, nil
 	case expr.OpNe:
-		// Only prunable when every value is the same one the predicate excludes.
+		// Only prunable when every value is the same one the predicate excludes —
+		// which a float's statistics cannot show. Writers leave NaN out of min and
+		// max, and NaN != v is TRUE, so a group of 1s and NaNs reads as [1, 1] and
+		// still holds rows that match (audit.md §5, I3). Ne is the only arm NaN can
+		// defeat: it makes every other comparison false, so their pruning is sound.
+		if lo.kind == boundFloat {
+			return true, nil
+		}
 		return !(lo.cmp(hi) == 0 && lo.cmp(v) == 0), nil
 	case expr.OpLt:
 		return lo.cmp(v) < 0, nil

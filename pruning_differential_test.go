@@ -298,8 +298,8 @@ func generatePrunePreds(t *testing.T, flat, nested string) map[string][]prunePre
 
 	var fp []prunePred
 	fp = append(fp, comparisons("flat", "i", "int", distinctInts(t, fdf, "i"))...)
-	fp = append(fp, comparisons("flat", "f", "float", distinctFloats(t, fdf, "f", false))...)
-	fp = append(fp, comparisons("flat", "f32", "float", distinctFloats(t, fdf, "f32", true))...)
+	fp = append(fp, comparisons("flat", "f", "float64", distinctFloats(t, fdf, "f", false))...)
+	fp = append(fp, comparisons("flat", "f32", "float32", distinctFloats(t, fdf, "f32", true))...)
 	fp = append(fp, comparisons("flat", "s", "string", distinctStrings(t, fdf, "s"))...)
 	for _, col := range []string{"i", "f", "f32", "s"} {
 		fp = append(fp,
@@ -334,8 +334,6 @@ func generatePrunePreds(t *testing.T, flat, nested string) map[string][]prunePre
 // answers differently today. Checked both ways, like the optimizer differential.
 var knownPruningMismatches = map[string]knownMismatch{
 	"I2": {69, "a flat column after a struct or list reads another leaf's statistics"},
-	"I3": {1, "statistics leave NaN out, so a group of 1s and NaNs looks like all 1s to !="},
-	"I4": {35, `a group holding "" and a string too long for its max reads back as all ""`},
 	"I5": {1, "IsNotNull on a struct reads its first field's null count"},
 }
 
@@ -388,7 +386,9 @@ func TestParquetPruningAgreesWithoutIt(t *testing.T) {
 	}
 	// Anti-vacuity: every class must actually skip something. A pruner that never
 	// prunes, or never prunes floats, agrees with itself everywhere and fails here.
-	for _, class := range []string{"int", "float", "string", "is_null", "nested-flat"} {
+	// Float64 and Float32 are separate classes: with one "float" class, a pruner
+	// that stopped pruning Float64 alone still passed, on Float32's skips.
+	for _, class := range []string{"int", "float64", "float32", "string", "is_null", "nested-flat"} {
 		if skipped[class] == 0 {
 			t.Errorf("no %s predicate skipped a row group — pruning has stopped pruning", class)
 		}
