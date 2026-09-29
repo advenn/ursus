@@ -56,8 +56,9 @@ func fileOpener(path string) parquet.Opener {
 //	    Select(ursus.Col("user"), ursus.Col("ts")).
 //	    Collect(ctx)
 //
-// Flat schemas only. A file with a nested, repeated or encrypted column is refused
-// with an error naming the column, rather than read with that column dropped.
+// Lists and structs are read; a column ursus cannot read — an encrypted one, a map,
+// a list of lists — is refused with an error naming it when a query reads it,
+// rather than dropped.
 func ScanParquet(path string, opts ...ParquetOption) *LazyFrame {
 	return Scan(parquet.New([]parquet.Opener{fileOpener(path)}, path, parquetOptions(opts)))
 }
@@ -78,8 +79,13 @@ func ScanParquetGlob(pattern string, opts ...ParquetOption) *LazyFrame {
 	return ScanParquetFiles(paths, opts...)
 }
 
-// ScanParquetFiles reads several files as one frame, in the order given. The schema
-// comes from the first.
+// ScanParquetFiles reads several files as one frame, in the order given.
+//
+// Columns are matched by NAME: every file must have the same columns, of the same
+// types, in any order. A file that differs is refused with ErrSchema, naming both
+// files and the difference, when the query is planned — every file's footer is
+// read then, before any row is produced. A column is nullable if it is nullable in
+// any file. To combine files that differ, scan them separately and Concat them.
 func ScanParquetFiles(paths []string, opts ...ParquetOption) *LazyFrame {
 	if len(paths) == 0 {
 		return &LazyFrame{err: uerr.New(uerr.KindValue, "scan_parquet", "no files given")}
@@ -92,7 +98,7 @@ func ScanParquetFiles(paths []string, opts ...ParquetOption) *LazyFrame {
 	if len(paths) > 1 {
 		desc += " and " + strconv.Itoa(len(paths)-1) + " more"
 	}
-	return Scan(parquet.New(opens, desc, parquetOptions(opts)))
+	return Scan(parquet.NewNamed(opens, paths, desc, parquetOptions(opts)))
 }
 
 // ScanParquetBytes reads a Parquet file from memory.

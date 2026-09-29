@@ -2,7 +2,10 @@ package parquet
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/apache/arrow-go/v18/parquet"
@@ -35,8 +38,23 @@ func DefaultOptions() Options { return Options{Prune: true} }
 type Opener func() (parquet.ReaderAtSeeker, io.Closer, error)
 
 // Source is one or more Parquet files read as a single table.
+//
+// # Several files are read BY NAME
+//
+// Every file must have the same columns, of the same types, in any order. The
+// schema is every file's footer reconciled at plan time — not the first file's,
+// which is what it used to be, and every later file was then read by the first
+// file's POSITIONS (audit.md §5, I1). A file with its columns in another order had
+// them swapped, silently; one with other names was read as if it had the first
+// file's; one with fewer columns panicked inside arrow-go.
+//
+// A column is nullable if it is nullable in ANY file. At read time each file's
+// layout is derived again from the footer actually being read (layoutFor), so a
+// file rewritten between planning and reading is read by name or refused, never
+// read by a layout it no longer has.
 type Source struct {
 	opens []Opener
+	names []string // per file, for error messages; see partName
 	desc  string
 	opts  Options
 
@@ -44,12 +62,8 @@ type Source struct {
 	schema *dtype.Schema
 	err    error
 
-	// leaves[i] is the file LEAF column set that schema field i is read from, or nil
-	// when the field cannot be read. Field index and leaf index are the same
-	// number only for a flat file; see fileSchema.
-	leaves [][]int
-	// unread holds, per unreadable field, the refusal to return if a query asks
-	// for it. Non-nil entries are the nested columns.
+	// unread holds, per unreadable field of the reconciled schema, the refusal to
+	// return if a query asks for it. Non-nil entries are the nested columns.
 	unread map[int]error
 
 	// Row groups read and skipped, across every reader this source has opened.
@@ -84,6 +98,22 @@ func (s *Source) countGroup(skipped bool) {
 // New builds a source over a list of openers, read in order.
 func New(opens []Opener, desc string, o Options) *Source {
 	return &Source{opens: opens, desc: desc, opts: o}
+}
+
+// NewNamed is New with a name for each file, which the errors use.
+func NewNamed(opens []Opener, names []string, desc string, o Options) *Source {
+	return &Source{opens: opens, names: names, desc: desc, opts: o}
+}
+
+// partName names file i for an error message.
+func (s *Source) partName(i int) string {
+	switch {
+	case i < len(s.names):
+		return s.names[i]
+	case len(s.opens) == 1:
+		return s.desc
+	}
+	return fmt.Sprintf("part %d of %s", i+1, s.desc)
 }
 
 // --- plan.Source ---------------------------------------------------------------
@@ -125,32 +155,164 @@ func (s *Source) ClassifyPredicates(preds []expr.Node) []plan.Pushdown {
 	return out
 }
 
-// Schema reads the footer of the first file once and caches it.
+// Schema reads every file's footer once, reconciles them, and caches the result.
+//
+// Every footer, not the first: a mismatch is refused here, before any row is
+// produced, rather than in the middle of a read after earlier files' rows have
+// gone downstream — and nullability is only right if every file is seen. One open
+// and one footer parse per file, at plan time; each is opened again to be read.
 func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 	s.once.Do(func() {
-		if err := ctx.Err(); err != nil {
-			s.err = err
-			return
-		}
-		r, closer, err := s.openFile(0)
-		if err != nil {
-			s.err = err
-			return
-		}
-		defer closer()
-		s.schema, s.leaves, s.unread, s.err = fileSchema(r.MetaData().Schema)
-		if s.err != nil {
-			s.err = uerr.Annotate(s.err, "scan_parquet", s.desc)
-		}
+		s.schema, s.unread, s.err = s.readSchemas(ctx)
 	})
 	return s.schema, s.err
+}
+
+func (s *Source) readSchemas(ctx context.Context) (*dtype.Schema, map[int]error, error) {
+	var (
+		first  *dtype.Schema
+		fields []dtype.Field
+		unread map[int]error
+	)
+	for k := range s.opens {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
+		r, closer, err := s.openFile(k)
+		if err != nil {
+			return nil, nil, err
+		}
+		fs, _, un, err := fileSchema(r.MetaData().Schema)
+		closer()
+		if err != nil {
+			return nil, nil, uerr.Annotate(err, "scan_parquet", s.partName(k))
+		}
+		if k == 0 {
+			first, fields = fs, fs.FieldSlice()
+			unread = un
+			continue
+		}
+		if err := sameColumns(first, fs, s.partName(0), s.partName(k)); err != nil {
+			return nil, nil, err
+		}
+		for i := range fields {
+			j := fs.IndexOf(fields[i].Name)
+			fields[i].Nullable = fields[i].Nullable || fs.Field(j).Nullable
+			if e := un[j]; e != nil && unread[i] == nil {
+				if unread == nil {
+					unread = make(map[int]error)
+				}
+				unread[i] = uerr.Annotate(e, "scan_parquet", s.partName(k))
+			}
+		}
+	}
+	out, err := dtype.NewSchema(fields...)
+	if err != nil {
+		return nil, nil, err
+	}
+	return out, unread, nil
+}
+
+// sameColumns refuses got unless it has exactly want's columns, by NAME, each of
+// the same type. Order may differ. Nullability may differ too — it is reconciled,
+// not compared — which is why this compares Field.Type and not Field.
+func sameColumns(want, got *dtype.Schema, wantName, gotName string) error {
+	var missing, extra []string
+	for _, f := range want.FieldSlice() {
+		if got.IndexOf(f.Name) < 0 {
+			missing = append(missing, f.Name)
+		}
+	}
+	for _, f := range got.FieldSlice() {
+		if want.IndexOf(f.Name) < 0 {
+			extra = append(extra, f.Name)
+		}
+	}
+	remedy := func(e *uerr.Error) *uerr.Error {
+		return e.Hint("several files are read as one by column NAME: every file must " +
+			"have the same columns, of the same types, in any order").
+			Hint("to combine files that differ, scan them separately and Concat them — " +
+				"it promotes types, and ConcatDiagonal fills missing columns with nulls")
+	}
+	if len(missing) > 0 || len(extra) > 0 {
+		e := uerr.New(uerr.KindSchema, "scan_parquet",
+			"%s does not have the same columns as %s", gotName, wantName)
+		if len(missing) > 0 {
+			e = e.Hint("missing from %s: %s", gotName, quoteNames(missing))
+		}
+		if len(extra) > 0 {
+			e = e.Hint("not in %s: %s", wantName, quoteNames(extra))
+		}
+		return remedy(e.Hint("%s: %s", wantName, want).Hint("%s: %s", gotName, got))
+	}
+	for _, f := range want.FieldSlice() {
+		g := got.Field(got.IndexOf(f.Name))
+		if !f.Type.Equal(g.Type) {
+			return remedy(uerr.New(uerr.KindSchema, "scan_parquet",
+				"column %q is %s in %s, but %s in %s", f.Name, f.Type, wantName, g.Type, gotName))
+		}
+	}
+	return nil
+}
+
+func quoteNames(names []string) string {
+	q := make([]string, len(names))
+	for i, n := range names {
+		q[i] = strconv.Quote(n)
+	}
+	return strings.Join(q, ", ")
+}
+
+// fileLayout is how ONE file stores the reconciled schema: for each of its fields,
+// by reconciled index, the leaf columns to read, whether this file declares it
+// optional, and the refusal if this file cannot supply it.
+type fileLayout struct {
+	leaves   [][]int
+	optional []bool
+	unread   map[int]error
+}
+
+// layoutFor derives file k's layout from the footer actually being read.
+//
+// From that footer, and not from what was seen at plan time: a file rewritten
+// between CollectSchema and Collect is then read by name, or refused. It is also
+// refused if it now allows nulls in a column the plan treats as non-null, because
+// the engine would be handed nulls it has promised cannot occur.
+func (s *Source) layoutFor(full *dtype.Schema, sc *schema.Schema, k int) (fileLayout, error) {
+	fs, leaves, un, err := fileSchema(sc)
+	if err != nil {
+		return fileLayout{}, uerr.Annotate(err, "scan_parquet", s.partName(k))
+	}
+	if err := sameColumns(full, fs, "the planned schema", s.partName(k)); err != nil {
+		return fileLayout{}, err
+	}
+	lay := fileLayout{leaves: make([][]int, full.Len()), optional: make([]bool, full.Len())}
+	for i := range full.Len() {
+		f := full.Field(i)
+		j := fs.IndexOf(f.Name)
+		g := fs.Field(j)
+		if g.Nullable && !f.Nullable {
+			return fileLayout{}, uerr.New(uerr.KindSchema, "scan_parquet",
+				"column %q of %s allows nulls, and the query was planned for a column "+
+					"that does not", f.Name, s.partName(k)).
+				Hint("the file changed after the query was planned; plan it again")
+		}
+		lay.leaves[i], lay.optional[i] = leaves[j], g.Nullable
+		if e := un[j]; e != nil {
+			if lay.unread == nil {
+				lay.unread = make(map[int]error)
+			}
+			lay.unread[i] = uerr.Annotate(e, "scan_parquet", s.partName(k))
+		}
+	}
+	return lay, nil
 }
 
 func (s *Source) openFile(i int) (*file.Reader, func(), error) {
 	ra, closer, err := s.opens[i]()
 	if err != nil {
 		return nil, nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
-			"opening part %d of %s", i+1, s.desc)
+			"opening %s", s.partName(i))
 	}
 	r, err := file.NewParquetReader(ra)
 	if err != nil {
@@ -158,7 +320,7 @@ func (s *Source) openFile(i int) (*file.Reader, func(), error) {
 			closer.Close()
 		}
 		return nil, nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
-			"reading the footer of %s", s.desc)
+			"reading the footer of %s", s.partName(i))
 	}
 	return r, func() {
 		r.Close()
@@ -244,15 +406,17 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 	// nil Projection means every column, so a select-all over a file with a nested
 	// column still fails, which is the behaviour that keeps "nothing is silently
 	// missing" true.
+	//
+	// The plans are built in OUTPUT order, which is the order Next names the
+	// chunks in. They were built in the file's order, and matched only because
+	// projection pushdown happens to emit projections in source order.
 	var cols []colPlan
-	for i := range full.Len() {
-		if out.IndexOf(full.Field(i).Name) < 0 {
-			continue
-		}
-		if err := s.unread[i]; err != nil {
+	for i := range out.Len() {
+		fi := full.IndexOf(out.Field(i).Name)
+		if err := s.unread[fi]; err != nil {
 			return nil, uerr.Annotate(err, "scan_parquet", s.desc)
 		}
-		cols = append(cols, colPlan{field: i, leaves: s.leaves[i]})
+		cols = append(cols, colPlan{field: fi})
 	}
 
 	batchSize := spec.BatchSize
@@ -290,6 +454,7 @@ type reader struct {
 	mu      sync.Mutex
 	fileIdx int
 	pf      *file.Reader
+	lay     fileLayout // how pf stores the reconciled schema
 	closeFn func()
 	rgIndex int
 	chunks  []colReader
@@ -343,8 +508,21 @@ func (r *reader) openNext() error {
 			if err != nil {
 				return err
 			}
+			lay, err := r.src.layoutFor(r.full, pf.MetaData().Schema, r.fileIdx)
+			if err == nil {
+				for _, p := range r.cols {
+					if e := lay.unread[p.field]; e != nil {
+						err = e
+						break
+					}
+				}
+			}
+			if err != nil {
+				closeFn()
+				return err
+			}
 			r.fileIdx++
-			r.pf, r.closeFn = pf, closeFn
+			r.pf, r.closeFn, r.lay = pf, closeFn, lay
 			r.rgIndex = -1
 		}
 
@@ -381,17 +559,13 @@ func (r *reader) openNext() error {
 	}
 }
 
-// colPlan is one OUTPUT column and the file leaves it is built from.
+// colPlan is one OUTPUT column, by its index in the reconciled schema.
 //
-// The two numbers used to be one. Every column readable before this step consumed
-// exactly one leaf — a flat column obviously, a List because its single element leaf
-// carries the whole thing — so the schema's field index and the file's leaf index
-// happened to agree, and openNext indexed the schema with a leaf number. A struct
-// with two fields ends the agreement for every column after it, and the symptom
-// would have been reading the wrong column under the right name rather than an error.
+// The file leaves it is read from are NOT here, because they differ from file to
+// file: each file's come from its own layout (r.lay). They used to be fixed here
+// from the first file, which read every later file by the first file's positions.
 type colPlan struct {
-	field  int   // index into the file schema
-	leaves []int // file column indexes, in field order
+	field int // index into the reconciled schema
 }
 
 // openColumn opens the chunk readers for one output column.
@@ -418,10 +592,15 @@ func (r *reader) openColumn(rg *file.RowGroupReader,
 		return newColReader(cr, r.pf.MetaData().Schema.Column(ci), dt)
 	}
 
+	leaves := r.lay.leaves[p.field]
 	if f.Type.ID() != dtype.TypeStruct {
-		return leafReader(p.leaves[0], f.Type)
+		return leafReader(leaves[0], f.Type)
 	}
-	return newStructReader(f, p.leaves, leafReader)
+	// Whether the struct can be null at all is THIS file's answer. The reconciled
+	// field is nullable if any file's is, and a struct that is REQUIRED in this
+	// file has no level of its own to read: tracking one anyway read a present
+	// struct with a null first field as a null struct.
+	return newStructReader(f, leaves, r.lay.optional[p.field], leafReader)
 }
 
 // shouldSkip asks the pruner whether this row group can be ruled out.
@@ -435,10 +614,10 @@ func (r *reader) shouldSkip(rg *metadata.RowGroupMetaData) (bool, error) {
 // statsLeaf is the leafOf for the file being read: a flat column's one leaf.
 func (r *reader) statsLeaf(name string) (int, bool) {
 	i := r.full.IndexOf(name)
-	if i < 0 || r.full.Field(i).Type.IsNested() || len(r.src.leaves[i]) != 1 {
+	if i < 0 || r.full.Field(i).Type.IsNested() || len(r.lay.leaves[i]) != 1 {
 		return 0, false
 	}
-	return r.src.leaves[i][0], true
+	return r.lay.leaves[i][0], true
 }
 
 func (r *reader) Next(ctx context.Context) (*data.Batch, error) {

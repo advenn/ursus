@@ -87,8 +87,6 @@ func multiFileQueries() []struct {
 // knownMultiFileMismatches counts the queries several files answer differently
 // from one, per defect. Checked both ways.
 var knownMultiFileMismatches = map[string]knownMismatch{
-	"I1": {30, "every Parquet part is laid out as the first: swapped values, wrong row " +
-		"groups pruned, or a type read as another"},
 	"I7": {60, "every CSV part is read by position against the first header"},
 }
 
@@ -185,13 +183,7 @@ func collectRecovered(ctx context.Context, lf *ursus.LazyFrame, opts ...ursus.Co
 
 // knownMultiFileDefects names each refusal case that is not refused today.
 var knownMultiFileDefects = map[string]string{
-	"parquet Datetime unit":            "planned without error",
-	"parquet Datetime zone":            "planned without error",
-	"parquet struct field renamed":     "planned without error",
-	"parquet struct fields reordered":  "planned without error",
-	"parquet list element type":        "planned without error",
-	"csv duplicate header":             "read without error",
-	"parquet rewritten after planning": "a = 1, 20 and b = 10, 2: read by the planned layout",
+	"csv duplicate header": "read without error",
 }
 
 // TestSeveralFilesThatDifferAreRefused: files whose columns differ in anything

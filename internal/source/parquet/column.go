@@ -821,7 +821,9 @@ func (c *structCol) close() error {
 // root contributes nothing, so the struct's own optionality is the entire level.
 // Nested structs would have to walk their ancestors instead, and they are refused at
 // schema time (structFieldLeaves) rather than mis-read here.
-func newStructReader(f dtype.Field, leaves []int,
+// optional is whether the file being read declares the struct itself optional —
+// which is not f.Nullable when several files are read as one.
+func newStructReader(f dtype.Field, leaves []int, optional bool,
 	open func(ci int, dt dtype.DataType) (colReader, error)) (colReader, error) {
 
 	sub := f.Type.Fields()
@@ -843,7 +845,7 @@ func newStructReader(f dtype.Field, leaves []int,
 		c.names[i] = sub[i].Name
 	}
 
-	if f.Nullable {
+	if optional {
 		t, ok := c.fields[0].(parentTracker)
 		if !ok {
 			// Every leaf reader implements it; a shape that does not could only

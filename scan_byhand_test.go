@@ -280,24 +280,14 @@ func refused(atPlan bool, names ...string) func(context.Context, *ursus.LazyFram
 // answers. Emptied by the commits that fix them; a listed case that answers
 // correctly fails as stale, and an unlisted one that answers wrongly fails.
 var knownScanDefects = map[string]string{
-	"I1 reordered":                     "a = 1, 2, 30, 40 and b = 10, 20, 3, 4: file 2 read by position",
-	"I1 reordered, other types":        "column a (String) has no reader",
-	"I1 renamed":                       "x and y read silently as a and b",
-	"I1 missing":                       "plans, then panics inside arrow-go at read time",
-	"I1 extra":                         "c silently ignored",
-	"I1 String vs Int64":               "plans, then: column a (Int64) has no fixed-width payload",
-	"I1 Int32 vs Int64":                "plans, then: column a is INT32 but mapped to Int64",
-	"I1 required then optional":        "a null in a column declared non-nullable (ErrInternal in tests, silent otherwise)",
-	"I1 struct optional then required": "file 2's {a: null, b: 5} reads as a null struct",
-	"I1 struct required then optional": "file 2's null struct reads as {null, null}",
-	"I7 reordered":                     "a = 1, 20 and b = 10, 2: file 2 read by position",
-	"I7 renamed":                       "a,c read silently as a,b",
-	"I7 missing":                       "refused, as a ragged row (ErrValue), not a different header",
-	"I7 extra":                         "the same",
-	"I7 headerless part":               "the part's first row read as a header and lost: a = 1, 3",
-	"I7 reordered, WithSchema":         "read by position",
-	"I7 reordered, WithColumnNames":    "read by position",
-	"I15 a BOM on one part":            `the first column is named "\ufeffa"`,
+	"I7 reordered":                  "a = 1, 20 and b = 10, 2: file 2 read by position",
+	"I7 renamed":                    "a,c read silently as a,b",
+	"I7 missing":                    "refused, as a ragged row (ErrValue), not a different header",
+	"I7 extra":                      "the same",
+	"I7 headerless part":            "the part's first row read as a header and lost: a = 1, 3",
+	"I7 reordered, WithSchema":      "read by position",
+	"I7 reordered, WithColumnNames": "read by position",
+	"I15 a BOM on one part":         `the first column is named "\ufeffa"`,
 }
 
 type scanCase struct {
