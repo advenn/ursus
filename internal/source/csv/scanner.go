@@ -81,6 +81,7 @@ const (
 )
 
 func newScanner(r io.Reader, o Options) *scanner {
+	r = &bomSkipper{r: r}
 	maxRec := o.MaxRecordSize
 	if maxRec <= 0 {
 		maxRec = defaultMaxRecord
@@ -397,4 +398,37 @@ func appendNormalised(dst, src []byte, quote byte) []byte {
 		}
 	}
 	return dst
+}
+
+// bomSkipper drops a UTF-8 byte-order mark at the very start of a stream.
+//
+// Spreadsheet exports and Windows tools write one, and it is not part of the
+// data: kept, it became part of the first column's NAME — `\ufeffa`, so
+// Col("a") was an unknown column — and, when several files are matched by header,
+// a part with a BOM would not match a part without (audit.md §5, I15). Polars,
+// pandas and DuckDB all drop it.
+type bomSkipper struct {
+	r       io.Reader
+	checked bool
+	pending []byte
+}
+
+func (b *bomSkipper) Read(p []byte) (int, error) {
+	if !b.checked {
+		b.checked = true
+		var head [3]byte
+		n, err := io.ReadFull(b.r, head[:])
+		if !(n == 3 && head == [3]byte{0xEF, 0xBB, 0xBF}) {
+			b.pending = append([]byte(nil), head[:n]...)
+		}
+		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+			return 0, err
+		}
+	}
+	if len(b.pending) > 0 {
+		n := copy(p, b.pending)
+		b.pending = b.pending[n:]
+		return n, nil
+	}
+	return b.r.Read(p)
 }

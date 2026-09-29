@@ -98,8 +98,9 @@ func ScanCSV(path string, opts ...CSVOption) *LazyFrame {
 
 // ScanCSVGlob reads every file matching a shell pattern as one frame.
 //
-// The files must share a schema; it is taken from the first match. Matches are
-// sorted, so `part-*.csv` reads in the order the names imply rather than whatever
+// The files must share their columns; the types are inferred from the first match,
+// and every other file's header is matched to the first's by NAME — see
+// ScanCSVFiles. Matches are sorted, so `part-*.csv` reads in the order the names imply rather than whatever
 // the filesystem returns — row order is a property of the data here, and leaving
 // it to readdir would make the same query return different orders on different
 // machines.
@@ -118,6 +119,15 @@ func ScanCSVGlob(pattern string, opts ...CSVOption) *LazyFrame {
 }
 
 // ScanCSVFiles reads several files as one frame, in the order given.
+//
+// Columns are matched by the NAMES in each file's header: every file must name the
+// same columns, in any order. A file that differs — a missing, extra, renamed or
+// repeated column, or no header at all — is refused with ErrSchema, naming both
+// files, when the scan reaches it. The types are inferred from the first file
+// (or given by WithSchema). WithColumnNames renames the first file's columns by
+// position, and later files are still matched to it by what the files say. With
+// WithHasHeader(false) there is nothing to match, and files are read by position.
+// A UTF-8 byte-order mark at the start of a file is dropped.
 func ScanCSVFiles(paths []string, opts ...CSVOption) *LazyFrame {
 	if len(paths) == 0 {
 		return &LazyFrame{err: uerr.New(uerr.KindValue, "scan_csv", "no files given")}

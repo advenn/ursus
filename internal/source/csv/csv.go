@@ -2,8 +2,10 @@ package csv
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"sync"
 
@@ -30,6 +32,7 @@ type Opener func() (io.ReadCloser, error)
 // inferred Int64 column is a parse error on a file that is not actually malformed.
 type Source struct {
 	opens []Opener
+	names []string // per stream, for error messages; see partName
 	desc  string
 	opts  Options
 
@@ -45,9 +48,22 @@ func New(open Opener, desc string, o Options) *Source {
 }
 
 // NewMulti builds a source over several streams read in order. The schema is
-// inferred from the first; the rest must match it.
+// inferred from the first. Every later stream's header must name the same
+// columns, in any order: each is matched to the first by name, and refused if it
+// differs (see matchHeader).
 func NewMulti(opens []Opener, desc string, o Options) *Source {
 	return &Source{opens: opens, desc: desc, opts: o.normalise()}
+}
+
+// partName names stream i for an error message.
+func (s *Source) partName(i int) string {
+	switch {
+	case i < len(s.names):
+		return s.names[i]
+	case len(s.opens) == 1:
+		return s.desc
+	}
+	return fmt.Sprintf("part %d of %s", i+1, s.desc)
 }
 
 // FromFile builds a source over a path.
@@ -61,7 +77,9 @@ func FromFiles(paths []string, desc string, o Options) *Source {
 	for i, p := range paths {
 		opens[i] = FileOpener(p)
 	}
-	return NewMulti(opens, desc, o)
+	s := NewMulti(opens, desc, o)
+	s.names = paths
+	return s
 }
 
 // FileOpener returns an Opener for a path.
@@ -191,6 +209,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		full:      full,
 		out:       out,
 		wanted:    wanted,
+		wanted0:   wanted,
 		builders:  builders,
 		batchSize: batchSize,
 		remaining: spec.MaxRows,
@@ -213,8 +232,15 @@ type reader struct {
 	next   int           // index of the next stream to open
 	full   *dtype.Schema // the file's columns
 	out    *dtype.Schema // what this reader emits
-	wanted []int         // file column -> output position, or -1
+	wanted []int         // THIS stream's column -> output position, or -1
 	isNull func([]byte) bool
+
+	// The reference header — the first stream's, as written in the file — and the
+	// column mapping that goes with it. Every later stream's header is matched to
+	// it by name, and wanted recomputed for that stream.
+	wanted0     []int
+	header0     []string
+	header0From int
 
 	builders  []colBuilder
 	batchSize int
@@ -289,10 +315,97 @@ func (r *reader) openNext() error {
 			return r.sc.Err()
 		}
 	}
-	if r.src.opts.HasHeader && !r.sc.Next() {
-		return r.sc.Err()
+	if r.src.opts.HasHeader {
+		if !r.sc.Next() {
+			return r.sc.Err() // an empty part: no header to check, and no rows
+		}
+		hdr := make([]string, r.sc.NumFields())
+		for i := range hdr {
+			hdr[i] = string(r.sc.Field(i)) // copies: Field aliases the scanner's buffer
+		}
+		if r.header0 == nil {
+			r.header0, r.header0From, r.wanted = hdr, r.next-1, r.wanted0
+			return nil
+		}
+		w, err := matchHeader(r.header0, hdr, r.wanted0,
+			r.src.partName(r.header0From), r.src.partName(r.next-1))
+		if err != nil {
+			return err
+		}
+		r.wanted = w
 	}
 	return nil
+}
+
+// matchHeader maps a later stream's header onto the reference header's columns,
+// BY NAME.
+//
+// Every later header was skipped unread, so a part with its columns in another
+// order was read by position — a,b then b,a read b's values into a, silently — a
+// renamed column was read as the reference's, and a part with no header at all
+// lost its first row, read as one (audit.md §5, I7). Now:
+//
+//   - an identical header uses the reference mapping unchanged;
+//   - a header with the same names in another order is remapped, by name;
+//   - anything else — a missing, extra, renamed or repeated column — is refused
+//     with ErrSchema, naming both parts.
+//
+// The names compared are the ones IN THE FILES. WithColumnNames renames the first
+// stream's columns by position, and a later stream is still matched to the first
+// by what the files say.
+func matchHeader(ref, got []string, wanted0 []int, refName, gotName string) ([]int, error) {
+	if slices.Equal(ref, got) {
+		return wanted0, nil
+	}
+	refuse := func(format string, args ...any) error {
+		return uerr.New(uerr.KindSchema, "scan_csv", format, args...).
+			Hint("%s: %q", refName, ref).
+			Hint("%s: %q", gotName, got).
+			Hint("several files are read as one by header NAME: every part must name " +
+				"the same columns, in any order").
+			Hint("to combine files that differ, scan them separately and Concat them")
+	}
+	pos := make(map[string]int, len(ref))
+	for i, n := range ref {
+		pos[n] = i
+	}
+	seen := make(map[string]bool, len(got))
+	for _, n := range got {
+		if seen[n] {
+			return nil, refuse("%s repeats the column %q", gotName, n)
+		}
+		seen[n] = true
+	}
+	if len(pos) != len(ref) {
+		return nil, refuse("%s repeats a column name, so its columns cannot be matched by name",
+			refName)
+	}
+	var missing, extra []string
+	for _, n := range ref {
+		if !seen[n] {
+			missing = append(missing, n)
+		}
+	}
+	for _, n := range got {
+		if _, ok := pos[n]; !ok {
+			extra = append(extra, n)
+		}
+	}
+	if len(missing) > 0 || len(extra) > 0 {
+		return nil, refuse("%s does not have the same columns as %s (missing %q, not in %s: %q)",
+			gotName, refName, missing, refName, extra)
+	}
+	if len(ref) != len(wanted0) {
+		// Only under WithSchema, whose width need not be the header's: a reordering
+		// could not be mapped onto it consistently.
+		return nil, refuse("%s has its columns in another order, and the schema given "+
+			"has %d columns for a header of %d", gotName, len(wanted0), len(ref))
+	}
+	w := make([]int, len(got))
+	for j, n := range got {
+		w[j] = wanted0[pos[n]]
+	}
+	return w, nil
 }
 
 func (r *reader) Next(ctx context.Context) (*data.Batch, error) {

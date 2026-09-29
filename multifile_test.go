@@ -87,7 +87,8 @@ func multiFileQueries() []struct {
 // knownMultiFileMismatches counts the queries several files answer differently
 // from one, per defect. Checked both ways.
 var knownMultiFileMismatches = map[string]knownMismatch{
-	"I7": {60, "every CSV part is read by position against the first header"},
+	// Empty since step 71: I1 (Parquet) and I7 (CSV) each had a class here, and
+	// every query of both disagreed with the single file.
 }
 
 func TestSeveralFilesReadAsOne(t *testing.T) {
@@ -183,7 +184,7 @@ func collectRecovered(ctx context.Context, lf *ursus.LazyFrame, opts ...ursus.Co
 
 // knownMultiFileDefects names each refusal case that is not refused today.
 var knownMultiFileDefects = map[string]string{
-	"csv duplicate header": "read without error",
+	// Empty since step 71.
 }
 
 // TestSeveralFilesThatDifferAreRefused: files whose columns differ in anything

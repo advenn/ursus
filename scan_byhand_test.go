@@ -280,14 +280,7 @@ func refused(atPlan bool, names ...string) func(context.Context, *ursus.LazyFram
 // answers. Emptied by the commits that fix them; a listed case that answers
 // correctly fails as stale, and an unlisted one that answers wrongly fails.
 var knownScanDefects = map[string]string{
-	"I7 reordered":                  "a = 1, 20 and b = 10, 2: file 2 read by position",
-	"I7 renamed":                    "a,c read silently as a,b",
-	"I7 missing":                    "refused, as a ragged row (ErrValue), not a different header",
-	"I7 extra":                      "the same",
-	"I7 headerless part":            "the part's first row read as a header and lost: a = 1, 3",
-	"I7 reordered, WithSchema":      "read by position",
-	"I7 reordered, WithColumnNames": "read by position",
-	"I15 a BOM on one part":         `the first column is named "\ufeffa"`,
+	// Empty since step 71: thirty cases were listed here when it began.
 }
 
 type scanCase struct {
