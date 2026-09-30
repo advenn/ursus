@@ -14,15 +14,23 @@ package ursus_test
 // cannot answer correctly, whichever of the two it keeps.
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"go/types"
 	"math"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/plan"
 )
 
 // knownLiteralDefects names each case that answers wrongly today. Emptied by the
@@ -199,4 +207,187 @@ func TestLiteralRenderingsCollide(t *testing.T) {
 			t.Errorf("%s: %s and %s no longer render alike", p.name, a, b)
 		}
 	}
+}
+
+// literalSamples are values that print alike across types, per term of the Literal
+// union. TestLiteralIdentityIsTypeAndBits reads the union from expr.go and fails on
+// a term with no samples, or samples for a term the union no longer has.
+var literalSamples = map[string][]any{
+	"~bool":     {true, false},
+	"~int":      {0, 1, 100, -1},
+	"~int8":     {int8(0), int8(1), int8(100), int8(-1)},
+	"~int16":    {int16(0), int16(1), int16(100)},
+	"~int32":    {int32(0), int32(1), int32(100)},
+	"~int64":    {int64(0), int64(1), int64(100), int64(-1)},
+	"~uint":     {uint(0), uint(1), uint(100)},
+	"~uint8":    {uint8(0), uint8(1), uint8(100)},
+	"~uint16":   {uint16(0), uint16(1), uint16(100)},
+	"~uint32":   {uint32(0), uint32(1), uint32(100)},
+	"~uint64":   {uint64(0), uint64(1), uint64(100)},
+	"~float32":  floats[float32](),
+	"~float64":  floats[float64](),
+	"~string":   {"", "0", "1", "100", "NaN"},
+	"~[]byte":   {[]byte{}, []byte("1"), []byte("100")},
+	"time.Time": {time.Unix(0, 0), time.Unix(0, 1), time.Unix(100, 0)},
+}
+
+func floats[F float32 | float64]() []any {
+	return []any{F(0), F(math.Copysign(0, -1)), F(1), F(100), F(0.1), F(-1),
+		F(math.NaN()), F(math.Inf(1)), F(math.Inf(-1))}
+}
+
+// literalDurations are not a term of the union — ~int64 admits them — but lift to a
+// literal of their own type, so they are swept too.
+var literalDurations = []any{time.Duration(0), time.Duration(1), time.Duration(100)}
+
+// liftAny lifts v through the public constructor, which is generic and so cannot
+// take an any.
+func liftAny(t *testing.T, v any) ursus.Expr {
+	switch x := v.(type) {
+	case bool:
+		return ursus.Lit(x)
+	case int:
+		return ursus.Lit(x)
+	case int8:
+		return ursus.Lit(x)
+	case int16:
+		return ursus.Lit(x)
+	case int32:
+		return ursus.Lit(x)
+	case int64:
+		return ursus.Lit(x)
+	case uint:
+		return ursus.Lit(x)
+	case uint8:
+		return ursus.Lit(x)
+	case uint16:
+		return ursus.Lit(x)
+	case uint32:
+		return ursus.Lit(x)
+	case uint64:
+		return ursus.Lit(x)
+	case float32:
+		return ursus.Lit(x)
+	case float64:
+		return ursus.Lit(x)
+	case string:
+		return ursus.Lit(x)
+	case []byte:
+		return ursus.Lit(x)
+	case time.Time:
+		return ursus.Lit(x)
+	case time.Duration:
+		return ursus.Lit(x)
+	}
+	t.Fatalf("liftAny: no case for %T", v)
+	return ursus.Expr{}
+}
+
+// literalTerms reads the Literal union's terms from expr.go.
+func literalTerms(t *testing.T) []string {
+	f, err := parser.ParseFile(token.NewFileSet(), "expr.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var terms []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		ts, ok := n.(*ast.TypeSpec)
+		if !ok || ts.Name.Name != "Literal" {
+			return true
+		}
+		var walk func(ast.Expr)
+		walk = func(e ast.Expr) {
+			if b, ok := e.(*ast.BinaryExpr); ok && b.Op == token.OR {
+				walk(b.X)
+				walk(b.Y)
+				return
+			}
+			terms = append(terms, types.ExprString(e))
+		}
+		for _, m := range ts.Type.(*ast.InterfaceType).Methods.List {
+			walk(m.Type)
+		}
+		return false
+	})
+	if len(terms) < 10 {
+		t.Fatalf("read %d terms of the Literal union from expr.go: %v", len(terms), terms)
+	}
+	return terms
+}
+
+// TestLiteralIdentityIsTypeAndBits: two literals share an Identity exactly when
+// they are the same literal — the same Go type, the same DataType and the same
+// bits. == is not "the same bits": it merges -0 with +0 and never merges NaN with
+// NaN, and each is a case below.
+func TestLiteralIdentityIsTypeAndBits(t *testing.T) {
+	terms := literalTerms(t)
+	for _, term := range terms {
+		if _, ok := literalSamples[term]; !ok {
+			t.Errorf("the Literal union has %s, and literalSamples has no values for it", term)
+		}
+	}
+	for term := range literalSamples {
+		if !slices.Contains(terms, term) {
+			t.Errorf("literalSamples has values for %s, which the Literal union no longer has", term)
+		}
+	}
+
+	var lits []*expr.Lit
+	for _, vs := range literalSamples {
+		for _, v := range vs {
+			lits = append(lits, litNodeOf(t, liftAny(t, v)))
+		}
+	}
+	for _, v := range literalDurations {
+		lits = append(lits, litNodeOf(t, liftAny(t, v)))
+	}
+
+	collide := 0
+	for _, a := range lits {
+		for _, b := range lits {
+			same := reflect.TypeOf(a.Value) == reflect.TypeOf(b.Value) && a.DT == b.DT &&
+				sameBits(a.Value, b.Value)
+			if got := expr.Identity(a) == expr.Identity(b); got != same {
+				t.Errorf("%s (%T, %s) and %s (%T, %s): same identity = %v, want %v",
+					a, a.Value, a.DT, b, b.Value, b.DT, got, same)
+			}
+			if !same && a.String() == b.String() {
+				collide++
+			}
+		}
+	}
+	// The sweep is only worth something if the renderings collide in it.
+	if collide < 50 {
+		t.Errorf("only %d ordered pairs render alike and differ; the samples no longer "+
+			"reach the collisions Identity exists for", collide)
+	}
+}
+
+// litNodeOf is the literal node e builds, reached through the public plan.
+func litNodeOf(t *testing.T, e ursus.Expr) *expr.Lit {
+	n := ursus.Frame(ursus.Values("x", []int64{1})).Select(e).Plan()
+	p, ok := n.(*plan.Project)
+	if !ok {
+		t.Fatalf("Select built a %T", n)
+	}
+	l, ok := p.Exprs[0].(*expr.Lit)
+	if !ok {
+		t.Fatalf("Lit built a %T", p.Exprs[0])
+	}
+	return l
+}
+
+func sameBits(a, b any) bool {
+	switch x := a.(type) {
+	case float32:
+		return math.Float32bits(x) == math.Float32bits(b.(float32))
+	case float64:
+		return math.Float64bits(x) == math.Float64bits(b.(float64))
+	case []byte:
+		return bytes.Equal(x, b.([]byte))
+	case time.Time:
+		y := b.(time.Time)
+		return x.Equal(y) && x.Location().String() == y.Location().String()
+	}
+	return a == b
 }
