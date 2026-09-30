@@ -726,38 +726,53 @@ func conv[T data.Primitive](c *data.Column, out []float64) ([]float64, error) {
 func floatsToInt(name string, to dtype.DataType, src []float64,
 	valid bitmap.View, strict bool) (*data.Column, error) {
 
-	n := len(src)
 	switch to.Physical().ID() {
 	case dtype.TypeInt8:
-		return floatToInt[int8](name, to, src, valid, strict, n)
+		return floatToInt[int8](name, to, src, valid, strict, -0x1p7, 0x1p7)
 	case dtype.TypeInt16:
-		return floatToInt[int16](name, to, src, valid, strict, n)
+		return floatToInt[int16](name, to, src, valid, strict, -0x1p15, 0x1p15)
 	case dtype.TypeInt32:
-		return floatToInt[int32](name, to, src, valid, strict, n)
+		return floatToInt[int32](name, to, src, valid, strict, -0x1p31, 0x1p31)
 	case dtype.TypeInt64:
-		return floatToInt[int64](name, to, src, valid, strict, n)
+		return floatToInt[int64](name, to, src, valid, strict, -0x1p63, 0x1p63)
 	case dtype.TypeUint8:
-		return floatToInt[uint8](name, to, src, valid, strict, n)
+		return floatToInt[uint8](name, to, src, valid, strict, 0, 0x1p8)
 	case dtype.TypeUint16:
-		return floatToInt[uint16](name, to, src, valid, strict, n)
+		return floatToInt[uint16](name, to, src, valid, strict, 0, 0x1p16)
 	case dtype.TypeUint32:
-		return floatToInt[uint32](name, to, src, valid, strict, n)
+		return floatToInt[uint32](name, to, src, valid, strict, 0, 0x1p32)
 	case dtype.TypeUint64:
-		return floatToInt[uint64](name, to, src, valid, strict, n)
+		return floatToInt[uint64](name, to, src, valid, strict, 0, 0x1p64)
 	default:
 		return nil, uerr.Internalf("kernel: cannot convert a float to %s", to)
 	}
 }
 
+// floatToInt is floatsToInt for one width, whose range is [lo, hiExcl): powers of
+// two, and so exact as float64s.
+//
+// # The range is checked before the conversion, not after
+//
+// Go leaves a float-to-integer conversion whose value is out of range to the
+// platform. amd64 gives the "indefinite integer", 0x8000…, which never survives the
+// round trip below, so checking afterwards happened to work there. arm64 SATURATES:
+// int64(2^63) is MaxInt64, whose float64 is 2^63 again, so the round trip passed and
+// 2^63 cast to Int64 came back as MaxInt64 — and 2^64 to Uint64 as MaxUint64. NaN
+// fails both comparisons.
 func floatToInt[T ~int8 | ~int16 | ~int32 | ~int64 | ~uint8 | ~uint16 | ~uint32 | ~uint64](
-	name string, to dtype.DataType, src []float64, valid bitmap.View, strict bool, n int) (*data.Column, error) {
+	name string, to dtype.DataType, src []float64, valid bitmap.View, strict bool,
+	lo, hiExcl float64) (*data.Column, error) {
 
+	n := len(src)
 	buf, dst := newValuesBuffer[T](n)
 	ok := bitmap.NewBuilder(n)
 	lossy := false
 	for i, v := range src {
-		t := T(v)
-		if float64(t) != v {
+		var t T
+		if v >= lo && v < hiExcl {
+			t = T(v)
+		}
+		if !(v >= lo && v < hiExcl) || float64(t) != v {
 			lossy = true
 			if strict && valid.Get(i) {
 				return nil, unrepresentable(strconv.FormatFloat(v, 'g', -1, 64), i, to)
