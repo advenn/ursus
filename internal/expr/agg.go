@@ -174,6 +174,11 @@ func (a *Agg) Field(in *dtype.Schema) (dtype.Field, error) {
 	if err != nil {
 		return dtype.Field{}, err
 	}
+	if a.Op == AggQuantile && !a.Params.Interp.Valid() {
+		return dtype.Field{}, uerr.New(uerr.KindValue, "quantile",
+			"interpolation %d is not an Interpolation", uint8(a.Params.Interp)).
+			Hint("use InterpLinear, InterpLower, InterpHigher, InterpNearest or InterpMidpoint")
+	}
 
 	// Nullability is where aggregates differ most from elementwise operations.
 	//

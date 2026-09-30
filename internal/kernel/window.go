@@ -145,8 +145,12 @@ func winRank(params expr.WinParams, name string, out dtype.DataType,
 					iv[row] = first
 				case expr.RankMax:
 					iv[row] = last
-				default: // RankAverage
+				case expr.RankAverage:
 					fv[row] = float64(first+last) / 2
+				default:
+					// ResolveWinFn refuses any other method. This was the average
+					// arm, and wrote to a buffer that did not exist.
+					return nil, uerr.Internalf("kernel: rank method %d reached the kernel", uint8(params.Method))
 				}
 			}
 			j = k

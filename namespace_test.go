@@ -2,7 +2,9 @@ package ursus_test
 
 import (
 	"errors"
+	"math"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -584,5 +586,34 @@ func TestTemporalCSVRoundTrip(t *testing.T) {
 	}
 	if got.String() != want.String() {
 		t.Errorf("round trip changed the data\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// TestStrSliceToTheEnd: a length past the end means "to the end", however large. The
+// end used to be computed as start+length in int, which wrapped for a length near
+// MaxInt64 and panicked on a negative slice bound.
+func TestStrSliceToTheEnd(t *testing.T) {
+	for _, tc := range []struct {
+		off, length int
+		want        []string
+	}{
+		{1, math.MaxInt64, []string{"bc", "", "éè"}},
+		{-2, math.MaxInt64, []string{"bc", "x", "éè"}},
+		{0, math.MaxInt64 - 1, []string{"abc", "x", "héè"}},
+		{1, 1, []string{"b", "", "é"}},
+		{5, math.MaxInt64, []string{"", "", ""}},
+	} {
+		df, err := ursus.Frame(ursus.Values("s", []string{"abc", "x", "héè"})).
+			Select(ursus.Col("s").Str().Slice(tc.off, tc.length)).Collect(t.Context())
+		if err != nil {
+			t.Fatalf("Slice(%d, %d): %v", tc.off, tc.length, err)
+		}
+		got, err := cellsOf(df, "s")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("Slice(%d, %d) = %q, want %q", tc.off, tc.length, got, tc.want)
+		}
 	}
 }

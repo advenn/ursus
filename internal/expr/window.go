@@ -325,6 +325,11 @@ func (m RankMethod) String() string {
 	return "?"
 }
 
+// Valid reports whether m is one of the declared methods. RankMethod is a public
+// integer type, so RankMethod(99) compiles; ResolveWinFn refuses it, and the kernel
+// never sees one.
+func (m RankMethod) Valid() bool { return m < rankMethodCount }
+
 // WinParams carries an ordered function's configuration.
 //
 // A typed struct rather than child nodes, for the reason AggParams gives: these are
@@ -434,6 +439,13 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 			return dtype.Null, uerr.New(uerr.KindType, "rank",
 				"rank() is not defined for %s", in).
 				Hint("only numeric, temporal, string and boolean types have an ordering")
+		}
+		// It fell through to the kernel's average arm before step 72, with a
+		// Uint32 output and no Float64 buffer to write into: an index out of range.
+		if !p.Method.Valid() {
+			return dtype.Null, uerr.New(uerr.KindValue, "rank",
+				"rank method %d is not a RankMethod", uint8(p.Method)).
+				Hint("use RankOrdinal, RankDense, RankMin, RankMax or RankAverage")
 		}
 		// Average is the odd one out: the mean of two adjacent positions is not an
 		// integer, and truncating it would make it indistinguishable from min.

@@ -77,9 +77,6 @@ type panicCase struct {
 // The value is a PREFIX of what the case reports, so a case that starts failing
 // in a different way — a crash that becomes a caller panic, say — fails too.
 var knownPanicDefects = map[string]string{
-	"Str().Slice to MaxInt64":                  "internal error, want [bc ]: ursus: recovered a panic",
-	"Rank(RankMethod(99))":                     "internal error, want value: ursus: recovered a panic",
-	"Quantile(Interpolation(99))":              "no error, got [2 3 5]",
 	"Parquet List(Int8)":                       `internal error, want [[1 2] [3]]: ursus: data: column "item" declares Int8`,
 	"Parquet List(Int16)":                      `internal error, want [[1 2] [3]]: ursus: data: column "item" declares Int16`,
 	"Parquet LZ4":                              "internal error, want unsupported: ursus: sink_parquet: recovered a panic",

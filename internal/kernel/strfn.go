@@ -274,7 +274,12 @@ func applyStr(fn expr.CallFn, s string, args []any, re *regexp.Regexp) (string, 
 			if length < 0 {
 				return "", true
 			}
-			end = min(start+int(length), len(r))
+			// Compared in int64 before adding: start+length wrapped for a length
+			// near MaxInt64 — Slice(1, math.MaxInt64), "to the end" — and the
+			// negative end panicked. listSlice has always compared this way.
+			if length < int64(len(r)-start) {
+				end = start + int(length)
+			}
 		}
 		return string(r[start:end]), true
 

@@ -46,3 +46,8 @@ func (i Interpolation) String() string {
 	}
 	return "?"
 }
+
+// Valid reports whether i is one of the declared interpolations. Interpolation is a
+// public integer type, so Interpolation(99) compiles; Agg.Field refuses it. It was
+// silently linear before step 72.
+func (i Interpolation) Valid() bool { return i < interpCount }

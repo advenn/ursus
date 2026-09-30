@@ -492,9 +492,12 @@ func quantileOf(v []float64, q float64, interp expr.Interpolation) float64 {
 		return v[hi]
 	case expr.InterpMidpoint:
 		return (v[lo] + v[hi]) / 2
-	default: // InterpLinear
+	case expr.InterpLinear:
 		return v[lo] + frac*(v[hi]-v[lo])
 	}
+	// Agg.Field refuses any other interpolation, and this has no error to return:
+	// an assertion, recovered into ErrInternal. It was the linear arm, silently.
+	panic(uerr.Internalf("kernel: interpolation %d reached the kernel", uint8(interp)))
 }
 
 // --- any / all_true -------------------------------------------------------------
