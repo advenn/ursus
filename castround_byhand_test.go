@@ -35,10 +35,7 @@ import (
 // knownCastDefects names each case that answers wrongly today, with what it
 // answers. Emptied by the commits that fix them; a listed case that answers
 // correctly fails as stale, and an unlisted one that answers wrongly fails.
-var knownCastDefects = map[string]string{
-	"Datetime(ns) 1700000000000000001 → Uint64": "…000: through a float64",
-	"Duration(ns) 2^53+1 → Int128":              "…992: through a float64",
-}
+var knownCastDefects = map[string]string{}
 
 type castCase struct {
 	name string

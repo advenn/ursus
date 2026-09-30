@@ -592,7 +592,13 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 
 	// Integer to integer never touches a float: a float64 holds every integer only
 	// up to 2^53, and the widest integers here are 128 bits. See castInt.
-	if from.IsInteger() && to.IsInteger() {
+	//
+	// By PHYSICAL type, which is what makes a temporal tick count an integer here:
+	// Datetime(ns) to Uint64 or Duration to Int128 are integer casts of the ticks.
+	// Asked of the logical types, IsInteger is false for every temporal type, so
+	// those pairs took the float path, and every nanosecond timestamp — all of them
+	// past 2^53 — came back rounded to a multiple of 256.
+	if fp.IsInteger() && tp.IsInteger() {
 		return castInt(name, to, strict, c)
 	}
 	// To a float: rounded once, from the source's own type. See castToFloat.

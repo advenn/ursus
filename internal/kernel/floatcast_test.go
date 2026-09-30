@@ -313,16 +313,7 @@ func naiveI128(v *big.Int) float64 {
 }
 
 // knownTickCastDefects counts the wrong values per temporal <-> integer pair.
-var knownTickCastDefects = map[string]knownWrong{
-	"Datetime(ns)->Int128": {6, "through a float64: rounded above 2^53"},
-	"Datetime(ns)->Uint64": {4, "through a float64: rounded above 2^53"},
-	"Duration(ns)->Int128": {6, "through a float64: rounded above 2^53"},
-	"Duration(ns)->Uint64": {4, "through a float64: rounded above 2^53"},
-	"Int128->Datetime(ns)": {8, "through a float64: rounded above 2^53"},
-	"Int128->Duration(ns)": {8, "through a float64: rounded above 2^53"},
-	"Uint64->Datetime(ns)": {4, "through a float64: rounded above 2^53"},
-	"Uint64->Duration(ns)": {4, "through a float64: rounded above 2^53"},
-}
+var knownTickCastDefects = map[string]knownWrong{}
 
 // TestTemporalIntegerCastsAreExact: a temporal value and an integer convert as a
 // tick count, and an integer never passes through a float on the way. Every pair of
