@@ -52,7 +52,7 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | --- | --- | --- | --- |
 | O1 ✔ | ~~**SW**~~ **fixed, step 70** | A `Filter` after a chained `WithColumns` returns wrong rows. `WithColumns(x+1 as w, w*2 as v).Filter(v>7)` gives x = 1, 3, 5, and the answer is 3, 4, 5. The in-place form returns 0 rows instead of 3; another form refuses with `unknown column`. | `rule_predicate.go:276-305`, `:343-351`: the definition is substituted verbatim, not recursively. `WithColumns` is documented as sequential. |
 | O2 ✔ | ~~**FR**~~ **fixed, step 70** | `Concat` then a projection is refused: `concat: frame 1 has 2 columns, frame 0 has 1`. Also refused after `GroupBy`, `Sort`, `WithColumns` and `Unique`. `WithVerify` catches it: *"projection_pushdown produced a plan whose schema does not resolve"*. | `rule_projection.go:264-281`, the Union arm, which lacks `pushdownMergeSorted`'s symmetry check. |
-| O3 ✔ | **SW / CR** | Literals of different types merge into one computation: `Lit(int8(100))` and `Lit(int64(100))` both render `lit(100)`, as do `1` and `1.0`. A sum came back −111 instead of 401; `x*1` beside `x*1.0` raises `ErrInternal`. Affects `Agg`, `GroupByDynamic`, window temporaries and partition keys. | `Lit.String()` (`expr/nodes.go:98-116`) omits the type. The dedup maps are `physical/agg.go:753`, `plan/resolve_window.go:82` and `physical/window.go:382`. This is step 65's UDF bug, for literals. |
+| O3 ✔ | ~~**SW / CR**~~ **fixed, step 72** | Literals of different types merge into one computation: `Lit(int8(100))` and `Lit(int64(100))` both render `lit(100)`, as do `1` and `1.0`. A sum came back −111 instead of 401; `x*1` beside `x*1.0` raises `ErrInternal`. Affects `Agg`, `GroupByDynamic`, window temporaries and partition keys. | `Lit.String()` (`expr/nodes.go:98-116`) omits the type. The dedup maps are `physical/agg.go:753`, `plan/resolve_window.go:82` and `physical/window.go:382`. This is step 65's UDF bug, for literals. |
 | O4 | **SW** | Cross-join collapse turns IEEE `==` into hash equality, so NaN matches NaN: `JoinWhere`, cross join + `Filter`, `WhereExists` and `WhereNotExists` all answer differently with the rule off. | `rule_collapse.go:88-104`, `:214-216`. |
 | O5 | **SW** | Cross-join collapse copies `NullsEqual`, so a `JoinNullsEqual(true)` cross join followed by `Filter(k == k_right)` matches null keys. `JoinNullsEqual` on a cross join is accepted silently. | `rule_collapse.go:103` (`c := *j`), whose comment at `:113` says it "stays false". |
 | O6 ✔ | **SW** | A filter on a coalesced join key is pushed into the side with the narrower key type and runs at that width: Int32 `k*m > 1e9` returns 0 rows, and the answer is 1. | `rule_predicate.go:597-605`, `rewriteForSide`'s Col arm. |
@@ -66,6 +66,8 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | O8-join | FR | The same across a join: a fallible filter is pushed into a join side, onto rows the join would remove. Polars makes the same trade. | the join arm of predicate pushdown. |
 | **P1** | **SW** | **Found by step 70's differential.** Projection pushdown stops reading a column that a `WithColumns` redefines without reading it, and the redefinition then lands at the END instead of in place: `WithColumns(x+1 as w)` on `{x, w, y}` returns `{x, y, w}`, while `CollectSchema` promises `{x, w, y}`. Silent without `WithVerify`. 132 shapes in the differential. | the `WithColumns` arm of projection pushdown, against `WalkWithColumns`' replace-in-place. |
 | **W1** | **SW / FR** | **Found measuring step 70.** A window over a column defined earlier in the same `WithColumns` reads the input's column — a per-group sum of 200 where the answer is 30 — or, for a new name, is refused with `unknown column`. Wrong with the optimizer on AND off, so no on/off differential can see it. | windows are lifted below the whole node, `resolve.go:329`, `resolve_window.go:131`. |
+| O13 | SW, unmeasured | **Recorded at step 72, not fixed.** An Enum's categories and a struct's field names render unquoted in `DataType.String()`, so two different types can render alike. `expr.Identity` carries a literal's type through that rendering, so two typed nulls of such types could still share one computation. | `dtype` rendering. It reaches the dedup maps only through a typed null. |
+| O14 | SW | **Recorded at step 72, not fixed.** A worker goroutine that ends in `runtime.Goexit` — which no recover sees — closes its lane as though the stream had ended, and the rows after it are silently dropped: a udf calling `Goexit` on the third of five rows, at 4 threads and a batch size of 1, gave `Count` = 2 and no error. | `parallel.go`, `parjoin.go`: a closed lane is read as end of stream. Nothing in ursus calls `Goexit`; a udf could. |
 
 ## 4. Joins
 
@@ -97,10 +99,10 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | I8 | **SW** | The CSV writer drops the seconds of a UTC offset, so the written text names an instant 30 s away (Africa/Monrovia 1970, Europe/Amsterdam 1930). Parquet and Arrow are unaffected. | `temporal.go:204`, layout `"Z07:00"`. |
 | I9 | **SW** | CSV inference accepts Go-only syntax: `1_000` becomes 1000, `0x1p3` becomes 8. Polars, pandas and DuckDB all read these as String. | `infer.go:72`. |
 | I10 | SW (low) | In a one-column CSV, an empty line is dropped instead of read as null. | |
-| I11 ✔ | **CR** | A Parquet List of Int8 or Int16 panics. | `parquet.go:710` stores the elements in an `[]int32` buffer. |
-| I12 | **CR** | Corrupt Parquet: in a byte-flip sweep of 7458 runs, 118 panicked inside arrow-go, unrecovered and in a worker goroutine. One file with an inflated `num_rows` **hangs forever and ignores the context**. | `parquet.go:482-484` (`rows == 0 → continue`). |
+| I11 ✔ | ~~**CR**~~ **fixed, step 72** | A Parquet List of Int8 or Int16 panics. | `parquet.go:710` stores the elements in an `[]int32` buffer. |
+| I12 | ~~**CR**~~ **fixed, step 72** | Corrupt Parquet: in a byte-flip sweep of 7458 runs, 118 panicked inside arrow-go, unrecovered and in a worker goroutine. One file with an inflated `num_rows` **hangs forever and ignores the context**. | `parquet.go:482-484` (`rows == 0 → continue`). |
 | I13 | ~~CR~~ **fixed, step 71** | A required List (level 0 means empty) and a required struct field both raise `ErrInternal`. | `column.go:577`. |
-| I14 | CR | `WithCompression(Lz4)` and `WithCompression(Lzo)` panic inside arrow-go. `Lz4Raw` works. | `writer.go:124`. |
+| I14 | ~~CR~~ **fixed, step 72** | `WithCompression(Lz4)` and `WithCompression(Lzo)` panic inside arrow-go. `Lz4Raw` works. | `writer.go:124`. |
 | I15 | ~~FR~~ **fixed, step 71** | A UTF-8 BOM is not stripped from a CSV header, so `Col("a")` fails with *did you mean "﻿a"*. | |
 | I16 | FR | An unannotated FIXED_LEN_BYTE_ARRAY is typed Binary by the schema and then refused by the reader. | `parquet.go:617`, `types.go:192`. |
 | I17 | FR / ME | List of Uint8, Uint32, Time(ms), Bool or Decimal is refused, with a hint claiming the unsigned and Time types are read. | `parquet.go:732`. |
@@ -111,6 +113,8 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | I22 | — | A zero-column frame loses its row count in Parquet, and in CSV becomes a column named `""`. | |
 | I23 | SW, unmeasured | **Recorded at step 71, not fixed.** arrow-go reports `HasNullCount()` true for every statistic read from a file, so a file written WITHOUT `null_count` reads as having no nulls, and `IsNull` pruning would drop rows; and a one-sided integer or float min/max reads its absent side as 0. Only a third-party writer reaches either — arrow-go and pyarrow always write both — and arrow-go's read API cannot detect them. | arrow-go `statistics_types.gen.go`; recorded in `prune.go`'s header. |
 | I24 | class | **Recorded at step 71.** `data.CheckNonNullable` is on only in test binaries. A null in a column declared non-nullable is therefore `ErrInternal` in the test suite and **silent in production**: I1's nullability case and I13 both reached it, and were loud only because tests ran them. | `internal/data/batch.go`; no production setter. |
+| I25 | ME | **Recorded at step 72.** A panic in `ScanArrow`'s factory is KindIO, but a panic in the `RecordReader` it returns — the caller's code too — is `ErrInternal`, "a bug in ursus". | `arrowsrc` recovers only inside its schema `Once`; `reader.Next` is recovered by the engine's `Pull`. |
+| I26 | low | **Recorded at step 72.** `DataFrame.Rows` decodes no List column: `no decoder for Go type []int64 from column List(Int64)`. | `rows.go` `makeSetter`. Step 72's list cases explode the list instead. |
 
 ## 6. Scalar expressions
 
@@ -118,7 +122,7 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | --- | --- | --- | --- |
 | S1 ✔ | **SW / CR** | String → integer casts parse through float64: `"9007199254740993"` becomes …992, and MaxInt64 becomes 2^63 as Uint64. A strict cast returns the wrong value, or `ErrInternal`. `Str().ToInteger()` is the same. This is step 69's bug, one path over. | `unary.go:1172` → `narrowInt` → `fromFloat64(…, false)` at `:1277`. |
 | S2 ✔ | **SW / CR** | Float32 maths nulls every inexact result: `Sqrt`, `Cbrt`, `Exp`, `Ln`, `Log10`, `Log1p`, `Round`. On a non-nullable column it is `ErrInternal`. Also affected: `CastLossy(Float32)` of 0.1 is null, string → Float32, and `IsIn` over Float32. | `fromFloat64(strict=false)` then narrow's round-trip check (`unary.go:347`, `:775`; `mathfn.go:75`). The comment at `unary.go:343` says the opposite. |
-| S3 ✔ | **CR** | `Str().Slice(1, MaxInt64)` panics in a worker goroutine and **kills the process**. | `strfn.go:277`, `start+int(length)` overflows. `listSlice` clamps correctly. |
+| S3 ✔ | ~~**CR**~~ **fixed, step 72** | `Str().Slice(1, MaxInt64)` panics in a worker goroutine and **kills the process**. | `strfn.go:277`, `start+int(length)` overflows. `listSlice` clamps correctly. |
 | S4 ✔ | **CR** | A strict String → narrow integer or Float32 cast raises `ErrInternal` (`"256"` → Uint8), or with a null present returns a silent null. | `narrowInt` / `narrowFloat` pass `strict=false` (`unary.go:1277`, `:1281`). |
 | S5 ✔ | **SW** | `Dt().Epoch()` truncates before 1970: it returns 0, and the answer is −1. | `dtfn.go:99`. |
 | S6 ✔ | **SW** | `IsIn` casts the set strictly to the column's type. An Int64 column matches `IsIn("1")`, which `Eq` refuses; a Datetime(s) matches a sub-second value; a Date matches a Datetime at 13:00 on that day. Its error message names a cast the user never wrote. | `physical/eval.go:320-321`, and `buildListNeedle`. |
@@ -135,6 +139,9 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | S17 | doc | The Neg/Abs doc says unsigned types are supported; they are refused. | `expr.go:223`. |
 | S18–S20 | low | A strict Int64 → Time cast wraps around the day; a Duration unit cast floors while `TotalSeconds` truncates; Duration `Abs`/`Neg` at MinInt64 wrap silently. | |
 | S21 | low | `Cast(String → Int128)` is refused; `ToUpper("ß")` is `"ß"`. The `Round` doc says half-away "matching Polars", but Polars 1.44 defaults to half-to-even. | |
+| S22 | CR, not run | **Recorded at step 72, not fixed.** `PadStart`, `PadEnd` and `ZFill` with a huge width allocate it: a fatal out-of-memory, which no recover can catch. Read from the code; running it takes the memory it exhausts. | `strfn.go`, no bound on the width. |
+| S23 | ME | **Recorded at step 72.** A panic in a `MapName` function is `ErrInternal`, where a panicking udf is the caller's KindValue. | `expr.Rename.Fn` is called by the planner with no attribution. |
+| S24 | SW, not run | **Recorded at step 72, not fixed.** `data.NewString` keeps 32-bit offsets, and past 2 GiB of string data in one column they wrap without an error. Read from the code, for the same reason as S22. | `internal/data`, string construction. |
 
 ## 7. Aggregation, sorting and windows
 
@@ -145,13 +152,15 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | A3 ✔ | **SW** | `PctChange` on u8/i8 subtracts at the narrow width, wrapping before it divides: `[3, 1, 255, 0]` gives 84.67 where the answer is −0.67. | `window.go:202`, `:210-213`. |
 | A4 | **SW** | Integer `Mean` accumulates in Float64, so past 2^53 it disagrees with the exact `Sum` in the same query. Polars does the same; DuckDB is exact. Decimal and Duration means already divide an exact sum. | `agg.go:312-317`. |
 | A5 ✔ | **SW** | `Var(0)` of `[1e308, −1e308]` is −Inf. A variance cannot be negative. | Welford update, `aggstat.go:67-71`. |
-| A6 ✔ | **CR** | `Rank(RankMethod(99))` panics in a worker goroutine and **kills the process**. `Interpolation(99)` is silently treated as linear. | `window.go:112` does not validate; `kernel/window.go:147-149`. |
-| A7 | CR | A zero `Expr{}` used as a method receiver panics with a nil dereference. | `lazy.go:73-86` checks only the top level. |
+| A6 ✔ | ~~**CR**~~ **fixed, step 72** | `Rank(RankMethod(99))` panics in a worker goroutine and **kills the process**. `Interpolation(99)` is silently treated as linear. | `window.go:112` does not validate; `kernel/window.go:147-149`. |
+| A7 | ~~CR~~ **fixed, step 72** | A zero `Expr{}` used as a method receiver panics with a nil dereference. | `lazy.go:73-86` checks only the top level. |
 | A8 | FR / ME | `Diff`, `PctChange` and `FillNull(Mean)` inside `.Over(g)` are refused as "a window inside a window": the sugar embeds a window the user never wrote. Polars supports all three. | `resolve_window.go:79`. |
 | A9 | ME | The hint for a window inside `Agg` recommends two things that are both refused. | `resolve_window.go:159-163`. |
 | A10 ✔ | FR / ME | `Sum` of a Bool column is refused, and the hint's `Count()` counts rows, not trues. Polars and DuckDB both answer 2. | `agg.go:271-274`. |
 | A11–A12 | ME | The ordered-aggregate refusal contradicts itself; `CumSum` of a String reports "sum()"; the Any/AllTrue hints use lower-case names; a group-by error says "one output row per input row". | `physical/window.go:405-412`. |
 | A13 | low | Integer `Product` of `[3, 0, −5]` is −0. `GroupBy().Agg()` with no aggregates returns shape (0, 0) against the doc's one row. Temporal `Median`/`Quantile`/`Std` are refused without that being documented. | |
+| A14 | SW | **Recorded at step 72, not fixed.** `Closed(99)` is accepted and behaves as `ClosedLeft` — measured, the same windows — which is A6's shape, an undeclared value of a public integer enum, without the panic. | No `Valid()` check on `Closed`. |
+| A15 | ME | **Recorded at step 72.** A udf's error, returned or panicked, names its row within the BATCH, not the frame: under `CollectBatches` with a batch size of 2, the third row is "row 0". | `udf.go`, `i` is the batch index. |
 
 ## 8. The patterns, which are the point
 
@@ -160,7 +169,8 @@ rather than a finding.
 
 1. **A rendering used as an identity** (O3). This is the UDF-name defect from step
    65, now for literals. Anything that deduplicates on `String()` needs a structural
-   key.
+   key. **Step 72: the four dedup maps key on `expr.Identity`**, the rendering plus
+   every literal's type and every udf's id.
 2. **float64 as the common currency** (S1, S2, S4). Step 69 removed it only from
    integer → integer casts. String parsing and Float32 maths still pass through it.
    Narrow's round-trip check is right for a *cast*, and wrong for the *result of a
@@ -174,7 +184,10 @@ rather than a finding.
    which equality applies.
 6. **Panics escape worker goroutines** (S3, A6, I12). `parallel.go:131` has no
    recover, so any kernel panic kills the host process. For a library embedded in a
-   service, that is the worst failure mode there is.
+   service, that is the worst failure mode there is. **Step 72: every call a driver
+   or worker makes is recovered, and every entry point**; `TestEveryGoroutineIsCovered`
+   fails on a new `go` statement until it names the test that covers it. A fatal
+   runtime error — an out-of-memory, S22 — is still beyond any recover.
 7. **`strict` not threaded through** (S2, S4, J2). Internal casts pass
    `strict=false`, and the result is either silent nulls or an `ErrInternal` from the
    non-null check, depending on the column's nullability.
@@ -251,11 +264,11 @@ Ordered by harm per unit of fix, not by count.
    and a several-files-against-one differential.
    This is silent data corruption from ordinary file reads, and I1 alone makes
    `ScanParquetGlob` unsafe over any directory written by more than one tool.
-3. **O3: literals carry their type in their identity.** One change, and it closes a
-   class that has now shipped twice.
-4. **Recover in worker goroutines.** One change stops S3, A6, I11 and I12 killing the
-   process: they become errors. Each still needs its own fix, but none can take down
-   the host.
+3. ~~**O3: literals carry their type in their identity.**~~ **Done — step 72**, with
+   `expr.Identity` and a sweep over every literal type the public API lifts.
+4. ~~**Recover in worker goroutines.**~~ **Done — step 72**, and at every entry point,
+   with S3, A6, A7, I11, I12 and I14 fixed at their causes too. A panicking udf is the
+   caller's KindValue error; a corrupt Parquet file is KindIO.
 5. **Finish step 69's job**: no float64 go-between for S1, S2 and S4, and `strict`
    threaded through.
 6. **The join promotion paths**: J1, J2, O6 and J8, which share one question: at what

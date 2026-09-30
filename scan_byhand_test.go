@@ -6,7 +6,9 @@ package ursus_test
 // Every case here is data corruption in an ordinary file read — the wrong value,
 // a row that disappears, a null that is not one — and most of them without an
 // error. Each runs single-threaded and under a recover, because one of them
-// panics inside arrow-go, and a panic in a worker goroutine cannot be recovered.
+// panicked inside arrow-go, and until step 72 a panic in a worker goroutine could
+// not be recovered by anyone. It is an error now; the recover stays, so a panic
+// that comes back fails a case rather than the test binary.
 
 import (
 	"context"
