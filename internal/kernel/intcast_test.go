@@ -238,8 +238,11 @@ func TestIntegerCastsAreExactOrRefused(t *testing.T) {
 				one := intColumn(t, from, []*big.Int{v})
 				got, err := kernel.Cast("c", to, true, one)
 				if inRange(v, to) {
+					// Not refusing is not enough: the value must also come back, valid.
 					if err != nil {
 						wrong = append(wrong, v.String()+" -> refused")
+					} else if g := intValues(t, got)[0]; g == nil || g.Cmp(v) != 0 {
+						wrong = append(wrong, v.String()+" -> "+render(g)+" (strict)")
 					}
 					continue
 				}

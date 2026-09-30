@@ -190,10 +190,15 @@ func TestDecimalCastsAreExactOrRefused(t *testing.T) {
 			// Strict refuses exactly the values that are not representable, with
 			// ErrValue.
 			for _, v := range vals {
-				_, err := kernel.Cast("c", to, true, columnOf(t, from, []*big.Rat{v}))
+				got, err := kernel.Cast("c", to, true, columnOf(t, from, []*big.Rat{v}))
 				switch {
 				case representable(v, to) && err != nil:
 					t.Errorf("%s: %s refused: %v", name, v.RatString(), err)
+				case representable(v, to):
+					// Not refusing is not enough: the value must also come back, valid.
+					if g := ratsOf(t, got)[0]; g == nil || g.Cmp(v) != 0 {
+						t.Errorf("%s: %s -> %s under a strict cast", name, v.RatString(), ratString(g))
+					}
 				case !representable(v, to) && err == nil:
 					t.Errorf("%s: %s converted under a strict cast", name, v.RatString())
 				case err != nil && !errors.Is(err, uerr.ErrValue):
