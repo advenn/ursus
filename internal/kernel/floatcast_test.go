@@ -30,27 +30,7 @@ import (
 )
 
 // knownFloatCastDefects counts the wrong values per pair.
-var knownFloatCastDefects = map[string]knownWrong{
-	"Date->Float32":            {34, "an inexact value is refused or null, and the rest round twice through a float64"},
-	"Datetime(ns)->Float32":    {184, "an inexact value is refused or null, and the rest round twice through a float64"},
-	"Decimal(10, 2)->Float32":  {26, "an inexact value is refused or null, and the rest round twice"},
-	"Decimal(1, 1)->Float32":   {10, "an inexact value is refused or null, and the rest round twice"},
-	"Decimal(18, 3)->Float32":  {96, "an inexact value is refused or null, and the rest round twice"},
-	"Decimal(19, 0)->Float32":  {110, "an inexact value is refused or null, and the rest round twice"},
-	"Decimal(20, 1)->Float32":  {128, "an inexact value is refused or null, and the rest round twice"},
-	"Decimal(38, 0)->Float32":  {300, "an inexact value is refused or null, and the rest round twice"},
-	"Decimal(38, 10)->Float32": {256, "an inexact value is refused or null, and the rest round twice"},
-	"Decimal(38, 24)->Float32": {170, "an inexact value is refused or null, and the rest round twice"},
-	"Decimal(38, 38)->Float32": {168, "an inexact value is refused or null, and the rest round twice"},
-	"Decimal(5, 2)->Float32":   {18, "an inexact value is refused or null, and the rest round twice"},
-	"Duration(ns)->Float32":    {184, "an inexact value is refused or null, and the rest round twice through a float64"},
-	"Float64->Float32":         {16, "an inexact value is refused or null, and one just above MaxFloat32 too"},
-	"Int128->Float32":          {344, "an inexact value is refused or null; 332 before Float64 rounded once, which narrow now refuses more often"},
-	"Int32->Float32":           {34, "an inexact value is refused or null, and the rest round twice through a float64"},
-	"Int64->Float32":           {184, "an inexact value is refused or null, and the rest round twice through a float64"},
-	"Uint32->Float32":          {32, "an inexact value is refused or null, and the rest round twice through a float64"},
-	"Uint64->Float32":          {110, "an inexact value is refused or null, and the rest round twice through a float64"},
-}
+var knownFloatCastDefects = map[string]knownWrong{}
 
 // srcVal is a source value: an exact rational, or a float special (NaN, ±Inf).
 type srcVal struct {

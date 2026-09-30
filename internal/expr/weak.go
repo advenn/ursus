@@ -83,11 +83,18 @@ func weakTarget(thenN, elseN Node, then, els dtype.DataType) (dtype.DataType, bo
 //
 // # Why this is a SECOND range check
 //
-// kernel.narrow already answers this question — `t := T(v); if float64(t) != v` —
-// and reusing it is impossible: internal/expr is L20 and internal/kernel is L30,
-// so the import is a levels violation. Two copies of a rule is the shape this
-// codebase has been bitten by before, so the two are pinned together by a
-// differential test rather than by hope. See TestWeakFitAgreesWithCast.
+// The kernel's cast rules answer a nearby question, and reusing them is impossible:
+// internal/expr is L20 and internal/kernel is L30, so the import is a levels
+// violation. Two copies of a rule is the shape this codebase has been bitten by
+// before, so the two are pinned together by a differential test rather than by
+// hope. See TestWeakFitAgreesWithCast.
+//
+// Nearby, not the same, since step 73: a cast to a float ROUNDS to the nearest
+// value of its width, where this still asks whether the value is EXACT. So a strict
+// cast no longer refuses what this should have refused — 0.1 to Float32 converts —
+// and a mistake here would round silently where it used to fail loudly. The
+// round-trip half of TestWeakFitAgreesWithCast and its "never" cases are what stand
+// in for that backstop now.
 //
 // It is deliberately CONSERVATIVE at the edges — above 2^53 for a float target,
 // and for every type it does not enumerate. Being conservative costs nothing: each

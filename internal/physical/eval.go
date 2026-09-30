@@ -172,8 +172,13 @@ func evalCond(ctx context.Context, c *expr.Cond, b *data.Batch) (*data.Column, e
 	// Weak literal typing preserves that. It narrows only to a type ResolveCond has
 	// already checked the literal's value fits EXACTLY, so the strict cast on the
 	// length-1 literal column cannot fail. If it ever does, expr.FitsExactly and
-	// kernel.narrow have diverged — which is what TestWeakFitAgreesWithCast exists
-	// to prevent.
+	// the kernel's cast rules have diverged — which is what TestWeakFitAgreesWithCast
+	// exists to prevent.
+	//
+	// This cast is no longer a backstop for a Float32 target: since step 73 a cast
+	// to a float rounds rather than refusing, so a FitsExactly that wrongly admitted
+	// 0.1 to Float32 would round here, silently. The test's round-trip check is what
+	// catches that now.
 	if then.DType() != out {
 		if then, err = kernel.Cast(then.Name(), out, true, then); err != nil {
 			return nil, err

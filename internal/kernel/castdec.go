@@ -14,8 +14,8 @@ package kernel
 //	                     precisely "Round(v, s) == v"
 //	Decimal -> Decimal   rescaling up always keeps the digits; down, only if the
 //	                     dropped ones are zero; and the result must fit p
-//	Decimal -> Float64   approximate by definition, as it is from Int64: the
-//	                     nearest double, correctly rounded
+//	Decimal -> float     approximate by definition, as it is from Int64: the
+//	                     nearest float of the target's width, rounded once
 //
 // Rounding is something a caller writes, not something a cast does behind their
 // back: Col("x").Round(2).Cast(Decimal(10, 2)) gives the digits Polars and DuckDB
@@ -97,6 +97,48 @@ func decimalToFloat(u i128.Int128, scale uint8) float64 {
 	return f
 }
 
+// decimalToFloat32 is decimalToFloat for a Float32: the nearest float32, in one
+// rounding. float32(decimalToFloat(...)) would round twice.
+//
+// The fast path divides two float32s that are both exact — |x| <= 2^24, and 10^s
+// for s <= 10, since 10^10 = 2^10 * 5^10 and 5^10 < 2^24 — so the one IEEE division
+// is the one rounding. Otherwise the digits are parsed at 32 bits, which rounds
+// once too.
+func decimalToFloat32(u i128.Int128, scale uint8) float32 {
+	if scale == 0 {
+		return u.Float32()
+	}
+	if scale <= 10 {
+		if x, ok := u.Int64(); ok && x >= -(1<<24) && x <= 1<<24 {
+			return float32(x) / float32(math.Pow10(int(scale)))
+		}
+	}
+	// Cannot fail: the digits are well formed and far inside a float32's range.
+	f, _ := strconv.ParseFloat(dtype.FormatDecimal(u.String(), scale), 32)
+	return float32(f)
+}
+
+// decimalToFloats casts a Decimal column to Float32 or Float64, nearest, total.
+func decimalToFloats(name string, to dtype.DataType, c *data.Column) (*data.Column, error) {
+	src, err := data.Values[i128.Int128](c)
+	if err != nil {
+		return nil, err
+	}
+	s, n := c.DType().Scale(), len(src)
+	if to.ID() == dtype.TypeFloat32 {
+		buf, dst := newValuesBuffer[float32](n)
+		for i, v := range src {
+			dst[i] = decimalToFloat32(v, s)
+		}
+		return data.NewFixedBuffer(name, to, buf, n, c.Validity()), nil
+	}
+	buf, dst := newValuesBuffer[float64](n)
+	for i, v := range src {
+		dst[i] = decimalToFloat(v, s)
+	}
+	return data.NewFixedBuffer(name, to, buf, n, c.Validity()), nil
+}
+
 // decimalFloats reads a Decimal column as float64, with the scale applied.
 func decimalFloats(c *data.Column) ([]float64, error) {
 	src, err := data.Values[i128.Int128](c)
@@ -137,13 +179,10 @@ func castDecimal(name string, to dtype.DataType, strict bool, c *data.Column) (*
 	case from.ID() == dtype.TypeDecimal && to.IsInteger():
 		return decimalToInt(name, to, strict, c)
 	case from.ID() == dtype.TypeDecimal && to.IsFloat():
-		f, err := decimalFloats(c)
-		if err != nil {
-			return nil, err
-		}
-		// Float64 takes the nearest double; Float32 is range- and round-trip-checked
-		// by narrow, as a Float64 -> Float32 cast is.
-		return fromFloat64(name, to, f, c.Validity(), strict)
+		// The nearest float of the target's width, never refused: |x| < 10^38 is far
+		// below where a Float32 overflows. Float32 used to take the nearest float64
+		// and then narrow's round-trip test, which refused 0.10 and rounded twice.
+		return decimalToFloats(name, to, c)
 	case from.IsInteger() && to.ID() == dtype.TypeDecimal:
 		return intToDecimal(name, to, strict, c)
 	case from.IsFloat() && to.ID() == dtype.TypeDecimal:

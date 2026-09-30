@@ -200,6 +200,17 @@ func (e Expr) MapName(fn func(string) string) Expr {
 
 // Cast converts to another type, failing the query on the first unrepresentable
 // value.
+//
+// What is representable depends on the target:
+//
+//   - An integer, a Decimal: exactly the value, in range. 3.5 is not an Int64, and
+//     0.123 is not a Decimal(10, 2).
+//   - A float: the nearest value of its width, so 0.1 cast to Float32 is the float32
+//     nearest 0.1, and an Int64 above 2^53 is the float64 nearest it. Only a finite
+//     value past the type's range — one that would round to an infinity — is
+//     unrepresentable.
+//   - From a String: the text parsed at the target's own width, by the same rules.
+//     "256" is not a Uint8, and text that is no number cannot be parsed at all.
 func (e Expr) Cast(to dtype.DataType) Expr {
 	return wrap(&expr.Cast{Child: e.node(), To: to, Strict: true})
 }
@@ -255,6 +266,10 @@ func (e Expr) Abs() Expr { return e.un(expr.OpAbs) }
 // All of them are TOTAL. sqrt(-1) is NaN, ln(0) is -Inf, and neither becomes a
 // null — the rule float division already set. Null in, null out, and nothing else
 // manufactures one.
+//
+// A Float32 result is the Float64 result rounded once to a float32, which is what
+// Polars and PyArrow return. Until step 73 every Float32 result that was not exact
+// at that width was a null.
 
 // Sign is -1, 0 or 1, keeping the operand's type.
 //
@@ -291,6 +306,9 @@ func (e Expr) Log1p() Expr { return e.un(expr.OpLog1p) }
 // It rounds twice — the value is scaled by 10^decimals first, and that multiply
 // rounds too. Round(2.675, 2) is 2.68, because 2.675 * 100 lands on exactly 267.5
 // even though 2.675 itself is stored as 2.67499999999999982…
+//
+// A Float32 is rounded as a Float64 and the result rounded once more to a float32,
+// so Round(0.1, 1) of a Float32 is the float32 nearest 0.1.
 func (e Expr) Round(decimals int) Expr {
 	if decimals < 0 {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "round",
@@ -380,7 +398,11 @@ func (e Expr) IsBetween[L, H Operand](lo L, hi H, closed ...Closed) Expr {
 // All values share one type parameter, so the set is homogeneous by construction.
 // Values that are not representable in the column's type are an error rather than a
 // silent non-match: comparing an Int8 column against 5000 is a question with no
-// meaningful answer.
+// meaningful answer. Representable is Cast's rule: a float converts to the nearest
+// value of the column's width, so IsIn(0.1) on a Float32 column matches the float32
+// nearest 0.1 (as DuckDB's and PyArrow's do; Polars compares at Float64 and does
+// not), and a string parses at the column's width, so IsIn("300") on an Int8
+// column is an error and IsIn("9007199254740993") on an Int64 is that integer.
 //
 // # Equality is GROUPING equality
 //

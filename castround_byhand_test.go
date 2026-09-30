@@ -36,18 +36,8 @@ import (
 // answers. Emptied by the commits that fix them; a listed case that answers
 // correctly fails as stale, and an unlisted one that answers wrongly fails.
 var knownCastDefects = map[string]string{
-	"f64 0.1 → Float32":                         "refused: not representable as Float32",
-	"f64 0.1 → Float32, lossy":                  "null",
-	"f64 3.4028235e38 → Float32":                "refused",
-	"i64 2^24+1 → Float32":                      "refused",
-	"i64 2^53+2^29+1 → Float32":                 "refused",
-	"u64 2^53+2^29+1 → Float32":                 "refused",
-	"Int128 2^64+2^40+1 → Float32":              "refused",
-	"Decimal(38,0) 2^53+2^29+1 → Float32":       "refused",
-	"Decimal(10,2) 0.10 → Float32":              "refused",
 	"Datetime(ns) 1700000000000000001 → Uint64": "…000: through a float64",
 	"Duration(ns) 2^53+1 → Int128":              "…992: through a float64",
-	"f32 IsIn(0.1)":                             "refused: not representable as Float32",
 }
 
 type castCase struct {

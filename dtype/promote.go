@@ -178,9 +178,9 @@ func CanCast(from, to DataType) bool {
 	//
 	// What it does promise is every numeric type in both directions, another Decimal,
 	// and String as a target. Each numeric conversion is EXACT OR REFUSED per value —
-	// 12.34 to an integer is refused, 0.1 to Decimal(10,2) is 0.10 — except a Float64
-	// target, which is approximate by definition, as it is from Int64. The kernel
-	// arm is castDecimal.
+	// 12.34 to an integer is refused, 0.1 to Decimal(10,2) is 0.10 — except a float
+	// target, which rounds to the nearest value of its width, as it does from Int64.
+	// The kernel arm is castDecimal.
 	//
 	// A target that no Decimal can be — Decimal(200, 3) constructs, because a type
 	// constructor returns no error — is refused here, so the planner rejects it
@@ -207,16 +207,13 @@ func CanCast(from, to DataType) bool {
 	case from.IsString() && (to.IsNumeric() || to.IsTemporal() || to.IsBool()):
 		// ...but not INTO Int128, which is the Decimal arm above one type over and
 		// the same dangerous direction: CanCast promising what the kernel cannot do.
-		// parseFromString resolves one parser per column and its integer parser is
-		// strconv.ParseInt at 64 bits, so a 128-bit target walks past it into
-		// fromFloat64's narrow and ends at an Internalf — "this is a bug in ursus",
-		// raised by an ordinary user cast.
+		// parseFromString parses each target at its own width with strconv, and
+		// strconv stops at 64 bits.
 		//
-		// Both ways of making it "work" are wrong. Through int64 it would cap at
-		// exactly the range Int128 exists to exceed; through float64 it would round
-		// above 2^53, which is the loss unary.go refuses in as many words when it
-		// routes Int128 around the float path. A real 128-bit parse needs i128
-		// multiplication, which i128 does not have and its own doc declines.
+		// Both ways of making it "work" with what exists are wrong. Through int64 it
+		// would cap at exactly the range Int128 exists to exceed; through float64 it
+		// would round above 2^53. i128.Parse exists, and would be the way, but it
+		// does not detect overflow, so it is not yet safe on text a user wrote.
 		return to.id != TypeInt128
 	case (from.IsNumeric() || from.IsTemporal() || from.IsBool()) && to.id == TypeString:
 		return true

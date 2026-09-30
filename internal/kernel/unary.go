@@ -595,29 +595,28 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 	if from.IsInteger() && to.IsInteger() {
 		return castInt(name, to, strict, c)
 	}
-	// Int128 to or from a float, handled before the float64 path below because a
-	// float source needs castI128's fraction check.
-	if fp.ID() == dtype.TypeInt128 || tp.ID() == dtype.TypeInt128 {
-		return castI128(name, to, strict, c)
+	// To a float: rounded once, from the source's own type. See castToFloat.
+	if to.IsFloat() {
+		return castToFloat(name, to, strict, c)
 	}
-
-	// Everything else has a float on at least one side, and widens through float64
-	// as the common currency. A float source is exact in a float64; an integer
-	// source bound for a float is approximate by definition, and a Float32 target is
-	// range- and round-trip-checked by narrow.
+	// What is left has a float source, which a float64 holds exactly, and an integer
+	// target: exact or refused.
+	if tp.ID() == dtype.TypeInt128 {
+		return floatToInt128(name, to, strict, c)
+	}
 	src, err := toFloat64(c)
 	if err != nil {
 		return nil, err
 	}
-	return fromFloat64(name, to, src, c.Validity(), strict)
+	return floatsToInt(name, to, src, c.Validity(), strict)
 }
 
 // boolToNumeric renders false as 0 and true as 1, which is what every other
 // system does and the only choice that makes sum(flag) a count.
 //
-// It materialises Int64 and RE-ENTERS Cast rather than calling fromFloat64
-// directly. Two reasons, and the second is the one a differential test found:
-// bool -> T ought to be bool -> Int64 -> T by definition, and fromFloat64 cannot
+// It materialises Int64 and RE-ENTERS Cast rather than converting directly. Two
+// reasons, and the second is the one a differential test found: bool -> T ought to
+// be bool -> Int64 -> T by definition, and the float path it once took could not
 // produce a 128-bit target at all — so `Col("flag").Cast(Int128)` failed with
 // "cannot narrow to Int128" although CanCast promises it. Nothing is lost by going
 // through Int64: 0 and 1 are exact in it and in every type reachable from it.
@@ -686,12 +685,11 @@ func toFloat64(c *data.Column) ([]float64, error) {
 	case dtype.TypeFloat64:
 		return data.Values[float64](c)
 	case dtype.TypeInt128:
-		// Rounds above 2^53, and that is inherent rather than a defect: this path
-		// exists to feed sqrt, log and exp, none of which has an exact integer
-		// answer anyway. Cast never reaches here — it routes Int128 through castI128
-		// first — so adding this arm changes no existing behaviour. What it enables
-		// is Col("x").Sum().Sqrt(), an ordinary query, since every integer Sum
-		// outputs Int128.
+		// The nearest float64, in one rounding since step 73 — above 2^53 it cannot
+		// be exact, and this path feeds sqrt, log and exp, none of which has an exact
+		// answer anyway. A Cast to a float does not come here: castToFloat converts
+		// each value from its own type. What this arm enables is Col("x").Sum().Sqrt(),
+		// an ordinary query, since every integer Sum outputs Int128.
 		v, err := data.Values[i128.Int128](c)
 		if err != nil {
 			return nil, err
@@ -716,67 +714,47 @@ func conv[T data.Primitive](c *data.Column, out []float64) ([]float64, error) {
 	return out, nil
 }
 
-func fromFloat64(name string, to dtype.DataType, src []float64,
+// floatsToInt converts floats to an integer type: exact, or refused under strict and
+// null otherwise. A float converts exactly when it is an integer the target holds,
+// so a fraction, NaN, an infinity and a value out of range are all refused.
+func floatsToInt(name string, to dtype.DataType, src []float64,
 	valid bitmap.View, strict bool) (*data.Column, error) {
 
 	n := len(src)
 	switch to.Physical().ID() {
 	case dtype.TypeInt8:
-		return narrow[int8](name, to, src, valid, strict, n)
+		return floatToInt[int8](name, to, src, valid, strict, n)
 	case dtype.TypeInt16:
-		return narrow[int16](name, to, src, valid, strict, n)
+		return floatToInt[int16](name, to, src, valid, strict, n)
 	case dtype.TypeInt32:
-		return narrow[int32](name, to, src, valid, strict, n)
+		return floatToInt[int32](name, to, src, valid, strict, n)
 	case dtype.TypeInt64:
-		return narrow[int64](name, to, src, valid, strict, n)
+		return floatToInt[int64](name, to, src, valid, strict, n)
 	case dtype.TypeUint8:
-		return narrow[uint8](name, to, src, valid, strict, n)
+		return floatToInt[uint8](name, to, src, valid, strict, n)
 	case dtype.TypeUint16:
-		return narrow[uint16](name, to, src, valid, strict, n)
+		return floatToInt[uint16](name, to, src, valid, strict, n)
 	case dtype.TypeUint32:
-		return narrow[uint32](name, to, src, valid, strict, n)
+		return floatToInt[uint32](name, to, src, valid, strict, n)
 	case dtype.TypeUint64:
-		return narrow[uint64](name, to, src, valid, strict, n)
-	case dtype.TypeFloat32:
-		return narrow[float32](name, to, src, valid, strict, n)
-	case dtype.TypeFloat64:
-		buf, dst := newValuesBuffer[float64](n)
-		copy(dst, src)
-		return data.NewFixedBuffer(name, to, buf, n, valid), nil
+		return floatToInt[uint64](name, to, src, valid, strict, n)
 	default:
-		return nil, uerr.Internalf("kernel: cannot narrow to %s", to)
+		return nil, uerr.Internalf("kernel: cannot convert a float to %s", to)
 	}
 }
 
-func narrow[T data.Primitive](name string, to dtype.DataType, src []float64,
-	valid bitmap.View, strict bool, n int) (*data.Column, error) {
+func floatToInt[T ~int8 | ~int16 | ~int32 | ~int64 | ~uint8 | ~uint16 | ~uint32 | ~uint64](
+	name string, to dtype.DataType, src []float64, valid bitmap.View, strict bool, n int) (*data.Column, error) {
 
 	buf, dst := newValuesBuffer[T](n)
 	ok := bitmap.NewBuilder(n)
 	lossy := false
-	toFloat := to.IsFloat()
 	for i, v := range src {
 		t := T(v)
-		// NaN needs its own arm, because the round-trip test below cannot see it:
-		// NaN != NaN, so `float64(t) != v` is true however faithfully it converted.
-		// Without this, a STRICT Cast(Float64 -> Float32) refused every NaN row with
-		// "value NaN is not representable as Float32" — which is simply false; NaN is
-		// exactly representable in a float32. ±Inf needs no arm: it compares equal to
-		// itself and passes through already.
-		//
-		// For an INTEGER target NaN really is unrepresentable, so the check is on the
-		// target rather than on the value.
-		if v != v && toFloat {
-			dst[i] = t
-			ok.Append(true)
-			continue
-		}
 		if float64(t) != v {
 			lossy = true
 			if strict && valid.Get(i) {
-				return nil, uerr.New(uerr.KindValue, "cast",
-					"value %v at row %d is not representable as %s", v, i, to).
-					Hint("use a non-strict cast to turn unrepresentable values into nulls")
+				return nil, unrepresentable(strconv.FormatFloat(v, 'g', -1, 64), i, to)
 			}
 			ok.Append(false)
 			continue
@@ -892,50 +870,36 @@ func narrowInto[T data.Primitive](name string, to, from dtype.DataType, src []i1
 	return data.NewFixedBuffer(name, to, buf, n, valid), nil
 }
 
-// castI128 converts between Int128 and a float. Integer pairs go through castInt.
-func castI128(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
+// floatToInt128 converts a float to Int128: exact or refused, like every other
+// float -> integer cast. i128.FromFloat64 truncates, and this used to take its
+// answer, so a strict Cast(Int128) turned 3.7 into 3 where Cast(Int64) refuses it —
+// two rules for one question, one of which broke Cast's promise to fail on an
+// unrepresentable value. Int128 to a float is castToFloat's.
+func floatToInt128(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
 	n := c.Len()
-
-	// TO Int128, from a float: exact or refused, like every other float -> integer
-	// cast. i128.FromFloat64 truncates, and this used to take its answer, so a strict
-	// Cast(Int128) turned 3.7 into 3 where Cast(Int64) refuses it — two rules for one
-	// question, one of which broke Cast's promise to fail on an unrepresentable value.
-	if to.Physical().ID() == dtype.TypeInt128 {
-		src, err := toFloat64(c)
-		if err != nil {
-			return nil, err
-		}
-		buf, dst := newValuesBuffer[i128.Int128](n)
-		ok := bitmap.NewBuilder(n)
-		valid := c.Validity()
-		for i, f := range src {
-			v, fits := i128.FromFloat64(f)
-			if !fits || f != math.Trunc(f) {
-				if strict && valid.Get(i) {
-					return nil, uerr.New(uerr.KindValue, "cast",
-						"value %v at row %d is not representable as Int128", f, i).
-						Hint("use a non-strict cast to turn unrepresentable values into nulls").
-						Hint("to drop the fraction on purpose, apply .Floor() or .Ceil() first")
-				}
-				ok.Append(false)
-				continue
-			}
-			dst[i] = v
-			ok.Append(true)
-		}
-		return data.NewFixedBuffer(name, to, buf, n, bitmap.And(valid, ok.Finish())), nil
-	}
-
-	// FROM Int128, to a float.
-	src, err := data.Values[i128.Int128](c)
+	src, err := toFloat64(c)
 	if err != nil {
 		return nil, err
 	}
-	f := make([]float64, n)
-	for i, v := range src {
-		f[i] = v.Float64()
+	buf, dst := newValuesBuffer[i128.Int128](n)
+	ok := bitmap.NewBuilder(n)
+	valid := c.Validity()
+	for i, f := range src {
+		v, fits := i128.FromFloat64(f)
+		if !fits || f != math.Trunc(f) {
+			if strict && valid.Get(i) {
+				return nil, uerr.New(uerr.KindValue, "cast",
+					"value %v at row %d is not representable as Int128", f, i).
+					Hint("use a non-strict cast to turn unrepresentable values into nulls").
+					Hint("to drop the fraction on purpose, apply .Floor() or .Ceil() first")
+			}
+			ok.Append(false)
+			continue
+		}
+		dst[i] = v
+		ok.Append(true)
 	}
-	return fromFloat64(name, to, f, c.Validity(), strict)
+	return data.NewFixedBuffer(name, to, buf, n, bitmap.And(valid, ok.Finish())), nil
 }
 
 func widenToInt64(c *data.Column) ([]int64, error) {
@@ -1010,8 +974,9 @@ func convUint[T data.Primitive](c *data.Column, out []uint64) ([]uint64, error) 
 //
 // # Strict, which this ignored until step 49
 //
-// The four other lossy paths in this file — narrow, both castI128 arms and
-// parseFromString — all refuse under strict and name the offending row, and Cast's
+// The other lossy casts — floatToInt, floatToInt128, f64ToF32 and, since step 73
+// stopped it dropping strict on the way down, parseFromString — all refuse under
+// strict and name the offending row, and Cast's
 // own doc states the contract as a fact about the kernel: "Strict casts fail the
 // query and name the offending row." This one took no strict parameter at all, so
 // Cast.Field's `Nullable: cf.Nullable || !c.Strict` declared a strict widening cast

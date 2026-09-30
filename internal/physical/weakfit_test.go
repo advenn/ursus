@@ -2,10 +2,12 @@ package physical_test
 
 // TestWeakFitAgreesWithCast is what licenses expr.FitsExactly existing at all.
 //
-// kernel.narrow already answers "is this value representable in that type" —
-// `t := T(v); if float64(t) != v` — and expr cannot call it: internal/expr is L20
-// and internal/kernel is L30, so the import is a levels violation and the check
-// has to be written twice. Two copies of a rule is the shape this codebase has
+// The kernel's casts answer a nearby question, and expr cannot call them:
+// internal/expr is L20 and internal/kernel is L30, so the import is a levels
+// violation and the check has to be written twice. Nearby rather than the same
+// since step 73, when a cast to a float began to round: a strict cast to Float32 no
+// longer refuses an inexact value, so for a float target it is the ROUND TRIP below
+// that checks exactness, and the "never" cases that pin it. Two copies of a rule is the shape this codebase has
 // been bitten by repeatedly, so the two are pinned together here rather than by
 // hope.
 //
@@ -176,6 +178,11 @@ func TestFitsExactlyMustAdmitTheOrdinaryCases(t *testing.T) {
 		{int64(0), dtype.String}, {int64(0), dtype.Bool},
 		{int64(0), dtype.Decimal(10, 2)}, {int64(0), dtype.Date},
 		{"x", dtype.String}, {true, dtype.Bool},
+		// Inexact at a float's width. A strict cast rounds these now rather than
+		// refusing them, so nothing downstream would notice an admission.
+		{0.1, dtype.Float32}, {int64(1<<24 + 1), dtype.Float32},
+		{float64(1<<24 + 1), dtype.Float32}, {int64(1<<53 + 1), dtype.Float64},
+		{uint64(math.MaxUint64), dtype.Float32},
 	}
 	for _, c := range never {
 		if expr.FitsExactly(c.v, c.to) {
