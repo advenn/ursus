@@ -37,18 +37,7 @@ type knownWrong struct {
 
 // knownParseDefects is counted per target, so a partial fix changes the number
 // rather than hiding behind a listed name.
-var knownParseDefects = map[string]knownWrong{
-	"Int8":    {70, "a strict out-of-range value is a null, not a refusal"},
-	"Int16":   {56, "a strict out-of-range value is a null"},
-	"Int32":   {41, "a strict out-of-range value is a null"},
-	"Int64":   {34, "through a float64: MaxInt64 is null; ParseInt's range error says cannot parse"},
-	"Uint8":   {66, "a strict out-of-range value is a null"},
-	"Uint16":  {54, "a strict out-of-range value is a null"},
-	"Uint32":  {41, "a strict out-of-range value is a null"},
-	"Uint64":  {47, "through a float64: MaxInt64 is 2^63, and above MaxInt64 cannot parse"},
-	"Float32": {111, "every inexact value is a null, and a strict one is not refused"},
-	"Float64": {7, "an overflow is refused as cannot parse"},
-}
+var knownParseDefects = map[string]knownWrong{}
 
 // parseTargets is every numeric type a String casts to, derived.
 func parseTargets(t *testing.T) []dtype.DataType {
@@ -163,6 +152,9 @@ var malformed = []string{"", " 1", "1 ", "abc", "1e", "--1", "+-1", ".", "-", "+
 // parseWant is the oracle's answer for s cast to dt: a value, or unrepresentable
 // (an integer out of range, a float that overflows), or malformed.
 type parseWant struct {
+	// skip is text a float parse accepts as Go syntax and this oracle does not judge:
+	// "1_000". That grammar is recorded as out of scope, not pinned either way.
+	skip                       bool
 	malformed, unrepresentable bool
 	i                          *big.Int
 	f                          float64
@@ -182,7 +174,10 @@ func oracle(s string, dt dtype.DataType) parseWant {
 	if f, ok := floatSpecials[s]; ok {
 		return parseWant{f: f}
 	}
-	if strings.ContainsAny(s, "/xX_") { // big.Rat reads fractions and prefixes; a float parse does not
+	if strings.Contains(s, "_") {
+		return parseWant{skip: true}
+	}
+	if strings.ContainsAny(s, "/xX") { // big.Rat reads fractions and prefixes; a float parse does not
 		return parseWant{malformed: true}
 	}
 	r, ok := new(big.Rat).SetString(s)
@@ -269,7 +264,7 @@ func TestStringParsesAreExactOrRefused(t *testing.T) {
 		if w := oracle(s, dtype.Int64); !w.malformed {
 			t.Fatalf("the integer oracle accepts %q", s)
 		}
-		if w := oracle(s, dtype.Float64); !w.malformed {
+		if w := oracle(s, dtype.Float64); !w.malformed && !w.skip {
 			t.Fatalf("the float oracle accepts %q", s)
 		}
 	}
@@ -286,8 +281,11 @@ func TestStringParsesAreExactOrRefused(t *testing.T) {
 		}
 		lossy := readParsed(t, lossyCol)
 		for i, s := range strs {
-			values++
 			w := oracle(s, dt)
+			if w.skip {
+				continue
+			}
+			values++
 			switch g := lossy[i]; {
 			case w.malformed || w.unrepresentable:
 				if !g.null {

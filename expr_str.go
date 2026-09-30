@@ -182,7 +182,9 @@ func (s StrExpr) EscapeRegex() Expr {
 
 // ToInteger, ToDate and ToDatetime parse. They are ordinary casts, which is why
 // they are spelled as casts rather than as new kernels — and unparseable values
-// become NULL rather than failing the query.
+// become NULL rather than failing the query, as do integers past Int64's range.
+// ToInteger parses exactly at 64 bits: "9007199254740993" is itself, not the
+// float64 beside it.
 func (s StrExpr) ToInteger() Expr { return s.e.CastLossy(dtype.Int64) }
 func (s StrExpr) ToDate() Expr    { return s.e.CastLossy(dtype.Date) }
 

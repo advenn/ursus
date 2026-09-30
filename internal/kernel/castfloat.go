@@ -38,3 +38,12 @@ func floatResult(name string, out dtype.DataType, v []float64, valid bitmap.View
 	}
 	return nil, uerr.Internalf("kernel: a float computation cannot produce %s", out)
 }
+
+// floatOverflow refuses v at row under a strict cast to a float: the one value a
+// float cannot take, a finite one past its range whose nearest float is an
+// infinity. Everything else rounds.
+func floatOverflow(v string, row int, to dtype.DataType) *uerr.Error {
+	return unrepresentable(v, row, to).
+		Hint("a cast to %s rounds to the nearest value, and refuses only a finite one "+
+			"past its range, which would round to an infinity", to)
+}

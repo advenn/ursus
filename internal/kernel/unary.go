@@ -1122,81 +1122,6 @@ func readTicks(c *data.Column) ([]int64, error) {
 	}
 }
 
-// parseFromString converts a String column into to.
-//
-// Non-strict is the default and turns an unparseable value into a NULL, which is
-// why the type checker marks every non-strict cast nullable. Strict fails the query
-// and names the offending row and text — the same contract the CSV reader honours,
-// and for the same reason: "cannot parse" on a ten-million-row frame is useless.
-func parseFromString(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
-	acc := c.Strings()
-	n := c.Len()
-	valid := c.Validity()
-	ok := bitmap.NewBuilder(n)
-
-	// One parser resolved per column rather than per value, matching the CSV
-	// reader's builder discipline.
-	var (
-		ints   []int64
-		floats []float64
-		bools  *bitmap.Builder
-	)
-	switch {
-	case to.IsTemporal(), to.Physical().IsInteger():
-		ints = make([]int64, n)
-	case to.IsFloat():
-		floats = make([]float64, n)
-	case to.IsBool():
-		bools = bitmap.NewBuilder(n)
-	default:
-		return nil, uerr.New(uerr.KindUnsupported, "cast",
-			"cast from %s to %s is not implemented yet", c.DType(), to)
-	}
-
-	for i := range n {
-		if !valid.Get(i) {
-			ok.Append(false)
-			if bools != nil {
-				bools.Append(false)
-			}
-			continue
-		}
-		s := acc.Get(i)
-		good := true
-		switch {
-		case to.IsTemporal():
-			v, p := dtype.ParseTemporal(to, s)
-			ints[i], good = v, p
-		case to.Physical().IsInteger():
-			v, err := strconv.ParseInt(s, 10, 64)
-			ints[i], good = v, err == nil
-		case to.IsFloat():
-			v, err := strconv.ParseFloat(s, 64)
-			floats[i], good = v, err == nil
-		case to.IsBool():
-			v, err := strconv.ParseBool(s)
-			bools.Append(v)
-			good = err == nil
-		}
-		if !good && strict {
-			return nil, uerr.New(uerr.KindValue, "cast",
-				"cannot parse %s as %s at row %d", strconv.Quote(s), to, i).
-				Hint("use CastLossy to turn unparseable values into nulls instead")
-		}
-		ok.Append(good)
-	}
-
-	outValid := ok.Finish()
-	switch {
-	case bools != nil:
-		return data.NewBool(name, bools.Finish(), outValid), nil
-	case floats != nil:
-		return narrowFloat(name, to, floats, outValid)
-	default:
-		return narrowInt(name, to, ints, outValid)
-	}
-}
-
 // formatToString renders a column as text, using the same formatter the frame
 // renderer and the CSV writer use, so all three agree.
 func formatToString(name string, c *data.Column) (*data.Column, error) {
@@ -1252,32 +1177,6 @@ func formatToString(name string, c *data.Column) (*data.Column, error) {
 		}
 	}
 	return data.NewString(name, out, valid), nil
-}
-
-// narrowInt places parsed int64s into the target's storage width, nulling any
-// value that does not fit rather than wrapping it.
-func narrowInt(name string, to dtype.DataType, v []int64, valid bitmap.View) (*data.Column, error) {
-	f := make([]float64, len(v))
-	for i, x := range v {
-		f[i] = float64(x)
-	}
-	if to.IsTemporal() {
-		// Temporal storage is exactly int32 days or an int64 tick count; there is
-		// nothing to narrow through a float.
-		if to.Physical().ID() == dtype.TypeInt32 {
-			d32 := make([]int32, len(v))
-			for i, x := range v {
-				d32[i] = int32(x)
-			}
-			return data.NewFixed(name, to, d32, valid), nil
-		}
-		return data.NewFixed(name, to, v, valid), nil
-	}
-	return fromFloat64(name, to, f, valid, false)
-}
-
-func narrowFloat(name string, to dtype.DataType, v []float64, valid bitmap.View) (*data.Column, error) {
-	return fromFloat64(name, to, v, valid, false)
 }
 
 // readAnyInt formats an integer column exactly.

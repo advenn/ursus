@@ -47,23 +47,7 @@ var knownCastDefects = map[string]string{
 	"Decimal(10,2) 0.10 → Float32":              "refused",
 	"Datetime(ns) 1700000000000000001 → Uint64": "…000: through a float64",
 	"Duration(ns) 2^53+1 → Int128":              "…992: through a float64",
-	"\"9007199254740993\" → Int64":              "…992: parsed through a float64",
-	"\"9007199254740993\" ToInteger":            "…992",
-	"\"9223372036854775807\" → Uint64":          "2^63",
-	"\"18446744073709551615\" → Uint64":         "cannot parse: parsed as an Int64",
-	"\"256\" → Uint8":                           "ErrInternal: a null in a non-nullable column",
-	"\"256\" → Uint8 beside a null":             "[null null], silently",
-	"\"-1\" → Uint8":                            "ErrInternal",
-	"\"0.1\" → Float32":                         "ErrInternal",
-	"\"0.1\" → Float32, lossy":                  "null",
-	"\"1.00000005960464477539063\" → Float32":   "ErrInternal",
-	"\"3.4e39\" → Float32":                      "ErrInternal",
-	"\"1e400\" → Float64":                       "refused as cannot parse",
-	"\"1e-50\" → Float32":                       "ErrInternal",
 	"f32 IsIn(0.1)":                             "refused: not representable as Float32",
-	"i8 IsIn(\"300\")":                          "[false false], silently",
-	"i64 IsIn(\"9007199254740993\")":            "[true false]",
-	"u64 IsIn(\"18446744073709551615\")":        "refused as cannot parse",
 }
 
 type castCase struct {
