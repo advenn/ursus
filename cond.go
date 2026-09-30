@@ -32,7 +32,7 @@ import (
 // arithmetic fault such as division by zero yields NULL rather than trapping — but
 // it does mean a conditional does not make an expensive branch cheaper.
 func When(pred Expr) WhenBuilder {
-	return WhenBuilder{pred: pred.n}
+	return WhenBuilder{pred: pred.node()}
 }
 
 // WhenBuilder is a conditional awaiting its Then.
@@ -62,7 +62,7 @@ func (w WhenBuilder) Then[T Operand](v T) ThenBuilder {
 
 // When adds another condition, the else-if of the chain.
 func (t ThenBuilder) When(pred Expr) WhenBuilder {
-	return WhenBuilder{pairs: t.pairs, pred: pred.n}
+	return WhenBuilder{pairs: t.pairs, pred: pred.node()}
 }
 
 // Otherwise supplies the fall-through value and closes the chain.
@@ -100,9 +100,9 @@ func Coalesce(exprs ...Expr) Expr {
 	case 1:
 		return exprs[0]
 	}
-	out := exprs[len(exprs)-1].n
+	out := exprs[len(exprs)-1].node()
 	for i := len(exprs) - 2; i >= 0; i-- {
-		a := exprs[i].n
+		a := exprs[i].node()
 		out = &expr.Cond{
 			Pred: &expr.Unary{Op: expr.OpIsNotNull, Child: a},
 			Then: a,

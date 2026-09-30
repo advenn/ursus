@@ -23,7 +23,7 @@ func (e Expr) Dt() DtExpr { return DtExpr{e} }
 
 func (d DtExpr) call(fn expr.CallFn, args ...any) Expr {
 	nodes := make([]expr.Node, 0, len(args)+1)
-	nodes = append(nodes, d.e.n)
+	nodes = append(nodes, d.e.node())
 	for _, a := range args {
 		nodes = append(nodes, litNode(a))
 	}

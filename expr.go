@@ -22,13 +22,29 @@ type Expr struct {
 	n expr.Node
 }
 
-func wrap(n expr.Node) Expr    { return Expr{n: n} }
-func (e Expr) node() expr.Node { return e.n }
+func wrap(n expr.Node) Expr { return Expr{n: n} }
+
+// node is the only way to read e's node. The zero Expr — `var e ursus.Expr`, or a
+// field never set — has none, and was a nil node that dereferenced deep inside
+// resolution: a panic, from something that compiles. As an operand, an alias, or
+// anything else built from it, it is now an error saying what it is.
+//
+// TestOnlyNodeReadsTheField keeps it the only way: String, nodes and OverWith check
+// for the zero Expr themselves.
+func (e Expr) node() expr.Node {
+	if e.n == nil {
+		// Fresh each time: plan layers annotate an error in place as it passes, so
+		// one shared across queries would carry another query's attribution.
+		return &expr.Err{E: uerr.New(uerr.KindValue, "", "the zero Expr is not an expression").
+			Hint("build one with Col, Lit or another constructor; a declared `var e ursus.Expr` is the zero Expr")}
+	}
+	return e.n
+}
 
 // Err returns any error deferred during construction — a bad regex, say.
 // Expression builders cannot return errors without destroying chaining, so the
 // error rides in the tree and surfaces here or at Collect.
-func (e Expr) Err() error { return expr.FirstErr(e.n) }
+func (e Expr) Err() error { return expr.FirstErr(e.node()) }
 
 // String renders the expression canonically.
 func (e Expr) String() string {
@@ -74,7 +90,7 @@ type Operand interface {
 // lift converts an Operand into an IR node.
 func lift[T Operand](v T) expr.Node {
 	if e, ok := any(v).(Expr); ok {
-		return e.n
+		return e.node()
 	}
 	return litNode(any(v))
 }
@@ -153,14 +169,14 @@ func Null(dt dtype.DataType) Expr { return wrap(&expr.Lit{Value: nil, DT: dt}) }
 // It sets ONE fixed name, so applying it to a multi-column selection is an error.
 // Use Prefix or Suffix to rename an expansion.
 func (e Expr) Alias(name string) Expr {
-	return wrap(&expr.Alias{Child: e.n, Name: name})
+	return wrap(&expr.Alias{Child: e.node(), Name: name})
 }
 
 // Prefix prepends to the output name. Unlike Alias it is expansion-safe, deriving
 // a distinct name per output column.
 func (e Expr) Prefix(p string) Expr {
 	return wrap(&expr.Rename{
-		Child: e.n,
+		Child: e.node(),
 		Fn:    func(s string) string { return p + s },
 		Label: `name.prefix(` + quote(p) + `)`,
 	})
@@ -169,7 +185,7 @@ func (e Expr) Prefix(p string) Expr {
 // Suffix appends to the output name. Expansion-safe, like Prefix.
 func (e Expr) Suffix(s string) Expr {
 	return wrap(&expr.Rename{
-		Child: e.n,
+		Child: e.node(),
 		Fn:    func(x string) string { return x + s },
 		Label: `name.suffix(` + quote(s) + `)`,
 	})
@@ -177,7 +193,7 @@ func (e Expr) Suffix(s string) Expr {
 
 // MapName derives the output name from the input name.
 func (e Expr) MapName(fn func(string) string) Expr {
-	return wrap(&expr.Rename{Child: e.n, Fn: fn, Label: "name.map(...)"})
+	return wrap(&expr.Rename{Child: e.node(), Fn: fn, Label: "name.map(...)"})
 }
 
 // --- casting -----------------------------------------------------------------
@@ -185,13 +201,13 @@ func (e Expr) MapName(fn func(string) string) Expr {
 // Cast converts to another type, failing the query on the first unrepresentable
 // value.
 func (e Expr) Cast(to dtype.DataType) Expr {
-	return wrap(&expr.Cast{Child: e.n, To: to, Strict: true})
+	return wrap(&expr.Cast{Child: e.node(), To: to, Strict: true})
 }
 
 // CastLossy converts to another type, turning unrepresentable values into nulls.
 // The result is always nullable as a consequence.
 func (e Expr) CastLossy(to dtype.DataType) Expr {
-	return wrap(&expr.Cast{Child: e.n, To: to, Strict: false})
+	return wrap(&expr.Cast{Child: e.node(), To: to, Strict: false})
 }
 
 // --- arithmetic --------------------------------------------------------------
@@ -282,7 +298,7 @@ func (e Expr) Round(decimals int) Expr {
 	}
 	return wrap(&expr.Call{
 		Fn:   expr.FnMathRound,
-		Args: []expr.Node{e.n, litNode(int64(decimals))},
+		Args: []expr.Node{e.node(), litNode(int64(decimals))},
 	})
 }
 
@@ -381,7 +397,7 @@ func (e Expr) IsBetween[L, H Operand](lo L, hi H, closed ...Closed) Expr {
 // An empty set makes every non-null row false, matching SQL's `x IN ()`.
 func (e Expr) IsIn[T Literal](vs ...T) Expr {
 	args := make([]expr.Node, 0, len(vs)+1)
-	args = append(args, e.n)
+	args = append(args, e.node())
 	for _, v := range vs {
 		args = append(args, litNode(any(v)))
 	}
@@ -415,9 +431,9 @@ func (e Expr) IsInfinite() Expr { return e.un(expr.OpIsInfinite) }
 // --- internals ---------------------------------------------------------------
 
 func (e Expr) bin(op expr.BinaryOp, r expr.Node) Expr {
-	return wrap(&expr.Binary{Op: op, L: e.n, R: r})
+	return wrap(&expr.Binary{Op: op, L: e.node(), R: r})
 }
 
 func (e Expr) un(op expr.UnaryOp) Expr {
-	return wrap(&expr.Unary{Op: op, Child: e.n})
+	return wrap(&expr.Unary{Op: op, Child: e.node()})
 }

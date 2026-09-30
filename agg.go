@@ -229,11 +229,11 @@ func (e Expr) Quantile(q float64, interp Interpolation) Expr {
 func (e Expr) Implode() Expr { return e.agg(expr.AggImplode) }
 
 func (e Expr) agg(op expr.AggOp) Expr {
-	return wrap(&expr.Agg{Op: op, Child: e.n})
+	return wrap(&expr.Agg{Op: op, Child: e.node()})
 }
 
 func (e Expr) aggP(op expr.AggOp, p expr.AggParams) Expr {
-	return wrap(&expr.Agg{Op: op, Child: e.n, Params: p})
+	return wrap(&expr.Agg{Op: op, Child: e.node(), Params: p})
 }
 
 // Len counts rows in the current group — SQL's COUNT(*) with no column argument.
@@ -250,7 +250,7 @@ type SortKey struct{ k plan.SortKey }
 
 // Asc orders ascending. Nulls come FIRST by default; call NullsLast to move them.
 func Asc(e Expr) SortKey {
-	return SortKey{plan.SortKey{Expr: e.n}}
+	return SortKey{plan.SortKey{Expr: e.node()}}
 }
 
 // Desc orders descending, with nulls still FIRST by default.
@@ -260,7 +260,7 @@ func Asc(e Expr) SortKey {
 // descending — which means switching to Desc silently relocates them. Keeping the
 // two orthogonal is more predictable.
 func Desc(e Expr) SortKey {
-	return SortKey{plan.SortKey{Expr: e.n, Descending: true}}
+	return SortKey{plan.SortKey{Expr: e.node(), Descending: true}}
 }
 
 // NullsFirst places nulls at the start of the output.

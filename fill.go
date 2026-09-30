@@ -17,7 +17,7 @@ import (
 // the promotion.
 func liftWeak[T Operand](v T) expr.Node {
 	if e, ok := any(v).(Expr); ok {
-		return e.n
+		return e.node()
 	}
 	return weaken(litNode(any(v)))
 }
@@ -59,8 +59,8 @@ func weaken(n expr.Node) expr.Node {
 // common-subexpression pass, EVALUATED twice — exactly as Coalesce is.
 func (e Expr) FillNullWith[T Operand](v T) Expr {
 	return wrap(&expr.Cond{
-		Pred: &expr.Unary{Op: expr.OpIsNotNull, Child: e.n},
-		Then: e.n,
+		Pred: &expr.Unary{Op: expr.OpIsNotNull, Child: e.node()},
+		Then: e.node(),
 		Else: liftWeak(v),
 	})
 }
@@ -84,8 +84,8 @@ func (e Expr) FillNullWith[T Operand](v T) Expr {
 // instead of a replaced one.
 func (e Expr) FillNan[T Operand](v T) Expr {
 	return wrap(&expr.Cond{
-		Pred: &expr.Unary{Op: expr.OpIsNotNan, Child: e.n},
-		Then: e.n,
+		Pred: &expr.Unary{Op: expr.OpIsNotNan, Child: e.node()},
+		Then: e.node(),
 		Else: liftWeak(v),
 	})
 }
@@ -128,12 +128,12 @@ func (e Expr) Clip[L, H Operand](lo L, hi H) Expr {
 	// written order.
 	l, h := liftWeak(lo), liftWeak(hi)
 	return wrap(&expr.Cond{
-		Pred: &expr.Binary{Op: expr.OpLt, L: e.n, R: l},
+		Pred: &expr.Binary{Op: expr.OpLt, L: e.node(), R: l},
 		Then: l,
 		Else: &expr.Cond{
-			Pred: &expr.Binary{Op: expr.OpGt, L: e.n, R: h},
+			Pred: &expr.Binary{Op: expr.OpGt, L: e.node(), R: h},
 			Then: h,
-			Else: e.n,
+			Else: e.node(),
 		},
 	})
 }

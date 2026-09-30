@@ -76,10 +76,7 @@ type panicCase struct {
 //
 // The value is a PREFIX of what the case reports, so a case that starts failing
 // in a different way — a crash that becomes a caller panic, say — fails too.
-var knownPanicDefects = map[string]string{
-	"the zero Expr, as an operand": "internal error, want value: ursus: collect: recovered a panic",
-	"the zero Expr, aliased":       "internal error, want value: ursus: collect: recovered a panic",
-}
+var knownPanicDefects = map[string]string{}
 
 // boom panics on the row holding 3, which every fixture below has.
 func boom(v int64) (int64, error) {
@@ -750,5 +747,109 @@ func TestEveryGoroutineIsCovered(t *testing.T) {
 		if !tests[test] {
 			t.Errorf("goroutineSites names %s for %s, and there is no such test", test, site)
 		}
+	}
+}
+
+// TestOnlyNodeReadsTheField: Expr.node is nil-safe, and reading the field directly
+// is how a zero Expr became a nil node inside a tree. Only the four functions that
+// check for the zero Expr themselves may read it.
+func TestOnlyNodeReadsTheField(t *testing.T) {
+	allowed := map[string]bool{"node": true, "String": true, "nodes": true, "OverWith": true}
+	reads := 0
+	repoFiles(t, func(path string, src []byte) {
+		if strings.Contains(filepath.ToSlash(path), "/") || strings.HasSuffix(path, "_test.go") {
+			return // the root package only, which is where Expr lives
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), path, src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range f.Decls {
+			fd, ok := d.(*ast.FuncDecl)
+			if !ok {
+				continue
+			}
+			ast.Inspect(fd, func(x ast.Node) bool {
+				if sel, ok := x.(*ast.SelectorExpr); ok && sel.Sel.Name == "n" {
+					if reads++; !allowed[fd.Name.Name] {
+						t.Errorf("%s: %s reads an Expr's node directly; use .node()", path, fd.Name.Name)
+					}
+				}
+				return true
+			})
+		}
+	})
+	if reads == 0 {
+		t.Fatal("found no read of the field at all; the test no longer looks where Expr is")
+	}
+}
+
+// TestTheZeroExprIsAnErrorEverywhere calls every method of Expr, and of each
+// namespace an Expr method returns, on the zero Expr, and selects what comes back.
+// Each must fail as an ordinary error: not a panic, not a result, not ErrInternal.
+//
+// Arguments are zero values; a method taking a function is left out, since a nil
+// function is its own mistake.
+func TestTheZeroExprIsAnErrorEverywhere(t *testing.T) {
+	exprType := reflect.TypeFor[ursus.Expr]()
+	swept := 0
+	var sweep func(path string, v reflect.Value)
+	try := func(path string, e ursus.Expr) {
+		var err error
+		func() {
+			defer func() {
+				if p := recover(); p != nil {
+					err = fmt.Errorf("panicked: %v", p)
+				}
+			}()
+			_, err = panicFrame().Select(e.Alias("x")).Collect(t.Context())
+		}()
+		switch {
+		case err == nil:
+			t.Errorf("%s: the zero Expr produced a result", path)
+		case errors.Is(err, ursus.ErrInternal) || strings.HasPrefix(err.Error(), "panicked"):
+			t.Errorf("%s: %v", path, err)
+		}
+		swept++
+	}
+	sweep = func(path string, v reflect.Value) {
+		for i := range v.NumMethod() {
+			m, fn := v.Type().Method(i), v.Method(i)
+			ft := fn.Type()
+			if m.Name == "String" || m.Name == "Err" {
+				continue
+			}
+			var args []reflect.Value
+			usable := true
+			for j := range ft.NumIn() {
+				if ft.IsVariadic() && j == ft.NumIn()-1 {
+					break
+				}
+				if ft.In(j).Kind() == reflect.Func {
+					usable = false
+					break
+				}
+				args = append(args, reflect.Zero(ft.In(j)))
+			}
+			if !usable {
+				continue
+			}
+			for _, out := range fn.Call(args) {
+				switch {
+				case out.Type() == exprType:
+					try(path+"."+m.Name, out.Interface().(ursus.Expr))
+				case out.Kind() == reflect.Struct && out.NumMethod() > 0 && path == "Expr{}":
+					sweep(path+"."+m.Name+"()", out) // a namespace: Str(), Dt(), List()...
+				}
+			}
+		}
+	}
+	sweep("Expr{}", reflect.ValueOf(ursus.Expr{}))
+	if err := (ursus.Expr{}).Err(); err == nil || !strings.Contains(err.Error(), "zero Expr") {
+		t.Errorf("Expr{}.Err() = %v, want the zero Expr's error", err)
+	}
+	// 136 when this was written, about half of them in the namespaces.
+	if swept < 120 {
+		t.Errorf("swept only %d methods; the sweep no longer reaches the namespaces", swept)
 	}
 }

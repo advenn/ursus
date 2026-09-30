@@ -36,5 +36,5 @@ func (e Expr) Struct() StructExpr { return StructExpr{e} }
 // available names listed — the type of the result depends on which field was asked
 // for, so the name has to be resolved against the schema anyway.
 func (s StructExpr) Field(name string) Expr {
-	return wrap(&expr.Call{Fn: expr.FnStructField, Args: []expr.Node{s.e.n, litNode(name)}})
+	return wrap(&expr.Call{Fn: expr.FnStructField, Args: []expr.Node{s.e.node(), litNode(name)}})
 }

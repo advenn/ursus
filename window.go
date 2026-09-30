@@ -99,7 +99,7 @@ func (e Expr) OverWith(spec WindowSpec) Expr {
 		ord[i] = k.k
 	}
 	return wrap(&expr.Window{
-		Child: e.n, PartitionBy: part, OrderBy: ord, Mapping: spec.Mapping,
+		Child: e.node(), PartitionBy: part, OrderBy: ord, Mapping: spec.Mapping,
 	})
 }
 
@@ -158,13 +158,13 @@ func (e Expr) Shift(n int) Expr {
 // ShiftFill is Shift with a value instead of null in the vacated rows.
 func (e Expr) ShiftFill[T Operand](n int, fill T) Expr {
 	return wrap(&expr.WinFn{
-		Fn: expr.WinShift, Child: e.n, Fill: lift(fill),
+		Fn: expr.WinShift, Child: e.node(), Fill: lift(fill),
 		Params: expr.WinParams{N: int64(n)},
 	})
 }
 
 func (e Expr) winFn(fn expr.WinFnOp, p expr.WinParams) Expr {
-	return wrap(&expr.WinFn{Fn: fn, Child: e.n, Params: p})
+	return wrap(&expr.WinFn{Fn: fn, Child: e.node(), Params: p})
 }
 
 // ForwardFill replaces each null with the last non-null value before it.

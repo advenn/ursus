@@ -133,13 +133,13 @@ func (lf *LazyFrame) temporalGroup(index Expr, rolling bool,
 
 	keys := make([]expr.Node, len(groupBy))
 	for i, k := range groupBy {
-		keys[i] = k.n
+		keys[i] = k.node()
 	}
 	return &GroupBy{
 		lf:   lf,
 		keys: keys,
 		temporal: &plan.TemporalGroup{
-			Index: index.n, Keys: keys, Rolling: rolling,
+			Index: index.node(), Keys: keys, Rolling: rolling,
 			Every: every, Period: period, Offset: offset, Closed: closed,
 		},
 		temporalErr: refused,

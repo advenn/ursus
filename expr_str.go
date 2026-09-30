@@ -26,7 +26,7 @@ func (e Expr) Str() StrExpr { return StrExpr{e} }
 
 func (s StrExpr) call(fn expr.CallFn, args ...any) Expr {
 	nodes := make([]expr.Node, 0, len(args)+1)
-	nodes = append(nodes, s.e.n)
+	nodes = append(nodes, s.e.node())
 	for _, a := range args {
 		nodes = append(nodes, litNode(a))
 	}

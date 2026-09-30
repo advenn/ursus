@@ -220,7 +220,7 @@ func (e Expr) MapBatches[In, Out Literal](name string, out DataType,
 func (e Expr) udf(name, kind string, out DataType, impl kernel.ColumnUDF) Expr {
 	// Through NewUDF, not a literal: it mints the identity that tells this udf from
 	// another one sharing its name, which a rendering cannot.
-	return wrap(expr.NewUDF(e.n, out, name, kind, impl))
+	return wrap(expr.NewUDF(e.node(), out, name, kind, impl))
 }
 
 func checkUDF(name string, nilFn bool, kind string) error {

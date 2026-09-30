@@ -153,7 +153,7 @@ func (lf *LazyFrame) JoinAsOf(other *LazyFrame, opts ...AsOfOption) *LazyFrame {
 
 	return lf.derive(&plan.AsOfJoin{
 		Left: lf.node, Right: other.node,
-		LeftOn: leftOn.n, RightOn: rightOn.n,
+		LeftOn: leftOn.node(), RightOn: rightOn.node(),
 		LeftBy: nodesOf(leftBy), RightBy: nodesOf(rightBy),
 		Strategy:          cfg.strategy,
 		Tolerance:         cfg.tolerance,
@@ -168,7 +168,7 @@ func nodesOf(es []Expr) []expr.Node {
 	}
 	out := make([]expr.Node, len(es))
 	for i, e := range es {
-		out[i] = e.n
+		out[i] = e.node()
 	}
 	return out
 }
