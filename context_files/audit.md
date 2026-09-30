@@ -120,12 +120,12 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 
 | | | finding | cause |
 | --- | --- | --- | --- |
-| S1 ✔ | **SW / CR** | String → integer casts parse through float64: `"9007199254740993"` becomes …992, and MaxInt64 becomes 2^63 as Uint64. A strict cast returns the wrong value, or `ErrInternal`. `Str().ToInteger()` is the same. This is step 69's bug, one path over. | `unary.go:1172` → `narrowInt` → `fromFloat64(…, false)` at `:1277`. |
-| S2 ✔ | **SW / CR** | Float32 maths nulls every inexact result: `Sqrt`, `Cbrt`, `Exp`, `Ln`, `Log10`, `Log1p`, `Round`. On a non-nullable column it is `ErrInternal`. Also affected: `CastLossy(Float32)` of 0.1 is null, string → Float32, and `IsIn` over Float32. | `fromFloat64(strict=false)` then narrow's round-trip check (`unary.go:347`, `:775`; `mathfn.go:75`). The comment at `unary.go:343` says the opposite. |
+| S1 ✔ | ~~**SW / CR**~~ **fixed, step 73** | String → integer casts parse through float64: `"9007199254740993"` becomes …992, and MaxInt64 becomes 2^63 as Uint64. A strict cast returns the wrong value, or `ErrInternal`. `Str().ToInteger()` is the same. This is step 69's bug, one path over. | `unary.go:1172` → `narrowInt` → `fromFloat64(…, false)` at `:1277`. |
+| S2 ✔ | ~~**SW / CR**~~ **fixed, step 73** | Float32 maths nulls every inexact result: `Sqrt`, `Cbrt`, `Exp`, `Ln`, `Log10`, `Log1p`, `Round`. On a non-nullable column it is `ErrInternal`. Also affected: `CastLossy(Float32)` of 0.1 is null, string → Float32, and `IsIn` over Float32. | `fromFloat64(strict=false)` then narrow's round-trip check (`unary.go:347`, `:775`; `mathfn.go:75`). The comment at `unary.go:343` says the opposite. |
 | S3 ✔ | ~~**CR**~~ **fixed, step 72** | `Str().Slice(1, MaxInt64)` panics in a worker goroutine and **kills the process**. | `strfn.go:277`, `start+int(length)` overflows. `listSlice` clamps correctly. |
-| S4 ✔ | **CR** | A strict String → narrow integer or Float32 cast raises `ErrInternal` (`"256"` → Uint8), or with a null present returns a silent null. | `narrowInt` / `narrowFloat` pass `strict=false` (`unary.go:1277`, `:1281`). |
+| S4 ✔ | ~~**CR**~~ **fixed, step 73** | A strict String → narrow integer or Float32 cast raises `ErrInternal` (`"256"` → Uint8), or with a null present returns a silent null. | `narrowInt` / `narrowFloat` pass `strict=false` (`unary.go:1277`, `:1281`). |
 | S5 ✔ | **SW** | `Dt().Epoch()` truncates before 1970: it returns 0, and the answer is −1. | `dtfn.go:99`. |
-| S6 ✔ | **SW** | `IsIn` casts the set strictly to the column's type. An Int64 column matches `IsIn("1")`, which `Eq` refuses; a Datetime(s) matches a sub-second value; a Date matches a Datetime at 13:00 on that day. Its error message names a cast the user never wrote. | `physical/eval.go:320-321`, and `buildListNeedle`. |
+| S6 ✔ | **SW** | `IsIn` casts the set strictly to the column's type. An Int64 column matches `IsIn("1")`, which `Eq` refuses; a Datetime(s) matches a sub-second value; a Date matches a Datetime at 13:00 on that day. Its error message names a cast the user never wrote. **Step 73** made the cast's float rule round, so `IsIn(0.1)` on a Float32 column now matches the float32 nearest 0.1 — as DuckDB's and PyArrow's do — where `Eq(0.1)` compares at Float64 and does not; the rule is still S6's. | `physical/eval.go:320-321`, and `buildListNeedle`. |
 | S7 | **SW** | Regex `Replace` (first match) does not expand `$1`; `ReplaceAll` does. | `strfn.go:173-179`. |
 | S8 | **SW** | Integer `FloorDiv` and `Mod` truncate while their float versions floor: `−7 // 2` is −3 as Int64 and −4 as Float64. Polars floors both, and the method is called FloorDiv. | `scalar.go:133-153`. |
 | S9 | **SW** | `SplitN(sep, 0)` returns `[]`; the doc says n ≤ 0 means unlimited. | `strfn.go:348`. |
@@ -142,6 +142,7 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | S22 | CR, not run | **Recorded at step 72, not fixed.** `PadStart`, `PadEnd` and `ZFill` with a huge width allocate it: a fatal out-of-memory, which no recover can catch. Read from the code; running it takes the memory it exhausts. | `strfn.go`, no bound on the width. |
 | S23 | ME | **Recorded at step 72.** A panic in a `MapName` function is `ErrInternal`, where a panicking udf is the caller's KindValue. | `expr.Rename.Fn` is called by the planner with no attribution. |
 | S24 | SW, not run | **Recorded at step 72, not fixed.** `data.NewString` keeps 32-bit offsets, and past 2 GiB of string data in one column they wrap without an error. Read from the code, for the same reason as S22. | `internal/data`, string construction. |
+| S25 | low | **Recorded at step 73, not fixed.** A String → float cast accepts Go's literal syntax, because it is `strconv.ParseFloat`: `"1_000"` is 1000, measured, and hex floats such as `"0x1p3"` parse too. Polars rejects both, and the String → integer parse accepts neither. The CSV reader shares the float grammar. | `castparse.go` `parseFloat`; the parse sweep skips underscore strings for floats rather than pinning either answer. |
 
 ## 7. Aggregation, sorting and windows
 
@@ -174,7 +175,9 @@ rather than a finding.
 2. **float64 as the common currency** (S1, S2, S4). Step 69 removed it only from
    integer → integer casts. String parsing and Float32 maths still pass through it.
    Narrow's round-trip check is right for a *cast*, and wrong for the *result of a
-   computation*, which is supposed to round.
+   computation*, which is supposed to round. **Step 73: narrow is gone.** A string
+   parses at the target's width, a computation rounds once, and a cast to a float
+   rounds once from the source's own type and refuses only an overflow.
 3. **Position instead of identity** (I1, I2, I7). Multi-file scans match columns by
    position, and pruning uses a top-level index as a leaf index.
 4. **Rewrites nothing checks** (O1, O2). `WithVerify` catches O2, and it is off in
@@ -190,7 +193,9 @@ rather than a finding.
    runtime error — an out-of-memory, S22 — is still beyond any recover.
 7. **`strict` not threaded through** (S2, S4, J2). Internal casts pass
    `strict=false`, and the result is either silent nulls or an `ErrInternal` from the
-   non-null check, depending on the column's nullability.
+   non-null check, depending on the column's nullability. **Step 73 threaded it through
+   the kernel's own paths (S2, S4)**, and the evaluator contract now fails a null in a
+   column its Field declared non-nullable. J2's two join casts are the join step's.
 
 ## 9. Documented differences, not reported
 
@@ -269,8 +274,9 @@ Ordered by harm per unit of fix, not by count.
 4. ~~**Recover in worker goroutines.**~~ **Done — step 72**, and at every entry point,
    with S3, A6, A7, I11, I12 and I14 fixed at their causes too. A panicking udf is the
    caller's KindValue error; a corrupt Parquet file is KindIO.
-5. **Finish step 69's job**: no float64 go-between for S1, S2 and S4, and `strict`
-   threaded through.
+5. ~~**Finish step 69's job**: no float64 go-between for S1, S2 and S4, and `strict`
+   threaded through.~~ **Done — step 73**, with the same go-between found and removed in
+   Int128 and Decimal to a float and in temporal ↔ integer casts.
 6. **The join promotion paths**: J1, J2, O6 and J8, which share one question: at what
    type is a key compared?
 7. Then the rest, by table.
@@ -278,7 +284,8 @@ Ordered by harm per unit of fix, not by count.
 Known and excluded, because they were already on the open lists:
 
 - Decimal arithmetic precision, and Decimal against a literal;
-- strict Int64 → Float32 at 2^53;
+- ~~strict Int64 → Float32 at 2^53~~ — closed by step 73's rule: a cast to a float
+  rounds, so 2^53+1 → 2^53 is the right answer;
 - `Optimizer.Verify` off (O2 is its first concrete consequence);
 - `rolling` unaccounted, and `unique`/`over` not spilling;
 - nested write, and object stores;
