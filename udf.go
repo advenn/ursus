@@ -58,6 +58,11 @@ import (
 // function, hold the Expr in a variable and use it twice rather than calling a
 // helper that builds a fresh closure each time.
 //
+// # A panic in fn is an error
+//
+// It is returned like an error fn returns — KindValue, naming the udf, the row and
+// the column — whichever goroutine fn ran on. Before step 72 it killed the process.
+//
 // # fn must be safe to call from several goroutines
 //
 // ursus parallelises a Select or Filter across runtime.NumCPU() workers by
@@ -79,7 +84,21 @@ func (e Expr) MapElements[In, Out Literal](name string, out DataType,
 		return wrap(&expr.Err{E: err})
 	}
 
-	impl := func(ctx context.Context, in *data.Column, outName string) (*data.Column, error) {
+	impl := func(ctx context.Context, in *data.Column, outName string) (_ *data.Column, err error) {
+		// A panic in fn is the caller's, like an error fn returns: KindValue, naming
+		// the udf, the row and the column. inFn is what tells it from a panic in the
+		// code around fn, which is ursus's.
+		row, inFn := -1, false
+		defer func() {
+			if v := recover(); v != nil {
+				if !inFn {
+					err = uerr.FromPanic(v, "map_elements")
+					return
+				}
+				err = uerr.Attributed(v, uerr.KindValue, "map_elements",
+					"udf %q panicked at row %d of column %q", name, row, in.Name())
+			}
+		}()
 		src, err := udfInput[In](in, "map_elements", name)
 		if err != nil {
 			return nil, err
@@ -97,7 +116,9 @@ func (e Expr) MapElements[In, Out Literal](name string, out DataType,
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
+			row, inFn = i, true
 			v, err := fn(src[i])
+			inFn = false
 			if err != nil {
 				// Naming the row and the column, as Series.MapErr does — a UDF
 				// that fails on one row of a million is useless without it.
@@ -139,7 +160,18 @@ func (e Expr) MapBatches[In, Out Literal](name string, out DataType,
 		return wrap(&expr.Err{E: err})
 	}
 
-	impl := func(ctx context.Context, in *data.Column, outName string) (*data.Column, error) {
+	impl := func(ctx context.Context, in *data.Column, outName string) (_ *data.Column, err error) {
+		inFn := false
+		defer func() {
+			if v := recover(); v != nil {
+				if !inFn {
+					err = uerr.FromPanic(v, "map_batches")
+					return
+				}
+				err = uerr.Attributed(v, uerr.KindValue, "map_batches",
+					"udf %q panicked on column %q", name, in.Name())
+			}
+		}()
 		src, err := udfInput[In](in, "map_batches", name)
 		if err != nil {
 			return nil, err
@@ -154,7 +186,9 @@ func (e Expr) MapBatches[In, Out Literal](name string, out DataType,
 			mask[i] = v.Get(i)
 		}
 
+		inFn = true
 		vals, ok, err := fn(src, mask)
+		inFn = false
 		if err != nil {
 			return nil, uerr.Wrap(err, uerr.KindValue, "map_batches",
 				"udf %q on column %q", name, in.Name())

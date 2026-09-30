@@ -77,14 +77,6 @@ type panicCase struct {
 // The value is a PREFIX of what the case reports, so a case that starts failing
 // in a different way — a crash that becomes a caller panic, say — fails too.
 var knownPanicDefects = map[string]string{
-	"udf, 1 thread":                            udfInternal,
-	"udf, 4 threads":                           udfInternal,
-	"map_batches, 4 threads":                   udfInternal,
-	"udf in a join's probe key, 4 threads":     udfInternal,
-	"udf inside an aggregate, 4 threads":       udfInternal,
-	"udf below an aggregate, 4 threads":        udfInternal,
-	"udf under Count, 1 thread":                udfInternal,
-	"udf under CollectBatches, 1 thread":       udfInternal,
 	"Str().Slice to MaxInt64":                  "internal error, want [bc ]: ursus: recovered a panic",
 	"Rank(RankMethod(99))":                     "internal error, want value: ursus: recovered a panic",
 	"Quantile(Interpolation(99))":              "no error, got [2 3 5]",
@@ -97,10 +89,6 @@ var knownPanicDefects = map[string]string{
 	"Parquet whose row group claims more rows": "hang",
 	"Parquet, every byte flipped":              "flipped bytes gave internal: map[",
 }
-
-// udfInternal is how a panicking udf answers once the engine recovers it and before
-// the udf's own wrapper attributes it: as ursus's bug, which it is not.
-const udfInternal = "internal error, want value: ursus: recovered a panic"
 
 // boom panics on the row holding 3, which every fixture below has.
 func boom(v int64) (int64, error) {
@@ -229,7 +217,7 @@ func panicCases() []panicCase {
 		{"udf, 1 thread", func(t *testing.T) (string, error) {
 			ctx := t.Context()
 			return collectCells(ctx, withUDF, "w", threads(1))
-		}, udfErr("boom")},
+		}, wantErr("value", `udf "boom" panicked at row 2 of column "v"`, "caused by: boom at 3")},
 		{"udf, 4 threads", func(t *testing.T) (string, error) {
 			ctx := t.Context()
 			return collectCells(ctx, withUDF, "w", threads(4))

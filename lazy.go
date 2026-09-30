@@ -469,7 +469,7 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 // Every entry point that runs a query recovers a panic in it and returns it as
 // ErrInternal — "this is a bug in ursus" — and every goroutine the engine starts
 // does the same for its own work, so no query can take down the process that asked
-// it.
+// it. A panic in a udf is the caller's own, and is a KindValue error naming the udf.
 func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (df *DataFrame, err error) {
 	defer uerr.Catch(&err, "collect")
 	cfg := newCollectCfg(opts)
