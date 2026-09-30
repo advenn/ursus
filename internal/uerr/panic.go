@@ -21,6 +21,12 @@ type PanicError struct {
 	Value any    // what was passed to panic
 	Site  string // the function and line that panicked, or "" if not found
 	Stack []byte // the goroutine's stack at the recover
+
+	// Callers are the functions from the panic site outward, the runtime's own left
+	// out. It is how a recover decides whose code panicked: a Parquet read that
+	// panicked inside arrow-go was reading a corrupt file, and one that panicked in
+	// ursus is ursus's bug.
+	Callers []string
 }
 
 func (p *PanicError) Error() string { return fmt.Sprint(p.Value) }
@@ -117,8 +123,10 @@ func recovered(v any) *PanicError {
 		case f.Function == "runtime.gopanic":
 			below = true
 		case below && !strings.HasPrefix(f.Function, "runtime."):
-			p.Site = fmt.Sprintf("%s (%s:%d)", f.Function, trimPath(f.File), f.Line)
-			return p
+			if p.Site == "" {
+				p.Site = fmt.Sprintf("%s (%s:%d)", f.Function, trimPath(f.File), f.Line)
+			}
+			p.Callers = append(p.Callers, f.Function)
 		}
 		if !more {
 			return p

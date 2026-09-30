@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -163,9 +164,41 @@ func (s *Source) ClassifyPredicates(preds []expr.Node) []plan.Pushdown {
 // and one footer parse per file, at plan time; each is opened again to be read.
 func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 	s.once.Do(func() {
+		// Recovered INSIDE the function Do runs: a panic that escaped it would still
+		// mark the Once done, and every later call would return (nil, nil).
+		defer func() {
+			if v := recover(); v != nil {
+				s.schema, s.unread, s.err = nil, nil, corrupt(v, s.desc)
+			}
+		}()
 		s.schema, s.unread, s.err = s.readSchemas(ctx)
 	})
 	return s.schema, s.err
+}
+
+// corrupt turns a panic recovered while reading a file into an error.
+//
+// arrow-go's decoders panic on input they cannot parse — an index past a buffer, a
+// length that is not there — and a file that makes them do that is corrupt, which
+// is the file's problem: KindIO. The frame that decides is the innermost one in
+// arrow-go or in ursus. If it is ursus's own, the bug is ursus's, and the result is
+// ErrInternal as anywhere else; so is ursus's own assertion, an internal *Error.
+func corrupt(v any, name string) *uerr.Error {
+	e := uerr.Attributed(v, uerr.KindIO, "scan_parquet",
+		"%s is corrupt, or uses something the decoder cannot read", name)
+	var p *uerr.PanicError
+	if !errors.As(e, &p) {
+		return e
+	}
+	for _, fn := range p.Callers {
+		switch {
+		case strings.HasPrefix(fn, "github.com/apache/arrow-go/"):
+			return e
+		case strings.HasPrefix(fn, "github.com/advenn/ursus/"):
+			return uerr.FromPanic(v, "scan_parquet")
+		}
+	}
+	return e
 }
 
 func (s *Source) readSchemas(ctx context.Context) (*dtype.Schema, map[int]error, error) {
@@ -308,12 +341,22 @@ func (s *Source) layoutFor(full *dtype.Schema, sc *schema.Schema, k int) (fileLa
 	return lay, nil
 }
 
-func (s *Source) openFile(i int) (*file.Reader, func(), error) {
+func (s *Source) openFile(i int) (_ *file.Reader, _ func(), err error) {
 	ra, closer, err := s.opens[i]()
 	if err != nil {
 		return nil, nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
 			"opening %s", s.partName(i))
 	}
+	// A corrupt footer can panic inside arrow-go. Recovered here as well as by every
+	// caller, because only here is the file still this function's to close.
+	defer func() {
+		if v := recover(); v != nil {
+			if closer != nil {
+				closer.Close()
+			}
+			err = corrupt(v, s.partName(i))
+		}
+	}()
 	r, err := file.NewParquetReader(ra)
 	if err != nil {
 		if closer != nil {
@@ -434,7 +477,19 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		preds:     spec.Predicate,
 		rgIndex:   -1,
 	}
-	if err := r.openNext(); err != nil && err != io.EOF {
+	// The first row group is opened here, outside Next, so it is recovered here as
+	// Next recovers. On any failure the reader is not returned, so whatever it
+	// opened is closed now or never.
+	err = func() (err error) {
+		defer func() {
+			if v := recover(); v != nil {
+				err = corrupt(v, r.name)
+			}
+		}()
+		return r.openNext()
+	}()
+	if err != nil && err != io.EOF {
+		r.closeLocked()
 		return nil, err
 	}
 	return r, nil
@@ -452,6 +507,8 @@ type reader struct {
 	preds     []expr.Node
 
 	mu      sync.Mutex
+	err     error  // a recovered panic, returned from every Next after it
+	name    string // the file being read, for errors
 	fileIdx int
 	pf      *file.Reader
 	lay     fileLayout // how pf stores the reconciled schema
@@ -504,10 +561,13 @@ func (r *reader) openNext() error {
 			if r.fileIdx >= len(r.src.opens) {
 				return io.EOF
 			}
+			r.name = r.src.partName(r.fileIdx)
 			pf, closeFn, err := r.src.openFile(r.fileIdx)
 			if err != nil {
 				return err
 			}
+			// Held at once, so Close releases the file even if what follows panics.
+			r.pf, r.closeFn = pf, closeFn
 			lay, err := r.src.layoutFor(r.full, pf.MetaData().Schema, r.fileIdx)
 			if err == nil {
 				for _, p := range r.cols {
@@ -519,10 +579,11 @@ func (r *reader) openNext() error {
 			}
 			if err != nil {
 				closeFn()
+				r.pf, r.closeFn = nil, nil
 				return err
 			}
 			r.fileIdx++
-			r.pf, r.closeFn, r.lay = pf, closeFn, lay
+			r.lay = lay
 			r.rgIndex = -1
 		}
 
@@ -620,7 +681,7 @@ func (r *reader) statsLeaf(name string) (int, bool) {
 	return r.lay.leaves[i][0], true
 }
 
-func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
+func (r *reader) Next(ctx context.Context) (_ *data.Batch, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -628,6 +689,17 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// A panic decoding a page is the file's, and it leaves this reader's chunks in
+	// no state to continue from: the error is returned from every Next after it.
+	defer func() {
+		if v := recover(); v != nil {
+			r.err = corrupt(v, r.name)
+			err = r.err
+		}
+	}()
+	if r.err != nil {
+		return nil, r.err
+	}
 	if r.done {
 		return nil, io.EOF
 	}
@@ -638,6 +710,11 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 	}
 
 	for {
+		// This loop can go round many times without returning — a run of pruned row
+		// groups, a file's worth of empty ones — and it holds the lock throughout.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if r.chunks == nil || r.rgLeft <= 0 {
 			switch err := r.openNext(); {
 			case err == io.EOF:
@@ -667,10 +744,15 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 					r.rgIndex, rows, got)
 			}
 		}
-		r.rgLeft -= rows
 		if rows == 0 {
-			continue // this row group is spent; roll on
+			// The footer promised rows that the column chunks do not hold. This
+			// looped forever, holding the lock, and never looked at ctx.
+			return nil, uerr.New(uerr.KindIO, "scan_parquet",
+				"row group %d of %s declares %d more rows than its column chunks hold",
+				r.rgIndex, r.name, r.rgLeft).
+				Hint("the file is corrupt or was truncated")
 		}
+		r.rgLeft -= rows
 
 		if r.remaining > 0 {
 			r.remaining -= rows
@@ -930,8 +1012,16 @@ func newListElems(cr file.ColumnChunkReader, desc *schema.Column,
 		}
 
 	case *file.Int32ColumnChunkReader:
+		// Narrowed as int32Reader narrows a flat column. Int8 and Int16 were read
+		// as int32 values under an Int8 or Int16 type, which data.NewFixed refuses
+		// with a panic: a list of small integers from any other writer was
+		// unreadable.
 		switch elem.ID() {
-		case dtype.TypeInt8, dtype.TypeInt16, dtype.TypeInt32, dtype.TypeDate:
+		case dtype.TypeInt8:
+			return &fixedElems[int32, int8]{cr: t, conv: func(v int32) int8 { return int8(v) }, valid: fixed()}, nil
+		case dtype.TypeInt16:
+			return &fixedElems[int32, int16]{cr: t, conv: func(v int32) int16 { return int16(v) }, valid: fixed()}, nil
+		case dtype.TypeInt32, dtype.TypeDate:
 			return &fixedElems[int32, int32]{cr: t, conv: identity[int32], valid: fixed()}, nil
 		}
 

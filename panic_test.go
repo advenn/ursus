@@ -77,14 +77,8 @@ type panicCase struct {
 // The value is a PREFIX of what the case reports, so a case that starts failing
 // in a different way — a crash that becomes a caller panic, say — fails too.
 var knownPanicDefects = map[string]string{
-	"Parquet List(Int8)":                       `internal error, want [[1 2] [3]]: ursus: data: column "item" declares Int8`,
-	"Parquet List(Int16)":                      `internal error, want [[1 2] [3]]: ursus: data: column "item" declares Int16`,
-	"Parquet LZ4":                              "internal error, want unsupported: ursus: sink_parquet: recovered a panic",
-	"Parquet LZO":                              "internal error, want unsupported: ursus: sink_parquet: recovered a panic",
-	"the zero Expr, as an operand":             "internal error, want value: ursus: collect: recovered a panic",
-	"the zero Expr, aliased":                   "internal error, want value: ursus: collect: recovered a panic",
-	"Parquet whose row group claims more rows": "hang",
-	"Parquet, every byte flipped":              "flipped bytes gave internal: map[",
+	"the zero Expr, as an operand": "internal error, want value: ursus: collect: recovered a panic",
+	"the zero Expr, aliased":       "internal error, want value: ursus: collect: recovered a panic",
 }
 
 // boom panics on the row holding 3, which every fixture below has.
@@ -271,11 +265,11 @@ func panicCases() []panicCase {
 		}, wantErr("value", "interpolation")},
 		{"Parquet List(Int8)", func(t *testing.T) (string, error) {
 			ctx := t.Context()
-			return readList[int8](ctx, rawList(t, 8))
+			return readList(ctx, rawList(t, 8), ursus.Int8)
 		}, wantGot("[[1 2] [3]]")},
 		{"Parquet List(Int16)", func(t *testing.T) (string, error) {
 			ctx := t.Context()
-			return readList[int16](ctx, rawList(t, 16))
+			return readList(ctx, rawList(t, 16), ursus.Int16)
 		}, wantGot("[[1 2] [3]]")},
 		{"Parquet LZ4", func(t *testing.T) (string, error) {
 			ctx := t.Context()
@@ -287,6 +281,14 @@ func panicCases() []panicCase {
 			var buf bytes.Buffer
 			return "", panicFrame().WriteParquet(ctx, &buf, ursus.WithCompression(compress.Codecs.Lzo))
 		}, wantErr("unsupported", "Lz4Raw")},
+		// The control: the refusal's advice works.
+		{"Parquet Lz4Raw, as the refusal advises", func(t *testing.T) (string, error) {
+			var buf bytes.Buffer
+			if err := panicFrame().WriteParquet(t.Context(), &buf, ursus.WithCompression(compress.Codecs.Lz4Raw)); err != nil {
+				return "", err
+			}
+			return collectCells(t.Context(), ursus.ScanParquetBytes(buf.Bytes(), "lz4raw.parquet"), "v")
+		}, wantGot("[1 2 3 4 5]")},
 		{"the zero Expr, selected", func(t *testing.T) (string, error) {
 			ctx := t.Context()
 			return collectCells(ctx, panicFrame().Select(ursus.Expr{}), "v")
@@ -327,19 +329,37 @@ func rawList(t *testing.T, bits int8) string {
 		[]rawCol{{vals: []int32{1, 2, 3}, defs: []int16{3, 3, 3}, reps: []int16{0, 1, 0}}})
 }
 
-// readList reads column L of the file at path.
-func readList[T int8 | int16](ctx context.Context, path string) (string, error) {
-	df, err := ursus.ScanParquet(path).Collect(ctx, threads(4))
+// readList reads column L of the file at path, which must be a List(elem).
+func readList(ctx context.Context, path string, elem ursus.DataType) (string, error) {
+	lf := ursus.ScanParquet(path)
+	s, err := lf.CollectSchema(ctx)
 	if err != nil {
 		return "", err
 	}
-	rows, err := df.Rows[struct{ L []T }]()
+	if f, _ := s.ByName("L"); f.Type != dtype.List(elem) {
+		return "", fmt.Errorf("L is %s, want %s", f.Type, dtype.List(elem))
+	}
+	// Rows decodes no list, so each element is exploded to a row of its own,
+	// numbered by the list it came from.
+	df, err := lf.WithRowIndex("row", 0).Explode("L").
+		Select(ursus.Col("row"), ursus.Col("L").Cast(ursus.Int64)).Collect(ctx, threads(4))
 	if err != nil {
 		return "", err
 	}
-	out := make([][]T, len(rows))
+	rows, err := cellsOf(df, "row")
+	if err != nil {
+		return "", err
+	}
+	vals, err := cellsOf(df, "L")
+	if err != nil {
+		return "", err
+	}
+	var out [][]string
 	for i, r := range rows {
-		out[i] = r.L
+		if i == 0 || r != rows[i-1] {
+			out = append(out, nil)
+		}
+		out[len(out)-1] = append(out[len(out)-1], vals[i])
 	}
 	return fmt.Sprint(out), nil
 }
@@ -396,11 +416,14 @@ func corruptSweep(ctx context.Context) (string, error) {
 				ctx, cancel := context.WithTimeout(ctx, time.Second)
 				defer cancel()
 				_, err := ursus.ScanParquetBytes(bad, "flipped.parquet").Collect(ctx, threads(4))
+				var p *uerr.PanicError
 				switch {
 				case err == nil:
 					tally["result"]++
 				case errors.Is(err, context.DeadlineExceeded):
 					tally["hang"]++
+				case kindOf(err) == "io" && errors.As(err, &p):
+					tally["io from a panic"]++
 				default:
 					tally[kindOf(err)]++
 				}
@@ -411,7 +434,9 @@ func corruptSweep(ctx context.Context) (string, error) {
 }
 
 // wantCorruptIsIO: a corrupt file is the file's problem, never ursus's bug — so no
-// flipped byte may panic, hang, or be an internal error.
+// flipped byte may panic, hang, or be an internal error. And at least one must
+// reach a decoder's panic, or the sweep no longer tests the recovers at all: 17
+// did when this was written, in the footer, in opening a column and in a page.
 func wantCorruptIsIO(r probeReport) string {
 	if r.Err != "" {
 		return "the sweep failed: " + r.Err
@@ -420,6 +445,9 @@ func wantCorruptIsIO(r probeReport) string {
 		if strings.Contains(r.Got, bad) {
 			return "flipped bytes gave " + bad + ": " + r.Got
 		}
+	}
+	if !strings.Contains(r.Got, "io from a panic") {
+		return "no flipped byte reached a decoder's panic: " + r.Got
 	}
 	return ""
 }

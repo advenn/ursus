@@ -68,6 +68,16 @@ type Writer struct {
 func NewWriter(w io.Writer, s *dtype.Schema, o WriteOptions) (*Writer, error) {
 	o = o.normalise()
 
+	// arrow-go declares LZ4 (the deprecated Hadoop framing) and LZO and implements
+	// neither, and it panicked on them as the first row group started — after the
+	// whole query had run. Asked here, it is a refusal before any work.
+	if _, err := compress.GetCodec(o.Compression); err != nil {
+		return nil, uerr.Wrap(err, uerr.KindUnsupported, "sink_parquet",
+			"cannot write %s compression", o.Compression).
+			Hint("for LZ4, use compress.Codecs.Lz4Raw, the framing the Parquet spec now names; " +
+				"Snappy, Gzip, Brotli and Zstd are supported too")
+	}
+
 	nodes := make(schema.FieldList, s.Len())
 	for i, f := range s.All() {
 		n, err := toNode(f)
@@ -121,8 +131,12 @@ func (w *Writer) WriteBatch(b *data.Batch) error {
 	// anything in — which is most of the reason to use Parquet at all.
 	for off := 0; off < b.Rows(); {
 		if w.rg == nil {
-			w.rg = w.w.AppendBufferedRowGroup()
-			w.rows = 0
+			// The Checked form: the other one panics where this returns an error.
+			rg, err := w.w.AppendBufferedRowGroupChecked()
+			if err != nil {
+				return uerr.Wrap(err, uerr.KindIO, "sink_parquet", "starting a row group")
+			}
+			w.rg, w.rows = rg, 0
 		}
 		n := min(b.Rows()-off, w.opts.RowGroupRows-w.rows)
 		if err := w.appendRows(b.Slice(off, n)); err != nil {
