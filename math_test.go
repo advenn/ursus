@@ -122,15 +122,7 @@ func TestMathMatchesStdlib(t *testing.T) {
 }
 
 // knownFloat32MathDefects names each op that answers a Float32 wrongly today.
-var knownFloat32MathDefects = map[string]string{
-	"sqrt":  "an inexact result is a null",
-	"cbrt":  "an inexact result is a null",
-	"exp":   "an inexact result is a null",
-	"ln":    "an inexact result is a null",
-	"log10": "an inexact result is a null",
-	"log1p": "an inexact result is a null",
-	"round": "an inexact result is a null",
-}
+var knownFloat32MathDefects = map[string]string{}
 
 // float32Corpus is mathCorpus at Float32, with the Float32 limits and the inputs
 // whose results are inexact at that width, which is almost all of them.

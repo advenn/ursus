@@ -588,21 +588,15 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 // Field and Eval agree, not that either is right — the anti-vacuity counters below
 // are what stand between it and a matrix that refuses everything.
 //
-// # Step 73 added a nullability half, and it held six
+// # Step 73 added a nullability half, and it held six, for one commit
 //
 // The fixture declared every column nullable, so no Field could promise a
 // non-nullable result and nothing asked whether Eval kept that promise. With each
 // column nullable exactly when it holds a null, the six Float32 maths functions
 // broke it: they nulled every result that was not exact in a float32 — sqrt(2),
 // ln(2), exp(1) — under a Field that passes the input's non-nullability through.
-var knownContractGaps = map[string]string{
-	"sqrt(f32)":  "an inexact Float32 result is a null",
-	"cbrt(f32)":  "an inexact Float32 result is a null",
-	"exp(f32)":   "an inexact Float32 result is a null",
-	"ln(f32)":    "an inexact Float32 result is a null",
-	"log10(f32)": "an inexact Float32 result is a null",
-	"log1p(f32)": "an inexact Float32 result is a null",
-}
+// A computation rounds now, and the map is empty again.
+var knownContractGaps = map[string]string{}
 
 var seenContractGaps = map[string]bool{}
 

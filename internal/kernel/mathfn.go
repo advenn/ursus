@@ -72,7 +72,9 @@ func round(name string, out dtype.DataType, c *data.Column, d int) (*data.Column
 		}
 		dst[i] = math.Round(s) / scale
 	}
-	return fromFloat64(name, out, dst, c.Validity(), false)
+	// A Float32 is rounded as a Float64 and then once more to a float32: Round(0.1,
+	// 1) of a Float32 is the float32 nearest 0.1, not a null.
+	return floatResult(name, out, dst, c.Validity())
 }
 
 // intArg reads the i'th literal argument as an int.

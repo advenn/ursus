@@ -295,8 +295,10 @@ func unaryFloat[T ~float32 | ~float64](op expr.UnaryOp, name string,
 // floor and ceil — and impossible here, because sqrt(Int64) is Float64 and reading
 // an Int64 column as []float64 is precisely what data.Values refuses.
 //
-// So this widens first, computes in float64, and narrows back. Both halves already
-// existed for Cast; this reuses them rather than growing a third conversion table.
+// So this widens first, computes in float64, and stores the result at the output's
+// width with floatResult — which rounds, because a Float32 result is a rounded one.
+// It used to narrow back through Cast's path, and a cast's round-trip test nulled
+// every inexact Float32 result.
 //
 // # Every one of these is TOTAL
 //
@@ -341,10 +343,7 @@ func unaryMath(op expr.UnaryOp, name string, out dtype.DataType,
 		return nil, uerr.Internalf("kernel: unaryMath got %s", op)
 	}
 
-	// strict=false: narrowing to Float32 is the only conversion that happens here,
-	// and it is a deliberate precision choice the user made by having a Float32
-	// column — not a lossy cast to refuse.
-	return fromFloat64(name, out, dst, c.Validity(), false)
+	return floatResult(name, out, dst, c.Validity())
 }
 
 // unaryUintSign is sign for the unsigned integers, where the answer is 0 or 1 and
