@@ -1,7 +1,9 @@
 package ursus_test
 
 import (
+	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -36,24 +38,27 @@ var mathCorpus = []float64{
 // `NaN == NaN` is false, so `==` calls every NaN a failure; and two NaNs with
 // different payloads are indistinguishable to `==` but not to Float64bits, which
 // is what pins that we return math.Sqrt's NaN rather than manufacturing our own.
+// mathOps is every elementwise maths op with its oracle in Go's math package.
+var mathOps = []struct {
+	name  string
+	build func(ursus.Expr) ursus.Expr
+	want  func(float64) float64
+}{
+	{"sqrt", ursus.Expr.Sqrt, math.Sqrt},
+	{"cbrt", ursus.Expr.Cbrt, math.Cbrt},
+	{"exp", ursus.Expr.Exp, math.Exp},
+	{"ln", ursus.Expr.Ln, math.Log},
+	{"log10", ursus.Expr.Log10, math.Log10},
+	{"log1p", ursus.Expr.Log1p, math.Log1p},
+	{"floor", ursus.Expr.Floor, math.Floor},
+	{"ceil", ursus.Expr.Ceil, math.Ceil},
+	{"abs", ursus.Expr.Abs, math.Abs},
+	{"neg", ursus.Expr.Neg, func(v float64) float64 { return -v }},
+	{"sign", ursus.Expr.Sign, goSign},
+}
+
 func TestMathMatchesStdlib(t *testing.T) {
-	ops := []struct {
-		name  string
-		build func(ursus.Expr) ursus.Expr
-		want  func(float64) float64
-	}{
-		{"sqrt", ursus.Expr.Sqrt, math.Sqrt},
-		{"cbrt", ursus.Expr.Cbrt, math.Cbrt},
-		{"exp", ursus.Expr.Exp, math.Exp},
-		{"ln", ursus.Expr.Ln, math.Log},
-		{"log10", ursus.Expr.Log10, math.Log10},
-		{"log1p", ursus.Expr.Log1p, math.Log1p},
-		{"floor", ursus.Expr.Floor, math.Floor},
-		{"ceil", ursus.Expr.Ceil, math.Ceil},
-		{"abs", ursus.Expr.Abs, math.Abs},
-		{"neg", ursus.Expr.Neg, func(v float64) float64 { return -v }},
-		{"sign", ursus.Expr.Sign, goSign},
-	}
+	ops := mathOps
 
 	exprs := make([]ursus.Expr, len(ops))
 	for i, op := range ops {
@@ -113,6 +118,166 @@ func TestMathMatchesStdlib(t *testing.T) {
 	if !sawSubnormal {
 		t.Error("no corpus entry produced a subnormal, so the gradual-underflow " +
 			"cases proved nothing")
+	}
+}
+
+// knownFloat32MathDefects names each op that answers a Float32 wrongly today.
+var knownFloat32MathDefects = map[string]string{
+	"sqrt":  "an inexact result is a null",
+	"cbrt":  "an inexact result is a null",
+	"exp":   "an inexact result is a null",
+	"ln":    "an inexact result is a null",
+	"log10": "an inexact result is a null",
+	"log1p": "an inexact result is a null",
+	"round": "an inexact result is a null",
+}
+
+// float32Corpus is mathCorpus at Float32, with the Float32 limits and the inputs
+// whose results are inexact at that width, which is almost all of them.
+func float32Corpus() []float32 {
+	var out []float32
+	seen := map[uint32]bool{}
+	add := func(f float32) {
+		if !seen[math.Float32bits(f)] {
+			seen[math.Float32bits(f)] = true
+			out = append(out, f)
+		}
+	}
+	for _, f := range mathCorpus {
+		add(float32(f))
+	}
+	for _, f := range []float32{math.MaxFloat32, math.SmallestNonzeroFloat32, 0x1p-126, 89, -103, 0.1, 3, 10} {
+		add(f)
+	}
+	return out
+}
+
+// TestFloat32MathMatchesStdlib is the Float32 twin of TestMathMatchesStdlib. A
+// Float32 result is the Float64 result rounded once to a float32 — what Polars and
+// PyArrow return — so the oracle is float32(math.F(float64(x))), compared by bit
+// pattern. It is a computation, and a computation rounds: nothing here is a null.
+//
+// A trailing null row pins that a null input is still a null output, and that the
+// rows before it are not.
+func TestFloat32MathMatchesStdlib(t *testing.T) {
+	corpus := float32Corpus()
+	valid := make([]bool, len(corpus)+1)
+	for i := range corpus {
+		valid[i] = true
+	}
+	exprs := make([]ursus.Expr, len(mathOps))
+	for i, op := range mathOps {
+		exprs[i] = op.build(ursus.Col("v")).Alias(op.name)
+	}
+	df, err := ursus.Frame(ursus.ValuesNullable("v", append(slices.Clone(corpus), 0), valid)).
+		Select(exprs...).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var sawNaN, sawNegZero, sawInf, sawSubnormal, sawOverflow bool
+	var inexact, rows int
+	for _, op := range mathOps {
+		var wrong []string
+		if typ := df.Schema().Field(slices.Index(df.Columns(), op.name)).Type; typ != ursus.Float32 {
+			t.Fatalf("%s of a Float32 is %s", op.name, typ)
+		}
+		for row, in := range corpus {
+			rows++
+			exact := op.want(float64(in))
+			want := float32(exact)
+			if !math.IsNaN(exact) && float64(want) != exact {
+				inexact++
+			}
+			// What the corpus reaches is the oracle's, whatever the kernel answers.
+			switch {
+			case math.IsNaN(float64(want)):
+				sawNaN = true
+			case math.IsInf(float64(want), 0):
+				sawInf = true
+				if !math.IsInf(float64(in), 0) && !math.IsInf(exact, 0) {
+					sawOverflow = true // finite at Float64, infinite at Float32
+				}
+			case want == 0 && math.Signbit(float64(want)):
+				sawNegZero = true
+			case want != 0 && math.Abs(float64(want)) < 0x1p-126:
+				sawSubnormal = true
+			}
+			got, ok, err := df.At[float32](row, op.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				wrong = append(wrong, fmt.Sprintf("%v -> null", in))
+				continue
+			}
+			if math.Float32bits(got) != math.Float32bits(want) {
+				wrong = append(wrong, fmt.Sprintf("%v -> %v, want %v", in, got, want))
+			}
+		}
+		if _, ok, _ := df.At[float32](len(corpus), op.name); ok {
+			wrong = append(wrong, "a null input is not a null output")
+		}
+		judgeFloat32Op(t, op.name, wrong)
+	}
+	if !sawNaN || !sawNegZero || !sawInf || !sawSubnormal || !sawOverflow {
+		t.Errorf("the corpus lost a case: NaN %v, -0 %v, Inf %v, subnormal %v, overflow from a finite input %v",
+			sawNaN, sawNegZero, sawInf, sawSubnormal, sawOverflow)
+	}
+	if inexact*4 < rows {
+		t.Errorf("only %d of %d results are inexact at Float32 — the corpus no longer "+
+			"reaches the rounding this test is about", inexact, rows)
+	}
+}
+
+// TestFloat32RoundIsTheFloat64RoundRounded: Round of a Float32 is Round of the same
+// value as a Float64, rounded once to a float32 — so its tie-break and its
+// arithmetic are Float64 Round's, which TestRoundEdges pins.
+func TestFloat32RoundIsTheFloat64RoundRounded(t *testing.T) {
+	corpus := float32Corpus()
+	wide := make([]float64, len(corpus))
+	for i, f := range corpus {
+		wide[i] = float64(f)
+	}
+	var wrong []string
+	for _, d := range []int{0, 1, 2, 7} {
+		got, err := ursus.Frame(ursus.Values("v", corpus)).Select(ursus.Col("v").Round(d)).Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := ursus.Frame(ursus.Values("v", wide)).Select(ursus.Col("v").Round(d)).Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for row, in := range corpus {
+			w, _, err := want.At[float64](row, "v")
+			if err != nil {
+				t.Fatal(err)
+			}
+			g, ok, err := got.At[float32](row, "v")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				wrong = append(wrong, fmt.Sprintf("Round(%v, %d) -> null", in, d))
+			} else if math.Float32bits(g) != math.Float32bits(float32(w)) {
+				wrong = append(wrong, fmt.Sprintf("Round(%v, %d) -> %v, want %v", in, d, g, float32(w)))
+			}
+		}
+	}
+	judgeFloat32Op(t, "round", wrong)
+}
+
+func judgeFloat32Op(t *testing.T, name string, wrong []string) {
+	t.Helper()
+	why, known := knownFloat32MathDefects[name]
+	switch {
+	case known && len(wrong) == 0:
+		t.Errorf("%s answers correctly now; delete it from knownFloat32MathDefects (%s)", name, why)
+	case known:
+		t.Logf("%s: known wrong (%s): %d values", name, why, len(wrong))
+	case len(wrong) > 0:
+		t.Errorf("%s: %d wrong: %v", name, len(wrong), wrong[:min(len(wrong), 6)])
 	}
 }
 

@@ -42,9 +42,12 @@ func contractBatch(t *testing.T) *data.Batch {
 	t.Helper()
 	cols := contractColumns(t)
 
+	// Nullable exactly when the column holds a null, as memsrc.FromColumns declares
+	// it. Everything nullable would make the nullability arm below vacuous: a
+	// non-nullable output is only ever derived from a non-nullable input.
 	fields := make([]dtype.Field, len(cols))
 	for i, c := range cols {
-		fields[i] = dtype.Of(c.Name(), c.DType())
+		fields[i] = dtype.Field{Name: c.Name(), Type: c.DType(), Nullable: c.NullCount() > 0}
 	}
 	schema, err := dtype.NewSchema(fields...)
 	if err != nil {
@@ -508,6 +511,12 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 	if c.Len() != b.Rows() && c.Len() != 1 {
 		fail("%s: produced %d rows for a %d-row batch", label, c.Len(), b.Rows())
 	}
+	// The NULLABILITY half. A null in a column Field declared non-nullable is a lie
+	// the optimizer acts on, and data.CheckNonNullable — which would catch it — is
+	// on only in test binaries.
+	if !f.Nullable && c.NullCount() > 0 {
+		fail("%s: Field declared it non-nullable and Eval produced %d nulls", label, c.NullCount())
+	}
 	if known && agreed {
 		t.Errorf("%s is listed in knownContractGaps but now agrees — delete the entry",
 			label)
@@ -578,7 +587,22 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 // a resolver that rejected every comparison would leave this file green. It proves
 // Field and Eval agree, not that either is right — the anti-vacuity counters below
 // are what stand between it and a matrix that refuses everything.
-var knownContractGaps = map[string]string{}
+//
+// # Step 73 added a nullability half, and it held six
+//
+// The fixture declared every column nullable, so no Field could promise a
+// non-nullable result and nothing asked whether Eval kept that promise. With each
+// column nullable exactly when it holds a null, the six Float32 maths functions
+// broke it: they nulled every result that was not exact in a float32 — sqrt(2),
+// ln(2), exp(1) — under a Field that passes the input's non-nullability through.
+var knownContractGaps = map[string]string{
+	"sqrt(f32)":  "an inexact Float32 result is a null",
+	"cbrt(f32)":  "an inexact Float32 result is a null",
+	"exp(f32)":   "an inexact Float32 result is a null",
+	"ln(f32)":    "an inexact Float32 result is a null",
+	"log10(f32)": "an inexact Float32 result is a null",
+	"log1p(f32)": "an inexact Float32 result is a null",
+}
 
 var seenContractGaps = map[string]bool{}
 
