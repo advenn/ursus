@@ -32,7 +32,7 @@ func (m ConcatMode) String() string {
 	// sentinel, so `int(m) < len(...)` is true for every DECLARED constant and this
 	// fallback would be unreachable without it — a forgotten entry would render as
 	// the EMPTY STRING, and two ops both missing names would render identically and
-	// collide in the three maps that dedup on String(). dtype.TypeID.String() has
+	// collide in the four dedup maps. dtype.TypeID.String() has
 	// had the correct guard since step 1; these eight did not.
 	if int(m) < len(concatModeNames) && concatModeNames[m] != "" {
 		return concatModeNames[m]

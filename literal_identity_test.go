@@ -36,17 +36,7 @@ import (
 // knownLiteralDefects names each case that answers wrongly today. Emptied by the
 // commit that fixes them; a listed case that answers correctly fails as stale, and
 // an unlisted one that answers wrongly fails.
-var knownLiteralDefects = map[string]string{
-	"aggregate int8 and int64":  "O3: b gets a's sum, -111",
-	"aggregate 1 and 1.0":       "O3: ErrInternal, b is Int64 under a Float64 schema",
-	"aggregate float32 and 0.1": "O3: ErrInternal, b is Float32 under a Float64 schema",
-	"temporal group":            "O3: b gets a's sum, -128",
-	"window temporary":          "O3: b is a's Int8 max, and CollectSchema says Int8",
-	"window partition":          "O3: b is partitioned by a's Int8 keys",
-	"control: the same literal": "",
-	"control: different values": "",
-	"control: one expr, reused": "",
-}
+var knownLiteralDefects = map[string]string{}
 
 func TestLiteralsOfDifferentTypesByHand(t *testing.T) {
 	c := ursus.Col
@@ -134,9 +124,9 @@ func TestLiteralsOfDifferentTypesByHand(t *testing.T) {
 			wrong := literalWrong(t, tc.got, want)
 			why, known := knownLiteralDefects[tc.name]
 			switch {
-			case known && why != "" && wrong == "":
+			case known && wrong == "":
 				t.Errorf("answers correctly now; delete it from knownLiteralDefects (%s)", why)
-			case known && why != "":
+			case known:
 				t.Logf("known defect (%s): %s", why, wrong)
 			case wrong != "":
 				t.Error(wrong)
@@ -356,8 +346,9 @@ func TestLiteralIdentityIsTypeAndBits(t *testing.T) {
 			}
 		}
 	}
-	// The sweep is only worth something if the renderings collide in it.
-	if collide < 50 {
+	// The sweep is only worth something if the renderings collide in it: 484 ordered
+	// pairs, among 67 literals, when this was written.
+	if collide < 400 {
 		t.Errorf("only %d ordered pairs render alike and differ; the samples no longer "+
 			"reach the collisions Identity exists for", collide)
 	}

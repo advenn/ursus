@@ -268,8 +268,8 @@ func allUnaryOps() []expr.UnaryOp {
 
 // allCallFns cannot use the `!= "?"` trick above, because CallFn.String() falls back
 // to "call(N)" rather than "?". That fallback is the BETTER of the two — two unnamed
-// constants render differently and so cannot collide in the three maps that dedup on
-// String() — so the derivation moves rather than the enum.
+// constants render differently and so cannot collide in the four dedup maps —
+// so the derivation moves rather than the enum.
 //
 // The six classifiers are exported and are range tests over contiguous blocks, which
 // makes this total by construction: `IsString()` is `f < fnStrEnd`, so every declared

@@ -2,10 +2,14 @@ package ursus_test
 
 // Two udfs sharing a name are one computation.
 //
-// Four maps in the planner deduplicate expressions by their RENDERED form. A Go
+// Four maps in the planner deduplicated expressions by their RENDERED form. A Go
 // closure has no rendered form, so UDF.String renders the name instead — and two
-// different closures under one name render identically, merge, and both results
-// come from whichever was seen first. No error, right row count, right type.
+// different closures under one name rendered identically, merged, and both results
+// came from whichever was seen first. No error, right row count, right type.
+//
+// Since step 72 the maps key on expr.Identity, which carries each udf's id, so the
+// merge is gone even without the refusal; the refusal stays because the name is
+// all a person sees of a udf.
 //
 // udf.go's own doc states this and does not enforce it. udf_test.go proves only the
 // POSITIVE direction, that differently-named udfs stay apart; change its two names

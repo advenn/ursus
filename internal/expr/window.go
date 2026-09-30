@@ -76,7 +76,7 @@ func (m MappingStrategy) String() string {
 	// sentinel, so `int(m) < len(...)` is true for every DECLARED constant and this
 	// fallback would be unreachable without it — a forgotten entry would render as
 	// the EMPTY STRING, and two ops both missing names would render identically and
-	// collide in the three maps that dedup on String(). dtype.TypeID.String() has
+	// collide in the four dedup maps. dtype.TypeID.String() has
 	// had the correct guard since step 1; these eight did not.
 	if int(m) < len(mappingNames) && mappingNames[m] != "" {
 		return mappingNames[m]
@@ -278,7 +278,7 @@ func (o WinFnOp) String() string {
 	// sentinel, so `int(o) < len(...)` is true for every DECLARED constant and this
 	// fallback would be unreachable without it — a forgotten entry would render as
 	// the EMPTY STRING, and two ops both missing names would render identically and
-	// collide in the three maps that dedup on String(). dtype.TypeID.String() has
+	// collide in the four dedup maps. dtype.TypeID.String() has
 	// had the correct guard since step 1; these eight did not.
 	if int(o) < len(winFnNames) && winFnNames[o] != "" {
 		return winFnNames[o]
@@ -317,7 +317,7 @@ func (m RankMethod) String() string {
 	// sentinel, so `int(m) < len(...)` is true for every DECLARED constant and this
 	// fallback would be unreachable without it — a forgotten entry would render as
 	// the EMPTY STRING, and two ops both missing names would render identically and
-	// collide in the three maps that dedup on String(). dtype.TypeID.String() has
+	// collide in the four dedup maps. dtype.TypeID.String() has
 	// had the correct guard since step 1; these eight did not.
 	if int(m) < len(rankNames) && rankNames[m] != "" {
 		return rankNames[m]
@@ -347,8 +347,8 @@ func (p WinParams) args(op WinFnOp) string {
 	case WinShift, WinForwardFill, WinBackwardFill:
 		// WITHOUT THIS ARM the fills fall to the default below and render as
 		// "forward_fill()" whatever their limit — so ForwardFill(1) and
-		// ForwardFill(3) would be one string, collide in the three maps that dedup on
-		// String(), and one would silently take the other's answer. That is step 7's
+		// ForwardFill(3) would be one string, collide in the four dedup maps,
+		// and one would silently take the other's answer. That is step 7's
 		// quantile bug and step 8's partition-key bug, third occurrence.
 		return strconv.FormatInt(p.N, 10)
 	default:

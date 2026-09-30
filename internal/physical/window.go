@@ -375,11 +375,12 @@ func planWindow(ctx context.Context, w *plan.Window, opts Options) (Operator, er
 		// Share a partitioning between windows that partition identically, which is
 		// the usual case — every window in a query tends to use the same key.
 		//
-		// Identically BY RENDERING, and this is the worst of the four places that
-		// matters: what is shared is not a temporary but the partition ASSIGNMENT,
-		// so a false merge buckets every row of the second window by the first
-		// one's values. plan.CheckUDFNames is what keeps a udf key honest here.
-		key := expr.StringAll(win.PartitionBy)
+		// Identically by expr.Identity, and this is the worst of the four dedup maps
+		// to get wrong: what is shared is not a temporary but the partition
+		// ASSIGNMENT, so a false merge buckets every row of the second window by the
+		// first one's values. By the rendering alone, `k * int8(2)` and
+		// `k * int64(2)` were one partitioning, and over an Int8 k the first wraps.
+		key := expr.IdentityAll(win.PartitionBy)
 		pi, seen := byKeys[key]
 		if !seen {
 			pi = len(sink.parts)

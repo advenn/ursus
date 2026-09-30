@@ -743,14 +743,16 @@ func (s *hashAggSink) residentResult() (*data.Batch, error) {
 // reference to a temporary column, collecting the specs as it goes.
 //
 // Identical aggregates share one temporary, so `sum(a) / sum(a)` computes one sum.
-// Identical BY RENDERING — which is safe for a udf only because plan.CheckUDFNames
-// has already refused two that share a name. This function has two instantiations,
-// one here per plan.Aggregate and one in tempgroup.go per plan.TemporalGroup, so it
-// is two of the four maps that rule protects.
+// Identical by expr.Identity: the rendering, plus each literal's type and each
+// udf's id. By the rendering alone, `(i8 + int8(100)).sum()` and
+// `(i8 + int64(100)).sum()` were one aggregate, and `(x*1).max()` and
+// `(x*1.0).max()` were one with two types, which was ErrInternal. This function has
+// two instantiations, one here per plan.Aggregate and one in tempgroup.go per
+// plan.TemporalGroup, so it is two of the four dedup maps.
 func extractAggs(n expr.Node, in *dtype.Schema, specs *[]aggSpec, byKey map[string]string) (expr.Node, error) {
 	switch t := n.(type) {
 	case *expr.Agg:
-		key := t.String()
+		key := expr.Identity(t)
 		name, seen := byKey[key]
 		if !seen {
 			cf, err := t.Child.Field(in)

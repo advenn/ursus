@@ -16,8 +16,9 @@ import (
 //
 // # Why an empty name is a wrong answer, not a cosmetic one
 //
-// FOUR maps key on a rendered String(), over three code sites, because
-// extractAggs is instantiated once per aggregate and once per temporal group:
+// FOUR maps key on expr.Identity, which begins with the rendered String(), over
+// three code sites, because extractAggs is instantiated once per aggregate and once
+// per temporal group:
 //
 //	internal/plan/resolve_window.go   window temporaries
 //	internal/physical/agg.go          aggregate temporaries
@@ -104,7 +105,7 @@ func TestEveryEnumConstantHasADistinctName(t *testing.T) {
 					case name == "":
 						t.Errorf("%s(%d) renders as the empty string — add it to the name "+
 							"table; two unnamed constants render alike and collide in the "+
-							"three maps that dedup on String()", tab.enum, i)
+							"four dedup maps", tab.enum, i)
 					case tab.unknown(name):
 						t.Errorf("%s(%d) renders as %q, the unknown-constant fallback — "+
 							"it is declared but has no name", tab.enum, i, name)

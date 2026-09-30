@@ -46,9 +46,11 @@ import (
 //
 // # name must be unique within the query, and this is CHECKED
 //
-// Four maps in the engine deduplicate expressions by their rendered form, and a Go
-// closure has no rendered form. Two different functions sharing a name would be one
-// computation to the planner, with both results coming from whichever it saw first.
+// A Go closure has no printable form, so the name is all that Explain and every
+// error message can show of a udf. Two different functions sharing one could not be
+// told apart there — and until the engine stopped deduplicating expressions by
+// their rendering, they were one computation, with both results coming from
+// whichever it saw first.
 //
 // plan.CheckUDFNames refuses that at plan time, before any data is read, so the
 // sentence above is a guarantee rather than advice. Two udfs with one name are an

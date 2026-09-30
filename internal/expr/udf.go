@@ -50,8 +50,8 @@ type UDFImpl interface{ UDFKernel() }
 // # Name is required, and that is a correctness argument rather than a style one
 //
 // Node.String is load-bearing: "it appears in Explain output, in golden test files,
-// and in error messages". Worse, FOUR maps deduplicate expressions on their
-// rendering, over three code sites, because extractAggs is instantiated twice —
+// and in error messages". Worse, until step 72 FOUR maps deduplicated expressions on
+// their rendering, over three code sites, because extractAggs is instantiated twice —
 // plan.resolveWindow's temporaries, physical.extractAggs' byKey for a hash
 // aggregate AND for a temporal group, and physical's partition sharing — and
 // names_test.go states the consequence:
@@ -68,10 +68,10 @@ type UDFImpl interface{ UDFKernel() }
 // plan file depend on allocation order. So: a name, supplied by the caller.
 //
 // That objection is about a counter that RENDERS. The id field below is a monotonic
-// counter which never renders — String is unchanged and the golden plans with it —
-// and it is what lets plan.CheckUDFNames refuse a collision instead of merging one.
-// The name still does the deduplicating; the id only tells the planner when two
-// names that look alike are not.
+// counter which never renders — String is unchanged and the golden plans with it.
+// It is what lets plan.CheckUDFNames refuse a collision instead of merging one, and
+// since step 72 it is part of what the four maps key on, through Identity, so two
+// names that look alike no longer merge even where the check has not run.
 type UDF struct {
 	Child Node
 

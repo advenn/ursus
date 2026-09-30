@@ -18,16 +18,18 @@ const winTempPrefix = "__win"
 // the physical planner uses for aggregates, done one level higher so that Explain
 // shows the window and the optimizer can refuse to push a predicate through it.
 //
-// Identical windows share one temporary. That dedup keys on String(), which is why
-// Window.String renders the partition keys, the order keys and the mapping: two
-// windows that rendered the same would become one computation and every row would
-// get the wrong partition's answer.
+// Identical windows share one temporary. That dedup keys on expr.Identity, which
+// starts from String() — which is why Window.String renders the partition keys, the
+// order keys and the mapping: two windows that rendered the same would become one
+// computation and every row would get the wrong partition's answer.
 //
-// A udf is the one expression whose rendering cannot distinguish it — a Go closure
-// has no printable identity — so what makes this dedup safe in its presence is
-// plan.CheckUDFNames, which refuses two udfs sharing a name before this runs. It
-// has to run before, not after: the merge below DROPS the losing subtree rather
-// than sharing it, so afterwards the second udf is not in the tree to be found.
+// It keyed on String() itself until step 72, and String() leaves out two things:
+// a strong literal's type, and which udf a name belongs to. The first merged
+// `(i8 + int8(100)).max()` with `(i8 + int64(100)).max()` and gave the second the
+// first one's Int8 answer; Identity adds both. plan.CheckUDFNames still refuses two
+// udfs sharing a name, and still before this runs: the merge below DROPS the losing
+// subtree rather than sharing it, so afterwards the second udf is not in the tree to
+// be found.
 //
 // It returns input unchanged and exprs unchanged when there is no window, so the
 // ordinary path pays one HasWindow walk and nothing else.
@@ -79,7 +81,7 @@ func extractWindows(input Node, exprs []expr.Node, op string) (Node, []expr.Node
 					"a window may not contain another window: %s", t.String()).
 					Hint("compute the inner window into a column with WithColumns first")
 			}
-			key := t.String()
+			key := expr.Identity(t)
 			name, seen := byKey[key]
 			if !seen {
 				name = winTempPrefix + strconv.Itoa(len(specs))

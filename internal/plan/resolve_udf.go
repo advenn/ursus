@@ -9,21 +9,27 @@ import (
 // query. It is the enforcement of udf.go's own documented contract, which until now
 // was stated and not checked.
 //
-// # Why a wrong name is a wrong ANSWER
+// # Why a shared name was a wrong ANSWER, and is still refused
 //
-// FOUR maps deduplicate expressions by their rendered form, over three code sites,
-// because extractAggs is instantiated twice:
+// FOUR maps deduplicate expressions, over three code sites, because extractAggs is
+// instantiated twice:
 //
 //	internal/plan/resolve_window.go   window temporaries, per extractWindows call
 //	internal/physical/agg.go          extractAggs, per plan.Aggregate
 //	internal/physical/tempgroup.go    the same extractAggs, per plan.TemporalGroup
 //	internal/physical/window.go       partition-key sharing, per plan.Window
 //
-// A Go closure has no rendered form, so UDF.String renders the NAME instead. Two
-// different closures sharing a name render identically, become one computation, and
-// both results come from whichever was seen first — with no error. The last of the
-// four is the worst: what it shares is a PARTITIONING, so every row of the second
-// window is bucketed by another function's values.
+// A Go closure has no rendered form, so UDF.String renders the NAME instead. Until
+// step 72 the four maps keyed on that rendering, so two different closures sharing
+// a name became one computation and both results came from whichever was seen
+// first — with no error. The last of the four was the worst: what it shares is a
+// PARTITIONING, so every row of the second window was bucketed by another
+// function's values.
+//
+// They key on expr.Identity now, which carries the udf's id, so a shared name no
+// longer merges two functions. It is still refused. The name is all a person ever
+// sees of a udf — in Explain, in the golden plans, in every error message — and two
+// functions under one name cannot be told apart in any of them.
 //
 // # Why it runs BEFORE Resolve's walk and not after
 //
@@ -33,7 +39,9 @@ import (
 // and a check there would pass on the exact query it exists to refuse.
 //
 // Running first means this sees the plan as the user wrote it, which is the only
-// tree in which every udf the user built is still present. It does not double-count
+// tree in which every udf the user built is certainly still present. Since the
+// merge keys on Identity it would no longer drop a second udf, but this check was
+// written against a merge that did, and it costs nothing to stay first. It does not double-count
 // either: the surviving subtree is MOVED into the Window node, not copied.
 //
 // Running before expansion is fine, and is not an accident. Expansion replaces
@@ -97,10 +105,9 @@ func CheckUDFNames(n Node) error {
 					"two different udfs are both named %q", u.Name).
 					Hint("first: %s", prev.enclosing.String()).
 					Hint("second: %s", enclosing.String()).
-					Hint("the planner deduplicates expressions by their rendered " +
-						"form, and a Go closure has no rendered form — so two udfs " +
-						"sharing a name would become ONE computation and both " +
-						"results would come from whichever was seen first").
+					Hint("a Go closure has no printable form, so the name is all " +
+						"that Explain and every error message can show of a udf, " +
+						"and two functions sharing one cannot be told apart there").
 					Hint("give them different names; or, if they are meant to BE " +
 						"the same function, build the Expr once and reuse that " +
 						"variable rather than calling the helper twice")

@@ -9,7 +9,8 @@ package plan
 // deleted outright.
 //
 // So each merge is pinned here, by calling the merging function directly. These are
-// the tests that keep the others honest.
+// the tests that keep the others honest. Since step 72 the merges key on
+// expr.Identity, so these pin both halves: what must merge, and what must not.
 
 import (
 	"errors"
@@ -38,61 +39,82 @@ func winOver(child expr.Node) expr.Node {
 		PartitionBy: []expr.Node{&expr.Col{Name: "g"}}}
 }
 
-// TestExtractWindowsMergesByRendering pins internal/plan/resolve_window.go:76.
+// TestExtractWindowsMergesOnIdentity pins internal/plan/resolve_window.go's byKey.
 //
-// Two windows whose udfs share a name render alike and collapse to ONE spec — and
-// the losing subtree is not merely shared, it is DROPPED: extractWindows returns a
-// Col reference and never appends it. That is why a name check has to run before
-// Resolve's walk; after it, the second udf is not in the tree to be found.
-func TestExtractWindowsMergesByRendering(t *testing.T) {
+// It merged on the rendering until step 72, and two windows whose udfs shared a
+// name collapsed to ONE spec — the losing subtree not merely shared but DROPPED:
+// extractWindows returns a Col reference and never appends it. Two literals that
+// render alike did the same. It merges on expr.Identity now, and what it must still
+// merge is one expression used twice.
+func TestExtractWindowsMergesOnIdentity(t *testing.T) {
 	src := &Scan{}
+	one := expr.NewUDF(&expr.Col{Name: "v"}, dtype.Int64, "f", "map_elements", nil)
+	plus := func(l *expr.Lit) expr.Node { return &expr.Binary{Op: expr.OpAdd, L: &expr.Col{Name: "v"}, R: l} }
 
-	same := []expr.Node{
-		&expr.Alias{Child: winOver(udfNode("f")), Name: "a"},
-		&expr.Alias{Child: winOver(udfNode("f")), Name: "b"},
-	}
-	_, _, temps, err := extractWindows(src, same, "select")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(temps) != 1 {
-		t.Errorf("two same-named udfs produced %d window temporaries, want 1 — "+
-			"the merge this defect depends on is gone", len(temps))
-	}
-
-	// The control: different names render differently and must NOT merge.
-	diff := []expr.Node{
-		&expr.Alias{Child: winOver(udfNode("f")), Name: "a"},
-		&expr.Alias{Child: winOver(udfNode("g")), Name: "b"},
-	}
-	if _, _, temps, err = extractWindows(src, diff, "select"); err != nil {
-		t.Fatal(err)
-	}
-	if len(temps) != 2 {
-		t.Errorf("two differently-named udfs produced %d window temporaries, "+
-			"want 2 — the name is not reaching the rendering", len(temps))
+	for _, tc := range []struct {
+		name string
+		a, b expr.Node
+		want int
+	}{
+		{"one udf, used twice", one, one, 1},
+		{"two udfs sharing a name",
+			expr.NewUDF(&expr.Col{Name: "v"}, dtype.Int64, "f", "map_elements", nil),
+			expr.NewUDF(&expr.Col{Name: "v"}, dtype.Int64, "f", "map_elements", nil), 2},
+		{"two udfs, two names", udfNode("f"), udfNode("g"), 2},
+		{"int8 and int64", plus(&expr.Lit{Value: int8(100), DT: dtype.Int8}),
+			plus(&expr.Lit{Value: int64(100), DT: dtype.Int64}), 2},
+		{"one literal, written twice", plus(&expr.Lit{Value: int8(100), DT: dtype.Int8}),
+			plus(&expr.Lit{Value: int8(100), DT: dtype.Int8}), 1},
+	} {
+		exprs := []expr.Node{
+			&expr.Alias{Child: winOver(tc.a), Name: "a"},
+			&expr.Alias{Child: winOver(tc.b), Name: "b"},
+		}
+		_, _, temps, err := extractWindows(src, exprs, "select")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(temps) != tc.want {
+			t.Errorf("%s: %d window temporaries, want %d", tc.name, len(temps), tc.want)
+		}
 	}
 }
 
-// TestPartitionKeysRenderAlike pins the precondition for
-// internal/physical/window.go:377, which shares a PARTITIONING between windows
-// whose keys render the same.
-//
-// The physical map itself needs a planned operator to reach; what makes it fire is
-// this, and this is what would break first if the rendering changed.
-func TestPartitionKeysRenderAlike(t *testing.T) {
-	keyA := []expr.Node{udfNode("bucket")}
-	keyB := []expr.Node{udfNode("bucket")}
-	if expr.StringAll(keyA) != expr.StringAll(keyB) {
-		t.Fatalf("two same-named udf partition keys render differently:\n %s\n %s",
-			expr.StringAll(keyA), expr.StringAll(keyB))
+// TestPartitionKeysShareOnIdentity pins the precondition for
+// internal/physical/window.go's partition map, which shares a PARTITIONING between
+// windows whose keys share an identity. The map itself needs a planned operator to
+// reach; literal_identity_test.go's "window partition" case reaches it end to end.
+func TestPartitionKeysShareOnIdentity(t *testing.T) {
+	one := expr.NewUDF(&expr.Col{Name: "t"}, dtype.Int64, "bucket", "map_elements", nil)
+	times := func(l *expr.Lit) expr.Node { return &expr.Binary{Op: expr.OpMul, L: &expr.Col{Name: "k"}, R: l} }
+
+	for _, tc := range []struct {
+		name string
+		a, b expr.Node
+		same bool
+	}{
+		{"one udf", one, one, true},
+		{"two udfs sharing a name",
+			expr.NewUDF(&expr.Col{Name: "t"}, dtype.Int64, "bucket", "map_elements", nil),
+			expr.NewUDF(&expr.Col{Name: "t"}, dtype.Int64, "bucket", "map_elements", nil), false},
+		{"int8 and int64", times(&expr.Lit{Value: int8(2), DT: dtype.Int8}),
+			times(&expr.Lit{Value: int64(2), DT: dtype.Int64}), false},
+	} {
+		keyA, keyB := []expr.Node{tc.a}, []expr.Node{tc.b}
+		if expr.StringAll(keyA) != expr.StringAll(keyB) {
+			t.Fatalf("%s: the fixture is wrong, the keys render differently", tc.name)
+		}
+		if got := expr.IdentityAll(keyA) == expr.IdentityAll(keyB); got != tc.same {
+			t.Errorf("%s: shared = %v, want %v", tc.name, got, tc.same)
+		}
 	}
 	// And the windows they belong to must be able to differ, or resolve_window
 	// merges them first and the partition map is never reached.
+	key := []expr.Node{one}
 	sum := &expr.Window{Child: &expr.Agg{Op: expr.AggSum, Child: &expr.Col{Name: "v"}},
-		PartitionBy: keyA}
+		PartitionBy: key}
 	max := &expr.Window{Child: &expr.Agg{Op: expr.AggMax, Child: &expr.Col{Name: "v"}},
-		PartitionBy: keyB}
+		PartitionBy: key}
 	if sum.String() == max.String() {
 		t.Fatal("the two windows render alike, so the window temporary map would " +
 			"merge them before the partition map could")
