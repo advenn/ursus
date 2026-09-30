@@ -234,3 +234,44 @@ func TestSumDoesNotOverflow(t *testing.T) {
 		t.Fatalf("sum of %d MaxUint64 = %s, want %s", n, got, want)
 	}
 }
+
+// TestFloatConversionsRoundOnce: Float64 and Float32 are the nearest float of each
+// width, against big.Float's own correctly rounded conversion. The corpus gains the
+// values either side of each width's midpoints above 2^64, where rounding the two
+// halves separately used to land on the tie.
+func TestFloatConversionsRoundOnce(t *testing.T) {
+	vs := corpus()
+	one := big.NewInt(1)
+	for _, k := range []int{64, 65, 100, 126} {
+		for _, p := range []int{24, 53} {
+			for _, base := range []*big.Int{new(big.Int).Lsh(one, uint(k)),
+				new(big.Int).Add(new(big.Int).Lsh(one, uint(k)), new(big.Int).Lsh(one, uint(k-1)))} {
+				mid := new(big.Int).Add(base, new(big.Int).Lsh(one, uint(k-p)))
+				for _, d := range []int64{-1, 0, 1} {
+					for _, sign := range []int64{1, -1} {
+						v := new(big.Int).Mul(new(big.Int).Add(mid, big.NewInt(d)), big.NewInt(sign))
+						x, ok := i128.Parse(v.String())
+						if !ok {
+							t.Fatalf("i128.Parse(%s)", v)
+						}
+						vs = append(vs, x)
+					}
+				}
+			}
+		}
+	}
+	for _, v := range vs {
+		b := new(big.Float).SetInt(toBig(t, v))
+		want64, _ := b.Float64()
+		want32, _ := b.Float32()
+		if got := v.Float64(); got != want64 {
+			t.Errorf("Float64(%s) = %v, want %v", v, got, want64)
+		}
+		if got := v.Float32(); got != want32 {
+			t.Errorf("Float32(%s) = %v, want %v", v, got, want32)
+		}
+	}
+	if len(vs) < 300 {
+		t.Fatalf("only %d values", len(vs))
+	}
+}

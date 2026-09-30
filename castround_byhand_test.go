@@ -42,7 +42,6 @@ var knownCastDefects = map[string]string{
 	"i64 2^24+1 → Float32":                      "refused",
 	"i64 2^53+2^29+1 → Float32":                 "refused",
 	"u64 2^53+2^29+1 → Float32":                 "refused",
-	"Int128 2^64+2^63+2^11+1 → Float64":         "2^64+2^63: i128.Float64 rounds twice",
 	"Int128 2^64+2^40+1 → Float32":              "refused",
 	"Decimal(38,0) 2^53+2^29+1 → Float32":       "refused",
 	"Decimal(10,2) 0.10 → Float32":              "refused",

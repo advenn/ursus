@@ -153,18 +153,62 @@ func (a Int128) Uint64() (uint64, bool) {
 	return a.Lo, true
 }
 
-// Float64 converts to a float64, rounding when the value exceeds 2^53.
+// Float64 converts to the nearest float64, ties to even — one rounding, as Go's own
+// integer conversions round.
+//
+// It was float64(Hi)*2^64 + float64(Lo), which rounds each half and then the sum:
+// 2^64+2^63+2^11+1 came back as 2^64+2^63, where the nearest float64 is
+// 2^64+2^63+2^12. Below 2^64 that expression was exact, which is why it looked right.
 func (a Int128) Float64() float64 {
-	if a.Hi < 0 {
-		// Min has no negation — Min.Neg() == Min — so without this arm the recursion
-		// below never ends, and a stack overflow is fatal rather than a recoverable
-		// panic. -2^127 is exactly representable.
-		if a == Min {
-			return -0x1p127
-		}
-		return -a.Neg().Float64()
+	top, exp, neg := a.top64()
+	f := math.Ldexp(float64(top), exp)
+	if neg {
+		return -f
 	}
-	return float64(a.Hi)*(1<<64) + float64(a.Lo)
+	return f
+}
+
+// Float32 converts to the nearest float32, ties to even, in one rounding. It is not
+// float32(a.Float64()): that rounds twice, and differs whenever the first rounding
+// lands on a float32 midpoint.
+func (a Int128) Float32() float32 {
+	top, exp, neg := a.top64()
+	// float32(top) is the one rounding; scaling by 2^exp is exact, and cannot
+	// overflow, since |a| <= 2^127.
+	f := float32(math.Ldexp(float64(float32(top)), exp))
+	if neg {
+		return -f
+	}
+	return f
+}
+
+// top64 is |a| as top * 2^exp, where top keeps the 64 most significant bits and ORs
+// every bit below them into bit 0. A float of either width rounds on bit 40 or bit
+// 11 of top at the lowest, so that sticky bit tells Go's uint64 conversion exactly
+// what it needs about the bits it cannot see, and the one conversion is the one
+// rounding.
+//
+// The magnitude is taken unsigned, so Min — whose negation is itself — needs no case
+// of its own and nothing recurses.
+func (a Int128) top64() (top uint64, exp int, neg bool) {
+	neg = a.Hi < 0
+	hi, lo := uint64(a.Hi), a.Lo
+	if neg {
+		lo = ^lo + 1
+		hi = ^hi
+		if lo == 0 {
+			hi++
+		}
+	}
+	if hi == 0 {
+		return lo, 0, neg
+	}
+	n := bits.Len64(hi)
+	top = hi<<(64-n) | lo>>n
+	if lo<<(64-n) != 0 {
+		top |= 1
+	}
+	return top, n, neg
 }
 
 // String renders the value in base 10.
