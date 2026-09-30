@@ -56,6 +56,20 @@ type Operator interface {
 	Close() error
 }
 
+// Pull is op.Next, with a panic in it returned as an error.
+//
+// Every driver pulls through this rather than calling Next: the serial loops in
+// internal/exec, and the dispatchers of parallelOp, parProbeOp and parallelSink.
+// A panic anywhere below — in a kernel, a source, a decoder — then reaches the
+// caller as ErrInternal instead of killing its goroutine, and with it, for a
+// worker's, the process. Recovering around the CALL rather than around a
+// goroutine is what keeps each driver's own bookkeeping — closing its lanes,
+// delivering the error in sequence — running as it does for any other error.
+func Pull(ctx context.Context, op Operator) (b *data.Batch, err error) {
+	defer uerr.Catch(&err, "")
+	return op.Next(ctx)
+}
+
 // BatchOp is a stateless, order-independent transform of one batch into one batch.
 //
 // Every operator that CAN be a BatchOp MUST be one. That is the rule that keeps

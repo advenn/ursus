@@ -63,7 +63,10 @@ func (df *DataFrame) At[T any](row int, name string) (T, bool, error) {
 }
 
 // Rows decodes every row into a T.
-func (df *DataFrame) Rows[T any]() ([]T, error) { return decodeRows[T](df.batch) }
+func (df *DataFrame) Rows[T any]() (rows []T, err error) {
+	defer uerr.Catch(&err, "rows")
+	return decodeRows[T](df.batch)
+}
 
 // String renders the frame as an aligned table.
 //

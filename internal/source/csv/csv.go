@@ -123,6 +123,14 @@ func (s *Source) Caps() plan.Caps { return plan.Caps{Projection: true} }
 // resolved.
 func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 	s.once.Do(func() {
+		// Recovered INSIDE the function Do runs. A panic that escaped it would still
+		// mark the Once done, and every later call would return (nil, nil) — a
+		// source with no schema and no error.
+		defer func() {
+			if v := recover(); v != nil {
+				s.schema, s.err = nil, uerr.FromPanic(v, "scan_csv")
+			}
+		}()
 		if s.opts.Schema != nil {
 			s.schema = s.opts.Schema
 			return
@@ -695,6 +703,9 @@ func (r *reader) convertAll() error {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
+			// A panic in a goroutine of this reader's own could be recovered by
+			// nothing else. rows[i] stays 0 for it, so it is the error reported.
+			defer uerr.Catch(&errs[i], "scan_csv")
 			rows[i], errs[i] = r.convert(j.pos, &r.stage[j.pos], j.fileCol)
 		}()
 	}

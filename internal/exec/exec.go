@@ -11,6 +11,10 @@
 // What is still true: nothing here knows about spilling, budgets or temporary files.
 // Every one of those lives below, which is why three operators gained the ability to
 // spill without this file changing.
+//
+// Each loop pulls through physical.Pull, so a panic below the root is an error. With
+// one thread every operator runs on the caller's goroutine, and a panic there
+// escaped every entry point until step 72.
 package exec
 
 import (
@@ -34,7 +38,7 @@ func Collect(ctx context.Context, root physical.Operator) (*data.Batch, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		b, err := root.Next(ctx)
+		b, err := physical.Pull(ctx, root)
 		if errors.Is(err, io.EOF) {
 			break
 		}
@@ -59,7 +63,7 @@ func Batches(ctx context.Context, root physical.Operator) iter.Seq2[*data.Batch,
 				yield(nil, err)
 				return
 			}
-			b, err := root.Next(ctx)
+			b, err := physical.Pull(ctx, root)
 			if errors.Is(err, io.EOF) {
 				return
 			}
@@ -83,7 +87,7 @@ func Count(ctx context.Context, root physical.Operator) (int64, error) {
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		b, err := root.Next(ctx)
+		b, err := physical.Pull(ctx, root)
 		if errors.Is(err, io.EOF) {
 			return n, nil
 		}

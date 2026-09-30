@@ -20,20 +20,33 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io"
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/compress"
 	"github.com/apache/arrow-go/v18/parquet/schema"
 
 	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/kernel"
+	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // panicProbeEnv names the case a child process runs.
@@ -64,26 +77,30 @@ type panicCase struct {
 // The value is a PREFIX of what the case reports, so a case that starts failing
 // in a different way — a crash that becomes a caller panic, say — fails too.
 var knownPanicDefects = map[string]string{
-	"udf, 1 thread":                            "a panic reached the caller: boom at 3",
-	"udf, 4 threads":                           "crash: panic: boom at 3",
-	"map_batches, 4 threads":                   "crash: panic: boom in a batch",
-	"udf in a join's probe key, 4 threads":     "crash: panic: boom at 3",
-	"udf inside an aggregate, 4 threads":       "crash: panic: boom at 3",
-	"udf below an aggregate, 4 threads":        "crash: panic: boom at 3",
-	"udf under Count, 1 thread":                "a panic reached the caller: boom at 3",
-	"udf under CollectBatches, 1 thread":       "a panic reached the caller: boom at 3",
-	"Str().Slice to MaxInt64":                  "crash: panic: runtime error: slice bounds out of range",
-	"Rank(RankMethod(99))":                     "crash: panic: runtime error: index out of range",
+	"udf, 1 thread":                            udfInternal,
+	"udf, 4 threads":                           udfInternal,
+	"map_batches, 4 threads":                   udfInternal,
+	"udf in a join's probe key, 4 threads":     udfInternal,
+	"udf inside an aggregate, 4 threads":       udfInternal,
+	"udf below an aggregate, 4 threads":        udfInternal,
+	"udf under Count, 1 thread":                udfInternal,
+	"udf under CollectBatches, 1 thread":       udfInternal,
+	"Str().Slice to MaxInt64":                  "internal error, want [bc ]: ursus: recovered a panic",
+	"Rank(RankMethod(99))":                     "internal error, want value: ursus: recovered a panic",
 	"Quantile(Interpolation(99))":              "no error, got [2 3 5]",
-	"Parquet List(Int8)":                       `a panic reached the caller: ursus: data: column "item" declares Int8`,
-	"Parquet List(Int16)":                      `a panic reached the caller: ursus: data: column "item" declares Int16`,
-	"Parquet LZ4":                              "a panic reached the caller: compression for LZ4 unimplemented",
-	"Parquet LZO":                              "a panic reached the caller: compression for LZO unimplemented",
-	"the zero Expr, as an operand":             "a panic reached the caller: runtime error: invalid memory address",
-	"the zero Expr, aliased":                   "a panic reached the caller: runtime error: invalid memory address",
+	"Parquet List(Int8)":                       `internal error, want [[1 2] [3]]: ursus: data: column "item" declares Int8`,
+	"Parquet List(Int16)":                      `internal error, want [[1 2] [3]]: ursus: data: column "item" declares Int16`,
+	"Parquet LZ4":                              "internal error, want unsupported: ursus: sink_parquet: recovered a panic",
+	"Parquet LZO":                              "internal error, want unsupported: ursus: sink_parquet: recovered a panic",
+	"the zero Expr, as an operand":             "internal error, want value: ursus: collect: recovered a panic",
+	"the zero Expr, aliased":                   "internal error, want value: ursus: collect: recovered a panic",
 	"Parquet whose row group claims more rows": "hang",
-	"Parquet, every byte flipped":              "a flipped byte panicked or hung: map[caller panic:",
+	"Parquet, every byte flipped":              "flipped bytes gave internal: map[",
 }
+
+// udfInternal is how a panicking udf answers once the engine recovers it and before
+// the udf's own wrapper attributes it: as ursus's bug, which it is not.
+const udfInternal = "internal error, want value: ursus: recovered a panic"
 
 // boom panics on the row holding 3, which every fixture below has.
 func boom(v int64) (int64, error) {
@@ -97,6 +114,15 @@ func boomBatch(vals []int64, _ []bool) ([]int64, []bool, error) {
 	panic("boom in a batch")
 }
 
+// rawBoom is a udf whose kernel panics, built without the public wrapper — which
+// is how a panic in one of ursus's own kernels looks to the engine.
+func rawBoom() ursus.Expr {
+	return ursus.ExprOf(expr.NewUDF(&expr.Col{Name: "v"}, dtype.Int64, "raw", "map_elements",
+		kernel.ColumnUDF(func(context.Context, *data.Column, string) (*data.Column, error) {
+			panic("kernel boom")
+		})))
+}
+
 // wantErr is right when the call failed with this kind of error, naming each of
 // words.
 func wantErr(kind string, words ...string) func(probeReport) string {
@@ -105,7 +131,7 @@ func wantErr(kind string, words ...string) func(probeReport) string {
 			return fmt.Sprintf("no error, got %s; want a %s error", r.Got, kind)
 		}
 		if r.Kind != kind {
-			return fmt.Sprintf("a %s error, want %s: %s", r.Kind, kind, r.Err)
+			return fmt.Sprintf("%s error, want %s: %s", r.Kind, kind, r.Err)
 		}
 		for _, w := range words {
 			if !strings.Contains(r.Err, w) {
@@ -120,7 +146,7 @@ func wantErr(kind string, words ...string) func(probeReport) string {
 func wantGot(got string) func(probeReport) string {
 	return func(r probeReport) string {
 		if r.Err != "" {
-			return fmt.Sprintf("a %s error, want %s: %s", r.Kind, got, r.Err)
+			return fmt.Sprintf("%s error, want %s: %s", r.Kind, got, r.Err)
 		}
 		if r.Got != got {
 			return fmt.Sprintf("got %s, want %s", r.Got, got)
@@ -154,7 +180,51 @@ func panicCases() []panicCase {
 	udf := c("v").MapElements("boom", ursus.Int64, boom)
 	withUDF := panicFrame().WithColumns(udf.Alias("w"))
 
+	raw := rawBoom()
+	withRaw := panicFrame().WithColumns(raw.Alias("w"))
+	internal := wantErr("internal", "recovered a panic", "kernel boom")
+
 	cases := []panicCase{
+		// A kernel that panics is ursus's bug: an internal error, through every
+		// driver and on every goroutine the engine starts.
+		{"a kernel panic, 1 thread", func(t *testing.T) (string, error) {
+			return collectCells(t.Context(), withRaw, "w", threads(1))
+		}, internal},
+		{"a kernel panic, 4 threads", func(t *testing.T) (string, error) {
+			return collectCells(t.Context(), withRaw, "w", threads(4))
+		}, internal},
+		{"a kernel panic in a join's probe key, 4 threads", func(t *testing.T) (string, error) {
+			return collectCells(t.Context(), panicFrame().Join(panicFrame(),
+				ursus.JoinLeftOn(raw), ursus.JoinRightOn(c("k"))), "v", threads(4))
+		}, internal},
+		{"a kernel panic inside an aggregate, 4 threads", func(t *testing.T) (string, error) {
+			return collectCells(t.Context(), panicFrame().GroupBy(c("k")).Agg(raw.Sum().Alias("s")), "k", threads(4))
+		}, internal},
+		{"a kernel panic under Count, 1 thread", func(t *testing.T) (string, error) {
+			n, err := withRaw.Filter(c("w").Gt(0)).Count(t.Context(), threads(1))
+			return fmt.Sprint(n), err
+		}, internal},
+		{"a kernel panic under CollectBatches, 1 thread", func(t *testing.T) (string, error) {
+			for _, err := range withRaw.CollectBatches(t.Context(), threads(1), ursus.WithBatchSize(2)) {
+				if err != nil {
+					return "", err
+				}
+			}
+			return "no error", nil
+		}, internal},
+		// The factory is the caller's code, and it runs inside the source's Once: a
+		// panic that escaped the Once would leave it done, and the second call
+		// would find no schema and no error.
+		{"ScanArrow whose open panics, asked twice", func(t *testing.T) (string, error) {
+			lf := ursus.ScanArrow(func() (array.RecordReader, error) { panic("open boom") })
+			_, err1 := lf.CollectSchema(t.Context())
+			_, err2 := lf.CollectSchema(t.Context())
+			if err1 == nil || err2 == nil || err1.Error() != err2.Error() {
+				return fmt.Sprintf("first %v, then %v", err1, err2), nil
+			}
+			return "", err2
+		}, wantErr("io", "open boom")},
+
 		// A udf is user code. Its panic is the user's, as its errors are.
 		{"udf, 1 thread", func(t *testing.T) (string, error) {
 			ctx := t.Context()
@@ -254,7 +324,7 @@ func panicCases() []panicCase {
 		}, wantErr("io", "declares")},
 		{"Parquet, every byte flipped", func(t *testing.T) (string, error) {
 			return corruptSweep(t.Context())
-		}, wantNoCallerPanic},
+		}, wantCorruptIsIO},
 	}
 	return cases
 }
@@ -355,12 +425,16 @@ func corruptSweep(ctx context.Context) (string, error) {
 	return fmt.Sprint(tally), nil
 }
 
-func wantNoCallerPanic(r probeReport) string {
+// wantCorruptIsIO: a corrupt file is the file's problem, never ursus's bug — so no
+// flipped byte may panic, hang, or be an internal error.
+func wantCorruptIsIO(r probeReport) string {
 	if r.Err != "" {
 		return "the sweep failed: " + r.Err
 	}
-	if strings.Contains(r.Got, "caller panic") || strings.Contains(r.Got, "hang") {
-		return "a flipped byte panicked or hung: " + r.Got
+	for _, bad := range []string{"caller panic", "hang", "internal"} {
+		if strings.Contains(r.Got, bad) {
+			return "flipped bytes gave " + bad + ": " + r.Got
+		}
 	}
 	return ""
 }
@@ -476,6 +550,192 @@ func TestPanicsAreErrors(t *testing.T) {
 	for name := range knownPanicDefects {
 		if !slices.ContainsFunc(cases, func(c panicCase) bool { return c.name == name }) {
 			t.Errorf("knownPanicDefects names %q, which is not a case", name)
+		}
+	}
+}
+
+// TestALoopBodyPanicIsTheCallers: CollectBatches recovers a panic in planning and in
+// every operator, and must not recover one in the caller's own loop body. Go forbids
+// a range function to swallow one — "range function recovered a loop body panic and
+// did not resume panicking" — so a recover around yield would change what the
+// caller's own recover sees.
+func TestALoopBodyPanicIsTheCallers(t *testing.T) {
+	for _, name := range []string{"CollectBatches", "CollectRecords"} {
+		got := func() (v any) {
+			defer func() { v = recover() }()
+			switch name {
+			case "CollectBatches":
+				for _, err := range panicFrame().CollectBatches(t.Context()) {
+					if err != nil {
+						return err
+					}
+					panic("mine")
+				}
+			case "CollectRecords":
+				for _, err := range panicFrame().CollectRecords(t.Context()) {
+					if err != nil {
+						return err
+					}
+					panic("mine")
+				}
+			}
+			return nil
+		}()
+		if got != "mine" {
+			t.Errorf("%s: the loop body's panic came out as %v", name, got)
+		}
+	}
+}
+
+// TestEveryEntryPointRecovers reflects over *LazyFrame for every method that runs
+// a query — whose last result is an error, or which returns an iterator of values
+// and errors — and runs each on a plan that panics as it is resolved: an Alias with
+// no child, which no public constructor builds. Each must return ErrInternal.
+//
+// A new entry point is swept the day it is written. One with a parameter this
+// cannot supply fails, rather than being skipped.
+func TestEveryEntryPointRecovers(t *testing.T) {
+	bad := ursus.FromPlan(&plan.Project{Input: panicFrame().Plan(),
+		Exprs: []expr.Node{&expr.Alias{Name: "x"}}})
+	errType := reflect.TypeFor[error]()
+	arg := func(in reflect.Type) reflect.Value {
+		switch in {
+		case reflect.TypeFor[context.Context]():
+			return reflect.ValueOf(t.Context())
+		case reflect.TypeFor[io.Writer]():
+			return reflect.ValueOf(io.Writer(&bytes.Buffer{}))
+		case reflect.TypeFor[string]():
+			return reflect.ValueOf(filepath.Join(t.TempDir(), "out"))
+		}
+		t.Fatalf("no argument for a %s", in)
+		return reflect.Value{}
+	}
+
+	v := reflect.ValueOf(bad)
+	var swept []string
+	for i := range v.NumMethod() {
+		name, fn := v.Type().Method(i).Name, v.Method(i)
+		ft := fn.Type()
+		isErr := ft.NumOut() > 0 && ft.Out(ft.NumOut()-1) == errType
+		isSeq := ft.NumOut() == 1 && ft.Out(0).Kind() == reflect.Func && ft.Out(0).NumIn() == 1 &&
+			ft.Out(0).In(0).NumIn() == 2 && ft.Out(0).In(0).In(1) == errType
+		if (!isErr && !isSeq) || name == "Err" { // Err reports a construction error; it runs nothing
+			continue
+		}
+		var args []reflect.Value
+		for j := range ft.NumIn() {
+			if ft.IsVariadic() && j == ft.NumIn()-1 {
+				break
+			}
+			args = append(args, arg(ft.In(j)))
+		}
+
+		var err error
+		func() {
+			defer func() {
+				if p := recover(); p != nil {
+					err = fmt.Errorf("panicked: %v", p)
+				}
+			}()
+			out := fn.Call(args)
+			if isErr {
+				err, _ = out[len(out)-1].Interface().(error)
+				return
+			}
+			yield := reflect.MakeFunc(out[0].Type().In(0), func(in []reflect.Value) []reflect.Value {
+				if e, _ := in[1].Interface().(error); e != nil && err == nil {
+					err = e
+				}
+				return []reflect.Value{reflect.ValueOf(true)}
+			})
+			out[0].Call([]reflect.Value{yield})
+		}()
+		if !recoveredPanic(err) {
+			t.Errorf("%s: want a recovered panic, got %v", name, err)
+		}
+		swept = append(swept, name)
+	}
+
+	// A generic method is not in the reflected method set.
+	if _, err := bad.CollectInto[struct{}](t.Context()); !recoveredPanic(err) {
+		t.Errorf("CollectInto: want a recovered panic, got %v", err)
+	}
+
+	for _, want := range []string{"Collect", "CollectBatches", "CollectRecords", "CollectSchema",
+		"Count", "Explain", "SinkCSV", "SinkParquet", "WriteCSV", "WriteParquet"} {
+		if !slices.Contains(swept, want) {
+			t.Errorf("the sweep did not reach %s; it reached %v", want, swept)
+		}
+	}
+}
+
+// recoveredPanic is ErrInternal whose cause is a recovered panic, and not an
+// internal error raised some other way.
+func recoveredPanic(err error) bool {
+	var p *uerr.PanicError
+	return errors.Is(err, ursus.ErrInternal) && errors.As(err, &p)
+}
+
+// goroutineSites names every go statement in the engine, by file, enclosing
+// function and order within it, with the test that makes a panic there an error.
+// TestEveryGoroutineIsCovered fails on a site not listed here, so a new goroutine
+// cannot be started without saying what recovers its panics.
+var goroutineSites = map[string]string{
+	"internal/physical/parallel.go launch 1":    "TestParallelDispatcherPanicIsAnError",
+	"internal/physical/parallel.go launch 2":    "TestParallelWorkerPanicIsAnError",
+	"internal/physical/parjoin.go launch 1":     "TestParProbeDispatcherPanicIsAnError",
+	"internal/physical/parjoin.go launch 2":     "TestPanicsAreErrors", // a kernel panic in a join's probe key
+	"internal/physical/parallelsink.go drain 1": "TestParallelSinkWorkerPanicStopsConsuming",
+	"internal/source/csv/csv.go convertAll 1":   "TestConvertAllRecoversAPanic",
+}
+
+func TestEveryGoroutineIsCovered(t *testing.T) {
+	found := map[string]bool{}
+	tests := map[string]bool{}
+	repoFiles(t, func(path string, src []byte) {
+		path = filepath.ToSlash(path)
+		if strings.HasPrefix(path, ".claude/") {
+			return
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), path, src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.HasSuffix(path, "_test.go") {
+			for _, d := range f.Decls {
+				if fd, ok := d.(*ast.FuncDecl); ok && strings.HasPrefix(fd.Name.Name, "Test") {
+					tests[fd.Name.Name] = true
+				}
+			}
+			return
+		}
+		for _, d := range f.Decls {
+			fd, ok := d.(*ast.FuncDecl)
+			if !ok {
+				continue
+			}
+			n := 0
+			ast.Inspect(fd, func(x ast.Node) bool {
+				if _, ok := x.(*ast.GoStmt); ok {
+					n++
+					found[fmt.Sprintf("%s %s %d", path, fd.Name.Name, n)] = true
+				}
+				return true
+			})
+		}
+	})
+	for site := range found {
+		if _, ok := goroutineSites[site]; !ok {
+			t.Errorf("%s starts a goroutine and goroutineSites does not list it: recover "+
+				"a panic in what it runs, and name the test that shows it", site)
+		}
+	}
+	for site, test := range goroutineSites {
+		if !found[site] {
+			t.Errorf("goroutineSites lists %s, which starts no goroutine", site)
+		}
+		if !tests[test] {
+			t.Errorf("goroutineSites names %s for %s, and there is no such test", test, site)
 		}
 	}
 }

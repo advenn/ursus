@@ -8,6 +8,7 @@ import (
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // parProbeOp runs the join's probe side across N workers, in INPUT ORDER.
@@ -140,7 +141,7 @@ func (p *parProbeOp) launch(parent context.Context) {
 		}()
 
 		for seq := 0; ; seq++ {
-			b, err := p.probe.Next(ctx)
+			b, err := Pull(ctx, p.probe)
 			job := parJob{b: b}
 			if err != nil {
 				if errors.Is(err, io.EOF) {
@@ -197,7 +198,9 @@ func (p *parProbeOp) runJob(ctx context.Context, w *joinProbeOp, job parJob, lan
 		send(probeResult{err: job.err})
 		return job.err
 	}
-	if err := w.startBatch(ctx, job.b); err != nil {
+	// Both calls are guarded: this is a worker goroutine, and a panic here could be
+	// recovered by nothing else.
+	if err := uerr.GuardErr("", func() error { return w.startBatch(ctx, job.b) }); err != nil {
 		send(probeResult{err: err})
 		return err
 	}
@@ -205,7 +208,7 @@ func (p *parProbeOp) runJob(ctx context.Context, w *joinProbeOp, job parJob, lan
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		out, err := w.stepCurrent(ctx)
+		out, err := uerr.Guard("", func() (*data.Batch, error) { return w.stepCurrent(ctx) })
 		if err != nil {
 			send(probeResult{err: err})
 			return err

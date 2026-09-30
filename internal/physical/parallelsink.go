@@ -5,9 +5,11 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // SinkFactory builds one worker's Sink. Every sink a factory returns must be
@@ -87,14 +89,16 @@ func (p *parallelSink) drain(parent context.Context) error {
 	}
 
 	var (
-		wg   sync.WaitGroup
-		mu   sync.Mutex
-		errs []error
+		wg     sync.WaitGroup
+		mu     sync.Mutex
+		errs   []error
+		failed atomic.Bool
 	)
 	fail := func(err error) {
 		mu.Lock()
 		errs = append(errs, err)
 		mu.Unlock()
+		failed.Store(true)
 		cancel() // stop the dispatcher and the other workers promptly
 	}
 
@@ -103,12 +107,19 @@ func (p *parallelSink) drain(parent context.Context) error {
 		go func(i int) {
 			defer wg.Done()
 			for b := range jobs[i] {
-				if err := p.sinks[i].Consume(ctx, b); err != nil {
-					fail(err)
-					// Keep draining rather than returning: the dispatcher may already
-					// be blocked sending into this lane, and abandoning it would
-					// deadlock until ctx cancellation reached it.
+				// Once anything has failed, drain without consuming. Draining rather
+				// than returning is because the dispatcher may already be blocked
+				// sending into this lane, and abandoning it would deadlock until
+				// ctx cancellation reached it. Not consuming is because the query
+				// has already failed — and after a panic, the sink that panicked is
+				// in no state anyone should feed.
+				if failed.Load() {
 					continue
+				}
+				// Guarded: this is a worker goroutine, and a panic in it could be
+				// recovered by nothing else.
+				if err := uerr.GuardErr("", func() error { return p.sinks[i].Consume(ctx, b) }); err != nil {
+					fail(err)
 				}
 			}
 		}(i)
@@ -119,7 +130,7 @@ func (p *parallelSink) drain(parent context.Context) error {
 	// batch is I/O, and the CPU work is what the workers do with it.
 	var dispatchErr error
 	for seq := 0; ; seq++ {
-		b, err := p.child.Next(ctx)
+		b, err := Pull(ctx, p.child)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				dispatchErr = err
@@ -140,7 +151,10 @@ func (p *parallelSink) drain(parent context.Context) error {
 	}
 	wg.Wait()
 
-	if dispatchErr != nil {
+	// A worker's failure cancels ctx, and the dispatcher then stops with
+	// context.Canceled — which is the failure's echo, not a second error. It is
+	// only news when the caller's own context was cancelled.
+	if dispatchErr != nil && !(len(errs) > 0 && errors.Is(dispatchErr, context.Canceled) && parent.Err() == nil) {
 		errs = append(errs, dispatchErr)
 	}
 	if err := errors.Join(errs...); err != nil {

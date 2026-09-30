@@ -85,6 +85,16 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 		return nil, err
 	}
 	s.once.Do(func() {
+		// Recovered INSIDE the function Do runs: a panic that escaped it would still
+		// mark the Once done, and every later call would return (nil, nil). The
+		// factory and the reader are the caller's code, so a panic in them is an I/O
+		// failure of the stream rather than ursus's bug.
+		defer func() {
+			if v := recover(); v != nil {
+				s.schema, s.err = nil, uerr.Attributed(v, uerr.KindIO, op,
+					"opening the Arrow stream panicked")
+			}
+		}()
 		rr, err := s.call()
 		if err != nil {
 			s.err = err

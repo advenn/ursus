@@ -231,7 +231,8 @@ func (lf *LazyFrame) SinkCSV(ctx context.Context, path string, opts ...CSVSinkOp
 //
 // It does not close w. Whoever opened it closes it — the only rule that works when
 // the destination might be os.Stdout.
-func (lf *LazyFrame) WriteCSV(ctx context.Context, w io.Writer, opts ...CSVSinkOption) error {
+func (lf *LazyFrame) WriteCSV(ctx context.Context, w io.Writer, opts ...CSVSinkOption) (err error) {
+	defer uerr.Catch(&err, "sink_csv")
 	cfg := csvSinkOptions(opts)
 	defer cfg.collect.report()
 	root, err := lf.compile(ctx, cfg.collect)

@@ -158,7 +158,8 @@ func (lf *LazyFrame) Pipe(fn func(*LazyFrame) *LazyFrame) *LazyFrame { return fn
 // footer, a CSV sample. A schema request that could not be cancelled would be a
 // hole in the cancellation story, which is why this is not the no-argument
 // Schema() the design documents originally specified.
-func (lf *LazyFrame) CollectSchema(ctx context.Context) (*Schema, error) {
+func (lf *LazyFrame) CollectSchema(ctx context.Context) (s *Schema, err error) {
+	defer uerr.Catch(&err, "collect_schema")
 	if lf.err != nil {
 		return nil, lf.err
 	}
@@ -188,7 +189,8 @@ func WithSchemas() ExplainOption { return func(c *explainCfg) { c.schema = true 
 // The output is stable and diff-friendly on purpose: it is what golden tests
 // snapshot, and a plan diff is the only thing that notices a query which still
 // returns the right answer while reading forty columns instead of two.
-func (lf *LazyFrame) Explain(ctx context.Context, opts ...ExplainOption) (string, error) {
+func (lf *LazyFrame) Explain(ctx context.Context, opts ...ExplainOption) (out string, err error) {
+	defer uerr.Catch(&err, "explain")
 	cfg := explainCfg{optimized: true}
 	for _, o := range opts {
 		o(&cfg)
@@ -461,7 +463,15 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 }
 
 // Collect runs the query and returns the whole result.
-func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (*DataFrame, error) {
+//
+// # A panic is an error
+//
+// Every entry point that runs a query recovers a panic in it and returns it as
+// ErrInternal — "this is a bug in ursus" — and every goroutine the engine starts
+// does the same for its own work, so no query can take down the process that asked
+// it.
+func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (df *DataFrame, err error) {
+	defer uerr.Catch(&err, "collect")
 	cfg := newCollectCfg(opts)
 	root, err := lf.compile(ctx, cfg)
 	if err != nil {
@@ -478,11 +488,18 @@ func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (*DataF
 // CollectBatches streams the result without materialising the whole frame.
 //
 // Breaking out of the loop tears the operator tree down, so an early exit is safe.
+//
+// A panic while planning, or in any operator, is an error yielded like any other.
+// A panic in the loop BODY is the caller's own and propagates as it would from any
+// loop: recovering around yield is something Go forbids a range function to do.
 func (lf *LazyFrame) CollectBatches(ctx context.Context, opts ...CollectOption) iter.Seq2[*DataFrame, error] {
 	return func(yield func(*DataFrame, error) bool) {
 		cfg := newCollectCfg(opts)
 		defer cfg.report()
-		root, err := lf.compile(ctx, cfg)
+		// Guarded here and in exec.Batches' Pull, and nowhere that encloses yield.
+		root, err := uerr.Guard("collect_batches", func() (physical.Operator, error) {
+			return lf.compile(ctx, cfg)
+		})
 		if err != nil {
 			yield(nil, err)
 			return
@@ -500,7 +517,8 @@ func (lf *LazyFrame) CollectBatches(ctx context.Context, opts ...CollectOption) 
 }
 
 // Count runs the query and returns the row count, retaining no data.
-func (lf *LazyFrame) Count(ctx context.Context, opts ...CollectOption) (int64, error) {
+func (lf *LazyFrame) Count(ctx context.Context, opts ...CollectOption) (n int64, err error) {
+	defer uerr.Catch(&err, "count")
 	cfg := newCollectCfg(opts)
 	defer cfg.report()
 	root, err := lf.compile(ctx, cfg)
@@ -514,7 +532,8 @@ func (lf *LazyFrame) Count(ctx context.Context, opts ...CollectOption) (int64, e
 //
 // A generic METHOD, which is the Go 1.27 feature this library was waiting for:
 // before, this had to be a package-level function taking the frame as an argument.
-func (lf *LazyFrame) CollectInto[T any](ctx context.Context, opts ...CollectOption) ([]T, error) {
+func (lf *LazyFrame) CollectInto[T any](ctx context.Context, opts ...CollectOption) (rows []T, err error) {
+	defer uerr.Catch(&err, "collect_into")
 	df, err := lf.Collect(ctx, opts...)
 	if err != nil {
 		return nil, err

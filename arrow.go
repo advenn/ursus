@@ -32,7 +32,8 @@ import (
 //
 // It can fail, because a few ursus types have no Arrow equivalent yet — see Record.
 // Asking for the schema is how to find that out without running anything.
-func (df *DataFrame) ArrowSchema() (*arrow.Schema, error) {
+func (df *DataFrame) ArrowSchema() (s *arrow.Schema, err error) {
+	defer uerr.Catch(&err, "arrow_schema")
 	return arrowout.Schema(df.batch.Schema())
 }
 
@@ -63,7 +64,8 @@ func (df *DataFrame) ArrowSchema() (*arrow.Schema, error) {
 // exportable yet; a frame containing one is refused by name rather than exported
 // wrongly. Everything else maps, including Decimal and the Int128 that every integer
 // Sum produces.
-func (df *DataFrame) Record() (arrow.Record, error) {
+func (df *DataFrame) Record() (rec arrow.Record, err error) {
+	defer uerr.Catch(&err, "record")
 	return arrowout.Record(df.batch)
 }
 

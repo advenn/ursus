@@ -7,6 +7,7 @@ import (
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // KernelFolder evaluates constant expressions for the optimizer's simplification
@@ -51,7 +52,10 @@ func (KernelFolder) Fold(n expr.Node, _ *dtype.Schema) (expr.Node, bool, error) 
 	// this batch exactly as it would over a real one.
 	b := data.NewBatchRows(empty, nil, 1)
 
-	c, err := Eval(context.Background(), n, b)
+	// Guarded, so a kernel that panics on this constant declines the fold like one
+	// that fails: the panic then happens at Collect, where it is an error, instead of
+	// in the optimizer.
+	c, err := uerr.Guard("", func() (*data.Column, error) { return Eval(context.Background(), n, b) })
 	if err != nil {
 		// A strict cast that cannot represent its value is the real case; division
 		// by zero is not one, because the kernel answers it with +Inf or a null

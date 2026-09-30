@@ -8,6 +8,7 @@ import (
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // parallelOp runs a pure pipeline — a source plus a chain of stateless BatchOps —
@@ -137,7 +138,7 @@ func (p *parallelOp) launch(parent context.Context) {
 		}()
 
 		for seq := 0; ; seq++ {
-			b, err := p.base.Next(ctx)
+			b, err := Pull(ctx, p.base)
 			job := parJob{b: b}
 			if err != nil {
 				if errors.Is(err, io.EOF) {
@@ -192,7 +193,11 @@ func (p *parallelOp) launch(parent context.Context) {
 // It mirrors stage.Next's rule that a batch filtered down to nothing is not
 // end-of-stream: the result is reported as empty and the consumer skips it, rather
 // than being confused for EOF.
-func (p *parallelOp) apply(ctx context.Context, b *data.Batch) parResult {
+//
+// A panic in the chain is the result's error. It happens on a worker goroutine,
+// where nothing else could recover it.
+func (p *parallelOp) apply(ctx context.Context, b *data.Batch) (res parResult) {
+	defer uerr.Catch(&res.err, "")
 	out := b
 	for _, op := range p.ops {
 		next, err := op.Apply(ctx, out)
