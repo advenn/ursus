@@ -105,7 +105,7 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | I14 | ~~CR~~ **fixed, step 72** | `WithCompression(Lz4)` and `WithCompression(Lzo)` panic inside arrow-go. `Lz4Raw` works. | `writer.go:124`. |
 | I15 | ~~FR~~ **fixed, step 71** | A UTF-8 BOM is not stripped from a CSV header, so `Col("a")` fails with *did you mean "﻿a"*. | |
 | I16 | FR | An unannotated FIXED_LEN_BYTE_ARRAY is typed Binary by the schema and then refused by the reader. | `parquet.go:617`, `types.go:192`. |
-| I17 | FR / ME | List of Uint8, Uint32, Time(ms), Bool or Decimal is refused, with a hint claiming the unsigned and Time types are read. | `parquet.go:732`. |
+| I17 | ~~FR / ME~~ **fixed, step 81** | List of Uint8, Uint32, Time(ms), Bool or Decimal is refused, with a hint claiming the unsigned and Time types are read. | `parquet.go:732`. |
 | I18 | FR | Null-typed columns are refused by both writers; Polars writes them. | |
 | I19 | ~~FR~~ **fixed, step 77** | The CSV reader refuses the Decimal and Int128 schemas the CSV writer produces, and inference reads a 38-digit decimal or `u64::MAX` as lossy Float64. | |
 | I20 | — | Invalid UTF-8 in a String column is never validated, so `SinkParquet` writes an out-of-spec STRING column that Polars and DuckDB refuse. | |
