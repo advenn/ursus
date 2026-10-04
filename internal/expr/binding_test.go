@@ -78,6 +78,13 @@ func TestBindingsArePhysicallyCoherent(t *testing.T) {
 				if op.IsComparison() || op.IsMissingComparison() || op.IsLogical() {
 					continue
 				}
+				// A quotient of two Decimals is a Float64 read from the unscaled
+				// Int128s, not from the output's width: kernel.arithmetic routes it to
+				// decimalDiv before dispatching on the output, which is what makes the
+				// width rule below not apply. Every other output still must agree.
+				if op == expr.OpDiv && b.CastL.ID() == dtype.TypeDecimal && b.Out == dtype.Float64 {
+					continue
+				}
 				if op2 := b.Out.Physical(); op2 != lp {
 					t.Errorf("%s(%s, %s): output %s is physically %s but the "+
 						"operands bind to %s — kernel.arithmetic dispatches on the "+

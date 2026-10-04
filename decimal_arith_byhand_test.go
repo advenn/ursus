@@ -23,12 +23,7 @@ import (
 
 // knownDecimalArithDefects names each case that answers wrongly today, with what it
 // answers.
-var knownDecimalArithDefects = map[string]string{
-	"a / b":                        "operator / has no common type for Decimal(10, 2) and Decimal(12, 3)",
-	"1 / 3":                        "operator / is not defined for Decimal(1, 0)",
-	"x / 0 is +Inf, and 0 / 0 NaN": "operator / is not defined for Decimal(5, 2)",
-	"a + 0.5 is Float64":           "operator + has no common type for Decimal(10, 2) and Float64",
-}
+var knownDecimalArithDefects = map[string]string{}
 
 // decimalValues reads a Decimal column's type and unscaled values, null as ∅.
 func decimalValues(df *ursus.DataFrame, name string) (dtype.DataType, []string, error) {

@@ -462,9 +462,13 @@ func arithmetic(op expr.BinaryOp, name string, out dtype.DataType, l, r *data.Co
 	}
 
 	// A Decimal result is exact or refused, and its operands carry their own
-	// scales, which arithI128 knows nothing of.
+	// scales, which arithI128 knows nothing of; a quotient of Decimals is the
+	// nearest Float64, computed from the unscaled values, not their doubles.
 	if out.ID() == dtype.TypeDecimal {
 		return decimalArith(op, name, out, l, r, n, valid)
+	}
+	if op == expr.OpDiv && l.DType().ID() == dtype.TypeDecimal && r.DType().ID() == dtype.TypeDecimal {
+		return decimalDiv(name, l, r, n, valid)
 	}
 
 	switch p.ID() {

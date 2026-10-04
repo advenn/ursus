@@ -273,7 +273,6 @@ func TestDecimalRefusalsRecommendOnlyPossibleCasts(t *testing.T) {
 		return func() *ursus.LazyFrame { return prices(t).Select(e) }
 	}
 	cases := map[string]func() *ursus.LazyFrame{
-		"div":      sel(price.Div(price)),
 		"floordiv": sel(price.FloorDiv(price)),
 		"mod":      sel(price.Mod(price)),
 		"floor":    sel(price.Floor()),

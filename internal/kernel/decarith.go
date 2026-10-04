@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"math"
 	"math/big"
 
 	"github.com/advenn/ursus/dtype"
@@ -119,4 +120,63 @@ func decimalTooWide(op expr.BinaryOp, out dtype.DataType, l, r *data.Column, row
 		dtype.FormatDecimal(b.String(), r.DType().Scale()), row, out.Precision(), out).
 		Hint("a Decimal holds at most %d digits; cast to Float64 for an approximate result",
 			dtype.MaxDecimalPrecision)
+}
+
+// decimalDiv is a / b of two Decimals as the NEAREST Float64 to the exact quotient
+// (ua / 10^sa) / (ub / 10^sb) = ua·10^sb / (ub·10^sa), rounded once.
+//
+// A quotient of decimals is generally not a decimal — 1/3 — so choosing a result
+// scale would be choosing where to round; a Float64 says the answer is approximate,
+// and is DuckDB's type. Dividing the two nearest doubles would round three times,
+// so it is done once: in one IEEE division when both unscaled values are exact
+// doubles at the same scale, and in big.Rat otherwise. A zero divisor gives ±Inf,
+// and 0/0 NaN, as float division and DuckDB do.
+func decimalDiv(name string, l, r *data.Column, n int, valid bitmap.View) (*data.Column, error) {
+	lv, err := data.Values[i128.Int128](l)
+	if err != nil {
+		return nil, err
+	}
+	rv, err := data.Values[i128.Int128](r)
+	if err != nil {
+		return nil, err
+	}
+	at := func(v []i128.Int128, i int) i128.Int128 {
+		if len(v) == 1 {
+			return v[0]
+		}
+		return v[i]
+	}
+	sa, sb := int(l.DType().Scale()), int(r.DType().Scale())
+	exact := func(v i128.Int128) (float64, bool) {
+		x, ok := v.Int64()
+		return float64(x), ok && x > -1<<53 && x < 1<<53
+	}
+	big10 := func(k int) *big.Int { return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(k)), nil) }
+	out := make([]float64, n)
+	for i := range n {
+		if !valid.Get(i) {
+			continue
+		}
+		a, b := at(lv, i), at(rv, i)
+		switch {
+		case b.IsZero() && a.IsZero():
+			out[i] = math.NaN()
+			continue
+		case b.IsZero():
+			out[i] = math.Inf(a.Sign())
+			continue
+		}
+		if fa, oka := exact(a); oka && sa == sb {
+			if fb, okb := exact(b); okb {
+				out[i] = fa / fb
+				continue
+			}
+		}
+		x, _ := new(big.Int).SetString(a.String(), 10)
+		y, _ := new(big.Int).SetString(b.String(), 10)
+		x.Mul(x, big10(sb))
+		y.Mul(y, big10(sa))
+		out[i], _ = new(big.Rat).SetFrac(x, y).Float64()
+	}
+	return data.NewFixed(name, dtype.Float64, out, valid), nil
 }

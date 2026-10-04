@@ -143,20 +143,32 @@ func enumOrdering(op BinaryOp, l, r dtype.DataType) (Binding, bool, error) {
 // An integer operand is a Decimal(d, 0), d being the digits its width holds
 // (dtype.DecimalDigits); Int128's 39 is more than a Decimal holds, and is refused.
 //
-//   - -   Decimal(min(38, max(p1-s1, p2-s2) + max(s1, s2) + 1), max(s1, s2))
+// A sum or a difference is Decimal(min(38, max(p1-s1, p2-s2) + max(s1, s2) + 1),
+// max(s1, s2)), which is DuckDB's and PyArrow's rule: the sum of two numbers has at
+// most one integer digit more than the wider, at the finer's scale. Past 38 digits a
+// row is refused by the kernel. It used to be the identical pair only, typed
+// Decimal(p, s) — one digit short — and wrapped through Int128's unchecked Add past
+// 38.
 //
-// which is DuckDB's and PyArrow's rule: the sum of two numbers has at most one
-// integer digit more than the wider, at the finer's scale. Past 38 digits a row is
-// refused by the kernel. It used to be the identical pair only, typed Decimal(p, s)
-// — one digit short — and wrapped through Int128's unchecked Add past 38.
+// A product is Decimal(min(38, p1 + p2), s1 + s2), which is exact: a p1-digit
+// integer times a p2-digit one has at most p1+p2 digits, at the sum of the scales.
+// Past 38 digits a row is refused; a scale past 38 cannot be held at all and is
+// refused here. Polars truncates the product to the larger scale, so 1.25 * 2.125
+// is 2.656 there; it is 2.65625.
 //
-//   - Decimal(min(38, p1 + p2), s1 + s2)
+// A quotient is the Float64 nearest to the exact quotient, rounded once.
 //
-// which is exact: a p1-digit integer times a p2-digit one has at most p1+p2 digits,
-// at the sum of the scales. Past 38 digits a row is refused; a scale past 38 cannot
-// be held at all and is refused here. Polars truncates the product to the larger
-// scale, so 1.25 * 2.125 is 2.656 there; it is 2.65625.
+// With a float, the arithmetic is the float's, at Float64.
 func resolveDecimal(op BinaryOp, l, r dtype.DataType) (Binding, error) {
+	// With a float, the arithmetic is the float's: the Decimal converts to its
+	// nearest Float64 (step 73) and the answer is approximate, as the float already
+	// was — DuckDB's and Polars' type too.
+	if l.IsFloat() || r.IsFloat() {
+		if op == OpPow || !(l.IsNumeric() && r.IsNumeric()) {
+			return Binding{}, mismatch(op, l, r)
+		}
+		return Binding{CastL: dtype.Float64, CastR: dtype.Float64, Out: dtype.Float64}, nil
+	}
 	pa, sa, oka := dtype.DecimalDigits(l)
 	pb, sb, okb := dtype.DecimalDigits(r)
 	if !oka || !okb {
@@ -190,6 +202,11 @@ func resolveDecimal(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 		}
 		p := min(dtype.MaxDecimalPrecision, pa+pb)
 		return Binding{CastL: cl, CastR: cr, Out: dtype.Decimal(uint8(p), uint8(s))}, nil
+	case OpDiv:
+		// The nearest Float64 to the exact quotient: a quotient of decimals is
+		// generally not one (1/3), and choosing its scale would be choosing where to
+		// round. DuckDB's type; Polars truncates to the larger scale.
+		return Binding{CastL: cl, CastR: cr, Out: dtype.Float64}, nil
 	}
 	return Binding{}, decimalRemedy(uerr.New(uerr.KindType, "",
 		"operator %s is not defined for %s and %s", op, l, r).
