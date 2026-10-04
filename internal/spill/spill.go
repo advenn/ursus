@@ -41,12 +41,14 @@ import (
 // ursus, never a user error, so it reports as one.
 const magic = "URSSPIL1"
 
-// Column payload kinds, matching data.Column's four representations.
+// Column payload kinds, matching data.Column's representations.
 const (
 	kindNull uint8 = iota // no payload buffer at all
 	kindFixed
 	kindBool
 	kindString
+	kindList   // validity, offsets, then the element column
+	kindStruct // validity, then each field column
 )
 
 // Validity and Bool payload flags.
@@ -181,16 +183,15 @@ func (w *Writer) putSchema(s *dtype.Schema) error {
 	return nil
 }
 
+// putDType writes a type, and a List's element type or a Struct's fields after it.
 func (w *Writer) putDType(d dtype.DataType) error {
 	switch d.ID() {
-	case dtype.TypeList, dtype.TypeArray, dtype.TypeStruct, dtype.TypeCategorical:
+	case dtype.TypeArray, dtype.TypeCategorical:
+		// Neither has a data.Column representation, so no column of either can
+		// reach a spill.
 		return uerr.New(uerr.KindUnsupported, "spill",
 			"cannot spill a %s column", d).
-			// The reason, corrected in step 46: List has had a data.Column
-			// representation since step 28 and a mid-query producer since step 45.
-			// What is missing is a putColumn arm — the serialisation format, not
-			// the layout.
-			Hint("the spill format has no encoding for a nested column yet")
+			Hint("ursus has no column representation for %s", d)
 	}
 	w.putByte(uint8(d.ID()))
 	w.putByte(uint8(d.TimeUnit()))
@@ -201,6 +202,19 @@ func (w *Writer) putDType(d dtype.DataType) error {
 	w.putUint(uint64(len(cats)))
 	for _, c := range cats {
 		w.putString(c)
+	}
+	switch d.ID() {
+	case dtype.TypeList:
+		return w.putDType(d.Inner())
+	case dtype.TypeStruct:
+		w.putUint(uint64(len(d.Fields())))
+		for _, f := range d.Fields() {
+			w.putString(f.Name)
+			w.putBool(f.Nullable)
+			if err := w.putDType(f.Type); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -234,6 +248,36 @@ func (w *Writer) putColumn(c *data.Column) error {
 			w.w.Write(b4[:])
 		}
 		w.putBytes(c.RawChars()[lo:hi])
+
+	case dt.ID() == dtype.TypeList && !c.IsPayloadFree():
+		// Offsets are rebased and the element column sliced to the range they
+		// address, for the reason a String's are: a sliced List keeps its parent's
+		// whole element column.
+		w.putByte(kindList)
+		w.putView(c.Validity(), n)
+		offs := data.Reinterpret[int32](c.RawOffsets())
+		if len(offs) < n+1 {
+			return uerr.Internalf("spill: column %q has %d offsets for %d rows",
+				c.Name(), len(offs), n)
+		}
+		lo, hi := offs[0], offs[n]
+		w.putUint(uint64((n + 1) * 4))
+		var b4 [4]byte
+		for i := 0; i <= n; i++ {
+			binary.LittleEndian.PutUint32(b4[:], uint32(offs[i]-lo))
+			w.w.Write(b4[:])
+		}
+		w.putString(c.Child().Name())
+		return w.putColumn(c.Child().Slice(int(lo), int(hi-lo)))
+
+	case dt.ID() == dtype.TypeStruct && !c.IsPayloadFree():
+		w.putByte(kindStruct)
+		w.putView(c.Validity(), n)
+		for _, f := range c.Fields() {
+			if err := w.putColumn(f); err != nil {
+				return err
+			}
+		}
 
 	case c.IsPayloadFree():
 		// NewNull carries no payload at all, which is a genuine representation and
@@ -510,6 +554,32 @@ func (r *Reader) getDType() (dtype.DataType, error) {
 
 	id, unit, prec, scale := dtype.TypeID(raw[0]), dtype.TimeUnit(raw[1]), raw[2], raw[3]
 	switch id {
+	case dtype.TypeList:
+		inner, err := r.getDType()
+		if err != nil {
+			return dtype.Null, err
+		}
+		return dtype.List(inner), nil
+	case dtype.TypeStruct:
+		nf, err := r.getUint()
+		if err != nil {
+			return dtype.Null, err
+		}
+		fields := make([]dtype.Field, nf)
+		for i := range fields {
+			if fields[i].Name, err = r.getString(); err != nil {
+				return dtype.Null, err
+			}
+			nullable, err := r.getByte()
+			if err != nil {
+				return dtype.Null, err
+			}
+			if fields[i].Type, err = r.getDType(); err != nil {
+				return dtype.Null, err
+			}
+			fields[i].Nullable = nullable != 0
+		}
+		return dtype.Struct(fields...), nil
 	case dtype.TypeTime:
 		return dtype.Time(unit), nil
 	case dtype.TypeDuration:
@@ -592,6 +662,39 @@ func (r *Reader) getColumn(f dtype.Field, n int) (*data.Column, error) {
 			return nil, err
 		}
 		return data.NewFixedBuffer(f.Name, f.Type, raw, n, valid), nil
+
+	case kindList:
+		ob, err := r.getBuffer()
+		if err != nil {
+			return nil, err
+		}
+		offs := data.Reinterpret[int32](ob.Bytes())
+		if len(offs) != n+1 {
+			return nil, uerr.Internalf("spill: %d offsets for %d rows of %q in %s",
+				len(offs), n, f.Name, r.path)
+		}
+		name, err := r.getString()
+		if err != nil {
+			return nil, err
+		}
+		child, err := r.getColumn(dtype.Field{Name: name, Type: f.Type.Inner(), Nullable: true},
+			int(offs[n]))
+		if err != nil {
+			return nil, err
+		}
+		return data.NewList(f.Name, offs, child, valid).WithDType(f.Type), nil
+
+	case kindStruct:
+		fs := f.Type.Fields()
+		cols := make([]*data.Column, len(fs))
+		for i, ff := range fs {
+			if cols[i], err = r.getColumn(ff, n); err != nil {
+				return nil, err
+			}
+		}
+		// NewStruct derives every field as nullable; the schema's type is the one
+		// the batch must carry.
+		return data.NewStruct(f.Name, cols, valid).WithDType(f.Type), nil
 
 	default:
 		return nil, uerr.Internalf("spill: unknown column kind %d", kind)

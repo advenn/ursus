@@ -28,9 +28,6 @@ import (
 // knownSpillDefects names each case that answers wrongly today, with what it
 // answers.
 var knownSpillDefects = map[string]string{
-	"sort carrying a List(String) and a Struct":         "cannot spill a List column",
-	"group_by MaintainOrder, First of a list":           "cannot spill a List column",
-	"join with a Struct payload":                        "cannot spill a Struct column",
 	"Unique(k)":                                         "refused: unique cannot spill",
 	"Unique() of whole rows":                            "refused: unique cannot spill",
 	"Unique over NaN and null keys":                     "refused: unique cannot spill",

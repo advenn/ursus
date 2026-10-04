@@ -88,6 +88,18 @@ func value(t *testing.T, c *data.Column, i int) string {
 	if dt.HasStringStorage() && !c.IsPayloadFree() {
 		return "s:" + c.Strings().Get(i)
 	}
+	if dt.ID() == dtype.TypeList && !c.IsPayloadFree() {
+		offs := data.Reinterpret[int32](c.RawOffsets())
+		elems := render(t, c.Child())
+		return fmt.Sprint(elems[offs[i]:offs[i+1]])
+	}
+	if dt.ID() == dtype.TypeStruct && !c.IsPayloadFree() {
+		var fs []string
+		for _, f := range c.Fields() {
+			fs = append(fs, f.Name()+"="+render(t, f)[i])
+		}
+		return fmt.Sprint(fs)
+	}
 	if c.IsPayloadFree() {
 		return "null"
 	}
@@ -320,17 +332,86 @@ func TestSpillRebasesSlicedStrings(t *testing.T) {
 	}
 }
 
-// TestSpillRefusesNestedTypes: List, Array and Struct have no data.Column
-// representation, so the format says so rather than writing something it cannot
-// read back.
-func TestSpillRefusesNestedTypes(t *testing.T) {
-	sch, err := dtype.NewSchema(dtype.Of("l", dtype.List(dtype.Int64)))
+// TestSpillRoundTripsNestedTypes: a List — null, empty, and holding a null element —
+// a Struct with a null struct and a null field, and a List of Structs, whole and
+// sliced, each read back as written.
+//
+// Array has no data.Column representation, so the format refuses it rather than
+// writing something nothing could have produced.
+func TestSpillRoundTripsNestedTypes(t *testing.T) {
+	valid := func(bits ...bool) bitmap.View {
+		b := bitmap.NewBuilder(len(bits))
+		for _, v := range bits {
+			b.Append(v)
+		}
+		return b.Finish()
+	}
+	// [a, null] [] null [d] [e, f, g]
+	strs := data.NewString("item", []string{"a", "", "d", "e", "f", "g"},
+		valid(true, false, true, true, true, true))
+	list := data.NewList("l", []int32{0, 2, 2, 2, 3, 6}, strs, valid(true, true, false, true, true))
+	st := data.NewStruct("s", []*data.Column{
+		data.NewFixed("a", dtype.Int64, []int64{1, 2, 3, 4, 5}, valid(true, false, true, true, true)),
+		data.NewString("b", []string{"x", "y", "z", "", "w"}, valid(true, true, true, false, true)),
+	}, valid(true, true, false, true, true))
+	inner := data.NewStruct("item", []*data.Column{
+		data.NewFixed("a", dtype.Int64, []int64{1, 2, 3}, valid(true, false, true)),
+	}, valid(true, true, false))
+	los := data.NewList("ls", []int32{0, 1, 1, 3, 3, 3}, inner, valid(true, false, true, true, true))
+
+	b, err := data.NewBatch(dtype.MustSchema(
+		dtype.Of("l", list.DType()), dtype.Of("s", st.DType()), dtype.Of("ls", los.DType())),
+		[]*data.Column{list, st, los})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := spill.Create(filepath.Join(t.TempDir(), "x"), sch); err == nil {
-		t.Fatal("a List column was accepted")
+	sch := b.Schema()
+	assertSame(t, []*data.Batch{b}, roundTrip(t, sch, []*data.Batch{b}))
+	sliced := b.Slice(1, 3)
+	assertSame(t, []*data.Batch{sliced}, roundTrip(t, sch, []*data.Batch{sliced}))
+
+	arr, err := dtype.NewSchema(dtype.Of("a", dtype.Array(dtype.Int64, 2)))
+	if err != nil {
+		t.Fatal(err)
 	}
+	if _, err := spill.Create(filepath.Join(t.TempDir(), "x"), arr); err == nil {
+		t.Fatal("an Array column was accepted")
+	}
+}
+
+// TestSpillRebasesSlicedLists: a slice of a List keeps its parent's whole element
+// column, and the file must carry only the elements the slice addresses.
+func TestSpillRebasesSlicedLists(t *testing.T) {
+	const rows = 2000
+	elems := make([]string, 0, 2*rows)
+	offs := []int32{0}
+	for i := range rows {
+		elems = append(elems, fmt.Sprintf("%064d", i), fmt.Sprintf("%064d", -i))
+		offs = append(offs, int32(len(elems)))
+	}
+	list := data.NewList("l", offs, data.NewString("item", elems, bitmap.AllSet(len(elems))),
+		bitmap.AllSet(rows))
+	sch := dtype.MustSchema(dtype.Of("l", list.DType()))
+	b, err := data.NewBatch(sch, []*data.Column{list})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sliced := b.Slice(500, 10)
+	path := filepath.Join(t.TempDir(), "run.ursspill")
+	w, err := spill.Create(path, sch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Write(sliced); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if size, whole := fileSize(t, path), int64(len(elems)*64); size > whole/50 {
+		t.Errorf("spilling 10 of %d lists wrote %d bytes; the elements are %d", rows, size, whole)
+	}
+	assertSame(t, []*data.Batch{sliced}, roundTrip(t, sch, []*data.Batch{sliced}))
 }
 
 // TestSpillValidityIsNotOversized is the bitmap half of the rebasing story.
