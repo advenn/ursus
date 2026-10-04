@@ -177,6 +177,16 @@ func TestAggregationsAndWindowsByHand(t *testing.T) {
 			want: ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("w", []int64{10, 20, 30}),
 				ursus.Values("x", []int64{1, 2, 3}), ursus.Values("s", []int64{30, 30, 30})).
 				Select(c("g"), c("w"), c("x"), c("s").Cast(ursus.Int128))},
+		// A second window over a name defined after the first split: split twice.
+		{name: "W1 two splits, and expressions after each",
+			got: gx.WithColumns(c("x").Mul(10).Alias("w"), c("w").Sum().Over(c("g")).Alias("s"),
+				c("s").Add(c("w")).Alias("t"), c("t").Max().Over(c("g")).Alias("m"), c("m").Sub(c("t")).Alias("d")),
+			want: ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("x", []int64{1, 2, 3}),
+				ursus.Values("w", []int64{10, 20, 30}), ursus.Values("s", []int64{30, 30, 30}),
+				ursus.Values("t", []int64{40, 50, 60}), ursus.Values("m", []int64{50, 50, 60}),
+				ursus.Values("d", []int64{10, 0, 0})).
+				Select(c("g"), c("x"), c("w"), c("s").Cast(ursus.Int128), c("t").Cast(ursus.Int128),
+					c("m").Cast(ursus.Int128), c("d").Cast(ursus.Int128))},
 		{name: "control: an earlier column read outside the window",
 			got: gx.WithColumns(c("x").Mul(10).Alias("w"), c("w").Add(c("x").Sum().Over(c("g"))).Alias("s")),
 			want: ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("x", []int64{1, 2, 3}),
