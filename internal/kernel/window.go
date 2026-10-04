@@ -354,6 +354,8 @@ func winCumFloat(fn expr.WinFnOp, params expr.WinParams, name string,
 	vals := make([]float64, n)
 	ok := make([]bool, n)
 	prod := fn == expr.WinCumProd
+	// An integer or Decimal running product of zero is +0, as Product's is.
+	exact := prod && !col.DType().IsFloat()
 
 	forEachOrdered(seg, params.Reverse, func(rows []int32) {
 		acc := 0.0
@@ -370,6 +372,9 @@ func winCumFloat(fn expr.WinFnOp, params expr.WinParams, name string,
 				acc += src[row]
 			}
 			vals[row] = acc
+			if exact && acc == 0 {
+				vals[row] = 0
+			}
 			ok[row] = true
 		}
 	})

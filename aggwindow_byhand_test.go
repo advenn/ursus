@@ -20,8 +20,6 @@ import (
 
 // knownAggDefects names each case that answers wrongly today, with what it answers.
 var knownAggDefects = map[string]string{
-	"A13 Product of Int64 [3, 0, -5]":    "-0",
-	"A13 GroupBy().Agg() of nothing":     "shape (0, 0)",
 	"A14 GroupByDynamic with Closed(99)": "answered as ClosedLeft",
 	"A14 IsBetween with Closed(99)":      "answered as ClosedLeft",
 }
@@ -135,14 +133,23 @@ func TestAggregationsAndWindowsByHand(t *testing.T) {
 				}
 				return ""
 			}},
-		{name: "A13 GroupBy().Agg() of nothing",
-			got: ursus.Frame(ursus.Values("v", []int64{1, 2, 3})).GroupBy().Agg(),
+		{name: "A13 CumProd of Int64 [3, 0, -5]",
+			got: ursus.Frame(ursus.Values("v", []int64{3, 0, -5})).Select(c("v").CumProd(false)),
 			check: func(df *ursus.DataFrame) string {
-				if h, w := df.Shape(); h != 1 || w != 0 {
-					return fmt.Sprintf("shape (%d, %d), want (1, 0): a global aggregate is one row", h, w)
+				for i := range 3 {
+					v, _, _ := df.At[float64](i, "v")
+					if i > 0 && (v != 0 || math.Signbit(v)) {
+						return fmt.Sprintf("row %d = %v (sign bit %v), want +0", i, v, math.Signbit(v))
+					}
 				}
 				return ""
 			}},
+		{name: "A13 GroupBy().Agg() of nothing",
+			got:   ursus.Frame(ursus.Values("v", []int64{1, 2, 3})).GroupBy().Agg(),
+			check: oneEmptyRow},
+		{name: "A13 GroupBy().Agg() of nothing, over no rows",
+			got:   ursus.Frame(ursus.Values("v", []int64{1, 2, 3})).Filter(c("v").Gt(9)).GroupBy().Agg(),
+			check: oneEmptyRow},
 
 		// --- A14: an undeclared Closed is refused ---
 		{name: "A14 GroupByDynamic with Closed(99)",
@@ -174,6 +181,14 @@ func TestAggregationsAndWindowsByHand(t *testing.T) {
 			t.Errorf("knownAggDefects names %q, which is not a case", name)
 		}
 	}
+}
+
+// oneEmptyRow is a global aggregate of nothing: one row, no columns.
+func oneEmptyRow(df *ursus.DataFrame) string {
+	if h, w := df.Shape(); h != 1 || w != 0 {
+		return fmt.Sprintf("shape (%d, %d), want (1, 0): a global aggregate is one row", h, w)
+	}
+	return ""
 }
 
 func aggWrong(t *testing.T, tc aggCase) string {

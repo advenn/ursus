@@ -147,8 +147,9 @@ func (a *varAcc) Finish(name string, nGroups int) (*data.Column, error) {
 // Int64 accumulator would WRAP, silently, after roughly twenty ordinary factors.
 // An approximate large answer beats a precise wrong one.
 type productAcc struct {
-	p    []float64
-	seen []bool
+	p     []float64
+	seen  []bool
+	exact bool // the input is an integer or a Decimal, which have no −0
 }
 
 func (a *productAcc) Reserve(n int) {
@@ -194,8 +195,20 @@ func (a *productAcc) Merge(other Accumulator, remap []int32) error {
 // The empty product is 1 mathematically, but this follows sum: an all-null group
 // returns NULL so that "nothing to multiply" stays distinguishable from "the
 // factors multiplied to one".
+//
+// An integer or Decimal product of zero is +0. The float accumulator turns
+// 3 × 0 × −5 into −0, which an integer product cannot be, and which reads back as
+// a different value: it sorts before +0 in a total order, divides into −Inf, and
+// prints as -0.
 func (a *productAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
+	if a.exact {
+		for g, v := range a.p[:nGroups] {
+			if v == 0 {
+				a.p[g] = 0
+			}
+		}
+	}
 	return data.NewFixed(name, dtype.Float64, a.p[:nGroups],
 		seenBitmap(a.seen, nGroups)), nil
 }

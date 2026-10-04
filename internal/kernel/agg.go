@@ -112,7 +112,7 @@ func NewAccumulator(op expr.AggOp, in dtype.DataType, bind expr.AggBinding,
 		return &varAcc{ddof: params.DDof, std: true}, nil
 
 	case expr.AggProduct:
-		return &productAcc{}, nil
+		return &productAcc{exact: !in.IsFloat()}, nil
 
 	case expr.AggArgMin:
 		return &argExtremumAcc{max: false}, nil

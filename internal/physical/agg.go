@@ -284,6 +284,11 @@ func (r *renameOp) Apply(_ context.Context, in *data.Batch) (*data.Batch, error)
 		return nil, uerr.Internalf("physical: rename got %d columns, want %d",
 			in.NumCols(), r.schema.Len())
 	}
+	if in.NumCols() == 0 {
+		// GroupBy().Agg() with nothing to aggregate: the global row, which has no
+		// columns to count it by, so its height is carried, not derived.
+		return data.NewBatchRows(r.schema, nil, in.Rows()), nil
+	}
 	cols := make([]*data.Column, in.NumCols())
 	for i, c := range in.Columns() {
 		f := r.schema.Field(i)
@@ -734,6 +739,11 @@ func (s *hashAggSink) residentResult() (*data.Batch, error) {
 		cols = append(cols, c)
 	}
 
+	if len(cols) == 0 {
+		// A global aggregate of nothing is still its one row, as Agg's doc promises;
+		// NewBatch derives the height from the columns, and with none it said 0.
+		return data.NewBatchRows(s.schema, nil, nGroups), nil
+	}
 	return data.NewBatch(s.schema, cols)
 }
 
