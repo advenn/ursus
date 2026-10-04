@@ -53,18 +53,18 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | O1 ✔ | ~~**SW**~~ **fixed, step 70** | A `Filter` after a chained `WithColumns` returns wrong rows. `WithColumns(x+1 as w, w*2 as v).Filter(v>7)` gives x = 1, 3, 5, and the answer is 3, 4, 5. The in-place form returns 0 rows instead of 3; another form refuses with `unknown column`. | `rule_predicate.go:276-305`, `:343-351`: the definition is substituted verbatim, not recursively. `WithColumns` is documented as sequential. |
 | O2 ✔ | ~~**FR**~~ **fixed, step 70** | `Concat` then a projection is refused: `concat: frame 1 has 2 columns, frame 0 has 1`. Also refused after `GroupBy`, `Sort`, `WithColumns` and `Unique`. `WithVerify` catches it: *"projection_pushdown produced a plan whose schema does not resolve"*. | `rule_projection.go:264-281`, the Union arm, which lacks `pushdownMergeSorted`'s symmetry check. |
 | O3 ✔ | ~~**SW / CR**~~ **fixed, step 72** | Literals of different types merge into one computation: `Lit(int8(100))` and `Lit(int64(100))` both render `lit(100)`, as do `1` and `1.0`. A sum came back −111 instead of 401; `x*1` beside `x*1.0` raises `ErrInternal`. Affects `Agg`, `GroupByDynamic`, window temporaries and partition keys. | `Lit.String()` (`expr/nodes.go:98-116`) omits the type. The dedup maps are `physical/agg.go:753`, `plan/resolve_window.go:82` and `physical/window.go:382`. This is step 65's UDF bug, for literals. |
-| O4 | **SW** | Cross-join collapse turns IEEE `==` into hash equality, so NaN matches NaN: `JoinWhere`, cross join + `Filter`, `WhereExists` and `WhereNotExists` all answer differently with the rule off. | `rule_collapse.go:88-104`, `:214-216`. |
-| O5 | **SW** | Cross-join collapse copies `NullsEqual`, so a `JoinNullsEqual(true)` cross join followed by `Filter(k == k_right)` matches null keys. `JoinNullsEqual` on a cross join is accepted silently. | `rule_collapse.go:103` (`c := *j`), whose comment at `:113` says it "stays false". |
+| O4 | ~~**SW**~~ **fixed, step 78** | Cross-join collapse turns IEEE `==` into hash equality, so NaN matches NaN: `JoinWhere`, cross join + `Filter`, `WhereExists` and `WhereNotExists` all answer differently with the rule off. | `rule_collapse.go:88-104`, `:214-216`. |
+| O5 | ~~**SW**~~ **fixed, step 78** | Cross-join collapse copies `NullsEqual`, so a `JoinNullsEqual(true)` cross join followed by `Filter(k == k_right)` matches null keys. `JoinNullsEqual` on a cross join is accepted silently. | `rule_collapse.go:103` (`c := *j`), whose comment at `:113` says it "stays false". |
 | O6 ✔ | ~~**SW**~~ **fixed, step 74** | A filter on a coalesced join key is pushed into the side with the narrower key type and runs at that width: Int32 `k*m > 1e9` returns 0 rows, and the answer is 1. | `rule_predicate.go:597-605`, `rewriteForSide`'s Col arm. |
-| O7 | **SW** | Parquet row-group pruning — see I2–I5. | |
+| O7 | ~~**SW**~~ **fixed, step 71** | Parquet row-group pruning — see I2–I5. | Closed at step 78: it is I2–I5, which step 71 fixed. |
 | O8 ✔ | ~~**FR**~~ **fixed, step 70** | Merging stacked filters reverses their order, so a guard no longer protects the filter after it. `Filter(ok).Filter(s.Cast(Int64) > 1)` fails with a cast error when optimized. | `rule_predicate.go:86`. |
-| O9 | SW (edge) | A filter pushed below `Unique` can tell −0.0 from +0.0, which `Unique` merges. | `rule_predicate.go:420-431`. |
-| O10 | CR | `GroupByDynamic(Col("t").Shift(1), …)` raises `ErrInternal`. | `resolveTemporalGroup` never calls `rejectWindow` or `rejectAggregate`. |
-| O11 | ME | `Explain` and `CollectSchema` accept `Sum().OverWith(OrderBy…)`, which `Collect` refuses. | The refusal exists only at `physical/window.go:405`. |
+| O9 | ~~SW (edge)~~ **fixed, step 78** | A filter pushed below `Unique` can tell −0.0 from +0.0, which `Unique` merges. | `rule_predicate.go:420-431`. |
+| O10 | ~~CR~~ **fixed, step 78** | `GroupByDynamic(Col("t").Shift(1), …)` raises `ErrInternal`. | `resolveTemporalGroup` never calls `rejectWindow` or `rejectAggregate`. |
+| O11 | ~~ME~~ **fixed, step 78** | `Explain` and `CollectSchema` accept `Sum().OverWith(OrderBy…)`, which `Collect` refuses. | The refusal exists only at `physical/window.go:405`. |
 | O12 | info | The optimizer can turn a runtime error into a result, e.g. `cast OR true`. This is probably acceptable, but it contradicts the rule's own contract for `Validate`. | |
-| O8b | **FR** | Found when O8 was fixed: pushdown still moves a fallible conjunct *below* one that stays. `Unique("s").Filter(ok).Filter(s.Cast(Int64) > 1)` casts beneath the Distinct, ahead of the guard. Needs a rule about which conjuncts can fail, not an ordering. | `rule_predicate.go`, the Distinct arm. |
-| O8-join | FR | The same across a join: a fallible filter is pushed into a join side, onto rows the join would remove. Polars makes the same trade. | the join arm of predicate pushdown. |
-| **P1** | **SW** | **Found by step 70's differential.** Projection pushdown stops reading a column that a `WithColumns` redefines without reading it, and the redefinition then lands at the END instead of in place: `WithColumns(x+1 as w)` on `{x, w, y}` returns `{x, y, w}`, while `CollectSchema` promises `{x, w, y}`. Silent without `WithVerify`. 132 shapes in the differential. | the `WithColumns` arm of projection pushdown, against `WalkWithColumns`' replace-in-place. |
+| O8b | ~~**FR**~~ **fixed, step 78** | Found when O8 was fixed: pushdown still moves a fallible conjunct *below* one that stays. `Unique("s").Filter(ok).Filter(s.Cast(Int64) > 1)` casts beneath the Distinct, ahead of the guard. Needs a rule about which conjuncts can fail, not an ordering. | `rule_predicate.go`, the Distinct arm. |
+| O8-join | ~~FR~~ **fixed, step 78** | The same across a join: a fallible filter is pushed into a join side, onto rows the join would remove. Polars makes the same trade. | the join arm of predicate pushdown. |
+| **P1** | ~~**SW**~~ **fixed, step 78** | **Found by step 70's differential.** Projection pushdown stops reading a column that a `WithColumns` redefines without reading it, and the redefinition then lands at the END instead of in place: `WithColumns(x+1 as w)` on `{x, w, y}` returns `{x, y, w}`, while `CollectSchema` promises `{x, w, y}`. Silent without `WithVerify`. 132 shapes in the differential. | the `WithColumns` arm of projection pushdown, against `WalkWithColumns`' replace-in-place. |
 | **W1** | ~~**SW / FR**~~ **fixed, step 75** | **Found measuring step 70.** A window over a column defined earlier in the same `WithColumns` reads the input's column — a per-group sum of 200 where the answer is 30 — or, for a new name, is refused with `unknown column`. Wrong with the optimizer on AND off, so no on/off differential can see it. | windows are lifted below the whole node, `resolve.go:329`, `resolve_window.go:131`. |
 | O13 | SW, unmeasured | **Recorded at step 72, not fixed.** An Enum's categories and a struct's field names render unquoted in `DataType.String()`, so two different types can render alike. `expr.Identity` carries a literal's type through that rendering, so two typed nulls of such types could still share one computation. | `dtype` rendering. It reaches the dedup maps only through a typed null. |
 | O14 | SW | **Recorded at step 72, not fixed.** A worker goroutine that ends in `runtime.Goexit` — which no recover sees — closes its lane as though the stream had ended, and the rows after it are silently dropped: a udf calling `Goexit` on the third of five rows, at 4 threads and a batch size of 1, gave `Count` = 2 and no error. | `parallel.go`, `parjoin.go`: a closed lane is read as end of stream. Nothing in ursus calls `Goexit`; a udf could. |
@@ -302,7 +302,14 @@ Ordered by harm per unit of fix, not by count.
    from String, exactly; a float is written so it reads back as one; a frame with rows
    and no columns is refused by the writers; and a null String and an empty one are
    written and read apart (I27, found by the step's round-trip sweep).
-10. Then the rest, by table.
+10. ~~**The optimizer's leftovers**: O4, O5, O8b, O8-join, O9, P1, with O10 and
+    O11.~~ **Done — step 78**: step 70's on/off differential has no mismatch left over
+    1629 queries. A float key extracted from `==` is checked again after the hash
+    match; a collapsed join never equates nulls; a fallible conjunct does not move
+    ahead of a guard or into a join side that loses rows; a filter reading a float
+    does not pass a Distinct; a redefined column keeps its place; and the planner
+    refuses what Collect refuses. O7 is closed as step 71's.
+11. Then the rest, by table.
 
 Known and excluded, because they were already on the open lists:
 
