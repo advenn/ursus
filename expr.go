@@ -407,13 +407,15 @@ func (e Expr) IsBetween[L, H Operand](lo L, hi H, closed ...Closed) Expr {
 // join wearing a predicate's clothes, and it belongs with the join machinery.
 //
 // All values share one type parameter, so the set is homogeneous by construction.
-// Values that are not representable in the column's type are an error rather than a
-// silent non-match: comparing an Int8 column against 5000 is a question with no
-// meaningful answer. Representable is Cast's rule: a float converts to the nearest
-// value of the column's width, so IsIn(0.1) on a Float32 column matches the float32
-// nearest 0.1 (as DuckDB's and PyArrow's do; Polars compares at Float64 and does
-// not), and a string parses at the column's width, so IsIn("300") on an Int8
-// column is an error and IsIn("9007199254740993") on an Int64 is that integer.
+//
+// # IsIn(v) answers what Eq(v) answers
+//
+// The column and the values meet at the type == would compare them at, so IsIn
+// refuses exactly the pairs Eq refuses, at plan time — a String against an Int64,
+// an int against a Bool, an instant against a Date — and is false wherever Eq is:
+// 5000 is not in an Int8 column, 0.1 is not in a Float32 one (they compare at
+// Float64, as Polars does), and 00:00:01.5 is not in a Datetime(s) one. To match the
+// float32 nearest 0.1, say so: IsIn(float32(0.1)).
 //
 // # Equality is GROUPING equality
 //

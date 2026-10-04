@@ -82,8 +82,8 @@ func (l ListExpr) Last() Expr  { return l.Get(-1) }
 // encoder `IsIn` uses, so NaN matches NaN and -0.0 matches +0.0, consistently
 // with how GroupBy and Sort treat them.
 //
-// The cast to the element type is STRICT. `Contains(int64(5000))` against Int8
-// elements reports that 5000 does not fit rather than quietly matching nothing.
+// The element and v meet as == would compare them, as IsIn's values do: v of a type
+// == refuses is refused, and `Contains(5000)` against Int8 elements is false.
 func (l ListExpr) Contains(v any) Expr { return l.call(expr.FnListContains, v) }
 
 // Min and Max reduce each list to its smallest or largest element, keeping the

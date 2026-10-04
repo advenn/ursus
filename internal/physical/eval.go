@@ -299,7 +299,8 @@ func litColumn(l *expr.Lit) (*data.Column, error) {
 }
 
 // buildInSet encodes is_in's literal arguments into a probe set, cast to the type
-// of the column they will be compared against.
+// the column and the values meet at: expr.MembershipType, which is Eq's type. The
+// caller casts the column there too when it differs.
 //
 // Each value is materialised as a length-1 column and cast INDIVIDUALLY rather than
 // as one batch, so the conversion goes through exactly the same kernel.Cast the
@@ -308,10 +309,9 @@ func litColumn(l *expr.Lit) (*data.Column, error) {
 // of equality, and the two would eventually disagree — which for a membership test
 // means rows quietly appearing or vanishing.
 //
-// The cast is STRICT. `Col("age").IsIn(int64(5000))` on an Int8 column is a
-// question with no meaningful answer, and reporting "5000 is not representable as
-// Int8" is more use than silently matching nothing.
-func buildInSet(c *expr.Call, recvType dtype.DataType) (map[string]struct{}, error) {
+// The cast is strict, and cannot fail: the meeting type holds every value, as it
+// holds both sides of an ==.
+func buildInSet(c *expr.Call, meet dtype.DataType) (map[string]struct{}, error) {
 	set := make(map[string]struct{}, len(c.Args)-1)
 	for _, a := range c.Args[1:] {
 		l, ok := a.(*expr.Lit)
@@ -322,8 +322,8 @@ func buildInSet(c *expr.Call, recvType dtype.DataType) (map[string]struct{}, err
 		if err != nil {
 			return nil, err
 		}
-		if col.DType() != recvType {
-			col, err = kernel.Cast(col.Name(), recvType, true, col)
+		if col.DType() != meet {
+			col, err = kernel.Cast(col.Name(), meet, true, col)
 			if err != nil {
 				return nil, err
 			}
@@ -357,7 +357,10 @@ type compiledCall struct {
 	// here for the reason the set is: the cast has to be strict and the encoding
 	// has to match the child's, and doing it per batch would repeat both.
 	needle []byte
-	err    error
+	// meet is the type is_in's column, or list.contains' list, is compared at:
+	// expr.MembershipType's, as a List for list.contains.
+	meet dtype.DataType
+	err  error
 }
 
 func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, error) {
@@ -408,10 +411,18 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 	case c.Fn.IsTemporal():
 		return kernel.DtCall(c.Fn, name, out, recv, cc.args)
 	case c.Fn == expr.FnIsIn:
+		if recv, err = meetType(recv, cc.meet); err != nil {
+			return nil, err
+		}
 		return kernel.InSet(name, recv, cc.set)
 	case c.Fn.IsMath():
 		return kernel.MathCall(c.Fn, name, out, recv, cc.args)
 	case c.Fn.IsList():
+		if c.Fn == expr.FnListContains {
+			if recv, err = meetType(recv, cc.meet); err != nil {
+				return nil, err
+			}
+		}
 		return kernel.ListCall(c.Fn, name, out, recv, cc.args, cc.needle)
 	case c.Fn.IsStruct():
 		return kernel.StructCall(c.Fn, name, recv, cc.args)
@@ -452,28 +463,31 @@ func compileCall(c *expr.Call, recvType dtype.DataType) compiledCall {
 	var cc compiledCall
 	cc.args, cc.err = expr.CallArgs(c)
 	if cc.err == nil && c.Fn == expr.FnIsIn {
-		cc.set, cc.err = buildInSet(c, recvType)
+		if cc.meet, cc.err = expr.MembershipType(c, recvType); cc.err == nil {
+			cc.set, cc.err = buildInSet(c, cc.meet)
+		}
 	}
 	if cc.err == nil && c.Fn.IsString() {
 		cc.re, cc.err = kernel.CompilePattern(c.Fn, cc.args)
 	}
 	if cc.err == nil && c.Fn == expr.FnListContains {
-		cc.needle, cc.err = buildListNeedle(c, recvType)
+		var elem dtype.DataType
+		if elem, cc.err = expr.MembershipType(c, recvType.Inner()); cc.err == nil {
+			cc.meet = dtype.List(elem)
+			cc.needle, cc.err = buildListNeedle(c, elem)
+		}
 	}
 	callCache.Store(k, cc)
 	return cc
 }
 
-// buildListNeedle encodes list.contains's value against the ELEMENT type.
+// buildListNeedle encodes list.contains's value at the type it meets the ELEMENT
+// at: expr.MembershipType's, against the list's Inner. It is buildInSet for a
+// single value, and the caller casts the list to List(elem) when it differs.
 //
-// It is buildInSet for a single value, and strict for the same reason: comparing
-// against a value the element type cannot hold is a question with no meaningful
-// answer, and "5000 is not representable as Int8" is more use than silently
-// matching nothing.
-//
-// The receiver here is the LIST, so the cast target is its Inner — getting that
+// The receiver here is the LIST, so the meeting is with its Inner — getting that
 // wrong would encode against List(Int8) and match nothing at all.
-func buildListNeedle(c *expr.Call, recvType dtype.DataType) ([]byte, error) {
+func buildListNeedle(c *expr.Call, elem dtype.DataType) ([]byte, error) {
 	if len(c.Args) < 2 {
 		return nil, uerr.Internalf("physical: list.contains has no value argument")
 	}
@@ -486,13 +500,22 @@ func buildListNeedle(c *expr.Call, recvType dtype.DataType) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	elem := recvType.Inner()
 	if col.DType() != elem {
 		if col, err = kernel.Cast(col.Name(), elem, true, col); err != nil {
 			return nil, err
 		}
 	}
 	return kernel.EncodeOne(col)
+}
+
+// meetType casts a membership test's receiver to the type it is compared at, when
+// it is not already there: an Int32 column tested against Go ints is compared as an
+// Int64, as Eq compares it.
+func meetType(recv *data.Column, meet dtype.DataType) (*data.Column, error) {
+	if recv.DType() == meet {
+		return recv, nil
+	}
+	return kernel.Cast(recv.Name(), meet, true, recv)
 }
 
 // evalUDF runs a user's function and then CHECKS WHAT IT CLAIMED.

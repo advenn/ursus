@@ -158,14 +158,18 @@ func TestCastsAndParsesByHand(t *testing.T) {
 			want: f32(sqrt2)},
 
 		// --- IsIn ---
-		{name: "f32 IsIn(0.1)", got: f32(0.1, 0.2).Select(c("x").IsIn(0.1)), want: boolean(true, false)},
-		{name: `i8 IsIn("300")`, got: ursus.Frame(ursus.Values("x", []int8{1, 2})).Select(c("x").IsIn("300")),
-			refuse: []string{`"300"`, "Int8"}},
-		{name: `i64 IsIn("9007199254740993")`,
-			got:  i64(p53, p53+1).Select(c("x").IsIn("9007199254740993")),
+		// Step 76 made IsIn compare as Eq does, so it no longer casts or parses its
+		// values to the column's type: a String against an integer column is refused,
+		// as == refuses it (scalar_byhand_test.go), and 0.1 against a Float32 column
+		// compares at Float64. What these cases kept from step 73 is exactness at the
+		// boundaries, through the typed values a caller now writes.
+		{name: "f32 IsIn(0.1)", got: f32(0.1, 0.2).Select(c("x").IsIn(0.1)), want: boolean(false, false)},
+		{name: "f32 IsIn(float32(0.1))", got: f32(0.1, 0.2).Select(c("x").IsIn(float32(0.1))), want: boolean(true, false)},
+		{name: "i64 IsIn(2^53+1)",
+			got:  i64(p53, p53+1).Select(c("x").IsIn(int64(p53 + 1))),
 			want: boolean(false, true)},
-		{name: `u64 IsIn("18446744073709551615")`,
-			got:  u64(math.MaxUint64).Select(c("x").IsIn("18446744073709551615")),
+		{name: "u64 IsIn(MaxUint64)",
+			got:  u64(math.MaxUint64).Select(c("x").IsIn(uint64(math.MaxUint64))),
 			want: boolean(true)},
 
 		// --- controls: right today, and must stay right ---

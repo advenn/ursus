@@ -144,19 +144,27 @@ func TestIsInUsesGroupingEquality(t *testing.T) {
 	}
 }
 
+// TestIsInRefusals: IsIn refuses what Eq refuses, and nothing else.
+//
+// Until step 76 the values were cast to the column's type, so 5e9 against an Int32
+// was a value error and "abc" against a number a parse error. A value the column
+// cannot hold is now simply not in it, as `qty == 5e9` is false; text against a
+// number has no common type, and is refused at plan time, as == refuses it.
 func TestIsInRefusals(t *testing.T) {
+	df, err := frame().Filter(ursus.Col("qty").IsIn(int64(5_000_000_000))).Collect(t.Context())
+	if err != nil || df.Height() != 0 {
+		t.Errorf("an Int32 column IsIn(5e9): %v rows, %v; want none and no error", df, err)
+	}
+
 	cases := []struct {
 		name string
 		lf   func() *ursus.LazyFrame
 		kind error
 		want string
 	}{
-		{"unrepresentable value", func() *ursus.LazyFrame {
-			return frame().Filter(ursus.Col("qty").IsIn(int64(5_000_000_000)))
-		}, uerr.ErrValue, "not representable as Int32"},
-		{"unparseable text against a number", func() *ursus.LazyFrame {
+		{"text against a number", func() *ursus.LazyFrame {
 			return frame().Filter(ursus.Col("qty").IsIn("abc"))
-		}, uerr.ErrValue, "abc"},
+		}, uerr.ErrType, "String"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

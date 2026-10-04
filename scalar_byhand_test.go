@@ -24,16 +24,6 @@ import (
 
 // knownScalarDefects names each case that answers wrongly today, with what it answers.
 var knownScalarDefects = map[string]string{
-	"S6 Int64 IsIn(\"1\")":                         "matched",
-	"S6 Bool IsIn(1)":                              "matched",
-	"S6 String IsIn(1)":                            "matched",
-	"S6 Date IsIn(2024-01-01T13:00)":               "matched",
-	"S6 Int8 IsIn(5000)":                           "refused: not representable as Int8",
-	"S6 Uint64 IsIn(-1)":                           "refused: not representable as Uint64",
-	"S6 Float32 IsIn(0.1)":                         "matched the float32 nearest 0.1",
-	"S6 Datetime(s) IsIn(00:00:01.5)":              "matched",
-	"S6 List(Int8) Contains(5000)":                 "refused: not representable as Int8",
-	"S6 List(Int64) Contains(\"1\")":               "matched",
 	"S7 Replace (a)(b) with $2$1":                  "$2$1 ab",
 	"S7 Replace (a)(b) with ${1}x":                 "${1}x ab",
 	"S9 SplitN with n = 0":                         "[]",

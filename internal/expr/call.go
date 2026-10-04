@@ -284,13 +284,13 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		return dtCallOut(c, in)
 
 	case fn.IsGeneral():
-		return genCallOut(fn, in)
+		return genCallOut(c, in)
 
 	case fn.IsMath():
 		return mathCallOut(fn, in)
 
 	case fn.IsList():
-		return listCallOut(fn, in)
+		return listCallOut(c, in)
 
 	case fn.IsStruct():
 		return structCallOut(c, in)
@@ -301,8 +301,8 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 }
 
 // genCallOut types the family that does not dispatch on the receiver's type.
-func genCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
-	switch fn {
+func genCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
+	switch fn := c.Fn; fn {
 	case FnIsIn:
 		// Membership is decided by the same encoding group_by and distinct use, so
 		// the receiver must be a type that encoding accepts.
@@ -311,10 +311,48 @@ func genCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 				"is_in is not defined for %s", in).
 				Hint("the value must be hashable: numeric, temporal, string or boolean")
 		}
+		if !in.IsNull() {
+			if _, err := MembershipType(c, in); err != nil {
+				return dtype.Null, err
+			}
+		}
 		return dtype.Bool, nil
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown general call %d", fn)
 	}
+}
+
+// MembershipType is the type is_in and list.contains compare at: the type Eq would
+// compare the receiver — for list.contains, its element — and each value at. So
+// `x.IsIn(v)` refuses exactly the pairs `x.Eq(v)` refuses, and answers the same
+// rows wherever both are defined.
+//
+// The values used to be cast to the receiver's type, which answered a different
+// question. A value the column cannot hold — 5000 against an Int8, −1 against a
+// Uint64 — was an error where Eq says false; a string, a bool or an instant was
+// parsed or converted, so an Int64 matched "1", a Bool matched 1 and a Date matched
+// 13:00 on that day, all pairs Eq refuses; and a value was rounded to the column's
+// precision, so a Datetime(s) matched 00:00:01.5 and a Float32 matched 0.1.
+//
+// Equality is still grouping equality, so NaN matches NaN — the one place the two
+// differ, and on purpose.
+func MembershipType(c *Call, against dtype.DataType) (dtype.DataType, error) {
+	common := against
+	for _, a := range c.Args[1:] {
+		l, ok := a.(*Lit)
+		if !ok {
+			return dtype.Null, uerr.Internalf("expr: %s argument %s is not a literal", c.Fn, a)
+		}
+		b, err := ResolveBinary(OpEq, common, l.DT)
+		if err != nil {
+			return dtype.Null, uerr.New(uerr.KindType, c.Fn.String(),
+				"%s cannot compare %s with a %s value", c.Fn, against, l.DT).
+				Hint("it compares as == does, and == has no common type for these").
+				Hint("cast one side so the two meet, e.g. .Cast(ursus.%s)", l.DT)
+		}
+		common = b.CastL
+	}
+	return common, nil
 }
 
 // mathCallOut types the parameterised maths family.
@@ -565,7 +603,8 @@ func callLitString(c *Call, i int) (string, bool) {
 // reshapes it and gives back the RECEIVER'S type, unchanged. A caller can read
 // which half a function is in from this switch alone, which is the point of
 // keeping the rule in one place.
-func listCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
+func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
+	fn := c.Fn
 	if in.ID() != dtype.TypeList {
 		return dtype.Null, uerr.New(uerr.KindType, "list",
 			"%s requires a List operand, got %s", fn, in).
@@ -580,6 +619,9 @@ func listCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 		return dtype.Uint32, nil
 
 	case FnListContains:
+		if _, err := MembershipType(c, elem); err != nil {
+			return dtype.Null, err
+		}
 		return dtype.Bool, nil
 
 	case FnListGet, FnListMin, FnListMax:
