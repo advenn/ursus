@@ -156,6 +156,19 @@ func TestScalarFunctionsByHand(t *testing.T) {
 			got: ursus.Frame(ursus.Values("a", []float64{-7, 7, -7.5}), ursus.Values("b", []float64{2, -2, 2})).
 				Select(c("a").Mod(c("b")).Alias("m")),
 			want: f64("m", 1, -1, 0.5)},
+		// A zero remainder takes the divisor's sign too, as Python's does; Polars, which
+		// computes a - b*floor(a/b), gives +0 for both.
+		{name: "S8 a zero Float64 remainder takes the divisor's sign",
+			got: ursus.Frame(ursus.Values("a", []float64{4, 0}), ursus.Values("b", []float64{-2, -2})).
+				Select(c("a").Mod(c("b")).Alias("m")),
+			check: func(df *ursus.DataFrame) string {
+				for i := range 2 {
+					if v, _, _ := df.At[float64](i, "m"); v != 0 || !math.Signbit(v) {
+						return fmt.Sprintf("row %d = %v (sign bit %v), want -0", i, v, math.Signbit(v))
+					}
+				}
+				return ""
+			}},
 		{name: "S8 Duration -7s FloorDiv 2",
 			got:  i64("a", -7).Select(c("a").Cast(ursus.Duration(ursus.Second)).FloorDiv(2)),
 			want: i64("a", -4).Select(c("a").Cast(ursus.Duration(ursus.Second)))},
@@ -266,6 +279,18 @@ func TestScalarFunctionsByHand(t *testing.T) {
 		if !slices.ContainsFunc(cases, func(c scalarCase) bool { return c.name == name }) {
 			t.Errorf("knownScalarDefects names %q, which is not a case", name)
 		}
+	}
+}
+
+// TestIsInRefusesAtPlanTime: the refusal is the resolver's, so CollectSchema and
+// Explain say it before any data is read, as they do for Eq.
+func TestIsInRefusesAtPlanTime(t *testing.T) {
+	lf := ursus.Frame(ursus.Values("v", []int64{1})).Select(ursus.Col("v").IsIn("1"))
+	if _, err := lf.CollectSchema(t.Context()); !errors.Is(err, ursus.ErrType) {
+		t.Errorf("CollectSchema of Int64 IsIn(\"1\"): %v, want a type error", err)
+	}
+	if _, err := lf.Explain(t.Context()); !errors.Is(err, ursus.ErrType) {
+		t.Errorf("Explain of Int64 IsIn(\"1\"): %v, want a type error", err)
 	}
 }
 
