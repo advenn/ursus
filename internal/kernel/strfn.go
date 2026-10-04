@@ -3,6 +3,7 @@ package kernel
 import (
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/advenn/ursus/dtype"
@@ -108,9 +109,11 @@ func StrCall(fn expr.CallFn, name string, out dtype.DataType,
 			default: // CountMatches
 				if re != nil {
 					vals[i] = uint32(len(re.FindAllStringIndex(s, -1)))
-				} else if pat == "" {
-					present = false
 				} else {
+					// An empty pattern matches at every rune boundary, len_chars + 1
+					// of them, which strings.Count says and the regex arm above
+					// already answered. It was null here, so the two spellings of
+					// one question disagreed.
 					vals[i] = uint32(strings.Count(s, pat))
 				}
 			}
@@ -207,11 +210,13 @@ func applyStr(fn expr.CallFn, s string, args []any, re *regexp.Regexp) (string, 
 		trimLeft := fn == expr.FnStrStripCharsStart
 		if !ok || cut == "" {
 			// The same default StripChars takes: no cutset means whitespace, which
-			// is what every caller means by "strip".
+			// is what every caller means by "strip" — Unicode whitespace, as
+			// TrimSpace's. These trimmed only " \t\n\r", so a no-break space was
+			// stripped from both ends and kept at either one.
 			if trimLeft {
-				return strings.TrimLeft(s, " \t\n\r"), true
+				return strings.TrimLeftFunc(s, unicode.IsSpace), true
 			}
-			return strings.TrimRight(s, " \t\n\r"), true
+			return strings.TrimRightFunc(s, unicode.IsSpace), true
 		}
 		if trimLeft {
 			return strings.TrimLeft(s, cut), true
@@ -351,7 +356,9 @@ func strToList(fn expr.CallFn, name string, c *data.Column,
 		case expr.FnStrSplitN:
 			sep, _ := argString(args, 0)
 			limit, has := argInt(args, 1)
-			if !has || limit < 0 {
+			// n <= 0 is unlimited, as the doc says. strings.SplitN reads 0 as "no
+			// parts" and returned an empty list.
+			if !has || limit <= 0 {
 				limit = -1
 			}
 			parts = append(parts, strings.SplitN(s, sep, int(limit))...)

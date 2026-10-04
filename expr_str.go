@@ -56,7 +56,8 @@ func (s StrExpr) Find(pattern string, literal bool) Expr {
 	return s.call(expr.FnStrFind, pattern, literal)
 }
 
-// CountMatches counts non-overlapping occurrences.
+// CountMatches counts non-overlapping occurrences. An empty pattern, literal or
+// regex, matches at every rune boundary: len_chars + 1 times.
 func (s StrExpr) CountMatches(pattern string, literal bool) Expr {
 	return s.call(expr.FnStrCountMatches, pattern, literal)
 }
@@ -136,7 +137,7 @@ func (s StrExpr) Split(by string) Expr {
 }
 
 // SplitN is Split with at most n parts; the last part keeps the rest, separators
-// and all. n <= 0 means unlimited, as in strings.SplitN.
+// and all. n <= 0 means unlimited — unlike strings.SplitN, whose 0 means none.
 func (s StrExpr) SplitN(by string, n int) Expr {
 	return s.call(expr.FnStrSplitN, by, int64(n))
 }
@@ -169,7 +170,7 @@ func (s StrExpr) ZFill(width int) Expr {
 
 // StripCharsStart and StripCharsEnd are the one-sided forms of StripChars: they
 // remove any leading (or trailing) character in the cutset. An empty cutset means
-// whitespace.
+// Unicode whitespace, as it does for StripChars.
 func (s StrExpr) StripCharsStart(chars string) Expr {
 	return s.call(expr.FnStrStripCharsStart, chars)
 }

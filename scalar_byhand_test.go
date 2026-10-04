@@ -24,15 +24,12 @@ import (
 
 // knownScalarDefects names each case that answers wrongly today, with what it answers.
 var knownScalarDefects = map[string]string{
-	"S9 SplitN with n = 0":                         "[]",
 	"S10 Kolkata Truncate(Every(1h))":              "10:30, the UTC grid",
 	"S10 New York Truncate(Every(2h))":             "03:00, the UTC grid",
 	"S10 New York spring-forward Truncate(2h)":     "01:00 EST, the UTC grid",
 	"S10 Kolkata GroupByDynamic(Every(1h))":        "one window at 10:30",
 	"S11 Truncate(Every(1mo)) near the ns minimum": "ErrInternal",
 	"S11 Truncate(time.Hour) at the ns minimum":    "wrapped to 2262",
-	"S12 CountMatches of an empty literal":         "null",
-	"S13 StripCharsStart and End of Unicode space": "only ASCII stripped",
 }
 
 type scalarCase struct {
