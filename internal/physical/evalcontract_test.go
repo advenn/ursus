@@ -172,6 +172,13 @@ func contractColumns(t *testing.T) []*data.Column {
 		// data.NewNull carries validity and nothing else — so it is the only one
 		// that tests what a kernel does when there is nothing to read.
 		data.NewNull("nu", dtype.Null, contractRows),
+
+		// An ENUM, physically Uint32 indices into its categories. It was excused
+		// until step 79, because adding it did not produce a gap, it produced a
+		// panic: IsString is true for an Enum, and the cast arm and kernel.Take read
+		// its indices through the string accessor. The categories are out of order on
+		// purpose, so category order and lexical order disagree.
+		data.NewFixed("en", dtype.Enum("mid", "lo", "hi"), []uint32{0, 1, 2}, v),
 	}
 }
 
@@ -186,26 +193,6 @@ var noContractColumn = map[dtype.TypeID]string{
 	dtype.TypeArray:       "declared but not constructible: there is no data.Column for it",
 	dtype.TypeCategorical: "reserved; its mapping grows at runtime",
 	dtype.TypeUint128:     "reserved; Int128 covers every unsigned value",
-
-	// Enum is CONSTRUCTIBLE — data.NewFixed under dtype.Enum, physically Uint32,
-	// which internal/data/nullcheck_test.go builds today — and it is excused anyway
-	// because adding it does not produce a gap, it produces a PANIC, in the cast
-	// arm, before any gap can be recorded:
-	//
-	//	panic: runtime error: index out of range [0] with length 0
-	//
-	// dtype.IsString() is true for an Enum, so CanCast admits Enum -> numeric;
-	// kernel.castTo then routes it to parseFromString, which opens with c.Strings()
-	// on a column that has no offsets buffer because its payload is uint32 indices.
-	// ResolveCall names the identical hazard and calls it "latent today only because
-	// Enum columns cannot yet be built from the public API".
-	//
-	// This entry is a DEBT, not an exemption: it is the one type whose absence is
-	// now measured rather than assumed, and the walk below fails the day someone
-	// deletes the line without building the column.
-	dtype.TypeEnum: "constructible, but CanCast admits Enum -> numeric through " +
-		"IsString and parseFromString then calls Strings() on a uint32 payload, " +
-		"which panics before the matrix can judge anything; its own step",
 }
 
 // TestContractColumnsCoverTheEnum is the check the type axis never had.

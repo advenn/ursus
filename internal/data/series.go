@@ -60,7 +60,24 @@ func accessor[T any](c *Column) (func(int) T, error) {
 		return func(i int) T { return any(bits.Get(i)).(T) }, nil
 
 	case string:
-		if !c.dt.IsString() && c.dt.ID() != dtype.TypeBinary {
+		// An Enum reads as its category text: it is a string logically, stored as
+		// indices into its categories. It used to take the string accessor below,
+		// over a payload with no offsets, and panic — the frame renderer reaches
+		// here, so printing an Enum column panicked.
+		if c.dt.ID() == dtype.TypeEnum {
+			idx, err := Values[uint32](c)
+			if err != nil {
+				return nil, err
+			}
+			cats := c.dt.Categories()
+			return func(i int) T {
+				if j := int(idx[i]); j < len(cats) {
+					return any(cats[j]).(T)
+				}
+				return any("").(T)
+			}, nil
+		}
+		if !c.dt.HasStringStorage() {
 			return nil, mismatch[T](c)
 		}
 		acc := c.Strings()

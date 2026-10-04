@@ -206,6 +206,11 @@ func CanCast(from, to DataType) bool {
 		return true
 	}
 	switch {
+	// An ENUM first, because IsString is true for one and the parsing arm below
+	// would promise Enum -> numeric, which read its indices as text and panicked
+	// (v0.3-scope.md §2.3). Nothing is promised until the kernel has the arms.
+	case from.ID() == TypeEnum || to.ID() == TypeEnum:
+		return false
 	// DECIMAL first, because it must not fall into the arms below: the numeric ->
 	// temporal arm would promise Decimal -> Date, which relabels an unscaled integer
 	// as a day count, and the numeric <-> Bool arm would promise a truth value.

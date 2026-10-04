@@ -520,7 +520,13 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 	// as String and cast, if a conversion exists".
 	//
 	// The two sides now agree because the kernel implements what CanCast promised.
-	if from.IsString() && !to.IsString() {
+	// An Enum source is never parsed as a String: its payload is indices, and
+	// IsString routed it into parseFromString, which read them as offsets and
+	// panicked (v0.3-scope.md §2.3).
+	if from.ID() == dtype.TypeEnum || to.ID() == dtype.TypeEnum {
+		return castEnum(name, to, strict, c)
+	}
+	if from.HasStringStorage() && from.ID() != dtype.TypeBinary && !to.IsString() {
 		return parseFromString(name, to, strict, c)
 	}
 	if to.ID() == dtype.TypeString && !from.IsString() {
@@ -1242,4 +1248,10 @@ func formatInts[T ~int8 | ~int16 | ~int32 | ~int64](c *data.Column, out []string
 		out[i] = strconv.FormatInt(int64(v[i]), 10)
 	}
 	return out, nil
+}
+
+// castEnum is every cast to or from an Enum. Step 79 gives it its arms; until then
+// it refuses rather than read indices as text.
+func castEnum(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
+	return nil, uerr.New(uerr.KindUnsupported, "cast", "cannot cast %s to %s", c.DType(), to)
 }

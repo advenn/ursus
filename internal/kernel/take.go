@@ -89,7 +89,11 @@ func Take(c *data.Column, sel []int32) (*data.Column, error) {
 	case c.DType().ID() == dtype.TypeStruct:
 		return takeStruct(c, sel, outValid)
 
-	case c.DType().IsString() || c.DType().ID() == dtype.TypeBinary:
+	// HasStringStorage, not IsString: an Enum is a string LOGICALLY and Uint32
+	// indices physically, and IsString sent it here to read offsets it does not
+	// have — every sort, join, group-by and shift of an Enum panicked. It takes the
+	// fixed-width path below, as its Physical type says.
+	case c.DType().HasStringStorage():
 		acc := c.Strings()
 		vals := make([]string, n)
 		for j, i := range sel {
@@ -184,7 +188,7 @@ func NullColumn(name string, dt dtype.DataType, n int) (*data.Column, error) {
 	case dt.ID() == dtype.TypeBool:
 		return data.NewBool(name, bitmap.Zeros(n), valid), nil
 
-	case dt.HasStringStorage() || dt.IsString():
+	case dt.HasStringStorage():
 		// A real offsets buffer of n+1 zeros and no character data, which is what
 		// StringAccessor.Get needs in order to return "" rather than panic.
 		return data.NewString(name, make([]string, n), valid).WithDType(dt), nil
@@ -461,7 +465,7 @@ func concatColumn(parts []*data.Column, total int) (*data.Column, error) {
 	case first.DType().ID() == dtype.TypeStruct:
 		return concatStruct(parts, total, outValid)
 
-	case first.DType().IsString() || first.DType().ID() == dtype.TypeBinary:
+	case first.DType().HasStringStorage(): // an Enum is indices, as in Take
 		vals := make([]string, 0, total)
 		for _, p := range parts {
 			acc := p.Strings()

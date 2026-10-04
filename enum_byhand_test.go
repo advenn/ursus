@@ -23,16 +23,8 @@ import (
 
 // knownEnumDefects names each case that answers wrongly today, with what it answers.
 var knownEnumDefects = map[string]string{
-	"the frame renders its categories":        "rendering panicked: runtime error: index out of range [0] with length ",
-	"sort is category order":                  "recovered a panic",
-	"group by an Enum":                        "recovered a panic",
-	"unique":                                  "recovered a panic",
-	"a join of an Enum to the same Enum":      "recovered a panic",
-	"concat":                                  "collect: recovered a panic",
-	"shift":                                   "recovered a panic",
-	"cum_max is category order":               "recovered a panic",
-	"String -> Enum":                          "cast: cannot cast String to Enum(lo, mid, hi)",
-	"String -> Enum refuses an unknown value": "a type error, want value error: cast: cannot cast String to Enum(lo, m",
+	"String -> Enum": "cast: cannot cast String to Enum(lo, mid, hi)",
+	"String -> Enum refuses an unknown value":         "a type error, want value error: cast: cannot cast String to Enum(lo, m",
 	"CastLossy String -> Enum nulls an unknown value": "cast: cannot cast String to Enum(lo, mid, hi)",
 	"Enum -> String":                                          "cast: cannot cast Enum(lo, mid, hi) to String",
 	"Enum -> another Enum":                                    "cast: cannot cast Enum(lo, mid, hi) to Enum(hi, lo, mid)",

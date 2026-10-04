@@ -111,7 +111,7 @@ func Select(name string, mask, a, b *data.Column) (*data.Column, error) {
 		}
 		return data.NewBool(name, out.Finish(), outValid), nil
 
-	case a.DType().HasStringStorage() || a.DType().IsString():
+	case a.DType().HasStringStorage(): // an Enum is indices, as in Take
 		aa, ba := a.Strings(), b.Strings()
 		vals := make([]string, n)
 		for i := range n {
