@@ -637,11 +637,7 @@ func classify(name, detail string, guilty []string) string {
 // today, by defect. Checked both ways: a class whose count changes is reported with
 // its queries, a class with none left is stale, and an unattributed mismatch fails.
 var knownDifferentialMismatches = map[string]knownMismatch{
-	"O8-join": {1, "a fallible filter is pushed into a join side, onto rows the join removes"},
-	// 4 before O8 was fixed: two of them had the guard BELOW the Distinct, where
-	// merging the stacked filters was the whole problem.
-	"O8b": {2, "a fallible filter is pushed below a Distinct, ahead of a guard that stays"},
-	"O9":  {1, "a filter below Unique can tell -0 from +0, which Unique merges"},
+	"O9": {1, "a filter below Unique can tell -0 from +0, which Unique merges"},
 }
 
 // judge compares the attributed mismatches with the ratchet and returns every

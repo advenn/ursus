@@ -106,8 +106,6 @@ func doubled() func(int64) (int64, error) {
 // mode. Emptied, entry by entry, by the commits that fix them; a listed case that
 // answers correctly fails as stale, and an unlisted one that answers wrongly fails.
 var knownOptimizerDefects = map[string]string{
-	"O8b under unique":   "optimized: the cast is pushed below the Distinct, ahead of the guard",
-	"O8-join inner":      "optimized: the cast is pushed into the left side and meets \"x\"",
 	"O9 unique keeps -0": "optimized: the filter keeps +0, which Unique then keeps",
 }
 

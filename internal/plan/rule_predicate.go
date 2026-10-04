@@ -91,9 +91,9 @@ func push(n Node, preds []expr.Node, flags Flags) (Node, error) {
 		//	Filter(Col("ok")).Filter(Col("s").Cast(Int64).Gt(1))
 		//
 		// ran the cast before the guard the user wrote to protect it, and failed on
-		// a row the guard removes. Order is kept only this far: pushdown can still
-		// move a fallible conjunct below one that stays (O8b), which needs a rule
-		// about fallibility rather than an ordering.
+		// a row the guard removes. Merging keeps the order; that pushdown then keeps
+		// a fallible conjunct behind the guards before it, and out of a join side
+		// that loses rows, is fallible.go's rule (O8b, O8-join).
 		return push(t.Input, append(append([]expr.Node(nil), t.Preds...), preds...), flags)
 
 	case *Sort, *Reverse:
@@ -340,11 +340,23 @@ func pushThroughProjection(n Node, exprs []expr.Node, preds []expr.Node, passthr
 		}
 	}
 
+	const stayDest, downDest = 0, 1
+	subs := make([]expr.Node, len(preds))
+	dest := make([]int, len(preds))
+	for i, p := range preds {
+		if sub, ok := substitutable(p, defs, opaque, in, passthrough); ok {
+			subs[i], dest[i] = sub, downDest
+		}
+	}
+	out, err := n.Schema()
+	if err != nil {
+		return nil, err
+	}
+	holdFallible(preds, dest, stayDest, out)
 	var down, stay []expr.Node
-	for _, p := range preds {
-		sub, ok := substitutable(p, defs, opaque, in, passthrough)
-		if ok {
-			down = append(down, sub)
+	for i, p := range preds {
+		if dest[i] == downDest {
+			down = append(down, subs[i])
 		} else {
 			stay = append(stay, p)
 		}
@@ -485,16 +497,28 @@ func pushThroughDistinct(d *Distinct, preds []expr.Node, flags Flags) (Node, err
 		sub[n] = struct{}{}
 	}
 
-	var down, stay []expr.Node
-	for _, p := range preds {
-		confined := true
+	const stayDest, downDest = 0, 1
+	dest := make([]int, len(preds))
+	for i, p := range preds {
+		dest[i] = downDest
 		for _, name := range expr.RootNames(p) {
 			if _, in := sub[name]; !in {
-				confined = false
+				dest[i] = stayDest
 				break
 			}
 		}
-		if confined {
+	}
+	// A guard that reads a non-subset column stays above, and a fallible conjunct
+	// after it stays with it: Unique("s").Filter(ok).Filter(s.Cast(Int64) > 1)
+	// cast beneath the Distinct, ahead of ok, and failed on a row ok removes (O8b).
+	in, err := d.Schema()
+	if err != nil {
+		return nil, err
+	}
+	holdFallible(preds, dest, stayDest, in)
+	var down, stay []expr.Node
+	for i, p := range preds {
+		if dest[i] == downDest {
 			down = append(down, p)
 		} else {
 			stay = append(stay, p)
@@ -561,27 +585,45 @@ func pushThroughJoin(j *Join, preds []expr.Node, flags Flags) (Node, error) {
 		return nil, err
 	}
 
-	var downLeft, downRight, stay []expr.Node
-	for _, p := range preds {
+	const stayDest, leftDest, rightDest = 0, 1, 2
+	subs := make([]expr.Node, len(preds))
+	dest := make([]int, len(preds))
+	for i, p := range preds {
+		// A fallible conjunct may go only to a side whose every row the join keeps:
+		// pushed into an inner join's side, it runs on rows the join removes, and
+		// can fail on one (O8-join). Polars makes that trade; ursus does not add
+		// an error by optimizing.
+		mayFail := fallible(p, layout.Schema)
 		// Try left, then right. A conjunct over a COALESCED key succeeds for both —
 		// the column denotes the same value on either side — and lands on the left,
 		// which is arbitrary but deterministic. Pushing a copy to BOTH sides is the
 		// classic key-propagation win and is deliberately not done here: it has to
 		// reason about the promoted key type, and `k > 2^40` pushed into an Int32
 		// side is a wrong answer rather than a slow one.
-		if joinPushLegal(j, FromLeft) {
+		if joinPushLegal(j, FromLeft) && (!mayFail || joinKeepsEvery(j, FromLeft)) {
 			if sub, ok := rewriteForSide(p, FromLeft, layout, ls, rs); ok {
-				downLeft = append(downLeft, sub)
+				subs[i], dest[i] = sub, leftDest
 				continue
 			}
 		}
-		if joinPushLegal(j, FromRight) {
+		if joinPushLegal(j, FromRight) && (!mayFail || joinKeepsEvery(j, FromRight)) {
 			if sub, ok := rewriteForSide(p, FromRight, layout, ls, rs); ok {
-				downRight = append(downRight, sub)
+				subs[i], dest[i] = sub, rightDest
 				continue
 			}
 		}
-		stay = append(stay, p)
+	}
+	holdFallible(preds, dest, stayDest, layout.Schema)
+	var downLeft, downRight, stay []expr.Node
+	for i, p := range preds {
+		switch dest[i] {
+		case leftDest:
+			downLeft = append(downLeft, subs[i])
+		case rightDest:
+			downRight = append(downRight, subs[i])
+		default:
+			stay = append(stay, p)
+		}
 	}
 
 	left, err := push(j.Left, downLeft, flags)
@@ -593,6 +635,13 @@ func pushThroughJoin(j *Join, preds []expr.Node, flags Flags) (Node, error) {
 		return nil, err
 	}
 	return refilter(j.WithChildren([]Node{left, right}), stay), nil
+}
+
+// joinKeepsEvery reports whether every row of side appears in the join's output:
+// the preserved side of a Left or Right join. Every other side can lose rows — to
+// an unmatched key, or to an empty other side of a cross join.
+func joinKeepsEvery(j *Join, side JoinSide) bool {
+	return (side == FromLeft && j.Kind == JoinLeft) || (side == FromRight && j.Kind == JoinRight)
 }
 
 // joinPushLegal is the table above, minus the per-predicate side classification.
