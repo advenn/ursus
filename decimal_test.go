@@ -161,15 +161,6 @@ func TestDecimalGuards(t *testing.T) {
 		want string
 	}{
 		{
-			// 12.34 * 12.34 = 152.2756, scale 4. Promote returns the operand type
-			// unchanged, so the result would be labelled scale 2 and print as
-			// 15227.56.
-			name: "multiplication changes the scale",
-			lf:   func() *ursus.LazyFrame { return prices(t).Select(ursus.Col("price").Mul(ursus.Col("price"))) },
-			kind: uerr.ErrType,
-			want: "scale",
-		},
-		{
 			// Would hand back the unscaled integer: 12.34 as 1234.
 			//
 			// The refusal has moved twice. Step 52 took it from the kernel to plan
@@ -199,6 +190,26 @@ func TestDecimalGuards(t *testing.T) {
 				t.Errorf("must be a user-facing refusal, not a reported ursus bug:\n%v", err)
 			}
 		})
+	}
+}
+
+// TestDecimalMultiplicationKeepsTheScale: 12.34 * 12.34 is 152.2756, at scale 4.
+//
+// This was a guard in TestDecimalGuards until step 80: a product labelled with its
+// operands' scale 2 would hold scale-4 digits and print as 15227.56, so * was
+// refused. It is implemented now, at Decimal(p1+p2, s1+s2), and this is the case the
+// guard existed for, asserted the other way round.
+func TestDecimalMultiplicationKeepsTheScale(t *testing.T) {
+	df, err := prices(t).Select(ursus.Col("price").Mul(ursus.Col("price")).Alias("sq")).
+		Collect(t.Context(), ursus.WithVerify())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := df.Schema().Field(0).Type; got != dtype.Decimal(20, 4) {
+		t.Errorf("output type = %s, want Decimal(20, 4)", got)
+	}
+	if !strings.Contains(df.String(), "152.2756") {
+		t.Errorf("12.34 * 12.34 should be 152.2756:\n%s", df)
 	}
 }
 
@@ -262,8 +273,9 @@ func TestDecimalRefusalsRecommendOnlyPossibleCasts(t *testing.T) {
 		return func() *ursus.LazyFrame { return prices(t).Select(e) }
 	}
 	cases := map[string]func() *ursus.LazyFrame{
-		"mul":      sel(price.Mul(price)),
 		"div":      sel(price.Div(price)),
+		"floordiv": sel(price.FloorDiv(price)),
+		"mod":      sel(price.Mod(price)),
 		"floor":    sel(price.Floor()),
 		"ceil":     sel(price.Ceil()),
 		"sign":     sel(price.Sign()),
@@ -329,20 +341,21 @@ func TestCastScannerFindsARecommendation(t *testing.T) {
 //
 // Until step 69 the advice was to read the unscaled integers with Int128Value and
 // apply the scale by hand, because the cast every refusal used to recommend did not
-// exist. It does now, so the advice is the cast again — and multiplication is the
-// refusal followed, because it stays refused: its precision rule is still undecided.
+// exist. It does now, so the advice is the cast again. Multiplication was the
+// refusal followed until step 80 implemented it; floor division stays refused, so it
+// is the one followed now.
 func TestDecimalRemedyIsFollowable(t *testing.T) {
 	price := ursus.Col("price")
-	_, err := prices(t).Select(price.Mul(price)).Collect(t.Context())
+	_, err := prices(t).Select(price.FloorDiv(price)).Collect(t.Context())
 	if err == nil {
-		t.Fatal("Decimal multiplication is implemented; follow a refusal that still exists")
+		t.Fatal("Decimal floor division is implemented; follow a refusal that still exists")
 	}
 	if !strings.Contains(err.Error(), ".Cast(ursus.Float64)") {
 		t.Fatalf("the refusal no longer names the cast:\n%v", err)
 	}
 
 	f := price.Cast(ursus.Float64)
-	df, err := prices(t).Select(f.Mul(f).Alias("sq")).Collect(t.Context())
+	df, err := prices(t).Select(f.Mul(f).Alias("sq"), f.FloorDiv(f.Mul(0.5)).Alias("q")).Collect(t.Context())
 	if err != nil {
 		t.Fatalf("the recommended cast does not work: %v", err)
 	}
@@ -356,6 +369,14 @@ func TestDecimalRemedyIsFollowable(t *testing.T) {
 	x := 12.34
 	if v, _ := sq.Get(0); v != x*x {
 		t.Errorf("12.34 squared = %v, want %v", v, x*x)
+	}
+	// And the refused operation itself, followed: 12.34 // 6.17 is 2.
+	q, err := df.Column[float64]("q")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := q.Get(0); v != 2 {
+		t.Errorf("12.34 // 6.17 = %v, want 2", v)
 	}
 }
 

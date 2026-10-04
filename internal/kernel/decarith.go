@@ -11,7 +11,7 @@ import (
 	"github.com/advenn/ursus/internal/uerr"
 )
 
-// decimalArith is + and - of two Decimals, exactly, into out.
+// decimalArith is + - and * of two Decimals, exactly, into out.
 //
 // expr's resolveDecimal chose out: the finer operand's scale, and one integer digit
 // more than the wider operand has, at most 38. Each row's operands are rescaled to
@@ -47,6 +47,17 @@ func decimalArith(op expr.BinaryOp, name string, out dtype.DataType,
 			continue
 		}
 		a, b := at(lv, i), at(rv, i)
+		if op == expr.OpMul {
+			// The unscaled product is the product at scale s1+s2, which is out's.
+			// A product past 128 bits has 39 digits at least, so a failed multiply
+			// is as much a refusal as a product past the precision.
+			v, ok := a.MulChecked(b)
+			if !ok || !withinDigits(v, prec) {
+				return nil, decimalTooWide(op, out, l, r, i, a, b)
+			}
+			dst[i] = v
+			continue
+		}
 		v, ok := decimalStep(op, a, ls, b, rs)
 		if !ok || !withinDigits(v, prec) {
 			if ok = decimalBig(op, a, ls, b, rs, prec, &v); !ok {

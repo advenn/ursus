@@ -149,6 +149,13 @@ func enumOrdering(op BinaryOp, l, r dtype.DataType) (Binding, bool, error) {
 // integer digit more than the wider, at the finer's scale. Past 38 digits a row is
 // refused by the kernel. It used to be the identical pair only, typed Decimal(p, s)
 // — one digit short — and wrapped through Int128's unchecked Add past 38.
+//
+//   - Decimal(min(38, p1 + p2), s1 + s2)
+//
+// which is exact: a p1-digit integer times a p2-digit one has at most p1+p2 digits,
+// at the sum of the scales. Past 38 digits a row is refused; a scale past 38 cannot
+// be held at all and is refused here. Polars truncates the product to the larger
+// scale, so 1.25 * 2.125 is 2.656 there; it is 2.65625.
 func resolveDecimal(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 	pa, sa, oka := dtype.DecimalDigits(l)
 	pb, sb, okb := dtype.DecimalDigits(r)
@@ -172,6 +179,16 @@ func resolveDecimal(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 	case OpAdd, OpSub:
 		s := max(sa, sb)
 		p := min(dtype.MaxDecimalPrecision, max(pa-sa, pb-sb)+s+1)
+		return Binding{CastL: cl, CastR: cr, Out: dtype.Decimal(uint8(p), uint8(s))}, nil
+	case OpMul:
+		s := sa + sb
+		if s > dtype.MaxDecimalPrecision {
+			return Binding{}, uerr.New(uerr.KindType, "",
+				"operator * of %s and %s needs scale %d, past the %d a Decimal holds",
+				l, r, s, dtype.MaxDecimalPrecision).
+				Hint("cast one operand to a Decimal of smaller scale first, or to Float64")
+		}
+		p := min(dtype.MaxDecimalPrecision, pa+pb)
 		return Binding{CastL: cl, CastR: cr, Out: dtype.Decimal(uint8(p), uint8(s))}, nil
 	}
 	return Binding{}, decimalRemedy(uerr.New(uerr.KindType, "",
