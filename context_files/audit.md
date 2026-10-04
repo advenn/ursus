@@ -317,7 +317,7 @@ Known and excluded, because they were already on the open lists:
 - ~~strict Int64 → Float32 at 2^53~~ — closed by step 73's rule: a cast to a float
   rounds, so 2^53+1 → 2^53 is the right answer;
 - `Optimizer.Verify` off (O2 is its first concrete consequence);
-- `rolling` unaccounted, and `unique`/`over` not spilling;
+- `rolling` unaccounted, and ~~`unique`/`over` not spilling~~ (spilling since step 82);
 - nested write, and object stores;
 - the planner leak, and `spill.Writer.Write`'s bare error;
 - the README debt.
