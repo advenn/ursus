@@ -476,14 +476,51 @@ func stripNaming(e expr.Node) expr.Node {
 }
 
 func pushThroughDistinct(d *Distinct, preds []expr.Node, flags Flags) (Node, error) {
+	in, err := d.Schema()
+	if err != nil {
+		return nil, err
+	}
+	// A predicate reading a float stays above, whole-row or subset. Distinct merges
+	// rows by grouping equality, under which -0.0 equals +0.0 (and one NaN another),
+	// so a duplicate class can hold values a predicate tells apart: x.Cast(String)
+	// == "0" is false on the -0 that Unique kept and true on the +0 it dropped.
+	// Filtered first, the +0 row survived to be the one kept (O9). "A predicate is
+	// constant on each duplicate class" is true of every other type.
+	readsFloat := func(p expr.Node) bool {
+		for _, name := range expr.RootNames(p) {
+			if i := in.IndexOf(name); i >= 0 && holdsFloat(in.Field(i).Type) {
+				return true
+			}
+		}
+		return false
+	}
+
 	// Whole-row distinct: a predicate is a function of the row, so it is constant
 	// on each duplicate class and filtering either side gives the same answer.
 	if d.Subset == nil {
-		child, err := push(d.Input, preds, flags)
+		// Every conjunct but a float reader moves; a fallible one behind a float
+		// reader stays with it, as O8b's rule has it.
+		const stayDest, downDest = 0, 1
+		dest := make([]int, len(preds))
+		for i, p := range preds {
+			if !readsFloat(p) {
+				dest[i] = downDest
+			}
+		}
+		holdFallible(preds, dest, stayDest, in)
+		var down, stay []expr.Node
+		for i, p := range preds {
+			if dest[i] == downDest {
+				down = append(down, p)
+			} else {
+				stay = append(stay, p)
+			}
+		}
+		child, err := push(d.Input, down, flags)
 		if err != nil {
 			return nil, err
 		}
-		return d.WithChildren([]Node{child}), nil
+		return refilter(d.WithChildren([]Node{child}), stay), nil
 	}
 
 	// Subset distinct: only predicates confined to the subset may pass.
@@ -501,6 +538,10 @@ func pushThroughDistinct(d *Distinct, preds []expr.Node, flags Flags) (Node, err
 	dest := make([]int, len(preds))
 	for i, p := range preds {
 		dest[i] = downDest
+		if readsFloat(p) {
+			dest[i] = stayDest
+			continue
+		}
 		for _, name := range expr.RootNames(p) {
 			if _, in := sub[name]; !in {
 				dest[i] = stayDest
@@ -511,10 +552,6 @@ func pushThroughDistinct(d *Distinct, preds []expr.Node, flags Flags) (Node, err
 	// A guard that reads a non-subset column stays above, and a fallible conjunct
 	// after it stays with it: Unique("s").Filter(ok).Filter(s.Cast(Int64) > 1)
 	// cast beneath the Distinct, ahead of ok, and failed on a row ok removes (O8b).
-	in, err := d.Schema()
-	if err != nil {
-		return nil, err
-	}
 	holdFallible(preds, dest, stayDest, in)
 	var down, stay []expr.Node
 	for i, p := range preds {
@@ -759,4 +796,21 @@ func rewriteForSide(p expr.Node, want JoinSide, layout *JoinLayout, ls, rs *dtyp
 		return nil, false
 	}
 	return out, true
+}
+
+// holdsFloat reports whether values of dt can hold a float, at any depth.
+func holdsFloat(dt dtype.DataType) bool {
+	switch {
+	case dt.IsFloat():
+		return true
+	case dt.ID() == dtype.TypeStruct:
+		for _, f := range dt.Fields() {
+			if holdsFloat(f.Type) {
+				return true
+			}
+		}
+	case dt.IsNested():
+		return holdsFloat(dt.Inner())
+	}
+	return false
 }

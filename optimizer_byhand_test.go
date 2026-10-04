@@ -105,9 +105,7 @@ func doubled() func(int64) (int64, error) {
 // knownOptimizerDefects names each case that answers wrongly today, and in which
 // mode. Emptied, entry by entry, by the commits that fix them; a listed case that
 // answers correctly fails as stale, and an unlisted one that answers wrongly fails.
-var knownOptimizerDefects = map[string]string{
-	"O9 unique keeps -0": "optimized: the filter keeps +0, which Unique then keeps",
-}
+var knownOptimizerDefects = map[string]string{}
 
 func TestOptimizerByHand(t *testing.T) {
 	c := ursus.Col
