@@ -55,7 +55,7 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | O3 ✔ | ~~**SW / CR**~~ **fixed, step 72** | Literals of different types merge into one computation: `Lit(int8(100))` and `Lit(int64(100))` both render `lit(100)`, as do `1` and `1.0`. A sum came back −111 instead of 401; `x*1` beside `x*1.0` raises `ErrInternal`. Affects `Agg`, `GroupByDynamic`, window temporaries and partition keys. | `Lit.String()` (`expr/nodes.go:98-116`) omits the type. The dedup maps are `physical/agg.go:753`, `plan/resolve_window.go:82` and `physical/window.go:382`. This is step 65's UDF bug, for literals. |
 | O4 | **SW** | Cross-join collapse turns IEEE `==` into hash equality, so NaN matches NaN: `JoinWhere`, cross join + `Filter`, `WhereExists` and `WhereNotExists` all answer differently with the rule off. | `rule_collapse.go:88-104`, `:214-216`. |
 | O5 | **SW** | Cross-join collapse copies `NullsEqual`, so a `JoinNullsEqual(true)` cross join followed by `Filter(k == k_right)` matches null keys. `JoinNullsEqual` on a cross join is accepted silently. | `rule_collapse.go:103` (`c := *j`), whose comment at `:113` says it "stays false". |
-| O6 ✔ | **SW** | A filter on a coalesced join key is pushed into the side with the narrower key type and runs at that width: Int32 `k*m > 1e9` returns 0 rows, and the answer is 1. | `rule_predicate.go:597-605`, `rewriteForSide`'s Col arm. |
+| O6 ✔ | ~~**SW**~~ **fixed, step 74** | A filter on a coalesced join key is pushed into the side with the narrower key type and runs at that width: Int32 `k*m > 1e9` returns 0 rows, and the answer is 1. | `rule_predicate.go:597-605`, `rewriteForSide`'s Col arm. |
 | O7 | **SW** | Parquet row-group pruning — see I2–I5. | |
 | O8 ✔ | ~~**FR**~~ **fixed, step 70** | Merging stacked filters reverses their order, so a guard no longer protects the filter after it. `Filter(ok).Filter(s.Cast(Int64) > 1)` fails with a cast error when optimized. | `rule_predicate.go:86`. |
 | O9 | SW (edge) | A filter pushed below `Unique` can tell −0.0 from +0.0, which `Unique` merges. | `rule_predicate.go:420-431`. |
@@ -73,15 +73,15 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 
 | | | finding | cause |
 | --- | --- | --- | --- |
-| J1 ✔ | **SW** | `AsOfBy` keys of different integer widths never match: every row is null. The schema shows the key promoted. | `asof.go:154`, `:281` call `evalKeys(…, nil)`, so the by-keys are never cast. |
-| J2 ✔ | **SW / CR** | Temporal keys of different units: a value outside the finer unit's range is nulled. A left join shows the key as null; under `NullsEqual` it matches a null key; with a non-nullable key it is `ErrInternal`. Affects Datetime and Duration. | A non-strict cast in `join.go:1417` (`evalKeys`) and `:1362` (`gatherOut`). The as-of path already switched to strict for this reason. |
-| J3 | **SW** | A spilled right join on two key columns nulls the non-null half of a partly-null right key. | `extjoin.go:506`: `nullPadOp` calls `gatherOut(…, false)`. |
-| J5 ✔ | **SW** | `Validate` 1:m / 1:1 misses duplicate left keys that have no match, and duplicate null left keys under `NullsEqual`. | `join.go:1002-1019` returns before the `seen` check. |
-| J6 | **SW** | `AsOfBy` matches a null by-key to a null by-key — undocumented, and against the `NullsEqual` default. | `asof.go` `bucket()` and `match()`. |
+| J1 ✔ | ~~**SW**~~ **fixed, step 74** | `AsOfBy` keys of different integer widths never match: every row is null. The schema shows the key promoted. | `asof.go:154`, `:281` call `evalKeys(…, nil)`, so the by-keys are never cast. |
+| J2 ✔ | ~~**SW / CR**~~ **fixed, step 74** | Temporal keys of different units: a value outside the finer unit's range is nulled. A left join shows the key as null; under `NullsEqual` it matches a null key; with a non-nullable key it is `ErrInternal`. Affects Datetime and Duration. | A non-strict cast in `join.go:1417` (`evalKeys`) and `:1362` (`gatherOut`). The as-of path already switched to strict for this reason. |
+| J3 | ~~**SW**~~ **fixed, step 74** | A spilled right join on two key columns nulls the non-null half of a partly-null right key. | `extjoin.go:506`: `nullPadOp` calls `gatherOut(…, false)`. |
+| J5 ✔ | ~~**SW**~~ **fixed, step 74** | `Validate` 1:m / 1:1 misses duplicate left keys that have no match, and duplicate null left keys under `NullsEqual`. | `join.go:1002-1019` returns before the `seen` check. |
+| J6 | ~~**SW**~~ **fixed, step 74** | `AsOfBy` matches a null by-key to a null by-key — undocumented, and against the `NullsEqual` default. | `asof.go` `bucket()` and `match()`. |
 | J7 ✔ | **FR** | An as-of join on a Float, Int8/16, Uint or Int128 key plans fine, then fails at `Collect` with *"cannot be read as Int64"*. `MergeSorted` refuses Float, Int16, Uint64 and String with a hint that contradicts itself. | `tempgroup.go:574` `temporalTicks`; `mergesorted.go:147`. |
-| J8 | SW (lossy) | Int64 vs Float64 promotion rounds above 2^53, both in joins and in strict `Concat`. This contradicts `resolve_union.go:68`: *"Promote only ever chose a type that holds both exactly"*. | `promote.go:97-107`. |
+| J8 | ~~SW (lossy)~~ **fixed, step 74**, for joins, Concat and Unpivot | Int64 vs Float64 promotion rounds above 2^53, both in joins and in strict `Concat`. This contradicts `resolve_union.go:68`: *"Promote only ever chose a type that holds both exactly"*. | `promote.go:97-107`. |
 | J9 | FR / ME | A full join with `JoinCoalesce(true)` is refused, and the hint says "no coalesce expression" — `ursus.Coalesce` exists. | `resolve.go:545-555`. |
-| J10 | ME | The key-cast hint suggests `.Cast(ursus.Int64)` for a UTC vs naive Datetime join, and `WhereExists` suggests `JoinSuffix`, which it does not accept. | `join_layout.go:213`, `:276`; `join.go:203`. |
+| J10 | ~~ME~~ **the key-cast hint fixed, step 74**; `WhereExists`'s `JoinSuffix` advice remains | The key-cast hint suggests `.Cast(ursus.Int64)` for a UTC vs naive Datetime join, and `WhereExists` suggests `JoinSuffix`, which it does not accept. | `join_layout.go:213`, `:276`; `join.go:203`. |
 | J11 | ME | The spilled join refuses with *"a single join key has more build rows than the limit"* when no key has more than two. | `extjoin.go:422`; the real cause was not found. |
 | J12 | FR | `Concat` of a frame with a Null-typed column: *"concat is not implemented for Null"*. The same happens with plain `Collect` at batch size 1. | |
 
@@ -195,7 +195,7 @@ rather than a finding.
    `strict=false`, and the result is either silent nulls or an `ErrInternal` from the
    non-null check, depending on the column's nullability. **Step 73 threaded it through
    the kernel's own paths (S2, S4)**, and the evaluator contract now fails a null in a
-   column its Field declared non-nullable. J2's two join casts are the join step's.
+   column its Field declared non-nullable. **Step 74** threaded it through the join's two key casts (J2).
 
 ## 9. Documented differences, not reported
 
@@ -277,8 +277,10 @@ Ordered by harm per unit of fix, not by count.
 5. ~~**Finish step 69's job**: no float64 go-between for S1, S2 and S4, and `strict`
    threaded through.~~ **Done — step 73**, with the same go-between found and removed in
    Int128 and Decimal to a float and in temporal ↔ integer casts.
-6. **The join promotion paths**: J1, J2, O6 and J8, which share one question: at what
-   type is a key compared?
+6. ~~**The join promotion paths**: J1, J2, O6 and J8.~~ **Done — step 74**, with J3,
+   J5, J6 and J10's hint: a key, a Concat column and an Unpivot value meet at a type
+   that holds both exactly (`dtype.PromoteExact`), keys are cast there strictly, and a
+   pair with no such type — a 64-bit integer with a float — is refused.
 7. Then the rest, by table.
 
 Known and excluded, because they were already on the open lists:
