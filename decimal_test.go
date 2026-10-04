@@ -202,8 +202,10 @@ func TestDecimalGuards(t *testing.T) {
 	}
 }
 
-// TestDecimalAdditionIsExact: + and - ARE allowed, because equal scales mean the
-// unscaled integers add directly. Refusing them alongside * would be over-broad.
+// TestDecimalAdditionIsExact: + and - ARE allowed, and exact. Since step 80 the sum
+// has one integer digit more than its operands — Decimal(10, 2) + Decimal(10, 2) is
+// Decimal(11, 2) — because a sum can need it: this used to be Decimal(10, 2), which
+// 99999999.99 + 99999999.99 does not fit.
 func TestDecimalAdditionIsExact(t *testing.T) {
 	df, err := prices(t).
 		Select(ursus.Col("price").Add(ursus.Col("price")).Alias("doubled")).
@@ -211,8 +213,8 @@ func TestDecimalAdditionIsExact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decimal + Decimal at the same scale is exact and must be allowed: %v", err)
 	}
-	if got := df.Schema().Field(0).Type; got != dtype.Decimal(10, 2) {
-		t.Errorf("output type = %s, want Decimal(10, 2)", got)
+	if got := df.Schema().Field(0).Type; got != dtype.Decimal(11, 2) {
+		t.Errorf("output type = %s, want Decimal(11, 2)", got)
 	}
 	if !strings.Contains(df.String(), "24.68") {
 		t.Errorf("12.34 + 12.34 should be 24.68:\n%s", df)

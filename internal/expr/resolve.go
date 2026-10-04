@@ -138,6 +138,48 @@ func enumOrdering(op BinaryOp, l, r dtype.DataType) (Binding, bool, error) {
 	return Binding{}, false, nil
 }
 
+// resolveDecimal is arithmetic with a Decimal operand: exact or refused.
+//
+// An integer operand is a Decimal(d, 0), d being the digits its width holds
+// (dtype.DecimalDigits); Int128's 39 is more than a Decimal holds, and is refused.
+//
+//   - -   Decimal(min(38, max(p1-s1, p2-s2) + max(s1, s2) + 1), max(s1, s2))
+//
+// which is DuckDB's and PyArrow's rule: the sum of two numbers has at most one
+// integer digit more than the wider, at the finer's scale. Past 38 digits a row is
+// refused by the kernel. It used to be the identical pair only, typed Decimal(p, s)
+// — one digit short — and wrapped through Int128's unchecked Add past 38.
+func resolveDecimal(op BinaryOp, l, r dtype.DataType) (Binding, error) {
+	pa, sa, oka := dtype.DecimalDigits(l)
+	pb, sb, okb := dtype.DecimalDigits(r)
+	if !oka || !okb {
+		return Binding{}, mismatch(op, l, r)
+	}
+	if pa > dtype.MaxDecimalPrecision || pb > dtype.MaxDecimalPrecision {
+		return Binding{}, uerr.New(uerr.KindType, "",
+			"operator %s is not defined for %s and %s", op, l, r).
+			Hint("an Int128 has 39 digits and a Decimal at most %d; cast it to a Decimal "+
+				"or to Int64 first", dtype.MaxDecimalPrecision)
+	}
+	asDecimal := func(t dtype.DataType, p int) dtype.DataType {
+		if t.ID() == dtype.TypeDecimal {
+			return t
+		}
+		return dtype.Decimal(uint8(p), 0)
+	}
+	cl, cr := asDecimal(l, pa), asDecimal(r, pb)
+	switch op {
+	case OpAdd, OpSub:
+		s := max(sa, sb)
+		p := min(dtype.MaxDecimalPrecision, max(pa-sa, pb-sb)+s+1)
+		return Binding{CastL: cl, CastR: cr, Out: dtype.Decimal(uint8(p), uint8(s))}, nil
+	}
+	return Binding{}, decimalRemedy(uerr.New(uerr.KindType, "",
+		"operator %s is not defined for %s and %s", op, l, r).
+		Hint("%s changes a decimal's scale and ursus does not implement it yet; "+
+			"+ and - are exact", op))
+}
+
 // isOrdered delegates to the one definition. Kept as a local name because it
 // reads better at the two call sites than dtype.DataType.IsOrdered does.
 func isOrdered(d dtype.DataType) bool { return d.IsOrdered() }
@@ -149,11 +191,8 @@ func resolveArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 		return resolveTemporalArithmetic(op, l, r)
 	}
 
-	// Promote meets two different Decimals, or a Decimal and another number, for
-	// comparisons; arithmetic between them has its own precision rule, and until it
-	// is implemented the pair is refused here as it always was.
-	if (l.ID() == dtype.TypeDecimal || r.ID() == dtype.TypeDecimal) && l != r {
-		return Binding{}, mismatch(op, l, r)
+	if l.ID() == dtype.TypeDecimal || r.ID() == dtype.TypeDecimal {
+		return resolveDecimal(op, l, r)
 	}
 	common, ok := dtype.Promote(l, r)
 	if !ok {

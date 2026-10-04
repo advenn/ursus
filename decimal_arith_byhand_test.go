@@ -24,21 +24,14 @@ import (
 // knownDecimalArithDefects names each case that answers wrongly today, with what it
 // answers.
 var knownDecimalArithDefects = map[string]string{
-	"a + b":                               "operator + has no common type for Decimal(10, 2) and Decimal(12, 3)",
-	"a - b":                               "operator - has no common type for Decimal(10, 2) and Decimal(12, 3)",
-	"an identical pair widens by a digit": "Decimal(10, 2) [250 -700], want Decimal(11, 2) [250 -700]",
-	"99999999.99 + 99999999.99":           "Decimal(10, 2) [19999999998], want Decimal(11, 2) [19999999998]",
-	"+ past 38 digits is refused":         "answered: the Int128 add wrapped",
-	"a * b":                               "operator * has no common type for Decimal(10, 2) and Decimal(12, 3)",
-	"a * an Int64 column":                 "operator * has no common type for Decimal(10, 2) and Int64",
-	"a * a Go int":                        "operator * has no common type for Decimal(10, 2) and Int64",
-	"* past 38 digits is refused":         "a type error, want value error: operator * is not defined for Decimal(38",
-	"a / b":                               "operator / has no common type for Decimal(10, 2) and Decimal(12, 3)",
-	"1 / 3":                               "operator / is not defined for Decimal(1, 0)",
-	"x / 0 is +Inf, and 0 / 0 NaN":        "operator / is not defined for Decimal(5, 2)",
-	"a + an Int64 column":                 "operator + has no common type for Decimal(10, 2) and Int64",
-	"a + a Go int":                        "operator + has no common type for Decimal(10, 2) and Int64",
-	"a + 0.5 is Float64":                  "operator + has no common type for Decimal(10, 2) and Float64",
+	"a * b":                        "operator * has no common type for Decimal(10, 2) and Decimal(12, 3)",
+	"a * an Int64 column":          "operator * has no common type for Decimal(10, 2) and Int64",
+	"a * a Go int":                 "operator * has no common type for Decimal(10, 2) and Int64",
+	"* past 38 digits is refused":  "a type error, want value error: operator * is not defined for Decimal(38",
+	"a / b":                        "operator / has no common type for Decimal(10, 2) and Decimal(12, 3)",
+	"1 / 3":                        "operator / is not defined for Decimal(1, 0)",
+	"x / 0 is +Inf, and 0 / 0 NaN": "operator / is not defined for Decimal(5, 2)",
+	"a + 0.5 is Float64":           "operator + has no common type for Decimal(10, 2) and Float64",
 }
 
 // decimalValues reads a Decimal column's type and unscaled values, null as ∅.

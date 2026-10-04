@@ -482,3 +482,50 @@ func roundUpDigits(d string) string {
 	}
 	return "1" + string(b)
 }
+
+// MulChecked is a*b, and false when the product is outside the type's range.
+//
+// It multiplies the magnitudes as unsigned 128-bit numbers from 64-bit limbs: a
+// product of two magnitudes each under 2^128 has a high half that must be zero, and
+// the low half must be under 2^127 — or exactly 2^127 for a negative result, which
+// is MinInt128. MinInt128's own magnitude, 2^127, is read correctly as unsigned.
+func (a Int128) MulChecked(b Int128) (Int128, bool) {
+	magnitude := func(v Int128) (hi, lo uint64, neg bool) {
+		if v.Hi < 0 {
+			v = v.Neg() // MinInt128 stays itself, whose bits are 2^127 unsigned
+			return uint64(v.Hi), v.Lo, true
+		}
+		return uint64(v.Hi), v.Lo, false
+	}
+	ah, al, an := magnitude(a)
+	bh, bl, bn := magnitude(b)
+	if ah != 0 && bh != 0 {
+		return Zero, false
+	}
+	hi, lo := bits.Mul64(al, bl)
+	c1h, c1l := bits.Mul64(ah, bl)
+	c2h, c2l := bits.Mul64(al, bh)
+	if c1h != 0 || c2h != 0 {
+		return Zero, false
+	}
+	var carry uint64
+	if hi, carry = bits.Add64(hi, c1l, 0); carry != 0 {
+		return Zero, false
+	}
+	if hi, carry = bits.Add64(hi, c2l, 0); carry != 0 {
+		return Zero, false
+	}
+	neg := an != bn && (hi != 0 || lo != 0)
+	switch {
+	case hi < 1<<63:
+	case neg && hi == 1<<63 && lo == 0:
+		return Int128{Hi: math.MinInt64, Lo: 0}, true
+	default:
+		return Zero, false
+	}
+	v := Int128{Hi: int64(hi), Lo: lo}
+	if neg {
+		v = v.Neg()
+	}
+	return v, true
+}
