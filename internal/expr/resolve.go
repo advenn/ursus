@@ -91,6 +91,11 @@ func nestedEquality(op BinaryOp, common dtype.DataType) error {
 }
 
 func resolveComparison(op BinaryOp, l, r dtype.DataType) (Binding, error) {
+	if op.IsOrdering() {
+		if b, ok, err := enumOrdering(op, l, r); ok {
+			return b, err
+		}
+	}
 	common, ok := dtype.Promote(l, r)
 	if !ok {
 		return Binding{}, mismatch(op, l, r)
@@ -109,6 +114,28 @@ func resolveComparison(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 		return Binding{}, err
 	}
 	return Binding{CastL: common, CastR: common, Out: dtype.Bool}, nil
+}
+
+// enumOrdering is an ordering comparison with an Enum on one side, which Promote
+// cannot answer: an Enum's order is its categories', and the String they meet at
+// for equality has its own. So `e < "mid"` casts the string to the Enum, strictly,
+// and compares by category, as Polars does and as the column's own sort orders it;
+// a string that is no category is refused when the cast meets it. Lexical order
+// would contradict that sort. Two different Enums have no common order at all.
+func enumOrdering(op BinaryOp, l, r dtype.DataType) (Binding, bool, error) {
+	le, re := l.ID() == dtype.TypeEnum, r.ID() == dtype.TypeEnum
+	switch {
+	case le && re && l != r:
+		return Binding{}, true, uerr.New(uerr.KindType, "",
+			"operator %s has no common order for %s and %s", op, l, r).
+			Hint("an Enum is ordered by its categories, and these differ").
+			Hint("cast both to ursus.String to compare the text, or one to the other's Enum")
+	case le && r.ID() == dtype.TypeString:
+		return Binding{CastL: l, CastR: l, Out: dtype.Bool}, true, nil
+	case re && l.ID() == dtype.TypeString:
+		return Binding{CastL: r, CastR: r, Out: dtype.Bool}, true, nil
+	}
+	return Binding{}, false, nil
 }
 
 // isOrdered delegates to the one definition. Kept as a local name because it

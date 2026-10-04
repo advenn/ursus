@@ -2,6 +2,7 @@ package expr
 
 import (
 	"math"
+	"slices"
 
 	"github.com/advenn/ursus/dtype"
 )
@@ -129,6 +130,11 @@ func FitsExactly(v any, to dtype.DataType) bool {
 		return floatFits(float64(x), to)
 	case float64:
 		return floatFits(x, to)
+	case string:
+		// A string is exact in an Enum when it is one of the categories, which is
+		// what String -> Enum refuses otherwise: FillNullWith("lo") keeps the Enum,
+		// and FillNullWith("zzz") falls back to the String both meet at.
+		return to.ID() == dtype.TypeEnum && slices.Contains(to.Categories(), x)
 	default:
 		// Strings, bools, temporals, Int128 literals. All unreachable — Promote
 		// refuses their pairs before weakTarget asks — and failing closed is the

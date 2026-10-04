@@ -72,9 +72,19 @@ func Promote(a, b DataType) (DataType, bool) {
 		return Null, false
 	}
 
-	// String types promote only to themselves. Enum and String are deliberately NOT
-	// interchangeable: comparing an Enum to a String requires an explicit cast so the
-	// category set is visible.
+	// An Enum is text with a fixed vocabulary, so with a String, or with another
+	// Enum, the text is what both hold exactly: they meet at String. An Enum met
+	// only itself until step 79, so `e == "mid"`, Concat with a String column and a
+	// join on a String key were all refused as having no common type. Two Enums of
+	// one type returned at a == b above. Ordering is the exception, and is not
+	// Promote's to decide: an Enum's order is its categories', which String does not
+	// have — see expr's resolveComparison.
+	if (a.id == TypeEnum && (b.id == TypeString || b.id == TypeEnum)) ||
+		(b.id == TypeEnum && a.id == TypeString) {
+		return String, true
+	}
+
+	// Other string types promote only to themselves.
 	if !a.IsNumeric() || !b.IsNumeric() {
 		return Null, false
 	}

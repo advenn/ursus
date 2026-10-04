@@ -176,9 +176,10 @@ func contractColumns(t *testing.T) []*data.Column {
 		// An ENUM, physically Uint32 indices into its categories. It was excused
 		// until step 79, because adding it did not produce a gap, it produced a
 		// panic: IsString is true for an Enum, and the cast arm and kernel.Take read
-		// its indices through the string accessor. The categories are out of order on
-		// purpose, so category order and lexical order disagree.
-		data.NewFixed("en", dtype.Enum("mid", "lo", "hi"), []uint32{0, 1, 2}, v),
+		// its indices through the string accessor. The categories are st's own texts,
+		// so a comparison with st has an answer for every row, and they are out of
+		// order on purpose, so category order and text order disagree.
+		data.NewFixed("en", dtype.Enum("3", "1", "2"), []uint32{0, 1, 2}, v),
 	}
 }
 

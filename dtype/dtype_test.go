@@ -184,7 +184,11 @@ func TestPromote(t *testing.T) {
 		{dtype.String, dtype.Int64, dtype.Null, false},
 		{dtype.Bool, dtype.Int64, dtype.Null, false},
 		{dtype.String, dtype.String, dtype.String, true},
-		{dtype.Enum("a"), dtype.String, dtype.Null, false},
+		// An Enum and a String meet at the String, which holds both exactly (step 79);
+		// two Enums of different categories too.
+		{dtype.Enum("a"), dtype.String, dtype.String, true},
+		{dtype.Enum("a"), dtype.Enum("b"), dtype.String, true},
+		{dtype.Enum("a"), dtype.Int64, dtype.Null, false},
 		{dtype.Date, dtype.Datetime(dtype.Micro, ""), dtype.Null, false},
 	}
 	for _, c := range cases {
