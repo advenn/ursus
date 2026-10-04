@@ -5,6 +5,7 @@ import (
 	"unsafe"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/uerr"
@@ -187,6 +188,24 @@ func newBuilder(dt dtype.DataType) (colBuilder, error) {
 		return uintBuilder[uint32](dt, 32), nil
 	case dtype.TypeUint64:
 		return uintBuilder[uint64](dt, 64), nil
+	case dtype.TypeInt128:
+		return &fixedBuilder[i128.Int128]{dt: dt, valid: bitmap.NewBuilder(0),
+			parse: func(b []byte) (i128.Int128, error) {
+				v, ok := i128.Parse(str(b))
+				if !ok {
+					return v, strconv.ErrSyntax
+				}
+				return v, nil
+			}}, nil
+	case dtype.TypeDecimal:
+		// What the writer writes for a Decimal column, read back exactly — or, for
+		// text with more digits than the scale, rounded half away from zero, as
+		// Polars and DuckDB read it.
+		prec, scale := int(dt.Precision()), int(dt.Scale())
+		return &fixedBuilder[i128.Int128]{dt: dt, valid: bitmap.NewBuilder(0),
+			parse: func(b []byte) (i128.Int128, error) {
+				return i128.ParseDecimal(str(b), prec, scale)
+			}}, nil
 	case dtype.TypeFloat32:
 		return &fixedBuilder[float32]{dt: dt, valid: bitmap.NewBuilder(0),
 			parse: func(b []byte) (float32, error) {
@@ -226,8 +245,8 @@ func newBuilder(dt dtype.DataType) (colBuilder, error) {
 	default:
 		return nil, uerr.New(uerr.KindUnsupported, "scan_csv",
 			"cannot read %s from a CSV file", dt).
-			Hint("CSV supports Bool, the integer and float types, the temporal " +
-				"types and String").
+			Hint("CSV supports Bool, the integer and float types, Int128, Decimal, " +
+				"the temporal types and String").
 			Hint("read it as String and cast, if a conversion exists")
 	}
 }

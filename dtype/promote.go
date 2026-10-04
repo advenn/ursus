@@ -226,6 +226,11 @@ func CanCast(from, to DataType) bool {
 		if from.ID() == TypeDecimal && to.id == TypeString {
 			return true
 		}
+		// Parsed by i128.ParseDecimal, which rounds half away from zero past the
+		// scale and refuses past the precision; the CSV reader parses the same way.
+		if from.ID() == TypeString && to.id == TypeDecimal {
+			return true
+		}
 		return from.IsNumeric() && to.IsNumeric()
 	case from.IsNumeric() && to.IsNumeric():
 		return true
@@ -239,16 +244,9 @@ func CanCast(from, to DataType) bool {
 		return true
 	// Parsing and formatting.
 	case from.IsString() && (to.IsNumeric() || to.IsTemporal() || to.IsBool()):
-		// ...but not INTO Int128, which is the Decimal arm above one type over and
-		// the same dangerous direction: CanCast promising what the kernel cannot do.
-		// parseFromString parses each target at its own width with strconv, and
-		// strconv stops at 64 bits.
-		//
-		// Both ways of making it "work" with what exists are wrong. Through int64 it
-		// would cap at exactly the range Int128 exists to exceed; through float64 it
-		// would round above 2^53. i128.Parse exists, and would be the way, but it
-		// does not detect overflow, so it is not yet safe on text a user wrote.
-		return to.id != TypeInt128
+		// Int128 included: i128.Parse detects overflow now, so text past the type's
+		// range is refused rather than wrapped, as for every other integer.
+		return true
 	case (from.IsNumeric() || from.IsTemporal() || from.IsBool()) && to.id == TypeString:
 		return true
 	// IsString includes Enum, so this arm used to promise String -> Enum and

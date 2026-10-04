@@ -15,6 +15,8 @@ package i128
 import (
 	"math"
 	"math/bits"
+	"strconv"
+	"strings"
 )
 
 // Int128 is a signed 128-bit integer in two's complement.
@@ -303,7 +305,14 @@ func divmod10(hi, lo uint64) (qhi, qlo, r uint64) {
 	return qhi, qlo, r
 }
 
-// Parse reads a base-10 Int128. Used by tests and by future CSV parsing.
+// Parse reads a base-10 Int128: an optional sign, then digits. It reports false
+// for anything else, and for a value outside the type's range.
+//
+// The range check is on the digits, before any arithmetic: after leading zeros,
+// 39 digits or fewer, and at 39 no greater than the limit's own text, which is
+// MaxInt128's for a positive value and its successor for a negative one. Without
+// it the accumulation below wrapped, and 2^127 parsed as MinInt128 — which is
+// why this was used only by tests until the CSV reader and Cast(String) needed it.
 func Parse(s string) (Int128, bool) {
 	if s == "" {
 		return Zero, false
@@ -313,6 +322,18 @@ func Parse(s string) (Int128, bool) {
 		neg = s[0] == '-'
 		s = s[1:]
 		if s == "" {
+			return Zero, false
+		}
+	}
+	digits := strings.TrimLeft(s, "0")
+	switch limit := "170141183460469231731687303715884105727"; {
+	case len(digits) > len(limit):
+		return Zero, false
+	case len(digits) == len(limit):
+		if neg {
+			limit = "170141183460469231731687303715884105728"
+		}
+		if digits > limit {
 			return Zero, false
 		}
 	}
@@ -367,3 +388,97 @@ func putUint64BE(b []byte, v uint64) {
 
 // GoString makes %#v readable in test failures.
 func (a Int128) GoString() string { return "i128.Int128(" + a.String() + ")" }
+
+// ParseDecimal reads decimal text as the unscaled value of a Decimal(precision,
+// scale): "12.345" at scale 2 is 1235. The text is an optional sign, digits with an
+// optional point, and an optional exponent — "1e2" at scale 2 is 10000.
+//
+// Digits past the scale are rounded half away from zero, so 1.235 is 1.24 and
+// -1.235 is -1.24, which is what Polars and DuckDB read; a value needing more than
+// precision digits is an error wrapping strconv.ErrRange, and text that is no
+// decimal one wrapping strconv.ErrSyntax.
+func ParseDecimal(s string, precision, scale int) (Int128, error) {
+	syntax := func() (Int128, error) {
+		return Zero, &strconv.NumError{Func: "ParseDecimal", Num: s, Err: strconv.ErrSyntax}
+	}
+	rangeErr := func() (Int128, error) {
+		return Zero, &strconv.NumError{Func: "ParseDecimal", Num: s, Err: strconv.ErrRange}
+	}
+	t := s
+	neg := false
+	if t != "" && (t[0] == '-' || t[0] == '+') {
+		neg, t = t[0] == '-', t[1:]
+	}
+	mant, exp := t, 0
+	if i := strings.IndexAny(t, "eE"); i >= 0 {
+		e, err := strconv.Atoi(t[i+1:])
+		if err != nil {
+			return syntax()
+		}
+		mant, exp = t[:i], e
+	}
+	whole, frac, _ := strings.Cut(mant, ".")
+	if whole == "" && frac == "" {
+		return syntax()
+	}
+	for _, part := range []string{whole, frac} {
+		for i := range len(part) {
+			if part[i] < '0' || part[i] > '9' {
+				return syntax()
+			}
+		}
+	}
+	// The value is digits × 10^shift at the target scale.
+	digits := strings.TrimLeft(whole+frac, "0")
+	if digits == "" {
+		return Zero, nil
+	}
+	shift := exp - len(frac) + scale
+	if shift > precision || len(digits)+shift > precision+1 {
+		return rangeErr() // more digits than precision, before rounding can matter
+	}
+	if shift >= 0 {
+		digits += strings.Repeat("0", shift)
+	} else {
+		keep := len(digits) + shift
+		var up bool
+		switch {
+		case keep < 0:
+			digits, up = "", false
+		default:
+			up = digits[keep] >= '5'
+			digits = digits[:keep]
+		}
+		if up {
+			digits = roundUpDigits(digits)
+		}
+		digits = strings.TrimLeft(digits, "0")
+		if digits == "" {
+			return Zero, nil
+		}
+	}
+	if len(digits) > precision {
+		return rangeErr()
+	}
+	v, ok := Parse(digits)
+	if !ok {
+		return rangeErr()
+	}
+	if neg {
+		v = v.Neg()
+	}
+	return v, nil
+}
+
+// roundUpDigits adds one to a decimal digit string, which may grow a digit.
+func roundUpDigits(d string) string {
+	b := []byte(d)
+	for i := len(b) - 1; i >= 0; i-- {
+		if b[i] < '9' {
+			b[i]++
+			return string(b)
+		}
+		b[i] = '0'
+	}
+	return "1" + string(b)
+}

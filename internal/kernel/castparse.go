@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/uerr"
@@ -53,6 +54,28 @@ func parseFromString(name string, to dtype.DataType, strict bool, c *data.Column
 		return parseColumn(name, to, strict, c, parseUnsigned[uint32](32))
 	case dtype.TypeUint64:
 		return parseColumn(name, to, strict, c, parseUnsigned[uint64](64))
+	case dtype.TypeInt128:
+		return parseColumn(name, to, strict, c, func(s string) (i128.Int128, parseResult) {
+			if v, ok := i128.Parse(s); ok {
+				return v, parsed
+			}
+			if decimalInteger(s) {
+				return i128.Zero, outOfRange
+			}
+			return i128.Zero, malformed
+		})
+	case dtype.TypeDecimal:
+		prec, scale := int(to.Precision()), int(to.Scale())
+		return parseColumn(name, to, strict, c, func(s string) (i128.Int128, parseResult) {
+			v, err := i128.ParseDecimal(s, prec, scale)
+			switch {
+			case errors.Is(err, strconv.ErrRange):
+				return i128.Zero, outOfRange
+			case err != nil:
+				return i128.Zero, malformed
+			}
+			return v, parsed
+		})
 	case dtype.TypeFloat32:
 		return parseColumn(name, to, strict, c, parseFloat[float32](32))
 	case dtype.TypeFloat64:

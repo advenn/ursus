@@ -187,11 +187,13 @@ func castDecimal(name string, to dtype.DataType, strict bool, c *data.Column) (*
 		return intToDecimal(name, to, strict, c)
 	case from.IsFloat() && to.ID() == dtype.TypeDecimal:
 		return floatToDecimal(name, to, strict, c)
+	case from.ID() == dtype.TypeString && to.ID() == dtype.TypeDecimal:
+		return parseFromString(name, to, strict, c)
 	}
 	return nil, uerr.New(uerr.KindUnsupported, "cast",
 		"cannot cast %s to %s", from, to).
 		Hint("a Decimal converts to and from the integer and float types, to " +
-			"another Decimal, and to String")
+			"another Decimal, and to and from String")
 }
 
 // toDecimal runs conv over every row, building a column of type to. A value conv

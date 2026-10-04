@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -49,13 +50,9 @@ func parseTargets(t *testing.T) []dtype.DataType {
 			out = append(out, dt)
 		}
 	}
-	if len(out) != 10 {
-		t.Fatalf("%d numeric targets for a String, want 10: %v", len(out), out)
-	}
-	for _, refused := range []dtype.DataType{dtype.Int128, dtype.Decimal(10, 2)} {
-		if dtype.CanCast(dtype.String, refused) {
-			t.Fatalf("String -> %s is castable now; add it to this sweep", refused)
-		}
+	// Int128 and Decimal(10, 2) joined at step 77, when the casts were added.
+	if len(out) != 12 {
+		t.Fatalf("%d numeric targets for a String, want 12: %v", len(out), out)
 	}
 	return out
 }
@@ -129,7 +126,10 @@ func parseStrings(t *testing.T) []string {
 		}
 	}
 	for _, s := range []string{"0.1", "-0.1", "1e400", "-1e400", "3.4e39", "-3.4e39",
-		"1e-50", "-1e-50", "1e-400", "3.4028235e38", "3.4028236e38", "1.5", "1e3"} {
+		"1e-50", "-1e-50", "1e-400", "3.4028235e38", "3.4028236e38", "1.5", "1e3",
+		// Decimal(10, 2): ties at the third place, and the largest value either side
+		// of the precision once rounded.
+		"1.235", "-1.235", "0.005", "-0.004", "99999999.994", "99999999.995", "1e-2", ".5"} {
 		add(s)
 	}
 	for s := range floatSpecials {
@@ -157,7 +157,33 @@ type parseWant struct {
 	f                          float64
 }
 
+// decimalText is the Decimal grammar: a sign, digits with an optional point, and an
+// optional exponent. No inf or nan — a Decimal has neither — no hex, no underscore.
+var decimalText = regexp.MustCompile(`^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$`)
+
 func oracle(s string, dt dtype.DataType) parseWant {
+	if dt.ID() == dtype.TypeDecimal {
+		// The unscaled value: the text's exact rational times 10^scale, rounded half
+		// away from zero, as Polars and DuckDB read it; past the precision, refused.
+		if !decimalText.MatchString(s) {
+			return parseWant{malformed: true}
+		}
+		r, ok := new(big.Rat).SetString(s)
+		if !ok {
+			return parseWant{malformed: true}
+		}
+		ten := big.NewInt(10)
+		r.Mul(r, new(big.Rat).SetInt(new(big.Int).Exp(ten, big.NewInt(int64(dt.Scale())), nil)))
+		n, d := new(big.Int).Abs(r.Num()), r.Denom()
+		u := new(big.Int).Quo(new(big.Int).Add(new(big.Int).Lsh(n, 1), d), new(big.Int).Lsh(d, 1))
+		if r.Sign() < 0 {
+			u.Neg(u)
+		}
+		if new(big.Int).Abs(u).Cmp(new(big.Int).Exp(ten, big.NewInt(int64(dt.Precision())), nil)) >= 0 {
+			return parseWant{unrepresentable: true}
+		}
+		return parseWant{i: u}
+	}
 	if dt.IsInteger() {
 		v, ok := new(big.Int).SetString(s, 10)
 		switch {
@@ -311,6 +337,10 @@ func TestStringParsesAreExactOrRefused(t *testing.T) {
 
 			// What the sweep must reach, per target.
 			switch {
+			case dt.ID() == dtype.TypeDecimal && w.unrepresentable:
+				floors[name+" past precision"] = true
+			case dt.ID() == dtype.TypeDecimal && (s == "1.235" || s == "-1.235") && !w.malformed:
+				floors[name+" tie"] = true
 			case dt.IsInteger() && w.unrepresentable && strings.HasPrefix(s, "-"):
 				floors[name+" below"] = true
 			case dt.IsInteger() && w.unrepresentable:
@@ -334,6 +364,12 @@ func TestStringParsesAreExactOrRefused(t *testing.T) {
 			for _, side := range []string{" below", " above"} {
 				if !floors[dt.String()+side] {
 					t.Errorf("no string out of range%s %s", side, dt)
+				}
+			}
+		} else if dt.ID() == dtype.TypeDecimal {
+			for _, k := range []string{" past precision", " tie"} {
+				if !floors[dt.String()+k] {
+					t.Errorf("no%s string for %s", k, dt)
 				}
 			}
 		} else {

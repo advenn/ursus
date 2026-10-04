@@ -1,17 +1,19 @@
 package csv
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/uerr"
 )
 
 // inferred is one column's running type during inference. It is ordered as a
 // lattice: a column only ever widens, never narrows.
 //
-//	unknown  →  bool     ─┐
-//	         →  int64  →  float64  ─┴→  string
+//	unknown  →  bool                ─┐
+//	         →  int64  →  int128  →  float64  ─┴→  string
 //
 // String is the top: it can hold anything, so a column that ever fails to parse
 // as something narrower ends there and the file still reads. That is the property
@@ -22,6 +24,7 @@ const (
 	infUnknown inferred = iota
 	infBool
 	infInt
+	infInt128 // an integer past Int64 that Int128 holds: u64::MAX infers exactly
 	infFloat
 	infString
 )
@@ -32,6 +35,8 @@ func (i inferred) dtype() dtype.DataType {
 		return dtype.Bool
 	case infInt:
 		return dtype.Int64
+	case infInt128:
+		return dtype.Int128
 	case infFloat:
 		return dtype.Float64
 	default:
@@ -50,10 +55,12 @@ func (i inferred) widen(o inferred) inferred {
 	if o == infUnknown || i == o {
 		return i
 	}
-	// int and float unify as float; every other disagreement goes to string.
-	// bool + int is string, not int: a column of true/false/1 is not a number.
-	if (i == infInt && o == infFloat) || (i == infFloat && o == infInt) {
-		return infFloat
+	// The numbers unify upward: int and int128 as int128, either with a float as
+	// float. Every other disagreement goes to string. bool + int is string, not
+	// int: a column of true/false/1 is not a number.
+	num := func(x inferred) bool { return x == infInt || x == infInt128 || x == infFloat }
+	if num(i) && num(o) {
+		return max(i, o)
 	}
 	return infString
 }
@@ -68,6 +75,12 @@ func classify(f []byte, isNull func([]byte) bool) inferred {
 	}
 	if _, err := strconv.ParseInt(str(f), 10, 64); err == nil {
 		return infInt
+	} else if errors.Is(err, strconv.ErrRange) {
+		// Past Int64. It used to fall to the float test below and infer Float64,
+		// which rounds u64::MAX and 2^63 silently; Polars infers Int128.
+		if _, ok := i128.Parse(str(f)); ok {
+			return infInt128
+		}
 	}
 	if _, err := dtype.ParseFloat(str(f), 64); err == nil {
 		// ParseFloat accepts "inf" and "nan", which in a text column are far more
