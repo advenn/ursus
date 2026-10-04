@@ -24,10 +24,6 @@ import (
 
 // knownScalarDefects names each case that answers wrongly today, with what it answers.
 var knownScalarDefects = map[string]string{
-	"S10 Kolkata Truncate(Every(1h))":              "10:30, the UTC grid",
-	"S10 New York Truncate(Every(2h))":             "03:00, the UTC grid",
-	"S10 New York spring-forward Truncate(2h)":     "01:00 EST, the UTC grid",
-	"S10 Kolkata GroupByDynamic(Every(1h))":        "one window at 10:30",
 	"S11 Truncate(Every(1mo)) near the ns minimum": "ErrInternal",
 	"S11 Truncate(time.Hour) at the ns minimum":    "wrapped to 2262",
 }
@@ -207,6 +203,15 @@ func TestScalarFunctionsByHand(t *testing.T) {
 		{name: "S10 New York spring-forward Truncate(2h)",
 			got:  instants(t, "America/New_York", dtype.Micro, "2024-03-10T07:30:00").Select(c("ts").Dt().Truncate(ursus.Every("2h"))),
 			want: instants(t, "America/New_York", dtype.Micro, "2024-03-10T07:00:00")},
+		// Past 2262, where UnixNano is undefined: the sub-day floor no longer uses it.
+		{name: "S10 Kolkata Truncate(Every(1h)) in the year 3000",
+			got:  instants(t, "Asia/Kolkata", dtype.Micro, "3000-01-01T05:17:00").Select(c("ts").Dt().Truncate(ursus.Every("1h"))),
+			want: instants(t, "Asia/Kolkata", dtype.Micro, "3000-01-01T04:30:00")},
+		// 1500ms divides neither way into a second, so it floors exactly in big.Int:
+		// 10:47:01.7 local floors to 10:47:01.5 on the wall clock's 1500ms grid.
+		{name: "S10 Kolkata Truncate(Every(1500ms))",
+			got:  instants(t, "Asia/Kolkata", dtype.Micro, "2024-01-01T05:17:01.7").Select(c("ts").Dt().Truncate(ursus.Every("1500ms"))),
+			want: instants(t, "Asia/Kolkata", dtype.Micro, "2024-01-01T05:17:01.5")},
 		{name: "S10 Kolkata GroupByDynamic(Every(1h))",
 			got: instants(t, "Asia/Kolkata", dtype.Micro, "2024-01-01T05:17:00", "2024-01-01T05:50:00").
 				GroupByDynamic(c("ts"), ursus.DynamicOptions{Every: ursus.Every("1h")}).Agg(ursus.Len().Alias("n")),

@@ -2,6 +2,7 @@ package dtype
 
 import (
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -411,12 +412,21 @@ func floorMod(a, b int) int {
 // TruncateTo floors t to the start of the window containing it, on a grid of this
 // interval anchored at the Unix epoch, in t's own location.
 //
-// # Local, not UTC
+// # Local, not UTC — sub-day included
 //
 // The grid is built from wall-clock components, so truncating by "1d" in
-// America/New_York gives local midnight rather than 00:00 UTC. That is what makes
-// Every("1d") different from FromDuration(24*time.Hour), which floors the absolute
-// instant and is left alone precisely because a Duration IS absolute.
+// America/New_York gives local midnight rather than 00:00 UTC, and by "1h" in
+// Asia/Kolkata, at +05:30, the local hour: 10:47 floors to 10:00, where the UTC
+// grid said 10:30. Dt().Truncate given a time.Duration floors the absolute instant
+// instead, because a Duration IS absolute, and never reaches here.
+//
+// A sub-day floor maps the floored wall clock back at t's own offset when that
+// offset still holds there, so in a fall-back fold the second 01:30 floors to the
+// second 01:00. Otherwise a transition lies between them, and the offset in force
+// at the floored wall clock is used; and when no offset makes it a real wall clock
+// — it fell into a spring-forward gap — the answer is the instant the gap ends.
+// All three are Polars' answers. time.Date is not used to decide: in a gap it may
+// pick either side, and picked the one before the gap, 01:00 for 02:00.
 //
 // # Mixed intervals are refused by the caller
 //
@@ -446,12 +456,64 @@ func (i Interval) TruncateTo(t time.Time) time.Time {
 		return time.Date(sy, sm, sd, 0, 0, 0, 0, t.Location())
 
 	default:
-		// A pure nanosecond grid: floor the absolute instant, which needs no zone.
-		ns := t.UnixNano()
-		q := ns / i.nanos
-		if ns%i.nanos != 0 && (ns < 0) != (i.nanos < 0) {
-			q--
+		// The wall clock, as seconds since the epoch read as if it were UTC. It used
+		// to floor the absolute instant, so every zone whose offset is not a multiple
+		// of the interval was off the local grid, and through UnixNano, which is
+		// undefined outside 1678–2262.
+		_, off := t.Zone()
+		fs, fn := floorUnix(t.Unix()+int64(off), int64(t.Nanosecond()), i.nanos)
+		at := func(o int) (time.Time, bool) {
+			u := time.Unix(fs-int64(o), fn).In(t.Location())
+			return u, zoneOffset(u) == o
 		}
-		return time.Unix(0, q*i.nanos).In(t.Location())
+		first, ok := at(off)
+		if ok {
+			return first
+		}
+		second, ok := at(zoneOffset(first))
+		if ok {
+			return second
+		}
+		// A gap: the wall clock is real under neither offset. It ends where the
+		// zone in force at the later of the two candidates begins.
+		later := first
+		if second.After(first) {
+			later = second
+		}
+		start, _ := later.ZoneBounds()
+		return start
 	}
+}
+
+func zoneOffset(t time.Time) int {
+	_, off := t.Zone()
+	return off
+}
+
+// floorUnix floors the instant secs seconds and nsec nanoseconds past the epoch to
+// a multiple of n nanoseconds, without forming secs*1e9, which leaves int64 past
+// 2262. A whole number of seconds floors the seconds; a divisor of a second floors
+// the nanoseconds; anything else — 1500ms — is rare, and done exactly in big.Int.
+func floorUnix(secs, nsec, n int64) (int64, int64) {
+	const e9 = int64(time.Second)
+	switch {
+	case n%e9 == 0:
+		k := n / e9
+		return int64(floorDiv(int(secs), int(k))) * k, 0
+	case e9%n == 0:
+		return secs, nsec - nsec%n
+	}
+	total := new(big.Int).Mul(big.NewInt(secs), big.NewInt(e9))
+	total.Add(total, big.NewInt(nsec))
+	q, m := new(big.Int).QuoRem(total, big.NewInt(n), new(big.Int))
+	if m.Sign() < 0 {
+		q.Sub(q, big.NewInt(1))
+	}
+	total.Mul(q, big.NewInt(n))
+	s, ns := new(big.Int).QuoRem(total, big.NewInt(e9), new(big.Int))
+	if ns.Sign() < 0 {
+		s.Sub(s, big.NewInt(1))
+		ns.Add(ns, big.NewInt(e9))
+	}
+	return s.Int64(), ns.Int64()
 }

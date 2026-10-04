@@ -68,6 +68,13 @@ func (d DtExpr) Epoch() Expr { return d.call(expr.FnDtEpoch) }
 //
 //	Truncate(time.Hour)     the instant, floored to a whole hour since the epoch
 //	Truncate(Every("1d"))   the start of the LOCAL day, in the column's own zone
+//	Truncate(Every("1h"))   the start of the LOCAL hour — 10:00 for 10:47 at +05:30,
+//	                        where time.Hour gives 10:30, the hour since the epoch
+//
+// An Interval floors the wall clock at every size. Where the floored wall clock
+// falls into a spring-forward gap, the answer is the instant the gap ends; in a
+// fall-back fold, the input keeps its own offset, so the second 01:30 floors to the
+// second 01:00. Both are Polars' answers.
 //
 // A Duration is a fixed span of elapsed time, so flooring by one is zone-independent
 // by definition — `Truncate(24*time.Hour)` on a New York column lands on 00:00 UTC,
@@ -79,8 +86,14 @@ func (d DtExpr) Truncate[T Span](every T) Expr {
 	if err := iv.Err(); err != nil {
 		return wrap(&expr.Err{E: err})
 	}
+	// The fourth argument says which spelling it was: an Interval floors the wall
+	// clock and a Duration the instant, and both arrive as the same three numbers.
+	wall := int64(0)
+	if _, ok := any(every).(Interval); ok {
+		wall = 1
+	}
 	return d.call(expr.FnDtTruncate,
-		int64(iv.Months()), int64(iv.Days()), iv.Nanos())
+		int64(iv.Months()), int64(iv.Days()), iv.Nanos(), wall)
 }
 
 // The Total family converts a Duration to a whole number of units, truncating.

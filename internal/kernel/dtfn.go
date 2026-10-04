@@ -284,7 +284,11 @@ func truncateTemporal(name string, out, dt dtype.DataType, ticks []int64,
 		return nil, uerr.Internalf("kernel: truncate on %s", dt)
 	}
 
-	if iv.IsCalendar() {
+	// An Interval floors the column's wall clock, sub-day included, so it takes the
+	// calendar path whenever the column has a zone; a Duration (wall == 0) floors
+	// the absolute instant below. Without a zone the two grids are one, and the
+	// tick arithmetic below is the faster way to it.
+	if wall, _ := argInt(args, 3); iv.IsCalendar() || (wall == 1 && locationOf(dt) != nil) {
 		return truncateCalendar(name, out, dt, ticks, valid, iv)
 	}
 	every := iv.Nanos()

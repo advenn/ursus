@@ -22,27 +22,7 @@ import (
 )
 
 // knownWallClockDefects counts the wrong instants per zone and interval.
-var knownWallClockDefects = map[string]int{
-	"Asia/Kolkata 1h":         37,
-	"Asia/Kolkata 2h":         37,
-	"Asia/Kolkata 3h":         37,
-	"Asia/Kolkata 90m":        37,
-	"Asia/Kathmandu 1h":       37,
-	"Asia/Kathmandu 2h":       37,
-	"Asia/Kathmandu 3h":       37,
-	"Asia/Kathmandu 90m":      37,
-	"America/New_York 2h":     43,
-	"America/New_York 3h":     74,
-	"America/New_York 90m":    74,
-	"Australia/Lord_Howe 1h":  40,
-	"Australia/Lord_Howe 2h":  74,
-	"Australia/Lord_Howe 3h":  74,
-	"Australia/Lord_Howe 90m": 34,
-	"Pacific/Chatham 1h":      72,
-	"Pacific/Chatham 2h":      74,
-	"Pacific/Chatham 3h":      74,
-	"Pacific/Chatham 90m":     74,
-}
+var knownWallClockDefects = map[string]int{}
 
 // wallSeconds is u's wall clock, as seconds since the epoch read as if it were UTC.
 func wallSeconds(u time.Time, loc *time.Location) int64 {
@@ -51,18 +31,24 @@ func wallSeconds(u time.Time, loc *time.Location) int64 {
 }
 
 // gridFloorOracle is the latest instant u <= t whose wall clock is a multiple of
-// every, or that ends a gap a grid wall clock fell into.
+// every and no later than t's own, or that ends a gap such a wall clock fell into.
+//
+// "No later than t's own" is what makes it a floor of the WALL CLOCK. In a fall-back
+// fold the instants just before t can read later on the clock than t does — 01:30
+// EDT comes before 01:00 EST — and the first version of this oracle took them, so
+// it floored 01:00 EST at 90m to 01:30 EDT. Polars, and a floor, say 00:00 EDT.
 func gridFloorOracle(t time.Time, loc *time.Location, every time.Duration) (time.Time, bool) {
 	step := int64(every / time.Second)
 	onGrid := func(w int64) bool { return ((w%step)+step)%step == 0 }
+	top := wallSeconds(t, loc)
 	for u := t.Truncate(time.Minute); t.Sub(u) <= every+2*time.Hour; u = u.Add(-time.Minute) {
-		if onGrid(wallSeconds(u, loc)) {
+		if w := wallSeconds(u, loc); w <= top && onGrid(w) {
 			return u, true
 		}
 		// A gap ends at u when the wall clock jumps forward across it: the wall
 		// clocks [before, after) do not exist, and a grid point among them floors to u.
 		before, after := wallSeconds(u.Add(-time.Second), loc)+1, wallSeconds(u, loc)
-		for w := before; w < after; w++ {
+		for w := before; w < after && w <= top; w++ {
 			if onGrid(w) {
 				return u, true
 			}
