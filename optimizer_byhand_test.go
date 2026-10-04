@@ -106,13 +106,9 @@ func doubled() func(int64) (int64, error) {
 // mode. Emptied, entry by entry, by the commits that fix them; a listed case that
 // answers correctly fails as stale, and an unlisted one that answers wrongly fails.
 var knownOptimizerDefects = map[string]string{
-	"O8b under unique":     "optimized: the cast is pushed below the Distinct, ahead of the guard",
-	"O4 cross join and ==": "optimized: NaN matches NaN in the collapsed hash join",
-	"O4 JoinWhere":         "optimized: NaN matches NaN in the collapsed hash join",
-	"O4 WhereExists":       "optimized: the NaN row exists",
-	"O4 WhereNotExists":    "optimized: the NaN row does not",
-	"O8-join inner":        "optimized: the cast is pushed into the left side and meets \"x\"",
-	"O9 unique keeps -0":   "optimized: the filter keeps +0, which Unique then keeps",
+	"O8b under unique":   "optimized: the cast is pushed below the Distinct, ahead of the guard",
+	"O8-join inner":      "optimized: the cast is pushed into the left side and meets \"x\"",
+	"O9 unique keeps -0": "optimized: the filter keeps +0, which Unique then keeps",
 }
 
 func TestOptimizerByHand(t *testing.T) {
@@ -328,7 +324,6 @@ func TestConcatUnderLenReadsOneColumn(t *testing.T) {
 
 // knownPlannerRefusalDefects names each case the planner does not refuse today.
 var knownPlannerRefusalDefects = map[string]string{
-	"O5 JoinNullsEqual on a cross join":      "accepted, and does nothing",
 	"O10 a window as the dynamic index":      "accepted by the planner, ErrInternal at Collect",
 	"O11 an ordered aggregate over a window": "accepted by Explain and CollectSchema",
 }

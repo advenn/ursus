@@ -585,6 +585,15 @@ func resolveJoin(j *Join) (Node, error) {
 				"validate is not meaningful on a cross join").
 				Hint("a cross join has no keys whose cardinality could be checked")
 		}
+		// Refused for Validate's reason. It used to be accepted and to do nothing —
+		// until the cross-join collapse copied it onto the inner join it builds,
+		// where it made null keys match (O5).
+		if j.NullsEqual {
+			return nil, uerr.New(uerr.KindValue, "join",
+				"nulls_equal is not meaningful on a cross join").
+				Hint("a cross join has no keys for nulls to equal; to match null keys, " +
+					"join on them with JoinOn(...) and JoinNullsEqual(true)")
+		}
 	} else if j.Kind == JoinFull && j.Coalesce == CoalesceOn {
 		// A full join can leave a key null on EITHER side, so the merged value is
 		// genuinely coalesce(l, r) rather than one side or the other — and there is

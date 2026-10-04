@@ -83,7 +83,7 @@ func (collapseCrossJoin) Apply(n Node, _ Flags) (Node, bool, error) {
 			return nil, err
 		}
 
-		var leftOn, rightOn, residual []expr.Node
+		var leftOn, rightOn, keyPreds, residual []expr.Node
 		for _, p := range f.Preds {
 			l, r, ok := equiKeys(p, layout, ls, rs)
 			if !ok {
@@ -92,6 +92,7 @@ func (collapseCrossJoin) Apply(n Node, _ Flags) (Node, bool, error) {
 			}
 			leftOn = append(leftOn, l)
 			rightOn = append(rightOn, r)
+			keyPreds = append(keyPreds, p)
 		}
 		if len(leftOn) == 0 {
 			// A predicate with no equality is a loop join. The keyless probe already
@@ -110,21 +111,25 @@ func (collapseCrossJoin) Apply(n Node, _ Flags) (Node, bool, error) {
 		// change the schema; dropping a column is a worse violation than reordering
 		// rows, because nothing downstream can even name what went missing.
 		c.Coalesce = CoalesceOff
-		// NullsEqual stays false, which is what makes the rewrite legal rather than
+		// NullsEqual is false, which is what makes the rewrite legal rather than
 		// merely plausible: `l.k == r.k` over a cross product drops a null key,
 		// because a comparison against null is null and Filter drops it, and an inner
-		// join with NullsEqual false drops it too. Setting it true here would MATCH
-		// null keys to each other and invent rows.
+		// join with NullsEqual false drops it too. True would MATCH null keys to each
+		// other and invent rows. This comment used to say it "stays false" while
+		// `c := *j` copied whatever the cross join carried (O5); a cross join with it
+		// set is refused at resolution now, and it is set here regardless.
+		c.NullsEqual = false
 
 		// A key type that cannot promote would make the new join fail to lay out.
 		// Bail rather than propagate: a missed optimisation is a cost, and turning a
 		// query that ran into one that errors is a defect.
-		if _, err := c.Layout(); err != nil {
+		lay, err := c.Layout()
+		if err != nil {
 			return x, nil
 		}
 
 		changed = true
-		return refilter(&c, residual), nil
+		return refilter(&c, append(floatKeyResiduals(lay, keyPreds), residual...)), nil
 	})
 	if err != nil {
 		return nil, false, err
@@ -157,7 +162,7 @@ func collapseResidual(j *Join) (Node, bool, error) {
 		return nil, false, err
 	}
 
-	var leftOn, rightOn, residual []expr.Node
+	var leftOn, rightOn, keyPreds, residual []expr.Node
 	for _, p := range j.Residual {
 		l, r, ok := equiKeys(p, pair, ls, rs)
 		if !ok {
@@ -166,6 +171,7 @@ func collapseResidual(j *Join) (Node, bool, error) {
 		}
 		leftOn = append(leftOn, l)
 		rightOn = append(rightOn, r)
+		keyPreds = append(keyPreds, p)
 	}
 	if len(leftOn) == 0 {
 		// No equality: the join stays keyless and every pair is tested. That is the
@@ -175,15 +181,37 @@ func collapseResidual(j *Join) (Node, bool, error) {
 
 	c := *j
 	c.LeftOn, c.RightOn = leftOn, rightOn
-	c.Residual = residual
+	c.NullsEqual = false // as in the Filter-over-Cross arm: == never matches a null
 	// No Coalesce to force off, unlike the Filter-over-Cross arm: Layout gives
 	// Semi and Anti the bare left schema, so no key column is ever merged and the
 	// output shape cannot change. The residual's namespace comes from PairLayout,
 	// which sets CoalesceOff itself.
-	if _, err := c.Layout(); err != nil {
+	lay, err := c.Layout()
+	if err != nil {
 		return j, false, nil
 	}
+	c.Residual = append(floatKeyResiduals(lay, keyPreds), residual...)
 	return &c, true, nil
+}
+
+// floatKeyResiduals is the extracted equalities whose key is compared as a float,
+// which must also be tested as written.
+//
+// A hash join matches keys by their encoding, which is grouping equality: NaN
+// equals NaN. `==` is IEEE, and NaN equals nothing, itself included. So a float
+// equality extracted into join keys matched NaN to NaN — in a cross join's
+// Filter, in JoinWhere, and in WhereExists and WhereNotExists, which answered the
+// NaN row backwards (O4). Testing it again after the hash match removes exactly
+// those pairs; −0 and +0 are equal under both, so nothing else changes, and the
+// hash join still does the work of finding the candidates.
+func floatKeyResiduals(lay *JoinLayout, keyPreds []expr.Node) []expr.Node {
+	var out []expr.Node
+	for i, p := range keyPreds {
+		if i < len(lay.KeyTypes) && lay.KeyTypes[i].IsFloat() {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // equiKeys splits `left_expr == right_expr` into the two child-namespace keys, or

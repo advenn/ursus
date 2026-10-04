@@ -253,14 +253,16 @@ func transforms() []transform {
 			}
 			return lf.WhereExists(lf.Select(c(f).Alias("fr")), c(f).Eq(c("fr"))), true
 		}},
-		// O5: NullsEqual on a cross join, then an equality filter that must drop
-		// null = null.
+		// O5: a cross join, then an equality filter that must drop null = null.
+		// This set JoinNullsEqual(true) on the cross join, which the collapse
+		// copied onto its inner join; step 78 refuses that option on a cross join,
+		// so the transform keeps the equality over nullable keys that is the point.
 		{name: "cross-nulls", unordered: true, apply: func(lf *ursus.LazyFrame, s *ursus.Schema) (*ursus.LazyFrame, bool) {
 			if !hasCol(s, "k") {
 				return nil, false
 			}
-			return lf.Join(lf.Select(c("k").Alias("kr")), ursus.JoinHow(ursus.JoinCross),
-				ursus.JoinNullsEqual(true)).Filter(c("k").Eq(c("kr"))), true
+			return lf.Join(lf.Select(c("k").Alias("kr")), ursus.JoinHow(ursus.JoinCross)).
+				Filter(c("k").Eq(c("kr"))), true
 		}},
 		{name: "dropnulls", apply: func(lf *ursus.LazyFrame, _ *ursus.Schema) (*ursus.LazyFrame, bool) {
 			return lf.DropNulls(), true
@@ -635,8 +637,6 @@ func classify(name, detail string, guilty []string) string {
 // today, by defect. Checked both ways: a class whose count changes is reported with
 // its queries, a class with none left is stale, and an unattributed mismatch fails.
 var knownDifferentialMismatches = map[string]knownMismatch{
-	"O4":      {19, "the cross-join collapse turns IEEE == into hash equality: NaN matches NaN"},
-	"O5":      {9, "the cross-join collapse keeps NullsEqual, so null keys match"},
 	"O8-join": {1, "a fallible filter is pushed into a join side, onto rows the join removes"},
 	// 4 before O8 was fixed: two of them had the guard BELOW the Distinct, where
 	// merging the stacked filters was the whole problem.
