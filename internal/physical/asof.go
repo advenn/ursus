@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/execopt"
 	"github.com/advenn/ursus/internal/expr"
@@ -162,8 +163,17 @@ func (s *asOfBuildSink) bucket(ctx context.Context, right *data.Batch) (map[stri
 	if err != nil {
 		return nil, err
 	}
+	// A right row with a null by-key joins no bucket, so no left row can find it.
+	// The encoder writes a null as a group of its own, and that group used to match
+	// a null left by-key — against every other null rule in ursus's joins, where a
+	// null key matches nothing unless NullsEqual says so, and as-of has no
+	// NullsEqual. Polars and DuckDB match nothing too.
+	valid := keyValidity(cols)
 	out := make(map[string][]int32, 16)
 	for i := range right.Rows() {
+		if !valid.Get(i) {
+			continue
+		}
 		k := string(enc.Encode(i))
 		out[k] = append(out[k], int32(i))
 	}
@@ -280,6 +290,7 @@ func (p *asOfProbeOp) match(ctx context.Context, in *data.Batch) (*data.Batch, e
 	}
 
 	var byEnc *kernel.GroupKeyEncoder
+	var byValid bitmap.View
 	if len(s.leftBy) > 0 {
 		cols, err := evalKeys(ctx, "join_asof", s.leftBy, in, s.layout.KeyTypes[1:])
 		if err != nil {
@@ -288,6 +299,7 @@ func (p *asOfProbeOp) match(ctx context.Context, in *data.Batch) (*data.Batch, e
 		if byEnc, err = kernel.NewGroupKeyEncoder("join_asof", cols); err != nil {
 			return nil, err
 		}
+		byValid = keyValidity(cols)
 	}
 
 	n := in.Rows()
@@ -297,6 +309,10 @@ func (p *asOfProbeOp) match(ctx context.Context, in *data.Batch) (*data.Batch, e
 		lsel[i] = int32(i)
 		key := ""
 		if byEnc != nil {
+			if !byValid.Get(i) {
+				rsel[i] = kernel.NullIndex // a null by-key matches nothing
+				continue
+			}
 			key = string(byEnc.Encode(i))
 		}
 		var err error

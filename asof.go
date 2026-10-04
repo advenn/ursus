@@ -60,6 +60,11 @@ func AsOfRightOn(e Expr) AsOfOption {
 // Without it every left row searches one global run, which on any real fixture means
 // matching the nearest row of the wrong instrument — a plausible number and the wrong
 // one.
+//
+// A null by-key matches nothing: a left row with one gets nulls, and a right row with
+// one is never found — as in Polars and DuckDB, and as a null key does in every other
+// ursus join unless NullsEqual says otherwise. By-keys of different types are
+// compared at the type that holds both exactly, as a join's keys are.
 func AsOfBy(exprs ...Expr) AsOfOption {
 	return func(c *asOfCfg) { c.by, c.haveBy = exprs, true }
 }
