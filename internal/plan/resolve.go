@@ -326,6 +326,23 @@ func resolveWithColumns(w *WithColumns) (Node, error) {
 		return w.Input, nil // every expression expanded to nothing; drop the node
 	}
 
+	// A window is lifted below this node, so it reads the node's INPUT — and the
+	// node is sequential, so a window over a column an earlier expression defined
+	// must read that definition. `WithColumns(x*10 as w, w.sum().over(g))` summed
+	// the input's w, and with a new name was "unknown column". The node is split
+	// before the first such window: the lower half defines the names, and the upper
+	// half's windows are lifted above it. The output is the one sequential walk
+	// above, column for column. Select is parallel and has no such case.
+	if i := firstWindowOverDefined(out); i > 0 {
+		lower, err := resolveWithColumns(&WithColumns{Input: w.Input, Exprs: out[:i]})
+		if err != nil {
+			return nil, err
+		}
+		c := *w
+		c.Input, c.Exprs = lower, out[i:]
+		return resolveWithColumns(&c)
+	}
+
 	input, out, temps, err := extractWindows(w.Input, out, "with_columns")
 	if err != nil {
 		return nil, err
@@ -351,6 +368,32 @@ func resolveWithColumns(w *WithColumns) (Node, error) {
 		}
 	}
 	return dropTemps(&c, keep), nil
+}
+
+// firstWindowOverDefined is the index of the first expression with a window that
+// reads a name an earlier expression in exprs defines, or -1. Only the columns read
+// inside a window count: a column read outside one is evaluated by the node itself,
+// which sees the earlier definitions already.
+func firstWindowOverDefined(exprs []expr.Node) int {
+	defined := map[string]bool{}
+	for i, e := range exprs {
+		hit := false
+		expr.Walk(e, func(n expr.Node) bool {
+			switch n.(type) {
+			case *expr.Window, *expr.WinFn:
+				for _, name := range expr.RootNames(n) {
+					hit = hit || defined[name]
+				}
+				return false
+			}
+			return true
+		})
+		if hit {
+			return i
+		}
+		defined[expr.OutputName(e)] = true
+	}
+	return -1
 }
 
 func resolveSort(s *Sort) (Node, error) {

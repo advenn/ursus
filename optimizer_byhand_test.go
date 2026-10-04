@@ -81,8 +81,6 @@ func doubled() func(int64) (int64, error) {
 var knownOptimizerDefects = map[string]string{
 	"O8b under unique": "optimized: the cast is pushed below the Distinct, ahead of the guard",
 	"P1 column order":  "optimized: w is appended at the end, not replaced in place",
-	"W1 window":        "both: the window reads the input's w, not the one defined before it",
-	"W1 window new":    "both: unknown column w2",
 }
 
 func TestOptimizerByHand(t *testing.T) {

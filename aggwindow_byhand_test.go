@@ -35,6 +35,7 @@ func TestAggregationsAndWindowsByHand(t *testing.T) {
 	one := func(lf *ursus.LazyFrame, e ursus.Expr) *ursus.LazyFrame { return lf.GroupBy().Agg(e) }
 	inf := math.Inf(1)
 	const big = 1<<53 + 1
+	gx := ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("x", []int64{1, 2, 3}))
 
 	cases := []aggCase{
 		// --- A1: ShiftFill's fill meets the column at a common type ---
@@ -162,6 +163,25 @@ func TestAggregationsAndWindowsByHand(t *testing.T) {
 		{name: "A14 IsBetween with Closed(99)",
 			got:    ursus.Frame(ursus.Values("v", []int64{1, 2, 3})).Select(c("v").IsBetween(1, 3, ursus.Closed(99))),
 			refuse: []string{"Closed"}},
+
+		// --- W1: a window reads the columns defined before it in its WithColumns ---
+		{name: "W1 a window over an earlier window",
+			got: gx.WithColumns(c("x").CumSum(false).Over(c("g")).Alias("a"), c("a").Max().Over(c("g")).Alias("m")),
+			want: ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("x", []int64{1, 2, 3}),
+				ursus.Values("a", []int64{1, 3, 3}), ursus.Values("m", []int64{3, 3, 3})).
+				Select(c("g"), c("x"), c("a").Cast(ursus.Int128), c("m").Cast(ursus.Int128))},
+		{name: "W1 a replaced column keeps its place",
+			got: ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("w", []int64{0, 0, 0}),
+				ursus.Values("x", []int64{1, 2, 3})).
+				WithColumns(c("x").Mul(10).Alias("w"), c("w").Sum().Over(c("g")).Alias("s")),
+			want: ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("w", []int64{10, 20, 30}),
+				ursus.Values("x", []int64{1, 2, 3}), ursus.Values("s", []int64{30, 30, 30})).
+				Select(c("g"), c("w"), c("x"), c("s").Cast(ursus.Int128))},
+		{name: "control: an earlier column read outside the window",
+			got: gx.WithColumns(c("x").Mul(10).Alias("w"), c("w").Add(c("x").Sum().Over(c("g"))).Alias("s")),
+			want: ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("x", []int64{1, 2, 3}),
+				ursus.Values("w", []int64{10, 20, 30}), ursus.Values("s", []int64{13, 23, 33})).
+				Select(c("g"), c("x"), c("w"), c("s").Cast(ursus.Int128))},
 	}
 
 	for _, tc := range cases {
