@@ -25,10 +25,8 @@ import (
 
 // knownJoinDefects names each case that answers wrongly today, with what it answers.
 var knownJoinDefects = map[string]string{
-	"J3 spilled right join, key (1, null)":                  "k1 is null: coalesced from the left's padding",
-	"J5 1:m with unmatched duplicate left keys":             "passes: an unmatched key is never checked",
-	"J5 1:m with duplicate null left keys under NullsEqual": "passes",
-	"O6 filter on a coalesced key of two widths":            "0 rows: k*k computed at Int32 in the pushed filter",
+	"J3 spilled right join, key (1, null)":       "k1 is null: coalesced from the left's padding",
+	"O6 filter on a coalesced key of two widths": "0 rows: k*k computed at Int32 in the pushed filter",
 }
 
 type joinCase struct {

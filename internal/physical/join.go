@@ -975,6 +975,22 @@ func (p *joinProbeOp) startBatch(ctx context.Context, in *data.Batch) error {
 }
 
 // enter looks up the current probe row's match list.
+// checkSeen is Validate's uniqueness check on the left side, for a key this level
+// decides: resident, or matching nothing. A ROUTED key is the sub-join's to police,
+// so inserting it here would make the map O(all distinct probe keys) at every level
+// instead of once — the unbounded structure spilling exists to bound. A null key
+// reaches here only under NullsEqual, where it is a key like any other.
+func (p *joinProbeOp) checkSeen(k []byte) error {
+	if p.seen == nil {
+		return nil
+	}
+	if _, dup := p.seen[string(k)]; dup {
+		return duplicateKeyErr(p.spec.validate, "left", nil, nil, p.row)
+	}
+	p.seen[string(k)] = struct{}{}
+	return nil
+}
+
 func (p *joinProbeOp) enter() error {
 	p.entered = true
 	p.hit, p.nHit = 0, 0
@@ -1015,18 +1031,16 @@ func (p *joinProbeOp) enter() error {
 			if b := partitionOf(k, p.level); p.buildFile(b) != "" {
 				p.ppend[b] = append(p.ppend[b], int32(p.row))
 				p.routed = true
+				return nil
 			}
-			return nil
+			// It matches nothing — and Validate still counts it. A left key that is
+			// duplicated is duplicated whether or not the right side has it, which is
+			// what Polars checks too. It used to return here, so 1:m passed over
+			// [1, 1, 2] joined to [2], and under NullsEqual over two null keys.
+			return p.checkSeen(k)
 		}
-		// seen is checked only for RESIDENT keys, and only after the lookup. A routed
-		// key is the sub-join's to police, so inserting it here would make this map
-		// O(all distinct probe keys) instead of O(resident ones) — the unbounded
-		// structure this whole step exists to bound.
-		if p.seen != nil {
-			if _, dup := p.seen[string(k)]; dup {
-				return duplicateKeyErr(p.spec.validate, "left", nil, nil, p.row)
-			}
-			p.seen[string(k)] = struct{}{}
+		if err := p.checkSeen(k); err != nil {
+			return err
 		}
 	}
 	if p.t.off == nil {
