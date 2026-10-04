@@ -205,12 +205,18 @@ func (j *Join) keyTypes(ls, rs *dtype.Schema) ([]dtype.DataType, error) {
 		if err != nil {
 			return nil, annotateKeySide(err, "right", i, rs, ls)
 		}
-		kt, ok := dtype.Promote(lf.Type, rf.Type)
+		// EXACTLY: a key compared in a type that rounds one side matches values that
+		// are not equal — an Int64 2^53+1 against a Float64 2^53.
+		kt, ok := dtype.PromoteExact(lf.Type, rf.Type)
 		if !ok {
+			why := "no common type for"
+			if dtype.ExactMismatch(lf.Type, rf.Type) {
+				why = "no type holds exactly both"
+			}
 			return nil, uerr.New(uerr.KindType, "join",
-				"cannot join key %s to %s: no common type for %s and %s",
-				j.LeftOn[i].String(), j.RightOn[i].String(), lf.Type, rf.Type).
-				Hint("cast one side explicitly, e.g. .Cast(ursus.Int64)")
+				"cannot join key %s to %s: %s %s and %s",
+				j.LeftOn[i].String(), j.RightOn[i].String(), why, lf.Type, rf.Type).
+				Hint("%s", dtype.MeetHint(lf.Type, rf.Type))
 		}
 		if !kt.IsHashable() {
 			return nil, uerr.New(uerr.KindType, "join",

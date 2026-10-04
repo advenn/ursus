@@ -160,13 +160,19 @@ func reconcileSchemas(schemas []*dtype.Schema, mode ConcatMode) (*dtype.Schema, 
 				acc, have = f, true
 				continue
 			}
-			t, ok := dtype.Promote(acc.Type, f.Type)
+			// EXACTLY: stacking a column means every value comes out as it went in,
+			// so a type that rounds one frame's values is no common type at all.
+			t, ok := dtype.PromoteExact(acc.Type, f.Type)
 			if !ok {
+				why := "no common type for"
+				if dtype.ExactMismatch(acc.Type, f.Type) {
+					why = "no type holds exactly both"
+				}
 				return nil, uerr.New(uerr.KindType, "concat",
-					"cannot stack column %q: no common type for %s and %s",
-					name, acc.Type, f.Type).
+					"cannot stack column %q: %s %s and %s",
+					name, why, acc.Type, f.Type).
 					Hint("frame 0 has it as %s, frame %d as %s", acc.Type, fi, f.Type).
-					Hint("cast one side explicitly, e.g. .Cast(ursus.Float64)")
+					Hint("%s", dtype.MeetHint(acc.Type, f.Type))
 			}
 			acc = acc.WithType(t)
 			if f.Nullable {

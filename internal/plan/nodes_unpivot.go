@@ -161,14 +161,19 @@ func (u *Unpivot) Schema() (*dtype.Schema, error) {
 			valType = f.Type
 			continue
 		}
-		t, ok := dtype.Promote(valType, f.Type)
+		// EXACTLY, as Concat: a melted value must come out as it went in.
+		t, ok := dtype.PromoteExact(valType, f.Type)
 		if !ok {
+			why := "no common type for"
+			if dtype.ExactMismatch(valType, f.Type) {
+				why = "no type holds exactly both"
+			}
 			return nil, uerr.New(uerr.KindType, "unpivot",
-				"cannot melt %q with %q: no common type for %s and %s",
-				u.On[0], name, valType, f.Type).
-				Hint("every melted column shares one value column, so their types " +
-					"must promote").
-				Hint("cast one side explicitly, e.g. .Cast(ursus.Float64)")
+				"cannot melt %q with %q: %s %s and %s",
+				u.On[0], name, why, valType, f.Type).
+				Hint("every melted column shares one value column, so their types "+
+					"must meet in one type that holds them all").
+				Hint("%s", dtype.MeetHint(valType, f.Type))
 		}
 		valType = t
 	}

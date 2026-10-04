@@ -67,9 +67,13 @@ func resolveUnion(u *Union) (Node, error) {
 			}
 			var e expr.Node = &expr.Col{Name: f.Name}
 			if cf.Type != f.Type {
-				// Strict: Promote only ever chose a type that holds both exactly, so
+				// Strict: PromoteExact only chooses a type that holds both exactly, so
 				// a value that fails to convert is a bug rather than a lossy
-				// conversion anyone asked for.
+				// conversion anyone asked for. This said Promote until step 74, and
+				// Promote put an Int64 with a Float64 at Float64, which rounds — so
+				// the claim was false for exactly the pair it most needed to cover.
+				// A temporal unit is the one range question left: a Datetime(ms)
+				// past the nanosecond range is refused here, by the strict cast.
 				e = &expr.Cast{Child: e, To: f.Type, Strict: true}
 				e = &expr.Alias{Child: e, Name: f.Name}
 			}

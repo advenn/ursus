@@ -135,6 +135,40 @@ func Promote(a, b DataType) (DataType, bool) {
 	}
 }
 
+// PromoteExact is Promote restricted to a type that holds every value of BOTH
+// operands exactly. It is the question a join key, a Concat column and an Unpivot
+// value ask, where a value that rounds is a wrong match or a wrong value — not the
+// expected inexactness of arithmetic, which keeps Promote.
+//
+// It differs from Promote in one place: an integer wider than 32 bits — Int64,
+// Uint64, Int128 — with a float. Promote answers Float64, which holds an integer
+// exactly only up to 2^53, so an Int64 key of 2^53+1 matched a Float64 key of 2^53
+// and a Concat turned it into 2^53. No type here holds both, so PromoteExact answers
+// none, as Polars and PyArrow refuse the same join. ExactMismatch says why.
+//
+// Temporal types are Promote's: Datetime(ms) and Datetime(ns) meet at Datetime(ns),
+// and a value the finer unit cannot hold is a range question, refused by the strict
+// cast at execution, not a type question.
+func PromoteExact(a, b DataType) (DataType, bool) {
+	if ExactMismatch(a, b) {
+		return Null, false
+	}
+	return Promote(a, b)
+}
+
+// ExactMismatch reports whether a and b promote, but only to a type that rounds one
+// of them: an integer wider than 32 bits with a float.
+func ExactMismatch(a, b DataType) bool {
+	if !a.IsNumeric() || !b.IsNumeric() || a.IsFloat() == b.IsFloat() {
+		return false
+	}
+	i := a
+	if a.IsFloat() {
+		i = b
+	}
+	return i.IsInteger() && i.BitWidth() > 32
+}
+
 func wider(a, b DataType) DataType {
 	if a.BitWidth() >= b.BitWidth() {
 		return a
@@ -233,4 +267,32 @@ func CanCast(from, to DataType) bool {
 	default:
 		return false
 	}
+}
+
+// MeetHint is the advice for two types that do not meet exactly — a join key, a
+// Concat column, an Unpivot value — naming a cast that would make them meet. Every
+// cast it names is one CanCast permits.
+func MeetHint(a, b DataType) string {
+	switch {
+	case ExactMismatch(a, b):
+		i, f := a, b
+		if a.IsFloat() {
+			i, f = b, a
+		}
+		return "no type holds both " + i.String() + " and " + f.String() + " exactly: a " +
+			f.String() + " holds an integer exactly only up to 2^" + mantissaBits(f) +
+			". Cast the " + f.String() + " side to " + i.String() +
+			", which is exact or refused, or both sides to Float64 if rounding is acceptable"
+	case a.IsTemporal() && b.IsTemporal() && a.ID() == b.ID() && a.TimeZone() != b.TimeZone():
+		return "an instant in one zone does not meet a wall clock or another zone; cast one " +
+			"side to the other's type, e.g. to " + a.String() + ", which relabels it"
+	}
+	return "cast one side to the other's type, " + a.String() + " or " + b.String()
+}
+
+func mantissaBits(f DataType) string {
+	if f.ID() == TypeFloat32 {
+		return "24"
+	}
+	return "53"
 }

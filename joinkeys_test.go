@@ -26,21 +26,7 @@ import (
 )
 
 // knownKeyTypeDefects counts the wrong answers per pair.
-// Each answers its join and its concat instead of refusing both, so 2 apiece.
-var knownKeyTypeDefects = map[string]int{
-	"Int64->Float32":  2,
-	"Int64->Float64":  2,
-	"Uint64->Float32": 2,
-	"Uint64->Float64": 2,
-	"Int128->Float32": 2,
-	"Int128->Float64": 2,
-	"Float32->Int64":  2,
-	"Float32->Uint64": 2,
-	"Float32->Int128": 2,
-	"Float64->Int64":  2,
-	"Float64->Uint64": 2,
-	"Float64->Int128": 2,
-}
+var knownKeyTypeDefects = map[string]int{}
 
 // numericKeyTypes is every numeric type a key can have. Decimal is left out: its
 // keys compare as Decimals, and no pair of them has the question this asks.

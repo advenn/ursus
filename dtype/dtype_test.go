@@ -2,6 +2,7 @@ package dtype_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/advenn/ursus/dtype"
@@ -362,5 +363,39 @@ func TestPromoteTemporalUnits(t *testing.T) {
 					c.a, c.b, got, ok, rev, revOK)
 			}
 		})
+	}
+}
+
+// TestPromoteExact: Promote, except where Promote's answer rounds one side — an
+// integer wider than 32 bits with a float — and every cast MeetHint recommends is
+// one CanCast permits.
+func TestPromoteExact(t *testing.T) {
+	for _, tc := range []struct {
+		a, b dtype.DataType
+		want dtype.DataType
+		ok   bool
+	}{
+		{dtype.Int64, dtype.Float64, dtype.Null, false},
+		{dtype.Uint64, dtype.Float32, dtype.Null, false},
+		{dtype.Int128, dtype.Float64, dtype.Null, false},
+		{dtype.Int32, dtype.Float32, dtype.Float64, true},
+		{dtype.Uint32, dtype.Float64, dtype.Float64, true},
+		{dtype.Int16, dtype.Float32, dtype.Float32, true},
+		{dtype.Int64, dtype.Uint64, dtype.Int128, true},
+		{dtype.Float32, dtype.Float64, dtype.Float64, true},
+		{dtype.Datetime(dtype.Milli, ""), dtype.Datetime(dtype.Nano, ""), dtype.Datetime(dtype.Nano, ""), true},
+	} {
+		for _, pair := range [][2]dtype.DataType{{tc.a, tc.b}, {tc.b, tc.a}} {
+			got, ok := dtype.PromoteExact(pair[0], pair[1])
+			if ok != tc.ok || (ok && got != tc.want) {
+				t.Errorf("PromoteExact(%s, %s) = %s, %v; want %s, %v", pair[0], pair[1], got, ok, tc.want, tc.ok)
+			}
+		}
+		if !tc.ok {
+			h := dtype.MeetHint(tc.a, tc.b)
+			if !strings.Contains(h, "exactly") || !dtype.CanCast(tc.b, tc.a) {
+				t.Errorf("MeetHint(%s, %s) = %q", tc.a, tc.b, h)
+			}
+		}
 	}
 }

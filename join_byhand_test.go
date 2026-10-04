@@ -33,11 +33,7 @@ var knownJoinDefects = map[string]string{
 	"J5 1:m with unmatched duplicate left keys":                 "passes: an unmatched key is never checked",
 	"J5 1:m with duplicate null left keys under NullsEqual":     "passes",
 	"J6 AsOfBy null by-keys":                                    "the null by-key matched the right null",
-	"J8 Int64 against Float64":                                  "2^53+1 matched 2^53, at Float64",
-	"J8 Concat of Int64 and Float64":                            "Float64, 2^53+1 rounded",
-	"J8 Unpivot of Int64 and Float64":                           "Float64, 2^53+1 rounded",
 	"O6 filter on a coalesced key of two widths":                "0 rows: k*k computed at Int32 in the pushed filter",
-	"J10 UTC against naive Datetime":                            "the hint says .Cast(ursus.Int64)",
 }
 
 type joinCase struct {
