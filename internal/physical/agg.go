@@ -109,6 +109,7 @@ type hashAggSink struct {
 
 	// --- MaintainOrder --------------------------------------------------------
 	ordered   bool
+	ord       string  // the ordinal column's name in spillSchema
 	firstSeen []int64 // input ordinal of each resident group's first row
 	nRows     int64   // rows consumed, the ordinal source at level 0
 }
@@ -239,7 +240,8 @@ func planAggregate(ctx context.Context, a *plan.Aggregate, opts Options) (Operat
 		// what lets a sub-sink be the same type as its parent.
 		s.spillSchema = in
 		if a.MaintainOrder {
-			f := append(in.FieldSlice(), dtype.NotNull(ordCol, dtype.Int64))
+			s.ord = ordinalName(in)
+			f := append(in.FieldSlice(), dtype.NotNull(s.ord, dtype.Int64))
 			sp, err := dtype.NewSchema(f...)
 			if err != nil {
 				return nil, err

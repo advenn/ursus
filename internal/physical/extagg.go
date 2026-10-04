@@ -43,9 +43,23 @@ const (
 	maxSpillDepth = 4
 
 	// ordCol carries a routed row's input ordinal so first-appearance order can be
-	// rebuilt. It is in the SPILL schema only, never in the sink's output.
+	// rebuilt. It is in the SPILL schema only, never in the sink's output, and
+	// ordinalName lengthens it until no input column has it.
 	ordCol = "__ord"
 )
+
+// ordinalName is a name for the ordinal column that no column of in has.
+//
+// A fixed name collided with an input column of that name: a MaintainOrder group-by
+// over a frame with a column called __ord failed under a limit with "duplicate
+// column", for a column the user never asked for.
+func ordinalName(in *dtype.Schema) string {
+	name := ordCol
+	for in.IndexOf(name) >= 0 {
+		name += "_"
+	}
+	return name
+}
 
 // partitionOf picks a radix bucket for an encoded group key at a given depth.
 //
@@ -186,7 +200,7 @@ func (s *hashAggSink) withOrdinal(in *data.Batch) (*data.Batch, error) {
 		ord[i] = s.nRows + int64(i)
 	}
 	cols := append(append([]*data.Column(nil), in.Columns()...),
-		data.NewFixed(ordCol, dtype.Int64, ord, bitmap.AllSet(n)))
+		data.NewFixed(s.ord, dtype.Int64, ord, bitmap.AllSet(n)))
 	return data.NewBatch(s.spillSchema, cols)
 }
 
@@ -195,7 +209,7 @@ func (s *hashAggSink) ordinalOf(in *data.Batch, i int) int64 {
 	if s.level == 0 {
 		return s.nRows + int64(i)
 	}
-	c, ok := in.ByName(ordCol)
+	c, ok := in.ByName(s.ord)
 	if !ok {
 		return s.nRows + int64(i)
 	}
@@ -278,7 +292,7 @@ func (s *hashAggSink) newSub(path string) (*hashAggSink, error) {
 		dir: s.dir, dirOwner: false, prefix: path + "-",
 		parts: make([]*partWriter, nParts), pend: make([][]int32, nParts),
 
-		ordered: s.ordered,
+		ordered: s.ordered, ord: s.ord,
 	}, nil
 }
 

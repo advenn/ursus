@@ -2,6 +2,8 @@ package physical
 
 import (
 	"context"
+	"errors"
+	"io"
 	"strconv"
 
 	"github.com/advenn/ursus/dtype"
@@ -106,6 +108,9 @@ func planWithColumns(ctx context.Context, w *plan.WithColumns, opts Options) (Op
 // The row kept is the FIRST for each key, complete with the columns Subset does not
 // compare, so `Distinct(Subset: "id")` over {id, ts} keeps the earliest ts per id
 // rather than an arbitrary one.
+//
+// Under a memory limit it spills rather than failing, and keeps its input order
+// doing so: extdistinct.go.
 type distinctOp struct {
 	child  Operator
 	schema *dtype.Schema
@@ -119,21 +124,38 @@ type distinctOp struct {
 	// system stopped it, which is the outcome the whole budget exists to replace.
 	mem      *execopt.Account
 	seenSize int64
+
+	// The spill state, idle until the query goes over its limit.
+	budget      *execopt.Budget
+	batch       int
+	level       int
+	ord         string        // the input-ordinal column's name, in spillSchema only
+	spillSchema *dtype.Schema // the input, plus ord
+	nRows       int64         // rows read so far: the next row's ordinal at level 0
+	frozen      bool
+	dir         string
+	parts       []*partWriter
+	pend        [][]int32
+	out         Operator // the spilled rows, deduplicated and back in input order
 }
 
 func (d *distinctOp) Schema() *dtype.Schema { return d.schema }
 
-func (d *distinctOp) Close() error {
-	d.mem.Release()
-	return d.child.Close()
-}
-
 func (d *distinctOp) Next(ctx context.Context) (*data.Batch, error) {
+	if d.out != nil {
+		return d.out.Next(ctx)
+	}
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		in, err := d.child.Next(ctx)
+		if errors.Is(err, io.EOF) && d.frozen {
+			if err := d.replay(ctx); err != nil {
+				return nil, err
+			}
+			return d.out.Next(ctx)
+		}
 		if err != nil {
 			return nil, err // includes io.EOF
 		}
@@ -149,6 +171,12 @@ func (d *distinctOp) Next(ctx context.Context) (*data.Batch, error) {
 		enc, err := kernel.NewGroupKeyEncoder("unique", cols)
 		if err != nil {
 			return nil, err
+		}
+		if d.frozen {
+			if err := d.route(in, enc); err != nil {
+				return nil, err
+			}
+			continue
 		}
 
 		keep := bitmap.NewBuilder(in.Rows())
@@ -168,8 +196,9 @@ func (d *distinctOp) Next(ctx context.Context) (*data.Batch, error) {
 			keep.Append(true)
 			any = true
 		}
+		d.nRows += int64(in.Rows())
 		d.mem.RetainBytes(d.seenSize - d.memHeld())
-		if err := d.mem.Check(); err != nil {
+		if err := d.overBudget(); err != nil {
 			return nil, err
 		}
 		if !any {
@@ -219,10 +248,19 @@ func planDistinct(ctx context.Context, d *plan.Distinct, opts Options) (Operator
 		}
 	}
 
+	ord := ordinalName(s)
+	sp, err := dtype.NewSchema(append(s.FieldSlice(), dtype.NotNull(ord, dtype.Int64))...)
+	if err != nil {
+		return nil, err
+	}
 	return &distinctOp{
 		child: child, schema: s, subset: subset,
 		seen: make(map[string]struct{}),
 		mem:  opts.Budget.Account("unique"),
+
+		budget: opts.Budget, batch: opts.batchSize(),
+		ord: ord, spillSchema: sp,
+		parts: make([]*partWriter, nParts), pend: make([][]int32, nParts),
 	}, nil
 }
 

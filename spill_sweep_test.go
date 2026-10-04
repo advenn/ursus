@@ -20,7 +20,6 @@ import (
 
 // knownSpillMismatches counts, per shape, the payload types that answer wrongly.
 var knownSpillMismatches = map[string]int{
-	"unique":                   25,
 	"over two partitionings":   25,
 	"over ordered, descending": 25,
 }

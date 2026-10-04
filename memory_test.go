@@ -481,9 +481,6 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 			return ursus.Scan(src).GroupBy(ursus.Col("k")).
 				Agg(ursus.Col("seq").Quantile(0.5, ursus.InterpLinear))
 		}, "group_by"},
-		{"unique", func() *ursus.LazyFrame {
-			return ursus.Scan(src).Unique("seq")
-		}, "unique"},
 		// A CROSS join, not a keyed one. A keyed join partitions since step 13 and
 		// succeeds here — TestCrossJoinUnderALimitRefuses asserts that pair — but a
 		// cross join has exactly one key by construction, and radix partitioning
@@ -542,6 +539,20 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 				ursus.WithSpillDir(t.TempDir()),
 				ursus.WithMemoryStats(&stats)); err != nil {
 			t.Errorf("a keyed join must partition rather than refuse: %v", err)
+		}
+		if stats.Spills == 0 {
+			t.Error("it succeeded without spilling, so it proves nothing")
+		}
+	})
+
+	// unique spills since step 82, so its entry moved here from the table above.
+	t.Run("unique_spills", func(t *testing.T) {
+		var stats ursus.MemoryStats
+		if _, err := ursus.Scan(src).Unique("seq").
+			Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
+				ursus.WithSpillDir(t.TempDir()),
+				ursus.WithMemoryStats(&stats)); err != nil {
+			t.Errorf("unique must partition rather than refuse: %v", err)
 		}
 		if stats.Spills == 0 {
 			t.Error("it succeeded without spilling, so it proves nothing")

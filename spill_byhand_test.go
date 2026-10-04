@@ -28,19 +28,13 @@ import (
 // knownSpillDefects names each case that answers wrongly today, with what it
 // answers.
 var knownSpillDefects = map[string]string{
-	"Unique(k)":                                         "refused: unique cannot spill",
-	"Unique() of whole rows":                            "refused: unique cannot spill",
-	"Unique over NaN and null keys":                     "refused: unique cannot spill",
-	"Unique carrying a List and a Struct":               "refused: unique cannot spill",
-	"Unique over a column named __ord":                  "refused: unique cannot spill",
-	"Sum().Over(k)":                                     "refused: over cannot spill",
+	"Sum().Over(k)": "refused: over cannot spill",
 	"Rank and CumSum ordered by seq descending":         "refused: over cannot spill",
 	"two partitionings, k and k % 7":                    "refused: over cannot spill",
 	"First() and Last() over k":                         "refused: over cannot spill",
 	"Over NaN and null partition keys":                  "refused: over cannot spill",
 	"Over carrying a List and a Struct":                 "refused: over cannot spill",
 	"Over over a column named __ord":                    "refused: over cannot spill",
-	"group_by MaintainOrder over a column named __ord":  "duplicate column __ord",
 	"Over() with no keys says it has no partition":      "says only that the limit was exceeded",
 	"one partition larger than the limit says so":       "says only that the limit was exceeded",
 	"over is charged for the copy Finish makes":         "Peak is the input once",
@@ -48,7 +42,6 @@ var knownSpillDefects = map[string]string{
 	"join_asof refuses between one and two right sides": "answers: the copy is not charged",
 	"group_by is charged for its key table":             "the key table is not charged",
 	"the hint says what spills and what fails":          "names neither join_asof nor merge_sorted, and says unique fails",
-	"a spilled unique leaves no files":                  "refused: unique cannot spill",
 	"a spilled over leaves no files":                    "refused: over cannot spill",
 }
 

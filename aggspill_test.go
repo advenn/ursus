@@ -670,18 +670,23 @@ func TestGroupBySpillFilesAreCleanedUp(t *testing.T) {
 // TestDistinctIsAccounted: the seventh buffering operator, which had no account at
 // all — its seen-set grew with distinct rows and was held across batches, exactly
 // like the group table beside it, and neither spilled nor failed.
+//
+// It failed, naming itself, from step 10 to step 82; it spills now, and spilling is
+// decided by the account, so a unique that reaches disk is one that is accounted.
 func TestDistinctIsAccounted(t *testing.T) {
 	src := memFrame(t, 20000, 512, 20000)
-	_, err := ursus.Scan(src).Unique("k").
-		Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithMemoryLimit(4<<10))
-	if err == nil {
-		t.Fatal("20,000 distinct keys against a 4KiB limit was accepted")
+	var stats ursus.MemoryStats
+	df, err := ursus.Scan(src).Unique("k").
+		Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithMemoryLimit(4<<10),
+			ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&stats))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !errors.Is(err, uerr.ErrResource) {
-		t.Fatalf("want a resource error, got %v", err)
+	if df.Height() != 20000 {
+		t.Errorf("%d rows, want 20000", df.Height())
 	}
-	if !strings.Contains(err.Error(), "unique") {
-		t.Errorf("the error must name the operator: %v", err)
+	if stats.Spills == 0 {
+		t.Error("20,000 distinct keys fitted a 4KiB limit without spilling")
 	}
 }
 

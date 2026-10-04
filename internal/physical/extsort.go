@@ -330,6 +330,42 @@ func (o *mergeOperator) Next(ctx context.Context) (*data.Batch, error) {
 	}
 }
 
+// mergeByOrdinal merges spill files, each already in ascending order of the Int64
+// column ord, into one stream in that order — which is the input's, for files whose
+// rows a spilling operator stamped with their input position.
+func mergeByOrdinal(sch *dtype.Schema, ord string, files []string, mem *execopt.Account,
+	batch int) (Operator, error) {
+
+	if len(files) == 0 {
+		return emptyOperator{schema: sch}, nil
+	}
+	keys := []plan.SortKey{{Expr: &expr.Col{Name: ord}}}
+	kSch, err := keySchema(keys, sch)
+	if err != nil {
+		return nil, err
+	}
+	srcs := make([]runSource, 0, len(files))
+	for _, f := range files {
+		r, err := spill.Open(f)
+		if err != nil {
+			for _, o := range srcs {
+				o.Close()
+			}
+			return nil, err
+		}
+		srcs = append(srcs, &fileRun{r: r})
+	}
+	rs, err := kernel.NewRunSet(len(srcs), []dtype.DataType{dtype.Int64}, []kernel.SortSpec{{}})
+	if err != nil {
+		return nil, err
+	}
+	return &mergeOperator{
+		schema: sch, keys: keys, kSch: kSch, batch: batch,
+		runs: srcs, rs: rs, m: kernel.NewMerger(rs), mem: mem,
+		cur: make([]*data.Batch, len(srcs)), pos: make([]int, len(srcs)), rows: make([]int, len(srcs)),
+	}, nil
+}
+
 // advance loads run r's next batch, resolves its key columns and pushes its head.
 // A run with nothing left simply contributes no cursor.
 func (o *mergeOperator) advance(ctx context.Context, r int) error {
