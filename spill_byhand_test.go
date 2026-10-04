@@ -279,6 +279,45 @@ func TestSpillingByHand(t *testing.T) {
 			return ""
 		}},
 
+		{"over is charged for its key table", func(t *testing.T) string {
+			// 20000 distinct 40-byte partition keys: the input holds them once, its
+			// reserved copy a second time, and the key table, encoded, a third.
+			const keys = 20000
+			s := make([]string, keys)
+			for i := range s {
+				s[i] = fmt.Sprintf("%040d", i)
+			}
+			_, stats, err := spillCollect(t, ursus.Frame(ursus.Values("g", s)).
+				WithColumns(ursus.Len().Over(c("g")).Alias("n")), 0, t.TempDir())
+			if err != nil {
+				return err.Error()
+			}
+			if need := int64(3.5 * keys * 40); stats.Peak < need {
+				return fmt.Sprintf("Peak %d, under the %d three copies of the keys take", stats.Peak, need)
+			}
+			return ""
+		}},
+		{"join_asof checks the limit after building its buckets", func(t *testing.T) string {
+			// One bucket per right row, keyed by a 64-byte string: building them is the
+			// last thing the as-of join charges, so its own peak less a byte is a limit
+			// only that check can refuse.
+			const n = 3000
+			seq := make([]int64, n)
+			by := make([]string, n)
+			for i := range seq {
+				seq[i], by[i] = int64(i), fmt.Sprintf("%064d", i)
+			}
+			q := ursus.Frame(ursus.Values("seq", seq), ursus.Values("by", by)).JoinAsOf(
+				ursus.Frame(ursus.Values("seq", seq), ursus.Values("by", by), ursus.Values("r", seq)),
+				ursus.AsOfOn(c("seq")), ursus.AsOfBy(c("by")))
+			_, stats, err := spillCollect(t, q, 0, t.TempDir())
+			if err != nil {
+				return err.Error()
+			}
+			df, _, err := spillCollect(t, q, stats.Peak-1, t.TempDir())
+			return refusal(df, err, ursus.ErrResource, "join_asof")
+		}},
+
 		// --- the words ---
 		{"the hint says what spills and what fails", func(t *testing.T) string {
 			_, _, err := spillCollect(t, base.Reverse(), limit, t.TempDir())
