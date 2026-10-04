@@ -22,11 +22,6 @@ import (
 var knownAggDefects = map[string]string{
 	"A1 Int64 ShiftFill(1, 1.5)":           "ErrInternal: select branches must share a type",
 	"A1 Int32 ShiftFill(1, 0)":             "ErrInternal: the fill is an Int64",
-	"A2 Quantile(0) of [-inf, 1, 2]":       "NaN: -inf + 0*NaN",
-	"A2 Quantile(1) of [1, 2, inf]":        "NaN",
-	"A2 Median of [-1.7e308, 1.7e308]":     "+Inf: b-a overflows",
-	"A2 midpoint of [1e308, 1.5e308]":      "+Inf: a+b overflows",
-	"A2 midpoint of [1.7e308, 1.7e308]":    "+Inf",
 	"A3 PctChange of UInt8 [3, 1, 255, 0]": "84.67: subtracted at UInt8",
 	"A3 PctChange of Int8 [100, -100, 50]": "wrapped at Int8",
 	"A4 group mean of [2^53+1, 2^53+2]":    "2^53: summed in float64",

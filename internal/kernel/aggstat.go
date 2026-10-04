@@ -467,6 +467,38 @@ func compareTotalF64(a, b float64) int {
 //
 // The rank is q·(n−1), the convention numpy, Polars and DuckDB share: q=0 is the
 // minimum and q=1 the maximum, with no extrapolation past either end.
+// lerp interpolates a fraction t of the way from a to b, a <= b.
+//
+// At an exact rank (t == 0) or between equal neighbours it is the value itself. The
+// plain a + t*(b-a) was not: at q = 0 over [-inf, 1, 2] it is -inf + 0*inf, NaN,
+// where Polars and DuckDB answer -inf. Between values of opposite sign b-a can
+// overflow — the median of [-1.7e308, 1.7e308] was +Inf — so there the weights are
+// applied to each end instead, which cannot (DuckDB's form). Of one sign, b-a is
+// representable and the plain form is the more accurate.
+func lerp(a, b, t float64) float64 {
+	switch {
+	case t == 0 || a == b:
+		return a
+	case t == 1:
+		return b
+	case (a < 0) != (b < 0):
+		return (1-t)*a + t*b
+	}
+	return a + t*(b-a)
+}
+
+// midpoint is (a+b)/2 without overflowing: a+b overflows for two huge values of one
+// sign — the midpoint of [1e308, 1.5e308] was +Inf — and b-a does not.
+func midpoint(a, b float64) float64 {
+	switch {
+	case a == b:
+		return a
+	case (a < 0) != (b < 0):
+		return (a + b) / 2
+	}
+	return a + (b-a)/2
+}
+
 func quantileOf(v []float64, q float64, interp expr.Interpolation) float64 {
 	n := len(v)
 	if n == 1 {
@@ -491,9 +523,9 @@ func quantileOf(v []float64, q float64, interp expr.Interpolation) float64 {
 		}
 		return v[hi]
 	case expr.InterpMidpoint:
-		return (v[lo] + v[hi]) / 2
+		return midpoint(v[lo], v[hi])
 	case expr.InterpLinear:
-		return v[lo] + frac*(v[hi]-v[lo])
+		return lerp(v[lo], v[hi], frac)
 	}
 	// Agg.Field refuses any other interpolation, and this has no error to return:
 	// an assertion, recovered into ErrInternal. It was the linear arm, silently.
