@@ -124,15 +124,15 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | S2 ✔ | ~~**SW / CR**~~ **fixed, step 73** | Float32 maths nulls every inexact result: `Sqrt`, `Cbrt`, `Exp`, `Ln`, `Log10`, `Log1p`, `Round`. On a non-nullable column it is `ErrInternal`. Also affected: `CastLossy(Float32)` of 0.1 is null, string → Float32, and `IsIn` over Float32. | `fromFloat64(strict=false)` then narrow's round-trip check (`unary.go:347`, `:775`; `mathfn.go:75`). The comment at `unary.go:343` says the opposite. |
 | S3 ✔ | ~~**CR**~~ **fixed, step 72** | `Str().Slice(1, MaxInt64)` panics in a worker goroutine and **kills the process**. | `strfn.go:277`, `start+int(length)` overflows. `listSlice` clamps correctly. |
 | S4 ✔ | ~~**CR**~~ **fixed, step 73** | A strict String → narrow integer or Float32 cast raises `ErrInternal` (`"256"` → Uint8), or with a null present returns a silent null. | `narrowInt` / `narrowFloat` pass `strict=false` (`unary.go:1277`, `:1281`). |
-| S5 ✔ | **SW** | `Dt().Epoch()` truncates before 1970: it returns 0, and the answer is −1. | `dtfn.go:99`. |
-| S6 ✔ | **SW** | `IsIn` casts the set strictly to the column's type. An Int64 column matches `IsIn("1")`, which `Eq` refuses; a Datetime(s) matches a sub-second value; a Date matches a Datetime at 13:00 on that day. Its error message names a cast the user never wrote. **Step 73** made the cast's float rule round, so `IsIn(0.1)` on a Float32 column now matches the float32 nearest 0.1 — as DuckDB's and PyArrow's do — where `Eq(0.1)` compares at Float64 and does not; the rule is still S6's. | `physical/eval.go:320-321`, and `buildListNeedle`. |
-| S7 | **SW** | Regex `Replace` (first match) does not expand `$1`; `ReplaceAll` does. | `strfn.go:173-179`. |
-| S8 | **SW** | Integer `FloorDiv` and `Mod` truncate while their float versions floor: `−7 // 2` is −3 as Int64 and −4 as Float64. Polars floors both, and the method is called FloorDiv. | `scalar.go:133-153`. |
-| S9 | **SW** | `SplitN(sep, 0)` returns `[]`; the doc says n ≤ 0 means unlimited. | `strfn.go:348`. |
-| S10 | **SW** | `Truncate(Every("1h"))` in a zone with a +05:30 offset floors on the UTC grid, although the doc says an Interval floors on the calendar. | `interval.go:448`. |
-| S11 | CR / SW | `Truncate` near the Datetime(ns) minimum: `1mo` raises `ErrInternal`, and a Duration step wraps int64. | `dtfn.go:173`, `:300`. |
-| S12 | SW | `CountMatches("", literal=true)` is null; the answer is len+1. | `strfn.go:112`. |
-| S13 | SW | `StripCharsStart("")` and `StripCharsEnd("")` strip only ASCII whitespace; `StripChars("")` uses `TrimSpace`. | `strfn.go:211`. |
+| S5 ✔ | ~~**SW**~~ **fixed, step 76** | `Dt().Epoch()` truncates before 1970: it returns 0, and the answer is −1. | `dtfn.go:99`. |
+| S6 ✔ | ~~**SW**~~ **fixed, step 76** | `IsIn` casts the set strictly to the column's type. An Int64 column matches `IsIn("1")`, which `Eq` refuses; a Datetime(s) matches a sub-second value; a Date matches a Datetime at 13:00 on that day. Its error message names a cast the user never wrote. **Step 73** made the cast's float rule round, so `IsIn(0.1)` on a Float32 column now matches the float32 nearest 0.1 — as DuckDB's and PyArrow's do — where `Eq(0.1)` compares at Float64 and does not; the rule is still S6's. | `physical/eval.go:320-321`, and `buildListNeedle`. |
+| S7 | ~~**SW**~~ **fixed, step 76** | Regex `Replace` (first match) does not expand `$1`; `ReplaceAll` does. | `strfn.go:173-179`. |
+| S8 | ~~**SW**~~ **fixed, step 76** | Integer `FloorDiv` and `Mod` truncate while their float versions floor: `−7 // 2` is −3 as Int64 and −4 as Float64. Polars floors both, and the method is called FloorDiv. | `scalar.go:133-153`. |
+| S9 | ~~**SW**~~ **fixed, step 76** | `SplitN(sep, 0)` returns `[]`; the doc says n ≤ 0 means unlimited. | `strfn.go:348`. |
+| S10 | ~~**SW**~~ **fixed, step 76** | `Truncate(Every("1h"))` in a zone with a +05:30 offset floors on the UTC grid, although the doc says an Interval floors on the calendar. | `interval.go:448`. |
+| S11 | ~~CR / SW~~ **fixed, step 76** | `Truncate` near the Datetime(ns) minimum: `1mo` raises `ErrInternal`, and a Duration step wraps int64. | `dtfn.go:173`, `:300`. |
+| S12 | ~~SW~~ **fixed, step 76** | `CountMatches("", literal=true)` is null; the answer is len+1. | `strfn.go:112`. |
+| S13 | ~~SW~~ **fixed, step 76** | `StripCharsStart("")` and `StripCharsEnd("")` strip only ASCII whitespace; `StripChars("")` uses `TrimSpace`. | `strfn.go:211`. |
 | S14 | FR / ME | Uint64 with an int literal in `//`, `%` or `*` is refused, and the hint suggests an Int64 cast that loses data. | `expr/resolve.go` ~160. |
 | S15 | ME | The Duration × float refusal hard-codes "2.5", and its own recipe fails. | `resolve.go:380-394`. |
 | S16 | ME | `FillNan` and `FillNull` errors name their desugaring (`is_not_nan`, `when`) rather than the method called. | |
@@ -143,6 +143,7 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | S23 | ME | **Recorded at step 72.** A panic in a `MapName` function is `ErrInternal`, where a panicking udf is the caller's KindValue. | `expr.Rename.Fn` is called by the planner with no attribution. |
 | S24 | SW, not run | **Recorded at step 72, not fixed.** `data.NewString` keeps 32-bit offsets, and past 2 GiB of string data in one column they wrap without an error. Read from the code, for the same reason as S22. | `internal/data`, string construction. |
 | S25 | low | **Recorded at step 73, not fixed.** A String → float cast accepts Go's literal syntax, because it is `strconv.ParseFloat`: `"1_000"` is 1000, measured, and hex floats such as `"0x1p3"` parse too. Polars rejects both, and the String → integer parse accepts neither. The CSV reader shares the float grammar. | `castparse.go` `parseFloat`; the parse sweep skips underscore strings for floats rather than pinning either answer. |
+| S26 | low | **Recorded at step 76, not fixed.** Integer `FloorDiv` of MinInt by −1 wraps to MinInt, silently; its quotient is MaxInt+1. Go and Polars both wrap. Int128 `//` and `%` are not implemented at all. | `kernel/scalar.go` `divIntScalar`; `arithI128` has no arm. |
 
 ## 7. Aggregation, sorting and windows
 
@@ -287,7 +288,14 @@ Ordered by harm per unit of fix, not by count.
    value and nothing interpolates through an overflow, a variance is never negative,
    PctChange computes in float, a fill meets its column, a Bool sums its trues,
    `Closed` is validated, and a window reads the columns defined before it. A16 is new.
-8. Then the rest, by table.
+8. ~~**Scalar functions**: S5–S13.~~ **Done — step 76**: `Epoch` floors; `IsIn` and
+   `list.contains` compare as `Eq` does; a first-match regex `Replace` expands its
+   groups; `FloorDiv` floors and `Mod` is its remainder, for integers, floats and
+   Durations; `SplitN(0)` is unlimited; an Interval floors the wall clock, sub-day
+   included, in `Truncate` and `GroupByDynamic`; a truncated instant outside the
+   type is refused; an empty literal is counted; and the one-sided strips trim
+   Unicode whitespace. S26 is new.
+9. Then the rest, by table.
 
 Known and excluded, because they were already on the open lists:
 
