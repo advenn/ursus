@@ -246,6 +246,21 @@ func TestOptimizerByHand(t *testing.T) {
 		{"O8-join inner", ursus.Frame(ursus.Values("s", []string{"1", "x"}), ursus.Values("k", []int64{1, 2})).
 			Join(ursus.Frame(ursus.Values("k", []int64{1}), ursus.Values("r", []int64{9})), ursus.JoinOn(c("k"))).
 			Filter(c("s").Cast(ursus.Int64).Gt(0)), wantInts("k", 1)},
+		// The ordering rule in each arm that can split conjuncts: a guard that stays
+		// above, then a strict cast that could move below it. Each guard removes the
+		// "x" row, so the cast never meets it — unless it moves first.
+		{"O8b whole-row unique, guarded by a float", ursus.Frame(ursus.Values("f", []float64{1, -1}),
+			ursus.Values("s", []string{"1", "x"})).Unique().
+			Filter(c("f").Gt(0)).Filter(c("s").Cast(ursus.Int64).Gt(0)), wantHeight(1)},
+		{"O8b WithColumns, guarded by a udf column", ursus.Frame(ursus.Values("x", []int64{1, -1}),
+			ursus.Values("s", []string{"1", "x"})).
+			WithColumns(c("x").MapElements("dbl", ursus.Int64, doubled()).Alias("u")).
+			Filter(c("u").Gt(0)).Filter(c("s").Cast(ursus.Int64).Gt(0)), wantHeight(1)},
+		{"O8 left join, guarded by the right side", ursus.Frame(ursus.Values("k", []int64{1, 2}),
+			ursus.Values("s", []string{"1", "x"})).
+			Join(ursus.Frame(ursus.Values("k", []int64{1}), ursus.Values("v", []int64{9})),
+				ursus.JoinOn(c("k")), ursus.JoinHow(ursus.JoinLeft)).
+			Filter(c("v").IsNotNull()).Filter(c("s").Cast(ursus.Int64).Gt(0)), wantInts("k", 1)},
 		// O9: Unique("x") keeps the first of -0 and +0, which is -0, and "-0" is not
 		// "0". Filtered first, the +0 row survives to be the one kept.
 		{"O9 unique keeps -0", ursus.Frame(ursus.Values("x", []float64{math.Copysign(0, -1), 0}),
