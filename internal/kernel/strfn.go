@@ -169,14 +169,15 @@ func applyStr(fn expr.CallFn, s string, args []any, re *regexp.Regexp) (string, 
 			if count == -1 {
 				return re.ReplaceAllString(s, rep), true
 			}
-			done := false
-			return re.ReplaceAllStringFunc(s, func(m string) string {
-				if done {
-					return m
-				}
-				done = true
-				return rep
-			}), true
+			// The first match, with $1 and ${name} expanded as ReplaceAllString
+			// expands them. This used ReplaceAllStringFunc, whose function returns
+			// its text verbatim, so Replace("(a)(b)", "$2$1") wrote "$2$1" while
+			// ReplaceAll wrote "ba": one replacement string, two meanings.
+			m := re.FindStringSubmatchIndex(s)
+			if m == nil {
+				return s, true
+			}
+			return s[:m[0]] + string(re.ExpandString(nil, rep, s, m)) + s[m[1]:], true
 		}
 		return strings.Replace(s, pat, rep, count), true
 

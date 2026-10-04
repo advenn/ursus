@@ -68,6 +68,10 @@ func (s StrExpr) Extract(pattern string, group int) Expr {
 }
 
 // Replace substitutes the FIRST match; ReplaceAll substitutes every match.
+//
+// For a regex, the replacement expands $1, ${1} and ${name} in both, as Go's
+// regexp.Expand does — so $1x names a group called "1x", and ${1}x is group 1 then
+// an x. A literal pattern's replacement is literal, $ and all.
 func (s StrExpr) Replace(pattern, value string, literal bool) Expr {
 	return s.call(expr.FnStrReplace, pattern, value, literal)
 }

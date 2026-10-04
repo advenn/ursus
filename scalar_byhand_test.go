@@ -24,8 +24,6 @@ import (
 
 // knownScalarDefects names each case that answers wrongly today, with what it answers.
 var knownScalarDefects = map[string]string{
-	"S7 Replace (a)(b) with $2$1":                  "$2$1 ab",
-	"S7 Replace (a)(b) with ${1}x":                 "${1}x ab",
 	"S9 SplitN with n = 0":                         "[]",
 	"S10 Kolkata Truncate(Every(1h))":              "10:30, the UTC grid",
 	"S10 New York Truncate(Every(2h))":             "03:00, the UTC grid",
