@@ -161,17 +161,104 @@ func (w *Writer) WriteBatch(b *data.Batch) error {
 }
 
 func (w *Writer) appendRows(b *data.Batch) error {
-	for i, c := range b.Columns() {
-		cw, err := w.rg.Column(i)
-		if err != nil {
-			return uerr.Wrap(err, uerr.KindIO, "sink_parquet",
-				"opening column %q", c.Name())
-		}
-		if err := w.writeColumn(cw, c); err != nil {
-			return err
+	// rg.Column counts LEAVES, not columns: a struct has one per field.
+	leaf := 0
+	for _, c := range b.Columns() {
+		for _, l := range shred(c) {
+			cw, err := w.rg.Column(leaf)
+			if err != nil {
+				return uerr.Wrap(err, uerr.KindIO, "sink_parquet",
+					"opening column %q", c.Name())
+			}
+			leaf++
+			if err := writeColumn(cw, l); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// leafData is one Parquet leaf column's contents for a batch: the column its values
+// come from, the indices of its PRESENT values in order, and its levels.
+type leafData struct {
+	col  *data.Column
+	rows []int
+	defs []int16
+	reps []int16 // nil for a leaf with no repeated ancestor
+}
+
+// shred splits a top-level column into its Parquet leaves, with the definition and
+// repetition levels of the schema toNode built for it (Dremel's encoding):
+//
+//	flat leaf        def 1 present, 0 null
+//	struct field     def 2 present, 1 a null field, 0 a null struct
+//	list element     def 3 present, 2 a null element, 1 an empty list, 0 a null list;
+//	                 rep 0 for a row's first level, 1 for the elements after it
+//
+// A null or empty list still contributes one level and no value: the levels say
+// what is absent, and the values hold only what is present, which is how the
+// reader's level machine — listCol's four states — reads them back.
+func shred(c *data.Column) []leafData {
+	n := c.Len()
+	switch c.DType().ID() {
+	case dtype.TypeStruct:
+		var out []leafData
+		for _, f := range c.Fields() {
+			l := leafData{col: f, defs: make([]int16, n)}
+			for row := range n {
+				switch {
+				case !c.IsValid(row):
+					l.defs[row] = 0
+				case !f.IsValid(row):
+					l.defs[row] = 1
+				default:
+					l.defs[row] = 2
+					l.rows = append(l.rows, row)
+				}
+			}
+			out = append(out, l)
+		}
+		return out
+
+	case dtype.TypeList:
+		acc := c.Lists()
+		child := acc.Child()
+		l := leafData{col: child, defs: make([]int16, 0, n), reps: make([]int16, 0, n)}
+		for row := range n {
+			start, end, _ := acc.Get(row)
+			switch {
+			case !c.IsValid(row):
+				l.defs, l.reps = append(l.defs, 0), append(l.reps, 0)
+			case start == end:
+				l.defs, l.reps = append(l.defs, 1), append(l.reps, 0)
+			default:
+				for k := start; k < end; k++ {
+					rep := int16(1)
+					if k == start {
+						rep = 0
+					}
+					l.reps = append(l.reps, rep)
+					if child.IsValid(int(k)) {
+						l.defs = append(l.defs, 3)
+						l.rows = append(l.rows, int(k))
+					} else {
+						l.defs = append(l.defs, 2)
+					}
+				}
+			}
+		}
+		return []leafData{l}
+	}
+
+	l := leafData{col: c, defs: make([]int16, n)}
+	for row := range n {
+		if c.IsValid(row) {
+			l.defs[row] = 1
+			l.rows = append(l.rows, row)
+		}
+	}
+	return []leafData{l}
 }
 
 func (w *Writer) flush() error {
@@ -199,28 +286,8 @@ func (w *Writer) Close() error {
 	return nil
 }
 
-// levels fills w.defs with 1 for a present value and 0 for a null, and returns it.
-//
-// Every column is written OPTIONAL (see toNode), so max definition level is 1 and
-// the levels are exactly the validity bitmap in int16 form.
-func (w *Writer) levels(c *data.Column) []int16 {
-	n := c.Len()
-	if cap(w.defs) < n {
-		w.defs = make([]int16, n)
-	}
-	w.defs = w.defs[:n]
-	for i := range n {
-		if c.IsValid(i) {
-			w.defs[i] = 1
-		} else {
-			w.defs[i] = 0
-		}
-	}
-	return w.defs
-}
-
-func (w *Writer) writeColumn(cw file.ColumnChunkWriter, c *data.Column) error {
-	defs := w.levels(c)
+func writeColumn(cw file.ColumnChunkWriter, l leafData) error {
+	c := l.col
 
 	switch t := cw.(type) {
 	case *file.BooleanColumnChunkWriter:
@@ -228,34 +295,34 @@ func (w *Writer) writeColumn(cw file.ColumnChunkWriter, c *data.Column) error {
 		if err != nil {
 			return err
 		}
-		return writeVals(t, c, defs, func(row int) bool { v, _ := s.Get(row); return v })
+		return writeVals(t, l, func(row int) bool { v, _ := s.Get(row); return v })
 
 	case *file.Int32ColumnChunkWriter:
-		return writeInt32(t, c, defs)
+		return writeInt32(t, l)
 
 	case *file.Int64ColumnChunkWriter:
-		return writeInt64(t, c, defs)
+		return writeInt64(t, l)
 
 	case *file.Float32ColumnChunkWriter:
 		s, err := data.TypedColumn[float32](c)
 		if err != nil {
 			return err
 		}
-		return writeVals(t, c, defs, func(row int) float32 { v, _ := s.Get(row); return v })
+		return writeVals(t, l, func(row int) float32 { v, _ := s.Get(row); return v })
 
 	case *file.Float64ColumnChunkWriter:
 		s, err := data.TypedColumn[float64](c)
 		if err != nil {
 			return err
 		}
-		return writeVals(t, c, defs, func(row int) float64 { v, _ := s.Get(row); return v })
+		return writeVals(t, l, func(row int) float64 { v, _ := s.Get(row); return v })
 
 	case *file.ByteArrayColumnChunkWriter:
 		s, err := data.TypedColumn[string](c)
 		if err != nil {
 			return err
 		}
-		return writeVals(t, c, defs, func(row int) parquet.ByteArray {
+		return writeVals(t, l, func(row int) parquet.ByteArray {
 			v, _ := s.Get(row)
 			return parquet.ByteArray(v)
 		})
@@ -268,7 +335,7 @@ func (w *Writer) writeColumn(cw file.ColumnChunkWriter, c *data.Column) error {
 		// Two's-complement big-endian, which is what Parquet's DECIMAL wants. Note
 		// this is NOT i128.AppendBigEndian, which flips the sign bit so that byte
 		// order matches value order — right for a sort key, wrong for a file format.
-		return writeVals(t, c, defs, func(row int) parquet.FixedLenByteArray {
+		return writeVals(t, l, func(row int) parquet.FixedLenByteArray {
 			v, _ := s.Get(row)
 			var buf [16]byte
 			putI128BE(buf[:], v)
@@ -292,35 +359,34 @@ type batchWriter[T any] interface {
 // Writing a placeholder for a null would shift every value after it on read, since
 // the reader maps the i'th value to the i'th SET definition level. It is the same
 // packing trap as on the read side, in the other direction.
-func writeVals[T any](cw batchWriter[T], c *data.Column, defs []int16, get func(int) T) error {
-	vals := make([]T, 0, c.Len())
-	for row := range c.Len() {
-		if c.IsValid(row) {
-			vals = append(vals, get(row))
-		}
+func writeVals[T any](cw batchWriter[T], l leafData, get func(int) T) error {
+	vals := make([]T, 0, len(l.rows))
+	for _, row := range l.rows {
+		vals = append(vals, get(row))
 	}
-	if _, err := cw.WriteBatch(vals, defs, nil); err != nil {
-		return uerr.Wrap(err, uerr.KindIO, "sink_parquet", "writing column %q", c.Name())
+	if _, err := cw.WriteBatch(vals, l.defs, l.reps); err != nil {
+		return uerr.Wrap(err, uerr.KindIO, "sink_parquet", "writing column %q", l.col.Name())
 	}
 	return nil
 }
 
 // writeInt32 narrows the small integer types, which Parquet stores as INT32 and
 // distinguishes only by the logical annotation toNode attached.
-func writeInt32(cw *file.Int32ColumnChunkWriter, c *data.Column, defs []int16) error {
+func writeInt32(cw *file.Int32ColumnChunkWriter, l leafData) error {
+	c := l.col
 	switch c.DType().ID() {
 	case dtype.TypeInt8:
-		return narrow[int8](cw, c, defs)
+		return narrow[int8](cw, l)
 	case dtype.TypeInt16:
-		return narrow[int16](cw, c, defs)
+		return narrow[int16](cw, l)
 	case dtype.TypeInt32, dtype.TypeDate:
-		return narrow[int32](cw, c, defs)
+		return narrow[int32](cw, l)
 	case dtype.TypeUint8:
-		return narrow[uint8](cw, c, defs)
+		return narrow[uint8](cw, l)
 	case dtype.TypeUint16:
-		return narrow[uint16](cw, c, defs)
+		return narrow[uint16](cw, l)
 	case dtype.TypeUint32:
-		return narrow[uint32](cw, c, defs)
+		return narrow[uint32](cw, l)
 	case dtype.TypeTime:
 		// TIME(MILLIS) is the one temporal type Parquet puts on INT32, and ursus
 		// stores every Time as int64 ticks — so this narrows where Date, whose ursus
@@ -353,7 +419,7 @@ func writeInt32(cw *file.Int32ColumnChunkWriter, c *data.Column, defs []int16) e
 					Hint("a Time is a time of day; this column holds tick %d", v)
 			}
 		}
-		return writeVals(cw, c, defs, func(row int) int32 {
+		return writeVals(cw, l, func(row int) int32 {
 			v, _ := s.Get(row)
 			return int32(v)
 		})
@@ -362,7 +428,8 @@ func writeInt32(cw *file.Int32ColumnChunkWriter, c *data.Column, defs []int16) e
 	}
 }
 
-func writeInt64(cw *file.Int64ColumnChunkWriter, c *data.Column, defs []int16) error {
+func writeInt64(cw *file.Int64ColumnChunkWriter, l leafData) error {
+	c := l.col
 	switch c.DType().ID() {
 	case dtype.TypeInt64, dtype.TypeDatetime, dtype.TypeDuration:
 		// The three temporal types are int64 tick counts at 64 bits, and their
@@ -370,9 +437,9 @@ func writeInt64(cw *file.Int64ColumnChunkWriter, c *data.Column, defs []int16) e
 		// type in the schema is what tells a reader what the ticks mean. Duration
 		// never reaches here today because toNode refuses it; it is listed so that
 		// enabling it is a one-line change in one place rather than two.
-		return narrow[int64](cw, c, defs)
+		return narrow[int64](cw, l)
 	case dtype.TypeTime:
-		return narrow[int64](cw, c, defs)
+		return narrow[int64](cw, l)
 	case dtype.TypeUint64:
 		s, err := data.TypedColumn[uint64](c)
 		if err != nil {
@@ -381,7 +448,7 @@ func writeInt64(cw *file.Int64ColumnChunkWriter, c *data.Column, defs []int16) e
 		// A uint64 above 2^63 wraps to a negative int64. That is exactly how Parquet
 		// stores UINT_64, and the UINT_64 annotation is what tells a reader to
 		// reinterpret it.
-		return writeVals(cw, c, defs, func(row int) int64 { v, _ := s.Get(row); return int64(v) })
+		return writeVals(cw, l, func(row int) int64 { v, _ := s.Get(row); return int64(v) })
 	default:
 		return uerr.Internalf("sink_parquet: %s mapped to INT64", c.DType())
 	}
@@ -394,12 +461,12 @@ type pqInt interface {
 func narrow[T interface {
 	data.Fixed
 	pqInt
-}, W int32 | int64](cw batchWriter[W], c *data.Column, defs []int16) error {
-	s, err := data.TypedColumn[T](c)
+}, W int32 | int64](cw batchWriter[W], l leafData) error {
+	s, err := data.TypedColumn[T](l.col)
 	if err != nil {
 		return err
 	}
-	return writeVals(cw, c, defs, func(row int) W { v, _ := s.Get(row); return W(v) })
+	return writeVals(cw, l, func(row int) W { v, _ := s.Get(row); return W(v) })
 }
 
 // putI128BE writes a 16-byte big-endian two's-complement encoding.

@@ -23,18 +23,7 @@ import (
 
 // knownNestedParquetDefects names each case that answers wrongly today, with what it
 // answers.
-var knownNestedParquetDefects = map[string]string{
-	"List(Int64)":                    "refused at write: no nested column is written",
-	"List(String)":                   "refused at write: no nested column is written",
-	"List(Float64) with NaN":         "refused at write: no nested column is written",
-	"Struct(a Int64, b String)":      "refused at write: no nested column is written",
-	"List(Bool)":                     "refused at write: no nested column is written",
-	"List(Uint8)":                    "refused at write: no nested column is written",
-	"List(Uint64)":                   "refused at write: no nested column is written",
-	"List(Decimal(10, 2))":           "refused at write: no nested column is written",
-	"List(Time(ms))":                 "refused at write: no nested column is written",
-	"lists across row groups of two": "refused at write: no nested column is written",
-}
+var knownNestedParquetDefects = map[string]string{}
 
 // validity is a bitmap from bools.
 func validity(v ...bool) bitmap.View {

@@ -220,6 +220,14 @@ func toNode(f dtype.Field) (schema.Node, error) {
 	rep := parquet.Repetitions.Optional
 	name := f.Name
 
+	// The nested shapes the reader reads, and only those: a List of a primitive in
+	// the standard three-level encoding, and a Struct of primitive fields. Each was
+	// refused until step 81, so a file ursus read it could not write back.
+	switch f.Type.ID() {
+	case dtype.TypeList, dtype.TypeStruct:
+		return nestedNode(f)
+	}
+
 	switch f.Type.ID() {
 	case dtype.TypeBool:
 		return schema.NewPrimitiveNode(name, rep, parquet.Types.Boolean, -1, -1)
@@ -301,7 +309,7 @@ func toNode(f dtype.Field) (schema.Node, error) {
 	default:
 		// Duration stays refused ON PURPOSE rather than for lack of work: arrow-go's
 		// IntervalLogicalType.toThrift panics outright, so there is no route through
-		// this library at all. Enum and the nested types are simply not written yet.
+		// this library at all. Enum is simply not written yet.
 		return nil, uerr.New(uerr.KindUnsupported, "sink_parquet",
 			"cannot write column %q of type %s to Parquet", f.Name, f.Type).
 			Hint("supported: Bool, the integer and float types, Int128, Decimal, " +
@@ -309,6 +317,58 @@ func toNode(f dtype.Field) (schema.Node, error) {
 			Hint("Duration has no Parquet logical type; cast it to Int64 to store " +
 				"the tick count")
 	}
+}
+
+// nestedNode is a List or a Struct as a Parquet group.
+//
+//	optional group l (LIST) { repeated group list { optional T element } }
+//	optional group s { optional T1 a; optional T2 b; ... }
+//
+// The list encoding is the standard one PyArrow and Polars write, and the one the
+// reader's listElementLeaf recognises. Anything nested deeper — a list of lists, a
+// list of structs, a struct holding either — is refused by name, as the reader
+// refuses to read it: a writer whose output its own reader rejects is worse than one
+// that says so.
+func nestedNode(f dtype.Field) (schema.Node, error) {
+	refuse := func() error {
+		return uerr.New(uerr.KindUnsupported, "sink_parquet",
+			"cannot write column %q of type %s to Parquet yet", f.Name, f.Type).
+			Hint("a List of a primitive type and a Struct of primitive fields are written; " +
+				"deeper nesting is not")
+	}
+	inner := func(fd dtype.Field) (schema.Node, error) {
+		if fd.Type.IsNested() {
+			return nil, refuse()
+		}
+		n, err := toNode(fd)
+		if err != nil {
+			return nil, uerr.New(uerr.KindUnsupported, "sink_parquet",
+				"cannot write column %q of type %s to Parquet", f.Name, f.Type).
+				Hint("its %s %q: %v", map[bool]string{true: "element", false: "field"}[f.Type.ID() == dtype.TypeList], fd.Name, err)
+		}
+		return n, nil
+	}
+	if f.Type.ID() == dtype.TypeList {
+		el, err := inner(dtype.Field{Name: "element", Type: f.Type.Inner(), Nullable: true})
+		if err != nil {
+			return nil, err
+		}
+		list, err := schema.NewGroupNode("list", parquet.Repetitions.Repeated, schema.FieldList{el}, -1)
+		if err != nil {
+			return nil, uerr.Wrap(err, uerr.KindInternal, "sink_parquet", "building %q", f.Name)
+		}
+		return schema.NewGroupNodeLogical(f.Name, parquet.Repetitions.Optional,
+			schema.FieldList{list}, schema.ListLogicalType{}, -1)
+	}
+	fields := make(schema.FieldList, 0, len(f.Type.Fields()))
+	for _, fd := range f.Type.Fields() {
+		n, err := inner(fd)
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, n)
+	}
+	return schema.NewGroupNode(f.Name, parquet.Repetitions.Optional, fields, -1)
 }
 
 // parquetTimeUnit maps a ursus TimeUnit onto Parquet's three.
