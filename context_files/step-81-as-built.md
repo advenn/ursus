@@ -6,7 +6,7 @@ It also fixes `audit.md` I17, the reader's own refusal of lists of several eleme
 types, because a writer whose output its own reader rejects is worse than one that
 refuses. It was the eighth step of the road to 0.3.
 
-Six commits and this document.
+Five commits and this document.
 
 Authoritative where it disagrees with the vision docs and [`design/`](./design/).
 
