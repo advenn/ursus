@@ -89,13 +89,22 @@ func Promote(a, b DataType) (DataType, bool) {
 		return Null, false
 	}
 
-	// A Decimal promotes only to itself — the a == b arm above. + and - of two
-	// identical Decimals are exact, and CanCast converts between a Decimal and any
-	// numeric type; what does not exist is a rule for the precision and scale of
-	// Decimal(10,2) + Decimal(12,3), or of Decimal + Int64, and guessing one here
-	// would silently commit the whole binary-operator calculus.
+	// A Decimal meets another Decimal, or an integer, at the Decimal that holds both
+	// exactly: as many integer digits as the wider side and as many fractional
+	// digits as the finer, so Decimal(10,2) and Decimal(12,3) meet at Decimal(12,3),
+	// and an Int64, which is a Decimal(19,0), with Decimal(10,2) at Decimal(21,2).
+	// Past 38 digits there is no such type. It is the type a comparison, a join key,
+	// a Concat column and a conditional meet at; arithmetic has its own rule, in
+	// expr's resolveDecimal, because a sum and a product need more digits than
+	// either operand.
+	//
+	// With a float, a Decimal meets at Float64, as arithmetic and comparisons do
+	// in every engine measured: the float is approximate already.
 	if a.id == TypeDecimal || b.id == TypeDecimal {
-		return Null, false
+		if a.IsFloat() || b.IsFloat() {
+			return Float64, true
+		}
+		return DecimalMeet(a, b)
 	}
 
 	af, bf := a.IsFloat(), b.IsFloat()
@@ -145,6 +154,46 @@ func Promote(a, b DataType) (DataType, bool) {
 	}
 }
 
+// DecimalDigits is t as a Decimal's precision and scale: a Decimal's own, and an
+// integer's as Decimal(d, 0), d being the digits its width holds. Int128 needs 39,
+// which no Decimal has, so its precision is reported as 39 and every rule that
+// asks refuses it.
+func DecimalDigits(t DataType) (p, s int, ok bool) {
+	switch t.id {
+	case TypeDecimal:
+		return int(t.prec), int(t.scale), true
+	case TypeInt8, TypeUint8:
+		return 3, 0, true
+	case TypeInt16, TypeUint16:
+		return 5, 0, true
+	case TypeInt32, TypeUint32:
+		return 10, 0, true
+	case TypeInt64:
+		return 19, 0, true
+	case TypeUint64:
+		return 20, 0, true
+	case TypeInt128:
+		return 39, 0, true
+	}
+	return 0, 0, false
+}
+
+// DecimalMeet is the Decimal holding every value of a and b exactly, each a Decimal
+// or an integer, or ok false when it would need more than 38 digits.
+func DecimalMeet(a, b DataType) (DataType, bool) {
+	pa, sa, oka := DecimalDigits(a)
+	pb, sb, okb := DecimalDigits(b)
+	if !oka || !okb {
+		return Null, false
+	}
+	s := max(sa, sb)
+	p := max(pa-sa, pb-sb) + s
+	if p > MaxDecimalPrecision {
+		return Null, false
+	}
+	return Decimal(uint8(p), uint8(s)), true
+}
+
 // PromoteExact is Promote restricted to a type that holds every value of BOTH
 // operands exactly. It is the question a join key, a Concat column and an Unpivot
 // value ask, where a value that rounds is a wrong match or a wrong value — not the
@@ -171,6 +220,11 @@ func PromoteExact(a, b DataType) (DataType, bool) {
 func ExactMismatch(a, b DataType) bool {
 	if !a.IsNumeric() || !b.IsNumeric() || a.IsFloat() == b.IsFloat() {
 		return false
+	}
+	// A Decimal with a float meets at Float64, which rounds the Decimal: 0.1 has no
+	// double. A join or a Concat of the two is refused, as Int64 with Float64 is.
+	if a.id == TypeDecimal || b.id == TypeDecimal {
+		return true
 	}
 	i := a
 	if a.IsFloat() {

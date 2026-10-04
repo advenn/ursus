@@ -149,6 +149,12 @@ func resolveArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 		return resolveTemporalArithmetic(op, l, r)
 	}
 
+	// Promote meets two different Decimals, or a Decimal and another number, for
+	// comparisons; arithmetic between them has its own precision rule, and until it
+	// is implemented the pair is refused here as it always was.
+	if (l.ID() == dtype.TypeDecimal || r.ID() == dtype.TypeDecimal) && l != r {
+		return Binding{}, mismatch(op, l, r)
+	}
 	common, ok := dtype.Promote(l, r)
 	if !ok {
 		return Binding{}, mismatch(op, l, r)

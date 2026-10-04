@@ -39,12 +39,6 @@ var knownDecimalArithDefects = map[string]string{
 	"a + an Int64 column":                 "operator + has no common type for Decimal(10, 2) and Int64",
 	"a + a Go int":                        "operator + has no common type for Decimal(10, 2) and Int64",
 	"a + 0.5 is Float64":                  "operator + has no common type for Decimal(10, 2) and Float64",
-	"a > b":                               "operator > has no common type for Decimal(10, 2) and Decimal(12, 3)",
-	"1.00 == 1.000":                       "operator == has no common type for Decimal(10, 2) and Decimal(12, 3)",
-	"a == 1.25":                           "operator == has no common type for Decimal(10, 2) and Float64",
-	"a join of Decimal(10,2) to Decimal(12,3) keys": "join: cannot join key col(\"k\") to col(\"k\"): no common type for Decimal(1",
-	"Concat of Decimal(10,2) and Decimal(12,3)":     "concat: cannot stack column \"x\": no common type for Decimal(10, 2) and D",
-	"When of Decimal(10,2) and Decimal(12,3)":       "when: the then and otherwise branches have no common type: Decimal(10, 2",
 }
 
 // decimalValues reads a Decimal column's type and unscaled values, null as ∅.
