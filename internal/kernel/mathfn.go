@@ -24,6 +24,13 @@ func MathCall(fn expr.CallFn, name string, out dtype.DataType,
 			return nil, err
 		}
 		return round(name, out, c, d)
+	case expr.FnMathAsFloat:
+		// ResolveCall typed it, so out is a float and the cast cannot refuse: an
+		// integer, a Decimal or a Duration's ticks are all far inside Float64.
+		if c.DType() == out {
+			return c.Rename(name), nil
+		}
+		return Cast(name, out, true, c)
 	default:
 		return nil, uerr.Internalf("kernel: no maths kernel for %s", fn)
 	}

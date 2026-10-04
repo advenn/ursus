@@ -103,6 +103,10 @@ const (
 	// become Round(0). That is step 7's Agg.Params bug, three sites over. Call.String()
 	// renders its arguments structurally, so the same class is impossible here.
 	FnMathRound CallFn = iota + 300
+	// FnMathAsFloat takes a number, or a Duration's ticks, to a float without
+	// changing its value: an integer or a Decimal to the nearest Float64, a float as
+	// itself. It is how PctChange subtracts in float, and is not public.
+	FnMathAsFloat
 	fnMathEnd
 
 	// --- list ---
@@ -176,7 +180,7 @@ var callNames = map[CallFn]string{
 
 	FnIsIn: "is_in",
 
-	FnMathRound: "round",
+	FnMathRound: "round", FnMathAsFloat: "as_float",
 
 	FnListLen: "list.len", FnListGet: "list.get",
 	FnListContains: "list.contains", FnListMin: "list.min",
@@ -338,6 +342,19 @@ func mathCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 					"scale the wrong number"))
 		}
 		return in, nil
+	case FnMathAsFloat:
+		// Only PctChange builds this, so its refusal speaks for PctChange: the
+		// change between two instants is a Duration, which has no ratio to an
+		// instant.
+		switch {
+		case in.IsFloat():
+			return in, nil
+		case in.IsNumeric() || in.ID() == dtype.TypeDuration:
+			return dtype.Float64, nil
+		}
+		return dtype.Null, uerr.New(uerr.KindType, "pct_change",
+			"pct_change is not defined for %s", in).
+			Hint("it is defined for numbers and Durations; for an instant, take Diff, a Duration")
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown maths call %d", fn)
 	}

@@ -22,8 +22,6 @@ import (
 var knownAggDefects = map[string]string{
 	"A1 Int64 ShiftFill(1, 1.5)":           "ErrInternal: select branches must share a type",
 	"A1 Int32 ShiftFill(1, 0)":             "ErrInternal: the fill is an Int64",
-	"A3 PctChange of UInt8 [3, 1, 255, 0]": "84.67: subtracted at UInt8",
-	"A3 PctChange of Int8 [100, -100, 50]": "wrapped at Int8",
 	"A10 Sum of [true, false, true, null]": "refused, with a hint to count rows",
 	"A13 Product of Int64 [3, 0, -5]":      "-0",
 	"A13 GroupBy().Agg() of nothing":       "shape (0, 0)",

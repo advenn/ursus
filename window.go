@@ -204,12 +204,20 @@ func (e Expr) Diff(n int) Expr { return e.Sub(e.Shift(n)) }
 // PctChange is the fractional change from the value n rows earlier.
 //
 // Always a float on a numeric column, because it divides — and a zero previous
-// value gives ±Inf rather than a null, since float division is total. On a
-// temporal column it is a plan-time error: the difference is a Duration and the
-// temporal algebra defines no Duration ÷ instant.
+// value gives ±Inf rather than a null, since float division is total. A Float32
+// stays Float32. On an instant it is a plan-time error.
+//
+// # The value is taken to a float BEFORE the subtraction
+//
+// It used to subtract at the column's own width, and integer subtraction wraps: a
+// UInt8 that went from 3 to 1 changed by 254, so its pct_change was 84.67 where the
+// answer is −0.67. The public Expr has no type in hand to choose a cast with, so an
+// internal call, typed at plan time, takes an integer or a Decimal to Float64 and a
+// Duration's ticks to Float64, keeps a float as it is, and refuses an instant.
 func (e Expr) PctChange(n int) Expr {
-	prev := e.Shift(n)
-	return e.Sub(prev).Div(prev)
+	x := wrap(&expr.Call{Fn: expr.FnMathAsFloat, Args: []expr.Node{e.node()}})
+	prev := x.Shift(n)
+	return x.Sub(prev).Div(prev)
 }
 
 // --- the predicates step 7 deferred to this step ---------------------------------
