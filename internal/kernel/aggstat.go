@@ -66,8 +66,17 @@ func (a *varAcc) AddBatch(groups []int32, col *data.Column) error {
 		}
 		x := vals[i]
 		a.n[g]++
+		n := float64(a.n[g])
 		delta := x - a.mean[g]
-		a.mean[g] += delta / float64(a.n[g])
+		if math.IsInf(delta, 0) && !math.IsInf(x, 0) && !math.IsInf(a.mean[g], 0) {
+			// The difference of two finite values overflowed. Welford's mean update
+			// then made the mean infinite too, and m2 took -Inf*(+Inf): the variance
+			// of [1e308, -1e308] came out NEGATIVE. Updated without forming delta,
+			// the mean stays finite and m2 takes the +Inf it truly overflows to.
+			a.mean[g] += x/n - a.mean[g]/n
+		} else {
+			a.mean[g] += delta / n
+		}
 		a.m2[g] += delta * (x - a.mean[g])
 	}
 	return nil
