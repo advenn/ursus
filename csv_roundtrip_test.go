@@ -23,9 +23,7 @@ import (
 
 // knownCSVRoundTripDefects names each type and route that does not round-trip today.
 var knownCSVRoundTripDefects = map[string]string{
-	"Float32 by inference": "I21: NaN and Inf make the column String",
-	"Float64 by inference": "I21: NaN and Inf make the column String",
-	"String by schema":     "I27: a null is written empty and read back as \"\"",
+	"String by schema": "I27: a null is written empty and read back as \"\"",
 }
 
 // nullAtEnd is a validity of n set rows and one unset.

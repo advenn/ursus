@@ -2,7 +2,9 @@ package csv
 
 import (
 	"bufio"
+	"bytes"
 	"io"
+	"math"
 	"strconv"
 
 	"github.com/advenn/ursus/dtype"
@@ -231,11 +233,11 @@ func (w *Writer) formatter(c *data.Column) (func([]byte, int) []byte, error) {
 
 	case dtype.TypeFloat32:
 		return appendFmt[float32](c, wrap, func(dst []byte, v float32) []byte {
-			return strconv.AppendFloat(dst, float64(v), 'g', -1, 32)
+			return appendFloatText(dst, float64(v), 32)
 		})
 	case dtype.TypeFloat64:
 		return appendFmt[float64](c, wrap, func(dst []byte, v float64) []byte {
-			return strconv.AppendFloat(dst, v, 'g', -1, 64)
+			return appendFloatText(dst, v, 64)
 		})
 
 	case dtype.TypeInt8:
@@ -326,4 +328,28 @@ func appendUint[T interface {
 	return appendFmt[T](c, wrap, func(dst []byte, v T) []byte {
 		return strconv.AppendUint(dst, uint64(v), 10)
 	})
+}
+
+// appendFloatText writes a float so the reader reads it back as a float, and as
+// this value: the shortest text that round-trips at its width, with ".0" when that
+// text is all digits, and inf, -inf and NaN for the three that are not numbers.
+//
+// The shortest text of 1.0 is "1", which inference read as an Int64, and +Inf was
+// Go's "+Inf", which it read as a String, so a float column came back as either.
+// Polars writes these the same way.
+func appendFloatText(dst []byte, v float64, bits int) []byte {
+	switch {
+	case math.IsInf(v, 1):
+		return append(dst, "inf"...)
+	case math.IsInf(v, -1):
+		return append(dst, "-inf"...)
+	case math.IsNaN(v):
+		return append(dst, "NaN"...)
+	}
+	start := len(dst)
+	dst = strconv.AppendFloat(dst, v, 'g', -1, bits)
+	if !bytes.ContainsAny(dst[start:], ".e") {
+		dst = append(dst, ".0"...)
+	}
+	return dst
 }

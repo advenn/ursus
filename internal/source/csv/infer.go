@@ -26,6 +26,11 @@ const (
 	infInt
 	infInt128 // an integer past Int64 that Int128 holds: u64::MAX infers exactly
 	infFloat
+	// infWord is inf, infinity or nan, in any case and with a sign: a float, but only
+	// beside a number. A column of nothing else is more likely words than numbers and
+	// stays String; one with a number in it is a float column, which is how a float
+	// column with a NaN, written by this package or by Polars, reads back as one.
+	infWord
 	infString
 )
 
@@ -59,8 +64,11 @@ func (i inferred) widen(o inferred) inferred {
 	// float. Every other disagreement goes to string. bool + int is string, not
 	// int: a column of true/false/1 is not a number.
 	num := func(x inferred) bool { return x == infInt || x == infInt128 || x == infFloat }
-	if num(i) && num(o) {
+	switch {
+	case num(i) && num(o):
 		return max(i, o)
+	case i == infWord && num(o), o == infWord && num(i):
+		return infFloat
 	}
 	return infString
 }
@@ -84,10 +92,11 @@ func classify(f []byte, isNull func([]byte) bool) inferred {
 	}
 	if _, err := dtype.ParseFloat(str(f), 64); err == nil {
 		// ParseFloat accepts "inf" and "nan", which in a text column are far more
-		// likely to be words than numbers. Require a digit somewhere.
+		// likely to be words than numbers — unless a number stands beside them.
 		if hasDigit(f) {
 			return infFloat
 		}
+		return infWord
 	}
 	return infString
 }

@@ -26,7 +26,6 @@ import (
 // knownIODefects names each case that answers wrongly today, with what it answers.
 var knownIODefects = map[string]string{
 	"I10 a blank line in a one-column String CSV":                 "\"\": an empty String field is not null until I27",
-	"I21 a Float64 column round-trips as Float64":                 "String: NaN and +Inf have no digit",
 	"I22 CSV refuses a frame with rows and no columns":            "writes a column named \"\"",
 	"I22 Parquet refuses a frame with rows and no columns":        "writes (0, 0)",
 	"I22 a frame with no rows and no columns writes an empty CSV": "writes a blank header line",
