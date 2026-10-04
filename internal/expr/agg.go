@@ -273,10 +273,16 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 			return AggBinding{Acc: dtype.Int128,
 				Out: dtype.Decimal(dtype.MaxDecimalPrecision, in.Scale())}, nil
 		}
+		if in.ID() == dtype.TypeBool {
+			// A Bool sums as 0 and 1, so the sum counts the trues, as Polars and
+			// DuckDB both answer; it is an integer sum, so it is Int128 like every
+			// other. It used to be refused with a hint to use count(), which counts
+			// the non-null rows, falses included — a different number.
+			return AggBinding{Acc: dtype.Int128, Out: dtype.Int128}, nil
+		}
 		if !in.IsNumeric() {
 			return AggBinding{}, uerr.New(uerr.KindType, "",
-				"sum() requires a numeric operand, got %s", in).
-				Hint("use count() to count rows, or len() to include nulls")
+				"sum() requires a numeric operand, got %s", in)
 		}
 		switch {
 		case in.IsInteger():

@@ -497,10 +497,20 @@ func forEachOrdered(seg Segments, reverse bool, fn func(rows []int32)) {
 	}
 }
 
-// widenToInt128 reads any integer column as []i128.Int128.
+// widenToInt128 reads any integer column, or a Bool as 0 and 1, as []i128.Int128.
 func widenToInt128(c *data.Column) ([]i128.Int128, error) {
 	if c.DType().Physical().ID() == dtype.TypeInt128 {
 		return data.Values[i128.Int128](c)
+	}
+	if c.DType().ID() == dtype.TypeBool {
+		bits := c.Bools()
+		out := make([]i128.Int128, c.Len())
+		for i := range out {
+			if bits.Get(i) {
+				out[i] = i128.FromInt64(1)
+			}
+		}
+		return out, nil
 	}
 	if c.DType().IsUnsignedInteger() {
 		u, err := widenUnsigned(c)

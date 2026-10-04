@@ -64,6 +64,9 @@ const (
 // A FLOAT sum accumulates in Float64 even when it returns Float32, because naive
 // float32 accumulation stops making progress past ~2^24 elements.
 //
+// A BOOL sums as 0 and 1, so its sum counts the trues, as an Int128. Count counts
+// the non-null rows, falses included.
+//
 // Sum of a group with no non-null values is NULL, not 0 — ursus follows SQL here
 // rather than Polars. `0` cannot be distinguished afterwards from a genuine zero;
 // NULL can be turned into 0 with FillNull if that is what you want.

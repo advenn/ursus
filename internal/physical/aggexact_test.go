@@ -268,7 +268,7 @@ func TestAggregatesAreExactOnAOneRowGroup(t *testing.T) {
 				t.Errorf("%s: cannot read an exact %s result", key, bind.Out)
 				continue
 			}
-			if out == want {
+			if asNumber(in, out) == asNumber(in, want) {
 				continue
 			}
 			observed[key] = true
@@ -297,9 +297,9 @@ func TestAggregatesAreExactOnAOneRowGroup(t *testing.T) {
 		}
 		if len(answers) > 1 {
 			agreements++
-			first := strings.SplitN(answers[0], "=", 2)[1]
+			first := asNumber(in, strings.SplitN(answers[0], "=", 2)[1])
 			for _, a := range answers[1:] {
-				if v := strings.SplitN(a, "=", 2)[1]; v != first {
+				if v := asNumber(in, strings.SplitN(a, "=", 2)[1]); v != first {
 					key := "sum/" + in.String()
 					observed[key] = true
 					if !knownInexactAggregates[key] {
@@ -373,7 +373,7 @@ func TestCumulativesAreExactOnAOneRowPartition(t *testing.T) {
 				t.Errorf("%s: cannot read an exact %s result", key, out)
 				continue
 			}
-			if s == want {
+			if asNumber(in, s) == asNumber(in, want) {
 				continue
 			}
 			observed[key] = true
@@ -388,6 +388,21 @@ func TestCumulativesAreExactOnAOneRowPartition(t *testing.T) {
 	if arms < 40 {
 		t.Errorf("only %d cumulative arms ran", arms)
 	}
+}
+
+// asNumber reads a Bool input's rendering as the 0 or 1 it sums as, so a Sum of one
+// true, which counts it, agrees with the Min of it, which is it. Any other input's
+// rendering is left alone.
+func asNumber(in dtype.DataType, s string) string {
+	if in.ID() == dtype.TypeBool {
+		switch s {
+		case "true":
+			return "1"
+		case "false":
+			return "0"
+		}
+	}
+	return s
 }
 
 // report fails on an unlisted defect and on a listed one that has been fixed.

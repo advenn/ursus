@@ -20,11 +20,10 @@ import (
 
 // knownAggDefects names each case that answers wrongly today, with what it answers.
 var knownAggDefects = map[string]string{
-	"A10 Sum of [true, false, true, null]": "refused, with a hint to count rows",
-	"A13 Product of Int64 [3, 0, -5]":      "-0",
-	"A13 GroupBy().Agg() of nothing":       "shape (0, 0)",
-	"A14 GroupByDynamic with Closed(99)":   "answered as ClosedLeft",
-	"A14 IsBetween with Closed(99)":        "answered as ClosedLeft",
+	"A13 Product of Int64 [3, 0, -5]":    "-0",
+	"A13 GroupBy().Agg() of nothing":     "shape (0, 0)",
+	"A14 GroupByDynamic with Closed(99)": "answered as ClosedLeft",
+	"A14 IsBetween with Closed(99)":      "answered as ClosedLeft",
 }
 
 type aggCase struct {
@@ -115,6 +114,16 @@ func TestAggregationsAndWindowsByHand(t *testing.T) {
 			got: one(ursus.Frame(ursus.ValuesNullable("v", []bool{true, false, true, false},
 				[]bool{true, true, true, false})), c("v").Sum()),
 			want: ursus.Frame(ursus.Values("v", []int64{2})).Select(c("v").Cast(ursus.Int128))},
+		{name: "A10 grouped Sum of a Bool",
+			got: ursus.Frame(ursus.Values("g", []int64{1, 2, 1, 2}), ursus.Values("v", []bool{true, true, true, false})).
+				GroupBy(c("g")).Agg(c("v").Sum()).Sort(ursus.Asc(c("g"))),
+			want: ursus.Frame(ursus.Values("g", []int64{1, 2}), ursus.Values("v", []int64{2, 1})).
+				Select(c("g"), c("v").Cast(ursus.Int128))},
+		{name: "A10 CumSum of [true, null, true, false]",
+			got: ursus.Frame(ursus.ValuesNullable("v", []bool{true, false, true, false},
+				[]bool{true, false, true, true})).Select(c("v").CumSum(false)),
+			want: ursus.Frame(ursus.ValuesNullable("v", []int64{1, 0, 2, 2}, []bool{true, false, true, true})).
+				Select(c("v").Cast(ursus.Int128))},
 
 		// --- A13 ---
 		{name: "A13 Product of Int64 [3, 0, -5]",

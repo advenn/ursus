@@ -467,6 +467,17 @@ func (a *sumAcc) AddBatch(groups []int32, col *data.Column) error {
 			a.seen[g] = true
 		}
 		switch {
+		case col.DType().ID() == dtype.TypeBool:
+			bits := col.Bools()
+			for i, g := range groups {
+				if valid.Get(i) {
+					v := i128.Zero
+					if bits.Get(i) {
+						v = i128.FromInt64(1)
+					}
+					add(g, v)
+				}
+			}
 		case col.DType().IsUnsignedInteger():
 			src, err := widenUnsigned(col)
 			if err != nil {
