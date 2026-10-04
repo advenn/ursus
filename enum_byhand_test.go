@@ -213,8 +213,18 @@ func TestEnumByHand(t *testing.T) {
 					wrong = fmt.Sprintf("rendering panicked: %v", p)
 				}
 			}()
-			if s := df.String(); !strings.Contains(s, "hi") || !strings.Contains(s, "mid") {
-				return "rendered without its categories: " + strings.Join(strings.Fields(s), " ")
+			// The cells, below the header rule: the header's type line already names
+			// every category, so a check of the whole text passes on cells that
+			// print indices — which the first version of this case did.
+			s := df.String()
+			_, body, _ := strings.Cut(s, "├")
+			for _, want := range []string{"hi", "lo", "mid"} {
+				if !strings.Contains(body, want) {
+					return "rendered cells without their categories: " + strings.Join(strings.Fields(body), " ")
+				}
+			}
+			if v, ok, err := df.At[string](0, "e"); err != nil || !ok || v != "hi" {
+				return fmt.Sprintf("At[string](0) = %q, %v, %v; want \"hi\"", v, ok, err)
 			}
 			return ""
 		}},
@@ -283,6 +293,9 @@ func TestEnumByHand(t *testing.T) {
 		{`== "zzz" is false`, wantBools(ef().Select(c("e").Eq("zzz")), "e", 0, 0, 0, -1)},
 		{`< "mid" is category order`, wantBools(ef().Select(c("e").Lt("mid")), "e", 0, 1, 0, -1)},
 		{`< "zzz" is refused`, refused(ef().Select(c("e").Lt("zzz")), ursus.ErrValue, "zzz")},
+		{"two different Enums have no common order", refused(
+			ef().WithColumns(c("e").Cast(ursus.Enum("hi", "lo", "mid")).Alias("f")).Select(c("e").Lt(c("f"))),
+			ursus.ErrType, "order")},
 		{"== a String column, by value", wantBools(
 			ef().WithColumns(ursus.Lit("").Alias("s")).WithColumns(
 				ursus.When(c("n").Eq(1)).Then(ursus.Lit("hi")).When(c("n").Eq(2)).Then(ursus.Lit("x")).
