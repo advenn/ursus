@@ -532,7 +532,7 @@ func structFieldLeaves(sc *schema.Schema, n schema.Node) ([]int, bool) {
 // column gets a leaf, and that one decides whether the leaf can be decoded.
 func readableElem(elem dtype.DataType) bool {
 	switch elem.ID() {
-	case dtype.TypeString, dtype.TypeBinary, dtype.TypeBool:
+	case dtype.TypeString, dtype.TypeBinary:
 		return true
 	}
 	return elem.IsFixedWidth()
