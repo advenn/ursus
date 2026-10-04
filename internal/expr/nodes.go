@@ -252,6 +252,9 @@ func (c *Cast) Field(in *dtype.Schema) (dtype.Field, error) {
 		e := uerr.New(uerr.KindType, "cast",
 			"cannot cast %s to %s", cf.Type, c.To).
 			Hint("column %q has type %s", cf.Name, cf.Type)
+		if c.To.ID() == dtype.TypeEnum {
+			e = e.Hint("an Enum is built from text: cast to ursus.String first, then to the Enum")
+		}
 		if c.To.ID() == dtype.TypeDecimal && !dtype.ValidDecimal(c.To.Precision(), c.To.Scale()) {
 			e = e.Hint("%s is not a type: a Decimal has 1 to %d digits of precision, "+
 				"and a scale no larger than its precision", c.To, dtype.MaxDecimalPrecision)

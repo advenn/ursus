@@ -207,10 +207,15 @@ func CanCast(from, to DataType) bool {
 	}
 	switch {
 	// An ENUM first, because IsString is true for one and the parsing arm below
-	// would promise Enum -> numeric, which read its indices as text and panicked
-	// (v0.3-scope.md §2.3). Nothing is promised until the kernel has the arms.
-	case from.ID() == TypeEnum || to.ID() == TypeEnum:
-		return false
+	// promised Enum -> numeric, which read its indices as text and panicked
+	// (v0.3-scope.md §2.3). An Enum is built from text — a String, or another
+	// Enum's — and becomes anything its text becomes, so Enum("1", "2") -> Int64
+	// is 1 and 2, not the indices 0 and 1. Nothing else becomes an Enum: a number
+	// has no category until it is text, and the cast should say which text.
+	case to.ID() == TypeEnum:
+		return from.ID() == TypeString || from.ID() == TypeEnum
+	case from.ID() == TypeEnum:
+		return to.ID() == TypeString || CanCast(String, to)
 	// DECIMAL first, because it must not fall into the arms below: the numeric ->
 	// temporal arm would promise Decimal -> Date, which relabels an unscaled integer
 	// as a day count, and the numeric <-> Bool arm would promise a truth value.

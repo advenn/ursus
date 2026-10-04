@@ -486,6 +486,13 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 		return c.Rename(name).WithDType(to), nil
 	}
 
+	// An Enum first, ahead of Decimal's routing too: its payload is indices, and
+	// IsString had routed it into parseFromString, which read them as offsets and
+	// panicked (v0.3-scope.md §2.3). castEnum decodes it to its text.
+	if from.ID() == dtype.TypeEnum || to.ID() == dtype.TypeEnum {
+		return castEnum(name, to, strict, c)
+	}
+
 	// A Decimal is stored as its UNSCALED integer, so every numeric cast below would
 	// return the wrong number by a factor of 10^scale — Decimal(10,2) 12.34 would
 	// cast to Int64 as 1234 — and castDecimal applies the scale instead. Decimal TO
@@ -520,12 +527,6 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 	// as String and cast, if a conversion exists".
 	//
 	// The two sides now agree because the kernel implements what CanCast promised.
-	// An Enum source is never parsed as a String: its payload is indices, and
-	// IsString routed it into parseFromString, which read them as offsets and
-	// panicked (v0.3-scope.md §2.3).
-	if from.ID() == dtype.TypeEnum || to.ID() == dtype.TypeEnum {
-		return castEnum(name, to, strict, c)
-	}
 	if from.HasStringStorage() && from.ID() != dtype.TypeBinary && !to.IsString() {
 		return parseFromString(name, to, strict, c)
 	}
@@ -1250,8 +1251,88 @@ func formatInts[T ~int8 | ~int16 | ~int32 | ~int64](c *data.Column, out []string
 	return out, nil
 }
 
-// castEnum is every cast to or from an Enum. Step 79 gives it its arms; until then
-// it refuses rather than read indices as text.
+// castEnum is every cast to or from an Enum, which is text with a fixed vocabulary
+// stored as indices into it.
+//
+//	Enum -> String      decodes
+//	String -> Enum      encodes; a value outside the categories is refused under a
+//	                    strict cast, naming it and them, and null under a lossy one
+//	Enum -> Enum        decodes and encodes, so the text is kept and the index is the
+//	                    new type's
+//	Enum -> anything    decodes and casts the text: Enum("1", "2") -> Int64 is 1, 2
+//
+// Polars casts an Enum to an integer as its index, and has deprecated that; the
+// index is storage, and the text is what the user wrote.
 func castEnum(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
-	return nil, uerr.New(uerr.KindUnsupported, "cast", "cannot cast %s to %s", c.DType(), to)
+	from := c.DType()
+	switch {
+	case from.ID() == dtype.TypeEnum:
+		text, err := decodeEnum(name, c)
+		if err != nil || to.ID() == dtype.TypeString {
+			return text, err
+		}
+		return Cast(name, to, strict, text)
+	case from.ID() == dtype.TypeString && to.ID() == dtype.TypeEnum:
+		return encodeEnum(name, to, strict, c)
+	}
+	return nil, uerr.New(uerr.KindType, "cast", "cannot cast %s to %s", from, to).
+		Hint("an Enum is built from text: cast to ursus.String first, then to the Enum")
+}
+
+// decodeEnum is an Enum column as its category text.
+func decodeEnum(name string, c *data.Column) (*data.Column, error) {
+	idx, err := data.Values[uint32](c)
+	if err != nil {
+		return nil, err
+	}
+	cats := c.DType().Categories()
+	valid := c.Validity()
+	out := make([]string, c.Len())
+	for i := range out {
+		if !valid.Get(i) {
+			continue
+		}
+		j := int(idx[i])
+		if j >= len(cats) {
+			return nil, uerr.Internalf("kernel: Enum index %d at row %d is past its %d categories",
+				j, i, len(cats))
+		}
+		out[i] = cats[j]
+	}
+	return data.NewString(name, out, valid), nil
+}
+
+// encodeEnum is a String column as indices into to's categories.
+func encodeEnum(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
+	cats := to.Categories()
+	pos := make(map[string]uint32, len(cats))
+	for i, s := range cats {
+		pos[s] = uint32(i)
+	}
+	acc := c.Strings()
+	valid := c.Validity()
+	n := c.Len()
+	idx := make([]uint32, n)
+	ok := bitmap.NewBuilder(n)
+	for i := range n {
+		if !valid.Get(i) {
+			ok.Append(false)
+			continue
+		}
+		s := acc.Get(i)
+		j, found := pos[s]
+		if !found {
+			if strict {
+				return nil, uerr.New(uerr.KindValue, "cast",
+					"value %s at row %d is not a category of %s", strconv.Quote(s), i, to).
+					Hint("the categories are %q", cats).
+					Hint("use CastLossy to turn values outside them into nulls")
+			}
+			ok.Append(false)
+			continue
+		}
+		idx[i] = j
+		ok.Append(true)
+	}
+	return data.NewFixed(name, to, idx, ok.Finish()), nil
 }

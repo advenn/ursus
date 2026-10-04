@@ -23,26 +23,19 @@ import (
 
 // knownEnumDefects names each case that answers wrongly today, with what it answers.
 var knownEnumDefects = map[string]string{
-	"String -> Enum": "cast: cannot cast String to Enum(lo, mid, hi)",
-	"String -> Enum refuses an unknown value":         "a type error, want value error: cast: cannot cast String to Enum(lo, m",
-	"CastLossy String -> Enum nulls an unknown value": "cast: cannot cast String to Enum(lo, mid, hi)",
-	"Enum -> String":                                          "cast: cannot cast Enum(lo, mid, hi) to String",
-	"Enum -> another Enum":                                    "cast: cannot cast Enum(lo, mid, hi) to Enum(hi, lo, mid)",
-	"Enum(1, 2) -> Int64 reads the text":                      "recovered a panic",
-	"Int64 -> Enum is refused":                                "the refusal does not say \"String\": cast: cannot cast Int64 to Enum(lo,",
 	"== a String column, by value":                            "select: operator == has no common type for Enum(lo, mid, hi) and Strin",
 	"Concat with a String is a String":                        "concat: cannot stack column \"e\": no common type for Enum(lo, mid, hi) ",
 	"a join to a String key matches by value":                 "join: cannot join key col(\"e\") to col(\"e\"): no common type for Enum(lo",
 	"CSV writes an Enum's text":                               "wrote \"\", sink_csv: cannot write column \"e\" of type Enum(lo, mid, hi) ",
 	"CSV reads an Enum schema":                                "scan: opening csv source",
 	"an unknown value in an Enum CSV column is a value error": "a unsupported error, want value error: scan: opening csv source",
-	"== \"mid\"":                                              "select: operator == has no common type for Enum(lo, mid, hi) and Strin",
-	"== \"zzz\" is false":                                     "select: operator == has no common type for Enum(lo, mid, hi) and Strin",
-	"< \"mid\" is category order":                             "select: operator < has no common type for Enum(lo, mid, hi) and String",
-	"< \"zzz\" is refused":                                    "a type error, want value error: select: operator < has no common type ",
-	"IsIn(\"lo\", \"zzz\")":                                   "is_in: is_in cannot compare Enum(lo, mid, hi) with a String value",
-	"FillNullWith(\"lo\") stays the Enum":                     "when: the then and otherwise branches have no common type: Enum(lo, mi",
-	"FillNullWith(\"zzz\") is a String":                       "when: the then and otherwise branches have no common type: Enum(lo, mi",
+	"== \"mid\"":                          "select: operator == has no common type for Enum(lo, mid, hi) and Strin",
+	"== \"zzz\" is false":                 "select: operator == has no common type for Enum(lo, mid, hi) and Strin",
+	"< \"mid\" is category order":         "select: operator < has no common type for Enum(lo, mid, hi) and String",
+	"< \"zzz\" is refused":                "a type error, want value error: select: operator < has no common type ",
+	"IsIn(\"lo\", \"zzz\")":               "is_in: is_in cannot compare Enum(lo, mid, hi) with a String value",
+	"FillNullWith(\"lo\") stays the Enum": "when: the then and otherwise branches have no common type: Enum(lo, mi",
+	"FillNullWith(\"zzz\") is a String":   "when: the then and otherwise branches have no common type: Enum(lo, mi",
 }
 
 // null is the text enumCol and enumText use for a null row.
