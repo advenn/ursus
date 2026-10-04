@@ -463,6 +463,9 @@ type nullPadOp struct {
 	leftPad *data.Batch
 	run     *fileRun
 	n       int
+	// right is whether a coalesced key takes the RIGHT side's value — a Right
+	// join's, as joinProbeOp.coalesceFromRight decides for the rows it emits.
+	right bool
 }
 
 func (o *nullPadOp) Schema() *dtype.Schema { return o.schema }
@@ -500,10 +503,12 @@ func (o *nullPadOp) Next(ctx context.Context) (*data.Batch, error) {
 			lsel[i] = kernel.NullIndex
 			rsel[i] = int32(i)
 		}
-		// coalesceRight is false: a null-keyed build row has a NULL key, so taking
-		// the merged column from the right would write null either way, and Full —
-		// the only kind that could ask — refuses Coalesce at plan time.
-		return gatherOut(o.schema, o.layout, o.leftPad, b, lsel, rsel, false)
+		// A Right join coalesces its keys from the right, here as in memory. This
+		// passed false, on the argument that "a null-keyed build row has a NULL
+		// key" — true of ONE key, and false of several: a row keyed (1, null) is
+		// null-keyed, lands in this bucket, and its 1 was read from leftPad and
+		// came back null.
+		return gatherOut(o.schema, o.layout, o.leftPad, b, lsel, rsel, o.right)
 	}
 }
 
@@ -686,7 +691,7 @@ func (p *joinProbeOp) startBucket(ctx context.Context, b int) error {
 			return err
 		}
 		p.rep = &nullPadOp{schema: p.schema, layout: p.layout,
-			leftPad: p.leftPad, run: &fileRun{r: r}}
+			leftPad: p.leftPad, run: &fileRun{r: r}, right: p.coalesceFromRight()}
 		return nil
 	}
 

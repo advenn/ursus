@@ -25,7 +25,6 @@ import (
 
 // knownJoinDefects names each case that answers wrongly today, with what it answers.
 var knownJoinDefects = map[string]string{
-	"J3 spilled right join, key (1, null)":       "k1 is null: coalesced from the left's padding",
 	"O6 filter on a coalesced key of two widths": "0 rows: k*k computed at Int32 in the pushed filter",
 }
 
