@@ -319,10 +319,7 @@ func TestConcatUnderLenReadsOneColumn(t *testing.T) {
 }
 
 // knownPlannerRefusalDefects names each case the planner does not refuse today.
-var knownPlannerRefusalDefects = map[string]string{
-	"O10 a window as the dynamic index":      "accepted by the planner, ErrInternal at Collect",
-	"O11 an ordered aggregate over a window": "accepted by Explain and CollectSchema",
-}
+var knownPlannerRefusalDefects = map[string]string{}
 
 // TestPlannerRefusesWhatCollectRefuses: a plan the engine will refuse is refused by
 // Explain and CollectSchema too, with the same kind — not accepted there and failed

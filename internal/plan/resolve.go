@@ -776,6 +776,18 @@ func resolveTemporalGroup(t *TemporalGroup) (Node, error) {
 	}
 	op := t.op()
 
+	// The index and the keys are per-row values, as GroupBy's keys are, and were
+	// never checked: a window as the index reached the evaluator, which said
+	// ErrInternal — "a window reached the evaluator" — for the caller's plan (O10).
+	for _, e := range append([]expr.Node{t.Index}, t.Keys...) {
+		if err := rejectWindow(e, op); err != nil {
+			return nil, err
+		}
+		if err := rejectAggregate(e, op); err != nil {
+			return nil, err
+		}
+	}
+
 	for _, iv := range []struct {
 		name string
 		v    dtype.Interval

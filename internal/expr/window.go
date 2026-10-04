@@ -187,6 +187,17 @@ func (w *Window) Field(in *dtype.Schema) (dtype.Field, error) {
 				"produces yet").
 			Hint("use the default mapping to get one value per row in the original order")
 	}
+	// An ordering over an aggregate, refused here for the reason MapExplode is: the
+	// physical planner refused it alone, so Explain and CollectSchema accepted a
+	// plan Collect would not run (O11). The physical check stays as a backstop.
+	if agg, isAgg := w.Child.(*Agg); isAgg && len(w.OrderBy) > 0 {
+		return dtype.Field{}, uerr.New(uerr.KindUnsupported, "over",
+			"an ordering is not yet honoured over an aggregate").
+			Hint("%s is order-independent over a partition, so the ordering would change "+
+				"nothing — except for first, last, arg_min, arg_max and implode, where it "+
+				"would, and is not applied", agg.Op).
+			Hint("drop the ordering, or use an ordered window function")
+	}
 
 	// The partition keys become group keys, so they must be hashable — the same
 	// constraint GroupBy applies, checked here so the message names `over`.
