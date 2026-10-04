@@ -46,6 +46,8 @@ var knownIODefects = map[string]string{
 	"I22 CSV refuses a frame with rows and no columns":            "writes a column named \"\"",
 	"I22 Parquet refuses a frame with rows and no columns":        "writes (0, 0)",
 	"I22 a frame with no rows and no columns writes an empty CSV": "writes a blank header line",
+	"I27 a null String round-trips":                               "read back as \"\"",
+	"I27 an unquoted empty String field is null":                  "\"\"",
 }
 
 type ioCase struct {
@@ -263,6 +265,24 @@ func TestIOByHand(t *testing.T) {
 		}},
 		{"control: a column of only NaN infers String", func(t *testing.T) string {
 			return ioEqual(t, read("a\nNaN\n"), strs("a", []string{"NaN"}))
+		}},
+
+		// --- I27: a null String and an empty one are written and read apart ---
+		// An unquoted empty field is null and a quoted "" is the empty string, as
+		// Polars reads and writes them. DuckDB reads both as null, which keeps the
+		// null and loses the empty string.
+		{"I27 a null String round-trips", func(t *testing.T) string {
+			f := ursus.Frame(ursus.ValuesNullable("s", []string{"", "", "x"}, []bool{true, false, true}),
+				ursus.Values("n", []int64{1, 2, 3}))
+			text, err := csvText(t, f)
+			if err != nil {
+				return err.Error()
+			}
+			return ioEqual(t, read(text), f)
+		}},
+		{"I27 an unquoted empty String field is null", func(t *testing.T) string {
+			return ioEqual(t, read("s,n\n,1\n\"\",2\n"),
+				ursus.Frame(ursus.ValuesNullable("s", []string{"", ""}, []bool{false, true}), ursus.Values("n", []int64{1, 2})))
 		}},
 
 		// --- I22: a frame with rows and no columns is refused by the writers ---
