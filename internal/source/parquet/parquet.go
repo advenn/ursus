@@ -1023,12 +1023,46 @@ func newListElems(cr file.ColumnChunkReader, desc *schema.Column,
 			return &fixedElems[int32, int16]{cr: t, conv: func(v int32) int16 { return int16(v) }, valid: fixed()}, nil
 		case dtype.TypeInt32, dtype.TypeDate:
 			return &fixedElems[int32, int32]{cr: t, conv: identity[int32], valid: fixed()}, nil
+		// The unsigned types and TIME(MILLIS) share INT32 storage, the unsigned ones
+		// reinterpreting its bits as a flat column's reader does (audit.md I17: they
+		// were refused, under a hint that said they were read).
+		case dtype.TypeUint8:
+			return &fixedElems[int32, uint8]{cr: t, conv: func(v int32) uint8 { return uint8(v) }, valid: fixed()}, nil
+		case dtype.TypeUint16:
+			return &fixedElems[int32, uint16]{cr: t, conv: func(v int32) uint16 { return uint16(v) }, valid: fixed()}, nil
+		case dtype.TypeUint32:
+			return &fixedElems[int32, uint32]{cr: t, conv: func(v int32) uint32 { return uint32(v) }, valid: fixed()}, nil
+		case dtype.TypeTime:
+			return &fixedElems[int32, int64]{cr: t, conv: func(v int32) int64 { return int64(v) }, valid: fixed()}, nil
+		case dtype.TypeDecimal:
+			return &fixedElems[int32, i128.Int128]{cr: t, conv: func(v int32) i128.Int128 { return i128.FromInt64(int64(v)) }, valid: fixed()}, nil
 		}
 
 	case *file.Int64ColumnChunkReader:
 		switch elem.ID() {
 		case dtype.TypeInt64, dtype.TypeDatetime, dtype.TypeDuration, dtype.TypeTime:
 			return &fixedElems[int64, int64]{cr: t, conv: identity[int64], valid: fixed()}, nil
+		case dtype.TypeUint64:
+			return &fixedElems[int64, uint64]{cr: t, conv: func(v int64) uint64 { return uint64(v) }, valid: fixed()}, nil
+		case dtype.TypeDecimal:
+			return &fixedElems[int64, i128.Int128]{cr: t, conv: i128.FromInt64, valid: fixed()}, nil
+		}
+
+	case *file.FixedLenByteArrayColumnChunkReader:
+		// DECIMAL, and Int128 written as DECIMAL(38, 0): big-endian two's complement.
+		// A value has at most sixteen bytes in a FLBA(16), so decimalFromBytes cannot
+		// fail here; a wider one would have been refused when the schema was mapped.
+		if elem.ID() == dtype.TypeDecimal || elem.ID() == dtype.TypeInt128 {
+			return &fixedElems[parquet.FixedLenByteArray, i128.Int128]{cr: t,
+				conv: func(v parquet.FixedLenByteArray) i128.Int128 {
+					d, _ := decimalFromBytes(v)
+					return d
+				}, valid: fixed()}, nil
+		}
+
+	case *file.BooleanColumnChunkReader:
+		if elem.ID() == dtype.TypeBool {
+			return &boolElems{cr: t, bits: fixed(), valid: fixed()}, nil
 		}
 
 	case *file.Float32ColumnChunkReader:
@@ -1043,6 +1077,6 @@ func newListElems(cr file.ColumnChunkReader, desc *schema.Column,
 	}
 	return nil, uerr.New(uerr.KindUnsupported, "scan_parquet",
 		"column %q is a list of %s, which cannot be read yet", desc.Name(), elem).
-		Hint("lists of the integer, float, temporal, String and Binary types are " +
-			"read; Bool, Decimal and nested elements are not")
+		Hint("lists of the integer, float, Bool, Decimal, temporal, String and Binary " +
+			"types are read; nested elements are not")
 }

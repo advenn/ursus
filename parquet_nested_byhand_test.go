@@ -34,13 +34,6 @@ var knownNestedParquetDefects = map[string]string{
 	"List(Decimal(10, 2))":           "refused at write: no nested column is written",
 	"List(Time(ms))":                 "refused at write: no nested column is written",
 	"lists across row groups of two": "refused at write: no nested column is written",
-	"pyarrow List(Bool)":             "refused at read: the list element type has no accumulator (I17)",
-	"pyarrow List(Uint8)":            "refused at read: the list element type has no accumulator (I17)",
-	"pyarrow List(Uint16)":           "refused at read: the list element type has no accumulator (I17)",
-	"pyarrow List(Uint32)":           "refused at read: the list element type has no accumulator (I17)",
-	"pyarrow List(Uint64)":           "refused at read: the list element type has no accumulator (I17)",
-	"pyarrow List(Decimal(10, 2))":   "refused at read: the list element type has no accumulator (I17)",
-	"pyarrow List(Time(ms))":         "refused at read: the list element type has no accumulator (I17)",
 }
 
 // validity is a bitmap from bools.

@@ -667,6 +667,53 @@ func (e *fixedElems[P, T]) finish(name string, elem dtype.DataType) *data.Column
 	return col
 }
 
+// boolElems accumulates Bool list elements, into a bitmap rather than a buffer of
+// values, which is the one way a Bool column differs from a fixed-width one.
+type boolElems struct {
+	cr *file.BooleanColumnChunkReader
+
+	vals  []bool
+	vpos  int
+	bits  *bitmap.Builder
+	valid *bitmap.Builder
+	n     int
+}
+
+func (e *boolElems) readLevels(defs, reps []int16) (int, error) {
+	if cap(e.vals) < len(defs) {
+		e.vals = make([]bool, len(defs))
+	}
+	total, _, err := e.cr.ReadBatch(int64(len(defs)), e.vals[:len(defs)], defs, reps)
+	if err != nil {
+		return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
+			"reading a repeated boolean column")
+	}
+	return int(total), nil
+}
+
+func (e *boolElems) appendVal() {
+	e.bits.Append(e.vals[e.vpos])
+	e.valid.Append(true)
+	e.vpos++
+	e.n++
+}
+
+func (e *boolElems) appendNull() {
+	e.bits.Append(false)
+	e.valid.Append(false)
+	e.n++
+}
+
+func (e *boolElems) count() int   { return e.n }
+func (e *boolElems) resetCursor() { e.vpos = 0 }
+func (e *boolElems) close() error { return e.cr.Close() }
+
+func (e *boolElems) finish(name string, _ dtype.DataType) *data.Column {
+	col := data.NewBool(name, e.bits.Finish(), e.valid.Finish())
+	e.bits, e.valid, e.n = bitmap.NewBuilder(0), bitmap.NewBuilder(0), 0
+	return col
+}
+
 // byteArrayElems accumulates String or Binary list elements.
 //
 // It is byteArrayCol's arena, unchanged: characters appended into one buffer and
