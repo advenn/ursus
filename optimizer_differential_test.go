@@ -636,9 +636,7 @@ func classify(name, detail string, guilty []string) string {
 // knownDifferentialMismatches counts every query the optimizer answers differently
 // today, by defect. Checked both ways: a class whose count changes is reported with
 // its queries, a class with none left is stale, and an unattributed mismatch fails.
-var knownDifferentialMismatches = map[string]knownMismatch{
-	"O9": {1, "a filter below Unique can tell -0 from +0, which Unique merges"},
-}
+var knownDifferentialMismatches = map[string]knownMismatch{}
 
 // judge compares the attributed mismatches with the ratchet and returns every
 // problem. It is pure, so it can be tested on its own.
