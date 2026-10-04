@@ -749,7 +749,9 @@ func (a *meanAcc) Merge(other Accumulator, remap []int32) error {
 
 func (a *meanAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
-	if a.in.ID() == dtype.TypeDecimal {
+	// An exact sum with a float output — a Decimal's, or an integer's — is divided
+	// once, to the nearest double. An integer is a Decimal of scale 0.
+	if a.in.ID() == dtype.TypeDecimal || (a.isInt && a.bind.Out.IsFloat()) {
 		return a.finishDecimal(name, nGroups), nil
 	}
 	if a.isInt {
@@ -832,7 +834,13 @@ func (a *meanAcc) finishDecimal(name string, nGroups int) *data.Column {
 			continue
 		}
 		vb.Append(true)
-		if scale <= 22 && a.carry[g] == 0 {
+		// The carry is kept only for a 128-bit input; an Int64 sum cannot leave
+		// Int128 in fewer than 2^64 rows.
+		var carry int64
+		if a.wide {
+			carry = a.carry[g]
+		}
+		if scale <= 22 && carry == 0 {
 			d := float64(a.n[g]) * math.Pow10(scale)
 			if x, ok := a.i[g].Int64(); ok && x >= -(1<<53) && x <= 1<<53 && d <= 1<<52 {
 				out[g] = float64(x) / d
@@ -841,7 +849,7 @@ func (a *meanAcc) finishDecimal(name string, nGroups int) *data.Column {
 		}
 		den := new(big.Int).Mul(new(big.Int).SetUint64(a.n[g]),
 			new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(scale)), nil))
-		out[g], _ = new(big.Rat).SetFrac(trueTotal(a.i[g], a.carry[g]), den).Float64()
+		out[g], _ = new(big.Rat).SetFrac(trueTotal(a.i[g], carry), den).Float64()
 	}
 	return data.NewFixed(name, a.bind.Out, out, vb.Finish())
 }

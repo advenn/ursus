@@ -19,11 +19,7 @@ import (
 )
 
 // knownInexactIntMeans counts the wrong means per type.
-var knownInexactIntMeans = map[string]int{
-	"Int64":  6, // summed in float64: 2^53+1 is already 2^53
-	"Uint64": 2,
-	"Int128": 6,
-}
+var knownInexactIntMeans = map[string]int{}
 
 // meanSets are the value sets each type is averaged over, kept to those the type
 // holds: its own and every other type's edges, and sums that a float64 rounds.

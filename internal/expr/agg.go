@@ -319,6 +319,14 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		if in == dtype.Float32 {
 			return AggBinding{Acc: dtype.Float64, Out: dtype.Float32}, nil
 		}
+		// An INTEGER mean divides an exact sum, as a Decimal mean does: Sum of the
+		// same column is exact, in Int128, and a mean summed in float64 disagreed
+		// with it past 2^53 in the same query — the mean of 2^53+1 and 2^53+2 was
+		// 2^53, where the nearest double to 2^53+1.5 is 2^53+2. DuckDB is exact
+		// too; Polars sums in float.
+		if in.IsInteger() {
+			return AggBinding{Acc: dtype.Int128, Out: dtype.Float64}, nil
+		}
 		return AggBinding{Acc: dtype.Float64, Out: dtype.Float64}, nil
 
 	case AggAny, AggAllTrue:
