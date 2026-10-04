@@ -534,10 +534,20 @@ func (s *temporalSink) toTime(tick int64) (time.Time, error) {
 	return v, nil
 }
 
+// fromTime stores a window bound in the index's type.
+//
+// A bound can leave the type the rows are in: the grid floors the first row, so a
+// row near the earliest instant Datetime(ns) holds has a window starting before it
+// — 1677-09-21 floors to 1677-09-01 by the month — and a window's end can pass the
+// last. That is the data's doing, so it is KindValue, as the same floor is in
+// Dt().Truncate; it was ErrInternal.
 func (s *temporalSink) fromTime(t time.Time) (int64, error) {
 	v, ok := s.idxType.FromTime(t)
 	if !ok {
-		return 0, uerr.Internalf("physical: cannot store %s", s.idxType)
+		return 0, uerr.New(uerr.KindValue, "group_by_dynamic",
+			"a window bound, %s, is outside the range %s holds", t.UTC().Format(time.RFC3339Nano), s.idxType).
+			Hint("a coarser unit holds a wider range: cast the index first, e.g. " +
+				".Cast(ursus.Datetime(ursus.Micro, \"\"))")
 	}
 	return v, nil
 }

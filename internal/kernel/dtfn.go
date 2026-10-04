@@ -178,7 +178,11 @@ func truncateCalendar(name string, out, dt dtype.DataType, ticks []int64,
 		}
 		v, ok := dt.FromTime(iv.TruncateTo(tm))
 		if !ok {
-			return nil, uerr.Internalf("kernel: truncate cannot store %s", dt)
+			// A floor only moves back, so near the earliest instant the type holds
+			// it can leave the type: 1677-09-21 floored to the month is 1677-09-01,
+			// before Datetime(ns) begins. Data reaches this, so it is the data's
+			// error, not an internal one.
+			return nil, truncateRange(dt, iv, t)
 		}
 		res[i] = v
 	}
@@ -309,9 +313,23 @@ func truncateTemporal(name string, out, dt dtype.DataType, ticks []int64,
 		if t%step != 0 && t < 0 {
 			q--
 		}
+		// The floor of an instant within one step of the earliest tick is below
+		// it, and q*step wrapped: 1677-09-21T00:12:43 floored to the hour at
+		// Datetime(ns) came back in 2262.
+		if overflowsI64(expr.OpMul, q, step) {
+			return nil, truncateRange(dt, iv, t)
+		}
 		res[i] = q * step
 	}
 	return packTicks(name, out, res, valid), nil
+}
+
+// truncateRange refuses a floor the column's type cannot hold. Polars wraps it.
+func truncateRange(dt dtype.DataType, iv dtype.Interval, t int64) error {
+	return uerr.New(uerr.KindValue, "dt",
+		"truncate of %s by %s is before the earliest %s", dtype.FormatTemporal(dt, t), iv, dt).
+		Hint("a coarser unit holds earlier instants: cast first, e.g. " +
+			".Cast(ursus.Datetime(ursus.Micro, \"\"))")
 }
 
 // locationOf resolves a Datetime's timezone once per column.

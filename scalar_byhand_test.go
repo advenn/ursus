@@ -23,10 +23,7 @@ import (
 )
 
 // knownScalarDefects names each case that answers wrongly today, with what it answers.
-var knownScalarDefects = map[string]string{
-	"S11 Truncate(Every(1mo)) near the ns minimum": "ErrInternal",
-	"S11 Truncate(time.Hour) at the ns minimum":    "wrapped to 2262",
-}
+var knownScalarDefects = map[string]string{}
 
 type scalarCase struct {
 	name   string
@@ -225,6 +222,10 @@ func TestScalarFunctionsByHand(t *testing.T) {
 		{name: "S11 Truncate(time.Hour) at the ns minimum",
 			got:    nsTicks(nsMin + 5).Select(c("ts").Dt().Truncate(time.Hour)),
 			refuse: ursus.ErrValue, naming: []string{"truncate"}},
+		{name: "S11 GroupByDynamic(Every(1mo)) near the ns minimum",
+			got: nsTicks(nsMin+3600e9).
+				GroupByDynamic(c("ts"), ursus.DynamicOptions{Every: ursus.Every("1mo")}).Agg(ursus.Len()),
+			refuse: ursus.ErrValue, naming: []string{"window bound"}},
 		{name: "control: Truncate(time.Hour) an hour above the ns minimum",
 			got:  nsTicks(nsMin + 3600e9).Select(c("ts").Dt().Truncate(time.Hour)),
 			want: instants(t, "", dtype.Nano, "1677-09-21T01:00:00")},
