@@ -1,7 +1,8 @@
 # ursus
 
 A (experimental) dataframe library for Go 1.27, modelled on Polars — lazy execution with a query optimizer, Arrow memory layout, SIMD
-kernels, and streaming execution that spills to disk rather than falling over.
+kernels, and streaming execution that spills to disk rather than falling over — sort, group-by, join, unique and
+partitioned windows spill; the operators that cannot fail with an error naming themselves.
 
 ```go
 df, err := ursus.ScanParquet("events.parquet").
@@ -98,7 +99,7 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 | **Joins**       | all seven equi-join kinds with `Validate`, `JoinWhere` and `WhereExists`/`WhereNotExists` (non-equi), as-of join with tolerance and `by` keys, merge-sorted                          |
 | **Grouping**    | group-by, `GroupByDynamic`, `Rolling`, calendar-aware intervals                                                                                   |
 | **Optimizer**   | predicate pushdown (including through joins), projection pushdown, limit/top-k pushdown, cross-join collapse, constant folding and simplification |
-| **Execution**   | order-preserving pipeline parallelism, parallel hash aggregation, and spilling for sort, hash aggregation and hash join                           |
+| **Execution**   | order-preserving pipeline parallelism, parallel hash aggregation, and spilling for sort, hash aggregation, hash join, unique and partitioned windows (`WithMemoryLimit` names the rest, which fail rather than spill) |
 | **UDFs**        | `MapElements` (per value) and `MapBatches` (per column) — generic methods, so the Go types are inferred from your function                        |
 
 Nested types are partly there: **List and Struct read from Parquet and Arrow**, with

@@ -276,8 +276,9 @@ func (a *Account) Check() error {
 		"memory limit of %s exceeded: the query is holding %s, %s of it in this operator",
 		Bytes(a.b.Limit()), Bytes(a.b.Used()), Bytes(a.Used())).
 		Hint("%s", holdsHint(a.op)).
-		Hint("sort, group_by and join spill to disk; the other buffering operators — " +
-			"over, reverse, hstack, tail and unique — fail rather than exceed the limit")
+		Hint("sort, group_by, join, unique and a partitioned over spill to disk; reverse, " +
+			"hstack, tail, join_asof, merge_sorted, rolling, group_by_dynamic and an " +
+			"unpartitioned over fail rather than exceed the limit")
 }
 
 // Release drops everything this account holds.
@@ -321,8 +322,22 @@ func holdsHint(op string) string {
 			"n_unique hold state per VALUE — which partitioning to disk cannot divide, " +
 			"because it divides across keys; raise the limit with WithMemoryLimit"
 	case "unique":
-		return "unique holds one entry per distinct row; raise the limit with " +
-			"WithMemoryLimit, or reduce the subset of columns it is called on"
+		// unique spills since step 82, so reaching Check means the freeze could not
+		// help: the limit was gone before the first key, or four levels of
+		// partitioning still left one file's distinct rows too many to hold.
+		return "unique holds one entry per distinct row, and partitions the rows it " +
+			"cannot hold to disk; reaching this means the limit is too small for one " +
+			"partition's distinct rows — raise it with WithMemoryLimit, or reduce the " +
+			"subset of columns unique is called on"
+	case "over":
+		return "over holds its whole input, and partitions it to disk by its " +
+			"partition_by when it does not fit; raise the limit with WithMemoryLimit"
+	case "join_asof":
+		return "join_asof holds its whole right side, and a second copy while it " +
+			"builds the buckets it probes; raise the limit with WithMemoryLimit"
+	case "merge_sorted":
+		return "merge_sorted holds each side whole, to check it is sorted before " +
+			"interleaving; raise the limit with WithMemoryLimit"
 	case "group_by_dynamic", "rolling":
 		// The default sentence is actively wrong here. What these hold that grows is
 		// the window GRID, which is derived from the index range and the interval

@@ -27,9 +27,7 @@ import (
 
 // knownSpillDefects names each case that answers wrongly today, with what it
 // answers.
-var knownSpillDefects = map[string]string{
-	"the hint says what spills and what fails": "names neither join_asof nor merge_sorted, and says unique fails",
-}
+var knownSpillDefects = map[string]string{}
 
 // spillFrame is n rows: k = i*7919 % keys, seq = i, a 32-byte pad, and f, a Float64
 // over fifty values with a NaN every seventh row and a null every eleventh.

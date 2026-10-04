@@ -324,8 +324,13 @@ type MemoryStats struct {
 // than memory works. Group-by spills too, by radix-partitioning the keys it cannot
 // hold: past the limit new keys are routed to one of sixteen files per level and
 // re-aggregated afterwards. Join partitions BOTH sides on the join key and replays
-// the pairs, so an equi-join over more data than memory works as well. Window,
-// reverse, hstack, unique and tail cannot spill: past the limit they FAIL, with an
+// the pairs, so an equi-join over more data than memory works as well. Unique
+// routes the rows whose keys it cannot hold the same way, and a window with a
+// partition_by routes whole partitions; both stamp each row with its input
+// position and merge back on it, so their answers keep their order exactly.
+//
+// Reverse, hstack, tail, join_asof, merge_sorted, rolling, group_by_dynamic and a
+// window with no partition_by cannot spill: past the limit they FAIL, with an
 // error naming the operator, which is a better outcome than being killed by the OS
 // with no explanation.
 //
@@ -360,7 +365,8 @@ type MemoryStats struct {
 //
 // The join has the same wall in two places: a CROSS join has no key at all, and one
 // join key with more build rows than the limit cannot be split however deep the
-// recursion goes. Both refuse with a message naming which it is.
+// recursion goes. Both refuse with a message naming which it is. A window has it
+// too: one partition with more rows than the limit refuses, saying so.
 //
 // # What it does not bound
 //
