@@ -96,9 +96,9 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | I5 | ~~**SW**~~ **fixed, step 71** | `IsNotNull` pruning on Struct and List columns uses one leaf's null count — the struct's first field, or the list element, where an empty list counts as null. | `prune.go:63`, `:214-221`. |
 | I6 | ~~**SW**~~ **fixed, step 71** | A List whose element is declared non-null reads `[]` as `[null]`. Spark writes this shape (`containsNull=false`). | `column.go:581`. |
 | I7 ✔ | ~~**SW**~~ **fixed, step 71** | Multi-file CSV skips later headers without checking them: columns are matched by position. | `csv.go:292`. |
-| I8 | **SW** | The CSV writer drops the seconds of a UTC offset, so the written text names an instant 30 s away (Africa/Monrovia 1970, Europe/Amsterdam 1930). Parquet and Arrow are unaffected. | `temporal.go:204`, layout `"Z07:00"`. |
-| I9 | **SW** | CSV inference accepts Go-only syntax: `1_000` becomes 1000, `0x1p3` becomes 8. Polars, pandas and DuckDB all read these as String. | `infer.go:72`. |
-| I10 | SW (low) | In a one-column CSV, an empty line is dropped instead of read as null. | |
+| I8 | ~~**SW**~~ **fixed, step 77** | The CSV writer drops the seconds of a UTC offset, so the written text names an instant 30 s away (Africa/Monrovia 1970, Europe/Amsterdam 1930). Parquet and Arrow are unaffected. | `temporal.go:204`, layout `"Z07:00"`. |
+| I9 | ~~**SW**~~ **fixed, step 77** | CSV inference accepts Go-only syntax: `1_000` becomes 1000, `0x1p3` becomes 8. Polars, pandas and DuckDB all read these as String. | `infer.go:72`. |
+| I10 | ~~SW (low)~~ **fixed, step 77** | In a one-column CSV, an empty line is dropped instead of read as null. | |
 | I11 ✔ | ~~**CR**~~ **fixed, step 72** | A Parquet List of Int8 or Int16 panics. | `parquet.go:710` stores the elements in an `[]int32` buffer. |
 | I12 | ~~**CR**~~ **fixed, step 72** | Corrupt Parquet: in a byte-flip sweep of 7458 runs, 118 panicked inside arrow-go, unrecovered and in a worker goroutine. One file with an inflated `num_rows` **hangs forever and ignores the context**. | `parquet.go:482-484` (`rows == 0 → continue`). |
 | I13 | ~~CR~~ **fixed, step 71** | A required List (level 0 means empty) and a required struct field both raise `ErrInternal`. | `column.go:577`. |
@@ -107,14 +107,15 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | I16 | FR | An unannotated FIXED_LEN_BYTE_ARRAY is typed Binary by the schema and then refused by the reader. | `parquet.go:617`, `types.go:192`. |
 | I17 | FR / ME | List of Uint8, Uint32, Time(ms), Bool or Decimal is refused, with a hint claiming the unsigned and Time types are read. | `parquet.go:732`. |
 | I18 | FR | Null-typed columns are refused by both writers; Polars writes them. | |
-| I19 | FR | The CSV reader refuses the Decimal and Int128 schemas the CSV writer produces, and inference reads a 38-digit decimal or `u64::MAX` as lossy Float64. | |
+| I19 | ~~FR~~ **fixed, step 77** | The CSV reader refuses the Decimal and Int128 schemas the CSV writer produces, and inference reads a 38-digit decimal or `u64::MAX` as lossy Float64. | |
 | I20 | — | Invalid UTF-8 in a String column is never validated, so `SinkParquet` writes an out-of-spec STRING column that Polars and DuckDB refuse. | |
-| I21 | — | A CSV round trip changes float types: integral floats come back Int64, and NaN/Inf come back String. It is exact with `WithSchema`. | |
-| I22 | — | A zero-column frame loses its row count in Parquet, and in CSV becomes a column named `""`. | |
+| I21 | **fixed, step 77** | A CSV round trip changes float types: integral floats come back Int64, and NaN/Inf come back String. It is exact with `WithSchema`. | |
+| I22 | **fixed, step 77** | A zero-column frame loses its row count in Parquet, and in CSV becomes a column named `""`. | |
 | I23 | SW, unmeasured | **Recorded at step 71, not fixed.** arrow-go reports `HasNullCount()` true for every statistic read from a file, so a file written WITHOUT `null_count` reads as having no nulls, and `IsNull` pruning would drop rows; and a one-sided integer or float min/max reads its absent side as 0. Only a third-party writer reaches either — arrow-go and pyarrow always write both — and arrow-go's read API cannot detect them. | arrow-go `statistics_types.gen.go`; recorded in `prune.go`'s header. |
 | I24 | class | **Recorded at step 71.** `data.CheckNonNullable` is on only in test binaries. A null in a column declared non-nullable is therefore `ErrInternal` in the test suite and **silent in production**: I1's nullability case and I13 both reached it, and were loud only because tests ran them. | `internal/data/batch.go`; no production setter. |
 | I25 | ME | **Recorded at step 72.** A panic in `ScanArrow`'s factory is KindIO, but a panic in the `RecordReader` it returns — the caller's code too — is `ErrInternal`, "a bug in ursus". | `arrowsrc` recovers only inside its schema `Once`; `reader.Next` is recovered by the engine's `Pull`. |
 | I26 | low | **Recorded at step 72.** `DataFrame.Rows` decodes no List column: `no decoder for Go type []int64 from column List(Int64)`. | `rows.go` `makeSetter`. Step 72's list cases explode the list instead. |
+| I27 | ~~**SW**~~ **fixed, step 77** | **Found at step 77.** A null String written to CSV is an empty field, and the reader read every empty String field as `""`, so null strings came back as empty strings, silently. The writer's doc called it a property of CSV; Polars writes the empty string as a quoted `""` and reads the two apart. DuckDB reads both as null. | `csv/writer.go` `NullValue`; `csv.go`, the empty-field rule. |
 
 ## 6. Scalar expressions
 
@@ -138,11 +139,11 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | S16 | ME | `FillNan` and `FillNull` errors name their desugaring (`is_not_nan`, `when`) rather than the method called. | |
 | S17 | doc | The Neg/Abs doc says unsigned types are supported; they are refused. | `expr.go:223`. |
 | S18–S20 | low | A strict Int64 → Time cast wraps around the day; a Duration unit cast floors while `TotalSeconds` truncates; Duration `Abs`/`Neg` at MinInt64 wrap silently. | |
-| S21 | low | `Cast(String → Int128)` is refused; `ToUpper("ß")` is `"ß"`. The `Round` doc says half-away "matching Polars", but Polars 1.44 defaults to half-to-even. | |
+| S21 | low, **the cast half fixed, step 77** | ~~`Cast(String → Int128)` is refused;~~ `ToUpper("ß")` is `"ß"`. The `Round` doc says half-away "matching Polars", but Polars 1.44 defaults to half-to-even. | |
 | S22 | CR, not run | **Recorded at step 72, not fixed.** `PadStart`, `PadEnd` and `ZFill` with a huge width allocate it: a fatal out-of-memory, which no recover can catch. Read from the code; running it takes the memory it exhausts. | `strfn.go`, no bound on the width. |
 | S23 | ME | **Recorded at step 72.** A panic in a `MapName` function is `ErrInternal`, where a panicking udf is the caller's KindValue. | `expr.Rename.Fn` is called by the planner with no attribution. |
 | S24 | SW, not run | **Recorded at step 72, not fixed.** `data.NewString` keeps 32-bit offsets, and past 2 GiB of string data in one column they wrap without an error. Read from the code, for the same reason as S22. | `internal/data`, string construction. |
-| S25 | low | **Recorded at step 73, not fixed.** A String → float cast accepts Go's literal syntax, because it is `strconv.ParseFloat`: `"1_000"` is 1000, measured, and hex floats such as `"0x1p3"` parse too. Polars rejects both, and the String → integer parse accepts neither. The CSV reader shares the float grammar. | `castparse.go` `parseFloat`; the parse sweep skips underscore strings for floats rather than pinning either answer. |
+| S25 | ~~low~~ **fixed, step 77** | **Recorded at step 73.** A String → float cast accepts Go's literal syntax, because it is `strconv.ParseFloat`: `"1_000"` is 1000, measured, and hex floats such as `"0x1p3"` parse too. Polars rejects both, and the String → integer parse accepts neither. The CSV reader shares the float grammar. | `castparse.go` `parseFloat`; the parse sweep skips underscore strings for floats rather than pinning either answer. |
 | S26 | low | **Recorded at step 76, not fixed.** Integer `FloorDiv` of MinInt by −1 wraps to MinInt, silently; its quotient is MaxInt+1. Go and Polars both wrap. Int128 `//` and `%` are not implemented at all. | `kernel/scalar.go` `divIntScalar`; `arithI128` has no arm. |
 
 ## 7. Aggregation, sorting and windows
@@ -295,7 +296,13 @@ Ordered by harm per unit of fix, not by count.
    included, in `Truncate` and `GroupByDynamic`; a truncated instant outside the
    type is refused; an empty literal is counted; and the one-sided strips trim
    Unicode whitespace. S26 is new.
-9. Then the rest, by table.
+9. ~~**CSV and I/O**: I8–I10, I19, I21, I22, with S25.~~ **Done — step 77**: an offset
+   with seconds is written in UTC; one float grammar, without underscores or hex; a
+   blank line in a one-column CSV is a null; Int128 and Decimal read from CSV and parse
+   from String, exactly; a float is written so it reads back as one; a frame with rows
+   and no columns is refused by the writers; and a null String and an empty one are
+   written and read apart (I27, found by the step's round-trip sweep).
+10. Then the rest, by table.
 
 Known and excluded, because they were already on the open lists:
 
