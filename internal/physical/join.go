@@ -965,7 +965,7 @@ func (p *joinProbeOp) startBatch(ctx context.Context, in *data.Batch) error {
 	if len(p.keys) == 0 {
 		return nil // cross join: no keys to encode
 	}
-	keyCols, err := evalKeys(ctx, p.keys, in, p.layout.KeyTypes)
+	keyCols, err := evalKeys(ctx, "join", p.keys, in, p.layout.KeyTypes)
 	if err != nil {
 		return err
 	}
@@ -1358,8 +1358,11 @@ func gatherOut(schema *dtype.Schema, layout *plan.JoinLayout, left, right *data.
 		// A cast rather than WithDType, deliberately. WithDType would relabel the
 		// bytes and hand NewBatch something that passes its check while holding
 		// Int32 values in an Int64 column.
+		// Strict, as castKey is: a value the output type cannot hold has already
+		// been refused there, so this cannot fail on a key that matched or was
+		// padded — and if it ever did, a null in its place would be a lie.
 		if f := schema.Field(i); c.DType() != f.Type {
-			if c, err = kernel.Cast(c.Name(), f.Type, false, c); err != nil {
+			if c, err = castKey("join", c, f.Type); err != nil {
 				return nil, err
 			}
 		}
@@ -1406,7 +1409,7 @@ func emptyBatch(s *dtype.Schema) (*data.Batch, error) {
 // bytes with different sign biasing, so an uncast pair NEVER matches and the join
 // silently returns zero rows — the worst kind of wrong answer. The plan layer has
 // already proven a common type exists; this applies it.
-func evalKeys(ctx context.Context, keys []expr.Node, in *data.Batch, types []dtype.DataType) ([]*data.Column, error) {
+func evalKeys(ctx context.Context, op string, keys []expr.Node, in *data.Batch, types []dtype.DataType) ([]*data.Column, error) {
 	out := make([]*data.Column, len(keys))
 	for i, k := range keys {
 		c, err := evalColumn(ctx, k, in)
@@ -1414,13 +1417,38 @@ func evalKeys(ctx context.Context, keys []expr.Node, in *data.Batch, types []dty
 			return nil, err
 		}
 		if i < len(types) && c.DType() != types[i] {
-			if c, err = kernel.Cast(c.Name(), types[i], false, c); err != nil {
+			if c, err = castKey(op, c, types[i]); err != nil {
 				return nil, err
 			}
 		}
 		out[i] = c
 	}
 	return out, nil
+}
+
+// castKey casts a key column to the type the two sides are compared in, STRICTLY.
+//
+// It was non-strict, and a value the promoted type cannot hold — a Datetime(ms) in
+// the year 3000, past int64 nanoseconds — became a NULL key. A null key matches
+// nothing, so a left join showed the row's key as null; under NullsEqual it MATCHED
+// another side's null; and on a non-nullable key column it was ErrInternal. A key
+// that does not survive promotion is a value error about that value, as the as-of
+// join's own key has been since it learned the same lesson. PromoteExact leaves a
+// temporal unit as the one way this can fail: an integer widening cannot.
+func castKey(op string, c *data.Column, to dtype.DataType) (*data.Column, error) {
+	cast, err := kernel.Cast(c.Name(), to, true, c)
+	if err != nil {
+		// Wrapped, because a bare "cast: ..." never mentions the join that asked for
+		// it, and its own hint — use a non-strict cast — is advice this caller cannot
+		// take. The cause keeps the row and the value.
+		return nil, uerr.Wrap(err, uerr.KindValue, op,
+			"the key %q does not fit %s, the type the two sides are compared in",
+			c.Name(), to).
+			Hint("both sides of a join cast each key to one promoted type").
+			Hint("give the two sides the same key type, or narrow the one whose " +
+				"range is too wide, before joining")
+	}
+	return cast, nil
 }
 
 // keyValidity reports, per row, whether EVERY key column is valid.

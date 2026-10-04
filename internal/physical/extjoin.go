@@ -246,7 +246,7 @@ func (s *joinBuildSink) repartition(ctx context.Context) error {
 // SAME code with the same predicate, rather than two that have to agree.
 func (s *joinBuildSink) classify(ctx context.Context, in *data.Batch) error {
 	n := in.Rows()
-	keyCols, err := evalKeys(ctx, s.keys, in, s.layout.KeyTypes)
+	keyCols, err := evalKeys(ctx, "join", s.keys, in, s.layout.KeyTypes)
 	if err != nil {
 		return err
 	}
@@ -318,7 +318,7 @@ func (s *joinBuildSink) classify(ctx context.Context, in *data.Batch) error {
 // sub-sink's own admit if it is not; a duplicate spanning two buckets cannot exist,
 // and one spanning the resident set and a bucket cannot either.
 func (s *joinBuildSink) admit(ctx context.Context, in *data.Batch, rowBase int) error {
-	keyCols, err := evalKeys(ctx, s.keys, in, s.layout.KeyTypes)
+	keyCols, err := evalKeys(ctx, "join", s.keys, in, s.layout.KeyTypes)
 	if err != nil {
 		return err
 	}

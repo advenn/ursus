@@ -151,7 +151,10 @@ func (s *asOfBuildSink) bucket(ctx context.Context, right *data.Batch) (map[stri
 		}
 		return map[string][]int32{"": rows}, nil
 	}
-	cols, err := evalKeys(ctx, s.rightBy, right, nil)
+	// Cast to the promoted by-key types, KeyTypes[1:] — [0] is the On key. These
+	// were never cast, so an Int32 by-key and an Int64 one encoded to different
+	// bytes and no row ever matched, while the schema showed the promoted type.
+	cols, err := evalKeys(ctx, "join_asof", s.rightBy, right, s.layout.KeyTypes[1:])
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +281,7 @@ func (p *asOfProbeOp) match(ctx context.Context, in *data.Batch) (*data.Batch, e
 
 	var byEnc *kernel.GroupKeyEncoder
 	if len(s.leftBy) > 0 {
-		cols, err := evalKeys(ctx, s.leftBy, in, nil)
+		cols, err := evalKeys(ctx, "join_asof", s.leftBy, in, s.layout.KeyTypes[1:])
 		if err != nil {
 			return nil, err
 		}

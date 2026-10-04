@@ -25,15 +25,11 @@ import (
 
 // knownJoinDefects names each case that answers wrongly today, with what it answers.
 var knownJoinDefects = map[string]string{
-	"J1 AsOfBy Int32 against Int64":                             "no match: the by-keys are never cast",
-	"J2 Datetime(ms) year 3000 against Datetime(ns), left join": "ErrInternal: the key cast to ns is a null",
-	"J2 the same, nullable key":                                 "a null key, silently",
-	"J2 the same, under NullsEqual against a null key":          "ErrInternal: the null key matched the right null",
-	"J3 spilled right join, key (1, null)":                      "k1 is null: coalesced from the left's padding",
-	"J5 1:m with unmatched duplicate left keys":                 "passes: an unmatched key is never checked",
-	"J5 1:m with duplicate null left keys under NullsEqual":     "passes",
-	"J6 AsOfBy null by-keys":                                    "the null by-key matched the right null",
-	"O6 filter on a coalesced key of two widths":                "0 rows: k*k computed at Int32 in the pushed filter",
+	"J3 spilled right join, key (1, null)":                  "k1 is null: coalesced from the left's padding",
+	"J5 1:m with unmatched duplicate left keys":             "passes: an unmatched key is never checked",
+	"J5 1:m with duplicate null left keys under NullsEqual": "passes",
+	"J6 AsOfBy null by-keys":                                "the null by-key matched the right null",
+	"O6 filter on a coalesced key of two widths":            "0 rows: k*k computed at Int32 in the pushed filter",
 }
 
 type joinCase struct {
