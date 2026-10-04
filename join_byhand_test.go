@@ -84,6 +84,15 @@ func TestJoinKeysByHand(t *testing.T) {
 					ursus.Values("rv", []int64{100, 200})), ursus.AsOfOn(c("k")), ursus.AsOfBy(c("g"))).
 				Select(c("lv"), c("rv")),
 			want: ursus.Frame(ursus.Values("lv", []int64{0, 1}), ursus.Values("rv", []int64{100, 200}))},
+		// The other way round: the narrow by-key on the right, so each side's cast is
+		// what one of these two cases depends on.
+		{name: "J1 AsOfBy Int64 against Int32",
+			got: ursus.Frame(ursus.Values("k", []int64{10, 20}), ursus.Values("g", []int64{1, 2}),
+				ursus.Values("lv", []int64{0, 1})).
+				JoinAsOf(ursus.Frame(ursus.Values("k", []int64{5, 15}), ursus.Values("g", []int32{1, 2}),
+					ursus.Values("rv", []int64{100, 200})), ursus.AsOfOn(c("k")), ursus.AsOfBy(c("g"))).
+				Select(c("lv"), c("rv")),
+			want: ursus.Frame(ursus.Values("lv", []int64{0, 1}), ursus.Values("rv", []int64{100, 200}))},
 
 		// --- J2: a temporal key the finer unit cannot hold ---
 		{name: "J2 Datetime(ms) year 3000 against Datetime(ns), left join",
