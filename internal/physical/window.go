@@ -54,6 +54,11 @@ type windowSink struct {
 	mem        *execopt.Account
 	stateBytes int64
 
+	// copy is every distinct allocation the retained rows hold, reserved as the
+	// copy Finish's Concat will make of them. Uncharged, the ledger saw half the
+	// true peak, and the limit was enforced against that half.
+	copy data.BufferSet
+
 	// The spill state, idle until the query goes over its limit: extwindow.go.
 	exprs       []expr.Node // the window expressions, to build fresh sinks from
 	budget      *execopt.Budget
@@ -117,6 +122,7 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 	}
 	s.rows = append(s.rows, in)
 	s.mem.Retain(in)
+	s.copy.AddBatch(in)
 
 	// Assign group ids for every partitioning, keeping this batch's ids separate so
 	// the accumulators can be fed with them before they are appended to the running
@@ -166,9 +172,9 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 		}
 	}
 
-	st := int64(0)
+	st := s.copy.Total()
 	for _, p := range s.parts {
-		st += int64(cap(p.perRow)) * 4
+		st += int64(cap(p.perRow))*4 + p.ids.NBytes()
 	}
 	for i := range s.specs {
 		if s.specs[i].acc != nil {

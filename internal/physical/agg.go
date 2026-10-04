@@ -467,7 +467,7 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 	for _, a := range s.accs {
 		acc += a.NBytes()
 	}
-	acc += int64(cap(s.firstSeen)) * 8
+	acc += int64(cap(s.firstSeen))*8 + s.ids.NBytes()
 	s.mem.RetainBytes(acc - s.accBytes)
 	s.accBytes = acc
 	s.nRows += int64(n)
@@ -568,7 +568,7 @@ func (s *hashAggSink) Merge(other Sink) error {
 	for _, a := range s.accs {
 		acc += a.NBytes()
 	}
-	acc += int64(cap(s.firstSeen)) * 8
+	acc += int64(cap(s.firstSeen))*8 + s.ids.NBytes()
 	s.mem.RetainBytes(acc - s.accBytes)
 	s.accBytes = acc
 	return nil

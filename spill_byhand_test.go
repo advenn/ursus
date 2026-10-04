@@ -28,11 +28,7 @@ import (
 // knownSpillDefects names each case that answers wrongly today, with what it
 // answers.
 var knownSpillDefects = map[string]string{
-	"over is charged for the copy Finish makes":         "Peak is the input once",
-	"join_asof is charged for the copy Probe makes":     "Peak is the right side once",
-	"join_asof refuses between one and two right sides": "answers: the copy is not charged",
-	"group_by is charged for its key table":             "the key table is not charged",
-	"the hint says what spills and what fails":          "names neither join_asof nor merge_sorted, and says unique fails",
+	"the hint says what spills and what fails": "names neither join_asof nor merge_sorted, and says unique fails",
 }
 
 // spillFrame is n rows: k = i*7919 % keys, seq = i, a 32-byte pad, and f, a Float64

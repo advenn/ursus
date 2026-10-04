@@ -57,8 +57,12 @@ type asOfBuildSink struct {
 
 	mem   *execopt.Account
 	parts []*data.Batch
-	keys  []int64 // the ordering key, whole stream, in input order
-	nRows int
+	// copy is every distinct allocation parts hold, reserved as the copy Probe's
+	// Concat makes of them; reserved is what has been charged for it.
+	copy     data.BufferSet
+	reserved int64
+	keys     []int64 // the ordering key, whole stream, in input order
+	nRows    int
 
 	sorted bool
 	badRow int
@@ -92,7 +96,9 @@ func (s *asOfBuildSink) Consume(ctx context.Context, in *data.Batch) error {
 	s.keys = append(s.keys, ks...)
 	s.parts = append(s.parts, in)
 	s.mem.Retain(in)
-	s.mem.RetainBytes(int64(n) * 8)
+	s.copy.AddBatch(in)
+	s.mem.RetainBytes(int64(n)*8 + s.copy.Total() - s.reserved)
+	s.reserved = s.copy.Total()
 	s.nRows += n
 	return s.mem.Check()
 }
@@ -131,6 +137,15 @@ func (s *asOfBuildSink) Probe(ctx context.Context, probe Operator) (Operator, er
 	}
 	buckets, err := s.bucket(ctx, right)
 	if err != nil {
+		return nil, err
+	}
+	// The bucket map: an int32 per right row, and a key and two headers per bucket.
+	held := int64(right.Rows()) * 4
+	for k, rows := range buckets {
+		held += int64(len(k)) + 56 + int64(cap(rows)-len(rows))*4
+	}
+	s.mem.RetainBytes(held)
+	if err := s.mem.Check(); err != nil {
 		return nil, err
 	}
 	pad, err := emptyBatch(s.right)

@@ -80,7 +80,7 @@ func (s *windowSink) startSpill(ctx context.Context) error {
 	}
 	s.spilling = true
 	rows := s.rows
-	s.rows, s.specs = nil, nil
+	s.rows, s.specs, s.copy = nil, nil, data.BufferSet{}
 	for _, p := range s.parts {
 		p.ids, p.perRow = nil, nil
 	}

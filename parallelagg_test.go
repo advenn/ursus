@@ -315,7 +315,10 @@ func TestMemoryLimitDisablesParallelAggregation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a memory-limited parallel aggregation must fall back, not fail: %v", err)
 	}
-	ursustest.AssertFrameEqual(t, got, want)
+	// Content, not order: an unordered group-by's row order under a limit depends on
+	// where it froze, as WithMemoryLimit documents. The order matched here only
+	// while the key table went uncharged and the freeze came after the last new key.
+	ursustest.AssertFrameEqual(t, got, want, ursustest.IgnoreRowOrder())
 }
 
 // TestParallelAggregationIsNotASemanticKnob: thread count is not a semantic knob,
