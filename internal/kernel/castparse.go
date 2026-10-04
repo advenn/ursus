@@ -218,7 +218,7 @@ func decimalInteger(s string) bool {
 // rounding, as it is for every cast to a float — and accepts "inf" and "NaN".
 func parseFloat[T ~float32 | ~float64](bits int) func(string) (T, parseResult) {
 	return func(s string) (T, parseResult) {
-		v, err := strconv.ParseFloat(s, bits)
+		v, err := dtype.ParseFloat(s, bits)
 		switch {
 		case errors.Is(err, strconv.ErrRange):
 			return 0, outOfRange

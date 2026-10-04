@@ -69,7 +69,7 @@ func classify(f []byte, isNull func([]byte) bool) inferred {
 	if _, err := strconv.ParseInt(str(f), 10, 64); err == nil {
 		return infInt
 	}
-	if _, err := strconv.ParseFloat(str(f), 64); err == nil {
+	if _, err := dtype.ParseFloat(str(f), 64); err == nil {
 		// ParseFloat accepts "inf" and "nan", which in a text column are far more
 		// likely to be words than numbers. Require a digit somewhere.
 		if hasDigit(f) {

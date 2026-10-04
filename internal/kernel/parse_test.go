@@ -147,14 +147,11 @@ var floatSpecials = map[string]float64{
 }
 
 // malformed is text that is no number at all, for any target.
-var malformed = []string{"", " 1", "1 ", "abc", "1e", "--1", "+-1", ".", "-", "+", "1/2", "0x10", "1_000"}
+var malformed = []string{"", " 1", "1 ", "abc", "1e", "--1", "+-1", ".", "-", "+", "1/2", "0x10", "1_000", "0x1p3"}
 
 // parseWant is the oracle's answer for s cast to dt: a value, or unrepresentable
 // (an integer out of range, a float that overflows), or malformed.
 type parseWant struct {
-	// skip is text a float parse accepts as Go syntax and this oracle does not judge:
-	// "1_000". That grammar is recorded as out of scope, not pinned either way.
-	skip                       bool
 	malformed, unrepresentable bool
 	i                          *big.Int
 	f                          float64
@@ -174,10 +171,9 @@ func oracle(s string, dt dtype.DataType) parseWant {
 	if f, ok := floatSpecials[s]; ok {
 		return parseWant{f: f}
 	}
-	if strings.Contains(s, "_") {
-		return parseWant{skip: true}
-	}
-	if strings.ContainsAny(s, "/xX") { // big.Rat reads fractions and prefixes; a float parse does not
+	// Go's float syntax takes "1_000" and "0x1p3"; the one float grammar does not
+	// (step 77, dtype.ParseFloat), and until then this oracle skipped them.
+	if strings.ContainsAny(s, "_/xX") { // big.Rat reads fractions and prefixes; a float parse does not
 		return parseWant{malformed: true}
 	}
 	r, ok := new(big.Rat).SetString(s)
@@ -264,7 +260,7 @@ func TestStringParsesAreExactOrRefused(t *testing.T) {
 		if w := oracle(s, dtype.Int64); !w.malformed {
 			t.Fatalf("the integer oracle accepts %q", s)
 		}
-		if w := oracle(s, dtype.Float64); !w.malformed && !w.skip {
+		if w := oracle(s, dtype.Float64); !w.malformed {
 			t.Fatalf("the float oracle accepts %q", s)
 		}
 	}
@@ -282,9 +278,6 @@ func TestStringParsesAreExactOrRefused(t *testing.T) {
 		lossy := readParsed(t, lossyCol)
 		for i, s := range strs {
 			w := oracle(s, dt)
-			if w.skip {
-				continue
-			}
 			values++
 			switch g := lossy[i]; {
 			case w.malformed || w.unrepresentable:

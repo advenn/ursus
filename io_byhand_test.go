@@ -25,10 +25,6 @@ import (
 
 // knownIODefects names each case that answers wrongly today, with what it answers.
 var knownIODefects = map[string]string{
-	"I9 inference of 1_000 and 0x1p3":                             "Float64 1000 and 8",
-	"I9 a Float64 schema refuses 1_000":                           "read as 1000",
-	"S25 Cast(String→Float64) refuses 1_000 and 0x1p3":            "parsed as 1000",
-	"S25 CastLossy(String→Float64) of 0x1p3 is null":              "8",
 	"I10 a blank line in a one-column Int64 CSV":                  "the line dropped",
 	"I10 a blank line in a one-column String CSV":                 "the line dropped",
 	"I10 a trailing blank line":                                   "the line dropped",

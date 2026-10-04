@@ -190,12 +190,12 @@ func newBuilder(dt dtype.DataType) (colBuilder, error) {
 	case dtype.TypeFloat32:
 		return &fixedBuilder[float32]{dt: dt, valid: bitmap.NewBuilder(0),
 			parse: func(b []byte) (float32, error) {
-				v, err := strconv.ParseFloat(str(b), 32)
+				v, err := dtype.ParseFloat(str(b), 32)
 				return float32(v), err
 			}}, nil
 	case dtype.TypeFloat64:
 		return &fixedBuilder[float64]{dt: dt, valid: bitmap.NewBuilder(0),
-			parse: func(b []byte) (float64, error) { return strconv.ParseFloat(str(b), 64) }}, nil
+			parse: func(b []byte) (float64, error) { return dtype.ParseFloat(str(b), 64) }}, nil
 	case dtype.TypeString:
 		// offs is seeded with its leading zero here rather than branched on per
 		// append; finish preserves it, so the hot path never tests for it.
