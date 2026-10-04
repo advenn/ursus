@@ -57,8 +57,9 @@ func WithSchemaOverrides(m map[string]dtype.DataType) CSVOption {
 // which is exact and, on a large file, expensive. Default 100.
 func WithInferRows(n int) CSVOption { return func(o *csv.Options) { o.InferRows = n } }
 
-// WithNullValues adds texts that mean NULL. The empty string already means null
-// for every type except String, where "" is a value.
+// WithNullValues adds texts that mean NULL. An empty field already means null for
+// every type; in a String column a quoted "" is the empty string, as Polars reads
+// it, so the two stay apart.
 func WithNullValues(vals ...string) CSVOption {
 	return func(o *csv.Options) { o.NullValues = vals }
 }
@@ -189,10 +190,9 @@ func WithLineTerminator(s string) CSVWriteOption {
 
 // WithNullValue sets the text written for a null. Default "".
 //
-// The default reads back as null for every type except String, where "" is a real
-// value the reader cannot distinguish from a missing one. A round trip that must
-// preserve null strings needs a sentinel on both sides: WithNullValue("\\N") here
-// and WithNullValues("\\N") on the read.
+// The default reads back as null for every type. An empty String is written as a
+// quoted "", which reads back as the empty string, so null and empty strings both
+// round-trip — as Polars writes and reads them.
 func WithNullValue(s string) CSVWriteOption { return func(o *csv.WriteOptions) { o.NullValue = s } }
 
 // SinkCSV runs the query and writes the result to path, streaming.

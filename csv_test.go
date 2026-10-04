@@ -61,9 +61,12 @@ func TestScanCSVInfersTypes(t *testing.T) {
 }
 
 // TestScanCSVEmptyStringIsNotNull is the other half of the same decision. For a
-// String column "" is a value; conflating it with null would be unrecoverable.
+// String column "" is a value; conflating it with null would be unrecoverable. So
+// the two are spelled apart: a quoted "" is the empty string, and an empty field is
+// null, as Polars reads them. Until step 77 every empty String field was "", and a
+// null String could not be written at all without a sentinel.
 func TestScanCSVEmptyStringIsNotNull(t *testing.T) {
-	path := writeFile(t, "s.csv", "a,b\n,x\n")
+	path := writeFile(t, "s.csv", "a,b\n\"\",x\n,y\n")
 	df, err := ursus.ScanCSV(path).Collect(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -73,7 +76,10 @@ func TestScanCSVEmptyStringIsNotNull(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !ok || v != "" {
-		t.Errorf("empty String field = (%q, valid %v), want (\"\", true)", v, ok)
+		t.Errorf("a quoted empty String field = (%q, valid %v), want (\"\", true)", v, ok)
+	}
+	if _, ok, _ := df.At[string](1, "a"); ok {
+		t.Error("an unquoted empty String field must be null")
 	}
 }
 
@@ -326,10 +332,14 @@ func TestCSVRoundTrip(t *testing.T) {
 	}
 }
 
-// TestCSVRoundTripNullStrings covers the one thing CSV cannot express by default.
-// "" and NULL are the same four columns of nothing, so preserving the difference
-// needs a sentinel on BOTH sides — and the default losing it is a property of the
-// format, not a defect to be hidden.
+// TestCSVRoundTripNullStrings: "" and NULL round-trip by default, and with a
+// sentinel too.
+//
+// This test used to pin the opposite — "the default losing it is a property of the
+// format" — and its own assertion said that if it ever passed, the documented
+// limitation was wrong. It was: quoting tells them apart. The writer writes the
+// empty string as a quoted "" and a null as nothing, and the reader reads them
+// back that way, as Polars does (step 77, I27).
 func TestCSVRoundTripNullStrings(t *testing.T) {
 	src := ursus.Frame(
 		ursus.ValuesNullable("s", []string{"a", "", ""}, []bool{true, true, false}),
@@ -340,17 +350,16 @@ func TestCSVRoundTripNullStrings(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "ns.csv")
 
-	// Default: the null and the empty string come back identical.
+	// Default: the null and the empty string come back apart.
 	if err := src.SinkCSV(t.Context(), path); err != nil {
 		t.Fatal(err)
 	}
-	lossy, err := ursus.ScanCSV(path, ursus.WithSchema(want.Schema())).Collect(t.Context())
+	plain, err := ursus.ScanCSV(path, ursus.WithSchema(want.Schema())).Collect(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lossy.String() == want.String() {
-		t.Error("without a sentinel, null and \"\" must be indistinguishable; " +
-			"if this passes the documented limitation is wrong")
+	if plain.String() != want.String() {
+		t.Errorf("the default round trip should keep null and \"\" apart\ngot:\n%s\nwant:\n%s", plain, want)
 	}
 
 	// With a sentinel on both sides, the round trip is exact.
@@ -466,7 +475,7 @@ func TestScanCSVStringBufferIntegrity(t *testing.T) {
 		want string
 		null bool
 	}{
-		{text: "", want: ""},
+		{text: `""`, want: ""}, // quoted: an unquoted empty field is a null
 		{text: "héllo", want: "héllo"},
 		{text: `\N`, null: true}, // between two multi-byte values on purpose
 		{text: "日本語", want: "日本語"},

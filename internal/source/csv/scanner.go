@@ -81,6 +81,9 @@ func (s *scanner) SetWidth(n int) { s.width = n }
 type fieldRef struct {
 	off, n int
 	esc    bool
+	// quoted says the field was written in quotes. It is how an empty String is
+	// told from a null: `""` is the empty string and an empty field is null.
+	quoted bool
 }
 
 const (
@@ -122,8 +125,10 @@ func (s *scanner) Err() error {
 	return s.err
 }
 
-// NumFields and Field expose the current record.
-func (s *scanner) NumFields() int { return len(s.fields) }
+// NumFields and Field expose the current record, and Quoted whether field i was
+// written in quotes.
+func (s *scanner) NumFields() int    { return len(s.fields) }
+func (s *scanner) Quoted(i int) bool { return s.fields[i].quoted }
 
 func (s *scanner) Field(i int) []byte {
 	f := s.fields[i]
@@ -365,9 +370,9 @@ func (s *scanner) quotedField(b []byte, i int, atEOF bool, nlSoFar int) (consume
 	if esc || bytes.Contains(content, crlf) {
 		off := len(s.unesc)
 		s.unesc = appendNormalised(s.unesc, content, s.quote)
-		s.fields = append(s.fields, fieldRef{off: off, n: len(s.unesc) - off, esc: true})
+		s.fields = append(s.fields, fieldRef{off: off, n: len(s.unesc) - off, esc: true, quoted: true})
 	} else {
-		s.fields = append(s.fields, fieldRef{off: start, n: len(content)})
+		s.fields = append(s.fields, fieldRef{off: start, n: len(content), quoted: true})
 	}
 
 	// What follows the closing quote must be a separator or a line terminator.

@@ -22,9 +22,7 @@ import (
 )
 
 // knownCSVRoundTripDefects names each type and route that does not round-trip today.
-var knownCSVRoundTripDefects = map[string]string{
-	"String by schema": "I27: a null is written empty and read back as \"\"",
-}
+var knownCSVRoundTripDefects = map[string]string{}
 
 // nullAtEnd is a validity of n set rows and one unset.
 func nullAtEnd(n int) []bool {

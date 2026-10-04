@@ -24,11 +24,7 @@ import (
 )
 
 // knownIODefects names each case that answers wrongly today, with what it answers.
-var knownIODefects = map[string]string{
-	"I10 a blank line in a one-column String CSV": "\"\": an empty String field is not null until I27",
-	"I27 a null String round-trips":               "read back as \"\"",
-	"I27 an unquoted empty String field is null":  "\"\"",
-}
+var knownIODefects = map[string]string{}
 
 type ioCase struct {
 	name string

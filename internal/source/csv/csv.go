@@ -526,9 +526,7 @@ func (r *reader) appendRecord() error {
 		}
 		f := r.sc.Field(i)
 		b := r.builders[pos]
-		// An empty field is null for every type except String, where "" is a
-		// value and losing the distinction would be unrecoverable.
-		if r.isNull(f) || (len(f) == 0 && r.out.Field(pos).Type.ID() != dtype.TypeString) {
+		if r.isNull(f) || r.emptyIsNull(i, pos, f) {
 			b.appendNull()
 			continue
 		}
@@ -542,6 +540,18 @@ func (r *reader) appendRecord() error {
 		}
 	}
 	return nil
+}
+
+// emptyIsNull reports whether field i, for output column pos, is a null because it
+// is empty. An empty field is null for every type; for a String, only when it was
+// not quoted, because `""` is the empty string — the two a String column must keep
+// apart, and as Polars writes and reads them. Every empty String field used to be
+// "", so a null String written as an empty field came back as "".
+func (r *reader) emptyIsNull(i, pos int, f []byte) bool {
+	if len(f) != 0 {
+		return false
+	}
+	return r.out.Field(pos).Type.ID() != dtype.TypeString || !r.sc.Quoted(i)
 }
 
 // stageRecord copies the current record's wanted fields into the per-column
@@ -563,10 +573,7 @@ func (r *reader) stageRecord() error {
 			continue // outside the projection: split past, never parsed
 		}
 		f := r.sc.Field(i)
-		// An empty field is null for every type except String, where "" is a
-		// value and losing the distinction would be unrecoverable.
-		isNull := r.isNull(f) ||
-			(len(f) == 0 && r.out.Field(pos).Type.ID() != dtype.TypeString)
+		isNull := r.isNull(f) || r.emptyIsNull(i, pos, f)
 		r.stage[pos].add(f, isNull)
 	}
 	// A short record pads the missing columns with nulls; only reachable with

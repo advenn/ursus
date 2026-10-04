@@ -25,13 +25,10 @@ type WriteOptions struct {
 	LineTerminator string
 
 	// NullValue is the text written for a null. It defaults to the empty string,
-	// which reads back as null for every type EXCEPT String — where "" is a real
-	// value and the reader cannot tell the two apart.
-	//
-	// That asymmetry is a property of CSV, not a bug here: the format has no way to
-	// distinguish an absent value from an empty one. A round trip that must
-	// preserve null strings needs a sentinel on both sides — WithNullValue("\\N")
-	// when writing and WithNullValues("\\N") when reading.
+	// which reads back as null for every type. An empty String is written quoted,
+	// as "", which reads back as the empty string, so the two stay apart — as
+	// Polars writes and reads them. This used to say the format cannot tell them
+	// apart; quoting can.
 	NullValue string
 }
 
@@ -101,16 +98,12 @@ func (w *Writer) WriteBatch(b *data.Batch) error {
 			}
 			w.line = w.fmts[c](w.line, row)
 		}
-		// A record that renders to nothing at all is a blank line, and every CSV
-		// reader — this one and encoding/csv both — skips blank lines. That silently
-		// DELETES the row. It happens for a one-column frame holding "" (or a null
-		// under the default empty NullValue), which is not an exotic case.
-		//
-		// Writing a bare pair of quotes makes it an empty field rather than an empty
-		// line. encoding/csv's writer has the same special case for the same reason.
-		if len(w.line) == 0 {
-			w.line = append(w.line, w.o.Quote, w.o.Quote)
-		}
+		// A record that renders to nothing at all is a blank line: a one-column
+		// frame's null under the default empty NullValue. This writer used to write
+		// a bare pair of quotes instead, because a blank line was skipped; it no
+		// longer is in a one-column file, and `""` is now the empty string, so the
+		// blank line is what reads back as the null — as it does in Polars and
+		// DuckDB. An empty string is "" from appendQuoted, never blank.
 		w.line = append(w.line, w.o.LineTerminator...)
 		if _, err := w.w.Write(w.line); err != nil {
 			return uerr.Wrap(err, uerr.KindIO, "sink_csv", "writing a record")
@@ -167,9 +160,10 @@ func (w *Writer) begin(s *dtype.Schema) error {
 //
 // The rule is the conventional one: quote if the value contains the separator, a
 // quote, or a line terminator, or if it begins with a space (which some readers
-// would otherwise strip).
+// would otherwise strip) — and quote the empty string, so that `""` is "" and an
+// empty field is a null, which is how the reader tells them apart.
 func (w *Writer) appendQuoted(dst []byte, s string) []byte {
-	need := len(s) > 0 && s[0] == ' '
+	need := len(s) == 0 || s[0] == ' '
 	for i := 0; i < len(s) && !need; i++ {
 		switch s[i] {
 		case w.o.Separator, w.o.Quote, '\n', '\r':
