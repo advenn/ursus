@@ -19,10 +19,7 @@ import (
 )
 
 // knownAggDefects names each case that answers wrongly today, with what it answers.
-var knownAggDefects = map[string]string{
-	"A14 GroupByDynamic with Closed(99)": "answered as ClosedLeft",
-	"A14 IsBetween with Closed(99)":      "answered as ClosedLeft",
-}
+var knownAggDefects = map[string]string{}
 
 type aggCase struct {
 	name   string
@@ -155,6 +152,11 @@ func TestAggregationsAndWindowsByHand(t *testing.T) {
 		{name: "A14 GroupByDynamic with Closed(99)",
 			got: hourly(t, "2024-01-01T00:10:00", "2024-01-01T01:05:00").
 				GroupByDynamic(c("ts"), ursus.DynamicOptions{Every: ursus.Every("1h"), Closed: ursus.Closed(99)}).
+				Agg(ursus.Len()),
+			refuse: []string{"Closed"}},
+		{name: "A14 Rolling with Closed(99)",
+			got: hourly(t, "2024-01-01T00:10:00", "2024-01-01T01:05:00").
+				Rolling(c("ts"), ursus.RollingOptions{Period: ursus.Every("1h"), Closed: ursus.Closed(99)}).
 				Agg(ursus.Len()),
 			refuse: []string{"Closed"}},
 		{name: "A14 IsBetween with Closed(99)",

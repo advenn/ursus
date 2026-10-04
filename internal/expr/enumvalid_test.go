@@ -1,7 +1,7 @@
 package expr_test
 
-// RankMethod and Interpolation are public integer types, so RankMethod(99) and
-// Interpolation(99) compile. Resolution refuses them, on every route a plan can
+// RankMethod, Interpolation and Closed are public integer types, so RankMethod(99),
+// Interpolation(99) and Closed(99) compile. Resolution refuses them, on every route a plan can
 // take — including a plan built by hand and handed to FromPlan, which no public
 // constructor checks.
 
@@ -25,7 +25,12 @@ func TestEveryDeclaredMethodIsValid(t *testing.T) {
 			t.Errorf("Interpolation %s is declared and not Valid", i)
 		}
 	}
-	if expr.RankMethod(99).Valid() || expr.Interpolation(99).Valid() {
+	for c := expr.ClosedDefault; c.String() != "?"; c++ {
+		if !c.Valid() {
+			t.Errorf("Closed %s is declared and not Valid", c)
+		}
+	}
+	if expr.RankMethod(99).Valid() || expr.Interpolation(99).Valid() || expr.Closed(99).Valid() {
 		t.Error("99 is Valid")
 	}
 }

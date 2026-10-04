@@ -375,6 +375,11 @@ func (e Expr) IsBetween[L, H Operand](lo L, hi H, closed ...Closed) Expr {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "is_between",
 			"is_between takes at most one Closed, got %d", len(closed))})
 	}
+	if !c.Valid() {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "is_between",
+			"Closed(%d) is not a declared Closed", uint8(c)).
+			Hint("use ClosedLeft, ClosedRight, ClosedBoth or ClosedNone")})
+	}
 	lower := e.Ge(lo)
 	if c.LowerOpen() {
 		lower = e.Gt(lo)

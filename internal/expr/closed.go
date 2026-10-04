@@ -66,6 +66,11 @@ func (c Closed) String() string {
 	return "?"
 }
 
+// Valid reports whether c is one of the declared values. Closed is a public integer
+// type, so Closed(99) compiles; it used to answer as ClosedLeft, because LowerOpen
+// and UpperClosed both say no to it. Every consumer refuses it instead.
+func (c Closed) Valid() bool { return c < closedCount }
+
 // Or resolves ClosedDefault to the caller's own convention and leaves anything else
 // alone. Every consumer calls this exactly once, at the edge, so the rest of the code
 // never has to wonder whether it is holding a resolved value.

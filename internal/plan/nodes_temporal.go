@@ -166,6 +166,13 @@ func (t *TemporalGroup) Schema() (*dtype.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Here rather than at the builder, so a plan handed to FromPlan is checked too,
+	// and so CollectSchema and Explain refuse what Collect would.
+	if !t.Closed.Valid() {
+		return nil, uerr.New(uerr.KindValue, t.op(),
+			"Closed(%d) is not a declared Closed", uint8(t.Closed)).
+			Hint("use ClosedLeft, ClosedRight, ClosedBoth or ClosedNone, or leave it unset for the default")
+	}
 
 	fields := make([]dtype.Field, 0, 1+len(t.Keys)+len(t.Aggs))
 	idx, err := expr.Resolve(t.Index, in)
