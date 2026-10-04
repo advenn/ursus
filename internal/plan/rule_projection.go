@@ -192,7 +192,15 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 			need[name] = struct{}{}
 		}
 		for i := len(t.Exprs) - 1; i >= 0; i-- {
-			delete(need, defs[i])
+			// A name that redefines an input column the parent wants stays required,
+			// although its old values are never read: the input column is what puts
+			// the redefinition in place. Dropped, the redefinition was appended at
+			// the end — {x, w, y} came out {x, y, w}, where CollectSchema promised
+			// the first — in 132 shapes of step 70's differential (P1).
+			_, wanted := required[defs[i]]
+			if !wanted || in.IndexOf(defs[i]) < 0 {
+				delete(need, defs[i])
+			}
 			for _, name := range expr.RootNames(t.Exprs[i]) {
 				need[name] = struct{}{}
 			}

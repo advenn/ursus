@@ -642,11 +642,6 @@ var knownDifferentialMismatches = map[string]knownMismatch{
 	// merging the stacked filters was the whole problem.
 	"O8b": {2, "a fallible filter is pushed below a Distinct, ahead of a guard that stays"},
 	"O9":  {1, "a filter below Unique can tell -0 from +0, which Unique merges"},
-	// 106 before O1 was fixed. O1's wrong substitution made the pushed filter read
-	// the input's column, which kept projection pushdown reading it, which hid P1
-	// in 26 shapes.
-	"P1": {132, "projection pushdown stops reading a column a WithColumns redefines, and " +
-		"the redefinition then lands at the end instead of in place"},
 }
 
 // judge compares the attributed mismatches with the ratchet and returns every
