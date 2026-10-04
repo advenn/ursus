@@ -24,8 +24,6 @@ import (
 
 // knownScalarDefects names each case that answers wrongly today, with what it answers.
 var knownScalarDefects = map[string]string{
-	"S5 Epoch of 1969-12-31T23:59:59.5":            "0",
-	"S5 Epoch of -1ns":                             "0",
 	"S6 Int64 IsIn(\"1\")":                         "matched",
 	"S6 Bool IsIn(1)":                              "matched",
 	"S6 String IsIn(1)":                            "matched",

@@ -54,7 +54,8 @@ func (d DtExpr) Quarter() Expr { return d.call(expr.FnDtQuarter) }
 // week of a year can begin in the previous one.
 func (d DtExpr) Week() Expr { return d.call(expr.FnDtWeek) }
 
-// Epoch is whole seconds since 1970-01-01T00:00:00Z.
+// Epoch is whole seconds since 1970-01-01T00:00:00Z, floored: the second an
+// instant lies in, so half a second before the epoch is -1.
 func (d DtExpr) Epoch() Expr { return d.call(expr.FnDtEpoch) }
 
 // Truncate floors an instant to a multiple of every, toward negative infinity so

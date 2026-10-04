@@ -96,7 +96,15 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 				vals[i] = t * secPerTick
 				continue
 			}
-			vals[i] = t / (nsPerSec / npt)
+			// Floored, not truncated: the epoch second an instant lies IN, so
+			// 1969-12-31T23:59:59.5 is -1, as Truncate and Polars floor. Go's / rounds
+			// toward zero and answered 0, the second after it.
+			per := nsPerSec / npt
+			q := t / per
+			if t%per != 0 && t < 0 {
+				q--
+			}
+			vals[i] = q
 		}
 		return data.NewFixed(name, out, vals, valid), nil
 	}
