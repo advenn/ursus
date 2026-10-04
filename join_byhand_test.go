@@ -24,9 +24,7 @@ import (
 )
 
 // knownJoinDefects names each case that answers wrongly today, with what it answers.
-var knownJoinDefects = map[string]string{
-	"O6 filter on a coalesced key of two widths": "0 rows: k*k computed at Int32 in the pushed filter",
-}
+var knownJoinDefects = map[string]string{}
 
 type joinCase struct {
 	name   string

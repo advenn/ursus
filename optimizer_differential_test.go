@@ -637,7 +637,6 @@ func classify(name, detail string, guilty []string) string {
 var knownDifferentialMismatches = map[string]knownMismatch{
 	"O4":      {19, "the cross-join collapse turns IEEE == into hash equality: NaN matches NaN"},
 	"O5":      {9, "the cross-join collapse keeps NullsEqual, so null keys match"},
-	"O6":      {1, "a filter on a widened join key is pushed to the narrow side and runs there"},
 	"O8-join": {1, "a fallible filter is pushed into a join side, onto rows the join removes"},
 	// 4 before O8 was fixed: two of them had the guard BELOW the Distinct, where
 	// merging the stacked filters was the whole problem.

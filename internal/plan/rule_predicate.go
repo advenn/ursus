@@ -639,20 +639,33 @@ func rewriteForSide(p expr.Node, want JoinSide, layout *JoinLayout, ls, rs *dtyp
 				return x
 			}
 			jc := layout.Columns[i]
+			var f dtype.Field
 			switch {
 			case jc.Side == want && want == FromLeft:
 				// Left names are never renamed, so this is an identity — rebuilt
 				// anyway so the walk allocates uniformly and never aliases the input.
-				return &expr.Col{Name: ls.Field(jc.Index).Name}
+				f = ls.Field(jc.Index)
 			case jc.Side == want && want == FromRight:
-				return &expr.Col{Name: rs.Field(jc.Index).Name} // un-suffix
+				f = rs.Field(jc.Index) // un-suffix
 			case jc.CoalesceWith >= 0 && want == FromRight:
 				// A merged key is both sides at once; the right's name may differ.
-				return &expr.Col{Name: rs.Field(jc.CoalesceWith).Name}
+				f = rs.Field(jc.CoalesceWith)
 			default:
 				ok = false
 				return x
 			}
+			var col expr.Node = &expr.Col{Name: f.Name}
+			// A coalesced key has the PROMOTED type above the join, and the side it
+			// is pushed into may be narrower. Pushed bare, `k*k > 2e9` over an Int32
+			// k computed the product at Int32, where 50000*50000 wraps negative, and
+			// the row the join would have kept was gone (audit O6). Cast to the
+			// output type, the pushed predicate sees the value the filter above the
+			// join would have seen. Strict, and it cannot refuse what the join would
+			// keep: the join casts its keys to that type strictly too.
+			if to := layout.Schema.Field(i).Type; f.Type != to {
+				col = &expr.Cast{Child: col, To: to, Strict: true}
+			}
+			return col
 
 		case *expr.Lit, *expr.Err:
 			return x
