@@ -23,16 +23,14 @@ import (
 
 // knownCSVRoundTripDefects names each type and route that does not round-trip today.
 var knownCSVRoundTripDefects = map[string]string{
-	"Uint64 by inference":                     "I19: past Int64 infers a lossy Float64",
-	"Int128 by schema":                        "I19: an Int128 schema is refused",
-	"Int128 by inference":                     "I19: past Int64 infers a lossy Float64",
-	"Float32 by inference":                    "I21: NaN and Inf make the column String",
-	"Float64 by inference":                    "I21: NaN and Inf make the column String",
-	"Decimal(38, 10) by schema":               "I19: a Decimal schema is refused",
-	"Decimal(10, 2) by schema":                "I19: a Decimal schema is refused",
-	"String by schema":                        "I27: a null is written empty and read back as \"\"",
-	"Datetime(ms, Asia/Kolkata) by schema":    "I8: 1677's LMT offset loses its seconds",
-	"Datetime(s, Europe/Amsterdam) by schema": "I8: 1929's LMT offset loses its seconds",
+	"Uint64 by inference":       "I19: past Int64 infers a lossy Float64",
+	"Int128 by schema":          "I19: an Int128 schema is refused",
+	"Int128 by inference":       "I19: past Int64 infers a lossy Float64",
+	"Float32 by inference":      "I21: NaN and Inf make the column String",
+	"Float64 by inference":      "I21: NaN and Inf make the column String",
+	"Decimal(38, 10) by schema": "I19: a Decimal schema is refused",
+	"Decimal(10, 2) by schema":  "I19: a Decimal schema is refused",
+	"String by schema":          "I27: a null is written empty and read back as \"\"",
 }
 
 // nullAtEnd is a validity of n set rows and one unset.

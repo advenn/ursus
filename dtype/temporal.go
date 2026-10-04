@@ -201,6 +201,14 @@ func FormatTemporal(d DataType, ticks int64) string {
 				t = t.In(loc)
 			}
 		}
+		// An offset with a seconds part — local mean time before a zone adopted a
+		// standard one: Amsterdam's +00:19:32 until 1937, Monrovia's −00:44:30 until
+		// 1972 — has no RFC 3339 spelling. "Z07:00" dropped the seconds and named an
+		// instant up to a minute away, which the CSV reader then read back. Such an
+		// instant is written in UTC instead, which every reader reads exactly.
+		if _, off := t.Zone(); off%60 != 0 {
+			t = t.UTC()
+		}
 		return t.Format("2006-01-02T15:04:05" + fracLayout(d.TimeUnit()) + "Z07:00")
 
 	case TypeDuration:

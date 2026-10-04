@@ -25,8 +25,6 @@ import (
 
 // knownIODefects names each case that answers wrongly today, with what it answers.
 var knownIODefects = map[string]string{
-	"I8 Amsterdam 1930 round-trips":                               "32 s off: +00:19:32 written as +00:19",
-	"I8 Monrovia 1970 round-trips":                                "30 s off: -00:44:30 written as -00:44",
 	"I9 inference of 1_000 and 0x1p3":                             "Float64 1000 and 8",
 	"I9 a Float64 schema refuses 1_000":                           "read as 1000",
 	"S25 Cast(String→Float64) refuses 1_000 and 0x1p3":            "parsed as 1000",
