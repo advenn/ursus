@@ -479,8 +479,9 @@ func TestFloatModAndFloorDiv(t *testing.T) {
 		t.Fatalf("float Mod: %v", err)
 	}
 
-	// math.Mod takes the sign of the dividend, matching Go's % on integers.
-	for i, want := range []float64{1, -1, math.NaN(), 1.5} {
+	// The floored remainder takes the sign of the DIVISOR, as the integer one does
+	// and as Polars and Python answer: −7 % 2 is 1. math.Mod's −1 was the dividend's.
+	for i, want := range []float64{1, 1, math.NaN(), 1.5} {
 		got, ok, _ := df.At[float64](i, "fmod")
 		if !ok {
 			t.Fatalf("fmod row %d is null; float mod is TOTAL, unlike integer mod", i)

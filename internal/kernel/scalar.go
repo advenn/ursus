@@ -73,9 +73,22 @@ func powScalar[T ~float32 | ~float64](dst, a, b []T) {
 
 // modFloatScalar is total for the same reason divFloatScalar is: math.Mod returns
 // NaN rather than faulting, so x % 0 is a value.
+//
+// It is the FLOORED remainder, as the integer arm's is and as Polars and Python
+// answer: −7.0 % 2.0 is 1.0, where math.Mod takes the dividend's sign and gave −1.
+// A zero remainder takes the divisor's sign, and x % ±Inf of a finite x of the
+// other sign is ±Inf, both as Python has it.
 func modFloatScalar[T ~float32 | ~float64](dst, a, b []T) {
 	for i := range a {
-		dst[i] = T(math.Mod(float64(a[i]), float64(b[i])))
+		x, y := float64(a[i]), float64(b[i])
+		r := math.Mod(x, y)
+		switch {
+		case r == 0:
+			r = math.Copysign(0, y)
+		case (r < 0) != (y < 0):
+			r += y
+		}
+		dst[i] = T(r)
 	}
 }
 
@@ -130,39 +143,41 @@ func absFloatScalar[T ~float32 | ~float64](dst, a []T) {
 // divIntScalar produces a null where the divisor is zero, matching SQL and
 // Polars. It must consult `in` before dividing: evaluating a null lane whose
 // garbage divisor happens to be 0 would panic and take the process down.
+//
+// It FLOORS, as its name says and as the float arm and Polars do: −7 // 2 is −4.
+// Go's / rounds toward zero and answered −3, so an Int64 and a Float64 column
+// holding the same numbers disagreed. A truncated quotient is one too large exactly
+// when there is a remainder and the operands' signs differ. That never overflows:
+// the quotient is then smaller in magnitude than the dividend. MinInt // −1 is
+// MinInt, the wrap Go and Polars share.
 func divIntScalar[T Integer](dst []T, ok *bitmap.Builder, a, b []T, in bitmap.View) {
 	for i := range a {
 		if !in.Get(i) || b[i] == 0 {
 			ok.Append(false)
 			continue
 		}
-		dst[i] = a[i] / b[i]
+		q := a[i] / b[i]
+		if a[i]%b[i] != 0 && (a[i] < 0) != (b[i] < 0) {
+			q--
+		}
+		dst[i] = q
 		ok.Append(true)
 	}
 }
 
+// modIntScalar is FloorDiv's remainder, so a == b*(a//b) + a%b and a%b takes the
+// divisor's sign: −7 % 2 is 1. Go's % takes the dividend's.
 func modIntScalar[T Integer](dst []T, ok *bitmap.Builder, a, b []T, in bitmap.View) {
 	for i := range a {
 		if !in.Get(i) || b[i] == 0 {
 			ok.Append(false)
 			continue
 		}
-		dst[i] = a[i] % b[i]
-		ok.Append(true)
-	}
-}
-
-func divIntScalarConst[T Integer](dst []T, ok *bitmap.Builder, a []T, s T, in bitmap.View) {
-	if s == 0 {
-		ok.AppendMany(false, len(a))
-		return
-	}
-	for i := range a {
-		if !in.Get(i) {
-			ok.Append(false)
-			continue
+		r := a[i] % b[i]
+		if r != 0 && (r < 0) != (b[i] < 0) {
+			r += b[i]
 		}
-		dst[i] = a[i] / s
+		dst[i] = r
 		ok.Append(true)
 	}
 }

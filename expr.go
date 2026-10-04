@@ -232,9 +232,15 @@ func (e Expr) Sub[T Operand](v T) Expr { return e.bin(expr.OpSub, lift(v)) }
 func (e Expr) Mul[T Operand](v T) Expr { return e.bin(expr.OpMul, lift(v)) }
 
 // Div is TRUE division: it always produces a float, so 7/2 is 3.5 even for two
-// integers. Integer-truncating division is FloorDiv, so the surprising behaviour
-// has to be asked for by name.
-func (e Expr) Div[T Operand](v T) Expr      { return e.bin(expr.OpDiv, lift(v)) }
+// integers. Integer division is FloorDiv, so the surprising behaviour has to be
+// asked for by name.
+func (e Expr) Div[T Operand](v T) Expr { return e.bin(expr.OpDiv, lift(v)) }
+
+// FloorDiv FLOORS, toward negative infinity, for integers, floats and a Duration
+// alike: −7 // 2 is −4, not the −3 Go's / gives. Mod is its remainder, so
+// a == b*FloorDiv(a, b) + Mod(a, b) and Mod takes the divisor's sign: −7 % 2 is 1.
+// Both are Polars' and Python's rule. An integer divisor of zero is null; a float
+// one follows IEEE.
 func (e Expr) FloorDiv[T Operand](v T) Expr { return e.bin(expr.OpFloorDiv, lift(v)) }
 func (e Expr) Mod[T Operand](v T) Expr      { return e.bin(expr.OpMod, lift(v)) }
 

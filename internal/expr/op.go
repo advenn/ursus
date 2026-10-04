@@ -11,7 +11,7 @@ const (
 	OpSub
 	OpMul
 	OpDiv      // true division: always produces a float
-	OpFloorDiv // integer-truncating division
+	OpFloorDiv // floored division: −7 // 2 is −4
 	OpMod
 
 	// Ordering and equality. Three-valued: if either operand is null the result

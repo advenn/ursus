@@ -169,8 +169,8 @@ func resolveArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 	switch op {
 	case OpDiv, OpPow:
 		// True division always produces a float, even for two integers. 7/2 == 3.5.
-		// Integer-truncating division is spelled FloorDiv, so the surprising
-		// behaviour has to be asked for by name.
+		// Integer division is spelled FloorDiv, so the surprising behaviour has to
+		// be asked for by name.
 		//
 		// Exponentiation shares the arm for the same reason and it is not optional:
 		// 2 ** -1 is 0.5, so the default `Out: common` would truncate every negative
@@ -305,8 +305,8 @@ func resolveTemporalArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error
 	// 1ns * 2.5 is 2ns. That is the honest reading of an integer tick count, and it
 	// is what the output type already promised.
 	// OpDiv is deliberately NOT here. A duration is an integer tick count, so
-	// dividing one by a number is truncating — and this file's own rule for that is
-	// "integer-truncating division is spelled FloorDiv, so the surprising behaviour
+	// dividing one by a number rounds — and this file's own rule for that is
+	// "integer division is spelled FloorDiv, so the surprising behaviour
 	// has to be asked for by name". Binding it to Out: Duration sent it to arithNum,
 	// which implements no integer OpDiv, so Field promised a Duration and Eval
 	// refused with "operator / is not implemented for Duration(ns)". Refusing here
@@ -314,7 +314,7 @@ func resolveTemporalArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error
 	case op == OpDiv && isDur(l) && r.IsNumeric():
 		return Binding{}, uerr.New(uerr.KindType, "",
 			"operator / is not defined for %s and %s", l, r).
-			Hint("dividing a duration by a number truncates; spell it FloorDiv").
+			Hint("dividing a duration by a number rounds; spell it FloorDiv, which floors").
 			Hint("or cast the duration to Float64 for an approximate result")
 
 	case (op == OpMul || op == OpFloorDiv) && isDur(l) && r.IsNumeric():

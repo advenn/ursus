@@ -280,8 +280,8 @@ func binaryNode(op expr.BinaryOp) expr.Node {
 // --- the oracle ---------------------------------------------------------------------
 
 // exact computes the arithmetic in math/big, which has no int64 to wrap. Integer
-// FloorDiv truncates toward zero (Go's /, see divIntScalar) and nulls on zero, so the
-// oracle uses Quo and declines the zero case rather than inventing one.
+// FloorDiv floors (see divIntScalar) and nulls on zero, so the oracle floors big's
+// truncated quotient and declines the zero case rather than inventing one.
 //
 // A Time result is MODULAR by contract, not by accident: step 57 made Time ± Duration
 // wrap into [0, 24h) because 25:00 is not a time of day. The oracle models that
@@ -301,7 +301,11 @@ func exact(op expr.BinaryOp, out dtype.DataType, a, b int64) (*big.Int, bool) {
 		if b == 0 {
 			return nil, false
 		}
-		z.Quo(x, y)
+		m := new(big.Int)
+		z.QuoRem(x, y, m)
+		if m.Sign() != 0 && (m.Sign() < 0) != (y.Sign() < 0) {
+			z.Sub(z, big.NewInt(1))
+		}
 	default:
 		return nil, false
 	}
