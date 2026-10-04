@@ -315,6 +315,9 @@ func (r *reader) openNext() error {
 	r.next++
 	r.rc = rc
 	r.sc = newScanner(rc, r.src.opts)
+	if !r.src.opts.HasHeader {
+		r.sc.SetWidth(len(r.wanted0)) // the schema's, inferred or given
+	}
 
 	// Every stream has its own leading rows and its own header. This is the reason
 	// multiple files are separate streams rather than concatenated bytes.
@@ -327,6 +330,7 @@ func (r *reader) openNext() error {
 		if !r.sc.Next() {
 			return r.sc.Err() // an empty part: no header to check, and no rows
 		}
+		r.sc.SetWidth(r.sc.NumFields())
 		hdr := make([]string, r.sc.NumFields())
 		for i := range hdr {
 			hdr[i] = string(r.sc.Field(i)) // copies: Field aliases the scanner's buffer

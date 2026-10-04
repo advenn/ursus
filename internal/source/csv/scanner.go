@@ -63,7 +63,18 @@ type scanner struct {
 	// skipped reports that the last parse consumed a comment or a blank line
 	// rather than producing a record.
 	skipped bool
+
+	// width is how many fields a record has, once a header, a schema or the first
+	// record has said; 0 until then. In a one-column file a blank line IS a record:
+	// its one field is empty, which is a null, as Polars and DuckDB read it. It was
+	// dropped, so a null written to a one-column CSV vanished with its row. In a
+	// wider file a blank line still is nothing — it cannot be a record of several
+	// fields — and is skipped, as DuckDB skips it.
+	width int
 }
+
+// SetWidth says how many fields a record has. See width.
+func (s *scanner) SetWidth(n int) { s.width = n }
 
 // fieldRef locates one field. A field lands in unesc only when it contained a
 // doubled quote, which is rare, so the common path stays copy-free.
@@ -245,14 +256,22 @@ func (s *scanner) parse(b []byte, atEOF bool) (n, nl int, ok bool, err error) {
 		s.skipped = true
 		return i + 1, 1, true, nil
 	}
-	// A blank line is consumed and produces no record, matching encoding/csv.
-	if b[0] == '\n' {
-		s.skipped = true
-		return 1, 1, true, nil
+	// A blank line is consumed and produces no record, matching encoding/csv —
+	// unless the file has one column, where it is that column's empty field.
+	blank := 0
+	switch {
+	case b[0] == '\n':
+		blank = 1
+	case b[0] == '\r' && len(b) > 1 && b[1] == '\n':
+		blank = 2
 	}
-	if b[0] == '\r' && len(b) > 1 && b[1] == '\n' {
-		s.skipped = true
-		return 2, 1, true, nil
+	if blank > 0 {
+		if s.width == 1 {
+			s.fields = append(s.fields, fieldRef{})
+		} else {
+			s.skipped = true
+		}
+		return blank, 1, true, nil
 	}
 
 	i := 0

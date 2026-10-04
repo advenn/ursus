@@ -25,9 +25,7 @@ import (
 
 // knownIODefects names each case that answers wrongly today, with what it answers.
 var knownIODefects = map[string]string{
-	"I10 a blank line in a one-column Int64 CSV":                  "the line dropped",
-	"I10 a blank line in a one-column String CSV":                 "the line dropped",
-	"I10 a trailing blank line":                                   "the line dropped",
+	"I10 a blank line in a one-column String CSV":                 "\"\": an empty String field is not null until I27",
 	"I19 inference of u64::MAX":                                   "lossy Float64",
 	"I19 inference of 2^63 beside 1":                              "lossy Float64",
 	"I19 an Int128 schema":                                        "refused: opening csv source",
