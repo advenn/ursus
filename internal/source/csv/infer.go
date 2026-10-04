@@ -135,7 +135,6 @@ func inferSchema(sc *scanner, o Options, isNull func([]byte) bool) (*dtype.Schem
 		for i := range names {
 			names[i] = string(sc.Field(i))
 		}
-		sc.SetWidth(len(names))
 	}
 
 	// Sample the data rows.
@@ -145,9 +144,6 @@ func inferSchema(sc *scanner, o Options, isNull func([]byte) bool) (*dtype.Schem
 	}
 	rows := 0
 	for (o.InferRows <= 0 || rows < o.InferRows) && sc.Next() {
-		if rows == 0 && len(names) == 0 {
-			sc.SetWidth(sc.NumFields()) // no header: the first record says
-		}
 		for len(types) < sc.NumFields() {
 			types = append(types, infUnknown)
 		}

@@ -180,6 +180,10 @@ func TestIOByHand(t *testing.T) {
 		{"I10 a trailing blank line", func(t *testing.T) string {
 			return ioEqual(t, read("a\n1\n2\n\n"), ints("a", []int64{1, 2, 0}, true, true, false))
 		}},
+		{"I10 a blank line in a one-column CSV without a header", func(t *testing.T) string {
+			return ioEqual(t, read("1\n\n3\n", ursus.WithHasHeader(false)),
+				ints("column_1", []int64{1, 0, 3}, true, false, true))
+		}},
 		{"control: a blank line in a two-column CSV is skipped", func(t *testing.T) string {
 			return ioEqual(t, read("a,b\n1,2\n\n3,4\n"),
 				ursus.Frame(ursus.Values("a", []int64{1, 3}), ursus.Values("b", []int64{2, 4})))
@@ -231,6 +235,21 @@ func TestIOByHand(t *testing.T) {
 				return err.Error()
 			}
 			return ioEqual(t, read(text), f)
+		}},
+		{"I21 an integral Float64 column round-trips as Float64", func(t *testing.T) string {
+			f := ursus.Frame(ursus.Values("f", []float64{1, 2, -3}))
+			text, err := csvText(t, f)
+			if err != nil {
+				return err.Error()
+			}
+			return ioEqual(t, read(text), f)
+		}},
+		{"I21 the writer spells the specials as Polars does", func(t *testing.T) string {
+			text, err := csvText(t, ursus.Frame(ursus.Values("f", []float64{1, math.Inf(1), math.Inf(-1), math.NaN()})))
+			if want := "f\n1.0\ninf\n-inf\nNaN\n"; err != nil || text != want {
+				return fmt.Sprintf("wrote %q, %v; want %q", text, err, want)
+			}
+			return ""
 		}},
 		{"control: a Float32 column round-trips as Float64", func(t *testing.T) string {
 			text, err := csvText(t, ursus.Frame(ursus.Values("h", []float32{1.5, 2})))
