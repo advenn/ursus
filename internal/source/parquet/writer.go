@@ -121,6 +121,13 @@ func (w *Writer) WriteBatch(b *data.Batch) error {
 	if b.Rows() == 0 {
 		return nil
 	}
+	// A row with no cells has no column chunk to hold it, and the file came back as
+	// no rows at all: (3, 0) written, (0, 0) read. The CSV writer refuses the same.
+	if b.NumCols() == 0 {
+		return uerr.New(uerr.KindValue, "sink_parquet",
+			"a frame with no columns cannot be written to Parquet: its %d rows have no cells", b.Rows()).
+			Hint("select at least one column before writing")
+	}
 
 	// A batch is SPLIT at row-group boundaries rather than appended whole.
 	//

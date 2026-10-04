@@ -74,6 +74,9 @@ func NewWriter(w io.Writer, o WriteOptions) *Writer {
 // WriteBatch appends a batch. The first call fixes the schema and writes the
 // header; later batches must match it.
 func (w *Writer) WriteBatch(b *data.Batch) error {
+	if err := noColumns("sink_csv", "CSV", b); err != nil {
+		return err
+	}
 	if w.schema == nil {
 		if err := w.begin(b.Schema()); err != nil {
 			return err
@@ -140,7 +143,10 @@ func (w *Writer) WriteEmpty(s *dtype.Schema) error {
 
 func (w *Writer) begin(s *dtype.Schema) error {
 	w.schema = s
-	if !w.o.Header {
+	// No columns, no header: an empty line is not a header naming nothing, and the
+	// reader took it for one column named "". A frame with no columns and no rows
+	// writes an empty file.
+	if !w.o.Header || s.Len() == 0 {
 		return nil
 	}
 	w.line = w.line[:0]
@@ -352,4 +358,17 @@ func appendFloatText(dst []byte, v float64, bits int) []byte {
 		dst = append(dst, ".0"...)
 	}
 	return dst
+}
+
+// noColumns refuses a batch with rows and no columns. A row with no cells has no
+// text in CSV and no column chunk in Parquet, so its rows cannot be written; CSV
+// wrote them as `""` lines that read back as a column named "", and Parquet as a
+// file that reads back as no rows at all.
+func noColumns(op, format string, b *data.Batch) error {
+	if b.NumCols() > 0 || b.Rows() == 0 {
+		return nil
+	}
+	return uerr.New(uerr.KindValue, op,
+		"a frame with no columns cannot be written to %s: its %d rows have no cells", format, b.Rows()).
+		Hint("select at least one column before writing")
 }
