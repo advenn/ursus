@@ -142,6 +142,12 @@ func TestDecimalArithmeticByHand(t *testing.T) {
 		{"an identical pair widens by a digit", wantDecimal(ab().Select(c("a").Add(c("a"))), "a", D(11, 2), "250", "-700")},
 		{"99999999.99 + 99999999.99", wantDecimal(ursus.Frame(dec("a", D(10, 2), "9999999999")).
 			Select(c("a").Add(c("a"))), "a", D(11, 2), "19999999998")},
+		// The left operand at scale 10 is 1.70e38, past 128 bits, and the sum still
+		// has 38 digits: the kernel's big.Int fallback is what answers it.
+		{"a rescale past 128 bits whose sum fits", wantDecimal(ursus.Frame(
+			dec("a", D(38, 0), "17014118346046923173168730372"),
+			dec("b", D(38, 10), "-99999999999999999999999999999999999999")).Select(c("a").Add(c("b"))),
+			"a", D(38, 10), "70141183460469231731687303720000000001")},
 		{"+ past 38 digits is refused", refused(ursus.Frame(dec("a", D(38, 0), max38)).
 			Select(c("a").Add(c("a"))), ursus.ErrValue, "38")},
 
@@ -190,6 +196,10 @@ func TestDecimalArithmeticByHand(t *testing.T) {
 			"1250", "-3500", "2125", "375")},
 		{"When of Decimal(10,2) and Decimal(12,3)", wantDecimal(ab().Select(
 			ursus.When(c("i").Eq(2)).Then(c("a")).Otherwise(c("b")).Alias("x")), "x", D(12, 3), "1250", "375")},
+
+		{"a join of a Decimal key to a Float64 key is refused", refused(
+			ursus.Frame(dec("k", D(10, 2), "100")).Join(ursus.Frame(ursus.Values("k", []float64{1})),
+				ursus.JoinOn(c("k"))), ursus.ErrType)},
 
 		// --- still refused ---
 		{"// is refused", refused(ab().Select(c("a").FloorDiv(c("b"))), ursus.ErrType)},
