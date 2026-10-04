@@ -22,11 +22,7 @@ import (
 )
 
 // knownEnumDefects names each case that answers wrongly today, with what it answers.
-var knownEnumDefects = map[string]string{
-	"CSV writes an Enum's text":                               "wrote \"\", sink_csv: cannot write column \"e\" of type Enum(lo, mid, hi) ",
-	"CSV reads an Enum schema":                                "scan: opening csv source",
-	"an unknown value in an Enum CSV column is a value error": "a unsupported error, want value error: scan: opening csv source",
-}
+var knownEnumDefects = map[string]string{}
 
 // null is the text enumCol and enumText use for a null row.
 const null = "∅"

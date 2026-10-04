@@ -275,6 +275,17 @@ func (w *Writer) formatter(c *data.Column) (func([]byte, int) []byte, error) {
 			return w.appendQuoted(dst, dtype.FormatTemporal(dt, v))
 		})
 
+	case dtype.TypeEnum:
+		// The text, which is what the reader reads back under the same Enum schema,
+		// and what Polars writes; the index would be storage, meaningless outside.
+		cats := dt.Categories()
+		return appendFmt[uint32](c, wrap, func(dst []byte, v uint32) []byte {
+			if int(v) >= len(cats) {
+				return dst // unreachable: a valid Enum index is a category
+			}
+			return w.appendQuoted(dst, cats[v])
+		})
+
 	case dtype.TypeDecimal:
 		scale := dt.Scale()
 		return appendFmt[i128.Int128](c, wrap, func(dst []byte, v i128.Int128) []byte {
@@ -282,10 +293,10 @@ func (w *Writer) formatter(c *data.Column) (func([]byte, int) []byte, error) {
 		})
 
 	default:
-		// Enum, Binary and the nested types are refused rather than written as their
-		// storage representation. Writing an Enum as its category index 3 would
-		// produce a file this package cannot read back, and a writer whose output its
-		// own reader rejects is worse than one that says so up front. Temporal used to
+		// Binary and the nested types are refused rather than written as their
+		// storage representation; a writer whose output its own reader rejects is
+		// worse than one that says so up front. An Enum is written as its text since
+		// step 79, which the reader reads back under the same schema. Temporal used to
 		// be refused for exactly that reason and no longer is, because the case above
 		// formats it the same way the reader parses it.
 		return nil, uerr.New(uerr.KindUnsupported, "sink_csv",

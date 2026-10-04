@@ -206,6 +206,20 @@ func newBuilder(dt dtype.DataType) (colBuilder, error) {
 			parse: func(b []byte) (i128.Int128, error) {
 				return i128.ParseDecimal(str(b), prec, scale)
 			}}, nil
+	case dtype.TypeEnum:
+		// The text, encoded as its category's index. A value outside the categories
+		// is a value error naming it, as a strict String -> Enum cast refuses it.
+		pos := make(map[string]uint32, len(dt.Categories()))
+		for i, s := range dt.Categories() {
+			pos[s] = uint32(i)
+		}
+		return &fixedBuilder[uint32]{dt: dt, valid: bitmap.NewBuilder(0),
+			parse: func(b []byte) (uint32, error) {
+				if j, ok := pos[str(b)]; ok {
+					return j, nil
+				}
+				return 0, strconv.ErrSyntax
+			}}, nil
 	case dtype.TypeFloat32:
 		return &fixedBuilder[float32]{dt: dt, valid: bitmap.NewBuilder(0),
 			parse: func(b []byte) (float32, error) {
@@ -246,7 +260,7 @@ func newBuilder(dt dtype.DataType) (colBuilder, error) {
 		return nil, uerr.New(uerr.KindUnsupported, "scan_csv",
 			"cannot read %s from a CSV file", dt).
 			Hint("CSV supports Bool, the integer and float types, Int128, Decimal, " +
-				"the temporal types and String").
+				"the temporal types, String and Enum").
 			Hint("read it as String and cast, if a conversion exists")
 	}
 }
