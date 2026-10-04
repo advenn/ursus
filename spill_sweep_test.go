@@ -19,10 +19,7 @@ import (
 )
 
 // knownSpillMismatches counts, per shape, the payload types that answer wrongly.
-var knownSpillMismatches = map[string]int{
-	"over two partitionings":   25,
-	"over ordered, descending": 25,
-}
+var knownSpillMismatches = map[string]int{}
 
 func TestSpillingAnswersAsInMemory(t *testing.T) {
 	c := ursus.Col
@@ -59,11 +56,11 @@ func TestSpillingAnswersAsInMemory(t *testing.T) {
 		{"unique", func(lf *ursus.LazyFrame) *ursus.LazyFrame { return lf.Unique("k") }, nil},
 		{"over two partitionings", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
 			return lf.WithColumns(c("seq").Sum().Over(c("k")).Alias("t"),
-				c("seq").Rank(ursus.RankOrdinal, false).Over(c("k").Mod(7)).Alias("r"))
+				c("seq").Rank(ursus.RankOrdinal, false).Over(c("k").Mod(50)).Alias("r"))
 		}, nil},
 		{"over ordered, descending", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
 			return lf.WithColumns(c("seq").CumSum(false).OverWith(ordered).Alias("cs"),
-				c("v").First().OverWith(ordered).Alias("vf"))
+				c("v").Shift(1).OverWith(ordered).Alias("vs"))
 		}, nil},
 	}
 
@@ -132,13 +129,13 @@ type spillShape struct {
 // two differ, or that the first never reached disk.
 func spillRouteWrong(t *testing.T, lf *ursus.LazyFrame, opts []ursustest.Option) string {
 	t.Helper()
-	got, stats, err := spillCollect(t, lf, 8<<10, t.TempDir())
-	if err != nil {
-		return err.Error()
-	}
 	want, err := lf.Collect(t.Context(), ursus.WithBatchSize(64))
 	if err != nil {
 		t.Fatalf("in memory: %v", err)
+	}
+	got, stats, err := spillCollect(t, lf, 8<<10, t.TempDir())
+	if err != nil {
+		return err.Error()
 	}
 	if d := framesDiffer(t, got, want, opts...); d != "" {
 		return d

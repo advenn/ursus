@@ -28,21 +28,11 @@ import (
 // knownSpillDefects names each case that answers wrongly today, with what it
 // answers.
 var knownSpillDefects = map[string]string{
-	"Sum().Over(k)": "refused: over cannot spill",
-	"Rank and CumSum ordered by seq descending":         "refused: over cannot spill",
-	"two partitionings, k and k % 7":                    "refused: over cannot spill",
-	"First() and Last() over k":                         "refused: over cannot spill",
-	"Over NaN and null partition keys":                  "refused: over cannot spill",
-	"Over carrying a List and a Struct":                 "refused: over cannot spill",
-	"Over over a column named __ord":                    "refused: over cannot spill",
-	"Over() with no keys says it has no partition":      "says only that the limit was exceeded",
-	"one partition larger than the limit says so":       "says only that the limit was exceeded",
 	"over is charged for the copy Finish makes":         "Peak is the input once",
 	"join_asof is charged for the copy Probe makes":     "Peak is the right side once",
 	"join_asof refuses between one and two right sides": "answers: the copy is not charged",
 	"group_by is charged for its key table":             "the key table is not charged",
 	"the hint says what spills and what fails":          "names neither join_asof nor merge_sorted, and says unique fails",
-	"a spilled over leaves no files":                    "refused: over cannot spill",
 }
 
 // spillFrame is n rows: k = i*7919 % keys, seq = i, a 32-byte pad, and f, a Float64
@@ -118,17 +108,17 @@ func TestSpillingByHand(t *testing.T) {
 	nested := func() *ursus.LazyFrame {
 		return ursus.Frame(append(spillColumns(n, 1500), list, st)...)
 	}
-	// spills requires lf to reach disk under the limit and to answer as it does in
+	// spillsAt requires lf to reach disk under lim and to answer as it does in
 	// memory.
-	spills := func(lf *ursus.LazyFrame, opts ...ursustest.Option) func(*testing.T) string {
+	spillsAt := func(lim int64, lf *ursus.LazyFrame, opts ...ursustest.Option) func(*testing.T) string {
 		return func(t *testing.T) string {
-			got, stats, err := spillCollect(t, lf, limit, t.TempDir())
-			if err != nil {
-				return err.Error()
-			}
 			want, err := lf.Collect(t.Context(), ursus.WithBatchSize(64))
 			if err != nil {
 				t.Fatalf("in memory: %v", err)
+			}
+			got, stats, err := spillCollect(t, lf, lim, t.TempDir())
+			if err != nil {
+				return err.Error()
 			}
 			if d := framesDiffer(t, got, want, opts...); d != "" {
 				return d
@@ -139,6 +129,12 @@ func TestSpillingByHand(t *testing.T) {
 			return ""
 		}
 	}
+	spills := func(lf *ursus.LazyFrame, opts ...ursustest.Option) func(*testing.T) string {
+		return spillsAt(limit, lf, opts...)
+	}
+	// wide holds one partition of k % 7, or of f, which are about 430 rows each,
+	// and not the input.
+	const wide = 128 << 10
 	refused := func(lf *ursus.LazyFrame, words ...string) func(*testing.T) string {
 		return func(t *testing.T) string {
 			df, _, err := spillCollect(t, lf, limit, t.TempDir())
@@ -235,11 +231,11 @@ func TestSpillingByHand(t *testing.T) {
 		{"Rank and CumSum ordered by seq descending", spills(base.WithColumns(
 			c("seq").Rank(ursus.RankOrdinal, false).OverWith(ordered).Alias("r"),
 			c("seq").CumSum(false).OverWith(ordered).Alias("cs")))},
-		{"two partitionings, k and k % 7", spills(base.WithColumns(
+		{"two partitionings, k and k % 7", spillsAt(wide, base.WithColumns(
 			c("seq").Sum().Over(c("k")).Alias("t"), c("seq").Max().Over(c("k").Mod(7)).Alias("u")))},
 		{"First() and Last() over k", spills(base.WithColumns(
 			c("seq").First().Over(c("k")).Alias("first"), c("pad").Last().Over(c("k")).Alias("last")))},
-		{"Over NaN and null partition keys", spills(base.WithColumns(c("seq").Sum().Over(c("f")).Alias("t")))},
+		{"Over NaN and null partition keys", spillsAt(wide, base.WithColumns(c("seq").Sum().Over(c("f")).Alias("t")))},
 		{"Over carrying a List and a Struct", spills(nested().WithColumns(c("seq").Sum().Over(c("k")).Alias("t")))},
 		{"Over over a column named __ord", spills(ord.WithColumns(c("__ord").Sum().Over(c("k")).Alias("t")))},
 

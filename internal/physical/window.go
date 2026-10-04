@@ -53,6 +53,21 @@ type windowSink struct {
 	// them, and a batch walker would report the sink at half its size.
 	mem        *execopt.Account
 	stateBytes int64
+
+	// The spill state, idle until the query goes over its limit: extwindow.go.
+	exprs       []expr.Node // the window expressions, to build fresh sinks from
+	budget      *execopt.Budget
+	batch       int
+	level       int
+	ord         string        // the input-ordinal column's name
+	spillSchema *dtype.Schema // the input, plus ord
+	nRows       int64         // rows stamped so far: the next row's ordinal at level 0
+	spilling    bool
+	dir         string
+	files       int // files created so far, to name the next one
+	routeSch    *dtype.Schema
+	routeParts  []*partWriter
+	pend        [][]int32
 }
 
 // winPartition is one distinct PARTITION BY, with its group table and the group id
@@ -86,7 +101,7 @@ func (s *windowSink) Schema() *dtype.Schema { return s.schema }
 
 func (s *windowSink) Close() error {
 	s.mem.Release()
-	return nil
+	return s.closeSpill()
 }
 
 func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
@@ -96,6 +111,9 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 	n := in.Rows()
 	if n == 0 {
 		return nil
+	}
+	if s.spilling {
+		return s.route(ctx, in, s.parts[0].keys)
 	}
 	s.rows = append(s.rows, in)
 	s.mem.Retain(in)
@@ -159,7 +177,7 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 	}
 	s.mem.RetainBytes(st - s.stateBytes)
 	s.stateBytes = st
-	return s.mem.Check()
+	return s.overBudget(ctx)
 }
 
 // Merge is refused for the same reason hashAggSink's is, one step further along.
@@ -180,6 +198,9 @@ func (s *windowSink) Merge(other Sink) error {
 }
 
 func (s *windowSink) Finish(ctx context.Context) (Operator, error) {
+	if s.spilling {
+		return s.finishSpilled(ctx)
+	}
 	if len(s.rows) == 0 {
 		// No row ever arrived. The result is still one column per output field, all
 		// empty — a zero-column batch would leave the schema unsatisfied.
@@ -367,10 +388,30 @@ func planWindow(ctx context.Context, w *plan.Window, opts Options) (Operator, er
 		return nil, err
 	}
 
-	sink := &windowSink{inSchema: in, schema: out, mem: opts.Budget.Account("over")}
+	// The ordinal is named against the OUTPUT, so it cannot collide with a window's
+	// alias either: a later pass's input holds the earlier passes' columns.
+	ord := ordinalName(out)
+	sp, err := dtype.NewSchema(append(in.FieldSlice(), dtype.NotNull(ord, dtype.Int64))...)
+	if err != nil {
+		return nil, err
+	}
+	sink, err := newWindowSink(in, out, w.Exprs, opts.Budget.Account("over"))
+	if err != nil {
+		return nil, err
+	}
+	sink.budget, sink.batch, sink.ord, sink.spillSchema = opts.Budget, opts.batchSize(), ord, sp
+	return &breaker{child: child, sink: sink}, nil
+}
+
+// newWindowSink builds a sink computing exprs over rows of schema in, producing out.
+//
+// planWindow calls it once; a spilling window calls it again for every partition
+// file, with fresh accumulators each time.
+func newWindowSink(in, out *dtype.Schema, exprs []expr.Node, mem *execopt.Account) (*windowSink, error) {
+	sink := &windowSink{inSchema: in, schema: out, mem: mem, exprs: exprs}
 	byKeys := map[string]int{}
 
-	for _, e := range w.Exprs {
+	for _, e := range exprs {
 		alias, ok := e.(*expr.Alias)
 		if !ok {
 			return nil, uerr.Internalf("physical: window expression is not aliased: %s", e)
@@ -462,6 +503,5 @@ func planWindow(ctx context.Context, w *plan.Window, opts Options) (Operator, er
 		}
 		sink.specs = append(sink.specs, spec)
 	}
-
-	return &breaker{child: child, sink: sink}, nil
+	return sink, nil
 }

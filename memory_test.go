@@ -488,9 +488,11 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 		{"cross_join", func() *ursus.LazyFrame {
 			return ursus.Scan(src).Join(ursus.Scan(other), ursus.JoinHow(ursus.JoinCross))
 		}, "join"},
+		// With no partition_by: a window over keys spills since step 82, and
+		// over_spills below is its entry.
 		{"over", func() *ursus.LazyFrame {
 			return ursus.Scan(src).WithColumns(
-				ursus.Col("seq").Sum().Over(ursus.Col("k")).Alias("t"))
+				ursus.Col("seq").Sum().Over().Alias("t"))
 		}, "over"},
 		{"reverse", func() *ursus.LazyFrame {
 			return ursus.Scan(src).Reverse()
@@ -553,6 +555,19 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 				ursus.WithSpillDir(t.TempDir()),
 				ursus.WithMemoryStats(&stats)); err != nil {
 			t.Errorf("unique must partition rather than refuse: %v", err)
+		}
+		if stats.Spills == 0 {
+			t.Error("it succeeded without spilling, so it proves nothing")
+		}
+	})
+
+	t.Run("over_spills", func(t *testing.T) {
+		var stats ursus.MemoryStats
+		if _, err := ursus.Scan(src).WithColumns(ursus.Col("seq").Sum().Over(ursus.Col("k")).Alias("t")).
+			Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(32<<10),
+				ursus.WithSpillDir(t.TempDir()),
+				ursus.WithMemoryStats(&stats)); err != nil {
+			t.Errorf("a partitioned window must partition rather than refuse: %v", err)
 		}
 		if stats.Spills == 0 {
 			t.Error("it succeeded without spilling, so it proves nothing")
