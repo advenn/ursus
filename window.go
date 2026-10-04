@@ -156,9 +156,13 @@ func (e Expr) Shift(n int) Expr {
 }
 
 // ShiftFill is Shift with a value instead of null in the vacated rows.
+//
+// The fill meets the column as FillNullWith's does: a Go value that fits the
+// column's type takes it, so ShiftFill(1, 0) on an Int32 column is an Int32, and
+// otherwise the two promote, so ShiftFill(1, 1.5) on an Int64 column is a Float64.
 func (e Expr) ShiftFill[T Operand](n int, fill T) Expr {
 	return wrap(&expr.WinFn{
-		Fn: expr.WinShift, Child: e.node(), Fill: lift(fill),
+		Fn: expr.WinShift, Child: e.node(), Fill: liftWeak(fill),
 		Params: expr.WinParams{N: int64(n)},
 	})
 }

@@ -263,6 +263,19 @@ func (s *windowSink) finishOrdered(ctx context.Context, sp *winSpec,
 		if fill, err = evalColumn(ctx, sp.fillOf, all); err != nil {
 			return nil, err
 		}
+		// The column and its fill meet at the type WinFnType chose, strictly, as a
+		// When's branches do: that type holds both, so a value that fails to convert
+		// is a bug, not a lossy conversion anyone asked for.
+		if fill.DType() != sp.out {
+			if fill, err = kernel.Cast(fill.Name(), sp.out, true, fill); err != nil {
+				return nil, err
+			}
+		}
+		if child.DType() != sp.out {
+			if child, err = kernel.Cast(child.Name(), sp.out, true, child); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return kernel.WinCall(sp.fn.Fn, sp.fn.Params, sp.name, sp.out, child, fill, seg)
 }
@@ -432,7 +445,7 @@ func planWindow(ctx context.Context, w *plan.Window, opts Options) (Operator, er
 			if err != nil {
 				return nil, err
 			}
-			t, err := expr.ResolveWinFn(body.Fn, body.Params, cf.Type)
+			t, err := expr.WinFnType(body, cf.Type, in)
 			if err != nil {
 				return nil, err
 			}

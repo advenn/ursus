@@ -410,7 +410,7 @@ func (f *WinFn) Field(in *dtype.Schema) (dtype.Field, error) {
 	if err != nil {
 		return dtype.Field{}, err
 	}
-	out, err := ResolveWinFn(f.Fn, f.Params, cf.Type)
+	out, err := WinFnType(f, cf.Type, in)
 	if err != nil {
 		return dtype.Field{}, err
 	}
@@ -426,6 +426,27 @@ func (f *WinFn) Field(in *dtype.Schema) (dtype.Field, error) {
 		nullable = true
 	}
 	return dtype.Field{Name: OutputName(f), Type: out, Nullable: nullable}, nil
+}
+
+// WinFnType is an ordered window function's output type, its fill included: the
+// one authority Field and the physical planner both ask.
+//
+// A shift's fill used to be ignored here, so the output was always the column's
+// type, the fill kept its own, and the kernel's select between the two refused them
+// at run time — ShiftFill(1, 1.5) on an Int64 column was ErrInternal. The fill now
+// meets the column as a When's branches do, through ResolveCond: a weak literal
+// that fits takes the column's type, and otherwise the two promote, so 1.5 on an
+// Int64 column is a Float64, which is the type Polars collects too.
+func WinFnType(f *WinFn, child dtype.DataType, in *dtype.Schema) (dtype.DataType, error) {
+	out, err := ResolveWinFn(f.Fn, f.Params, child)
+	if err != nil || f.Fill == nil {
+		return out, err
+	}
+	ff, err := f.Fill.Field(in)
+	if err != nil {
+		return dtype.Null, err
+	}
+	return ResolveCond(f.Child, f.Fill, out, ff.Type)
 }
 
 // ResolveWinFn gives an ordered window function's output type.
