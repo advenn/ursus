@@ -137,26 +137,34 @@ func (p *parallelOp) launch(parent context.Context) {
 			}
 		}()
 
-		for seq := 0; ; seq++ {
-			b, err := Pull(ctx, p.base)
-			job := parJob{b: b}
-			if err != nil {
-				if errors.Is(err, io.EOF) {
+		seq := 0
+		goexitGuard(func(err error) {
+			select {
+			case jobs[seq%p.n] <- parJob{err: err}:
+			case <-ctx.Done():
+			}
+		}, func() {
+			for ; ; seq++ {
+				b, err := Pull(ctx, p.base)
+				job := parJob{b: b}
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						return
+					}
+					// Deliver the error at its position in the sequence rather than
+					// out of band, so it cannot overtake results already in flight.
+					job = parJob{err: err}
+				}
+				select {
+				case jobs[seq%p.n] <- job:
+				case <-ctx.Done():
 					return
 				}
-				// Deliver the error at its position in the sequence rather than out
-				// of band, so it cannot overtake results already in flight.
-				job = parJob{err: err}
+				if job.err != nil {
+					return
+				}
 			}
-			select {
-			case jobs[seq%p.n] <- job:
-			case <-ctx.Done():
-				return
-			}
-			if job.err != nil {
-				return
-			}
-		}
+		})
 	}()
 
 	// Workers: apply the BatchOp chain. Every job produces exactly one result, so
@@ -167,25 +175,61 @@ func (p *parallelOp) launch(parent context.Context) {
 		go func(i int) {
 			defer p.wg.Done()
 			defer close(p.results[i])
-
-			for job := range jobs[i] {
-				var res parResult
-				if job.err != nil {
-					res = parResult{err: job.err}
-				} else {
-					res = p.apply(ctx, job.b)
-				}
+			goexitGuard(func(err error) {
 				select {
-				case p.results[i] <- res:
+				case p.results[i] <- parResult{err: err}:
 				case <-ctx.Done():
-					return
 				}
-				if res.err != nil {
-					return
+			}, func() {
+				for job := range jobs[i] {
+					var res parResult
+					if job.err != nil {
+						res = parResult{err: job.err}
+					} else {
+						res = p.apply(ctx, job.b)
+					}
+					select {
+					case p.results[i] <- res:
+					case <-ctx.Done():
+						return
+					}
+					if res.err != nil {
+						return
+					}
 				}
-			}
+			})
 		}(i)
 	}
+}
+
+// goexitGuard runs body, the work of a goroutine that runs a caller's code, and
+// tells report if that code ended the goroutine with runtime.Goexit.
+//
+// Goexit runs deferred calls and nothing else, so no recover sees it — and
+// testing's FailNow, Fatal and SkipNow call it. The goroutine's lane then closed
+// as though the stream had ended, and every row after the exit was dropped with no
+// error (audit.md O14). report runs before the goroutine's own defers close its
+// lane, so the error takes the place of the rows.
+//
+// A Goexit and an ordinary end both reach the deferred check with recover() nil;
+// what tells them apart is whether body returned. A panic passes through untouched:
+// every goroutine here turns one into an error before it can get this far.
+func goexitGuard(report func(error), body func()) {
+	returned := false
+	defer func() {
+		if returned {
+			return
+		}
+		if v := recover(); v != nil {
+			panic(v)
+		}
+		report(uerr.New(uerr.KindValue, "", "a function ended its goroutine with "+
+			"runtime.Goexit, and the rows after it would have been lost").
+			Hint("return an error from the function instead; testing's FailNow, Fatal " +
+				"and SkipNow call runtime.Goexit, and cannot be used inside one"))
+	}()
+	body()
+	returned = true
 }
 
 // apply runs the BatchOp chain over one batch.

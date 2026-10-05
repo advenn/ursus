@@ -140,26 +140,34 @@ func (p *parProbeOp) launch(parent context.Context) {
 			}
 		}()
 
-		for seq := 0; ; seq++ {
-			b, err := Pull(ctx, p.probe)
-			job := parJob{b: b}
-			if err != nil {
-				if errors.Is(err, io.EOF) {
+		seq := 0
+		goexitGuard(func(err error) {
+			select {
+			case jobs[seq%p.n] <- parJob{err: err}:
+			case <-ctx.Done():
+			}
+		}, func() {
+			for ; ; seq++ {
+				b, err := Pull(ctx, p.probe)
+				job := parJob{b: b}
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						return
+					}
+					// Delivered at its position in the sequence rather than out of
+					// band, so it cannot overtake results already in flight.
+					job = parJob{err: err}
+				}
+				select {
+				case jobs[seq%p.n] <- job:
+				case <-ctx.Done():
 					return
 				}
-				// Delivered at its position in the sequence rather than out of band, so
-				// it cannot overtake results already in flight.
-				job = parJob{err: err}
+				if job.err != nil {
+					return
+				}
 			}
-			select {
-			case jobs[seq%p.n] <- job:
-			case <-ctx.Done():
-				return
-			}
-			if job.err != nil {
-				return
-			}
-		}
+		})
 	}()
 
 	for i := range p.n {
@@ -169,11 +177,18 @@ func (p *parProbeOp) launch(parent context.Context) {
 			defer close(p.results[i])
 
 			w := p.workers[i]
-			for job := range jobs[i] {
-				if err := p.runJob(ctx, w, job, i); err != nil {
-					return
+			goexitGuard(func(err error) {
+				select {
+				case p.results[i] <- probeResult{err: err}:
+				case <-ctx.Done():
 				}
-			}
+			}, func() {
+				for job := range jobs[i] {
+					if err := p.runJob(ctx, w, job, i); err != nil {
+						return
+					}
+				}
+			})
 		}(i)
 	}
 }

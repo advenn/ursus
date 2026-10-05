@@ -106,22 +106,26 @@ func (p *parallelSink) drain(parent context.Context) error {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			for b := range jobs[i] {
-				// Once anything has failed, drain without consuming. Draining rather
-				// than returning is because the dispatcher may already be blocked
-				// sending into this lane, and abandoning it would deadlock until
-				// ctx cancellation reached it. Not consuming is because the query
-				// has already failed — and after a panic, the sink that panicked is
-				// in no state anyone should feed.
-				if failed.Load() {
-					continue
+			// fail cancels the dispatcher, so a worker that Goexits — and so stops
+			// draining its lane — cannot leave the dispatcher blocked sending into it.
+			goexitGuard(fail, func() {
+				for b := range jobs[i] {
+					// Once anything has failed, drain without consuming. Draining
+					// rather than returning is because the dispatcher may already be
+					// blocked sending into this lane, and abandoning it would deadlock
+					// until ctx cancellation reached it. Not consuming is because the
+					// query has already failed — and after a panic, the sink that
+					// panicked is in no state anyone should feed.
+					if failed.Load() {
+						continue
+					}
+					// Guarded: this is a worker goroutine, and a panic in it could be
+					// recovered by nothing else.
+					if err := uerr.GuardErr("", func() error { return p.sinks[i].Consume(ctx, b) }); err != nil {
+						fail(err)
+					}
 				}
-				// Guarded: this is a worker goroutine, and a panic in it could be
-				// recovered by nothing else.
-				if err := uerr.GuardErr("", func() error { return p.sinks[i].Consume(ctx, b) }); err != nil {
-					fail(err)
-				}
-			}
+			})
 		}(i)
 	}
 

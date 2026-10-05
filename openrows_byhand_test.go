@@ -23,11 +23,7 @@ import (
 
 // knownOpenRowDefects names each case that answers wrongly today, with what it
 // answers.
-var knownOpenRowDefects = map[string]string{
-	"Goexit in a parallel Select is an error":      "drops the rows after it",
-	"Goexit in a parallel aggregation is an error": "drops the rows after it",
-	"Goexit in a parallel join probe is an error":  "drops the rows after it",
-}
+var knownOpenRowDefects = map[string]string{}
 
 // textOf is a column's type and its values as text, null as ∅.
 func textOf(t *testing.T, df *ursus.DataFrame, name string) (string, []string) {
