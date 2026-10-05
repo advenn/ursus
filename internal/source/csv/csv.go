@@ -80,8 +80,13 @@ func FromFiles(paths []string, desc string, o Options) *Source {
 	for i, p := range paths {
 		opens[i] = FileOpener(p)
 	}
+	return NewNamed(opens, paths, desc, o)
+}
+
+// NewNamed is NewMulti with a name per stream, for its errors.
+func NewNamed(opens []Opener, names []string, desc string, o Options) *Source {
 	s := NewMulti(opens, desc, o)
-	s.names = paths
+	s.names = names
 	return s
 }
 
@@ -459,7 +464,8 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 	for rows < want {
 		if !r.sc.Next() {
 			if err := r.sc.Err(); err != nil {
-				return nil, uerr.Annotate(err, "scan_csv", r.src.desc)
+				// The stream that failed, which openNext has already counted past.
+				return nil, uerr.Annotate(err, "scan_csv", r.src.partName(r.next-1))
 			}
 			// This stream is exhausted; roll on to the next file, if any.
 			switch err := r.openNext(ctx); {

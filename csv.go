@@ -149,6 +149,49 @@ func ScanCSVReader(b []byte, name string, opts ...CSVOption) *LazyFrame {
 	return Scan(csv.New(open, name, csvOptions(opts)))
 }
 
+// CSVFile is one CSV file, read as a stream from wherever it lives — an object
+// store, an HTTP server, an archive — by code that knows how to reach it.
+type CSVFile struct {
+	// Name identifies the file in errors and in Explain.
+	Name string
+
+	// Open returns the file's bytes from the start.
+	//
+	// It is called more than once per query — once to infer the schema, once for
+	// each execution — and must return a fresh stream each time. ctx is the query's
+	// and outlives the stream, which ursus closes when it is done with it.
+	Open func(ctx context.Context) (io.ReadCloser, error)
+}
+
+// ScanCSVFrom reads CSV files the caller opens, as one frame in the order given,
+// under ScanCSVFiles' rules for several files.
+//
+// It is how ursus reaches an object store without depending on one: give each file
+// an Open that returns the body of a GET.
+func ScanCSVFrom(files []CSVFile, opts ...CSVOption) *LazyFrame {
+	if len(files) == 0 {
+		return &LazyFrame{err: uerr.New(uerr.KindValue, "scan_csv", "no files given")}
+	}
+	opens := make([]csv.Opener, len(files))
+	names := make([]string, len(files))
+	for i, f := range files {
+		names[i] = f.Name
+		if names[i] == "" {
+			names[i] = "csv file " + strconv.Itoa(i+1)
+		}
+		if f.Open == nil {
+			return &LazyFrame{err: uerr.New(uerr.KindValue, "scan_csv",
+				"%s has no Open function", names[i])}
+		}
+		opens[i] = csv.Opener(f.Open)
+	}
+	desc := names[0]
+	if len(names) > 1 {
+		desc += " and " + strconv.Itoa(len(names)-1) + " more"
+	}
+	return Scan(csv.NewNamed(opens, names, desc, csvOptions(opts)))
+}
+
 // --- writing -------------------------------------------------------------------
 
 // CSVWriteOption configures the CSV writer.

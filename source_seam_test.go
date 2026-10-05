@@ -300,3 +300,183 @@ func TestScanParquetFrom(t *testing.T) {
 		}
 	})
 }
+
+// csvStream counts opens and closes, and fails after failAfter bytes when non-zero.
+type csvStream struct {
+	io.Reader
+	closed *atomic.Int64
+}
+
+func (s *csvStream) Close() error {
+	s.closed.Add(1)
+	return nil
+}
+
+// failingReader returns the first n bytes of b, then an error.
+type failingReader struct {
+	b []byte
+	n int
+}
+
+func (f *failingReader) Read(p []byte) (int, error) {
+	if f.n <= 0 {
+		return 0, errors.New("the connection was reset")
+	}
+	k := copy(p, f.b[:min(len(f.b), f.n)])
+	f.b, f.n = f.b[k:], f.n-k
+	return k, nil
+}
+
+func csvFile(name, text string, t *tally, failAfter int) ursus.CSVFile {
+	return ursus.CSVFile{Name: name, Open: func(context.Context) (io.ReadCloser, error) {
+		t.opens.Add(1)
+		var r io.Reader = strings.NewReader(text)
+		if failAfter > 0 {
+			r = &failingReader{b: []byte(text), n: failAfter}
+		}
+		return &csvStream{Reader: r, closed: &t.closed}, nil
+	}}
+}
+
+func TestScanCSVFrom(t *testing.T) {
+	var text strings.Builder
+	text.WriteString("a,s,f\n")
+	for i := range 5000 {
+		fmt.Fprintf(&text, "%d,x%d,%d.5\n", i, i%7, i)
+	}
+	body := text.String()
+
+	t.Run("answers as ScanCSVReader, and closes every stream", func(t *testing.T) {
+		var n tally
+		got, err := ursus.ScanCSVFrom([]ursus.CSVFile{csvFile("d.csv", body, &n, 0)}).Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := ursus.ScanCSVReader([]byte(body), "d.csv").Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d := framesDiffer(t, got, want); d != "" {
+			t.Error(d)
+		}
+		if n.opens.Load() < 2 || n.opens.Load() != n.closed.Load() {
+			t.Errorf("%d opened, %d closed", n.opens.Load(), n.closed.Load())
+		}
+	})
+
+	t.Run("several files answer as ScanCSVFiles", func(t *testing.T) {
+		dir := t.TempDir()
+		var files []ursus.CSVFile
+		var paths []string
+		var n tally
+		for i := range 3 {
+			part := fmt.Sprintf("s,a\nx%d,%d\n,%d\n", i, i, 10*i)
+			p := filepath.Join(dir, fmt.Sprintf("part-%d.csv", i))
+			if err := os.WriteFile(p, []byte(part), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			paths = append(paths, p)
+			files = append(files, csvFile(p, part, &n, 0))
+		}
+		got, err := ursus.ScanCSVFrom(files).Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := ursus.ScanCSVFiles(paths).Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d := framesDiffer(t, got, want); d != "" {
+			t.Error(d)
+		}
+		if n.opens.Load() != n.closed.Load() {
+			t.Errorf("%d opened, %d closed", n.opens.Load(), n.closed.Load())
+		}
+	})
+
+	t.Run("Open gets the query's context", func(t *testing.T) {
+		type key struct{}
+		var seen, opens atomic.Int64
+		f := ursus.CSVFile{Name: "d.csv", Open: func(ctx context.Context) (io.ReadCloser, error) {
+			opens.Add(1)
+			if ctx.Value(key{}) == "the query" {
+				seen.Add(1)
+			}
+			return io.NopCloser(strings.NewReader(body)), nil
+		}}
+		ctx := context.WithValue(t.Context(), key{}, "the query")
+		if _, err := ursus.ScanCSVFrom([]ursus.CSVFile{f}).Collect(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if seen.Load() != opens.Load() || opens.Load() == 0 {
+			t.Errorf("%d of %d opens saw the query's context", seen.Load(), opens.Load())
+		}
+	})
+
+	t.Run("a later file that fails to open is named", func(t *testing.T) {
+		var n tally
+		gone := ursus.CSVFile{Name: "s3://bucket/2.csv", Open: func(context.Context) (io.ReadCloser, error) {
+			return nil, errors.New("NoSuchKey")
+		}}
+		_, err := ursus.ScanCSVFrom([]ursus.CSVFile{csvFile("s3://bucket/1.csv", body, &n, 0), gone}).
+			Collect(t.Context())
+		if d := refusal(nil, err, ursus.ErrIO, "s3://bucket/2.csv", "NoSuchKey"); d != "" {
+			t.Error(d)
+		}
+		if n.opens.Load() != n.closed.Load() {
+			t.Errorf("%d opened, %d closed", n.opens.Load(), n.closed.Load())
+		}
+	})
+
+	t.Run("a read that fails mid-stream is an I/O error naming the file, and closes", func(t *testing.T) {
+		var n tally
+		f := csvFile("s3://bucket/d.csv", body, &n, 0)
+		open := f.Open
+		f.Open = func(ctx context.Context) (io.ReadCloser, error) {
+			if n.opens.Load() == 0 {
+				return open(ctx) // inference reads it whole
+			}
+			n.opens.Add(1)
+			return &csvStream{Reader: &failingReader{b: []byte(body), n: len(body) / 2}, closed: &n.closed}, nil
+		}
+		_, err := ursus.ScanCSVFrom([]ursus.CSVFile{f}).Collect(t.Context())
+		if d := refusal(nil, err, ursus.ErrIO, "s3://bucket/d.csv", "connection was reset"); d != "" {
+			t.Error(d)
+		}
+		if n.opens.Load() != n.closed.Load() {
+			t.Errorf("%d opened, %d closed", n.opens.Load(), n.closed.Load())
+		}
+	})
+
+	t.Run("a later file that fails mid-stream is named", func(t *testing.T) {
+		var n tally
+		_, err := ursus.ScanCSVFrom([]ursus.CSVFile{csvFile("s3://bucket/1.csv", body, &n, 0),
+			csvFile("s3://bucket/2.csv", body, &n, len(body)/2)}).Collect(t.Context())
+		if d := refusal(nil, err, ursus.ErrIO, "s3://bucket/2.csv"); d != "" {
+			t.Error(d)
+		}
+	})
+
+	t.Run("no files, or a file with no Open, is refused", func(t *testing.T) {
+		_, err := ursus.ScanCSVFrom(nil).Collect(t.Context())
+		if d := refusal(nil, err, ursus.ErrValue, "no files"); d != "" {
+			t.Error(d)
+		}
+		_, err = ursus.ScanCSVFrom([]ursus.CSVFile{{Name: "x.csv"}}).Collect(t.Context())
+		if d := refusal(nil, err, ursus.ErrValue, "x.csv", "Open"); d != "" {
+			t.Error(d)
+		}
+	})
+
+	t.Run("Explain names the files", func(t *testing.T) {
+		var n tally
+		plan, err := ursus.ScanCSVFrom([]ursus.CSVFile{csvFile("s3://bucket/1.csv", body, &n, 0),
+			csvFile("s3://bucket/2.csv", body, &n, 0)}).Explain(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(plan, "s3://bucket/1.csv and 1 more") {
+			t.Errorf("Explain does not name the files:\n%s", plan)
+		}
+	})
+}
