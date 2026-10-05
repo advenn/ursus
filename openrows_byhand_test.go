@@ -152,6 +152,30 @@ func TestOpenRowsByHand(t *testing.T) {
 		{"Goexit in a parallel join probe is an error", refusesGoexit(five().Join(
 			ursus.Frame(ursus.Values("k", []int64{10, 20}), ursus.Values("r", []int64{1, 2})),
 			ursus.JoinOn(exitOn(c("k"))), ursus.JoinHow(ursus.JoinLeft)))},
+
+		// --- S22: refused before anything is allocated. Run before the fix, these
+		// asked for a terabyte a row. ---
+		{"a PadStart wider than a String column holds is refused", func(t *testing.T) string {
+			df, err := ursus.Frame(ursus.Values("s", []string{"a", "b"})).
+				Select(c("s").Str().PadStart(1<<40, " ")).Collect(t.Context())
+			return refusal(df, err, ursus.ErrValue, "width")
+		}},
+		{"a ZFill wider than a String column holds is refused", func(t *testing.T) string {
+			df, err := ursus.Frame(ursus.Values("s", []string{"-1"})).
+				Select(c("s").Str().ZFill(1 << 40)).Collect(t.Context())
+			return refusal(df, err, ursus.ErrValue, "width")
+		}},
+		{"control: a PadEnd that fits pads", func(t *testing.T) string {
+			df, err := ursus.Frame(ursus.Values("s", []string{"a"})).
+				Select(c("s").Str().PadEnd(3, "-")).Collect(t.Context())
+			if err != nil {
+				return err.Error()
+			}
+			if _, got := textOf(t, df, "s"); !slices.Equal(got, []string{"a--"}) {
+				return fmt.Sprintf("%v, want [a--]", got)
+			}
+			return ""
+		}},
 	}
 
 	for _, tc := range cases {

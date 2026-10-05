@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"math"
 	"regexp"
 	"strings"
 	"unicode"
@@ -45,6 +46,12 @@ func StrCall(fn expr.CallFn, name string, out dtype.DataType,
 	acc := c.Strings()
 	n := c.Len()
 	valid := c.Validity()
+
+	if fn == expr.FnStrPadStart || fn == expr.FnStrPadEnd || fn == expr.FnStrZFill {
+		if err := padFits(fn, args, acc, n, valid); err != nil {
+			return nil, err
+		}
+	}
 
 	// Predicates and counts write fixed-width output; the rest build strings.
 	switch fn {
@@ -298,6 +305,48 @@ func applyStr(fn expr.CallFn, s string, args []any, re *regexp.Regexp) (string, 
 //
 // A string argument rather than a rune because the expression layer's literals are
 // Go values with no rune type; the first rune of it is what pads.
+// maxStringBytes is the most character data one String column can hold: its
+// offsets are 32-bit. A variable only so a test can lower it.
+var maxStringBytes int64 = math.MaxInt32
+
+// padFits refuses a pad whose output would not fit in one String column, before
+// anything is allocated.
+//
+// The width is the caller's, and every row pads to it, so a huge width was a huge
+// allocation per row: a fatal out-of-memory, which no recover can catch (audit.md
+// S22). Past 2 GiB the column's 32-bit offsets would wrap besides (S24). The bytes
+// are counted exactly — each row's own, plus its padding at the fill's width — so a
+// pad that fits is never refused.
+func padFits(fn expr.CallFn, args []any, acc data.StringAccessor, n int, valid bitmap.View) error {
+	width, _ := argInt(args, 0)
+	fill := int64(1)
+	if fn != expr.FnStrZFill {
+		fill = int64(utf8.RuneLen(padRune(args, 1)))
+	}
+	var total int64
+	for i := range n {
+		if !valid.Get(i) {
+			continue
+		}
+		s := acc.Get(i)
+		total += int64(len(s))
+		if short := width - int64(utf8.RuneCountInString(s)); short > 0 {
+			if short > (maxStringBytes-total)/fill+1 {
+				total = maxStringBytes + 1
+			} else {
+				total += short * fill
+			}
+		}
+		if total > maxStringBytes {
+			return uerr.New(uerr.KindValue, fn.String(),
+				"padding to width %d needs more than the %d bytes a String column holds",
+				width, maxStringBytes).
+				Hint("a String column's offsets are 32-bit; pad fewer rows, or to a smaller width")
+		}
+	}
+	return nil
+}
+
 func padRune(args []any, i int) rune {
 	s, ok := argString(args, i)
 	if !ok || s == "" {
