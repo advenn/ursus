@@ -1,8 +1,8 @@
 # ursus
 
 A (experimental) dataframe library for Go 1.27, modelled on Polars — lazy execution with a query optimizer, Arrow memory layout, SIMD
-kernels, and streaming execution that spills to disk rather than falling over — sort, group-by, join, unique and
-partitioned windows spill; the operators that cannot fail with an error naming themselves.
+kernels, and streaming execution that spills to disk rather than falling over. Sort, group-by, join, unique and
+partitioned windows spill; an operator that cannot fails with an error naming itself.
 
 ```go
 df, err := ursus.ScanParquet("events.parquet").
@@ -43,7 +43,7 @@ to.
 
 - Interactive analytics over hundreds of millions of rows. Use DuckDB or Polars.
 - Anywhere you can link cgo freely: `duckdb-go` is around 10x faster than this and is a binding to a mature engine.
-- Anything production-critical today. This is v0.2, the API still moves, and nothing here is promised.
+- Anything production-critical today. This is v0.3, the API still moves, and nothing here is promised.
 
 The honest summary is that Go has not had a dataframe library of this shape, and one that is correct and a few times
 slower is more useful than none — for the sizes most services actually handle.
@@ -88,12 +88,12 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 
 ## Status
 
-**v0.2 is complete.** What works today:
+**v0.3** — what changed since v0.2 is in [`CHANGELOG.md`](./CHANGELOG.md). What works today:
 
 |                 |                                                                                                                                                   |
 |-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Sources**     | Parquet and CSV (read and write), in-memory frames, Arrow (records and streams in; records out, zero-copy)                                        |
-| **Types**       | Bool, Int8–64, Uint8–64, Float32/64, String, Binary, Date, Time, Datetime (unit + zone), Duration, Decimal (128-bit; exact `sum`; casts to and from every numeric type exact or refused, except to a float, which rounds to the nearest), Enum |
+| **Sources**     | Parquet and CSV (read and write, List and Struct included for Parquet), from paths, memory, or any `io.ReaderAt` / stream you open (`ScanParquetFrom`, `ScanCSVFrom`); in-memory frames; Arrow (records and streams in; records out, zero-copy) |
+| **Types**       | Bool, Int8–64, Uint8–64, Float32/64, String, Binary, Date, Time, Datetime (unit + zone), Duration, Decimal (128-bit; exact `+ - *` and `sum`, refused past 38 digits; `/` to the nearest Float64; casts to and from every numeric type exact or refused, except to a float, which rounds to the nearest), Enum (built from String, ordered by its categories) |
 | **Expressions** | arithmetic, comparison, Kleene three-valued logic, conditionals, casts, null repair, `.str` (incl. `Split` → List) and `.dt` namespaces, 20 aggregates including `Implode`, window functions |
 | **Frame ops**   | filter, select, with-columns, sort, top-k, distinct, concat/vstack/hstack, slice/tail/reverse/row-index, drop/rename/drop-nulls, unpivot                   |
 | **Joins**       | all seven equi-join kinds with `Validate`, `JoinWhere` and `WhereExists`/`WhereNotExists` (non-equi), as-of join with tolerance and `by` keys, merge-sorted                          |
@@ -150,7 +150,7 @@ tell from a real one; use `MapBatches` when the null is the point. The name is
 required, and `Explain` shows it. Your function is called from several goroutines at
 once, so it must be safe for that.
 
-Not done: `MapGroups` and `RollingMap`, common subexpression elimination, SQL, `Pivot` — whose output columns are the distinct values of a
+Not done: built-in object stores (planned for 0.4; the seam above reaches one today), `MapGroups` and `RollingMap`, common subexpression elimination, SQL, `Pivot` — whose output columns are the distinct values of a
 column, so its schema would depend on data and no plan node here does; `Unpivot` (melt) ships — and the long tail of
 `Expr.Rolling*`, `Upsample`, `Interpolate`
 and the trigonometric block.
@@ -168,7 +168,7 @@ make race       # the whole suite under -race
 make levels     # import-level invariants
 ```
 
-**1610 test cases**, and the matrix is not decoration. Vector width is a *runtime*
+**2890 test cases**, and the matrix is not decoration. Vector width is a *runtime*
 property, so a single-width run proves very little: 512-bit gives 8 float64 lanes, which happens to be exactly one
 bitmap byte — a coincidence that hides an entire class of sub-byte bitmap bug. The 128-bit leg is where those surface.
 
