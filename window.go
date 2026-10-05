@@ -199,11 +199,22 @@ func (e Expr) BackwardFill(limit int) Expr {
 // shift is computed once. That is real common-subexpression elimination, unlike
 // Coalesce, which has none.
 //
-// The type is whatever subtraction gives, which is the operand's own for a number
-// and a DURATION for an instant — the temporal algebra's instant-minus-instant
+// The type is whatever subtraction gives, which is the operand's own for a signed
+// number and a DURATION for an instant — the temporal algebra's instant-minus-instant
 // rule. Polars' diff carries a null_behavior parameter this composition cannot
 // express; the first n rows are null here.
-func (e Expr) Diff(n int) Expr { return e.Sub(e.Shift(n)) }
+//
+// # An unsigned column is widened first
+//
+// Subtracting at its own width wrapped: a UInt8 that went from 3 to 1 changed by
+// 254. It is taken one signed width up — UInt8 to Int16, UInt16 to Int32, UInt32 to
+// Int64, UInt64 to Int128 — which holds every difference exactly, by the same
+// plan-time call PctChange uses to reach a float. A signed integer keeps its width
+// and wraps, as all integer arithmetic here does, and as Polars' diff does.
+func (e Expr) Diff(n int) Expr {
+	w := wrap(&expr.Call{Fn: expr.FnMathDiffWiden, Args: []expr.Node{e.node()}})
+	return w.Sub(w.Shift(n))
+}
 
 // PctChange is the fractional change from the value n rows earlier.
 //

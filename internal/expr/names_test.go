@@ -223,8 +223,8 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	if classified != 63 {
-		t.Errorf("%d call functions are classified, want 63 — the families and the "+
+	if classified != 64 {
+		t.Errorf("%d call functions are classified, want 64 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }

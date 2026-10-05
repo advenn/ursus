@@ -24,10 +24,6 @@ import (
 // knownOpenRowDefects names each case that answers wrongly today, with what it
 // answers.
 var knownOpenRowDefects = map[string]string{
-	"Diff over UInt8 widens to Int16":              "UInt8, wrapped",
-	"Diff over UInt16 widens to Int32":             "UInt16, wrapped",
-	"Diff over UInt32 widens to Int64":             "UInt32, wrapped",
-	"Diff over UInt64 widens to Int128":            "UInt64, wrapped",
 	"Goexit in a parallel Select is an error":      "drops the rows after it",
 	"Goexit in a parallel aggregation is an error": "drops the rows after it",
 	"Goexit in a parallel join probe is an error":  "drops the rows after it",

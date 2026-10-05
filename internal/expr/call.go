@@ -107,6 +107,10 @@ const (
 	// changing its value: an integer or a Decimal to the nearest Float64, a float as
 	// itself. It is how PctChange subtracts in float, and is not public.
 	FnMathAsFloat
+	// FnMathDiffWiden takes an unsigned integer to the signed type that holds the
+	// difference of any two of its values, and leaves every other type as it is. It
+	// is how Diff subtracts without wrapping, and is not public.
+	FnMathDiffWiden
 	fnMathEnd
 
 	// --- list ---
@@ -180,7 +184,7 @@ var callNames = map[CallFn]string{
 
 	FnIsIn: "is_in",
 
-	FnMathRound: "round", FnMathAsFloat: "as_float",
+	FnMathRound: "round", FnMathAsFloat: "as_float", FnMathDiffWiden: "diff_widen",
 
 	FnListLen: "list.len", FnListGet: "list.get",
 	FnListContains: "list.contains", FnListMin: "list.min",
@@ -393,6 +397,21 @@ func mathCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 		return dtype.Null, uerr.New(uerr.KindType, "pct_change",
 			"pct_change is not defined for %s", in).
 			Hint("it is defined for numbers and Durations; for an instant, take Diff, a Duration")
+	case FnMathDiffWiden:
+		// One width up, which holds every difference exactly: a UInt8 difference
+		// is within ±255. UInt64's is within ±(2^64−1), which only Int128 holds;
+		// Polars gives Int64 there, and nulls where it overflows.
+		switch in.ID() {
+		case dtype.TypeUint8:
+			return dtype.Int16, nil
+		case dtype.TypeUint16:
+			return dtype.Int32, nil
+		case dtype.TypeUint32:
+			return dtype.Int64, nil
+		case dtype.TypeUint64:
+			return dtype.Int128, nil
+		}
+		return in, nil
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown maths call %d", fn)
 	}
