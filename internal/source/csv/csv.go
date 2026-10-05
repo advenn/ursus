@@ -22,7 +22,10 @@ import (
 // execution — and an io.Reader cannot be rewound. Taking a factory instead of a
 // Reader makes that explicit and lets the same type serve a file, a byte slice, or
 // an object store later, without this package knowing which.
-type Opener func() (io.ReadCloser, error)
+//
+// ctx is the query's: the one Schema and Open were given, so a stream that lives
+// behind a network can be cancelled through it.
+type Opener func(ctx context.Context) (io.ReadCloser, error)
 
 // Source is one or more CSV files read as a single table.
 //
@@ -84,7 +87,7 @@ func FromFiles(paths []string, desc string, o Options) *Source {
 
 // FileOpener returns an Opener for a path.
 func FileOpener(path string) Opener {
-	return func() (io.ReadCloser, error) { return os.Open(path) }
+	return func(context.Context) (io.ReadCloser, error) { return os.Open(path) }
 }
 
 // --- plan.Source ---------------------------------------------------------------
@@ -142,9 +145,9 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 		// Inference reads the FIRST stream only. Reading them all would make opening
 		// a thousand-part dataset cost a thousand file opens before the query starts,
 		// and the parts of a partitioned dataset share a schema by construction.
-		r, err := s.opens[0]()
+		r, err := s.opens[0](ctx)
 		if err != nil {
-			s.err = uerr.Wrap(err, uerr.KindIO, "scan_csv", "opening %s", s.desc)
+			s.err = uerr.Wrap(err, uerr.KindIO, "scan_csv", "opening %s", s.partName(0))
 			return
 		}
 		defer r.Close()
@@ -225,7 +228,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		stage:     make([]colStage, out.Len()),
 		threads:   spec.Threads,
 	}
-	if err := r.openNext(); err != nil {
+	if err := r.openNext(ctx); err != nil {
 		return nil, err
 	}
 	return r, nil
@@ -300,17 +303,16 @@ func (r *reader) closeLocked() error {
 
 // openNext advances to the next stream and skips its leading rows and header.
 // It reports io.EOF when there are no streams left.
-func (r *reader) openNext() error {
+func (r *reader) openNext(ctx context.Context) error {
 	if err := r.closeLocked(); err != nil {
 		return uerr.Wrap(err, uerr.KindIO, "scan_csv", "closing a part of %s", r.src.desc)
 	}
 	if r.next >= len(r.src.opens) {
 		return io.EOF
 	}
-	rc, err := r.src.opens[r.next]()
+	rc, err := r.src.opens[r.next](ctx)
 	if err != nil {
-		return uerr.Wrap(err, uerr.KindIO, "scan_csv", "opening part %d of %s",
-			r.next+1, r.src.desc)
+		return uerr.Wrap(err, uerr.KindIO, "scan_csv", "opening %s", r.src.partName(r.next))
 	}
 	r.next++
 	r.rc = rc
@@ -460,7 +462,7 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 				return nil, uerr.Annotate(err, "scan_csv", r.src.desc)
 			}
 			// This stream is exhausted; roll on to the next file, if any.
-			switch err := r.openNext(); {
+			switch err := r.openNext(ctx); {
 			case err == io.EOF:
 				r.done = true
 			case err != nil:

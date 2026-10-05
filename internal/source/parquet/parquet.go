@@ -36,7 +36,10 @@ type Options struct {
 func DefaultOptions() Options { return Options{Prune: true} }
 
 // Opener produces a fresh handle on the same file.
-type Opener func() (parquet.ReaderAtSeeker, io.Closer, error)
+//
+// ctx is the query's: the one Schema and Open were given. A file that lives behind
+// a network can be cancelled through it, and its handle may keep it for its reads.
+type Opener func(ctx context.Context) (parquet.ReaderAtSeeker, io.Closer, error)
 
 // Source is one or more Parquet files read as a single table.
 //
@@ -211,7 +214,7 @@ func (s *Source) readSchemas(ctx context.Context) (*dtype.Schema, map[int]error,
 		if err := ctx.Err(); err != nil {
 			return nil, nil, err
 		}
-		r, closer, err := s.openFile(k)
+		r, closer, err := s.openFile(ctx, k)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -341,8 +344,8 @@ func (s *Source) layoutFor(full *dtype.Schema, sc *schema.Schema, k int) (fileLa
 	return lay, nil
 }
 
-func (s *Source) openFile(i int) (_ *file.Reader, _ func(), err error) {
-	ra, closer, err := s.opens[i]()
+func (s *Source) openFile(ctx context.Context, i int) (_ *file.Reader, _ func(), err error) {
+	ra, closer, err := s.opens[i](ctx)
 	if err != nil {
 		return nil, nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
 			"opening %s", s.partName(i))
@@ -486,7 +489,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 				err = corrupt(v, r.name)
 			}
 		}()
-		return r.openNext()
+		return r.openNext(ctx)
 	}()
 	if err != nil && err != io.EOF {
 		r.closeLocked()
@@ -555,14 +558,14 @@ func (r *reader) closeChunks() {
 
 // openNext advances to the next readable row group, opening the next file when the
 // current one runs out and skipping any row group the pruner rules out.
-func (r *reader) openNext() error {
+func (r *reader) openNext(ctx context.Context) error {
 	for {
 		if r.pf == nil {
 			if r.fileIdx >= len(r.src.opens) {
 				return io.EOF
 			}
 			r.name = r.src.partName(r.fileIdx)
-			pf, closeFn, err := r.src.openFile(r.fileIdx)
+			pf, closeFn, err := r.src.openFile(ctx, r.fileIdx)
 			if err != nil {
 				return err
 			}
@@ -716,7 +719,7 @@ func (r *reader) Next(ctx context.Context) (_ *data.Batch, err error) {
 			return nil, err
 		}
 		if r.chunks == nil || r.rgLeft <= 0 {
-			switch err := r.openNext(); {
+			switch err := r.openNext(ctx); {
 			case err == io.EOF:
 				r.done = true
 				return nil, io.EOF

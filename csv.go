@@ -145,7 +145,7 @@ func ScanCSVFiles(paths []string, opts ...CSVOption) *LazyFrame {
 // It takes the bytes rather than an io.Reader because a source is opened more than
 // once — once for inference, once per execution — and a Reader cannot be rewound.
 func ScanCSVReader(b []byte, name string, opts ...CSVOption) *LazyFrame {
-	open := func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(b)), nil }
+	open := func(context.Context) (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(b)), nil }
 	return Scan(csv.New(open, name, csvOptions(opts)))
 }
 

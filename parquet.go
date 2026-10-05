@@ -36,7 +36,7 @@ func parquetOptions(opts []ParquetOption) parquet.Options {
 }
 
 func fileOpener(path string) parquet.Opener {
-	return func() (arrowpq.ReaderAtSeeker, io.Closer, error) {
+	return func(context.Context) (arrowpq.ReaderAtSeeker, io.Closer, error) {
 		f, err := os.Open(path)
 		if err != nil {
 			return nil, nil, err
@@ -103,7 +103,7 @@ func ScanParquetFiles(paths []string, opts ...ParquetOption) *LazyFrame {
 
 // ScanParquetBytes reads a Parquet file from memory.
 func ScanParquetBytes(b []byte, name string, opts ...ParquetOption) *LazyFrame {
-	open := func() (arrowpq.ReaderAtSeeker, io.Closer, error) {
+	open := func(context.Context) (arrowpq.ReaderAtSeeker, io.Closer, error) {
 		return bytes.NewReader(b), nil, nil
 	}
 	return Scan(parquet.New([]parquet.Opener{open}, name, parquetOptions(opts)))

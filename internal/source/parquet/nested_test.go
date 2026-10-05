@@ -13,6 +13,7 @@ package parquet
 // produced, and reading around it works.
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -181,7 +182,7 @@ func writeNested(t *testing.T) string {
 
 func openSource(t *testing.T, path string) *Source {
 	t.Helper()
-	return New([]Opener{func() (parquet.ReaderAtSeeker, io.Closer, error) {
+	return New([]Opener{func(context.Context) (parquet.ReaderAtSeeker, io.Closer, error) {
 		f, err := os.Open(path)
 		return f, f, err
 	}}, path, Options{})

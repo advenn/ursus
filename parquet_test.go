@@ -1,6 +1,7 @@
 package ursus_test
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -571,7 +572,7 @@ func TestCSVToParquet(t *testing.T) {
 // Source directly and read its counters.
 func fileOpener(t *testing.T, path string) parquet.Opener {
 	t.Helper()
-	return func() (arrowpq.ReaderAtSeeker, io.Closer, error) {
+	return func(context.Context) (arrowpq.ReaderAtSeeker, io.Closer, error) {
 		f, err := os.Open(path)
 		if err != nil {
 			return nil, nil, err

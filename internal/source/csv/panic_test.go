@@ -5,6 +5,7 @@ package csv
 // schema.
 
 import (
+	"context"
 	"errors"
 	"io"
 	"strings"
@@ -49,7 +50,7 @@ func TestConvertAllRecoversAPanic(t *testing.T) {
 // recovered outside, the Once would still be done, and the second call would
 // return no schema and no error.
 func TestSchemaPanicIsNotForgotten(t *testing.T) {
-	s := New(func() (io.ReadCloser, error) { panic("open boom") }, "boom.csv", Options{})
+	s := New(func(context.Context) (io.ReadCloser, error) { panic("open boom") }, "boom.csv", Options{})
 	for i := range 2 {
 		sc, err := s.Schema(t.Context())
 		if sc != nil || !errors.Is(err, uerr.ErrInternal) || !strings.Contains(err.Error(), "open boom") {

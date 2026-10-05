@@ -101,7 +101,7 @@ func TestSchemaStopsWhenTheContextIsCancelled(t *testing.T) {
 	for i := range 3 {
 		p := filepath.Join(dir, "part"+string(rune('0'+i))+".parquet")
 		writeInts(t, p, []string{"a"}, []int64{int64(i)})
-		opens = append(opens, func() (parquet.ReaderAtSeeker, io.Closer, error) {
+		opens = append(opens, func(context.Context) (parquet.ReaderAtSeeker, io.Closer, error) {
 			if i == 1 {
 				cancel() // the query is cancelled while the second footer is read
 			}
