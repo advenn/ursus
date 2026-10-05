@@ -44,6 +44,15 @@ func TestPadRefusesWhatAStringColumnCannotHold(t *testing.T) {
 		{"a width past int64 arithmetic is refused, not wrapped", expr.FnStrPadStart,
 			[]any{int64(1) << 62, "€"}, false},
 	}
+	// One row, so a width whose padding wraps int64 cannot wrap back past the limit
+	// on a later row and be refused by accident.
+	t.Run("one row past int64 arithmetic is refused", func(t *testing.T) {
+		one := data.NewString("s", []string{"ab"}, bitmap.AllSet(1))
+		if _, err := StrCall(expr.FnStrPadStart, "s", dtype.String, one,
+			[]any{int64(1) << 62, "€"}, nil); !errors.Is(err, uerr.ErrValue) {
+			t.Fatalf("want a value error, got %v", err)
+		}
+	})
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			out, err := StrCall(tc.fn, "s", dtype.String, c, tc.args, nil)

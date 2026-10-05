@@ -152,6 +152,15 @@ func TestOpenRowsByHand(t *testing.T) {
 		{"Goexit in a parallel join probe is an error", refusesGoexit(five().Join(
 			ursus.Frame(ursus.Values("k", []int64{10, 20}), ursus.Values("r", []int64{1, 2})),
 			ursus.JoinOn(exitOn(c("k"))), ursus.JoinHow(ursus.JoinLeft)))},
+		// A sort key is evaluated as the sort drains its input, which happens in
+		// whatever goroutine pulls from it: here the dispatcher of the parallel stage,
+		// or of the join probe, above it.
+		{"Goexit in a parallel stage's dispatcher is an error", refusesGoexit(five().
+			Sort(ursus.Asc(exitOn(c("k")))).Select(c("k").Add(1)))},
+		{"Goexit in a join probe's dispatcher is an error", refusesGoexit(five().
+			Sort(ursus.Asc(exitOn(c("k")))).Join(
+			ursus.Frame(ursus.Values("k", []int64{10, 20}), ursus.Values("r", []int64{1, 2})),
+			ursus.JoinOn(c("k")), ursus.JoinHow(ursus.JoinLeft)))},
 
 		// --- S22: refused before anything is allocated. Run before the fix, these
 		// asked for a terabyte a row. ---
