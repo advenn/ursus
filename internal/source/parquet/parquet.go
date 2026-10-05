@@ -651,7 +651,7 @@ func (r *reader) openColumn(rg *file.RowGroupReader,
 		cr, err := rg.Column(ci)
 		if err != nil {
 			return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
-				"opening column %q", f.Name)
+				"opening column %q of %s", f.Name, r.name)
 		}
 		return newColReader(cr, r.pf.MetaData().Schema.Column(ci), dt)
 	}
@@ -734,7 +734,9 @@ func (r *reader) Next(ctx context.Context) (_ *data.Batch, err error) {
 		for _, c := range r.chunks {
 			got, err := c.read(n)
 			if err != nil {
-				return nil, err
+				// The file, which a column's own error does not know: over several
+				// files, or a file behind a network, it is the part that matters.
+				return nil, uerr.Annotate(err, "scan_parquet", r.name)
 			}
 			// Every column of a row group has the same number of rows. A disagreement
 			// means the file's column chunks are inconsistent, and continuing would

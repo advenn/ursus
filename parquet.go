@@ -3,6 +3,7 @@ package ursus
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -107,6 +108,83 @@ func ScanParquetBytes(b []byte, name string, opts ...ParquetOption) *LazyFrame {
 		return bytes.NewReader(b), nil, nil
 	}
 	return Scan(parquet.New([]parquet.Opener{open}, name, parquetOptions(opts)))
+}
+
+// ParquetFile is one Parquet file, read through ReadAt from wherever it lives — an
+// object store, an HTTP server, an archive — by code that knows how to reach it.
+//
+// ursus reads a file the way an object store wants to be read: the footer from the
+// end, then one ranged read for each column chunk the query needs, after the
+// statistics have pruned the row groups it does not. A ReadAt over a ranged GET
+// therefore fetches what the query reads and nothing else.
+type ParquetFile struct {
+	// Name identifies the file in errors and in Explain.
+	Name string
+
+	// Open returns the file's bytes and their size.
+	//
+	// It is called more than once per query — once to read the schema when the
+	// query is planned, once for each execution — and must return a fresh reader
+	// each time. ctx is the query's and outlives the reader, so a reader over a
+	// network may keep it for its reads. If the reader is also an io.Closer, ursus
+	// closes it when it is done with it.
+	Open func(ctx context.Context) (r io.ReaderAt, size int64, err error)
+}
+
+// ScanParquetFrom reads Parquet files the caller opens, as one frame in the order
+// given, under ScanParquetFiles' rules for several files.
+//
+// It is how ursus reaches an object store without depending on one: give each file
+// an Open that returns a ReaderAt over ranged GETs.
+//
+//	files := []ursus.ParquetFile{{
+//	    Name: "s3://logs/2026/10/part-0.parquet",
+//	    Open: func(ctx context.Context) (io.ReaderAt, int64, error) {
+//	        return newRangedReader(ctx, client, "logs", "2026/10/part-0.parquet")
+//	    },
+//	}}
+//	df, err := ursus.ScanParquetFrom(files).Filter(ursus.Col("status").Eq(500)).Collect(ctx)
+func ScanParquetFrom(files []ParquetFile, opts ...ParquetOption) *LazyFrame {
+	if len(files) == 0 {
+		return &LazyFrame{err: uerr.New(uerr.KindValue, "scan_parquet", "no files given")}
+	}
+	opens := make([]parquet.Opener, len(files))
+	names := make([]string, len(files))
+	for i, f := range files {
+		names[i] = f.Name
+		if names[i] == "" {
+			names[i] = "parquet file " + strconv.Itoa(i+1)
+		}
+		if f.Open == nil {
+			return &LazyFrame{err: uerr.New(uerr.KindValue, "scan_parquet",
+				"%s has no Open function", names[i])}
+		}
+		opens[i] = readerAtOpener(f.Open)
+	}
+	desc := names[0]
+	if len(names) > 1 {
+		desc += " and " + strconv.Itoa(len(names)-1) + " more"
+	}
+	return Scan(parquet.NewNamed(opens, names, desc, parquetOptions(opts)))
+}
+
+// readerAtOpener adapts a ParquetFile's Open to the reader's Opener: a section of
+// the given size is what the footer is found at the end of.
+func readerAtOpener(open func(context.Context) (io.ReaderAt, int64, error)) parquet.Opener {
+	return func(ctx context.Context) (arrowpq.ReaderAtSeeker, io.Closer, error) {
+		r, size, err := open(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		c, _ := r.(io.Closer)
+		if r == nil || size < 0 {
+			if c != nil {
+				c.Close()
+			}
+			return nil, nil, fmt.Errorf("Open returned a nil reader or a negative size (%d)", size)
+		}
+		return io.NewSectionReader(r, 0, size), c, nil
+	}
 }
 
 // --- writing -------------------------------------------------------------------
