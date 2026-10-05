@@ -102,9 +102,9 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 | **Execution**   | order-preserving pipeline parallelism, parallel hash aggregation, and spilling for sort, hash aggregation, hash join, unique and partitioned windows (`WithMemoryLimit` names the rest, which fail rather than spill) |
 | **UDFs**        | `MapElements` (per value) and `MapBatches` (per column) — generic methods, so the Go types are inferred from your function                        |
 
-Nested types are partly there: **List and Struct read from Parquet and Arrow**, with
+Nested types are partly there: **List and Struct read from Parquet and Arrow and write to Parquet**, with
 `Explode`, `Unnest`, a `.list` namespace and `.struct.field()`. An Arrow Map arrives as a list of key/value structs.
-Array is not there, and nested columns cannot yet be written to Parquet.
+Array is not there, and a List of Lists or of Structs is refused by name on both sides.
 
 **Arrow** goes both ways, in pure Go. `df.Record()` and `lf.CollectRecords(ctx)` export without copying;
 `ScanArrow` reads any `array.RecordReader` — an IPC stream, Flight, the C Data Interface — and `ScanArrowRecords` reads
@@ -118,6 +118,23 @@ lf := ursus.ScanArrow(func() (array.RecordReader, error) {
 
 The function is called once to plan the query and once per scan, because a reader cannot be rewound. 38 of Arrow's 45
 types map; Decimal256, intervals, unions and run-end encoding are refused by name.
+
+**Object storage** has no client built in: each store wants its vendor's SDK, and ursus is pure Go with one dependency.
+`ScanParquetFrom` reads Parquet through any `io.ReaderAt` instead, so a ReadAt over ranged GETs reaches S3, GCS or an
+HTTP server — and ursus reads the footer and then only the column chunks the query needs, after statistics have pruned
+the row groups it does not:
+
+```go
+lf := ursus.ScanParquetFrom([]ursus.ParquetFile{{
+    Name: "s3://logs/2026/10/part-0.parquet",
+    Open: func(ctx context.Context) (io.ReaderAt, int64, error) {
+        return openRanged(ctx, client, "logs", "2026/10/part-0.parquet") // your ReadAt over GetObject with a Range
+    },
+}})
+```
+
+`ScanCSVFrom` takes a stream the same way, and `WriteParquet` and `WriteCSV` write to any `io.Writer`, an upload
+included. Built-in stores — `s3://` paths, listing for globs, retries — are planned for 0.4.
 
 The escape hatch is real: a per-element UDF in Go is a function call, not a Python
 interpreter round trip, which is the one place this library can beat Polars outright

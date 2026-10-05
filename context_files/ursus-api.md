@@ -1078,6 +1078,12 @@ func WithEncoding(e Encoding) CSVScanOption
 
 ### Object storage
 
+> **As of 0.3 (step 83), not built.** The stores are deferred to 0.4 for the reason
+> `v0.3-scope.md` §4 gives. What ships is the seam beneath them: `ScanParquetFrom`
+> takes `[]ParquetFile{Name, Open func(ctx) (io.ReaderAt, int64, error)}`, and
+> `ScanCSVFrom` takes `[]CSVFile{Name, Open func(ctx) (io.ReadCloser, error)}`. A
+> `Store` below would be one implementation of those Opens.
+
 ```go
 package objstore
 
