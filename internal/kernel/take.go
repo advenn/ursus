@@ -466,14 +466,7 @@ func concatColumn(parts []*data.Column, total int) (*data.Column, error) {
 		return concatStruct(parts, total, outValid)
 
 	case first.DType().HasStringStorage(): // an Enum is indices, as in Take
-		vals := make([]string, 0, total)
-		for _, p := range parts {
-			acc := p.Strings()
-			for i := range p.Len() {
-				vals = append(vals, acc.Get(i))
-			}
-		}
-		return data.NewString(first.Name(), vals, outValid).WithDType(first.DType()), nil
+		return data.ConcatStrings(first.Name(), first.DType(), parts, outValid), nil
 
 	default:
 		return concatFixed(parts, total, outValid)

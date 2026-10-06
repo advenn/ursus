@@ -297,6 +297,67 @@ func NewString(name string, vals []string, valid bitmap.View) *Column {
 	}
 }
 
+// ConcatStrings builds one String or Binary column of type dt from parts, end to
+// end, and validity valid: each part's live characters copied once, its offsets
+// shifted by the characters before it.
+//
+// Every Collect ends in one of these per String column, serially. It used to build
+// a Go string per row and hand the slice to NewString, which copied every byte a
+// second time: 0.37 s of h2o j3's 0.58 s at 2M rows (step 101's profile).
+//
+// A part is a derived column as often as not — Column.Slice keeps the whole
+// character buffer and re-windows the offsets — so what it contributes is the range
+// its own offsets cover, not its buffer.
+func ConcatStrings(name string, dt dtype.DataType, parts []*Column, valid bitmap.View) *Column {
+	n, chars := 0, int64(0)
+	for _, p := range parts {
+		if p.len == 0 || p.offs == nil {
+			n += p.len
+			continue
+		}
+		o := unsafeData[int32](p.offs.Bytes())
+		chars += int64(o[p.len] - o[0])
+		n += p.len
+	}
+	// Counted before anything is allocated, as NewString counts.
+	if chars > MaxStringBytes {
+		tooManyChars(name, chars)
+	}
+	ob := arrowx.NewBuffer((n + 1) * 4)
+	cb := arrowx.NewBuffer(int(chars))
+	offs := unsafeData[int32](ob.Bytes())
+	out := cb.Bytes()
+
+	row, pos := 0, int32(0)
+	for _, p := range parts {
+		if p.len == 0 {
+			continue
+		}
+		if p.offs == nil {
+			// A column with no payload — every row null — holds no characters.
+			for range p.len {
+				offs[row] = pos
+				row++
+			}
+			continue
+		}
+		o := unsafeData[int32](p.offs.Bytes())
+		lo, hi := o[0], o[p.len]
+		copy(out[pos:], p.chars.Bytes()[lo:hi])
+		for i := range p.len {
+			offs[row] = pos + (o[i] - lo)
+			row++
+		}
+		pos += hi - lo
+	}
+	offs[n] = pos
+
+	if valid.Len() == 0 && n > 0 {
+		valid = bitmap.AllSet(n)
+	}
+	return &Column{name: name, dt: dt, len: n, valid: valid, offs: ob, chars: cb}
+}
+
 // NewStringParts builds a String column from an offsets slice and a character
 // slice that a reader has already accumulated.
 //
