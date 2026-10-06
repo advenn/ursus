@@ -131,7 +131,14 @@ func leafType(c *schema.Column) (dtype.DataType, error) {
 		}
 		return dtype.Datetime(u, ""), nil
 
-	case schema.NoLogicalType, schema.NullLogicalType:
+	case schema.NullLogicalType:
+		// A column of nothing but nulls: Polars and PyArrow write their Null type
+		// so, and so does ursus since step 108. It was read as its physical type,
+		// which turned a Null column into an Int32 one that happened to hold no
+		// values.
+		return dtype.Null, nil
+
+	case schema.NoLogicalType:
 		return physicalOnly(c, p)
 
 	default:
@@ -229,6 +236,11 @@ func toNode(f dtype.Field) (schema.Node, error) {
 	}
 
 	switch f.Type.ID() {
+	case dtype.TypeNull:
+		// Parquet's NULL logical type, on INT32 as PyArrow and Polars put it: every
+		// row has definition level 0 and there are no values (audit.md I18).
+		return schema.NewPrimitiveNodeLogical(name, rep, schema.NullLogicalType{},
+			parquet.Types.Int32, -1, -1)
 	case dtype.TypeBool:
 		return schema.NewPrimitiveNode(name, rep, parquet.Types.Boolean, -1, -1)
 	case dtype.TypeFloat32:

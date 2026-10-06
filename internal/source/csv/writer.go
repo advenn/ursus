@@ -211,6 +211,9 @@ func (w *Writer) formatter(c *data.Column) (func([]byte, int) []byte, error) {
 
 	dt := c.DType()
 	switch dt.ID() {
+	case dtype.TypeNull:
+		// Every row is null, written as the null value (audit.md I18).
+		return func(dst []byte, _ int) []byte { return append(dst, null...) }, nil
 	case dtype.TypeString:
 		s, err := data.TypedColumn[string](c)
 		if err != nil {

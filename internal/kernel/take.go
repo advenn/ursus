@@ -452,6 +452,10 @@ func concatColumn(parts []*data.Column, total int) (*data.Column, error) {
 	outValid := valid.Finish()
 
 	switch {
+	case first.DType().IsNull():
+		// Nothing but nulls, and no payload to join (audit.md J12): a Null column
+		// in any frame failed every Collect that concatenated batches.
+		return data.NewNull(first.Name(), first.DType(), total), nil
 	case first.DType().ID() == dtype.TypeBool:
 		bits := bitmap.NewBuilder(total)
 		for _, p := range parts {

@@ -375,6 +375,9 @@ func writeVals[T any](cw batchWriter[T], l leafData, get func(int) T) error {
 func writeInt32(cw *file.Int32ColumnChunkWriter, l leafData) error {
 	c := l.col
 	switch c.DType().ID() {
+	case dtype.TypeNull:
+		// Only levels: shred found no valid row, so there is no value to write.
+		return writeVals(cw, l, func(int) int32 { return 0 })
 	case dtype.TypeInt8:
 		return narrow[int8](cw, l)
 	case dtype.TypeInt16:

@@ -915,6 +915,32 @@ func checkEncodings(rg *metadata.RowGroupMetaData, col int, name string) error {
 
 // --- column reader construction --------------------------------------------------
 
+// skipper is every typed column chunk reader: each can step over rows unread.
+type skipper interface {
+	Skip(nvalues int64) (int64, error)
+}
+
+// nullCol reads a column of Parquet's NULL logical type, which holds rows and no
+// values: it steps over them and counts.
+type nullCol struct {
+	skip func(int64) (int64, error)
+	rows int
+}
+
+func (c *nullCol) read(n int) (int, error) {
+	got, err := c.skip(int64(n))
+	c.rows += int(got)
+	return int(got), err
+}
+
+func (c *nullCol) finish(name string) *data.Column {
+	col := data.NewNull(name, dtype.Null, c.rows)
+	c.rows = 0
+	return col
+}
+
+func (c *nullCol) close() error { return nil }
+
 func newColReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataType) (colReader, error) {
 	maxDef := desc.MaxDefinitionLevel()
 	name := desc.Name()
@@ -924,6 +950,13 @@ func newColReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataT
 	// levels are the ones the machine needs.
 	if dt.ID() == dtype.TypeList {
 		return newListReader(cr, desc, dt)
+	}
+	if dt.ID() == dtype.TypeNull {
+		s, ok := cr.(skipper)
+		if !ok {
+			return nil, uerr.Internalf("parquet: column %q of type Null has no Skip", name)
+		}
+		return &nullCol{skip: s.Skip}, nil
 	}
 
 	switch t := cr.(type) {

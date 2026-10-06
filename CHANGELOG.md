@@ -12,6 +12,10 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **A Null-typed column concatenates, and writes to Parquet and CSV.**
+  - It failed every `Collect` that concatenated batches (`audit.md` J12).
+  - Parquet stores it as the NULL logical type, as PyArrow does, and reads that
+    back as Null, not Int32 (I18) (108).
 - **Comparisons are about 3.5× faster:** a literal is no longer copied to the
   column's length, and results are written 64 at a time (107).
 - **`TopK(k)` and `BottomK(k)` aggregates:** a group's k largest or smallest
