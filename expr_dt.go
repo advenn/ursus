@@ -106,3 +106,13 @@ func (d DtExpr) TotalSeconds() Expr { return d.call(expr.FnDtTotalSeconds) }
 // ToString formats using the same ISO 8601 layouts the CSV writer emits, so a
 // frame printed to a terminal and a frame written to a file agree.
 func (d DtExpr) ToString() Expr { return d.e.Cast(String) }
+
+// Strftime formats a Date, Datetime or Time with a strftime-style format, in a
+// zoned Datetime's own wall clock — Polars' dt.strftime.
+//
+//	Col("day").Dt().Strftime("%A, %e %B %Y")   // "Friday,  9 February 2024"
+//
+// The directives are Strptime's. A format that asks for what the value does not
+// have is refused while the query is planned: a date from a Time, or an offset or
+// zone name (%z, %Z) from anything but a zoned Datetime.
+func (d DtExpr) Strftime(format string) Expr { return d.call(expr.FnDtStrftime, format) }

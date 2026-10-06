@@ -223,8 +223,10 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	if classified != 64 {
-		t.Errorf("%d call functions are classified, want 64 — the families and the "+
+	// 68 since step 113 added str.to_date, str.to_datetime, str.to_time and
+	// dt.strftime.
+	if classified != 68 {
+		t.Errorf("%d call functions are classified, want 68 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }

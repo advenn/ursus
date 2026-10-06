@@ -42,6 +42,11 @@ import (
 func StrCall(fn expr.CallFn, name string, out dtype.DataType,
 	c *data.Column, args []any, re *regexp.Regexp) (*data.Column, error) {
 
+	switch fn {
+	case expr.FnStrToDateFmt, expr.FnStrToDatetimeFmt, expr.FnStrToTimeFmt:
+		return strptimeCall(fn, name, out, c, args)
+	}
+
 	acc := c.Strings()
 	n := c.Len()
 	valid := c.Validity()

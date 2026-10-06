@@ -28,11 +28,12 @@ const modulePath = "github.com/advenn/ursus"
 // levels without renumbering the world.
 var levels = map[string]int{
 	// L0 — leaves. Import stdlib and third-party only, never another ursus package.
-	"internal/uerr":   0, // stdlib only
-	"internal/arrowx": 0, // arrow-go only: the allocator and the ownership model
-	"objstore":        0, // stdlib only
-	"i128":            0, // stdlib only (math/big is a TEST-only import)
-	"internal/gen":    0, // build tooling
+	"internal/uerr":     0, // stdlib only
+	"internal/arrowx":   0, // arrow-go only: the allocator and the ownership model
+	"objstore":          0, // stdlib only
+	"i128":              0, // stdlib only (math/big is a TEST-only import)
+	"internal/strftime": 0, // stdlib only: strftime formats, compiled
+	"internal/gen":      0, // build tooling
 
 	"internal/bitmap": 5, // + arrowx
 

@@ -34,6 +34,10 @@ import (
 func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 	c *data.Column, args []any) (*data.Column, error) {
 
+	if fn == expr.FnDtStrftime {
+		return strftimeCall(name, c, args)
+	}
+
 	dt := c.DType()
 	ticks, err := readTicks(c)
 	if err != nil {

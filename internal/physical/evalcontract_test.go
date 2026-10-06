@@ -320,6 +320,19 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 	expr.FnStrExtract:    {{args: []any{"1", int64(0)}}},
 	expr.FnStrExtractAll: {{args: []any{"1"}}},
 
+	// string, parsed with a format. Not strict, so the fixture's strings, which are
+	// not dates, give nulls rather than refusing every row (step 113).
+	expr.FnStrToDateFmt:     {{args: []any{"%Y-%m-%d", false}}},
+	expr.FnStrToDatetimeFmt: {{args: []any{"%Y-%m-%d %H:%M", false, int64(dtype.Micro), ""}}},
+	expr.FnStrToTimeFmt:     {{args: []any{"%H:%M", false, int64(dtype.Micro)}}},
+
+	// temporal, formatted: a date format and a time one, because a Time refuses
+	// the first and a Date writes zeros for the second.
+	expr.FnDtStrftime: {
+		{label: ",date", args: []any{"%Y-%m-%d"}},
+		{label: ",time", args: []any{"%H:%M:%S"}},
+	},
+
 	// string, pattern + the literal flag that decides whether a regex is compiled
 	expr.FnStrContains: {
 		{label: ",literal", args: []any{"1", true}},

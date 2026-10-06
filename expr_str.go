@@ -3,6 +3,7 @@ package ursus
 import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // StrExpr is the string namespace: `Col("name").Str().ToLower()`.
@@ -195,4 +196,34 @@ func (s StrExpr) ToDate() Expr    { return s.e.CastLossy(dtype.Date) }
 
 func (s StrExpr) ToDatetime(unit dtype.TimeUnit, tz string) Expr {
 	return s.e.CastLossy(dtype.Datetime(unit, tz))
+}
+
+// Strptime parses each string with a strftime-style format into dt, a Date,
+// Datetime or Time — Polars' str.strptime.
+//
+//	Col("when").Str().Strptime(ursus.Date, "%d/%m/%Y", true)
+//	Col("ts").Str().Strptime(ursus.Datetime(ursus.Micro, "UTC"), "%Y-%m-%d %H:%M:%S%.f %z", true)
+//
+// The directives are strftime's: %Y %m %d %H %M %S, %.f for a fraction, %z for an
+// offset, %b and %B for month names, %j, %p, and the rest (internal/strftime lists
+// them). A format that cannot produce dt is refused while the query is planned: a
+// Date needs a date, a Time has none, and only a Datetime holds an offset.
+//
+// Strict, a value that does not match — or names a day that does not exist, such as
+// 30 February — is an error naming it. Otherwise it becomes null, as ToDate's do.
+//
+// A Datetime takes its instant from the offset when the format reads one;
+// otherwise the wall clock is read in dt's zone, or kept as it is when dt is naive.
+// Digits finer than the unit are dropped.
+func (s StrExpr) Strptime(dt dtype.DataType, format string, strict bool) Expr {
+	switch dt.ID() {
+	case dtype.TypeDate:
+		return s.call(expr.FnStrToDateFmt, format, strict)
+	case dtype.TypeDatetime:
+		return s.call(expr.FnStrToDatetimeFmt, format, strict, int64(dt.TimeUnit()), dt.TimeZone())
+	case dtype.TypeTime:
+		return s.call(expr.FnStrToTimeFmt, format, strict, int64(dt.TimeUnit()))
+	}
+	return wrap(&expr.Err{E: uerr.New(uerr.KindType, "str.strptime",
+		"strptime parses to a Date, Datetime or Time, not %s", dt)})
 }

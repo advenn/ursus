@@ -57,6 +57,12 @@ const (
 	FnStrSplit
 	FnStrSplitN
 	FnStrExtractAll
+	// The three parse a string with a strftime-style format (step 113): args are
+	// the format, strict, and for a Datetime the unit and zone, for a Time the
+	// unit. One function per target, because a type is not a literal.
+	FnStrToDateFmt
+	FnStrToDatetimeFmt
+	FnStrToTimeFmt
 	fnStrEnd
 
 	// --- temporal ---
@@ -79,6 +85,7 @@ const (
 	FnDtTotalHours
 	FnDtTotalMinutes
 	FnDtTotalSeconds
+	FnDtStrftime // formats with a strftime-style format; the one arg is the format
 	fnDtEnd
 
 	// --- type-agnostic ---
@@ -172,6 +179,8 @@ var callNames = map[CallFn]string{
 	FnStrStripCharsEnd:   "str.strip_chars_end",
 	FnStrEscapeRegex:     "str.escape_regex", FnStrSplit: "str.split",
 	FnStrSplitN: "str.splitn", FnStrExtractAll: "str.extract_all",
+	FnStrToDateFmt: "str.to_date", FnStrToDatetimeFmt: "str.to_datetime",
+	FnStrToTimeFmt: "str.to_time",
 
 	FnDtYear: "dt.year", FnDtMonth: "dt.month", FnDtDay: "dt.day",
 	FnDtHour: "dt.hour", FnDtMinute: "dt.minute", FnDtSecond: "dt.second",
@@ -181,6 +190,7 @@ var callNames = map[CallFn]string{
 	FnDtWeek: "dt.week", FnDtEpoch: "dt.epoch", FnDtTruncate: "dt.truncate",
 	FnDtTotalDays: "dt.total_days", FnDtTotalHours: "dt.total_hours",
 	FnDtTotalMinutes: "dt.total_minutes", FnDtTotalSeconds: "dt.total_seconds",
+	FnDtStrftime: "dt.strftime",
 
 	FnIsIn: "is_in",
 
@@ -281,6 +291,9 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 			return dtype.Null, uerr.New(uerr.KindType, "str",
 				"%s requires a String operand, got %s", fn, in).
 				Hint("cast the column first, e.g. .Cast(ursus.String)")
+		}
+		if fn.isStrptime() {
+			return strptimeOut(c)
 		}
 		return strCallOut(fn), nil
 
@@ -462,6 +475,13 @@ func dtCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 				"%s requires a Date, Time or Datetime operand, got %s", fn, in)
 		}
 		return truncateOut(c, in)
+
+	case FnDtStrftime:
+		if !isInstant {
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"%s requires a Date, Time or Datetime operand, got %s", fn, in)
+		}
+		return strftimeOut(c, in)
 
 	case FnDtEpoch:
 		if !isInstant {

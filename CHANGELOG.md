@@ -12,6 +12,12 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **`Str().Strptime(dtype, format, strict)` and `Dt().Strftime(format)`:** parse
+  and format dates, datetimes and times with strftime directives (`%d/%m/%Y`,
+  `%b %e, %Y`, `%H:%M:%S%.f %z`, …), as Polars does.
+  - A format that cannot produce the type is refused while the query is planned.
+  - A strict parse names the value that does not match; a lenient one gives null
+    (113).
 - **Parquet INT96 timestamps read,** as a naive `Datetime(ns)`, as PyArrow reads
   them. Spark writes INT96 by default, and such a file failed to open.
 - **An unannotated fixed-length byte array reads as Binary.** Its schema promised
