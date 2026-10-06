@@ -22,10 +22,7 @@ import (
 
 // knownCastEdgeDefects names each case that answers wrongly today, with what it
 // answers.
-var knownCastEdgeDefects = map[string]string{
-	"Abs of the minimum Duration is refused": "wraps to itself",
-	"Neg of the minimum Duration is refused": "wraps to itself",
-}
+var knownCastEdgeDefects = map[string]string{}
 
 func TestCastEdgesByHand(t *testing.T) {
 	c := ursus.Col

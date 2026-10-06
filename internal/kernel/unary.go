@@ -69,6 +69,11 @@ func Unary(op expr.UnaryOp, name string, out dtype.DataType, c *data.Column) (*d
 
 	case expr.OpNeg, expr.OpAbs, expr.OpSign, expr.OpFloor, expr.OpCeil:
 		// The TYPE-PRESERVING unary family: out == in for all five.
+		if (op == expr.OpNeg || op == expr.OpAbs) && c.DType().ID() == dtype.TypeDuration {
+			if err := durationNegates(op, c); err != nil {
+				return nil, err
+			}
+		}
 		return unaryArith(op, name, out, c, n)
 
 	case expr.OpSqrt, expr.OpCbrt, expr.OpExp, expr.OpLn, expr.OpLog10, expr.OpLog1p:
@@ -414,6 +419,32 @@ func Cast(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Co
 		return timeInDay(out, c.DType(), strict)
 	}
 	return out, nil
+}
+
+// durationNegates refuses the one Duration with no negation, the minimum, which Neg
+// and Abs wrapped to itself (audit.md S20). Every other overflowing temporal
+// operation has been refused since step 61; an integer's Abs still wraps, as all
+// integer arithmetic here does, and as Polars' does.
+func durationNegates(op expr.UnaryOp, c *data.Column) error {
+	v, err := data.Values[int64](c)
+	if err != nil {
+		return nil // payload-free: all nulls
+	}
+	name := "neg"
+	if op == expr.OpAbs {
+		name = "abs"
+	}
+	for i, t := range v {
+		if t == math.MinInt64 && c.IsValid(i) {
+			return uerr.New(uerr.KindValue, name,
+				"%s at row %d has no negation in %s", dtype.FormatTemporal(c.DType(), t), i, c.DType()).
+				Hint("%s holds tick counts from %s to %s, and the most negative has no positive "+
+					"partner", c.DType(), dtype.FormatTemporal(c.DType(), math.MinInt64),
+					dtype.FormatTemporal(c.DType(), math.MaxInt64)).
+				Hint("a coarser unit covers a wider span: cast it with .Cast(ursus.Duration(ursus.Micro))")
+		}
+	}
+	return nil
 }
 
 // timeInDay refuses, or nulls when lossy, every value of a Time column outside the
