@@ -69,9 +69,12 @@ type ScanSpec struct {
 	// use more than one core knows whether it may. 0 or 1 means stay serial.
 	//
 	// A source is free to ignore it — most have nothing to parallelise, because
-	// reading is I/O and the work above them is where the CPU goes. The CSV reader
-	// is the exception: turning text into typed columns is real per-field compute,
-	// and it used to do all of it on one core while eight sat idle.
+	// reading is I/O and the work above them is where the CPU goes. The CSV and
+	// Parquet readers are the exceptions: turning text into typed columns, and
+	// decompressing and decoding pages, is real compute, and each used to do all of
+	// it on one core while eight sat idle. The Parquet reader decodes row groups in
+	// parallel (step 102), and a profile had found it at nearly half the CPU of the
+	// queries it measured.
 	//
 	// It must be honoured in the direction that matters: WithThreads(1) is
 	// documented as reproducing the serial operator tree exactly, so a source that

@@ -470,6 +470,37 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		batchSize = 8192
 	}
 
+	// Row groups are decoded in parallel unless there is one thread, or a limit:
+	// reading ahead under MaxRows decodes row groups the query will never use. See
+	// parallelReader.
+	if spec.Threads > 1 && spec.MaxRows <= 0 {
+		pr := &parallelReader{
+			src:       s,
+			full:      full,
+			out:       out,
+			cols:      cols,
+			batchSize: batchSize,
+			preds:     spec.Predicate,
+			threads:   spec.Threads,
+			stop:      make(chan struct{}),
+		}
+		// As the serial reader does: the first file is opened now, so one that
+		// cannot be read is refused while the query is planned. A panic in its
+		// footer is the file's.
+		err := func() (err error) {
+			defer func() {
+				if v := recover(); v != nil {
+					err = corrupt(v, s.partName(0))
+				}
+			}()
+			return pr.openFirst(ctx)
+		}()
+		if err != nil {
+			return nil, err
+		}
+		return pr, nil
+	}
+
 	r := &reader{
 		src:       s,
 		full:      full,
@@ -632,15 +663,29 @@ type colPlan struct {
 	field int // index into the reconciled schema
 }
 
-// openColumn opens the chunk readers for one output column.
+// fileView is one open file as the readers need it: its name for errors, its
+// footer, and how it stores the reconciled schema.
+type fileView struct {
+	name string
+	pf   *file.Reader
+	lay  fileLayout
+}
+
+// openColumn opens the chunk readers for one output column of the current file.
+func (r *reader) openColumn(rg *file.RowGroupReader,
+	rgMeta *metadata.RowGroupMetaData, p colPlan) (colReader, error) {
+	return openColumnIn(r.full, fileView{name: r.name, pf: r.pf, lay: r.lay}, rg, rgMeta, p)
+}
+
+// openColumnIn opens the chunk readers for one output column of file fv.
 //
 // A struct needs one per field plus the group's own definition level, which is what
 // separates "this struct is absent" from "this struct is here and its fields are
 // null". Every other shape is a single leaf.
-func (r *reader) openColumn(rg *file.RowGroupReader,
+func openColumnIn(full *dtype.Schema, fv fileView, rg *file.RowGroupReader,
 	rgMeta *metadata.RowGroupMetaData, p colPlan) (colReader, error) {
 
-	f := r.full.Field(p.field)
+	f := full.Field(p.field)
 
 	// dt is passed in rather than read off f, because a struct's fields each have
 	// their own type and the leaf reader is what decodes them.
@@ -651,12 +696,12 @@ func (r *reader) openColumn(rg *file.RowGroupReader,
 		cr, err := rg.Column(ci)
 		if err != nil {
 			return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
-				"opening column %q of %s", f.Name, r.name)
+				"opening column %q of %s", f.Name, fv.name)
 		}
-		return newColReader(cr, r.pf.MetaData().Schema.Column(ci), dt)
+		return newColReader(cr, fv.pf.MetaData().Schema.Column(ci), dt)
 	}
 
-	leaves := r.lay.leaves[p.field]
+	leaves := fv.lay.leaves[p.field]
 	if f.Type.ID() != dtype.TypeStruct {
 		return leafReader(leaves[0], f.Type)
 	}
@@ -664,24 +709,30 @@ func (r *reader) openColumn(rg *file.RowGroupReader,
 	// field is nullable if any file's is, and a struct that is REQUIRED in this
 	// file has no level of its own to read: tracking one anyway read a present
 	// struct with a null first field as a null struct.
-	return newStructReader(f, leaves, r.lay.optional[p.field], leafReader)
+	return newStructReader(f, leaves, fv.lay.optional[p.field], leafReader)
 }
 
 // shouldSkip asks the pruner whether this row group can be ruled out.
 func (r *reader) shouldSkip(rg *metadata.RowGroupMetaData) (bool, error) {
-	if !r.src.opts.Prune || len(r.preds) == 0 {
-		return false, nil
-	}
-	return canSkipRowGroup(rg, r.statsLeaf, r.preds)
+	return shouldSkipIn(r.src, r.full, r.lay, r.preds, rg)
 }
 
-// statsLeaf is the leafOf for the file being read: a flat column's one leaf.
-func (r *reader) statsLeaf(name string) (int, bool) {
-	i := r.full.IndexOf(name)
-	if i < 0 || r.full.Field(i).Type.IsNested() || len(r.lay.leaves[i]) != 1 {
-		return 0, false
+// shouldSkipIn asks the pruner whether row group rg of a file laid out as lay can be
+// ruled out.
+func shouldSkipIn(src *Source, full *dtype.Schema, lay fileLayout, preds []expr.Node,
+	rg *metadata.RowGroupMetaData) (bool, error) {
+	if !src.opts.Prune || len(preds) == 0 {
+		return false, nil
 	}
-	return r.lay.leaves[i][0], true
+	// The leafOf for that file: a flat column's one leaf.
+	leafOf := func(name string) (int, bool) {
+		i := full.IndexOf(name)
+		if i < 0 || full.Field(i).Type.IsNested() || len(lay.leaves[i]) != 1 {
+			return 0, false
+		}
+		return lay.leaves[i][0], true
+	}
+	return canSkipRowGroup(rg, leafOf, preds)
 }
 
 func (r *reader) Next(ctx context.Context) (_ *data.Batch, err error) {
@@ -729,31 +780,9 @@ func (r *reader) Next(ctx context.Context) (_ *data.Batch, err error) {
 			continue
 		}
 
-		n := min(want, r.rgLeft)
-		rows := -1
-		for _, c := range r.chunks {
-			got, err := c.read(n)
-			if err != nil {
-				return nil, err
-			}
-			// Every column of a row group has the same number of rows. A disagreement
-			// means the file's column chunks are inconsistent, and continuing would
-			// build a ragged batch.
-			if rows == -1 {
-				rows = got
-			} else if got != rows {
-				return nil, uerr.New(uerr.KindValue, "scan_parquet",
-					"row group %d: columns disagree on row count (%d vs %d)",
-					r.rgIndex, rows, got)
-			}
-		}
-		if rows == 0 {
-			// The footer promised rows that the column chunks do not hold. This
-			// looped forever, holding the lock, and never looked at ctx.
-			return nil, uerr.New(uerr.KindIO, "scan_parquet",
-				"row group %d of %s declares %d more rows than its column chunks hold",
-				r.rgIndex, r.name, r.rgLeft).
-				Hint("the file is corrupt or was truncated")
+		b, rows, err := readBatch(r.chunks, r.out, min(want, r.rgLeft), r.rgIndex, r.name, r.rgLeft)
+		if err != nil {
+			return nil, err
 		}
 		r.rgLeft -= rows
 
@@ -763,13 +792,47 @@ func (r *reader) Next(ctx context.Context) (_ *data.Batch, err error) {
 				r.done = true
 			}
 		}
-
-		cols := make([]*data.Column, len(r.chunks))
-		for i, c := range r.chunks {
-			cols[i] = c.finish(r.out.Field(i).Name)
-		}
-		return data.NewBatch(r.out, cols)
+		return b, nil
 	}
+}
+
+// readBatch reads up to n rows from every chunk of one row group and builds a batch,
+// returning it and the rows it holds. rgLeft is what the footer says remains of the
+// row group, for the error when the chunks hold less.
+func readBatch(chunks []colReader, out *dtype.Schema, n, rgIndex int, name string,
+	rgLeft int) (*data.Batch, int, error) {
+
+	rows := -1
+	for _, c := range chunks {
+		got, err := c.read(n)
+		if err != nil {
+			return nil, 0, err
+		}
+		// Every column of a row group has the same number of rows. A disagreement
+		// means the file's column chunks are inconsistent, and continuing would
+		// build a ragged batch.
+		if rows == -1 {
+			rows = got
+		} else if got != rows {
+			return nil, 0, uerr.New(uerr.KindValue, "scan_parquet",
+				"row group %d: columns disagree on row count (%d vs %d)",
+				rgIndex, rows, got)
+		}
+	}
+	if rows == 0 {
+		// The footer promised rows that the column chunks do not hold. This looped
+		// forever, holding the lock, and never looked at ctx.
+		return nil, 0, uerr.New(uerr.KindIO, "scan_parquet",
+			"row group %d of %s declares %d more rows than its column chunks hold",
+			rgIndex, name, rgLeft).
+			Hint("the file is corrupt or was truncated")
+	}
+	cols := make([]*data.Column, len(chunks))
+	for i, c := range chunks {
+		cols[i] = c.finish(out.Field(i).Name)
+	}
+	b, err := data.NewBatch(out, cols)
+	return b, rows, err
 }
 
 // --- encodings ------------------------------------------------------------------

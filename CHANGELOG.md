@@ -12,6 +12,11 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **Parquet row groups are decoded in parallel,** in file order.
+  - PDS-H q6 at SF=1 is 40% faster and q7 31%; every SF=0.1 query measured is
+    21–31% faster.
+  - `WithThreads(1)` and a limit read serially, as before.
+  - Peak memory rises by the few batches each worker holds ahead (102).
 - **Int128 has `*`, `//` and `%`,** so `Col("x").Sum().Mul(2)` and Int64 × UInt64
   work. Every integer `Sum` is an Int128, and only `+` and `-` were implemented.
   - `//` and `%` floor, as Int64's do, and a zero divisor is null.

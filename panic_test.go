@@ -691,12 +691,13 @@ func recoveredPanic(err error) bool {
 // TestEveryGoroutineIsCovered fails on a site not listed here, so a new goroutine
 // cannot be started without saying what recovers its panics.
 var goroutineSites = map[string]string{
-	"internal/physical/parallel.go launch 1":    "TestParallelDispatcherPanicIsAnError",
-	"internal/physical/parallel.go launch 2":    "TestParallelWorkerPanicIsAnError",
-	"internal/physical/parjoin.go launch 1":     "TestParProbeDispatcherPanicIsAnError",
-	"internal/physical/parjoin.go launch 2":     "TestPanicsAreErrors", // a kernel panic in a join's probe key
-	"internal/physical/parallelsink.go drain 1": "TestParallelSinkWorkerPanicStopsConsuming",
-	"internal/source/csv/csv.go convertAll 1":   "TestConvertAllRecoversAPanic",
+	"internal/physical/parallel.go launch 1":      "TestParallelDispatcherPanicIsAnError",
+	"internal/physical/parallel.go launch 2":      "TestParallelWorkerPanicIsAnError",
+	"internal/physical/parjoin.go launch 1":       "TestParProbeDispatcherPanicIsAnError",
+	"internal/physical/parjoin.go launch 2":       "TestPanicsAreErrors", // a kernel panic in a join's probe key
+	"internal/physical/parallelsink.go drain 1":   "TestParallelSinkWorkerPanicStopsConsuming",
+	"internal/source/csv/csv.go convertAll 1":     "TestConvertAllRecoversAPanic",
+	"internal/source/parquet/parallel.go issue 1": "TestParallelRowGroupPanicIsAnError",
 }
 
 func TestEveryGoroutineIsCovered(t *testing.T) {
