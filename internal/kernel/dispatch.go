@@ -807,10 +807,19 @@ func cmpI128(op expr.BinaryOp, l, r *data.Column, n int, out *bitmap.Builder) er
 	return nil
 }
 
-// arithI128 implements Add/Sub on Int128 columns, so `sum(a) - sum(b)` works over
-// an aggregated frame. Mul, division and modulo are deliberately absent: 128-bit
-// multiply and divide are real algorithms, and neither appears in a query anyone
-// writes over a sum. Cast to Int64 or Float64 first.
+// arithI128 implements + - * // % on Int128 columns, exact or refused.
+//
+// Int128 is the type ursus gives every integer sum, so that the sum is exact, and
+// its arithmetic keeps that promise: a result outside the type is an error naming
+// the row, never a wrapped number. Int64 wraps, as Polars' does; an Int128 that
+// wrapped would be a sum that is silently wrong after all.
+//
+// `/` never arrives here: true division is a float, and resolveArithmetic casts both
+// sides first. `//` and `%` floor, as Int64's do, and a zero divisor is a null.
+//
+// Only + and - existed until step 100. Every integer Sum, Bool Sum and UInt64 Diff is
+// an Int128, so `Col("x").Sum().Mul(2)` was refused, and so was Int64 * UInt64,
+// which promotes to Int128.
 func arithI128(op expr.BinaryOp, name string, out dtype.DataType,
 	l, r *data.Column, n int, valid bitmap.View) (*data.Column, error) {
 
@@ -829,19 +838,56 @@ func arithI128(op expr.BinaryOp, name string, out dtype.DataType,
 		return v[i]
 	}
 
+	partial := op == expr.OpFloorDiv || op == expr.OpMod
+	var nonZero *bitmap.Builder
+	if partial {
+		nonZero = bitmap.NewBuilder(n)
+	}
 	buf, dst := newValuesBuffer[i128.Int128](n)
 	for i := range n {
+		// A null slot's payload is arbitrary, so it is never judged: refusing an
+		// overflow there would refuse a query over data nobody can see.
+		if !valid.Get(i) {
+			if partial {
+				nonZero.Append(false)
+			}
+			continue
+		}
 		a, b := get(lv, i, l.Len()), get(rv, i, r.Len())
+		var v i128.Int128
+		ok := true
 		switch op {
 		case expr.OpAdd:
-			dst[i] = a.Add(b)
+			v, ok = a.AddChecked(b)
 		case expr.OpSub:
-			dst[i] = a.Sub(b)
+			v, ok = a.SubChecked(b)
+		case expr.OpMul:
+			v, ok = a.MulChecked(b)
+		case expr.OpFloorDiv, expr.OpMod:
+			nonZero.Append(!b.IsZero())
+			if b.IsZero() {
+				continue
+			}
+			var m i128.Int128
+			v, m, ok = a.DivMod(b)
+			if op == expr.OpMod {
+				v, ok = m, true
+			}
 		default:
 			return nil, uerr.New(uerr.KindUnsupported, "",
 				"operator %s is not implemented for Int128", op).
 				Hint("cast to Int64 or Float64 first")
 		}
+		if !ok {
+			return nil, uerr.New(uerr.KindValue, "arith",
+				"%s %s %s at row %d overflows Int128", a, op, b, i).
+				Hint("Int128 holds about ±1.7e38, and its arithmetic is exact or refused").
+				Hint("cast to Float64 first for an approximate answer")
+		}
+		dst[i] = v
+	}
+	if partial {
+		valid = bitmap.And(valid, nonZero.Finish())
 	}
 	return data.NewFixedBuffer(name, out, buf, n, valid), nil
 }

@@ -264,12 +264,17 @@ func resolveArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 	// before that". It did not. TestEvaluatorContract is what found it, on the first
 	// run after the test the docs had promised for dozens of steps was finally
 	// written.
-	if common.ID() == dtype.TypeInt128 && op != OpAdd && op != OpSub &&
-		op != OpDiv && op != OpPow {
-		return Binding{}, uerr.New(uerr.KindType, "",
-			"operator %s is not implemented for %s", op, common).
-			Hint("%s and %s promote to Int128, where only + and - are implemented", l, r).
-			Hint("cast to Int64 or Float64 first")
+	//
+	// Step 100 implemented * // and %, so the guard now names exactly what arithI128
+	// has: every arithmetic operator, with / and ** cast to floats below.
+	if common.ID() == dtype.TypeInt128 {
+		switch op {
+		case OpAdd, OpSub, OpMul, OpFloorDiv, OpMod, OpDiv, OpPow:
+		default:
+			return Binding{}, uerr.New(uerr.KindType, "",
+				"operator %s is not implemented for %s", op, common).
+				Hint("cast to Int64 or Float64 first")
+		}
 	}
 
 	switch op {

@@ -7,9 +7,12 @@
 // overflow is unreachable for any real dataset: even Int64 values at the maximum
 // magnitude would need 2^63 rows to overflow.
 //
-// The type is deliberately small and total. It has no division and no modulo —
-// 128-bit division needs Knuth algorithm D and `sum(x) % 7` is not a query anyone
-// writes. Division is available by casting to Int64 or Float64 first.
+// The type is deliberately small. Add and Sub wrap, for the accumulators that
+// count their own carries; AddChecked, SubChecked and MulChecked are exact or
+// report that the result left the type, and DivMod is floor division with its
+// remainder. Those four are what the engine's Int128 arithmetic runs on, because a
+// sum that wrapped after it was summed would be no more exact than one that wrapped
+// while it was.
 package i128
 
 import (
@@ -528,4 +531,112 @@ func (a Int128) MulChecked(b Int128) (Int128, bool) {
 		v = v.Neg()
 	}
 	return v, true
+}
+
+// AddChecked is a+b, and false when the sum is outside the type's range: two
+// operands of one sign whose wrapped sum has the other.
+func (a Int128) AddChecked(b Int128) (Int128, bool) {
+	s := a.Add(b)
+	if (a.Hi < 0) == (b.Hi < 0) && (s.Hi < 0) != (a.Hi < 0) {
+		return Zero, false
+	}
+	return s, true
+}
+
+// SubChecked is a-b, and false when the difference is outside the type's range:
+// operands of opposite signs whose wrapped difference takes b's.
+func (a Int128) SubChecked(b Int128) (Int128, bool) {
+	d := a.Sub(b)
+	if (a.Hi < 0) != (b.Hi < 0) && (d.Hi < 0) != (a.Hi < 0) {
+		return Zero, false
+	}
+	return d, true
+}
+
+// DivMod is floor division and its remainder: q rounds toward negative infinity,
+// and m = a - b*q takes b's sign, so −7 // 2 is −4 and −7 % 2 is 1. These are the
+// rules Int64's // and % follow.
+//
+// ok is false when q is outside the type, which happens only for Min // −1; m is
+// right either way (it is 0). b must not be zero: the caller decides what a
+// division by zero means, as Go's own / leaves it to the caller.
+func (a Int128) DivMod(b Int128) (q, m Int128, ok bool) {
+	if b.IsZero() {
+		panic("i128: division by zero")
+	}
+	an, bn := a.Hi < 0, b.Hi < 0
+	ah, al := magnitudeOf(a)
+	bh, bl := magnitudeOf(b)
+	qh, ql, rh, rl := quoRem(ah, al, bh, bl)
+
+	// The truncated remainder has a's sign and a magnitude under |b|, so it fits.
+	m = Int128{Hi: int64(rh), Lo: rl}
+	if an {
+		m = m.Neg()
+	}
+	// Truncation rounds toward zero; floor differs when the signs do and the
+	// division was inexact. m + b then has b's sign and stays under |b|.
+	floor := !m.IsZero() && an != bn
+	if floor {
+		m = m.Add(b)
+	}
+
+	// |q| is at most 2^127, which is Min when q is negative and one past Max when
+	// it is not.
+	if an == bn && qh >= 1<<63 {
+		return Zero, m, false
+	}
+	q = Int128{Hi: int64(qh), Lo: ql}
+	if an != bn {
+		q = q.Neg()
+	}
+	if floor {
+		q = q.Sub(One) // |q| < 2^127 here, since the division was inexact
+	}
+	return q, m, true
+}
+
+// magnitudeOf is |v| as an unsigned 128-bit number. Min's magnitude, 2^127, has
+// no positive Int128 but is read correctly from Min's own bits.
+func magnitudeOf(v Int128) (hi, lo uint64) {
+	if v.Hi < 0 {
+		v = v.Neg()
+	}
+	return uint64(v.Hi), v.Lo
+}
+
+// quoRem divides unsigned 128-bit numbers: u / v and u % v, v non-zero.
+//
+// A divisor under 2^64 is two 64-bit long-division steps. Otherwise the quotient
+// fits in 64 bits, and a trial quotient from v's top word, normalised, is exact or
+// one too small (Hacker's Delight, 9-5): one comparison corrects it.
+func quoRem(uh, ul, vh, vl uint64) (qh, ql, rh, rl uint64) {
+	if vh == 0 {
+		var r uint64
+		if uh >= vl {
+			qh, uh = bits.Div64(0, uh, vl)
+		}
+		ql, r = bits.Div64(uh, ul, vl)
+		return qh, ql, 0, r
+	}
+	n := uint(bits.LeadingZeros64(vh))
+	v1 := vh<<n | vl>>(64-n)        // the top 64 bits of v << n; vl>>64 is 0 in Go
+	u1h, u1l := uh>>1, uh<<63|ul>>1 // u >> 1, so u1h < 2^63 <= v1 and Div64 cannot trap
+	tq, _ := bits.Div64(u1h, u1l, v1)
+	tq >>= 63 - n
+	if tq != 0 {
+		tq--
+	}
+	// u - v*tq. The product is at most u, so it fits in 128 bits.
+	ph, pl := bits.Mul64(vl, tq)
+	ph += vh * tq
+	var borrow uint64
+	rl, borrow = bits.Sub64(ul, pl, 0)
+	rh, _ = bits.Sub64(uh, ph, borrow)
+	if rh > vh || (rh == vh && rl >= vl) {
+		tq++
+		rl, borrow = bits.Sub64(rl, vl, 0)
+		rh, _ = bits.Sub64(rh, vh, borrow)
+	}
+	return 0, tq, rh, rl
 }

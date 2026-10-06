@@ -12,6 +12,13 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **Int128 has `*`, `//` and `%`,** so `Col("x").Sum().Mul(2)` and Int64 × UInt64
+  work. Every integer `Sum` is an Int128, and only `+` and `-` were implemented.
+  - `//` and `%` floor, as Int64's do, and a zero divisor is null.
+  - **Behaviour change:** Int128 arithmetic is exact or refused. `+` and `-` used
+    to wrap: Max + Max gave a plausible wrong number. A result past ±1.7e38 is now
+    an error naming the row. Int64 arithmetic still wraps, as Polars' does.
+  - **Added:** `Int128.AddChecked`, `SubChecked` and `DivMod` (100).
 - **A List column past 2^31-1 elements is refused,** naming `CollectBatches` and
   `SinkParquet`, as a String column past 2 GiB already was.
   - Its 32-bit offsets used to wrap silently. Two one-row lists of 2^30 elements

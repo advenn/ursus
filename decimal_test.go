@@ -315,14 +315,17 @@ func TestDecimalRefusalsRecommendOnlyPossibleCasts(t *testing.T) {
 //
 // After the fix no Decimal refusal names a cast target at all, so that sweep would
 // pass against a scanner that always returned nothing. This drives a refusal that
-// SHOULD name one — Int128 arithmetic, where "cast to Int64 or Float64 first" is
-// sound because CanCast permits both — and asserts the scanner sees it.
+// SHOULD name one — an Int128 product past the type, whose refusal recommends a cast
+// to Float64, sound because CanCast permits it — and asserts the scanner sees it.
+//
+// It drove Int128 multiplication itself until step 100 implemented it.
 func TestCastScannerFindsARecommendation(t *testing.T) {
-	_, err := ursus.Frame(ursus.Values("a", []int64{1, 2})).
-		Select(ursus.Col("a").Cast(dtype.Int128).Mul(ursus.Col("a").Cast(dtype.Int128))).
+	a := ursus.Col("a").Cast(dtype.Int128)
+	_, err := ursus.Frame(ursus.Values("a", []int64{math.MaxInt64})).
+		Select(a.Mul(a).Mul(a)).
 		Collect(t.Context())
 	if err == nil {
-		t.Fatal("Int128 multiplication is implemented now; this control needs a new op")
+		t.Fatal("a product of 2^189 fit in Int128; this control needs a new refusal")
 	}
 	found := castTargetsNamed(err.Error())
 	if len(found) == 0 {
