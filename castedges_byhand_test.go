@@ -23,12 +23,8 @@ import (
 // knownCastEdgeDefects names each case that answers wrongly today, with what it
 // answers.
 var knownCastEdgeDefects = map[string]string{
-	"strict Int64 -> Time past a day is refused": "folds 90000s to 01:00",
-	"lossy Int64 -> Time outside a day is null":  "folds it into the day",
-	"Duration(ms) -> Duration(s) truncates":      "floors -1.5s to -2s",
-	"Duration(ns) -> Duration(us) truncates":     "floors -1500ns to -2us",
-	"Abs of the minimum Duration is refused":     "wraps to itself",
-	"Neg of the minimum Duration is refused":     "wraps to itself",
+	"Abs of the minimum Duration is refused": "wraps to itself",
+	"Neg of the minimum Duration is refused": "wraps to itself",
 }
 
 func TestCastEdgesByHand(t *testing.T) {

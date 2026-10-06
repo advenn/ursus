@@ -395,15 +395,59 @@ func uintSign[T ~uint8 | ~uint16 | ~uint32 | ~uint64](name string, out dtype.Dat
 // Normalising into [0, 24h) does not merely restore an invariant here; it makes
 // `Cast(Datetime -> Time)` mean what the user asked for. The wrapping is done once,
 // after every arm, rather than in each of the four that can produce a Time.
+//
+// # Only from an instant
+//
+// Folding is the time of day of an INSTANT. A bare tick count, or a Duration, has
+// no day to take the time of, and folding it made 90000 seconds 01:00 (audit.md
+// S18). From anything but a Datetime, a value outside the day is refused under a
+// strict cast and null under a lossy one, as Polars does.
 func Cast(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
 	out, err := castTo(name, to, strict, c)
 	if err != nil {
 		return nil, err
 	}
 	if to.ID() == dtype.TypeTime {
-		return normaliseTime(out)
+		if c.DType().ID() == dtype.TypeDatetime {
+			return normaliseTime(out)
+		}
+		return timeInDay(out, c.DType(), strict)
 	}
 	return out, nil
+}
+
+// timeInDay refuses, or nulls when lossy, every value of a Time column outside the
+// day. It scans before it allocates, as normaliseTime does.
+func timeInDay(c *data.Column, from dtype.DataType, strict bool) (*data.Column, error) {
+	m, ok := dtype.TicksPerDay(c.DType())
+	if !ok {
+		return c, nil
+	}
+	v, err := data.Values[int64](c)
+	if err != nil {
+		return c, nil // payload-free: all nulls
+	}
+	bad := -1
+	for i, t := range v {
+		if (t < 0 || t >= m) && c.IsValid(i) {
+			bad = i
+			break
+		}
+	}
+	if bad < 0 {
+		return c, nil
+	}
+	if strict {
+		return nil, uerr.New(uerr.KindValue, "cast",
+			"%s %d at row %d is not a time of day: %s spans 0 to %d", from, v[bad], bad,
+			c.DType(), m-1).
+			Hint("use a lossy cast to turn values outside the day into nulls")
+	}
+	keep := bitmap.NewBuilder(len(v))
+	for i, t := range v {
+		keep.Append(c.IsValid(i) && t >= 0 && t < m)
+	}
+	return c.WithValidity(keep.Finish()), nil
 }
 
 // normaliseTime folds a Time column's ticks into [0, 24h).
@@ -1049,12 +1093,16 @@ func rescaleTemporal(name string, to dtype.DataType, c *data.Column, fromNanos, 
 			valid = ok.Finish()
 		}
 	} else {
-		// Finer -> coarser: floor-divide, losing precision by definition.
+		// Finer -> coarser: losing precision by definition. An instant FLOORS, so
+		// the second before the epoch stays before it. A Duration TRUNCATES, as its
+		// TotalSeconds does and Polars' cast does: -1.5s is -1s, the mirror of 1.5s
+		// (audit.md S19).
 		f := toNanos / fromNanos
+		floor := to.ID() != dtype.TypeDuration
 		for i, v := range src {
 			q := v / f
-			if v%f != 0 && v < 0 {
-				q-- // floor, not truncate
+			if floor && v%f != 0 && v < 0 {
+				q--
 			}
 			out[i] = q
 		}
