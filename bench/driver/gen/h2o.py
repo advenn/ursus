@@ -151,8 +151,10 @@ def _generate_join(root: Path, n: int, want_csv: bool, console) -> dict:
 
     rng = np.random.default_rng(SEED)
     n_small, n_medium = int(n / 1e6), int(n / 1e3)
-    if n_small < 1:
-        raise SystemExit(f"h2o join data needs N >= 1e6 (got {n:g})")
+    # Two rows, not one: _split_xlr gives a one-row table no right-only keys and no
+    # common ones either, so its right-hand pool is empty and sampling it fails.
+    if n_small < 2:
+        raise SystemExit(f"h2o join data needs N >= 2e6 (got {n:g})")
 
     console.print(f"  join: LHS {n:,} / small {n_small:,} / medium {n_medium:,} / big {n:,}")
 
