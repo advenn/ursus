@@ -205,7 +205,7 @@ func panicCases() []panicCase {
 		{"udf, 1 thread", func(t *testing.T) (string, error) {
 			ctx := t.Context()
 			return collectCells(ctx, withUDF, "w", threads(1))
-		}, wantErr("value", `udf "boom" panicked at row 2 of column "v"`, "caused by: boom at 3")},
+		}, wantErr("value", `udf "boom" panicked on 3, row 2 of its batch of column "v"`, "caused by: boom at 3")},
 		{"udf, 4 threads", func(t *testing.T) (string, error) {
 			ctx := t.Context()
 			return collectCells(ctx, withUDF, "w", threads(4))

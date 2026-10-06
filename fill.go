@@ -59,9 +59,10 @@ func weaken(n expr.Node) expr.Node {
 // common-subexpression pass, EVALUATED twice — exactly as Coalesce is.
 func (e Expr) FillNullWith[T Operand](v T) Expr {
 	return wrap(&expr.Cond{
-		Pred: &expr.Unary{Op: expr.OpIsNotNull, Child: e.node()},
-		Then: e.node(),
-		Else: liftWeak(v),
+		Pred:  &expr.Unary{Op: expr.OpIsNotNull, Child: e.node()},
+		Then:  e.node(),
+		Else:  liftWeak(v),
+		Sugar: "fill_null",
 	})
 }
 
@@ -84,9 +85,10 @@ func (e Expr) FillNullWith[T Operand](v T) Expr {
 // instead of a replaced one.
 func (e Expr) FillNan[T Operand](v T) Expr {
 	return wrap(&expr.Cond{
-		Pred: &expr.Unary{Op: expr.OpIsNotNan, Child: e.node()},
-		Then: e.node(),
-		Else: liftWeak(v),
+		Pred:  &expr.Unary{Op: expr.OpIsNotNan, Child: e.node()},
+		Then:  e.node(),
+		Else:  liftWeak(v),
+		Sugar: "fill_nan",
 	})
 }
 
@@ -282,11 +284,11 @@ func (e Expr) FillNull(s FillStrategy) Expr {
 	case FillBackward:
 		return e.BackwardFill(0)
 	case FillMin:
-		return Coalesce(e, e.Min().Over())
+		return sugared(Coalesce(e, e.Min().Over()), "fill_null")
 	case FillMax:
-		return Coalesce(e, e.Max().Over())
+		return sugared(Coalesce(e, e.Max().Over()), "fill_null")
 	case FillMean:
-		return Coalesce(e, e.Mean().Over())
+		return sugared(Coalesce(e, e.Mean().Over()), "fill_null")
 	default:
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "fill_null",
 			"unknown fill strategy %s", s)})
@@ -319,4 +321,15 @@ func (e Expr) Unnest() Expr {
 		"Unnest is not an expression; it produces one column per struct field").
 		Hint("use the frame-level form: lf.Unnest(\"person\")").
 		Hint("for a single field, use Col(\"person\").Struct().Field(\"age\")")})
+}
+
+// sugared names the method a conditional was built for, so its refusal does; see
+// expr.Cond.Sugar.
+func sugared(e Expr, method string) Expr {
+	if c, ok := e.node().(*expr.Cond); ok {
+		cp := *c
+		cp.Sugar = method
+		return wrap(&cp)
+	}
+	return e
 }

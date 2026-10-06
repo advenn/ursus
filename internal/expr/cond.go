@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"errors"
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -40,6 +41,14 @@ type Cond struct {
 	Pred Node
 	Then Node
 	Else Node
+
+	// Sugar names the method a conditional was desugared from — fill_null,
+	// fill_nan — so its refusal says what the caller wrote rather than what it
+	// became (audit.md S16: "is_not_nan() requires a floating-point operand", to
+	// someone who had called FillNan). "" for a When the caller built. A rewrite
+	// that rebuilds the node may drop it: types are resolved before any rule runs,
+	// and that is where these refusals arise.
+	Sugar string
 }
 
 func (c *Cond) node()            {}
@@ -52,6 +61,25 @@ func (c *Cond) String() string {
 }
 
 func (c *Cond) Field(in *dtype.Schema) (dtype.Field, error) {
+	f, err := c.field(in)
+	if err != nil && c.Sugar != "" {
+		// The receiver is the Then branch of every desugaring that sets Sugar.
+		what := "this column"
+		if tf, terr := c.Then.Field(in); terr == nil {
+			what = "a " + tf.Type.String() + " column"
+		}
+		kind := uerr.KindType
+		var ue *uerr.Error
+		if errors.As(err, &ue) {
+			kind = ue.Kind
+		}
+		return dtype.Field{}, uerr.Wrap(err, kind, c.Sugar,
+			"%s() cannot be applied to %s", c.Sugar, what)
+	}
+	return f, err
+}
+
+func (c *Cond) field(in *dtype.Schema) (dtype.Field, error) {
 	pf, err := c.Pred.Field(in)
 	if err != nil {
 		return dtype.Field{}, err

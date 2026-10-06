@@ -497,11 +497,28 @@ func integralScale(op BinaryOp, dur, num dtype.DataType) error {
 	// `*` thirty lines above. So the binding promised a Duration and kernel.Cast then
 	// refused Decimal -> Int64 — a plan-accepts / kernel-rejects divergence over
 	// twelve arms, which TestEveryTemporalArmRuns listed before this line existed.
+	// The hints name no factor: only the operand's TYPE reaches here, and a message
+	// that quoted 2.5 to someone who wrote 1.5 sent them looking for a 2.5 (audit.md
+	// S15). The recipe is the one TestDurationScaledByNumber runs.
 	return uerr.New(uerr.KindType, "",
 		"cannot %s a %s by a fractional %s", opVerb(op), dur, num).
-		Hint("a duration is an integer tick count, so scaling it by 2.5 has no "+
+		Hint("a duration is an integer tick count, so a fractional factor has no "+
 			"exact answer at its resolution").
-		Hint("convert first: .Cast(ursus.Float64).Mul(2.5).Cast(%s)", dur)
+		Hint("convert first, rounding to the nearest tick: "+
+			".Cast(ursus.Float64).%s(factor).Cast(%s)", opMethod(op), dur)
+}
+
+// opMethod is the Expr method that spells op, for a hint the caller can paste.
+func opMethod(op BinaryOp) string {
+	switch op {
+	case OpMul:
+		return "Mul"
+	case OpDiv:
+		return "Div"
+	case OpFloorDiv:
+		return "FloorDiv"
+	}
+	return op.String()
 }
 
 func opVerb(op BinaryOp) string {

@@ -491,17 +491,18 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 
 	case WinCumSum:
 		// The same binding Sum uses, so `cum_sum(x)` and `sum(x)` agree on the last
-		// row rather than differing by an accumulator width.
+		// row rather than differing by an accumulator width. Its refusal names
+		// cum_sum: it named sum(), which the caller had not written (audit.md A11).
 		b, err := ResolveAggBinding(AggSum, in)
 		if err != nil {
-			return dtype.Null, err
+			return dtype.Null, cumulativeErr(fn, in, err)
 		}
 		return b.Out, nil
 
 	case WinCumProd:
 		b, err := ResolveAggBinding(AggProduct, in)
 		if err != nil {
-			return dtype.Null, err
+			return dtype.Null, cumulativeErr(fn, in, err)
 		}
 		return b.Out, nil
 
@@ -643,3 +644,11 @@ func Rebuild(n Node, kids []Node) Node {
 }
 
 func itoa(i int) string { return strconv.Itoa(i) }
+
+// cumulativeErr is a refusal of the aggregate a cumulative function borrows its
+// binding from, renamed to the function the caller wrote.
+func cumulativeErr(fn WinFnOp, in dtype.DataType, cause error) error {
+	return uerr.Wrap(cause, uerr.KindType, fn.String(),
+		"%s() is not defined for %s", fn, in).
+		Hint("it accumulates numbers: a numeric, Boolean or Decimal column")
+}

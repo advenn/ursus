@@ -12,6 +12,13 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **Refusals name what you wrote.**
+  - `FillNan`, `FillNullWith` and `FillNull` name themselves, not `is_not_nan()`,
+    `when` or `mean()`.
+  - `CumSum` names `cum_sum`, not `sum`.
+  - A Duration scaled by a fraction no longer quotes a factor of 2.5 you did not
+    write.
+  - A failing udf names the input value it failed on (111).
 - **A full join merges its keys with `JoinCoalesce(true)`:** the left key where the
   row has a left side, the right key where it does not. It was refused, with a hint
   that ursus had no coalesce expression (`audit.md` J9) (110).

@@ -2,6 +2,8 @@ package ursus
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
@@ -89,6 +91,7 @@ func (e Expr) MapElements[In, Out Literal](name string, out DataType,
 		// the udf, the row and the column. inFn is what tells it from a panic in the
 		// code around fn, which is ursus's.
 		row, inFn := -1, false
+		var src []In
 		defer func() {
 			if v := recover(); v != nil {
 				if !inFn {
@@ -96,10 +99,11 @@ func (e Expr) MapElements[In, Out Literal](name string, out DataType,
 					return
 				}
 				err = uerr.Attributed(v, uerr.KindValue, "map_elements",
-					"udf %q panicked at row %d of column %q", name, row, in.Name())
+					"udf %q panicked on %v, row %d of its batch of column %q",
+					name, udfArg(src, row), row, in.Name())
 			}
 		}()
-		src, err := udfInput[In](in, "map_elements", name)
+		src, err = udfInput[In](in, "map_elements", name)
 		if err != nil {
 			return nil, err
 		}
@@ -122,8 +126,13 @@ func (e Expr) MapElements[In, Out Literal](name string, out DataType,
 			if err != nil {
 				// Naming the row and the column, as Series.MapErr does — a UDF
 				// that fails on one row of a million is useless without it.
+				// The input value is what finds the row: the index is the row's
+				// place in its BATCH, which is not its place in the frame under
+				// CollectBatches, a filter, or several workers (audit.md A15). It
+				// used to be offered as "row 1" for the frame's fourth row.
 				return nil, uerr.Wrap(err, uerr.KindValue, "map_elements",
-					"udf %q at row %d of column %q", name, i, in.Name())
+					"udf %q failed on %v, row %d of its batch of column %q",
+					name, udfArg(src, i), i, in.Name())
 			}
 			vals[i] = v
 			valid.Append(true)
@@ -314,4 +323,16 @@ func checkEnumRange(c *data.Column, out DataType) error {
 		}
 	}
 	return nil
+}
+
+// udfArg renders a udf's input for an error, quoting a string so an empty or
+// space-padded one is visible.
+func udfArg[In any](src []In, i int) string {
+	if i < 0 || i >= len(src) {
+		return "?"
+	}
+	if s, ok := any(src[i]).(string); ok {
+		return strconv.Quote(s)
+	}
+	return fmt.Sprint(src[i])
 }
