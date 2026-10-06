@@ -301,6 +301,10 @@ func TestMaintainOrderStaysSerial(t *testing.T) {
 //
 // Small batches, so the switch comes early and the rest of the input has to spill:
 // the test requires that it did, and that the answer is the serial one.
+//
+// Under the DEFAULT budget, lowered here to 16 KiB: an explicit WithMemoryLimit keeps
+// the group-by serial (step 92), because where a parallel one switches depends on
+// scheduling, and its row order on where it switched.
 func TestParallelAggregationSwitchesToSerialUnderALimit(t *testing.T) {
 	q := func() *ursus.LazyFrame {
 		return ursus.Scan(aggSource(t)).GroupBy(ursus.Col("k"), ursus.Col("g")).
@@ -311,9 +315,9 @@ func TestParallelAggregationSwitchesToSerialUnderALimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stats ursus.MemoryStats
+	defer ursus.SetDefaultMemoryLimit(16 << 10)()
 	got, err := q().Collect(t.Context(), ursus.WithThreads(8), ursus.WithBatchSize(16),
-		ursus.WithMemoryLimit(16<<10), ursus.WithSpillDir(t.TempDir()),
-		ursus.WithMemoryStats(&stats))
+		ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&stats))
 	if err != nil {
 		t.Fatalf("a memory-limited parallel aggregation must fall back, not fail: %v", err)
 	}
@@ -616,5 +620,27 @@ func assertBothValuesPresent(t *testing.T, df *ursus.DataFrame) {
 				"input, so this case cannot test the merge",
 				f.Name, df.Height(), sawTrue, sawFalse)
 		}
+	}
+}
+
+// TestAnExplicitLimitKeepsTheGroupOrder: under a limit the caller set, a group-by
+// that spills gives its rows in the same order on every run, however many threads
+// there are — the property CI caught step 91 breaking (step 92).
+func TestAnExplicitLimitKeepsTheGroupOrder(t *testing.T) {
+	q := func() *ursus.LazyFrame {
+		return ursus.Scan(aggSource(t)).GroupBy(ursus.Col("k"), ursus.Col("g")).
+			Agg(ursus.Col("w").Sum().Alias("s"))
+	}
+	run := func() *ursus.DataFrame {
+		df, err := q().Collect(t.Context(), ursus.WithThreads(8), ursus.WithBatchSize(16),
+			ursus.WithMemoryLimit(16<<10), ursus.WithSpillDir(t.TempDir()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return df
+	}
+	first := run()
+	for range 5 {
+		ursustest.AssertFrameEqual(t, run(), first)
 	}
 }

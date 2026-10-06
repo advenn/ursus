@@ -380,13 +380,18 @@ type MemoryStats struct {
 // WithMemoryLimit(0) turns the budget off; elsewhere than Linux there is no default
 // and it is off already.
 //
-// # A parallel group-by overshoots a little
+// # A group-by under a limit you set is serial
 //
-// A group-by runs on several workers until the query holds half its budget, then
-// folds them into one and finishes serially, spilling as the serial path does. Half,
-// because the fold builds the merged table while the workers' still exist. The
-// batches the workers already had queued are aggregated first, so the switch can come
-// that much late — a few megabytes at the default batch size.
+// So that a group-by that spills gives its rows in the same order on every run.
+//
+// Under the DEFAULT budget it runs on several workers until the query holds half the
+// budget, then folds them into one and finishes serially, spilling as the serial path
+// does. Half, because the fold builds the merged table while the workers' still
+// exist. The batches the workers already had queued are aggregated first, so the
+// switch can come a few megabytes late at the default batch size. Where it switches
+// depends on scheduling, so an unordered group-by that gets that far can give its
+// rows in a different order from one run to the next; their contents do not change.
+// MaintainOrder, or a limit of your own, makes the order reproducible.
 //
 // # What it does not bound
 //
@@ -417,6 +422,9 @@ func WithMemoryStats(out *MemoryStats) CollectOption {
 	return func(c *collectCfg) { c.stats = out }
 }
 
+// defaultMemoryLimit is execopt.DefaultLimit, as a variable so a test can lower it.
+var defaultMemoryLimit = execopt.DefaultLimit
+
 func baseCollectCfg() collectCfg {
 	return collectCfg{
 		batchSize: physical.DefaultOptions().BatchSize,
@@ -430,9 +438,12 @@ func baseCollectCfg() collectCfg {
 // different union type and still need exactly this step.
 func (c *collectCfg) finish() {
 	if !c.limitSet {
-		c.memLimit = execopt.DefaultLimit()
+		c.memLimit = defaultMemoryLimit()
 	}
 	c.budget = execopt.NewBudget(c.memLimit, c.spillDir)
+	if !c.limitSet {
+		c.budget.MarkDefault()
+	}
 }
 
 func newCollectCfg(opts []CollectOption) collectCfg {

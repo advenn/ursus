@@ -651,6 +651,15 @@ func aggWorkers(a *plan.Aggregate, specs []aggSpec, opts Options) int {
 	if opts.Threads <= 1 || a.MaintainOrder {
 		return 1
 	}
+	// Under a limit the caller set, serial, as before step 91. Where a parallel
+	// group-by switches to serial depends on which worker crosses half the budget
+	// first, which is scheduling, and an unordered group-by's row order depends on
+	// where it switched: CI found two runs at one limit giving two orders. Under the
+	// default budget that switch needs half the machine, and is rare; under an
+	// explicit limit, run to run reproducibility is what the caller gets (step 92).
+	if opts.Budget.Limit() > 0 && !opts.Budget.IsDefault() {
+		return 1
+	}
 	for _, spec := range specs {
 		if spec.op.IsOrderDependent() {
 			return 1

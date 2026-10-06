@@ -34,3 +34,19 @@ func TestTheMemoryBudgetHasADefault(t *testing.T) {
 		t.Logf("no default detected on this machine")
 	}
 }
+
+// TestTheDefaultBudgetIsMarkedAsSuch: the budget a query gets without
+// WithMemoryLimit says it is the default, and one the caller set says it is not —
+// the distinction a parallel group-by reads to decide whether it may run parallel
+// (step 92).
+func TestTheDefaultBudgetIsMarkedAsSuch(t *testing.T) {
+	if !ursus.BudgetOf().IsDefault() {
+		t.Error("the budget with no WithMemoryLimit is not marked as the default")
+	}
+	if ursus.BudgetOf(ursus.WithMemoryLimit(64 << 20)).IsDefault() {
+		t.Error("an explicit WithMemoryLimit is marked as the default")
+	}
+	if ursus.BudgetOf(ursus.WithMemoryLimit(0)).IsDefault() {
+		t.Error("an explicit WithMemoryLimit(0) is marked as the default")
+	}
+}

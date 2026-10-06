@@ -39,8 +39,9 @@ import (
 // A nil *Budget means unlimited and untracked; every method is nil-safe so that
 // operators need no branch of their own.
 type Budget struct {
-	limit    int64
-	spillDir string
+	isDefault bool // the limit is DefaultLimit, not the caller's; see MarkDefault
+	limit     int64
+	spillDir  string
 
 	mu     sync.Mutex
 	held   map[data.BufferID]entry
@@ -60,6 +61,19 @@ type entry struct {
 func NewBudget(limit int64, spillDir string) *Budget {
 	return &Budget{limit: limit, spillDir: spillDir, held: map[data.BufferID]entry{}}
 }
+
+// MarkDefault records that the limit is the default (DefaultLimit), not one the
+// caller asked for. Only a parallel group-by reads it: under a limit the caller set,
+// it stays serial, as it always was, so its row order is the same on every run
+// (step 92).
+func (b *Budget) MarkDefault() {
+	if b != nil {
+		b.isDefault = true
+	}
+}
+
+// IsDefault reports whether the limit is the default rather than the caller's.
+func (b *Budget) IsDefault() bool { return b != nil && b.isDefault }
 
 // Limit returns the ceiling in bytes, or 0 when unlimited.
 func (b *Budget) Limit() int64 {

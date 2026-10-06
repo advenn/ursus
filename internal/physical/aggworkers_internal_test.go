@@ -18,8 +18,14 @@ func TestAggregationStaysParallelUnderABudget(t *testing.T) {
 	opts := func(limit int64) Options {
 		return Options{Threads: 8, Budget: execopt.NewBudget(limit, "")}
 	}
-	if got := aggWorkers(&plan.Aggregate{}, sum, opts(4<<30)); got != 8 {
-		t.Errorf("a sum under a 4 GiB budget runs on %d workers, want 8", got)
+	byDefault := opts(4 << 30)
+	byDefault.Budget.MarkDefault()
+	if got := aggWorkers(&plan.Aggregate{}, sum, byDefault); got != 8 {
+		t.Errorf("a sum under the default 4 GiB budget runs on %d workers, want 8", got)
+	}
+	// Under a limit the caller set, serial, so the row order is the same every run.
+	if got := aggWorkers(&plan.Aggregate{}, sum, opts(4<<30)); got != 1 {
+		t.Errorf("a sum under an explicit budget runs on %d workers, want 1", got)
 	}
 	if got := aggWorkers(&plan.Aggregate{}, sum, opts(0)); got != 8 {
 		t.Errorf("a sum with no budget runs on %d workers, want 8", got)
