@@ -69,6 +69,9 @@ var errWantSerial = errors.New("physical: the budget is reached; finish serially
 // serialSink is a sink that can be told it is alone again.
 type serialSink interface{ goSerial() }
 
+// discarder is a sink whose state can be dropped once it has been merged.
+type discarder interface{ discard() }
+
 func newParallelSink(child Operator, sinks []Sink) *parallelSink {
 	return &parallelSink{child: child, sinks: sinks}
 }
@@ -190,6 +193,9 @@ func (p *parallelSink) drain(parent context.Context) error {
 	for i := 1; i < n; i++ {
 		if err := p.sinks[0].Merge(p.sinks[i]); err != nil {
 			return err
+		}
+		if d, ok := p.sinks[i].(discarder); ok {
+			d.discard()
 		}
 	}
 

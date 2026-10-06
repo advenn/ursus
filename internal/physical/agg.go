@@ -487,7 +487,12 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 		// instead. This batch is already aggregated, so nothing is lost: the driver
 		// merges the workers and finishes on one sink, where the freeze, the spill
 		// and the per-value refusal all happen as they do serially.
-		if s.budget.Limit() > 0 && s.mem.Over() {
+		//
+		// At HALF the budget, because the fold that follows builds the merged table
+		// while the workers' still exist: switching at the budget itself doubled it
+		// there, and h2o gb10 — ten million groups — was OOM-killed under the very
+		// cap its serial run spills within.
+		if lim := s.budget.Limit(); lim > 0 && s.budget.Used() > lim/2 {
 			return errWantSerial
 		}
 		return nil
@@ -500,6 +505,13 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 
 // goSerial is how parallelSink hands the rest of the input to the merged sink.
 func (s *hashAggSink) goSerial() { s.parallel = false }
+
+// discard drops a merged-in sink's state as soon as it has been folded, so the fold
+// of N tables holds about one table at a time, not two. Its account is already
+// released by Merge, and Close still runs.
+func (s *hashAggSink) discard() {
+	s.ids, s.accs, s.keyParts, s.firstSeen = kernel.NewKeyTable(), nil, nil, nil
+}
 
 func (s *hashAggSink) Merge(other Sink) error {
 	o, ok := other.(*hashAggSink)

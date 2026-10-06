@@ -382,11 +382,11 @@ type MemoryStats struct {
 //
 // # A parallel group-by overshoots a little
 //
-// A group-by runs on several workers until the budget is reached, then folds them
-// into one and finishes serially, spilling as the serial path does. The batches the
-// workers already had queued are aggregated first, so the budget can be exceeded by
-// that much — a few megabytes at the default batch size — before the serial path
-// takes over.
+// A group-by runs on several workers until the query holds half its budget, then
+// folds them into one and finishes serially, spilling as the serial path does. Half,
+// because the fold builds the merged table while the workers' still exist. The
+// batches the workers already had queued are aggregated first, so the switch can come
+// that much late — a few megabytes at the default batch size.
 //
 // # What it does not bound
 //
