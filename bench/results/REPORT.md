@@ -21,11 +21,11 @@ reading a speedup.
 
 | query | gota | qframe | ursus (Go) | polars | pandas | duckdb | datafusion | chdb | duckdb-go | what it exercises |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|
-| gb1 | 26,501 | 4,810 | 2,349 | 409 | 2,879 | 827 | 542 | 1,194 | 902 | sum v1 by id1 (large-cardinality string groups) |
-| gb2 | OOM | 5,684 | 2,216 | 828 | 3,863 | 977 | 748 | 1,398 | 1,044 | sum v1 by id1, id2 (medium-cardinality string groups) |
-| gb3 | OOM | 6,252 | 2,912 | 952 | 5,280 | 1,277 | 1,423 | 1,435 | 1,402 | sum v1, mean v3 by id3 (small-cardinality string groups) |
-| gb4 | 29,586 | 5,165 | 3,315 | 478 | 2,834 | 998 | 723 | 1,327 | 951 | mean v1, v2, v3 by id4 (large-cardinality integer groups) |
-| gb5 | 31,792 | 5,937 | 3,334 | 752 | 2,891 | 1,471 | 1,366 | TIMEOUT | 1,337 | sum v1, v2, v3 by id6 (small-cardinality integer groups) |
+| gb1 | 26,501 | 4,810 | 2,349 | 409 | 2,879 | 827 | 542 | 1,194 | 902 | sum v1 by id1 (100 string groups) |
+| gb2 | OOM | 5,684 | 2,216 | 828 | 3,863 | 977 | 748 | 1,398 | 1,044 | sum v1 by id1, id2 (10,000 string groups) |
+| gb3 | OOM | 6,252 | 2,912 | 952 | 5,280 | 1,277 | 1,423 | 1,435 | 1,402 | sum v1, mean v3 by id3 (N/100 string groups) |
+| gb4 | 29,586 | 5,165 | 3,315 | 478 | 2,834 | 998 | 723 | 1,327 | 951 | mean v1, v2, v3 by id4 (100 integer groups) |
+| gb5 | 31,792 | 5,937 | 3,334 | 752 | 2,891 | 1,471 | 1,366 | TIMEOUT | 1,337 | sum v1, v2, v3 by id6 (N/100 integer groups) |
 | gb6 | 31,836 | n/a | 3,583 | 794 | 3,181 | 1,207 | 1,047 | ERR | 1,252 | median v3, sd v3 by id4, id5 |
 | gb7 | n/a | n/a | 2,584 | 990 | 5,168 | 1,237 | 932 | 864 | 1,226 | max v1 - min v2 by id3 (range over small groups) |
 | gb8 | n/a | n/a | 6,102 | 1,095 | 3,996 | 1,466 | 1,417 | 1,580 | 1,335 | largest two v3 by id6 (top-n within group) |
@@ -60,11 +60,11 @@ Peak resident memory across the suite (GB):
 
 | query | polars | ursus (Go) | duckdb | datafusion | duckdb-go | pandas | chdb | gota | qframe | what it exercises |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|
-| gb1 | 98 | 716 | 58 | 33 | 35 | 641 | 271 | n/a | n/a | sum v1 by id1 (large-cardinality string groups) |
-| gb2 | 561 | 885 | 192 | 105 | 137 | 1,009 | 407 | n/a | n/a | sum v1 by id1, id2 (medium-cardinality string groups) |
-| gb3 | 789 | 1,895 | 719 | 635 | 524 | 1,875 | TIMEOUT | n/a | n/a | sum v1, mean v3 by id3 (small-cardinality string groups) |
-| gb4 | 261 | 1,017 | 155 | 156 | 94 | 523 | 125 | n/a | n/a | mean v1, v2, v3 by id4 (large-cardinality integer groups) |
-| gb5 | 713 | 1,243 | 692 | 512 | 496 | 860 | TIMEOUT | n/a | n/a | sum v1, v2, v3 by id6 (small-cardinality integer groups) |
+| gb1 | 98 | 716 | 58 | 33 | 35 | 641 | 271 | n/a | n/a | sum v1 by id1 (100 string groups) |
+| gb2 | 561 | 885 | 192 | 105 | 137 | 1,009 | 407 | n/a | n/a | sum v1 by id1, id2 (10,000 string groups) |
+| gb3 | 789 | 1,895 | 719 | 635 | 524 | 1,875 | TIMEOUT | n/a | n/a | sum v1, mean v3 by id3 (N/100 string groups) |
+| gb4 | 261 | 1,017 | 155 | 156 | 94 | 523 | 125 | n/a | n/a | mean v1, v2, v3 by id4 (100 integer groups) |
+| gb5 | 713 | 1,243 | 692 | 512 | 496 | 860 | TIMEOUT | n/a | n/a | sum v1, v2, v3 by id6 (N/100 integer groups) |
 | gb6 | 478 | 1,702 | 590 | 589 | 436 | 1,349 | ERR | n/a | n/a | median v3, sd v3 by id4, id5 |
 | gb7 | 743 | 1,320 | 653 | 297 | 409 | 1,365 | TIMEOUT | n/a | n/a | max v1 - min v2 by id3 (range over small groups) |
 | gb8 | 901 | 4,805 | 992 | 1,005 | 685 | 4,101 | 1,030 | n/a | n/a | largest two v3 by id6 (top-n within group) |

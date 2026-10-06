@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/metrics"
 	"runtime/pprof"
 	"sort"
 	"strconv"
@@ -246,6 +247,11 @@ func PeakRSS() int64 {
 // OS, which grows to accommodate the ALLOCATION RATE between collections rather than
 // the live set, so the gap between this peak and HeapSys is exactly the quantity
 // worth naming.
+//
+// Sampled through runtime/metrics, not runtime.ReadMemStats: ReadMemStats stops the
+// world, every 5 ms, under the query it is measuring — a call took up to 21 ms
+// against a parallel allocating workload, where metrics.Read took microseconds. The
+// two report the same number: HeapInuse is heap objects plus heap unused, to the byte.
 type heapSampler struct {
 	stop chan struct{}
 	done chan struct{}
@@ -268,15 +274,18 @@ func startHeapSampler() *heapSampler {
 		defer close(h.done)
 		t := time.NewTicker(5 * time.Millisecond)
 		defer t.Stop()
-		var m runtime.MemStats
+		sample := []metrics.Sample{
+			{Name: "/memory/classes/heap/objects:bytes"},
+			{Name: "/memory/classes/heap/unused:bytes"},
+		}
 		written := false
 		for {
 			select {
 			case <-h.stop:
 				return
 			case <-t.C:
-				runtime.ReadMemStats(&m)
-				v := int64(m.HeapInuse)
+				metrics.Read(sample)
+				v := int64(sample[0].Value.Uint64() + sample[1].Value.Uint64())
 				if v > h.peak.Load() {
 					h.peak.Store(v)
 				}

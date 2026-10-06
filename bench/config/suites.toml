@@ -90,11 +90,11 @@ j4   = ["v1", "v2"]
 j5   = ["v1", "v2"]
 
 [queries.h2o]
-gb1  = "sum v1 by id1 (large-cardinality string groups)"
-gb2  = "sum v1 by id1, id2 (medium-cardinality string groups)"
-gb3  = "sum v1, mean v3 by id3 (small-cardinality string groups)"
-gb4  = "mean v1, v2, v3 by id4 (large-cardinality integer groups)"
-gb5  = "sum v1, v2, v3 by id6 (small-cardinality integer groups)"
+gb1  = "sum v1 by id1 (100 string groups)"
+gb2  = "sum v1 by id1, id2 (10,000 string groups)"
+gb3  = "sum v1, mean v3 by id3 (N/100 string groups)"
+gb4  = "mean v1, v2, v3 by id4 (100 integer groups)"
+gb5  = "sum v1, v2, v3 by id6 (N/100 integer groups)"
 gb6  = "median v3, sd v3 by id4, id5"
 gb7  = "max v1 - min v2 by id3 (range over small groups)"
 gb8  = "largest two v3 by id6 (top-n within group)"

@@ -304,8 +304,8 @@ Every addition is in the root package unless named.
 
 - **Object stores:** there is no built-in client. S3, GCS and Azure each want a
   vendor SDK, and ursus is pure Go with one dependency. `ScanParquetFrom` and
-  `ScanCSVFrom` are the seam, and the stores are planned for 0.4
-  ([`v0.3-scope.md`](./context_files/v0.3-scope.md) §4).
+  `ScanCSVFrom` are the seam. The stores were planned for 0.4, and have since
+  been deferred past it ([`v0.4-scope.md`](./context_files/v0.4-scope.md) §4).
 - **Operators that do not spill** each fail under `WithMemoryLimit` with an error
   naming themselves:
   - reverse, hstack, tail, `JoinAsOf`, `MergeSorted`, `Rolling` and
@@ -339,9 +339,10 @@ Every addition is in the root package unless named.
 - **Speed:** ursus is slower than Polars and DuckDB, and the README's table, measured
   at v0.3.0, says by how much.
 - **PDS-H q7 regressed** to 3.9 s from 2.4 s, because its date filter is no longer
-  pushed below its joins.
+  pushed below its joins. *Fixed in v0.3.1.*
 - **ursus spills only under an explicit `WithMemoryLimit`.** Under a cgroup's limit it
-  can be killed instead: h2o gb10 over CSV was, at 8 GB.
+  can be killed instead: h2o gb10 over CSV was, at 8 GB. *Fixed in v0.3.1,* which
+  budgets every query by default.
 
 ---
 

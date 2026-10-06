@@ -137,7 +137,7 @@ lf := ursus.ScanParquetFrom([]ursus.ParquetFile{{
 ```
 
 `ScanCSVFrom` takes a stream the same way, and `WriteParquet` and `WriteCSV` write to any `io.Writer`, an upload
-included. Built-in stores — `s3://` paths, listing for globs, retries — are planned for 0.4.
+included. Built-in stores — `s3://` paths, listing for globs, retries — are not planned for 0.4; the seam is the way in.
 
 The escape hatch is real: a per-element UDF in Go is a function call, not a Python
 interpreter round trip, which is the one place this library can beat Polars outright
@@ -153,7 +153,7 @@ tell from a real one; use `MapBatches` when the null is the point. The name is
 required, and `Explain` shows it. Your function is called from several goroutines at
 once, so it must be safe for that.
 
-Not done: built-in object stores (planned for 0.4; the seam above reaches one today), `MapGroups` and `RollingMap`, common subexpression elimination, SQL, `Pivot` — whose output columns are the distinct values of a
+Not done: built-in object stores (not in 0.4; the seam above reaches one today), `MapGroups` and `RollingMap`, common subexpression elimination, SQL, `Pivot` — whose output columns are the distinct values of a
 column, so its schema would depend on data and no plan node here does; `Unpivot` (melt) ships — and the long tail of
 `Expr.Rolling*`, `Upsample`, `Interpolate`
 and the trigonometric block.
