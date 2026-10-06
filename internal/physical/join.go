@@ -1183,7 +1183,7 @@ func (p *joinProbeOp) residualMatch(ctx context.Context) (bool, error) {
 // to reduce per row.
 func (p *joinProbeOp) residualHolds(ctx context.Context) (bool, error) {
 	pairs, err := gatherOut(p.pairLayout.Schema, p.pairLayout, p.cur, p.t.build,
-		p.csel, p.rcand, false)
+		p.csel, p.rcand, keyFromLeft)
 	if err != nil {
 		return false, err
 	}
@@ -1222,7 +1222,7 @@ func (p *joinProbeOp) residualHolds(ctx context.Context) (bool, error) {
 // surviving pairs back to probe rows, and that mapping is the entire output.
 func (p *joinProbeOp) residualFold(ctx context.Context, base int, rowAny []bool) error {
 	pairs, err := gatherOut(p.pairLayout.Schema, p.pairLayout, p.cur, p.t.build,
-		p.csel, p.rcand, false)
+		p.csel, p.rcand, keyFromLeft)
 	if err != nil {
 		return err
 	}
@@ -1331,7 +1331,7 @@ func (p *joinProbeOp) emit() (*data.Batch, error) {
 		src = p.leftPad
 	}
 	return gatherOut(p.schema, p.layout, src, p.t.build,
-		p.lsel, p.rsel, p.coalesceFromRight())
+		p.lsel, p.rsel, p.keyFrom())
 }
 
 // gatherOut materialises one output batch from a pair of selection vectors.
@@ -1341,7 +1341,7 @@ func (p *joinProbeOp) emit() (*data.Batch, error) {
 // what emit already does during the Right/Full flush, and duplicating that column
 // walk is how the layout's "single authority" property would be lost.
 func gatherOut(schema *dtype.Schema, layout *plan.JoinLayout, left, right *data.Batch,
-	lsel, rsel []int32, coalesceRight bool,
+	lsel, rsel []int32, from keyFrom,
 ) (*data.Batch, error) {
 
 	n := len(lsel)
@@ -1354,10 +1354,13 @@ func gatherOut(schema *dtype.Schema, layout *plan.JoinLayout, left, right *data.
 		switch {
 		case jc.Side == plan.FromRight:
 			c, err = kernel.Take(right.Column(jc.Index), rsel)
-		case jc.CoalesceWith >= 0 && coalesceRight:
+		case jc.CoalesceWith >= 0 && from == keyFromRight:
 			// A merged key on a Right join takes the RIGHT side's value: the left is
 			// null on an unmatched right row, and on a matched row the two are equal.
 			c, err = kernel.Take(right.Column(jc.CoalesceWith), rsel)
+		case jc.CoalesceWith >= 0 && from == keyFromEither:
+			c, err = eitherKey(schema.Field(i).Type, left.Column(jc.Index), lsel,
+				right.Column(jc.CoalesceWith), rsel)
 		default:
 			c, err = kernel.Take(left.Column(jc.Index), lsel)
 		}
@@ -1390,7 +1393,59 @@ func gatherOut(schema *dtype.Schema, layout *plan.JoinLayout, left, right *data.
 	return data.NewBatch(schema, cols)
 }
 
-func (p *joinProbeOp) coalesceFromRight() bool { return p.spec.kind == plan.JoinRight }
+// keyFrom says which side a merged key is read from, by join kind.
+func (p *joinProbeOp) keyFrom() keyFrom {
+	switch p.spec.kind {
+	case plan.JoinRight:
+		return keyFromRight
+	case plan.JoinFull:
+		return keyFromEither
+	}
+	return keyFromLeft
+}
+
+// keyFrom is the side a merged join key is gathered from.
+type keyFrom uint8
+
+const (
+	// keyFromLeft: every output row has a left row, so the left key is there.
+	keyFromLeft keyFrom = iota
+	// keyFromRight: a right join's unmatched right rows have no left row.
+	keyFromRight
+	// keyFromEither: a full join can lack either side, so the key is the left's
+	// where there is one and the right's where there is not — coalesce(l, r).
+	keyFromEither
+)
+
+// eitherKey is a full join's merged key: the left value where the row has one, the
+// right value where it does not, both in the promoted type the layout gives it. On a
+// matched row the two are equal; the right is read only where the left is absent.
+//
+// It is what audit.md J9 asked for. The resolver refused JoinCoalesce(true) on a
+// full join, saying ursus had no coalesce expression to merge the two with — and
+// ursus.Coalesce existed, as a conditional over kernel.Select, which this is.
+func eitherKey(out dtype.DataType, l *data.Column, lsel []int32, r *data.Column, rsel []int32) (*data.Column, error) {
+	lk, err := kernel.Take(l, lsel)
+	if err != nil {
+		return nil, err
+	}
+	rk, err := kernel.Take(r, rsel)
+	if err != nil {
+		return nil, err
+	}
+	if lk.DType() != out {
+		if lk, err = castKey("join", lk, out); err != nil {
+			return nil, err
+		}
+	}
+	if rk.DType() != out {
+		if rk, err = castKey("join", rk, out); err != nil {
+			return nil, err
+		}
+	}
+	present := data.NewBool("present", lk.Validity(), bitmap.AllSet(lk.Len()))
+	return kernel.Select(l.Name(), present, lk, rk)
+}
 
 // --- helpers ----------------------------------------------------------------------
 

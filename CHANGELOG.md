@@ -12,6 +12,9 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **A full join merges its keys with `JoinCoalesce(true)`:** the left key where the
+  row has a left side, the right key where it does not. It was refused, with a hint
+  that ursus had no coalesce expression (`audit.md` J9) (110).
 - **`JoinAsOf` and `MergeSorted` take any integer, float or temporal key, and
   `MergeSorted` a String one.**
   - An as-of join on a Float, Int8 or UInt64 key used to plan and then fail at

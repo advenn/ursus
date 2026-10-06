@@ -90,6 +90,8 @@ func JoinSuffix(s string) JoinOption {
 // Unset is not the same as either: by default the key appears once for inner,
 // left, right, semi and anti joins, and twice for a full join — which can leave
 // the key null on either side, so there is no single side to take it from.
+// JoinCoalesce(true) merges a full join's keys too: the left key where the row has
+// a left side, and the right key where it does not.
 //
 // The default only merges keys that are named the SAME on both sides. Merging
 // JoinLeftOn(Col("cust_id")) with JoinRightOn(Col("id")) would silently delete a

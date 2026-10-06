@@ -339,7 +339,7 @@ func (p *asOfProbeOp) match(ctx context.Context, in *data.Batch) (*data.Batch, e
 	}
 	p.nRows += n
 	p.lastSeen = lk[n-1]
-	return gatherOut(p.schema, p.layout, in, p.right, lsel, rsel, false)
+	return gatherOut(p.schema, p.layout, in, p.right, lsel, rsel, keyFromLeft)
 }
 
 // lastSeen is the previous batch's final key, so the sortedness check spans batches.

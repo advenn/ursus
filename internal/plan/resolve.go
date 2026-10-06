@@ -594,17 +594,6 @@ func resolveJoin(j *Join) (Node, error) {
 				Hint("a cross join has no keys for nulls to equal; to match null keys, " +
 					"join on them with JoinOn(...) and JoinNullsEqual(true)")
 		}
-	} else if j.Kind == JoinFull && j.Coalesce == CoalesceOn {
-		// A full join can leave a key null on EITHER side, so the merged value is
-		// genuinely coalesce(l, r) rather than one side or the other — and there is
-		// no coalesce expression in ursus yet. Refusing beats emitting a column
-		// that is null wherever the left side was unmatched.
-		return nil, uerr.New(uerr.KindUnsupported, "join",
-			"a full join cannot coalesce its keys yet").
-			Hint("a full join can leave the key null on either side, so merging "+
-				"them needs a coalesce expression ursus does not have").
-			Hint("the default keeps both key columns; the right one is suffixed %q",
-				j.suffix())
 	} else if len(j.LeftOn) == 0 && len(j.RightOn) == 0 && !j.HasResidual() {
 		// An equi-join with no keys must be an error, never a silent cross join:
 		// the cardinality difference is |L| vs |L|x|R|.

@@ -665,9 +665,6 @@ func TestJoinOptionErrors(t *testing.T) {
 		{"key count mismatch", []ursus.JoinOption{
 			ursus.JoinLeftOn(ursus.Col("k"), ursus.Col("lv")),
 			ursus.JoinRightOn(ursus.Col("k"))}, "left keys and"},
-		{"full with coalesce", []ursus.JoinOption{
-			ursus.JoinOn(ursus.Col("k")), ursus.JoinHow(ursus.JoinFull),
-			ursus.JoinCoalesce(true)}, "cannot coalesce"},
 		{"validate on cross", []ursus.JoinOption{
 			ursus.JoinHow(ursus.JoinCross),
 			ursus.JoinValidate(ursus.ValidateOneToOne)}, "not meaningful"},

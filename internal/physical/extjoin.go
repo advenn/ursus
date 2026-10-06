@@ -463,9 +463,10 @@ type nullPadOp struct {
 	leftPad *data.Batch
 	run     *fileRun
 	n       int
-	// right is whether a coalesced key takes the RIGHT side's value — a Right
-	// join's, as joinProbeOp.coalesceFromRight decides for the rows it emits.
-	right bool
+	// from is the side a coalesced key is read from, as joinProbeOp.keyFrom
+	// decides for the rows it emits. Here every left row is absent, so a Right
+	// join's and a Full join's both come from the right.
+	from keyFrom
 }
 
 func (o *nullPadOp) Schema() *dtype.Schema { return o.schema }
@@ -508,7 +509,7 @@ func (o *nullPadOp) Next(ctx context.Context) (*data.Batch, error) {
 		// key" — true of ONE key, and false of several: a row keyed (1, null) is
 		// null-keyed, lands in this bucket, and its 1 was read from leftPad and
 		// came back null.
-		return gatherOut(o.schema, o.layout, o.leftPad, b, lsel, rsel, o.right)
+		return gatherOut(o.schema, o.layout, o.leftPad, b, lsel, rsel, o.from)
 	}
 }
 
@@ -691,7 +692,7 @@ func (p *joinProbeOp) startBucket(ctx context.Context, b int) error {
 			return err
 		}
 		p.rep = &nullPadOp{schema: p.schema, layout: p.layout,
-			leftPad: p.leftPad, run: &fileRun{r: r}, right: p.coalesceFromRight()}
+			leftPad: p.leftPad, run: &fileRun{r: r}, from: p.keyFrom()}
 		return nil
 	}
 
