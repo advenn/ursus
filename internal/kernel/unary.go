@@ -76,7 +76,10 @@ func Unary(op expr.UnaryOp, name string, out dtype.DataType, c *data.Column) (*d
 		}
 		return unaryArith(op, name, out, c, n)
 
-	case expr.OpSqrt, expr.OpCbrt, expr.OpExp, expr.OpLn, expr.OpLog10, expr.OpLog1p:
+	case expr.OpSqrt, expr.OpCbrt, expr.OpExp, expr.OpLn, expr.OpLog10, expr.OpLog1p,
+		expr.OpSin, expr.OpCos, expr.OpTan, expr.OpArcSin, expr.OpArcCos, expr.OpArcTan,
+		expr.OpSinh, expr.OpCosh, expr.OpTanh, expr.OpArcSinh, expr.OpArcCosh, expr.OpArcTanh,
+		expr.OpDegrees, expr.OpRadians:
 		// The widening family. Listed rather than routed through op.IsMath() so that
 		// a math op added to the enum without an arm here fails loudly in Unary's
 		// default rather than silently taking the type-preserving path.
@@ -345,10 +348,28 @@ func unaryMath(op expr.UnaryOp, name string, out dtype.DataType,
 			dst[i] = math.Log1p(v)
 		}
 	default:
-		return nil, uerr.Internalf("kernel: unaryMath got %s", op)
+		f, ok := trig[op]
+		if !ok {
+			return nil, uerr.Internalf("kernel: unaryMath got %s", op)
+		}
+		for i, v := range src {
+			dst[i] = f(v)
+		}
 	}
 
 	return floatResult(name, out, dst, c.Validity())
+}
+
+// trig is the trigonometric block, one Go function each. Outside its domain each
+// gives NaN — arcsin(2), arccosh(0) — and arctanh(±1) gives ±Inf, as math does:
+// values, as sqrt(-1) is.
+var trig = map[expr.UnaryOp]func(float64) float64{
+	expr.OpSin: math.Sin, expr.OpCos: math.Cos, expr.OpTan: math.Tan,
+	expr.OpArcSin: math.Asin, expr.OpArcCos: math.Acos, expr.OpArcTan: math.Atan,
+	expr.OpSinh: math.Sinh, expr.OpCosh: math.Cosh, expr.OpTanh: math.Tanh,
+	expr.OpArcSinh: math.Asinh, expr.OpArcCosh: math.Acosh, expr.OpArcTanh: math.Atanh,
+	expr.OpDegrees: func(r float64) float64 { return r * (180 / math.Pi) },
+	expr.OpRadians: func(d float64) float64 { return d * (math.Pi / 180) },
 }
 
 // unaryUintSign is sign for the unsigned integers, where the answer is 0 or 1 and

@@ -174,6 +174,24 @@ const (
 	OpFloor
 	OpCeil
 
+	// Trigonometry, appended in step 114 rather than inserted after OpLog1p, so no
+	// existing constant moves. Widening like sqrt, which is why IsMath tests a
+	// second range for them. Radians in, radians out; Degrees and Radians convert.
+	OpSin
+	OpCos
+	OpTan
+	OpArcSin
+	OpArcCos
+	OpArcTan
+	OpSinh
+	OpCosh
+	OpTanh
+	OpArcSinh
+	OpArcCosh
+	OpArcTanh
+	OpDegrees
+	OpRadians
+
 	unaryOpCount
 )
 
@@ -185,6 +203,11 @@ var unaryOpNames = [unaryOpCount]string{
 	OpSqrt: "sqrt", OpCbrt: "cbrt", OpExp: "exp", OpLn: "ln",
 	OpLog10: "log10", OpLog1p: "log1p",
 	OpSign: "sign", OpFloor: "floor", OpCeil: "ceil",
+	OpSin: "sin", OpCos: "cos", OpTan: "tan",
+	OpArcSin: "arcsin", OpArcCos: "arccos", OpArcTan: "arctan",
+	OpSinh: "sinh", OpCosh: "cosh", OpTanh: "tanh",
+	OpArcSinh: "arcsinh", OpArcCosh: "arccosh", OpArcTanh: "arctanh",
+	OpDegrees: "degrees", OpRadians: "radians",
 }
 
 func (o UnaryOp) String() string {
@@ -206,7 +229,9 @@ func (o UnaryOp) IsNullPredicate() bool { return o == OpIsNull || o == OpIsNotNu
 // IsMath reports whether the op widens its operand to a float and returns a float.
 // A range comparison over declaration order, like the classifiers above, which is
 // why that block is append-only.
-func (o UnaryOp) IsMath() bool { return o >= OpSqrt && o <= OpLog1p }
+func (o UnaryOp) IsMath() bool {
+	return o >= OpSqrt && o <= OpLog1p || o >= OpSin && o <= OpRadians
+}
 
 // IsNanPredicate reports whether the op tests a float property.
 func (o UnaryOp) IsNanPredicate() bool { return o >= OpIsNan && o <= OpIsInfinite }

@@ -12,6 +12,9 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **Trigonometric and hyperbolic functions:** `Sin`, `Cos`, `Tan`, their inverses
+  `ArcSin`, `ArcCos`, `ArcTan`, the hyperbolic six, and `Degrees` and `Radians`.
+  They widen to a float as `Sqrt` does (114).
 - **`Str().Strptime(dtype, format, strict)` and `Dt().Strftime(format)`:** parse
   and format dates, datetimes and times with strftime directives (`%d/%m/%Y`,
   `%b %e, %Y`, `%H:%M:%S%.f %z`, …), as Polars does.

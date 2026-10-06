@@ -239,6 +239,12 @@ func TestMathOpsAreClassified(t *testing.T) {
 	widening := map[UnaryOp]bool{
 		OpSqrt: true, OpCbrt: true, OpExp: true,
 		OpLn: true, OpLog10: true, OpLog1p: true,
+		// The trigonometric block, appended in step 114.
+		OpSin: true, OpCos: true, OpTan: true,
+		OpArcSin: true, OpArcCos: true, OpArcTan: true,
+		OpSinh: true, OpCosh: true, OpTanh: true,
+		OpArcSinh: true, OpArcCosh: true, OpArcTanh: true,
+		OpDegrees: true, OpRadians: true,
 	}
 	preserving := []UnaryOp{OpNeg, OpAbs, OpSign, OpFloor, OpCeil}
 

@@ -303,6 +303,26 @@ func (e Expr) Ln() Expr    { return e.un(expr.OpLn) }
 func (e Expr) Log10() Expr { return e.un(expr.OpLog10) }
 func (e Expr) Log1p() Expr { return e.un(expr.OpLog1p) }
 
+// The trigonometric and hyperbolic functions, in radians, with Polars' names. Like
+// Sqrt they widen to a float, keeping Float32, and a value outside the domain —
+// ArcSin(2), ArcCosh(0) — is NaN rather than an error or a null.
+func (e Expr) Sin() Expr     { return e.un(expr.OpSin) }
+func (e Expr) Cos() Expr     { return e.un(expr.OpCos) }
+func (e Expr) Tan() Expr     { return e.un(expr.OpTan) }
+func (e Expr) ArcSin() Expr  { return e.un(expr.OpArcSin) }
+func (e Expr) ArcCos() Expr  { return e.un(expr.OpArcCos) }
+func (e Expr) ArcTan() Expr  { return e.un(expr.OpArcTan) }
+func (e Expr) Sinh() Expr    { return e.un(expr.OpSinh) }
+func (e Expr) Cosh() Expr    { return e.un(expr.OpCosh) }
+func (e Expr) Tanh() Expr    { return e.un(expr.OpTanh) }
+func (e Expr) ArcSinh() Expr { return e.un(expr.OpArcSinh) }
+func (e Expr) ArcCosh() Expr { return e.un(expr.OpArcCosh) }
+func (e Expr) ArcTanh() Expr { return e.un(expr.OpArcTanh) }
+
+// Degrees converts radians to degrees, and Radians degrees to radians.
+func (e Expr) Degrees() Expr { return e.un(expr.OpDegrees) }
+func (e Expr) Radians() Expr { return e.un(expr.OpRadians) }
+
 // Round rounds to decimals decimal places, HALF AWAY FROM ZERO.
 //
 // Round(0.5) is 1 and Round(2.5) is 3, as a spreadsheet rounds, rather than IEEE's
