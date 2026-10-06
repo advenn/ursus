@@ -165,6 +165,10 @@ func ParseArgs() Args {
 		"write an inuse_space profile when the live heap first exceeds -heapprofile-at")
 	flag.Int64Var(&heapProfileAt, "heapprofile-at", 1<<30,
 		"live-heap threshold in bytes for -heapprofile")
+	flag.StringVar(&cpuProfile, "cpuprofile", "",
+		"write a CPU profile of the timed iterations to this file")
+	flag.StringVar(&allocProfile, "allocprofile", "",
+		"write the allocs profile to this file after the timed iterations")
 	flag.Parse()
 
 	for _, name := range strings.Split(checksum, ",") {
@@ -268,6 +272,15 @@ var (
 	heapProfileAt int64
 )
 
+// cpuProfile names a file to receive a CPU profile of the TIMED iterations only:
+// not the warm-up, which pays for the page cache and first-touch allocations, and
+// not the setup. That is the time the report prints, so it is the time to explain.
+//
+// allocProfile names a file to receive the allocs profile — every allocation since
+// the process started, by site — written after the timed iterations. It answers
+// what heapProfile cannot: not what is live at the peak, but what churns.
+var cpuProfile, allocProfile string
+
 func startHeapSampler() *heapSampler {
 	h := &heapSampler{stop: make(chan struct{}), done: make(chan struct{})}
 	go func() {
@@ -297,6 +310,19 @@ func startHeapSampler() *heapSampler {
 		}
 	}()
 	return h
+}
+
+// writeProfile writes one of runtime/pprof's named profiles to path.
+func writeProfile(name, path string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	if err := pprof.Lookup(name).WriteTo(f, 0); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // writeHeapProfile dumps the live objects at this instant.
@@ -385,6 +411,16 @@ func execute(a Args, build Build, out *payload) error {
 	}
 	release(warm)
 
+	if cpuProfile != "" {
+		f, err := os.Create(cpuProfile)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			return err
+		}
+	}
 	var answer Answer
 	for i := 0; i < a.Iterations; i++ {
 		started := time.Now()
@@ -407,6 +443,14 @@ func execute(a Args, build Build, out *payload) error {
 		// process is also reporting.
 		release(answer)
 		answer = next
+	}
+	if cpuProfile != "" {
+		pprof.StopCPUProfile()
+	}
+	if allocProfile != "" {
+		if err := writeProfile("allocs", allocProfile); err != nil {
+			return err
+		}
 	}
 
 	out.Rows = answer.Rows()
