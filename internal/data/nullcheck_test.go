@@ -11,9 +11,10 @@ import (
 	"github.com/advenn/ursus/internal/data"
 )
 
-// See data.CheckNonNullable. One line per test binary, run before any test starts.
+// See data.CheckTimeRange. One line per test binary, run before any test starts.
+// CheckNonNullable is NOT set here: it is on by default, and
+// TestNonNullableCheckIsOnByDefault reads the default this binary starts with.
 func init() {
-	data.CheckNonNullable = true
 	data.CheckTimeRange = true
 }
 
@@ -120,11 +121,22 @@ func TestNonNullableCheckNeedsTheCount(t *testing.T) {
 	}
 }
 
-// TestNonNullableCheckIsOffByDefault. It costs a popcount per column per batch on
-// exactly the columns most likely to be declared non-nullable — a Parquet REQUIRED
-// column always carries a materialised bitmap — so it is an invariant check for
-// tests, not a guard for production.
-func TestNonNullableCheckIsOffByDefault(t *testing.T) {
+// TestNonNullableCheckIsOnByDefault: a null in a non-nullable column is refused in
+// production, not only in a test binary (audit.md I24). This binary's init leaves
+// the toggle alone, so what is read here is the default.
+func TestNonNullableCheckIsOnByDefault(t *testing.T) {
+	if !data.CheckNonNullable {
+		t.Fatal("CheckNonNullable is off by default, so a production build never runs it")
+	}
+	schema, cols := nullCheckCols(t, true)
+	if _, err := data.NewBatch(schema, cols); err == nil {
+		t.Error("a null in a non-nullable column was accepted")
+	}
+}
+
+// TestNonNullableCheckCanBeTurnedOff: the toggle exists for the benchmark that
+// measures the check, and off it does not run.
+func TestNonNullableCheckCanBeTurnedOff(t *testing.T) {
 	data.CheckNonNullable = false
 	defer func() { data.CheckNonNullable = true }()
 

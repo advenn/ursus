@@ -18,30 +18,26 @@ type Batch struct {
 	rows   int
 }
 
-// NewBatch builds a batch, checking that the columns match the schema in count,
-// order, name and type.
+// CheckNonNullable is the fifth boundary check: a column whose field says
+// Nullable: false must actually hold no nulls. It is on.
 //
-// The check is not paranoia: a mismatch here means the evaluator produced
-// something other than what the plan's schema resolution promised, which is
-// exactly the class of bug that would otherwise surface as corrupted output far
-// downstream. Failing at the boundary makes it a one-line diagnosis.
-// CheckNonNullable turns on the fifth boundary check: a column whose field says
-// Nullable: false must actually hold no nulls.
+// # On in production since step 98
 //
-// # Why it is a toggle rather than one of the other four
+// It was on only in test binaries (audit.md I24), so a null in a column declared
+// non-nullable was ErrInternal in the suite and silent everywhere else — and the
+// optimizer acts on the declaration, below. The reason given was cost: the four
+// checks in NewBatch are O(columns), and this one may cost a popcount per column,
+// because bitmap.Builder.Finish never returns the no-storage all-set form, so a
+// scanned or concatenated column carries a materialised bitmap even when nothing is
+// null and the O(1) fast path misses exactly there.
 //
-// The four checks in NewBatch are unconditional because they are O(columns) on
-// values already in registers. This one may cost a popcount per column per batch —
-// bitmap.Builder.Finish never returns the no-storage all-set form, so a scanned or
-// concatenated column carries a materialised bitmap even when nothing is null, and
-// the O(1) fast path misses exactly there.
+// Measured (BenchmarkNonNullableCheck): 76 ns per non-nullable column per batch of
+// 8192 rows with a materialised bitmap — 865 ns against 103 ns for ten columns —
+// next to microseconds for any kernel that reads the batch. A column with no
+// stored bitmap takes the O(1) path and costs nothing.
 //
-// It is a package var rather than a CollectOption because the option would have to
-// reach here from the root package, and nothing does: WithVerify stops at
-// Optimizer.Verify, and physical.Options carries only BatchSize, Threads and Budget.
-// Threading a flag to forty-six construction sites — several of them in kernel and
-// source, which never see Options — would be a large change to buy a check that
-// only tests run. Set it once from a test binary's init, never during a query.
+// It stays a package var so a benchmark can measure it off. Never change it during
+// a query.
 //
 // # What a violation means
 //
@@ -51,7 +47,7 @@ type Batch struct {
 // when x is declared non-nullable. So a lie here is a potentially unsound rewrite,
 // not a cosmetic mismatch, and it will not show up in the final frame of the query
 // that told it.
-var CheckNonNullable bool
+var CheckNonNullable = true
 
 // checkNonNullable is the fifth clause, shared by both constructors.
 func checkNonNullable(schema *dtype.Schema, cols []*Column) error {
@@ -168,6 +164,13 @@ func checkShape(schema *dtype.Schema, cols []*Column) (int, error) {
 	return rows, nil
 }
 
+// NewBatch builds a batch, checking that the columns match the schema in count,
+// order, name and type.
+//
+// The check is not paranoia: a mismatch here means the evaluator produced
+// something other than what the plan's schema resolution promised, which is
+// exactly the class of bug that would otherwise surface as corrupted output far
+// downstream. Failing at the boundary makes it a one-line diagnosis.
 func NewBatch(schema *dtype.Schema, cols []*Column) (*Batch, error) {
 	rows, err := checkShape(schema, cols)
 	if err != nil {
