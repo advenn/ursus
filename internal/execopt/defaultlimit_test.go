@@ -28,8 +28,8 @@ func TestDefaultLimitIsHalfTheSmallerCeiling(t *testing.T) {
 		want int64
 	}{
 		{"no cgroup limit: half of RAM", fakeFS{
-			"/proc/meminfo":               meminfo16G,
-			"/proc/self/cgroup":           "0::/user.slice/app.scope\n",
+			"/proc/meminfo":     meminfo16G,
+			"/proc/self/cgroup": "0::/user.slice/app.scope\n",
 			"/sys/fs/cgroup/user.slice/app.scope/memory.max": "max\n",
 		}, ram / 2},
 		{"a limit on the process's own cgroup", fakeFS{
