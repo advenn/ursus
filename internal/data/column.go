@@ -21,6 +21,8 @@
 package data
 
 import (
+	"math"
+
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
 	"github.com/advenn/ursus/dtype"
@@ -232,14 +234,34 @@ func NewBool(name string, bits bitmap.View, valid bitmap.View) *Column {
 	return &Column{name: name, dt: dtype.Bool, len: n, valid: valid, bits: bits}
 }
 
+// MaxStringBytes is the most character data one String column holds. Its offsets
+// are 32-bit, and past this they wrapped silently, reading other rows' bytes or
+// slicing at a negative offset (audit.md S24). A variable only so a test can lower
+// it.
+var MaxStringBytes int64 = math.MaxInt32
+
+// tooManyChars is raised by a String constructor asked for more than a column
+// holds. The constructors return no error, and every boundary recovers a panic, so
+// this is how a 3 GiB Collect fails instead of wrapping.
+func tooManyChars(name string, n int64) {
+	uerr.Raise(uerr.New(uerr.KindResource, "string",
+		"column %q needs %d bytes of characters, and a String column holds %d", name, n,
+		MaxStringBytes).
+		Hint("its offsets are 32-bit; read the result in batches with CollectBatches, or " +
+			"write it with SinkParquet or SinkCSV, which never build one column of all of it"))
+}
+
 // NewString builds a String column from Go strings.
 func NewString(name string, vals []string, valid bitmap.View) *Column {
-	total := 0
+	var total int64
 	for _, s := range vals {
-		total += len(s)
+		total += int64(len(s))
+	}
+	if total > MaxStringBytes {
+		tooManyChars(name, total)
 	}
 	offs := arrowx.NewBuffer((len(vals) + 1) * 4)
-	chars := arrowx.NewBuffer(total)
+	chars := arrowx.NewBuffer(int(total))
 
 	o := unsafeData[int32](offs.Bytes())
 	d := chars.Bytes()
@@ -277,6 +299,11 @@ func NewString(name string, vals []string, valid bitmap.View) *Column {
 // int32 write goes through unsafeData rather than encoding/binary because the buffer
 // is native-endian, which is what every reader of it assumes.
 func NewStringParts(name string, offs []int32, chars []byte, valid bitmap.View) *Column {
+	// A reader computes offs as int32 while it appends, so past the limit they have
+	// already wrapped; the characters themselves are what can be counted.
+	if int64(len(chars)) > MaxStringBytes {
+		tooManyChars(name, int64(len(chars)))
+	}
 	n := len(offs) - 1
 	if n < 0 {
 		n = 0

@@ -13,12 +13,12 @@ import (
 )
 
 // TestPadRefusesWhatAStringColumnCannotHold: a pad is refused before it allocates
-// when its output would pass maxStringBytes, and the bytes are counted exactly, so a
+// when its output would pass data.MaxStringBytes, and the bytes are counted exactly, so a
 // pad that fits is never refused (audit.md S22). The limit is lowered to 4 KiB so
 // that what is refused here is small enough to allocate if the bound were gone.
 func TestPadRefusesWhatAStringColumnCannotHold(t *testing.T) {
-	defer func(old int64) { maxStringBytes = old }(maxStringBytes)
-	maxStringBytes = 4 << 10
+	defer func(old int64) { data.MaxStringBytes = old }(data.MaxStringBytes)
+	data.MaxStringBytes = 4 << 10
 
 	// Three strings and a null, which pads to nothing.
 	c := data.NewString("s", []string{"ab", "", "-7", "x"},
@@ -63,7 +63,7 @@ func TestPadRefusesWhatAStringColumnCannotHold(t *testing.T) {
 				t.Fatal("answered without padding")
 			case !tc.fits && err == nil:
 				t.Fatalf("padded %d bytes past the %d a column holds",
-					len(out.RawChars()), maxStringBytes)
+					len(out.RawChars()), data.MaxStringBytes)
 			case !tc.fits && !errors.Is(err, uerr.ErrValue):
 				t.Fatalf("want a value error, got %v", err)
 			case !tc.fits && !strings.Contains(err.Error(), "width"):

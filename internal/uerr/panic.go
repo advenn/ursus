@@ -56,6 +56,9 @@ func (p *PanicError) Unwrap() error {
 // what it is. Anything else — a runtime error, a string, an *Error of another kind
 // — is a bug in ursus too, and becomes KindInternal with the value as its cause.
 func FromPanic(v any, op string) *Error {
+	if r, ok := v.(raised); ok {
+		return r.e
+	}
 	if e, ok := v.(*Error); ok && e.Kind == KindInternal {
 		return e
 	}
@@ -73,6 +76,9 @@ func FromPanic(v any, op string) *Error {
 // An internal *Error still passes through: raised by ursus, it is ursus's bug
 // wherever it surfaced.
 func Attributed(v any, kind Kind, op, format string, args ...any) *Error {
+	if r, ok := v.(raised); ok {
+		return r.e
+	}
 	if e, ok := v.(*Error); ok && e.Kind == KindInternal {
 		return e
 	}
@@ -83,6 +89,21 @@ func Attributed(v any, kind Kind, op, format string, args ...any) *Error {
 	}
 	return e
 }
+
+// Raise panics with e on purpose, for a constructor whose signature has no error to
+// return: a String column past what its 32-bit offsets hold, say. FromPanic and
+// Attributed return e itself, whatever its kind, where an *Error panicked any other
+// way is taken for a bug.
+//
+// Every operator boundary recovers a panic (step 72), so a Raise surfaces as e from
+// Collect and its siblings. One that reaches a caller's own goroutine — through a
+// public constructor called directly — prints e's message.
+func Raise(e *Error) { panic(raised{e}) }
+
+// raised is a Raise in flight. It is an error so that, unrecovered, it prints as one.
+type raised struct{ e *Error }
+
+func (r raised) Error() string { return r.e.Error() }
 
 // Catch recovers a panic into *errp, as FromPanic describes. It must be deferred
 // DIRECTLY — `defer uerr.Catch(&err, op)` — because recover only stops a panic

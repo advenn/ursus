@@ -1,7 +1,6 @@
 package kernel
 
 import (
-	"math"
 	"regexp"
 	"strings"
 	"unicode"
@@ -305,10 +304,6 @@ func applyStr(fn expr.CallFn, s string, args []any, re *regexp.Regexp) (string, 
 //
 // A string argument rather than a rune because the expression layer's literals are
 // Go values with no rune type; the first rune of it is what pads.
-// maxStringBytes is the most character data one String column can hold: its
-// offsets are 32-bit. A variable only so a test can lower it.
-var maxStringBytes int64 = math.MaxInt32
-
 // padFits refuses a pad whose output would not fit in one String column, before
 // anything is allocated.
 //
@@ -331,16 +326,16 @@ func padFits(fn expr.CallFn, args []any, acc data.StringAccessor, n int, valid b
 		s := acc.Get(i)
 		total += int64(len(s))
 		if short := width - int64(utf8.RuneCountInString(s)); short > 0 {
-			if short > (maxStringBytes-total)/fill+1 {
-				total = maxStringBytes + 1
+			if short > (data.MaxStringBytes-total)/fill+1 {
+				total = data.MaxStringBytes + 1
 			} else {
 				total += short * fill
 			}
 		}
-		if total > maxStringBytes {
+		if total > data.MaxStringBytes {
 			return uerr.New(uerr.KindValue, fn.String(),
 				"padding to width %d needs more than the %d bytes a String column holds",
-				width, maxStringBytes).
+				width, data.MaxStringBytes).
 				Hint("a String column's offsets are 32-bit; pad fewer rows, or to a smaller width")
 		}
 	}
