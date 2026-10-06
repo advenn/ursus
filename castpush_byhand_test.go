@@ -22,12 +22,7 @@ import (
 
 // knownCastPushDefects names each case that answers wrongly today, with what it
 // answers.
-var knownCastPushDefects = map[string]string{
-	"Datetime(ns) literal cast to Date: pushed into the join side": "stays above the join",
-	"Datetime(us) column cast to Date: pushed":                     "stays above the join",
-	"Datetime(ns) cast to a coarser Datetime(ms): pushed":          "stays above the join",
-	"Datetime cast to Time: pushed":                                "stays above the join",
-}
+var knownCastPushDefects = map[string]string{}
 
 // filterBelowJoin reports whether lf's optimized plan has its FILTER beneath its
 // JOIN — inside a side — rather than above it.
@@ -82,7 +77,7 @@ func TestCastPushByHand(t *testing.T) {
 		{"Datetime(ns) cast to a coarser Datetime(ms): pushed",
 			pushed(c("ts").Cast(dtype.Datetime(dtype.Milli, "")).Ge(ursus.Lit(day(4)).Cast(dtype.Datetime(dtype.Milli, ""))))},
 		{"Datetime cast to Time: pushed",
-			pushed(c("ts").Cast(dtype.Time(dtype.Nano)).Ge(ursus.Lit(int64(0)).Cast(dtype.Time(dtype.Nano))))},
+			pushed(c("ts").Cast(dtype.Time(dtype.Nano)).Ge(ursus.Lit(day(1)).Cast(dtype.Time(dtype.Nano))))},
 		{"control: a comparison with no cast is pushed", pushed(c("ts").Ge(ursus.Lit(day(4))))},
 
 		// Casts that CAN fail stay where they were written, as step 78 decided.
