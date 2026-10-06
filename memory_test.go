@@ -509,8 +509,11 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			// Generous enough that the query plans and runs, far too small to hold
-			// 4000 rows of 32-byte strings.
-			_, err := c.build().Collect(t.Context(),
+			// 4000 rows of 32-byte strings. One thread: a parallel group-by queues a few
+			// batches past the budget before it goes serial (step 91), and at 4 KiB
+			// that is all 32 of this input's, leaving the per-value refusal no rows to
+			// fire on — a real overshoot at test scale, a few megabytes at a real one.
+			_, err := c.build().Collect(t.Context(), ursus.WithThreads(1),
 				ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10))
 			if err == nil {
 				t.Fatal("a 4KiB limit was enough")

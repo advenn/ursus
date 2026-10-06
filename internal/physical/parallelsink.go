@@ -60,6 +60,15 @@ type parallelSink struct {
 	done bool
 }
 
+// errWantSerial is a worker's sink saying it has reached the memory budget and would
+// freeze — which a sink that must still be merged cannot. The batch it was given is
+// already consumed; the driver stops dispatching, folds the workers together, and
+// finishes the input serially on the merged sink, which may then freeze and spill.
+var errWantSerial = errors.New("physical: the budget is reached; finish serially")
+
+// serialSink is a sink that can be told it is alone again.
+type serialSink interface{ goSerial() }
+
 func newParallelSink(child Operator, sinks []Sink) *parallelSink {
 	return &parallelSink{child: child, sinks: sinks}
 }
@@ -93,6 +102,7 @@ func (p *parallelSink) drain(parent context.Context) error {
 		mu     sync.Mutex
 		errs   []error
 		failed atomic.Bool
+		serial atomic.Bool // a worker reached the budget: stop dispatching
 	)
 	fail := func(err error) {
 		mu.Lock()
@@ -121,7 +131,12 @@ func (p *parallelSink) drain(parent context.Context) error {
 					}
 					// Guarded: this is a worker goroutine, and a panic in it could be
 					// recovered by nothing else.
-					if err := uerr.GuardErr("", func() error { return p.sinks[i].Consume(ctx, b) }); err != nil {
+					err := uerr.GuardErr("", func() error { return p.sinks[i].Consume(ctx, b) })
+					if errors.Is(err, errWantSerial) {
+						serial.Store(true)
+						continue
+					}
+					if err != nil {
 						fail(err)
 					}
 				}
@@ -133,7 +148,7 @@ func (p *parallelSink) drain(parent context.Context) error {
 	// parallel — the same split parallelOp makes, for the same reason: reading a
 	// batch is I/O, and the CPU work is what the workers do with it.
 	var dispatchErr error
-	for seq := 0; ; seq++ {
+	for seq := 0; !serial.Load(); seq++ {
 		b, err := Pull(ctx, p.child)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
@@ -175,6 +190,26 @@ func (p *parallelSink) drain(parent context.Context) error {
 	for i := 1; i < n; i++ {
 		if err := p.sinks[0].Merge(p.sinks[i]); err != nil {
 			return err
+		}
+	}
+
+	// A worker reached the budget: the rest of the input goes to the merged sink,
+	// alone, where it may freeze and spill as the serial path always has.
+	if serial.Load() {
+		if s, ok := p.sinks[0].(serialSink); ok {
+			s.goSerial()
+		}
+		for {
+			b, err := Pull(ctx, p.child)
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			if err := p.sinks[0].Consume(ctx, b); err != nil {
+				return err
+			}
 		}
 	}
 

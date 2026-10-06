@@ -324,6 +324,11 @@ func itoa64(v int64) string {
 // TestGroupBySpillActuallyHappens: the query succeeding proves nothing. This
 // asserts the counter AND that files existed on disk during the run, which the
 // counter alone cannot show.
+// The spill tests below pin WithThreads(1). They test the serial path's freeze and
+// partitioning; since step 91 a parallel group-by switches to that path only when a
+// worker reaches the budget, and over these small inputs most rows are already
+// aggregated in memory by then, so whether anything spills becomes a matter of
+// timing. TestParallelAggregationSwitchesToSerialUnderALimit tests the switch.
 func TestGroupBySpillActuallyHappens(t *testing.T) {
 	dir := t.TempDir()
 	src := memFrame(t, 20000, 512, 4000)
@@ -331,7 +336,7 @@ func TestGroupBySpillActuallyHappens(t *testing.T) {
 	sawFiles := false
 	for range ursus.Scan(src).GroupBy(ursus.Col("k")).Agg(ursus.Len().Alias("n")).
 		CollectBatches(t.Context(), ursus.WithBatchSize(512),
-			ursus.WithMemoryLimit(16<<10), ursus.WithSpillDir(dir)) {
+			ursus.WithThreads(1), ursus.WithMemoryLimit(16<<10), ursus.WithSpillDir(dir)) {
 		es, err := os.ReadDir(dir)
 		if err != nil {
 			t.Fatal(err)
@@ -419,7 +424,7 @@ func TestGroupByOrderIsUnspecifiedWithoutMaintainOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := q().Collect(t.Context(), ursus.WithBatchSize(512),
-		ursus.WithMemoryLimit(16<<10), ursus.WithSpillDir(t.TempDir()))
+		ursus.WithThreads(1), ursus.WithMemoryLimit(16<<10), ursus.WithSpillDir(t.TempDir()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -516,7 +521,7 @@ func TestGroupBySpillRecursesOnSkew(t *testing.T) {
 
 	var stats ursus.MemoryStats
 	got, err := q().Collect(t.Context(), ursus.WithBatchSize(512),
-		ursus.WithMemoryLimit(2<<10), ursus.WithSpillDir(t.TempDir()),
+		ursus.WithThreads(1), ursus.WithMemoryLimit(2<<10), ursus.WithSpillDir(t.TempDir()),
 		ursus.WithMemoryStats(&stats))
 	if err != nil {
 		t.Fatal(err)
@@ -597,7 +602,7 @@ func TestGroupBySpillFilesAreCleanedUp(t *testing.T) {
 		var stats ursus.MemoryStats
 		if _, err := ursus.Scan(src).GroupBy(ursus.Col("k")).Agg(ursus.Len().Alias("n")).
 			Collect(t.Context(), ursus.WithBatchSize(512),
-				ursus.WithMemoryLimit(16<<10), ursus.WithSpillDir(dir),
+				ursus.WithThreads(1), ursus.WithMemoryLimit(16<<10), ursus.WithSpillDir(dir),
 				ursus.WithMemoryStats(&stats)); err != nil {
 			t.Fatal(err)
 		}

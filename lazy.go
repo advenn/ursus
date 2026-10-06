@@ -380,6 +380,14 @@ type MemoryStats struct {
 // WithMemoryLimit(0) turns the budget off; elsewhere than Linux there is no default
 // and it is off already.
 //
+// # A parallel group-by overshoots a little
+//
+// A group-by runs on several workers until the budget is reached, then folds them
+// into one and finishes serially, spilling as the serial path does. The batches the
+// workers already had queued are aggregated first, so the budget can be exceeded by
+// that much — a few megabytes at the default batch size — before the serial path
+// takes over.
+//
 // # What it does not bound
 //
 // Collect materialises the whole result by definition, and asking for a frame in

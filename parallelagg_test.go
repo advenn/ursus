@@ -290,13 +290,18 @@ func TestMaintainOrderStaysSerial(t *testing.T) {
 	ursustest.AssertFrameEqual(t, many, one)
 }
 
-// TestMemoryLimitDisablesParallelAggregation is the spill gate.
+// TestParallelAggregationSwitchesToSerialUnderALimit is the spill gate (step 91).
 //
-// A hashAggSink refuses to Merge once it has frozen or spilled, and N workers
-// splitting one budget make spilling likelier rather than less likely — so a limit
-// would turn a slow query into a failed one. Under a limit the aggregate keeps
-// exactly the serial path steps 10 and 12 built.
-func TestMemoryLimitDisablesParallelAggregation(t *testing.T) {
+// A hashAggSink cannot be merged once it has frozen, so a parallel worker never
+// freezes: the one that reaches the budget asks for serial, the driver folds the
+// workers together, and the merged sink takes the rest of the input alone, freezing
+// and spilling as the serial path does. Until step 91 the aggregate was simply
+// serial under any limit — harmless while a limit was rare, and every group-by
+// once step 90 gave every query a budget.
+//
+// Small batches, so the switch comes early and the rest of the input has to spill:
+// the test requires that it did, and that the answer is the serial one.
+func TestParallelAggregationSwitchesToSerialUnderALimit(t *testing.T) {
 	q := func() *ursus.LazyFrame {
 		return ursus.Scan(aggSource(t)).GroupBy(ursus.Col("k"), ursus.Col("g")).
 			Agg(ursus.Col("v").Sum().Alias("s"))
@@ -305,20 +310,27 @@ func TestMemoryLimitDisablesParallelAggregation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 16KB is tight enough that the sinks actually SPILL, which is what makes this
-	// a real test rather than a formality: with the gate removed the query fails
-	// outright with "cannot merge hashAggSinks that have spilled", not merely with
-	// a different float rounding. Measured — at 64KB the workers stay resident and
-	// the merge succeeds, so a looser limit would prove much less.
-	got, err := q().Collect(t.Context(), ursus.WithThreads(8),
-		ursus.WithMemoryLimit(16<<10), ursus.WithSpillDir(t.TempDir()))
+	var stats ursus.MemoryStats
+	got, err := q().Collect(t.Context(), ursus.WithThreads(8), ursus.WithBatchSize(16),
+		ursus.WithMemoryLimit(16<<10), ursus.WithSpillDir(t.TempDir()),
+		ursus.WithMemoryStats(&stats))
 	if err != nil {
 		t.Fatalf("a memory-limited parallel aggregation must fall back, not fail: %v", err)
 	}
-	// Content, not order: an unordered group-by's row order under a limit depends on
-	// where it froze, as WithMemoryLimit documents. The order matched here only
-	// while the key table went uncharged and the freeze came after the last new key.
-	ursustest.AssertFrameEqual(t, got, want, ursustest.IgnoreRowOrder())
+	if stats.Spills == 0 {
+		t.Error("nothing spilled, so the switch to serial was not exercised")
+	}
+	// Content, not order — an unordered group-by's order under a limit depends on
+	// where it froze, so both are sorted on the key — and within a float
+	// tolerance, because the workers add in a different order from one sink.
+	byKey := func(df *ursus.DataFrame) *ursus.DataFrame {
+		s, err := df.Lazy().Sort(ursus.Asc(ursus.Col("k")), ursus.Asc(ursus.Col("g"))).Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	ursustest.AssertFrameEqual(t, byKey(got), byKey(want), ursustest.WithTolerance(0, 1e-9))
 }
 
 // TestParallelAggregationIsNotASemanticKnob: thread count is not a semantic knob,

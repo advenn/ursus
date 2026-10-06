@@ -112,6 +112,10 @@ type hashAggSink struct {
 	ord       string  // the ordinal column's name in spillSchema
 	firstSeen []int64 // input ordinal of each resident group's first row
 	nRows     int64   // rows consumed, the ordinal source at level 0
+
+	// parallel is set on each of several workers: past the budget the sink asks the
+	// driver to go serial instead of freezing (step 91).
+	parallel bool
 }
 
 // aggSpec is one distinct inner aggregate: its op, its input expression, and the
@@ -475,11 +479,27 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 	// The freeze is tested at a BATCH BOUNDARY, so no batch is ever half-frozen.
 	// The cost is that the resident set overshoots by up to one batch's distinct
 	// keys; the benefit is that the invariant is visible rather than argued.
+	if s.parallel {
+		// A parallel worker neither freezes, since a frozen sink cannot be merged,
+		// nor raises the budget's error: the budget is shared, and another worker
+		// can push it over between this sink's look and its Check, which made a
+		// spillable group-by fail under -race. Over the budget, it asks for serial
+		// instead. This batch is already aggregated, so nothing is lost: the driver
+		// merges the workers and finishes on one sink, where the freeze, the spill
+		// and the per-value refusal all happen as they do serially.
+		if s.budget.Limit() > 0 && s.mem.Over() {
+			return errWantSerial
+		}
+		return nil
+	}
 	if !s.frozen && s.budget.Limit() > 0 && s.mem.Over() && len(s.keys) > 0 {
 		s.frozen, s.frozenAcc = true, acc
 	}
 	return s.overBudget()
 }
+
+// goSerial is how parallelSink hands the rest of the input to the merged sink.
+func (s *hashAggSink) goSerial() { s.parallel = false }
 
 func (s *hashAggSink) Merge(other Sink) error {
 	o, ok := other.(*hashAggSink)
@@ -571,6 +591,12 @@ func (s *hashAggSink) Merge(other Sink) error {
 	acc += int64(cap(s.firstSeen))*8 + s.ids.NBytes()
 	s.mem.RetainBytes(acc - s.accBytes)
 	s.accBytes = acc
+	// other's state now lives in s, which has charged for it, so other's account
+	// is released here rather than at Close: under a budget, the merged sink would
+	// otherwise see the query as over it twice and freeze early (step 91). Buffers
+	// both hold are counted by allocation, so s keeps paying for those.
+	o.mem.Release()
+	o.accBytes = 0
 	return nil
 }
 
@@ -599,20 +625,18 @@ func (s *hashAggSink) Merge(other Sink) error {
 //
 // # Memory
 //
-// hashAggSink refuses to Merge once it has frozen or spilled, and N workers
-// splitting one budget makes spilling likelier, not less likely — so a limit would
-// turn a slow query into a failed one. Steps 10 and 12 built the serial spilling
-// path and this keeps it: under a limit, nothing changes.
+// hashAggSink refuses to Merge once it has frozen or spilled, so the workers never
+// freeze: a worker that would returns errWantSerial instead, and parallelSink folds
+// the workers together and finishes the input on the one merged sink, which then
+// freezes and spills exactly as the serial path does (step 91). A group-by that fits
+// stays parallel; one that does not degrades to serial at the point it stopped
+// fitting, rather than failing.
 //
-// The trade that leaves, stated plainly: without a limit, peak memory rises to
-// roughly N times the group table, because each worker builds its own. That is the
-// exchange being made, and the memory gate is what stops it being made behind a
-// user's back.
+// This used to be decided up front — serial under any limit — and was harmless
+// while a limit was rare. Step 90 gave every query a default budget, and every
+// group-by went serial: h2o's small ones half again as slow.
 func aggWorkers(a *plan.Aggregate, specs []aggSpec, opts Options) int {
 	if opts.Threads <= 1 || a.MaintainOrder {
-		return 1
-	}
-	if opts.Budget.Limit() > 0 {
 		return 1
 	}
 	for _, spec := range specs {
@@ -639,6 +663,11 @@ func aggBreaker(child Operator, newSink SinkFactory, n int) (Operator, error) {
 	}
 	if n == 1 {
 		return &breaker{child: child, sink: sinks[0]}, nil
+	}
+	for _, s := range sinks {
+		if h, ok := s.(*hashAggSink); ok {
+			h.parallel = true
+		}
 	}
 	return newParallelSink(child, sinks), nil
 }
