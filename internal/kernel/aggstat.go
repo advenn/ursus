@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"math"
+	"math/bits"
 	"slices"
 
 	"github.com/advenn/ursus/dtype"
@@ -454,7 +455,6 @@ func (a *quantileAcc) Finish(name string, nGroups int) (*data.Column, error) {
 		if len(v) == 0 {
 			continue
 		}
-		slices.SortFunc(v, compareTotalF64)
 		out[i] = quantileOf(v, a.q, a.interp)
 		seen[i] = true
 	}
@@ -521,6 +521,17 @@ func midpoint(a, b float64) float64 {
 	return a + (b-a)/2
 }
 
+// quantileOf is the q-quantile of v, which it reorders: the values at the two ranks
+// around q·(n-1), interpolated.
+//
+// # Selection, not a sort
+//
+// It needs two order statistics, adjacent ones, and used to sort the whole group to
+// read them: O(n log n) per group, serially, in the group-by's Finish — 18% of h2o
+// gb6's CPU at 2M rows (step 105). selectNth puts the lower one in place in O(n) on
+// average and leaves everything above it to its right, so the upper one is the
+// least of that. The answer is the sort's: the order statistics of a total order do
+// not depend on how they are found.
 func quantileOf(v []float64, q float64, interp expr.Interpolation) float64 {
 	n := len(v)
 	if n == 1 {
@@ -534,24 +545,96 @@ func quantileOf(v []float64, q float64, interp expr.Interpolation) float64 {
 	hi = max(0, min(hi, n-1))
 	frac := pos - float64(lo)
 
+	selectNth(v, lo)
+	a, b := v[lo], v[lo]
+	if hi > lo {
+		b = minTotalF64(v[lo+1:])
+	}
+
 	switch interp {
 	case expr.InterpLower:
-		return v[lo]
+		return a
 	case expr.InterpHigher:
-		return v[hi]
+		return b
 	case expr.InterpNearest:
 		if frac < 0.5 {
-			return v[lo]
+			return a
 		}
-		return v[hi]
+		return b
 	case expr.InterpMidpoint:
-		return midpoint(v[lo], v[hi])
+		return midpoint(a, b)
 	case expr.InterpLinear:
-		return lerp(v[lo], v[hi], frac)
+		return lerp(a, b, frac)
 	}
 	// Agg.Field refuses any other interpolation, and this has no error to return:
 	// an assertion, recovered into ErrInternal. It was the linear arm, silently.
 	panic(uerr.Internalf("kernel: interpolation %d reached the kernel", uint8(interp)))
+}
+
+// selectNth reorders v so that v[k] is what sorting v under compareTotalF64 would
+// put there, with nothing after it smaller and nothing before it larger.
+//
+// Quickselect with a median-of-three pivot and a three-way partition, so a run of
+// equal values — common in real data — is settled in one pass rather than
+// recursed into. After 2·log2(n) rounds it sorts what is left, so an input built to
+// defeat the pivot costs O(n log n), not O(n²).
+func selectNth(v []float64, k int) {
+	lo, hi := 0, len(v)-1
+	for rounds := 2 * bits.Len(uint(len(v))); hi > lo; rounds-- {
+		if rounds == 0 {
+			slices.SortFunc(v[lo:hi+1], compareTotalF64)
+			return
+		}
+		pivot := medianOfThree(v[lo], v[lo+(hi-lo)/2], v[hi])
+		// v[lo:lt] < pivot, v[lt:i] == pivot, v[gt+1:hi+1] > pivot.
+		lt, i, gt := lo, lo, hi
+		for i <= gt {
+			switch c := compareTotalF64(v[i], pivot); {
+			case c < 0:
+				v[lt], v[i] = v[i], v[lt]
+				lt++
+				i++
+			case c > 0:
+				v[i], v[gt] = v[gt], v[i]
+				gt--
+			default:
+				i++
+			}
+		}
+		switch {
+		case k < lt:
+			hi = lt - 1
+		case k > gt:
+			lo = gt + 1
+		default:
+			return
+		}
+	}
+}
+
+// medianOfThree is the middle of three values under compareTotalF64.
+func medianOfThree(a, b, c float64) float64 {
+	if compareTotalF64(a, b) > 0 {
+		a, b = b, a
+	}
+	if compareTotalF64(b, c) > 0 {
+		b = c
+		if compareTotalF64(a, b) > 0 {
+			b = a
+		}
+	}
+	return b
+}
+
+// minTotalF64 is the least of v under compareTotalF64; v is not empty.
+func minTotalF64(v []float64) float64 {
+	m := v[0]
+	for _, x := range v[1:] {
+		if compareTotalF64(x, m) < 0 {
+			m = x
+		}
+	}
+	return m
 }
 
 // --- any / all_true -------------------------------------------------------------

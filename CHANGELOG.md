@@ -12,6 +12,8 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **`median` and `quantile` select instead of sorting each group.** h2o gb6 is 30%
+  faster (105).
 - **An inner join hashes its smaller input.** The inputs are swapped when the right
   is estimated at more than twice the left, from Parquet footers and in-memory
   frames.
