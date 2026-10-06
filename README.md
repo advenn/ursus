@@ -56,7 +56,9 @@ The API reference is on **[pkg.go.dev](https://pkg.go.dev/github.com/advenn/ursu
 nothing to host and nothing to keep in sync.
 
 Start with the [runnable examples](./example_test.go): filter, group-by, join, computed columns, whole-frame
-aggregation, and reading typed values back out. They render beside the methods they document, and `go test` checks each
+aggregation, and reading typed values back out — and, new in 0.3, reading Parquet through any `io.ReaderAt`, a Go
+UDF, lists with `Split` and `Explode`, `JoinWhere`, exact Decimal arithmetic, an Enum, a spilling `Unique`, and a List
+column written to Parquet. They render beside the methods they document, and `go test` checks each
 one's output, so an example that stops being true breaks the build rather than misleading someone quietly.
 
 Beyond that, the doc comments are the documentation. They are unusually long on purpose: each explains why a thing is
@@ -168,7 +170,7 @@ make race       # the whole suite under -race
 make levels     # import-level invariants
 ```
 
-**2936 test cases**, and the matrix is not decoration. Vector width is a *runtime*
+**2944 test cases**, and the matrix is not decoration. Vector width is a *runtime*
 property, so a single-width run proves very little: 512-bit gives 8 float64 lanes, which happens to be exactly one
 bitmap byte — a coincidence that hides an entire class of sub-byte bitmap bug. The 128-bit leg is where those surface.
 
