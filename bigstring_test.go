@@ -6,6 +6,7 @@ package ursus_test
 // is lowered here so the test can reach it.
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"strings"
@@ -16,6 +17,12 @@ import (
 )
 
 func TestCollectRefusesAStringColumnPastItsOffsets(t *testing.T) {
+	// One row holding a 5 KB string, as Parquet, written under the real limit.
+	var pq bytes.Buffer
+	if err := ursus.Frame(ursus.Values("s", []string{strings.Repeat("p", 5<<10)})).
+		WriteParquet(t.Context(), &pq); err != nil {
+		t.Fatal(err)
+	}
 	vals := make([]string, 200)
 	for i := range vals {
 		vals[i] = fmt.Sprintf("%064d", i)
@@ -46,6 +53,14 @@ func TestCollectRefusesAStringColumnPastItsOffsets(t *testing.T) {
 		}
 		if rows != 200 {
 			t.Errorf("%d rows, want 200", rows)
+		}
+	})
+	// The Parquet reader recovers a panic in its own Next and calls it a corrupt
+	// file; a column past the limit must say what it is instead.
+	t.Run("a Parquet column past the limit is a resource error, not a corrupt file", func(t *testing.T) {
+		_, err := ursus.ScanParquetBytes(pq.Bytes(), "big.parquet").Collect(t.Context())
+		if !errors.Is(err, ursus.ErrResource) {
+			t.Fatalf("want a resource error, got %v", err)
 		}
 	})
 	t.Run("a result under the limit collects", func(t *testing.T) {
