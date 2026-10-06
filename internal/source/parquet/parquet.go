@@ -2,9 +2,11 @@ package parquet
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -915,6 +917,57 @@ func checkEncodings(rg *metadata.RowGroupMetaData, col int, name string) error {
 
 // --- column reader construction --------------------------------------------------
 
+// flbaAsBytes reads a FIXED_LEN_BYTE_ARRAY column through byteArrayCol: each
+// value is bytes, of one length. The conversion is a slice header; byteArrayCol
+// copies the bytes out, as it must for a buffer arrow-go reuses.
+type flbaAsBytes struct {
+	*file.FixedLenByteArrayColumnChunkReader
+	buf []parquet.FixedLenByteArray
+}
+
+func (f *flbaAsBytes) ReadBatch(n int64, vals []parquet.ByteArray, defs, reps []int16) (int64, int, error) {
+	if cap(f.buf) < len(vals) {
+		f.buf = make([]parquet.FixedLenByteArray, len(vals))
+	}
+	buf := f.buf[:len(vals)]
+	total, read, err := f.FixedLenByteArrayColumnChunkReader.ReadBatch(n, buf, defs, reps)
+	for i := range read {
+		vals[i] = parquet.ByteArray(buf[i])
+	}
+	return total, read, err
+}
+
+// julianUnixEpoch is 1970-01-01 as a Julian day number.
+const julianUnixEpoch = 2_440_588
+
+// int96Nanos reads Parquet's deprecated INT96 timestamp — eight little-endian bytes
+// of nanoseconds into the day, then four of the Julian day — as nanoseconds since
+// the Unix epoch. One that does not fit Datetime(ns), about 292 years either side of
+// 1970, is refused rather than wrapped: raised, since a conversion here has no
+// error to return, and the reader recovers it as the value error it is.
+func int96Nanos(v parquet.Int96) int64 {
+	nanos := binary.LittleEndian.Uint64(v[:8])
+	day := int64(binary.LittleEndian.Uint32(v[8:])) - julianUnixEpoch
+	const perDay = 86_400_000_000_000
+	refuse := func(why string) {
+		uerr.Raise(uerr.New(uerr.KindValue, "scan_parquet",
+			"an INT96 timestamp (Julian day %d, %d ns into it) %s", day+julianUnixEpoch, nanos, why).
+			Hint("INT96 is read as Datetime(ns), which spans 1677-09-21 to 2262-04-11"))
+	}
+	if nanos >= perDay {
+		refuse("has more nanoseconds than a day")
+	}
+	if day > math.MaxInt64/perDay || day < math.MinInt64/perDay-1 {
+		refuse("is outside Datetime(ns)")
+	}
+	at := day * perDay
+	sum := at + int64(nanos)
+	if sum < at {
+		refuse("is outside Datetime(ns)")
+	}
+	return sum
+}
+
 // skipper is every typed column chunk reader: each can step over rows unread.
 type skipper interface {
 	Skip(nvalues int64) (int64, error)
@@ -1003,7 +1056,14 @@ func newColReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataT
 	case *file.Float64ColumnChunkReader:
 		return newFixed[float64, float64](t, maxDef, dt, identity[float64]), nil
 
+	case *file.Int96ColumnChunkReader:
+		return newFixed[parquet.Int96, int64](t, maxDef, dt, int96Nanos), nil
+
 	case *file.FixedLenByteArrayColumnChunkReader:
+		if dt.ID() == dtype.TypeBinary {
+			return &byteArrayCol{cr: &flbaAsBytes{FixedLenByteArrayColumnChunkReader: t},
+				maxDef: maxDef, dt: dt, valid: bitmap.NewBuilder(0)}, nil
+		}
 		if dt.ID() != dtype.TypeDecimal {
 			return nil, uerr.New(uerr.KindUnsupported, "scan_parquet",
 				"column %q is a FIXED_LEN_BYTE_ARRAY that is not a DECIMAL", name)

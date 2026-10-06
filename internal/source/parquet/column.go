@@ -267,7 +267,7 @@ func (c *boolCol) close() error { return c.cr.Close() }
 
 // byteArrayCol reads BYTE_ARRAY as String or Binary.
 type byteArrayCol struct {
-	cr     *file.ByteArrayColumnChunkReader
+	cr     byteArrayReader
 	maxDef int16
 	dt     dtype.DataType
 
@@ -289,6 +289,13 @@ type byteArrayCol struct {
 
 	parentDef int16
 	parent    *bitmap.Builder
+}
+
+// byteArrayReader is what byteArrayCol reads from: a BYTE_ARRAY chunk, or a
+// FIXED_LEN_BYTE_ARRAY one through flbaAsBytes.
+type byteArrayReader interface {
+	ReadBatch(n int64, vals []parquet.ByteArray, defs, reps []int16) (int64, int, error)
+	Close() error
 }
 
 func (c *byteArrayCol) trackParent(level int16) {

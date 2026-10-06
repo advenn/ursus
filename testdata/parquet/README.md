@@ -13,3 +13,9 @@ list of one. `parquet_nested_byhand_test.go` states the values.
 three rows: `id` Int64 1, 2, 3; `nothing`, PyArrow's Null type, which it stores as
 `optional int32 nothing (Null)`; and `name` String "a", null, "c". `nullcolumn_test.go`
 reads it (audit.md I18).
+
+`pyarrow_int96_flba.parquet` — pyarrow 25, `pq.write_table(t, path, compression='none',
+use_deprecated_int96_timestamps=True)`, four rows: `ts`, INT96, which Spark writes,
+holding 2024-01-02 03:04:05.123456, null, 1969-12-31 23:59:59.999999 and 1900-01-01;
+and `fixed`, an unannotated FIXED_LEN_BYTE_ARRAY(4), holding "abcd", 00 01 02 03, null
+and "zzzz". `int96flba_test.go` reads it (audit.md I16, `v0.4-scope.md` item 22).

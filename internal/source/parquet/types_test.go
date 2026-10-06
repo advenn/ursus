@@ -52,6 +52,11 @@ func TestTypeMapping(t *testing.T) {
 			"c", parquet.Repetitions.Optional, parquet.Types.Double, -1, -1)), dtype.Float64},
 		{"unannotated byte array is Binary", mustNode(schema.NewPrimitiveNode(
 			"c", parquet.Repetitions.Optional, parquet.Types.ByteArray, -1, -1)), dtype.Binary},
+		{"unannotated fixed-length byte array is Binary", mustNode(schema.NewPrimitiveNode(
+			"c", parquet.Repetitions.Optional, parquet.Types.FixedLenByteArray, -1, 4)), dtype.Binary},
+		// INT96 was refused until step 112; it is the timestamp Spark writes.
+		{"INT96 is a naive Datetime(ns)", mustNode(schema.NewPrimitiveNode(
+			"c", parquet.Repetitions.Optional, parquet.Types.Int96, -1, -1)), dtype.Datetime(dtype.Nano, "")},
 		{"STRING", mustNode(schema.NewPrimitiveNodeLogical(
 			"c", parquet.Repetitions.Optional, schema.StringLogicalType{},
 			parquet.Types.ByteArray, -1, -1)), dtype.String},
@@ -130,9 +135,6 @@ func TestTypeRefusals(t *testing.T) {
 		{"nested", mustNode(schema.NewPrimitiveNode(
 			"c", parquet.Repetitions.Optional, parquet.Types.Int32, -1, -1)),
 			2, 0, "nested"},
-		{"int96", mustNode(schema.NewPrimitiveNode(
-			"c", parquet.Repetitions.Optional, parquet.Types.Int96, -1, -1)),
-			1, 0, "INT96"},
 		{"decimal too wide", mustNode(schema.NewPrimitiveNodeLogical(
 			"c", parquet.Repetitions.Optional, schema.NewDecimalLogicalType(38, 10),
 			parquet.Types.FixedLenByteArray, 32, -1)), 1, 0, "128 bits"},

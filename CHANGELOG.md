@@ -12,6 +12,10 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **Parquet INT96 timestamps read,** as a naive `Datetime(ns)`, as PyArrow reads
+  them. Spark writes INT96 by default, and such a file failed to open.
+- **An unannotated fixed-length byte array reads as Binary.** Its schema promised
+  Binary and its reader refused it (`audit.md` I16) (112).
 - **Refusals name what you wrote.**
   - `FillNan`, `FillNullWith` and `FillNull` name themselves, not `is_not_nan()`,
     `when` or `mean()`.

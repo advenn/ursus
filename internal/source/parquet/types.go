@@ -196,14 +196,14 @@ func physicalOnly(c *schema.Column, p parquet.Type) (dtype.DataType, error) {
 		// hand back invalid UTF-8 as a Go string.
 		return dtype.Binary, nil
 	case parquet.Types.FixedLenByteArray:
+		// Bytes, as an un-annotated BYTE_ARRAY is. The reader reads it through the
+		// byte-array path since step 112; before, the schema promised Binary and
+		// the reader refused it (audit.md I16).
 		return dtype.Binary, nil
 	case parquet.Types.Int96:
-		// INT96 is the deprecated nanosecond timestamp. It is readable in principle
-		// but ursus has no Datetime support in this reader yet, and reading it as
-		// three raw words would be worse than refusing.
-		return dtype.Null, unsupportedColumn(c,
-			"INT96 columns are not supported").
-			Hint("INT96 is a deprecated timestamp encoding")
+		// The deprecated nanosecond timestamp Spark still writes by default, read as
+		// PyArrow and Polars read it: a naive Datetime(ns). Its bytes carry no zone.
+		return dtype.Datetime(dtype.Nano, ""), nil
 	default:
 		return dtype.Null, unsupportedColumn(c, "physical type %s is not supported", p)
 	}
