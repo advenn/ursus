@@ -12,6 +12,13 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **`SetProcessMemoryLimit`** sets the Go runtime's soft memory limit to nine
+  tenths of the container's or the machine's memory.
+  - It is opt-in, because the limit is the whole process's.
+  - A limit already chosen, through `GOMEMLIMIT` or `debug.SetMemoryLimit`, is
+    kept.
+  - Under a container's limit, it keeps the Go heap's own slack inside the
+    ceiling. The query budget bounds only what is live (97).
 - **A long-running service no longer leaks through the engine:**
   - **Compiled regexes and `is_in` sets** are freed with the expression they came
     from. They were cached for the life of the process, so a service building

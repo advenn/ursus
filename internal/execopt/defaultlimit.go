@@ -32,26 +32,35 @@ import (
 //
 // Detected once per process. Linux only: elsewhere nothing is readable and the
 // default stays unlimited, as it always was.
-func DefaultLimit() int64 {
-	defaultOnce.Do(func() { defaultLimit = detectLimit(os.ReadFile) })
-	return defaultLimit
+func DefaultLimit() int64 { return Ceiling() / 2 }
+
+// Ceiling is the memory this process may use: the smaller of its cgroup's limit and
+// the machine's RAM, or 0 where neither can be read. Detected once per process.
+func Ceiling() int64 {
+	ceilingOnce.Do(func() { ceiling = detectCeiling(os.ReadFile) })
+	return ceiling
 }
 
 var (
-	defaultOnce  sync.Once
-	defaultLimit int64
+	ceilingOnce sync.Once
+	ceiling     int64
 )
 
 // detectLimit is DefaultLimit over a file reader, so a test can hand it fixtures.
 func detectLimit(read func(string) ([]byte, error)) int64 {
-	ceiling, ok := memTotal(read)
-	if c, cok := cgroupLimit(read); cok && (!ok || c < ceiling) {
-		ceiling, ok = c, true
+	return detectCeiling(read) / 2
+}
+
+// detectCeiling is Ceiling over a file reader.
+func detectCeiling(read func(string) ([]byte, error)) int64 {
+	c, ok := memTotal(read)
+	if cg, cok := cgroupLimit(read); cok && (!ok || cg < c) {
+		c, ok = cg, true
 	}
 	if !ok {
 		return 0
 	}
-	return ceiling / 2
+	return c
 }
 
 // memTotal is MemTotal from /proc/meminfo, in bytes.

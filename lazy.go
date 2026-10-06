@@ -380,6 +380,11 @@ type MemoryStats struct {
 // WithMemoryLimit(0) turns the budget off; elsewhere than Linux there is no default
 // and it is off already.
 //
+// The heap's slack is the Go runtime's to bound, not the budget's. A program that
+// runs under a container's limit should call SetProcessMemoryLimit at start-up, or
+// set GOMEMLIMIT, so the collector works harder near the ceiling instead of the
+// kernel killing the process.
+//
 // # A group-by under a limit you set is serial
 //
 // So that a group-by that spills gives its rows in the same order on every run.
