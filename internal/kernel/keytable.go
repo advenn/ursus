@@ -58,8 +58,13 @@ type KeyTable struct {
 
 	// Per id, parallel:
 	hashes []uint64 // lets grow rehash without re-reading a single key
-	offs   []int32  // n+1 entries; key i is arena[offs[i]:offs[i+1]]
-	arena  []byte
+	// offs has n+1 entries; key i is arena[offs[i]:offs[i+1]]. They are 64-bit
+	// because the arena holds every distinct key of the query: a group-by over
+	// enough distinct strings passes 2 GiB, where int32 offsets wrapped and a key
+	// was read from the wrong bytes (audit.md S24). Nothing outside reads them, so
+	// unlike a String column's they need not match Arrow's layout.
+	offs  []int64
+	arena []byte
 }
 
 // initialSlots is small because most group-bys are small, and growth is cheap:
@@ -87,7 +92,7 @@ func (t *KeyTable) init(n int) {
 	t.mask = uint64(n - 1)
 	// The leading zero, planted once, so KeyAt is offs[id]:offs[id+1] with no
 	// fixup and Len is len(offs)-1 with no guard.
-	t.offs = make([]int32, 1, 1+initialSlots)
+	t.offs = make([]int64, 1, 1+initialSlots)
 }
 
 // Len is the number of distinct keys, which is also the next id GetOrInsert will
@@ -116,7 +121,7 @@ func (t *KeyTable) GetOrInsert(key []byte) (id int32, inserted bool) {
 			id = int32(len(t.offs) - 1)
 			t.hashes = append(t.hashes, h)
 			t.arena = append(t.arena, key...)
-			t.offs = append(t.offs, int32(len(t.arena)))
+			t.offs = append(t.offs, int64(len(t.arena)))
 			t.slots[i] = id
 			if (len(t.offs)-1)*maxLoadDen >= len(t.slots)*maxLoadNum {
 				t.grow()
@@ -176,7 +181,7 @@ func (t *KeyTable) keyAt(id int32) []byte {
 func (t *KeyTable) NBytes() int64 {
 	return int64(cap(t.slots))*4 +
 		int64(cap(t.hashes))*8 +
-		int64(cap(t.offs))*4 +
+		int64(cap(t.offs))*8 +
 		int64(cap(t.arena))
 }
 
