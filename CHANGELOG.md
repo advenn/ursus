@@ -12,7 +12,7 @@ Step numbers below point at those records.
 
 ## v0.3.0 — unreleased
 
-Everything since `v0.2.0` (2026-09-04): steps 22–86, about 265 commits.
+Everything since `v0.2.0` (2026-09-04): steps 22–87, about 270 commits.
 
 [`v0.3-scope.md`](./context_files/v0.3-scope.md) set the scope: **the types and the
 I/O are honest**. Most of the release is correctness work. A measured audit,
@@ -141,6 +141,12 @@ the right one could not be given.
   - an interval finer than its index's resolution is refused (68).
 - **`PadStart`, `PadEnd` and `ZFill`** refuse a width whose output a String column
   cannot hold. It used to be a fatal out-of-memory (85).
+- **A String column past 2 GiB of characters is refused**, with `ErrResource`.
+  Its 32-bit offsets used to wrap silently, and `Collect` reaches that size at
+  around 30 million rows of 100-byte strings. `CollectBatches` and the sinks never
+  build one column of all of it (87).
+- **A group-by or join over more than 2 GiB of distinct keys** groups correctly. Its
+  key table's offsets wrapped too (87).
 
 **Aggregations and windows**
 
@@ -280,8 +286,6 @@ Every addition is in the root package unless named.
   - Duration is not written to Parquet; cast it to Int64.
 - **Still-open audit rows that can answer wrongly**, each recorded in
   [`audit.md`](./context_files/audit.md):
-  - **S24:** a String column past 2 GiB of characters wraps its 32-bit offsets.
-    The pads refuse first; other builders do not.
   - **I23:** a third-party Parquet file written without null counts can be pruned
     wrongly by an `IsNull` filter.
   - **O13**, unmeasured: two Enum or Struct types can render alike.
