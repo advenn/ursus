@@ -12,7 +12,7 @@ Step numbers below point at those records.
 
 ## v0.3.0 — unreleased
 
-Everything since `v0.2.0` (2026-09-04): steps 22–85, about 260 commits.
+Everything since `v0.2.0` (2026-09-04): steps 22–86, about 265 commits.
 
 [`v0.3-scope.md`](./context_files/v0.3-scope.md) set the scope: **the types and the
 I/O are honest**. Most of the release is correctness work. A measured audit,
@@ -88,6 +88,10 @@ the right one could not be given.
   numbers, in `Cast`, in CSV inference, or in float schemas (77).
 - **Datetime → Time** takes the time of day. It used to reinterpret the epoch ticks
   (57).
+- **Int64 → Time** refuses a value outside the day when strict, and is null when
+  lossy, as Polars does; it used to fold 90000 seconds to 01:00 (86).
+- **A Duration cast to a coarser unit** truncates toward zero, as Polars and
+  `TotalSeconds` do: −1.5 s is −1 s, where it was −2 s. An instant still floors (86).
 - **Instants outside 1678–2262:** they are null in `Values([]time.Time)`, and refused
   by `Lit` and by casts from String. They used to wrap: 2300 became 1715 (61).
 - **Datetime → Date** errors when strict and is null when lossy (49).
@@ -114,6 +118,7 @@ the right one could not be given.
   - Date − Date is a Duration, and Date ± Duration a Datetime. Naive minus UTC is
     refused (52).
   - Time ± Duration wraps around midnight (57).
+  - `Abs` and `Neg` of the minimum Duration are refused; they wrapped (86).
 - **`FloorDiv` floors and `Mod` takes the divisor's sign**, for signed integers,
   floats and Durations (54, 76). A float `%` follows Python, with ±Inf and the signed
   zero.
@@ -282,9 +287,13 @@ Every addition is in the root package unless named.
   - **O13**, unmeasured: two Enum or Struct types can render alike.
   - **J8, a remainder:** an Int64 compared with a float literal past 2^53 meets at
     Float64.
-  - **S18–S20:** narrow edge cases of Duration and Time casts.
   - **S26:** `MinInt // -1` wraps.
   - **I24:** a null in a non-null column is checked only in test builds.
+- **Where ursus differs from Polars on purpose:**
+  - `Round` rounds half away from zero, which is Polars'
+    `mode="half_away_from_zero"`, not its default, half to even.
+  - UInt64 `Diff` is an exact Int128, where Polars gives Int64 and nulls.
+  - The minimum Duration's `Abs` is refused, where Polars wraps.
 - **Speed:** ursus is slower than Polars and DuckDB, and the README's table says by
   how much.
 
