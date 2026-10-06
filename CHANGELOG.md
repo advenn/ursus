@@ -12,7 +12,7 @@ Step numbers below point at those records.
 
 ## v0.3.0 — unreleased
 
-Everything since `v0.2.0` (2026-09-04): steps 22–87, about 270 commits.
+Everything since `v0.2.0` (2026-09-04): steps 22–88, 271 commits.
 
 [`v0.3-scope.md`](./context_files/v0.3-scope.md) set the scope: **the types and the
 I/O are honest**. Most of the release is correctness work. A measured audit,
