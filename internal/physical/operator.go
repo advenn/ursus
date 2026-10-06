@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
@@ -278,6 +279,49 @@ type Options struct {
 	// buffering operator in the tree. A nil Budget means unlimited and untracked,
 	// so an Options built by hand still works.
 	Budget *execopt.Budget
+
+	// opened is every source planning has opened so far; PlanRoot sets it, and
+	// closes them all if planning fails. See openedSources.
+	opened *openedSources
+}
+
+// openedSources records each source planScan opens, so that a plan which fails part
+// way can close them.
+//
+// A source may hold something from Open on — CSV's stream is opened there, a file
+// handle or an HTTP body — and planning goes child by child, so when a later child
+// failed, every operator already built was dropped without a Close: the first side
+// of a join whose second side could not open, the inputs of a Concat before the one
+// that failed, and the source in planScan itself when its schema then failed. Step
+// 64 counted seventeen such sites. Recording the sources at the one place they are
+// opened covers all of them, and any site added later.
+//
+// No planning function closes a child on its own error path, so nothing is closed
+// twice.
+type openedSources struct {
+	mu   sync.Mutex
+	srcs []source.BatchSource
+}
+
+func (o *openedSources) add(s source.BatchSource) {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	o.srcs = append(o.srcs, s)
+	o.mu.Unlock()
+}
+
+// closeAll closes every recorded source. Their errors are dropped: the query has
+// already failed, and the planning error is the one the caller needs.
+func (o *openedSources) closeAll() {
+	o.mu.Lock()
+	srcs := o.srcs
+	o.srcs = nil
+	o.mu.Unlock()
+	for _, s := range srcs {
+		_ = s.Close()
+	}
 }
 
 // batchSize returns the configured batch size, or the default when Options was
@@ -303,9 +347,14 @@ func DefaultOptions() Options {
 // Plan itself parallelises each child that a NON-pipeline operator consumes; this
 // covers the remaining case, a query that is nothing but a pipeline. The two
 // together mean every maximal pipeline in the tree is wrapped exactly once.
+//
+// A plan that fails part way closes every source it had opened.
 func PlanRoot(ctx context.Context, n plan.Node, opts Options) (Operator, error) {
+	opened := &openedSources{}
+	opts.opened = opened
 	op, err := Plan(ctx, n, opts)
 	if err != nil {
+		opened.closeAll()
 		return nil, err
 	}
 	return parallelise(op, opts), nil
@@ -442,6 +491,7 @@ func planScan(ctx context.Context, s *plan.Scan, opts Options) (Operator, error)
 	if err != nil {
 		return nil, uerr.Wrap(err, uerr.KindIO, "scan", "opening %s source", s.Src.Name())
 	}
+	opts.opened.add(src)
 
 	want, err := s.Schema()
 	if err != nil {
