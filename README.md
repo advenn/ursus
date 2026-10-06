@@ -2,7 +2,8 @@
 
 A (experimental) dataframe library for Go 1.27, modelled on Polars — lazy execution with a query optimizer, Arrow memory layout, SIMD
 kernels, and streaming execution that spills to disk rather than falling over. Sort, group-by, join, unique and
-partitioned windows spill; an operator that cannot fails with an error naming itself.
+partitioned windows spill — by default once a query holds half the memory its container or machine allows — and an
+operator that cannot spill fails with an error naming itself.
 
 ```go
 df, err := ursus.ScanParquet("events.parquet").

@@ -228,6 +228,7 @@ type collectCfg struct {
 	flags     plan.Flags
 	verify    bool
 	memLimit  int64
+	limitSet  bool // WithMemoryLimit was given; otherwise finish takes the default
 	spillDir  string
 	stats     *MemoryStats
 	budget    *execopt.Budget
@@ -368,13 +369,24 @@ type MemoryStats struct {
 // recursion goes. Both refuse with a message naming which it is. A window has it
 // too: one partition with more rows than the limit refuses, saying so.
 //
+// # Without it
+//
+// A query with no WithMemoryLimit is budgeted at half the memory it can have: the
+// smaller of its cgroup's limit — a container's, or a systemd slice's — and the
+// machine's RAM, on Linux. Half, because ursus's buffers are on the Go heap, which
+// with GOGC=100 grows to about twice what is live before it collects. So a query
+// spills by default rather than growing until the kernel kills it, and an operator
+// that cannot spill fails at that point with an error naming itself.
+// WithMemoryLimit(0) turns the budget off; elsewhere than Linux there is no default
+// and it is off already.
+//
 // # What it does not bound
 //
 // Collect materialises the whole result by definition, and asking for a frame in
 // memory is a request to hold it. The larger-than-RAM story runs through
 // SinkParquet and CollectBatches, both of which stream.
 func WithMemoryLimit(bytes int64) CollectOption {
-	return func(c *collectCfg) { c.memLimit = bytes }
+	return func(c *collectCfg) { c.memLimit, c.limitSet = bytes, true }
 }
 
 // WithSpillDir chooses where spill files are written. The default is the system
@@ -409,6 +421,9 @@ func baseCollectCfg() collectCfg {
 // separate from baseCollectCfg because the sinks apply their options through a
 // different union type and still need exactly this step.
 func (c *collectCfg) finish() {
+	if !c.limitSet {
+		c.memLimit = execopt.DefaultLimit()
+	}
 	c.budget = execopt.NewBudget(c.memLimit, c.spillDir)
 }
 
