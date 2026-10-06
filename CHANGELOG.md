@@ -12,6 +12,13 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **A List column past 2^31-1 elements is refused,** naming `CollectBatches` and
+  `SinkParquet`, as a String column past 2 GiB already was.
+  - Its 32-bit offsets used to wrap silently. Two one-row lists of 2^30 elements
+    concatenated to a second row spanning a negative range (99).
+- **A null in a column declared non-nullable is an error in production too,** not
+  only in the test suite (`audit.md` I24). Measured: 76 ns per such column per
+  batch (98).
 - **`SetProcessMemoryLimit`** sets the Go runtime's soft memory limit to nine
   tenths of the container's or the machine's memory.
   - It is opt-in, because the limit is the whole process's.

@@ -251,6 +251,21 @@ func tooManyChars(name string, n int64) {
 			"write it with SinkParquet or SinkCSV, which never build one column of all of it"))
 }
 
+// MaxListElements is the most elements one List column holds. Its offsets are
+// 32-bit, as a String's are, and past this they wrapped silently: two one-row lists
+// of 2^30 elements concatenated to a second row spanning [2^30, -2^31), with no
+// error (step 99). A variable only so a test can lower it.
+var MaxListElements int64 = math.MaxInt32
+
+// tooManyElements is tooManyChars for a List column.
+func tooManyElements(name string, n int64) {
+	uerr.Raise(uerr.New(uerr.KindResource, "list",
+		"column %q needs %d list elements, and a List column holds %d", name, n,
+		MaxListElements).
+		Hint("its offsets are 32-bit; read the result in batches with CollectBatches, or " +
+			"write it with SinkParquet, which never build one column of all of it"))
+}
+
 // NewString builds a String column from Go strings.
 func NewString(name string, vals []string, valid bitmap.View) *Column {
 	var total int64
@@ -354,7 +369,16 @@ func NewStringBuffers(name string, offs, chars *memory.Buffer, n int, valid bitm
 // The type is DERIVED from the child rather than passed in. A List whose declared
 // element type disagrees with the column actually holding the elements would be a
 // lie no caller could detect, and there is no case where the two should differ.
+//
+// # At most MaxListElements elements
+//
+// Past it the offsets have wrapped, so it is refused rather than built. The caller
+// computed offs as int32 and they are already wrong; the child's length is what can
+// be counted.
 func NewList(name string, offs []int32, child *Column, valid bitmap.View) *Column {
+	if int64(child.Len()) > MaxListElements {
+		tooManyElements(name, int64(child.Len()))
+	}
 	n := len(offs) - 1
 	if n < 0 {
 		n = 0
