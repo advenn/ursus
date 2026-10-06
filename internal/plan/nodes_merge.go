@@ -63,10 +63,34 @@ func (m *MergeSorted) Schema() (*dtype.Schema, error) {
 			Hint("merge_sorted interleaves rows, so both sides must match exactly").
 			Hint("use Concat for frames that only need to be compatible")
 	}
-	if ls.IndexOf(m.Key) < 0 {
+	i := ls.IndexOf(m.Key)
+	if i < 0 {
 		return nil, uerr.UnknownColumn("merge_sorted", m.Key, ls.Names())
 	}
+	if t := ls.Field(i).Type; !sortedKeyType(t) && !t.HasStringStorage() {
+		return nil, uerr.New(uerr.KindType, "merge_sorted",
+			"cannot merge on a %s key", t).
+			Hint("merge_sorted interleaves two ordered runs; it merges on an integer, " +
+				"float, temporal, Enum or String key")
+	}
 	return ls, nil
+}
+
+// sortedKeyType reports whether a key of type t can be searched or merged by its
+// order: every integer up to 64 bits, the floats, the temporal types and Enum —
+// the types physical.orderKeys reads. Decimal and Int128 are 128 bits wide and
+// Boolean is stored as bits, and none of them has an order key.
+func sortedKeyType(t dtype.DataType) bool {
+	if t.ID() == dtype.TypeDecimal {
+		return false
+	}
+	switch t.Physical().ID() {
+	case dtype.TypeInt8, dtype.TypeInt16, dtype.TypeInt32, dtype.TypeInt64,
+		dtype.TypeUint8, dtype.TypeUint16, dtype.TypeUint32, dtype.TypeUint64,
+		dtype.TypeFloat32, dtype.TypeFloat64:
+		return true
+	}
+	return false
 }
 
 func (m *MergeSorted) Label() string { return "MERGE SORTED [" + m.Key + "]" }

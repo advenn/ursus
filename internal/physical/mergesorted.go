@@ -107,11 +107,17 @@ func keyAfter(a, b mergeKey) bool {
 	if a.null {
 		return false
 	}
-	return a.v > b.v
+	if a.v != b.v {
+		return a.v > b.v
+	}
+	return a.s > b.s
 }
 
+// mergeKey is one row's key: an order key (see orderKeys) for a numeric or temporal
+// column, or the bytes of a String or Binary one, with v left zero.
 type mergeKey struct {
 	v    int64
+	s    string
 	null bool
 }
 
@@ -140,15 +146,24 @@ func (m *mergeSortedOp) drain(ctx context.Context, op Operator, side string) (*d
 	if !ok {
 		return nil, nil, uerr.Internalf("physical: merge_sorted lost column %q", m.key)
 	}
-	ticks, err := temporalTicks(col)
-	if err != nil {
-		return nil, nil, uerr.New(uerr.KindUnsupported, "merge_sorted",
-			"cannot merge on a %s key", col.DType()).
-			Hint("merge_sorted compares with <, so the key must be numeric or temporal")
-	}
-	keys := make([]mergeKey, len(ticks))
-	for i := range ticks {
-		keys[i] = mergeKey{v: ticks[i], null: !col.IsValid(i)}
+	keys := make([]mergeKey, col.Len())
+	if col.DType().HasStringStorage() {
+		acc := col.Strings()
+		for i := range keys {
+			keys[i] = mergeKey{null: !col.IsValid(i)}
+			if !keys[i].null {
+				keys[i].s = acc.Get(i)
+			}
+		}
+	} else {
+		// MergeSorted.Schema refused every other type while the query was planned.
+		ord, err := orderKeys(col)
+		if err != nil {
+			return nil, nil, err
+		}
+		for i := range keys {
+			keys[i] = mergeKey{v: ord[i], null: !col.IsValid(i)}
+		}
 	}
 	for i := 1; i < len(keys); i++ {
 		if keyAfter(keys[i-1], keys[i]) {

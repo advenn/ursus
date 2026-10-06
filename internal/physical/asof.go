@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"sort"
 	"time"
 
@@ -203,7 +204,8 @@ func unsortedErr(side string, row int) error {
 		Hint("sort first, e.g. .Sort(ursus.Asc(ursus.Col(...))) on both inputs")
 }
 
-// asOfKeys evaluates one side's ordering key and reads it as int64 ticks or integers.
+// asOfKeys evaluates one side's ordering key and reads it as order keys: int64s in
+// the key's own order, whatever its numeric or temporal type (see orderKeys).
 func asOfKeys(ctx context.Context, on expr.Node, in *data.Batch, to dtype.DataType) ([]int64, error) {
 	c, err := evalColumn(ctx, on, in)
 	if err != nil {
@@ -241,7 +243,7 @@ func asOfKeys(ctx context.Context, on expr.Node, in *data.Batch, to dtype.DataTy
 				Hint("filter the nulls out before joining")
 		}
 	}
-	return temporalTicks(c)
+	return orderKeys(c)
 }
 
 // --- the probe --------------------------------------------------------------------
@@ -399,7 +401,16 @@ func (s *asOfBuildSink) nearest(bucket []int32, k int64) (int32, error) {
 			//
 			// back and fwd bracket k by construction of the two searches above, so
 			// these are the exact distances and <= still sends a tie backward.
-			if absDiffU64(k, keys[bucket[back]]) <= absDiffU64(keys[bucket[fwd]], k) {
+			//
+			// A float key's order key says nothing about distance, so its distances
+			// are measured on the floats themselves.
+			closerBack := absDiffU64(k, keys[bucket[back]]) <= absDiffU64(keys[bucket[fwd]], k)
+			if s.keyType.IsFloat() {
+				kf := floatOfKey(k)
+				closerBack = math.Abs(kf-floatOfKey(keys[bucket[back]])) <=
+					math.Abs(floatOfKey(keys[bucket[fwd]])-kf)
+			}
+			if closerBack {
 				pick = back
 			} else {
 				pick = fwd

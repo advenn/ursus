@@ -205,10 +205,12 @@ func resolveAsOfJoin(a *AsOfJoin) (Node, error) {
 	if err != nil {
 		return nil, uerr.Annotate(err, "join_asof", "AsOfJoin")
 	}
-	if !lf.Type.IsNumeric() && !lf.Type.IsTemporal() {
+	if !sortedKeyType(lf.Type) || lf.Type.ID() == dtype.TypeEnum {
 		return nil, uerr.New(uerr.KindType, "join_asof",
 			"cannot run an as-of join on a %s key", lf.Type).
-			Hint("the as-of key is compared with <, so it must be numeric or temporal")
+			Hint("the as-of key is searched by its order; it may be an integer, a float " +
+				"or a temporal type").
+			Hint("cast a Decimal key to Float64 first")
 	}
 	// Tolerance is a calendar-aware Interval, which only means something against an
 	// instant. Refusing beats reinterpreting nanoseconds as a count of whatever the

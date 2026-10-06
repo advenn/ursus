@@ -12,6 +12,13 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **`JoinAsOf` and `MergeSorted` take any integer, float or temporal key, and
+  `MergeSorted` a String one.**
+  - An as-of join on a Float, Int8 or UInt64 key used to plan and then fail at
+    `Collect`.
+  - `MergeSorted` refused Float64 with a hint that the key must be numeric.
+  - What neither supports, Decimal for instance, is refused while the query is
+    planned (`audit.md` J7) (109).
 - **A Null-typed column concatenates, and writes to Parquet and CSV.**
   - It failed every `Collect` that concatenated batches (`audit.md` J12).
   - Parquet stores it as the NULL logical type, as PyArrow does, and reads that
