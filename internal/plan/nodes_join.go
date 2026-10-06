@@ -161,6 +161,11 @@ type Join struct {
 	NullsEqual bool // zero value false: a null key matches nothing, as in SQL
 	Validate   JoinValidation
 
+	// MaintainOrder keeps an inner join's rows in the left input's order, by
+	// keeping the build_side rule from exchanging its inputs. Every other kind
+	// keeps its order regardless.
+	MaintainOrder bool
+
 	// Residual is evaluated per candidate PAIR, before the match verdict, and is
 	// SEMI/ANTI ONLY.
 	//

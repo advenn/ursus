@@ -58,6 +58,10 @@ type Flags struct {
 	// join, so switching it off is how you measure what it is worth — and how you
 	// check that it is an optimisation rather than a change of answer.
 	CollapseCrossJoin bool
+
+	// BuildSide lets an inner join hash its smaller input, by exchanging the
+	// inputs when the right one is estimated much larger. See buildSide.
+	BuildSide bool
 }
 
 // DefaultFlags enables every rule that exists.
@@ -70,6 +74,7 @@ func DefaultFlags() Flags {
 
 		JoinPredicatePushdown: true,
 		CollapseCrossJoin:     true,
+		BuildSide:             true,
 	}
 }
 
@@ -146,6 +151,14 @@ func NewOptimizer() *Optimizer {
 				rule:    limitPushdown{},
 				mode:    Once,
 				enabled: func(f Flags) bool { return f.LimitPushdown },
+			},
+			// The build side is chosen after every pushdown, so the inputs it
+			// exchanges are the ones that will run, and before simplification, which
+			// has nothing to do to the Project it adds.
+			{
+				rule:    buildSide{},
+				mode:    Once,
+				enabled: func(f Flags) bool { return f.BuildSide },
 			},
 			// Simplification runs LAST, because the pushdowns make work for it that
 			// does not exist beforehand: an identity Project only becomes one once

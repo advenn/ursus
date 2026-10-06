@@ -12,6 +12,14 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **An inner join hashes its smaller input.** The inputs are swapped when the right
+  is estimated at more than twice the left, from Parquet footers and in-memory
+  frames.
+  - PDS-H at SF=1: q8 is 72% faster with a quarter of the memory, q9 54% and q5
+    37%.
+  - **Behaviour change:** an inner join's row order is no longer promised to
+    follow the left frame. `JoinMaintainOrder(true)` keeps it. Left, right, semi,
+    anti and full joins are unchanged (104).
 - **Collecting String and Binary columns is faster:** the final concatenation copies
   each batch's characters once, instead of building a string per row. h2o j3 is 22%
   faster (103).

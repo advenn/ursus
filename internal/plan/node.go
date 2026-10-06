@@ -83,6 +83,17 @@ type Source interface {
 	Caps() Caps
 }
 
+// RowEstimator is a Source that can say how many rows it holds without reading
+// them: an in-memory frame's length, the row counts in Parquet footers. It is
+// optional, and an estimate rather than a promise — the build_side rule uses it to
+// choose which side of a join to hash, and a wrong one costs speed, never an
+// answer.
+type RowEstimator interface {
+	// EstimatedRows reports the source's row count, and false when it does not
+	// know one — a CSV file, or a Parquet source whose footers have not been read.
+	EstimatedRows() (int64, bool)
+}
+
 // Caps describes what a source can do for itself.
 //
 // A source that cannot honour a pushdown is not penalised: the physical planner

@@ -46,6 +46,15 @@ func New(schema *dtype.Schema, batches ...*data.Batch) (*Source, error) {
 	return &Source{schema: schema, batches: batches}, nil
 }
 
+// EstimatedRows is exact: the batches are all there.
+func (s *Source) EstimatedRows() (int64, bool) {
+	var n int64
+	for _, b := range s.batches {
+		n += int64(b.Rows())
+	}
+	return n, true
+}
+
 // FromBatch builds a single-batch source preserving the batch's DECLARED schema.
 //
 // # Why this is not FromColumns

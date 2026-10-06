@@ -57,6 +57,7 @@ type joinCfg struct {
 	coalesce                 plan.CoalesceMode
 	nullsEqual               bool
 	validate                 JoinValidation
+	maintainOrder            bool
 }
 
 // JoinOn names key columns present under the same name on both sides.
@@ -110,6 +111,15 @@ func JoinCoalesce(b bool) JoinOption {
 // same entity?", and a missing identifier is not evidence of sameness.
 func JoinNullsEqual(b bool) JoinOption { return func(c *joinCfg) { c.nullsEqual = b } }
 
+// JoinMaintainOrder keeps an inner join's rows in the left frame's order.
+//
+// Without it an inner join's row order is not promised, as in Polars. ursus hashes
+// the smaller input, estimated from the sources' row counts, and the rows come out
+// in the order of the other one: the left frame's when the right is smaller, the
+// right frame's when it is much larger. Left, right, semi, anti and full joins keep
+// their order regardless; under a memory limit no join's order is promised.
+func JoinMaintainOrder(b bool) JoinOption { return func(c *joinCfg) { c.maintainOrder = b } }
+
 // JoinValidate asserts a key cardinality, failing the query when the data
 // violates it.
 //
@@ -129,6 +139,10 @@ func JoinValidate(v JoinValidation) JoinOption { return func(c *joinCfg) { c.val
 //
 // Column names that appear on both sides get the right one suffixed; the join key
 // appears once unless the kind is a full join. See JoinCoalesce and JoinSuffix.
+//
+// An inner join's row order is not promised: ursus hashes whichever input it
+// estimates is smaller, and the rows follow the other. JoinMaintainOrder keeps the
+// left frame's order.
 func (lf *LazyFrame) Join(other *LazyFrame, opts ...JoinOption) *LazyFrame {
 	if lf.err != nil {
 		return lf
@@ -181,6 +195,8 @@ func (lf *LazyFrame) Join(other *LazyFrame, opts ...JoinOption) *LazyFrame {
 		Coalesce:   cfg.coalesce,
 		NullsEqual: cfg.nullsEqual,
 		Validate:   cfg.validate,
+
+		MaintainOrder: cfg.maintainOrder,
 	})
 }
 

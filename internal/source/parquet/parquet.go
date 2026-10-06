@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/file"
@@ -79,6 +80,10 @@ type Source struct {
 	statsMu sync.Mutex
 	read    int
 	skipped int
+
+	// rows is every file's footer row count, summed when Schema reads them; -1
+	// until it has.
+	rows atomic.Int64
 }
 
 // RowGroupStats reports how many row groups were read and how many the pruner
@@ -101,12 +106,21 @@ func (s *Source) countGroup(skipped bool) {
 
 // New builds a source over a list of openers, read in order.
 func New(opens []Opener, desc string, o Options) *Source {
-	return &Source{opens: opens, desc: desc, opts: o}
+	return NewNamed(opens, nil, desc, o)
 }
 
 // NewNamed is New with a name for each file, which the errors use.
 func NewNamed(opens []Opener, names []string, desc string, o Options) *Source {
-	return &Source{opens: opens, names: names, desc: desc, opts: o}
+	s := &Source{opens: opens, names: names, desc: desc, opts: o}
+	s.rows.Store(-1)
+	return s
+}
+
+// EstimatedRows is the sum of the files' footer row counts, which Schema reads at
+// plan time. Exact, unless a file changes between planning and reading.
+func (s *Source) EstimatedRows() (int64, bool) {
+	n := s.rows.Load()
+	return n, n >= 0
 }
 
 // partName names file i for an error message.
@@ -209,6 +223,7 @@ func (s *Source) readSchemas(ctx context.Context) (*dtype.Schema, map[int]error,
 		first  *dtype.Schema
 		fields []dtype.Field
 		unread map[int]error
+		rows   int64
 	)
 	for k := range s.opens {
 		if err := ctx.Err(); err != nil {
@@ -218,6 +233,7 @@ func (s *Source) readSchemas(ctx context.Context) (*dtype.Schema, map[int]error,
 		if err != nil {
 			return nil, nil, err
 		}
+		rows += r.NumRows()
 		fs, _, un, err := fileSchema(r.MetaData().Schema)
 		closer()
 		if err != nil {
@@ -246,6 +262,7 @@ func (s *Source) readSchemas(ctx context.Context) (*dtype.Schema, map[int]error,
 	if err != nil {
 		return nil, nil, err
 	}
+	s.rows.Store(rows)
 	return out, unread, nil
 }
 

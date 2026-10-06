@@ -13,6 +13,7 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/source/memsrc"
 	"github.com/advenn/ursus/internal/uerr"
 	"github.com/advenn/ursus/ursustest"
@@ -384,9 +385,15 @@ func TestSpillingJoinIsBounded(t *testing.T) {
 	right := joinFrame(t, 60_000, 512, 500, 0, false)
 	out := filepath.Join(t.TempDir(), "join.parquet")
 
+	// The build is the 60,000 rows on the right, and this measures it spilling. The
+	// build_side rule would hash the 500 on the left instead (step 104), so it is
+	// off here: this pins the operator, not the planner's choice.
+	rightBuilds := plan.DefaultFlags()
+	rightBuilds.BuildSide = false
+
 	var unbounded ursus.MemoryStats
 	if err := joinQuery(left, right, ursus.JoinInner).
-		SinkParquet(t.Context(), out, ursus.WithBatchSize(512),
+		SinkParquet(t.Context(), out, ursus.WithBatchSize(512), ursus.WithOptFlags(rightBuilds),
 			ursus.WithMemoryStats(&unbounded)); err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +401,7 @@ func TestSpillingJoinIsBounded(t *testing.T) {
 	const limit = 256 << 10
 	var stats ursus.MemoryStats
 	if err := joinQuery(left, right, ursus.JoinInner).
-		SinkParquet(t.Context(), out, ursus.WithBatchSize(512),
+		SinkParquet(t.Context(), out, ursus.WithBatchSize(512), ursus.WithOptFlags(rightBuilds),
 			ursus.WithMemoryLimit(limit), ursus.WithSpillDir(t.TempDir()),
 			ursus.WithMemoryStats(&stats)); err != nil {
 		t.Fatal(err)
