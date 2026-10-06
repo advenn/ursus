@@ -44,6 +44,8 @@ func TestEveryAggregateOverADecimalHasItsStatedType(t *testing.T) {
 		"median":     "Float64",
 		"quantile":   "Float64",
 		"implode":    "List(Decimal(10, 2))",
+		"top_k":      "List(Decimal(10, 2))",
+		"bottom_k":   "List(Decimal(10, 2))",
 	}
 
 	for i := range int(aggOpCount) {

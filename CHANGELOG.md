@@ -12,6 +12,11 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **`TopK(k)` and `BottomK(k)` aggregates:** a group's k largest or smallest
+  values, as a List.
+  - Each holds k values a group, so the group-by stays parallel and bounded.
+  - h2o gb8 uses it now, as Polars does: 80% faster and a third of the memory
+    (106).
 - **`median` and `quantile` select instead of sorting each group.** h2o gb6 is 30%
   faster (105).
 - **An inner join hashes its smaller input.** The inputs are swapped when the right

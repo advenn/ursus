@@ -35,6 +35,8 @@ const (
 	AggMedian
 	AggQuantile
 	AggImplode // every value of the group, as a List
+	AggTopK    // the k largest values of the group, largest first, as a List
+	AggBottomK // the k smallest values of the group, smallest first, as a List
 
 	aggOpCount
 )
@@ -48,6 +50,7 @@ var aggOpNames = [aggOpCount]string{
 	AggArgMin: "arg_min", AggArgMax: "arg_max",
 	AggMedian: "median", AggQuantile: "quantile",
 	AggImplode: "implode",
+	AggTopK:    "top_k", AggBottomK: "bottom_k",
 }
 
 func (o AggOp) String() string {
@@ -119,6 +122,7 @@ type AggParams struct {
 	DDof   uint8
 	Q      float64
 	Interp Interpolation
+	K      int // TopK and BottomK
 }
 
 // args renders the parameters op actually reads. See Agg.String for why this is
@@ -129,6 +133,8 @@ func (p AggParams) args(op AggOp) string {
 		return strconv.FormatUint(uint64(p.DDof), 10)
 	case AggQuantile:
 		return strconv.FormatFloat(p.Q, 'g', -1, 64) + ", " + p.Interp.String()
+	case AggTopK, AggBottomK:
+		return strconv.Itoa(p.K)
 	default:
 		return ""
 	}
@@ -173,6 +179,10 @@ func (a *Agg) Field(in *dtype.Schema) (dtype.Field, error) {
 	out, err := ResolveAgg(a.Op, cf.Type)
 	if err != nil {
 		return dtype.Field{}, err
+	}
+	if (a.Op == AggTopK || a.Op == AggBottomK) && a.Params.K < 1 {
+		return dtype.Field{}, uerr.New(uerr.KindValue, a.Op.String(),
+			"k must be at least 1, got %d", a.Params.K)
 	}
 	if a.Op == AggQuantile && !a.Params.Interp.Valid() {
 		return dtype.Field{}, uerr.New(uerr.KindValue, "quantile",
@@ -239,6 +249,17 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		//
 		// Acc is the input type because nothing is widened — the accumulator retains
 		// the values it was handed. Only sum and mean read Acc at all.
+		return AggBinding{Acc: in, Out: dtype.List(in)}, nil
+
+	case AggTopK, AggBottomK:
+		// A List of the input's own type: the values are selected, not computed.
+		// Every ordered type but Boolean, where the k largest of two values is not
+		// a question anyone asks.
+		if !in.IsOrdered() || in.ID() == dtype.TypeBool {
+			return AggBinding{}, uerr.New(uerr.KindType, "",
+				"%s() is not defined for %s", op, in).
+				Hint("it orders values: numeric, temporal, decimal and string types have an ordering")
+		}
 		return AggBinding{Acc: in, Out: dtype.List(in)}, nil
 
 	case AggMin, AggMax:

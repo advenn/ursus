@@ -231,6 +231,21 @@ func (e Expr) Quantile(q float64, interp Interpolation) Expr {
 // one key.
 func (e Expr) Implode() Expr { return e.agg(expr.AggImplode) }
 
+// TopK is the k largest values of the group, largest first, as a List.
+//
+//	GroupBy(Col("id6")).Agg(Col("v3").TopK(2).Alias("largest2")).Explode("largest2")
+//
+// It holds only k values a group, so unlike Implode it does not grow with the data,
+// and it keeps a parallel group-by parallel. Values are in ursus's total order — NaN
+// is the largest float, as Sort places it. Nulls are skipped: a group with fewer
+// than k values gives a shorter list, and one with none gives null. Defined for
+// numeric, temporal, decimal and string columns; k must be at least 1.
+func (e Expr) TopK(k int) Expr { return e.aggP(expr.AggTopK, expr.AggParams{K: k}) }
+
+// BottomK is the k smallest values of the group, smallest first, as a List. See
+// TopK, whose rules it follows.
+func (e Expr) BottomK(k int) Expr { return e.aggP(expr.AggBottomK, expr.AggParams{K: k}) }
+
 func (e Expr) agg(op expr.AggOp) Expr {
 	return wrap(&expr.Agg{Op: op, Child: e.node()})
 }

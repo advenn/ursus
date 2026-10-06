@@ -79,7 +79,8 @@ func classify(op expr.AggOp) (aggClass, bool) {
 	case expr.AggSum, expr.AggMean, expr.AggMin, expr.AggMax,
 		expr.AggFirst, expr.AggLast, expr.AggAny, expr.AggAllTrue:
 		return classIdentity, true
-	case expr.AggImplode:
+	case expr.AggImplode, expr.AggTopK, expr.AggBottomK:
+		// A one-row group's top k, or bottom k, is the one value, in a list.
 		return classImplode, true
 	case expr.AggCount, expr.AggLen, expr.AggNUnique, expr.AggNullCount:
 		return classCounting, true
@@ -173,6 +174,8 @@ func aggregate(op expr.AggOp, in dtype.DataType, col *data.Column) (*data.Column
 		params = expr.AggParams{Q: 0.5, Interp: expr.InterpLinear}
 	case expr.AggVar, expr.AggStd:
 		params = expr.AggParams{DDof: 1}
+	case expr.AggTopK, expr.AggBottomK:
+		params = expr.AggParams{K: 2}
 	}
 	acc, err := kernel.NewAccumulator(op, in, bind, params)
 	if err != nil {

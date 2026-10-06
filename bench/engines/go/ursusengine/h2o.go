@@ -81,26 +81,17 @@ func gb7(scan Scan) *ursus.LazyFrame {
 
 // gb8 — the two largest v3 per id6.
 //
-// The reference implementations sort the whole frame and take the head of each
-// group. ursus has no head-within-aggregate, so this uses an ordinal window
-// rank instead, which is the same query a SQL engine would run
-// (row_number() OVER (PARTITION BY id6 ORDER BY v3 DESC) <= 2) and is what
-// engines/sql/h2o/gb8.sql does.
+// TopK inside the group-by, which is Polars' own formulation
+// (group_by("id6").agg(pl.col("v3").top_k(2)).explode(...)): a bounded accumulator
+// per group. Until step 106 ursus had no top_k aggregate, and this was an ordinal
+// rank over a partitioned window, filtered to rank ≤ 2 — the SQL formulation, and
+// engines/sql/h2o/gb8.sql's — whose sort was 92% of the query (step 24).
 func gb8(scan Scan) *ursus.LazyFrame {
 	return scan("g1").
 		DropNulls("v3").
-		// ursus refuses a window expression inside Filter and asks for it to be
-		// materialised first, so the rank becomes a real column.
-		WithColumns(
-			ursus.Col("v3").Rank(ursus.RankOrdinal, true).
-				Over(ursus.Col("id6")).
-				Alias("order_v3"),
-		).
-		Filter(ursus.Col("order_v3").Le(2)).
-		Select(
-			ursus.Col("id6"),
-			ursus.Col("v3").Alias("largest2_v3"),
-		)
+		GroupBy(ursus.Col("id6")).
+		Agg(ursus.Col("v3").TopK(2).Alias("largest2_v3")).
+		Explode("largest2_v3")
 }
 
 // gb9 — squared Pearson correlation of v1 and v2 per (id2, id4).

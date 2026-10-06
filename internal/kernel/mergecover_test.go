@@ -113,6 +113,8 @@ func defaultParams(op expr.AggOp) expr.AggParams {
 		return expr.AggParams{Q: 0.75, Interp: expr.InterpLinear}
 	case expr.AggVar, expr.AggStd:
 		return expr.AggParams{DDof: 1}
+	case expr.AggTopK, expr.AggBottomK:
+		return expr.AggParams{K: 3}
 	default:
 		return expr.AggParams{}
 	}
