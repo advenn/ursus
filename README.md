@@ -175,7 +175,8 @@ property, so a single-width run proves very little: 512-bit gives 8 float64 lane
 bitmap byte — a coincidence that hides an entire class of sub-byte bitmap bug. The 128-bit leg is where those surface.
 
 Correctness is also checked against other engines. The benchmark suite validates every result against a duckdb
-reference, and ursus currently passes **22/22 PDS-H (TPC-H) queries and 15/15 h2o.ai queries**.
+reference, and ursus currently passes **22/22 PDS-H (TPC-H) queries and 15/15 h2o.ai queries** — PDS-H at scale factor
+0.1, re-run at every step, and h2o.ai at two million rows over CSV and Parquet, re-run for the 0.3 release.
 
 ---
 
@@ -197,7 +198,10 @@ See [`bench/README.md`](./bench/README.md) for what is timed and why.
 reference, and a disagreement is struck through rather than quietly reported as a fast number.
 
 **How current it is, precisely.** Every table was measured in one session, on one commit, with every engine re-run
-together — so the numbers are comparable across engines rather than stitched from different days.
+together — so the numbers are comparable across engines rather than stitched from different days. That commit is
+step 40's, from 2026-09-08. The steps since, which are most of 0.3, were correctness work: their answers are
+re-validated, as above, but their timings have not been re-measured at these sizes, and at scale factor 0.1 they show no
+slowdown beyond run-to-run noise.
 
 The caveat that applies to *this* run: the machine had 9 GiB of swap in use, and three PDS-H queries (`q1`, `q2`, `q6`)
 show iteration spreads of up to 2.6x where they were previously tight. Their medians are inflated by contention — the

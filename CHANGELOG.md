@@ -299,7 +299,8 @@ Every addition is in the root package unless named.
   - UInt64 `Diff` is an exact Int128, where Polars gives Int64 and nulls.
   - The minimum Duration's `Abs` is refused, where Polars wraps.
 - **Speed:** ursus is slower than Polars and DuckDB, and the README's table says by
-  how much.
+  how much. That table was measured at step 40; the steps since were not re-timed at
+  its sizes.
 
 ---
 
