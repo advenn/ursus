@@ -305,9 +305,11 @@ func (e Expr) Log1p() Expr { return e.un(expr.OpLog1p) }
 
 // Round rounds to decimals decimal places, HALF AWAY FROM ZERO.
 //
-// Round(0.5) is 1 and Round(2.5) is 3, matching Polars and a spreadsheet rather
-// than IEEE's round-half-to-even. It preserves the operand's type: rounding an
-// integer column is the identity, not a widening.
+// Round(0.5) is 1 and Round(2.5) is 3, as a spreadsheet rounds, rather than IEEE's
+// round-half-to-even. That is Polars' `mode="half_away_from_zero"`, and NOT Polars'
+// default, which rounds half to even: Polars' `round(0)` gives 2 for 2.5. It
+// preserves the operand's type: rounding an integer column is the identity, not a
+// widening.
 //
 // It rounds twice — the value is scaled by 10^decimals first, and that multiply
 // rounds too. Round(2.675, 2) is 2.68, because 2.675 * 100 lands on exactly 267.5

@@ -42,8 +42,10 @@ func MathCall(fn expr.CallFn, name string, out dtype.DataType,
 // # The tie-break is a decision, not an accident
 //
 // Go offers both: math.Round is half-away-from-zero, math.RoundToEven is banker's
-// rounding. ursus takes half-away-from-zero, which is what Polars does and what a
-// spreadsheet user expects — Round(0.5) is 1, and Round(2.5) is 3 rather than 2.
+// rounding. ursus takes half-away-from-zero, which is what a spreadsheet user
+// expects — Round(0.5) is 1, and Round(2.5) is 3 rather than 2. Polars offers it as
+// `mode="half_away_from_zero"`; its DEFAULT is half-to-even, measured on 1.44, so a
+// round ported from Polars' default can differ here at an exact tie.
 //
 // # It rounds TWICE, and the second rounding is the one that surprises people
 //
