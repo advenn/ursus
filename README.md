@@ -45,7 +45,7 @@ to.
 
 - Interactive analytics over hundreds of millions of rows. Use DuckDB or Polars.
 - Anywhere you can link cgo freely: `duckdb-go` is around 10x faster than this and is a binding to a mature engine.
-- Anything production-critical today. This is v0.3, the API still moves, and nothing here is promised.
+- Anything production-critical today. This is v0.4, the API still moves, and nothing here is promised.
 
 The honest summary is that Go has not had a dataframe library of this shape, and one that is correct and a few times
 slower is more useful than none — for the sizes most services actually handle.
@@ -92,18 +92,19 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 
 ## Status
 
-**v0.3** — what changed since v0.2 is in [`CHANGELOG.md`](./CHANGELOG.md). What works today:
+**v0.4** — what changed since v0.3 is in [`CHANGELOG.md`](./CHANGELOG.md), and what 0.4 set out to do, and did, in
+[`v0.4-scope.md`](./context_files/v0.4-scope.md) §7. What works today:
 
 |                 |                                                                                                                                                   |
 |-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Sources**     | Parquet and CSV (read and write, List and Struct included for Parquet), from paths, memory, or any `io.ReaderAt` / stream you open (`ScanParquetFrom`, `ScanCSVFrom`); in-memory frames; Arrow (records and streams in; records out, zero-copy) |
 | **Types**       | Bool, Int8–64, Uint8–64, Float32/64, String, Binary, Date, Time, Datetime (unit + zone), Duration, Decimal (128-bit; exact `+ - *` and `sum`, refused past 38 digits; `/` to the nearest Float64; casts to and from every numeric type exact or refused, except to a float, which rounds to the nearest), Enum (built from String, ordered by its categories) |
-| **Expressions** | arithmetic, comparison, Kleene three-valued logic, conditionals, casts, null repair, `.str` (incl. `Split` → List) and `.dt` namespaces, 20 aggregates including `Implode`, window functions |
+| **Expressions** | arithmetic, comparison, Kleene three-valued logic, conditionals, casts, null repair, trigonometric and hyperbolic functions, `.str` (incl. `Split` → List, and `Strptime` with strftime formats) and `.dt` (incl. `Strftime`) namespaces, 22 aggregates including `Implode`, `TopK` and `BottomK`, window functions |
 | **Frame ops**   | filter, select, with-columns, sort, top-k, distinct, concat/vstack/hstack, slice/tail/reverse/row-index, drop/rename/drop-nulls, unpivot                   |
 | **Joins**       | all seven equi-join kinds with `Validate`, `JoinWhere` and `WhereExists`/`WhereNotExists` (non-equi), as-of join with tolerance and `by` keys, merge-sorted                          |
 | **Grouping**    | group-by, `GroupByDynamic`, `Rolling`, calendar-aware intervals                                                                                   |
 | **Optimizer**   | predicate pushdown (including through joins), projection pushdown, limit/top-k pushdown, cross-join collapse, constant folding and simplification |
-| **Execution**   | order-preserving pipeline parallelism, parallel Parquet decoding, parallel hash aggregation, and spilling for sort, hash aggregation, hash join, unique and partitioned windows (`WithMemoryLimit` names the rest, which fail rather than spill) |
+| **Execution**   | order-preserving pipeline parallelism, Parquet row groups decoded in parallel, parallel hash aggregation, inner joins that hash their smaller input, and spilling for sort, hash aggregation, hash join, unique and partitioned windows (`WithMemoryLimit` names the rest, which fail rather than spill) |
 | **UDFs**        | `MapElements` (per value) and `MapBatches` (per column) — generic methods, so the Go types are inferred from your function                        |
 
 Nested types are partly there: **List and Struct read from Parquet and Arrow and write to Parquet**, with
@@ -156,8 +157,8 @@ once, so it must be safe for that.
 
 Not done: built-in object stores (not in 0.4; the seam above reaches one today), `MapGroups` and `RollingMap`, common subexpression elimination, SQL, `Pivot` — whose output columns are the distinct values of a
 column, so its schema would depend on data and no plan node here does; `Unpivot` (melt) ships — and the long tail of
-`Expr.Rolling*`, `Upsample`, `Interpolate`
-and the trigonometric block.
+`Expr.Rolling*`, EWM, `Upsample`, `Interpolate`, calendar offsets and the rest of `.dt`, `ValueCounts`, `Describe`,
+Arrow IPC and NDJSON. [`v0.4-scope.md`](./context_files/v0.4-scope.md) §7 says which of these moved to 0.5, and why.
 
 Version numbers follow Go's own rule for v0: **nothing is promised.** The API is still moving, and the preamble above
 says why.
@@ -172,7 +173,7 @@ make race       # the whole suite under -race
 make levels     # import-level invariants
 ```
 
-**2969 test cases**, and the matrix is not decoration. Vector width is a *runtime*
+**3240 test cases**, and the matrix is not decoration. Vector width is a *runtime*
 property, so a single-width run proves very little: 512-bit gives 8 float64 lanes, which happens to be exactly one
 bitmap byte — a coincidence that hides an entire class of sub-byte bitmap bug. The 128-bit leg is where those surface.
 
@@ -204,6 +205,10 @@ reference, and a disagreement is struck through rather than quietly reported as 
 together — so the numbers are comparable across engines rather than stitched from different days. That commit is
 v0.3.0's, measured on 2026-10-06.
 
+**0.4's speed-ups are not in it yet.** Parallel Parquet decoding, a join that hashes its smaller input, `TopK` and
+median by selection were each measured on single queries, and [`CHANGELOG.md`](./CHANGELOG.md) gives those numbers. The
+full report has not been re-run for 0.4, so the table below is still v0.3.0's.
+
 The caveats that apply to *this* run:
 
 - **Every query ran in an 8 GB cgroup**, on a laptop with 6–9 GiB of swap already in use.
@@ -211,7 +216,7 @@ The caveats that apply to *this* run:
   `WithMemoryLimit`, so it never saw the cgroup.
 - **PDS-H `q7` regressed** to 3.9 s and 1.68 GB, from 2.4 s and 0.60 GB at step 40. Its date filter stopped being pushed
   below its joins.
-- **Both are fixed on master**, in [`CHANGELOG.md`](./CHANGELOG.md)'s Unreleased section. Re-run under the same cap,
+- **Both are fixed in v0.3.1**, in [`CHANGELOG.md`](./CHANGELOG.md). Re-run under the same cap,
   ursus passes 15/15 on h2o over CSV, `q7` takes 1.7 s and 0.63 GB, and the h2o Parquet geomean is 1,950 ms.
 - **Other engines:** chDB timed out on two group-bys and gota ran out of memory on two, under the same cap.
 

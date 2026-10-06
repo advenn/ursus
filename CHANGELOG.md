@@ -10,7 +10,97 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased
+## v0.4.0 — candidate
+
+Everything since `v0.3.1` (2026-10-06): steps 92–116.
+
+[`v0.4-scope.md`](./context_files/v0.4-scope.md) set the scope: **fast where it is
+slow, and safe inside a service.** Its §7 records what was done, and what moved to
+0.5 and why. Step 92 was also meant to be v0.3.2, which is not tagged; 0.4.0
+contains it.
+
+### Highlights
+
+- **Faster where ursus was slowest,** measured one query at a time against the step
+  before. The full benchmark report has not been re-run for 0.4; the README's table
+  is still v0.3.0's.
+  - **Parquet row groups decode in parallel:** PDS-H q6 at SF=1 is 40% faster, and
+    q7 31% (102).
+  - **An inner join hashes its smaller input:** q8 72% faster with a quarter of the
+    memory, q9 54%, q5 37% (104).
+  - **h2o:** gb8 80% faster with `TopK` (106); gb6 30% with median by selection
+    (105); j3 22% from a String concatenation that copies bytes, not rows (103).
+  - **Comparisons** are about 3.5× faster (107).
+- **Safe inside a long-running service:**
+  - compiled regexes and `is_in` sets are freed with their expression (94);
+  - a query that fails while being planned closes what it opened (95);
+  - `Rolling` and `GroupByDynamic` hold a bounded working set, charged to the
+    budget (96);
+  - `SetProcessMemoryLimit` sets Go's soft limit near the container's (97);
+  - a null in a non-nullable column is caught in production (98);
+  - a List column past 2^31-1 elements is refused, not wrapped (99).
+- **New:**
+  - `TopK` and `BottomK` aggregates (106);
+  - `Str().Strptime` and `Dt().Strftime`, with strftime formats (113);
+  - the trigonometric and hyperbolic functions (114);
+  - Int128 `*`, `//` and `%`, so `Col("x").Sum().Mul(2)` works (100);
+  - `JoinCoalesce(true)` on a full join (110);
+  - `JoinAsOf` and `MergeSorted` on every integer, float and temporal key, and
+    `MergeSorted` on String (109);
+  - Parquet INT96 timestamps and unannotated fixed-length byte arrays (112);
+  - a Null-typed column that concatenates, and writes to Parquet and CSV (108).
+- **Errors name what you wrote** (111, 115). `audit.md`'s list of false refusals and
+  misleading errors is closed, but for three rows (§ Known limitations).
+
+### Behaviour changes a v0.3 user can trip on
+
+- **An inner join's row order is no longer promised** to follow the left frame:
+  the smaller input is hashed, whichever side it is. `JoinMaintainOrder(true)`
+  keeps the old order. Left, right, semi, anti and full joins are unchanged (104).
+- **Int128 arithmetic is exact or refused.** `+` and `-` used to wrap, so Max + Max
+  gave a plausible wrong number. A result past ±1.7e38 is now an error naming the
+  row. Int64 arithmetic still wraps, as Polars' does (100).
+- **A null in a column declared non-nullable is an error in production,** not only
+  in the test suite (98).
+- **A median or an implode over heavily overlapping rolling windows** is refused
+  under the budget, naming the operator, where it used to grow past it (96).
+- **A List column past 2^31-1 elements is refused,** naming `CollectBatches` and
+  `SinkParquet` (99).
+- **A group-by under a limit you set is serial again,** as in v0.3.0, so a spilling
+  group-by gives the same order on every run. In v0.3.1 it was parallel until half
+  the budget (92).
+- **Parquet:** a file with an INT96 column opens, where it failed; a column of the
+  NULL logical type reads as Null, not Int32 (108, 112).
+- **Peak memory of a Parquet scan rises** by the few batches each worker decodes
+  ahead. `WithThreads(1)` reads serially, as before (102).
+- **Error kinds that changed,** for code that tests them with `errors.Is`:
+  - a panic in a `MapName` function is `ErrValue`, and a panic in the
+    `RecordReader` that `ScanArrow`'s factory returns is `ErrIO`; both were
+    `ErrInternal` (115);
+  - a dynamic group-by over a row at the last instant a `time.Time` holds is
+    `ErrValue`, not `ErrInternal` (115);
+  - a failed spill write is `ErrIO`; it had no kind (115).
+- **Error text changed** for `FillNan`, `FillNull`, `CumSum`, a Duration scaled by a
+  fraction, a failing udf (111), a window inside `Agg`, an ordering over a windowed
+  aggregate, and `Any` (115).
+
+### API
+
+Every addition is in the root package unless named. **Nothing was removed or
+changed its parameters** since v0.3.1.
+
+- **Expressions:** `Expr.TopK` and `BottomK`; `Expr.Sin`, `Cos`, `Tan`, `ArcSin`,
+  `ArcCos`, `ArcTan`, `Sinh`, `Cosh`, `Tanh`, `ArcSinh`, `ArcCosh`, `ArcTanh`,
+  `Degrees` and `Radians`.
+- **Namespaces:** `StrExpr.Strptime` and `DtExpr.Strftime`.
+- **Joins:** `JoinMaintainOrder`.
+- **Process:** `SetProcessMemoryLimit`.
+- **`i128`:** `Int128.AddChecked`, `SubChecked` and `DivMod`.
+
+### Everything, by step
+
+Newest first. The numbers are steps, each with an as-built record in
+[`context_files/`](./context_files/).
 
 - **The last misleading refusals of `audit.md`'s list** (115):
   - A window inside `Agg` gets a hint that works: move the window, not the
@@ -131,6 +221,54 @@ Step numbers below point at those records.
   - CI caught it: `TestGroupBySpillIsDeterministic` is flaky in the v0.3.1 tag.
   - Parallel-then-serial now applies only under the default budget, where a switch
     needs half the machine or the container (92).
+
+### Known limitations
+
+- **Object stores:** there is no built-in client, by decision for 0.4
+  ([`v0.4-scope.md`](./context_files/v0.4-scope.md) §4). `ScanParquetFrom` and
+  `ScanCSVFrom` are the seam, through any `io.ReaderAt` or stream.
+- **Operators that do not spill** each fail under a budget with an error naming
+  themselves:
+  - reverse, hstack, tail, `JoinAsOf` and `MergeSorted`;
+  - `Rolling` and `GroupByDynamic`, which since step 96 are bounded and charged,
+    so they are refused rather than killed;
+  - a window with no partition key, and one partition larger than the limit;
+  - a cross join;
+  - quantile-like aggregates over a few very large groups.
+- **Not built:** SQL, `Pivot`, `MapGroups`, common subexpression elimination,
+  `Expr.Rolling*`, EWM, `Upsample` and `Interpolate`. `v0.4-scope.md` §7 lists what
+  moved to 0.5: calendar offsets and the rest of `.dt`, `ValueCounts`, `Describe`,
+  `Sample`, `Cut`, the string and list joins, Arrow IPC, NDJSON, hive partitioning,
+  and the radix group-by, among others.
+- **Types:**
+  - Nesting deeper than a List of a primitive, or a Struct of primitives, is refused
+    by name in Parquet, both ways.
+  - Array has no column representation.
+  - CSV refuses nested columns.
+  - Enum is not written to Parquet or Arrow.
+  - Duration is not written to Parquet; cast it to Int64.
+  - The mean of a Date, Datetime or Time, and the median, quantile, variance and
+    standard deviation of any temporal type, are refused; `Cast(Int64)` gives the
+    ticks.
+- **Open audit rows:**
+  - **I23:** a third-party Parquet file written without null counts can be pruned
+    wrongly by an `IsNull` filter.
+  - **O13**, unmeasured: two Enum or Struct types can render alike.
+  - **J8, a remainder:** an Int64 compared with a float literal past 2^53 meets at
+    Float64.
+  - **S26:** `MinInt // -1` wraps.
+  - **J11:** a spilled join can refuse with "a single join key has more build rows
+    than the limit" when no key has. Its cause has not been found.
+  - **I26:** `DataFrame.Rows` does not decode a List column.
+  - **A8:** `Diff`, `PctChange` and `FillNull(Mean)` inside `.Over()` are refused.
+- **Where ursus differs from Polars on purpose:**
+  - `Round` rounds half away from zero, which is Polars'
+    `mode="half_away_from_zero"`, not its default, half to even.
+  - UInt64 `Diff` is an exact Int128, where Polars gives Int64 and nulls.
+  - The minimum Duration's `Abs` is refused, where Polars wraps.
+- **Speed:** ursus is slower than Polars and DuckDB. The README's table was measured
+  at v0.3.0. The steps above were each measured on one query, and the full report for
+  0.4 has not been run.
 
 ---
 
