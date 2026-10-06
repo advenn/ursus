@@ -171,7 +171,7 @@ make race       # the whole suite under -race
 make levels     # import-level invariants
 ```
 
-**2944 test cases**, and the matrix is not decoration. Vector width is a *runtime*
+**2967 test cases**, and the matrix is not decoration. Vector width is a *runtime*
 property, so a single-width run proves very little: 512-bit gives 8 float64 lanes, which happens to be exactly one
 bitmap byte — a coincidence that hides an entire class of sub-byte bitmap bug. The 128-bit leg is where those surface.
 
@@ -207,9 +207,11 @@ The caveats that apply to *this* run:
 
 - **Every query ran in an 8 GB cgroup**, on a laptop with 6–9 GiB of swap already in use.
 - **ursus's h2o `gb10` over CSV was killed at that cap.** It needs about 9 GB, and v0.3.0 spilled only under an explicit
-  `WithMemoryLimit`, so it never saw the cgroup. A default budget follows in the next release.
+  `WithMemoryLimit`, so it never saw the cgroup.
 - **PDS-H `q7` regressed** to 3.9 s and 1.68 GB, from 2.4 s and 0.60 GB at step 40. Its date filter stopped being pushed
-  below its joins. The fix also follows.
+  below its joins.
+- **Both are fixed on master**, in [`CHANGELOG.md`](./CHANGELOG.md)'s Unreleased section. Re-run under the same cap,
+  ursus passes 15/15 on h2o over CSV, `q7` takes 1.7 s and 0.63 GB, and the h2o Parquet geomean is 1,950 ms.
 - **Other engines:** chDB timed out on two group-bys and gota ran out of memory on two, under the same cap.
 
 Timings come from a laptop under real conditions, so treat small differences as noise and the ordering as the signal.

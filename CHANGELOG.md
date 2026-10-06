@@ -10,7 +10,32 @@ Step numbers below point at those records.
 
 ---
 
-## v0.3.0 — unreleased
+## Unreleased — the v0.3.1 candidate
+
+Steps 89–91: what benchmarking v0.3.0 found, fixed.
+
+- **A query is budgeted by default, so it spills under a container's limit.**
+  - With no `WithMemoryLimit`, the budget is half the smaller of the cgroup's memory
+    limit (the least over the process's cgroup and its ancestors) and the
+    machine's RAM, on Linux.
+  - v0.3.0 spilled only under an explicit limit, and was killed by the kernel
+    under a cgroup's instead: h2o gb10 over CSV, at the benchmark's 8 GB.
+  - `WithMemoryLimit(0)` is unlimited, the old default. Off Linux nothing changes.
+  - **Behaviour change:** an operator that cannot spill now fails at that point,
+    with an error naming itself, rather than running into swap (90).
+- **A group-by stays parallel under a budget.**
+  - It runs on several workers until the query holds half its budget, then folds
+    them into one and finishes serially, spilling as before.
+  - In v0.3.0 any limit made it serial outright, which with a default budget
+    would have made every group-by serial: about 1.5× slower on h2o's small ones,
+    measured (91).
+- **PDS-H q7 is fixed:** 1.55 s and 0.59 GB, against 3.9 s and 1.68 GB in v0.3.0.
+  A temporal cast that cannot fail, such as a nanosecond Datetime narrowed to a
+  Date, no longer keeps a filter above the joins it should be pushed into (89).
+
+---
+
+## v0.3.0 — 2026-10-06
 
 Everything since `v0.2.0` (2026-09-04): steps 22–88, about 270 commits.
 
