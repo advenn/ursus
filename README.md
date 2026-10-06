@@ -27,7 +27,7 @@ core. None of that is visible in the query.
 static binary like any other Go dependency, and `go get` is the whole install.
 
 That is the reason to pick it, and the cost should be just as plain: **ursus is slower than the serious analytical
-engines.** On the h2o.ai benchmark at ten million rows it is roughly 4x Polars; on TPC-H at scale factor 1 it is about
+engines.** On the h2o.ai benchmark at ten million rows it is roughly 3x Polars; on TPC-H at scale factor 1 it is about
 10x. CSV parsing is worse than that. It is not trying to beat Polars or DuckDB, and on current evidence it is not going
 to.
 
@@ -176,7 +176,8 @@ bitmap byte — a coincidence that hides an entire class of sub-byte bitmap bug.
 
 Correctness is also checked against other engines. The benchmark suite validates every result against a duckdb
 reference, and ursus currently passes **22/22 PDS-H (TPC-H) queries and 15/15 h2o.ai queries** — PDS-H at scale factor
-0.1, re-run at every step, and h2o.ai at two million rows over CSV and Parquet, re-run for the 0.3 release.
+0.1, re-run at every step, and both suites at the published sizes in the v0.3.0 report; every answer ursus gave there
+validates.
 
 ---
 
@@ -199,14 +200,16 @@ reference, and a disagreement is struck through rather than quietly reported as 
 
 **How current it is, precisely.** Every table was measured in one session, on one commit, with every engine re-run
 together — so the numbers are comparable across engines rather than stitched from different days. That commit is
-step 40's, from 2026-09-08. The steps since, which are most of 0.3, were correctness work: their answers are
-re-validated, as above, but their timings have not been re-measured at these sizes, and at scale factor 0.1 they show no
-slowdown beyond run-to-run noise.
+v0.3.0's, measured on 2026-10-06.
 
-The caveat that applies to *this* run: the machine had 9 GiB of swap in use, and three PDS-H queries (`q1`, `q2`, `q6`)
-show iteration spreads of up to 2.6x where they were previously tight. Their medians are inflated by contention — the
-minimum of iterations puts them within 7–16% of their old values rather than 29–74% worse. The published table keeps the
-median anyway, because switching estimator after seeing which one flatters you is how a benchmark stops being one.
+The caveats that apply to *this* run:
+
+- **Every query ran in an 8 GB cgroup**, on a laptop with 6–9 GiB of swap already in use.
+- **ursus's h2o `gb10` over CSV was killed at that cap.** It needs about 9 GB, and v0.3.0 spilled only under an explicit
+  `WithMemoryLimit`, so it never saw the cgroup. A default budget follows in the next release.
+- **PDS-H `q7` regressed** to 3.9 s and 1.68 GB, from 2.4 s and 0.60 GB at step 40. Its date filter stopped being pushed
+  below its joins. The fix also follows.
+- **Other engines:** chDB timed out on two group-bys and gota ran out of memory on two, under the same cap.
 
 Timings come from a laptop under real conditions, so treat small differences as noise and the ordering as the signal.
 
@@ -214,10 +217,10 @@ Timings come from a laptop under real conditions, so treat small differences as 
 
 |                        |    ursus |  Polars |       |
 |------------------------|---------:|--------:|-------|
-| h2o.ai, 10M rows       | 2,401 ms |  601 ms | 4.0x  |
-| TPC-H SF=1             |   936 ms |   86 ms | 10.8x |
-| TPC-H SF=0.1           |   160 ms |   76 ms | 2.1x  |
-| TPC-H SF=1 peak memory |  2.26 GB | 0.81 GB | 2.8x  |
+| h2o.ai, 10M rows       | 2,426 ms |  731 ms | 3.3x  |
+| TPC-H SF=1             |   918 ms |   85 ms | 10.8x |
+| TPC-H SF=0.1           |    82 ms |   11 ms | 7.5x  |
+| TPC-H SF=1 peak memory |  1.68 GB | 0.86 GB | 2.0x  |
 
 Geomeans over queries every engine passed. The gap narrows as the data gets smaller, which is the shape of the trade
 described at the top of this file.

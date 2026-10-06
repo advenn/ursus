@@ -298,9 +298,12 @@ Every addition is in the root package unless named.
     `mode="half_away_from_zero"`, not its default, half to even.
   - UInt64 `Diff` is an exact Int128, where Polars gives Int64 and nulls.
   - The minimum Duration's `Abs` is refused, where Polars wraps.
-- **Speed:** ursus is slower than Polars and DuckDB, and the README's table says by
-  how much. That table was measured at step 40; the steps since were not re-timed at
-  its sizes.
+- **Speed:** ursus is slower than Polars and DuckDB, and the README's table, measured
+  at v0.3.0, says by how much.
+- **PDS-H q7 regressed** to 3.9 s from 2.4 s, because its date filter is no longer
+  pushed below its joins.
+- **ursus spills only under an explicit `WithMemoryLimit`.** Under a cgroup's limit it
+  can be killed instead: h2o gb10 over CSV was, at 8 GB.
 
 ---
 
