@@ -158,12 +158,41 @@ func (s *temporalSink) Finish(ctx context.Context) (Operator, error) {
 		return nil, err
 	}
 
+	// Windows overlap, so a row is fed to the aggregates once for every window that
+	// reaches it: one (window, row) pair per membership, and a gathered copy of the
+	// input per pair. A rolling window a thousand rows long over a million rows is
+	// a billion pairs. They are built and fed a chunk at a time — one batch's worth —
+	// so the expansion is bounded by the chunk, not by how much the windows overlap.
+	// Built whole, it was neither bounded nor charged (step 96).
+	//
+	// What the aggregates keep is charged as it grows. For a sum that is a number
+	// per window; a median or an implode keeps every value it is fed, one per pair,
+	// and is refused here under the budget rather than growing past it.
 	var (
-		rows     []int32 // input row per (window, row) pair
-		groups   []int32 // the window each pair belongs to
 		starts   []int64 // the index value of each window
 		bucketOf []int   // which bucket each window came from, for its key values
+		charged  int64   // the aggregates' state, as last charged
+		unseen   int     // pairs fed since it was charged
 	)
+	rows := make([]int32, 0, s.chunk())   // input row per (window, row) pair
+	groups := make([]int32, 0, s.chunk()) // the window each pair belongs to
+	flush := func() error {
+		if len(rows) == 0 {
+			return nil
+		}
+		if err := s.accumulate(ctx, all, rows, groups, len(starts)); err != nil {
+			return err
+		}
+		unseen += len(rows)
+		rows, groups = rows[:0], groups[:0]
+		// NBytes is O(windows), so it is read once per that many pairs: O(1) a pair,
+		// with the state at most one pair per window ahead of its charge.
+		if unseen < max(s.chunk(), len(starts)) {
+			return nil
+		}
+		unseen = 0
+		return s.chargeState(&charged, len(starts))
+	}
 	for b, rowsIn := range buckets {
 		wins, err := s.windows(rowsIn)
 		if err != nil {
@@ -176,12 +205,19 @@ func (s *temporalSink) Finish(ctx context.Context) (Operator, error) {
 			for _, r := range rowsIn[w.lo:w.hi] {
 				rows = append(rows, r)
 				groups = append(groups, g)
+				if len(rows) == cap(rows) {
+					if err := flush(); err != nil {
+						return nil, err
+					}
+				}
 			}
 		}
 	}
-
+	if err := flush(); err != nil {
+		return nil, err
+	}
 	nGroups := len(starts)
-	if err := s.accumulate(ctx, all, rows, groups, nGroups); err != nil {
+	if err := s.chargeState(&charged, nGroups); err != nil {
 		return nil, err
 	}
 
@@ -227,6 +263,18 @@ func (s *temporalSink) Finish(ctx context.Context) (Operator, error) {
 		return newBatchOperator(s.schema, out), nil
 	}
 	return &runOperator{schema: s.schema, src: &batchRun{b: out, n: s.chunk()}}, nil
+}
+
+// chargeState charges what the aggregates hold, and the two per-window arrays
+// Finish builds, to the budget, and checks it. charged is what was charged last.
+func (s *temporalSink) chargeState(charged *int64, nWindows int) error {
+	st := int64(nWindows) * 16 // starts and bucketOf
+	for _, a := range s.accs {
+		st += a.NBytes()
+	}
+	s.mem.RetainBytes(st - *charged)
+	*charged = st
+	return s.mem.Check()
 }
 
 func (s *temporalSink) chunk() int {

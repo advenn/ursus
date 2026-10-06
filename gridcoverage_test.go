@@ -216,7 +216,10 @@ func TestBackStepRefusesRatherThanGivingUp(t *testing.T) {
 // asserted directly in internal/physical instead.
 func TestGridAccountingIsQueryWide(t *testing.T) {
 	lo := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	span := 4 * time.Hour // ~14,400 windows at 1s, ~346 KiB of grid
+	// ~14,400 windows at 1s: ~346 KiB of grid, and since step 96 the per-window
+	// state Finish builds is charged too — each window's start and bucket, and the
+	// count — for ~700 KiB a bucket in all.
+	span := 4 * time.Hour
 
 	run := func(buckets int, limit int64) error {
 		var ts []time.Time
@@ -234,7 +237,7 @@ func TestGridAccountingIsQueryWide(t *testing.T) {
 		return err
 	}
 
-	const limit = 600 << 10
+	const limit = 1 << 20
 	if err := run(1, limit); err != nil {
 		t.Fatalf("one bucket's grid fits under %d bytes and must not be refused: %v",
 			limit, err)

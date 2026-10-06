@@ -12,6 +12,23 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **A long-running service no longer leaks through the engine:**
+  - **Compiled regexes and `is_in` sets** are freed with the expression they came
+    from. They were cached for the life of the process, so a service building
+    queries per request grew without bound (94).
+  - **A query that fails while being planned closes what it opened.** A CSV
+    stream, a file or an HTTP body, was left open when a later part of the query
+    failed to plan: the left side of a join whose right could not open, the inputs
+    of a `Concat` before a failing one (95).
+- **`Rolling` and `GroupByDynamic` hold a bounded working set,** and what they
+  must keep is charged to the budget.
+  - Overlapping windows were expanded whole and uncharged: a 4,000-row rolling
+    sum held 244 MB.
+  - **Behaviour change:** a median or an implode over heavily overlapping windows
+    is now refused under the budget, naming the operator, where it used to grow
+    past it.
+  - The expansion is now built a batch at a time, which also made the rolling sum
+    about 30% faster (96).
 - **A group-by under a limit you set is serial again,** so a group-by that spills
   gives its rows in the same order on every run, as in v0.3.0.
   - In v0.3.1 it ran parallel until half of any budget, and where it switched
