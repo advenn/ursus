@@ -155,12 +155,32 @@ func dropTemps(n Node, keep []string) Node {
 // the temporary projected away above it, and the node above them does not choose its
 // own columns. The message names the rewrite that works today rather than implying
 // the query is meaningless.
+//
+// The rewrite moves the WINDOW, not the expression holding it. It used to move the
+// whole of e, which in Agg is an aggregate: WithColumns refuses one, and Agg then
+// refuses the bare Col("w") it is left with (audit A9).
 func rejectWindow(e expr.Node, op string) error {
-	if !expr.HasWindow(e) {
+	var w expr.Node
+	expr.Walk(e, func(x expr.Node) bool {
+		switch x.(type) {
+		case *expr.Window, *expr.WinFn:
+			if w == nil {
+				w = x
+			}
+			return false
+		}
+		return w == nil
+	})
+	if w == nil {
 		return nil
 	}
-	return uerr.New(uerr.KindUnsupported, op,
+	err := uerr.New(uerr.KindUnsupported, op,
 		"a window expression is not supported in %s yet: %s", op, e.String()).
-		Hint("compute it first: .WithColumns(%s.Alias(\"w\")) and then %s on Col(\"w\")",
-			e.String(), op)
+		Hint("compute the window first, .WithColumns(%s.Alias(\"w\")), and use "+
+			"Col(\"w\") in its place", w.String())
+	if _, bare := w.(*expr.WinFn); bare && op == "agg" {
+		err.Hint("in WithColumns %s runs over the whole frame; .Over(the group-by "+
+			"keys) runs it within each group", w.String())
+	}
+	return err
 }

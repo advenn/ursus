@@ -78,12 +78,12 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | J3 | ~~**SW**~~ **fixed, step 74** | A spilled right join on two key columns nulls the non-null half of a partly-null right key. | `extjoin.go:506`: `nullPadOp` calls `gatherOut(…, false)`. |
 | J5 ✔ | ~~**SW**~~ **fixed, step 74** | `Validate` 1:m / 1:1 misses duplicate left keys that have no match, and duplicate null left keys under `NullsEqual`. | `join.go:1002-1019` returns before the `seen` check. |
 | J6 | ~~**SW**~~ **fixed, step 74** | `AsOfBy` matches a null by-key to a null by-key — undocumented, and against the `NullsEqual` default. | `asof.go` `bucket()` and `match()`. |
-| J7 ✔ | **FR** | An as-of join on a Float, Int8/16, Uint or Int128 key plans fine, then fails at `Collect` with *"cannot be read as Int64"*. `MergeSorted` refuses Float, Int16, Uint64 and String with a hint that contradicts itself. | `tempgroup.go:574` `temporalTicks`; `mergesorted.go:147`. |
+| J7 ✔ | ~~**FR**~~ **fixed, step 109** | An as-of join on a Float, Int8/16, Uint or Int128 key plans fine, then fails at `Collect` with *"cannot be read as Int64"*. `MergeSorted` refuses Float, Int16, Uint64 and String with a hint that contradicts itself. | `tempgroup.go:574` `temporalTicks`; `mergesorted.go:147`. |
 | J8 | ~~SW (lossy)~~ **fixed, step 74**, for joins, Concat and Unpivot | Int64 vs Float64 promotion rounds above 2^53, both in joins and in strict `Concat`. This contradicts `resolve_union.go:68`: *"Promote only ever chose a type that holds both exactly"*. | `promote.go:97-107`. |
-| J9 | FR / ME | A full join with `JoinCoalesce(true)` is refused, and the hint says "no coalesce expression" — `ursus.Coalesce` exists. | `resolve.go:545-555`. |
-| J10 | ~~ME~~ **the key-cast hint fixed, step 74**; `WhereExists`'s `JoinSuffix` advice remains | The key-cast hint suggests `.Cast(ursus.Int64)` for a UTC vs naive Datetime join, and `WhereExists` suggests `JoinSuffix`, which it does not accept. | `join_layout.go:213`, `:276`; `join.go:203`. |
+| J9 | ~~FR / ME~~ **fixed, step 110** | A full join with `JoinCoalesce(true)` is refused, and the hint says "no coalesce expression" — `ursus.Coalesce` exists. | `resolve.go:545-555`. |
+| J10 | ~~ME~~ **fixed, steps 74 and 111**: the key-cast hint in 74; by 111 the `WhereExists` advice no longer appeared | The key-cast hint suggests `.Cast(ursus.Int64)` for a UTC vs naive Datetime join, and `WhereExists` suggests `JoinSuffix`, which it does not accept. | `join_layout.go:213`, `:276`; `join.go:203`. |
 | J11 | ME | The spilled join refuses with *"a single join key has more build rows than the limit"* when no key has more than two. | `extjoin.go:422`; the real cause was not found. |
-| J12 | FR | `Concat` of a frame with a Null-typed column: *"concat is not implemented for Null"*. The same happens with plain `Collect` at batch size 1. | |
+| J12 | ~~FR~~ **fixed, step 108** | `Concat` of a frame with a Null-typed column: *"concat is not implemented for Null"*. The same happens with plain `Collect` at batch size 1. | |
 
 ## 5. I/O
 
@@ -104,16 +104,16 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | I13 | ~~CR~~ **fixed, step 71** | A required List (level 0 means empty) and a required struct field both raise `ErrInternal`. | `column.go:577`. |
 | I14 | ~~CR~~ **fixed, step 72** | `WithCompression(Lz4)` and `WithCompression(Lzo)` panic inside arrow-go. `Lz4Raw` works. | `writer.go:124`. |
 | I15 | ~~FR~~ **fixed, step 71** | A UTF-8 BOM is not stripped from a CSV header, so `Col("a")` fails with *did you mean "﻿a"*. | |
-| I16 | FR | An unannotated FIXED_LEN_BYTE_ARRAY is typed Binary by the schema and then refused by the reader. | `parquet.go:617`, `types.go:192`. |
+| I16 | ~~FR~~ **fixed, step 112** | An unannotated FIXED_LEN_BYTE_ARRAY is typed Binary by the schema and then refused by the reader. | `parquet.go:617`, `types.go:192`. |
 | I17 | ~~FR / ME~~ **fixed, step 81** | List of Uint8, Uint32, Time(ms), Bool or Decimal is refused, with a hint claiming the unsigned and Time types are read. | `parquet.go:732`. |
-| I18 | FR | Null-typed columns are refused by both writers; Polars writes them. | |
+| I18 | ~~FR~~ **fixed, step 108** | Null-typed columns are refused by both writers; Polars writes them. | |
 | I19 | ~~FR~~ **fixed, step 77** | The CSV reader refuses the Decimal and Int128 schemas the CSV writer produces, and inference reads a 38-digit decimal or `u64::MAX` as lossy Float64. | |
 | I20 | — | Invalid UTF-8 in a String column is never validated, so `SinkParquet` writes an out-of-spec STRING column that Polars and DuckDB refuse. | |
 | I21 | **fixed, step 77** | A CSV round trip changes float types: integral floats come back Int64, and NaN/Inf come back String. It is exact with `WithSchema`. | |
 | I22 | **fixed, step 77** | A zero-column frame loses its row count in Parquet, and in CSV becomes a column named `""`. | |
 | I23 | SW, unmeasured | **Recorded at step 71, not fixed.** arrow-go reports `HasNullCount()` true for every statistic read from a file, so a file written WITHOUT `null_count` reads as having no nulls, and `IsNull` pruning would drop rows; and a one-sided integer or float min/max reads its absent side as 0. Only a third-party writer reaches either — arrow-go and pyarrow always write both — and arrow-go's read API cannot detect them. | arrow-go `statistics_types.gen.go`; recorded in `prune.go`'s header. |
-| I24 | class | **Recorded at step 71.** `data.CheckNonNullable` is on only in test binaries. A null in a column declared non-nullable is therefore `ErrInternal` in the test suite and **silent in production**: I1's nullability case and I13 both reached it, and were loud only because tests ran them. | `internal/data/batch.go`; no production setter. |
-| I25 | ME | **Recorded at step 72.** A panic in `ScanArrow`'s factory is KindIO, but a panic in the `RecordReader` it returns — the caller's code too — is `ErrInternal`, "a bug in ursus". | `arrowsrc` recovers only inside its schema `Once`; `reader.Next` is recovered by the engine's `Pull`. |
+| I24 | ~~class~~ **fixed, step 98** | **Recorded at step 71.** `data.CheckNonNullable` is on only in test binaries. A null in a column declared non-nullable is therefore `ErrInternal` in the test suite and **silent in production**: I1's nullability case and I13 both reached it, and were loud only because tests ran them. | `internal/data/batch.go`; no production setter. |
+| I25 | ~~ME~~ **fixed, step 115** | **Recorded at step 72.** A panic in `ScanArrow`'s factory is KindIO, but a panic in the `RecordReader` it returns — the caller's code too — is `ErrInternal`, "a bug in ursus". | `arrowsrc` recovers only inside its schema `Once`; `reader.Next` is recovered by the engine's `Pull`. |
 | I26 | low | **Recorded at step 72.** `DataFrame.Rows` decodes no List column: `no decoder for Go type []int64 from column List(Int64)`. | `rows.go` `makeSetter`. Step 72's list cases explode the list instead. |
 | I27 | ~~**SW**~~ **fixed, step 77** | **Found at step 77.** A null String written to CSV is an empty field, and the reader read every empty String field as `""`, so null strings came back as empty strings, silently. The writer's doc called it a property of CSV; Polars writes the empty string as a quoted `""` and reads the two apart. DuckDB reads both as null. | `csv/writer.go` `NullValue`; `csv.go`, the empty-field rule. |
 
@@ -134,14 +134,14 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | S11 | ~~CR / SW~~ **fixed, step 76** | `Truncate` near the Datetime(ns) minimum: `1mo` raises `ErrInternal`, and a Duration step wraps int64. | `dtfn.go:173`, `:300`. |
 | S12 | ~~SW~~ **fixed, step 76** | `CountMatches("", literal=true)` is null; the answer is len+1. | `strfn.go:112`. |
 | S13 | ~~SW~~ **fixed, step 76** | `StripCharsStart("")` and `StripCharsEnd("")` strip only ASCII whitespace; `StripChars("")` uses `TrimSpace`. | `strfn.go:211`. |
-| S14 | FR / ME | Uint64 with an int literal in `//`, `%` or `*` is refused, and the hint suggests an Int64 cast that loses data. | `expr/resolve.go` ~160. |
-| S15 | ME | The Duration × float refusal hard-codes "2.5", and its own recipe fails. | `resolve.go:380-394`. |
-| S16 | ME | `FillNan` and `FillNull` errors name their desugaring (`is_not_nan`, `when`) rather than the method called. | |
-| S17 | doc | The Neg/Abs doc says unsigned types are supported; they are refused. | `expr.go:223`. |
+| S14 | ~~FR / ME~~ **fixed, step 100, pinned in step 115** | Uint64 with an int literal in `//`, `%` or `*` is refused, and the hint suggests an Int64 cast that loses data. | `expr/resolve.go` ~160. |
+| S15 | ~~ME~~ **fixed, step 111** | The Duration × float refusal hard-codes "2.5", and its own recipe fails. | `resolve.go:380-394`. |
+| S16 | ~~ME~~ **fixed, step 111** | `FillNan` and `FillNull` errors name their desugaring (`is_not_nan`, `when`) rather than the method called. | |
+| S17 | ~~doc~~ **fixed, step 115** | The Neg/Abs doc says unsigned types are supported; they are refused. | `expr.go:223`. |
 | S18–S20 | ~~low~~ **fixed, step 86** | A strict Int64 → Time cast wraps around the day; a Duration unit cast floors while `TotalSeconds` truncates; Duration `Abs`/`Neg` at MinInt64 wrap silently. | |
 | S21 | low, **the cast half fixed, step 77; the `Round` doc, step 86** | ~~`Cast(String → Int128)` is refused;~~ `ToUpper("ß")` is `"ß"`. ~~The `Round` doc says half-away "matching Polars", but Polars 1.44 defaults to half-to-even.~~ | |
 | S22 | ~~CR, not run~~ **fixed, step 85** | **Recorded at step 72, not fixed.** `PadStart`, `PadEnd` and `ZFill` with a huge width allocate it: a fatal out-of-memory, which no recover can catch. Read from the code; running it takes the memory it exhausts. | `strfn.go`, no bound on the width. |
-| S23 | ME | **Recorded at step 72.** A panic in a `MapName` function is `ErrInternal`, where a panicking udf is the caller's KindValue. | `expr.Rename.Fn` is called by the planner with no attribution. |
+| S23 | ~~ME~~ **fixed, step 115** | **Recorded at step 72.** A panic in a `MapName` function is `ErrInternal`, where a panicking udf is the caller's KindValue. | `expr.Rename.Fn` is called by the planner with no attribution. |
 | S24 | ~~SW, not run~~ **fixed, step 87** — the pads at step 85; every String column and the key table at 87 | **Recorded at step 72, not fixed.** `data.NewString` keeps 32-bit offsets, and past 2 GiB of string data in one column they wrap without an error. Read from the code, for the same reason as S22. | `internal/data`, string construction. |
 | S25 | ~~low~~ **fixed, step 77** | **Recorded at step 73.** A String → float cast accepts Go's literal syntax, because it is `strconv.ParseFloat`: `"1_000"` is 1000, measured, and hex floats such as `"0x1p3"` parse too. Polars rejects both, and the String → integer parse accepts neither. The CSV reader shares the float grammar. | `castparse.go` `parseFloat`; the parse sweep skips underscore strings for floats rather than pinning either answer. |
 | S26 | low | **Recorded at step 76, not fixed.** Integer `FloorDiv` of MinInt by −1 wraps to MinInt, silently; its quotient is MaxInt+1. Go and Polars both wrap. Int128 `//` and `%` are not implemented at all. | `kernel/scalar.go` `divIntScalar`; `arithI128` has no arm. |
@@ -158,12 +158,12 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | A6 ✔ | ~~**CR**~~ **fixed, step 72** | `Rank(RankMethod(99))` panics in a worker goroutine and **kills the process**. `Interpolation(99)` is silently treated as linear. | `window.go:112` does not validate; `kernel/window.go:147-149`. |
 | A7 | ~~CR~~ **fixed, step 72** | A zero `Expr{}` used as a method receiver panics with a nil dereference. | `lazy.go:73-86` checks only the top level. |
 | A8 | FR / ME | `Diff`, `PctChange` and `FillNull(Mean)` inside `.Over(g)` are refused as "a window inside a window": the sugar embeds a window the user never wrote. Polars supports all three. | `resolve_window.go:79`. |
-| A9 | ME | The hint for a window inside `Agg` recommends two things that are both refused. | `resolve_window.go:159-163`. |
+| A9 | ~~ME~~ **fixed, step 115** | The hint for a window inside `Agg` recommends two things that are both refused. | `resolve_window.go:159-163`. |
 | A10 ✔ | ~~FR / ME~~ **fixed, step 75** | `Sum` of a Bool column is refused, and the hint's `Count()` counts rows, not trues. Polars and DuckDB both answer 2. | `agg.go:271-274`. |
-| A11–A12 | ME | The ordered-aggregate refusal contradicts itself; `CumSum` of a String reports "sum()"; the Any/AllTrue hints use lower-case names; a group-by error says "one output row per input row". | `physical/window.go:405-412`. |
-| A13 | ~~low~~ **fixed, step 75**, except the last sentence | Integer `Product` of `[3, 0, −5]` is −0. `GroupBy().Agg()` with no aggregates returns shape (0, 0) against the doc's one row. Temporal `Median`/`Quantile`/`Std` are refused without that being documented. | |
+| A11–A12 | ~~ME~~ **fixed, steps 111 (A11) and 115 (A12)** | The ordered-aggregate refusal contradicts itself; `CumSum` of a String reports "sum()"; the Any/AllTrue hints use lower-case names; a group-by error says "one output row per input row". | `physical/window.go:405-412`. |
+| A13 | ~~low~~ **fixed, step 75**, and the last sentence in step 115 | Integer `Product` of `[3, 0, −5]` is −0. `GroupBy().Agg()` with no aggregates returns shape (0, 0) against the doc's one row. Temporal `Median`/`Quantile`/`Std` are refused without that being documented. | |
 | A14 | ~~SW~~ **fixed, step 75** | **Recorded at step 72.** `Closed(99)` is accepted and behaves as `ClosedLeft` — measured, the same windows — which is A6's shape, an undeclared value of a public integer enum, without the panic. | No `Valid()` check on `Closed`. |
-| A15 | ME | **Recorded at step 72.** A udf's error, returned or panicked, names its row within the BATCH, not the frame: under `CollectBatches` with a batch size of 2, the third row is "row 0". | `udf.go`, `i` is the batch index. |
+| A15 | ~~ME~~ **fixed, step 111** | **Recorded at step 72.** A udf's error, returned or panicked, names its row within the BATCH, not the frame: under `CollectBatches` with a batch size of 2, the third row is "row 0". | `udf.go`, `i` is the batch index. |
 | A16 | ~~SW~~ **fixed, step 85** | **Recorded at step 75, not fixed.** `Diff` on an unsigned column subtracts at its width and wraps: UInt8 `[3, 1, 255, 0]` diffs to `[null, 254, 254, 1]`. Polars widens to Int16 and answers `[null, −2, 254, −255]`. `PctChange` no longer goes through it (A3). | root `window.go`, `Diff` is `Sub` at the column's type. |
 
 ## 8. The patterns, which are the point
@@ -317,7 +317,7 @@ Known and excluded, because they were already on the open lists:
 - ~~strict Int64 → Float32 at 2^53~~ — closed by step 73's rule: a cast to a float
   rounds, so 2^53+1 → 2^53 is the right answer;
 - `Optimizer.Verify` off (O2 is its first concrete consequence);
-- `rolling` unaccounted, and ~~`unique`/`over` not spilling~~ (spilling since step 82);
+- ~~`rolling` unaccounted~~ (charged since step 96), and ~~`unique`/`over` not spilling~~ (spilling since step 82);
 - nested write, and object stores;
-- the planner leak, and `spill.Writer.Write`'s bare error;
+- ~~the planner leak~~ (closed in step 95), and ~~`spill.Writer.Write`'s bare error~~ (wrapped in step 115);
 - the README debt.

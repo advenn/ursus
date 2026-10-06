@@ -78,6 +78,9 @@ func (e Expr) Sum() Expr { return e.agg(expr.AggSum) }
 //
 // Mean of a group with no non-null values is NULL, not NaN: there was nothing to
 // compute, as opposed to a computation that came out undefined.
+//
+// The mean of a Duration is an exact Duration. A Date, Datetime or Time is refused
+// for now; Cast(Int64) gives its ticks.
 func (e Expr) Mean() Expr { return e.agg(expr.AggMean) }
 
 // Min and Max use ursus's TOTAL order, the same one Sort uses: NaN sorts above
@@ -163,6 +166,9 @@ func (e Expr) ArgMax() Expr { return e.agg(expr.AggArgMax) }
 //
 // Computed with Welford's algorithm, so a column of large near-equal values gives
 // the right answer rather than the zero (or negative) that E[x²]−E[x]² produces.
+//
+// A temporal column, a Duration included, is refused for now; Cast(Int64) gives
+// its ticks.
 func (e Expr) Var(ddof int) Expr { return e.varStd(expr.AggVar, ddof) }
 func (e Expr) Std(ddof int) Expr { return e.varStd(expr.AggStd, ddof) }
 
@@ -178,7 +184,9 @@ func (e Expr) varStd(op expr.AggOp, ddof int) Expr {
 // Median is the 0.5 quantile with linear interpolation, so an even-sized group
 // gives the mean of the two middle values.
 //
-// It returns Float64 for every numeric input, and skips nulls.
+// It returns Float64 for every numeric input, and skips nulls. A temporal column, a
+// Duration included, is refused for now, as it is by Quantile; Cast(Int64) gives
+// its ticks.
 func (e Expr) Median() Expr { return e.agg(expr.AggMedian) }
 
 // Quantile returns the value at rank q, where q runs from 0 (the minimum) to 1 (the
@@ -190,6 +198,9 @@ func (e Expr) Median() Expr { return e.agg(expr.AggMedian) }
 //
 // Values are ordered by ursus's TOTAL order, so NaN sorts above everything and a
 // high quantile of a column containing NaN is NaN, exactly as Sort would place it.
+//
+// A temporal column, a Duration included, is refused for now; Cast(Int64) gives
+// its ticks.
 func (e Expr) Quantile(q float64, interp Interpolation) Expr {
 	if !(q >= 0 && q <= 1) { // written this way so NaN is rejected too
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "quantile",

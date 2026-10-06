@@ -192,8 +192,22 @@ func (e Expr) Suffix(s string) Expr {
 }
 
 // MapName derives the output name from the input name.
+//
+// fn is called while the query is planned. A panic in it is the caller's error, of
+// kind ErrValue, naming the input name it panicked on.
 func (e Expr) MapName(fn func(string) string) Expr {
-	return wrap(&expr.Rename{Child: e.node(), Fn: fn, Label: "name.map(...)"})
+	guarded := func(name string) string {
+		// The planner calls Fn where nothing returns an error, so the failure is
+		// raised; Collect's recover returns it as it is, not as ursus's bug.
+		defer func() {
+			if v := recover(); v != nil {
+				uerr.Raise(uerr.Attributed(v, uerr.KindValue, "name.map",
+					"the function passed to MapName panicked on %q", name))
+			}
+		}()
+		return fn(name)
+	}
+	return wrap(&expr.Rename{Child: e.node(), Fn: guarded, Label: "name.map(...)"})
 }
 
 // --- casting -----------------------------------------------------------------
@@ -253,9 +267,11 @@ func (e Expr) Pow[T Operand](v T) Expr { return e.bin(expr.OpPow, lift(v)) }
 
 // Neg negates. Abs takes the absolute value.
 //
-// Both are defined for every numeric type, including the unsigned integers,
-// Int128 and Decimal — which matters more than it sounds, because every integer
-// Sum outputs Int128, so `Col("x").Sum().Abs()` is an ordinary query.
+// Both are defined for every signed numeric type, Int128 and Decimal included —
+// which matters more than it sounds, because every integer Sum outputs Int128, so
+// `Col("x").Sum().Abs()` is an ordinary query. Abs of an unsigned integer is
+// itself. Neg of one is refused, because most of its negations do not fit: cast it
+// to a signed type first.
 func (e Expr) Neg() Expr { return e.un(expr.OpNeg) }
 func (e Expr) Abs() Expr { return e.un(expr.OpAbs) }
 

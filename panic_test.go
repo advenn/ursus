@@ -35,6 +35,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/compress"
@@ -200,6 +201,19 @@ func panicCases() []panicCase {
 			}
 			return "", err2
 		}, wantErr("io", "open boom")},
+		// The reader is the caller's code as much as the factory is, and it runs on
+		// the engine's goroutines, whose recover took its panic for ursus's bug
+		// (audit I25).
+		{"ScanArrow whose reader panics, 4 threads", func(t *testing.T) (string, error) {
+			lf := ursus.ScanArrow(func() (array.RecordReader, error) { return newPanickyReader() })
+			return collectCells(t.Context(), lf, "v", threads(4))
+		}, wantErr("io", "reading the Arrow stream panicked", "reader boom")},
+		// MapName's function runs while the query is planned, and its panic was
+		// ursus's bug too (audit S23).
+		{"MapName whose function panics", func(t *testing.T) (string, error) {
+			named := c("v").MapName(func(string) string { panic("name boom") })
+			return collectCells(t.Context(), panicFrame().Select(named), "v")
+		}, wantErr("value", `MapName panicked on "v"`, "name boom")},
 
 		// A udf is user code. Its panic is the user's, as its errors are.
 		{"udf, 1 thread", func(t *testing.T) (string, error) {
@@ -311,6 +325,19 @@ func panicCases() []panicCase {
 		}, wantCorruptIsIO},
 	}
 	return cases
+}
+
+// panickyReader is an Arrow stream of one Int64 column, v, whose Next panics.
+type panickyReader struct{ array.RecordReader }
+
+func (*panickyReader) Next() bool { panic("reader boom") }
+
+func newPanickyReader() (array.RecordReader, error) {
+	rr, err := array.NewRecordReader(arrow.NewSchema([]arrow.Field{{Name: "v", Type: arrow.PrimitiveTypes.Int64}}, nil), nil)
+	if err != nil {
+		return nil, err
+	}
+	return &panickyReader{rr}, nil
 }
 
 // rawList writes [[1 2] [3]] as a list of INT(bits) to a Parquet file. ursus's own

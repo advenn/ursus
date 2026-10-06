@@ -114,7 +114,7 @@ func rejectAggregate(e expr.Node, op string) error {
 	}
 	return uerr.New(uerr.KindType, op,
 		"aggregate expression is not allowed here: %s", e.String()).
-		Hint("%s produces one output row per input row; an aggregate produces one row in total", op).
+		Hint("%s needs one value per input row; an aggregate produces one value in total", op).
 		Hint("use GroupBy(...).Agg(...) to aggregate, or Select over an already-aggregated frame")
 }
 

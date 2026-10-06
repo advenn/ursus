@@ -228,7 +228,7 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 		return nil, r.finish(nil)
 	}
 	if r.rr == nil {
-		if err := r.start(); err != nil {
+		if err := callerCode("opening", r.start); err != nil {
 			return nil, r.finish(err)
 		}
 	}
@@ -237,13 +237,27 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 		// Only now may the reader move on: every row of the previous record has been
 		// copied, so nothing depends on it surviving this call.
 		r.rec = nil
-		if !r.rr.Next() {
-			if err := r.rr.Err(); err != nil && !errors.Is(err, io.EOF) {
-				return nil, r.finish(uerr.Wrap(err, uerr.KindIO, op, "reading the Arrow stream"))
+		var (
+			rec     arrow.RecordBatch
+			more    bool
+			readErr error
+		)
+		if err := callerCode("reading", func() error {
+			if more = r.rr.Next(); more {
+				rec = r.rr.RecordBatch()
+			} else {
+				readErr = r.rr.Err()
+			}
+			return nil
+		}); err != nil {
+			return nil, r.finish(err)
+		}
+		if !more {
+			if readErr != nil && !errors.Is(readErr, io.EOF) {
+				return nil, r.finish(uerr.Wrap(readErr, uerr.KindIO, op, "reading the Arrow stream"))
 			}
 			return nil, r.finish(nil)
 		}
-		rec := r.rr.RecordBatch()
 		if err := r.check.Check(rec); err != nil {
 			return nil, r.finish(err)
 		}
@@ -266,6 +280,18 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 // start opens this scan's reader and checks it has the schema the query was planned
 // against. A reader whose columns were reordered or retyped since would otherwise
 // be read under the planned schema's names and types.
+// callerCode runs f, which calls the caller's factory or reader, and recovers a panic
+// in it as an I/O failure of the stream, as Schema does. The engine would otherwise
+// recover it as ursus's own bug (audit I25).
+func callerCode(what string, f func() error) (err error) {
+	defer func() {
+		if v := recover(); v != nil {
+			err = uerr.Attributed(v, uerr.KindIO, op, "%s the Arrow stream panicked", what)
+		}
+	}()
+	return f()
+}
+
 func (r *reader) start() error {
 	rr, err := r.src.call()
 	if err != nil {

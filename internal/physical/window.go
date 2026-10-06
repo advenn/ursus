@@ -464,13 +464,7 @@ func newWindowSink(in, out *dtype.Schema, exprs []expr.Node, mem *execopt.Accoun
 			// order key that exists nowhere in the aggregate path. Refusing is the
 			// honest state until it does.
 			if len(win.OrderBy) > 0 {
-				return nil, uerr.New(uerr.KindUnsupported, "over",
-					"an ordering is not yet honoured over an aggregate").
-					Hint("%s is order-independent over a partition, so the ordering "+
-						"would change nothing — except for first, last, arg_min, "+
-						"arg_max and implode, where it would, and is not applied",
-						body.Op).
-					Hint("drop the ordering, or use an ordered window function")
+				return nil, expr.OrderedAggRefusal(body.Op)
 			}
 			cf, err := body.Child.Field(in)
 			if err != nil {

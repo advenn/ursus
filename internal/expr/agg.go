@@ -338,8 +338,8 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 			return AggBinding{Acc: dtype.Int128, Out: dtype.Float64}, nil
 		}
 		if !in.IsNumeric() {
-			return AggBinding{}, uerr.New(uerr.KindType, "",
-				"mean() requires a numeric operand, got %s", in)
+			return AggBinding{}, notTemporalYet(uerr.New(uerr.KindType, "",
+				"mean() requires a numeric operand, got %s", in), in)
 		}
 		// Always a float: the mean of two integers is rarely an integer, and
 		// truncating it silently is the kind of wrong answer nobody notices.
@@ -362,9 +362,13 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		// get their own ops rather than being sugar so that Explain says any() and
 		// the error for a non-Boolean input names the function the user wrote.
 		if !in.IsBool() {
+			method := "Any"
+			if op == AggAllTrue {
+				method = "AllTrue"
+			}
 			return AggBinding{}, uerr.New(uerr.KindType, "",
 				"%s() requires a Boolean operand, got %s", op, in).
-				Hint("compare first, e.g. Col(\"x\").Gt(0).%s()", op)
+				Hint("compare first, e.g. Col(\"x\").Gt(0).%s()", method)
 		}
 		return AggBinding{Acc: dtype.Bool, Out: dtype.Bool}, nil
 
@@ -373,8 +377,8 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		// toFloat64 with the scale applied. Polars returns Float64 for all four;
 		// DuckDB keeps median as a DECIMAL, and a median of an even count is a mean.
 		if !in.IsNumeric() {
-			return AggBinding{}, uerr.New(uerr.KindType, "",
-				"%s() requires a numeric operand, got %s", op, in)
+			return AggBinding{}, notTemporalYet(uerr.New(uerr.KindType, "",
+				"%s() requires a numeric operand, got %s", op, in), in)
 		}
 		// Float64 throughout, including for a Float32 input, unlike sum and mean.
 		// Those preserve Float32 because their result is the same KIND of quantity as
@@ -532,7 +536,12 @@ func IsAggregation(n Node) bool {
 		// one number. Rejecting it here rather than returning a bare true is what
 		// stops it type-checking successfully (Sum→Int64, Mean→Float64) and
 		// failing much later.
-		return !HasAgg(t.Child)
+		//
+		// Unbound: an aggregate under a window is bound by it and gives a value per
+		// row, so `x.Sum().Over(g).Max()` reduces. It was called an aggregate of an
+		// aggregate, and its refusal sent the caller looking for a bare column that
+		// is not there (audit A9). The window inside it is refused by name instead.
+		return !HasUnboundAgg(t.Child)
 	case *Col:
 		return false
 	case *Lit:
@@ -601,4 +610,14 @@ func BareColumns(n Node) []string {
 	}
 	walk(n, false)
 	return out
+}
+
+// notTemporalYet adds, to the refusal of an aggregate a temporal column does not
+// have yet, the cast that reaches it.
+func notTemporalYet(err *uerr.Error, in dtype.DataType) *uerr.Error {
+	if in.IsTemporal() {
+		err.Hint("it is not implemented for a temporal column yet; .Cast(ursus.Int64) " +
+			"gives its ticks")
+	}
+	return err
 }

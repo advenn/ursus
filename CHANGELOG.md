@@ -12,6 +12,20 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **The last misleading refusals of `audit.md`'s list** (115):
+  - A window inside `Agg` gets a hint that works: move the window, not the
+    aggregate around it. `Col("x").Sum().Over(g).Max()` was refused as "not an
+    aggregate".
+  - An ordering over `First().Over(...)` no longer calls `first`
+    order-independent.
+  - `Any`'s hint names `.Any()`.
+  - Temporal `Median`, `Quantile`, `Std`, `Var` and `Mean` are documented as
+    refused, and their refusal names the cast to ticks.
+  - A panic in a `MapName` function, or in the `RecordReader` that `ScanArrow`'s
+    factory returns, is the caller's error, not "a bug in ursus".
+  - So is a dynamic group-by over a row at the last instant a `time.Time` holds.
+  - A spill write that fails says it was spilling, and to which file.
+
 - **Trigonometric and hyperbolic functions:** `Sin`, `Cos`, `Tan`, their inverses
   `ArcSin`, `ArcCos`, `ArcTan`, the hyperbolic six, and `Degrees` and `Radians`.
   They widen to a float as `Sqrt` does (114).

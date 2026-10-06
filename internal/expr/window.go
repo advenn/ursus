@@ -191,12 +191,7 @@ func (w *Window) Field(in *dtype.Schema) (dtype.Field, error) {
 	// physical planner refused it alone, so Explain and CollectSchema accepted a
 	// plan Collect would not run (O11). The physical check stays as a backstop.
 	if agg, isAgg := w.Child.(*Agg); isAgg && len(w.OrderBy) > 0 {
-		return dtype.Field{}, uerr.New(uerr.KindUnsupported, "over",
-			"an ordering is not yet honoured over an aggregate").
-			Hint("%s is order-independent over a partition, so the ordering would change "+
-				"nothing — except for first, last, arg_min, arg_max and implode, where it "+
-				"would, and is not applied", agg.Op).
-			Hint("drop the ordering, or use an ordered window function")
+		return dtype.Field{}, OrderedAggRefusal(agg.Op)
 	}
 
 	// The partition keys become group keys, so they must be hashable — the same
@@ -539,6 +534,24 @@ func HasWindow(n Node) bool {
 		return true
 	})
 	return found
+}
+
+// OrderedAggRefusal refuses an ordering over an aggregate, here and in the physical
+// planner's backstop.
+//
+// The hint depends on the aggregate. It used to call every one of them
+// order-independent "except for first, last, arg_min, arg_max and implode", which
+// said both things of first (audit A12).
+func OrderedAggRefusal(op AggOp) *uerr.Error {
+	err := uerr.New(uerr.KindUnsupported, "over",
+		"an ordering is not yet honoured over an aggregate")
+	if op.IsOrderDependent() {
+		return err.Hint("%s depends on the order; sort the frame by the ordering first, "+
+			"and drop it from the window: a partition's rows are taken in the frame's "+
+			"order", op)
+	}
+	return err.Hint("%s does not depend on the order, so drop the ordering: the answer "+
+		"is the same", op)
 }
 
 // --- generic rebuild ------------------------------------------------------------

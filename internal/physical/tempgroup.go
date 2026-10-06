@@ -383,8 +383,7 @@ func (s *temporalSink) gridWindows(bts []int64) ([]window, error) {
 		}
 		prev := start
 		if start = back.AddTo(start); !start.Before(prev) {
-			return nil, uerr.Internalf(
-				"physical: every=%s does not step backwards from %s", s.every, prev)
+			return nil, s.gridAtTheEdge(prev)
 		}
 	}
 	// And when the LOWER end is open, a row sitting exactly on the first boundary is
@@ -442,7 +441,7 @@ func (s *temporalSink) gridWindows(bts []int64) ([]window, error) {
 
 		next := s.every.AddTo(start)
 		if !next.After(start) {
-			return nil, uerr.Internalf("physical: every=%s does not advance", s.every)
+			return nil, s.gridAtTheEdge(start)
 		}
 		start = next
 	}
@@ -519,6 +518,21 @@ func (s *temporalSink) gridTooLarge(phase string) error {
 			"offset, is what makes it smaller", s.every, s.every).
 		Hint("this is the grid, not the input: it is derived from the index range " +
 			"and the interval, so a small frame can still ask for a large one")
+}
+
+// gridAtTheEdge is the refusal when a step of the grid does not move.
+//
+// The resolver has proven every positive, so every is never the cause, though the
+// message used to name it, as ursus's bug. A time.Time saturates at its first and
+// last instants, and a step from one of them goes nowhere. A row there is the
+// data's doing: an Int64 cast to a Datetime(s) is taken as seconds unchecked, and
+// one near its maximum is at the edge (step 68's record).
+func (s *temporalSink) gridAtTheEdge(at time.Time) error {
+	return uerr.New(uerr.KindValue, s.op(),
+		"the window grid cannot step past %s, the edge of what Go's time.Time holds",
+		at.UTC().Format(time.RFC3339)).
+		Hint("an instant this far out usually comes from casting an integer that is not " +
+			"a tick count of the type")
 }
 
 // rollingWindows gives every row a window ending at its own instant.

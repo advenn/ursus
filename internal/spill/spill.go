@@ -124,7 +124,13 @@ func (w *Writer) Write(b *data.Batch) error {
 		}
 	}
 	w.rows += int64(b.Rows())
-	return w.w.Flush()
+	// Wrapped as Close wraps the same flush: bare, a full disk reached the caller
+	// with no kind and no word of spilling.
+	if err := w.w.Flush(); err != nil {
+		return uerr.Wrap(err, uerr.KindIO, "spill", "writing %s", w.f.Name()).
+			Hint("set the spill directory with WithSpillDir")
+	}
+	return nil
 }
 
 // Close writes the terminator and closes the file.
