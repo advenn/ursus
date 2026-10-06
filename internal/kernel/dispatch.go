@@ -225,28 +225,9 @@ func cmpNum[T data.Primitive](op expr.BinaryOp, l, r *data.Column, n int, out *b
 	if err != nil {
 		return err
 	}
-
-	// Broadcast by materialising the scalar side. Simple and correct; the float64
-	// fast path above avoids it for the shape that matters.
-	lv, rv = broadcastVals(lv, rv, n)
-
-	switch op {
-	case expr.OpEq:
-		eqScalar(out, lv, rv)
-	case expr.OpNe:
-		neScalar(out, lv, rv)
-	case expr.OpLt:
-		ltScalar(out, lv, rv)
-	case expr.OpLe:
-		leScalar(out, lv, rv)
-	case expr.OpGt:
-		gtScalar(out, lv, rv)
-	case expr.OpGe:
-		geScalar(out, lv, rv)
-	default:
-		return uerr.Internalf("kernel: %s is not a comparison", op)
-	}
-	return nil
+	// A scalar side is read where it is rather than copied n times, and the results
+	// go out a word at a time. See cmpWords.
+	return cmpWords(out, op, lv, rv, n)
 }
 
 func broadcastVals[T data.Primitive](lv, rv []T, n int) ([]T, []T) {

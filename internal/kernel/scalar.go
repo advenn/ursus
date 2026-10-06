@@ -187,42 +187,9 @@ func modIntScalar[T Integer](dst []T, ok *bitmap.Builder, a, b []T, in bitmap.Vi
 // Each writes exactly len(a) payload bits. Ordering follows IEEE for floats:
 // NaN compares false against everything, including itself. Sorting and grouping
 // need a different, total order — see order.go — and must never call these.
-
-func eqScalar[T Numeric](out *bitmap.Builder, a, b []T) {
-	for i := range a {
-		out.Append(a[i] == b[i])
-	}
-}
-
-func neScalar[T Numeric](out *bitmap.Builder, a, b []T) {
-	for i := range a {
-		out.Append(a[i] != b[i])
-	}
-}
-
-func ltScalar[T Numeric](out *bitmap.Builder, a, b []T) {
-	for i := range a {
-		out.Append(a[i] < b[i])
-	}
-}
-
-func leScalar[T Numeric](out *bitmap.Builder, a, b []T) {
-	for i := range a {
-		out.Append(a[i] <= b[i])
-	}
-}
-
-func gtScalar[T Numeric](out *bitmap.Builder, a, b []T) {
-	for i := range a {
-		out.Append(a[i] > b[i])
-	}
-}
-
-func geScalar[T Numeric](out *bitmap.Builder, a, b []T) {
-	for i := range a {
-		out.Append(a[i] >= b[i])
-	}
-}
+//
+// These are the Float64 SIMD kernels' scalar fallback. Every other numeric
+// comparison is cmpWords, which packs a word at a time.
 
 func eqScalarConst[T Numeric](out *bitmap.Builder, a []T, s T) {
 	for i := range a {

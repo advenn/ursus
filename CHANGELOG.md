@@ -12,6 +12,8 @@ Step numbers below point at those records.
 
 ## Unreleased
 
+- **Comparisons are about 3.5× faster:** a literal is no longer copied to the
+  column's length, and results are written 64 at a time (107).
 - **`TopK(k)` and `BottomK(k)` aggregates:** a group's k largest or smallest
   values, as a List.
   - Each holds k values a group, so the group-by stays parallel and bounded.
