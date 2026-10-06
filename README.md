@@ -171,7 +171,7 @@ make race       # the whole suite under -race
 make levels     # import-level invariants
 ```
 
-**2967 test cases**, and the matrix is not decoration. Vector width is a *runtime*
+**2969 test cases**, and the matrix is not decoration. Vector width is a *runtime*
 property, so a single-width run proves very little: 512-bit gives 8 float64 lanes, which happens to be exactly one
 bitmap byte — a coincidence that hides an entire class of sub-byte bitmap bug. The 128-bit leg is where those surface.
 

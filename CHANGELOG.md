@@ -10,7 +10,20 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — the v0.3.1 candidate
+## Unreleased
+
+- **A group-by under a limit you set is serial again,** so a group-by that spills
+  gives its rows in the same order on every run, as in v0.3.0.
+  - In v0.3.1 it ran parallel until half of any budget, and where it switched
+    depended on thread scheduling. The contents were always right, but the order
+    of an unordered group-by could change from run to run.
+  - CI caught it: `TestGroupBySpillIsDeterministic` is flaky in the v0.3.1 tag.
+  - Parallel-then-serial now applies only under the default budget, where a switch
+    needs half the machine or the container (92).
+
+---
+
+## v0.3.1 — 2026-10-06
 
 Steps 89–91: what benchmarking v0.3.0 found, fixed.
 
