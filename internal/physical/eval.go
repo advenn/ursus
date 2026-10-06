@@ -6,8 +6,10 @@ import (
 	"context"
 	"math"
 	"regexp"
+	"runtime"
 	"sync"
 	"time"
+	"weak"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
@@ -347,6 +349,17 @@ func buildInSet(c *expr.Call, meet dtype.DataType) (map[string]struct{}, error) 
 // sync.Map rather than a plain map because parallelise hands BatchOp chains to N
 // workers, so several goroutines evaluate the same Call node concurrently.
 // regexp.Regexp is itself documented as safe for concurrent use.
+//
+// # An entry lives as long as its node
+//
+// The key holds the node WEAKLY, and a cleanup on the node deletes the entry once
+// the node is collected. The key used to be the pointer itself, so an entry kept its
+// node alive and nothing ever removed one: a service building queries per request —
+// a filter whose pattern or is_in list comes from the request — grew this map by
+// every Call it ever ran, regexes and probe sets included, for the life of the
+// process (step 94 measured 400 entries left behind by 200 finished queries). A plan
+// keeps its nodes, so within a query, and across Collects of one held LazyFrame,
+// the cache still hits.
 var callCache sync.Map // callKey -> compiledCall
 
 type compiledCall struct {
@@ -450,13 +463,17 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 // The old comment claimed "that type is fixed for the plan's lifetime, so the
 // cached entry stays valid", which is true of one plan and false of a reused
 // expression.
+//
+// The node is held weakly; see callCache. Weak pointers made from one pointer are
+// equal, before and after the node is collected, which is what lets one serve as a
+// key.
 type callKey struct {
-	node *expr.Call
+	node weak.Pointer[expr.Call]
 	recv dtype.DataType
 }
 
 func compileCall(c *expr.Call, recvType dtype.DataType) compiledCall {
-	k := callKey{node: c, recv: recvType}
+	k := callKey{node: weak.Make(c), recv: recvType}
 	if v, ok := callCache.Load(k); ok {
 		return v.(compiledCall)
 	}
@@ -477,7 +494,9 @@ func compileCall(c *expr.Call, recvType dtype.DataType) compiledCall {
 			cc.needle, cc.err = buildListNeedle(c, elem)
 		}
 	}
-	callCache.Store(k, cc)
+	if _, loaded := callCache.LoadOrStore(k, cc); !loaded {
+		runtime.AddCleanup(c, func(k callKey) { callCache.Delete(k) }, k)
+	}
 	return cc
 }
 
