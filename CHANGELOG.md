@@ -108,6 +108,15 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **Parquet, from the same audit** (119):
+  - A struct whose first field is Null reads again, and so does `List(Null)`, which
+    PyArrow infers for a field or list that only ever holds None. Step 108 made both
+    fail, the first as ursus's bug.
+  - When a later file fails to open, the rows before it are delivered first, as the
+    serial reader always did; `Head(n)` that the first file answers succeeds.
+  - An INT96 timestamp on 1677-09-21 reads exactly; it came back in 2262.
+  - An integer column under BYTE_STREAM_SPLIT reads; a FIXED_LEN_BYTE_ARRAY under a
+    delta encoding is refused by name, where it reached a decoder panic.
 - **Joins, from an audit of 0.4's own work** (118):
   - An as-of join whose keys meet at Int128 or a Decimal is refused while planned.
     It planned, then failed at `Collect` as ursus's bug.

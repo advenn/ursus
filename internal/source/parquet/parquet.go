@@ -877,7 +877,7 @@ var allowedEncodings = map[parquet.Encoding]bool{
 	parquet.Encodings.DeltaBinaryPacked:    true,
 	parquet.Encodings.DeltaByteArray:       true,
 	parquet.Encodings.DeltaLengthByteArray: true,
-	parquet.Encodings.ByteStreamSplit:      true, // supported for FLOAT/DOUBLE only
+	parquet.Encodings.ByteStreamSplit:      true, // decodable says on which types
 }
 
 func checkEncodings(rg *metadata.RowGroupMetaData, col int, name string) error {
@@ -899,20 +899,42 @@ func checkEncodings(rg *metadata.RowGroupMetaData, col int, name string) error {
 				Hint("this is checked up front because the decoder panics rather " +
 					"than returning an error")
 		}
-		// BYTE_STREAM_SPLIT is defined for every physical type since Parquet 2.11,
-		// but arrow-go only implements FLOAT and DOUBLE. The others reach the panic.
-		if e == parquet.Encodings.ByteStreamSplit {
-			switch cc.Type() {
-			case parquet.Types.Float, parquet.Types.Double:
-			default:
-				return uerr.New(uerr.KindUnsupported, "scan_parquet",
-					"column %q uses BYTE_STREAM_SPLIT on a %s column, which cannot "+
-						"be decoded", name, cc.Type()).
-					Hint("only FLOAT and DOUBLE are implemented for this encoding")
-			}
+		if !decodable(cc.Type(), e) {
+			return uerr.New(uerr.KindUnsupported, "scan_parquet",
+				"column %q uses the %s encoding on a %s column, which cannot be decoded",
+				name, e, cc.Type()).
+				Hint("this is checked up front because the decoder panics rather " +
+					"than returning an error")
 		}
 	}
 	return nil
+}
+
+// decodable is whether arrow-go v18.7.0 decodes encoding e on physical type t
+// (parquet/internal/encoding/typed_encoder.go). Every other pairing reaches a panic.
+//
+// It used to check one pairing, BYTE_STREAM_SPLIT, and that one wrongly: the
+// integers decode it. FIXED_LEN_BYTE_ARRAY under DELTA_BYTE_ARRAY, which
+// parquet-mr's v2 writer produces, got through to the panic.
+//
+// RLE is allowed on every type because the levels are RLE-encoded, and a chunk's
+// list of encodings does not say which pages used which.
+func decodable(t parquet.Type, e parquet.Encoding) bool {
+	switch e {
+	case parquet.Encodings.Plain, parquet.Encodings.RLE:
+		return true
+	case parquet.Encodings.PlainDict, parquet.Encodings.RLEDict:
+		return t != parquet.Types.Boolean
+	}
+	switch t {
+	case parquet.Types.Int32, parquet.Types.Int64:
+		return e == parquet.Encodings.DeltaBinaryPacked || e == parquet.Encodings.ByteStreamSplit
+	case parquet.Types.Float, parquet.Types.Double, parquet.Types.FixedLenByteArray:
+		return e == parquet.Encodings.ByteStreamSplit
+	case parquet.Types.ByteArray:
+		return e == parquet.Encodings.DeltaLengthByteArray || e == parquet.Encodings.DeltaByteArray
+	}
+	return false
 }
 
 // --- column reader construction --------------------------------------------------
@@ -960,30 +982,106 @@ func int96Nanos(v parquet.Int96) int64 {
 	if day > math.MaxInt64/perDay || day < math.MinInt64/perDay-1 {
 		refuse("is outside Datetime(ns)")
 	}
-	at := day * perDay
-	sum := at + int64(nanos)
-	if sum < at {
+	// Before 1970 the instant is counted down from the END of its day, because the
+	// day's start can be past what an int64 holds: day*perDay for 1677-09-21 is
+	// below MinInt64 and wrapped to a value in 2262.
+	if day >= 0 {
+		at := day * perDay
+		sum := at + int64(nanos)
+		if sum < at {
+			refuse("is outside Datetime(ns)")
+		}
+		return sum
+	}
+	end := (day + 1) * perDay
+	sum := end - (perDay - int64(nanos))
+	if sum > end {
 		refuse("is outside Datetime(ns)")
 	}
 	return sum
 }
 
-// skipper is every typed column chunk reader: each can step over rows unread.
-type skipper interface {
-	Skip(nvalues int64) (int64, error)
+// levelsOf reads only the levels of a column whose values are not wanted, through
+// whichever typed reader it has: a NULL column, which PyArrow and ursus write on
+// INT32, holds levels and no values at all.
+func levelsOf(cr file.ColumnChunkReader) (func(defs, reps []int16) (int, error), bool) {
+	switch t := cr.(type) {
+	case *file.Int32ColumnChunkReader:
+		return readLevels[int32](t), true
+	case *file.Int64ColumnChunkReader:
+		return readLevels[int64](t), true
+	case *file.Int96ColumnChunkReader:
+		return readLevels[parquet.Int96](t), true
+	case *file.Float32ColumnChunkReader:
+		return readLevels[float32](t), true
+	case *file.Float64ColumnChunkReader:
+		return readLevels[float64](t), true
+	case *file.BooleanColumnChunkReader:
+		return readLevels[bool](t), true
+	case *file.ByteArrayColumnChunkReader:
+		return readLevels[parquet.ByteArray](t), true
+	case *file.FixedLenByteArrayColumnChunkReader:
+		return readLevels[parquet.FixedLenByteArray](t), true
+	}
+	return nil, false
+}
+
+func readLevels[P any](cr batchReader[P]) func(defs, reps []int16) (int, error) {
+	var vals []P
+	return func(defs, reps []int16) (int, error) {
+		if cap(vals) < len(defs) {
+			vals = make([]P, len(defs))
+		}
+		total, _, err := cr.ReadBatch(int64(len(defs)), vals[:len(defs)], defs, reps)
+		if err != nil {
+			return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a column chunk")
+		}
+		return int(total), nil
+	}
 }
 
 // nullCol reads a column of Parquet's NULL logical type, which holds rows and no
-// values: it steps over them and counts.
+// values, by its definition levels.
+//
+// It used to Skip the rows, which had two faults. Skip reports the count it was
+// asked for, not the count there was, so a truncated chunk read as made-up rows.
+// And a skipped row says nothing about whether a struct enclosing the column was
+// present, so a struct whose first field was Null could not be read at all.
 type nullCol struct {
-	skip func(int64) (int64, error)
-	rows int
+	levels  func(defs, reps []int16) (int, error)
+	closeCR func() error
+	defs    []int16
+	rows    int
+
+	parentDef int16
+	parent    *bitmap.Builder
+}
+
+func (c *nullCol) trackParent(level int16) {
+	c.parentDef, c.parent = level, bitmap.NewBuilder(0)
+}
+
+func (c *nullCol) parentValidity() bitmap.View {
+	v := c.parent.Finish()
+	c.parent = bitmap.NewBuilder(0)
+	return v
 }
 
 func (c *nullCol) read(n int) (int, error) {
-	got, err := c.skip(int64(n))
-	c.rows += int(got)
-	return int(got), err
+	if cap(c.defs) < n {
+		c.defs = make([]int16, n)
+	}
+	got, err := c.levels(c.defs[:n], nil)
+	if err != nil {
+		return 0, err
+	}
+	if c.parent != nil {
+		for _, d := range c.defs[:got] {
+			c.parent.Append(d >= c.parentDef)
+		}
+	}
+	c.rows += got
+	return got, nil
 }
 
 func (c *nullCol) finish(name string) *data.Column {
@@ -992,7 +1090,7 @@ func (c *nullCol) finish(name string) *data.Column {
 	return col
 }
 
-func (c *nullCol) close() error { return nil }
+func (c *nullCol) close() error { return c.closeCR() }
 
 func newColReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataType) (colReader, error) {
 	maxDef := desc.MaxDefinitionLevel()
@@ -1005,11 +1103,11 @@ func newColReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataT
 		return newListReader(cr, desc, dt)
 	}
 	if dt.ID() == dtype.TypeNull {
-		s, ok := cr.(skipper)
+		levels, ok := levelsOf(cr)
 		if !ok {
-			return nil, uerr.Internalf("parquet: column %q of type Null has no Skip", name)
+			return nil, uerr.Internalf("parquet: column %q of type Null has no level reader", name)
 		}
-		return &nullCol{skip: s.Skip}, nil
+		return &nullCol{levels: levels, closeCR: cr.Close}, nil
 	}
 
 	switch t := cr.(type) {
@@ -1177,6 +1275,14 @@ func newListElems(cr file.ColumnChunkReader, desc *schema.Column,
 	elem dtype.DataType) (listElems, error) {
 
 	fixed := func() *bitmap.Builder { return bitmap.NewBuilder(0) }
+
+	// List(Null), which PyArrow infers for a list that only ever holds None and
+	// ursus writes since step 108: only levels, whatever the physical type.
+	if elem.ID() == dtype.TypeNull {
+		if levels, ok := levelsOf(cr); ok {
+			return &nullElems{levels: levels, closeCR: cr.Close}, nil
+		}
+	}
 
 	switch t := cr.(type) {
 	case *file.ByteArrayColumnChunkReader:

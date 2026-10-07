@@ -57,8 +57,9 @@ type parallelReader struct {
 	err       error      // the first failure, returned from every Next after it
 	fileIdx   int        // the next file to open
 	cur       *sharedFile
-	rgIndex   int  // the last row group of cur considered
-	issuedAll bool // every row group of every file has been considered
+	rgIndex   int   // the last row group of cur considered
+	issuedAll bool  // every row group of every file has been considered
+	issueErr  error // a failure issuing, delivered after the row groups before it
 	inflight  []*rgTask
 
 	stop     chan struct{} // closed by Close: workers stop sending and return
@@ -262,7 +263,11 @@ func (r *parallelReader) Next(ctx context.Context) (_ *data.Batch, err error) {
 		case res, ok := <-head.out:
 			r.mu.Lock()
 			if !ok {
-				r.inflight = r.inflight[1:]
+				// Only the task this Next waited on: Close empties the queue, and a
+				// second Next waiting on the same task has already taken it.
+				if len(r.inflight) > 0 && r.inflight[0] == head {
+					r.inflight = r.inflight[1:]
+				}
 				r.mu.Unlock()
 				if head, err = r.head(ctx); head == nil || err != nil {
 					return nil, err
@@ -308,18 +313,41 @@ func (r *parallelReader) head(ctx context.Context) (_ *rgTask, err error) {
 		return nil, errClosed
 	default:
 	}
-	for !r.issuedAll && len(r.inflight) < r.threads {
-		ok, err := r.issue(ctx)
+	for !r.issuedAll && r.issueErr == nil && len(r.inflight) < r.threads {
+		ok, err := r.issueRecovered(ctx)
 		if err != nil {
-			r.err = err
-			return nil, err
+			// Held until the row groups already in flight are delivered: they come
+			// before it in the input. A later file that failed to open, or a later
+			// row group's statistics that failed to read, used to cost the caller
+			// every row before it, which the serial reader never did.
+			r.issueErr = err
+			break
 		}
 		r.issuedAll = !ok
 	}
 	if len(r.inflight) == 0 {
+		if r.issueErr != nil {
+			r.err = r.issueErr
+			return nil, r.err
+		}
 		return nil, io.EOF
 	}
 	return r.inflight[0], nil
+}
+
+// issueRecovered is issue, with a panic reading a later footer or its metadata
+// turned into the file's error, which is then held in input order like any other.
+func (r *parallelReader) issueRecovered(ctx context.Context) (ok bool, err error) {
+	defer func() {
+		if v := recover(); v != nil {
+			name := r.src.desc
+			if r.cur != nil {
+				name = r.cur.name
+			}
+			ok, err = false, corrupt(v, name)
+		}
+	}()
+	return r.issue(ctx)
 }
 
 // Close stops every worker, waits for them, and closes the files.

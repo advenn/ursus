@@ -674,6 +674,30 @@ func (e *fixedElems[P, T]) finish(name string, elem dtype.DataType) *data.Column
 	return col
 }
 
+// nullElems accumulates the elements of a List(Null): every one is null, so only
+// their count is kept, read from the levels.
+type nullElems struct {
+	levels  func(defs, reps []int16) (int, error)
+	closeCR func() error
+	n       int
+}
+
+func (e *nullElems) readLevels(defs, reps []int16) (int, error) { return e.levels(defs, reps) }
+
+// appendVal is a present element, which a NULL column cannot hold. A file that
+// claims one has no value to give, so it is read as the null it must be.
+func (e *nullElems) appendVal()   { e.n++ }
+func (e *nullElems) appendNull()  { e.n++ }
+func (e *nullElems) count() int   { return e.n }
+func (e *nullElems) resetCursor() {}
+func (e *nullElems) close() error { return e.closeCR() }
+
+func (e *nullElems) finish(name string, elem dtype.DataType) *data.Column {
+	col := data.NewNull(name, elem, e.n)
+	e.n = 0
+	return col
+}
+
 // boolElems accumulates Bool list elements, into a bitmap rather than a buffer of
 // values, which is the one way a Bool column differs from a fixed-width one.
 type boolElems struct {
