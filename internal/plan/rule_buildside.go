@@ -37,7 +37,16 @@ import (
 //   - a residual, which belongs to a semi or anti join;
 //   - a Validate, which names one side's keys as the unique ones;
 //   - any input whose size is unknown: a CSV source, or a node EstimateRows has no
-//     rule for.
+//     rule for;
+//   - a join whose order something above depends on: an input of an as-of join or
+//     of MergeSorted, reached through nodes that keep their input's order. Those
+//     refuse an unsorted input, so a swap turned a query that ran into one that
+//     failed, depending on the tables' sizes;
+//   - a join whose left input the caller sorted, reached the same way:
+//     `Sort(ts).Join(users)` asks for rows by ts, and `.Head(n)` after it for the
+//     first n of them;
+//   - a float key. A merged key is taken from the side the table is built from,
+//     and the hash equates -0.0 with +0.0, so a swap could change a key's sign.
 //
 // # The estimate
 //
@@ -59,23 +68,90 @@ const buildSideRatio = 2
 
 func (buildSide) Apply(n Node, _ Flags) (Node, bool, error) {
 	changed := false
-	out, err := TransformUp(n, func(x Node) (Node, error) {
+	// Bottom-up, as TransformUp is, but each node is told whether its parent
+	// depends on its row order, which TransformUp cannot say.
+	var walk func(x Node, ordered bool) Node
+	walk = func(x Node, ordered bool) Node {
+		if kids := x.Children(); len(kids) > 0 {
+			next := make([]Node, len(kids))
+			moved := false
+			for i, c := range kids {
+				next[i] = walk(c, keepsOrderOf(x, i, ordered))
+				moved = moved || next[i] != c
+			}
+			if moved {
+				x = x.WithChildren(next)
+			}
+		}
 		j, ok := x.(*Join)
-		if !ok || !swappable(j) {
-			return x, nil
+		if !ok || ordered || !swappable(j) || sortedBelow(j.Left) {
+			return x
 		}
 		l, lok := EstimateRows(j.Left)
 		r, rok := EstimateRows(j.Right)
 		if !lok || !rok || r <= buildSideRatio*l {
-			return x, nil
+			return x
 		}
 		if p := swapJoin(j); p != nil {
 			changed = true
-			return p, nil
+			return p
 		}
-		return x, nil
-	})
-	return out, changed, err
+		return x
+	}
+	return walk(n, false), changed, nil
+}
+
+// keepsOrderOf reports whether child i of x must keep its row order.
+//
+// An as-of join and MergeSorted require sorted inputs. A node that keeps its
+// input's order passes its parent's need down; a join passes it to its left
+// input, whose order its output follows. Everything else — a sort, a group-by, a
+// union — sets its own order, so its inputs owe it none.
+func keepsOrderOf(x Node, i int, ordered bool) bool {
+	switch x.(type) {
+	case *AsOfJoin, *MergeSorted:
+		return true
+	case *Join:
+		return ordered && i == 0
+	case *Filter, *Project, *WithColumns, *Window, *RowIndex, *Limit, *Slice, *Tail,
+		*Reverse, *Explode, *Unnest:
+		return ordered
+	}
+	return false
+}
+
+// sortedBelow reports whether n's rows come in an order the caller chose: a Sort,
+// reached through nodes that keep their input's order.
+func sortedBelow(n Node) bool {
+	switch t := n.(type) {
+	case *Sort:
+		return true
+	case *Filter:
+		return sortedBelow(t.Input)
+	case *Project:
+		return sortedBelow(t.Input)
+	case *WithColumns:
+		return sortedBelow(t.Input)
+	case *Window:
+		return sortedBelow(t.Input)
+	case *RowIndex:
+		return sortedBelow(t.Input)
+	case *Limit:
+		return sortedBelow(t.Input)
+	case *Slice:
+		return sortedBelow(t.Input)
+	case *Tail:
+		return sortedBelow(t.Input)
+	case *Reverse:
+		return sortedBelow(t.Input)
+	case *Explode:
+		return sortedBelow(t.Input)
+	case *Unnest:
+		return sortedBelow(t.Input)
+	case *Join:
+		return sortedBelow(t.Left)
+	}
+	return false
 }
 
 // swappable reports whether j's inputs can be exchanged without changing its
@@ -90,6 +166,11 @@ func swapJoin(j *Join) Node {
 	orig, err := j.Layout()
 	if err != nil {
 		return nil
+	}
+	for _, t := range orig.KeyTypes {
+		if t.IsFloat() {
+			return nil
+		}
 	}
 	s := &Join{
 		Left: j.Right, Right: j.Left,

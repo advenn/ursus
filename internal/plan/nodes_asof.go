@@ -240,11 +240,28 @@ func resolveAsOfJoin(a *AsOfJoin) (Node, error) {
 				"Datetime key")
 	}
 
-	// Computed and thrown away, exactly as resolveJoin does: it is where the key
-	// types are promoted and the output collisions are checked, and the message is
-	// far more useful here than from inside the physical planner.
-	if _, err := c.Layout(); err != nil {
+	// Computed exactly as resolveJoin does: it is where the key types are promoted
+	// and the output collisions are checked, and the message is far more useful
+	// here than from inside the physical planner.
+	lay, err := c.Layout()
+	if err != nil {
 		return nil, err
+	}
+	// The search runs on the type the two keys MEET at, which the left key's own
+	// check above does not see: a Uint64 key meeting an Int64 one is searched as an
+	// Int128, and an Int64 meeting a Decimal as a Decimal. Each planned, then failed
+	// at Collect as ursus's bug.
+	if kt := lay.KeyTypes[0]; !sortedKeyType(kt) || kt.ID() == dtype.TypeEnum {
+		rf, err := expr.Resolve(c.RightOn, rs)
+		if err != nil {
+			return nil, uerr.Annotate(err, "join_asof", "AsOfJoin")
+		}
+		return nil, uerr.New(uerr.KindType, "join_asof",
+			"cannot run an as-of join on a %s key and a %s key, which meet at %s",
+			lf.Type, rf.Type, kt).
+			Hint("the as-of key is searched by its order; both keys must meet at an " +
+				"integer of at most 64 bits, a float or a temporal type").
+			Hint("cast one key to the other's type first")
 	}
 	return &c, nil
 }

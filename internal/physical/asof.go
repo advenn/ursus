@@ -406,9 +406,8 @@ func (s *asOfBuildSink) nearest(bucket []int32, k int64) (int32, error) {
 			// are measured on the floats themselves.
 			closerBack := absDiffU64(k, keys[bucket[back]]) <= absDiffU64(keys[bucket[fwd]], k)
 			if s.keyType.IsFloat() {
-				kf := floatOfKey(k)
-				closerBack = math.Abs(kf-floatOfKey(keys[bucket[back]])) <=
-					math.Abs(floatOfKey(keys[bucket[fwd]])-kf)
+				closerBack = floatDistance(k, keys[bucket[back]]) <=
+					floatDistance(keys[bucket[fwd]], k)
 			}
 			if closerBack {
 				pick = back
@@ -442,6 +441,24 @@ func (s *asOfBuildSink) nearest(bucket []int32, k int64) (int32, error) {
 // MinInt64, where negating leaves the value negative and every comparison against a
 // bound then succeeds. Nothing here can overflow, so there is no overflow case to
 // get right.
+// floatDistance is how far apart two float order keys are.
+//
+// Zero when they are the same key, so an exact match on an infinity is a tie, and
+// goes backward as on every other key type: Inf − Inf is NaN, and NaN <= NaN is
+// false, so it went forward. +Inf when either is NaN, which is no distance from
+// anything: a NaN sorts last, so it is the forward candidate of every larger key,
+// and `x <= NaN` being false made it win every time.
+func floatDistance(a, b int64) float64 {
+	if a == b {
+		return 0
+	}
+	x, y := floatOfKey(a), floatOfKey(b)
+	if math.IsNaN(x) || math.IsNaN(y) {
+		return math.Inf(1)
+	}
+	return math.Abs(x - y)
+}
+
 func absDiffU64(a, b int64) uint64 {
 	if a >= b {
 		return uint64(a) - uint64(b)

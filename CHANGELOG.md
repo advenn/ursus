@@ -108,6 +108,16 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **Joins, from an audit of 0.4's own work** (118):
+  - An as-of join whose keys meet at Int128 or a Decimal is refused while planned.
+    It planned, then failed at `Collect` as ursus's bug.
+  - A nearest as-of join on a float key no longer picks a NaN, and breaks a tie on
+    an infinity backward, as on every other key.
+  - An inner join keeps its left input's order when the caller sorted it, or when an
+    as-of join or `MergeSorted` above needs it sorted. The build-side swap of step
+    104 had made such a query fail, or `.Head(n)` return other rows, depending on
+    the tables' sizes.
+  - A join on a float key is not swapped, so a merged -0.0 key stays -0.0.
 - **The last misleading refusals of `audit.md`'s list** (115):
   - A window inside `Agg` gets a hint that works: move the window, not the
     aggregate around it. `Col("x").Sum().Over(g).Max()` was refused as "not an
