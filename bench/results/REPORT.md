@@ -1,6 +1,6 @@
 # ursus benchmark results
 
-Produced from `ea43952` — docs: say what was re-validated for 0.3, and that the timings were not — on 2026-10-06.
+Produced from `645efda` — docs: the v0.4.0 release candidate — on 2026-10-08.
 
 Median wall-clock over the timed iterations, in milliseconds; lower is better.
 IO is included in the measurement.
@@ -21,38 +21,36 @@ reading a speedup.
 
 | query | gota | qframe | ursus (Go) | polars | pandas | duckdb | datafusion | chdb | duckdb-go | what it exercises |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|
-| gb1 | 26,501 | 4,810 | 2,349 | 409 | 2,879 | 827 | 542 | 1,194 | 902 | sum v1 by id1 (100 string groups) |
-| gb2 | OOM | 5,684 | 2,216 | 828 | 3,863 | 977 | 748 | 1,398 | 1,044 | sum v1 by id1, id2 (10,000 string groups) |
-| gb3 | OOM | 6,252 | 2,912 | 952 | 5,280 | 1,277 | 1,423 | 1,435 | 1,402 | sum v1, mean v3 by id3 (N/100 string groups) |
-| gb4 | 29,586 | 5,165 | 3,315 | 478 | 2,834 | 998 | 723 | 1,327 | 951 | mean v1, v2, v3 by id4 (100 integer groups) |
-| gb5 | 31,792 | 5,937 | 3,334 | 752 | 2,891 | 1,471 | 1,366 | TIMEOUT | 1,337 | sum v1, v2, v3 by id6 (N/100 integer groups) |
-| gb6 | 31,836 | n/a | 3,583 | 794 | 3,181 | 1,207 | 1,047 | ERR | 1,252 | median v3, sd v3 by id4, id5 |
-| gb7 | n/a | n/a | 2,584 | 990 | 5,168 | 1,237 | 932 | 864 | 1,226 | max v1 - min v2 by id3 (range over small groups) |
-| gb8 | n/a | n/a | 6,102 | 1,095 | 3,996 | 1,466 | 1,417 | 1,580 | 1,335 | largest two v3 by id6 (top-n within group) |
-| gb9 | n/a | n/a | 2,978 | 977 | 3,700 | 1,178 | 839 | 1,234 | 1,098 | regression: sum(v1*v2)/... by id2, id4 |
-| gb10 | n/a | n/a | OOM | 3,625 | 16,683 | 3,342 | 2,508 | 5,573 | 2,430 | sum v3, count by id1..id6 (six-key grouping) |
-| j1 | n/a | n/a | 4,121 | 1,106 | 8,324 | 2,134 | 1,598 | 2,714 | 1,677 | inner join large to small on integer |
-| j2 | n/a | n/a | 4,396 | 1,397 | 8,818 | 2,417 | 2,493 | 3,435 | 1,893 | inner join large to medium on integer |
-| j3 | n/a | n/a | 4,663 | 1,031 | 8,377 | 2,823 | 2,687 | 3,521 | 2,058 | left join large to medium on integer |
-| j4 | n/a | n/a | 4,328 | 1,421 | 9,684 | 2,589 | 2,241 | 3,420 | 1,871 | join large to medium on varchar |
-| j5 | n/a | n/a | 11,729 | 3,209 | 18,910 | 4,987 | 3,195 | 10,781 | 3,687 | join large to large on integer |
-| **geomean** | **29,847** | **5,545** | **3,778** | **1,065** | **5,703** | **1,683** | **1,381** | **2,242** | **1,494** | |
-| **vs polars** | 28.03x | 5.21x | 3.55x | 1.00x | 5.36x | 1.58x | 1.30x | 2.11x | 1.40x | |
-| **queries passed** | 4/15 | 5/15 | 14/15 | 15/15 | 15/15 | 15/15 | 15/15 | 13/15 | 15/15 | |
+| gb1 | 24,150 | 4,539 | 2,072 | 393 | 2,655 | 785 | 437 | 932 | 810 | sum v1 by id1 (100 string groups) |
+| gb2 | OOM | 5,126 | 2,233 | 780 | 3,735 | 930 | 524 | 1,080 | 929 | sum v1 by id1, id2 (10,000 string groups) |
+| gb3 | OOM | 6,145 | 2,974 | 932 | 4,996 | 1,210 | 798 | 1,172 | 1,188 | sum v1, mean v3 by id3 (N/100 string groups) |
+| gb4 | 27,020 | 4,733 | 3,113 | 450 | 2,683 | 856 | 556 | 1,095 | 897 | mean v1, v2, v3 by id4 (100 integer groups) |
+| gb5 | 28,725 | 5,683 | 2,920 | 750 | 2,748 | 1,280 | 738 | 1,235 | 1,248 | sum v1, v2, v3 by id6 (N/100 integer groups) |
+| gb6 | 29,342 | n/a | 2,797 | 732 | 2,753 | 1,120 | 768 | ERR | 1,132 | median v3, sd v3 by id4, id5 |
+| gb7 | n/a | n/a | 2,424 | 899 | 4,950 | 1,110 | 715 | 1,099 | 1,143 | max v1 - min v2 by id3 (range over small groups) |
+| gb8 | n/a | n/a | 2,651 | 1,029 | 3,906 | 1,249 | 1,191 | 2,276 | 1,243 | largest two v3 by id6 (top-n within group) |
+| gb9 | n/a | n/a | 2,663 | 984 | 3,673 | 982 | 641 | 1,136 | 1,017 | regression: sum(v1*v2)/... by id2, id4 |
+| gb10 | n/a | n/a | 8,409 | 3,323 | 16,557 | 2,669 | 1,623 | 6,207 | 2,231 | sum v3, count by id1..id6 (six-key grouping) |
+| j1 | n/a | n/a | 3,404 | 1,029 | 7,686 | 1,927 | 1,220 | 2,476 | 1,480 | inner join large to small on integer |
+| j2 | n/a | n/a | 3,543 | 1,130 | 8,237 | 2,042 | 1,789 | 3,139 | 1,746 | inner join large to medium on integer |
+| j3 | n/a | n/a | 3,667 | 965 | 7,578 | 2,263 | 1,687 | 3,497 | 1,784 | left join large to medium on integer |
+| j4 | n/a | n/a | 3,597 | 1,142 | 9,101 | 2,182 | 1,849 | 3,221 | 1,694 | join large to medium on varchar |
+| j5 | n/a | n/a | 10,473 | 3,077 | 18,165 | 4,078 | 2,646 | 9,027 | 3,389 | join large to large on integer |
+| **geomean** | **27,232** | **5,212** | **3,375** | **989** | **5,389** | **1,466** | **994** | **2,044** | **1,356** | |
+| **vs polars** | 27.54x | 5.27x | 3.41x | 1.00x | 5.45x | 1.48x | 1.01x | 2.07x | 1.37x | |
+| **queries passed** | 4/15 | 5/15 | 15/15 | 15/15 | 15/15 | 15/15 | 15/15 | 14/15 | 15/15 | |
 
 Peak resident memory across the suite (GB):
 
 | gota | qframe | ursus (Go) | polars | pandas | duckdb | datafusion | chdb | duckdb-go |
 |--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| 8.57 | 3.88 | 7.83 | 5.18 | 5.03 | 4.07 | 3.65 | 5.54 | 4.41 |
+| 8.50 | 3.65 | 8.19 | 5.21 | 5.03 | 4.09 | 3.77 | 5.46 | 4.37 |
 
 <details><summary>failures</summary>
 
-- `chdb` **gb5** — timeout: exceeded 600s
 - `chdb` **gb6** — error: RuntimeError: Code: 46. DB::Exception: Function with name `quantile_cont` does not exist. In scope SELECT id4, id5, quantile_cont(v3, 0.5) AS median_v3, stddev(v3) AS sd_v3 FROM g1 GROUP BY id4, id5 SETTINGS joined_subquery_requires_alias = 0, enable_analyzer = 1. Maybe you meant: ['quantileExact','
 - `gota` **gb2** — oom: no output, exit -9
 - `gota` **gb3** — oom: no output, exit -9
-- `ursus` **gb10** — oom: no output, exit -9
 
 </details>
 
@@ -60,37 +58,37 @@ Peak resident memory across the suite (GB):
 
 | query | polars | ursus (Go) | duckdb | datafusion | duckdb-go | pandas | chdb | gota | qframe | what it exercises |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|
-| gb1 | 98 | 716 | 58 | 33 | 35 | 641 | 271 | n/a | n/a | sum v1 by id1 (100 string groups) |
-| gb2 | 561 | 885 | 192 | 105 | 137 | 1,009 | 407 | n/a | n/a | sum v1 by id1, id2 (10,000 string groups) |
-| gb3 | 789 | 1,895 | 719 | 635 | 524 | 1,875 | TIMEOUT | n/a | n/a | sum v1, mean v3 by id3 (N/100 string groups) |
-| gb4 | 261 | 1,017 | 155 | 156 | 94 | 523 | 125 | n/a | n/a | mean v1, v2, v3 by id4 (100 integer groups) |
-| gb5 | 713 | 1,243 | 692 | 512 | 496 | 860 | TIMEOUT | n/a | n/a | sum v1, v2, v3 by id6 (N/100 integer groups) |
-| gb6 | 478 | 1,702 | 590 | 589 | 436 | 1,349 | ERR | n/a | n/a | median v3, sd v3 by id4, id5 |
-| gb7 | 743 | 1,320 | 653 | 297 | 409 | 1,365 | TIMEOUT | n/a | n/a | max v1 - min v2 by id3 (range over small groups) |
-| gb8 | 901 | 4,805 | 992 | 1,005 | 685 | 4,101 | 1,030 | n/a | n/a | largest two v3 by id6 (top-n within group) |
-| gb9 | 678 | 1,131 | 464 | 187 | 224 | 1,450 | 321 | n/a | n/a | regression: sum(v1*v2)/... by id2, id4 |
-| gb10 | 3,480 | 9,274 | 8,509 | 1,551 | 1,270 | 18,500 | 3,531 | n/a | n/a | sum v3, count by id1..id6 (six-key grouping) |
-| j1 | 1,041 | 3,928 | 3,737 | 527 | 757 | 3,137 | 1,955 | n/a | n/a | inner join large to small on integer |
-| j2 | 906 | 3,900 | 1,894 | 784 | 934 | 3,509 | 2,605 | n/a | n/a | inner join large to medium on integer |
-| j3 | 734 | 4,084 | 2,622 | 647 | 1,057 | 5,885 | 2,453 | n/a | n/a | left join large to medium on integer |
-| j4 | 759 | 3,721 | 1,838 | 660 | 908 | 5,106 | 2,085 | n/a | n/a | join large to medium on varchar |
-| j5 | 2,833 | 14,854 | 3,934 | 2,485 | 1,919 | 7,701 | 8,468 | n/a | n/a | join large to large on integer |
-| **geomean** | **731** | **2,426** | **890** | **436** | **444** | **2,308** | **1,122** | — | — | |
-| **vs polars** | 1.00x | 3.32x | 1.22x | 0.60x | 0.61x | 3.16x | 1.54x | — | — | |
+| gb1 | 93 | 494 | 39 | 34 | 33 | 347 | 121 | n/a | n/a | sum v1 by id1 (100 string groups) |
+| gb2 | 467 | 811 | 131 | 94 | 122 | 767 | 382 | n/a | n/a | sum v1 by id1, id2 (10,000 string groups) |
+| gb3 | 707 | 1,356 | 616 | 519 | 667 | 1,044 | 528 | n/a | n/a | sum v1, mean v3 by id3 (N/100 string groups) |
+| gb4 | 105 | 585 | 106 | 107 | 88 | 349 | 161 | n/a | n/a | mean v1, v2, v3 by id4 (100 integer groups) |
+| gb5 | 341 | 1,247 | 608 | 461 | 479 | 455 | TIMEOUT | n/a | n/a | sum v1, v2, v3 by id6 (N/100 integer groups) |
+| gb6 | 449 | 821 | 468 | 513 | 406 | 864 | ERR | n/a | n/a | median v3, sd v3 by id4, id5 |
+| gb7 | 767 | 1,156 | 445 | 285 | 388 | 864 | TIMEOUT | n/a | n/a | max v1 - min v2 by id3 (range over small groups) |
+| gb8 | 776 | 1,122 | 695 | 873 | 514 | 2,055 | 954 | n/a | n/a | largest two v3 by id6 (top-n within group) |
+| gb9 | 547 | 945 | 205 | 175 | 200 | 824 | TIMEOUT | n/a | n/a | regression: sum(v1*v2)/... by id2, id4 |
+| gb10 | 2,839 | 6,855 | 1,785 | 1,371 | 1,254 | 10,400 | 3,105 | n/a | n/a | sum v3, count by id1..id6 (six-key grouping) |
+| j1 | 521 | 1,960 | 994 | 566 | 715 | 1,737 | 1,655 | n/a | n/a | inner join large to small on integer |
+| j2 | 569 | 2,087 | 1,246 | 620 | 846 | 2,042 | 2,289 | n/a | n/a | inner join large to medium on integer |
+| j3 | 385 | 2,063 | 1,637 | 672 | 976 | 2,027 | 2,375 | n/a | n/a | left join large to medium on integer |
+| j4 | 676 | 2,140 | 1,208 | 585 | 915 | 3,258 | 1,963 | n/a | n/a | join large to medium on varchar |
+| j5 | 2,129 | 6,432 | 2,398 | 1,987 | 1,719 | 5,584 | 8,078 | n/a | n/a | join large to large on integer |
+| **geomean** | **531** | **1,468** | **525** | **389** | **419** | **1,335** | **1,047** | — | — | |
+| **vs polars** | 1.00x | 2.77x | 0.99x | 0.73x | 0.79x | 2.51x | 1.97x | — | — | |
 | **queries passed** | 15/15 | 15/15 | 15/15 | 15/15 | 15/15 | 15/15 | 11/15 | 0/15 | 0/15 | |
 
 Peak resident memory across the suite (GB):
 
 | polars | ursus (Go) | duckdb | datafusion | duckdb-go | pandas | chdb | gota | qframe |
 |--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| 4.77 | 7.61 | 3.46 | 4.37 | 3.73 | 4.82 | 5.20 | — | — |
+| 4.66 | 6.17 | 3.46 | 4.43 | 3.75 | 5.59 | 5.43 | — | — |
 
 <details><summary>failures</summary>
 
-- `chdb` **gb3** — timeout: exceeded 600s
 - `chdb` **gb5** — timeout: exceeded 600s
 - `chdb` **gb6** — error: RuntimeError: Code: 46. DB::Exception: Function with name `quantile_cont` does not exist. In scope SELECT id4, id5, quantile_cont(v3, 0.5) AS median_v3, stddev(v3) AS sd_v3 FROM g1 GROUP BY id4, id5 SETTINGS joined_subquery_requires_alias = 0, enable_analyzer = 1. Maybe you meant: ['quantileExact','
 - `chdb` **gb7** — timeout: exceeded 600s
+- `chdb` **gb9** — timeout: exceeded 600s
 
 </details>
 
@@ -98,71 +96,71 @@ Peak resident memory across the suite (GB):
 
 | query | duckdb | polars | pandas | ursus (Go) | duckdb-go | arrow-go | datafusion | chdb | chdb-go | what it exercises |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|
-| q1 | 30 | 31 | 170 | 124 | 48 | n/a | 25 | 94 | n/a | Pricing summary: filter + 2-key groupby with 8 aggregates + sort |
-| q2 | 29 | 5 | 29 | 34 | 37 | n/a | 28 | 88 | · | Minimum cost supplier: correlated min() rewritten as groupby + join |
-| q3 | 34 | 8 | 96 | 70 | 34 | n/a | 29 | 79 | · | Shipping priority: 3-way join, filter, groupby, top-10 |
-| q4 | 30 | 13 | 51 | 61 | 26 | n/a | 24 | 141 | · | Order priority checking: EXISTS -> semi join |
-| q5 | 47 | 11 | 114 | 143 | 32 | n/a | 29 | 96 | · | Local supplier volume: 6-way join + groupby |
-| q6 | 24 | 5 | 37 | 60 | 18 | 41 | 21 | 55 | · | Forecasting revenue change: single-table filter + sum (scan-bound) |
-| q7 | 36 | 32 | 280 | 270 | 33 | n/a | 91 | 109 | · | Volume shipping: 5-way join, date extraction, 3-key groupby |
-| q8 | 35 | 11 | 154 | 160 | 43 | n/a | 68 | 127 | · | National market share: 7-way join, conditional aggregate |
-| q9 | 47 | 18 | 114 | 194 | 44 | n/a | 80 | 133 | · | Product type profit measure: 6-way join, substring match, groupby |
-| q10 | 44 | 13 | 105 | 124 | 48 | n/a | 43 | 91 | · | Returned item reporting: 4-way join, groupby, top-20 |
-| q11 | 23 | 5 | 23 | 25 | 32 | n/a | 21 | 79 | · | Important stock identification: scalar-subquery threshold via two collects |
-| q12 | 27 | 11 | 157 | 86 | 23 | n/a | 26 | 64 | · | Shipping modes and order priority: join + conditional aggregates |
-| q13 | 49 | 21 | 112 | 77 | 38 | n/a | 33 | 73 | · | Customer distribution: left join + count + groupby of a groupby |
-| q14 | 24 | 5 | 36 | 58 | 23 | n/a | 19 | 65 | · | Promotion effect: join + conditional sum ratio |
-| q15 | 25 | 6 | 45 | 107 | 21 | n/a | 35 | ~~109~~ | · | Top supplier: aggregate view + max threshold + join |
-| q16 | 26 | 7 | 33 | 17 | 22 | n/a | 24 | 66 | · | Parts/supplier relationship: anti join + n_unique groupby |
-| q17 | 30 | 9 | 52 | 86 | 26 | n/a | 31 | 77 | · | Small-quantity-order revenue: correlated avg -> groupby + join + filter |
-| q18 | 34 | 19 | 91 | 127 | 35 | n/a | 49 | 95 | · | Large volume customer: having-subquery -> semi join, top-100 |
-| q19 | 31 | 7 | 214 | 117 | 24 | n/a | 29 | 64 | · | Discounted revenue: equi join on partkey then an OR-of-conjunctions filter |
-| q20 | 40 | 10 | 94 | 74 | 25 | n/a | 25 | 120 | · | Potential part promotion: nested correlated subqueries -> groupby + semi joins |
-| q21 | 62 | 40 | 254 | 246 | 75 | n/a | 56 | 175 | · | Suppliers who kept orders waiting: self semi join + self anti join |
-| q22 | 29 | 6 | 21 | 20 | 41 | n/a | 19 | 140 | · | Global sales opportunity: phone prefix substring + scalar avg + anti join |
-| **geomean** | **33** | **11** | **79** | **82** | **32** | **41** | **33** | **92** | — | |
-| **vs polars** | 3.10x | 1.00x | 7.40x | 7.69x | 2.99x | 3.85x | 3.06x | 8.63x | — | |
+| q1 | 72 | 23 | 108 | 85 | 26 | n/a | 20 | 90 | n/a | Pricing summary: filter + 2-key groupby with 8 aggregates + sort |
+| q2 | 33 | 4 | 32 | 34 | 25 | n/a | 19 | 78 | · | Minimum cost supplier: correlated min() rewritten as groupby + join |
+| q3 | 33 | 7 | 47 | 58 | 27 | n/a | 19 | 77 | · | Shipping priority: 3-way join, filter, groupby, top-10 |
+| q4 | 29 | 7 | 38 | 49 | 22 | n/a | 17 | 56 | · | Order priority checking: EXISTS -> semi join |
+| q5 | 43 | 12 | 64 | 55 | 29 | n/a | 20 | 80 | · | Local supplier volume: 6-way join + groupby |
+| q6 | 40 | 5 | 16 | 33 | 18 | 34 | 12 | 47 | · | Forecasting revenue change: single-table filter + sum (scan-bound) |
+| q7 | 55 | 13 | 80 | 109 | 31 | n/a | 28 | 91 | · | Volume shipping: 5-way join, date extraction, 3-key groupby |
+| q8 | 44 | 10 | 69 | 66 | 32 | n/a | 24 | 105 | · | National market share: 7-way join, conditional aggregate |
+| q9 | 49 | 15 | 79 | 93 | 44 | n/a | 30 | 124 | · | Product type profit measure: 6-way join, substring match, groupby |
+| q10 | 51 | 10 | 66 | 65 | 38 | n/a | 25 | 89 | · | Returned item reporting: 4-way join, groupby, top-20 |
+| q11 | 26 | 5 | 18 | 18 | 26 | n/a | 12 | 86 | · | Important stock identification: scalar-subquery threshold via two collects |
+| q12 | 26 | 9 | 88 | 69 | 22 | n/a | 17 | 65 | · | Shipping modes and order priority: join + conditional aggregates |
+| q13 | 41 | 19 | 55 | 48 | 36 | n/a | 24 | 68 | · | Customer distribution: left join + count + groupby of a groupby |
+| q14 | 26 | 4 | 21 | 47 | 21 | n/a | 13 | 58 | · | Promotion effect: join + conditional sum ratio |
+| q15 | 30 | 5 | 28 | 68 | 19 | n/a | 18 | ~~99~~ | · | Top supplier: aggregate view + max threshold + join |
+| q16 | 37 | 4 | 21 | 16 | 23 | n/a | 12 | 60 | · | Parts/supplier relationship: anti join + n_unique groupby |
+| q17 | 49 | 7 | 28 | 58 | 23 | n/a | 20 | 80 | · | Small-quantity-order revenue: correlated avg -> groupby + join + filter |
+| q18 | 47 | 21 | 70 | 69 | 34 | n/a | 48 | 90 | · | Large volume customer: having-subquery -> semi join, top-100 |
+| q19 | 52 | 9 | 114 | 82 | 25 | n/a | 19 | 69 | · | Discounted revenue: equi join on partkey then an OR-of-conjunctions filter |
+| q20 | 30 | 8 | 48 | 56 | 26 | n/a | 16 | 93 | · | Potential part promotion: nested correlated subqueries -> groupby + semi joins |
+| q21 | 47 | 32 | 155 | 174 | 46 | n/a | 42 | 137 | · | Suppliers who kept orders waiting: self semi join + self anti join |
+| q22 | 27 | 4 | 13 | 15 | 22 | n/a | 14 | 60 | · | Global sales opportunity: phone prefix substring + scalar avg + anti join |
+| **geomean** | **39** | **9** | **46** | **53** | **27** | **34** | **20** | **78** | — | |
+| **vs polars** | 4.45x | 1.00x | 5.33x | 6.13x | 3.12x | 3.90x | 2.30x | 9.03x | — | |
 | **queries passed** | 22/22 | 22/22 | 22/22 | 22/22 | 22/22 | 1/22 | 22/22 | 21/22 | 0/22 | |
 
 Peak resident memory across the suite (GB):
 
 | duckdb | polars | pandas | ursus (Go) | duckdb-go | arrow-go | datafusion | chdb | chdb-go |
 |--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| 0.16 | 0.25 | 0.46 | 0.18 | 0.11 | 0.05 | 0.41 | 0.57 | — |
+| 0.26 | 0.36 | 0.50 | 0.18 | 0.22 | 0.05 | 0.46 | 0.62 | — |
 
 ## PDS-H (TPC-H, 22 queries) — 1 scale, io=parquet
 
 | query | ursus (Go) | polars | pandas | duckdb | datafusion | chdb | duckdb-go | arrow-go | what it exercises |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|---|
-| q1 | 1,454 | 258 | 1,809 | 138 | 181 | 330 | 147 | n/a | Pricing summary: filter + 2-key groupby with 8 aggregates + sort |
-| q2 | 342 | 17 | 87 | 52 | 49 | 114 | 51 | n/a | Minimum cost supplier: correlated min() rewritten as groupby + join |
-| q3 | 812 | 74 | 650 | 129 | 138 | 305 | 103 | n/a | Shipping priority: 3-way join, filter, groupby, top-10 |
-| q4 | 642 | 74 | 494 | 82 | 68 | 156 | 71 | n/a | Order priority checking: EXISTS -> semi join |
-| q5 | 1,842 | 122 | 1,017 | 107 | 210 | 316 | 120 | n/a | Local supplier volume: 6-way join + groupby |
-| q6 | 605 | 48 | 230 | 66 | 77 | 112 | 60 | 360 | Forecasting revenue change: single-table filter + sum (scan-bound) |
-| q7 | 3,914 | 90 | 1,032 | 132 | 247 | 304 | 106 | n/a | Volume shipping: 5-way join, date extraction, 3-key groupby |
-| q8 | 2,850 | 97 | 692 | 144 | 154 | 768 | 143 | n/a | National market share: 7-way join, conditional aggregate |
-| q9 | 3,274 | 213 | 1,037 | 240 | 250 | 725 | 416 | n/a | Product type profit measure: 6-way join, substring match, groupby |
-| q10 | 878 | 102 | 633 | 159 | 250 | 298 | 161 | n/a | Returned item reporting: 4-way join, groupby, top-20 |
-| q11 | 183 | 25 | 81 | 40 | 35 | 114 | 33 | n/a | Important stock identification: scalar-subquery threshold via two collects |
-| q12 | 862 | 71 | 1,752 | 75 | 98 | 216 | 68 | n/a | Shipping modes and order priority: join + conditional aggregates |
-| q13 | 695 | 162 | 610 | 182 | 141 | 311 | 172 | n/a | Customer distribution: left join + count + groupby of a groupby |
-| q14 | 608 | 53 | 246 | 101 | 91 | 162 | 99 | n/a | Promotion effect: join + conditional sum ratio |
-| q15 | 1,082 | 36 | 230 | 79 | ~~124~~ | ~~256~~ | 70 | n/a | Top supplier: aggregate view + max threshold + join |
-| q16 | 179 | 49 | 133 | 78 | 57 | 187 | 55 | n/a | Parts/supplier relationship: anti join + n_unique groupby |
-| q17 | 1,018 | 104 | 171 | 124 | 390 | 330 | 124 | n/a | Small-quantity-order revenue: correlated avg -> groupby + join + filter |
-| q18 | 1,559 | 263 | 888 | 173 | 543 | 275 | 184 | n/a | Large volume customer: having-subquery -> semi join, top-100 |
-| q19 | 1,184 | 68 | 1,558 | 128 | 133 | 275 | 128 | n/a | Discounted revenue: equi join on partkey then an OR-of-conjunctions filter |
-| q20 | 902 | 160 | 736 | 92 | 177 | 262 | 89 | n/a | Potential part promotion: nested correlated subqueries -> groupby + semi joins |
-| q21 | 2,779 | 554 | 3,449 | 280 | 319 | 603 | 272 | n/a | Suppliers who kept orders waiting: self semi join + self anti join |
-| q22 | 272 | 25 | 46 | 57 | 46 | 104 | 60 | n/a | Global sales opportunity: phone prefix substring + scalar avg + anti join |
-| **geomean** | **918** | **85** | **481** | **108** | **135** | **254** | **104** | **360** | |
-| **vs polars** | 10.77x | 1.00x | 5.64x | 1.27x | 1.59x | 2.97x | 1.22x | 4.23x | |
+| q1 | 898 | 237 | 1,046 | 137 | 146 | 286 | 131 | n/a | Pricing summary: filter + 2-key groupby with 8 aggregates + sort |
+| q2 | 184 | 15 | 76 | 46 | 42 | 132 | 53 | n/a | Minimum cost supplier: correlated min() rewritten as groupby + join |
+| q3 | 463 | 69 | 382 | 96 | 105 | 276 | 102 | n/a | Shipping priority: 3-way join, filter, groupby, top-10 |
+| q4 | 547 | 65 | 330 | 69 | 62 | 159 | 64 | n/a | Order priority checking: EXISTS -> semi join |
+| q5 | 529 | 138 | 621 | 102 | 165 | 291 | 99 | n/a | Local supplier volume: 6-way join + groupby |
+| q6 | 410 | 50 | 142 | 58 | 64 | 110 | 54 | 346 | Forecasting revenue change: single-table filter + sum (scan-bound) |
+| q7 | 1,034 | 93 | 772 | 117 | 216 | 286 | 103 | n/a | Volume shipping: 5-way join, date extraction, 3-key groupby |
+| q8 | 594 | 152 | 489 | 132 | 136 | 514 | 128 | n/a | National market share: 7-way join, conditional aggregate |
+| q9 | 1,014 | 196 | 722 | 228 | 199 | 618 | 211 | n/a | Product type profit measure: 6-way join, substring match, groupby |
+| q10 | 579 | 105 | 463 | 143 | 173 | 285 | 133 | n/a | Returned item reporting: 4-way join, groupby, top-20 |
+| q11 | 129 | 25 | 61 | 34 | 31 | 110 | 32 | n/a | Important stock identification: scalar-subquery threshold via two collects |
+| q12 | 777 | 73 | 1,032 | 75 | 112 | 199 | 60 | n/a | Shipping modes and order priority: join + conditional aggregates |
+| q13 | 532 | 148 | 492 | 167 | 127 | 241 | 156 | n/a | Customer distribution: left join + count + groupby of a groupby |
+| q14 | 385 | 52 | 158 | 91 | 77 | 149 | 92 | n/a | Promotion effect: join + conditional sum ratio |
+| q15 | 653 | 38 | 147 | 70 | ~~110~~ | ~~234~~ | 61 | n/a | Top supplier: aggregate view + max threshold + join |
+| q16 | 137 | 34 | 131 | 54 | 54 | 91 | 53 | n/a | Parts/supplier relationship: anti join + n_unique groupby |
+| q17 | 605 | 69 | 120 | 103 | 314 | 276 | 104 | n/a | Small-quantity-order revenue: correlated avg -> groupby + join + filter |
+| q18 | 932 | 261 | 662 | 177 | 522 | 264 | 160 | n/a | Large volume customer: having-subquery -> semi join, top-100 |
+| q19 | 927 | 58 | 1,076 | 122 | 117 | 226 | 113 | n/a | Discounted revenue: equi join on partkey then an OR-of-conjunctions filter |
+| q20 | 634 | 148 | 382 | 88 | 136 | 210 | 90 | n/a | Potential part promotion: nested correlated subqueries -> groupby + semi joins |
+| q21 | 2,264 | 501 | 2,330 | 243 | 272 | 551 | 239 | n/a | Suppliers who kept orders waiting: self semi join + self anti join |
+| q22 | 176 | 23 | 42 | 49 | 37 | 98 | 49 | n/a | Global sales opportunity: phone prefix substring + scalar avg + anti join |
+| **geomean** | **528** | **81** | **334** | **96** | **115** | **222** | **92** | **346** | |
+| **vs polars** | 6.51x | 1.00x | 4.12x | 1.18x | 1.42x | 2.73x | 1.13x | 4.27x | |
 | **queries passed** | 22/22 | 22/22 | 22/22 | 22/22 | 21/22 | 21/22 | 22/22 | 1/22 | |
 
 Peak resident memory across the suite (GB):
 
 | ursus (Go) | polars | pandas | duckdb | datafusion | chdb | duckdb-go | arrow-go |
 |--:|--:|--:|--:|--:|--:|--:|--:|
-| 1.68 | 0.86 | 1.77 | 0.43 | 1.41 | 1.37 | 0.37 | 0.10 |
+| 0.97 | 0.92 | 1.86 | 0.44 | 1.47 | 1.56 | 0.41 | 0.10 |
 

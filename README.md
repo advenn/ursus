@@ -30,7 +30,7 @@ static binary like any other Go dependency, and `go get` is the whole install.
 
 That is the reason to pick it, and the cost should be just as plain: **ursus is slower than the serious analytical
 engines.** On the h2o.ai benchmark at ten million rows it is roughly 3x Polars; on TPC-H at scale factor 1 it is about
-10x. CSV parsing is worse than that. It is not trying to beat Polars or DuckDB, and on current evidence it is not going
+6.5x. CSV parsing is worse than that. It is not trying to beat Polars or DuckDB, and on current evidence it is not going
 to.
 
 **Where that trade is a good one**
@@ -44,7 +44,8 @@ to.
 **Where it is not**
 
 - Interactive analytics over hundreds of millions of rows. Use DuckDB or Polars.
-- Anywhere you can link cgo freely: `duckdb-go` is around 10x faster than this and is a binding to a mature engine.
+- Anywhere you can link cgo freely: `duckdb-go` is around 6x faster than this on TPC-H and is a binding to a mature
+  engine.
 - Anything production-critical today. This is v0.4, the API still moves, and nothing here is promised.
 
 The honest summary is that Go has not had a dataframe library of this shape, and one that is correct and a few times
@@ -203,35 +204,32 @@ reference, and a disagreement is struck through rather than quietly reported as 
 
 **How current it is, precisely.** Every table was measured in one session, on one commit, with every engine re-run
 together — so the numbers are comparable across engines rather than stitched from different days. That commit is
-v0.3.0's, measured on 2026-10-06.
-
-**0.4's speed-ups are not in it yet.** Parallel Parquet decoding, a join that hashes its smaller input, `TopK` and
-median by selection were each measured on single queries, and [`CHANGELOG.md`](./CHANGELOG.md) gives those numbers. The
-full report has not been re-run for 0.4, so the table below is still v0.3.0's.
+`645efda`, the v0.4.0 candidate, measured on 2026-10-08.
 
 The caveats that apply to *this* run:
 
-- **Every query ran in an 8 GB cgroup**, on a laptop with 6–9 GiB of swap already in use.
-- **ursus's h2o `gb10` over CSV was killed at that cap.** It needs about 9 GB, and v0.3.0 spilled only under an explicit
-  `WithMemoryLimit`, so it never saw the cgroup.
-- **PDS-H `q7` regressed** to 3.9 s and 1.68 GB, from 2.4 s and 0.60 GB at step 40. Its date filter stopped being pushed
-  below its joins.
-- **Both are fixed in v0.3.1**, in [`CHANGELOG.md`](./CHANGELOG.md). Re-run under the same cap,
-  ursus passes 15/15 on h2o over CSV, `q7` takes 1.7 s and 0.63 GB, and the h2o Parquet geomean is 1,950 ms.
-- **Other engines:** chDB timed out on two group-bys and gota ran out of memory on two, under the same cap.
+- **Every query ran in an 8 GB cgroup** with swap off, on 8 threads, on a laptop with an IDE still open and 4 GiB of
+  swap already in use.
+- **ursus passed every query of all four suites,** and every answer validated against duckdb's. v0.3.0 was killed on h2o
+  `gb10` over CSV; it now spills under the default budget and passes.
+- **ursus's highest peak is h2o `j5` over CSV, 8.19 GB**, close to the cap. The query budget was 4 GB; the rest is the
+  Go heap's slack, which `SetProcessMemoryLimit` would bound and the bench runner does not call.
+- **Other engines:** chDB timed out on three group-bys over Parquet and failed `gb6` in both h2o suites; gota ran out of
+  memory on two group-bys; chDB, and DataFusion at SF=1, answered PDS-H `q15` wrongly, and are struck through.
 
 Timings come from a laptop under real conditions, so treat small differences as noise and the ordering as the signal.
 
-**Where it stands, in one place.** Against Polars, on the current report:
+**Where it stands, in one place.** Against Polars, on the current report, with v0.3.0's for comparison:
 
-|                        |    ursus |  Polars |       |
-|------------------------|---------:|--------:|-------|
-| h2o.ai, 10M rows       | 2,426 ms |  731 ms | 3.3x  |
-| TPC-H SF=1             |   918 ms |   85 ms | 10.8x |
-| TPC-H SF=0.1           |    82 ms |   11 ms | 7.5x  |
-| TPC-H SF=1 peak memory |  1.68 GB | 0.86 GB | 2.0x  |
+|                         |    ursus |  Polars |       | at v0.3.0 |
+|-------------------------|---------:|--------:|-------|----------:|
+| h2o.ai, 10M rows, Parquet | 1,468 ms |  531 ms | 2.8x  |      3.3x |
+| h2o.ai, 10M rows, CSV   | 3,375 ms |  989 ms | 3.4x  |      3.6x |
+| TPC-H SF=1              |   528 ms |   81 ms | 6.5x  |     10.8x |
+| TPC-H SF=0.1            |    53 ms |    9 ms | 6.1x  |      7.5x |
+| TPC-H SF=1 peak memory  |  0.97 GB | 0.92 GB | 1.05x |      2.0x |
 
-Geomeans over queries every engine passed. The gap narrows as the data gets smaller, which is the shape of the trade
+Geomeans over each engine's passed queries; ursus and Polars pass every one. The gap narrows as the data gets smaller, which is the shape of the trade
 described at the top of this file.
 
 Where ursus is behind and why is recorded rather than glossed — every step of construction has an as-built document in [
