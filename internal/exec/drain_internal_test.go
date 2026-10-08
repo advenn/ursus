@@ -34,7 +34,7 @@ func (s *spyOp) Next(context.Context) (*data.Batch, error) {
 // the concatenation of the result (step 128).
 func TestDrainClosesTheTreeBeforeTheResultIsAssembled(t *testing.T) {
 	op := &spyOp{n: 3}
-	batches, err := drain(t.Context(), op)
+	batches, err := drain(t.Context(), op, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestDrainClosesTheTreeBeforeTheResultIsAssembled(t *testing.T) {
 	if len(batches) != 3 {
 		t.Errorf("%d batches, want 3", len(batches))
 	}
-	b, err := Collect(t.Context(), &spyOp{n: 3})
+	b, err := Collect(t.Context(), &spyOp{n: 3}, nil)
 	if err != nil || b.Rows() != 3 {
 		t.Fatalf("Collect: %v rows, %v", b, err)
 	}

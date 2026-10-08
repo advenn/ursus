@@ -12,7 +12,7 @@ Step numbers below point at those records.
 
 ## v0.4.0 — candidate
 
-Everything since `v0.3.1` (2026-10-06): steps 92–116.
+Everything since `v0.3.1` (2026-10-06): steps 92–130.
 
 [`v0.4-scope.md`](./context_files/v0.4-scope.md) set the scope: **fast where it is
 slow, and safe inside a service.** Its §7 records what was done, and what moved to
@@ -67,6 +67,13 @@ contains it.
   `GOMEMLIMIT` in the environment, `off` included, a limit already set with
   `debug.SetMemoryLimit`, a limit given with `WithMemoryLimit`, and
   `LeaveProcessMemoryLimit` each keep ursus from setting it.
+- **`Collect` refuses a result too large to hold, under the default budget** (130).
+  Once the query holds more, its result and its operators' state together, than
+  three quarters of the ceiling, `Collect` fails with a resource error naming
+  `collect` and pointing to `CollectBatches`, `SinkParquet` and `SinkCSV`, which
+  stream. It used to grow until the kernel killed the process. Under a limit given
+  with `WithMemoryLimit`, or none, `Collect` holds whatever it is asked to, as
+  before.
 
 - **An inner join's row order is no longer promised** to follow the left frame:
   the smaller input is hashed, whichever side it is. `JoinMaintainOrder(true)`
@@ -116,6 +123,12 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **`Collect` counts its result under the default budget** (130), and refuses one
+  too large to hold (see the behaviour changes).
+  - The result is counted apart from what the operators hold, so they spill as they
+    would if it were streamed, and `MemoryStats.Peak` is unchanged.
+  - The limit is three quarters of the ceiling, not the budget's half: at half, the
+    `j5` runs that passed under 3 GB and 4 GB containers would have been refused.
 - **A test fails when a query holds memory its budget does not count** (129). It
   measures the live heap of a join, a group-by, a spilling join and two `Collect`s
   on a few million rows, in seconds, and fails if a result or a build side is held
@@ -130,8 +143,9 @@ Newest first. The numbers are steps, each with an as-built record in
     column's pieces let go once copied, instead of being held twice.
   - Measured after: under a 4 GB container `j5` and `gb10` pass over CSV and
     Parquet, peaking at nine tenths of the cap, as fast as under 8 GB. Under 3 GB
-    both pass too, but `gb10`, whose ten-million-row result `Collect` holds whole,
-    reaches the cap.
+    both pass too, but `gb10` over Parquet reaches the cap. That is most likely its
+    group-by holding its keys twice while it assembles its answer (130), not
+    `Collect`.
 - **The 0.4 report, re-run** after the performance round (127): PDS-H SF=1 at 4.4×
   Polars, SF=0.1 4.0×, h2o 1.9× over Parquet and 3.3× over CSV. Step 117's report,
   taken while this session's reviewers were grepping, had understated ursus.
@@ -365,7 +379,12 @@ Newest first. The numbers are steps, each with an as-built record in
   the rest, from the report step 127 ran.
 - **Memory:** h2o `gb10` over CSV peaked at 7.60 GB under an 8 GB cap, in step 127's
   report. The query budget was 4 GB; the rest is the Go heap's slack, which ursus
-  bounds by default since step 128, after that report. Not re-measured since.
+  bounds by default since step 128, after that report.
+  - Re-measured after step 128, `gb10` and `j5` pass under 4 GB and 3 GB caps.
+  - Under 3 GB, `gb10` over Parquet reaches the cap. A group-by with as many groups
+    as rows holds its keys twice, uncounted, while it assembles its answer: a
+    six-key group-by of two million rows held 517 MB against the 375 MB it counted
+    (130). Not fixed.
 
 ---
 

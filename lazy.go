@@ -296,6 +296,9 @@ type MemoryStats struct {
 	// allocation so a payload two operators share is counted once. It does not
 	// count a kernel's transient output, because ursus's allocator reports
 	// nothing and there is no hook at the allocation site.
+	//
+	// Nor the result Collect assembles. Under the default budget Collect counts
+	// that apart, against a limit of its own: see Collect.
 	Peak int64
 
 	// Limit is the ceiling that was in force, or 0 if there was none.
@@ -376,9 +379,9 @@ type MemoryStats struct {
 // machine's RAM, on Linux. Half, because ursus's buffers are on the Go heap, which
 // with GOGC=100 grows to about twice what is live before it collects. So a query
 // spills by default rather than growing until the kernel kills it, and an operator
-// that cannot spill fails at that point with an error naming itself.
-// WithMemoryLimit(0) turns the budget off; elsewhere than Linux there is no default
-// and it is off already.
+// that cannot spill fails at that point with an error naming itself. Collect also
+// refuses a result too large to hold: see Collect. WithMemoryLimit(0) turns the
+// budget off; elsewhere than Linux there is no default and it is off already.
 //
 // The heap's slack is the Go runtime's to bound, not the budget's. Under the default
 // budget ursus sets the Go soft memory limit too, to nine tenths of the same ceiling,
@@ -401,9 +404,11 @@ type MemoryStats struct {
 //
 // # What it does not bound
 //
-// Collect materialises the whole result by definition, and asking for a frame in
-// memory is a request to hold it. The larger-than-RAM story runs through
-// SinkParquet and CollectBatches, both of which stream.
+// Collect materialises the whole result by definition, and under a limit you give,
+// asking for a frame in memory is a request to hold it: Collect holds whatever it is
+// asked to. The default budget checks it, which a limit of yours turns off. The
+// larger-than-RAM story runs through SinkParquet and CollectBatches, both of which
+// stream.
 func WithMemoryLimit(bytes int64) CollectOption {
 	return func(c *collectCfg) { c.memLimit, c.limitSet = bytes, true }
 }
@@ -516,6 +521,26 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 
 // Collect runs the query and returns the whole result.
 //
+// # A result too large to hold is an error
+//
+// Under the default budget, Collect counts its result as it arrives, and refuses
+// once the query holds more, the result and what its operators hold together, than
+// three quarters of the memory it may use: the default budget and half as much
+// again. The error is a resource error naming collect.
+//
+// Three quarters, because ursus sets the Go soft limit at nine tenths of the same
+// ceiling, and a query holds up to about a fifth more than it counts: three quarters
+// and a fifth is nine tenths. Past that the collector cannot keep the heap under the
+// soft limit, and under a container's limit the kernel kills the process instead.
+// CollectBatches, SinkParquet and SinkCSV hold one batch at a time and are not
+// checked.
+//
+// The result is counted apart from what the operators hold, so they spill exactly
+// as they would if it were streamed, and MemoryStats.Peak leaves it out.
+//
+// Under a limit you give with WithMemoryLimit, or none, Collect is not checked and
+// holds whatever it is asked to, as it always has.
+//
 // # A panic is an error
 //
 // Every entry point that runs a query recovers a panic in it and returns it as
@@ -529,7 +554,7 @@ func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (df *Da
 	if err != nil {
 		return nil, err
 	}
-	b, err := exec.Collect(ctx, root)
+	b, err := exec.Collect(ctx, root, cfg.budget.Result())
 	cfg.report()
 	if err != nil {
 		return nil, err

@@ -29,7 +29,7 @@ func TestEachLoopReturnsAPanicAsAnError(t *testing.T) {
 			t.Errorf("%s: want the panic as an internal error, got %v", name, err)
 		}
 	}
-	_, err := exec.Collect(t.Context(), panicOp{})
+	_, err := exec.Collect(t.Context(), panicOp{}, nil)
 	want("Collect", err)
 	_, err = exec.Count(t.Context(), panicOp{})
 	want("Count", err)

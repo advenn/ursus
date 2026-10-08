@@ -305,6 +305,10 @@ func TestMaintainOrderStaysSerial(t *testing.T) {
 // Under the DEFAULT budget, lowered here to 16 KiB: an explicit WithMemoryLimit keeps
 // the group-by serial (step 92), because where a parallel one switches depends on
 // scheduling, and its row order on where it switched.
+//
+// Streamed, because Collect may hold 24 KiB under that budget, its result and the
+// spilled replay's state together, and the 14 KiB result with the replay's is more
+// (step 130).
 func TestParallelAggregationSwitchesToSerialUnderALimit(t *testing.T) {
 	q := func() *ursus.LazyFrame {
 		return ursus.Scan(aggSource(t)).GroupBy(ursus.Col("k"), ursus.Col("g")).
@@ -315,11 +319,21 @@ func TestParallelAggregationSwitchesToSerialUnderALimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stats ursus.MemoryStats
-	defer ursus.SetDefaultMemoryLimit(16 << 10)()
-	got, err := q().Collect(t.Context(), ursus.WithThreads(8), ursus.WithBatchSize(16),
-		ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&stats))
+	parts := func() []*ursus.LazyFrame {
+		defer ursus.SetDefaultMemoryLimit(16 << 10)()
+		var parts []*ursus.LazyFrame
+		for df, err := range q().CollectBatches(t.Context(), ursus.WithThreads(8),
+			ursus.WithBatchSize(16), ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&stats)) {
+			if err != nil {
+				t.Fatalf("a memory-limited parallel aggregation must fall back, not fail: %v", err)
+			}
+			parts = append(parts, df.Lazy())
+		}
+		return parts
+	}()
+	got, err := ursus.Concat(parts).Collect(t.Context())
 	if err != nil {
-		t.Fatalf("a memory-limited parallel aggregation must fall back, not fail: %v", err)
+		t.Fatal(err)
 	}
 	if stats.Spills == 0 {
 		t.Error("nothing spilled, so the switch to serial was not exercised")

@@ -24,6 +24,15 @@
 // where memory is RETAINED, not where it is allocated. That is exactly right for
 // the buffering operators, which are the only things that hold memory across
 // batches, and it is silent about a single kernel's transient output.
+//
+// # A result is held apart
+//
+// Collect holds its result in an account of its own, opened with Result, and only
+// under the default budget. The ledger keeps the bytes only a result holds apart
+// from what the operators hold, and the limit, Over and Peak see only the
+// operators'. Charged with them, a result would put a spilled group-by's or join's
+// replay over budget from its first partition, though it cannot be spilled: see
+// Result.
 package execopt
 
 import (
@@ -45,7 +54,8 @@ type Budget struct {
 
 	mu     sync.Mutex
 	held   map[data.BufferID]entry
-	total  int64
+	total  int64 // what the operators hold: what the limit, Over and Peak are about
+	kept   int64 // what only a result holds, on top of total
 	peak   int64
 	spills int64
 }
@@ -53,6 +63,20 @@ type Budget struct {
 type entry struct {
 	size int64
 	refs int
+	kept int // how many of refs are a result's
+}
+
+// counted splits the entry's size between the operators' total and the result's.
+// An allocation an operator holds is the operators', whoever else holds it too.
+func (e entry) counted() (ops, kept int64) {
+	switch {
+	case e.refs == 0:
+		return 0, 0
+	case e.refs > e.kept:
+		return e.size, 0
+	default:
+		return 0, e.size
+	}
 }
 
 // NewBudget returns a budget with the given limit in bytes; a limit <= 0 means
@@ -92,7 +116,7 @@ func (b *Budget) SpillDir() string {
 	return b.spillDir
 }
 
-// Used returns the current retained total in bytes.
+// Used returns what the query's operators hold now, in bytes.
 func (b *Budget) Used() int64 {
 	if b == nil {
 		return 0
@@ -151,6 +175,56 @@ func (b *Budget) Over() bool {
 	return b.total > b.limit
 }
 
+// Holding returns everything the query holds now: what its operators hold, and
+// the result Collect is assembling, each allocation once.
+func (b *Budget) Holding() int64 {
+	if b == nil {
+		return 0
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.total + b.kept
+}
+
+// ResultLimit is what a query may hold, its result included, before Collect
+// refuses it, or 0 when Collect is not checked.
+//
+// It is three quarters of the memory ceiling: the default budget, half the
+// ceiling, and half as much again. Under the default budget ursus sets the Go soft
+// limit at nine tenths of the ceiling, and a query holds up to about a fifth more
+// than the ledger counts, measured by internal/memcheck; three quarters, and a
+// fifth more, is that soft limit. Past it the collector cannot keep the heap under
+// the soft limit, and a process under a container's limit is killed.
+//
+// Only under the default budget. A limit the caller gave bounds what the
+// operators hold, as it always has: Collect then holds whatever it is asked to.
+func (b *Budget) ResultLimit() int64 {
+	if b == nil || !b.isDefault || b.limit <= 0 {
+		return 0
+	}
+	return b.limit + b.limit/2
+}
+
+// Result opens the account Collect holds its result in, or nil, a working no-op,
+// when ResultLimit is 0.
+//
+// What only a result holds is kept off the operators' total, so it moves neither
+// Over nor Peak. An operator that can spill decides to by Over, and a result
+// cannot be spilled: a spilled group-by or join replays its partitions while the
+// answers of the earlier ones sit in Collect, and charged with them each
+// partition's sub-sink would start over budget, partition again and again, and
+// reach maxSpillDepth on data that is not skewed at all. That is the rebasing
+// hashAggSink.releaseState does, for the same reason.
+//
+// An allocation an operator holds too, such as a group-by's answer the result
+// holds slices of, stays the operator's until the operator lets go.
+func (b *Budget) Result() *Account {
+	if b.ResultLimit() == 0 {
+		return nil
+	}
+	return &Account{b: b, op: "collect", ids: map[data.BufferID]int64{}, result: true}
+}
+
 // Account opens an operator's view of the budget.
 //
 // op is the user-facing operator name — "sort", "group_by", "join" — because the
@@ -162,40 +236,61 @@ func (b *Budget) Account(op string) *Account {
 	return &Account{b: b, op: op, ids: map[data.BufferID]int64{}}
 }
 
-func (b *Budget) retain(id data.BufferID, size int64) {
+func (b *Budget) retain(id data.BufferID, size int64, result bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	e := b.held[id]
 	if e.refs == 0 {
 		e.size = size
-		b.total += size
 	}
+	ops, kept := e.counted()
 	e.refs++
-	b.held[id] = e
-	if b.total > b.peak {
-		b.peak = b.total
+	if result {
+		e.kept++
 	}
+	b.move(e, ops, kept)
+	b.held[id] = e
 }
 
-func (b *Budget) release(id data.BufferID) {
+func (b *Budget) release(id data.BufferID, result bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	e, ok := b.held[id]
 	if !ok {
 		return
 	}
+	ops, kept := e.counted()
 	e.refs--
+	if result {
+		e.kept--
+	}
+	b.move(e, ops, kept)
 	if e.refs <= 0 {
-		b.total -= e.size
 		delete(b.held, id)
 		return
 	}
 	b.held[id] = e
 }
 
-func (b *Budget) addExtra(n int64) {
+// move applies an entry's change, from what it counted before, to both totals.
+// An allocation an operator lets go of and a result still holds moves from the
+// operators' total to the result's.
+func (b *Budget) move(e entry, wasOps, wasKept int64) {
+	ops, kept := e.counted()
+	b.total += ops - wasOps
+	b.kept += kept - wasKept
+	if b.total > b.peak {
+		b.peak = b.total
+	}
+}
+
+func (b *Budget) addExtra(n int64, result bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if result {
+		b.kept += n
+		return
+	}
 	b.total += n
 	if b.total > b.peak {
 		b.peak = b.total
@@ -211,10 +306,11 @@ func (b *Budget) addExtra(n int64) {
 // A nil *Account is a working no-op, which is what lets an operator written
 // against it work unchanged when no budget was configured.
 type Account struct {
-	b   *Budget
-	op  string
-	ids map[data.BufferID]int64
-	raw int64
+	b      *Budget
+	op     string
+	ids    map[data.BufferID]int64
+	raw    int64
+	result bool // opened by Result: what only it holds is kept off the operators' total
 }
 
 // Retain records that the operator now holds the batch's allocations.
@@ -237,7 +333,7 @@ func (a *Account) retainColumn(c *data.Column) {
 			continue
 		}
 		a.ids[id] = size
-		a.b.retain(id, size)
+		a.b.retain(id, size, a.result)
 	}
 }
 
@@ -253,7 +349,7 @@ func (a *Account) RetainBytes(n int64) {
 		return
 	}
 	a.raw += n
-	a.b.addExtra(n)
+	a.b.addExtra(n, a.result)
 }
 
 // Used returns what this account is holding.
@@ -301,13 +397,34 @@ func (a *Account) Release() {
 		return
 	}
 	for id := range a.ids {
-		a.b.release(id)
+		a.b.release(id, a.result)
 	}
 	clear(a.ids)
 	if a.raw != 0 {
-		a.b.addExtra(-a.raw)
+		a.b.addExtra(-a.raw, a.result)
 		a.raw = 0
 	}
+}
+
+// CheckResult returns a resource error naming collect when the query holds more,
+// its result included, than ResultLimit. It is Check for the account Result opens.
+func (a *Account) CheckResult() error {
+	if a == nil {
+		return nil
+	}
+	limit, held := a.b.ResultLimit(), a.b.Holding()
+	if limit <= 0 || held <= limit {
+		return nil
+	}
+	return uerr.New(uerr.KindResource, a.op,
+		"the result does not fit in memory: the query holds %s, %s of it the result "+
+			"so far, and may hold %s, three quarters of the %s this process may use",
+		Bytes(held), Bytes(a.Used()), Bytes(limit), Bytes(2*a.b.Limit())).
+		Hint("CollectBatches streams the result a batch at a time, and SinkParquet " +
+			"and SinkCSV write it to a file; neither holds it whole").
+		Hint("this check comes with the default memory budget: WithMemoryLimit, with " +
+			"a limit of your own or 0, turns it off, and Collect then holds whatever " +
+			"it is asked to")
 }
 
 // holdsHint says what the named operator actually holds.

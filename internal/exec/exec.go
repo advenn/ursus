@@ -8,9 +8,10 @@
 // dispatch is what BUYS input order structurally, and a scheduler here would have to
 // re-establish it, which is the harder problem.
 //
-// What is still true: nothing here knows about spilling, budgets or temporary files.
-// Every one of those lives below, which is why three operators gained the ability to
-// spill without this file changing.
+// What is still true: nothing here knows about spilling or temporary files. Every
+// one of those lives below, which is why three operators gained the ability to
+// spill without this file changing. The one budget here is the result's: Collect
+// holds every batch, and nothing below it can.
 //
 // Each loop pulls through physical.Pull, so a panic below the root is an error. With
 // one thread every operator runs on the caller's goroutine, and a panic there
@@ -25,14 +26,20 @@ import (
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/execopt"
 	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/physical"
 )
 
 // Collect runs the tree to completion and concatenates every batch.
-func Collect(ctx context.Context, root physical.Operator) (*data.Batch, error) {
+//
+// held is the account the result is held in, from execopt.Budget.Result; nil holds
+// it unchecked. Each batch is retained in it as it arrives, and Collect stops with
+// held's error once the query holds more than a result may take.
+func Collect(ctx context.Context, root physical.Operator, held *execopt.Account) (*data.Batch, error) {
+	defer held.Release()
 	schema := root.Schema()
-	batches, err := drain(ctx, root)
+	batches, err := drain(ctx, root, held)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +54,11 @@ func Collect(ctx context.Context, root physical.Operator) (*data.Batch, error) {
 // result were alive at once: the moment a large join over CSV was OOM-killed under
 // a 4 GB container (step 128). The batches are then concatenated by ConcatOwned,
 // which lets go of them column by column.
-func drain(ctx context.Context, root physical.Operator) ([]*data.Batch, error) {
+//
+// It refuses as soon as the result is too large, not once the stream ends: a
+// result's batches are what fills the memory, and the operators below have no
+// reason to stop.
+func drain(ctx context.Context, root physical.Operator, held *execopt.Account) ([]*data.Batch, error) {
 	defer root.Close()
 	var batches []*data.Batch
 	for {
@@ -62,6 +73,10 @@ func drain(ctx context.Context, root physical.Operator) ([]*data.Batch, error) {
 			return nil, err
 		}
 		batches = append(batches, b)
+		held.Retain(b)
+		if err := held.CheckResult(); err != nil {
+			return nil, err
+		}
 	}
 }
 

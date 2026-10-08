@@ -168,3 +168,136 @@ func TestBytesRendersReadably(t *testing.T) {
 		}
 	}
 }
+
+// TestAResultIsHeldApartFromTheOperators: what only Collect's result holds moves
+// neither Used, nor Over, nor Peak, so an operator spills exactly as it would if the
+// result were streamed. An allocation an operator holds too is counted once, as the
+// operator's, and becomes the result's when the operator lets go.
+func TestAResultIsHeldApartFromTheOperators(t *testing.T) {
+	shared, fresh := batch(t, "a", []int64{1, 2, 3, 4}), batch(t, "b", []int64{5, 6, 7, 8, 9, 10, 11, 12})
+	probe := execopt.NewBudget(0, "")
+	probe.Account("x").Retain(shared)
+	one := probe.Used()
+	probe.Account("x").Retain(fresh)
+	two := probe.Used() - one
+
+	bud := execopt.NewBudget(one+1, "")
+	bud.MarkDefault()
+	op, res := bud.Account("group_by"), bud.Result()
+	if res == nil {
+		t.Fatal("no result account under the default budget")
+	}
+
+	op.Retain(shared)
+	res.Retain(shared)
+	if bud.Used() != one || bud.Holding() != one {
+		t.Errorf("a result sharing an operator's batch: used %d, holding %d, want %d and %d",
+			bud.Used(), bud.Holding(), one, one)
+	}
+
+	res.Retain(fresh)
+	if bud.Used() != one || bud.Holding() != one+two {
+		t.Errorf("a batch only the result holds: used %d, holding %d, want %d and %d",
+			bud.Used(), bud.Holding(), one, one+two)
+	}
+	if bud.Over() || op.Over() {
+		t.Error("the result's own batch put the operators over their limit")
+	}
+	if bud.Peak() != one {
+		t.Errorf("peak = %d, want the operators' %d", bud.Peak(), one)
+	}
+
+	op.Release()
+	if bud.Used() != 0 || bud.Holding() != one+two {
+		t.Errorf("after the operator let go: used %d, holding %d, want 0 and %d",
+			bud.Used(), bud.Holding(), one+two)
+	}
+
+	// And back: an operator taking hold of what only the result held is the
+	// operators' again.
+	op.Retain(fresh)
+	if bud.Used() != two || bud.Holding() != one+two {
+		t.Errorf("an operator retaining the result's batch: used %d, holding %d, want %d and %d",
+			bud.Used(), bud.Holding(), two, one+two)
+	}
+	op.Release()
+	res.Release()
+	if bud.Used() != 0 || bud.Holding() != 0 {
+		t.Errorf("after both let go: used %d, holding %d", bud.Used(), bud.Holding())
+	}
+}
+
+// TestOnlyTheDefaultBudgetChecksAResult: a limit the caller gave bounds the
+// operators, as it always has, and Collect holds whatever it is asked to.
+func TestOnlyTheDefaultBudgetChecksAResult(t *testing.T) {
+	marked := func(limit int64) *execopt.Budget {
+		b := execopt.NewBudget(limit, "")
+		b.MarkDefault()
+		return b
+	}
+	cases := []struct {
+		name string
+		bud  *execopt.Budget
+		want int64
+	}{
+		{"the default budget", marked(1000), 1500},
+		{"a limit the caller gave", execopt.NewBudget(1000, ""), 0},
+		{"no budget", nil, 0},
+		{"the default, where no ceiling is known", marked(0), 0},
+	}
+	for _, c := range cases {
+		if got := c.bud.ResultLimit(); got != c.want {
+			t.Errorf("%s: result limit %d, want %d", c.name, got, c.want)
+		}
+		if res := c.bud.Result(); (res != nil) != (c.want > 0) {
+			t.Errorf("%s: result account %v, want one only with a result limit", c.name, res)
+		}
+	}
+
+	var none *execopt.Account
+	none.Retain(batch(t, "v", []int64{1}))
+	if err := none.CheckResult(); err != nil {
+		t.Errorf("no result account refused: %v", err)
+	}
+	none.Release()
+}
+
+// TestCheckResultRefusesPastTheResultLimit: the query's holdings, operators' and
+// result's together, against three quarters of the ceiling, with an error that
+// names collect and says what streams instead.
+func TestCheckResultRefusesPastTheResultLimit(t *testing.T) {
+	b := batch(t, "v", make([]int64, 64))
+	probe := execopt.NewBudget(0, "")
+	probe.Account("x").Retain(b)
+	size := probe.Used()
+
+	// The limit lets one batch through and not two: 1.5 × limit is 1.5 batches.
+	bud := execopt.NewBudget(size, "")
+	bud.MarkDefault()
+	res := bud.Result()
+	res.Retain(b)
+	if err := res.CheckResult(); err != nil {
+		t.Fatalf("a result of one batch, under a limit of one and a half: %v", err)
+	}
+
+	// An operator's holding counts toward it too.
+	other := batch(t, "w", make([]int64, 64))
+	op := bud.Account("join")
+	op.Retain(other)
+	err := res.CheckResult()
+	if err == nil {
+		t.Fatal("two batches held, past a limit of one and a half, were accepted")
+	}
+	if !errors.Is(err, uerr.ErrResource) {
+		t.Errorf("want a resource error, got %v", err)
+	}
+	for _, want := range []string{"collect", "CollectBatches", "SinkParquet", "WithMemoryLimit"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error does not say %q: %v", want, err)
+		}
+	}
+	op.Release()
+	if err := res.CheckResult(); err != nil {
+		t.Errorf("back under the limit but still refused: %v", err)
+	}
+}

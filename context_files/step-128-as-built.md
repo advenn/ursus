@@ -110,15 +110,16 @@ The limit is soft. A query whose live state outgrows it can still be killed.
 **Nothing was killed, but `gb10` reached the cap over Parquet.**
 
 - **`j5`** sits at the soft limit, as under 4 GB.
-- **`gb10` groups ten million rows into about ten million groups,** so its result is
-  nearly its input's size. `Collect` holds all of it, uncharged, on top of the
-  group-by's 1.5 GB budget, and nothing can shed it.
+- **`gb10` groups ten million rows into about ten million groups.** This record first
+  said `Collect` held its result uncharged on top of the group-by's budget. **That
+  was wrong** (step 130): the group-by lets go of its state before it emits, and
+  charges its answer while `Collect` holds slices of it. What is uncharged is a
+  second copy of its keys while it assembles that answer, measured in step 130.
 - **It survived** because the kernel reclaimed page cache first. Under a smaller cap,
   or a busier one, it would likely be killed.
 
-A result that size is what `CollectBatches` and `SinkParquet` are for. Charging
-`Collect`'s result to the budget, and refusing past it with an error naming those
-two, would turn that kill into a message. That is not built.
+Step 130 made `Collect` refuse, under the default budget, a result too large to
+hold. That does not change `gb10`, whose result is well under the limit.
 
 ## 4. Tests and teeth
 
