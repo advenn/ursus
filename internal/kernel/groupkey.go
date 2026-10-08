@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"encoding/binary"
+	"slices"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
@@ -77,6 +78,23 @@ func (e *GroupKeyEncoder) Encode(row int) []byte {
 		e.buf = w(e.buf, row)
 	}
 	return e.buf
+}
+
+// StringMembers recovers the plain strings of a set of keys a single String or Binary
+// column encoded, as keyWriter writes them: 0x01, the length as four big-endian
+// bytes, then the bytes. It reports false for any key not of that shape.
+func StringMembers(set map[string]struct{}) ([]string, map[string]struct{}, bool) {
+	members := make([]string, 0, len(set))
+	plain := make(map[string]struct{}, len(set))
+	for k := range set {
+		if len(k) < 5 || k[0] != 0x01 || int(binary.BigEndian.Uint32([]byte(k[1:5]))) != len(k)-5 {
+			return nil, nil, false
+		}
+		members = append(members, k[5:])
+		plain[k[5:]] = struct{}{}
+	}
+	slices.Sort(members) // map order is random; a stable order keeps runs comparable
+	return members, plain, true
 }
 
 func keyWriter(op string, c *data.Column) (func([]byte, int) []byte, error) {

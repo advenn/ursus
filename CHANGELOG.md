@@ -108,6 +108,9 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **`IsIn` on a String column compares strings** instead of building each row's
+  grouping key (125): its CPU in q12 fell from 1.34 s to 0.51 s. q19 is 6% faster;
+  q12's wall time is bound by its join build and did not move.
 - **String columns are read with one copy, not two** (124): q1 −11%, h2o gb1 −14%,
   j4 about −10%.
 - **The Parquet scan and the filter are cheaper** (123). PDS-H q6 at SF=1 is about

@@ -424,6 +424,11 @@ type compiledCall struct {
 	args []any
 	re   *regexp.Regexp
 	set  map[string]struct{} // is_in's probe set, encoded against the receiver's type
+	// members and plain are the set's members as plain strings, when is_in compares
+	// at a String or Binary type: kernel.InStrings tests a row against them as it is
+	// stored, with no key encoded for it.
+	members []string
+	plain   map[string]struct{}
 	// needle is list.contains's value, encoded against the ELEMENT type. Prepared
 	// here for the reason the set is: the cast has to be strict and the encoding
 	// has to match the child's, and doing it per batch would repeat both.
@@ -485,6 +490,9 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 		if recv, err = meetType(recv, cc.meet); err != nil {
 			return nil, err
 		}
+		if cc.plain != nil && recv.DType().HasStringStorage() {
+			return kernel.InStrings(name, recv, cc.members, cc.plain), nil
+		}
 		return kernel.InSet(name, recv, cc.set)
 	case c.Fn.IsMath():
 		return kernel.MathCall(c.Fn, name, out, recv, cc.args)
@@ -540,6 +548,11 @@ func compileCall(c *expr.Call, recvType dtype.DataType) compiledCall {
 	if cc.err == nil && c.Fn == expr.FnIsIn {
 		if cc.meet, cc.err = expr.MembershipType(c, recvType); cc.err == nil {
 			cc.set, cc.err = buildInSet(c, cc.meet)
+		}
+		if cc.err == nil && cc.meet.HasStringStorage() {
+			if m, p, ok := kernel.StringMembers(cc.set); ok {
+				cc.members, cc.plain = m, p
+			}
 		}
 	}
 	if cc.err == nil && c.Fn.IsString() {

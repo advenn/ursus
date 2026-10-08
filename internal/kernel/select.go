@@ -149,17 +149,54 @@ func InSet(name string, c *data.Column, set map[string]struct{}) (*data.Column, 
 		return nil, err
 	}
 	valid := c.Validity()
-	n := c.Len()
-	bits := bitmap.NewBuilder(n)
-	for i := range n {
-		if !valid.Get(i) {
-			bits.Append(false) // the value bit under a null is never read
-			continue
-		}
+	return memberBits(name, c.Len(), valid, func(i int) bool {
 		_, ok := set[string(enc.Encode(i))]
-		bits.Append(ok)
+		return ok
+	}), nil
+}
+
+// InStrings is InSet for a String or Binary column, against the set's members as
+// plain strings, which StringMembers recovers once per query: a row is compared as
+// it is stored, with no key built for it. A few members are compared one by one; a
+// map costs more than that until there are about eight.
+//
+// PDS-H q12 and q19 test `IsIn` on string columns over millions of rows, and InSet
+// built every row's grouping key to look it up: a fifth of q12's CPU.
+func InStrings(name string, c *data.Column, members []string, set map[string]struct{}) *data.Column {
+	acc := c.Strings()
+	if len(members) <= 8 {
+		return memberBits(name, c.Len(), c.Validity(), func(i int) bool {
+			s := acc.Get(i)
+			for _, m := range members {
+				if s == m {
+					return true
+				}
+			}
+			return false
+		})
 	}
-	return data.NewBool(name, bits.Finish(), valid), nil
+	return memberBits(name, c.Len(), c.Validity(), func(i int) bool {
+		_, ok := set[acc.Get(i)]
+		return ok
+	})
+}
+
+// memberBits packs is_in's answers 64 rows at a time. The value bit under a null is
+// never read, and is left clear.
+func memberBits(name string, n int, valid bitmap.View, member func(int) bool) *data.Column {
+	bits := bitmap.NewBuilder(n)
+	all := valid.IsAllSet()
+	for i := 0; i < n; i += 64 {
+		w := min(64, n-i)
+		var word uint64
+		for b := range w {
+			if (all || valid.Get(i+b)) && member(i+b) {
+				word |= 1 << uint(b)
+			}
+		}
+		bits.AppendBits(word, w)
+	}
+	return data.NewBool(name, bits.Finish(), valid)
 }
 
 // EncodeOne returns the set key for the single row of a length-1 column.
