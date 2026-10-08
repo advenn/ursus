@@ -7,6 +7,7 @@ package ursus_test
 
 import (
 	"bytes"
+	"fmt"
 	"math/rand/v2"
 	"testing"
 
@@ -82,6 +83,41 @@ func TestParquetReaderRoundTripsNulls(t *testing.T) {
 				t.Fatal(err)
 			}
 			ursustest.AssertFrameEqual(t, got, want)
+		}
+	}
+}
+
+// TestStringsAcrossManySmallPages: a byte-array column is read a page at a time,
+// its values aliasing the page until they are copied (step 124). A batch here
+// spans dozens of 256-byte pages, dictionary-encoded and plain, with nulls, so a
+// value copied after its page was replaced would read another page's bytes.
+func TestStringsAcrossManySmallPages(t *testing.T) {
+	for _, threads := range []int{1, 4} {
+		df, err := ursus.ScanParquet("testdata/parquet/pyarrow_small_pages.parquet").
+			Collect(t.Context(), ursus.WithBatchSize(97), ursus.WithThreads(threads))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if df.Height() != 3000 {
+			t.Fatalf("%d rows, want 3000", df.Height())
+		}
+		for _, name := range []string{"dict", "plain"} {
+			col, err := df.Column[string](name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := range 3000 {
+				got, ok := col.Get(i)
+				if i%13 == 0 {
+					if ok {
+						t.Fatalf("%s row %d: %q, want null", name, i, got)
+					}
+					continue
+				}
+				if want := fmt.Sprintf("v%04d", i*7%1000); !ok || got != want {
+					t.Fatalf("%s row %d: %q (%v), want %q", name, i, got, ok, want)
+				}
+			}
 		}
 	}
 }

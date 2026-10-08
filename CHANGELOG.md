@@ -108,6 +108,8 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **String columns are read with one copy, not two** (124): q1 −11%, h2o gb1 −14%,
+  j4 about −10%.
 - **The Parquet scan and the filter are cheaper** (123). PDS-H q6 at SF=1 is about
   45% faster, q1 36%, q3 44% and q14 41%; h2o gb4 38%, gb1 about 28%, j1 15%.
   - A column stored as Parquet stores it is read straight into its buffer.

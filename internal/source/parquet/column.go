@@ -459,6 +459,26 @@ func (c *byteArrayCol) appendNull() {
 	c.offs = append(c.offs, int32(len(c.chars)))
 }
 
+// growExact makes room for n more elements and no more: the column keeps the
+// buffer, so append's doubling, across the page reads of one batch, was memory the
+// frame held for nothing.
+func growExact[E any](s []E, n int) []E {
+	if cap(s)-len(s) >= n {
+		return s
+	}
+	out := make([]E, len(s), len(s)+n)
+	copy(out, s)
+	return out
+}
+
+// inPageReader reads values that alias the current page instead of copies of them.
+// arrow-go's ReadBatch copies every value of a byte-array chunk into a fresh buffer,
+// and byteArrayCol copies them again into its own: one of the two is enough, and
+// the allocation it makes for every batch is work for the collector.
+type inPageReader interface {
+	ReadBatchInPage(n int64, vals []parquet.ByteArray, defs, reps []int16) (int64, int, error)
+}
+
 func (c *byteArrayCol) read(n int) (int, error) {
 	if cap(c.vals) < n {
 		c.vals = make([]parquet.ByteArray, n)
@@ -466,20 +486,48 @@ func (c *byteArrayCol) read(n int) (int, error) {
 			c.defs = make([]int16, n)
 		}
 	}
-	vals := c.vals[:n]
-	var defs []int16
-	if c.maxDef > 0 {
-		defs = c.defs[:n]
+	ip, inPage := c.cr.(inPageReader)
+	if !inPage {
+		var defs []int16
+		if c.maxDef > 0 {
+			defs = c.defs[:n]
+		}
+		total, valuesRead, err := c.cr.ReadBatch(int64(n), c.vals[:n], defs, nil)
+		if err != nil {
+			return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a byte-array chunk")
+		}
+		return c.take(int(total), valuesRead, defs), nil
 	}
+	// A page at a time. The values alias the page, which the next call may replace,
+	// so each call's values are copied into chars before it.
+	rows := 0
+	for rows < n {
+		var defs []int16
+		if c.maxDef > 0 {
+			defs = c.defs[rows:n]
+		}
+		total, valuesRead, err := ip.ReadBatchInPage(int64(n-rows), c.vals[:n-rows], defs, nil)
+		if err != nil {
+			return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a byte-array chunk")
+		}
+		if total == 0 {
+			break
+		}
+		rows += c.take(int(total), valuesRead, defs)
+	}
+	return rows, nil
+}
 
-	total, valuesRead, err := c.cr.ReadBatch(int64(n), vals, defs, nil)
-	if err != nil {
-		return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a byte-array chunk")
+// take appends one read's values, the first valuesRead of c.vals, for rows rows
+// whose definition levels are defs (nil for a REQUIRED column), and returns rows.
+func (c *byteArrayCol) take(rows, valuesRead int, defs []int16) int {
+	if c.maxDef == 0 {
+		rows = valuesRead
 	}
-	rows := int(total)
 	if rows == 0 {
-		return 0, nil
+		return 0
 	}
+	vals := c.vals[:valuesRead]
 
 	// The mandatory leading zero, seeded once per column rather than branched on
 	// per value. finish then hands offs straight over with no fixup.
@@ -489,23 +537,15 @@ func (c *byteArrayCol) read(n int) (int, error) {
 	// Both buffers grown once for the whole read, not by append's doubling as each
 	// value arrives: the characters are counted first.
 	chars := 0
-	for _, v := range vals[:valuesRead] {
+	for _, v := range vals {
 		chars += len(v)
 	}
-	c.chars = slices.Grow(c.chars, chars)
-	c.offs = slices.Grow(c.offs, rows)
+	c.chars = growExact(c.chars, chars)
+	c.offs = growExact(c.offs, rows)
 
-	if c.maxDef == 0 {
-		for i := range valuesRead {
-			c.appendVal(vals[i])
-		}
-		c.valid.appendValid(valuesRead)
-		return valuesRead, nil
-	}
-
-	if valuesRead == rows {
-		for i := range rows {
-			c.appendVal(vals[i])
+	if c.maxDef == 0 || valuesRead == rows {
+		for _, v := range vals {
+			c.appendVal(v)
 		}
 		c.valid.appendValid(rows)
 	} else {
@@ -520,12 +560,12 @@ func (c *byteArrayCol) read(n int) (int, error) {
 		}
 		c.valid.appendDefs(defs[:rows], c.maxDef)
 	}
-	if c.parent != nil {
+	if c.parent != nil && c.maxDef > 0 {
 		for _, d := range defs[:rows] {
 			c.parent.Append(d >= c.parentDef)
 		}
 	}
-	return rows, nil
+	return rows
 }
 
 func (c *byteArrayCol) finish(name string) *data.Column {

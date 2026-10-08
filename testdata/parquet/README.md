@@ -34,3 +34,9 @@ encoding arrow-go decodes for integers; and `f`, FIXED_LEN_BYTE_ARRAY(4), plain.
 column_encoding={"f": "DELTA_BYTE_ARRAY"}`: `f`, FIXED_LEN_BYTE_ARRAY(4), "abcd",
 "efgh", "ijkl", "mnop", under an encoding arrow-go does not decode for that type and
 panics on. `parquetaudit_test.go` reads both (step 119).
+
+`pyarrow_small_pages.parquet` — pyarrow 25, `compression='none', data_page_size=256,
+use_dictionary=['dict'], write_batch_size=50`: 3,000 rows of two String columns, `dict`
+(RLE_DICTIONARY) and `plain`, each holding "v%04d" of i*7 mod 1000, and null where i is
+a multiple of 13. Its 256-byte pages put dozens in every batch the reader reads.
+`readerroundtrip_test.go` reads it (step 124).
