@@ -68,6 +68,32 @@ type Accumulator interface {
 	NBytes() int64
 }
 
+// extend returns s at length n, the new elements set to fill, doubling its capacity
+// when it must grow.
+//
+// Every accumulator's Reserve grows its per-group arrays here. They appended a
+// group at a time, so past 256 groups each grew by append's quarter steps, and the
+// allocations on the way to a final size summed to about five times it: in h2o gb10
+// the sum and the count were 12% of everything the query allocated (step 132).
+// Doubling sums to about twice. It can leave half an array unused, which is why
+// each NBytes counts capacity, not length (step 134).
+func extend[T any](s []T, n int, fill T) []T {
+	l := len(s)
+	if n <= l {
+		return s
+	}
+	if n > cap(s) {
+		g := make([]T, l, max(n, 2*cap(s)))
+		copy(g, s)
+		s = g
+	}
+	s = s[:n]
+	for i := l; i < n; i++ {
+		s[i] = fill
+	}
+	return s
+}
+
 // NewAccumulator builds the accumulator for an aggregate over a given input type.
 //
 // The binding comes from expr.ResolveAggBinding and is OBEYED, not re-derived —
@@ -203,11 +229,7 @@ type countAcc struct {
 	n    []uint64
 }
 
-func (a *countAcc) Reserve(n int) {
-	for len(a.n) < n {
-		a.n = append(a.n, 0)
-	}
-}
+func (a *countAcc) Reserve(n int) { a.n = extend(a.n, n, 0) }
 
 func (a *countAcc) AddBatch(groups []int32, col *data.Column) error {
 	valid := col.Validity()
@@ -318,9 +340,7 @@ func takeGroup(key []byte) int32 {
 }
 
 func (a *nuniqueAcc) Reserve(n int) {
-	for len(a.counts) < n {
-		a.counts = append(a.counts, 0)
-	}
+	a.counts = extend(a.counts, n, 0)
 	// Size the table by the GROUP count. It is a lower bound on the distinct pairs —
 	// every group contributes at least one — and it skips most of the doublings that
 	// otherwise rehash the whole table on the way up from 64 slots.
@@ -433,16 +453,14 @@ func newSumAcc(in dtype.DataType, bind expr.AggBinding) (Accumulator, error) {
 }
 
 func (a *sumAcc) Reserve(n int) {
-	for len(a.seen) < n {
-		a.seen = append(a.seen, false)
-		if a.isInt {
-			a.i = append(a.i, i128.Zero)
-			if a.wide {
-				a.carry = append(a.carry, 0)
-			}
-		} else {
-			a.f = append(a.f, 0)
+	a.seen = extend(a.seen, n, false)
+	if a.isInt {
+		a.i = extend(a.i, n, i128.Zero)
+		if a.wide {
+			a.carry = extend(a.carry, n, 0)
 		}
+	} else {
+		a.f = extend(a.f, n, 0)
 	}
 }
 
@@ -688,16 +706,14 @@ func newMeanAcc(in dtype.DataType, bind expr.AggBinding) (Accumulator, error) {
 }
 
 func (a *meanAcc) Reserve(n int) {
-	for len(a.n) < n {
-		a.n = append(a.n, 0)
-		if a.isInt {
-			a.i = append(a.i, i128.Zero)
-			if a.wide {
-				a.carry = append(a.carry, 0)
-			}
-		} else {
-			a.sum = append(a.sum, 0)
+	a.n = extend(a.n, n, 0)
+	if a.isInt {
+		a.i = extend(a.i, n, i128.Zero)
+		if a.wide {
+			a.carry = extend(a.carry, n, 0)
 		}
+	} else {
+		a.sum = extend(a.sum, n, 0)
 	}
 }
 
@@ -968,11 +984,9 @@ type extremumNum[T data.Primitive] struct {
 }
 
 func (a *extremumNum[T]) Reserve(n int) {
-	for len(a.seen) < n {
-		var zero T
-		a.best = append(a.best, zero)
-		a.seen = append(a.seen, false)
-	}
+	var zero T
+	a.best = extend(a.best, n, zero)
+	a.seen = extend(a.seen, n, false)
 }
 
 // wins reports whether x should replace the current best.
@@ -1033,7 +1047,7 @@ func (a *extremumNum[T]) Finish(name string, nGroups int) (*data.Column, error) 
 
 func (a *extremumNum[T]) NBytes() int64 {
 	w := int64(a.out.Physical().BitWidth() / 8)
-	return int64(len(a.best))*w + int64(len(a.seen))
+	return int64(cap(a.best))*w + int64(cap(a.seen))
 }
 
 // --- strings and binary --------------------------------------------------------
@@ -1046,10 +1060,8 @@ type extremumStr struct {
 }
 
 func (a *extremumStr) Reserve(n int) {
-	for len(a.seen) < n {
-		a.best = append(a.best, "")
-		a.seen = append(a.seen, false)
-	}
+	a.best = extend(a.best, n, "")
+	a.seen = extend(a.seen, n, false)
 }
 
 func (a *extremumStr) wins(x, cur string) bool {
@@ -1112,7 +1124,7 @@ func (a *extremumStr) Finish(name string, nGroups int) (*data.Column, error) {
 }
 
 func (a *extremumStr) NBytes() int64 {
-	n := int64(len(a.best))*16 + int64(len(a.seen)) // string headers plus seen
+	n := int64(cap(a.best))*16 + int64(cap(a.seen)) // string headers plus seen
 	for _, s := range a.best {
 		n += int64(len(s))
 	}
@@ -1129,10 +1141,8 @@ type extremumI128 struct {
 }
 
 func (a *extremumI128) Reserve(n int) {
-	for len(a.seen) < n {
-		a.best = append(a.best, i128.Zero)
-		a.seen = append(a.seen, false)
-	}
+	a.best = extend(a.best, n, i128.Zero)
+	a.seen = extend(a.seen, n, false)
 }
 
 func (a *extremumI128) wins(x, cur i128.Int128) bool {
@@ -1190,7 +1200,7 @@ func (a *extremumI128) Finish(name string, nGroups int) (*data.Column, error) {
 }
 
 func (a *extremumI128) NBytes() int64 {
-	return int64(len(a.best))*16 + int64(len(a.seen))
+	return int64(cap(a.best))*16 + int64(cap(a.seen))
 }
 
 // --- Bool, which is also Any and AllTrue ---------------------------------------
@@ -1203,10 +1213,8 @@ type extremumBool struct {
 }
 
 func (a *extremumBool) Reserve(n int) {
-	for len(a.seen) < n {
-		a.best = append(a.best, false)
-		a.seen = append(a.seen, false)
-	}
+	a.best = extend(a.best, n, false)
+	a.seen = extend(a.seen, n, false)
 }
 
 func (a *extremumBool) AddBatch(groups []int32, col *data.Column) error {
@@ -1263,7 +1271,7 @@ func (a *extremumBool) Finish(name string, nGroups int) (*data.Column, error) {
 	return data.NewBool(name, vb.Finish(), seenBitmap(a.seen, nGroups)), nil
 }
 
-func (a *extremumBool) NBytes() int64 { return int64(len(a.best)) + int64(len(a.seen)) }
+func (a *extremumBool) NBytes() int64 { return int64(cap(a.best)) + int64(cap(a.seen)) }
 
 // --- first / last -------------------------------------------------------------
 
@@ -1279,11 +1287,7 @@ type positionAcc struct {
 	rows []*data.Column
 }
 
-func (a *positionAcc) Reserve(n int) {
-	for len(a.rows) < n {
-		a.rows = append(a.rows, nil)
-	}
-}
+func (a *positionAcc) Reserve(n int) { a.rows = extend(a.rows, n, nil) }
 
 func (a *positionAcc) AddBatch(groups []int32, col *data.Column) error {
 	pick := map[int32]int{}
@@ -1413,7 +1417,7 @@ func widenFloat(c *data.Column) ([]float64, error) { return toFloat64(c) }
 // colBytes sums the payload of a per-group column slice, skipping the empty slots
 // Reserve leaves behind.
 func colBytes(cs []*data.Column) int64 {
-	n := int64(len(cs)) * 8 // the slice of pointers
+	n := int64(cap(cs)) * 8 // the slice of pointers
 	for _, c := range cs {
 		if c != nil {
 			n += c.NBytes()
@@ -1422,7 +1426,7 @@ func colBytes(cs []*data.Column) int64 {
 	return n
 }
 
-func (a *countAcc) NBytes() int64 { return int64(len(a.n)) * 8 }
+func (a *countAcc) NBytes() int64 { return int64(cap(a.n)) * 8 }
 
 // NBytes for n_unique approximates the map contents: 8 bytes per group for the
 // slice, plus a per-entry constant covering the string header and the bucket slot.
@@ -1435,15 +1439,15 @@ func (a *countAcc) NBytes() int64 { return int64(len(a.n)) * 8 }
 // the two that REFUSE to spill rather than spilling, so this number is what decides
 // when the refusal fires, and an under-count makes it fire late.
 func (a *nuniqueAcc) NBytes() int64 {
-	return a.tab.NBytes() + int64(len(a.counts))*4
+	return a.tab.NBytes() + int64(cap(a.counts))*4
 }
 
 func (a *sumAcc) NBytes() int64 {
-	return int64(len(a.i))*16 + int64(len(a.f))*8 + int64(len(a.seen))
+	return int64(cap(a.i))*16 + int64(cap(a.carry))*8 + int64(cap(a.f))*8 + int64(cap(a.seen))
 }
 
 func (a *meanAcc) NBytes() int64 {
-	return int64(len(a.sum))*8 + int64(len(a.i))*16 + int64(len(a.n))*8
+	return int64(cap(a.sum))*8 + int64(cap(a.i))*16 + int64(cap(a.carry))*8 + int64(cap(a.n))*8
 }
 
 func (a *positionAcc) NBytes() int64 { return colBytes(a.rows) }
@@ -1489,11 +1493,7 @@ type implodeAcc struct {
 	base  int32          // rows retained so far, which is where the next batch starts
 }
 
-func (a *implodeAcc) Reserve(n int) {
-	for len(a.rows) < n {
-		a.rows = append(a.rows, nil)
-	}
-}
+func (a *implodeAcc) Reserve(n int) { a.rows = extend(a.rows, n, nil) }
 
 // AddBatch is the one place implode deviates from every other aggregate: it does
 // NOT skip nulls.
@@ -1592,7 +1592,7 @@ func (a *implodeAcc) Finish(name string, nGroups int) (*data.Column, error) {
 // size, so the O(rows) refusal would fire far too late or not at all. Nothing in a
 // correctness test would notice.
 func (a *implodeAcc) NBytes() int64 {
-	n := int64(len(a.rows)) * 24 // one slice header per group
+	n := int64(cap(a.rows)) * 24 // one slice header per group
 	for _, r := range a.rows {
 		n += int64(cap(r)) * 4
 	}

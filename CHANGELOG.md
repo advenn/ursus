@@ -12,7 +12,7 @@ Step numbers below point at those records.
 
 ## v0.4.0 — candidate
 
-Everything since `v0.3.1` (2026-10-06): steps 92–133.
+Everything since `v0.3.1` (2026-10-06): steps 92–134.
 
 [`v0.4-scope.md`](./context_files/v0.4-scope.md) set the scope: **fast where it is
 slow, and safe inside a service.** Its §7 records what was done, and what moved to
@@ -123,6 +123,10 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **Accumulators grow by doubling** (134). Each allocated about five times what it
+  held, growing a group at a time; now about twice. The memory budget now counts
+  each per-group array's capacity, which doubling can leave up to half unused, not
+  only its length. Its speed was not measured.
 - **The key table allocates about what it holds** (133). Its key arena is chunks
   that never move, and its per-key arrays double. A million distinct keys allocated
   4.1 times what the table held, and now 1.6.

@@ -48,11 +48,9 @@ type varAcc struct {
 }
 
 func (a *varAcc) Reserve(n int) {
-	for len(a.n) < n {
-		a.n = append(a.n, 0)
-		a.mean = append(a.mean, 0)
-		a.m2 = append(a.m2, 0)
-	}
+	a.n = extend(a.n, n, 0)
+	a.mean = extend(a.mean, n, 0)
+	a.m2 = extend(a.m2, n, 0)
 }
 
 func (a *varAcc) AddBatch(groups []int32, col *data.Column) error {
@@ -154,10 +152,8 @@ type productAcc struct {
 }
 
 func (a *productAcc) Reserve(n int) {
-	for len(a.p) < n {
-		a.p = append(a.p, 1) // the multiplicative identity, not zero
-		a.seen = append(a.seen, false)
-	}
+	a.p = extend(a.p, n, 1) // the multiplicative identity, not zero
+	a.seen = extend(a.seen, n, false)
 }
 
 func (a *productAcc) AddBatch(groups []int32, col *data.Column) error {
@@ -246,11 +242,9 @@ type argExtremumAcc struct {
 }
 
 func (a *argExtremumAcc) Reserve(n int) {
-	for len(a.n) < n {
-		a.n = append(a.n, 0)
-		a.best = append(a.best, nil)
-		a.bestI = append(a.bestI, 0)
-	}
+	a.n = extend(a.n, n, 0)
+	a.best = extend(a.best, n, nil)
+	a.bestI = extend(a.bestI, n, 0)
 }
 
 func (a *argExtremumAcc) AddBatch(groups []int32, col *data.Column) error {
@@ -407,11 +401,7 @@ type quantileAcc struct {
 	vals   [][]float64
 }
 
-func (a *quantileAcc) Reserve(n int) {
-	for len(a.vals) < n {
-		a.vals = append(a.vals, nil)
-	}
-}
+func (a *quantileAcc) Reserve(n int) { a.vals = extend(a.vals, n, nil) }
 
 func (a *quantileAcc) AddBatch(groups []int32, col *data.Column) error {
 	vals, err := widenFloat(col)
@@ -654,20 +644,20 @@ func newBoolExtremum(op expr.AggOp) Accumulator {
 }
 
 func (a *varAcc) NBytes() int64 {
-	return int64(len(a.n))*8 + int64(len(a.mean))*8 + int64(len(a.m2))*8
+	return int64(cap(a.n))*8 + int64(cap(a.mean))*8 + int64(cap(a.m2))*8
 }
 
-func (a *productAcc) NBytes() int64 { return int64(len(a.p))*8 + int64(len(a.seen)) }
+func (a *productAcc) NBytes() int64 { return int64(cap(a.p))*8 + int64(cap(a.seen)) }
 
 func (a *argExtremumAcc) NBytes() int64 {
-	return int64(len(a.n))*8 + int64(len(a.bestI))*8 + colBytes(a.best)
+	return int64(cap(a.n))*8 + int64(cap(a.bestI))*8 + colBytes(a.best)
 }
 
 // NBytes for quantile is the one that matters. It keeps EVERY value it has seen,
 // per group, so its state is O(rows) rather than O(groups) — the single place
 // where an aggregation's memory is not bounded by cardinality.
 func (a *quantileAcc) NBytes() int64 {
-	n := int64(len(a.vals)) * 24 // one slice header per group
+	n := int64(cap(a.vals)) * 24 // one slice header per group
 	for _, v := range a.vals {
 		n += int64(cap(v)) * 8
 	}

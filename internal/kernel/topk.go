@@ -80,11 +80,7 @@ func (a *topKAcc[T]) better(x, y T) bool {
 	return c < 0
 }
 
-func (a *topKAcc[T]) Reserve(n int) {
-	for len(a.vals) < n {
-		a.vals = append(a.vals, nil)
-	}
-}
+func (a *topKAcc[T]) Reserve(n int) { a.vals = extend(a.vals, n, nil) }
 
 // offer places v among group g's best, if it belongs there.
 func (a *topKAcc[T]) offer(g int, v T) {
@@ -157,7 +153,7 @@ func (a *topKAcc[T]) Finish(name string, nGroups int) (*data.Column, error) {
 
 // NBytes is O(groups), as Accumulator requires: the values are counted as they
 // arrive, not walked.
-func (a *topKAcc[T]) NBytes() int64 { return a.held*a.size + int64(len(a.vals))*24 }
+func (a *topKAcc[T]) NBytes() int64 { return a.held*a.size + int64(cap(a.vals))*24 }
 
 // newTopK builds the TopK or BottomK accumulator for a column of type in.
 func newTopK(in dtype.DataType, k int, top bool) (Accumulator, error) {
