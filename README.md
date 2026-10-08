@@ -3,8 +3,9 @@
 A (experimental) dataframe library for Go 1.27, modelled on Polars — lazy execution with a query optimizer, Arrow memory layout, SIMD
 kernels, and streaming execution that spills to disk rather than falling over. Sort, group-by, join, unique and
 partitioned windows spill — by default once a query holds half the memory its container or machine allows — and an
-operator that cannot spill fails with an error naming itself. In a container, call `ursus.SetProcessMemoryLimit()` once
-at start-up, or set `GOMEMLIMIT`, so the Go heap's own slack stays under the limit too.
+operator that cannot spill fails with an error naming itself. Under that default budget ursus also sets the Go runtime's
+soft memory limit near the same ceiling, so the heap's own slack stays under it too; `GOMEMLIMIT`, or
+`ursus.LeaveProcessMemoryLimit()`, keeps a program's own choice.
 
 ```go
 df, err := ursus.ScanParquet("events.parquet").
@@ -214,7 +215,7 @@ The caveats that apply to *this* run:
 - **ursus passed every query of all four suites,** and every answer validated against duckdb's. v0.3.0 was killed on h2o
   `gb10` over CSV; it now spills under the default budget and passes.
 - **ursus's highest peak is h2o `gb10` over CSV, 7.60 GB**, under the cap. The query budget was 4 GB; the rest is the Go
-  heap's slack, which `SetProcessMemoryLimit` would bound and the bench runner does not call.
+  heap's slack, which ursus bounds by default since step 128, after this run.
 - **Other engines:** chDB timed out on three group-bys and failed `gb6` in both h2o suites; gota ran out of memory on
   two group-bys; DataFusion, and chDB at SF=0.1, answered PDS-H `q15` wrongly, and are struck through.
 

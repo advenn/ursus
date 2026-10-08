@@ -4,6 +4,8 @@ import (
 	"math"
 	"os"
 	"runtime/debug"
+	"sync"
+	"sync/atomic"
 
 	"github.com/advenn/ursus/internal/execopt"
 )
@@ -13,8 +15,8 @@ import (
 // cgroup's limit and the machine's RAM, as the default query budget reads them. It
 // returns the limit in effect afterwards, in bytes; math.MaxInt64 means none.
 //
-// Call it once, at start-up, in a program that runs ursus under a memory limit — a
-// container, a systemd unit — and that does not set GOMEMLIMIT itself.
+// ursus calls it itself, once, the first time a query runs under the default budget
+// (step 128). Calling it at start-up does the same thing earlier.
 //
 // # Why
 //
@@ -28,10 +30,22 @@ import (
 // 650 MB of runtime memory under the defaults and at about 440 MB under a 450 MB
 // soft limit.
 //
-// # Why it is not automatic
+// # Why it is automatic
 //
-// The limit is the whole process's, not ursus's: it changes how the program
-// around ursus collects garbage too. A library should not decide that on import.
+// The limit is the whole process's, not ursus's: it changes how the program around
+// ursus collects garbage too, which is why step 97 left it to the caller. Measured
+// since, that was the wrong trade. The budget counts what the operators hold, and
+// the heap ran to about twice it: under an 8 GB cgroup, h2o's six-key group-by peaked
+// at 7.6 GB against a 4 GB budget, and under a 4 GB cgroup a join of two ten-million-
+// row tables was killed at the cap. A program that never called this, which is most
+// of them, had a default budget that did not hold.
+//
+// So it is set where ursus already decides how much memory the process may use: when
+// a query runs under the default budget, which ursus derives from that same ceiling.
+// Not on import, and not under a limit the caller gave WithMemoryLimit.
+//
+// To keep ursus from setting it, set GOMEMLIMIT, "off" included, or call
+// LeaveProcessMemoryLimit before the first query.
 //
 // # What it leaves alone
 //
@@ -54,3 +68,28 @@ func SetProcessMemoryLimit() int64 {
 
 // processCeiling is execopt.Ceiling, as a variable so a test can set it.
 var processCeiling = execopt.Ceiling
+
+// LeaveProcessMemoryLimit keeps ursus from setting the Go runtime's soft memory limit
+// when a query first runs under the default budget. Call it before the first query,
+// in a program that manages the limit itself, or wants none and cannot set
+// GOMEMLIMIT=off.
+func LeaveProcessMemoryLimit() { autoLimitOff.Store(true) }
+
+var (
+	autoLimitOnce sync.Once
+	autoLimitOff  atomic.Bool
+)
+
+// applyAutoMemoryLimit is SetProcessMemoryLimit, once per process, unless
+// LeaveProcessMemoryLimit came first. The query's own budget is not affected: it is
+// half the ceiling either way.
+func applyAutoMemoryLimit() {
+	if autoLimitOff.Load() {
+		return
+	}
+	autoLimitOnce.Do(func() {
+		if !autoLimitOff.Load() {
+			SetProcessMemoryLimit()
+		}
+	})
+}

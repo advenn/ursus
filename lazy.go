@@ -380,10 +380,11 @@ type MemoryStats struct {
 // WithMemoryLimit(0) turns the budget off; elsewhere than Linux there is no default
 // and it is off already.
 //
-// The heap's slack is the Go runtime's to bound, not the budget's. A program that
-// runs under a container's limit should call SetProcessMemoryLimit at start-up, or
-// set GOMEMLIMIT, so the collector works harder near the ceiling instead of the
-// kernel killing the process.
+// The heap's slack is the Go runtime's to bound, not the budget's. Under the default
+// budget ursus sets the Go soft memory limit too, to nine tenths of the same ceiling,
+// unless GOMEMLIMIT or an earlier debug.SetMemoryLimit chose one: see
+// SetProcessMemoryLimit. Under a limit given here, it does not, and a program running
+// under a container's limit should call SetProcessMemoryLimit itself.
 //
 // # A group-by under a limit you set is serial
 //
@@ -444,6 +445,12 @@ func baseCollectCfg() collectCfg {
 func (c *collectCfg) finish() {
 	if !c.limitSet {
 		c.memLimit = defaultMemoryLimit()
+		// The default budget is half the ceiling, and only holds if the heap's own
+		// slack does too, so the Go soft limit is set with it. See
+		// SetProcessMemoryLimit.
+		if c.memLimit > 0 {
+			applyAutoMemoryLimit()
+		}
 	}
 	c.budget = execopt.NewBudget(c.memLimit, c.spillDir)
 	if !c.limitSet {

@@ -355,6 +355,45 @@ func FilterBatch(b *data.Batch, mask *data.Column) (*data.Batch, error) {
 	return data.NewBatch(b.Schema(), cols)
 }
 
+// ConcatOwned is Concat for a caller that gives its batches up: it clears the slice
+// it is handed, and lets go of each column's pieces as soon as that column is
+// copied.
+//
+// Concat holds every input until its last column is done, so the input and the
+// answer are both alive in full, at what is usually the operator's largest moment:
+// twice a join's build side when it freezes, twice a query's result when Collect
+// assembles it, and none of it counted against the budget. Here the two overlap by
+// one column (step 128).
+func ConcatOwned(schema *dtype.Schema, batches []*data.Batch) (*data.Batch, error) {
+	if len(batches) <= 1 || schema.Len() == 0 {
+		out, err := Concat(schema, batches)
+		clear(batches)
+		return out, err
+	}
+	total := 0
+	for _, b := range batches {
+		total += b.Rows()
+	}
+	parts := make([][]*data.Column, schema.Len())
+	for ci := range parts {
+		parts[ci] = make([]*data.Column, len(batches))
+		for bi, b := range batches {
+			parts[ci][bi] = b.Column(ci)
+		}
+	}
+	clear(batches)
+	cols := make([]*data.Column, schema.Len())
+	for ci := range parts {
+		out, err := concatColumn(parts[ci], total)
+		if err != nil {
+			return nil, err
+		}
+		cols[ci] = out
+		parts[ci] = nil
+	}
+	return data.NewBatch(schema, cols)
+}
+
 func emptyCols(b *data.Batch) []*data.Column {
 	out := make([]*data.Column, b.NumCols())
 	for i, c := range b.Columns() {

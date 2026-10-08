@@ -576,16 +576,18 @@ func (s *joinBuildSink) freeze() (*joinTable, error) {
 			}
 			t.build = b
 		default:
-			b, err := kernel.Concat(s.right, s.parts)
+			// Owned: the parts are let go column by column as each is copied, so the
+			// build side is not held twice at the moment this operator is largest.
+			b, err := kernel.ConcatOwned(s.right, s.parts)
 			if err != nil {
 				return nil, err
 			}
 			t.build = b
 		}
 		s.parts = nil
-		// The concat allocated a SECOND full copy of the build side, at the moment
-		// this operator is largest, and the retained source batches are dropped in
-		// exchange. Re-basing the account on the table rather than on the parts is
+		// The concat builds a second copy of the build side, overlapping the parts
+		// by one column now (step 128), and the retained source batches are dropped
+		// in exchange. Re-basing the account on the table rather than on the parts is
 		// what stops MemoryStats.Peak under-reporting a join by one whole copy of
 		// its input.
 		s.mem.Retain(t.build)

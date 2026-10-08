@@ -60,6 +60,14 @@ contains it.
 
 ### Behaviour changes a v0.3 user can trip on
 
+- **The Go runtime's soft memory limit is set by default** (128). The first query
+  that runs under the default budget sets it to nine tenths of the ceiling the
+  budget is derived from, as `SetProcessMemoryLimit` does. The limit is the whole
+  process's, so it changes how the program around ursus collects garbage too.
+  `GOMEMLIMIT` in the environment, `off` included, a limit already set with
+  `debug.SetMemoryLimit`, a limit given with `WithMemoryLimit`, and
+  `LeaveProcessMemoryLimit` each keep ursus from setting it.
+
 - **An inner join's row order is no longer promised** to follow the left frame:
   the smaller input is hashed, whichever side it is. `JoinMaintainOrder(true)`
   keeps the old order. Left, right, semi, anti and full joins are unchanged (104).
@@ -100,7 +108,7 @@ changed its parameters** since v0.3.1.
   `Degrees` and `Radians`.
 - **Namespaces:** `StrExpr.Strptime` and `DtExpr.Strftime`.
 - **Joins:** `JoinMaintainOrder`.
-- **Process:** `SetProcessMemoryLimit`.
+- **Process:** `SetProcessMemoryLimit` and `LeaveProcessMemoryLimit`.
 - **`i128`:** `Int128.AddChecked`, `SubChecked` and `DivMod`.
 
 ### Everything, by step
@@ -108,6 +116,14 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **The default memory budget holds** (128). Under a 4 GB container a join of two
+  ten-million-row tables was killed: the heap ran to about twice the 2 GB budget.
+  - Under the default budget, the Go soft memory limit is now set as well (see the
+    behaviour changes).
+  - `Collect` closes the query's operators before assembling the result, so a join's
+    build side is no longer alive alongside it.
+  - The result, and a join's build side, are concatenated column by column, each
+    column's pieces let go once copied, instead of being held twice.
 - **The 0.4 report, re-run** after the performance round (127): PDS-H SF=1 at 4.4×
   Polars, SF=0.1 4.0×, h2o 1.9× over Parquet and 3.3× over CSV. Step 117's report,
   taken while this session's reviewers were grepping, had understated ursus.
@@ -339,9 +355,9 @@ Newest first. The numbers are steps, each with an as-built record in
 - **Speed:** ursus is slower than Polars and DuckDB: 4.4× Polars on PDS-H at SF=1, by
   geomean, just short of the 4× the scope set as its target. The README's table gives
   the rest, from the report step 127 ran.
-- **Memory:** h2o `gb10` over CSV peaked at 7.60 GB under an 8 GB cap. The query
-  budget was 4 GB; the rest is the Go heap's slack, which `SetProcessMemoryLimit`
-  bounds.
+- **Memory:** h2o `gb10` over CSV peaked at 7.60 GB under an 8 GB cap, in step 127's
+  report. The query budget was 4 GB; the rest is the Go heap's slack, which ursus
+  bounds by default since step 128, after that report. Not re-measured since.
 
 ---
 

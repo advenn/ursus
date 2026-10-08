@@ -31,8 +31,24 @@ import (
 
 // Collect runs the tree to completion and concatenates every batch.
 func Collect(ctx context.Context, root physical.Operator) (*data.Batch, error) {
-	defer root.Close()
+	schema := root.Schema()
+	batches, err := drain(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	return kernel.ConcatOwned(schema, batches)
+}
 
+// drain pulls every batch, and closes the tree before it returns.
+//
+// The tree's state — a join's table and its build side, a sort's runs — is dead
+// once the stream has ended. Collect used to close it only after concatenating the
+// result, so a join's whole build side, the result's batches and the concatenated
+// result were alive at once: the moment a large join over CSV was OOM-killed under
+// a 4 GB container (step 128). The batches are then concatenated by ConcatOwned,
+// which lets go of them column by column.
+func drain(ctx context.Context, root physical.Operator) ([]*data.Batch, error) {
+	defer root.Close()
 	var batches []*data.Batch
 	for {
 		if err := ctx.Err(); err != nil {
@@ -40,14 +56,13 @@ func Collect(ctx context.Context, root physical.Operator) (*data.Batch, error) {
 		}
 		b, err := physical.Pull(ctx, root)
 		if errors.Is(err, io.EOF) {
-			break
+			return batches, nil
 		}
 		if err != nil {
 			return nil, err
 		}
 		batches = append(batches, b)
 	}
-	return kernel.Concat(root.Schema(), batches)
 }
 
 // Batches streams results without materialising the whole frame.
