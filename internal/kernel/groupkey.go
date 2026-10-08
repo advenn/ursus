@@ -67,6 +67,20 @@ func NewGroupKeyEncoder(op string, cols []*data.Column) (*GroupKeyEncoder, error
 // is deliberate: a map lookup `m[string(key)]` does not allocate in Go, so the
 // common path (an existing group) is allocation-free and only a genuinely new
 // group pays for a copy.
+// AppendKey appends a row's key to dst, as Encode encodes it, so that several keys
+// can be held at once: KeyTable's batch methods take a chunk of them.
+func (e *GroupKeyEncoder) AppendKey(dst []byte, row int) []byte {
+	for i, w := range e.writers {
+		if !e.cols[i].IsValid(row) {
+			dst = append(dst, 0x00)
+			continue
+		}
+		dst = append(dst, 0x01)
+		dst = w(dst, row)
+	}
+	return dst
+}
+
 func (e *GroupKeyEncoder) Encode(row int) []byte {
 	e.buf = e.buf[:0]
 	for i, w := range e.writers {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/advenn/ursus/dtype"
@@ -265,6 +266,7 @@ type joinBuildSink struct {
 	rowKey []int32
 	parts  []*data.Batch
 	nRows  int
+	chunk  keyChunk // admit's scratch
 
 	// mem accounts everything this sink holds across batches: the retained build
 	// batches, rowKey (one int32 per build row whether or not the rows themselves
@@ -645,10 +647,15 @@ type joinProbeOp struct {
 
 	mu sync.Mutex
 
-	cur     *data.Batch
-	curOK   bitmap.View
-	enc     *kernel.GroupKeyEncoder
-	row     int
+	cur   *data.Batch
+	curOK bitmap.View
+	enc   *kernel.GroupKeyEncoder
+	row   int
+	// found is each row's id in the table, looked up for the whole batch in
+	// startBatch a chunk at a time, or -1 when the key is not resident, or noLookup
+	// for a null key that matches nothing (step 126).
+	found   []int32
+	chunk   keyChunk
 	hit     int32
 	nHit    int32
 	entered bool
@@ -970,9 +977,43 @@ func (p *joinProbeOp) startBatch(ctx context.Context, in *data.Batch) error {
 		return err
 	}
 	p.curOK = keyValidity(keyCols)
-	p.enc, err = kernel.NewGroupKeyEncoder("join", keyCols)
-	return err
+	if p.enc, err = kernel.NewGroupKeyEncoder("join", keyCols); err != nil {
+		return err
+	}
+	// Every row's key looked up now, a chunk at a time, so the table's slots are
+	// read many at once rather than one per row as enter reaches it. Get, not
+	// GetOrInsert: the probe must never add a key, and a frozen table read this way
+	// is still safe to share between probe workers.
+	n := in.Rows()
+	p.found = slices.Grow(p.found[:0], n)[:n]
+	ch := &p.chunk
+	ch.reset()
+	flush := func() {
+		ids, ok := ch.lookup(p.t.ids)
+		for j, id := range ids {
+			if !ok[j] {
+				id = -1
+			}
+			p.found[ch.rows[j]] = id
+		}
+		ch.reset()
+	}
+	for i := range n {
+		if !p.spec.nullsEqual && !p.curOK.Get(i) {
+			p.found[i] = noLookup
+			continue
+		}
+		ch.add(p.enc, i)
+		if ch.full() {
+			flush()
+		}
+	}
+	flush()
+	return nil
 }
+
+// noLookup marks a probe row whose null key matches nothing, in joinProbeOp.found.
+const noLookup = int32(-2)
 
 // enter looks up the current probe row's match list.
 // checkSeen is Validate's uniqueness check on the left side, for a key this level
@@ -1003,19 +1044,17 @@ func (p *joinProbeOp) enter() error {
 			return nil // cross join against an empty build side
 		}
 	} else {
-		if !p.spec.nullsEqual && !p.curOK.Get(p.row) {
+		if p.found[p.row] == noLookup {
 			// A null key matches nothing — without a lookup, so the two NullsEqual
 			// settings cannot leak into each other even if a null-keyed build row is
 			// somehow present.
 			return nil
 		}
-		k := p.enc.Encode(p.row)
-		var ok bool
-		// Get, not GetOrInsert: the probe must never add a key. It also mutates
-		// nothing, which is what keeps the frozen table safe to read from several
-		// probe workers at once.
-		id, ok = p.t.ids.Get(k)
-		if !ok {
+		// Looked up in startBatch. The key's bytes are needed only to route it or to
+		// police Validate, so they are encoded again only then.
+		id = p.found[p.row]
+		if id < 0 {
+			k := p.enc.Encode(p.row)
 			// Not resident. Three lines decide the rest, and they need no split-state
 			// branch:
 			//
@@ -1039,8 +1078,10 @@ func (p *joinProbeOp) enter() error {
 			// [1, 1, 2] joined to [2], and under NullsEqual over two null keys.
 			return p.checkSeen(k)
 		}
-		if err := p.checkSeen(k); err != nil {
-			return err
+		if p.seen != nil {
+			if err := p.checkSeen(p.enc.Encode(p.row)); err != nil {
+				return err
+			}
 		}
 	}
 	if p.t.off == nil {

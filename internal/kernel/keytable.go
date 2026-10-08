@@ -49,11 +49,19 @@ import (
 // promise that nothing changes after the build freezes — the property that would
 // let several probe workers share one table with no lock.
 type KeyTable struct {
-	// slots is the open-addressed index: a power-of-two ring of key ids, with -1
-	// for empty. Linear probing, because the load factor is capped low enough that
+	// slots is the open-addressed index: a power-of-two ring, 0 for empty, and
+	// otherwise a key's id+1 in the low 32 bits under the top 32 bits of its hash,
+	// its tag. Linear probing, because the load factor is capped low enough that
 	// clusters stay short and a linear walk is friendlier to the cache than any
 	// scheme that jumps.
-	slots []int32
+	//
+	// The tag is what keeps the walk in the ring. A probe passes several occupied
+	// slots on its way to its own, near the 3/4 cap about eight for a new key, and
+	// each was checked against hashes[id], an array indexed by id: a read at a random
+	// place, a cache miss, per slot passed. A 1.5-million-key join build spent about
+	// 170 ns an insert there (step 126). The tag rejects nearly every other key's
+	// slot from the ring itself, which is read in order.
+	slots []uint64
 	mask  uint64
 
 	// Per id, parallel:
@@ -65,6 +73,9 @@ type KeyTable struct {
 	// unlike a String column's they need not match Arrow's layout.
 	offs  []int64
 	arena []byte
+
+	// touched holds touch's sum, which nothing reads.
+	touched uint64
 }
 
 // initialSlots is small because most group-bys are small, and growth is cheap:
@@ -85,10 +96,7 @@ func NewKeyTable() *KeyTable {
 }
 
 func (t *KeyTable) init(n int) {
-	t.slots = make([]int32, n)
-	for i := range t.slots {
-		t.slots[i] = -1
-	}
+	t.slots = make([]uint64, n)
 	t.mask = uint64(n - 1)
 	// The leading zero, planted once, so KeyAt is offs[id]:offs[id+1] with no
 	// fixup and Len is len(offs)-1 with no guard.
@@ -114,29 +122,99 @@ func (t *KeyTable) GetOrInsert(key []byte) (id int32, inserted bool) {
 	if t.slots == nil {
 		t.init(initialSlots)
 	}
-	h := probeHash(key)
+	return t.getOrInsert(key, probeHash(key))
+}
+
+// ManyChunk is the most keys GetOrInsertMany and GetMany take at once.
+const ManyChunk = 64
+
+// GetOrInsertMany is GetOrInsert for up to ManyChunk keys, in order: ids[j] and
+// inserted[j] answer keys[j], exactly as calling GetOrInsert on each in turn would.
+//
+// # Why a batch
+//
+// Past the size of the cache, an insert waits on main memory for its first slot,
+// and a lookup does: in a million-key table that one read was two thirds of an
+// insert's time. One key at a time, each waits in turn. Here the keys' slots are
+// read first, in a loop whose reads do not depend on one another, so the processor
+// has many in flight at once; the inserts that follow find them in cache.
+func (t *KeyTable) GetOrInsertMany(keys [][]byte, ids []int32, inserted []bool) {
+	if t.slots == nil {
+		t.init(initialSlots)
+	}
+	var hs [ManyChunk]uint64
+	for j, k := range keys {
+		hs[j] = probeHash(k)
+	}
+	t.touch(hs[:len(keys)])
+	for j, k := range keys {
+		ids[j], inserted[j] = t.getOrInsert(k, hs[j])
+	}
+}
+
+// GetMany is Get for up to ManyChunk keys, with GetOrInsertMany's reason: ids[j] is
+// keys[j]'s id, or -1, and found[j] says which.
+//
+// Like Get it writes nothing to the table, so probe workers can share one. The
+// first slot of every key is read into first, and each lookup starts from it: the
+// reads are used, so nothing has to be stored to keep them. Storing their sum in the
+// table, as GetOrInsertMany does, was a data race between probe workers, which the
+// race detector found in the gate (step 126).
+func (t *KeyTable) GetMany(keys [][]byte, ids []int32, found []bool) {
+	if t.slots == nil {
+		for j := range keys {
+			ids[j], found[j] = -1, false
+		}
+		return
+	}
+	var hs, first [ManyChunk]uint64
+	for j, k := range keys {
+		hs[j] = probeHash(k)
+	}
+	for j, h := range hs[:len(keys)] {
+		first[j] = t.slots[h&t.mask]
+	}
+	for j, k := range keys {
+		ids[j], found[j] = t.getFrom(k, hs[j], first[j])
+	}
+}
+
+// touch reads each hash's first slot. The reads are independent, which is the
+// point; the sum is kept only so the compiler cannot drop them. It writes the table,
+// as an insert does, so it serves GetOrInsertMany and not GetMany.
+func (t *KeyTable) touch(hs []uint64) {
+	var sum uint64
+	for _, h := range hs {
+		sum += t.slots[h&t.mask]
+	}
+	t.touched = sum
+}
+
+func (t *KeyTable) getOrInsert(key []byte, h uint64) (id int32, inserted bool) {
+	tag := h >> 32
 	for i := h & t.mask; ; i = (i + 1) & t.mask {
-		got := t.slots[i]
-		if got < 0 {
+		s := t.slots[i]
+		if s == 0 {
 			id = int32(len(t.offs) - 1)
 			t.hashes = append(t.hashes, h)
 			t.arena = append(t.arena, key...)
 			t.offs = append(t.offs, int64(len(t.arena)))
-			t.slots[i] = id
+			t.slots[i] = slotOf(h, id)
 			if (len(t.offs)-1)*maxLoadDen >= len(t.slots)*maxLoadNum {
 				t.grow()
 			}
 			return id, true
 		}
-		// The hash comparison is what actually separates keys here: slot collisions
-		// are common (the mask is small), full 64-bit hash collisions are not.
-		// bytes.Equal is the backstop for the case that does not happen — and it is
-		// load-bearing anyway, because the alternative is two groups silently merged.
-		//
-		// It is also, honestly, unreachable by any test: probeHash mixes in the
-		// length, so even "ab" against "ab\x00" is rejected by the hash. Replacing
-		// this with a prefix comparison leaves the whole suite green.
-		if t.hashes[got] == h && bytes.Equal(t.keyAt(got), key) {
+		if s>>32 != tag {
+			continue
+		}
+		got := int32(uint32(s)) - 1
+		// The tag has already rejected every key whose hash differs in its top 32
+		// bits, which is all but about one in four billion. bytes.Equal decides the
+		// rest, and is load-bearing: the alternative is two groups silently merged.
+		// Comparing hashes[got] first used to sit here, and now would cost a read at
+		// a random place on every match to reject almost nothing.
+		if bytes.Equal(t.keyAt(got), key) {
 			return got, false
 		}
 	}
@@ -148,17 +226,34 @@ func (t *KeyTable) Get(key []byte) (id int32, ok bool) {
 	if t.slots == nil {
 		return -1, false
 	}
-	h := probeHash(key)
-	for i := h & t.mask; ; i = (i + 1) & t.mask {
-		got := t.slots[i]
-		if got < 0 {
+	return t.get(key, probeHash(key))
+}
+
+func (t *KeyTable) get(key []byte, h uint64) (id int32, ok bool) {
+	return t.getFrom(key, h, t.slots[h&t.mask])
+}
+
+// getFrom is get, given the key's first slot word already read.
+func (t *KeyTable) getFrom(key []byte, h, s uint64) (id int32, ok bool) {
+	tag := h >> 32
+	for i := h & t.mask; ; {
+		if s == 0 {
 			return -1, false
 		}
-		if t.hashes[got] == h && bytes.Equal(t.keyAt(got), key) {
-			return got, true
+		if s>>32 == tag {
+			got := int32(uint32(s)) - 1
+			if bytes.Equal(t.keyAt(got), key) {
+				return got, true
+			}
 		}
+		i = (i + 1) & t.mask
+		s = t.slots[i]
 	}
 }
+
+// slotOf is a slot's word for key id with hash h: its tag above, id+1 below, so
+// that no occupied slot is 0.
+func slotOf(h uint64, id int32) uint64 { return h>>32<<32 | uint64(uint32(id+1)) }
 
 // KeyAt returns the key bytes for an id. The result aliases the arena and is
 // invalidated by the next insert, so a caller that keeps it must copy.
@@ -179,7 +274,7 @@ func (t *KeyTable) keyAt(id int32) []byte {
 // slack, and said so. A memory limit is enforced against this number, so an
 // estimate spills too early or too late; four slices can simply be measured.
 func (t *KeyTable) NBytes() int64 {
-	return int64(cap(t.slots))*4 +
+	return int64(cap(t.slots))*8 +
 		int64(cap(t.hashes))*8 +
 		int64(cap(t.offs))*8 +
 		int64(cap(t.arena))
@@ -222,15 +317,12 @@ func (t *KeyTable) Reserve(n int) {
 }
 
 func (t *KeyTable) grow() {
-	slots := make([]int32, len(t.slots)*2)
-	for i := range slots {
-		slots[i] = -1
-	}
+	slots := make([]uint64, len(t.slots)*2)
 	mask := uint64(len(slots) - 1)
 	for id, h := range t.hashes {
 		for i := h & mask; ; i = (i + 1) & mask {
-			if slots[i] < 0 {
-				slots[i] = int32(id)
+			if slots[i] == 0 {
+				slots[i] = slotOf(h, int32(id))
 				break
 			}
 		}

@@ -328,27 +328,50 @@ func (s *joinBuildSink) admit(ctx context.Context, in *data.Batch, rowBase int) 
 		return err
 	}
 	track := s.spec.tracksRows()
+	// rowKey has a place per row, null-keyed ones included, filled as each chunk of
+	// keys is answered.
+	base := len(s.rowKey)
+	if track {
+		s.rowKey = append(s.rowKey, make([]int32, in.Rows())...)
+	}
+	ch := &s.chunk
+	ch.reset()
+	flush := func() error {
+		ids, inserted := ch.insert(s.ids)
+		for j, id := range ids {
+			if inserted[j] {
+				s.counts = append(s.counts, 0)
+			} else if s.spec.validate.RequiresRightUnique() {
+				row := -1
+				if rowBase >= 0 {
+					row = rowBase + int(ch.rows[j])
+				}
+				return duplicateKeyErr(s.spec.validate, "right", s.right, s.keys, row)
+			}
+			if track {
+				s.counts[id]++
+				s.rowKey[base+int(ch.rows[j])] = id
+			}
+		}
+		ch.reset()
+		return nil
+	}
 	for i := range in.Rows() {
 		if !s.spec.nullsEqual && !ok.Get(i) {
 			if track {
-				s.rowKey = append(s.rowKey, noKey)
+				s.rowKey[base+i] = noKey
 			}
 			continue
 		}
-		id, inserted := s.ids.GetOrInsert(enc.Encode(i))
-		if inserted {
-			s.counts = append(s.counts, 0)
-		} else if s.spec.validate.RequiresRightUnique() {
-			row := -1
-			if rowBase >= 0 {
-				row = rowBase + i
+		ch.add(enc, i)
+		if ch.full() {
+			if err := flush(); err != nil {
+				return err
 			}
-			return duplicateKeyErr(s.spec.validate, "right", s.right, s.keys, row)
 		}
-		if track {
-			s.counts[id]++
-			s.rowKey = append(s.rowKey, id)
-		}
+	}
+	if err := flush(); err != nil {
+		return err
 	}
 	if s.spec.needBuildRows {
 		s.parts = append(s.parts, in)

@@ -86,3 +86,30 @@ func BenchmarkKeyTableGetLarge(b *testing.B)     { benchGet(b, 4<<20) }
 func BenchmarkKeyTableGetMissSmall(b *testing.B) { benchGetMiss(b, 64<<10) }
 func BenchmarkKeyTableGetMissLarge(b *testing.B) { benchGetMiss(b, 4<<20) }
 func BenchmarkKeyTableInsert(b *testing.B)       { benchInsert(b, 1<<20) }
+func BenchmarkKeyTableInsertMany(b *testing.B)   { benchInsertMany(b, 1<<20) }
+
+// benchInsertMany is benchInsert through GetOrInsertMany, ManyChunk keys at a time.
+func benchInsertMany(b *testing.B, n int) {
+	buf := make([]byte, 0, 16*ManyChunk)
+	keys := make([][]byte, ManyChunk)
+	ids := make([]int32, ManyChunk)
+	ins := make([]bool, ManyChunk)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		t := NewKeyTable()
+		t.Reserve(n)
+		for i := 0; i < n; i += ManyChunk {
+			m := min(ManyChunk, n-i)
+			buf = buf[:0]
+			for j := range m {
+				start := len(buf)
+				buf = append(buf, 0x01)
+				buf = binary.BigEndian.AppendUint64(buf, uint64(i+j))
+				buf = append(buf, 0xAA, 0xBB, 0xCC)
+				keys[j] = buf[start:]
+			}
+			t.GetOrInsertMany(keys[:m], ids, ins)
+		}
+	}
+}

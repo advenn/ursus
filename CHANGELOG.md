@@ -108,6 +108,10 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **The key table waits on memory once per chunk of keys, not once per key** (126).
+  Each slot holds a tag of its key's hash, and joins and group-bys look up and insert
+  64 keys at a time, reading their slots together. PDS-H q4 is 28% faster, q12, q9
+  and q21 about 20%; h2o gb3 13%, gb10 6%. Peak memory rises about 5%.
 - **`IsIn` on a String column compares strings** instead of building each row's
   grouping key (125): its CPU in q12 fell from 1.34 s to 0.51 s. q19 is 6% faster;
   q12's wall time is bound by its join build and did not move.

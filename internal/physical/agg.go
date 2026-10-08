@@ -74,8 +74,9 @@ type hashAggSink struct {
 	keys   []expr.Node
 	specs  []aggSpec
 
-	ids  *kernel.KeyTable
-	accs []kernel.Accumulator
+	ids   *kernel.KeyTable
+	accs  []kernel.Accumulator
+	keyCh keyChunk // Consume's scratch
 
 	keyParts  []*data.Batch // one per batch that introduced groups, in id order
 	keySchema *dtype.Schema
@@ -375,38 +376,62 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 		// The freeze is tested at a batch boundary (see below), so `frozen` cannot
 		// change while this loop runs and the two cases are separate loops rather
 		// than a branch on every row.
+		// Keys go to the table a chunk at a time, in row order, so ids, newRows and
+		// firstSeen come out exactly as one key at a time would give them.
+		ch := &s.keyCh
+		ch.reset()
 		if s.frozen {
 			// Residency is closed: a key already resident behaves exactly as before,
 			// and a NEW key is routed. Get is the lookup-only form precisely so a miss
 			// here cannot admit the key — partitionOf is a pure function of the
 			// encoded key, so every later row of that key lands in the same file.
-			for i := range n {
-				k := enc.Encode(i)
-				id, seen := s.ids.Get(k)
-				if !seen {
-					p := partitionOf(k, s.level)
-					s.pend[p] = append(s.pend[p], int32(i))
-					routed++
-					continue
-				}
-				keep = append(keep, int32(i))
-				s.groups = append(s.groups, id)
-			}
-		} else {
-			for i := range n {
-				// One hash and one probe, whether or not the key is new: the probe that
-				// misses is the one that fills the slot. The key bytes alias the
-				// encoder's buffer and are copied into the table's arena on insert.
-				id, inserted := s.ids.GetOrInsert(enc.Encode(i))
-				if inserted {
-					newRows = append(newRows, int32(i))
-					if s.ordered {
-						s.firstSeen = append(s.firstSeen, s.ordinalOf(in, i))
+			flush := func() {
+				ids, seen := ch.lookup(s.ids)
+				for j, id := range ids {
+					i := ch.rows[j]
+					if !seen[j] {
+						p := partitionOf(ch.keys[j], s.level)
+						s.pend[p] = append(s.pend[p], i)
+						routed++
+						continue
 					}
+					keep = append(keep, i)
+					s.groups = append(s.groups, id)
 				}
-				keep = append(keep, int32(i))
-				s.groups = append(s.groups, id)
+				ch.reset()
 			}
+			for i := range n {
+				ch.add(enc, i)
+				if ch.full() {
+					flush()
+				}
+			}
+			flush()
+		} else {
+			// One hash and one probe per key, whether or not it is new: the probe that
+			// misses is the one that fills the slot.
+			flush := func() {
+				ids, inserted := ch.insert(s.ids)
+				for j, id := range ids {
+					i := ch.rows[j]
+					if inserted[j] {
+						newRows = append(newRows, i)
+						if s.ordered {
+							s.firstSeen = append(s.firstSeen, s.ordinalOf(in, int(i)))
+						}
+					}
+					keep = append(keep, i)
+					s.groups = append(s.groups, id)
+				}
+				ch.reset()
+			}
+			for i := range n {
+				ch.add(enc, i)
+				if ch.full() {
+					flush()
+				}
+			}
+			flush()
 		}
 	}
 	s.keep = keep
