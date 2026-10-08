@@ -352,11 +352,19 @@ func DefaultOptions() Options {
 func PlanRoot(ctx context.Context, n plan.Node, opts Options) (Operator, error) {
 	opened := &openedSources{}
 	opts.opened = opened
+	// Deferred, so a panic while planning closes them too: a caller's Open that
+	// panics is recovered into an error by Collect, and the process carries on.
+	planned := false
+	defer func() {
+		if !planned {
+			opened.closeAll()
+		}
+	}()
 	op, err := Plan(ctx, n, opts)
 	if err != nil {
-		opened.closeAll()
 		return nil, err
 	}
+	planned = true
 	return parallelise(op, opts), nil
 }
 

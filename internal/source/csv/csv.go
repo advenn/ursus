@@ -234,6 +234,10 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		threads:   spec.Threads,
 	}
 	if err := r.openNext(ctx); err != nil {
+		// openNext may have opened the stream before failing on its header. The
+		// reader is not returned, so no one else can close it: a service retrying a
+		// scan over a failing stream leaked one handle per attempt.
+		r.Close()
 		return nil, err
 	}
 	return r, nil
@@ -510,6 +514,25 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 	cols := make([]*data.Column, r.out.Len())
 	for i, f := range r.out.All() {
 		cols[i] = r.builders[i].finish(f.Name)
+	}
+	// A schema given with WithSchema can declare a column non-nullable, and the file
+	// can still leave a cell of it empty. That is the file's doing, and the caller's
+	// to hear about by name; data.NewBatch would report it as ursus's own bug, which
+	// it has done in production since its check was turned on there (step 98).
+	for i, f := range r.out.All() {
+		if f.Nullable || cols[i].Validity().IsAllSet() {
+			continue
+		}
+		v := cols[i].Validity()
+		for k := range rows {
+			if !v.Get(k) {
+				return nil, uerr.New(uerr.KindValue, "scan_csv",
+					"row %d has no value for column %q, which the schema declares non-nullable",
+					r.row-rows+1+k, f.Name).
+					Hint("declare the column nullable in the schema given to WithSchema, " +
+						"or fill the empty cells")
+			}
+		}
 	}
 	return data.NewBatch(r.out, cols)
 }

@@ -254,8 +254,10 @@ func (s *temporalSink) Finish(ctx context.Context) (Operator, error) {
 		return nil, err
 	}
 	// The account held the input; it holds the answer now, which is the rebase
-	// hashAggSink.Finish and joinBuildSink.freeze both make.
-	s.parts, s.ticks = nil, nil
+	// hashAggSink.Finish and joinBuildSink.freeze both make. The aggregates' state
+	// goes with it: kept, it stayed alive until the query ended — a rolling median
+	// holds a value per window and row — while the account no longer counted it.
+	s.parts, s.ticks, s.accs = nil, nil, nil
 	s.mem.Release()
 	s.mem.Retain(out)
 

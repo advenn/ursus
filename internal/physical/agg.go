@@ -750,7 +750,11 @@ func (s *hashAggSink) Finish(ctx context.Context) (Operator, error) {
 // not skewed at all. That is a budget bug, not a skew one, and it is invisible from
 // the error message.
 func (s *hashAggSink) releaseState() {
+	// The accumulators and the key table go with the account's claim on them. Kept,
+	// they stayed alive until the query ended, uncounted: a median or an implode
+	// holds every value of every group. firstSeen stays, for finishOrdered.
 	s.keyParts, s.accBytes = nil, 0
+	s.ids, s.accs = kernel.NewKeyTable(), nil
 	s.mem.Release()
 }
 

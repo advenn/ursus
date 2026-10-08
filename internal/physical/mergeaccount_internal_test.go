@@ -71,6 +71,8 @@ func TestAParallelWorkerSwitchesAtHalfTheBudget(t *testing.T) {
 
 // TestAFoldedWorkerHoldsNoTable: after the parallel driver folds a worker into the
 // survivor, the worker's table is gone, so the fold holds about one table at a time.
+// The survivor answers for both: six groups. Once it has, it keeps no table either,
+// since step 120; this checked the survivor's six keys, which is that state.
 func TestAFoldedWorkerHoldsNoTable(t *testing.T) {
 	ctx := context.Background()
 	s := testSchema(t)
@@ -79,13 +81,17 @@ func TestAFoldedWorkerHoldsNoTable(t *testing.T) {
 		testBatch(t, s, []int64{1, 2, 3}, []int64{1, 2, 3}),
 		testBatch(t, s, []int64{4, 5, 6}, []int64{4, 5, 6}))
 	p := newParallelSink(child, []Sink{a, b})
-	if _, err := p.Next(ctx); err != nil {
+	out, err := p.Next(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if n := b.ids.Len(); n != 0 {
 		t.Errorf("the folded worker still holds %d keys", n)
 	}
-	if n := a.ids.Len(); n != 6 {
-		t.Errorf("the survivor holds %d keys, want 6", n)
+	if out.Rows() != 6 {
+		t.Errorf("the survivor answered %d groups, want 6", out.Rows())
+	}
+	if n := a.ids.Len(); n != 0 {
+		t.Errorf("the survivor still holds %d keys after its answer", n)
 	}
 }

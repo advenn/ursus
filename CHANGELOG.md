@@ -108,6 +108,14 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **Service safety, from the same audit** (120):
+  - A CSV column a `WithSchema` declares non-nullable, with an empty cell in the
+    file, is a value error naming the row. Since step 98 it failed as ursus's bug.
+  - A finished group-by, rolling or dynamic group-by drops its aggregates' state,
+    which stayed alive, uncounted, until the query ended.
+  - A CSV scan whose stream fails on its header closes the stream.
+  - A panic while a query is planned closes what was already opened, as an error
+    did since step 95.
 - **Parquet, from the same audit** (119):
   - A struct whose first field is Null reads again, and so does `List(Null)`, which
     PyArrow infers for a field or list that only ever holds None. Step 108 made both
