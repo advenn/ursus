@@ -10,13 +10,16 @@
 //
 // # What it reads
 //
-//	%Y year, four digits     %m month 01–12     %d day 01–31     %e day, space-padded
-//	%y year 00–99 (2000+)    %j day of year 001–366
+//	%Y year, four digits, or signed past 0000–9999 (+10000)
+//	%m month 01–12     %d day 01–31     %e day, space-padded
+//	%y year 00–99: 00–69 are 2000–2069 and 70–99 are 1970–1999, as chrono reads them
+//	%j day of year 001–366
 //	%H hour 00–23   %I hour 01–12   %p AM/PM   %M minute 00–59   %S second 00–59
 //	%f fraction, 1–9 digits as written   %.f the same after a dot, optional
 //	%.3f %.6f %.9f a dot and exactly 3, 6, 9 digits   %3f %6f %9f the same, no dot
 //	%b %h month abbreviation   %B month name   %a weekday abbreviation   %A weekday
-//	%z offset +hhmm   %:z offset +hh:mm   %Z zone name (formatting only)
+//	%z offset +hhmm, read with or without the colon   %:z offset +hh:mm
+//	%Z zone name (formatting only)
 //	%T %H:%M:%S   %D %m/%d/%y   %F %Y-%m-%d   %R %H:%M   %% a percent sign
 //
 // Names are English. Parsing is strict about shape: a number takes at most its
@@ -37,8 +40,13 @@ type Format struct {
 	items []item
 
 	// What the directives can supply, for the callers that refuse a format that
-	// cannot say what their type needs.
+	// cannot say what their type needs. HasDate is any part of a date, which is
+	// what a Time cannot format; ParsesDate is a whole one — a year with a month
+	// and a day, or with %j — which is what Parse needs to produce a date at all.
 	HasDate, HasTime, HasZone bool
+	ParsesDate                bool
+	// HasZoneName is %Z, which is formatted and cannot be read back.
+	HasZoneName bool
 }
 
 type item struct {
@@ -62,6 +70,7 @@ func Compile(src string) (*Format, error) {
 			lit.Reset()
 		}
 	}
+	var year, month, day, yday bool
 	add := func(it item) {
 		flush()
 		f.items = append(f.items, it)
@@ -73,7 +82,20 @@ func Compile(src string) (*Format, error) {
 		case 'z', 'Z':
 			f.HasZone = true
 		}
+		switch it.spec {
+		case 'Y', 'y':
+			year = true
+		case 'm', 'b', 'B':
+			month = true
+		case 'd', 'e':
+			day = true
+		case 'j':
+			yday = true
+		case 'Z':
+			f.HasZoneName = true
+		}
 	}
+
 	for i := 0; i < len(src); i++ {
 		c := src[i]
 		if c != '%' {
@@ -148,6 +170,10 @@ func Compile(src string) (*Format, error) {
 		}
 	}
 	flush()
+	// A weekday names no date, and %d/%m names none without a year: each passed the
+	// check that asked only for "a date directive", then failed on every row, or,
+	// %a alone, gave the year 0 for every one.
+	f.ParsesDate = year && (month && day && !yday || yday && !month && !day)
 	return f, nil
 }
 
@@ -216,18 +242,31 @@ func (f *Format) Parse(s string) (Fields, error) {
 		var ok bool
 		switch it.spec {
 		case 'Y':
-			neg := pos < len(s) && s[pos] == '-'
-			if neg {
+			// Four digits, or a sign and up to nine: the form Append writes for a
+			// year outside 0000–9999, which Date and Datetime(ms) and (us) can hold.
+			sign := 0
+			if pos < len(s) && (s[pos] == '-' || s[pos] == '+') {
+				sign = 1
+				if s[pos] == '-' {
+					sign = -1
+				}
 				pos++
 			}
-			year, ok = num(4, 4)
-			if neg {
-				year = -year
+			if sign == 0 {
+				year, ok = num(4, 4)
+			} else {
+				year, ok = num(4, 9)
+				year *= sign
 			}
 			haveYear = true
 		case 'y':
+			// chrono's pivot, which Polars reads with: "99" is 1999, not 2099.
 			year, ok = num(2, 2)
-			year += 2000
+			if year < 70 {
+				year += 2000
+			} else {
+				year += 1900
+			}
 			haveYear = true
 		case 'm':
 			month, ok = num(1, 2)
@@ -372,11 +411,11 @@ func parseOffset(s string, pos *int, colon bool, out *int) bool {
 	if !ok {
 		return false
 	}
-	if colon {
-		if i >= len(s) || s[i] != ':' {
-			return false
-		}
+	// %:z requires the colon; %z takes it or not, as chrono and Python read it.
+	if i < len(s) && s[i] == ':' {
 		i++
+	} else if colon {
+		return false
 	}
 	m, ok := two()
 	if !ok || h > 23 || m > 59 {
@@ -406,10 +445,13 @@ func (f *Format) Append(dst []byte, t time.Time, zone bool) ([]byte, error) {
 		}
 		switch it.spec {
 		case 'Y':
+			// Signed outside 0000–9999, as chrono writes it, so Parse reads it back.
 			y := t.Year()
 			if y < 0 {
 				dst = append(dst, '-')
 				y = -y
+			} else if y > 9999 {
+				dst = append(dst, '+')
 			}
 			dst = pad(dst, y, 4, '0')
 		case 'y':

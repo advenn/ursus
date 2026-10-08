@@ -58,9 +58,12 @@ func strptimeOut(c *Call) (dtype.DataType, error) {
 		}
 		return dtype.TimeUnit(u), nil
 	}
+	if f.HasZoneName {
+		return refuse("the format %q reads %%Z, a zone name, which cannot be read back; use %%z", f)
+	}
 	switch c.Fn {
 	case FnStrToDateFmt:
-		if !f.HasDate {
+		if !f.ParsesDate {
 			return refuse("the format %q names no date: a Date needs %%Y with %%m and %%d, or %%j", f)
 		}
 		if f.HasZone {
@@ -68,7 +71,7 @@ func strptimeOut(c *Call) (dtype.DataType, error) {
 		}
 		return dtype.Date, nil
 	case FnStrToDatetimeFmt:
-		if !f.HasDate {
+		if !f.ParsesDate {
 			return refuse("the format %q names no date: a Datetime needs %%Y with %%m and %%d, or %%j", f)
 		}
 		u, err := unit()

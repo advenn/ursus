@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"fmt"
 	"math"
 	"time"
 
@@ -55,14 +56,10 @@ func strptimeCall(fn expr.CallFn, name string, out dtype.DataType, c *data.Colum
 		s := acc.Get(i)
 		p, perr := f.Parse(s)
 		var v int64
-		ok := perr == nil
-		if ok {
-			v, ok = toTicks(p, out.ID(), loc, perTick)
-			if !ok {
-				perr = errOutOfRange
-			}
+		if perr == nil {
+			v, perr = toTicks(p, out.ID(), loc, perTick)
 		}
-		if !ok {
+		if perr != nil {
 			if strict {
 				return nil, uerr.New(uerr.KindValue, fn.String(),
 					"%q does not parse with the format %q: %v", s, src, perr).
@@ -93,27 +90,66 @@ var errOutOfRange error = rangeErr{}
 
 // toTicks is a parsed value as the target type's storage: days for a Date, ticks of
 // perTick nanoseconds since the epoch for a Datetime, since midnight for a Time.
-func toTicks(p strftime.Fields, id dtype.TypeID, loc *time.Location, perTick int64) (int64, bool) {
+func toTicks(p strftime.Fields, id dtype.TypeID, loc *time.Location, perTick int64) (int64, error) {
 	switch id {
 	case dtype.TypeDate:
 		days := time.Date(p.Year, time.Month(p.Month), p.Day, 0, 0, 0, 0, time.UTC).Unix() / 86400
-		return days, days >= math.MinInt32 && days <= math.MaxInt32
+		if days < math.MinInt32 || days > math.MaxInt32 {
+			return 0, errOutOfRange
+		}
+		return days, nil
 	case dtype.TypeTime:
 		secs := int64(p.Hour*3600 + p.Minute*60 + p.Second)
-		return secs*(1e9/perTick) + int64(p.Nanos)/perTick, true
+		return secs*(1e9/perTick) + int64(p.Nanos)/perTick, nil
 	default: // Datetime
 		zone := loc
 		if p.HasZone {
 			zone = time.FixedZone("", p.Offset)
 		}
 		t := time.Date(p.Year, time.Month(p.Month), p.Day, p.Hour, p.Minute, p.Second, p.Nanos, zone)
+		if !p.HasZone && zone != time.UTC {
+			if err := oneInstant(t, p, zone); err != nil {
+				return 0, err
+			}
+		}
 		perSec := 1e9 / perTick
 		secs := t.Unix()
 		if secs > math.MaxInt64/perSec-1 || secs < math.MinInt64/perSec+1 {
-			return 0, false
+			return 0, errOutOfRange
 		}
-		return secs*perSec + int64(t.Nanosecond())/perTick, true
+		return secs*perSec + int64(t.Nanosecond())/perTick, nil
 	}
+}
+
+// oneInstant reports whether the wall clock p names is exactly one instant in loc,
+// given t, the instant time.Date chose for it.
+//
+// time.Date answers both failures silently. A time the clocks skip, 02:30 on the
+// morning New York springs forward, is moved by the gap, to 03:30 EDT; one they pass
+// twice, 01:30 on the morning it falls back, becomes either. Polars raises on both,
+// and so does a strict parse here; a lenient one gives null.
+func oneInstant(t time.Time, p strftime.Fields, loc *time.Location) error {
+	if !sameWallClock(t, p) {
+		return fmt.Errorf("it does not exist in %s: the clocks skip it", loc)
+	}
+	// A wall clock happens twice only across a transition, where the offset changes:
+	// the other instant is t moved by the difference. Three hours either side finds
+	// every transition there is, and away from one this is two offset lookups.
+	_, off := t.Zone()
+	for _, d := range []time.Duration{-3 * time.Hour, 3 * time.Hour} {
+		if _, o := t.Add(d).Zone(); o != off {
+			other := t.Add(time.Duration(off-o) * time.Second)
+			if !other.Equal(t) && sameWallClock(other.In(loc), p) {
+				return fmt.Errorf("it is ambiguous in %s: the clocks pass it twice", loc)
+			}
+		}
+	}
+	return nil
+}
+
+func sameWallClock(t time.Time, p strftime.Fields) bool {
+	return t.Year() == p.Year && int(t.Month()) == p.Month && t.Day() == p.Day &&
+		t.Hour() == p.Hour && t.Minute() == p.Minute && t.Second() == p.Second
 }
 
 // strftimeCall formats a Date, Datetime or Time column with a strftime-style

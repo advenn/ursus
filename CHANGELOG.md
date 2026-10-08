@@ -108,6 +108,16 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **Strptime and Strftime, from the same audit** (122):
+  - A strict parse into a zoned Datetime refuses a wall-clock time the clocks skip
+    or pass twice, naming the zone; a lenient one gives null. It returned an instant
+    an hour away, or either of two.
+  - A format that names no whole date (`%a`, `%d/%m`, `%Y-%m`) is refused while the
+    query is planned, as `%Z` is for parsing.
+  - **Behaviour change:** `%y` reads 70–99 as 1970–1999, as chrono and Polars do; it
+    read every year as 20xx.
+  - `%z` reads "+05:30" as well as "+0530", and a year past 9999 is written with its
+    sign, "+10000", and reads back.
 - **Expressions, from the same audit** (121):
   - A conditional's branch that fails on a row's value — Int128 past its range, a
     strict cast — is evaluated again over only the rows it is taken for, so a guard
