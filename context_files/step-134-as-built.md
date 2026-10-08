@@ -129,3 +129,31 @@ feeding the join, and the reading grows with it. Step 129 recorded the same nois
 
 **The open fix:** read the spilling case exactly, at its concatenations, as the other
 cases are, instead of sampled. Not done here.
+
+## 6. Measured afterwards, at the maintainer's request
+
+`gb10` and `j5` at ten million rows, ursus alone, one timed run each, under a 3 GB
+scope, at `c83a400`. Beside each, step 133's run, at `c5c9e24`. CPU is the scope's,
+from the journal.
+
+| query | time | CPU | VmHWM | heap in use | allocated | counted | collections |
+| --- | --: | --: | --: | --: | --: | --: | --: |
+| `gb10`, CSV | 6.8 s (6.4) | 21.7 s (20.0) | 2.77 GB (2.85) | 2.83 GB (2.85) | 17.5 GB (18.5) | 1.65 GB (1.61) | 39 (40) |
+| `j5`, CSV | 10.0 s (9.6) | 53.9 s (49.6) | 2.88 GB (2.87) | 2.83 GB (2.80) | 17.1 GB (17.1) | 1.21 GB (1.21) | 40 (39) |
+| `gb10`, Parquet | 4.0 s (3.8) | 16.1 s (16.0) | 2.67 GB (2.88) | 2.82 GB (2.80) | 16.4 GB (17.4) | 1.61 GB (1.55) | 30 (35) |
+| `j5`, Parquet | 4.4 s (4.9) | 41.6 s (42.4) | 2.88 GB (2.90) | 2.78 GB (2.81) | 17.4 GB (17.4) | 1.04 GB (1.04) | 32 (32) |
+
+**`gb10` allocates 1.0 GB less, 5 to 6%.** That is about what §4 estimated: the
+accumulators were 12% of its allocations, and a third of that is 4%.
+
+**Its peak is unchanged or lower:**
+
+- VmHWM fell over Parquet, 2.88 to 2.67 GB;
+- its sampled heap in use did not move;
+- what the budget counts rose 0.04 to 0.06 GB, the accumulators' unused capacity
+  now counted.
+
+**Its CPU did not move beyond the noise.** `j5`, which holds no accumulator and so
+is unchanged by this step, moved by +9% over CSV and −2% over Parquet between the two
+runs. That is how far single runs on this machine wander. `gb10` moved by +8% and
++1%, inside it.

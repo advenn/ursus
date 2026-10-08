@@ -126,7 +126,8 @@ Newest first. The numbers are steps, each with an as-built record in
 - **Accumulators grow by doubling** (134). Each allocated about five times what it
   held, growing a group at a time; now about twice. The memory budget now counts
   each per-group array's capacity, which doubling can leave up to half unused, not
-  only its length. Its speed was not measured.
+  only its length. Measured after, under a 3 GB container, `gb10` allocates 1.0 GB
+  less, 5 to 6%, with its CPU within the run-to-run noise.
 - **The key table allocates about what it holds** (133). Its key arena is chunks
   that never move, and its per-key arrays double. A million distinct keys allocated
   4.1 times what the table held, and now 1.6.
