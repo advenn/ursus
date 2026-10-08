@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"cmp"
+	"math"
 	"sort"
 	"strings"
 	"unsafe"
@@ -50,6 +51,24 @@ type topKAcc[T any] struct {
 
 	vals [][]T // per group, best first, at most k
 	held int64 // values held across every group
+}
+
+// compareSignedZero is the total order with -0.0 below +0.0.
+//
+// The total order calls them equal, and offer keeps the first of two equals, so
+// TopK(1) of [-0.0, 0.0] gave whichever arrived first, which a parallel group-by
+// decides. Its answer is not meant to depend on arrival order.
+func compareSignedZero(x, y float64) int {
+	if c := compareTotalF64(x, y); c != 0 || x != 0 {
+		return c
+	}
+	switch sx, sy := math.Signbit(x), math.Signbit(y); {
+	case sx && !sy:
+		return -1
+	case !sx && sy:
+		return 1
+	}
+	return 0
 }
 
 // better reports whether a belongs ahead of b.
@@ -178,10 +197,10 @@ func newTopK(in dtype.DataType, k int, top bool) (Accumulator, error) {
 		return newTopKFixed[uint64](in, k, top, cmp.Compare[uint64]), nil
 	case dtype.TypeFloat32:
 		return newTopKFixed[float32](in, k, top, func(x, y float32) int {
-			return compareTotalF64(float64(x), float64(y))
+			return compareSignedZero(float64(x), float64(y))
 		}), nil
 	case dtype.TypeFloat64:
-		return newTopKFixed[float64](in, k, top, compareTotalF64), nil
+		return newTopKFixed[float64](in, k, top, compareSignedZero), nil
 	case dtype.TypeInt128: // Int128 and Decimal, whose scale one column shares
 		return newTopKFixed[i128.Int128](in, k, top, i128.Int128.Cmp), nil
 	}

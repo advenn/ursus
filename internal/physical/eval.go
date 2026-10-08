@@ -4,6 +4,7 @@ package physical
 
 import (
 	"context"
+	"errors"
 	"math"
 	"regexp"
 	"runtime"
@@ -111,6 +112,60 @@ func Eval(ctx context.Context, n expr.Node, b *data.Batch) (*data.Column, error)
 	}
 }
 
+// evalBranch evaluates one branch of a conditional over the batch, and, if that
+// fails on a row's VALUE, again over only the rows that take the branch: those
+// where the condition is true for Then, and the rest, nulls included, for Else.
+//
+// The whole batch first, because that is the common case and costs nothing more.
+// The retry is what makes a guard work: `When(x.Lt(limit)).Then(x.Mul(2))` is how a
+// caller keeps an Int128 product in range, and it failed on the very rows the
+// guard excluded. Polars evaluates both branches too, and wraps instead. A row the
+// branch is taken for still fails, now with the row numbered within those rows.
+func evalBranch(ctx context.Context, branch expr.Node, b *data.Batch, pred *data.Column,
+	then bool) (*data.Column, error) {
+
+	col, err := Eval(ctx, branch, b)
+	if err == nil || !errors.Is(err, uerr.ErrValue) || pred.Len() != b.Rows() ||
+		pred.DType().ID() != dtype.TypeBool {
+		return col, err
+	}
+	trues, serr := kernel.SelectionFromMask(pred)
+	if serr != nil {
+		return nil, err
+	}
+	sel := trues
+	if !then {
+		sel = make([]int32, 0, b.Rows()-len(trues))
+		next := 0
+		for i := range int32(b.Rows()) {
+			if next < len(trues) && trues[next] == i {
+				next++
+				continue
+			}
+			sel = append(sel, i)
+		}
+	}
+	if len(sel) == b.Rows() {
+		return nil, err // every row takes this branch: the failure is real
+	}
+	sub, terr := takeBatch(b.Schema(), b, sel)
+	if terr != nil {
+		return nil, terr
+	}
+	part, err := Eval(ctx, branch, sub)
+	if err != nil {
+		return nil, err
+	}
+	at := make([]int32, b.Rows())
+	for i := range at {
+		at[i] = kernel.NullIndex
+	}
+	for j, r := range sel {
+		at[r] = int32(j)
+	}
+	return kernel.Take(part, at)
+}
+
 func evalUnary(ctx context.Context, u *expr.Unary, b *data.Batch) (*data.Column, error) {
 	c, err := Eval(ctx, u.Child, b)
 	if err != nil {
@@ -127,21 +182,24 @@ func evalUnary(ctx context.Context, u *expr.Unary, b *data.Batch) (*data.Column,
 //
 // Both branches are evaluated in full, for every row — there is no short-circuit,
 // and there cannot be one in a columnar engine without materialising a selection
-// and gathering twice, which costs more than it saves for cheap branches. That is
-// only observable through side effects, and expressions have none: an arithmetic
-// fault such as integer division by zero produces a NULL rather than a trap
-// (scalar.go's divInt), so `When(x.Ne(0)).Then(y.Div(x)).Otherwise(0)` is safe
+// and gathering twice, which costs more than it saves for cheap branches. An
+// arithmetic fault such as integer division by zero produces a NULL rather than a
+// trap (scalar.go's divInt), so `When(x.Ne(0)).Then(y.Div(x)).Otherwise(0)` is safe
 // even though y/x is computed at x == 0.
+//
+// Some faults are errors, though: an Int128 or Decimal result past its range, a
+// strict cast of a value that does not convert. When a branch fails with one, it
+// is evaluated again over only the rows it is taken for. See evalBranch.
 func evalCond(ctx context.Context, c *expr.Cond, b *data.Batch) (*data.Column, error) {
 	pred, err := Eval(ctx, c.Pred, b)
 	if err != nil {
 		return nil, err
 	}
-	then, err := Eval(ctx, c.Then, b)
+	then, err := evalBranch(ctx, c.Then, b, pred, true)
 	if err != nil {
 		return nil, err
 	}
-	els, err := Eval(ctx, c.Else, b)
+	els, err := evalBranch(ctx, c.Else, b, pred, false)
 	if err != nil {
 		return nil, err
 	}

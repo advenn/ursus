@@ -108,6 +108,14 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **Expressions, from the same audit** (121):
+  - A conditional's branch that fails on a row's value — Int128 past its range, a
+    strict cast — is evaluated again over only the rows it is taken for, so a guard
+    such as `When(x.Lt(limit)).Then(x.Mul(2))` works. It failed on the rows the guard
+    excluded.
+  - Int128 `Neg` and `Abs` of the minimum are refused, as `0 - x` is; they wrapped.
+  - `TopK` and `BottomK` rank +0.0 above -0.0, so the answer does not depend on
+    arrival order.
 - **Service safety, from the same audit** (120):
   - A CSV column a `WithSchema` declares non-nullable, with an empty cell in the
     file, is a value error naming the row. Since step 98 it failed as ursus's bug.

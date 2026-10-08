@@ -195,15 +195,27 @@ func unaryArith(op expr.UnaryOp, name string, out dtype.DataType, c *data.Column
 
 // unaryI128 is neg and abs at 128 bits.
 //
-// i128 has Neg and Sign and no Mul, which is exactly enough: abs is a sign test
-// and a negation. Neg(Min) is Min, matching two's complement at every other width
-// — the same wrap absIntScalar has for Int8..Int64.
+// abs is a sign test and a negation. Neg(Min) has no answer: Min's magnitude is one
+// past Max. It used to be Min itself, wrapping as Int8..Int64 do, which broke the
+// promise Int128's arithmetic makes since step 100, exact or refused: Lit(0).Sub(x)
+// refused the same value Neg returned.
 func unaryI128(op expr.UnaryOp, name string, out dtype.DataType,
 	c *data.Column, n int) (*data.Column, error) {
 
 	v, err := data.Values[i128.Int128](c)
 	if err != nil {
 		return nil, err
+	}
+	if op == expr.OpNeg || op == expr.OpAbs {
+		valid := c.Validity()
+		for i, x := range v {
+			if x == i128.Min && valid.Get(i) {
+				return nil, uerr.New(uerr.KindValue, op.String(),
+					"%s of %s at row %d overflows Int128", op, x, i).
+					Hint("Int128 holds about ±1.7e38, and its arithmetic is exact or refused").
+					Hint("cast to Float64 first for an approximate answer")
+			}
+		}
 	}
 	buf, dst := newValuesBuffer[i128.Int128](n)
 	switch op {
