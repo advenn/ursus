@@ -84,6 +84,8 @@ group-by's input. None was changed.
 **The sampled reading's largest is now while the group-by aggregates:** 1.31 of what
 it counts, against a one-key group-by's 1.17. This step did not change that phase,
 and it is not explained. The test bounds it at 1.5, for a second copy of something.
+*Explained in step 133:* the key arena, grown by `append`, was held twice while it
+copied. With a chunked arena it reads 1.02 to 1.13, and the bound is back to 1.3.
 
 **What this means for `gb10` at ten million rows under 3 GB is not measured.** Its
 answer phase held the group-by's state, up to the budget, and a second copy of its

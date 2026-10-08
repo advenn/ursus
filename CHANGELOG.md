@@ -12,7 +12,7 @@ Step numbers below point at those records.
 
 ## v0.4.0 — candidate
 
-Everything since `v0.3.1` (2026-10-06): steps 92–131.
+Everything since `v0.3.1` (2026-10-06): steps 92–133.
 
 [`v0.4-scope.md`](./context_files/v0.4-scope.md) set the scope: **fast where it is
 slow, and safe inside a service.** Its §7 records what was done, and what moved to
@@ -123,6 +123,19 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **The key table allocates about what it holds** (133). Its key arena is chunks
+  that never move, and its per-key arrays double. A million distinct keys allocated
+  4.1 times what the table held, and now 1.6.
+  - `append` grows a large slice a quarter at a time. That made the table half of
+    everything h2o `gb10` allocated, in an allocation profile at ten million rows
+    (132).
+  - It also held the old arena beside the new while it copied. A six-key group-by's
+    live heap while aggregating fell from 1.31 of what it counts to about 1.1.
+  - Its speed was not measured.
+- **A spilled full or right join no longer panics on its last flush** (133). Where
+  a join both kept build rows in memory and spilled others, it released its table
+  and then emitted the last unmatched build rows from it. Reachable since v0.1 at
+  limits that depend on the data; a sweep of limits now covers it.
 - **A group-by with as many groups as rows holds its keys once while it assembles
   its answer** (131). It held them twice, uncounted, with its key table beside them:
   517 MB to assemble a 159 MB answer, measured on two million rows of `gb10`'s shape.

@@ -33,6 +33,19 @@ import (
 //   - Keys live in one arena rather than an individually allocated string each,
 //     so comparison reads contiguous memory and insertion does not allocate.
 //
+// # The arena is chunks, and the per-key arrays double
+//
+// The arena was one []byte grown by append, and so were hashes and offsets. Past
+// 256 elements append adds about a quarter at a time, so the allocations on the way
+// to a final size F summed to about 5F, and each growth held the old array beside
+// the new one while it copied, the old one uncounted. h2o gb10, with one group per
+// row, spent half of everything it allocated there: 11.5 GB of 22.9 (step 132).
+//
+// The arena is now chunks that never move, so it allocates about F and holds no
+// second copy. A key never straddles two chunks; one longer than a chunk gets a
+// chunk of its own. hashes and refs, indexed by id on every probe, stay flat arrays
+// and double, about 2F.
+//
 // # Ids are dense and first-seen ordered, and that is load-bearing
 //
 // id N is the Nth DISTINCT key handed to GetOrInsert. Accumulators index their
@@ -66,13 +79,22 @@ type KeyTable struct {
 
 	// Per id, parallel:
 	hashes []uint64 // lets grow rehash without re-reading a single key
-	// offs has n+1 entries; key i is arena[offs[i]:offs[i+1]]. They are 64-bit
-	// because the arena holds every distinct key of the query: a group-by over
-	// enough distinct strings passes 2 GiB, where int32 offsets wrapped and a key
-	// was read from the wrong bytes (audit.md S24). Nothing outside reads them, so
-	// unlike a String column's they need not match Arrow's layout.
-	offs  []int64
-	arena []byte
+	// refs has n+1 entries, the first 0: refs[i+1] is where key i ENDS, its chunk
+	// above refShift and its offset in the chunk below. Key i starts where key i-1
+	// ended if that was in the same chunk, and at the chunk's start if not: keys
+	// are stored in id order, and a key that does not fit starts a new chunk.
+	//
+	// 64-bit, because the arena holds every distinct key of the query: a group-by
+	// over enough distinct strings passes 2 GiB, where int32 offsets wrapped and a
+	// key was read from the wrong bytes (audit.md S24).
+	refs []uint64
+
+	// chunks is the arena. Each is filled up to its capacity and never grown, so a
+	// key's bytes never move. chunkBytes is their capacities' sum; nextChunk is the
+	// size of the next one, doubling from firstChunk to maxChunk.
+	chunks     [][]byte
+	chunkBytes int64
+	nextChunk  int
 
 	// touched holds touch's sum, which nothing reads.
 	touched uint64
@@ -81,6 +103,30 @@ type KeyTable struct {
 // initialSlots is small because most group-bys are small, and growth is cheap:
 // rehashing reads the stored hashes rather than the keys.
 const initialSlots = 64
+
+// The arena's chunk sizes: small first, doubling to maxChunk. A chunk is allocated
+// whole, so at most one is part empty, besides what a key too long for the rest of
+// one leaves.
+//
+// Small first, because most tables are small, and some run under tiny limits: a
+// spilling group-by's sub-sinks each hold a key or a few, under the 2 KiB limits
+// its tests use. With a first chunk of 1 KiB, and hashes made for 64 keys, a
+// one-key table counted 2.5 KiB where it had counted 1, and those sub-sinks
+// partitioned to maxSpillDepth (step 133). It counts 1.2 now.
+const (
+	firstChunk = 64
+	maxChunk   = 1 << 20
+)
+
+// firstIDs is the capacity hashes starts at, for the same reason.
+const firstIDs = 8
+
+// refShift splits a ref: the chunk above, the offset in it below. 2^24 chunks of up
+// to 2^40 bytes.
+const (
+	refShift = 40
+	refMask  = 1<<refShift - 1
+)
 
 // maxLoadNum/maxLoadDen cap the load factor at 3/4. Past that, linear probing's
 // cluster lengths grow fast enough to undo the advantage over a bucketed map.
@@ -98,18 +144,18 @@ func NewKeyTable() *KeyTable {
 func (t *KeyTable) init(n int) {
 	t.slots = make([]uint64, n)
 	t.mask = uint64(n - 1)
-	// The leading zero, planted once, so KeyAt is offs[id]:offs[id+1] with no
-	// fixup and Len is len(offs)-1 with no guard.
-	t.offs = make([]int64, 1, 1+initialSlots)
+	// The leading zero, planted once, so key id ends at refs[id+1] and starts by
+	// refs[id] with no fixup, and Len is len(refs)-1 with no guard.
+	t.refs = make([]uint64, 1, 1+initialSlots)
 }
 
 // Len is the number of distinct keys, which is also the next id GetOrInsert will
 // hand out.
 func (t *KeyTable) Len() int {
-	if t.offs == nil {
+	if t.refs == nil {
 		return 0
 	}
-	return len(t.offs) - 1
+	return len(t.refs) - 1
 }
 
 // GetOrInsert returns the id for key, inserting it if this is its first sighting.
@@ -195,12 +241,11 @@ func (t *KeyTable) getOrInsert(key []byte, h uint64) (id int32, inserted bool) {
 	for i := h & t.mask; ; i = (i + 1) & t.mask {
 		s := t.slots[i]
 		if s == 0 {
-			id = int32(len(t.offs) - 1)
-			t.hashes = append(t.hashes, h)
-			t.arena = append(t.arena, key...)
-			t.offs = append(t.offs, int64(len(t.arena)))
+			id = int32(len(t.refs) - 1)
+			t.hashes = pushDoubling(t.hashes, h)
+			t.refs = pushDoubling(t.refs, t.store(key))
 			t.slots[i] = slotOf(h, id)
-			if (len(t.offs)-1)*maxLoadDen >= len(t.slots)*maxLoadNum {
+			if (len(t.refs)-1)*maxLoadDen >= len(t.slots)*maxLoadNum {
 				t.grow()
 			}
 			return id, true
@@ -255,8 +300,9 @@ func (t *KeyTable) getFrom(key []byte, h, s uint64) (id int32, ok bool) {
 // that no occupied slot is 0.
 func slotOf(h uint64, id int32) uint64 { return h>>32<<32 | uint64(uint32(id+1)) }
 
-// KeyAt returns the key bytes for an id. The result aliases the arena and is
-// invalidated by the next insert, so a caller that keeps it must copy.
+// KeyAt returns the key bytes for an id. The result aliases the arena, so a caller
+// that keeps it past Reset must copy. A later insert does not move it: chunks never
+// move.
 //
 // This is what lets both Merge implementations walk their keys in id order. They
 // used to invert the map into a []string first, purely because a Go map cannot be
@@ -264,7 +310,44 @@ func slotOf(h uint64, id int32) uint64 { return h>>32<<32 | uint64(uint32(id+1))
 func (t *KeyTable) KeyAt(id int32) []byte { return t.keyAt(id) }
 
 func (t *KeyTable) keyAt(id int32) []byte {
-	return t.arena[t.offs[id]:t.offs[id+1]]
+	start, end := t.refs[id], t.refs[id+1]
+	c := end >> refShift
+	var from uint64
+	if start>>refShift == c {
+		from = start & refMask
+	}
+	return t.chunks[c][from : end&refMask]
+}
+
+// store copies key into the arena and returns the ref of its end. The first key,
+// even an empty one, makes the first chunk, so keyAt always has one to read.
+func (t *KeyTable) store(key []byte) uint64 {
+	n := len(t.chunks)
+	if n == 0 || len(key) > cap(t.chunks[n-1])-len(t.chunks[n-1]) {
+		size := max(t.nextChunk, firstChunk)
+		t.nextChunk = min(2*size, maxChunk)
+		// A key longer than the next chunk gets one of exactly its size, and the
+		// doubling carries on from where it was.
+		size = max(size, len(key))
+		t.chunks = append(t.chunks, make([]byte, 0, size))
+		t.chunkBytes += int64(size)
+		n++
+	}
+	c := append(t.chunks[n-1], key...)
+	t.chunks[n-1] = c
+	return uint64(n-1)<<refShift | uint64(len(c))
+}
+
+// pushDoubling appends v, doubling the capacity when it is full. append grows a
+// large slice by about a quarter at a time, which allocates about five times the
+// final size on the way there; doubling, about twice.
+func pushDoubling[T any](s []T, v T) []T {
+	if len(s) == cap(s) {
+		g := make([]T, len(s), max(2*cap(s), firstIDs))
+		copy(g, s)
+		s = g
+	}
+	return append(s, v)
 }
 
 // NBytes is what this table holds, EXACTLY.
@@ -276,8 +359,9 @@ func (t *KeyTable) keyAt(id int32) []byte {
 func (t *KeyTable) NBytes() int64 {
 	return int64(cap(t.slots))*8 +
 		int64(cap(t.hashes))*8 +
-		int64(cap(t.offs))*8 +
-		int64(cap(t.arena))
+		int64(cap(t.refs))*8 +
+		t.chunkBytes +
+		int64(cap(t.chunks))*24 // the chunks' slice headers
 }
 
 // Reset empties the table and releases its memory, for the repartitioning paths
@@ -286,7 +370,7 @@ func (t *KeyTable) NBytes() int64 {
 func (t *KeyTable) Reset() { *t = KeyTable{} }
 
 // grow doubles the slot ring and re-places every id from the stored hashes. No
-// key is read and no key is moved — the arena and offs are untouched, so every id
+// key is read and no key is moved — the arena and refs are untouched, so every id
 // keeps its meaning.
 // Reserve sizes the table for at least n keys, if it is not already that big.
 //

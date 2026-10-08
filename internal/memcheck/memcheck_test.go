@@ -340,10 +340,13 @@ func TestAGroupByHoldsItsAnswerOnce(t *testing.T) {
 	if atColumns > result*13/10+16*mb {
 		t.Errorf("assembling a %d MB answer held %d MB", result/mb, atColumns/mb)
 	}
-	// Sampled, the most is now while it aggregates, at 1.31 of what it charges here,
-	// against the one-key group-by's 1.17. That phase is not what this test is for,
-	// and step 131 did not change it; the bound is for a second copy of something.
-	if live > st.Peak*15/10+16*mb {
+	// Sampled, the most is while it aggregates: 1.02 to 1.13 of what it charges
+	// here, over seven runs. It was 1.31 until the key table's arena became chunks
+	// that never move (step 133): growing by append held the old arena beside the
+	// new while it copied, uncounted. What a growth allocates is
+	// TestKeyTableAllocatesAboutWhatItHolds's to check; this bound is for a second
+	// copy of something.
+	if live > st.Peak*13/10+16*mb {
 		t.Errorf("the live heap rose %d MB; the group-by charged a peak of %d MB", live/mb, st.Peak/mb)
 	}
 }

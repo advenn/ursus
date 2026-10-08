@@ -79,7 +79,8 @@ grows the arena, the old array and the new one are both alive while it copies, a
 the old one stays as garbage until the next collection. The ledger counts only the
 new capacity, so that is up to four fifths of an arena, uncounted. A six-key arena
 of two million keys is on the order of 100 MB, and the gap was 116 MB. Not
-verified.
+verified here. *Step 133 confirmed it:* with the arena chunked, the reading fell
+from 1.31 to between 1.02 and 1.13.
 
 ## 4. What would move it, not built
 

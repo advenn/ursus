@@ -1317,16 +1317,26 @@ func (p *joinProbeOp) flushStep() (*data.Batch, error) {
 		p.lsel = append(p.lsel, kernel.NullIndex)
 		p.rsel = append(p.rsel, int32(j))
 	}
+	// The table is released for the replay only after the last rows are emitted from
+	// it. Released first, as it was from the first commit, the last flush read a nil
+	// build side whenever a level both kept rows resident and spilled others (step
+	// 133).
+	release := false
 	if p.flushJ >= n {
 		p.phase = p.afterFlush()
-		if p.phase == phaseReplay {
-			p.releaseTable()
+		release = p.phase == phaseReplay
+	}
+	var out *data.Batch
+	if p.outLen() > 0 {
+		var err error
+		if out, err = p.emit(); err != nil {
+			return nil, err
 		}
 	}
-	if p.outLen() == 0 {
-		return nil, nil
+	if release {
+		p.releaseTable()
 	}
-	return p.emit()
+	return out, nil
 }
 
 // account charges what the probe side holds, as a delta.
