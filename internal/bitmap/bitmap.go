@@ -29,6 +29,7 @@
 package bitmap
 
 import (
+	"encoding/binary"
 	"math/bits"
 
 	"github.com/apache/arrow-go/v18/arrow/bitutil"
@@ -158,6 +159,16 @@ func (v View) word(pos, n int) uint64 {
 	byteIdx := pos >> 3
 	shift := uint(pos & 7)
 
+	// One 8-byte load, and the 9th byte only when the shift straddles it. The loop
+	// below assembled every word a byte at a time, under every Words caller.
+	if byteIdx+9 <= len(v.buf) {
+		w := binary.LittleEndian.Uint64(v.buf[byteIdx:])
+		if shift > 0 {
+			w = w>>shift | uint64(v.buf[byteIdx+8])<<(64-shift)
+		}
+		return maskLow(w, n)
+	}
+
 	var w uint64
 	// Read up to 9 bytes: 8 for the word plus 1 for a straddling shift.
 	need := (int(shift) + n + 7) / 8
@@ -177,6 +188,37 @@ func (v View) word(pos, n int) uint64 {
 	}
 	w >>= shift
 	return maskLow(w, n)
+}
+
+// AppendSetPositions appends to dst every position, relative to the views, where a is
+// set and b is too. A b with no storage is all set. Both views must have the same
+// length.
+//
+// A word at a time: a run of unset bits costs one test, and a set bit one
+// TrailingZeros. It is how a filter's mask becomes a selection.
+func AppendSetPositions(dst []int32, a, b View) []int32 {
+	n := a.length
+	for rel := 0; rel < n; rel += 64 {
+		k := min(64, n-rel)
+		w := a.wordRel(rel, k)
+		if b.buf != nil {
+			w &= b.wordRel(rel, k)
+		}
+		for w != 0 {
+			dst = append(dst, int32(rel+bits.TrailingZeros64(w)))
+			w &= w - 1
+		}
+	}
+	return dst
+}
+
+// wordRel is word at a position relative to the view, with the no-storage form's
+// all-ones.
+func (v View) wordRel(rel, n int) uint64 {
+	if v.buf == nil {
+		return maskLow(^uint64(0), n)
+	}
+	return v.word(v.offset+rel, n)
 }
 
 func maskLow(w uint64, n int) uint64 {

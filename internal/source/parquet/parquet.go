@@ -1121,7 +1121,7 @@ func newColReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataT
 				"column %q stores a DECIMAL in a variable-length BYTE_ARRAY", name).
 				Hint("ursus reads DECIMAL from INT32, INT64 and FIXED_LEN_BYTE_ARRAY")
 		}
-		return &byteArrayCol{cr: t, maxDef: maxDef, dt: dt, valid: bitmap.NewBuilder(0)}, nil
+		return &byteArrayCol{cr: t, maxDef: maxDef, dt: dt}, nil
 
 	case *file.Int32ColumnChunkReader:
 		if dt.ID() == dtype.TypeDecimal {
@@ -1160,7 +1160,7 @@ func newColReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataT
 	case *file.FixedLenByteArrayColumnChunkReader:
 		if dt.ID() == dtype.TypeBinary {
 			return &byteArrayCol{cr: &flbaAsBytes{FixedLenByteArrayColumnChunkReader: t},
-				maxDef: maxDef, dt: dt, valid: bitmap.NewBuilder(0)}, nil
+				maxDef: maxDef, dt: dt}, nil
 		}
 		if dt.ID() != dtype.TypeDecimal {
 			return nil, uerr.New(uerr.KindUnsupported, "scan_parquet",
@@ -1213,7 +1213,8 @@ func int32Reader(t *file.Int32ColumnChunkReader, maxDef int16, dt dtype.DataType
 }
 
 func newFixed[P any, T data.Fixed](cr batchReader[P], maxDef int16, dt dtype.DataType, conv func(P) T) colReader {
-	return &fixedCol[P, T]{cr: cr, maxDef: maxDef, dt: dt, conv: conv, valid: bitmap.NewBuilder(0)}
+	_, direct := any([]P(nil)).([]T)
+	return &fixedCol[P, T]{cr: cr, maxDef: maxDef, dt: dt, conv: conv, direct: direct}
 }
 
 func identity[T any](v T) T { return v }

@@ -1,6 +1,8 @@
 package kernel
 
 import (
+	"slices"
+
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/bitmap"
@@ -21,16 +23,14 @@ func SelectionFromMask(mask *data.Column) ([]int32, error) {
 	if mask.DType().ID() != dtype.TypeBool {
 		return nil, uerr.Internalf("kernel: selection mask must be Bool, got %s", mask.DType())
 	}
+	// The selection's length is counted first, so it is allocated once and exactly:
+	// a filter that keeps 2% of a batch held a buffer for all of it.
 	bits, valid := mask.Bools(), mask.Validity()
-	n := mask.Len()
-
-	sel := make([]int32, 0, n)
-	for i := range n {
-		if valid.Get(i) && bits.Get(i) {
-			sel = append(sel, int32(i))
-		}
+	n := bits.CountSet()
+	if !valid.IsAllSet() {
+		n = min(n, valid.CountSet())
 	}
-	return sel, nil
+	return bitmap.AppendSetPositions(make([]int32, 0, n), bits, valid), nil
 }
 
 // Take gathers rows by index, producing a compacted column.
@@ -46,19 +46,24 @@ func Take(c *data.Column, sel []int32) (*data.Column, error) {
 	srcValid := c.Validity()
 
 	// Output validity: null if the index is null, or if the source row was null.
-	valid := bitmap.NewBuilder(n)
-	anyNull := false
-	for _, i := range sel {
-		ok := i != NullIndex && srcValid.Get(int(i))
-		valid.Append(ok)
-		anyNull = anyNull || !ok
-	}
-	outValid := valid.Finish()
-	if !anyNull {
-		// Drop the buffer entirely when nothing is null: Arrow permits omitting
-		// the validity bitmap, and the no-storage form makes downstream kernels
-		// take their fast path.
-		outValid = bitmap.AllSet(n)
+	// Neither can happen when the source has no nulls and the selection no
+	// NullIndex, which is every filter of a column without nulls: a bit was
+	// appended per row there, and then thrown away.
+	outValid := bitmap.AllSet(n)
+	if !srcValid.IsAllSet() || slices.Contains(sel, NullIndex) {
+		valid := bitmap.NewBuilder(n)
+		anyNull := false
+		for _, i := range sel {
+			ok := i != NullIndex && srcValid.Get(int(i))
+			valid.Append(ok)
+			anyNull = anyNull || !ok
+		}
+		if anyNull {
+			// Otherwise the buffer is dropped: Arrow permits omitting the validity
+			// bitmap, and the no-storage form makes downstream kernels take their
+			// fast path.
+			outValid = valid.Finish()
+		}
 	}
 
 	switch {
@@ -94,15 +99,9 @@ func Take(c *data.Column, sel []int32) (*data.Column, error) {
 	// have — every sort, join, group-by and shift of an Enum panicked. It takes the
 	// fixed-width path below, as its Physical type says.
 	case c.DType().HasStringStorage():
-		acc := c.Strings()
-		vals := make([]string, n)
-		for j, i := range sel {
-			if i != NullIndex {
-				vals[j] = acc.Get(int(i))
-			}
-		}
-		col := data.NewString(c.Name(), vals, outValid)
-		return col.WithDType(c.DType()), nil
+		// By offsets and bytes, as Concat does since step 103: a Go string per row
+		// was an allocation per row, and NewString then copied every byte again.
+		return data.TakeStrings(c, sel, outValid), nil
 
 	default:
 		return takeFixed(c, sel, outValid)

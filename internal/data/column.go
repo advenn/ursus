@@ -358,6 +358,48 @@ func ConcatStrings(name string, dt dtype.DataType, parts []*Column, valid bitmap
 	return &Column{name: name, dt: dt, len: n, valid: valid, offs: ob, chars: cb}
 }
 
+// TakeStrings gathers a String or Binary column by row: row j of the result is row
+// sel[j] of c, and a negative index is an empty row, which valid marks null. Each
+// row's bytes are copied once, into one buffer counted before it is allocated.
+func TakeStrings(c *Column, sel []int32, valid bitmap.View) *Column {
+	n := len(sel)
+	var (
+		o   []int32
+		src []byte
+	)
+	chars := int64(0)
+	if c.offs != nil {
+		o = unsafeData[int32](c.offs.Bytes())
+		src = c.chars.Bytes()
+		for _, i := range sel {
+			if i >= 0 {
+				chars += int64(o[i+1] - o[i])
+			}
+		}
+	}
+	if chars > MaxStringBytes {
+		tooManyChars(c.name, chars)
+	}
+	ob := arrowx.NewBuffer((n + 1) * 4)
+	cb := arrowx.NewBuffer(int(chars))
+	offs := unsafeData[int32](ob.Bytes())
+	out := cb.Bytes()
+	pos := int32(0)
+	for j, i := range sel {
+		offs[j] = pos
+		if i >= 0 && o != nil {
+			lo, hi := o[i], o[i+1]
+			copy(out[pos:], src[lo:hi])
+			pos += hi - lo
+		}
+	}
+	offs[n] = pos
+	if valid.Len() == 0 && n > 0 {
+		valid = bitmap.AllSet(n)
+	}
+	return &Column{name: c.name, dt: c.dt, len: n, valid: valid, offs: ob, chars: cb}
+}
+
 // NewStringParts builds a String column from an offsets slice and a character
 // slice that a reader has already accumulated.
 //

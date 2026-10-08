@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"encoding/binary"
+	"slices"
 
 	"github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/file"
@@ -70,6 +71,71 @@ type parentTracker interface {
 	parentValidity() bitmap.View
 }
 
+// lazyValid is a column's validity, built only once a null arrives.
+//
+// Until then every row is valid and only counted, and a batch with no null at all
+// finishes with no bitmap: the no-storage form, which every kernel downstream takes
+// as its fast path, where a bitmap of ones that says the same thing is not. The
+// files PDS-H reads declare every column optional and hold no null in any of them.
+type lazyValid struct {
+	b       *bitmap.Builder // nil until the first null
+	pending int             // valid rows not yet in b
+}
+
+func (v *lazyValid) appendValid(n int) {
+	if v.b == nil {
+		v.pending += n
+		return
+	}
+	v.b.AppendMany(true, n)
+}
+
+// appendWord appends the low w bits of word, LSB first.
+func (v *lazyValid) appendWord(word uint64, w int) {
+	if word == maskBits(w) {
+		v.appendValid(w)
+		return
+	}
+	if v.b == nil {
+		v.b = bitmap.NewBuilder(v.pending + w)
+		v.b.AppendMany(true, v.pending)
+		v.pending = 0
+	}
+	v.b.AppendBits(word, w)
+}
+
+func (v *lazyValid) finish() bitmap.View {
+	if v.b == nil {
+		n := v.pending
+		v.pending = 0
+		return bitmap.AllSet(n)
+	}
+	out := v.b.Finish()
+	v.b = nil
+	return out
+}
+
+func maskBits(w int) uint64 {
+	if w >= 64 {
+		return ^uint64(0)
+	}
+	return uint64(1)<<uint(w) - 1
+}
+
+// appendDefs appends the validity defs say, where def == maxDef is a present value.
+func (v *lazyValid) appendDefs(defs []int16, maxDef int16) {
+	for i := 0; i < len(defs); i += 64 {
+		w := min(64, len(defs)-i)
+		var word uint64
+		for b, d := range defs[i : i+w] {
+			if d == maxDef {
+				word |= 1 << uint(b)
+			}
+		}
+		v.appendWord(word, w)
+	}
+}
+
 // batchReader is the ReadBatch shape shared by every typed column chunk reader.
 type batchReader[P any] interface {
 	ReadBatch(batchSize int64, values []P, defLvls, repLvls []int16) (int64, int, error)
@@ -81,12 +147,16 @@ type fixedCol[P any, T data.Fixed] struct {
 	cr     batchReader[P]
 	maxDef int16
 	conv   func(P) T
+	// direct is set when P and T are one type and conv is the identity: Int32,
+	// Int64, Float32, Float64, Date, Datetime, Duration and Time. Values are then
+	// read straight into out, with no scratch buffer and no call per value.
+	direct bool
 
 	vals []P     // scratch: packed values from ReadBatch
 	defs []int16 // scratch: definition levels
 
 	out   []T
-	valid *bitmap.Builder
+	valid lazyValid
 	dt    dtype.DataType
 
 	parentDef int16 // 0 when nothing above this column can be null
@@ -104,6 +174,9 @@ func (c *fixedCol[P, T]) parentValidity() bitmap.View {
 }
 
 func (c *fixedCol[P, T]) read(n int) (int, error) {
+	if c.direct {
+		return c.readDirect(n)
+	}
 	if cap(c.vals) < n {
 		c.vals = make([]P, n)
 		if c.maxDef > 0 {
@@ -127,15 +200,17 @@ func (c *fixedCol[P, T]) read(n int) (int, error) {
 
 	if c.maxDef == 0 {
 		// A REQUIRED column has no nulls and no levels; the values are already dense.
+		c.out = slices.Grow(c.out, valuesRead)
 		for i := range valuesRead {
 			c.out = append(c.out, c.conv(vals[i]))
 		}
-		c.valid.AppendMany(true, valuesRead)
+		c.valid.appendValid(valuesRead)
 		return valuesRead, nil
 	}
 
 	var zero T
 	vi := 0
+	c.out = slices.Grow(c.out, rows)
 	for i := 0; i < rows; {
 		// Pack validity 64 bits at a time. AppendBits is width-safe, which matters
 		// because the tail word is partial for any row count not a multiple of 64.
@@ -149,15 +224,11 @@ func (c *fixedCol[P, T]) read(n int) (int, error) {
 			} else {
 				c.out = append(c.out, zero)
 			}
-			if c.parent != nil {
-				// >=, not ==: the enclosing group is present for every level at or
-				// above its own, including the ones where this field is null.
-				c.parent.Append(defs[i+b] >= c.parentDef)
-			}
 		}
-		c.valid.AppendBits(word, w)
+		c.valid.appendWord(word, w)
 		i += w
 	}
+	c.trackParentDefs(defs[:rows])
 	if vi != valuesRead {
 		// The levels and the value count disagree, which means the file's levels are
 		// inconsistent with its data. Catching it here names the cause; letting it
@@ -168,12 +239,79 @@ func (c *fixedCol[P, T]) read(n int) (int, error) {
 	return rows, nil
 }
 
+// readDirect is read for a column stored as it is written. The values arrive
+// packed, the nulls left out, so a chunk with nulls is spread into place from the
+// back, where no value is overwritten before it is moved.
+func (c *fixedCol[P, T]) readDirect(n int) (int, error) {
+	start := len(c.out)
+	c.out = slices.Grow(c.out, n)
+	out := c.out[start : start+n]
+	vals := any(out).([]P)
+	var defs []int16
+	if c.maxDef > 0 {
+		if cap(c.defs) < n {
+			c.defs = make([]int16, n)
+		}
+		defs = c.defs[:n]
+	}
+	total, valuesRead, err := c.cr.ReadBatch(int64(n), vals, defs, nil)
+	if err != nil {
+		return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a column chunk")
+	}
+	rows := int(total)
+	if c.maxDef == 0 {
+		rows = valuesRead
+	}
+	c.out = c.out[:start+rows]
+	if rows == 0 {
+		return 0, nil
+	}
+	if c.maxDef == 0 || valuesRead == rows {
+		c.valid.appendValid(rows)
+		if c.maxDef > 0 {
+			c.trackParentDefs(defs[:rows])
+		}
+		return rows, nil
+	}
+	var zero T
+	vi := valuesRead - 1
+	for i := rows - 1; i >= 0; i-- {
+		if defs[i] == c.maxDef {
+			if vi < 0 {
+				break
+			}
+			out[i] = out[vi]
+			vi--
+		} else {
+			out[i] = zero
+		}
+	}
+	if vi != -1 {
+		return 0, uerr.New(uerr.KindValue, "scan_parquet",
+			"definition levels describe %d values but %d were read", valuesRead-vi-1, valuesRead)
+	}
+	c.valid.appendDefs(defs[:rows], c.maxDef)
+	c.trackParentDefs(defs[:rows])
+	return rows, nil
+}
+
+// trackParentDefs records, for a field of a struct, whether the struct was present
+// on each row: >=, not ==, because the enclosing group is present for every level at
+// or above its own, including the ones where this field is null.
+func (c *fixedCol[P, T]) trackParentDefs(defs []int16) {
+	if c.parent == nil {
+		return
+	}
+	for _, d := range defs {
+		c.parent.Append(d >= c.parentDef)
+	}
+}
+
 func (c *fixedCol[P, T]) finish(name string) *data.Column {
-	col := data.NewFixed(name, c.dt, c.out, c.valid.Finish())
+	col := data.NewFixed(name, c.dt, c.out, c.valid.finish())
 	// A fresh buffer per batch: NewFixed wraps without copying, so reusing the
 	// slice would rewrite a batch the consumer still holds.
 	c.out = nil
-	c.valid = bitmap.NewBuilder(0)
 	return col
 }
 
@@ -285,7 +423,7 @@ type byteArrayCol struct {
 	// gains one entry per value, null or not.
 	offs  []int32
 	chars []byte
-	valid *bitmap.Builder
+	valid lazyValid
 
 	parentDef int16
 	parent    *bitmap.Builder
@@ -348,36 +486,51 @@ func (c *byteArrayCol) read(n int) (int, error) {
 	if c.offs == nil {
 		c.offs = make([]int32, 1, rows+1)
 	}
+	// Both buffers grown once for the whole read, not by append's doubling as each
+	// value arrives: the characters are counted first.
+	chars := 0
+	for _, v := range vals[:valuesRead] {
+		chars += len(v)
+	}
+	c.chars = slices.Grow(c.chars, chars)
+	c.offs = slices.Grow(c.offs, rows)
 
 	if c.maxDef == 0 {
 		for i := range valuesRead {
 			c.appendVal(vals[i])
 		}
-		c.valid.AppendMany(true, valuesRead)
+		c.valid.appendValid(valuesRead)
 		return valuesRead, nil
 	}
 
-	vi := 0
-	for i := range rows {
-		if defs[i] == c.maxDef {
-			c.appendVal(vals[vi])
-			c.valid.Append(true)
-			vi++
-		} else {
-			c.appendNull()
-			c.valid.Append(false)
+	if valuesRead == rows {
+		for i := range rows {
+			c.appendVal(vals[i])
 		}
-		if c.parent != nil {
-			c.parent.Append(defs[i] >= c.parentDef)
+		c.valid.appendValid(rows)
+	} else {
+		vi := 0
+		for i := range rows {
+			if defs[i] == c.maxDef {
+				c.appendVal(vals[vi])
+				vi++
+			} else {
+				c.appendNull()
+			}
+		}
+		c.valid.appendDefs(defs[:rows], c.maxDef)
+	}
+	if c.parent != nil {
+		for _, d := range defs[:rows] {
+			c.parent.Append(d >= c.parentDef)
 		}
 	}
 	return rows, nil
 }
 
 func (c *byteArrayCol) finish(name string) *data.Column {
-	col := data.NewStringParts(name, c.offs, c.chars, c.valid.Finish())
+	col := data.NewStringParts(name, c.offs, c.chars, c.valid.finish())
 	c.offs, c.chars = nil, nil
-	c.valid = bitmap.NewBuilder(0)
 	return col.WithDType(c.dt)
 }
 
