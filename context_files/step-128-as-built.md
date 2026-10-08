@@ -96,8 +96,29 @@ limit now sits: the collector worked harder there instead of letting the heap gr
 
 **The times match the 8 GB run of step 127:** `j5` over CSV 8.5 s, `gb10` 7.6 s.
 
-The limit is soft. A query whose live state outgrew it would still be killed, and
-under a smaller cap than 4 GB that has not been measured.
+The limit is soft. A query whose live state outgrows it can still be killed.
+
+**Under a 3 GB scope:**
+
+| query | time | peak |
+| --- | --: | --: |
+| `gb10`, CSV | 7.4 s | 3.05 GB |
+| `j5`, CSV | 8.4 s | 2.92 GB |
+| `gb10`, Parquet | 4.8 s | 3.22 GB, the whole 3 GiB |
+| `j5`, Parquet | 4.4 s | 2.91 GB |
+
+**Nothing was killed, but `gb10` reached the cap over Parquet.**
+
+- **`j5`** sits at the soft limit, as under 4 GB.
+- **`gb10` groups ten million rows into about ten million groups,** so its result is
+  nearly its input's size. `Collect` holds all of it, uncharged, on top of the
+  group-by's 1.5 GB budget, and nothing can shed it.
+- **It survived** because the kernel reclaimed page cache first. Under a smaller cap,
+  or a busier one, it would likely be killed.
+
+A result that size is what `CollectBatches` and `SinkParquet` are for. Charging
+`Collect`'s result to the budget, and refusing past it with an error naming those
+two, would turn that kill into a message. That is not built.
 
 ## 4. Tests and teeth
 
