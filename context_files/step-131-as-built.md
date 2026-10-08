@@ -114,3 +114,51 @@ for a median or an implode, which hold every value.
 
 **Gate:** test-all 115 ok, race 23 ok (memcheck 62 s), levels, vet ×3 and the
 bench engine tests clean. No PDS-H run, by request.
+
+## 7. Measured afterwards, at the maintainer's request
+
+`gb10` and `j5` at ten million rows, ursus alone, one timed run each, under a 3 GB
+scope, at `79636f6`. Beside them, the 3 GB run of step 128, before steps 130 and
+131.
+
+| query | time | VmHWM | CPU | step 128's run |
+| --- | --: | --: | --: | --- |
+| `gb10`, CSV | 8.8 s | 3.05 GB | 24.7 s | 7.4 s, 3.05 GB, 23.5 s |
+| `j5`, CSV | 10.3 s | 2.91 GB | 52.3 s | 8.4 s, 2.92 GB, 47.7 s |
+| `gb10`, Parquet | 4.7 s | 3.20 GB | 22.1 s | 4.8 s, 3.22 GB, 21.8 s |
+| `j5`, Parquet | 5.6 s | 2.91 GB | 42.5 s | 4.4 s, 2.91 GB, 42.1 s |
+
+CPU is the scope's, from the journal.
+
+**Nothing was killed, and VmHWM did not move.** It cannot show this step's change.
+The runner's own figures for this run:
+
+| query | the budget counted | heap in use, sampled peak | allocated in all | collections |
+| --- | --: | --: | --: | --: |
+| `gb10`, CSV | 1.72 GB | 3.02 GB | 28.0 GB | 65 |
+| `j5`, CSV | 1.13 GB | 2.83 GB | 18.7 GB | 44 |
+| `gb10`, Parquet | 1.54 GB | 3.19 GB | 25.6 GB | 46 |
+| `j5`, Parquet | 0.95 GB | 2.82 GB | 18.5 GB | 34 |
+
+- **The heap in use is about twice what the budget counts,** and it is past the soft
+  limit, nine tenths of 3 GiB or 2.9 GB, for `gb10`.
+- **Heap in use counts garbage not yet collected.** `gb10` over Parquet allocated
+  25.6 GB in 4.7 s, about 5 GB a second. A collector held to a share of the CPU
+  cannot keep pace with that under the soft limit.
+- **So the heap fills to the cap whatever the live peak is,** and a lower live peak
+  shows only as headroom, which VmHWM does not report. The runs before this one kept
+  no heap figures, since each run's raw result replaces the last; whether the live
+  peak fell at this size is not known.
+
+**Times:**
+
+- Three of four were 19–26% slower than step 128's run.
+- Their CPU time was within 5%, except `j5` over CSV at 10%.
+- `j5` over Parquet took the same CPU over a quarter more wall time.
+
+More wall time on the same CPU points at the machine, not at more work. Each is one
+iteration, and nothing here separates the two.
+
+**What it points to:** at ten million rows the allocation rate, not what any one
+operator holds, is what puts the heap at the cap. An allocation profile of `gb10`
+would say where 25 GB goes.

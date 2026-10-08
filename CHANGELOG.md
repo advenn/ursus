@@ -393,8 +393,11 @@ Newest first. The numbers are steps, each with an as-built record in
   - Under 3 GB, `gb10` over Parquet reaches the cap. A group-by with as many groups
     as rows held its keys twice, uncounted, while it assembled its answer: a six-key
     group-by of two million rows held 517 MB against the 375 MB it counted (130).
-    Fixed in step 131, where the same assembly holds 172 MB; `gb10` itself has not
-    been re-run.
+    Fixed in step 131, where the same assembly holds 172 MB.
+  - Re-run under 3 GB after step 131, all four pass, and the peaks are unchanged.
+    The heap fills to the cap whatever the live peak: `gb10` over Parquet allocated
+    25.6 GB in 4.7 s, and its heap in use peaked at 3.19 GB against the 1.54 GB the
+    budget counted.
 
 ---
 
