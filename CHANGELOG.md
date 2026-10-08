@@ -21,12 +21,12 @@ contains it.
 
 ### Highlights
 
-- **Faster where ursus was slowest.** The full report, re-run for 0.4 with every
-  engine in one session (117), puts ursus against Polars at:
-  - **PDS-H SF=1:** 6.5×, from 10.8× at v0.3.0, with a peak memory of 0.97 GB
-    against Polars' 0.92 GB, where it was twice Polars';
-  - **PDS-H SF=0.1:** 6.1×, from 7.5×;
-  - **h2o, 10 million rows:** 2.8× over Parquet, from 3.3×; 3.4× over CSV, from 3.6×.
+- **Faster where ursus was slowest.** The full report, re-run with every engine in
+  one session on an otherwise idle machine (127), puts ursus against Polars at:
+  - **PDS-H SF=1:** 4.4×, from 10.8× at v0.3.0, with a peak memory of 1.02 GB
+    against Polars' 0.91 GB, where it was twice Polars';
+  - **PDS-H SF=0.1:** 4.0×, from 7.5×;
+  - **h2o, 10 million rows:** 1.9× over Parquet, from 3.3×; 3.3× over CSV, from 3.6×.
     `gb10` over CSV, killed under the 8 GB cap at v0.3.0, passes.
 
   Each step was also measured on its own queries, against the step before:
@@ -108,6 +108,9 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **The 0.4 report, re-run** after the performance round (127): PDS-H SF=1 at 4.4×
+  Polars, SF=0.1 4.0×, h2o 1.9× over Parquet and 3.3× over CSV. Step 117's report,
+  taken while this session's reviewers were grepping, had understated ursus.
 - **The key table waits on memory once per chunk of keys, not once per key** (126).
   Each slot holds a tag of its key's hash, and joins and group-bys look up and insert
   64 keys at a time, reading their slots together. PDS-H q4 is 28% faster, q12, q9
@@ -333,11 +336,12 @@ Newest first. The numbers are steps, each with an as-built record in
     `mode="half_away_from_zero"`, not its default, half to even.
   - UInt64 `Diff` is an exact Int128, where Polars gives Int64 and nulls.
   - The minimum Duration's `Abs` is refused, where Polars wraps.
-- **Speed:** ursus is slower than Polars and DuckDB: 6.5× Polars on PDS-H at SF=1, by
-  geomean, against the 4× the scope set as its target. The README's table gives the
-  rest, from the report step 117 ran.
-- **Memory:** h2o `j5` over CSV peaked at 8.19 GB under an 8 GB cap. The query budget
-  was 4 GB; the rest is the Go heap's slack, which `SetProcessMemoryLimit` bounds.
+- **Speed:** ursus is slower than Polars and DuckDB: 4.4× Polars on PDS-H at SF=1, by
+  geomean, just short of the 4× the scope set as its target. The README's table gives
+  the rest, from the report step 127 ran.
+- **Memory:** h2o `gb10` over CSV peaked at 7.60 GB under an 8 GB cap. The query
+  budget was 4 GB; the rest is the Go heap's slack, which `SetProcessMemoryLimit`
+  bounds.
 
 ---
 
