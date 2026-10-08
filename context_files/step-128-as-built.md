@@ -79,6 +79,26 @@ The three changes each remove a measured part of the gap:
 How much each contributes, and whether `j5` now passes, takes one targeted run of
 `j5` and `gb10` under a 4 GB cap, whenever the maintainer chooses.
 
+### Measured afterwards, at the maintainer's request
+
+After step 129, ursus alone, `gb10` and `j5` at ten million rows, one timed run
+each, under a 4 GB scope:
+
+| query | time | peak | before this step |
+| --- | --: | --: | --- |
+| `gb10`, CSV | 7.4 s | 3.88 GB | passed |
+| `j5`, CSV | 8.6 s | 3.87 GB | killed at the cap |
+| `gb10`, Parquet | 4.9 s | 3.87 GB | passed |
+| `j5`, Parquet | 4.4 s | 3.87 GB | passed at exactly the cap |
+
+**Nothing was killed.** Each peaked at nine tenths of the 4 GiB cap, where the soft
+limit now sits: the collector worked harder there instead of letting the heap grow.
+
+**The times match the 8 GB run of step 127:** `j5` over CSV 8.5 s, `gb10` 7.6 s.
+
+The limit is soft. A query whose live state outgrew it would still be killed, and
+under a smaller cap than 4 GB that has not been measured.
+
 ## 4. Tests and teeth
 
 - **`TestTheDefaultBudgetSetsTheProcessMemoryLimit`** (root, internal) stubs the

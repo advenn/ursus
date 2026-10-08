@@ -128,6 +128,8 @@ Newest first. The numbers are steps, each with an as-built record in
     build side is no longer alive alongside it.
   - The result, and a join's build side, are concatenated column by column, each
     column's pieces let go once copied, instead of being held twice.
+  - Measured after: under a 4 GB container `j5` and `gb10` pass over CSV and
+    Parquet, peaking at nine tenths of the cap, as fast as under 8 GB.
 - **The 0.4 report, re-run** after the performance round (127): PDS-H SF=1 at 4.4×
   Polars, SF=0.1 4.0×, h2o 1.9× over Parquet and 3.3× over CSV. Step 117's report,
   taken while this session's reviewers were grepping, had understated ursus.
