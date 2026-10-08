@@ -12,7 +12,7 @@ Step numbers below point at those records.
 
 ## v0.4.0 — candidate
 
-Everything since `v0.3.1` (2026-10-06): steps 92–130.
+Everything since `v0.3.1` (2026-10-06): steps 92–131.
 
 [`v0.4-scope.md`](./context_files/v0.4-scope.md) set the scope: **fast where it is
 slow, and safe inside a service.** Its §7 records what was done, and what moved to
@@ -123,6 +123,15 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **A group-by with as many groups as rows holds its keys once while it assembles
+  its answer** (131). It held them twice, uncounted, with its key table beside them:
+  517 MB to assemble a 159 MB answer, measured on two million rows of `gb10`'s shape.
+  It now holds 172 MB.
+  - The cause was found in the budget's ledger. It is keyed by pointers into the
+    buffers it counts, so an account keeps alive what it holds, and the group-by's
+    released its key parts only after the answer was built.
+  - The same kept step 130's `Collect` holding its result twice under the default
+    budget, a regression from step 128's fix; that is fixed too.
 - **`Collect` counts its result under the default budget** (130), and refuses one
   too large to hold (see the behaviour changes).
   - The result is counted apart from what the operators hold, so they spill as they
@@ -382,9 +391,10 @@ Newest first. The numbers are steps, each with an as-built record in
   bounds by default since step 128, after that report.
   - Re-measured after step 128, `gb10` and `j5` pass under 4 GB and 3 GB caps.
   - Under 3 GB, `gb10` over Parquet reaches the cap. A group-by with as many groups
-    as rows holds its keys twice, uncounted, while it assembles its answer: a
-    six-key group-by of two million rows held 517 MB against the 375 MB it counted
-    (130). Not fixed.
+    as rows held its keys twice, uncounted, while it assembled its answer: a six-key
+    group-by of two million rows held 517 MB against the 375 MB it counted (130).
+    Fixed in step 131, where the same assembly holds 172 MB; `gb10` itself has not
+    been re-run.
 
 ---
 

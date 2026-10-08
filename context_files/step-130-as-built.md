@@ -87,6 +87,11 @@ setting the soft limit (step 128).
 and checks it as the batch arrives. It refuses once the result is too large, not
 once the stream ends: by then the memory has filled.
 
+**Corrected in step 131:** `held` was released by a `defer`, after the result was
+concatenated. The ledger's keys are pointers into the buffers it counts, so it kept
+every batch alive, and under the default budget the result was held twice while it
+was copied, which is what step 128 had removed. It is now released before.
+
 **`lazy.go`:**
 
 - `Collect` passes `cfg.budget.Result()`;

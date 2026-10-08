@@ -36,10 +36,15 @@ import (
 // held is the account the result is held in, from execopt.Budget.Result; nil holds
 // it unchecked. Each batch is retained in it as it arrives, and Collect stops with
 // held's error once the query holds more than a result may take.
+//
+// held is released once the stream has ended, before the batches are concatenated.
+// The ledger's keys are pointers into the buffers it counts, so an account keeps
+// alive what it holds: released after, it kept every batch until the result was
+// whole, and the result was held twice while it was copied (step 131).
 func Collect(ctx context.Context, root physical.Operator, held *execopt.Account) (*data.Batch, error) {
-	defer held.Release()
 	schema := root.Schema()
 	batches, err := drain(ctx, root, held)
+	held.Release()
 	if err != nil {
 		return nil, err
 	}

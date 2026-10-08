@@ -735,8 +735,6 @@ func (s *hashAggSink) Finish(ctx context.Context) (Operator, error) {
 		return nil, err
 	}
 
-	s.releaseState()
-
 	if len(s.files) == 0 {
 		s.mem.Retain(resident)
 		if resident.Rows() <= s.chunk() {
@@ -756,13 +754,14 @@ func (s *hashAggSink) Finish(ctx context.Context) (Operator, error) {
 		n: s.chunk(), files: s.files}, nil
 }
 
-// releaseState drops the sink's claim on everything residentResult was built from.
+// releaseState drops the sink's state, and its account's claim on it.
+// residentResult calls it before it builds the answer, from the pieces it took.
 //
 // # Rebasing, and why it is not optional
 //
-// The key parts and the accumulator state are both dead the moment the answer
-// exists, and holding all three would double-count the aggregation at exactly its
-// largest moment. joinBuildSink.freeze makes the same correction for the same
+// The key parts and the accumulator state are both dead once the answer is built
+// from them, and holding all three would double-count the aggregation at exactly
+// its largest moment. joinBuildSink.freeze makes the same correction for the same
 // reason.
 //
 // # And why a SPILLING sink must go further than that
@@ -783,9 +782,36 @@ func (s *hashAggSink) releaseState() {
 	s.mem.Release()
 }
 
-// residentResult builds the answer for the groups this sink holds in memory.
+// residentResult builds the answer for the groups this sink holds in memory. It
+// takes the sink's state, releases it with releaseState, and lets go of each piece
+// as soon as the answer has what it needed from it. A caller closes the sink's
+// partition files first: closeParts uncharges their buffers.
+//
+// # Why as it goes
+//
+// With one group per row, as h2o's gb10 has, the answer is about the input's size,
+// and so is each thing it is built from: the key table, which holds every key
+// encoded, and the key parts. All three were alive until the last key column was
+// copied, the parts twice over, and none of the copy was charged. A six-key group-by
+// of two million rows held 517 MB to assemble a 159 MB answer, against the 375 MB it
+// charged, and gb10 reached a 3 GB container's cap (step 131).
+//
+//   - The key table answers lookups, and the answer needs none: it goes first, once
+//     the group count is read.
+//   - The key parts go a column at a time, with kernel.ConcatOwned, as Collect's
+//     batches and a join's build side do (step 128).
+//   - Each accumulator goes once its column is finished.
+//
+// # Why the account is released first
+//
+// The ledger's keys are pointers into the buffers it counts, so an account keeps
+// alive what it holds. Released after the answer was built, as it used to be, the
+// account kept every key part until then, whatever ConcatOwned let go of.
+// finishOrdered reads firstSeen, which stays.
 func (s *hashAggSink) residentResult() (*data.Batch, error) {
 	nGroups := s.ids.Len()
+	keyParts, accs := s.keyParts, s.accs
+	s.releaseState()
 
 	// A GLOBAL aggregate emits exactly one row even over an empty input:
 	// `count(*)` of nothing is 0, not no rows. A hash table gets this wrong by
@@ -797,13 +823,13 @@ func (s *hashAggSink) residentResult() (*data.Batch, error) {
 	cols := make([]*data.Column, 0, len(s.keys)+len(s.specs))
 
 	if len(s.keys) > 0 {
-		if len(s.keyParts) == 0 {
+		if len(keyParts) == 0 {
 			// No row ever arrived, so no group was created. Concat over zero batches
 			// yields a zero-COLUMN batch, which would leave the output short of its
 			// schema; the correct answer is one empty column per key.
 			cols = append(cols, emptyColumns(s.keySchema)...)
 		} else {
-			keys, err := kernel.Concat(s.keySchema, s.keyParts)
+			keys, err := kernel.ConcatOwned(s.keySchema, keyParts)
 			if err != nil {
 				return nil, err
 			}
@@ -812,8 +838,9 @@ func (s *hashAggSink) residentResult() (*data.Batch, error) {
 	}
 
 	for i, spec := range s.specs {
-		s.accs[i].Reserve(nGroups)
-		c, err := s.accs[i].Finish(spec.name, nGroups)
+		accs[i].Reserve(nGroups)
+		c, err := accs[i].Finish(spec.name, nGroups)
+		accs[i] = nil
 		if err != nil {
 			return nil, err
 		}

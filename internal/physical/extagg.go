@@ -450,16 +450,15 @@ func (s *hashAggSink) collectOrdered(ctx context.Context, resident *data.Batch,
 			sub.Close()
 			return nil, nil, err
 		}
+		if err := sub.closeParts(); err != nil {
+			sub.Close()
+			return nil, nil, err
+		}
 		subRes, err := sub.residentResult()
 		if err != nil {
 			sub.Close()
 			return nil, nil, err
 		}
-		if err := sub.closeParts(); err != nil {
-			sub.Close()
-			return nil, nil, err
-		}
-		sub.releaseState()
 		ps, os_, err := sub.collectOrdered(ctx, subRes)
 		if err != nil {
 			sub.Close()

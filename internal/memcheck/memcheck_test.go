@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/kernel"
 )
 
@@ -213,25 +214,37 @@ func TestCollectHoldsTheResultOnce(t *testing.T) {
 
 	// A filter keeping three rows in four copies them into new buffers, so the
 	// result is new memory and nothing below it is held: what Collect itself holds.
-	t.Run("a result is not held twice while it is assembled", func(t *testing.T) {
-		var df *ursus.DataFrame
-		var st ursus.MemoryStats
-		_, live := liveDuring(func() {
-			var err error
-			df, err = wide.Filter(c("k").Mod(4).Ne(0)).Collect(t.Context(), limit, ursus.WithMemoryStats(&st))
-			if err != nil {
-				t.Fatal(err)
+	//
+	// Under the default budget too, where Collect counts its result (step 130) in an
+	// account that kept every batch alive until the result was whole (step 131).
+	for _, b := range []struct {
+		name string
+		opts []ursus.CollectOption
+	}{
+		{"under a limit", []ursus.CollectOption{limit}},
+		{"under the default budget", nil},
+	} {
+		t.Run("a result is not held twice while it is assembled, "+b.name, func(t *testing.T) {
+			var df *ursus.DataFrame
+			var st ursus.MemoryStats
+			_, live := liveDuring(func() {
+				var err error
+				df, err = wide.Filter(c("k").Mod(4).Ne(0)).Collect(t.Context(),
+					append(b.opts, ursus.WithMemoryStats(&st))...)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}, wide)
+			result := int64(df.Height()) * 7 * 8
+			report(t, t.Name(), live, st)
+			// Held once is the result and one column more, 1.14 of it here; held twice
+			// is 2.
+			if live > result*13/10+8*mb {
+				t.Errorf("assembling a %d MB result held %d MB", result/mb, live/mb)
 			}
-		}, wide)
-		result := int64(df.Height()) * 7 * 8
-		report(t, t.Name(), live, st)
-		// Held once is the result and one column more, 1.14 of it here; held twice is
-		// 2.
-		if live > result*13/10+8*mb {
-			t.Errorf("assembling a %d MB result held %d MB", result/mb, live/mb)
-		}
-		runtime.KeepAlive(df)
-	})
+			runtime.KeepAlive(df)
+		})
+	}
 	// Four probe rows a build key, so the result outweighs the join's own state.
 	t.Run("a join's state is not held while its result is assembled", func(t *testing.T) {
 		build := frame(t, n/4, 1, func(i int) int64 { return int64(i) })
@@ -255,4 +268,82 @@ func TestCollectHoldsTheResultOnce(t *testing.T) {
 		}
 		runtime.KeepAlive(df)
 	})
+}
+
+// TestAGroupByHoldsItsAnswerOnce: a group-by with one group per row, h2o gb10's
+// shape, reached a 3 GB container's cap (step 128's record). Its answer is about its
+// input's size, and it held its keys twice while it assembled it, with the key table
+// alive beside both: a concatenation of every key part, kept until the last column
+// was copied (step 131).
+//
+// Three String keys and three Int64, and a sum and a count, as gb10 has. Streamed,
+// so what is read is the group-by's own.
+func TestAGroupByHoldsItsAnswerOnce(t *testing.T) {
+	defer debug.SetGCPercent(debug.SetGCPercent(10))
+	c := ursus.Col
+	const n = 1 << 21
+	var cols []*ursus.Column
+	for k, name := range []string{"id1", "id2", "id3"} {
+		v := make([]string, n)
+		for i := range v {
+			v[i] = fmt.Sprintf("id%07d", (i*7+k)%n)
+		}
+		cols = append(cols, ursus.Values(name, v))
+	}
+	for _, name := range []string{"id4", "id5", "id6"} {
+		v := make([]int64, n)
+		for i := range v {
+			v[i] = int64(i)
+		}
+		cols = append(cols, ursus.Values(name, v))
+	}
+	cols = append(cols, ursus.Values("v3", make([]float64, n)))
+	df, err := ursus.Frame(cols...).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A filter keeping nearly every row copies them, as a file's scan does.
+	q := df.Lazy().Filter(c("id4").Mod(1000).Ne(999)).
+		GroupBy(c("id1"), c("id2"), c("id3"), c("id4"), c("id5"), c("id6")).
+		Agg(c("v3").Sum(), ursus.Len())
+
+	// The answer's size: what its batches point into, each allocation once. They are
+	// slices of the one answer the group-by built.
+	answer := map[data.BufferID]int64{}
+	var st ursus.MemoryStats
+	live, atColumns := liveDuring(func() {
+		for out, err := range q.CollectBatches(t.Context(), ursus.WithMemoryLimit(1<<30),
+			ursus.WithMemoryStats(&st)) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, col := range out.Batch().Columns() {
+				for id, size := range col.Buffers() {
+					answer[id] = size
+				}
+			}
+		}
+	}, df)
+	var result int64
+	for _, size := range answer {
+		result += size
+	}
+	report(t, t.Name(), live, st)
+	report(t, t.Name()+" (assembling)", atColumns, st)
+	if os.Getenv("URSUS_MEMCHECK_VERBOSE") != "" {
+		fmt.Printf("%-28s %6.1f MB\n", "  its answer", float64(result)/mb)
+	}
+
+	// While it assembles the answer it holds the answer, one column of key parts not
+	// yet let go, and the accumulators: 1.08 of the answer here. Its keys twice were
+	// 3.2, with the key table beside them.
+	if atColumns > result*13/10+16*mb {
+		t.Errorf("assembling a %d MB answer held %d MB", result/mb, atColumns/mb)
+	}
+	// Sampled, the most is now while it aggregates, at 1.31 of what it charges here,
+	// against the one-key group-by's 1.17. That phase is not what this test is for,
+	// and step 131 did not change it; the bound is for a second copy of something.
+	if live > st.Peak*15/10+16*mb {
+		t.Errorf("the live heap rose %d MB; the group-by charged a peak of %d MB", live/mb, st.Peak/mb)
+	}
 }

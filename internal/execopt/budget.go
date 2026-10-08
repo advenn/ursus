@@ -25,6 +25,15 @@
 // the buffering operators, which are the only things that hold memory across
 // batches, and it is silent about a single kernel's transient output.
 //
+// # An account keeps alive what it holds
+//
+// A data.BufferID is a pointer to an allocation's first byte, and the ledger is
+// keyed by it, so an allocation stays reachable while any account holds it. An
+// operator that lets go of a buffer it will not read again, to free it, must
+// release it from its account first: released afterwards, the account keeps it
+// alive until then. A group-by assembling its answer and Collect assembling its
+// result each held their input twice that way (step 131).
+//
 // # A result is held apart
 //
 // Collect holds its result in an account of its own, opened with Result, and only
