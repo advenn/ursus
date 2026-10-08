@@ -12,7 +12,7 @@ Step numbers below point at those records.
 
 ## v0.4.0 — candidate
 
-Everything since `v0.3.1` (2026-10-06): steps 92–135.
+Everything since `v0.3.1` (2026-10-06): steps 92–136.
 
 [`v0.4-scope.md`](./context_files/v0.4-scope.md) set the scope: **fast where it is
 slow, and safe inside a service.** Its §7 records what was done, and what moved to
@@ -123,6 +123,13 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **The CSV reader allocates about what it produces** (136): 4.1 times it, now 1.3,
+  counting every batch.
+  - Each fixed-width column dropped its values slice every batch. A comment claimed
+    the column wrapped it, but the column has copied it since the first commit. So
+    each batch's values were allocated twice, once by `append`'s quarter steps.
+  - The slice is now kept, as the String builder's buffers always were. A test
+    checks an earlier batch is intact after the later ones.
 - **The memory test's spilling join reads the heap exactly** (135), at each bucket's
   concatenation: 14.3 MB in every run under a 16 MB budget. Its sampled reading, which
   it was bounded on, once read 128 MB in a gate where every package competes for the

@@ -67,9 +67,14 @@ func (b *fixedBuilder[T]) len() int { return len(b.vals) }
 
 func (b *fixedBuilder[T]) finish(name string) *data.Column {
 	c := data.NewFixed(name, b.dt, b.vals, b.valid.Finish())
-	// A fresh values slice per batch: NewFixed wraps the slice without copying, so
-	// reusing it would rewrite a batch the consumer is still holding.
-	b.vals = nil
+	// The values slice is kept for the next batch, as stringBuilder keeps its
+	// buffers: NewFixed copies into a fresh Arrow buffer, so the column just made
+	// does not alias it. This said NewFixed wrapped the slice, and dropped it every
+	// batch to be safe, but NewFixed has copied since the first commit: each batch's
+	// values were allocated twice, once growing here by append and once in NewFixed
+	// (step 136). TestReadingAllocatesAboutWhatItProduces checks an earlier batch is
+	// intact after the later ones.
+	b.vals = b.vals[:0]
 	b.valid = bitmap.NewBuilder(0)
 	return c
 }
