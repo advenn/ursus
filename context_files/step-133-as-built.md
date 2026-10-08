@@ -157,3 +157,32 @@ in the root package, which had not been run before the gate. After §2's smaller
 first sizes and §4's fix: test-all 115 ok, race 23 ok, levels, vet ×3 and the
 bench engine tests clean. The figures in §3 were re-read with the final sizes and
 are unchanged. No PDS-H run, by request.
+
+## 7. Measured afterwards, at the maintainer's request
+
+`gb10` and `j5` at ten million rows, ursus alone, one timed run each, under a 3 GB
+scope, at `c5c9e24`. Beside each, step 131's run of the same, at `79636f6`. CPU is
+the scope's, from the journal.
+
+| query | time | CPU | VmHWM | heap in use | allocated | collections |
+| --- | --: | --: | --: | --: | --: | --: |
+| `gb10`, CSV | 6.4 s (8.8) | 20.0 s (24.7) | 2.85 GB (3.05) | 2.85 GB (3.02) | 18.5 GB (28.0) | 40 (65) |
+| `j5`, CSV | 9.6 s (10.3) | 49.6 s (52.3) | 2.87 GB (2.91) | 2.80 GB (2.83) | 17.1 GB (18.7) | 39 (44) |
+| `gb10`, Parquet | 3.8 s (4.7) | 16.0 s (22.1) | 2.88 GB (3.20) | 2.80 GB (3.19) | 17.4 GB (25.6) | 35 (46) |
+| `j5`, Parquet | 4.9 s (5.6) | 42.4 s (42.5) | 2.90 GB (2.91) | 2.81 GB (2.82) | 17.4 GB (18.5) | 32 (34) |
+
+**`gb10` allocates a third less, and is off the cap.**
+
+- It allocates 18.5 and 17.4 GB, from 28.0 and 25.6: a third less, about what §5
+  estimated for the key table.
+- Over Parquet, its VmHWM is 2.88 GB, under the soft limit's 2.9; it was 3.20, the
+  whole 3 GiB.
+- It uses 19% less CPU over CSV and 28% less over Parquet. CPU time does not depend
+  on what else the machine runs, so that is the change and not the machine.
+- Its wall time is 27% and 20% shorter, from one iteration each.
+
+**`j5` barely moved:** 9% less allocated over CSV and 6% over Parquet, and the same
+CPU within 5%. Its key table is a fraction of what it allocates.
+
+**`j5` over CSV is still slower than step 128's run,** 9.6 s against 8.4, on 4% more
+CPU. It is one iteration, on a laptop, and was not looked into.

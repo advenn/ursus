@@ -131,7 +131,9 @@ Newest first. The numbers are steps, each with an as-built record in
     (132).
   - It also held the old arena beside the new while it copied. A six-key group-by's
     live heap while aggregating fell from 1.31 of what it counts to about 1.1.
-  - Its speed was not measured.
+  - Measured after, under a 3 GB container at ten million rows, `gb10` allocates a
+    third less and uses 19–28% less CPU. Over Parquet its peak fell from the whole
+    3 GiB to 2.88 GB, under the soft limit. `j5` barely moved.
 - **A spilled full or right join no longer panics on its last flush** (133). Where
   a join both kept build rows in memory and spilled others, it released its table
   and then emitted the last unmatched build rows from it. Reachable since v0.1 at
