@@ -390,6 +390,9 @@ func ConcatOwned(schema *dtype.Schema, batches []*data.Batch) (*data.Batch, erro
 		}
 		cols[ci] = out
 		parts[ci] = nil
+		if ConcatColumnDone != nil {
+			ConcatColumnDone()
+		}
 	}
 	return data.NewBatch(schema, cols)
 }
@@ -456,9 +459,18 @@ func Concat(schema *dtype.Schema, batches []*data.Batch) (*data.Batch, error) {
 			return nil, err
 		}
 		cols[ci] = out
+		if ConcatColumnDone != nil {
+			ConcatColumnDone()
+		}
 	}
 	return data.NewBatch(schema, cols)
 }
+
+// ConcatColumnDone, when set, is called after Concat and ConcatOwned copy each
+// column. It is for internal/memcheck, which collects garbage there to read what a
+// concatenation keeps reachable at its largest moment: a copy takes milliseconds,
+// too fast for a heap sampled between collections to see. Nothing else sets it.
+var ConcatColumnDone func()
 
 // ConcatColumns stacks columns of the same type end to end.
 //

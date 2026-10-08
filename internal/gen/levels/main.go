@@ -74,6 +74,8 @@ var levels = map[string]int{
 	"selector":  80,
 	"sql":       80,
 	"ursustest": 80,
+	// Tests only, which import the root package; its one file declares nothing.
+	"internal/memcheck": 80,
 }
 
 func levelOf(rel string) (int, bool) {

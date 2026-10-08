@@ -116,6 +116,10 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **A test fails when a query holds memory its budget does not count** (129). It
+  measures the live heap of a join, a group-by, a spilling join and two `Collect`s
+  on a few million rows, in seconds, and fails if a result or a build side is held
+  twice, as step 128 found them.
 - **The default memory budget holds** (128). Under a 4 GB container a join of two
   ten-million-row tables was killed: the heap ran to about twice the 2 GB budget.
   - Under the default budget, the Go soft memory limit is now set as well (see the
