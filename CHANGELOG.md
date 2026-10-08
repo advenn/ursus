@@ -12,7 +12,7 @@ Step numbers below point at those records.
 
 ## v0.4.0 — candidate
 
-Everything since `v0.3.1` (2026-10-06): steps 92–134.
+Everything since `v0.3.1` (2026-10-06): steps 92–135.
 
 [`v0.4-scope.md`](./context_files/v0.4-scope.md) set the scope: **fast where it is
 slow, and safe inside a service.** Its §7 records what was done, and what moved to
@@ -123,6 +123,10 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **The memory test's spilling join reads the heap exactly** (135), at each bucket's
+  concatenation: 14.3 MB in every run under a 16 MB budget. Its sampled reading, which
+  it was bounded on, once read 128 MB in a gate where every package competes for the
+  CPU.
 - **Accumulators grow by doubling** (134). Each allocated about five times what it
   held, growing a group at a time; now about twice. The memory budget now counts
   each per-group array's capacity, which doubling can leave up to half unused, not

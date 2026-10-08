@@ -157,12 +157,15 @@ func TestQueriesHoldWhatTheBudgetCounts(t *testing.T) {
 	// filter that keeps nearly every row copies them, as a file's scan would: the case
 	// that was killed (step 128) read CSV.
 	copied := build.Filter(c("k").Mod(1000).Ne(999))
+	// What the join counts when it holds everything, for the spilling case below.
+	var whole int64
 
 	t.Run("a join holds what it charges", func(t *testing.T) {
 		var st ursus.MemoryStats
 		live, atFreeze := liveDuring(func() {
 			stream(t, probe.Join(copied, ursus.JoinOn(c("k"))), limit, ursus.WithMemoryStats(&st))
 		}, build, probe)
+		whole = st.Peak
 		report(t, t.Name(), live, st)
 		report(t, t.Name()+" (freezing)", atFreeze, st)
 		if live > st.Peak*13/10+16*mb {
@@ -189,17 +192,30 @@ func TestQueriesHoldWhatTheBudgetCounts(t *testing.T) {
 	t.Run("a join under a small budget spills and stays near it", func(t *testing.T) {
 		var st ursus.MemoryStats
 		const small = 16 * mb
-		live, _ := liveDuring(func() {
+		live, atReplay := liveDuring(func() {
 			stream(t, probe.Join(copied, ursus.JoinOn(c("k"))), ursus.WithMemoryLimit(small), ursus.WithMemoryStats(&st))
 		}, build, probe)
 		report(t, t.Name(), live, st)
+		report(t, t.Name()+" (replaying)", atReplay, st)
 		if st.Spills == 0 {
 			t.Fatal("nothing spilled")
 		}
-		// Held whole, the join's state is about 185 MB; spilled, a few times the
-		// budget, sampled with the filter's floating garbage.
-		if live > 5*small+16*mb {
-			t.Errorf("the live heap rose %d MB under a %d MB budget", live/mb, int64(small)/mb)
+		// Exact, as each bucket's sub-join concatenates its build side, which is when
+		// it holds most: 14.3 MB in every run, under a 16 MB budget. A sub-join holds
+		// its bucket within the budget and one column more; the resident table, or the
+		// last bucket's sub-join, kept beside it is about twice that.
+		//
+		// This bound was on the sampled reading until step 135, at five times the
+		// budget and 16 MB more, and that reading wandered: 19.9 to 35.5 MB alone, and
+		// 128 MB once in a gate, where every package's tests compete for the CPU and
+		// the collector falls behind the filter feeding the join.
+		if atReplay > small+8*mb {
+			t.Errorf("replaying held %d MB under a %d MB budget", atReplay/mb, int64(small)/mb)
+		}
+		// Sampled, only what the noise cannot reach: spilled, it holds less than the
+		// join held whole.
+		if whole > 0 && live >= whole {
+			t.Errorf("the live heap rose %d MB spilled; whole, the join counted %d MB", live/mb, whole/mb)
 		}
 	})
 }
