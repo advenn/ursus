@@ -55,8 +55,10 @@ both teeth did exactly that and was silent, the trap step 129 recorded.
 
 **Silent, and why that is right:**
 
-- **The resident table kept through the replay:** at a 16 MB budget the join spills
-  nearly all of its build side, so the resident table is close to empty.
+- **The resident table kept through the replay:** with it kept, the replay still
+  read under the 24 MB bound, against 14.3 without it, so it held under 10 MB. At a
+  16 MB budget nearly the whole build side goes to disk; a larger budget would leave
+  more resident, and this case does not test one.
 - **A freeze releasing its account after concatenating** does hold the build side
   twice: the unspilled join's freeze read 260.7 MB, against 180.7 without it. But
   the account then counts the parts and the table together, so the peak it reports
