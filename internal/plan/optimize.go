@@ -112,6 +112,17 @@ func NewOptimizer() *Optimizer {
 	return &Optimizer{
 		folder: folder,
 		rules: []registered{
+			// Constants are folded once BEFORE the pushdowns too, so a predicate
+			// reaches a scan as the pruner can read it. `Lit(t).Cast(Date)` was a cast
+			// when predicate pushdown asked the Parquet source what it could prune,
+			// and was folded only afterwards, by the simplification at the end: dates
+			// were never pruned (step 142). This is the second registration the note
+			// on the last rule below says closes that gap.
+			{
+				rule:    Local(simplify{fold: folder}),
+				mode:    Once,
+				enabled: func(f Flags) bool { return f.SimplifyExprs },
+			},
 			// Predicate pushdown runs FIRST. Moving filters down before deciding
 			// which columns are needed means projection pushdown sees the final
 			// shape of the plan; the reverse order would compute a projection and

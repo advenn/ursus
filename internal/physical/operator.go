@@ -147,25 +147,84 @@ type filterOp struct {
 func (f *filterOp) Schema() *dtype.Schema { return f.schema }
 func (f *filterOp) Close() error          { return nil }
 
+// Apply keeps the rows every conjunct holds for.
+//
+// Conjuncts are applied in sequence rather than combined into one AND tree. Each
+// one shrinks the batch, so later predicates evaluate over fewer rows — and it keeps
+// the Kleene combination out of the hot path entirely.
+//
+// # Copied once
+//
+// Each conjunct used to gather every column of the rows it kept, so a filter of k
+// conjuncts copied the batch k times, most of it to be thrown away by the next.
+// Filters were 17 to 24% of PDS-H q7, q12, q15 and q19 (step 141).
+//
+// Now the rows kept are a selection into the input, narrowed by each conjunct. A
+// conjunct is evaluated over only the columns it reads, gathered at the selection so
+// far, and every column is gathered once, at the end (step 142). Columns are found
+// by name (Eval), so a narrower batch evaluates the same.
 func (f *filterOp) Apply(ctx context.Context, in *data.Batch) (*data.Batch, error) {
-	out := in
-	// Conjuncts are applied in sequence rather than combined into one AND tree.
-	// Each one shrinks the batch, so later predicates evaluate over fewer rows —
-	// and it keeps the Kleene combination out of the hot path entirely.
-	for _, p := range f.preds {
-		mask, err := evalColumn(ctx, p, out)
+	var sel []int32 // rows of in kept so far; nil while every row is
+	cur := in
+	for i, p := range f.preds {
+		mask, err := evalColumn(ctx, p, cur)
 		if err != nil {
 			return nil, err
 		}
-		out, err = kernel.FilterBatch(out, mask)
+		kept, err := kernel.SelectionFromMask(mask)
 		if err != nil {
 			return nil, err
 		}
-		if out.Rows() == 0 {
+		if len(kept) < cur.Rows() {
+			if sel == nil {
+				sel = kept
+			} else {
+				for j, k := range kept {
+					kept[j] = sel[k]
+				}
+				sel = kept
+			}
+		}
+		if sel != nil && len(sel) == 0 {
 			break
 		}
+		if i+1 < len(f.preds) && sel != nil {
+			if cur, err = gatherRead(f.preds[i+1], in, sel); err != nil {
+				return nil, err
+			}
+		}
 	}
-	return out, nil
+	if sel == nil {
+		return in, nil
+	}
+	return takeBatch(in.Schema(), in, sel)
+}
+
+// gatherRead gathers, at sel, only the columns of in that p reads.
+func gatherRead(p expr.Node, in *data.Batch, sel []int32) (*data.Batch, error) {
+	names := expr.RootNames(p)
+	fields := make([]dtype.Field, 0, len(names))
+	cols := make([]*data.Column, 0, len(names))
+	for _, name := range names {
+		c, ok := in.ByName(name)
+		if !ok {
+			return nil, uerr.UnknownColumn("filter", name, in.Schema().Names())
+		}
+		g, err := kernel.Take(c, sel)
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, in.Schema().Field(in.Schema().IndexOf(name)))
+		cols = append(cols, g)
+	}
+	schema, err := dtype.NewSchema(fields...)
+	if err != nil {
+		return nil, err
+	}
+	if len(cols) == 0 {
+		return data.NewBatchRows(schema, nil, len(sel)), nil
+	}
+	return data.NewBatch(schema, cols)
 }
 
 // --- project -----------------------------------------------------------------

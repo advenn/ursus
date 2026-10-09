@@ -106,6 +106,18 @@ func (l *Lit) String() string {
 	switch x := l.Value.(type) {
 	case string:
 		v = strconv.Quote(x)
+	case int32:
+		v = fmt.Sprint(x)
+		if l.DT.IsTemporal() {
+			v = dtype.FormatTemporal(l.DT, int64(x))
+		}
+	case int64:
+		v = fmt.Sprint(x)
+		if l.DT.IsTemporal() {
+			// A folded temporal literal holds its ticks (step 142); it reads as the
+			// date or instant it is, not as a count of them.
+			v = dtype.FormatTemporal(l.DT, x)
+		}
 	default:
 		v = fmt.Sprint(x)
 	}

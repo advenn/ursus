@@ -80,9 +80,17 @@ func (KernelFolder) Fold(n expr.Node, _ *dtype.Schema) (expr.Node, bool, error) 
 // []byte. This direction accepts only what it can prove round-trips to an
 // IDENTICAL column: the Go type has to pair with the dtype exactly, or the fold
 // silently changes a column's physical width or its unit. The cases left out —
-// temporal, Decimal, Int128, Binary — are all ones where litColumn's
-// reconstruction is lossy or unit-blind, and none of them are types anyone writes
-// two literals of and adds together.
+// Decimal, Int128, Binary — are ones where litColumn's reconstruction is lossy,
+// and none of them are types anyone writes two literals of and adds together.
+//
+// # Temporal, as ticks
+//
+// A temporal value folds to its raw ticks, int32 for a Date and int64 for the rest,
+// with the full dtype, unit and zone included. litColumn builds that back exactly:
+// the time.Time path, which converts, is never taken. It used to be refused with
+// the rest, so `Lit(t).Cast(Date)` stayed a cast, run on every batch, and the
+// Parquet pruner, which matches a column against a literal, never saw a date
+// (step 142). The pruner compares ticks only against a column of the same dtype.
 //
 // A refusal here is free: the expression is left exactly as the user wrote it and
 // the executor evaluates it per batch, which is what happens today.
@@ -120,6 +128,12 @@ func litFromColumn(c *data.Column) (expr.Node, bool, error) {
 		return litOf[float32](c, dt)
 	case dtype.Float64:
 		return litOf[float64](c, dt)
+	}
+	switch dt.ID() {
+	case dtype.TypeDate:
+		return litOf[int32](c, dt)
+	case dtype.TypeDatetime, dtype.TypeDuration, dtype.TypeTime:
+		return litOf[int64](c, dt)
 	}
 	return nil, false, nil
 }

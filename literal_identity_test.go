@@ -191,7 +191,10 @@ func TestLiteralRenderingsCollide(t *testing.T) {
 		{"float32 and float64", ursus.Lit(float32(0.1)), ursus.Lit(0.1)},
 		{"NaN widths", ursus.Lit(float32(math.NaN())), ursus.Lit(math.NaN())},
 		{"Inf widths", ursus.Lit(float32(math.Inf(1))), ursus.Lit(math.Inf(1))},
-		{"a Duration and int64", ursus.Lit(time.Duration(5)), ursus.Lit(int64(5))},
+		// A Duration and an int64 collided here, both as lit(5), until a temporal
+		// literal's ticks began rendering as what they are, lit(5ns), when folded
+		// casts started producing them (step 142). The identity key still holds the
+		// type; this pair no longer needs it.
 	} {
 		if a, b := p.a.String(), p.b.String(); a != b {
 			t.Errorf("%s: %s and %s no longer render alike", p.name, a, b)

@@ -80,8 +80,8 @@ func prunable(e expr.Node, s *dtype.Schema) bool {
 		case expr.OpAnd, expr.OpOr:
 			return prunable(t.L, s) && prunable(t.R, s)
 		case expr.OpEq, expr.OpNe, expr.OpLt, expr.OpLe, expr.OpGt, expr.OpGe:
-			name, _, ok := colAndLit(t)
-			return ok && flat(s, name)
+			name, lit, ok := colAndLit(t)
+			return ok && flat(s, name) && sameTicks(s, name, lit)
 		}
 	case *expr.Unary:
 		if t.Op == expr.OpIsNull || t.Op == expr.OpIsNotNull {
@@ -90,6 +90,20 @@ func prunable(e expr.Node, s *dtype.Schema) bool {
 		}
 	}
 	return false
+}
+
+// sameTicks reports whether a temporal literal's ticks can be compared with the
+// column's statistics as they are: only when its dtype is the column's, unit and
+// zone included. A Datetime in microseconds against one in milliseconds holds a
+// thousand times the column's ticks. The evaluator casts one side to the other;
+// the pruner compares raw numbers, and would skip groups that match (step 142).
+// A literal that is not temporal, against a column that is not, is unchanged.
+func sameTicks(s *dtype.Schema, name string, lit *expr.Lit) bool {
+	col := s.Field(s.IndexOf(name)).Type
+	if !lit.DT.IsTemporal() && !col.IsTemporal() {
+		return true
+	}
+	return lit.DT == col
 }
 
 // flat reports whether name is a column of s that is not nested.
