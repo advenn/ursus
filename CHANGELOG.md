@@ -12,7 +12,7 @@ Step numbers below point at those records.
 
 ## v0.4.0 — candidate
 
-Everything since `v0.3.1` (2026-10-06): steps 92–136.
+Everything since `v0.3.1` (2026-10-06): steps 92–138.
 
 [`v0.4-scope.md`](./context_files/v0.4-scope.md) set the scope: **fast where it is
 slow, and safe inside a service.** Its §7 records what was done, and what moved to
@@ -123,6 +123,13 @@ changed its parameters** since v0.3.1.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **The Parquet reader keeps its values slice too, and a join's per-row arrays
+  double** (138), from an allocation profile of h2o `j5` (137).
+  - The Parquet reader's fixed-width and List-element columns made step 136's
+    mistake: the slice was dropped every batch, on the same comment. They allocated
+    2.1 times what they produced, now 1.1.
+  - A join's `rowKey` and `counts` grew by `append`; a build of a million keys
+    allocated 2.3 times what it held, now 1.8.
 - **The CSV reader allocates about what it produces** (136): 4.1 times it, now 1.3,
   counting every batch.
   - Each fixed-width column dropped its values slice every batch. A comment claimed

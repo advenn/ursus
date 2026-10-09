@@ -309,9 +309,14 @@ func (c *fixedCol[P, T]) trackParentDefs(defs []int16) {
 
 func (c *fixedCol[P, T]) finish(name string) *data.Column {
 	col := data.NewFixed(name, c.dt, c.out, c.valid.finish())
-	// A fresh buffer per batch: NewFixed wraps without copying, so reusing the
-	// slice would rewrite a batch the consumer still holds.
-	c.out = nil
+	// The values slice is kept for the next batch: NewFixed copies into a fresh Arrow
+	// buffer, so the column just made does not alias it. This said NewFixed wrapped
+	// the slice, and dropped it every batch to be safe, but NewFixed has copied since
+	// the first commit, so each batch's values were allocated twice: 0.74 GB of h2o
+	// j5's profile over Parquet (step 137), the CSV reader's mistake of step 136.
+	// TestReadingAllocatesAboutWhatItProduces checks an earlier batch is intact after
+	// the later ones.
+	c.out = c.out[:0]
 	return col
 }
 
@@ -862,7 +867,8 @@ func (e *fixedElems[P, T]) close() error { return e.cr.Close() }
 
 func (e *fixedElems[P, T]) finish(name string, elem dtype.DataType) *data.Column {
 	col := data.NewFixed(name, elem, e.out, e.valid.Finish())
-	e.out = nil
+	// Kept, as fixedCol keeps its own: NewFixed copies.
+	e.out = e.out[:0]
 	e.valid = bitmap.NewBuilder(0)
 	return col
 }

@@ -80,7 +80,7 @@ func (a *topKAcc[T]) better(x, y T) bool {
 	return c < 0
 }
 
-func (a *topKAcc[T]) Reserve(n int) { a.vals = extend(a.vals, n, nil) }
+func (a *topKAcc[T]) Reserve(n int) { a.vals = Extend(a.vals, n, nil) }
 
 // offer places v among group g's best, if it belongs there.
 func (a *topKAcc[T]) offer(g int, v T) {

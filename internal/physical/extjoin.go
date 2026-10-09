@@ -329,19 +329,21 @@ func (s *joinBuildSink) admit(ctx context.Context, in *data.Batch, rowBase int) 
 	}
 	track := s.spec.tracksRows()
 	// rowKey has a place per row, null-keyed ones included, filled as each chunk of
-	// keys is answered.
+	// keys is answered. It and counts double as they grow: append's quarter steps
+	// allocated about five times their final size, 0.8 GB of h2o j5's profile
+	// (step 137, 138).
 	base := len(s.rowKey)
 	if track {
-		s.rowKey = append(s.rowKey, make([]int32, in.Rows())...)
+		s.rowKey = kernel.Extend(s.rowKey, base+in.Rows(), 0)
 	}
 	ch := &s.chunk
 	ch.reset()
 	flush := func() error {
 		ids, inserted := ch.insert(s.ids)
+		// One count per key: room for the chunk's new keys, made once.
+		s.counts = kernel.Extend(s.counts, s.ids.Len(), 0)
 		for j, id := range ids {
-			if inserted[j] {
-				s.counts = append(s.counts, 0)
-			} else if s.spec.validate.RequiresRightUnique() {
+			if !inserted[j] && s.spec.validate.RequiresRightUnique() {
 				row := -1
 				if rowBase >= 0 {
 					row = rowBase + int(ch.rows[j])

@@ -68,7 +68,7 @@ type Accumulator interface {
 	NBytes() int64
 }
 
-// extend returns s at length n, the new elements set to fill, doubling its capacity
+// Extend returns s at length n, the new elements set to fill, doubling its capacity
 // when it must grow.
 //
 // Every accumulator's Reserve grows its per-group arrays here. They appended a
@@ -77,7 +77,7 @@ type Accumulator interface {
 // the sum and the count were 12% of everything the query allocated (step 132).
 // Doubling sums to about twice. It can leave half an array unused, which is why
 // each NBytes counts capacity, not length (step 134).
-func extend[T any](s []T, n int, fill T) []T {
+func Extend[T any](s []T, n int, fill T) []T {
 	l := len(s)
 	if n <= l {
 		return s
@@ -229,7 +229,7 @@ type countAcc struct {
 	n    []uint64
 }
 
-func (a *countAcc) Reserve(n int) { a.n = extend(a.n, n, 0) }
+func (a *countAcc) Reserve(n int) { a.n = Extend(a.n, n, 0) }
 
 func (a *countAcc) AddBatch(groups []int32, col *data.Column) error {
 	valid := col.Validity()
@@ -340,7 +340,7 @@ func takeGroup(key []byte) int32 {
 }
 
 func (a *nuniqueAcc) Reserve(n int) {
-	a.counts = extend(a.counts, n, 0)
+	a.counts = Extend(a.counts, n, 0)
 	// Size the table by the GROUP count. It is a lower bound on the distinct pairs —
 	// every group contributes at least one — and it skips most of the doublings that
 	// otherwise rehash the whole table on the way up from 64 slots.
@@ -453,14 +453,14 @@ func newSumAcc(in dtype.DataType, bind expr.AggBinding) (Accumulator, error) {
 }
 
 func (a *sumAcc) Reserve(n int) {
-	a.seen = extend(a.seen, n, false)
+	a.seen = Extend(a.seen, n, false)
 	if a.isInt {
-		a.i = extend(a.i, n, i128.Zero)
+		a.i = Extend(a.i, n, i128.Zero)
 		if a.wide {
-			a.carry = extend(a.carry, n, 0)
+			a.carry = Extend(a.carry, n, 0)
 		}
 	} else {
-		a.f = extend(a.f, n, 0)
+		a.f = Extend(a.f, n, 0)
 	}
 }
 
@@ -706,14 +706,14 @@ func newMeanAcc(in dtype.DataType, bind expr.AggBinding) (Accumulator, error) {
 }
 
 func (a *meanAcc) Reserve(n int) {
-	a.n = extend(a.n, n, 0)
+	a.n = Extend(a.n, n, 0)
 	if a.isInt {
-		a.i = extend(a.i, n, i128.Zero)
+		a.i = Extend(a.i, n, i128.Zero)
 		if a.wide {
-			a.carry = extend(a.carry, n, 0)
+			a.carry = Extend(a.carry, n, 0)
 		}
 	} else {
-		a.sum = extend(a.sum, n, 0)
+		a.sum = Extend(a.sum, n, 0)
 	}
 }
 
@@ -985,8 +985,8 @@ type extremumNum[T data.Primitive] struct {
 
 func (a *extremumNum[T]) Reserve(n int) {
 	var zero T
-	a.best = extend(a.best, n, zero)
-	a.seen = extend(a.seen, n, false)
+	a.best = Extend(a.best, n, zero)
+	a.seen = Extend(a.seen, n, false)
 }
 
 // wins reports whether x should replace the current best.
@@ -1060,8 +1060,8 @@ type extremumStr struct {
 }
 
 func (a *extremumStr) Reserve(n int) {
-	a.best = extend(a.best, n, "")
-	a.seen = extend(a.seen, n, false)
+	a.best = Extend(a.best, n, "")
+	a.seen = Extend(a.seen, n, false)
 }
 
 func (a *extremumStr) wins(x, cur string) bool {
@@ -1141,8 +1141,8 @@ type extremumI128 struct {
 }
 
 func (a *extremumI128) Reserve(n int) {
-	a.best = extend(a.best, n, i128.Zero)
-	a.seen = extend(a.seen, n, false)
+	a.best = Extend(a.best, n, i128.Zero)
+	a.seen = Extend(a.seen, n, false)
 }
 
 func (a *extremumI128) wins(x, cur i128.Int128) bool {
@@ -1213,8 +1213,8 @@ type extremumBool struct {
 }
 
 func (a *extremumBool) Reserve(n int) {
-	a.best = extend(a.best, n, false)
-	a.seen = extend(a.seen, n, false)
+	a.best = Extend(a.best, n, false)
+	a.seen = Extend(a.seen, n, false)
 }
 
 func (a *extremumBool) AddBatch(groups []int32, col *data.Column) error {
@@ -1287,7 +1287,7 @@ type positionAcc struct {
 	rows []*data.Column
 }
 
-func (a *positionAcc) Reserve(n int) { a.rows = extend(a.rows, n, nil) }
+func (a *positionAcc) Reserve(n int) { a.rows = Extend(a.rows, n, nil) }
 
 func (a *positionAcc) AddBatch(groups []int32, col *data.Column) error {
 	pick := map[int32]int{}
@@ -1493,7 +1493,7 @@ type implodeAcc struct {
 	base  int32          // rows retained so far, which is where the next batch starts
 }
 
-func (a *implodeAcc) Reserve(n int) { a.rows = extend(a.rows, n, nil) }
+func (a *implodeAcc) Reserve(n int) { a.rows = Extend(a.rows, n, nil) }
 
 // AddBatch is the one place implode deviates from every other aggregate: it does
 // NOT skip nulls.

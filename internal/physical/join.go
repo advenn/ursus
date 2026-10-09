@@ -336,9 +336,7 @@ func (s *joinBuildSink) Consume(ctx context.Context, in *data.Batch) error {
 			s.counts = append(s.counts, 0)
 		}
 		if s.spec.tracksRows() {
-			for range n {
-				s.rowKey = append(s.rowKey, 0)
-			}
+			s.rowKey = kernel.Extend(s.rowKey, len(s.rowKey)+n, 0)
 			s.counts[0] += int32(n)
 		}
 		if s.spec.needBuildRows {
@@ -406,9 +404,7 @@ func (s *joinBuildSink) Merge(other Sink) error {
 	remap := make([]int32, nOther)
 	for oid := range nOther {
 		id, inserted := s.ids.GetOrInsert(o.ids.KeyAt(int32(oid)))
-		if inserted {
-			s.counts = append(s.counts, 0)
-		} else if s.spec.validate.RequiresRightUnique() {
+		if !inserted && s.spec.validate.RequiresRightUnique() {
 			// A key unique within each partial sink can still be duplicated across
 			// them. Omitting this makes Validate silently weaker under parallelism.
 			return duplicateKeyErr(s.spec.validate, "right", s.right, s.keys, -1)
@@ -416,17 +412,21 @@ func (s *joinBuildSink) Merge(other Sink) error {
 		remap[oid] = id
 	}
 
+	s.counts = kernel.Extend(s.counts, s.ids.Len(), 0)
+
 	// `other` consumed a LATER portion of the input, so appending preserves build
 	// order — which is what makes the emitted match order, and the Right/Full flush
 	// order, agree with a single-sink run.
-	for _, oid := range o.rowKey {
+	base := len(s.rowKey)
+	s.rowKey = kernel.Extend(s.rowKey, base+len(o.rowKey), 0)
+	for j, oid := range o.rowKey {
 		if oid == noKey {
-			s.rowKey = append(s.rowKey, noKey)
+			s.rowKey[base+j] = noKey
 			continue
 		}
 		id := remap[oid]
 		s.counts[id]++
-		s.rowKey = append(s.rowKey, id)
+		s.rowKey[base+j] = id
 	}
 	s.parts = append(s.parts, o.parts...)
 	s.nRows += o.nRows

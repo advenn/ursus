@@ -157,11 +157,10 @@ func (b *stringBuilder) len() int { return len(b.offs) - 1 }
 
 func (b *stringBuilder) finish(name string) *data.Column {
 	c := data.NewStringParts(name, b.offs, b.chars, b.valid.Finish())
-	// Both buffers are reused with their capacity intact, which is safe here for a
-	// reason fixedBuilder cannot rely on: NewStringParts COPIES into fresh arrow
-	// buffers, so the column we just produced does not alias what the next batch
-	// overwrites. NewFixed wraps its slice without copying, which is why
-	// fixedBuilder has to drop its own.
+	// Both buffers are reused with their capacity intact, which is safe because
+	// NewStringParts COPIES into fresh arrow buffers, so the column we just produced
+	// does not alias what the next batch overwrites. NewFixed copies too, and
+	// fixedBuilder keeps its slice for the same reason (step 136).
 	//
 	// Truncating to [:1] keeps the leading zero, so offs is never re-seeded.
 	b.offs = b.offs[:1]

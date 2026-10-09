@@ -48,9 +48,9 @@ type varAcc struct {
 }
 
 func (a *varAcc) Reserve(n int) {
-	a.n = extend(a.n, n, 0)
-	a.mean = extend(a.mean, n, 0)
-	a.m2 = extend(a.m2, n, 0)
+	a.n = Extend(a.n, n, 0)
+	a.mean = Extend(a.mean, n, 0)
+	a.m2 = Extend(a.m2, n, 0)
 }
 
 func (a *varAcc) AddBatch(groups []int32, col *data.Column) error {
@@ -152,8 +152,8 @@ type productAcc struct {
 }
 
 func (a *productAcc) Reserve(n int) {
-	a.p = extend(a.p, n, 1) // the multiplicative identity, not zero
-	a.seen = extend(a.seen, n, false)
+	a.p = Extend(a.p, n, 1) // the multiplicative identity, not zero
+	a.seen = Extend(a.seen, n, false)
 }
 
 func (a *productAcc) AddBatch(groups []int32, col *data.Column) error {
@@ -242,9 +242,9 @@ type argExtremumAcc struct {
 }
 
 func (a *argExtremumAcc) Reserve(n int) {
-	a.n = extend(a.n, n, 0)
-	a.best = extend(a.best, n, nil)
-	a.bestI = extend(a.bestI, n, 0)
+	a.n = Extend(a.n, n, 0)
+	a.best = Extend(a.best, n, nil)
+	a.bestI = Extend(a.bestI, n, 0)
 }
 
 func (a *argExtremumAcc) AddBatch(groups []int32, col *data.Column) error {
@@ -401,7 +401,7 @@ type quantileAcc struct {
 	vals   [][]float64
 }
 
-func (a *quantileAcc) Reserve(n int) { a.vals = extend(a.vals, n, nil) }
+func (a *quantileAcc) Reserve(n int) { a.vals = Extend(a.vals, n, nil) }
 
 func (a *quantileAcc) AddBatch(groups []int32, col *data.Column) error {
 	vals, err := widenFloat(col)
