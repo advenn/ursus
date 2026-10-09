@@ -10,6 +10,164 @@ Step numbers below point at those records.
 
 ---
 
+## v0.5.0 — candidate, not tagged
+
+Everything since `v0.4.0` (2026-10-09): steps 140–154.
+
+[`v0.5-scope.md`](./context_files/v0.5-scope.md) set the scope: **speed, and the
+features users reach for first.** Object stores stayed out, by decision. Its
+"Where it stands" list records each step; its Tier 2 and Tier 3 say what moved to
+0.6 and why.
+
+### Highlights
+
+- **Faster.** The report, ursus and Polars re-run together on the candidate (154),
+  puts ursus against Polars at:
+  - **PDS-H SF=1:** 3.6×, from 4.4× at v0.4.0. The scope's target was 3×, with q15
+    and q2 under 4×; q15 is at 4.3× and q2 at 4.9×. Not met: the Parquet reader and
+    the join probe, where most of the rest is, were no 0.5 item's.
+  - **PDS-H SF=0.1:** 2.6×, from 4.0×.
+  - **h2o, 10 million rows:** 1.7× over Parquet, from 1.9×; 2.0× over CSV, from 3.3×.
+  - **Peak memory at SF=1:** 1.10 GB against Polars' 0.84, from 1.02.
+
+  Each step was also measured on its own queries, against the step before:
+  - **A subtree a query uses twice runs once** (143): PDS-H q15 48% faster at SF=1,
+    q11 42%, q2 39%, with the same peak memory.
+  - **The CSV reader parses on every core** (144): h2o `gb1` 40% and `gb4` 38%
+    faster over CSV at ten million rows.
+  - **A filter copies its rows once** (142): q19, q12, q7 and q15 6 to 9% faster.
+  - **A group-by of many groups folds on every core** (150): 33% faster over two
+    million groups.
+  - **A join's build side is built on every core** (151): q12 about 10 to 17%
+    faster; 22 to 30% on a join of two million build keys.
+- **The calendar** (145): `OffsetBy`, `Round`, `MonthStart`, `MonthEnd`,
+  `IsLeapYear` and `ConvertTimeZone`, each reading the column in its own zone.
+- **Windows** (148, 149, 153):
+  - `RollingSum`, `RollingMean`, `RollingMin`, `RollingMax`, `RollingVar` and
+    `RollingStd` over a fixed number of rows;
+  - `EwmMean`, `EwmStd` and `EwmVar`, and `Interpolate`;
+  - `Diff`, `PctChange` and `FillNull(Mean)` inside `.Over(g)`, and any window body
+    built around an aggregate, such as `(x - x.Mean()).Over(g)`.
+- **Everyday expressions** (146, 147): `ConcatStr`, `Struct`, `Str().Join`,
+  `List().Join`, `Cut`, `QCut`, `ValueCounts`, `Describe`, and the six bit counts.
+
+### Behaviour changes a v0.4 user can trip on
+
+- **`Truncate` by a day or a month, and `GroupByDynamic`'s day windows, where a
+  zone's midnight does not exist** (145). Santiago's 2024-09-08 began at 01:00. It
+  used to begin, by ursus, at 23:00 the day before, a whole day early; it now begins
+  at 01:00, as in Polars. A wall clock that falls in a gap now reads as the instant
+  the gap ends, and one read twice in a fold at the input's own offset, at every
+  interval size, as sub-day intervals always did.
+- **A large unordered group-by comes out in another order** (150). Past 65,536 groups
+  on several threads, its rows are partition-major. The order was already unspecified
+  and already depended on the thread count; `MaintainOrder` keeps first appearance.
+- **`SinkParquet` refuses a String that is not UTF-8** (152), naming the column. It
+  used to write a file Polars and DuckDB refuse to read. Cast to Binary to write the
+  bytes as they are.
+- **A window refusal comes while the query is planned,** not at `Collect`:
+  `Col("x").Over(g)`, and an ordered window over an aggregate written inside a
+  larger body (148). Explain refuses them too.
+- **A failing CSV read through `CollectBatches` may deliver fewer rows before its
+  error** (144): the good rows of the block that holds the bad record. `Collect`
+  discards them either way.
+- **Explain shows `CACHE #n`** where a subtree is shared (143).
+
+### API
+
+Every addition is in the root package. **Nothing was removed or changed its
+parameters** since v0.4.0.
+
+- **Calendar:** `DtExpr.OffsetBy`, `Round`, `MonthStart`, `MonthEnd`, `IsLeapYear`
+  and `ConvertTimeZone`.
+- **Windows:** `Expr.RollingSum`, `RollingMean`, `RollingMin`, `RollingMax`,
+  `RollingVar`, `RollingStd`, `EwmMean`, `EwmStd`, `EwmVar` and `Interpolate`;
+  `WindowOption`, `MinSamples`, `Ddof`, `EwmAdjust`, `IgnoreNulls` and `Biased`;
+  `EwmDecay`, built by `EwmAlpha`, `EwmSpan`, `EwmCom` and `EwmHalfLife`.
+- **Expressions:** `ConcatStr` and `Struct`; `Expr.Cut`, `QCut` and `QCutN`, with
+  `CutOption`, `CutLabels` and `CutLeftClosed`; `Expr.BitwiseCountOnes`,
+  `BitwiseCountZeros`, `BitwiseLeadingOnes`, `BitwiseLeadingZeros`,
+  `BitwiseTrailingOnes` and `BitwiseTrailingZeros`.
+- **Namespaces:** `StrExpr.Join` and `ListExpr.Join`.
+- **Frames:** `LazyFrame.ValueCounts` and `Describe`, and their `DataFrame` mirrors.
+
+### Everything, by step
+
+Newest first. The numbers are steps, each with an as-built record in
+[`context_files/`](./context_files/).
+
+- **The report** (154), ursus and Polars together on `fb7788b`, every query
+  validated. `gb10` and `j5` pass under a 3 GB container over Parquet and CSV,
+  peaking at 2.73 to 2.86 GB.
+- **EWM and `Interpolate`** (153), as ordered window functions on pandas'
+  recurrences, which Polars' follow. Checked against pandas' answers and against
+  a closed form.
+- **A String that is not UTF-8 is refused by the Parquet writer** (152), audit I20.
+  Each Parquet footer read once was measured at 0.11 to 0.83 ms a file, under 0.5%
+  of any PDS-H query, and declined.
+- **A join's build side is inserted partitioned, in parallel** (151). The build
+  waits for `freeze`, which inserts each partition's keys into its own table on its
+  own goroutine, in row order, so a key's rows stay ascending. Past half the
+  default budget it streams, the path that can spill.
+- **A group-by of many groups folds its workers partitioned** (150), with a sparse
+  remap; the serial fold was about 60% of a two-million-group query.
+- **The fixed-size rolling functions** (149): a monotonic deque for min and max, an
+  exact Int128 for an integer sum, and a compensated running state for floats,
+  recomputed every N removals so rounding cannot build up.
+- **The sugar inside `Over`, and a window body around an aggregate** (148), audit A8:
+  an outer `Over`'s keys are handed down to the windows inside its body.
+- **`Cut`, `QCut`, `ValueCounts` and `Describe`** (147). `Cut` and `QCut` share one
+  kernel whose breaks are operands, so `QCut`'s can be quantile windows.
+- **`ConcatStr`, `Struct`, `List().Join`, `Str().Join` and the bit counts** (146).
+  ursus had no string concatenation. A family of calls whose every argument is an
+  operand needed no new expression node.
+- **The calendar, and a day whose midnight does not exist** (145). One rule now reads
+  every wall clock back into its zone.
+- **The CSV reader parses a stream on several goroutines** (144). A splitter cuts
+  whole records by the scanner's own quote rule, and hands what it does not follow
+  to the serial path.
+- **A subtree a query uses at more than one place runs once** (143), as a `Cache`
+  plan node, its result held once on the budget or spilled.
+- **A filter copies its rows once, and a temporal literal folds** (142), so a date
+  reaches the Parquet pruner.
+- **The profile** (141): CPU profiles of the widest gaps re-ranked the speed items;
+  reading Parquet was 29 to 57% of every PDS-H query profiled, ZSTD 13 to 29%.
+- **The scope** (140).
+
+### Known limitations
+
+- **Object stores:** there is no built-in client, by decision for 0.5 as for 0.4.
+  `ScanParquetFrom` and `ScanCSVFrom` are the seam.
+- **Operators that do not spill** each fail under a budget with an error naming
+  themselves: reverse, hstack, tail, `JoinAsOf` and `MergeSorted`; `Rolling` and
+  `GroupByDynamic`; a window with no partition key, and one partition larger than
+  the limit, the rolling and ewm functions included; a cross join; quantile-like
+  aggregates over a few very large groups.
+- **Not built:** SQL, `Pivot`, `MapGroups`, `Upsample`, rolling windows by time,
+  `Corr`, `Cov`, `MinBy`, `MaxBy`, list set operations, `Sample`, `WithFields`,
+  `List().Eval`, `ReplaceTimeZone`, and `Interpolate`'s nearest method.
+  `v0.5-scope.md`'s Tier 2 and Tier 3 give each one's reason.
+- **Types:** as in v0.4.0. Nesting deeper than a List of a primitive or a Struct of
+  primitives is refused by name in Parquet; Array has no column representation;
+  CSV refuses nested columns; Enum is not written to Parquet or Arrow; Duration is
+  not written to Parquet; temporal means, medians, quantiles and variances are
+  refused. `Cut` and `QCut` answer a String, not Polars' Categorical.
+- **Open audit rows:** I23, O13, J8's remainder, S26, J11 and I26, as in v0.4.0,
+  and O12, the optimizer turning a runtime error into a result. A8 and I20 are
+  fixed.
+- **Where ursus differs from Polars on purpose:** as in v0.4.0, and:
+  - a NaN is a value to the ewm functions, where pandas skips it;
+  - an ewm variance of one value is null, where pandas answers NaN.
+- **Speed:** ursus is slower than Polars and DuckDB: 3.6× Polars on PDS-H at SF=1,
+  by geomean, short of the 3× the scope set. The widest gaps are q7 at 7.2×, q19 at
+  5.9× and q17 at 5.2×, mostly reading Parquet and probing joins.
+- **Memory:** a shared subtree's result, a group-by's partitioned fold and a join's
+  partitioned build each hold more at once than before, which the budget counts:
+  PDS-H at SF=1 peaks at 1.10 GB, from 1.02. h2o `gb10` over CSV peaks at 7.28 GB
+  under an 8 GB cap; `gb10` and `j5` pass under 3 GB.
+
+---
+
 ## v0.4.0 — 2026-10-09
 
 Everything since `v0.3.1` (2026-10-06): steps 92–138.

@@ -30,8 +30,8 @@ core. None of that is visible in the query.
 static binary like any other Go dependency, and `go get` is the whole install.
 
 That is the reason to pick it, and the cost should be just as plain: **ursus is slower than the serious analytical
-engines.** On the h2o.ai benchmark at ten million rows it is about 2x Polars over Parquet and 3x over CSV; on TPC-H at
-scale factor 1 it is about 4.5x. CSV parsing is worse than that. It is not trying to beat Polars or DuckDB, and on current evidence it is not going
+engines.** On the h2o.ai benchmark at ten million rows it is about 1.7x Polars over Parquet and 2x over CSV; on TPC-H
+at scale factor 1 it is about 3.6x. It is not trying to beat Polars or DuckDB, and on current evidence it is not going
 to.
 
 **Where that trade is a good one**
@@ -47,7 +47,7 @@ to.
 - Interactive analytics over hundreds of millions of rows. Use DuckDB or Polars.
 - Anywhere you can link cgo freely: `duckdb-go` is around 3.5x faster than this on TPC-H and is a binding to a mature
   engine.
-- Anything production-critical today. This is v0.4, the API still moves, and nothing here is promised.
+- Anything production-critical today. This is v0.5, the API still moves, and nothing here is promised.
 
 The honest summary is that Go has not had a dataframe library of this shape, and one that is correct and a few times
 slower is more useful than none — for the sizes most services actually handle.
@@ -94,19 +94,19 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 
 ## Status
 
-**v0.4** — what changed since v0.3 is in [`CHANGELOG.md`](./CHANGELOG.md), and what 0.4 set out to do, and did, in
-[`v0.4-scope.md`](./context_files/v0.4-scope.md) §7. What works today:
+**v0.5, a candidate** — what changed since v0.4 is in [`CHANGELOG.md`](./CHANGELOG.md), and what 0.5 set out to do,
+and did, in [`v0.5-scope.md`](./context_files/v0.5-scope.md). What works today:
 
 |                 |                                                                                                                                                   |
 |-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Sources**     | Parquet and CSV (read and write, List and Struct included for Parquet), from paths, memory, or any `io.ReaderAt` / stream you open (`ScanParquetFrom`, `ScanCSVFrom`); in-memory frames; Arrow (records and streams in; records out, zero-copy) |
 | **Types**       | Bool, Int8–64, Uint8–64, Float32/64, String, Binary, Date, Time, Datetime (unit + zone), Duration, Decimal (128-bit; exact `+ - *` and `sum`, refused past 38 digits; `/` to the nearest Float64; casts to and from every numeric type exact or refused, except to a float, which rounds to the nearest), Enum (built from String, ordered by its categories) |
-| **Expressions** | arithmetic, comparison, Kleene three-valued logic, conditionals, casts, null repair, trigonometric and hyperbolic functions, `.str` (incl. `Split` → List, and `Strptime` with strftime formats) and `.dt` (incl. `Strftime`) namespaces, 22 aggregates including `Implode`, `TopK` and `BottomK`, window functions |
-| **Frame ops**   | filter, select, with-columns, sort, top-k, distinct, concat/vstack/hstack, slice/tail/reverse/row-index, drop/rename/drop-nulls, unpivot                   |
+| **Expressions** | arithmetic, comparison, Kleene three-valued logic, conditionals, casts, null repair, trigonometric and hyperbolic functions, bit counts, `ConcatStr`, `Struct`, `Cut`/`QCut`, `.str` (incl. `Split` → List, `Join`, and `Strptime` with strftime formats), `.dt` (incl. `Strftime`, `OffsetBy`, `Round`, `MonthStart`/`MonthEnd`, `ConvertTimeZone`) and `.list` (incl. `Join`) namespaces, 22 aggregates including `Implode`, `TopK` and `BottomK`, window functions (incl. `Rolling*`, `Ewm*`, `Interpolate`, and any body around an aggregate inside `.Over`) |
+| **Frame ops**   | filter, select, with-columns, sort, top-k, distinct, concat/vstack/hstack, slice/tail/reverse/row-index, drop/rename/drop-nulls, unpivot, `ValueCounts`, `Describe` |
 | **Joins**       | all seven equi-join kinds with `Validate`, `JoinWhere` and `WhereExists`/`WhereNotExists` (non-equi), as-of join with tolerance and `by` keys, merge-sorted                          |
 | **Grouping**    | group-by, `GroupByDynamic`, `Rolling`, calendar-aware intervals                                                                                   |
-| **Optimizer**   | predicate pushdown (including through joins), projection pushdown, limit/top-k pushdown, cross-join collapse, constant folding and simplification |
-| **Execution**   | order-preserving pipeline parallelism, Parquet row groups decoded in parallel, parallel hash aggregation, inner joins that hash their smaller input, and spilling for sort, hash aggregation, hash join, unique and partitioned windows (`WithMemoryLimit` names the rest, which fail rather than spill) |
+| **Optimizer**   | predicate pushdown (including through joins), projection pushdown, limit/top-k pushdown, cross-join collapse, constant folding and simplification, a shared subtree run once |
+| **Execution**   | order-preserving pipeline parallelism, Parquet row groups decoded and CSV parsed in parallel, parallel hash aggregation with a partitioned fold, a partitioned parallel join build, inner joins that hash their smaller input, and spilling for sort, hash aggregation, hash join, unique and partitioned windows (`WithMemoryLimit` names the rest, which fail rather than spill) |
 | **UDFs**        | `MapElements` (per value) and `MapBatches` (per column) — generic methods, so the Go types are inferred from your function                        |
 
 Nested types are partly there: **List and Struct read from Parquet and Arrow and write to Parquet**, with
@@ -141,7 +141,7 @@ lf := ursus.ScanParquetFrom([]ursus.ParquetFile{{
 ```
 
 `ScanCSVFrom` takes a stream the same way, and `WriteParquet` and `WriteCSV` write to any `io.Writer`, an upload
-included. Built-in stores — `s3://` paths, listing for globs, retries — are not planned for 0.4; the seam is the way in.
+included. Built-in stores — `s3://` paths, listing for globs, retries — are not planned for 0.5; the seam is the way in.
 
 The escape hatch is real: a per-element UDF in Go is a function call, not a Python
 interpreter round trip, which is the one place this library can beat Polars outright
@@ -203,11 +203,11 @@ See [`bench/README.md`](./bench/README.md) for what is timed and why.
 [`bench/results/REPORT.md`](./bench/results/REPORT.md) is checked in. Every result in it is validated against a duckdb
 reference, and a disagreement is struck through rather than quietly reported as a fast number.
 
-**How current it is, precisely.** Every table was measured in one session, on one commit, with every engine re-run
-together — so the numbers are comparable across engines rather than stitched from different days. That commit is
-`5a721e0`, measured on 2026-10-08, after the round of performance work that followed the v0.4.0 candidate. The memory
-work that came after it, steps 128–138, was measured on h2o `gb10` and `j5` alone, under a 3 GB container; the
-changelog has those figures, and this report has not been re-run since.
+**How current it is, precisely.** ursus and Polars were re-run together on the v0.5 candidate, `fb7788b`, on
+2026-10-09, every query of all four suites (step 154). The other engines' numbers are from the full session before it,
+every engine together on `5a721e0` on 2026-10-08 (step 127): their code has not changed, and re-running them would have
+taken the laptop for an hour and more. So ursus is compared with Polars within one session, and with the rest across
+two.
 
 The caveats that apply to *this* run:
 
@@ -216,22 +216,22 @@ The caveats that apply to *this* run:
   records how.
 - **ursus passed every query of all four suites,** and every answer validated against duckdb's. v0.3.0 was killed on h2o
   `gb10` over CSV; it now spills under the default budget and passes.
-- **ursus's highest peak is h2o `gb10` over CSV, 7.60 GB**, under the cap. The query budget was 4 GB; the rest is the Go
-  heap's slack, which ursus bounds by default since step 128, after this run.
+- **ursus's highest peak is h2o `gb10` over CSV, 7.28 GB**, under the cap; it was 7.60 GB at step 127. Under a 3 GB
+  container, `gb10` and `j5` pass over Parquet and over CSV, peaking at 2.73 to 2.86 GB.
 - **Other engines:** chDB timed out on three group-bys and failed `gb6` in both h2o suites; gota ran out of memory on
   two group-bys; DataFusion, and chDB at SF=0.1, answered PDS-H `q15` wrongly, and are struck through.
 
 Timings come from a laptop under real conditions, so treat small differences as noise and the ordering as the signal.
 
-**Where it stands, in one place.** Against Polars, on the current report, with v0.3.0's for comparison:
+**Where it stands, in one place.** Against Polars, on the current report, with v0.4.0's and v0.3.0's for comparison:
 
-|                         |    ursus |  Polars |       | at v0.3.0 |
-|-------------------------|---------:|--------:|-------|----------:|
-| h2o.ai, 10M rows, Parquet |   914 ms |  475 ms | 1.9x  |      3.3x |
-| h2o.ai, 10M rows, CSV   | 3,244 ms |  989 ms | 3.3x  |      3.6x |
-| TPC-H SF=1              |   310 ms |   70 ms | 4.4x  |     10.8x |
-| TPC-H SF=0.1            |    35 ms |    9 ms | 4.0x  |      7.5x |
-| TPC-H SF=1 peak memory  |  1.02 GB | 0.91 GB | 1.1x  |      2.0x |
+|                           |    ursus |   Polars |       | at v0.4.0 | at v0.3.0 |
+|---------------------------|---------:|---------:|-------|----------:|----------:|
+| h2o.ai, 10M rows, Parquet |   947 ms |   547 ms | 1.7x  |      1.9x |      3.3x |
+| h2o.ai, 10M rows, CSV     | 2,195 ms | 1,116 ms | 2.0x  |      3.3x |      3.6x |
+| TPC-H SF=1                |   276 ms |    78 ms | 3.6x  |      4.4x |     10.8x |
+| TPC-H SF=0.1              |    24 ms |     9 ms | 2.6x  |      4.0x |      7.5x |
+| TPC-H SF=1 peak memory    |  1.10 GB |  0.84 GB | 1.3x  |      1.1x |      2.0x |
 
 Geomeans over each engine's passed queries; ursus and Polars pass every one. The gap narrows as the data gets smaller, which is the shape of the trade
 described at the top of this file.
