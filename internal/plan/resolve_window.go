@@ -53,6 +53,15 @@ func extractWindows(input Node, exprs []expr.Node, op string) (Node, []expr.Node
 	rewrite = func(n expr.Node) (expr.Node, error) {
 		switch t := n.(type) {
 		case *expr.Window:
+			// A body that is not itself one aggregate or ordered function is handed
+			// the window's keys, part by part (distribute).
+			d, ok, err := distribute(t)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				return rewrite(d)
+			}
 			// A window inside a window has no defined meaning: the inner one has
 			// already written one value per row, so partitioning it again would
 			// aggregate values that are themselves per-partition constants.
@@ -80,6 +89,18 @@ func extractWindows(input Node, exprs []expr.Node, op string) (Node, []expr.Node
 				return nil, uerr.New(uerr.KindUnsupported, op,
 					"a window may not contain another window: %s", t.String()).
 					Hint("compute the inner window into a column with WithColumns first")
+			}
+			// Nothing in the body to window. The physical planner refused this alone,
+			// so Explain printed a plan Collect would not run.
+			switch t.Child.(type) {
+			case *expr.Agg, *expr.WinFn:
+			default:
+				if t.Mapping == expr.MapGroupsToRows {
+					return nil, uerr.New(uerr.KindType, "over",
+						"%s is not a window function", t.Child.String()).
+						Hint("Over applies to an aggregate such as .Sum() or .Mean(), or to " +
+							"an ordered function such as .Rank(...) or .CumSum(...)")
+				}
 			}
 			key := expr.Identity(t)
 			name, seen := byKey[key]
@@ -131,6 +152,91 @@ func extractWindows(input Node, exprs []expr.Node, op string) (Node, []expr.Node
 	}
 
 	return &Window{Input: input, Exprs: specs}, out, names, nil
+}
+
+// distribute hands a window's partition, order and mapping down into a body that is
+// not itself one aggregate or ordered function (step 148): each aggregate and each
+// ordered function in the body is windowed alone, and each window a sugar built
+// (expr.Window.Inherits) takes the outer keys in place of its own. The outer window
+// is then gone, and no window left holds another.
+//
+// So (x - x.Mean()).Over(g) is x - x.Mean().Over(g), as Polars computes it, where
+// the physical window refused a body that is not one window function. And so the
+// sugars that build windows the user never wrote work inside .Over(g), which was
+// audit A8: Diff's and PctChange's Shift, an ordered function with no Over of its
+// own, and FillNull(FillMean)'s mean over the frame.
+//
+// # Why handing it down is the same answer
+//
+// Under the default mapping, a window's body is computed per partition and each row
+// gets its own partition's value. A body that is elementwise around its windowed
+// parts therefore equals the same elementwise expression over those parts, each
+// windowed by the same keys.
+//
+// It declines, and the window stays as it was:
+//   - for a body that is one aggregate or ordered function, the ordinary window,
+//     including one whose operand holds a window: x.Diff(1).CumSum().Over(g)
+//     would need one window computed below another, and is refused;
+//   - for a body with a window the user wrote inside it, whose scope is the user's:
+//     refused as a window inside a window;
+//   - for a body with nothing windowed in it, which extractWindows refuses as not
+//     a window function;
+//   - for a mapping but the default, the only one that maps back to rows.
+func distribute(w *expr.Window) (expr.Node, bool, error) {
+	if w.Mapping != expr.MapGroupsToRows {
+		return nil, false, nil
+	}
+	switch w.Child.(type) {
+	case *expr.WinFn, *expr.Agg:
+		return nil, false, nil
+	}
+	var refused error
+	scope := func(n expr.Node) expr.Node {
+		return &expr.Window{Child: n, PartitionBy: w.PartitionBy, OrderBy: w.OrderBy, Mapping: w.Mapping}
+	}
+	scoped := 0
+	var down func(expr.Node) (expr.Node, bool)
+	down = func(n expr.Node) (expr.Node, bool) {
+		switch t := n.(type) {
+		case *expr.Window:
+			if !t.Inherits {
+				return nil, false
+			}
+			scoped++
+			return scope(t.Child), true
+		case *expr.Agg:
+			// Refused here, while the query is resolved, as Window.Field refuses the
+			// same window written by hand: built later, it would first be typed
+			// inside an optimizer rule, and read as ursus's own failure.
+			if len(w.OrderBy) > 0 {
+				refused = expr.OrderedAggRefusal(t.Op)
+				return nil, false
+			}
+			scoped++
+			return scope(t), true
+		case *expr.WinFn:
+			scoped++
+			return scope(t), true
+		}
+		kids := n.Children()
+		if len(kids) == 0 {
+			return n, true
+		}
+		out := make([]expr.Node, len(kids))
+		for i, c := range kids {
+			r, ok := down(c)
+			if !ok {
+				return nil, false
+			}
+			out[i] = r
+		}
+		return expr.Rebuild(n, out), true
+	}
+	d, ok := down(w.Child)
+	if refused != nil {
+		return nil, false, refused
+	}
+	return d, ok && scoped > 0, nil
 }
 
 // dropTemps projects away the window temporaries, restoring the schema the caller

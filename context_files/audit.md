@@ -157,7 +157,7 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | A5 ✔ | ~~**SW**~~ **fixed, step 75** | `Var(0)` of `[1e308, −1e308]` is −Inf. A variance cannot be negative. | Welford update, `aggstat.go:67-71`. |
 | A6 ✔ | ~~**CR**~~ **fixed, step 72** | `Rank(RankMethod(99))` panics in a worker goroutine and **kills the process**. `Interpolation(99)` is silently treated as linear. | `window.go:112` does not validate; `kernel/window.go:147-149`. |
 | A7 | ~~CR~~ **fixed, step 72** | A zero `Expr{}` used as a method receiver panics with a nil dereference. | `lazy.go:73-86` checks only the top level. |
-| A8 | FR / ME | `Diff`, `PctChange` and `FillNull(Mean)` inside `.Over(g)` are refused as "a window inside a window": the sugar embeds a window the user never wrote. Polars supports all three. | `resolve_window.go:79`. |
+| A8 ✔ | ~~FR / ME~~ **fixed, step 148** | `Diff`, `PctChange` and `FillNull(Mean)` inside `.Over(g)` are refused as "a window inside a window": the sugar embeds a window the user never wrote. Polars supports all three. | `resolve_window.go:79`. |
 | A9 | ~~ME~~ **fixed, step 115** | The hint for a window inside `Agg` recommends two things that are both refused. | `resolve_window.go:159-163`. |
 | A10 ✔ | ~~FR / ME~~ **fixed, step 75** | `Sum` of a Bool column is refused, and the hint's `Count()` counts rows, not trues. Polars and DuckDB both answer 2. | `agg.go:271-274`. |
 | A11–A12 | ~~ME~~ **fixed, steps 111 (A11) and 115 (A12)** | The ordered-aggregate refusal contradicts itself; `CumSum` of a String reports "sum()"; the Any/AllTrue hints use lower-case names; a group-by error says "one output row per input row". | `physical/window.go:405-412`. |

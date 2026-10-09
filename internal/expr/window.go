@@ -119,6 +119,13 @@ type Window struct {
 	PartitionBy []Node
 	OrderBy     []OrderKey
 	Mapping     MappingStrategy
+
+	// Inherits marks a window the library built for a sugar, not one the user
+	// wrote: FillNull(FillMean)'s mean over the frame. Inside an enclosing Over it
+	// takes that Over's partition, order and mapping (plan's extractWindows, step
+	// 148), so FillNull(FillMean).Over(g) fills with each group's mean, as Polars
+	// does. A window the user wrote inside another is still refused.
+	Inherits bool
 }
 
 func (w *Window) node() {}
@@ -169,6 +176,11 @@ func (w *Window) String() string {
 	if w.Mapping != MapGroupsToRows {
 		b.WriteString("; mapping ")
 		b.WriteString(w.Mapping.String())
+	}
+	if w.Inherits {
+		// It computes what a window of the same keys computes, but an enclosing
+		// Over treats the two differently, so they must not be one entry in a map.
+		b.WriteString("; inherited")
 	}
 	b.WriteString(")")
 	return b.String()

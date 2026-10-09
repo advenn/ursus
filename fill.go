@@ -271,6 +271,7 @@ func (s FillStrategy) String() string {
 //
 // FillMin, FillMax and FillMean compute an aggregate over every row before they
 // can fill anything, so they turn a streaming query into one that holds its input.
+// Inside .Over(g) the aggregate is each group's, as Polars computes it.
 // FillForward and FillBackward are ordered windows and buffer for the same reason.
 // Only FillZero and FillOne stream.
 func (e Expr) FillNull(s FillStrategy) Expr {
@@ -284,11 +285,11 @@ func (e Expr) FillNull(s FillStrategy) Expr {
 	case FillBackward:
 		return e.BackwardFill(0)
 	case FillMin:
-		return sugared(Coalesce(e, e.Min().Over()), "fill_null")
+		return sugared(Coalesce(e, inheritedOver(e.Min())), "fill_null")
 	case FillMax:
-		return sugared(Coalesce(e, e.Max().Over()), "fill_null")
+		return sugared(Coalesce(e, inheritedOver(e.Max())), "fill_null")
 	case FillMean:
-		return sugared(Coalesce(e, e.Mean().Over()), "fill_null")
+		return sugared(Coalesce(e, inheritedOver(e.Mean())), "fill_null")
 	default:
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "fill_null",
 			"unknown fill strategy %s", s)})
@@ -321,6 +322,12 @@ func (e Expr) Unnest() Expr {
 		"Unnest is not an expression; it produces one column per struct field").
 		Hint("use the frame-level form: lf.Unnest(\"person\")").
 		Hint("for a single field, use Col(\"person\").Struct().Field(\"age\")")})
+}
+
+// inheritedOver is e.Over() for a sugar: over the whole frame alone, and over an
+// enclosing Over's partitions inside one (expr.Window.Inherits).
+func inheritedOver(e Expr) Expr {
+	return wrap(&expr.Window{Child: e.node(), Inherits: true})
 }
 
 // sugared names the method a conditional was built for, so its refusal does; see
