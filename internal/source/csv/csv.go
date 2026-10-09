@@ -240,6 +240,9 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		r.Close()
 		return nil, err
 	}
+	if r.parallel() {
+		r.split = newSplitter(r.sc, r.row)
+	}
 	return r, nil
 }
 
@@ -282,9 +285,26 @@ type reader struct {
 	// multi-file scan.
 	row int
 
+	// split is set while the current stream is cut into blocks that several
+	// goroutines parse at once, and ready holds what a round of them produced, in
+	// file order, cut to the batch size (step 144). See splitter.
+	split    *splitter
+	ready    []*data.Batch
+	window   []*parsing     // blocks parsing in the background, oldest first
+	inflight sync.WaitGroup // their goroutines, which Close waits for
+	splitEnd bool           // the splitter has no more blocks for this stream
+	splitErr error          // reading failed; delivered after the window drains
+	// failed is the error the reader has stopped on, delivered after what is ready.
+	failed error
+
 	mu   sync.Mutex
 	done bool
 }
+
+// parallel reports whether the reader parses blocks of a stream on several
+// goroutines. One thread reproduces the serial path exactly, and MaxRows reads only
+// as many rows as it is asked for.
+func (r *reader) parallel() bool { return r.threads > 1 && r.remaining == 0 }
 
 func (r *reader) Schema() *dtype.Schema { return r.out }
 
@@ -296,6 +316,10 @@ func (r *reader) Schema() *dtype.Schema { return r.out }
 func (r *reader) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// Blocks still parsing read only their own bytes, but nothing of the reader's
+	// may outlive it.
+	r.inflight.Wait()
+	r.window = nil
 	return r.closeLocked()
 }
 
@@ -441,7 +465,27 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 	// than pretending otherwise.
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.nextLocked(ctx)
+}
 
+func (r *reader) nextLocked(ctx context.Context) (*data.Batch, error) {
+	if len(r.ready) > 0 {
+		b := r.ready[0]
+		r.ready[0] = nil
+		r.ready = r.ready[1:]
+		return b, nil
+	}
+	if r.failed != nil {
+		return nil, r.failed
+	}
+	if r.split != nil {
+		b, err := r.nextParallel(ctx)
+		if err != nil || b != nil {
+			return b, err
+		}
+		// The splitter stopped short of a record it will not cut: the serial path
+		// reads the rest of this stream.
+	}
 	if r.done {
 		return nil, io.EOF
 	}
@@ -478,7 +522,11 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 			case err != nil:
 				return nil, err
 			default:
-				continue
+				if !r.parallel() {
+					continue
+				}
+				// A new stream is cut into blocks again; the batch so far ends here.
+				r.split = newSplitter(r.sc, r.row)
 			}
 			break
 		}
@@ -508,6 +556,9 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 		}
 	}
 	if rows == 0 {
+		if r.split != nil {
+			return r.nextLocked(ctx)
+		}
 		return nil, io.EOF
 	}
 
@@ -515,10 +566,20 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 	for i, f := range r.out.All() {
 		cols[i] = r.builders[i].finish(f.Name)
 	}
-	// A schema given with WithSchema can declare a column non-nullable, and the file
-	// can still leave a cell of it empty. That is the file's doing, and the caller's
-	// to hear about by name; data.NewBatch would report it as ursus's own bug, which
-	// it has done in production since its check was turned on there (step 98).
+	if err := r.checkNonNullable(cols, rows, r.row-rows); err != nil {
+		return nil, err
+	}
+	return data.NewBatch(r.out, cols)
+}
+
+// checkNonNullable refuses a null in a column the schema declares non-nullable.
+// firstRow is the data rows before cols' first.
+//
+// A schema given with WithSchema can declare a column non-nullable, and the file can
+// still leave a cell of it empty. That is the file's doing, and the caller's to hear
+// about by name; data.NewBatch would report it as ursus's own bug, which it has done
+// in production since its check was turned on there (step 98).
+func (r *reader) checkNonNullable(cols []*data.Column, rows, firstRow int) error {
 	for i, f := range r.out.All() {
 		if f.Nullable || cols[i].Validity().IsAllSet() {
 			continue
@@ -526,15 +587,15 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 		v := cols[i].Validity()
 		for k := range rows {
 			if !v.Get(k) {
-				return nil, uerr.New(uerr.KindValue, "scan_csv",
+				return uerr.New(uerr.KindValue, "scan_csv",
 					"row %d has no value for column %q, which the schema declares non-nullable",
-					r.row-rows+1+k, f.Name).
+					firstRow+1+k, f.Name).
 					Hint("declare the column nullable in the schema given to WithSchema, " +
 						"or fill the empty cells")
 			}
 		}
 	}
-	return data.NewBatch(r.out, cols)
+	return nil
 }
 
 // appendRecord converts the current record's fields straight into the builders,
@@ -546,28 +607,35 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 // operator tree exactly, so it must not quietly get slower to make the parallel
 // path tidier. Measured: staging every field cost the serial read up to 15%.
 func (r *reader) appendRecord() error {
-	n := r.sc.NumFields()
-	if n != len(r.wanted) && !r.src.opts.TruncateRaggedLines {
-		return r.raggedError(n)
+	return r.appendTo(r.sc, r.builders, r.wanted, r.row)
+}
+
+// appendTo converts sc's current record, data row row, into builders. It reads
+// nothing of the reader's but its configuration, which is what lets the parallel
+// path's goroutines call it at once, each with a scanner and builders of its own.
+func (r *reader) appendTo(sc *scanner, builders []colBuilder, wanted []int, row int) error {
+	n := sc.NumFields()
+	if n != len(wanted) && !r.src.opts.TruncateRaggedLines {
+		return r.raggedErrorAt(row, sc.Line(), n, len(wanted))
 	}
-	for i := range min(n, len(r.wanted)) {
-		pos := r.wanted[i]
+	for i := range min(n, len(wanted)) {
+		pos := wanted[i]
 		if pos < 0 {
 			continue // outside the projection: split past, never parsed
 		}
-		f := r.sc.Field(i)
-		b := r.builders[pos]
-		if r.isNull(f) || r.emptyIsNull(i, pos, f) {
+		f := sc.Field(i)
+		b := builders[pos]
+		if r.isNull(f) || r.emptyIn(sc, i, pos, f) {
 			b.appendNull()
 			continue
 		}
 		if err := b.appendField(f); err != nil {
-			return r.valueError(i, pos, f, err)
+			return r.valueErrorAt(row, sc.Line(), len(wanted), i, pos, f, err)
 		}
 	}
-	for i := n; i < len(r.wanted); i++ {
-		if pos := r.wanted[i]; pos >= 0 {
-			r.builders[pos].appendNull()
+	for i := n; i < len(wanted); i++ {
+		if pos := wanted[i]; pos >= 0 {
+			builders[pos].appendNull()
 		}
 	}
 	return nil
@@ -578,11 +646,13 @@ func (r *reader) appendRecord() error {
 // not quoted, because `""` is the empty string — the two a String column must keep
 // apart, and as Polars writes and reads them. Every empty String field used to be
 // "", so a null String written as an empty field came back as "".
-func (r *reader) emptyIsNull(i, pos int, f []byte) bool {
+func (r *reader) emptyIsNull(i, pos int, f []byte) bool { return r.emptyIn(r.sc, i, pos, f) }
+
+func (r *reader) emptyIn(sc *scanner, i, pos int, f []byte) bool {
 	if len(f) != 0 {
 		return false
 	}
-	return r.out.Field(pos).Type.ID() != dtype.TypeString || !r.sc.Quoted(i)
+	return r.out.Field(pos).Type.ID() != dtype.TypeString || !sc.Quoted(i)
 }
 
 // stageRecord copies the current record's wanted fields into the per-column
@@ -620,9 +690,13 @@ func (r *reader) stageRecord() error {
 // raggedError is the record-shape error, shared by both record paths so that the
 // message cannot depend on whether the query happened to be parallel.
 func (r *reader) raggedError(n int) error {
+	return r.raggedErrorAt(r.row, r.sc.Line(), n, len(r.wanted))
+}
+
+func (r *reader) raggedErrorAt(row, line, n, width int) error {
 	return uerr.New(uerr.KindValue, "scan_csv",
 		"row %d (line %d) has %d fields, but the schema has %d",
-		r.row, r.sc.Line(), n, len(r.wanted)).
+		row, line, n, width).
 		Hint("in %s", r.src.desc).
 		Hint("pass WithTruncateRaggedLines(true) to pad and truncate instead")
 }
@@ -642,13 +716,17 @@ func (r *reader) raggedError(n int) error {
 // malformed input; reporting it as "a bug in ursus; please report it" would send
 // someone to the issue tracker over a stray comma in their data.
 func (r *reader) valueError(fileCol, pos int, f []byte, cause error) error {
+	return r.valueErrorAt(r.row, r.sc.Line(), len(r.wanted), fileCol, pos, f, cause)
+}
+
+func (r *reader) valueErrorAt(row, line, width, fileCol, pos int, f []byte, cause error) error {
 	name := r.out.Field(pos).Name
 	want := r.out.Field(pos).Type
 	return uerr.Wrap(cause, uerr.KindValue, "scan_csv",
 		"row %d (line %d), column %q: cannot read %s as %s",
-		r.row, r.sc.Line(), name, strconv.Quote(string(f)), want).
+		row, line, name, strconv.Quote(string(f)), want).
 		Hint("in %s", r.src.desc).
-		Hint("field %d of %d in the file", fileCol+1, len(r.wanted)).
+		Hint("field %d of %d in the file", fileCol+1, width).
 		Hint("pass a schema override for %q, or add the text to WithNullValues", name)
 }
 

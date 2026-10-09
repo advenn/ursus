@@ -95,7 +95,13 @@ const (
 )
 
 func newScanner(r io.Reader, o Options) *scanner {
-	r = &bomSkipper{r: r}
+	return newScannerFrom(&bomSkipper{r: r}, o)
+}
+
+// newScannerFrom is newScanner for input that is not the start of a stream: a block
+// of the parallel path, or where its splitter stopped. A byte-order mark is only a
+// mark at the start of a file; anywhere else those three bytes are data.
+func newScannerFrom(r io.Reader, o Options) *scanner {
 	maxRec := o.MaxRecordSize
 	if maxRec <= 0 {
 		maxRec = defaultMaxRecord

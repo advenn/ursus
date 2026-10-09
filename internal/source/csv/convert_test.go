@@ -2,6 +2,7 @@ package csv
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,17 +135,35 @@ func TestConvertAllStaysSerialForOneThread(t *testing.T) {
 	}
 }
 
-// TestThreadsReachTheConverter closes the loop the unit tests above leave open.
-// They build a reader by hand, so they would keep passing if ScanSpec.Threads
-// never reached it — which is exactly the failure step 36 shipped. This one goes
-// through Open, so every link is under test: the spec's Threads, the reader's
-// field, the staged/serial choice in Next, and the goroutines in convertAll.
-func TestThreadsReachTheConverter(t *testing.T) {
+// TestThreadsReachTheBlockParser closes the loop the unit tests above leave open.
+// They build a reader by hand, so they would keep passing if ScanSpec.Threads never
+// reached it — which is exactly the failure step 36 shipped. This one goes through
+// Open, so every link is under test: the spec's Threads, the reader's field, the
+// parallel choice, and the goroutines that parse blocks.
+//
+// It reached the column converter until step 144, which cut a stream into blocks
+// parsed at once; the converter now runs only where the serial path takes over.
+func TestThreadsReachTheBlockParser(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.csv")
-	if err := os.WriteFile(path, []byte("a,b,c,d\n1,2,3,4\n5,6,7,8\n"), 0o644); err != nil {
+	var body strings.Builder
+	body.WriteString("a,b,c,d\n")
+	for i := range 64 {
+		fmt.Fprintf(&body, "%d,2,3,4\n", i)
+	}
+	if err := os.WriteFile(path, []byte(body.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	defer func(size int) { splitBlockSize = size }(splitBlockSize)
+	splitBlockSize = 16 // two records a block
+
+	arrived := make(chan struct{}, 256)
+	release := make(chan struct{})
+	blockStart = func() {
+		arrived <- struct{}{}
+		<-release
+	}
+	defer func() { blockStart = nil }()
 
 	src := FromFile(path, DefaultOptions())
 	bs, err := src.Open(t.Context(), source.ScanSpec{Threads: 4})
@@ -153,39 +172,28 @@ func TestThreadsReachTheConverter(t *testing.T) {
 	}
 	defer bs.Close()
 
-	r, ok := bs.(*reader)
-	if !ok {
-		t.Fatalf("Open returned %T, not *reader", bs)
-	}
-
-	// Swap the real builders for barriers AFTER Open, so nothing about the
-	// reader's construction changes.
-	arrived := make(chan int, 256)
-	release := make(chan struct{})
-	for i := range r.builders {
-		r.builders[i] = barrier(r.builders[i], i, arrived, release)
-	}
-
 	done := make(chan error, 1)
 	go func() {
-		_, err := r.Next(context.Background())
+		_, err := bs.Next(context.Background())
 		done <- err
 	}()
 
-	seen := make(map[int]bool, 4)
+	seen := 0
 	deadline := time.After(3 * time.Second)
-	for len(seen) < 4 {
+	for seen < 4 {
 		select {
-		case id := <-arrived:
-			seen[id] = true
+		case <-arrived:
+			seen++
 		case <-deadline:
 			close(release)
-			t.Fatalf("ScanSpec.Threads=4 but only %d of 4 columns were converting at once; "+
-				"the thread count is not reaching the converter", len(seen))
+			t.Fatalf("ScanSpec.Threads=4 but only %d of 4 blocks were parsing at once; "+
+				"the thread count is not reaching the block parser", seen)
 		}
 	}
 	close(release)
-	<-done
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestStagedFieldsAreCopiedNotAliased is the hazard this design has in place of
