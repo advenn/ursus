@@ -179,9 +179,16 @@ const (
 // operands, named as they are. Neither has a parameter, so Call's rule — Args[1:]
 // literal — does not apply to them, and they are typed from every operand's type
 // (ResolveHorizontal) rather than from a receiver's.
+//
+// cut (step 147) puts its first operand in a bin: the operands after it are the
+// breaks, numbers, then none or one label more than breaks, strings. Its breaks are
+// operands because QCut's are quantiles of the column, known only when it runs.
+// cut_left_closed is the same with each bin closed on the left.
 const (
 	FnConcatStr CallFn = iota + 600
 	FnStructOf
+	FnCut
+	FnCutLeftClosed
 	fnHorizontalEnd
 )
 
@@ -235,7 +242,8 @@ var callNames = map[CallFn]string{
 	FnMathCountOnes: "bitwise_count_ones", FnMathCountZeros: "bitwise_count_zeros",
 	FnMathLeadingOnes: "bitwise_leading_ones", FnMathLeadingZeros: "bitwise_leading_zeros",
 	FnMathTrailingOnes: "bitwise_trailing_ones", FnMathTrailingZeros: "bitwise_trailing_zeros",
-	FnConcatStr: "concat_str", FnStructOf: "struct",
+	FnConcatStr: "concat_str", FnStructOf: "struct", FnCut: "cut",
+	FnCutLeftClosed: "cut_left_closed",
 
 	FnListLen: "list.len", FnListGet: "list.get",
 	FnListContains: "list.contains", FnListMin: "list.min",
@@ -378,6 +386,19 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 	}
 }
 
+// CutBreaks is how many of a cut's operands after the first are breaks: those before
+// the first label, which is a String.
+func CutBreaks(ops []dtype.Field) int {
+	k := 0
+	for _, f := range ops[1:] {
+		if f.Type.ID() == dtype.TypeString {
+			break
+		}
+		k++
+	}
+	return k
+}
+
 // ResolveHorizontal gives the output type of a horizontal call over operands of
 // these fields. Like ResolveCall, it is the one authority, for the plan's schema and
 // the kernel's output alike.
@@ -413,6 +434,23 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			fields[i] = dtype.Field{Name: f.Name, Type: f.Type, Nullable: true}
 		}
 		return dtype.Struct(fields...), nil
+
+	case FnCut, FnCutLeftClosed:
+		if !ops[0].Type.IsNumeric() {
+			return dtype.Null, uerr.New(uerr.KindType, "cut",
+				"%s requires a numeric operand, got %s", fn, ops[0].Type).
+				Hint("cast it first, e.g. .Cast(ursus.Float64)")
+		}
+		k := CutBreaks(ops)
+		for _, f := range ops[1 : 1+k] {
+			if !f.Type.IsNumeric() && !f.Type.IsNull() {
+				return dtype.Null, uerr.Internalf("expr: %s break of type %s", fn, f.Type)
+			}
+		}
+		if labels := len(ops) - 1 - k; labels != 0 && labels != k+1 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d breaks and %d labels", fn, k, labels)
+		}
+		return dtype.String, nil
 	}
 	return dtype.Null, uerr.Internalf("expr: unknown horizontal call %d", fn)
 }

@@ -117,8 +117,9 @@ func intArg(fn expr.CallFn, args []any, i int) (int, error) {
 // bitwise_count_ones and its siblings do: the leading zeros of an Int8 1 are 7, and
 // a negative number is its two's complement.
 func bitCount(fn expr.CallFn, name string, c *data.Column) (*data.Column, error) {
-	if c.Len() > 0 && c.NullCount() == c.Len() {
-		return NullColumn(name, dtype.Uint32, c.Len()) // a null column may have no payload
+	c, err := readable(c) // a column of nulls may have no payload
+	if err != nil {
+		return nil, err
 	}
 	u, w, err := integerBits(c)
 	if err != nil {

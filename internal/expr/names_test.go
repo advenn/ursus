@@ -224,10 +224,10 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	// 83 since step 146 added list.join, the six bit counts, and the horizontal
-	// family's concat_str and struct.
-	if classified != 83 {
-		t.Errorf("%d call functions are classified, want 83 — the families and the "+
+	// 85 since step 147 added cut and cut_left_closed, after step 146's list.join,
+	// six bit counts, concat_str and struct.
+	if classified != 85 {
+		t.Errorf("%d call functions are classified, want 85 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }

@@ -1,6 +1,11 @@
 package kernel
 
 import (
+	"math"
+	"slices"
+	"sort"
+	"strconv"
+
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
@@ -34,6 +39,8 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return concatStr(name, ops, n)
 	case expr.FnStructOf:
 		return structOf(name, out, ops, n)
+	case expr.FnCut, expr.FnCutLeftClosed:
+		return cut(name, fn == expr.FnCutLeftClosed, ops, n)
 	}
 	return nil, uerr.Internalf("kernel: no horizontal kernel for %s", fn)
 }
@@ -117,4 +124,108 @@ func stringTooLong(fn, name string) error {
 	return uerr.New(uerr.KindValue, fn,
 		"%s of %q needs more than the %d bytes a String column holds", fn, name, data.MaxStringBytes).
 		Hint("a String column's offsets are 32-bit; work on fewer rows at once")
+}
+
+// cut puts each value in the bin its breaks give it (step 147), and answers the
+// bin's label: the label operand of that bin, or else its interval, "(1, 2.5]" or,
+// closed on the left, "[1, 2.5)", from -inf to inf.
+//
+// A null or NaN value, or one whose breaks are not all there — QCut's quantiles of
+// a column of nulls — has no bin and is null. The breaks are read at each row, since
+// QCut's are columns, and are non-decreasing: a break repeated, which QCut gives a
+// column of few values, leaves an empty bin, never a misplaced value. An interval
+// label is built again only when the breaks change, which for a literal or a
+// quantile is once.
+func cut(name string, leftClosed bool, ops []*data.Column, n int) (*data.Column, error) {
+	fields := make([]dtype.Field, len(ops))
+	for i, c := range ops {
+		fields[i] = dtype.Field{Type: c.DType()}
+	}
+	k := expr.CutBreaks(fields)
+	nums := make([][]float64, 1+k)
+	valids := make([]bitmap.View, 1+k)
+	for i, c := range ops[:1+k] {
+		// A payload-free column of nulls, such as an aggregate's over nothing, is
+		// given one to read, as every operand is (take.go's NullColumn).
+		c, err := readable(c)
+		if err != nil {
+			return nil, err
+		}
+		if c.DType() != dtype.Float64 {
+			if c, err = Cast(c.Name(), dtype.Float64, true, c); err != nil {
+				return nil, err
+			}
+		}
+		v, err := data.Values[float64](c)
+		if err != nil {
+			return nil, err
+		}
+		nums[i], valids[i] = v, c.Validity()
+	}
+	labels := ops[1+k:]
+
+	out := make([]string, n)
+	valid := bitmap.NewBuilder(n)
+	at := make([]float64, k)
+	var intervals []string // the interval labels of the breaks in seen
+	seen := make([]float64, k)
+	for row := range n {
+		ok := true
+		for i := range nums {
+			j := broadcastIdx(ops[i], row)
+			if !valids[i].Get(j) || math.IsNaN(nums[i][j]) {
+				ok = false
+				break
+			}
+			if i > 0 {
+				at[i-1] = nums[i][j]
+			}
+		}
+		valid.Append(ok)
+		if !ok {
+			continue
+		}
+		v := nums[0][broadcastIdx(ops[0], row)]
+		// The bin is the number of breaks below v, or at or below it on the left.
+		bin := sort.Search(k, func(j int) bool {
+			if leftClosed {
+				return at[j] > v
+			}
+			return at[j] >= v
+		})
+		if len(labels) > 0 {
+			l := labels[bin]
+			out[row] = l.Strings().Get(broadcastIdx(l, row))
+			continue
+		}
+		if intervals == nil || !slices.Equal(at, seen) {
+			intervals = cutIntervals(at, leftClosed)
+			copy(seen, at)
+		}
+		out[row] = intervals[bin]
+	}
+	return data.NewString(name, out, valid.Finish()), nil
+}
+
+// cutIntervals names the k+1 bins of k breaks by their intervals, each break
+// formatted as a cast to String formats a Float64.
+func cutIntervals(breaks []float64, leftClosed bool) []string {
+	open, close := "(", "]"
+	if leftClosed {
+		open, close = "[", ")"
+	}
+	bound := func(j int) string {
+		switch {
+		case j < 0:
+			return "-inf"
+		case j == len(breaks):
+			return "inf"
+		}
+		return strconv.FormatFloat(breaks[j], 'g', -1, 64)
+	}
+	out := make([]string, len(breaks)+1)
+	for j := range out {
+		out[j] = open + bound(j-1) + ", " + bound(j) + close
+	}
+	return out
 }

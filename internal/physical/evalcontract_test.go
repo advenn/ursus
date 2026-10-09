@@ -405,7 +405,11 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 	// One operand alone is the other set.
 	expr.FnConcatStr: {{label: ",alone"}, {label: ",sep", args: []any{"-"}}},
 	expr.FnStructOf:  {{label: ",alone"}, {label: ",lit", args: []any{"x"}}},
-	expr.FnListJoin:  {{args: []any{","}}},
+	// The value, its breaks, then none or one label more than breaks.
+	expr.FnCut: {{label: ",one bin"}, {label: ",breaks", args: []any{1.5, 2.5}},
+		{label: ",labelled", args: []any{1.5, "lo", "hi"}}},
+	expr.FnCutLeftClosed: {{label: ",breaks", args: []any{1.5, 2.5}}},
+	expr.FnListJoin:      {{args: []any{","}}},
 
 	// The list and struct families are unreachable against this fixture, which has
 	// no List and no Struct column — every combination is an agreed refusal. The
@@ -451,6 +455,8 @@ func callLit(v any) expr.Node {
 		return &expr.Lit{Value: x, DT: dtype.Int64}
 	case bool:
 		return &expr.Lit{Value: x, DT: dtype.Bool}
+	case float64:
+		return &expr.Lit{Value: x, DT: dtype.Float64}
 	default:
 		panic("contractCallArgs holds a value callLit cannot type")
 	}
