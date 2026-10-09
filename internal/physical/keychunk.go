@@ -44,7 +44,7 @@ func (c *keyChunk) insert(t *kernel.KeyTable) (ids []int32, inserted []bool) {
 }
 
 // lookup is GetMany over the chunk.
-func (c *keyChunk) lookup(t *kernel.KeyTable) (ids []int32, found []bool) {
+func (c *keyChunk) lookup(t joinKeys) (ids []int32, found []bool) {
 	ids, found = c.answers()
 	t.GetMany(c.keys, ids, found)
 	return ids, found

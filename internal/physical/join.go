@@ -155,9 +155,9 @@ const noKey = int32(-1)
 // Nothing mutates it after freeze, which is what would let a future morsel
 // scheduler share one table across N probe workers with no lock.
 type joinTable struct {
-	ids   *kernel.KeyTable // encoded key -> key id
-	off   []int32          // len nKeys+1; rows[off[id]:off[id+1]] are id's build rows
-	rows  []int32          // build row indices, ascending within each key
+	ids   joinKeys // encoded key -> key id
+	off   []int32  // len nKeys+1; rows[off[id]:off[id+1]] are id's build rows
+	rows  []int32  // build row indices, ascending within each key
 	nKeys int
 
 	// build holds every build row, addressable by one index. nil for Semi/Anti,
@@ -167,6 +167,12 @@ type joinTable struct {
 	// rowKey[j] is build row j's key id, or noKey. Kept only for Right/Full, whose
 	// flush walks build rows in INPUT order.
 	rowKey []int32
+}
+
+// joinKeys is the probe's view of the build side's keys: one KeyTable, from the
+// streaming build, or several read as one, from the partitioned build (step 151).
+type joinKeys interface {
+	GetMany(keys [][]byte, ids []int32, found []bool)
 }
 
 // --- the spec -------------------------------------------------------------------
@@ -261,6 +267,12 @@ type joinBuildSink struct {
 	// one bucket at a time anyway, and its probe side is a spill file read serially.
 	threads int
 
+	// deferred is set by planJoin when the build may run partitioned: Consume only
+	// retains the batches, and freeze inserts their keys, one table per partition,
+	// each on its own goroutine (buildPartitioned). Past half the budget, catchUp
+	// turns it back into the streaming build, the one that can spill.
+	deferred bool
+
 	ids    *kernel.KeyTable
 	counts []int32
 	rowKey []int32
@@ -327,6 +339,12 @@ func (s *joinBuildSink) Consume(ctx context.Context, in *data.Batch) error {
 	}
 
 	switch {
+	case s.deferred:
+		// The keys wait for freeze, which inserts them partitioned.
+		s.parts = append(s.parts, in)
+		s.mem.Retain(in)
+		s.nBuild += n
+
 	case len(s.keys) == 0:
 		// Cross join: one key, every row in it. The same shape hashAggSink uses for
 		// a global aggregate, which puts every row in group 0 and creates group 0
@@ -359,6 +377,14 @@ func (s *joinBuildSink) Consume(ctx context.Context, in *data.Batch) error {
 	}
 	s.nRows += n
 	s.reaccount()
+
+	// Only the streaming build can spill, so past half the budget a deferred one
+	// becomes it, before anything below could need to split.
+	if s.deferred && s.budget.Limit() > 0 && s.budget.Used()*2 > s.budget.Limit() {
+		if err := s.catchUp(ctx); err != nil {
+			return err
+		}
+	}
 
 	// The split is decided at a BATCH BOUNDARY, so no batch is ever half-split. The
 	// cost is that the resident set overshoots by up to one batch; the benefit is
@@ -454,7 +480,7 @@ func (s *joinBuildSink) Finish(ctx context.Context) (Operator, error) {
 // choice is made once here and nothing downstream knows which it got. See
 // parallelProbe for the four conditions that force the serial one.
 func (s *joinBuildSink) Probe(ctx context.Context, probe Operator) (Operator, error) {
-	t, err := s.freeze()
+	t, err := s.freeze(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -548,13 +574,26 @@ func (s *joinBuildSink) newProbeOp(t *joinTable, probe Operator, pad *data.Batch
 }
 
 // freeze scatters the CSR arrays and concatenates the build side.
-func (s *joinBuildSink) freeze() (*joinTable, error) {
+func (s *joinBuildSink) freeze(ctx context.Context) (*joinTable, error) {
 	s.finished = true
 	if err := s.closeBuildParts(); err != nil {
 		return nil, err
 	}
 	nKeys := s.ids.Len()
 	t := &joinTable{ids: s.ids, nKeys: nKeys}
+	if s.deferred {
+		keys, err := s.buildPartitioned(ctx)
+		if err != nil {
+			return nil, err
+		}
+		nKeys = keys.Len()
+		t = &joinTable{ids: keys, nKeys: nKeys}
+		// Charged as reaccount charges the streaming build's, so the peak sees the
+		// tables as it sees the one, before the rebase below lets them go.
+		st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + keys.NBytes()
+		s.mem.RetainBytes(st - s.stateBytes)
+		s.stateBytes = st
+	}
 
 	// Rebase UNCONDITIONALLY. This release used to sit inside the needBuildRows
 	// block below, so Semi and Anti never reached it: their stateBytes stayed
@@ -1657,6 +1696,7 @@ func planJoin(ctx context.Context, j *plan.Join, opts Options) (Operator, error)
 		leftKeys:   j.LeftOn,
 		spec:       newJoinSpec(j, batchSize),
 		threads:    opts.Threads,
+		deferred:   deferBuild(j, opts),
 		pairLayout: pairLayout,
 		ids:        kernel.NewKeyTable(),
 		mem:        opts.Budget.Account("join"),

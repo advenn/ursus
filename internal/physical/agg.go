@@ -808,7 +808,7 @@ func (s *hashAggSink) foldPartitioned(sinks []Sink, newSink SinkFactory) (Operat
 		wg.Go(func() {
 			r := make([][]int32, nParts)
 			for id := range ws[w].ids.Len() {
-				p := (ws[w].ids.HashAt(int32(id)) >> 32) * uint64(nParts) >> 32
+				p := kernel.PartitionOf(ws[w].ids.HashAt(int32(id)), nParts)
 				r[p] = append(r[p], int32(id))
 			}
 			routed[w] = r
