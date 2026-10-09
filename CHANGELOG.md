@@ -130,6 +130,8 @@ Newest first. The numbers are steps, each with an as-built record in
     2.1 times what they produced, now 1.1.
   - A join's `rowKey` and `counts` grew by `append`; a build of a million keys
     allocated 2.3 times what it held, now 1.8.
+  - Measured after, under a 3 GB container at ten million rows, `j5` allocates 6%
+    less over Parquet and 2.5% less over CSV; CPU within the noise.
 - **The CSV reader allocates about what it produces** (136): 4.1 times it, now 1.3,
   counting every batch.
   - Each fixed-width column dropped its values slice every batch. A comment claimed

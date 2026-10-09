@@ -95,3 +95,33 @@ could go wrong.
 
 **Gate:** test-all 115 ok, race 23 ok, levels, vet ×3 and the bench engine tests
 clean. No benchmark, by request.
+
+## 5. Measured afterwards, at the maintainer's request
+
+`gb10` and `j5` at ten million rows, ursus alone, one timed run each, under a 3 GB
+scope, at `97ab4fc`. Beside each, step 136's run, at `55fb091`. CPU is the scope's,
+from the journal.
+
+| query | time | CPU | VmHWM | heap in use | allocated | counted | collections |
+| --- | --: | --: | --: | --: | --: | --: | --: |
+| `gb10`, CSV | 6.5 s (6.6) | 19.7 s (20.1) | 2.75 GB (2.75) | 2.65 GB (2.71) | 14.9 GB (14.9) | 1.65 GB (1.65) | 34 (31) |
+| `j5`, CSV | 8.2 s (8.8) | 44.5 s (46.9) | 2.85 GB (2.89) | 2.83 GB (2.89) | 11.7 GB (12.0) | 1.26 GB (1.21) | 25 (27) |
+| `gb10`, Parquet | 3.8 s (3.7) | 15.0 s (14.8) | 2.72 GB (2.85) | 2.77 GB (2.78) | 16.0 GB (16.4) | 1.61 GB (1.61) | 31 (32) |
+| `j5`, Parquet | 4.2 s (4.4) | 40.7 s (41.1) | 2.92 GB (2.89) | 2.78 GB (2.79) | 16.3 GB (17.4) | 1.09 GB (1.04) | 29 (33) |
+
+**`j5` allocates less, by less than §3 estimated:**
+
+- over Parquet, 1.1 GB less, 6%, against an estimated 8%;
+- over CSV, 0.3 GB less, 2.5%, against 5%.
+
+The estimate took shares of the profile, which counted a warm-up and a timed run, and
+applied them to these runs' totals. The join's half of it came in under its share.
+
+**`gb10` over Parquet allocates 0.4 GB less,** from the Parquet reader's half of the
+change. Over CSV it does not touch this step's code, and did not move.
+
+**What the join counts rose** by 0.05 GB for `j5`: `rowKey` and `counts`' unused
+capacity, now counted.
+
+**CPU and time are within the noise,** the largest change being `j5` over CSV at 5%
+less CPU.
