@@ -10,7 +10,7 @@ Step numbers below point at those records.
 
 ---
 
-## v0.4.0 — candidate
+## v0.4.0 — 2026-10-09
 
 Everything since `v0.3.1` (2026-10-06): steps 92–138.
 
@@ -37,6 +37,17 @@ contains it.
   - **h2o:** gb8 80% faster with `TopK` (106); gb6 30% with median by selection
     (105); j3 22% from a String concatenation that copies bytes, not rows (103).
   - **Comparisons** are about 3.5× faster (107).
+
+  The report predates the memory work below and has not been re-run since.
+- **Holds under a container's memory limit** (128–138). At ten million rows, h2o
+  `j5` was killed under a 4 GB container; it and `gb10` now pass under 3 GB.
+  - The Go soft limit is set with the default budget (128).
+  - `Collect` refuses a result too large to hold, with an error naming what streams
+    (130).
+  - A join, a group-by and `Collect` no longer hold their input or answer twice
+    while they assemble it (128, 131).
+  - What they allocate fell, measured under 3 GB from step 131 to step 138: `gb10`
+    38–47% less, `j5` 12–37% (133–138).
 - **Safe inside a long-running service:**
   - compiled regexes and `is_in` sets are freed with their expression (94);
   - a query that fails while being planned closes what it opened (95);

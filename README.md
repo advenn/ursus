@@ -205,7 +205,9 @@ reference, and a disagreement is struck through rather than quietly reported as 
 
 **How current it is, precisely.** Every table was measured in one session, on one commit, with every engine re-run
 together — so the numbers are comparable across engines rather than stitched from different days. That commit is
-`5a721e0`, measured on 2026-10-08, after the round of performance work that followed the v0.4.0 candidate.
+`5a721e0`, measured on 2026-10-08, after the round of performance work that followed the v0.4.0 candidate. The memory
+work that came after it, steps 128–138, was measured on h2o `gb10` and `j5` alone, under a 3 GB container; the
+changelog has those figures, and this report has not been re-run since.
 
 The caveats that apply to *this* run:
 
