@@ -242,7 +242,7 @@ func TestRollingAgainstTheOracle(t *testing.T) {
 	lf := ursus.Frame(ursus.Values("g", gs), ursus.Values("t", ts), ursus.ValuesNullable("x", xs, ok))
 	spec := ursus.WindowSpec{PartitionBy: []ursus.Expr{c("g")}, OrderBy: []ursus.SortKey{ursus.Asc(c("t"))}}
 
-	type fnOf func(ursus.Expr, int, ...ursus.RollingOption) ursus.Expr
+	type fnOf func(ursus.Expr, int, ...ursus.WindowOption) ursus.Expr
 	fns := map[string]fnOf{
 		"sum": ursus.Expr.RollingSum, "mean": ursus.Expr.RollingMean, "min": ursus.Expr.RollingMin,
 		"max": ursus.Expr.RollingMax, "var": ursus.Expr.RollingVar, "std": ursus.Expr.RollingStd,
@@ -254,7 +254,7 @@ func TestRollingAgainstTheOracle(t *testing.T) {
 			var names, fnNames []string
 			for name, f := range fns {
 				col := fmt.Sprintf("%s_%d_%d", name, size, minN)
-				opts := []ursus.RollingOption{}
+				opts := []ursus.WindowOption{}
 				if minN > 0 {
 					opts = append(opts, ursus.MinSamples(minN))
 				}

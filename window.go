@@ -1,6 +1,8 @@
 package ursus
 
 import (
+	"math"
+
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -190,19 +192,20 @@ func (e Expr) BackwardFill(limit int) Expr {
 	return e.winFn(expr.WinBackwardFill, expr.WinParams{N: int64(limit)})
 }
 
-// RollingOption configures a rolling function.
-type RollingOption func(*expr.WinParams)
+// WindowOption configures a rolling or an exponentially weighted function. An option
+// a function has no use for, Ddof on an EwmMean, does nothing.
+type WindowOption func(*expr.WinParams)
 
 // MinSamples lets a rolling window answer from k values, where by default it needs
 // as many as it has rows: RollingMean(7, MinSamples(1)) averages what the first six
 // rows have. k is between 1 and the window's size.
-func MinSamples(k int) RollingOption {
+func MinSamples(k int) WindowOption {
 	return func(p *expr.WinParams) { p.MinSamples = int64(k) }
 }
 
 // Ddof sets RollingVar's and RollingStd's delta degrees of freedom; the default, 1,
 // is the sample variance, as Var(1) and Polars' rolling_var.
-func Ddof(d int) RollingOption {
+func Ddof(d int) WindowOption {
 	return func(p *expr.WinParams) { p.Ddof = int64(d) }
 }
 
@@ -222,37 +225,143 @@ func Ddof(d int) RollingOption {
 // same type: a sum of integers is an Int128, a mean, var and std of numbers floats,
 // a min and max the column's own type, of any type with an order. A NaN in a float
 // window makes its sum, mean, var and std NaN, and its max NaN, as the aggregates'.
-func (e Expr) RollingSum(size int, opts ...RollingOption) Expr {
+func (e Expr) RollingSum(size int, opts ...WindowOption) Expr {
 	return e.rolling(expr.WinRollingSum, size, 0, opts)
 }
 
-func (e Expr) RollingMean(size int, opts ...RollingOption) Expr {
+func (e Expr) RollingMean(size int, opts ...WindowOption) Expr {
 	return e.rolling(expr.WinRollingMean, size, 0, opts)
 }
 
-func (e Expr) RollingMin(size int, opts ...RollingOption) Expr {
+func (e Expr) RollingMin(size int, opts ...WindowOption) Expr {
 	return e.rolling(expr.WinRollingMin, size, 0, opts)
 }
 
-func (e Expr) RollingMax(size int, opts ...RollingOption) Expr {
+func (e Expr) RollingMax(size int, opts ...WindowOption) Expr {
 	return e.rolling(expr.WinRollingMax, size, 0, opts)
 }
 
-func (e Expr) RollingVar(size int, opts ...RollingOption) Expr {
+func (e Expr) RollingVar(size int, opts ...WindowOption) Expr {
 	return e.rolling(expr.WinRollingVar, size, 1, opts)
 }
 
-func (e Expr) RollingStd(size int, opts ...RollingOption) Expr {
+func (e Expr) RollingStd(size int, opts ...WindowOption) Expr {
 	return e.rolling(expr.WinRollingStd, size, 1, opts)
 }
 
-func (e Expr) rolling(fn expr.WinFnOp, size int, ddof int64, opts []RollingOption) Expr {
+func (e Expr) rolling(fn expr.WinFnOp, size int, ddof int64, opts []WindowOption) Expr {
 	p := expr.WinParams{N: int64(size), Ddof: ddof}
 	for _, o := range opts {
 		o(&p)
 	}
 	return e.winFn(fn, p)
 }
+
+// EwmDecay is how fast an exponentially weighted function forgets: the weight a row
+// loses with each row after it. Build it from whichever quantity is to hand, as
+// Polars' com, span, half_life and alpha are.
+type EwmDecay struct {
+	alpha float64
+	err   error
+}
+
+// EwmAlpha is the decay itself: each row after keeps 1-alpha of a row's weight.
+// 0 < alpha <= 1.
+func EwmAlpha(alpha float64) EwmDecay {
+	if !(alpha > 0 && alpha <= 1) {
+		return EwmDecay{err: uerr.New(uerr.KindValue, "ewm", "alpha is %v, and must be in (0, 1]", alpha)}
+	}
+	return EwmDecay{alpha: alpha}
+}
+
+// EwmSpan is a decay by an N-row span: alpha = 2/(span+1), for span >= 1.
+func EwmSpan(span float64) EwmDecay {
+	if !(span >= 1) {
+		return EwmDecay{err: uerr.New(uerr.KindValue, "ewm", "span is %v, and must be at least 1", span)}
+	}
+	return EwmAlpha(2 / (span + 1))
+}
+
+// EwmCom is a decay by a centre of mass: alpha = 1/(1+com), for com >= 0.
+func EwmCom(com float64) EwmDecay {
+	if !(com >= 0) {
+		return EwmDecay{err: uerr.New(uerr.KindValue, "ewm", "com is %v, and must not be negative", com)}
+	}
+	return EwmAlpha(1 / (1 + com))
+}
+
+// EwmHalfLife is a decay by the rows over which a weight halves:
+// alpha = 1 - exp(-ln 2 / halfLife), for halfLife > 0.
+func EwmHalfLife(halfLife float64) EwmDecay {
+	if !(halfLife > 0) {
+		return EwmDecay{err: uerr.New(uerr.KindValue, "ewm", "half_life is %v, and must be positive", halfLife)}
+	}
+	return EwmAlpha(1 - math.Exp(-math.Ln2/halfLife))
+}
+
+// EwmAdjust chooses how the first rows are weighed; true is the default, as Polars'
+// adjust=True. Adjusted, each row's answer divides by the weights its rows had;
+// unadjusted, the newest row weighs alpha and the running answer 1-alpha.
+func EwmAdjust(adjust bool) WindowOption {
+	return func(p *expr.WinParams) { p.NoAdjust = !adjust }
+}
+
+// IgnoreNulls weighs an ewm by position among the values, so a null does not age
+// the rows before it. By default it does, as a row would: Polars' ignore_nulls=False.
+func IgnoreNulls() WindowOption {
+	return func(p *expr.WinParams) { p.IgnoreNulls = true }
+}
+
+// Biased makes EwmVar and EwmStd the biased estimate, Polars' bias=True. By default
+// they are corrected for the weights, and a first value's is null.
+func Biased() WindowOption {
+	return func(p *expr.WinParams) { p.Bias = true }
+}
+
+// EwmMean, EwmStd and EwmVar are exponentially weighted: each row's answer is over
+// every row of its window up to it, each weighted by decay's power of how far behind
+// it lies — Polars' ewm_mean, ewm_std and ewm_var, whose recurrences are pandas'.
+//
+//	Col("price").EwmMean(EwmSpan(20))                         // a 20-row moving average
+//	Col("price").EwmStd(EwmHalfLife(5)).OverWith(byDayPerTicker)
+//
+// A null row is no observation and answers the running value; MinSamples sets how
+// many values must have been seen before a row answers, one by default. Each is a
+// Float64, or a Float32 for one. A NaN is a value, and makes the answer NaN from
+// there on, where pandas would skip it.
+func (e Expr) EwmMean(decay EwmDecay, opts ...WindowOption) Expr {
+	return e.ewm(expr.WinEwmMean, decay, opts)
+}
+
+func (e Expr) EwmStd(decay EwmDecay, opts ...WindowOption) Expr {
+	return e.ewm(expr.WinEwmStd, decay, opts)
+}
+
+func (e Expr) EwmVar(decay EwmDecay, opts ...WindowOption) Expr {
+	return e.ewm(expr.WinEwmVar, decay, opts)
+}
+
+func (e Expr) ewm(fn expr.WinFnOp, decay EwmDecay, opts []WindowOption) Expr {
+	if decay.err != nil {
+		return wrap(&expr.Err{E: decay.err})
+	}
+	if decay.alpha == 0 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "ewm",
+			"no decay: pass EwmAlpha, EwmSpan, EwmCom or EwmHalfLife")})
+	}
+	p := expr.WinParams{Alpha: decay.alpha}
+	for _, o := range opts {
+		o(&p)
+	}
+	return e.winFn(fn, p)
+}
+
+// Interpolate fills each run of nulls between two values with the points on the
+// straight line between them, by position in the window's order: Polars'
+// interpolate. [1, null, null, 7] is [1, 3, 5, 7]. A run before the first value or
+// after the last stays null. An integer or a Decimal answers a Float64; a float keeps
+// its width.
+func (e Expr) Interpolate() Expr { return e.winFn(expr.WinInterpolate, expr.WinParams{}) }
 
 // Diff is the difference from the value n rows earlier.
 //

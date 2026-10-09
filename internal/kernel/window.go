@@ -58,6 +58,10 @@ func WinCall(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Data
 		return winCumulative(fn, params, name, out, col, seg)
 	case fn.IsRolling():
 		return winRolling(fn, params, name, out, col, seg)
+	case fn.IsEwm():
+		return winEwm(fn, params, name, out, col, seg)
+	case fn == expr.WinInterpolate:
+		return winInterpolate(name, out, col, seg)
 	default:
 		return nil, uerr.Internalf("kernel: no window kernel for %s", fn)
 	}

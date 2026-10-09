@@ -291,6 +291,17 @@ const (
 	WinRollingVar
 	WinRollingStd
 
+	// The exponentially weighted functions (step 153), Polars' and pandas' ewm_*:
+	// each row's answer over every row of its partition up to it, weighted by
+	// Params.Alpha's decay.
+	WinEwmMean
+	WinEwmStd
+	WinEwmVar
+
+	// WinInterpolate fills each run of nulls between two values on the straight line
+	// between them, by position in the window's order.
+	WinInterpolate
+
 	winFnCount
 )
 
@@ -302,6 +313,8 @@ var winFnNames = [winFnCount]string{
 	WinRollingSum: "rolling_sum", WinRollingMean: "rolling_mean",
 	WinRollingMin: "rolling_min", WinRollingMax: "rolling_max",
 	WinRollingVar: "rolling_var", WinRollingStd: "rolling_std",
+	WinEwmMean: "ewm_mean", WinEwmStd: "ewm_std", WinEwmVar: "ewm_var",
+	WinInterpolate: "interpolate",
 }
 
 func (o WinFnOp) String() string {
@@ -322,6 +335,9 @@ func (o WinFnOp) IsCumulative() bool { return o >= WinCumSum && o <= WinCumMax }
 
 // IsRolling reports whether the op is over a fixed number of rows up to each.
 func (o WinFnOp) IsRolling() bool { return o >= WinRollingSum && o <= WinRollingStd }
+
+// IsEwm reports whether the op is exponentially weighted.
+func (o WinFnOp) IsEwm() bool { return o >= WinEwmMean && o <= WinEwmVar }
 
 // RankMethod decides how Rank breaks ties.
 type RankMethod uint8
@@ -379,6 +395,15 @@ type WinParams struct {
 	// var's and std's delta degrees of freedom.
 	MinSamples int64
 	Ddof       int64
+
+	// The ewm functions' (step 153): Alpha is the decay; NoAdjust is Polars'
+	// adjust=False, so the zero value is its default; IgnoreNulls weighs by
+	// position among the values rather than among the rows; Bias is ewm_var's and
+	// ewm_std's bias=True.
+	Alpha       float64
+	NoAdjust    bool
+	IgnoreNulls bool
+	Bias        bool
 }
 
 func (p WinParams) args(op WinFnOp) string {
@@ -402,6 +427,14 @@ func (p WinParams) args(op WinFnOp) string {
 			", ddof " + strconv.FormatInt(p.Ddof, 10)
 	case WinRollingSum, WinRollingMean, WinRollingMin, WinRollingMax:
 		return strconv.FormatInt(p.N, 10) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10)
+	case WinEwmMean, WinEwmStd, WinEwmVar:
+		// Every parameter, bias included where it does not apply, so two calls that
+		// differ in any one cannot share a temporary.
+		return "alpha " + strconv.FormatFloat(p.Alpha, 'g', -1, 64) +
+			", adjust " + strconv.FormatBool(!p.NoAdjust) +
+			", min_samples " + strconv.FormatInt(p.MinSamples, 10) +
+			", ignore_nulls " + strconv.FormatBool(p.IgnoreNulls) +
+			", bias " + strconv.FormatBool(p.Bias)
 	default:
 		if p.Reverse {
 			return "reverse"
@@ -468,8 +501,9 @@ func (f *WinFn) Field(in *dtype.Schema) (dtype.Field, error) {
 	switch {
 	case f.Fn == WinRank || f.Fn == WinCumCount:
 		nullable = false
-	case f.Fn == WinShift || f.Fn.IsRolling():
-		// A rolling window's first rows hold fewer values than it needs.
+	case f.Fn == WinShift || f.Fn.IsRolling() || f.Fn.IsEwm():
+		// A rolling window's first rows hold fewer values than it needs, and so can
+		// an ewm's; an ewm variance of one value has none.
 		nullable = true
 	}
 	return dtype.Field{Name: OutputName(f), Type: out, Nullable: nullable}, nil
@@ -555,6 +589,29 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 
 	case WinRollingSum, WinRollingMean, WinRollingMin, WinRollingMax, WinRollingVar, WinRollingStd:
 		return rollingOut(fn, p, in)
+
+	case WinEwmMean, WinEwmStd, WinEwmVar, WinInterpolate:
+		if fn != WinInterpolate {
+			if !(p.Alpha > 0 && p.Alpha <= 1) {
+				return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
+					"alpha is %v, and must be in (0, 1]", p.Alpha)
+			}
+			if p.MinSamples < 0 {
+				return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
+					"min_samples is %d, and must not be negative", p.MinSamples)
+			}
+		}
+		// Weighted means and lines between values are fractions, so an integer or a
+		// Decimal answers a Float64, as Polars' do; a float keeps its width.
+		switch {
+		case in.IsFloat():
+			return in, nil
+		case in.IsNumeric() && in.ID() != dtype.TypeInt128:
+			return dtype.Float64, nil
+		}
+		return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+			"%s() is not defined for %s", fn, in).
+			Hint("cast it first, e.g. .Cast(ursus.Float64)")
 
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown window function %d", fn)
