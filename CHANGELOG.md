@@ -451,6 +451,15 @@ Newest first. The numbers are steps, each with an as-built record in
     The heap fills to the cap whatever the live peak: `gb10` over Parquet allocated
     25.6 GB in 4.7 s, and its heap in use peaked at 3.19 GB against the 1.54 GB the
     budget counted.
+  - **After steps 133–138, as tagged:**
+    - `gb10` over Parquet peaks at 2.72 GB, under the soft limit, and allocates
+      16.0 GB;
+    - over CSV, it peaks at 2.75 GB and allocates 14.9 GB;
+    - the heap in use still sits near the soft limit while allocation outpaces the
+      collector.
+
+    *This item was corrected on master after the tag: as tagged, it ended at the
+    figures above it.*
 
 ---
 
