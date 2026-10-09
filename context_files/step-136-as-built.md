@@ -83,3 +83,37 @@ checks the reuse is safe, and would fail if `NewFixed` ever stopped copying.
 
 **Gate:** test-all 115 ok, race 23 ok, levels, vet ×3 and the bench engine tests
 clean. No benchmark, by request.
+
+## 6. Measured afterwards, at the maintainer's request
+
+`gb10` and `j5` at ten million rows, ursus alone, one timed run each, under a 3 GB
+scope, at `55fb091`. Beside each, step 134's run, at `c83a400`. CPU is the scope's,
+from the journal.
+
+| query | time | CPU | VmHWM | heap in use | allocated | collections |
+| --- | --: | --: | --: | --: | --: | --: |
+| `gb10`, CSV | 6.6 s (6.8) | 20.1 s (21.7) | 2.75 GB (2.77) | 2.71 GB (2.83) | 14.9 GB (17.5) | 31 (39) |
+| `j5`, CSV | 8.8 s (10.0) | 46.9 s (53.9) | 2.89 GB (2.88) | 2.89 GB (2.83) | 12.0 GB (17.1) | 27 (40) |
+| `gb10`, Parquet | 3.7 s (4.0) | 14.8 s (16.1) | 2.85 GB (2.67) | 2.78 GB (2.82) | 16.4 GB (16.4) | 32 (30) |
+| `j5`, Parquet | 4.4 s (4.4) | 41.1 s (41.6) | 2.89 GB (2.88) | 2.79 GB (2.78) | 17.4 GB (17.4) | 33 (32) |
+
+**Over CSV, both allocate less:**
+
+- `gb10` 2.6 GB less, 15%;
+- `j5` 5.1 GB less, 30%. It reads two ten-million-row files, so twice the columns.
+
+**`j5` over CSV used 13% less CPU,** with a third fewer collections. That is past the
+9% single runs on this machine have wandered by (step 134), though it is still one
+run.
+
+**Over Parquet nothing moved, as it should not:** that reader does not use these
+builders. Its allocations are the same to a tenth of a gigabyte.
+
+**Since step 131,** before steps 133 to 136:
+
+| query | allocated then | now |
+| --- | --: | --: |
+| `gb10`, CSV | 28.0 GB | 14.9 GB |
+| `gb10`, Parquet | 25.6 GB | 16.4 GB |
+| `j5`, CSV | 18.7 GB | 12.0 GB |
+| `j5`, Parquet | 18.5 GB | 17.4 GB |

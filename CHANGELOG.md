@@ -130,6 +130,8 @@ Newest first. The numbers are steps, each with an as-built record in
     each batch's values were allocated twice, once by `append`'s quarter steps.
   - The slice is now kept, as the String builder's buffers always were. A test
     checks an earlier batch is intact after the later ones.
+  - Measured after, under a 3 GB container at ten million rows over CSV, `gb10`
+    allocates 15% less and `j5` 30% less, with 13% less CPU for `j5`.
 - **The memory test's spilling join reads the heap exactly** (135), at each bucket's
   concatenation: 14.3 MB in every run under a 16 MB budget. Its sampled reading, which
   it was bounded on, once read 128 MB in a gate where every package competes for the
