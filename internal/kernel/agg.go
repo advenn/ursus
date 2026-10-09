@@ -57,6 +57,10 @@ type Accumulator interface {
 	// positional fold below adds one group's total to another, silently and with
 	// no length mismatch to catch it. That is the piece parallel aggregation
 	// needs; see physical.hashAggSink.Merge for where the mapping is built.
+	//
+	// A remap may instead be sparse, as SparseRemap builds it: only the groups it
+	// lists are merged. A group-by's partitioned fold merges each worker into
+	// several partitions at once that way, and so Merge only reads other.
 	Merge(other Accumulator, remap []int32) error
 
 	// Finish emits the result, one row per group.
@@ -182,6 +186,13 @@ func mergeCap(remap []int32, n int) int {
 	if remap == nil {
 		return n
 	}
+	if isSparse(remap) {
+		most := 0
+		for j := 2; j < len(remap); j += 2 {
+			most = max(most, int(remap[j])+1)
+		}
+		return most
+	}
 	n = min(n, len(remap))
 	most := 0
 	for _, d := range remap[:n] {
@@ -190,11 +201,36 @@ func mergeCap(remap []int32, n int) int {
 	return most
 }
 
+// sparseMark opens a sparse remap: the pairs after it are a source group and its
+// destination, and no other group of the source is merged. No dense remap can
+// start with it, since a group id is never negative.
+const sparseMark = math.MinInt32
+
+// SparseRemap is a remap that merges only src[j], into dst[j] (Accumulator.Merge).
+// A group-by's partitioned fold merges a worker's groups into each partition this
+// way, at a cost of the groups that go there, where a dense remap of the others'
+// -1s costs every group of the worker for every partition (step 150).
+func SparseRemap(src, dst []int32) []int32 {
+	r := make([]int32, 1, 1+2*len(src))
+	r[0] = sparseMark
+	for j, s := range src {
+		r = append(r, s, dst[j])
+	}
+	return r
+}
+
+func isSparse(remap []int32) bool { return len(remap) > 0 && remap[0] == sparseMark }
+
 // mergeEach calls fn(dst, src) for every source group.
 //
 // n is bounded by len(remap) as well as by the caller's count, because Reserve
 // over-allocates: an accumulator's slices are usually longer than the number of
 // groups actually assigned, and the remap is sized to the latter.
+//
+// A negative entry skips its group. A group-by's partitioned fold merges each
+// worker's accumulators into several partitions' at once, each taking only the
+// groups that hash to it, and reading the worker's state, never writing it
+// (step 150). Every Merge here must keep to both.
 func mergeEach(remap []int32, n int, fn func(dst, src int)) {
 	if remap == nil {
 		for i := range n {
@@ -202,8 +238,18 @@ func mergeEach(remap []int32, n int, fn func(dst, src int)) {
 		}
 		return
 	}
+	if isSparse(remap) {
+		for j := 1; j+1 < len(remap); j += 2 {
+			if src := int(remap[j]); src < n {
+				fn(int(remap[j+1]), src)
+			}
+		}
+		return
+	}
 	for i := range min(n, len(remap)) {
-		fn(int(remap[i]), i)
+		if remap[i] >= 0 {
+			fn(int(remap[i]), i)
+		}
 	}
 }
 
@@ -380,6 +426,19 @@ func (a *nuniqueAcc) Merge(other Accumulator, remap []int32) error {
 		return uerr.Internalf("kernel: cannot merge %T into nuniqueAcc", other)
 	}
 	a.Reserve(mergeCap(remap, len(o.counts)))
+	if isSparse(remap) {
+		// Its lookup is by source group, which a list of pairs is not.
+		dense := make([]int32, len(o.counts))
+		for i := range dense {
+			dense[i] = -1
+		}
+		for j := 1; j+1 < len(remap); j += 2 {
+			if int(remap[j]) < len(dense) {
+				dense[remap[j]] = remap[j+1]
+			}
+		}
+		remap = dense
+	}
 	for id := int32(0); id < int32(o.tab.Len()); id++ {
 		k := o.tab.KeyAt(id)
 		if len(k) < groupPrefixLen {
@@ -387,8 +446,8 @@ func (a *nuniqueAcc) Merge(other Accumulator, remap []int32) error {
 		}
 		dst := takeGroup(k)
 		if remap != nil {
-			if int(dst) >= len(remap) {
-				continue
+			if int(dst) >= len(remap) || remap[dst] < 0 {
+				continue // another partition's group (mergeEach)
 			}
 			dst = remap[dst]
 		}

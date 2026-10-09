@@ -3,8 +3,11 @@ package physical
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"strconv"
+	"sync"
+	"sync/atomic"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
@@ -715,8 +718,262 @@ func aggBreaker(child Operator, newSink SinkFactory, n int) (Operator, error) {
 			h.parallel = true
 		}
 	}
-	return newParallelSink(child, sinks), nil
+	ps := newParallelSink(child, sinks)
+	ps.newSink = newSink
+	return ps, nil
 }
+
+// partitionedFoldMin is how many groups the workers must hold between them for the
+// fold to run partitioned. Below it the serial fold takes milliseconds, and keeps
+// the first-appearance order every small group-by has always come out in.
+const partitionedFoldMin = 1 << 16
+
+// partitionedFolds counts the folds that ran partitioned, for a test to see that
+// one did.
+var partitionedFolds atomic.Int64
+
+// foldPartitioned folds the workers' sinks into as many partitions, all at once,
+// each on its own goroutine (step 150): v0.5 item 2, the radix group-by's stage a.
+//
+// # Why
+//
+// The serial fold, Merge, re-inserts every worker's every key into one table, on
+// one goroutine, after the workers have finished. Over two million groups it was
+// about 0.43 s of a 0.70 s group-by whose consuming took eight cores a quarter of
+// that, and 24% of gb10's allocation (step 132).
+//
+// # How
+//
+// Each worker's groups are routed by the hash its key table stored, so no key is
+// hashed again. The top half of the hash names the partition: the tables index
+// their slots by the low bits, so a partition taken from those would crowd its keys
+// into a fraction of its own table's slots. Each partition then merges its share of
+// every worker, in worker order, into a fresh sink: the keys through
+// GetOrInsertHashed, the key values taken straight from the worker's parts, and the
+// accumulators through Merge with a sparse remap of the partition's groups alone
+// (kernel.SparseRemap). A worker is only read, by every partition at once.
+//
+// # What it gives up
+//
+//   - Order. The answer is partition-major: deterministic for an input and a thread
+//     count, and not first appearance, which an unordered group-by does not promise.
+//     MaintainOrder never runs in parallel.
+//   - Memory. Every worker's state stays until the last partition has merged, and
+//     the partitions grow to about as much again; the serial fold lets each worker
+//     go as it is folded. Under a budget that cannot hold both, it is the serial
+//     fold that runs.
+//
+// It returns a nil Operator, and folds nothing, when it does not apply. The sinks it
+// returns are the partitions', for the driver to close.
+func (s *hashAggSink) foldPartitioned(sinks []Sink, newSink SinkFactory) (Operator, []Sink, error) {
+	ws := make([]*hashAggSink, len(sinks))
+	total, held := 0, int64(0)
+	for i, x := range sinks {
+		w, ok := x.(*hashAggSink)
+		if !ok || w.ordered || w.frozen || len(w.files) > 0 || len(w.keys) == 0 {
+			return nil, nil, nil
+		}
+		ws[i] = w
+		total += w.ids.Len()
+		held += w.mem.Used()
+	}
+	if total < partitionedFoldMin {
+		return nil, nil, nil
+	}
+	if b := s.budget; b != nil && b.Limit() > 0 && b.Used()+held > b.Limit() {
+		return nil, nil, nil
+	}
+
+	nParts := len(ws)
+	parts := make([]*hashAggSink, 0, nParts)
+	var made []Sink
+	for range nParts {
+		x, err := newSink()
+		if err != nil {
+			return nil, made, err
+		}
+		made = append(made, x)
+		h, ok := x.(*hashAggSink)
+		if !ok {
+			return nil, made, uerr.Internalf("physical: a partitioned fold built a %T", x)
+		}
+		parts = append(parts, h)
+	}
+
+	// Route each worker's groups, in id order: routed[w][p] is worker w's share of
+	// partition p.
+	routed := make([][][]int32, len(ws))
+	var wg sync.WaitGroup
+	for w := range ws {
+		wg.Go(func() {
+			r := make([][]int32, nParts)
+			for id := range ws[w].ids.Len() {
+				p := (ws[w].ids.HashAt(int32(id)) >> 32) * uint64(nParts) >> 32
+				r[p] = append(r[p], int32(id))
+			}
+			routed[w] = r
+		})
+	}
+	wg.Wait()
+
+	errs := make([]error, nParts)
+	for p := range parts {
+		wg.Go(func() {
+			errs[p] = uerr.GuardErr("", func() error { return parts[p].mergeShare(ws, routed, p) })
+		})
+	}
+	wg.Wait()
+	if err := errors.Join(errs...); err != nil {
+		return nil, made, err
+	}
+
+	partitionedFolds.Add(1)
+
+	// The workers are folded: their state goes, and their accounts' claim on it.
+	for _, w := range ws {
+		w.mem.Release()
+		w.accBytes = 0
+		w.discard()
+	}
+
+	// One answer per partition, in partition order.
+	runs := make([]*batchRun, 0, nParts)
+	for _, h := range parts {
+		res, err := h.residentResult()
+		if err != nil {
+			return nil, made, err
+		}
+		h.mem.Retain(res)
+		runs = append(runs, &batchRun{b: res, n: h.chunk()})
+	}
+	return &runOperator{schema: s.schema, src: &partsRun{runs: runs}}, made, nil
+}
+
+// mergeShare merges into s, a partition, its share of every worker: Merge, for the
+// groups routed[w][p] of each worker w, in worker order, through a sparse remap.
+func (s *hashAggSink) mergeShare(ws []*hashAggSink, routed [][][]int32, p int) error {
+	n := 0
+	for w := range ws {
+		n += len(routed[w][p])
+	}
+	s.ids.Reserve(n)
+	var (
+		keys     [kernel.ManyChunk][]byte
+		hs       [kernel.ManyChunk]uint64
+		ids      [kernel.ManyChunk]int32
+		inserted [kernel.ManyChunk]bool
+		dst      []int32
+		newRows  []int32
+	)
+	for w, o := range ws {
+		share := routed[w][p]
+		if len(share) == 0 {
+			continue
+		}
+		dst, newRows = dst[:0], newRows[:0]
+		for lo := 0; lo < len(share); lo += kernel.ManyChunk {
+			chunk := share[lo:min(lo+kernel.ManyChunk, len(share))]
+			for j, oid := range chunk {
+				keys[j], hs[j] = o.ids.KeyAt(oid), o.ids.HashAt(oid)
+			}
+			s.ids.GetOrInsertHashed(keys[:len(chunk)], hs[:len(chunk)], ids[:], inserted[:])
+			for j, oid := range chunk {
+				dst = append(dst, ids[j])
+				if inserted[j] {
+					newRows = append(newRows, oid)
+				}
+			}
+		}
+		// Sparse: the worker's other groups are other partitions', and a dense remap
+		// would walk them all, for every partition.
+		rm := kernel.SparseRemap(share, dst)
+		if len(newRows) > 0 {
+			part, err := o.takeKeys(newRows, s.keySchema)
+			if err != nil {
+				return err
+			}
+			s.keyParts = append(s.keyParts, part)
+			s.mem.Retain(part)
+		}
+		for i := range s.accs {
+			if err := s.accs[i].Merge(o.accs[i], rm); err != nil {
+				return err
+			}
+		}
+	}
+	var acc int64
+	for _, a := range s.accs {
+		acc += a.NBytes()
+	}
+	acc += s.ids.NBytes()
+	s.mem.RetainBytes(acc - s.accBytes)
+	s.accBytes = acc
+	return nil
+}
+
+// takeKeys gathers the key values of the groups ids, ascending, from the parts that
+// hold them, named as schema names them: each part holds the groups of one batch,
+// in id order, so a group's part and its row in it follow from the parts' sizes.
+// Unlike Merge it does not concatenate the parts first, so a partitioned fold does
+// not hold every worker's keys twice.
+func (s *hashAggSink) takeKeys(ids []int32, schema *dtype.Schema) (*data.Batch, error) {
+	var pieces []*data.Batch
+	start, i := int32(0), 0
+	for _, part := range s.keyParts {
+		if i == len(ids) {
+			break
+		}
+		end := start + int32(part.Rows())
+		j := i
+		for j < len(ids) && ids[j] < end {
+			j++
+		}
+		if j > i {
+			local := make([]int32, j-i)
+			for k, id := range ids[i:j] {
+				local[k] = id - start
+			}
+			cols := make([]*data.Column, part.NumCols())
+			for c := range cols {
+				taken, err := kernel.Take(part.Column(c), local)
+				if err != nil {
+					return nil, err
+				}
+				cols[c] = taken.Rename(schema.Field(c).Name)
+			}
+			b, err := data.NewBatch(schema, cols)
+			if err != nil {
+				return nil, err
+			}
+			pieces = append(pieces, b)
+		}
+		i, start = j, end
+	}
+	if i != len(ids) {
+		return nil, uerr.Internalf("physical: %d of %d groups have no key part", len(ids)-i, len(ids))
+	}
+	if len(pieces) == 1 {
+		return pieces[0], nil
+	}
+	return kernel.Concat(schema, pieces)
+}
+
+// partsRun serves several answers in order, each cut to its run's batch size.
+type partsRun struct{ runs []*batchRun }
+
+func (r *partsRun) Next() (*data.Batch, error) {
+	for len(r.runs) > 0 {
+		b, err := r.runs[0].Next()
+		if errors.Is(err, io.EOF) {
+			r.runs = r.runs[1:]
+			continue
+		}
+		return b, err
+	}
+	return nil, io.EOF
+}
+
+func (r *partsRun) Close() error { return nil }
 
 // chunk is the output batch size, defaulting when the sink was built by hand.
 func (s *hashAggSink) chunk() int {

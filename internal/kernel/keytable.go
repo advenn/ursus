@@ -198,6 +198,22 @@ func (t *KeyTable) GetOrInsertMany(keys [][]byte, ids []int32, inserted []bool) 
 	}
 }
 
+// GetOrInsertHashed is GetOrInsertMany for keys whose hashes are known: hs[j] is
+// keys[j]'s, as another table's HashAt gives it. A group-by's partitioned fold
+// moves keys between tables with it, and hashes none of them again (step 150).
+func (t *KeyTable) GetOrInsertHashed(keys [][]byte, hs []uint64, ids []int32, inserted []bool) {
+	if t.slots == nil {
+		t.init(initialSlots)
+	}
+	t.touch(hs[:len(keys)])
+	for j, k := range keys {
+		ids[j], inserted[j] = t.getOrInsert(k, hs[j])
+	}
+}
+
+// HashAt is the hash of the key with this id, as the table stored it.
+func (t *KeyTable) HashAt(id int32) uint64 { return t.hashes[id] }
+
 // GetMany is Get for up to ManyChunk keys, with GetOrInsertMany's reason: ids[j] is
 // keys[j]'s id, or -1, and found[j] says which.
 //

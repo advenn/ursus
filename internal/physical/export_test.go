@@ -6,3 +6,6 @@ func CallCacheLen() int {
 	callCache.Range(func(any, any) bool { n++; return true })
 	return n
 }
+
+// PartitionedFolds is how many group-by folds have run partitioned (step 150).
+func PartitionedFolds() int64 { return partitionedFolds.Load() }

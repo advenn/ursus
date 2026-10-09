@@ -56,8 +56,20 @@ type parallelSink struct {
 	child Operator
 	sinks []Sink
 
+	// newSink builds the sinks a partitioned fold merges into, and extra holds them
+	// for Close (step 150). A sink type that does not fold partitioned ignores it.
+	newSink SinkFactory
+	extra   []Sink
+
 	out  Operator
 	done bool
+}
+
+// partitionedFolder is a sink whose workers can be folded several ways at once:
+// hashAggSink.foldPartitioned. A nil Operator means it does not apply, and the
+// serial fold runs.
+type partitionedFolder interface {
+	foldPartitioned(sinks []Sink, newSink SinkFactory) (Operator, []Sink, error)
 }
 
 // errWantSerial is a worker's sink saying it has reached the memory budget and would
@@ -186,6 +198,20 @@ func (p *parallelSink) drain(parent context.Context) error {
 		return err
 	}
 
+	// Many groups fold partitioned, on every worker at once. Not once a worker has
+	// reached the budget: the rest of the input is the merged sink's then.
+	if f, ok := p.sinks[0].(partitionedFolder); ok && p.newSink != nil && !serial.Load() {
+		out, extra, err := f.foldPartitioned(p.sinks, p.newSink)
+		p.extra = extra
+		if err != nil {
+			return err
+		}
+		if out != nil {
+			p.out = out
+			return nil
+		}
+	}
+
 	// Fold in worker order. Which order is immaterial here BY CONSTRUCTION —
 	// aggCanParallelise has already established that the merge is commutative —
 	// but it is fixed rather than arbitrary so that a given input produces a given
@@ -233,6 +259,9 @@ func (p *parallelSink) Close() error {
 		errs = append(errs, p.out.Close())
 	}
 	for _, s := range p.sinks {
+		errs = append(errs, s.Close())
+	}
+	for _, s := range p.extra {
 		errs = append(errs, s.Close())
 	}
 	errs = append(errs, p.child.Close())

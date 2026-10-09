@@ -410,10 +410,14 @@ type GroupBy struct {
 // step 12 a group-by over more distinct keys than the memory limit holds partitions
 // the overflow to disk, and the unordered path then emits partition-major: resident
 // groups first, then partition 0's groups, then partition 1's. The order depends on
-// where the freeze fell, so it depends on the limit.
+// where the freeze fell, so it depends on the limit. Since step 150 a group-by of
+// tens of thousands of groups or more, on several threads, folds its workers'
+// tables partitioned, each partition on its own goroutine, and emits partition-major
+// as well, in an order that depends on the thread count.
 //
-// The CONTENT never does. Every group, every value, identical at every limit. See
-// WithMemoryLimit, which states the same contract from the other side.
+// The CONTENT never does. Every group, every value, identical at every limit and
+// thread count. See WithMemoryLimit, which states the same contract from the other
+// side. MaintainOrder runs serially.
 //
 // Costs nothing when the aggregation fits in memory. When it spills it adds an
 // int64 ordinal to every routed row and materialises the whole result to permute it
