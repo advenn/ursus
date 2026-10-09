@@ -223,10 +223,10 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	// 68 since step 113 added str.to_date, str.to_datetime, str.to_time and
-	// dt.strftime.
-	if classified != 68 {
-		t.Errorf("%d call functions are classified, want 68 — the families and the "+
+	// 74 since step 145 added dt.offset_by, dt.round, dt.month_start, dt.month_end,
+	// dt.is_leap_year and dt.convert_time_zone.
+	if classified != 74 {
+		t.Errorf("%d call functions are classified, want 74 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }

@@ -376,6 +376,28 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 		{label: ",negative", args: []any{int64(0), int64(0), int64(-time.Hour)}},
 	},
 
+	// Round takes truncate's arguments, the fourth saying whether the interval
+	// floors the wall clock; offset_by takes the interval's three numbers.
+	expr.FnDtRound: {
+		{label: ",nanos", args: []any{int64(0), int64(0), int64(time.Hour), int64(0)}},
+		{label: ",wall", args: []any{int64(0), int64(0), int64(time.Hour), int64(1)}},
+		{label: ",calendar", args: []any{int64(1), int64(0), int64(0), int64(1)}},
+		{label: ",zero", args: []any{int64(0), int64(0), int64(0), int64(0)}},
+	},
+	expr.FnDtOffsetBy: {
+		{label: ",nanos", args: []any{int64(0), int64(0), int64(-time.Hour)}},
+		{label: ",days", args: []any{int64(0), int64(2), int64(0)}},
+		{label: ",calendar", args: []any{int64(-1), int64(0), int64(0)}},
+		// Finer than microseconds, and than a day: refused at plan time for both
+		// Datetime(us) and Date.
+		{label: ",sub-tick", args: []any{int64(0), int64(0), int64(1)}},
+	},
+	expr.FnDtConvertTimeZone: {
+		{label: ",tokyo", args: []any{"Asia/Tokyo"}},
+		{label: ",unknown", args: []any{"Mars/Olympus_Mons"}},
+		{label: ",empty", args: []any{""}},
+	},
+
 	expr.FnMathRound: {{args: []any{int64(1)}}},
 
 	// The list and struct families are unreachable against this fixture, which has

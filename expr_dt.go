@@ -116,3 +116,73 @@ func (d DtExpr) ToString() Expr { return d.e.Cast(String) }
 // have is refused while the query is planned: a date from a Time, or an offset or
 // zone name (%z, %Z) from anything but a zoned Datetime.
 func (d DtExpr) Strftime(format string) Expr { return d.call(expr.FnDtStrftime, format) }
+
+// OffsetBy moves each Date or Datetime by an interval, keeping its type: Polars'
+// dt.offset_by.
+//
+//	Col("due").Dt().OffsetBy(Every("1mo"))      // the same day next month, clamped
+//	Col("ts").Dt().OffsetBy(-90 * time.Minute)  // ninety minutes earlier
+//
+// Months and days move the WALL CLOCK in the column's own zone: one day after 09:00
+// is 09:00 the next day across a daylight-saving change, and January 31st plus a
+// month is the last day of February. Nanoseconds, and a time.Duration, move elapsed
+// time. A wall clock the zone skips gives the instant the gap ends; one it repeats,
+// the reading at the input's own offset when that offset holds there.
+//
+// An offset the type cannot hold is refused while the query is planned: an hour on a
+// Date, a nanosecond on Datetime(us). An answer past the type's range is refused
+// when it is computed. A Time has no date to move: add a Duration to it instead.
+func (d DtExpr) OffsetBy[T Span](by T) Expr {
+	iv := span(by)
+	if err := iv.Err(); err != nil {
+		return wrap(&expr.Err{E: err})
+	}
+	return d.call(expr.FnDtOffsetBy, int64(iv.Months()), int64(iv.Days()), iv.Nanos())
+}
+
+// Round rounds a Date or Datetime to the nearer boundary of Truncate's grid, and a
+// value exactly halfway up: Polars' dt.round.
+//
+//	Col("ts").Dt().Round(15 * time.Minute)   // 10:07:30 → 10:15, 10:07:29 → 10:00
+//	Col("ts").Dt().Round(Every("1mo"))       // the nearer first of a month
+//
+// The grid is Truncate's, in both spellings, and nearer is measured in elapsed time:
+// the middle of February 2024 is 2024-02-15T12:00, and the middle of a 23-hour day
+// 11:30 after its start. A Time is refused, because it can round up to 24:00, which
+// it cannot hold.
+func (d DtExpr) Round[T Span](every T) Expr {
+	iv := span(every)
+	if err := iv.Err(); err != nil {
+		return wrap(&expr.Err{E: err})
+	}
+	wall := int64(0)
+	if _, ok := any(every).(Interval); ok {
+		wall = 1
+	}
+	return d.call(expr.FnDtRound, int64(iv.Months()), int64(iv.Days()), iv.Nanos(), wall)
+}
+
+// MonthStart moves a Date or Datetime to the first day of its month, keeping the
+// time of day on its wall clock: Polars' dt.month_start. A Datetime's month is the
+// one in its own zone.
+func (d DtExpr) MonthStart() Expr { return d.call(expr.FnDtMonthStart) }
+
+// MonthEnd moves a Date or Datetime to the last day of its month, keeping the time
+// of day, as MonthStart does: Polars' dt.month_end. February 2024 ends on the 29th.
+func (d DtExpr) MonthEnd() Expr { return d.call(expr.FnDtMonthEnd) }
+
+// IsLeapYear reports whether a Date or Datetime falls in a year of 366 days, the year
+// read in the column's own zone.
+func (d DtExpr) IsLeapYear() Expr { return d.call(expr.FnDtIsLeapYear) }
+
+// ConvertTimeZone reads a zoned Datetime's instants in another zone: the same
+// instants, whose components, Strftime and rendering now follow tz. Polars'
+// dt.convert_time_zone.
+//
+//	Col("ts").Dt().ConvertTimeZone("Asia/Tokyo")   // 09:00 UTC reads as 18:00
+//
+// No value changes, so it costs nothing per row. A naive Datetime names no instant
+// to convert and is refused; if its wall clocks are UTC, cast it to
+// Datetime(unit, "UTC") first. A zone the system does not know is refused while the
+// query is planned.
+func (d DtExpr) ConvertTimeZone(tz string) Expr { return d.call(expr.FnDtConvertTimeZone, tz) }

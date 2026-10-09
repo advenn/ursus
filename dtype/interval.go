@@ -335,15 +335,27 @@ func (i Interval) String() string {
 // one day to January 31st gives February 29th then March 1st in a leap year; the other
 // order gives February 1st then March 1st. Both are defensible; only one can be the
 // answer, and this is the one Arrow, Polars and PostgreSQL all give.
+//
+// # Months and days move the wall clock; nanos move the instant
+//
+// The calendar parts keep the WALL CLOCK, so crossing a daylight-saving boundary
+// moves the instant by 23 or 25 hours and midnight stays midnight — which is what a
+// calendar day means. The date is advanced in UTC, where every day is a day, and read
+// back in t's zone once, by wallTime: where that wall clock is read twice, at t's own
+// offset if it holds there, and where it is never read, at the instant the gap ends.
+//
+// It used AddDate, whose time.Date picks a side of a gap as it likes, and picked the
+// one before: in Santiago, 2024-09-08 began at 01:00, and one day after 2024-09-07
+// 00:00 was 2024-09-07 23:00, the same date (step 145).
 func (i Interval) AddTo(t time.Time) time.Time {
-	if i.months != 0 {
-		t = addMonths(t, int(i.months))
-	}
-	if i.days != 0 {
-		// AddDate, not a nanosecond count. It keeps the WALL CLOCK, so crossing a
-		// daylight-saving boundary moves the instant by 23 or 25 hours and midnight
-		// stays midnight — which is what a calendar day means.
-		t = t.AddDate(0, 0, int(i.days))
+	if i.months != 0 || i.days != 0 {
+		y, m, d := t.Date()
+		if i.months != 0 {
+			y, m, d = addMonths(y, m, d, int(i.months))
+		}
+		hh, mm, ss := t.Clock()
+		wall := time.Date(y, m, d+int(i.days), hh, mm, ss, 0, time.UTC).Unix()
+		t = wallTime(wall, int64(t.Nanosecond()), t.Location(), zoneOffset(t))
 	}
 	if i.nanos != 0 {
 		t = t.Add(time.Duration(i.nanos))
@@ -351,7 +363,7 @@ func (i Interval) AddTo(t time.Time) time.Time {
 	return t
 }
 
-// addMonths advances by whole months, CLAMPING to the end of the target month.
+// addMonths advances a date by whole months, CLAMPING to the end of the target month.
 //
 // This is the one piece that cannot delegate to the standard library. time.Date
 // NORMALISES an out-of-range day — time.Date(2024, 2, 31, …) is March 2nd — so
@@ -361,16 +373,32 @@ func (i Interval) AddTo(t time.Time) time.Time {
 //
 // It is also the single most common bug in date arithmetic, which is why it gets a
 // differential test against a hand-written table rather than against AddDate.
-func addMonths(t time.Time, n int) time.Time {
-	y, m, d := t.Date()
+func addMonths(y int, m time.Month, d, n int) (int, time.Month, int) {
 	total := (y*12 + int(m) - 1) + n
-	ny, nm := floorDiv(total, 12), floorMod(total, 12)+1
-	if last := daysInMonth(ny, time.Month(nm)); d > last {
-		d = last
-	}
-	hh, mm, ss := t.Clock()
-	return time.Date(ny, time.Month(nm), d, hh, mm, ss, t.Nanosecond(), t.Location())
+	ny, nm := floorDiv(total, 12), time.Month(floorMod(total, 12)+1)
+	return ny, nm, min(d, daysInMonth(ny, nm))
 }
+
+// MonthStart is t on the first day of its month, at the same time of day on the
+// wall clock of t's own zone, as Polars' dt.month_start keeps it. The wall clock is
+// read back as AddTo reads it.
+func MonthStart(t time.Time) time.Time {
+	return onDay(t, func(int, time.Month) int { return 1 })
+}
+
+// MonthEnd is t on the last day of its month, as MonthStart is on the first.
+func MonthEnd(t time.Time) time.Time { return onDay(t, daysInMonth) }
+
+func onDay(t time.Time, day func(int, time.Month) int) time.Time {
+	y, m, _ := t.Date()
+	hh, mm, ss := t.Clock()
+	wall := time.Date(y, m, day(y, m), hh, mm, ss, 0, time.UTC).Unix()
+	return wallTime(wall, int64(t.Nanosecond()), t.Location(), zoneOffset(t))
+}
+
+// IsLeapYear reports whether year y of the proleptic Gregorian calendar has 366
+// days, asking the standard library, which owns the calendar.
+func IsLeapYear(y int) bool { return time.Date(y, 12, 31, 0, 0, 0, 0, time.UTC).YearDay() == 366 }
 
 // daysInMonth is the length of a month, leap years included.
 //
@@ -401,6 +429,14 @@ func floorDiv(a, b int) int {
 	return q
 }
 
+func floorDiv64(a, b int64) int64 {
+	q := a / b
+	if a%b != 0 && (a < 0) != (b < 0) {
+		q--
+	}
+	return q
+}
+
 func floorMod(a, b int) int {
 	r := a % b
 	if r != 0 && (r < 0) != (b < 0) {
@@ -420,13 +456,12 @@ func floorMod(a, b int) int {
 // grid said 10:30. Dt().Truncate given a time.Duration floors the absolute instant
 // instead, because a Duration IS absolute, and never reaches here.
 //
-// A sub-day floor maps the floored wall clock back at t's own offset when that
-// offset still holds there, so in a fall-back fold the second 01:30 floors to the
-// second 01:00. Otherwise a transition lies between them, and the offset in force
-// at the floored wall clock is used; and when no offset makes it a real wall clock
-// — it fell into a spring-forward gap — the answer is the instant the gap ends.
-// All three are Polars' answers. time.Date is not used to decide: in a gap it may
-// pick either side, and picked the one before the gap, 01:00 for 02:00.
+// The floored wall clock is read back by wallTime, at every size: at t's own offset
+// when that offset still holds there, so in a fall-back fold the second 01:30
+// floors to the second 01:00; otherwise at the offset in force; and when no offset
+// makes it a real wall clock — it fell into a spring-forward gap — at the instant
+// the gap ends. Days and months were read back by time.Date until step 145, and a
+// day that began at 01:00 began, by it, at 23:00 the day before.
 //
 // # Mixed intervals are refused by the caller
 //
@@ -435,13 +470,53 @@ func floorMod(a, b int) int {
 // one component. GroupByDynamic rejects the rest; this function uses the coarsest
 // component present so it is total rather than panicking on input it cannot get.
 func (i Interval) TruncateTo(t time.Time) time.Time {
+	ws, ns := i.floorWall(t)
+	return wallTime(ws, ns, t.Location(), zoneOffset(t))
+}
+
+// RoundTo rounds t to the nearer end of the window that holds it, on TruncateTo's
+// grid, and a t exactly halfway to the later end, as Polars' dt.round does. The
+// interval must be positive.
+//
+// # Nearer is in elapsed time
+//
+// A sub-day grid rounds t plus half the interval down, so the later end is the next
+// boundary t's clock reaches: across a fall-back fold, where the wall clock goes
+// back, 01:30 EDT rounds by the hour to 01:00 EST, half an hour later, as Polars
+// rounds it. A boundary taken from the wall clock would have been 02:00 EST, two
+// hours after the window's start.
+//
+// A day or a month has no fixed half, so its window's two ends are found on the
+// calendar and t compared with each: on a 23-hour day the middle is 11:30 after the
+// start, and 2024-02-15T12:00 is past February's middle and rounds to March.
+func (i Interval) RoundTo(t time.Time) time.Time {
+	if !i.IsCalendar() {
+		return i.TruncateTo(t.Add(time.Duration(i.nanos / 2)))
+	}
+	ws, ns := i.floorWall(t)
+	loc, off := t.Location(), zoneOffset(t)
+	start := wallTime(ws, ns, loc, off)
+	end := wallTime(i.nextWall(ws), 0, loc, off)
+	// (t - start) - (end - t), in seconds and nanoseconds rather than as a Duration,
+	// which a window of three centuries leaves.
+	s := (t.Unix() - start.Unix()) - (end.Unix() - t.Unix())
+	n := int64(t.Nanosecond()-start.Nanosecond()) - int64(end.Nanosecond()-t.Nanosecond())
+	if s+floorDiv64(n, int64(time.Second)) >= 0 {
+		return end
+	}
+	return start
+}
+
+// floorWall is the start of the window holding t, as a wall clock: seconds and
+// nanoseconds since the epoch, read as if it were UTC.
+func (i Interval) floorWall(t time.Time) (int64, int64) {
 	switch {
 	case i.months != 0:
 		y, m, _ := t.Date()
 		total := y*12 + int(m) - 1
 		start := int(i.months) * floorDiv(total, int(i.months))
 		return time.Date(floorDiv(start, 12), time.Month(floorMod(start, 12)+1), 1,
-			0, 0, 0, 0, t.Location())
+			0, 0, 0, 0, time.UTC).Unix(), 0
 
 	case i.days != 0:
 		// The day NUMBER is computed on the calendar, in UTC, and only then read back
@@ -452,8 +527,7 @@ func (i Interval) TruncateTo(t time.Time) time.Time {
 		y, m, d := t.Date()
 		day := int(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix() / secondsPerDay)
 		start := int(i.days) * floorDiv(day, int(i.days))
-		sy, sm, sd := time.Unix(int64(start)*secondsPerDay, 0).UTC().Date()
-		return time.Date(sy, sm, sd, 0, 0, 0, 0, t.Location())
+		return int64(start) * secondsPerDay, 0
 
 	default:
 		// The wall clock, as seconds since the epoch read as if it were UTC. It used
@@ -461,28 +535,54 @@ func (i Interval) TruncateTo(t time.Time) time.Time {
 		// of the interval was off the local grid, and through UnixNano, which is
 		// undefined outside 1678–2262.
 		_, off := t.Zone()
-		fs, fn := floorUnix(t.Unix()+int64(off), int64(t.Nanosecond()), i.nanos)
-		at := func(o int) (time.Time, bool) {
-			u := time.Unix(fs-int64(o), fn).In(t.Location())
-			return u, zoneOffset(u) == o
-		}
-		first, ok := at(off)
-		if ok {
-			return first
-		}
-		second, ok := at(zoneOffset(first))
-		if ok {
-			return second
-		}
-		// A gap: the wall clock is real under neither offset. It ends where the
-		// zone in force at the later of the two candidates begins.
-		later := first
-		if second.After(first) {
-			later = second
-		}
-		start, _ := later.ZoneBounds()
-		return start
+		return floorUnix(t.Unix()+int64(off), int64(t.Nanosecond()), i.nanos)
 	}
+}
+
+// nextWall is the start of the window after the one starting at the wall clock ws,
+// for a grid of months or days, ws being floorWall's answer.
+func (i Interval) nextWall(ws int64) int64 {
+	if i.months == 0 {
+		return ws + int64(i.days)*secondsPerDay
+	}
+	y, m, _ := time.Unix(ws, 0).UTC().Date()
+	y, m, _ = addMonths(y, m, 1, int(i.months))
+	return time.Date(y, m, 1, 0, 0, 0, 0, time.UTC).Unix()
+}
+
+// wallTime is the instant at which loc's wall clock reads ws seconds and ns
+// nanoseconds past the epoch, read as if it were UTC.
+//
+// A wall clock is read at two instants in a fall-back fold, and at none in a
+// spring-forward gap. In a fold the answer is the one at the offset prefer — the
+// input's own, so the second 01:30 floors to the second 01:00 — when that offset
+// holds there, and otherwise the one at the offset in force. In a gap it is the
+// instant the gap ends. All three are Polars' answers.
+//
+// time.Date is not used to decide: in a gap it may pick either side, and picked the
+// one before, 01:00 for 02:00. Where a day began at 01:00 — Santiago's 2024-09-08,
+// Havana's 2024-03-10 — that put the start of the day at 23:00 the day before.
+func wallTime(ws, ns int64, loc *time.Location, prefer int) time.Time {
+	at := func(o int) (time.Time, bool) {
+		u := time.Unix(ws-int64(o), ns).In(loc)
+		return u, zoneOffset(u) == o
+	}
+	first, ok := at(prefer)
+	if ok {
+		return first
+	}
+	second, ok := at(zoneOffset(first))
+	if ok {
+		return second
+	}
+	// A gap: the wall clock is real under neither offset. It ends where the zone in
+	// force at the later of the two candidates begins.
+	later := first
+	if second.After(first) {
+		later = second
+	}
+	start, _ := later.ZoneBounds()
+	return start
 }
 
 func zoneOffset(t time.Time) int {

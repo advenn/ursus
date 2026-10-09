@@ -3,6 +3,7 @@ package expr
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/uerr"
@@ -86,6 +87,14 @@ const (
 	FnDtTotalMinutes
 	FnDtTotalSeconds
 	FnDtStrftime // formats with a strftime-style format; the one arg is the format
+	// The calendar (step 145). offset_by's args are an interval's months, days and
+	// nanos; round's are truncate's; convert_time_zone's one arg is the zone.
+	FnDtOffsetBy
+	FnDtRound
+	FnDtMonthStart
+	FnDtMonthEnd
+	FnDtIsLeapYear
+	FnDtConvertTimeZone
 	fnDtEnd
 
 	// --- type-agnostic ---
@@ -190,7 +199,9 @@ var callNames = map[CallFn]string{
 	FnDtWeek: "dt.week", FnDtEpoch: "dt.epoch", FnDtTruncate: "dt.truncate",
 	FnDtTotalDays: "dt.total_days", FnDtTotalHours: "dt.total_hours",
 	FnDtTotalMinutes: "dt.total_minutes", FnDtTotalSeconds: "dt.total_seconds",
-	FnDtStrftime: "dt.strftime",
+	FnDtStrftime: "dt.strftime", FnDtOffsetBy: "dt.offset_by", FnDtRound: "dt.round",
+	FnDtMonthStart: "dt.month_start", FnDtMonthEnd: "dt.month_end",
+	FnDtIsLeapYear: "dt.is_leap_year", FnDtConvertTimeZone: "dt.convert_time_zone",
 
 	FnIsIn: "is_in",
 
@@ -469,12 +480,40 @@ func dtCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		}
 		return dtype.Int64, nil
 
-	case FnDtTruncate:
+	case FnDtTruncate, FnDtRound:
 		if !isInstant {
 			return dtype.Null, uerr.New(uerr.KindType, "dt",
 				"%s requires a Date, Time or Datetime operand, got %s", fn, in)
 		}
 		return truncateOut(c, in)
+
+	case FnDtOffsetBy, FnDtMonthStart, FnDtMonthEnd, FnDtIsLeapYear:
+		// A Time has no date to move or to read a year from.
+		if in.ID() != dtype.TypeDate && in.ID() != dtype.TypeDatetime {
+			e := uerr.New(uerr.KindType, "dt", "%s requires a Date or Datetime operand, got %s", fn, in)
+			if fn == FnDtOffsetBy && (isDur || in.ID() == dtype.TypeTime) {
+				e.Hint("add a Duration with Add instead")
+			}
+			return dtype.Null, e
+		}
+		switch fn {
+		case FnDtIsLeapYear:
+			return dtype.Bool, nil
+		case FnDtOffsetBy:
+			args, err := CallArgs(c)
+			if err != nil {
+				return dtype.Null, err
+			}
+			iv := dtype.IntervalOf(
+				int32(callLitInt(args, 0)), int32(callLitInt(args, 1)), callLitInt(args, 2))
+			if err := OffsetRefusal(iv, in); err != nil {
+				return dtype.Null, err
+			}
+		}
+		return in, nil
+
+	case FnDtConvertTimeZone:
+		return convertZoneOut(c, in)
 
 	case FnDtStrftime:
 		if !isInstant {
@@ -508,17 +547,16 @@ func dtCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 	}
 }
 
-// truncateOut types dt.truncate, the one temporal call whose answer depends on its
-// argument rather than only on its receiver.
+// truncateOut types dt.truncate and dt.round, whose refusals depend on their
+// argument rather than only on their receiver.
 //
-// # It reproduces the kernel's rule, it does not paraphrase it
+// # It asks the kernel's rule, it does not paraphrase it
 //
 // The interval is rebuilt with dtype.IntervalOf exactly as truncateTemporal does, and
-// both refusals are the kernel's own — the same predicates, the same messages, the
-// same hints. A plan-time check that drifted from the kernel would be worse than no
-// check at all, which is the Binding lesson one file over, so
-// TestTruncateRefusalsAgree in internal/kernel pins the two together rather than
-// trusting them to stay aligned.
+// the refusal is GridRefusal, which the kernel asks too. A plan-time check that
+// drifted from the kernel would be worse than no check at all, which is the Binding
+// lesson one file over. Until step 145 the two were copies, held together by
+// TestTruncateRefusalsAgree in internal/kernel, which still runs.
 //
 // A missing argument reads as zero, which the first refusal then catches — the same
 // answer the kernel's argInt gives, and a truncate node with no interval is not a
@@ -531,33 +569,110 @@ func truncateOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 	iv := dtype.IntervalOf(
 		int32(callLitInt(args, 0)), int32(callLitInt(args, 1)), callLitInt(args, 2))
 
-	// Reachable from the public API, which is why it is worth moving. dtype.FromDuration
-	// does no validation, so `Truncate(time.Duration(0))` and `Truncate(-time.Hour)`
-	// carry no error out of DtExpr.Truncate's iv.Err() check — they planned, rendered
-	// in Explain, and failed at Collect.
-	// Before the range check, because an interval that failed to BUILD renders as
-	// <invalid> and the message below would then say nothing useful. Ordering is
-	// the whole of it: after, this would be unreachable, since a refused interval
-	// is zero-valued and IsZero fires first.
-	if err := iv.Err(); err != nil {
+	if err := GridRefusal(c.Fn, iv, in); err != nil {
 		return dtype.Null, err
 	}
-	if iv.IsZero() || iv.Negative() {
-		return dtype.Null, uerr.New(uerr.KindValue, "dt",
-			"truncate needs a positive interval, got %s", iv).
-			Hint(`pass a time.Duration or an interval, e.g. .Dt().Truncate(time.Hour) ` +
-				`or .Dt().Truncate(ursus.Every("1mo"))`)
+	return in, nil
+}
+
+// GridRefusal is dt.truncate's and dt.round's refusal of their interval, for a
+// receiver of type in. truncateOut asks it at plan time and the kernel at run time,
+// which kernel.DtCall's callers reach without resolving, so the two give one answer
+// (TestTruncateRefusalsAgree).
+func GridRefusal(fn CallFn, iv dtype.Interval, in dtype.DataType) error {
+	verb, method := "truncate", "Truncate"
+	if fn == FnDtRound {
+		verb, method = "round", "Round"
 	}
-	// A Time is a wall clock with no date. The kernel routes on IsCalendar() and
-	// refuses this pair; a sub-day interval on the same column is fine, which is
-	// exactly why the receiver's type alone could never decide it.
-	if iv.IsCalendar() && in.ID() == dtype.TypeTime {
-		return dtype.Null, uerr.New(uerr.KindType, "dt",
+	// Reachable from the public API, which is why it is checked at plan time.
+	// dtype.FromDuration does no validation, so `Truncate(time.Duration(0))` and
+	// `Truncate(-time.Hour)` carry no error out of DtExpr.Truncate's iv.Err() check —
+	// they planned, rendered in Explain, and failed at Collect.
+	//
+	// Err() is checked first, because an interval that failed to BUILD renders as
+	// <invalid> and the message below would then say nothing useful. Ordering is the
+	// whole of it: after, this would be unreachable, since a refused interval is
+	// zero-valued and IsZero fires first.
+	if err := iv.Err(); err != nil {
+		return err
+	}
+	if iv.IsZero() || iv.Negative() {
+		return uerr.New(uerr.KindValue, "dt",
+			"%s needs a positive interval, got %s", verb, iv).
+			Hint(`pass a time.Duration or an interval, e.g. .Dt().%s(time.Hour) `+
+				`or .Dt().%s(ursus.Every("1mo"))`, method, method)
+	}
+	if in.ID() != dtype.TypeTime {
+		return nil
+	}
+	// A Time rounded up from 23:59 to the hour is 24:00, which a Time cannot hold, and
+	// wrapping it to 00:00 would put it before the value it rounds.
+	if fn == FnDtRound {
+		return uerr.New(uerr.KindType, "dt", "round is not defined for %s", in).
+			Hint("a Time can round up to 24:00, which it cannot hold").
+			Hint("use Truncate, or cast to Datetime first")
+	}
+	// A Time is a wall clock with no date. A sub-day interval on the same column is
+	// fine, which is exactly why the receiver's type alone could never decide it.
+	if iv.IsCalendar() {
+		return uerr.New(uerr.KindType, "dt",
 			"truncate by %s is not defined for %s", iv, in).
 			Hint("a Time has no date, so it cannot be floored to a day or a month").
 			Hint("use a sub-day interval, or cast to Datetime first")
 	}
-	return in, nil
+	return nil
+}
+
+// OffsetRefusal is dt.offset_by's refusal of its interval, for a Date or Datetime of
+// type in, asked at plan time and by the kernel as GridRefusal is.
+//
+// The answer has the receiver's type, so an offset it cannot hold is refused rather
+// than rounded: an hour is no number of days, and a nanosecond no number of
+// microseconds.
+func OffsetRefusal(iv dtype.Interval, in dtype.DataType) error {
+	if err := iv.Err(); err != nil {
+		return err
+	}
+	npt, ok := in.NanosPerTick()
+	if !ok {
+		return uerr.Internalf("dt: offset_by on %s", in)
+	}
+	if iv.Nanos()%npt == 0 {
+		return nil
+	}
+	e := uerr.New(uerr.KindType, "dt", "offset_by %s is finer than %s holds", iv, in)
+	if in.ID() == dtype.TypeDate {
+		return e.Hint("a Date moves by whole days; cast it to a Datetime first")
+	}
+	return e.Hint("cast it to a finer unit first, e.g. .Cast(ursus.Datetime(ursus.Nano, zone))")
+}
+
+// convertZoneOut types dt.convert_time_zone: the same instants, labelled with another
+// zone, so their wall clocks are read there. A naive Datetime is a wall clock in no
+// zone and names no instant, so it is refused, as Polars refuses it.
+func convertZoneOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
+	if in.ID() != dtype.TypeDatetime {
+		return dtype.Null, uerr.New(uerr.KindType, "dt",
+			"%s requires a Datetime operand, got %s", c.Fn, in)
+	}
+	if in.TimeZone() == "" {
+		return dtype.Null, uerr.New(uerr.KindType, "dt",
+			"%s requires a Datetime with a time zone, got %s", c.Fn, in).
+			Hint("a naive Datetime names no instant to convert; if its wall clocks " +
+				"are UTC, cast it first: .Cast(ursus.Datetime(unit, \"UTC\"))")
+	}
+	tz, ok := callLitString(c, 1)
+	if !ok || tz == "" {
+		return dtype.Null, uerr.New(uerr.KindValue, "dt",
+			"%s needs a time zone, such as \"Europe/London\"", c.Fn)
+	}
+	if tz != "UTC" {
+		if _, err := time.LoadLocation(tz); err != nil {
+			return dtype.Null, uerr.New(uerr.KindValue, "dt",
+				"the time zone %q is not known: %v", tz, err)
+		}
+	}
+	return dtype.Datetime(in.TimeUnit(), tz), nil
 }
 
 func callLitInt(args []any, i int) int64 {

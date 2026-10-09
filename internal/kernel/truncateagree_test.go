@@ -87,43 +87,47 @@ func TestTruncateRefusalsAgree(t *testing.T) {
 	}
 
 	var refusals, accepts int
-	for _, r := range receivers {
-		for _, iv := range intervals {
-			label := "truncate(" + r.label + ", " + iv.label + ")"
+	// dt.round (step 145) shares truncate's arguments and its refusal, and refuses a
+	// Time besides.
+	for _, fn := range []expr.CallFn{expr.FnDtTruncate, expr.FnDtRound} {
+		for _, r := range receivers {
+			for _, iv := range intervals {
+				label := fn.String() + "(" + r.label + ", " + iv.label + ")"
 
-			args := []expr.Node{&expr.Col{Name: "c"}}
-			for _, a := range iv.args {
-				args = append(args, &expr.Lit{Value: a, DT: dtype.Int64})
-			}
-			out, rerr := expr.ResolveCall(&expr.Call{Fn: expr.FnDtTruncate, Args: args}, r.dt)
-
-			// The kernel is handed the type the OLD resolver would have promised, so
-			// a refusal that moved to plan time is still visible here rather than
-			// disappearing behind a resolve error.
-			_, kerr := kernel.DtCall(expr.FnDtTruncate, "c", r.dt, r.col(r.dt), iv.args)
-
-			switch {
-			case rerr != nil && kerr != nil:
-				refusals++
-				// Same kind, not merely both non-nil. errors.Is walks the cause
-				// chain and would call a KindValue and a KindType the same thing.
-				var re, ke *uerr.Error
-				if errors.As(rerr, &re) && errors.As(kerr, &ke) && re.Kind != ke.Kind {
-					t.Errorf("%s: plan time says %v, the kernel says %v — the same "+
-						"refusal reported as two different kinds", label, re.Kind, ke.Kind)
+				args := []expr.Node{&expr.Col{Name: "c"}}
+				for _, a := range iv.args {
+					args = append(args, &expr.Lit{Value: a, DT: dtype.Int64})
 				}
-			case rerr == nil && kerr == nil:
-				accepts++
-				if out != r.dt {
-					t.Errorf("%s: resolved to %s, want the receiver's own type %s",
-						label, out, r.dt)
+				out, rerr := expr.ResolveCall(&expr.Call{Fn: fn, Args: args}, r.dt)
+
+				// The kernel is handed the type the OLD resolver would have promised, so
+				// a refusal that moved to plan time is still visible here rather than
+				// disappearing behind a resolve error.
+				_, kerr := kernel.DtCall(fn, "c", r.dt, r.col(r.dt), iv.args)
+
+				switch {
+				case rerr != nil && kerr != nil:
+					refusals++
+					// Same kind, not merely both non-nil. errors.Is walks the cause
+					// chain and would call a KindValue and a KindType the same thing.
+					var re, ke *uerr.Error
+					if errors.As(rerr, &re) && errors.As(kerr, &ke) && re.Kind != ke.Kind {
+						t.Errorf("%s: plan time says %v, the kernel says %v — the same "+
+							"refusal reported as two different kinds", label, re.Kind, ke.Kind)
+					}
+				case rerr == nil && kerr == nil:
+					accepts++
+					if out != r.dt {
+						t.Errorf("%s: resolved to %s, want the receiver's own type %s",
+							label, out, r.dt)
+					}
+				case rerr != nil:
+					t.Errorf("%s: refused at plan time (%v) but the kernel runs it — the "+
+						"planner rejects a query the engine can answer", label, rerr)
+				default:
+					t.Errorf("%s: resolved to %s and the kernel refused: %v — Explain "+
+						"would print a plan that cannot run", label, out, kerr)
 				}
-			case rerr != nil:
-				t.Errorf("%s: refused at plan time (%v) but the kernel runs it — the "+
-					"planner rejects a query the engine can answer", label, rerr)
-			default:
-				t.Errorf("%s: resolved to %s and the kernel refused: %v — Explain "+
-					"would print a plan that cannot run", label, out, kerr)
 			}
 		}
 	}
@@ -132,7 +136,7 @@ func TestTruncateRefusalsAgree(t *testing.T) {
 	// that only asserts agreement, and each would be a different disaster.
 	if refusals < 10 {
 		t.Errorf("only %d refusals across %d combinations; the pair is agreeing by "+
-			"accepting everything", refusals, len(receivers)*len(intervals))
+			"accepting everything", refusals, 2*len(receivers)*len(intervals))
 	}
 	if accepts < 10 {
 		t.Errorf("only %d accepts; the pair is agreeing by refusing everything", accepts)

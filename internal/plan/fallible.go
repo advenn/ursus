@@ -30,7 +30,8 @@ import (
 //   - a strict Cast that is not total (totalCast);
 //   - a udf, which is the caller's code;
 //   - arithmetic with a temporal operand, which refuses an overflow;
-//   - dt.truncate and dt.epoch, which refuse an instant the type cannot hold.
+//   - dt.truncate, dt.round, dt.epoch, dt.offset_by, dt.month_start and
+//     dt.month_end, which refuse an instant the type cannot hold.
 //
 // An expression this cannot type is treated as fallible.
 func fallible(p expr.Node, in *dtype.Schema) bool {
@@ -55,7 +56,11 @@ func fallible(p expr.Node, in *dtype.Schema) bool {
 			rf, rerr := t.R.Field(in)
 			found = lerr != nil || rerr != nil || lf.Type.IsTemporal() || rf.Type.IsTemporal()
 		case *expr.Call:
-			found = t.Fn == expr.FnDtTruncate || t.Fn == expr.FnDtEpoch
+			switch t.Fn {
+			case expr.FnDtTruncate, expr.FnDtEpoch, expr.FnDtRound, expr.FnDtOffsetBy,
+				expr.FnDtMonthStart, expr.FnDtMonthEnd:
+				found = true
+			}
 		}
 		return !found
 	})

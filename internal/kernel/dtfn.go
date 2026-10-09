@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"math"
 	"time"
 
 	"github.com/advenn/ursus/dtype"
@@ -34,8 +35,11 @@ import (
 func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 	c *data.Column, args []any) (*data.Column, error) {
 
-	if fn == expr.FnDtStrftime {
+	switch fn {
+	case expr.FnDtStrftime:
 		return strftimeCall(name, c, args)
+	case expr.FnDtConvertTimeZone:
+		return convertTimeZone(name, out, c)
 	}
 
 	dt := c.DType()
@@ -113,13 +117,50 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 		return data.NewFixed(name, out, vals, valid), nil
 	}
 
-	if fn == expr.FnDtTruncate {
-		return truncateTemporal(name, out, dt, ticks, valid, args)
+	switch fn {
+	case expr.FnDtTruncate, expr.FnDtRound:
+		return truncateTemporal(fn, name, out, dt, ticks, valid, args)
+	case expr.FnDtOffsetBy:
+		return offsetBy(name, out, dt, ticks, valid, args)
+	case expr.FnDtMonthStart, expr.FnDtMonthEnd:
+		move := dtype.MonthStart
+		if fn == expr.FnDtMonthEnd {
+			move = dtype.MonthEnd
+		}
+		// Each moves by less than a month, but the first of 1677-09 is before
+		// Datetime(ns) begins, and the end of 2262-04 after it.
+		return eachInstant(fn, name, out, dt, ticks, valid, move, func(t int64) error {
+			return uerr.New(uerr.KindValue, "dt",
+				"%s of %s is outside the range of %s", fn, dtype.FormatTemporal(dt, t), dt).
+				Hint(widerUnitHint)
+		})
+	}
+
+	loc := locationOf(dt)
+	if fn == expr.FnDtIsLeapYear {
+		if !isDateLike(dt) {
+			return nil, uerr.Internalf("kernel: %s on %s", fn, dt)
+		}
+		bits := bitmap.NewBuilder(n)
+		for i, t := range ticks {
+			leap := false
+			if valid.Get(i) {
+				tm, ok := dt.ToTime(t)
+				if !ok {
+					return nil, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
+				}
+				if loc != nil {
+					tm = tm.In(loc)
+				}
+				leap = dtype.IsLeapYear(tm.Year())
+			}
+			bits.Append(leap)
+		}
+		return data.NewBool(name, bits.Finish(), valid), nil
 	}
 
 	// Calendar components.
 	vals := make([]int32, n)
-	loc := locationOf(dt)
 	for i, t := range ticks {
 		if !valid.Get(i) {
 			continue
@@ -153,7 +194,7 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 // `group_by 1 day` would land in the wrong bucket, by a whole day, for the hours
 // between local midnight and UTC midnight. That is the difference between
 // Every("1d") and a 24-hour Duration, and it is why they are different types.
-func truncateCalendar(name string, out, dt dtype.DataType, ticks []int64,
+func truncateCalendar(fn expr.CallFn, name string, out, dt dtype.DataType, ticks []int64,
 	valid bitmap.View, iv dtype.Interval,
 ) (*data.Column, error) {
 
@@ -180,13 +221,20 @@ func truncateCalendar(name string, out, dt dtype.DataType, ticks []int64,
 		if loc != nil {
 			tm = tm.In(loc)
 		}
-		v, ok := dt.FromTime(iv.TruncateTo(tm))
+		var at time.Time
+		if fn == expr.FnDtRound {
+			at = iv.RoundTo(tm)
+		} else {
+			at = iv.TruncateTo(tm)
+		}
+		v, ok := fromTime(dt, at)
 		if !ok {
 			// A floor only moves back, so near the earliest instant the type holds
 			// it can leave the type: 1677-09-21 floored to the month is 1677-09-01,
-			// before Datetime(ns) begins. Data reaches this, so it is the data's
-			// error, not an internal one.
-			return nil, truncateRange(dt, iv, t)
+			// before Datetime(ns) begins; and a round can move forward past the
+			// latest. Data reaches this, so it is the data's error, not an internal
+			// one.
+			return nil, gridRange(fn, dt, iv, t)
 		}
 		res[i] = v
 	}
@@ -263,33 +311,26 @@ func durationDivisor(fn expr.CallFn) (int64, bool) {
 	}
 }
 
-// truncateTemporal floors an instant to a multiple of a duration.
+// truncateTemporal floors an instant to a multiple of a duration, or rounds it to
+// the nearer multiple, halfway up, for dt.round.
 //
 // The floor is toward negative infinity, so truncating an instant before the epoch
 // moves it backwards like every other instant rather than jumping forward — the
 // same asymmetry the rescale path avoids, for the same reason.
-func truncateTemporal(name string, out, dt dtype.DataType, ticks []int64,
+func truncateTemporal(fn expr.CallFn, name string, out, dt dtype.DataType, ticks []int64,
 	valid bitmap.View, args []any) (*data.Column, error) {
 
 	mo, _ := argInt(args, 0)
 	dd, _ := argInt(args, 1)
 	ns, _ := argInt(args, 2)
 	iv := dtype.IntervalOf(int32(mo), int32(dd), ns)
-	// Ahead of the range check, for the reason expr's truncateOut gives: a refused
-	// interval is zero-valued, so IsZero would fire first and the message would
-	// lose why. TestTruncateRefusalsAgree holds the two in step.
-	if err := iv.Err(); err != nil {
+	// The plan-time rule, asked again: DtCall is reachable without resolving.
+	if err := expr.GridRefusal(fn, iv, dt); err != nil {
 		return nil, err
-	}
-	if iv.IsZero() || iv.Negative() {
-		return nil, uerr.New(uerr.KindValue, "dt",
-			"truncate needs a positive interval, got %s", iv).
-			Hint(`pass a time.Duration or an interval, e.g. .Dt().Truncate(time.Hour) ` +
-				`or .Dt().Truncate(ursus.Every("1mo"))`)
 	}
 	npt, has := dt.NanosPerTick()
 	if !has {
-		return nil, uerr.Internalf("kernel: truncate on %s", dt)
+		return nil, uerr.Internalf("kernel: %s on %s", fn, dt)
 	}
 
 	// An Interval floors the column's wall clock, sub-day included, so it takes the
@@ -297,7 +338,7 @@ func truncateTemporal(name string, out, dt dtype.DataType, ticks []int64,
 	// the absolute instant below. Without a zone the two grids are one, and the
 	// tick arithmetic below is the faster way to it.
 	if wall, _ := argInt(args, 3); iv.IsCalendar() || (wall == 1 && locationOf(dt) != nil) {
-		return truncateCalendar(name, out, dt, ticks, valid, iv)
+		return truncateCalendar(fn, name, out, dt, ticks, valid, iv)
 	}
 	every := iv.Nanos()
 	step := every / npt
@@ -321,19 +362,138 @@ func truncateTemporal(name string, out, dt dtype.DataType, ticks []int64,
 		// it, and q*step wrapped: 1677-09-21T00:12:43 floored to the hour at
 		// Datetime(ns) came back in 2262.
 		if overflowsI64(expr.OpMul, q, step) {
-			return nil, truncateRange(dt, iv, t)
+			return nil, gridRange(fn, dt, iv, t)
 		}
-		res[i] = q * step
+		v := q * step
+		// Halfway rounds up, as Polars does: t-v is in [0, step), so neither side of
+		// the comparison can overflow, and only the move to the next one can.
+		if r := t - v; fn == expr.FnDtRound && r >= step-r {
+			if overflowsI64(expr.OpAdd, v, step) {
+				return nil, gridRange(fn, dt, iv, t)
+			}
+			v += step
+		}
+		if !fitsTicks(dt, v) {
+			return nil, gridRange(fn, dt, iv, t)
+		}
+		res[i] = v
 	}
 	return packTicks(name, out, res, valid), nil
 }
 
-// truncateRange refuses a floor the column's type cannot hold. Polars wraps it.
-func truncateRange(dt dtype.DataType, iv dtype.Interval, t int64) error {
+// gridRange refuses a floor or a round the column's type cannot hold. Polars wraps
+// it.
+func gridRange(fn expr.CallFn, dt dtype.DataType, iv dtype.Interval, t int64) error {
+	verb := "truncate"
+	if fn == expr.FnDtRound {
+		verb = "round"
+	}
 	return uerr.New(uerr.KindValue, "dt",
-		"truncate of %s by %s is before the earliest %s", dtype.FormatTemporal(dt, t), iv, dt).
-		Hint("a coarser unit holds earlier instants: cast first, e.g. " +
-			".Cast(ursus.Datetime(ursus.Micro, \"\"))")
+		"%s of %s by %s is outside the range of %s", verb, dtype.FormatTemporal(dt, t), iv, dt).
+		Hint(widerUnitHint)
+}
+
+const widerUnitHint = "a coarser unit holds a wider range: cast first, e.g. " +
+	".Cast(ursus.Datetime(ursus.Micro, \"\"))"
+
+// fromTime is dt.FromTime, refusing a Date past an int32 of days as well, which
+// FromTime returns as an int64 and packTicks would wrap.
+func fromTime(dt dtype.DataType, t time.Time) (int64, bool) {
+	v, ok := dt.FromTime(t)
+	return v, ok && fitsTicks(dt, v)
+}
+
+// fitsTicks reports whether v fits dt's physical width.
+func fitsTicks(dt dtype.DataType, v int64) bool {
+	return dt.Physical().ID() != dtype.TypeInt32 || (v >= math.MinInt32 && v <= math.MaxInt32)
+}
+
+func isDateLike(dt dtype.DataType) bool {
+	return dt.ID() == dtype.TypeDate || dt.ID() == dtype.TypeDatetime
+}
+
+// convertTimeZone relabels a zoned Datetime with the zone out names: the ticks are
+// UTC instants, so the same ticks are the same instants, and only where their wall
+// clocks are read changes.
+func convertTimeZone(name string, out dtype.DataType, c *data.Column) (*data.Column, error) {
+	dt := c.DType()
+	if dt.ID() != dtype.TypeDatetime || dt.TimeZone() == "" ||
+		out.ID() != dtype.TypeDatetime || out.TimeUnit() != dt.TimeUnit() || out.TimeZone() == "" {
+		return nil, uerr.Internalf("kernel: convert_time_zone from %s to %s", dt, out)
+	}
+	return c.WithDType(out).Rename(name), nil
+}
+
+// offsetBy moves each instant by an interval: its months and days on the wall clock
+// of the column's zone, its nanoseconds in elapsed time, as dtype.Interval.AddTo
+// does. Without months or days the move is a whole number of ticks
+// (expr.OffsetRefusal), added to each.
+func offsetBy(name string, out, dt dtype.DataType, ticks []int64, valid bitmap.View,
+	args []any) (*data.Column, error) {
+
+	mo, _ := argInt(args, 0)
+	dd, _ := argInt(args, 1)
+	ns, _ := argInt(args, 2)
+	iv := dtype.IntervalOf(int32(mo), int32(dd), ns)
+	if !isDateLike(dt) {
+		return nil, uerr.Internalf("kernel: offset_by on %s", dt)
+	}
+	if err := expr.OffsetRefusal(iv, dt); err != nil {
+		return nil, err
+	}
+	refuse := func(t int64) error {
+		return uerr.New(uerr.KindValue, "dt",
+			"offset_by of %s by %s is outside the range of %s", dtype.FormatTemporal(dt, t), iv, dt).
+			Hint(widerUnitHint)
+	}
+	if iv.IsCalendar() {
+		return eachInstant(expr.FnDtOffsetBy, name, out, dt, ticks, valid, iv.AddTo, refuse)
+	}
+	npt, _ := dt.NanosPerTick()
+	by := iv.Nanos() / npt
+	res := make([]int64, len(ticks))
+	for i, t := range ticks {
+		if !valid.Get(i) {
+			continue
+		}
+		if overflowsI64(expr.OpAdd, t, by) || !fitsTicks(dt, t+by) {
+			return nil, refuse(t)
+		}
+		res[i] = t + by
+	}
+	return packTicks(name, out, res, valid), nil
+}
+
+// eachInstant applies move to each value, read as a time.Time in the column's zone,
+// and stores the instant it gives at the column's unit, or refuses the value whose
+// answer the unit cannot hold. offset_by, month_start and month_end are this.
+func eachInstant(fn expr.CallFn, name string, out, dt dtype.DataType, ticks []int64,
+	valid bitmap.View, move func(time.Time) time.Time, refuse func(int64) error,
+) (*data.Column, error) {
+
+	if !isDateLike(dt) {
+		return nil, uerr.Internalf("kernel: %s on %s", fn, dt)
+	}
+	loc := locationOf(dt)
+	res := make([]int64, len(ticks))
+	for i, t := range ticks {
+		if !valid.Get(i) {
+			continue
+		}
+		tm, ok := dt.ToTime(t)
+		if !ok {
+			return nil, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
+		}
+		if loc != nil {
+			tm = tm.In(loc)
+		}
+		v, ok := fromTime(dt, move(tm))
+		if !ok {
+			return nil, refuse(t)
+		}
+		res[i] = v
+	}
+	return packTicks(name, out, res, valid), nil
 }
 
 // locationOf resolves a Datetime's timezone once per column.
