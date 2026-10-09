@@ -190,6 +190,70 @@ func (e Expr) BackwardFill(limit int) Expr {
 	return e.winFn(expr.WinBackwardFill, expr.WinParams{N: int64(limit)})
 }
 
+// RollingOption configures a rolling function.
+type RollingOption func(*expr.WinParams)
+
+// MinSamples lets a rolling window answer from k values, where by default it needs
+// as many as it has rows: RollingMean(7, MinSamples(1)) averages what the first six
+// rows have. k is between 1 and the window's size.
+func MinSamples(k int) RollingOption {
+	return func(p *expr.WinParams) { p.MinSamples = int64(k) }
+}
+
+// Ddof sets RollingVar's and RollingStd's delta degrees of freedom; the default, 1,
+// is the sample variance, as Var(1) and Polars' rolling_var.
+func Ddof(d int) RollingOption {
+	return func(p *expr.WinParams) { p.Ddof = int64(d) }
+}
+
+// RollingSum, RollingMean, RollingMin, RollingMax, RollingVar and RollingStd answer
+// each row over the size rows up to and including it: Polars' rolling_* with a
+// window_size, center=False.
+//
+//	Col("price").RollingMean(7)                           // the week's average, from the 7th row
+//	Col("price").RollingMean(7).Over(Col("ticker"))       // per ticker
+//	Col("price").RollingMax(3, MinSamples(1)).OverWith(spec)  // in the spec's order
+//
+// The rows are the window's: a partition's, in its order, with .Over or .OverWith,
+// or else the frame's, in scan order. A row whose window holds fewer than
+// MinSamples values — by default, size, so any null in a full window — is null.
+//
+// Each answers what the aggregate of the same name would over that window, with the
+// same type: a sum of integers is an Int128, a mean, var and std of numbers floats,
+// a min and max the column's own type, of any type with an order. A NaN in a float
+// window makes its sum, mean, var and std NaN, and its max NaN, as the aggregates'.
+func (e Expr) RollingSum(size int, opts ...RollingOption) Expr {
+	return e.rolling(expr.WinRollingSum, size, 0, opts)
+}
+
+func (e Expr) RollingMean(size int, opts ...RollingOption) Expr {
+	return e.rolling(expr.WinRollingMean, size, 0, opts)
+}
+
+func (e Expr) RollingMin(size int, opts ...RollingOption) Expr {
+	return e.rolling(expr.WinRollingMin, size, 0, opts)
+}
+
+func (e Expr) RollingMax(size int, opts ...RollingOption) Expr {
+	return e.rolling(expr.WinRollingMax, size, 0, opts)
+}
+
+func (e Expr) RollingVar(size int, opts ...RollingOption) Expr {
+	return e.rolling(expr.WinRollingVar, size, 1, opts)
+}
+
+func (e Expr) RollingStd(size int, opts ...RollingOption) Expr {
+	return e.rolling(expr.WinRollingStd, size, 1, opts)
+}
+
+func (e Expr) rolling(fn expr.WinFnOp, size int, ddof int64, opts []RollingOption) Expr {
+	p := expr.WinParams{N: int64(size), Ddof: ddof}
+	for _, o := range opts {
+		o(&p)
+	}
+	return e.winFn(fn, p)
+}
+
 // Diff is the difference from the value n rows earlier.
 //
 // # It costs ONE shift, not two

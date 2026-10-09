@@ -34,7 +34,16 @@ func numbers(t *testing.T, df *ursus.DataFrame, name string) []string {
 		if err != nil {
 			iv, iok, ierr := df.At[int64](i, name)
 			if ierr != nil {
-				t.Fatalf("%s: %v", name, err)
+				// An integer sum is an Int128.
+				wv, wok, werr := df.At[ursus.Int128Value](i, name)
+				if werr != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				iok = wok
+				if wok {
+					f, _ := strconv.ParseFloat(wv.String(), 64)
+					iv = int64(f)
+				}
 			}
 			v, ok = float64(iv), iok
 		}

@@ -358,14 +358,20 @@ func TestCumulativesAreExactOnAOneRowPartition(t *testing.T) {
 			continue
 		}
 		for _, fn := range allWinFnOps() {
-			if !fn.IsCumulative() {
+			// A rolling window of one row is that row too (step 149); its var and
+			// std are not the value.
+			var params expr.WinParams
+			switch {
+			case fn.IsRolling() && fn != expr.WinRollingVar && fn != expr.WinRollingStd:
+				params = expr.WinParams{N: 1, MinSamples: 1}
+			case !fn.IsCumulative():
 				continue
 			}
-			out, err := expr.ResolveWinFn(fn, expr.WinParams{}, in)
+			out, err := expr.ResolveWinFn(fn, params, in)
 			if err != nil || !exactType(out) {
 				continue
 			}
-			got, err := kernel.WinCall(fn, expr.WinParams{}, "out", out, col, nil, seg)
+			got, err := kernel.WinCall(fn, params, "out", out, col, nil, seg)
 			if err != nil {
 				continue
 			}

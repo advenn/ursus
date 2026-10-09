@@ -281,6 +281,16 @@ const (
 	WinForwardFill
 	WinBackwardFill
 
+	// The rolling functions (step 149): each row's answer over the Params.N rows of
+	// its partition up to and including it, in the window's order, or null where
+	// fewer than Params.MinSamples of them hold a value.
+	WinRollingSum
+	WinRollingMean
+	WinRollingMin
+	WinRollingMax
+	WinRollingVar
+	WinRollingStd
+
 	winFnCount
 )
 
@@ -289,6 +299,9 @@ var winFnNames = [winFnCount]string{
 	WinCumProd: "cum_prod", WinCumMin: "cum_min", WinCumMax: "cum_max",
 	WinShift:       "shift",
 	WinForwardFill: "forward_fill", WinBackwardFill: "backward_fill",
+	WinRollingSum: "rolling_sum", WinRollingMean: "rolling_mean",
+	WinRollingMin: "rolling_min", WinRollingMax: "rolling_max",
+	WinRollingVar: "rolling_var", WinRollingStd: "rolling_std",
 }
 
 func (o WinFnOp) String() string {
@@ -306,6 +319,9 @@ func (o WinFnOp) String() string {
 
 // IsCumulative reports whether the op is a running scan over the ordered partition.
 func (o WinFnOp) IsCumulative() bool { return o >= WinCumSum && o <= WinCumMax }
+
+// IsRolling reports whether the op is over a fixed number of rows up to each.
+func (o WinFnOp) IsRolling() bool { return o >= WinRollingSum && o <= WinRollingStd }
 
 // RankMethod decides how Rank breaks ties.
 type RankMethod uint8
@@ -357,6 +373,12 @@ type WinParams struct {
 	Descending bool
 	Reverse    bool
 	N          int64
+
+	// MinSamples is a rolling function's least number of values in a window for it
+	// to answer; zero means N, as Polars' min_samples=None does. Ddof is rolling
+	// var's and std's delta degrees of freedom.
+	MinSamples int64
+	Ddof       int64
 }
 
 func (p WinParams) args(op WinFnOp) string {
@@ -374,6 +396,12 @@ func (p WinParams) args(op WinFnOp) string {
 		// and one would silently take the other's answer. That is step 7's
 		// quantile bug and step 8's partition-key bug, third occurrence.
 		return strconv.FormatInt(p.N, 10)
+	case WinRollingVar, WinRollingStd:
+		// Every parameter the answer depends on, for the reason the arm above gives.
+		return strconv.FormatInt(p.N, 10) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10) +
+			", ddof " + strconv.FormatInt(p.Ddof, 10)
+	case WinRollingSum, WinRollingMean, WinRollingMin, WinRollingMax:
+		return strconv.FormatInt(p.N, 10) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10)
 	default:
 		if p.Reverse {
 			return "reverse"
@@ -437,10 +465,11 @@ func (f *WinFn) Field(in *dtype.Schema) (dtype.Field, error) {
 	// be: a shift past the partition edge produces nulls even over a non-null
 	// column, and a running total inherits its input's nullability.
 	nullable := cf.Nullable
-	switch f.Fn {
-	case WinRank, WinCumCount:
+	switch {
+	case f.Fn == WinRank || f.Fn == WinCumCount:
 		nullable = false
-	case WinShift:
+	case f.Fn == WinShift || f.Fn.IsRolling():
+		// A rolling window's first rows hold fewer values than it needs.
 		nullable = true
 	}
 	return dtype.Field{Name: OutputName(f), Type: out, Nullable: nullable}, nil
@@ -524,9 +553,62 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 	case WinShift, WinForwardFill, WinBackwardFill:
 		return in, nil
 
+	case WinRollingSum, WinRollingMean, WinRollingMin, WinRollingMax, WinRollingVar, WinRollingStd:
+		return rollingOut(fn, p, in)
+
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown window function %d", fn)
 	}
+}
+
+// rollingOut types a rolling function: its window first, then its operand.
+//
+// Each type is the matching aggregate's, so a full window's answer is the aggregate
+// of its rows: a sum of integers is an Int128, which a window of them cannot wrap; a
+// mean, var and std of numbers are floats; a min and max are the operand's own type,
+// of any type with an order. A sum of a Decimal, a Duration or an Int128 could leave
+// its type over a long enough window, and a mean of a Duration is a Duration, so
+// those are refused: cast to Float64 first.
+func rollingOut(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, error) {
+	if p.N < 1 {
+		return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
+			"a rolling window needs at least one row, got %d", p.N)
+	}
+	if p.MinSamples < 0 || p.MinSamples > p.N {
+		return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
+			"min_samples is %d, and must be between 1 and the window's %d rows", p.MinSamples, p.N)
+	}
+	if p.Ddof < 0 || p.Ddof > 255 {
+		return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
+			"ddof is %d, and must be between 0 and 255", p.Ddof)
+	}
+	if fn == WinRollingMin || fn == WinRollingMax {
+		if !in.IsOrdered() {
+			return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+				"%s() is not defined for %s", fn, in).
+				Hint("only numeric, temporal, string and boolean types have an ordering")
+		}
+		return in, nil
+	}
+	ok := in.IsFloat() || (in.IsInteger() && in.ID() != dtype.TypeInt128)
+	switch fn {
+	case WinRollingSum:
+		ok = ok || in.IsBool()
+	default:
+		ok = ok || in.ID() == dtype.TypeDecimal
+	}
+	if !ok {
+		return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+			"%s() is not defined for %s", fn, in).
+			Hint("cast it first, e.g. .Cast(ursus.Float64)")
+	}
+	op := map[WinFnOp]AggOp{WinRollingSum: AggSum, WinRollingMean: AggMean,
+		WinRollingVar: AggVar, WinRollingStd: AggStd}[fn]
+	b, err := ResolveAggBinding(op, in)
+	if err != nil {
+		return dtype.Null, cumulativeErr(fn, in, err)
+	}
+	return b.Out, nil
 }
 
 // HasWindow reports whether the tree contains a window or an ordered window
