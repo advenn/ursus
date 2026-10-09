@@ -227,3 +227,13 @@ func (s StrExpr) Strptime(dt dtype.DataType, format string, strict bool) Expr {
 	return wrap(&expr.Err{E: uerr.New(uerr.KindType, "str.strptime",
 		"strptime parses to a Date, Datetime or Time, not %s", dt)})
 }
+
+// Join joins a column's strings into one, with sep between each two and nulls
+// skipped: Polars' str.join. It is an aggregate, so GroupBy().Agg gives one row for
+// the frame, and GroupBy(keys).Agg one per group:
+//
+//	df.GroupBy(Col("team")).Agg(Col("name").Str().Join(", "))
+//
+// It is Implode, then List().Join, and its order is the rows': a group-by's rows
+// arrive in the input's order within each group.
+func (s StrExpr) Join(sep string) Expr { return s.e.Implode().List().Join(sep) }

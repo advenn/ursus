@@ -196,7 +196,7 @@ func TestUnknownConstantsRenderAsUnknown(t *testing.T) {
 // would fall to an Internalf. Both are silent until the call is used.
 func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 	var classified int
-	for i := range 600 {
+	for i := range 700 {
 		fn := CallFn(i)
 		var claims []string
 		for _, c := range []struct {
@@ -206,6 +206,7 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			{"string", fn.IsString()}, {"temporal", fn.IsTemporal()},
 			{"general", fn.IsGeneral()}, {"maths", fn.IsMath()},
 			{"list", fn.IsList()}, {"struct", fn.IsStruct()},
+			{"horizontal", fn.IsHorizontal()},
 		} {
 			if c.ok {
 				claims = append(claims, c.name)
@@ -223,10 +224,10 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	// 74 since step 145 added dt.offset_by, dt.round, dt.month_start, dt.month_end,
-	// dt.is_leap_year and dt.convert_time_zone.
-	if classified != 74 {
-		t.Errorf("%d call functions are classified, want 74 — the families and the "+
+	// 83 since step 146 added list.join, the six bit counts, and the horizontal
+	// family's concat_str and struct.
+	if classified != 83 {
+		t.Errorf("%d call functions are classified, want 83 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }

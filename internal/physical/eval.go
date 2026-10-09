@@ -443,6 +443,9 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 	if len(c.Args) == 0 {
 		return nil, uerr.Internalf("physical: %s has no receiver", c.Fn)
 	}
+	if c.Fn.IsHorizontal() {
+		return evalHorizontal(ctx, c, b)
+	}
 	recv, err := evalColumn(ctx, c.Args[0], b)
 	if err != nil {
 		return nil, err
@@ -508,6 +511,27 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 	default:
 		return nil, uerr.Internalf("physical: no kernel for %s", c.Fn)
 	}
+}
+
+// evalHorizontal evaluates every operand of a horizontal call (step 146), and types
+// the answer as Field does: the struct's field names are its operands' names in the
+// plan, which an evaluated column's name need not be.
+//
+// A literal operand stays one row long, through Eval rather than evalColumn, and the
+// kernel reads it at every row: concat_str's separators would otherwise each be
+// copied once per row before being read.
+func evalHorizontal(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, error) {
+	f, err := c.Field(b.Schema())
+	if err != nil {
+		return nil, err
+	}
+	ops := make([]*data.Column, len(c.Args))
+	for i, a := range c.Args {
+		if ops[i], err = Eval(ctx, a, b); err != nil {
+			return nil, err
+		}
+	}
+	return kernel.HorizontalCall(c.Fn, f.Name, f.Type, ops)
 }
 
 // callKey identifies a compiled call.

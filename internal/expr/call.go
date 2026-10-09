@@ -127,6 +127,14 @@ const (
 	// difference of any two of its values, and leaves every other type as it is. It
 	// is how Diff subtracts without wrapping, and is not public.
 	FnMathDiffWiden
+	// The bit counts of an integer (step 146), Polars' bitwise_count_ones and its
+	// five siblings, each a Uint32.
+	FnMathCountOnes
+	FnMathCountZeros
+	FnMathLeadingOnes
+	FnMathLeadingZeros
+	FnMathTrailingOnes
+	FnMathTrailingZeros
 	fnMathEnd
 
 	// --- list ---
@@ -142,6 +150,7 @@ const (
 	FnListMax
 	FnListSum
 	FnListMean
+	FnListJoin // the elements of a List of String, joined; the one arg is the separator
 
 	// list -> LIST. These reshape the list and hand back a list, which is the
 	// distinction that split the namespace across two steps: everything above
@@ -162,6 +171,20 @@ const (
 	fnStructEnd
 )
 
+// The horizontal family (step 146): every argument is an OPERAND, a column read
+// row by row, where each family above takes a receiver and literal parameters.
+//
+// concat_str joins its operands' text, and a separator is an operand like any
+// other, a literal between each two; struct builds a Struct whose fields are its
+// operands, named as they are. Neither has a parameter, so Call's rule — Args[1:]
+// literal — does not apply to them, and they are typed from every operand's type
+// (ResolveHorizontal) rather than from a receiver's.
+const (
+	FnConcatStr CallFn = iota + 600
+	FnStructOf
+	fnHorizontalEnd
+)
+
 // IsString, IsTemporal and IsGeneral classify a function by family.
 //
 // These are range comparisons over declaration order, which is why the enum is
@@ -172,6 +195,9 @@ func (f CallFn) IsGeneral() bool  { return f >= FnIsIn && f < fnGenEnd }
 func (f CallFn) IsMath() bool     { return f >= FnMathRound && f < fnMathEnd }
 func (f CallFn) IsList() bool     { return f >= FnListLen && f < fnListEnd }
 func (f CallFn) IsStruct() bool   { return f >= FnStructField && f < fnStructEnd }
+func (f CallFn) IsHorizontal() bool {
+	return f >= FnConcatStr && f < fnHorizontalEnd
+}
 
 var callNames = map[CallFn]string{
 	FnStrContains: "str.contains", FnStrStartsWith: "str.starts_with",
@@ -206,6 +232,10 @@ var callNames = map[CallFn]string{
 	FnIsIn: "is_in",
 
 	FnMathRound: "round", FnMathAsFloat: "as_float", FnMathDiffWiden: "diff_widen",
+	FnMathCountOnes: "bitwise_count_ones", FnMathCountZeros: "bitwise_count_zeros",
+	FnMathLeadingOnes: "bitwise_leading_ones", FnMathLeadingZeros: "bitwise_leading_zeros",
+	FnMathTrailingOnes: "bitwise_trailing_ones", FnMathTrailingZeros: "bitwise_trailing_zeros",
+	FnConcatStr: "concat_str", FnStructOf: "struct",
 
 	FnListLen: "list.len", FnListGet: "list.get",
 	FnListContains: "list.contains", FnListMin: "list.min",
@@ -213,7 +243,7 @@ var callNames = map[CallFn]string{
 	FnListReverse: "list.reverse", FnListHead: "list.head",
 	FnListTail: "list.tail", FnListSlice: "list.slice",
 	FnListSort: "list.sort", FnListUnique: "list.unique",
-	FnListDropNulls: "list.drop_nulls",
+	FnListDropNulls: "list.drop_nulls", FnListJoin: "list.join",
 
 	FnStructField: "struct.field",
 }
@@ -248,8 +278,8 @@ func (c *Call) String() string {
 	for i, a := range c.Args {
 		parts[i] = a.String()
 	}
-	if len(parts) == 0 {
-		return c.Fn.String() + "()"
+	if len(parts) == 0 || c.Fn.IsHorizontal() {
+		return c.Fn.String() + "(" + strings.Join(parts, ", ") + ")"
 	}
 	return parts[0] + "." + c.Fn.String() + "(" + strings.Join(parts[1:], ", ") + ")"
 }
@@ -257,6 +287,21 @@ func (c *Call) String() string {
 func (c *Call) Field(in *dtype.Schema) (dtype.Field, error) {
 	if len(c.Args) == 0 {
 		return dtype.Field{}, uerr.Internalf("expr: %s has no receiver", c.Fn)
+	}
+	if c.Fn.IsHorizontal() {
+		fields := make([]dtype.Field, len(c.Args))
+		for i, a := range c.Args {
+			f, err := a.Field(in)
+			if err != nil {
+				return dtype.Field{}, err
+			}
+			fields[i] = f
+		}
+		out, err := ResolveHorizontal(c.Fn, fields)
+		if err != nil {
+			return dtype.Field{}, err
+		}
+		return dtype.Field{Name: fields[0].Name, Type: out, Nullable: true}, nil
 	}
 	recv, err := c.Args[0].Field(in)
 	if err != nil {
@@ -323,9 +368,53 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 	case fn.IsStruct():
 		return structCallOut(c, in)
 
+	case fn.IsHorizontal():
+		// Typed from every operand, which a receiver's type is not: Field and the
+		// evaluator call ResolveHorizontal.
+		return dtype.Null, uerr.Internalf("expr: %s is typed by ResolveHorizontal", fn)
+
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown call %d", fn)
 	}
+}
+
+// ResolveHorizontal gives the output type of a horizontal call over operands of
+// these fields. Like ResolveCall, it is the one authority, for the plan's schema and
+// the kernel's output alike.
+func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
+	if len(ops) == 0 {
+		return dtype.Null, uerr.Internalf("expr: %s has no operands", fn)
+	}
+	switch fn {
+	case FnConcatStr:
+		// Any operand that formats as text is formatted, as Polars' concat_str
+		// formats it: the kernel casts it to String, the cast every type here has.
+		for i, f := range ops {
+			if !dtype.CanCast(f.Type, dtype.String) {
+				return dtype.Null, uerr.New(uerr.KindType, "concat_str",
+					"concat_str cannot format operand %d (%s), a %s, as text", i+1, f.Name, f.Type).
+					Hint("take a field or an element of it first, which can be formatted")
+			}
+		}
+		return dtype.String, nil
+
+	case FnStructOf:
+		// A field is named after its operand, so two operands of one name would be
+		// two fields Field("name") could not tell apart.
+		fields := make([]dtype.Field, len(ops))
+		seen := make(map[string]bool, len(ops))
+		for i, f := range ops {
+			if seen[f.Name] {
+				return dtype.Null, uerr.New(uerr.KindSchema, "struct",
+					"two fields of the struct are named %q", f.Name).
+					Hint("alias one of them, e.g. .Alias(\"%s_2\")", f.Name)
+			}
+			seen[f.Name] = true
+			fields[i] = dtype.Field{Name: f.Name, Type: f.Type, Nullable: true}
+		}
+		return dtype.Struct(fields...), nil
+	}
+	return dtype.Null, uerr.Internalf("expr: unknown horizontal call %d", fn)
 }
 
 // genCallOut types the family that does not dispatch on the receiver's type.
@@ -421,6 +510,15 @@ func mathCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 		return dtype.Null, uerr.New(uerr.KindType, "pct_change",
 			"pct_change is not defined for %s", in).
 			Hint("it is defined for numbers and Durations; for an instant, take Diff, a Duration")
+	case FnMathCountOnes, FnMathCountZeros, FnMathLeadingOnes, FnMathLeadingZeros,
+		FnMathTrailingOnes, FnMathTrailingZeros:
+		// Counted in the type's own width, so the leading zeros of an Int8 1 are 7.
+		// Int128 has no kernel here, and a Bool is not a run of bits.
+		if !in.IsInteger() || in.ID() == dtype.TypeInt128 {
+			return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+				"%s requires an integer operand of 8 to 64 bits, got %s", fn, in)
+		}
+		return dtype.Uint32, nil
 	case FnMathDiffWiden:
 		// One width up, which holds every difference exactly: a UInt8 difference
 		// is within ±255. UInt64's is within ±(2^64−1), which only Int128 holds;
@@ -777,6 +875,17 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 			return dtype.Null, err
 		}
 		return dtype.Bool, nil
+
+	case FnListJoin:
+		if elem.ID() != dtype.TypeString && elem.ID() != dtype.TypeNull {
+			return dtype.Null, uerr.New(uerr.KindType, "list",
+				"%s requires a List of String, got %s", fn, in).
+				Hint("cast the elements first, e.g. .Cast(ursus.List(ursus.String))")
+		}
+		if _, ok := callLitString(c, 1); !ok {
+			return dtype.Null, uerr.Internalf("expr: %s without a separator", fn)
+		}
+		return dtype.String, nil
 
 	case FnListGet, FnListMin, FnListMax:
 		// The element type unchanged: picking one element out, or the smallest or

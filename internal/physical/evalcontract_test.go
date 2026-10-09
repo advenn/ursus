@@ -267,15 +267,16 @@ func allUnaryOps() []expr.UnaryOp {
 // string function is claimed and nothing between the families is.
 //
 // The values are NOT at round offsets. iota counts ConstSpecs across the whole block,
-// so FnDtYear is 127, FnIsIn 247, FnMathRound 349, FnListLen 451 and FnStructField
-// 500. A driver that walked 0..120 would find twenty-six functions and report nothing
-// wrong, which is the failure this file exists to prevent.
+// so FnDtYear is 130, FnIsIn 257, FnMathRound 359 and FnListLen 469 at step 146;
+// FnStructField is 500 and FnConcatStr 600, each opening a block of its own. A
+// driver that walked 0..120 would find a fraction of the functions and report
+// nothing wrong, which is the failure this file exists to prevent.
 func allCallFns() []expr.CallFn {
 	var fns []expr.CallFn
-	for i := range 600 {
+	for i := range 700 {
 		fn := expr.CallFn(i)
 		if fn.IsString() || fn.IsTemporal() || fn.IsGeneral() ||
-			fn.IsMath() || fn.IsList() || fn.IsStruct() {
+			fn.IsMath() || fn.IsList() || fn.IsStruct() || fn.IsHorizontal() {
 			fns = append(fns, fn)
 		}
 	}
@@ -399,6 +400,12 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 	},
 
 	expr.FnMathRound: {{args: []any{int64(1)}}},
+
+	// The horizontal family's arguments are operands: the column, then a literal.
+	// One operand alone is the other set.
+	expr.FnConcatStr: {{label: ",alone"}, {label: ",sep", args: []any{"-"}}},
+	expr.FnStructOf:  {{label: ",alone"}, {label: ",lit", args: []any{"x"}}},
+	expr.FnListJoin:  {{args: []any{","}}},
 
 	// The list and struct families are unreachable against this fixture, which has
 	// no List and no Struct column — every combination is an agreed refusal. The

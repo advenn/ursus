@@ -98,6 +98,10 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 	case expr.FnListSlice:
 		return listSlice(name, c, args)
 
+	case expr.FnListJoin:
+		sep, _ := args[0].(string)
+		return listJoin(name, c, sep)
+
 	case expr.FnListSort:
 		return listSort(name, c, args)
 
@@ -501,4 +505,36 @@ func listAggOp(fn expr.CallFn) (expr.AggOp, error) {
 		return expr.AggMean, nil
 	}
 	return 0, uerr.Internalf("kernel: %s is not a list aggregate", fn)
+}
+
+// listJoin joins each list's strings with sep, skipping null elements, as Polars'
+// list.join does by default. An empty list, or one of nulls only, joins to "", and a
+// null list stays null.
+func listJoin(name string, c *data.Column, sep string) (*data.Column, error) {
+	acc := c.Lists()
+	child := acc.Child()
+	strs := child.Strings() // a List(Null)'s child has no characters, and no valid element
+	offs := make([]int32, 1, c.Len()+1)
+	var chars []byte
+	valid := c.Validity()
+	for i := range c.Len() {
+		if start, end, present := acc.Get(i); present {
+			first := true
+			for e := start; e < end; e++ {
+				if !child.IsValid(int(e)) {
+					continue
+				}
+				if !first {
+					chars = append(chars, sep...)
+				}
+				chars = append(chars, strs.Get(int(e))...)
+				first = false
+			}
+		}
+		if int64(len(chars)) > data.MaxStringBytes {
+			return nil, stringTooLong("list.join", name)
+		}
+		offs = append(offs, int32(len(chars)))
+	}
+	return data.NewStringParts(name, offs, chars, valid), nil
 }

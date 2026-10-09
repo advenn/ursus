@@ -130,6 +130,13 @@ func OutputName(n Node) string {
 		return OutputName(t.Child)
 	case *WinFn:
 		return OutputName(t.Child)
+	case *Call:
+		// A horizontal call's first argument is an operand like the rest, so it is
+		// named after that, as Field names it, and as Polars names concat_str and
+		// struct; a literal one is "literal" either way.
+		if t.Fn.IsHorizontal() {
+			return OutputName(t.Args[0])
+		}
 	case *Cond:
 		// Named after the VALUE, not the test. Leftmost-column-wins would otherwise
 		// pick the condition's column, so

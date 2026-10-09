@@ -364,6 +364,21 @@ func (e Expr) Round(decimals int) Expr {
 	})
 }
 
+// The bit counts of an integer of 8 to 64 bits, each a Uint32, in the type's own
+// width: Polars' bitwise_count_ones and its siblings. An Int8 -1 has eight ones and
+// no zeros, and an Int8 1 has seven leading zeros where an Int64 1 has 63. Zero's
+// trailing zeros are its width.
+func (e Expr) BitwiseCountOnes() Expr     { return e.bitCall(expr.FnMathCountOnes) }
+func (e Expr) BitwiseCountZeros() Expr    { return e.bitCall(expr.FnMathCountZeros) }
+func (e Expr) BitwiseLeadingOnes() Expr   { return e.bitCall(expr.FnMathLeadingOnes) }
+func (e Expr) BitwiseLeadingZeros() Expr  { return e.bitCall(expr.FnMathLeadingZeros) }
+func (e Expr) BitwiseTrailingOnes() Expr  { return e.bitCall(expr.FnMathTrailingOnes) }
+func (e Expr) BitwiseTrailingZeros() Expr { return e.bitCall(expr.FnMathTrailingZeros) }
+
+func (e Expr) bitCall(fn expr.CallFn) Expr {
+	return wrap(&expr.Call{Fn: fn, Args: []expr.Node{e.node()}})
+}
+
 // Log is the logarithm to an arbitrary base.
 //
 // It is SUGAR — ln(x)/ln(base) — rather than a parameterised kernel, which is the

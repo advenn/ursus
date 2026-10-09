@@ -27,6 +27,7 @@ package physical
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -50,6 +51,10 @@ import (
 //	6    [4, 8, 4]       after most windows: a tail that must not leak in either
 //
 // Every value is distinct enough that a sum or a min cannot be right by coincidence.
+//
+// ls is the same lists of the same values as text, for list.join, which joins only
+// strings (step 146). A cast of l would rebuild the offsets from zero, which is the
+// one shape this file must not test.
 func slicedListBatch(t *testing.T) *data.Batch {
 	t.Helper()
 
@@ -65,13 +70,20 @@ func slicedListBatch(t *testing.T) *data.Batch {
 		rv.Append(i != 3) // row 3 is a null list
 	}
 	offs := []int32{0, 2, 5, 5, 5, 8, 9, 12}
-	col := data.NewList("l", offs, child, rv.Finish())
+	valid := rv.Finish()
+	col := data.NewList("l", offs, child, valid)
 
-	schema, err := dtype.NewSchema(dtype.Of("l", col.DType()))
+	text := make([]string, len(elems))
+	for i, e := range elems {
+		text[i] = strconv.FormatInt(e, 10)
+	}
+	strs := data.NewList("ls", offs, data.NewString("item", text, ev.Finish()), valid)
+
+	schema, err := dtype.NewSchema(dtype.Of("l", col.DType()), dtype.Of("ls", strs.DType()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := data.NewBatch(schema, []*data.Column{col})
+	b, err := data.NewBatch(schema, []*data.Column{col, strs})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,8 +112,12 @@ func TestEveryListFunctionHonoursASlicedList(t *testing.T) {
 		if !fn.IsList() {
 			continue
 		}
+		recv := "l"
+		if fn == expr.FnListJoin {
+			recv = "ls"
+		}
 		for _, set := range contractArgSets(fn) {
-			args := []expr.Node{&expr.Col{Name: "l"}}
+			args := []expr.Node{&expr.Col{Name: recv}}
 			for _, a := range set.args {
 				args = append(args, callLit(a))
 			}
@@ -154,10 +170,10 @@ func TestEveryListFunctionHonoursASlicedList(t *testing.T) {
 	}
 
 	// Anti-vacuity, on the three things that could quietly stop being true.
-	if len(reached) < 14 {
-		t.Errorf("only %d list functions were reached; the enum declares 14", len(reached))
+	if len(reached) < 15 {
+		t.Errorf("only %d list functions were reached; the enum declares 15", len(reached))
 	}
-	if compared < 14*len(listWindows) {
+	if compared < 15*len(listWindows) {
 		t.Errorf("only %d comparisons ran", compared)
 	}
 	// The fixture property this whole file exists for, stated exactly.

@@ -157,3 +157,9 @@ func (l ListExpr) Unique() Expr { return l.call(expr.FnListUnique) }
 // there is nothing to drop from, which is not the same as having dropped
 // everything.
 func (l ListExpr) DropNulls() Expr { return l.call(expr.FnListDropNulls) }
+
+// Join joins each list's strings with sep, skipping null elements, as Polars'
+// list.join does by default: ["a", null, "b"] joins with "-" to "a-b". An empty list
+// joins to "", and a null list is null. The list must be of String; cast it first
+// otherwise, e.g. .Cast(List(String)).
+func (l ListExpr) Join(sep string) Expr { return l.call(expr.FnListJoin, sep) }
