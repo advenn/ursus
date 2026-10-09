@@ -633,7 +633,9 @@ expressions, which are then executed using its own engine."
 - **Not** supported: `INSERT`, `UPDATE`, `DELETE`, `ANALYZE`
 
 **Lesson:** SQL should be a *frontend that lowers to the same logical plan*, never a
-parallel engine. Build it after the expression API is stable.
+parallel engine. ursus will not build one: it stays 0.x and its expression API never
+freezes, so "after the API is stable" never arrives, and SQL is out by decision
+(`v0.6-scope.md`).
 
 ---
 

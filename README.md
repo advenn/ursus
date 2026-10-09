@@ -141,7 +141,7 @@ lf := ursus.ScanParquetFrom([]ursus.ParquetFile{{
 ```
 
 `ScanCSVFrom` takes a stream the same way, and `WriteParquet` and `WriteCSV` write to any `io.Writer`, an upload
-included. Built-in stores — `s3://` paths, listing for globs, retries — are not planned for 0.5; the seam is the way in.
+included. Built-in stores — `s3://` paths, listing for globs, retries — are out by decision; the seam is the way in.
 
 The escape hatch is real: a per-element UDF in Go is a function call, not a Python
 interpreter round trip, which is the one place this library can beat Polars outright
@@ -157,13 +157,15 @@ tell from a real one; use `MapBatches` when the null is the point. The name is
 required, and `Explain` shows it. Your function is called from several goroutines at
 once, so it must be safe for that.
 
-Not done: built-in object stores (not in 0.4; the seam above reaches one today), `MapGroups` and `RollingMap`, common subexpression elimination, SQL, `Pivot` — whose output columns are the distinct values of a
-column, so its schema would depend on data and no plan node here does; `Unpivot` (melt) ships — and the long tail of
-`Expr.Rolling*`, EWM, `Upsample`, `Interpolate`, calendar offsets and the rest of `.dt`, `ValueCounts`, `Describe`,
-Arrow IPC and NDJSON. [`v0.4-scope.md`](./context_files/v0.4-scope.md) §7 says which of these moved to 0.5, and why.
+Not done: built-in object stores and SQL, both out by decision (the seam above reaches a store today); `MapGroups`
+and `RollingMap`; `Pivot`, whose output columns are the distinct values of a column, so its schema would depend on data
+and no plan node here does (`Unpivot`, melt, ships); `Upsample`; rolling windows by time as expressions, `Corr`, `Cov`,
+`MinBy`, `MaxBy` and `ReplaceTimeZone`; Arrow IPC files and NDJSON. [`v0.6-scope.md`](./context_files/v0.6-scope.md)
+says which of these 0.6 takes, and why the rest wait.
 
-Version numbers follow Go's own rule for v0: **nothing is promised.** The API is still moving, and the preamble above
-says why.
+**ursus stays 0.x; there will be no 1.0.** Version numbers follow Go's rule for v0, **nothing is promised**, and that
+is permanent rather than a phase: a minor version renames, removes or reshapes an API whenever the result is better,
+with no deprecation period. The changelog lists each release's breaks with their replacements.
 
 ---
 

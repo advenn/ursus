@@ -51,6 +51,12 @@ under 4×:
 Polars' own timings moved between the two sessions: its SF=1 geomean was 70 ms at
 step 127.
 
+*Added at step 156, after the tag:* that drift is about half of the ratio's move.
+Against step 127's 70 ms, ursus's 276 ms is 3.94×, from its own 310 ms at 4.43×. On
+h2o over Parquet ursus went from 914 to 947 ms, and the ratio's fall from 1.93× to
+1.73× is Polars' 475 to 547 ms. So ursus's own time against v0.5.0 is part of 0.6's
+target (`v0.6-scope.md` §2).
+
 **The widest gaps left at SF=1:**
 
 | query | ursus | Polars | ratio | at step 127 |

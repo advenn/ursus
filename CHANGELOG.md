@@ -4,6 +4,11 @@ ursus follows Go's rule for v0: **nothing is promised**, and a minor version may
 change behaviour. Each release below therefore says what a user of the previous one
 can trip on, not only what is new.
 
+**ursus will stay 0.x; there will be no 1.0.** So no API is frozen and none is
+deprecated first: a minor version renames, removes or reshapes an API whenever the
+result is better. From 0.6 on, each release lists its breaks, each with its
+replacement.
+
 Every step of construction has an as-built record in
 [`context_files/`](./context_files/), with the measurements behind each change.
 Step numbers below point at those records.
@@ -26,6 +31,11 @@ features users reach for first.** Object stores stayed out, by decision. Its
   - **PDS-H SF=1:** 3.6×, from 4.4× at v0.4.0. The scope's target was 3×, with q15
     and q2 under 4×; q15 is at 4.3× and q2 at 4.9×. Not met: the Parquet reader and
     the join probe, where most of the rest is, were no 0.5 item's.
+  - **About half of that move was Polars, not ursus.** Polars' SF=1 geomean was 70 ms
+    in step 127's session and 78 ms in step 154's. Against 70 ms, ursus's 276 ms is
+    3.9×, from its own 310 ms. On h2o over Parquet, ursus went from 914 to 947 ms,
+    and only Polars' 475 to 547 ms moved that ratio. *This reading was added on master
+    after the tag (step 156).*
   - **PDS-H SF=0.1:** 2.6×, from 4.0×.
   - **h2o, 10 million rows:** 1.7× over Parquet, from 1.9×; 2.0× over CSV, from 3.3×.
   - **Peak memory at SF=1:** 1.10 GB against Polars' 0.84, from 1.02.
@@ -154,9 +164,12 @@ Newest first. The numbers are steps, each with an as-built record in
   CSV refuses nested columns; Enum is not written to Parquet or Arrow; Duration is
   not written to Parquet; temporal means, medians, quantiles and variances are
   refused. `Cut` and `QCut` answer a String, not Polars' Categorical.
-- **Open audit rows:** I23, O13, J8's remainder, S26, J11 and I26, as in v0.4.0,
-  and O12, the optimizer turning a runtime error into a result. A8 and I20 are
-  fixed.
+- **Open audit rows:** I23, O13, J8's remainder, S21, S26, J11 and I26, as in
+  v0.4.0, and O12, the optimizer turning a runtime error into a result. A8 and I20
+  are fixed.
+- **The default budget is Linux's only.** On macOS and Windows a query is
+  unbudgeted unless `WithMemoryLimit` sets one, and no Go soft limit is set. *Added
+  on master after the tag (step 156).*
 - **Where ursus differs from Polars on purpose:** as in v0.4.0, and:
   - a NaN is a value to the ewm functions, where pandas skips it;
   - an ewm variance of one value is null, where pandas answers NaN.

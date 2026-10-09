@@ -31,8 +31,9 @@
 //
 // # Building
 //
-// ursus requires Go 1.27 and GOEXPERIMENT=simd. Use the Makefile, or export the
-// variable yourself — package simd does not compile without it.
+// ursus requires Go 1.27. GOEXPERIMENT=simd is optional: it switches on the SIMD
+// kernels, and without it each kernel falls back to its scalar twin, which the
+// CI runs the whole suite against.
 package ursus
 
 import (
