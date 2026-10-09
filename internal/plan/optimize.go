@@ -62,6 +62,12 @@ type Flags struct {
 	// BuildSide lets an inner join hash its smaller input, by exchanging the
 	// inputs when the right one is estimated much larger. See buildSide.
 	BuildSide bool
+
+	// ShareSubplans runs a subtree the query uses at more than one place once,
+	// and replays it at each. It is applied before Resolve, by MarkShared, rather
+	// than as a rule: once Resolve has copied a shared subtree, nothing says the
+	// copies were one. See Cache.
+	ShareSubplans bool
 }
 
 // DefaultFlags enables every rule that exists.
@@ -75,6 +81,7 @@ func DefaultFlags() Flags {
 		JoinPredicatePushdown: true,
 		CollapseCrossJoin:     true,
 		BuildSide:             true,
+		ShareSubplans:         true,
 	}
 }
 

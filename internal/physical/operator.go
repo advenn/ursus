@@ -342,6 +342,10 @@ type Options struct {
 	// opened is every source planning has opened so far; PlanRoot sets it, and
 	// closes them all if planning fails. See openedSources.
 	opened *openedSources
+
+	// shared is every Cache subtree planned so far, so each ID is planned and run
+	// once; PlanRoot sets it. See sharedResult.
+	shared *sharedPlans
 }
 
 // openedSources records each source planScan opens, so that a plan which fails part
@@ -411,6 +415,7 @@ func DefaultOptions() Options {
 func PlanRoot(ctx context.Context, n plan.Node, opts Options) (Operator, error) {
 	opened := &openedSources{}
 	opts.opened = opened
+	opts.shared = &sharedPlans{byID: map[int]*sharedResult{}}
 	// Deferred, so a panic while planning closes them too: a caller's Open that
 	// panics is recovered into an error by Collect, and the process carries on.
 	planned := false
@@ -529,6 +534,9 @@ func Plan(ctx context.Context, n plan.Node, opts Options) (Operator, error) {
 
 	case *plan.Join:
 		return planJoin(ctx, t, opts)
+
+	case *plan.Cache:
+		return planCache(ctx, t, opts)
 
 	default:
 		return nil, uerr.Internalf("physical: no operator for plan node %T", n)

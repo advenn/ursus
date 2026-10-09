@@ -3,6 +3,7 @@ package plan
 import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 	"slices"
 )
 
@@ -46,17 +47,54 @@ func (p projectionPushdown) Apply(n Node, _ Flags) (Node, bool, error) {
 		required[name] = struct{}{}
 	}
 
-	out, changed, err := pushdown(n, required)
-	if err != nil {
-		return nil, false, err
+	// A Cache's subtree must come out the same at every site, so each site gives it
+	// the union of what every site of its ID requires (step 143). The union is known
+	// only once every site has been reached, so the sweep runs again while any union
+	// grew: once for a plan with no Cache, and once more per level of nesting
+	// otherwise. Every sweep starts from n, so the last one is the answer.
+	ps := &pushState{unions: map[int]map[string]struct{}{}}
+	for range maxIterations {
+		ps.grew = false
+		out, changed, err := ps.pushdown(n, cloneSet(required))
+		if err != nil {
+			return nil, false, err
+		}
+		if !ps.grew {
+			return out, changed, nil
+		}
 	}
-	return out, changed, nil
+	return nil, false, uerr.Internalf(
+		"projection pushdown: the columns a Cache's sites require did not settle in %d sweeps",
+		maxIterations)
 }
 
-func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
+// pushState is what one Apply carries through its sweeps: per Cache ID, the union
+// of what its sites have required so far, and whether a sweep made one grow.
+type pushState struct {
+	unions map[int]map[string]struct{}
+	grew   bool
+}
+
+// cacheNeeds adds a site's requirement to its Cache's union and returns the union.
+func (ps *pushState) cacheNeeds(id int, required map[string]struct{}) map[string]struct{} {
+	u := ps.unions[id]
+	if u == nil {
+		u = map[string]struct{}{}
+		ps.unions[id] = u
+	}
+	for name := range required {
+		if _, ok := u[name]; !ok {
+			u[name] = struct{}{}
+			ps.grew = true
+		}
+	}
+	return u
+}
+
+func (ps *pushState) pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 	switch t := n.(type) {
 	case *Scan:
-		return pushdownScan(t, required)
+		return ps.pushdownScan(t, required)
 
 	case *Project:
 		// A projection defines its own inputs: what its expressions read is
@@ -68,7 +106,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 				need[name] = struct{}{}
 			}
 		}
-		child, changed, err := pushdown(t.Input, need)
+		child, changed, err := ps.pushdown(t.Input, need)
 		if err != nil {
 			return nil, false, err
 		}
@@ -86,7 +124,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 				need[name] = struct{}{}
 			}
 		}
-		child, changed, err := pushdown(t.Input, need)
+		child, changed, err := ps.pushdown(t.Input, need)
 		if err != nil {
 			return nil, false, err
 		}
@@ -99,7 +137,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 		// Pure pass-through: the output schema is the input's and the node reads no
 		// column of its own, so it needs exactly what the parent asked for. Grouped
 		// because writing them apart would be four copies of one rule.
-		child, changed, err := pushdown(t.Children()[0], required)
+		child, changed, err := ps.pushdown(t.Children()[0], required)
 		if err != nil {
 			return nil, false, err
 		}
@@ -118,7 +156,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 				need[name] = struct{}{}
 			}
 		}
-		child, changed, err := pushdown(t.Input, need)
+		child, changed, err := ps.pushdown(t.Input, need)
 		if err != nil {
 			return nil, false, err
 		}
@@ -142,7 +180,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 		// kept — a missed optimisation, not a wrong answer, and closing it needs
 		// aggSpec to carry a "no input" marker that it does not have.
 		need := requiredOf(append(append([]expr.Node(nil), t.Keys...), t.Aggs...))
-		child, changed, err := pushdown(t.Input, need)
+		child, changed, err := ps.pushdown(t.Input, need)
 		if err != nil {
 			return nil, false, err
 		}
@@ -157,7 +195,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 		// operator cannot run.
 		es := append([]expr.Node{t.Index}, t.Keys...)
 		need := requiredOf(append(es, t.Aggs...))
-		child, changed, err := pushdown(t.Input, need)
+		child, changed, err := ps.pushdown(t.Input, need)
 		if err != nil {
 			return nil, false, err
 		}
@@ -212,7 +250,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 				delete(need, name)
 			}
 		}
-		child, changed, err := pushdown(t.Input, need)
+		child, changed, err := ps.pushdown(t.Input, need)
 		if err != nil {
 			return nil, false, err
 		}
@@ -245,7 +283,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 			for _, name := range in.Names() {
 				all[name] = struct{}{}
 			}
-			child, changed, err := pushdown(t.Input, all)
+			child, changed, err := ps.pushdown(t.Input, all)
 			if err != nil {
 				return nil, false, err
 			}
@@ -261,7 +299,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 		for _, name := range t.Subset {
 			need[name] = struct{}{}
 		}
-		child, changed, err := pushdown(t.Input, need)
+		child, changed, err := ps.pushdown(t.Input, need)
 		if err != nil {
 			return nil, false, err
 		}
@@ -271,7 +309,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 		return t.WithChildren([]Node{child}), true, nil
 
 	case *Union:
-		return pushdownUnion(t, required)
+		return ps.pushdownUnion(t, required)
 
 	case *Sort:
 		// Sort preserves its input's schema exactly, so it needs what the parent
@@ -292,7 +330,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 				need[name] = struct{}{}
 			}
 		}
-		child, changed, err := pushdown(t.Input, need)
+		child, changed, err := ps.pushdown(t.Input, need)
 		if err != nil {
 			return nil, false, err
 		}
@@ -302,7 +340,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 		return t.WithChildren([]Node{child}), true, nil
 
 	case *Join:
-		return pushdownJoin(t, required)
+		return ps.pushdownJoin(t, required)
 
 	case *Window:
 		// A Window publishes its input's columns plus one temporary per window, so
@@ -329,7 +367,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 				need[name] = struct{}{}
 			}
 		}
-		child, changed, err := pushdown(t.Input, need)
+		child, changed, err := ps.pushdown(t.Input, need)
 		if err != nil {
 			return nil, false, err
 		}
@@ -347,7 +385,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 		for _, name := range t.Columns {
 			need[name] = struct{}{}
 		}
-		child, changed, err := pushdown(t.Input, need)
+		child, changed, err := ps.pushdown(t.Input, need)
 		if err != nil {
 			return nil, false, err
 		}
@@ -378,7 +416,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 		for _, name := range t.Columns {
 			need[name] = struct{}{}
 		}
-		child, changed, err := pushdown(t.Input, need)
+		child, changed, err := ps.pushdown(t.Input, need)
 		if err != nil {
 			return nil, false, err
 		}
@@ -388,16 +426,29 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 		return t.WithChildren([]Node{child}), true, nil
 
 	case *Unpivot:
-		return pushdownUnpivot(t, required)
+		return ps.pushdownUnpivot(t, required)
 
 	case *AsOfJoin:
-		return pushdownAsOfJoin(t, required)
+		return ps.pushdownAsOfJoin(t, required)
 
 	case *MergeSorted:
-		return pushdownMergeSorted(t, required)
+		return ps.pushdownMergeSorted(t, required)
 
 	case *HStack:
-		return pushdownHStack(t, required)
+		return ps.pushdownHStack(t, required)
+
+	case *Cache:
+		// Every site gives the subtree the union of what every site needs, so the
+		// copies Resolve made stay one subtree. Each site's parent is given more than
+		// it asked for, which every node above already allows.
+		child, changed, err := ps.pushdown(t.Input, cloneSet(ps.cacheNeeds(t.ID, required)))
+		if err != nil {
+			return nil, false, err
+		}
+		if !changed {
+			return t, false, nil
+		}
+		return t.WithChildren([]Node{child}), true, nil
 
 	default:
 		// Conservative: require everything this node's children can produce, and
@@ -418,7 +469,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 			for _, name := range cs.Names() {
 				all[name] = struct{}{}
 			}
-			nk, changed, err := pushdown(c, all)
+			nk, changed, err := ps.pushdown(c, all)
 			if err != nil {
 				return nil, false, err
 			}
@@ -432,7 +483,7 @@ func pushdown(n Node, required map[string]struct{}) (Node, bool, error) {
 	}
 }
 
-func pushdownScan(s *Scan, required map[string]struct{}) (Node, bool, error) {
+func (ps *pushState) pushdownScan(s *Scan, required map[string]struct{}) (Node, bool, error) {
 	// Emit in the SOURCE's column order, not the required set's iteration order,
 	// so the plan is deterministic. Golden Explain files depend on it, and a
 	// non-deterministic projection would also defeat plan caching later.
@@ -536,7 +587,7 @@ func cloneSet(s map[string]struct{}) map[string]struct{} {
 // The residual, stated because it is contractual rather than structural: everywhere
 // else in this rule an under-stated `required` fails loudly at a Scan. Here it would
 // fail at the Unpivot's own Schema().
-func pushdownUnpivot(u *Unpivot, required map[string]struct{}) (Node, bool, error) {
+func (ps *pushState) pushdownUnpivot(u *Unpivot, required map[string]struct{}) (Node, bool, error) {
 	in, err := u.Input.Schema()
 	if err != nil {
 		return nil, false, err
@@ -558,7 +609,7 @@ func pushdownUnpivot(u *Unpivot, required map[string]struct{}) (Node, bool, erro
 		}
 	}
 
-	child, changed, err := pushdown(u.Input, need)
+	child, changed, err := ps.pushdown(u.Input, need)
 	if err != nil {
 		return nil, false, err
 	}
@@ -568,7 +619,7 @@ func pushdownUnpivot(u *Unpivot, required map[string]struct{}) (Node, bool, erro
 	return u.WithChildren([]Node{child}), true, nil
 }
 
-func pushdownJoin(j *Join, required map[string]struct{}) (Node, bool, error) {
+func (ps *pushState) pushdownJoin(j *Join, required map[string]struct{}) (Node, bool, error) {
 	leftNeed, rightNeed, ok, err := joinNeeds(j, required)
 	if err != nil {
 		return nil, false, err
@@ -576,7 +627,7 @@ func pushdownJoin(j *Join, required map[string]struct{}) (Node, bool, error) {
 	if !ok {
 		return j, false, nil
 	}
-	return pushIntoPair(j, leftNeed, rightNeed)
+	return ps.pushIntoPair(j, leftNeed, rightNeed)
 }
 
 // joinNeeds splits a required set into the two sides of a join.
@@ -685,13 +736,13 @@ func joinNeeds(j *Join, required map[string]struct{}) (
 
 // pushIntoPair descends into a two-child node and rebuilds it through its OWN
 // WithChildren, so the node type survives the rewrite.
-func pushIntoPair(n Node, leftNeed, rightNeed map[string]struct{}) (Node, bool, error) {
+func (ps *pushState) pushIntoPair(n Node, leftNeed, rightNeed map[string]struct{}) (Node, bool, error) {
 	kids := n.Children()
-	left, lc, err := pushdown(kids[0], leftNeed)
+	left, lc, err := ps.pushdown(kids[0], leftNeed)
 	if err != nil {
 		return nil, false, err
 	}
-	right, rc, err := pushdown(kids[1], rightNeed)
+	right, rc, err := ps.pushdown(kids[1], rightNeed)
 	if err != nil {
 		return nil, false, err
 	}
@@ -744,7 +795,7 @@ func withColumnsDefs(in *dtype.Schema, es []expr.Node) ([]string, error) {
 //
 // The rebuild goes through AsOfJoin's own WithChildren. Calling pushdownJoin here
 // would hand back a *Join with an identical schema and no nearest-match semantics.
-func pushdownAsOfJoin(a *AsOfJoin, required map[string]struct{}) (Node, bool, error) {
+func (ps *pushState) pushdownAsOfJoin(a *AsOfJoin, required map[string]struct{}) (Node, bool, error) {
 	leftNeed, rightNeed, ok, err := joinNeeds(a.asJoin(), required)
 	if err != nil {
 		return nil, false, err
@@ -752,7 +803,7 @@ func pushdownAsOfJoin(a *AsOfJoin, required map[string]struct{}) (Node, bool, er
 	if !ok {
 		return a, false, nil
 	}
-	return pushIntoPair(a, leftNeed, rightNeed)
+	return ps.pushIntoPair(a, leftNeed, rightNeed)
 }
 
 // pushdownMergeSorted prunes both sides, and then CHECKS ITSELF.
@@ -797,7 +848,7 @@ func pushdownAsOfJoin(a *AsOfJoin, required map[string]struct{}) (Node, bool, er
 // for the first column instead, which is pushdownHStack's height trick. Asking for
 // nothing gives a Scan a nil projection, which means every column, while a Filter
 // child still keeps its predicate's: disagreement again.
-func pushdownUnion(u *Union, required map[string]struct{}) (Node, bool, error) {
+func (ps *pushState) pushdownUnion(u *Union, required map[string]struct{}) (Node, bool, error) {
 	out, err := u.Schema()
 	if err != nil {
 		return nil, false, err
@@ -820,7 +871,7 @@ func pushdownUnion(u *Union, required map[string]struct{}) (Node, bool, error) {
 	names := make([][]string, len(u.Inputs))
 	changed, agree := false, true
 	for i, c := range u.Inputs {
-		nk, ch, err := pushdown(c, need)
+		nk, ch, err := ps.pushdown(c, need)
 		if err != nil {
 			return nil, false, err
 		}
@@ -851,7 +902,7 @@ func pushdownUnion(u *Union, required map[string]struct{}) (Node, bool, error) {
 	return u.WithChildren(kids), true, nil
 }
 
-func pushdownMergeSorted(m *MergeSorted, required map[string]struct{}) (Node, bool, error) {
+func (ps *pushState) pushdownMergeSorted(m *MergeSorted, required map[string]struct{}) (Node, bool, error) {
 	// The key is read by Schema() whether or not anyone selected it.
 	need := make(map[string]struct{}, len(required)+1)
 	for n := range required {
@@ -859,7 +910,7 @@ func pushdownMergeSorted(m *MergeSorted, required map[string]struct{}) (Node, bo
 	}
 	need[m.Key] = struct{}{}
 
-	out, changed, err := pushIntoPair(m, need, need)
+	out, changed, err := ps.pushIntoPair(m, need, need)
 	if err != nil {
 		return nil, false, err
 	}
@@ -873,7 +924,7 @@ func pushdownMergeSorted(m *MergeSorted, required map[string]struct{}) (Node, bo
 	if lerr != nil || rerr != nil || !ls.Equal(rs) {
 		// Asymmetric. Hand back the ORIGINAL node and let the conservative default
 		// descend instead, so a Project below either side still prunes.
-		return pushdownConservative(m)
+		return ps.pushdownConservative(m)
 	}
 	return out, true, nil
 }
@@ -891,7 +942,7 @@ func pushdownMergeSorted(m *MergeSorted, required map[string]struct{}) (Node, bo
 // is what guarantees that: an empty need set would make pushdownScan produce a nil
 // projection, which means "every column", so the prune would silently become a
 // no-op that still reports changed.
-func pushdownHStack(h *HStack, required map[string]struct{}) (Node, bool, error) {
+func (ps *pushState) pushdownHStack(h *HStack, required map[string]struct{}) (Node, bool, error) {
 	kids := h.Children()
 	needs := make([]map[string]struct{}, len(kids))
 	for i, c := range kids {
@@ -916,7 +967,7 @@ func pushdownHStack(h *HStack, required map[string]struct{}) (Node, bool, error)
 	newKids := make([]Node, len(kids))
 	anyChanged := false
 	for i, c := range kids {
-		nk, changed, err := pushdown(c, needs[i])
+		nk, changed, err := ps.pushdown(c, needs[i])
 		if err != nil {
 			return nil, false, err
 		}
@@ -934,7 +985,7 @@ func pushdownHStack(h *HStack, required map[string]struct{}) (Node, bool, error)
 // pushdownMergeSorted needs it as a fallback, and a second copy of "require
 // everything the children can produce, then keep descending" would be a second thing
 // to keep in step.
-func pushdownConservative(n Node) (Node, bool, error) {
+func (ps *pushState) pushdownConservative(n Node) (Node, bool, error) {
 	kids := n.Children()
 	if len(kids) == 0 {
 		return n, false, nil
@@ -950,7 +1001,7 @@ func pushdownConservative(n Node) (Node, bool, error) {
 		for _, name := range cs.Names() {
 			all[name] = struct{}{}
 		}
-		nk, changed, err := pushdown(c, all)
+		nk, changed, err := ps.pushdown(c, all)
 		if err != nil {
 			return nil, false, err
 		}

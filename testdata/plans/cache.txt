@@ -1,0 +1,12 @@
+JOIN INNER [col("s")] = [col("m")] no coalesce
+  left:
+    CACHE #1
+      AGGREGATE [col("region")] -> [col("qty").sum().alias("s")]
+        MEMORY SCAN 6 rows
+          projection: [region, qty] (2/6 cols)
+  right:
+    AGGREGATE [] -> [col("s").max().alias("m")]
+      CACHE #1
+        AGGREGATE [col("region")] -> [col("qty").sum().alias("s")]
+          MEMORY SCAN 6 rows
+            projection: [region, qty] (2/6 cols)

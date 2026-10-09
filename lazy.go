@@ -199,7 +199,11 @@ func (lf *LazyFrame) Explain(ctx context.Context, opts ...ExplainOption) (out st
 		return "", lf.err
 	}
 
-	n, err := plan.Resolve(ctx, lf.node)
+	n := lf.node
+	if cfg.optimized {
+		n = plan.MarkShared(n)
+	}
+	n, err = plan.Resolve(ctx, n)
 	if err != nil {
 		return "", err
 	}
@@ -502,7 +506,11 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 	if lf.err != nil {
 		return nil, lf.err
 	}
-	resolved, err := plan.Resolve(ctx, lf.node)
+	node := lf.node
+	if cfg.flags.ShareSubplans {
+		node = plan.MarkShared(node)
+	}
+	resolved, err := plan.Resolve(ctx, node)
 	if err != nil {
 		return nil, err
 	}

@@ -248,6 +248,15 @@ var planCoverage = []struct {
 	{"slice", "testdata/plans/slice.txt", func(t *testing.T) *ursus.LazyFrame {
 		return frame().Slice(1, 2)
 	}},
+	// A group-by used twice, in a join and under a max, as PDS-H q15 uses its
+	// per-supplier revenue: one subtree with two parents, so MarkShared caches it
+	// (step 143).
+	{"cache", "testdata/plans/cache.txt", func(t *testing.T) *ursus.LazyFrame {
+		bySum := frame().GroupBy(ursus.Col("region")).Agg(ursus.Col("qty").Sum().Alias("s"))
+		best := bySum.GroupBy().Agg(ursus.Col("s").Max().Alias("m"))
+		return bySum.Join(best, ursus.JoinHow(ursus.JoinCross)).
+			Filter(ursus.Col("s").Eq(ursus.Col("m")))
+	}},
 	// The three below each carry an UNSELECTED column and a Select above the node.
 	//
 	// They did not, and that made their goldens unable to observe the thing they
@@ -371,7 +380,8 @@ func TestEveryPlanNodeIsCovered(t *testing.T) {
 				ursustest.AssertPlan(t, lf, c.golden)
 			}
 
-			n, err := plan.Resolve(t.Context(), lf.Plan())
+			// Marked as compile marks it, or a Cache could never appear here.
+			n, err := plan.Resolve(t.Context(), plan.MarkShared(lf.Plan()))
 			if err != nil {
 				t.Fatal(err)
 			}

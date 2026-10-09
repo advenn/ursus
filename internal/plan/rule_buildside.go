@@ -68,6 +68,21 @@ const buildSideRatio = 2
 
 func (buildSide) Apply(n Node, _ Flags) (Node, bool, error) {
 	changed := false
+	// A Cache's subtree must be rewritten the same at every site, so it keeps its
+	// order if ANY site needs it: a swap below one copy and not another would make
+	// the copies differ, and the physical planner runs only one (step 143).
+	cacheOrdered := map[int]bool{}
+	var need func(x Node, ordered bool)
+	need = func(x Node, ordered bool) {
+		if c, ok := x.(*Cache); ok && ordered {
+			cacheOrdered[c.ID] = true
+		}
+		for i, c := range x.Children() {
+			need(c, keepsOrderOf(x, i, ordered))
+		}
+	}
+	need(n, false)
+
 	// Bottom-up, as TransformUp is, but each node is told whether its parent
 	// depends on its row order, which TransformUp cannot say.
 	var walk func(x Node, ordered bool) Node
@@ -76,7 +91,11 @@ func (buildSide) Apply(n Node, _ Flags) (Node, bool, error) {
 			next := make([]Node, len(kids))
 			moved := false
 			for i, c := range kids {
-				next[i] = walk(c, keepsOrderOf(x, i, ordered))
+				o := keepsOrderOf(x, i, ordered)
+				if cache, ok := x.(*Cache); ok {
+					o = cacheOrdered[cache.ID]
+				}
+				next[i] = walk(c, o)
 				moved = moved || next[i] != c
 			}
 			if moved {
@@ -114,7 +133,7 @@ func keepsOrderOf(x Node, i int, ordered bool) bool {
 	case *Join:
 		return ordered && i == 0
 	case *Filter, *Project, *WithColumns, *Window, *RowIndex, *Limit, *Slice, *Tail,
-		*Reverse, *Explode, *Unnest:
+		*Reverse, *Explode, *Unnest, *Cache:
 		return ordered
 	}
 	return false
@@ -147,6 +166,8 @@ func sortedBelow(n Node) bool {
 	case *Explode:
 		return sortedBelow(t.Input)
 	case *Unnest:
+		return sortedBelow(t.Input)
+	case *Cache:
 		return sortedBelow(t.Input)
 	case *Join:
 		return sortedBelow(t.Left)
@@ -262,6 +283,8 @@ func EstimateRows(n Node) (int64, bool) {
 	case *Window:
 		return EstimateRows(t.Input)
 	case *RowIndex:
+		return EstimateRows(t.Input)
+	case *Cache:
 		return EstimateRows(t.Input)
 	case *Limit:
 		in, ok := EstimateRows(t.Input)
