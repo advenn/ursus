@@ -94,7 +94,7 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 
 ## Status
 
-**v0.5, a candidate** — what changed since v0.4 is in [`CHANGELOG.md`](./CHANGELOG.md), and what 0.5 set out to do,
+**v0.5** — what changed since v0.4 is in [`CHANGELOG.md`](./CHANGELOG.md), and what 0.5 set out to do,
 and did, in [`v0.5-scope.md`](./context_files/v0.5-scope.md). What works today:
 
 |                 |                                                                                                                                                   |
@@ -203,7 +203,7 @@ See [`bench/README.md`](./bench/README.md) for what is timed and why.
 [`bench/results/REPORT.md`](./bench/results/REPORT.md) is checked in. Every result in it is validated against a duckdb
 reference, and a disagreement is struck through rather than quietly reported as a fast number.
 
-**How current it is, precisely.** ursus and Polars were re-run together on the v0.5 candidate, `fb7788b`, on
+**How current it is, precisely.** ursus and Polars were re-run together on v0.5.0's code, `fb7788b`, on
 2026-10-09, every query of all four suites (step 154). The other engines' numbers are from the full session before it,
 every engine together on `5a721e0` on 2026-10-08 (step 127): their code has not changed, and re-running them would have
 taken the laptop for an hour and more. So ursus is compared with Polars within one session, and with the rest across

@@ -10,9 +10,9 @@ Step numbers below point at those records.
 
 ---
 
-## v0.5.0 — candidate, not tagged
+## v0.5.0 — 2026-10-09
 
-Everything since `v0.4.0` (2026-10-09): steps 140–154.
+Everything since `v0.4.0` (2026-10-09): steps 140–155.
 
 [`v0.5-scope.md`](./context_files/v0.5-scope.md) set the scope: **speed, and the
 features users reach for first.** Object stores stayed out, by decision. Its
@@ -21,7 +21,7 @@ features users reach for first.** Object stores stayed out, by decision. Its
 
 ### Highlights
 
-- **Faster.** The report, ursus and Polars re-run together on the candidate (154),
+- **Faster.** The report, ursus and Polars re-run together on this release's code (154),
   puts ursus against Polars at:
   - **PDS-H SF=1:** 3.6×, from 4.4× at v0.4.0. The scope's target was 3×, with q15
     and q2 under 4×; q15 is at 4.3× and q2 at 4.9×. Not met: the Parquet reader and
@@ -96,6 +96,8 @@ parameters** since v0.4.0.
 Newest first. The numbers are steps, each with an as-built record in
 [`context_files/`](./context_files/).
 
+- **v0.5.0 is tagged** (155). `gb10` and `j5` were run once more under 3 GB first,
+  and pass.
 - **The report** (154), ursus and Polars together on `fb7788b`, every query
   validated. `gb10` and `j5` pass under a 3 GB container over Parquet and CSV,
   peaking at 2.73 to 2.86 GB.
