@@ -108,7 +108,7 @@ ordinary input) · **FR** false refusal · **ME** misleading error or hint.
 | I17 | ~~FR / ME~~ **fixed, step 81** | List of Uint8, Uint32, Time(ms), Bool or Decimal is refused, with a hint claiming the unsigned and Time types are read. | `parquet.go:732`. |
 | I18 | ~~FR~~ **fixed, step 108** | Null-typed columns are refused by both writers; Polars writes them. | |
 | I19 | ~~FR~~ **fixed, step 77** | The CSV reader refuses the Decimal and Int128 schemas the CSV writer produces, and inference reads a 38-digit decimal or `u64::MAX` as lossy Float64. | |
-| I20 | — | Invalid UTF-8 in a String column is never validated, so `SinkParquet` writes an out-of-spec STRING column that Polars and DuckDB refuse. | |
+| I20 ✔ | ~~—~~ **fixed, step 152** | Invalid UTF-8 in a String column is never validated, so `SinkParquet` writes an out-of-spec STRING column that Polars and DuckDB refuse. | |
 | I21 | **fixed, step 77** | A CSV round trip changes float types: integral floats come back Int64, and NaN/Inf come back String. It is exact with `WithSchema`. | |
 | I22 | **fixed, step 77** | A zero-column frame loses its row count in Parquet, and in CSV becomes a column named `""`. | |
 | I23 | SW, unmeasured | **Recorded at step 71, not fixed.** arrow-go reports `HasNullCount()` true for every statistic read from a file, so a file written WITHOUT `null_count` reads as having no nulls, and `IsNull` pruning would drop rows; and a one-sided integer or float min/max reads its absent side as 0. Only a third-party writer reaches either — arrow-go and pyarrow always write both — and arrow-go's read API cannot detect them. | arrow-go `statistics_types.gen.go`; recorded in `prune.go`'s header. |

@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"io"
+	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/compress"
@@ -321,6 +322,20 @@ func writeColumn(cw file.ColumnChunkWriter, l leafData) error {
 		s, err := data.TypedColumn[string](c)
 		if err != nil {
 			return err
+		}
+		// A Parquet STRING is UTF-8 by the spec, and Polars and DuckDB refuse a file
+		// whose STRING is not (audit.md I20). A String column can hold any bytes —
+		// a CSV field, a Go string — so it is checked here, where the promise is
+		// made; a Binary column is the way to write bytes as they are.
+		if c.DType().ID() == dtype.TypeString {
+			for _, row := range l.rows {
+				if v, _ := s.Get(row); !utf8.ValidString(v) {
+					return uerr.New(uerr.KindValue, "sink_parquet",
+						"column %q holds a value that is not UTF-8, %q, and a Parquet "+
+							"STRING must be", c.Name(), v).
+						Hint("to write its bytes as they are, cast it first: .Cast(ursus.Binary)")
+				}
+			}
 		}
 		return writeVals(t, l, func(row int) parquet.ByteArray {
 			v, _ := s.Get(row)
