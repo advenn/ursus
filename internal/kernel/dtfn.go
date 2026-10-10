@@ -40,6 +40,8 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 		return strftimeCall(name, c, args)
 	case expr.FnDtConvertTimeZone:
 		return convertTimeZone(name, out, c)
+	case expr.FnDtReplaceTimeZone:
+		return replaceTimeZone(name, out, c, args)
 	}
 
 	dt := c.DType()

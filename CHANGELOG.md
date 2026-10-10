@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–173, so far.
+Everything on master since `v0.5.0`: steps 156–174, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -64,6 +64,11 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   Date's, a Datetime(us) keeping the fraction of a day; and a Duration's median
   (173). Each exact and truncated toward zero, as Polars answers.
 - **Parquet UUID and JSON columns read,** as Binary and String (173).
+- **`Dt().ReplaceTimeZone(tz, opts...)`** keeps each value's wall clock and reads it
+  in another zone, or none (174): Polars' `dt.replace_time_zone`. A clock the zone
+  reads twice or never refuses the query by default, as Polars raises;
+  `AmbiguousEarliest`, `AmbiguousLatest`, `AmbiguousNull` and `NonExistentNull`
+  answer it instead.
 
 ### What a user of v0.5.0 can trip on
 

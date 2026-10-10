@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -95,6 +96,9 @@ const (
 	FnDtMonthEnd
 	FnDtIsLeapYear
 	FnDtConvertTimeZone
+	// Step 174: replace_time_zone's args are the zone, "" for none, then the
+	// ambiguous and non_existent policies, in Polars' words (ZonePolicies).
+	FnDtReplaceTimeZone
 	fnDtEnd
 
 	// --- type-agnostic ---
@@ -236,6 +240,7 @@ var callNames = map[CallFn]string{
 	FnDtStrftime: "dt.strftime", FnDtOffsetBy: "dt.offset_by", FnDtRound: "dt.round",
 	FnDtMonthStart: "dt.month_start", FnDtMonthEnd: "dt.month_end",
 	FnDtIsLeapYear: "dt.is_leap_year", FnDtConvertTimeZone: "dt.convert_time_zone",
+	FnDtReplaceTimeZone: "dt.replace_time_zone",
 
 	FnIsIn: "is_in",
 
@@ -655,6 +660,9 @@ func dtCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 	case FnDtConvertTimeZone:
 		return convertZoneOut(c, in)
 
+	case FnDtReplaceTimeZone:
+		return replaceZoneOut(c, in)
+
 	case FnDtStrftime:
 		if !isInstant {
 			return dtype.Null, uerr.New(uerr.KindType, "dt",
@@ -810,6 +818,50 @@ func convertZoneOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		if _, err := time.LoadLocation(tz); err != nil {
 			return dtype.Null, uerr.New(uerr.KindValue, "dt",
 				"the time zone %q is not known: %v", tz, err)
+		}
+	}
+	return dtype.Datetime(in.TimeUnit(), tz), nil
+}
+
+// The policies replace_time_zone takes for a wall clock its new zone reads twice,
+// in a fall-back fold, or never, in a spring-forward gap: Polars' own words, which
+// the plan carries as its third and fourth args.
+const (
+	ZoneRaise    = "raise"    // refuse the query, naming the wall clock; the default
+	ZoneEarliest = "earliest" // a fold's first reading, at the offset before it
+	ZoneLatest   = "latest"   // a fold's second reading
+	ZoneNull     = "null"     // a null
+)
+
+// replaceZoneOut types replace_time_zone: a Datetime, naive or zoned, keeps its unit
+// and takes the zone its first arg names, "" making it naive. The zone and both
+// policies are checked here, so a query that names an unknown one is refused while
+// it is planned.
+func replaceZoneOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
+	if in.ID() != dtype.TypeDatetime {
+		return dtype.Null, uerr.New(uerr.KindType, "dt",
+			"%s requires a Datetime operand, got %s", c.Fn, in)
+	}
+	tz, ok := callLitString(c, 1)
+	if !ok {
+		return dtype.Null, uerr.New(uerr.KindValue, "dt",
+			"%s needs a time zone, such as \"Europe/London\", or \"\" for none", c.Fn)
+	}
+	if tz != "" && tz != "UTC" {
+		if _, err := time.LoadLocation(tz); err != nil {
+			return dtype.Null, uerr.New(uerr.KindValue, "dt",
+				"the time zone %q is not known: %v", tz, err)
+		}
+	}
+	for i, allowed := range [][]string{
+		{ZoneRaise, ZoneEarliest, ZoneLatest, ZoneNull}, // ambiguous
+		{ZoneRaise, ZoneNull},                           // non_existent
+	} {
+		p, ok := callLitString(c, 2+i)
+		if !ok || !slices.Contains(allowed, p) {
+			return dtype.Null, uerr.New(uerr.KindValue, "dt",
+				"%s's %s policy is %q; it is one of %q", c.Fn,
+				[]string{"ambiguous", "non_existent"}[i], p, allowed)
 		}
 	}
 	return dtype.Datetime(in.TimeUnit(), tz), nil

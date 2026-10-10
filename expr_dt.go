@@ -186,3 +186,57 @@ func (d DtExpr) IsLeapYear() Expr { return d.call(expr.FnDtIsLeapYear) }
 // Datetime(unit, "UTC") first. A zone the system does not know is refused while the
 // query is planned.
 func (d DtExpr) ConvertTimeZone(tz string) Expr { return d.call(expr.FnDtConvertTimeZone, tz) }
+
+// ReplaceTimeZone keeps each value's wall clock and reads it in the zone tz, so the
+// instant moves: Polars' dt.replace_time_zone. A naive Datetime gains a zone, a zoned
+// one changes it, and tz "" makes it naive, keeping the clock as it read.
+//
+//	Col("ts").Dt().ReplaceTimeZone("Asia/Tokyo")   // 09:00 naive reads 09:00 in Tokyo, 00:00 UTC
+//
+// The new zone may read a wall clock twice, in the hour its clocks fall back, or
+// never, in the hour they spring forward. By default either refuses the query,
+// naming the clock; AmbiguousEarliest, AmbiguousLatest or AmbiguousNull, and
+// NonExistentNull, answer them instead. A value already in tz is kept as it is, as
+// Polars keeps it. A zone the system does not know is refused while the query is
+// planned.
+//
+// Where Polars differs: it also takes a column of policies, one per row. Here a
+// policy is the whole column's.
+func (d DtExpr) ReplaceTimeZone(tz string, opts ...ZoneOption) Expr {
+	ambiguous, nonExistent := AmbiguousRaise, NonExistentRaise
+	for _, o := range opts {
+		switch o := o.(type) {
+		case Ambiguous:
+			ambiguous = o
+		case NonExistent:
+			nonExistent = o
+		}
+	}
+	return d.call(expr.FnDtReplaceTimeZone, tz, string(ambiguous), string(nonExistent))
+}
+
+// ZoneOption is a policy for ReplaceTimeZone: an Ambiguous or a NonExistent.
+type ZoneOption interface{ zoneOption() }
+
+// Ambiguous answers a wall clock that ReplaceTimeZone's new zone reads twice, in the
+// hour its clocks fall back: Polars' ambiguous.
+type Ambiguous string
+
+const (
+	AmbiguousRaise    Ambiguous = expr.ZoneRaise    // refuse the query; the default
+	AmbiguousEarliest Ambiguous = expr.ZoneEarliest // the first reading, before the clocks fell back
+	AmbiguousLatest   Ambiguous = expr.ZoneLatest   // the second reading, after
+	AmbiguousNull     Ambiguous = expr.ZoneNull     // a null
+)
+
+// NonExistent answers a wall clock that ReplaceTimeZone's new zone never reads, in
+// the hour its clocks spring forward: Polars' non_existent.
+type NonExistent string
+
+const (
+	NonExistentRaise NonExistent = expr.ZoneRaise // refuse the query; the default
+	NonExistentNull  NonExistent = expr.ZoneNull  // a null
+)
+
+func (Ambiguous) zoneOption()   {}
+func (NonExistent) zoneOption() {}

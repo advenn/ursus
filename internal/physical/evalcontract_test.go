@@ -398,6 +398,14 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 		{label: ",unknown", args: []any{"Mars/Olympus_Mons"}},
 		{label: ",empty", args: []any{""}},
 	},
+	// The zone, "" for none, then the ambiguous and non_existent policies.
+	expr.FnDtReplaceTimeZone: {
+		{label: ",tokyo", args: []any{"Asia/Tokyo", "raise", "raise"}},
+		{label: ",naive", args: []any{"", "raise", "raise"}},
+		{label: ",nulls", args: []any{"Europe/London", "null", "null"}},
+		{label: ",unknown", args: []any{"Mars/Olympus_Mons", "raise", "raise"}},
+		{label: ",policy", args: []any{"UTC", "nearest", "raise"}},
+	},
 
 	expr.FnMathRound: {{args: []any{int64(1)}}},
 
