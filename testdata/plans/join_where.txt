@@ -1,5 +1,5 @@
 FILTER [(col("lv") < col("rv"))]
-  JOIN INNER [col("k")] = [col("k")] no coalesce
+  JOIN INNER [col("k")] = [col("k")] no coalesce swap_at_runtime
     left:
       MEMORY SCAN 5 rows
         projection: [k, lv] (2/2 cols)

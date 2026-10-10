@@ -59,6 +59,11 @@ type joinBreaker struct {
 	builder ProbeBuilder
 	out     Operator
 	done    bool
+
+	// swap is the join when it may exchange its inputs at runtime, and swapOpts the
+	// options to plan the exchanged join under (joinswap.go); nil otherwise.
+	swap     *plan.Join
+	swapOpts Options
 }
 
 func (j *joinBreaker) Schema() *dtype.Schema { return j.builder.Schema() }
@@ -87,6 +92,16 @@ func (j *joinBreaker) drain(ctx context.Context) error {
 		}
 		if err := j.builder.Consume(ctx, in); err != nil {
 			return err
+		}
+	}
+	if j.swap != nil {
+		out, err := j.swapIfSmaller(ctx)
+		if err != nil {
+			return err
+		}
+		if out != nil {
+			j.out = out
+			return nil
 		}
 	}
 	out, err := j.builder.Probe(ctx, j.probe)
@@ -1704,11 +1719,10 @@ func duplicateKeyErr(v plan.JoinValidation, side string, s *dtype.Schema, keys [
 
 // planJoin lowers a plan.Join.
 //
-// The RIGHT side always builds. Not cost-based: nothing in the plan layer carries
-// a cardinality estimate — plan.Source exposes Name, Describe, Schema and Caps and
-// nothing about size — so a heuristic here would be a fabricated number. The seam
-// is named: a future Source.Rows() plus a swap decision here, and nothing below
-// this function changes.
+// The RIGHT side builds. Which input is the right one is the planner's choice
+// (build_side, from the sources' row estimates), except where it marks the join
+// SwapAtRuntime: then a deferred build that finds its probe side the smaller by
+// half exchanges the two, by their actual rows (joinswap.go, step 162).
 func planJoin(ctx context.Context, j *plan.Join, opts Options) (Operator, error) {
 	left, err := planPipelined(ctx, j.Left, opts)
 	if err != nil {
@@ -1765,5 +1779,9 @@ func planJoin(ctx context.Context, j *plan.Join, opts Options) (Operator, error)
 		bfiles: make([]string, nBuckets),
 		pend:   make([][]int32, nBuckets),
 	}
-	return &joinBreaker{build: right, probe: left, builder: sink}, nil
+	br := &joinBreaker{build: right, probe: left, builder: sink}
+	if j.SwapAtRuntime && sink.deferred {
+		br.swap, br.swapOpts = j, opts
+	}
+	return br, nil
 }

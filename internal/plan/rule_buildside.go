@@ -54,6 +54,16 @@ import (
 // the larger input, which is right for the key-to-foreign-key joins that dominate
 // real queries. It swaps only when the right side is more than twice the left, so
 // an estimate that is merely loose does not flip a join of similar sides.
+//
+// # Marked, for the physical join (step 162)
+//
+// An upper bound through every filter is wrong in both directions: PDS-H q12's
+// lineitem is estimated at six million rows and its filters leave 31 thousand, so
+// the rule built orders' 1.5 million keys. So every join it could exchange is also
+// marked SwapAtRuntime, exchanged or not, and the physical join, which knows its
+// build side's rows before it inserts a key, exchanges it again where the probe side
+// turns out the smaller. Exchanging a swapped join's inputs again is the join as
+// written, so the inner join of a swap is marked too.
 type buildSide struct{}
 
 func (buildSide) Name() string { return "build_side" }
@@ -106,16 +116,23 @@ func (buildSide) Apply(n Node, _ Flags) (Node, bool, error) {
 		if !ok || ordered || !swappable(j) || sortedBelow(j.Left) {
 			return x
 		}
+		sw := swapJoin(j)
+		if sw == nil {
+			return x
+		}
 		l, lok := EstimateRows(j.Left)
 		r, rok := EstimateRows(j.Right)
 		if !lok || !rok || r <= buildSideRatio*l {
-			return x
+			// Kept, and marked: the estimates are upper bounds, blind to filters, so
+			// the physical join may still find its build side the larger (step 162).
+			return markSwap(j, &changed)
 		}
-		if p := swapJoin(j); p != nil {
-			changed = true
-			return p
-		}
-		return x
+		changed = true
+		p := sw.(*Project)
+		// Exchanging the swapped join's inputs again is the join as written, so the
+		// physical join may undo a swap that the filters made wrong.
+		p.Input = markSwap(p.Input.(*Join), &changed)
+		return p
 	}
 	return walk(n, false), changed, nil
 }
@@ -174,6 +191,22 @@ func sortedBelow(n Node) bool {
 	}
 	return false
 }
+
+// markSwap returns j marked SwapAtRuntime, noting a change if it was not.
+func markSwap(j *Join, changed *bool) *Join {
+	if j.SwapAtRuntime {
+		return j
+	}
+	c := *j
+	c.SwapAtRuntime = true
+	*changed = true
+	return &c
+}
+
+// SwapJoin is the build_side rule's rewrite, Join(R, L) under a Project that
+// restores j's output exactly, or nil when it cannot be exact. The physical join
+// plans it when it exchanges a SwapAtRuntime join's inputs (step 162).
+func SwapJoin(j *Join) Node { return swapJoin(j) }
 
 // swappable reports whether j's inputs can be exchanged without changing its
 // answer, as a multiset of rows.

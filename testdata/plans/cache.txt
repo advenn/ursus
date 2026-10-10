@@ -1,4 +1,4 @@
-JOIN INNER [col("s")] = [col("m")] no coalesce
+JOIN INNER [col("s")] = [col("m")] no coalesce swap_at_runtime
   left:
     CACHE #1
       AGGREGATE [col("region")] -> [col("qty").sum().alias("s")]

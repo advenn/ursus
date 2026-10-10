@@ -6,6 +6,7 @@ package physical
 // same row; one that reaches half the default budget catches up and streams.
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -65,25 +66,16 @@ func sideBatches(t *testing.T, rng *rand.Rand, k, name string, n, keys, nulls in
 	return sch, batches
 }
 
-// runJoin plans and drains j, and returns its rows, rendered, with the build sink
-// and the table its probe read: a *kernel.KeyTable, *kernel.KeyParts or
-// *kernel.IntKeyParts.
-func runJoin(t *testing.T, j *plan.Join, opts Options) ([]string, *joinBuildSink, any, error) {
-	t.Helper()
-	ctx := t.Context()
-	op, err := planJoin(ctx, j, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer op.Close()
+// drainRows reads op to its end and renders every row, one line each.
+func drainRows(ctx context.Context, op Operator) ([]string, error) {
 	var rows []string
 	for {
 		b, err := op.Next(ctx)
 		if errors.Is(err, io.EOF) {
-			break
+			return rows, nil
 		}
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 		for i := range b.Rows() {
 			var line strings.Builder
@@ -102,6 +94,23 @@ func runJoin(t *testing.T, j *plan.Join, opts Options) ([]string, *joinBuildSink
 			rows = append(rows, line.String())
 		}
 	}
+}
+
+// runJoin plans and drains j, and returns its rows, rendered, with the build sink
+// and the table its probe read: a *kernel.KeyTable, *kernel.KeyParts or
+// *kernel.IntKeyParts.
+func runJoin(t *testing.T, j *plan.Join, opts Options) ([]string, *joinBuildSink, any, error) {
+	t.Helper()
+	ctx := t.Context()
+	op, err := planJoin(ctx, j, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer op.Close()
+	rows, err := drainRows(ctx, op)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	br := op.(*joinBreaker)
 	sink := br.builder.(*joinBuildSink)
 	var table *joinTable
@@ -111,7 +120,12 @@ func runJoin(t *testing.T, j *plan.Join, opts Options) ([]string, *joinBuildSink
 	case *joinProbeOp:
 		table = out.t
 	}
-	if table.ints != nil {
+	switch {
+	case table == nil:
+		// Exchanged at runtime (step 162), or spilled: the probe is another
+		// operator's.
+		return rows, sink, nil, nil
+	case table.ints != nil:
 		return rows, sink, table.ints, nil
 	}
 	return rows, sink, table.ids, nil

@@ -183,3 +183,91 @@ func TestJoinMaintainOrderKeepsTheLeftOrder(t *testing.T) {
 	}
 	ursustest.AssertFrameEqual(t, got, want)
 }
+
+// marked reports whether lf's optimized plan marks a join SwapAtRuntime (step 162).
+func marked(t *testing.T, lf *ursus.LazyFrame) bool {
+	t.Helper()
+	p, err := lf.Explain(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Contains(p, "swap_at_runtime")
+}
+
+// TestBuildSideMarksWhatItCouldSwap: since step 162 the rule marks every join it
+// could exchange, exchanged or not, so the physical join may exchange it by its
+// inputs' actual sizes; and no join it could not.
+func TestBuildSideMarksWhatItCouldSwap(t *testing.T) {
+	c := ursus.Col
+	frame := func(n int) *ursus.LazyFrame {
+		k := make([]int64, n)
+		for i := range k {
+			k[i] = int64(i % 5)
+		}
+		return ursus.Frame(ursus.Values("k", k), ursus.Values(fmt.Sprintf("v%d", n), k))
+	}
+	floats := ursus.Frame(ursus.Values("k", []float64{1, 2}), ursus.Values("a", []int64{1, 2}))
+	cases := []struct {
+		name string
+		lf   *ursus.LazyFrame
+		want bool
+	}{
+		{"inner, exchanged", frame(10).Join(frame(100), ursus.JoinOn(c("k"))), true},
+		{"inner, kept", frame(10).Join(frame(20), ursus.JoinOn(c("k"))), true},
+		{"a left join", frame(10).Join(frame(100), ursus.JoinOn(c("k")), ursus.JoinHow(ursus.JoinLeft)), false},
+		{"a semi join", frame(10).Join(frame(100), ursus.JoinLeftOn(c("k")), ursus.JoinRightOn(c("v100")), ursus.JoinHow(ursus.JoinSemi)), false},
+		{"JoinMaintainOrder", frame(10).Join(frame(100), ursus.JoinOn(c("k")), ursus.JoinMaintainOrder(true)), false},
+		{"a validated join", frame(10).Join(frame(100), ursus.JoinOn(c("k")), ursus.JoinValidate(ursus.ValidateManyToMany)), false},
+		{"a sorted left input", frame(10).Sort(ursus.Asc(c("v10"))).Join(frame(20), ursus.JoinOn(c("k"))), false},
+		{"a float key", floats.Join(floats, ursus.JoinOn(c("k"))), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := marked(t, tc.lf); got != tc.want {
+				t.Errorf("marked = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestARuntimeSwapKeepsTheAnswer: q12's shape. The right input is estimated at four
+// times the left, all of it, so the rule builds the left; its filter leaves a
+// hundredth, so the physical join builds that instead. The answer is the join's as
+// written, by threads and by whether the rule ran.
+func TestARuntimeSwapKeepsTheAnswer(t *testing.T) {
+	c := ursus.Col
+	left := func() *ursus.LazyFrame {
+		k := make([]int64, 10_000)
+		v := make([]int64, 10_000)
+		for i := range k {
+			k[i], v[i] = int64(i), int64(i*3)
+		}
+		return ursus.Frame(ursus.Values("k", k), ursus.Values("v", v))
+	}
+	right := func() *ursus.LazyFrame {
+		k := make([]int64, 40_000)
+		w := make([]int64, 40_000)
+		for i := range k {
+			k[i], w[i] = int64(i%12_000), int64(i)
+		}
+		return ursus.Frame(ursus.Values("k", k), ursus.Values("w", w)).Filter(c("w").Lt(int64(400)))
+	}
+	q := func() *ursus.LazyFrame { return left().Join(right(), ursus.JoinOn(c("k"))) }
+	if !swapped(t, q()) || !marked(t, q()) {
+		t.Fatal("the fixture is not q12's shape: exchanged by the rule, and marked")
+	}
+	want, err := q().Collect(t.Context(), ursus.WithThreads(1), ursus.WithOptFlags(noBuildSide()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want.Height() != 400 {
+		t.Fatalf("the fixture joins %d rows, want 400", want.Height())
+	}
+	for _, threads := range []int{1, 8} {
+		got, err := q().Collect(t.Context(), ursus.WithThreads(threads), ursus.WithBatchSize(1024))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ursustest.AssertFrameEqual(t, sortedByAll(t, got), sortedByAll(t, want))
+	}
+}

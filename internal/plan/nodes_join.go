@@ -166,6 +166,12 @@ type Join struct {
 	// keeps its order regardless.
 	MaintainOrder bool
 
+	// SwapAtRuntime is set by the build_side rule on a join whose inputs it could
+	// exchange, whether or not its estimates made it: the physical join may then
+	// exchange them itself, by their actual sizes (step 162). The rule proves the
+	// rest: an inner join, nothing above it depending on its order, SwapJoin exact.
+	SwapAtRuntime bool
+
 	// Residual is evaluated per candidate PAIR, before the match verdict, and is
 	// SEMI/ANTI ONLY.
 	//
@@ -308,6 +314,11 @@ func (j *Join) Label() string {
 	}
 	if j.Suffix != "" && j.Suffix != DefaultJoinSuffix {
 		b.WriteString(" suffix " + strconv.Quote(j.Suffix))
+	}
+	// Rendered because it says the planner proved the join's order free: the rows
+	// may come in either input's order (step 162).
+	if j.SwapAtRuntime {
+		b.WriteString(" swap_at_runtime")
 	}
 	return b.String()
 }
