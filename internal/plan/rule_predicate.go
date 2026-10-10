@@ -662,6 +662,20 @@ func pushThroughJoin(j *Join, preds []expr.Node, flags Flags) (Node, error) {
 			stay = append(stay, p)
 		}
 	}
+	// What a conjunct that stays implies about each side goes down as well, and
+	// the conjunct stays as it was (step 165).
+	for _, p := range stay {
+		if joinPushLegal(j, FromLeft) {
+			if q, ok := impliedFor(p, FromLeft, layout, ls, rs); ok {
+				downLeft = append(downLeft, q)
+			}
+		}
+		if joinPushLegal(j, FromRight) {
+			if q, ok := impliedFor(p, FromRight, layout, ls, rs); ok {
+				downRight = append(downRight, q)
+			}
+		}
+	}
 
 	left, err := push(j.Left, downLeft, flags)
 	if err != nil {
@@ -672,6 +686,76 @@ func pushThroughJoin(j *Join, preds []expr.Node, flags Flags) (Node, error) {
 		return nil, err
 	}
 	return refilter(j.WithChildren([]Node{left, right}), stay), nil
+}
+
+// impliedFor is the predicate on one side of a join that p implies, when every arm
+// of p, an Or, has a conjunct over that side alone: the Or of each arm's such
+// conjuncts, Anded (step 165).
+//
+// # Why
+//
+// PDS-H q19 filters its join of lineitem and part by an Or of three buckets, each an
+// And of part conditions and a lineitem one. The Or names both sides, so it stays
+// above the join: every one of part's 200,000 rows was built into the table, and
+// p_brand and p_container gathered for about 430,000 joined rows, to keep a few
+// hundred. What the Or implies about part alone, the three buckets' part conditions,
+// keeps about one part in a hundred.
+//
+// # Why it is implied
+//
+// A row passes p only where p is true: some arm is true, so every conjunct of that
+// arm is true, so the Or of each arm's chosen conjuncts is true. So a side row this
+// is not true for joins to no row p keeps, and filtering it out first changes
+// nothing. That holds under Kleene logic as under two-valued, and for an arm with
+// conjuncts left out, which only makes the implication weaker. One arm, an And
+// whose conjuncts name both sides, is the same reasoning with nothing to Or.
+//
+// # What it leaves alone
+//
+// A conjunct that may fail, as rewritten for the side, is left out of its arm: pushed
+// below the join, it would run on rows the join drops, which is an error the query
+// did not have (fallible). An arm with nothing left
+// means nothing is implied. The caller asks only for a side the join may filter
+// (joinPushLegal), and p itself stays above.
+func impliedFor(p expr.Node, side JoinSide, layout *JoinLayout, ls, rs *dtype.Schema) (expr.Node, bool) {
+	own := ls
+	if side == FromRight {
+		own = rs
+	}
+	var out expr.Node
+	for _, arm := range flatten(p, expr.OpOr) {
+		var mine expr.Node
+		for _, c := range flatten(arm, expr.OpAnd) {
+			// Judged as rewritten, in the side's own types: a merged key may be cast.
+			sub, ok := rewriteForSide(c, side, layout, ls, rs)
+			if !ok || fallible(sub, own) {
+				continue
+			}
+			mine = combine(mine, sub, expr.OpAnd)
+		}
+		if mine == nil {
+			return nil, false
+		}
+		out = combine(out, mine, expr.OpOr)
+	}
+	return out, out != nil
+}
+
+// flatten is p's operands under op, as many levels as op nests: a, b and c for
+// (a op b) op c.
+func flatten(p expr.Node, op expr.BinaryOp) []expr.Node {
+	if b, ok := p.(*expr.Binary); ok && b.Op == op {
+		return append(flatten(b.L, op), flatten(b.R, op)...)
+	}
+	return []expr.Node{p}
+}
+
+// combine is acc op x, or x when acc is nil.
+func combine(acc, x expr.Node, op expr.BinaryOp) expr.Node {
+	if acc == nil {
+		return x
+	}
+	return &expr.Binary{Op: op, L: acc, R: x}
 }
 
 // joinKeepsEvery reports whether every row of side appears in the join's output:
