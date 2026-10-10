@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/rand/v2"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -57,8 +59,9 @@ func sideScan(t *testing.T, rng *rand.Rand, k, name string, n, keys, nulls int) 
 }
 
 // runJoin plans and drains j, and returns its rows, rendered, with the build sink
-// and the table its probe read.
-func runJoin(t *testing.T, j *plan.Join, opts Options) ([]string, *joinBuildSink, joinKeys, error) {
+// and the table its probe read: a *kernel.KeyTable, *kernel.KeyParts or
+// *kernel.IntKeyParts.
+func runJoin(t *testing.T, j *plan.Join, opts Options) ([]string, *joinBuildSink, any, error) {
 	t.Helper()
 	ctx := t.Context()
 	op, err := planJoin(ctx, j, opts)
@@ -86,8 +89,7 @@ func runJoin(t *testing.T, j *plan.Join, opts Options) ([]string, *joinBuildSink
 				case dtype.TypeString:
 					line.WriteString(c.Strings().Get(i) + "|")
 				default:
-					v, _ := data.Values[int64](c)
-					fmt.Fprintf(&line, "%d|", v[i])
+					fmt.Fprintf(&line, "%v|", reflect.ValueOf(c.FixedSlice()).Index(i))
 				}
 			}
 			rows = append(rows, line.String())
@@ -95,14 +97,17 @@ func runJoin(t *testing.T, j *plan.Join, opts Options) ([]string, *joinBuildSink
 	}
 	br := op.(*joinBreaker)
 	sink := br.builder.(*joinBuildSink)
-	var keys joinKeys
+	var table *joinTable
 	switch out := br.out.(type) {
 	case *parProbeOp:
-		keys = out.workers[0].t.ids
+		table = out.workers[0].t
 	case *joinProbeOp:
-		keys = out.t.ids
+		table = out.t
 	}
-	return rows, sink, keys, nil
+	if table.ints != nil {
+		return rows, sink, table.ints, nil
+	}
+	return rows, sink, table.ids, nil
 }
 
 func TestThePartitionedBuildAnswersAsTheStreamingOne(t *testing.T) {
@@ -135,12 +140,24 @@ func TestThePartitionedBuildAnswersAsTheStreamingOne(t *testing.T) {
 				if !sink.deferred {
 					t.Fatal("the build did not defer")
 				}
-				parts, ok := keys.(*kernel.KeyParts)
-				if !ok {
+				// An Int64 key whose nulls match nothing is an integer (step 159).
+				var n int
+				switch parts := keys.(type) {
+				case *kernel.KeyParts:
+					if !nullsEqual {
+						t.Fatal("the probe read encoded keys, not integers")
+					}
+					n = parts.Len()
+				case *kernel.IntKeyParts:
+					if nullsEqual {
+						t.Fatal("the probe read integers where a null is a key")
+					}
+					n = parts.Len()
+				default:
 					t.Fatalf("the probe read a %T, not the partitioned tables", keys)
 				}
 				// A null key is no key unless nulls are equal, in both builds.
-				if n, want := parts.Len(), streamed.(*kernel.KeyTable).Len(); n != want {
+				if want := streamed.(*kernel.KeyTable).Len(); n != want {
 					t.Errorf("%d keys, the streaming build has %d", n, want)
 				}
 				if len(got) != len(want) {
@@ -216,13 +233,121 @@ func TestADeferredBuildPastHalfItsBudgetStreams(t *testing.T) {
 	if sink.deferred {
 		t.Fatal("the build never caught up")
 	}
-	if _, ok := keys.(*kernel.KeyParts); ok {
-		t.Fatal("the probe read the partitioned tables after a catch-up")
+	switch keys.(type) {
+	case *kernel.KeyParts, *kernel.IntKeyParts:
+		t.Fatalf("the probe read the partitioned tables, %T, after a catch-up", keys)
 	}
 	// A spilled join's rows come out bucket by bucket, so compare them sorted.
 	slices.Sort(want)
 	slices.Sort(got)
 	if !slices.Equal(got, want) {
 		t.Errorf("%d rows, the streaming build alone gives %d, or they differ", len(got), len(want))
+	}
+}
+
+// typedScan is a scan of n rows of (k, name) in batches of 512, k of type dt from
+// raw values converted to T, so they wrap at T's width; a null in nulls.
+func typedScan[T int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64](t *testing.T, rng *rand.Rand, dt dtype.DataType, k, name string,
+	n int, pool []int64, nulls int,
+) *plan.Scan {
+	t.Helper()
+	sch := dtype.MustSchema(dtype.Of(k, dt), dtype.Of(name, dtype.String))
+	var batches []*data.Batch
+	for lo := 0; lo < n; lo += 512 {
+		m := min(512, n-lo)
+		ks := make([]T, m)
+		valid := bitmap.NewBuilder(m)
+		names := make([]string, m)
+		for i := range m {
+			ks[i] = T(pool[rng.IntN(len(pool))])
+			valid.Append(rng.IntN(nulls) != 0)
+			names[i] = fmt.Sprintf("%s%d", name, lo+i)
+		}
+		b, err := data.NewBatch(sch, []*data.Column{
+			data.NewFixed(k, dt, ks, valid.Finish()),
+			data.NewString(name, names, bitmap.AllSet(m)),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		batches = append(batches, b)
+	}
+	src, err := memsrc.New(sch, batches...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &plan.Scan{Src: src, Full: sch}
+}
+
+// TestTheIntegerKeysAnswerAsTheEncodedOnes: step 159's integer tables against the
+// streaming build's encoded keys, for every integer width, the temporal types stored
+// as integers, and two sides of different widths, which meet at the wider. The keys
+// repeat, and include every width's extremes, which wrap where a width is narrower.
+func TestTheIntegerKeysAnswerAsTheEncodedOnes(t *testing.T) {
+	rng := rand.New(rand.NewPCG(159, 1))
+	pool := []int64{0, -1, 1, math.MinInt64, math.MaxInt64, math.MinInt32, math.MaxInt32,
+		math.MaxUint32, -128, 127, 255, 1 << 32}
+	for range 300 {
+		pool = append(pool, int64(rng.IntN(2_000))-1_000)
+	}
+	type side func(t *testing.T, rng *rand.Rand, k, name string, n int) *plan.Scan
+	of := func(mk func(*testing.T, *rand.Rand, dtype.DataType, string, string, int, []int64, int) *plan.Scan,
+		dt dtype.DataType) side {
+		return func(t *testing.T, rng *rand.Rand, k, name string, n int) *plan.Scan {
+			return mk(t, rng, dt, k, name, n, pool, 30)
+		}
+	}
+	cases := []struct {
+		name        string
+		left, right side
+	}{
+		{"Int8", of(typedScan[int8], dtype.Int8), of(typedScan[int8], dtype.Int8)},
+		{"Int16", of(typedScan[int16], dtype.Int16), of(typedScan[int16], dtype.Int16)},
+		{"Int32", of(typedScan[int32], dtype.Int32), of(typedScan[int32], dtype.Int32)},
+		{"Int64", of(typedScan[int64], dtype.Int64), of(typedScan[int64], dtype.Int64)},
+		{"Uint8", of(typedScan[uint8], dtype.Uint8), of(typedScan[uint8], dtype.Uint8)},
+		{"Uint16", of(typedScan[uint16], dtype.Uint16), of(typedScan[uint16], dtype.Uint16)},
+		{"Uint32", of(typedScan[uint32], dtype.Uint32), of(typedScan[uint32], dtype.Uint32)},
+		{"Uint64", of(typedScan[uint64], dtype.Uint64), of(typedScan[uint64], dtype.Uint64)},
+		{"Date", of(typedScan[int32], dtype.Date), of(typedScan[int32], dtype.Date)},
+		{"Datetime", of(typedScan[int64], dtype.Datetime(dtype.Micro, "")),
+			of(typedScan[int64], dtype.Datetime(dtype.Micro, ""))},
+		{"Int32 to Int64", of(typedScan[int32], dtype.Int32), of(typedScan[int64], dtype.Int64)},
+		{"Uint32 to Int64", of(typedScan[uint32], dtype.Uint32), of(typedScan[int64], dtype.Int64)},
+	}
+	serial := Options{Threads: 1, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
+	parallel := Options{Threads: 4, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
+	for _, c := range cases {
+		for _, kind := range []plan.JoinKind{plan.JoinInner, plan.JoinLeft, plan.JoinRight, plan.JoinFull} {
+			t.Run(fmt.Sprintf("%s, %s", c.name, kind), func(t *testing.T) {
+				join := func() *plan.Join {
+					rng := rand.New(rand.NewPCG(159, uint64(kind)))
+					return &plan.Join{
+						Left:    c.left(t, rng, "k", "l", 3_000),
+						Right:   c.right(t, rng, "k2", "r", 4_000),
+						LeftOn:  []expr.Node{&expr.Col{Name: "k"}},
+						RightOn: []expr.Node{&expr.Col{Name: "k2"}},
+						Kind:    kind,
+					}
+				}
+				want, _, _, err := runJoin(t, join(), serial)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, _, keys, err := runJoin(t, join(), parallel)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, ok := keys.(*kernel.IntKeyParts); !ok {
+					t.Fatalf("the probe read a %T, not integer tables", keys)
+				}
+				if len(want) == 0 {
+					t.Fatal("the fixture joins nothing")
+				}
+				if !slices.Equal(got, want) {
+					t.Fatalf("%d rows, the encoded keys give %d, or they differ", len(got), len(want))
+				}
+			})
+		}
 	}
 }

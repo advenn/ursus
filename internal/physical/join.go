@@ -155,9 +155,10 @@ const noKey = int32(-1)
 // Nothing mutates it after freeze, which is what would let a future morsel
 // scheduler share one table across N probe workers with no lock.
 type joinTable struct {
-	ids   joinKeys // encoded key -> key id
-	off   []int32  // len nKeys+1; rows[off[id]:off[id+1]] are id's build rows
-	rows  []int32  // build row indices, ascending within each key
+	ids   joinKeys            // encoded key -> key id
+	ints  *kernel.IntKeyParts // integer key -> key id, in place of ids (step 159)
+	off   []int32             // len nKeys+1; rows[off[id]:off[id+1]] are id's build rows
+	rows  []int32             // build row indices, ascending within each key
 	nKeys int
 
 	// build holds every build row, addressable by one index. nil for Semi/Anti,
@@ -169,8 +170,9 @@ type joinTable struct {
 	rowKey []int32
 }
 
-// joinKeys is the probe's view of the build side's keys: one KeyTable, from the
-// streaming build, or several read as one, from the partitioned build (step 151).
+// joinKeys is the probe's view of the build side's encoded keys: one KeyTable, from
+// the streaming build, or several read as one, from the partitioned build (step 151).
+// A partitioned build of one integer key leaves joinTable.ints instead (step 159).
 type joinKeys interface {
 	GetMany(keys [][]byte, ids []int32, found []bool)
 }
@@ -587,7 +589,12 @@ func (s *joinBuildSink) freeze(ctx context.Context) (*joinTable, error) {
 			return nil, err
 		}
 		nKeys = keys.Len()
-		t = &joinTable{ids: keys, nKeys: nKeys}
+		t = &joinTable{nKeys: nKeys}
+		if keys.ints != nil {
+			t.ints = keys.ints
+		} else {
+			t.ids = keys.bytes
+		}
 		// Charged as reaccount charges the streaming build's, so the peak sees the
 		// tables as it sees the one, before the rebase below lets them go.
 		st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + keys.NBytes()
@@ -697,6 +704,7 @@ type joinProbeOp struct {
 	// for a null key that matches nothing (step 126).
 	found   []int32
 	chunk   keyChunk
+	intKeys []int64 // a narrower integer key, widened (kernel.IntKeys)
 	hit     int32
 	nHit    int32
 	entered bool
@@ -1030,6 +1038,24 @@ func (p *joinProbeOp) startBatch(ctx context.Context, in *data.Batch) error {
 	// is still safe to share between probe workers.
 	n := in.Rows()
 	p.found = slices.Grow(p.found[:0], n)[:n]
+	if p.t.ints != nil {
+		// An integer key is its own value, read from the column: nothing to encode.
+		// A null row is looked up like the rest, for whatever its slot holds, and
+		// then marked; a chunk without a branch per row is the cheaper of the two.
+		keys := kernel.IntKeys(keyCols[0], &p.intKeys)
+		for i := 0; i < n; i += kernel.ManyChunk {
+			j := min(i+kernel.ManyChunk, n)
+			p.t.ints.GetMany(keys[i:j], p.found[i:j])
+		}
+		if !p.curOK.IsAllSet() {
+			for i := range n {
+				if !p.curOK.Get(i) {
+					p.found[i] = noLookup
+				}
+			}
+		}
+		return nil
+	}
 	ch := &p.chunk
 	ch.reset()
 	flush := func() {

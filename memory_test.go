@@ -429,27 +429,38 @@ func joinShape(left, right *memsrc.Source, kind ursus.JoinKind) *ursus.LazyFrame
 // So the assertion is "the peak is far more than the columns alone", with the
 // threshold set between the two measurements. It survives step 13's spilling change
 // because an unbounded run never spills.
+//
+// On one thread that is the streaming build's table. On several, since step 159, an
+// Int64 key goes into integer tables instead, eight bytes a key and a slot or two:
+// 0.97 MiB at the peak when charged and 0.48 MiB when not, so their floor is 3/4 MiB.
 func TestJoinAccountsItsHashTable(t *testing.T) {
 	const n = 20_000
-	left := memFrame(t, n, 512, n)
-	right := memFrame(t, n, 512, n)
+	for _, c := range []struct {
+		threads int
+		floor   int64
+	}{{1, 1 << 20}, {4, 3 << 18}} {
+		left := memFrame(t, n, 512, n)
+		right := memFrame(t, n, 512, n)
 
-	var stats ursus.MemoryStats
-	df, err := ursus.Scan(left).Select(ursus.Col("k")).
-		Join(ursus.Scan(right).Select(ursus.Col("k").Alias("k2"), ursus.Col("seq")),
-			ursus.JoinLeftOn(ursus.Col("k")), ursus.JoinRightOn(ursus.Col("k2"))).
-		Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithMemoryStats(&stats))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if df.Height() != n {
-		t.Fatalf("joined %d rows, want %d — the fixture is not one-to-one", df.Height(), n)
-	}
-	// 320 KiB of column payload plus a 1.1 MiB hash table. Below 1 MiB the map is
-	// not being counted.
-	if stats.Peak < 1<<20 {
-		t.Errorf("peak = %d over %d distinct keys, which is the column payload and "+
-			"little else — the ids map is not on the ledger", stats.Peak, n)
+		var stats ursus.MemoryStats
+		df, err := ursus.Scan(left).Select(ursus.Col("k")).
+			Join(ursus.Scan(right).Select(ursus.Col("k").Alias("k2"), ursus.Col("seq")),
+				ursus.JoinLeftOn(ursus.Col("k")), ursus.JoinRightOn(ursus.Col("k2"))).
+			Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithMemoryStats(&stats),
+				ursus.WithThreads(c.threads))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if df.Height() != n {
+			t.Fatalf("joined %d rows, want %d — the fixture is not one-to-one", df.Height(), n)
+		}
+		// 320 KiB of column payload plus the table. Below the floor the table is not
+		// being counted.
+		if stats.Peak < c.floor {
+			t.Errorf("%d threads: peak = %d over %d distinct keys, which is the column "+
+				"payload and little else — the key table is not on the ledger",
+				c.threads, stats.Peak, n)
+		}
 	}
 }
 

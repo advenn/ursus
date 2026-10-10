@@ -36,6 +36,16 @@ import (
 // probe and a Right or Full join's flush are unchanged: a key's rows stay
 // ascending, which a Left join's match order and the flush depend on.
 //
+// # Integer keys (step 159)
+//
+// A key of one integer column, or one stored as an integer, whose nulls match
+// nothing, is never encoded: its values, widened to int64, are routed by IntHash and
+// inserted into IntKeyTables, which the probe reads the same way (intKeyed). Encoding
+// a key to bytes, hashing them and comparing them were most of the cost of a probe
+// against a small build, and nearly every PDS-H join is on one integer column. The
+// streaming build, the one that can spill, keeps its encoded keys: a spill routes
+// by their bytes.
+//
 // # When it does not
 //
 // planJoin defers only where the streaming build would hold every row anyway and
@@ -75,11 +85,49 @@ func (s *joinBuildSink) catchUp(ctx context.Context) error {
 	return nil
 }
 
+// intKeyed reports whether the join's key is one integer column whose nulls match
+// nothing, which the partitioned build keys in IntKeyTables (step 159).
+func (s *joinBuildSink) intKeyed() bool {
+	return len(s.keys) == 1 && !s.spec.nullsEqual && kernel.IsIntKey(s.layout.KeyTypes[0])
+}
+
+// builtKeys is what buildPartitioned leaves the probe: the tables read as one, of
+// encoded keys or, for an intKeyed join, of integers. One of the two is set.
+type builtKeys struct {
+	bytes *kernel.KeyParts
+	ints  *kernel.IntKeyParts
+}
+
+func (k builtKeys) Len() int {
+	if k.ints != nil {
+		return k.ints.Len()
+	}
+	return k.bytes.Len()
+}
+
+func (k builtKeys) Base(p int) int32 {
+	if k.ints != nil {
+		return k.ints.Base(p)
+	}
+	return k.bytes.Base(p)
+}
+
+func (k builtKeys) NBytes() int64 {
+	if k.ints != nil {
+		return k.ints.NBytes()
+	}
+	return k.bytes.NBytes()
+}
+
 // buildPartitioned inserts the deferred build side's keys, partitioned, and leaves
 // counts and rowKey in the streaming build's shape, numbered by the tables it
 // returns read as one.
-func (s *joinBuildSink) buildPartitioned(ctx context.Context) (*kernel.KeyParts, error) {
+//
+// An intKeyed join's keys are the column's integers, hashed with IntHash, and never
+// encoded: the two forms differ only in how a key is made and which table holds it.
+func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error) {
 	nParts := min(max(s.threads, 1), maxBuildParts)
+	ints := s.intKeyed()
 	starts := make([]int, len(s.parts)+1)
 	for i, b := range s.parts {
 		starts[i+1] = starts[i] + b.Rows()
@@ -87,7 +135,8 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (*kernel.KeyParts,
 	nRows := starts[len(s.parts)]
 	part := make([]uint8, nRows)
 	keyCols := make([][]*data.Column, len(s.parts))
-	inPart := make([][]int, len(s.parts)) // rows of each batch in each partition
+	keyInts := make([][]int64, len(s.parts)) // an intKeyed join's keys, by batch
+	inPart := make([][]int, len(s.parts))    // rows of each batch in each partition
 
 	// 1. Each batch's keys, evaluated, hashed and routed.
 	err := s.eachConcurrently(len(s.parts), nParts, func(bi int) error {
@@ -97,50 +146,76 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (*kernel.KeyParts,
 			return err
 		}
 		ok := keyValidity(cols)
+		counts := make([]int, nParts)
+		route := func(i int, h uint64) {
+			p := kernel.PartitionOf(h, nParts)
+			part[starts[bi]+i] = uint8(p)
+			counts[p]++
+		}
+		if ints {
+			var scratch []int64
+			v := kernel.IntKeys(cols[0], &scratch)
+			for i := range b.Rows() {
+				if !ok.Get(i) {
+					part[starts[bi]+i] = noPart
+					continue
+				}
+				route(i, kernel.IntHash(v[i]))
+			}
+			keyInts[bi], inPart[bi] = v, counts
+			return nil
+		}
 		enc, err := kernel.NewGroupKeyEncoder("join", cols)
 		if err != nil {
 			return err
 		}
-		counts := make([]int, nParts)
 		var key []byte
 		for i := range b.Rows() {
-			g := starts[bi] + i
 			if !s.spec.nullsEqual && !ok.Get(i) {
-				part[g] = noPart
+				part[starts[bi]+i] = noPart
 				continue
 			}
 			key = enc.AppendKey(key[:0], i)
-			p := kernel.PartitionOf(kernel.KeyHash(key), nParts)
-			part[g] = uint8(p)
-			counts[p]++
+			route(i, kernel.KeyHash(key))
 		}
 		keyCols[bi], inPart[bi] = cols, counts
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return builtKeys{}, err
 	}
 
 	// 2. Each partition's keys, in row order, into its own table. Every row is
 	// written by its partition's goroutine alone.
 	s.rowKey = kernel.Extend(s.rowKey[:0], nRows, noKey)
 	tables := make([]*kernel.KeyTable, nParts)
+	intTables := make([]*kernel.IntKeyTable, nParts)
 	counts := make([][]int32, nParts)
 	dup := make([]int, nParts)
 	err = s.eachConcurrently(nParts, nParts, func(p int) error {
-		t := kernel.NewKeyTable()
 		rows := 0
 		for _, c := range inPart {
 			rows += c[p]
 		}
 		// Half the rows: a build of distinct keys grows once more, and one of a few
 		// keys over many rows does not hold slots it will never use.
-		t.Reserve(rows / 2)
+		var (
+			t  *kernel.KeyTable
+			it *kernel.IntKeyTable
+		)
+		if ints {
+			it = kernel.NewIntKeyTable()
+			it.Reserve(rows / 2)
+		} else {
+			t = kernel.NewKeyTable()
+			t.Reserve(rows / 2)
+		}
 		var (
 			cnt      []int32
 			buf      []byte
 			keys     [kernel.ManyChunk][]byte
 			hs       [kernel.ManyChunk]uint64
+			intKeys  [kernel.ManyChunk]int64
 			at       [kernel.ManyChunk]int
 			ids      [kernel.ManyChunk]int32
 			inserted [kernel.ManyChunk]bool
@@ -148,7 +223,11 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (*kernel.KeyParts,
 		dup[p] = -1
 		n := 0
 		flush := func() {
-			t.GetOrInsertHashed(keys[:n], hs[:n], ids[:], inserted[:])
+			if ints {
+				it.GetOrInsertMany(intKeys[:n], ids[:n], inserted[:n])
+			} else {
+				t.GetOrInsertHashed(keys[:n], hs[:n], ids[:], inserted[:])
+			}
 			for j := range n {
 				id := ids[j]
 				if inserted[j] {
@@ -167,30 +246,38 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (*kernel.KeyParts,
 			if inPart[bi][p] == 0 {
 				continue
 			}
-			enc, err := kernel.NewGroupKeyEncoder("join", keyCols[bi])
-			if err != nil {
-				return err
+			var enc *kernel.GroupKeyEncoder
+			if !ints {
+				var err error
+				if enc, err = kernel.NewGroupKeyEncoder("join", keyCols[bi]); err != nil {
+					return err
+				}
 			}
 			for i := range b.Rows() {
 				g := starts[bi] + i
 				if part[g] != uint8(p) {
 					continue
 				}
-				start := len(buf)
-				buf = enc.AppendKey(buf, i)
-				keys[n] = buf[start:len(buf):len(buf)]
-				hs[n], at[n] = kernel.KeyHash(keys[n]), g
+				if ints {
+					intKeys[n] = keyInts[bi][i]
+				} else {
+					start := len(buf)
+					buf = enc.AppendKey(buf, i)
+					keys[n] = buf[start:len(buf):len(buf)]
+					hs[n] = kernel.KeyHash(keys[n])
+				}
+				at[n] = g
 				if n++; n == kernel.ManyChunk {
 					flush()
 				}
 			}
 		}
 		flush()
-		tables[p], counts[p] = t, cnt
+		tables[p], intTables[p], counts[p] = t, it, cnt
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return builtKeys{}, err
 	}
 
 	// The serial build met its first duplicate at the first such row of all.
@@ -202,12 +289,17 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (*kernel.KeyParts,
 			}
 		}
 		if first >= 0 {
-			return nil, duplicateKeyErr(s.spec.validate, "right", s.right, s.keys, first)
+			return builtKeys{}, duplicateKeyErr(s.spec.validate, "right", s.right, s.keys, first)
 		}
 	}
 
 	// 3. One numbering: each table's keys after the tables before it.
-	keys := kernel.NewKeyParts(tables)
+	var keys builtKeys
+	if ints {
+		keys.ints = kernel.NewIntKeyParts(intTables)
+	} else {
+		keys.bytes = kernel.NewKeyParts(tables)
+	}
 	s.counts = s.counts[:0]
 	for _, c := range counts {
 		s.counts = append(s.counts, c...)
