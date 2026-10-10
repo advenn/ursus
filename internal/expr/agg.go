@@ -38,6 +38,13 @@ const (
 	AggTopK    // the k largest values of the group, largest first, as a List
 	AggBottomK // the k smallest values of the group, smallest first, as a List
 
+	// Two inputs (step 175), carried as a two-field Struct, PairOf's: the value and
+	// what orders it, or the two variables.
+	AggCorr  // Pearson's correlation of the pairs where both are non-null
+	AggCov   // their covariance, with Params.DDof
+	AggMinBy // the value at the row whose second field is the least
+	AggMaxBy // and the greatest
+
 	aggOpCount
 )
 
@@ -51,6 +58,7 @@ var aggOpNames = [aggOpCount]string{
 	AggMedian: "median", AggQuantile: "quantile",
 	AggImplode: "implode",
 	AggTopK:    "top_k", AggBottomK: "bottom_k",
+	AggCorr: "corr", AggCov: "cov", AggMinBy: "min_by", AggMaxBy: "max_by",
 }
 
 func (o AggOp) String() string {
@@ -100,7 +108,44 @@ func (o AggOp) IsCounting() bool {
 // are expensive, but they sort in Finish and are perfectly order-insensitive.
 func (o AggOp) IsOrderDependent() bool {
 	return o == AggFirst || o == AggLast || o == AggArgMin || o == AggArgMax ||
-		o == AggImplode
+		o == AggImplode || o.IsBy()
+}
+
+// IsPaired reports whether the aggregate reads two inputs, as PairOf's struct.
+func (o AggOp) IsPaired() bool { return o >= AggCorr && o <= AggMaxBy }
+
+// IsBy reports whether the aggregate is MinBy or MaxBy. They are order-dependent as
+// ArgMin and ArgMax are: a tie goes to the earliest row, which a worker holding
+// rows dealt round-robin cannot know.
+func (o AggOp) IsBy() bool { return o == AggMinBy || o == AggMaxBy }
+
+// The field names PairOf gives its two inputs. Only their positions are read; the
+// names are fixed so the two can never collide, whatever the inputs are called.
+const (
+	PairFirst  = "0"
+	PairSecond = "1"
+)
+
+// PairOf is the child of a paired aggregate: a two-field Struct of a and b, each
+// aliased to its position. The aggregate is still named after a's column, since
+// naming reads an Alias only at the root (OutputName).
+func PairOf(a, b Node) Node {
+	return &Call{Fn: FnStructOf, Args: []Node{
+		&Alias{Child: a, Name: PairFirst}, &Alias{Child: b, Name: PairSecond}}}
+}
+
+// pairArgs is PairOf's two inputs as written, or false if child is not its shape.
+func pairArgs(child Node) (a, b Node, ok bool) {
+	c, ok := child.(*Call)
+	if !ok || c.Fn != FnStructOf || len(c.Args) != 2 {
+		return nil, nil, false
+	}
+	x, okA := c.Args[0].(*Alias)
+	y, okB := c.Args[1].(*Alias)
+	if !okA || !okB || x.Name != PairFirst || y.Name != PairSecond {
+		return nil, nil, false
+	}
+	return x.Child, y.Child, true
 }
 
 // AggParams carries an aggregate's configuration — ddof for Var and Std, the
@@ -129,7 +174,7 @@ type AggParams struct {
 // load-bearing.
 func (p AggParams) args(op AggOp) string {
 	switch op {
-	case AggVar, AggStd:
+	case AggVar, AggStd, AggCov:
 		return strconv.FormatUint(uint64(p.DDof), 10)
 	case AggQuantile:
 		return strconv.FormatFloat(p.Q, 'g', -1, 64) + ", " + p.Interp.String()
@@ -168,6 +213,15 @@ func (a *Agg) Children() []Node { return []Node{a.Child} }
 // "x.quantile()" twice, collapsed into a single computation, and returned the
 // median under both names with no error anywhere.
 func (a *Agg) String() string {
+	// A paired aggregate reads as it was written: col("x").corr(col("y")), not
+	// through the struct that carries its two inputs.
+	if x, y, ok := pairArgs(a.Child); ok && a.Op.IsPaired() {
+		args := y.String()
+		if p := a.Params.args(a.Op); p != "" {
+			args += ", " + p
+		}
+		return x.String() + "." + a.Op.String() + "(" + args + ")"
+	}
 	return a.Child.String() + "." + a.Op.String() + "(" + a.Params.args(a.Op) + ")"
 }
 
@@ -202,6 +256,34 @@ func (a *Agg) Field(in *dtype.Schema) (dtype.Field, error) {
 	nullable := !a.Op.IsCounting()
 
 	return dtype.Field{Name: OutputName(a), Type: out, Nullable: nullable}, nil
+}
+
+// pairedBinding types an aggregate of two inputs, in as PairOf's struct.
+//
+// Corr and Cov take two numbers and answer a Float64, as Var does, a Float32 pair
+// included; Polars keeps a Float32 pair's Float32. MinBy and MaxBy answer the
+// first's type, ordered by the second, which has an order as Min's operand must.
+func pairedBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
+	fs := in.Fields()
+	if in.ID() != dtype.TypeStruct || len(fs) != 2 {
+		return AggBinding{}, uerr.Internalf("expr: %s over %s, not a pair", op, in)
+	}
+	a, b := fs[0].Type, fs[1].Type
+	if op.IsBy() {
+		if !b.IsOrdered() {
+			return AggBinding{}, uerr.New(uerr.KindType, "",
+				"%s() orders by a %s, which has no order", op, b).
+				Hint("only numeric, temporal, string and boolean types have an ordering")
+		}
+		return AggBinding{Acc: a, Out: a}, nil
+	}
+	for _, t := range []dtype.DataType{a, b} {
+		if !t.IsNumeric() {
+			return AggBinding{}, notTemporalYet(uerr.New(uerr.KindType, "",
+				"%s() requires numeric operands, got %s and %s", op, a, b), t)
+		}
+	}
+	return AggBinding{Acc: dtype.Float64, Out: dtype.Float64}, nil
 }
 
 // AggBinding is the resolved form of an aggregate: the type it ACCUMULATES in and
@@ -424,6 +506,9 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		// twenty ordinary factors anyway, so an Int64 accumulator would wrap silently
 		// on inputs a Float64 still describes approximately.
 		return AggBinding{Acc: dtype.Float64, Out: dtype.Float64}, nil
+
+	case AggCorr, AggCov, AggMinBy, AggMaxBy:
+		return pairedBinding(op, in)
 
 	case AggArgMin, AggArgMax:
 		if !in.IsOrdered() {

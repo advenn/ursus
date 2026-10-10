@@ -46,6 +46,12 @@ func TestEveryAggregateOverADecimalHasItsStatedType(t *testing.T) {
 		"implode":    "List(Decimal(10, 2))",
 		"top_k":      "List(Decimal(10, 2))",
 		"bottom_k":   "List(Decimal(10, 2))",
+		// Two inputs, as PairOf's struct, so a Decimal alone is not one; a pair of
+		// Decimals is Float64 for corr and cov, and min_by keeps its value's type.
+		"corr":   "refused: a pair of inputs",
+		"cov":    "refused: a pair of inputs",
+		"min_by": "refused: a pair of inputs",
+		"max_by": "refused: a pair of inputs",
 	}
 
 	for i := range int(aggOpCount) {

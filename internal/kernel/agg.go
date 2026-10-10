@@ -161,6 +161,15 @@ func NewAccumulator(op expr.AggOp, in dtype.DataType, bind expr.AggBinding,
 	case expr.AggQuantile:
 		return &quantileAcc{q: params.Q, interp: params.Interp}, nil
 
+	case expr.AggCorr:
+		return &coMomentAcc{corr: true}, nil
+	case expr.AggCov:
+		return &coMomentAcc{ddof: params.DDof}, nil
+	case expr.AggMinBy:
+		return newByAcc(in, bind.Out, false)
+	case expr.AggMaxBy:
+		return newByAcc(in, bind.Out, true)
+
 	case expr.AggImplode:
 		return &implodeAcc{elem: in}, nil
 	case expr.AggTopK:
@@ -1409,6 +1418,13 @@ func (a *positionAcc) AddBatch(groups []int32, col *data.Column) error {
 			}
 		}
 	}
+	return a.place(col, pick, who)
+}
+
+// place gathers col's rows pick as a part, each the row of the group who names at
+// the same index, superseding any row the group had. MinBy and MaxBy place theirs
+// through it too (byAcc).
+func (a *positionAcc) place(col *data.Column, pick, who []int32) error {
 	if len(pick) == 0 {
 		return nil
 	}
@@ -1467,10 +1483,7 @@ func (a *positionAcc) Merge(other Accumulator, remap []int32) error {
 	if !ok {
 		return uerr.Internalf("kernel: cannot merge %T into positionAcc", other)
 	}
-	shift := a.base
-	a.parts = append(a.parts, o.parts...)
-	a.base += o.base
-	a.dead += o.dead
+	shift := a.adopt(o)
 	a.Reserve(mergeCap(remap, len(o.at)))
 	mergeEach(remap, len(o.at), func(dst, src int) {
 		r := o.at[src]
@@ -1489,6 +1502,17 @@ func (a *positionAcc) Merge(other Accumulator, remap []int32) error {
 		}
 	})
 	return nil
+}
+
+// adopt appends o's parts after this one's, with the rows none of o's groups point
+// at, and answers the shift that turns o's row indices into this one's. Which of
+// o's rows a group then points at is the caller's choice.
+func (a *positionAcc) adopt(o *positionAcc) int32 {
+	shift := a.base
+	a.parts = append(a.parts, o.parts...)
+	a.base += o.base
+	a.dead += o.dead
+	return shift
 }
 
 func (a *positionAcc) Finish(name string, nGroups int) (*data.Column, error) {

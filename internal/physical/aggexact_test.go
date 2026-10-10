@@ -86,8 +86,13 @@ func classify(op expr.AggOp) (aggClass, bool) {
 		return classCounting, true
 	case expr.AggArgMin, expr.AggArgMax:
 		return classIndex, true
-	case expr.AggVar, expr.AggStd, expr.AggMedian, expr.AggQuantile, expr.AggProduct:
+	case expr.AggVar, expr.AggStd, expr.AggMedian, expr.AggQuantile, expr.AggProduct,
+		expr.AggCorr, expr.AggCov:
 		return classApproximate, true
+	case expr.AggMinBy, expr.AggMaxBy:
+		// One row's value, chosen by another input. Paired, so every operand here,
+		// a single column, is refused; aggpair_test.go asks them their questions.
+		return classIdentity, true
 	}
 	return 0, false
 }

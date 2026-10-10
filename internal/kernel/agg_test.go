@@ -480,6 +480,22 @@ func renderRow(c *data.Column, i int) (string, error) {
 			parts = append(parts, e)
 		}
 		return "[" + strings.Join(parts, ",") + "]", nil
+	case dtype.TypeStruct:
+		// Each field, null or rendered: step 175's paired aggregates made struct
+		// families for the merge sweep, and First, Last and Implode reach them too.
+		parts := make([]string, 0, len(c.Fields()))
+		for _, f := range c.Fields() {
+			if !f.IsValid(i) {
+				parts = append(parts, "null")
+				continue
+			}
+			e, err := renderRow(f, i)
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, e)
+		}
+		return "{" + strings.Join(parts, ",") + "}", nil
 	}
 
 	switch c.DType().Physical().ID() {

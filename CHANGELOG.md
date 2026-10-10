@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–174, so far.
+Everything on master since `v0.5.0`: steps 156–175, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -69,6 +69,10 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   reads twice or never refuses the query by default, as Polars raises;
   `AmbiguousEarliest`, `AmbiguousLatest`, `AmbiguousNull` and `NonExistentNull`
   answer it instead.
+- **`Corr(a, b)`, `Cov(a, b, ddof)`, `MinBy(by)` and `MaxBy(by)`** (175): Polars'
+  `pl.corr`, `pl.cov`, `min_by` and `max_by`, in a group-by or a window. Corr and Cov
+  skip a pair with a null and run on every worker; MinBy and MaxBy order by any
+  ordered type, a tie going to the earliest row.
 
 ### What a user of v0.5.0 can trip on
 

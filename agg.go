@@ -154,6 +154,52 @@ func (e Expr) Product() Expr { return e.agg(expr.AggProduct) }
 func (e Expr) ArgMin() Expr { return e.agg(expr.AggArgMin) }
 func (e Expr) ArgMax() Expr { return e.agg(expr.AggArgMax) }
 
+// MinBy is the value of e at the row where by is the least, and MaxBy where it is
+// the greatest: Polars' min_by and max_by. The answer is e's type, and by may be of
+// any ordered type.
+//
+//	GroupBy(Col("store")).Agg(Col("product").MaxBy(Col("sales")))
+//
+// A row whose by is null is skipped, and a group where every by is null answers
+// null; a null value at the chosen row is null too. A tie goes to the earliest row.
+//
+// Where Polars differs: by is ordered as Max and ArgMax order it, so NaN is the
+// greatest value and MaxBy chooses a NaN's row, where Polars skips the NaN. Then
+// v.MaxBy(by) is always v at by.ArgMax().
+func (e Expr) MinBy(by Expr) Expr { return pairAgg(expr.AggMinBy, e, by, expr.AggParams{}) }
+func (e Expr) MaxBy(by Expr) Expr { return pairAgg(expr.AggMaxBy, e, by, expr.AggParams{}) }
+
+// Corr is Pearson's correlation of a and b over the rows where both are non-null:
+// Polars' pl.corr. It is a Float64, named after a, and NaN, never null, where it is
+// undefined: no such rows, one, or a variable that does not vary. A NaN in either
+// makes it NaN.
+//
+//	GroupBy(Col("g")).Agg(Corr(Col("x"), Col("y")))
+//
+// It runs on every worker and merges by Chan's formulas, as Var does. Spearman's
+// rank correlation, Polars' method="spearman", is not built.
+func Corr(a, b Expr) Expr { return pairAgg(expr.AggCorr, a, b, expr.AggParams{}) }
+
+// Cov is the covariance of a and b over the rows where both are non-null: Polars'
+// pl.cov. ddof is Var's: 1 for the sample covariance, Polars' default, and 0 for the
+// population's. A group of ddof or fewer such rows is null, as Var is.
+//
+// Where Polars differs: over a single row with ddof 1, it answers 0.0 when neither
+// input has a null, and null when nulls left the one row; here both are null.
+func Cov(a, b Expr, ddof int) Expr {
+	if ddof < 0 || ddof > 255 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "cov",
+			"ddof must be between 0 and 255, got %d", ddof).
+			Hint("0 is the population statistic and 1 the sample one")})
+	}
+	return pairAgg(expr.AggCov, a, b, expr.AggParams{DDof: uint8(ddof)})
+}
+
+// pairAgg is an aggregate of two inputs, carried as expr.PairOf's struct.
+func pairAgg(op expr.AggOp, a, b Expr, p expr.AggParams) Expr {
+	return wrap(&expr.Agg{Op: op, Child: expr.PairOf(a.node(), b.node()), Params: p})
+}
+
 // Var and Std are the variance and standard deviation of the non-null values.
 //
 // ddof is the delta degrees of freedom: 0 for the population statistic, 1 for the
