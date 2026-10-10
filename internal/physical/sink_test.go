@@ -171,7 +171,7 @@ func newTestAggSink(t *testing.T) *hashAggSink {
 		schema:    out,
 		keys:      []expr.Node{&expr.Col{Name: "k"}},
 		specs:     []aggSpec{spec},
-		ids:       kernel.NewKeyTable(),
+		ids:       newGroupKeys(keySchema),
 		accs:      []kernel.Accumulator{acc},
 		keySchema: keySchema,
 		inSchema:  in,
@@ -358,8 +358,8 @@ func TestHashAggSinkMergeDoesNotDuplicateKeyRows(t *testing.T) {
 	ids := kernel.NewKeyTable()
 	ids.GetOrInsert([]byte("a"))
 	ids.GetOrInsert([]byte("b"))
-	a := &hashAggSink{ids: ids, keySchema: ks, keyParts: []*data.Batch{keyRows()}}
-	b := &hashAggSink{ids: ids, keySchema: ks, keyParts: []*data.Batch{keyRows()}}
+	a := &hashAggSink{ids: groupKeys{bytes: ids}, keySchema: ks, keyParts: []*data.Batch{keyRows()}}
+	b := &hashAggSink{ids: groupKeys{bytes: ids}, keySchema: ks, keyParts: []*data.Batch{keyRows()}}
 
 	if err := a.Merge(b); err != nil {
 		t.Fatalf("merging a sink whose groups this one already has: %v", err)

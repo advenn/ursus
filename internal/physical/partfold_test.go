@@ -115,6 +115,46 @@ func TestAPartitionedFoldAnswersAsTheSerialOne(t *testing.T) {
 	}
 }
 
+// TestAPartitionedFoldOfIntegerKeys: one integer key is folded in its own tables
+// since step 160, routed by IntHash and its null by a fixed hash. Its answer is the
+// encoded keys': the same group-by, on one thread, of the key cast to String.
+func TestAPartitionedFoldOfIntegerKeys(t *testing.T) {
+	rng := rand.New(rand.NewPCG(160, 1))
+	n := 200_000
+	k := make([]int64, n)
+	ok := make([]bool, n)
+	w := make([]int64, n)
+	for i := range n {
+		k[i], ok[i], w[i] = int64(rng.IntN(150_000))-75_000, rng.IntN(50) != 0, int64(rng.IntN(1<<20))
+	}
+	frame := ursus.Frame(ursus.ValuesNullable("k", k, ok), ursus.Values("w", w))
+	aggs := []ursus.Expr{ursus.Col("w").Sum().Alias("sum"), ursus.Col("w").Min().Alias("min"),
+		ursus.Len().Alias("len")}
+	encoded, err := frame.GroupBy(ursus.Col("k").Cast(ursus.String)).Agg(aggs...).
+		Collect(t.Context(), ursus.WithThreads(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if encoded.Height() < 1<<16 {
+		t.Fatalf("only %d groups: too few to fold partitioned", encoded.Height())
+	}
+	before := physical.PartitionedFolds()
+	par, err := frame.GroupBy(ursus.Col("k")).Agg(aggs...).
+		Collect(t.Context(), ursus.WithThreads(4), ursus.WithBatchSize(4096))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if physical.PartitionedFolds() == before {
+		t.Fatal("the fold did not run partitioned")
+	}
+	want, got := rowsOf(t, encoded), rowsOf(t, par)
+	slices.Sort(want)
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Fatalf("%d groups, the encoded keys give %d, or they differ", len(got), len(want))
+	}
+}
+
 func TestAFewGroupsFoldAsBefore(t *testing.T) {
 	k := make([]int64, 100_000)
 	for i := range k {

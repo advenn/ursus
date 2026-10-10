@@ -77,9 +77,10 @@ type hashAggSink struct {
 	keys   []expr.Node
 	specs  []aggSpec
 
-	ids   *kernel.KeyTable
-	accs  []kernel.Accumulator
-	keyCh keyChunk // Consume's scratch
+	ids     groupKeys
+	accs    []kernel.Accumulator
+	keyCh   keyChunk // Consume's scratch
+	intKeys []int64  // Consume's scratch: a narrower integer key, widened
 
 	keyParts  []*data.Batch // one per batch that introduced groups, in id order
 	keySchema *dtype.Schema
@@ -231,7 +232,7 @@ func planAggregate(ctx context.Context, a *plan.Aggregate, opts Options) (Operat
 			schema:    sinkSchema,
 			keys:      a.Keys,
 			specs:     specs,
-			ids:       kernel.NewKeyTable(),
+			ids:       newGroupKeys(keySchema),
 			accs:      accs,
 			keySchema: keySchema,
 			mem:       opts.Budget.Account("group_by"),
@@ -366,10 +367,15 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 			keep = append(keep, int32(i))
 		}
 		if s.ids.Len() == 0 {
-			s.ids.GetOrInsert(nil)
+			s.ids.bytes.GetOrInsert(nil)
 			if s.ordered {
 				s.firstSeen = append(s.firstSeen, s.ordinalOf(in, 0))
 			}
+		}
+	} else if s.ids.ints != nil {
+		var err error
+		if keep, newRows, routed, err = s.consumeInts(in, keyCols[0], keep); err != nil {
+			return err
 		}
 	} else {
 		enc, err := kernel.NewGroupKeyEncoder("group_by", keyCols)
@@ -389,7 +395,7 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 			// here cannot admit the key — partitionOf is a pure function of the
 			// encoded key, so every later row of that key lands in the same file.
 			flush := func() {
-				ids, seen := ch.lookup(s.ids)
+				ids, seen := ch.lookup(s.ids.bytes)
 				for j, id := range ids {
 					i := ch.rows[j]
 					if !seen[j] {
@@ -414,7 +420,7 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 			// One hash and one probe per key, whether or not it is new: the probe that
 			// misses is the one that fills the slot.
 			flush := func() {
-				ids, inserted := ch.insert(s.ids)
+				ids, inserted := ch.insert(s.ids.bytes)
 				for j, id := range ids {
 					i := ch.rows[j]
 					if inserted[j] {
@@ -531,6 +537,78 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 	return s.overBudget()
 }
 
+// consumeInts is Consume's key assignment for a key of one integer column (step 160):
+// the column's values, a chunk at a time, never encoded except to route a frozen
+// sink's new key. It appends to s.groups and keep as the encoded path does, and
+// returns keep, the rows that introduced groups, and how many rows it routed.
+func (s *hashAggSink) consumeInts(in *data.Batch, col *data.Column, keep []int32,
+) (_ []int32, newRows []int32, routed int, _ error) {
+	if !kernel.IsIntKey(col.DType()) {
+		return nil, nil, 0, uerr.Internalf("physical: an integer group key evaluated to %s", col.DType())
+	}
+	t := s.ids.ints
+	n := col.Len()
+	keys := kernel.IntKeys(col, &s.intKeys)
+	valid := col.Validity()
+	var (
+		ids      [kernel.ManyChunk]int32
+		inserted [kernel.ManyChunk]bool
+		enc      *kernel.GroupKeyEncoder
+		base     int
+	)
+	null := func(j int) bool { return !valid.Get(base + j) }
+	for base = 0; base < n; base += kernel.ManyChunk {
+		m := min(kernel.ManyChunk, n-base)
+		chunk := keys[base : base+m]
+		if s.frozen {
+			// Residency is closed, as on the encoded path: a resident key, a null among
+			// them, behaves as before, and a new one is routed by partitionOf of its
+			// encoded key, a pure function of the key, so every later row of it lands
+			// in the same file. Only routed keys are encoded, and only after a freeze.
+			t.GetMany(chunk, ids[:m])
+			for j := range m {
+				i := base + j
+				id := ids[j]
+				if !valid.IsAllSet() && !valid.Get(i) {
+					id = t.NullID()
+				}
+				if id < 0 {
+					if enc == nil {
+						var err error
+						if enc, err = kernel.NewGroupKeyEncoder("group_by", []*data.Column{col}); err != nil {
+							return nil, nil, 0, err
+						}
+					}
+					p := partitionOf(enc.Encode(i), s.level)
+					s.pend[p] = append(s.pend[p], int32(i))
+					routed++
+					continue
+				}
+				keep = append(keep, int32(i))
+				s.groups = append(s.groups, id)
+			}
+			continue
+		}
+		if valid.IsAllSet() {
+			t.GetOrInsertMany(chunk, ids[:m], inserted[:m])
+		} else {
+			t.GetOrInsertNullable(chunk, null, ids[:m], inserted[:m])
+		}
+		for j := range m {
+			i := int32(base + j)
+			if inserted[j] {
+				newRows = append(newRows, i)
+				if s.ordered {
+					s.firstSeen = append(s.firstSeen, s.ordinalOf(in, int(i)))
+				}
+			}
+			keep = append(keep, i)
+			s.groups = append(s.groups, ids[j])
+		}
+	}
+	return keep, newRows, routed, nil
+}
+
 // goSerial is how parallelSink hands the rest of the input to the merged sink.
 func (s *hashAggSink) goSerial() { s.parallel = false }
 
@@ -538,7 +616,7 @@ func (s *hashAggSink) goSerial() { s.parallel = false }
 // of N tables holds about one table at a time, not two. Its account is already
 // released by Merge, and Close still runs.
 func (s *hashAggSink) discard() {
-	s.ids, s.accs, s.keyParts, s.firstSeen = kernel.NewKeyTable(), nil, nil, nil
+	s.ids, s.accs, s.keyParts, s.firstSeen = s.ids.empty(), nil, nil, nil
 }
 
 func (s *hashAggSink) Merge(other Sink) error {
@@ -576,16 +654,28 @@ func (s *hashAggSink) Merge(other Sink) error {
 	// that aggregates without MaintainOrder.
 	//
 	// KeyAt indexes by id directly. This used to invert the map into a []string
-	// first, purely because a Go map cannot be indexed by value.
+	// first, purely because a Go map cannot be indexed by value. A chunk at a time
+	// since step 160, which gives ids in the same order.
 	nOther := o.ids.Len()
 	remap := make([]int32, nOther)
 	var newRows []int32 // o's row index, for keys this sink has never seen
-	for oid := range nOther {
-		id, inserted := s.ids.GetOrInsert(o.ids.KeyAt(int32(oid)))
-		if inserted {
-			newRows = append(newRows, int32(oid))
+	var (
+		oids     [kernel.ManyChunk]int32
+		ids      [kernel.ManyChunk]int32
+		inserted [kernel.ManyChunk]bool
+	)
+	for lo := 0; lo < nOther; lo += kernel.ManyChunk {
+		m := min(kernel.ManyChunk, nOther-lo)
+		for j := range m {
+			oids[j] = int32(lo + j)
 		}
-		remap[oid] = id
+		s.ids.insertFrom(o.ids, oids[:m], ids[:m], inserted[:m])
+		for j := range m {
+			if inserted[j] {
+				newRows = append(newRows, oids[j])
+			}
+			remap[lo+j] = ids[j]
+		}
 	}
 
 	// The key VALUES of the groups only o saw. This is the piece joinBuildSink.Merge
@@ -858,8 +948,6 @@ func (s *hashAggSink) mergeShare(ws []*hashAggSink, routed [][][]int32, p int) e
 	}
 	s.ids.Reserve(n)
 	var (
-		keys     [kernel.ManyChunk][]byte
-		hs       [kernel.ManyChunk]uint64
 		ids      [kernel.ManyChunk]int32
 		inserted [kernel.ManyChunk]bool
 		dst      []int32
@@ -873,10 +961,7 @@ func (s *hashAggSink) mergeShare(ws []*hashAggSink, routed [][][]int32, p int) e
 		dst, newRows = dst[:0], newRows[:0]
 		for lo := 0; lo < len(share); lo += kernel.ManyChunk {
 			chunk := share[lo:min(lo+kernel.ManyChunk, len(share))]
-			for j, oid := range chunk {
-				keys[j], hs[j] = o.ids.KeyAt(oid), o.ids.HashAt(oid)
-			}
-			s.ids.GetOrInsertHashed(keys[:len(chunk)], hs[:len(chunk)], ids[:], inserted[:])
+			s.ids.insertFrom(o.ids, chunk, ids[:], inserted[:])
 			for j, oid := range chunk {
 				dst = append(dst, ids[j])
 				if inserted[j] {
@@ -1035,7 +1120,7 @@ func (s *hashAggSink) releaseState() {
 	// they stayed alive until the query ended, uncounted: a median or an implode
 	// holds every value of every group. firstSeen stays, for finishOrdered.
 	s.keyParts, s.accBytes = nil, 0
-	s.ids, s.accs = kernel.NewKeyTable(), nil
+	s.ids, s.accs = s.ids.empty(), nil
 	s.mem.Release()
 }
 

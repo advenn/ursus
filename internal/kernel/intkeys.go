@@ -28,19 +28,27 @@ import (
 // Every integer type, and every type stored as one (Date, Datetime, Duration,
 // Time), widened to int64 by its bits: sign-extended if signed, zero-extended if
 // not. That is a bijection for each type, and both sides of a join are cast to one
-// key type first, so equal keys widen equal. A null key is not in the table; a
-// caller under NullsEqual, where a null is a key, keeps the byte path.
+// key type first, so equal keys widen equal.
+//
+// # A null key
+//
+// A join's null matches nothing, so it never reaches the table. A group-by's null is
+// a group (step 160): GetOrInsertNull gives it the next id, as any new key gets, but
+// no slot, since no value can find it; its keys entry is a placeholder that grow
+// skips. A join under NullsEqual, where a null is a key it must also find, keeps the
+// encoded keys.
 type IntKeyTable struct {
 	slots []uint64 // as KeyTable's: hash top half << 32 | id+1, 0 empty
 	mask  uint64
 	keys  []int64 // by id
+	null  int32   // the null key's id, or -1
 }
 
 // IntHash is the hash IntKeyTable gives k.
 func IntHash(k int64) uint64 { return Mix64(uint64(k)) }
 
 func NewIntKeyTable() *IntKeyTable {
-	t := &IntKeyTable{}
+	t := &IntKeyTable{null: -1}
 	t.init(initialSlots)
 	return t
 }
@@ -72,6 +80,39 @@ func (t *IntKeyTable) Reserve(n int) {
 	}
 }
 
+// NullID is the null key's id, or -1 when no null has been inserted.
+func (t *IntKeyTable) NullID() int32 { return t.null }
+
+// GetOrInsertNull is the null key's id, given the next one if it has none.
+func (t *IntKeyTable) GetOrInsertNull() (int32, bool) {
+	if t.null >= 0 {
+		return t.null, false
+	}
+	t.null = int32(len(t.keys))
+	t.keys = pushDoubling(t.keys, 0)
+	return t.null, true
+}
+
+// KeyAt is the key of id; the null key's is 0, so a caller asks NullID first.
+func (t *IntKeyTable) KeyAt(id int32) int64 { return t.keys[id] }
+
+// HashAt is IntHash of id's key, and a fixed hash for the null key, so the nulls of
+// several tables meet in one partition.
+func (t *IntKeyTable) HashAt(id int32) uint64 {
+	if id == t.null {
+		return nullKeyHash
+	}
+	return IntHash(t.keys[id])
+}
+
+// nullKeyHash is the null key's hash in HashAt.
+const nullKeyHash = 0
+
+// GetOrInsert is k's id, given the next one if k is new.
+func (t *IntKeyTable) GetOrInsert(k int64) (int32, bool) {
+	return t.getOrInsert(k, IntHash(k))
+}
+
 // GetOrInsertMany is KeyTable.GetOrInsertMany for up to ManyChunk keys: ids[j] and
 // inserted[j] answer keys[j]. Every key's first slot is read before any is placed.
 func (t *IntKeyTable) GetOrInsertMany(keys []int64, ids []int32, inserted []bool) {
@@ -85,6 +126,26 @@ func (t *IntKeyTable) GetOrInsertMany(keys []int64, ids []int32, inserted []bool
 	_ = sum
 	for j, k := range keys {
 		ids[j], inserted[j] = t.getOrInsert(k, hs[j])
+	}
+}
+
+// GetOrInsertNullable is GetOrInsertMany where null(j) marks keys[j] a null key.
+// Ids are given in order, so a new null between two new keys is numbered between
+// them, which a group-by numbering its groups by first appearance needs.
+func (t *IntKeyTable) GetOrInsertNullable(keys []int64, null func(j int) bool, ids []int32, inserted []bool) {
+	lo := 0
+	for j := range keys {
+		if !null(j) {
+			continue
+		}
+		if lo < j {
+			t.GetOrInsertMany(keys[lo:j], ids[lo:j], inserted[lo:j])
+		}
+		ids[j], inserted[j] = t.GetOrInsertNull()
+		lo = j + 1
+	}
+	if lo < len(keys) {
+		t.GetOrInsertMany(keys[lo:], ids[lo:], inserted[lo:])
 	}
 }
 
@@ -139,11 +200,15 @@ func (t *IntKeyTable) getFrom(k int64, h, s uint64) int32 {
 	}
 }
 
-// grow doubles the slots, rehashing each key; Mix64 is cheaper than storing hashes.
+// grow doubles the slots, rehashing each key but the null; Mix64 is cheaper than
+// storing hashes.
 func (t *IntKeyTable) grow() {
 	slots := make([]uint64, len(t.slots)*2)
 	mask := uint64(len(slots) - 1)
 	for id, k := range t.keys {
+		if int32(id) == t.null {
+			continue
+		}
 		h := IntHash(k)
 		for i := h & mask; ; i = (i + 1) & mask {
 			if slots[i] == 0 {

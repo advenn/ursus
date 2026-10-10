@@ -283,7 +283,7 @@ func (s *hashAggSink) newSub(path string) (*hashAggSink, error) {
 	}
 	return &hashAggSink{
 		schema: s.schema, keys: s.keys, specs: s.specs, keySchema: s.keySchema,
-		ids:  kernel.NewKeyTable(),
+		ids:  newGroupKeys(s.keySchema),
 		accs: accs,
 		mem:  s.budget.Account("group_by"),
 

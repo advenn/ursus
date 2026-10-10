@@ -198,3 +198,73 @@ func TestIntKeyTableComparesTheKeyNotItsTag(t *testing.T) {
 		t.Fatalf("GetOrInsertMany(%d, %d) = %v, %v; want [1 0], [true false]", b, a, ids, inserted)
 	}
 }
+
+// TestIntKeyTableNumbersANullInOrder: a group-by's null key is a group, numbered
+// where it first appears among the others (step 160). It has no slot, so growing
+// the table must not place it, where the zero it keeps would be found as key 0: so
+// the null comes first, the table grows, and only then does 0 arrive.
+func TestIntKeyTableNumbersANullInOrder(t *testing.T) {
+	rng := rand.New(rand.NewPCG(160, 2))
+	tbl := NewIntKeyTable()
+	want := map[int64]int32{}
+	wantNull := int32(-1)
+	var ids [ManyChunk]int32
+	var inserted [ManyChunk]bool
+	keys := make([]int64, ManyChunk)
+	nulls := make([]bool, ManyChunk)
+	for round := range 400 {
+		for j := range keys {
+			// Key 0 often, so a null placed in a slot would be met as it.
+			keys[j], nulls[j] = int64(rng.IntN(3_000))*int64(rng.IntN(2)), rng.IntN(40) == 0
+			if round == 0 {
+				// The null first, then enough keys to grow the table, and no 0 yet: a
+				// real 0 inserted first would sit ahead of a misplaced null in its chain.
+				keys[j], nulls[j] = int64(j+1), j == 0
+			}
+		}
+		tbl.GetOrInsertNullable(keys, func(j int) bool { return nulls[j] }, ids[:], inserted[:])
+		for j := range keys {
+			next := int32(len(want))
+			if wantNull >= 0 {
+				next++
+			}
+			var id int32
+			var isNew bool
+			if nulls[j] {
+				if isNew = wantNull < 0; isNew {
+					wantNull = next
+				}
+				id = wantNull
+			} else {
+				var ok bool
+				if id, ok = want[keys[j]]; !ok {
+					id, isNew = next, true
+					want[keys[j]] = id
+				}
+			}
+			if ids[j] != id || inserted[j] != isNew {
+				t.Fatalf("round %d, key %d (null %v): id %d, inserted %v; want %d, %v",
+					round, keys[j], nulls[j], ids[j], inserted[j], id, isNew)
+			}
+		}
+	}
+	if tbl.NullID() != wantNull || wantNull < 0 {
+		t.Fatalf("NullID() = %d, want %d", tbl.NullID(), wantNull)
+	}
+	// Grown many times past the null: 0 is still its own key, found at its own id.
+	tbl.GetMany([]int64{0}, ids[:1])
+	if ids[0] != want[0] || ids[0] == wantNull {
+		t.Fatalf("key 0 found at %d, its id is %d and the null's %d", ids[0], want[0], wantNull)
+	}
+	for k, id := range want {
+		if tbl.KeyAt(id) != k || tbl.HashAt(id) != IntHash(k) {
+			t.Fatalf("id %d reads back as %d, hash %#x", id, tbl.KeyAt(id), tbl.HashAt(id))
+		}
+	}
+	if tbl.HashAt(wantNull) != nullKeyHash {
+		t.Fatalf("the null's hash is %#x", tbl.HashAt(wantNull))
+	}
+	if id, isNew := tbl.GetOrInsert(0); id != want[0] || isNew {
+		t.Fatalf("GetOrInsert(0) = %d, %v", id, isNew)
+	}
+}
