@@ -79,8 +79,9 @@ func (e Expr) Sum() Expr { return e.agg(expr.AggSum) }
 // Mean of a group with no non-null values is NULL, not NaN: there was nothing to
 // compute, as opposed to a computation that came out undefined.
 //
-// The mean of a Duration is an exact Duration. A Date, Datetime or Time is refused
-// for now; Cast(Int64) gives its ticks.
+// The mean of an instant or a duration is one, exact and truncated toward zero, as
+// Polars' (step 173): a Datetime, Time or Duration keeps its type, and a Date's mean
+// is a Datetime(us), keeping the fraction of a day.
 func (e Expr) Mean() Expr { return e.agg(expr.AggMean) }
 
 // Min and Max use ursus's TOTAL order, the same one Sort uses: NaN sorts above
@@ -184,9 +185,10 @@ func (e Expr) varStd(op expr.AggOp, ddof int) Expr {
 // Median is the 0.5 quantile with linear interpolation, so an even-sized group
 // gives the mean of the two middle values.
 //
-// It returns Float64 for every numeric input, and skips nulls. A temporal column, a
-// Duration included, is refused for now, as it is by Quantile; Cast(Int64) gives
-// its ticks.
+// It returns Float64 for every numeric input, and skips nulls. The median of
+// instants or durations is one, truncated toward zero, as Polars' (step 173): its
+// type kept, but a Date's, which is a Datetime(us). Quantile still refuses a temporal
+// column; Cast(Int64) gives its ticks.
 func (e Expr) Median() Expr { return e.agg(expr.AggMedian) }
 
 // Quantile returns the value at rank q, where q runs from 0 (the minimum) to 1 (the

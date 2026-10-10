@@ -337,6 +337,15 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 			// would need a 39th digit.
 			return AggBinding{Acc: dtype.Int128, Out: dtype.Float64}, nil
 		}
+		// An instant's mean is an instant, exact and truncated toward zero, as
+		// Polars' (step 173). A Datetime or a Time keeps its type; a Date's mean
+		// keeps the fraction of a day, so it is a Datetime(us), as Polars answers.
+		switch in.ID() {
+		case dtype.TypeDatetime, dtype.TypeTime:
+			return AggBinding{Acc: dtype.Int128, Out: in}, nil
+		case dtype.TypeDate:
+			return AggBinding{Acc: dtype.Int128, Out: dtype.Datetime(dtype.Micro, "")}, nil
+		}
 		if !in.IsNumeric() {
 			return AggBinding{}, notTemporalYet(uerr.New(uerr.KindType, "",
 				"mean() requires a numeric operand, got %s", in), in)
@@ -373,6 +382,15 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		return AggBinding{Acc: dtype.Bool, Out: dtype.Bool}, nil
 
 	case AggVar, AggStd, AggMedian, AggQuantile:
+		// A median of instants or durations is one of them, truncated toward zero,
+		// as Polars' (step 173): its type kept, but a Date's, which is a
+		// Datetime(us) to keep a fraction of a day, as the mean's.
+		if op == AggMedian && in.IsTemporal() {
+			if in.ID() == dtype.TypeDate {
+				return AggBinding{Acc: dtype.Float64, Out: dtype.Datetime(dtype.Micro, "")}, nil
+			}
+			return AggBinding{Acc: dtype.Float64, Out: in}, nil
+		}
 		// A Decimal takes the Float64 path below, and reads its values through
 		// toFloat64 with the scale applied. Polars returns Float64 for all four;
 		// DuckDB keeps median as a DECIMAL, and a median of an even count is a mean.

@@ -134,10 +134,10 @@ func TestTemporalStatisticsAreRefusedWithACast(t *testing.T) {
 		name string
 		e    ursus.Expr
 	}{
-		{"median of a Datetime", c("ts").Median()},
+		// A Datetime's median and mean answer since step 173, as Polars'
+		// (temporalagg_test.go); the quantile and the spreads still refuse.
 		{"quantile of a Date", c("day").Quantile(0.5, ursus.InterpLinear)},
 		{"std of a Duration", c("d").Std(1)},
-		{"mean of a Datetime", c("ts").Mean()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			refusedSaying(t, f.GroupBy().Agg(tc.e.Alias("y")), ursus.ErrType,

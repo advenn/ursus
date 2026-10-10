@@ -399,7 +399,17 @@ type quantileAcc struct {
 	q      float64
 	interp expr.Interpolation
 	vals   [][]float64
+
+	// out is the answer's type: Float64, or for a median of instants or durations
+	// their own, the float answer truncated toward zero, as Polars' (step 173). scale
+	// multiplies each value as it is added: a Date's days are microseconds in its
+	// Datetime(us) answer, and every other value is itself, 0 meaning 1.
+	out   dtype.DataType
+	scale float64
 }
+
+// microsPerDay is a Date's day in a Datetime(us).
+const microsPerDay = 86_400_000_000
 
 func (a *quantileAcc) Reserve(n int) { a.vals = Extend(a.vals, n, nil) }
 
@@ -409,11 +419,15 @@ func (a *quantileAcc) AddBatch(groups []int32, col *data.Column) error {
 		return err
 	}
 	valid := col.Validity()
+	scale := a.scale
+	if scale == 0 {
+		scale = 1
+	}
 	for i, g := range groups {
 		if !valid.Get(i) {
 			continue // nulls are skipped, as in every other aggregate
 		}
-		a.vals[g] = append(a.vals[g], vals[i])
+		a.vals[g] = append(a.vals[g], vals[i]*scale)
 	}
 	return nil
 }
@@ -447,6 +461,13 @@ func (a *quantileAcc) Finish(name string, nGroups int) (*data.Column, error) {
 		}
 		out[i] = quantileOf(v, a.q, a.interp)
 		seen[i] = true
+	}
+	if a.out.IsTemporal() {
+		ticks := make([]int64, nGroups)
+		for i, v := range out {
+			ticks[i] = int64(v) // toward zero, as Polars casts its float median
+		}
+		return data.NewFixed(name, a.out, ticks, seenBitmap(seen, nGroups)), nil
 	}
 	return data.NewFixed(name, dtype.Float64, out, seenBitmap(seen, nGroups)), nil
 }

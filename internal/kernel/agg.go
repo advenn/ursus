@@ -153,7 +153,11 @@ func NewAccumulator(op expr.AggOp, in dtype.DataType, bind expr.AggBinding,
 		// The median IS the 0.5 quantile, linearly interpolated. Giving it its own
 		// accumulator would mean two implementations that must agree on the
 		// even-length case forever.
-		return &quantileAcc{q: 0.5, interp: expr.InterpLinear}, nil
+		q := &quantileAcc{q: 0.5, interp: expr.InterpLinear, out: bind.Out}
+		if in.ID() == dtype.TypeDate {
+			q.scale = microsPerDay
+		}
+		return q, nil
 	case expr.AggQuantile:
 		return &quantileAcc{q: params.Q, interp: params.Interp}, nil
 
@@ -784,6 +788,14 @@ func (a *meanAcc) AddBatch(groups []int32, col *data.Column) error {
 		src, err := widenToInt128(col)
 		if err != nil {
 			return err
+		}
+		if a.in.ID() == dtype.TypeDate {
+			// A Date's mean is a Datetime(us), in microseconds (step 173). A day's
+			// worth of them times any int32 of days fits 128 bits.
+			day := i128.FromInt64(microsPerDay)
+			for i := range src {
+				src[i], _ = src[i].MulChecked(day)
+			}
 		}
 		for i, g := range groups {
 			if valid.Get(i) {

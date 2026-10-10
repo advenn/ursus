@@ -85,6 +85,20 @@ func leafType(c *schema.Column) (dtype.DataType, error) {
 	case schema.IntLogicalType:
 		return intType(c, lt)
 
+	case schema.JSONLogicalType:
+		// JSON text, read as the String it is, as Polars reads it (step 173).
+		if p != parquet.Types.ByteArray {
+			return dtype.Null, unsupportedColumn(c, "JSON on a %s column", p)
+		}
+		return dtype.String, nil
+
+	case schema.UUIDLogicalType:
+		// Sixteen bytes, read as the Binary they are, as Polars reads them (step 173).
+		if p != parquet.Types.FixedLenByteArray || c.TypeLength() != 16 {
+			return dtype.Null, unsupportedColumn(c, "UUID on a %s column of %d bytes", p, c.TypeLength())
+		}
+		return dtype.Binary, nil
+
 	case schema.DecimalLogicalType:
 		prec, scale := lt.Precision(), lt.Scale()
 		// 38 digits is what fits in 128 bits, which is ursus's Decimal storage. A
@@ -142,7 +156,7 @@ func leafType(c *schema.Column) (dtype.DataType, error) {
 		return physicalOnly(c, p)
 
 	default:
-		// JSON, BSON, UUID, ENUM, INTERVAL, FLOAT16, VARIANT, LIST, MAP.
+		// BSON, ENUM, INTERVAL, FLOAT16, VARIANT, LIST, MAP.
 		return dtype.Null, unsupportedColumn(c,
 			"logical type %s is not supported", c.LogicalType())
 	}
