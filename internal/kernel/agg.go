@@ -1340,55 +1340,140 @@ func (a *extremumBool) NBytes() int64 { return int64(cap(a.best)) + int64(cap(a.
 // be null. First is a selection, not a reduction — skipping nulls would mean
 // First(a) and First(b) could come from different rows, which is precisely what
 // people use them together for. DuckDB and Polars both agree on this default.
+//
+// # A row index a group, and one gather a batch (step 168)
+//
+// It kept a one-row Column per group: a map and a Take per group each batch, and a
+// Finish that concatenated one part per group. That is the shape implodeAcc records
+// costing 93 seconds on h2o gb7 at step 20; First and Last had kept it, at 0.8 and
+// 1.2 s over 182,000 groups where Sum took 33 ms.
+//
+// Now each batch gathers, in one Take, the rows it decides: a group's first row for
+// First, and a group's last row in the batch for Last. Each group keeps the index of
+// its row in the concatenation of those gathers, and Finish gathers once. Take keeps
+// the dtype, so every type works as it does for implode.
+//
+// Last supersedes a group's row in every batch the group appears in, and a
+// superseded row is garbage in parts. When the garbage passes twice the live rows,
+// and 64k, the live rows are gathered into one part again, so what Last holds stays
+// O(groups).
 type positionAcc struct {
 	out  dtype.DataType
 	last bool
-	rows []*data.Column
+
+	parts []*data.Column // the rows gathered, a part a batch, in order
+	at    []int32        // per group: its row in the concatenation of parts, or NullIndex
+	base  int32          // rows in parts, which is where the next part starts
+	live  int            // groups with a row
+	dead  int            // rows in parts no group points at (Last only)
+
+	// seen[g] is the number of the batch that last picked group g, so a batch picks
+	// a group once; batch counts the batches.
+	seen  []int32
+	batch int32
 }
 
-func (a *positionAcc) Reserve(n int) { a.rows = Extend(a.rows, n, nil) }
+func (a *positionAcc) Reserve(n int) {
+	a.at = Extend(a.at, n, NullIndex)
+	a.seen = Extend(a.seen, n, 0)
+}
 
 func (a *positionAcc) AddBatch(groups []int32, col *data.Column) error {
-	pick := map[int32]int{}
-	for i, g := range groups {
-		if _, seen := pick[g]; !seen || a.last {
-			pick[g] = i
+	a.batch++
+	var pick, who []int32 // rows of col to gather, and the group each is for
+	if a.last {
+		// Walked backwards, so a group's first sighting is its last row.
+		for i := len(groups) - 1; i >= 0; i-- {
+			if g := groups[i]; a.seen[g] != a.batch {
+				a.seen[g] = a.batch
+				pick, who = append(pick, int32(i)), append(who, g)
+			}
+		}
+	} else {
+		for i, g := range groups {
+			if a.at[g] == NullIndex && a.seen[g] != a.batch {
+				a.seen[g] = a.batch
+				pick, who = append(pick, int32(i)), append(who, g)
+			}
 		}
 	}
-	for g, row := range pick {
-		if a.rows[g] != nil && !a.last {
-			continue // First: the earliest batch wins
+	if len(pick) == 0 {
+		return nil
+	}
+	part, err := Take(col, pick)
+	if err != nil {
+		return err
+	}
+	a.parts = append(a.parts, part)
+	for j, g := range who {
+		if a.at[g] == NullIndex {
+			a.live++
+		} else {
+			a.dead++
 		}
-		c, err := Take(col, []int32{int32(row)})
-		if err != nil {
-			return err
-		}
-		a.rows[g] = c
+		a.at[g] = a.base + int32(j)
+	}
+	a.base += int32(len(pick))
+	if a.dead > 1<<16 && a.dead > 2*a.live {
+		return a.compact()
 	}
 	return nil
 }
 
+// compact gathers the live rows into one part, in group order.
+func (a *positionAcc) compact() error {
+	all, err := concatColumn(a.parts, int(a.base))
+	if err != nil {
+		return err
+	}
+	sel := make([]int32, 0, a.live)
+	for g, r := range a.at {
+		if r != NullIndex {
+			a.at[g] = int32(len(sel))
+			sel = append(sel, r)
+		}
+	}
+	part, err := Take(all, sel)
+	if err != nil {
+		return err
+	}
+	a.parts, a.base, a.dead = []*data.Column{part}, int32(len(sel)), 0
+	return nil
+}
+
+// Merge folds another accumulator's groups in, its rows after this one's.
+//
+// Merge assumes `other` saw a LATER slice of the input than this one. First keeps
+// what it has; Last takes the newer value.
+//
+// That assumption is why First and Last are ORDER-DEPENDENT and why the parallel
+// aggregation driver refuses to use it: its dispatcher is round-robin, so worker 1's
+// second batch precedes worker 0's Nth and neither sink holds a contiguous portion.
+// See expr.AggOp.IsOrderDependent and physical.aggCanParallelise.
 func (a *positionAcc) Merge(other Accumulator, remap []int32) error {
 	o, ok := other.(*positionAcc)
 	if !ok {
 		return uerr.Internalf("kernel: cannot merge %T into positionAcc", other)
 	}
-	a.Reserve(mergeCap(remap, len(o.rows)))
-	mergeEach(remap, len(o.rows), func(dst, src int) {
-		c := o.rows[src]
-		if c == nil {
+	shift := a.base
+	a.parts = append(a.parts, o.parts...)
+	a.base += o.base
+	a.dead += o.dead
+	a.Reserve(mergeCap(remap, len(o.at)))
+	mergeEach(remap, len(o.at), func(dst, src int) {
+		r := o.at[src]
+		if r == NullIndex {
 			return
 		}
-		// Merge assumes `other` saw a LATER slice of the input than this one. First
-		// keeps what it has; Last takes the newer value.
-		//
-		// That assumption is why First and Last are ORDER-DEPENDENT and why the
-		// parallel aggregation driver refuses to use it: its dispatcher is
-		// round-robin, so worker 1's second batch precedes worker 0's Nth and
-		// neither sink holds a contiguous portion. See expr.AggOp.IsOrderDependent
-		// and physical.aggCanParallelise.
-		if a.rows[dst] == nil || a.last {
-			a.rows[dst] = c
+		switch {
+		case a.at[dst] == NullIndex:
+			a.live++
+			a.at[dst] = r + shift
+		case a.last:
+			a.dead++
+			a.at[dst] = r + shift
+		default:
+			a.dead++ // First keeps its own; o's row is never read
 		}
 	})
 	return nil
@@ -1396,46 +1481,22 @@ func (a *positionAcc) Merge(other Accumulator, remap []int32) error {
 
 func (a *positionAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
-	return assembleRows(name, a.out, a.rows[:nGroups])
-}
-
-// --- helpers -----------------------------------------------------------------
-
-// assembleRows stitches one single-row column per group into one column, with a
-// null where a group produced nothing.
-func assembleRows(name string, out dtype.DataType, rows []*data.Column) (*data.Column, error) {
-	n := len(rows)
-	if n == 0 {
-		return data.NewNull(name, out, 0), nil
+	if len(a.parts) == 0 {
+		return NullColumn(name, a.out, nGroups)
 	}
-
-	parts := make([]*data.Column, 0, n)
-	vb := bitmap.NewBuilder(n)
-	for _, c := range rows {
-		if c == nil {
-			// NullColumn, not data.NewNull: this placeholder is about to be
-			// concatenated, and a payload-free column cannot be read. With
-			// data.NewNull here, `GroupBy(g).Agg(Col("v").Min())` failed with
-			// "column has no fixed-width payload" for any group whose values were
-			// all null — a plain query, reported as if it were an ursus bug.
-			pad, err := NullColumn(name, out, 1)
-			if err != nil {
-				return nil, err
-			}
-			parts = append(parts, pad)
-			vb.Append(false)
-			continue
-		}
-		parts = append(parts, c)
-		vb.Append(c.IsValid(0))
-	}
-
-	col, err := concatColumn(parts, n)
+	all, err := concatColumn(a.parts, int(a.base))
 	if err != nil {
 		return nil, err
 	}
-	return col.Rename(name).WithDType(out), nil
+	// A group with no row gathers NullIndex, a null.
+	col, err := Take(all, a.at[:nGroups])
+	if err != nil {
+		return nil, err
+	}
+	return col.Rename(name).WithDType(a.out), nil
 }
+
+// --- helpers -----------------------------------------------------------------
 
 // seenBitmap turns per-group presence flags into a validity bitmap, dropping the
 // buffer entirely when every group saw a value.
@@ -1509,7 +1570,9 @@ func (a *meanAcc) NBytes() int64 {
 	return int64(cap(a.sum))*8 + int64(cap(a.i))*16 + int64(cap(a.carry))*8 + int64(cap(a.n))*8
 }
 
-func (a *positionAcc) NBytes() int64 { return colBytes(a.rows) }
+func (a *positionAcc) NBytes() int64 {
+	return colBytes(a.parts) + int64(cap(a.at))*4 + int64(cap(a.seen))*4
+}
 
 // --- implode ---------------------------------------------------------------------
 

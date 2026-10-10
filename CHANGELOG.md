@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–167, so far.
+Everything on master since `v0.5.0`: steps 156–168, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -45,6 +45,8 @@ far ursus has moved against v0.5.0 is measured once, at the end.
 - **Runtime filters** (167): an inner or semi join's built integer keys drop the rows
   below the joins between it and its probe key's source. q21 −56% CPU, q2 −35%, q11
   −30%. A filter that keeps three quarters of what it sees retires.
+- **`First` and `Last` over many groups** (168): about 25 times faster over 182,000
+  groups, from 0.8 and 1.2 s to 34 and 45 ms.
 
 ### What a user of v0.5.0 can trip on
 
