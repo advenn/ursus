@@ -29,6 +29,9 @@ import (
 func winRolling(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
 	col *data.Column, seg Segments) (*data.Column, error) {
 
+	if params.Center {
+		return rollingCentered(fn, params, name, out, col, seg)
+	}
 	size, minN := int(params.N), int(params.MinSamples)
 	if minN == 0 {
 		minN = size
@@ -47,6 +50,61 @@ func winRolling(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.D
 		return rollingIntSum(name, out, col, seg, size, minN)
 	}
 	return rollingFloat(fn, int(params.Ddof), name, out, col, seg, size, minN)
+}
+
+// rollingCentered is a rolling window labelled at its middle row, as Polars'
+// center=True (step 172): a window of size rows covers size/2 before the row and
+// (size-1)/2 after. That is the trailing window ending (size-1)/2 rows later, so each
+// partition is padded with that many null rows after its last, the trailing kernel
+// runs unchanged, and each row takes the answer from those rows on. A padded row is
+// null, so it counts as no value, which is Polars' partial window at the end.
+func rollingCentered(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
+	col *data.Column, seg Segments) (*data.Column, error) {
+
+	params.Center = false
+	k := (int(params.N) - 1) / 2
+	if k == 0 {
+		return winRolling(fn, params, name, out, col, seg)
+	}
+	col, err := readable(col)
+	if err != nil {
+		return nil, err
+	}
+	parts, n := len(seg.Bounds)-1, col.Len()
+	pad, err := NullColumn(col.Name(), col.DType(), parts*k)
+	if err != nil {
+		return nil, err
+	}
+	ext, err := concatColumn([]*data.Column{col, pad}, n+parts*k)
+	if err != nil {
+		return nil, err
+	}
+	perm := make([]int32, 0, len(seg.Perm)+parts*k)
+	bounds := make([]int32, 1, parts+1)
+	next := int32(n)
+	for p := range parts {
+		perm = append(perm, seg.Perm[seg.Bounds[p]:seg.Bounds[p+1]]...)
+		for range k {
+			perm = append(perm, next)
+			next++
+		}
+		bounds = append(bounds, int32(len(perm)))
+	}
+	res, err := winRolling(fn, params, name, out, ext, Segments{Perm: perm, Bounds: bounds})
+	if err != nil {
+		return nil, err
+	}
+	sel := make([]int32, n)
+	for i := range sel {
+		sel[i] = NullIndex
+	}
+	for p := range parts {
+		rows := seg.Perm[seg.Bounds[p]:seg.Bounds[p+1]]
+		for i, row := range rows {
+			sel[row] = perm[int(bounds[p])+i+k]
+		}
+	}
+	return Take(res, sel)
 }
 
 // rollingExtremum answers each row with the window's least or greatest row, kept at

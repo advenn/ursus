@@ -396,6 +396,11 @@ type WinParams struct {
 	MinSamples int64
 	Ddof       int64
 
+	// Center labels a rolling window at its middle row rather than its last, as
+	// Polars' center=True; Nearest is Interpolate's method="nearest" (step 172).
+	Center  bool
+	Nearest bool
+
 	// The ewm functions' (step 153): Alpha is the decay; NoAdjust is Polars'
 	// adjust=False, so the zero value is its default; IgnoreNulls weighs by
 	// position among the values rather than among the rows; Bias is ewm_var's and
@@ -424,9 +429,14 @@ func (p WinParams) args(op WinFnOp) string {
 	case WinRollingVar, WinRollingStd:
 		// Every parameter the answer depends on, for the reason the arm above gives.
 		return strconv.FormatInt(p.N, 10) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10) +
-			", ddof " + strconv.FormatInt(p.Ddof, 10)
+			", ddof " + strconv.FormatInt(p.Ddof, 10) + centered(p)
 	case WinRollingSum, WinRollingMean, WinRollingMin, WinRollingMax:
-		return strconv.FormatInt(p.N, 10) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10)
+		return strconv.FormatInt(p.N, 10) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10) + centered(p)
+	case WinInterpolate:
+		if p.Nearest {
+			return "nearest"
+		}
+		return ""
 	case WinEwmMean, WinEwmStd, WinEwmVar:
 		// Every parameter, bias included where it does not apply, so two calls that
 		// differ in any one cannot share a temporary.
@@ -441,6 +451,14 @@ func (p WinParams) args(op WinFnOp) string {
 		}
 		return ""
 	}
+}
+
+// centered renders a rolling window's center, which its answer depends on.
+func centered(p WinParams) string {
+	if p.Center {
+		return ", center"
+	}
+	return ""
 }
 
 // WinFn is an ordered window function — rank, a running total, a shift.
@@ -591,6 +609,15 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 		return rollingOut(fn, p, in)
 
 	case WinEwmMean, WinEwmStd, WinEwmVar, WinInterpolate:
+		if fn == WinInterpolate && p.Nearest {
+			// The nearest value is a value of the column, so its type is kept, as
+			// Polars' method="nearest" keeps it.
+			if in.IsNumeric() || in.IsTemporal() {
+				return in, nil
+			}
+			return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+				"interpolate(nearest) is not defined for %s", in)
+		}
 		if fn != WinInterpolate {
 			if !(p.Alpha > 0 && p.Alpha <= 1) {
 				return dtype.Null, uerr.New(uerr.KindValue, fn.String(),

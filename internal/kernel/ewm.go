@@ -155,6 +155,47 @@ func winInterpolate(name string, out dtype.DataType, col *data.Column, seg Segme
 	return floatsAs(name, out, res, seenBitmap(ok, len(ok))), nil
 }
 
+// winInterpolateNearest fills each run of nulls between two values with the nearer
+// of the two by position, the later on a tie, as Polars' interpolate(method=
+// "nearest") does (step 172). A run before the first value or after the last stays
+// null. It answers rows of the column, so one Take keeps its type.
+func winInterpolateNearest(name string, col *data.Column, seg Segments) (*data.Column, error) {
+	col, err := readable(col)
+	if err != nil {
+		return nil, err
+	}
+	valid := col.Validity()
+	sel := make([]int32, col.Len())
+	for i := range sel {
+		sel[i] = NullIndex
+	}
+	forEachOrdered(seg, false, func(rows []int32) {
+		last := -1 // the position of the last value seen
+		for p, row := range rows {
+			if !valid.Get(int(row)) {
+				continue
+			}
+			sel[row] = row
+			if last >= 0 {
+				for q := last + 1; q < p; q++ {
+					// The later value wins a tie: nearer to it, or as near.
+					if p-q <= q-last {
+						sel[rows[q]] = row
+					} else {
+						sel[rows[q]] = rows[last]
+					}
+				}
+			}
+			last = p
+		}
+	})
+	out, err := Take(col, sel)
+	if err != nil {
+		return nil, err
+	}
+	return out.Rename(name), nil
+}
+
 // floatsAs stores float64 answers as out, a Float32 or a Float64.
 func floatsAs(name string, out dtype.DataType, res []float64, valid bitmap.View) *data.Column {
 	if out == dtype.Float32 {

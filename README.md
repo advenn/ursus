@@ -160,7 +160,7 @@ once, so it must be safe for that.
 Not done: built-in object stores and SQL, both out by decision (the seam above reaches a store today); `MapGroups`
 and `RollingMap`; `Pivot`, whose output columns are the distinct values of a column, so its schema would depend on data
 and no plan node here does (`Unpivot`, melt, ships); `Upsample`; rolling windows by time as expressions, `Corr`, `Cov`,
-`MinBy`, `MaxBy`, `ReplaceTimeZone` and `Interpolate`'s nearest method; list set operations, `Sample` and
+`MinBy`, `MaxBy` and `ReplaceTimeZone`; list set operations, `Sample` and
 `List().Eval`; Arrow IPC files and NDJSON. [`v0.6-scope.md`](./context_files/v0.6-scope.md) says which of these 0.6
 takes, and why the rest wait.
 

@@ -209,9 +209,25 @@ func Ddof(d int) WindowOption {
 	return func(p *expr.WinParams) { p.Ddof = int64(d) }
 }
 
+// RollingCenter labels a rolling window at its middle row rather than its last, as
+// Polars' center=True (step 172): a window of size rows covers size/2 rows before
+// the row and (size-1)/2 after it. A window that runs past either end of the rows
+// holds fewer values, and is null unless MinSamples allows it.
+func RollingCenter() WindowOption {
+	return func(p *expr.WinParams) { p.Center = true }
+}
+
+// InterpolateNearest makes Interpolate fill a run of nulls with the nearer of the two
+// values around it, the later on a tie, as Polars' method="nearest" (step 172). The
+// column's own type is kept, a number's or an instant's.
+func InterpolateNearest() WindowOption {
+	return func(p *expr.WinParams) { p.Nearest = true }
+}
+
 // RollingSum, RollingMean, RollingMin, RollingMax, RollingVar and RollingStd answer
 // each row over the size rows up to and including it: Polars' rolling_* with a
-// window_size, center=False.
+// window_size, center=False. RollingCenter() labels each window at its middle row
+// instead, as center=True does.
 //
 //	Col("price").RollingMean(7)                           // the week's average, from the 7th row
 //	Col("price").RollingMean(7).Over(Col("ticker"))       // per ticker
@@ -360,8 +376,15 @@ func (e Expr) ewm(fn expr.WinFnOp, decay EwmDecay, opts []WindowOption) Expr {
 // straight line between them, by position in the window's order: Polars'
 // interpolate. [1, null, null, 7] is [1, 3, 5, 7]. A run before the first value or
 // after the last stays null. An integer or a Decimal answers a Float64; a float keeps
-// its width.
-func (e Expr) Interpolate() Expr { return e.winFn(expr.WinInterpolate, expr.WinParams{}) }
+// its width. InterpolateNearest() fills it with the nearer value instead:
+// [1, 1, 7, 7].
+func (e Expr) Interpolate(opts ...WindowOption) Expr {
+	var p expr.WinParams
+	for _, o := range opts {
+		o(&p)
+	}
+	return e.winFn(expr.WinInterpolate, p)
+}
 
 // Diff is the difference from the value n rows earlier.
 //
