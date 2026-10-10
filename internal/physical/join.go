@@ -282,6 +282,12 @@ type joinBuildSink struct {
 	nRows  int
 	chunk  keyChunk // admit's scratch
 
+	// keyParts are a deferred Semi or Anti join's evaluated keys, a batch of them for
+	// each build batch, which it keeps in place of the batches (step 161): it reads
+	// its build rows for their keys alone. keySchema names their columns.
+	keyParts  []*data.Batch
+	keySchema *dtype.Schema
+
 	// mem accounts everything this sink holds across batches: the retained build
 	// batches, rowKey (one int32 per build row whether or not the rows themselves
 	// are kept), counts, and the ids map.
@@ -341,6 +347,16 @@ func (s *joinBuildSink) Consume(ctx context.Context, in *data.Batch) error {
 	}
 
 	switch {
+	case s.deferred && !s.spec.needBuildRows:
+		// A Semi or Anti join's keys wait for freeze; its rows are never read.
+		kb, err := s.keyBatch(ctx, in)
+		if err != nil {
+			return err
+		}
+		s.keyParts = append(s.keyParts, kb)
+		s.mem.Retain(kb)
+		s.nBuild += n
+
 	case s.deferred:
 		// The keys wait for freeze, which inserts them partitioned.
 		s.parts = append(s.parts, in)
@@ -457,12 +473,16 @@ func (s *joinBuildSink) Merge(other Sink) error {
 		s.rowKey[base+j] = id
 	}
 	s.parts = append(s.parts, o.parts...)
+	s.keyParts = append(s.keyParts, o.keyParts...)
 	s.nRows += o.nRows
 
 	// Merge used to do no accounting at all: it appended another sink's retained
 	// batches without retaining them and left stateBytes stale, so a merged sink
 	// under-reported by everything the other one held.
 	for _, b := range o.parts {
+		s.mem.Retain(b)
+	}
+	for _, b := range o.keyParts {
 		s.mem.Retain(b)
 	}
 	st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + s.ids.NBytes()
@@ -595,6 +615,9 @@ func (s *joinBuildSink) freeze(ctx context.Context) (*joinTable, error) {
 		} else {
 			t.ids = keys.bytes
 		}
+		// A Semi or Anti join's keys are in the tables now; the rebase below drops
+		// their charge.
+		s.keyParts = nil
 		// Charged as reaccount charges the streaming build's, so the peak sees the
 		// tables as it sees the one, before the rebase below lets them go.
 		st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + keys.NBytes()

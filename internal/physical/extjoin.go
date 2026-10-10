@@ -322,6 +322,19 @@ func (s *joinBuildSink) admit(ctx context.Context, in *data.Batch, rowBase int) 
 	if err != nil {
 		return err
 	}
+	if err := s.admitKeys(keyCols, in.Rows(), rowBase); err != nil {
+		return err
+	}
+	if s.spec.needBuildRows {
+		s.parts = append(s.parts, in)
+		s.mem.Retain(in)
+	}
+	return nil
+}
+
+// admitKeys is admit's insertion of n rows' evaluated keys, which a deferred Semi or
+// Anti join's catchUp calls with the keys it kept (step 161).
+func (s *joinBuildSink) admitKeys(keyCols []*data.Column, n, rowBase int) error {
 	ok := keyValidity(keyCols)
 	enc, err := kernel.NewGroupKeyEncoder("join", keyCols)
 	if err != nil {
@@ -334,7 +347,7 @@ func (s *joinBuildSink) admit(ctx context.Context, in *data.Batch, rowBase int) 
 	// (step 137, 138).
 	base := len(s.rowKey)
 	if track {
-		s.rowKey = kernel.Extend(s.rowKey, base+in.Rows(), 0)
+		s.rowKey = kernel.Extend(s.rowKey, base+n, 0)
 	}
 	ch := &s.chunk
 	ch.reset()
@@ -358,7 +371,7 @@ func (s *joinBuildSink) admit(ctx context.Context, in *data.Batch, rowBase int) 
 		ch.reset()
 		return nil
 	}
-	for i := range in.Rows() {
+	for i := range n {
 		if !s.spec.nullsEqual && !ok.Get(i) {
 			if track {
 				s.rowKey[base+i] = noKey
@@ -375,11 +388,7 @@ func (s *joinBuildSink) admit(ctx context.Context, in *data.Batch, rowBase int) 
 	if err := flush(); err != nil {
 		return err
 	}
-	if s.spec.needBuildRows {
-		s.parts = append(s.parts, in)
-		s.mem.Retain(in)
-	}
-	s.nBuild += in.Rows()
+	s.nBuild += n
 	return nil
 }
 

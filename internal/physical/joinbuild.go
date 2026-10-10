@@ -3,9 +3,11 @@ package physical
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
+	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/plan"
@@ -59,27 +61,66 @@ const noPart = 0xFF
 const maxBuildParts = 64
 
 // deferBuild reports whether a join's build may wait for freeze and run partitioned:
-// several threads, a key, every build row retained, and no limit the caller set.
-// Semi and Anti keep their keys only, never their rows, so there would be nothing
-// to read them back from; and under a caller's limit, a spill must stay possible
-// from the first batch.
+// several threads, a key, and no limit the caller set, under which a spill must
+// stay possible from the first batch.
+//
+// Semi and Anti joins defer too since step 161. They read their build rows for the
+// keys alone, so they keep each batch's evaluated keys (keyParts), not the batch,
+// and the streaming build's O(distinct keys) becomes O(build rows) of key columns
+// until freeze: about what a kept build side costs every other kind, and bounded the
+// same way, by catchUp at half the budget.
 func deferBuild(j *plan.Join, opts Options) bool {
-	if opts.Threads <= 1 || len(j.RightOn) == 0 || !newJoinSpec(j, 0).needBuildRows {
+	if opts.Threads <= 1 || len(j.RightOn) == 0 {
 		return false
 	}
 	return opts.Budget.Limit() == 0 || opts.Budget.IsDefault()
 }
 
+// keyBatch is a deferred Semi or Anti join's keys of in, evaluated as the streaming
+// build evaluates them, in a batch of their own.
+func (s *joinBuildSink) keyBatch(ctx context.Context, in *data.Batch) (*data.Batch, error) {
+	cols, err := evalKeys(ctx, "join", s.keys, in, s.layout.KeyTypes)
+	if err != nil {
+		return nil, err
+	}
+	if s.keySchema == nil {
+		fields := make([]dtype.Field, len(cols))
+		for i, c := range cols {
+			fields[i] = dtype.Of(fmt.Sprintf("__key%d", i), c.DType())
+		}
+		if s.keySchema, err = dtype.NewSchema(fields...); err != nil {
+			return nil, err
+		}
+	}
+	renamed := make([]*data.Column, len(cols))
+	for i, c := range cols {
+		renamed[i] = c.Rename(s.keySchema.Field(i).Name)
+	}
+	return data.NewBatch(s.keySchema, renamed)
+}
+
 // catchUp inserts the deferred batches' keys as the streaming build would have,
 // batch by batch in order, and streams from here on.
 func (s *joinBuildSink) catchUp(ctx context.Context) error {
-	parts := s.parts
-	s.parts, s.nRows, s.nBuild, s.deferred = nil, 0, 0, false
+	parts, keyParts := s.parts, s.keyParts
+	s.parts, s.keyParts, s.nRows, s.nBuild, s.deferred = nil, nil, 0, 0, false
 	for _, b := range parts {
 		if err := s.admit(ctx, b, s.nRows); err != nil {
 			return err
 		}
 		s.nRows += b.Rows()
+	}
+	for _, kb := range keyParts {
+		if err := s.admitKeys(kb.Columns(), kb.Rows(), s.nRows); err != nil {
+			return err
+		}
+		s.nRows += kb.Rows()
+	}
+	if len(keyParts) > 0 {
+		// The keys are in the table, and a Semi or Anti join keeps nothing else, so
+		// the key batches' charge goes with them; reaccount charges the table.
+		s.mem.Release()
+		s.stateBytes = 0
 	}
 	s.reaccount()
 	return nil
@@ -128,22 +169,53 @@ func (k builtKeys) NBytes() int64 {
 func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error) {
 	nParts := min(max(s.threads, 1), maxBuildParts)
 	ints := s.intKeyed()
-	starts := make([]int, len(s.parts)+1)
-	for i, b := range s.parts {
+	// The batches: the build rows, or a Semi or Anti join's keys alone.
+	batches := s.parts
+	if !s.spec.needBuildRows {
+		batches = s.keyParts
+	}
+	track := s.spec.tracksRows()
+	starts := make([]int, len(batches)+1)
+	for i, b := range batches {
 		starts[i+1] = starts[i] + b.Rows()
 	}
-	nRows := starts[len(s.parts)]
+	nRows := starts[len(batches)]
 	part := make([]uint8, nRows)
-	keyCols := make([][]*data.Column, len(s.parts))
-	keyInts := make([][]int64, len(s.parts)) // an intKeyed join's keys, by batch
-	inPart := make([][]int, len(s.parts))    // rows of each batch in each partition
+	keyCols := make([][]*data.Column, len(batches))
+	keyInts := make([][]int64, len(batches)) // an intKeyed join's keys, by batch
+	// inPart[bi][p] are batch bi's rows in partition p, ascending, so a partition's
+	// goroutine visits its own rows alone: scanning every row's partition, once a
+	// partition, was a ninth of q4's CPU at eight (step 161).
+	inPart := make([][][]int32, len(batches))
+	byPart := func(bi int, counts []int) [][]int32 {
+		total := 0
+		for _, c := range counts {
+			total += c
+		}
+		flat := make([]int32, total)
+		out := make([][]int32, nParts)
+		at := 0
+		for p, c := range counts {
+			out[p] = flat[at : at : at+c]
+			at += c
+		}
+		for i, p := range part[starts[bi]:starts[bi+1]] {
+			if p != noPart {
+				out[p] = append(out[p], int32(i))
+			}
+		}
+		return out
+	}
 
 	// 1. Each batch's keys, evaluated, hashed and routed.
-	err := s.eachConcurrently(len(s.parts), nParts, func(bi int) error {
-		b := s.parts[bi]
-		cols, err := evalKeys(ctx, "join", s.keys, b, s.layout.KeyTypes)
-		if err != nil {
-			return err
+	err := s.eachConcurrently(len(batches), nParts, func(bi int) error {
+		b := batches[bi]
+		cols := b.Columns()
+		if s.spec.needBuildRows {
+			var err error
+			if cols, err = evalKeys(ctx, "join", s.keys, b, s.layout.KeyTypes); err != nil {
+				return err
+			}
 		}
 		ok := keyValidity(cols)
 		counts := make([]int, nParts)
@@ -162,7 +234,7 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 				}
 				route(i, kernel.IntHash(v[i]))
 			}
-			keyInts[bi], inPart[bi] = v, counts
+			keyInts[bi], inPart[bi] = v, byPart(bi, counts)
 			return nil
 		}
 		enc, err := kernel.NewGroupKeyEncoder("join", cols)
@@ -178,7 +250,7 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 			key = enc.AppendKey(key[:0], i)
 			route(i, kernel.KeyHash(key))
 		}
-		keyCols[bi], inPart[bi] = cols, counts
+		keyCols[bi], inPart[bi] = cols, byPart(bi, counts)
 		return nil
 	})
 	if err != nil {
@@ -187,7 +259,9 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 
 	// 2. Each partition's keys, in row order, into its own table. Every row is
 	// written by its partition's goroutine alone.
-	s.rowKey = kernel.Extend(s.rowKey[:0], nRows, noKey)
+	if track {
+		s.rowKey = kernel.Extend(s.rowKey[:0], nRows, noKey)
+	}
 	tables := make([]*kernel.KeyTable, nParts)
 	intTables := make([]*kernel.IntKeyTable, nParts)
 	counts := make([][]int32, nParts)
@@ -195,7 +269,7 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 	err = s.eachConcurrently(nParts, nParts, func(p int) error {
 		rows := 0
 		for _, c := range inPart {
-			rows += c[p]
+			rows += len(c[p])
 		}
 		// Half the rows: a build of distinct keys grows once more, and one of a few
 		// keys over many rows does not hold slots it will never use.
@@ -230,20 +304,24 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 			}
 			for j := range n {
 				id := ids[j]
+				if !inserted[j] && dup[p] < 0 {
+					dup[p] = at[j]
+				}
+				if !track {
+					continue
+				}
 				if inserted[j] {
 					cnt = append(cnt, 1)
 				} else {
 					cnt[id]++
-					if dup[p] < 0 {
-						dup[p] = at[j]
-					}
 				}
 				s.rowKey[at[j]] = id
 			}
 			n, buf = 0, buf[:0]
 		}
-		for bi, b := range s.parts {
-			if inPart[bi][p] == 0 {
+		for bi := range batches {
+			mine := inPart[bi][p]
+			if len(mine) == 0 {
 				continue
 			}
 			var enc *kernel.GroupKeyEncoder
@@ -253,11 +331,9 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 					return err
 				}
 			}
-			for i := range b.Rows() {
+			for _, r := range mine {
+				i := int(r)
 				g := starts[bi] + i
-				if part[g] != uint8(p) {
-					continue
-				}
 				if ints {
 					intKeys[n] = keyInts[bi][i]
 				} else {
@@ -299,6 +375,9 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 		keys.ints = kernel.NewIntKeyParts(intTables)
 	} else {
 		keys.bytes = kernel.NewKeyParts(tables)
+	}
+	if !track {
+		return keys, nil
 	}
 	s.counts = s.counts[:0]
 	for _, c := range counts {
