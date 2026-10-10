@@ -538,6 +538,11 @@ func evalHorizontal(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Col
 		if ops[i], err = Eval(ctx, a, b); err != nil {
 			return nil, err
 		}
+		// with_fields sets a field by its operand's name, so the kernel is given the
+		// plan's name for each (step 171).
+		if c.Fn == expr.FnStructWithFields && i > 0 {
+			ops[i] = ops[i].Rename(expr.OutputName(a))
+		}
 	}
 	return kernel.HorizontalCall(c.Fn, f.Name, f.Type, ops)
 }

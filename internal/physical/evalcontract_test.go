@@ -405,6 +405,8 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 	// One operand alone is the other set.
 	expr.FnConcatStr: {{label: ",alone"}, {label: ",sep", args: []any{"-"}}},
 	expr.FnStructOf:  {{label: ",alone"}, {label: ",lit", args: []any{"x"}}},
+	// The struct, then the fields it sets: refused here, where nothing is a Struct.
+	expr.FnStructWithFields: {{label: ",alone"}, {label: ",lit", args: []any{"x"}}},
 	// The value, its breaks, then none or one label more than breaks.
 	expr.FnCut: {{label: ",one bin"}, {label: ",breaks", args: []any{1.5, 2.5}},
 		{label: ",labelled", args: []any{1.5, "lo", "hi"}}},

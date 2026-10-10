@@ -189,6 +189,7 @@ const (
 	FnStructOf
 	FnCut
 	FnCutLeftClosed
+	FnStructWithFields
 	fnHorizontalEnd
 )
 
@@ -243,7 +244,7 @@ var callNames = map[CallFn]string{
 	FnMathLeadingOnes: "bitwise_leading_ones", FnMathLeadingZeros: "bitwise_leading_zeros",
 	FnMathTrailingOnes: "bitwise_trailing_ones", FnMathTrailingZeros: "bitwise_trailing_zeros",
 	FnConcatStr: "concat_str", FnStructOf: "struct", FnCut: "cut",
-	FnCutLeftClosed: "cut_left_closed",
+	FnCutLeftClosed: "cut_left_closed", FnStructWithFields: "struct.with_fields",
 
 	FnListLen: "list.len", FnListGet: "list.get",
 	FnListContains: "list.contains", FnListMin: "list.min",
@@ -434,6 +435,9 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			fields[i] = dtype.Field{Name: f.Name, Type: f.Type, Nullable: true}
 		}
 		return dtype.Struct(fields...), nil
+
+	case FnStructWithFields:
+		return withFieldsOut(ops)
 
 	case FnCut, FnCutLeftClosed:
 		if !ops[0].Type.IsNumeric() {
@@ -970,4 +974,40 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown list call %d", fn)
 	}
+}
+
+// withFieldsOut types struct.with_fields (step 171): the first operand's fields, each
+// replaced in place by an operand of its name, then the operands of new names, in
+// order. Two operands of one name would set one field twice, so they are refused.
+func withFieldsOut(ops []dtype.Field) (dtype.DataType, error) {
+	in := ops[0].Type
+	if in.ID() != dtype.TypeStruct {
+		return dtype.Null, uerr.New(uerr.KindType, "struct.with_fields",
+			"with_fields requires a Struct, got %s", in).
+			Hint("only a Struct column has fields")
+	}
+	set := make(map[string]dtype.DataType, len(ops)-1)
+	var added []dtype.Field
+	for _, f := range ops[1:] {
+		if _, dup := set[f.Name]; dup {
+			return dtype.Null, uerr.New(uerr.KindSchema, "struct.with_fields",
+				"two new fields are named %q", f.Name).
+				Hint("alias one of them, e.g. .Alias(\"%s_2\")", f.Name)
+		}
+		set[f.Name] = f.Type
+	}
+	fields := make([]dtype.Field, 0, len(in.Fields())+len(ops)-1)
+	for _, f := range in.Fields() {
+		if t, ok := set[f.Name]; ok {
+			f.Type, f.Nullable = t, true
+			delete(set, f.Name)
+		}
+		fields = append(fields, f)
+	}
+	for _, f := range ops[1:] {
+		if _, ok := set[f.Name]; ok {
+			added = append(added, dtype.Field{Name: f.Name, Type: f.Type, Nullable: true})
+		}
+	}
+	return dtype.Struct(append(fields, added...)...), nil
 }

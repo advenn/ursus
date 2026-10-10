@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–170, so far.
+Everything on master since `v0.5.0`: steps 156–171, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -51,6 +51,12 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   written, searches for the literals rather than backtracking (169): q13 −15%.
 - **A join shares its probe batch's columns** when the rows it takes from it are a
   run, rather than copying them (170).
+
+### New
+
+- **`Struct().WithFields(exprs...)`** replaces the fields its expressions name, in
+  place, and adds the rest after (171). Polars' `struct.with_fields`, with fields read
+  through `Field` rather than `pl.field()`.
 
 ### What a user of v0.5.0 can trip on
 

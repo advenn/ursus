@@ -39,6 +39,8 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return concatStr(name, ops, n)
 	case expr.FnStructOf:
 		return structOf(name, out, ops, n)
+	case expr.FnStructWithFields:
+		return withFields(name, out, ops, n)
 	case expr.FnCut, expr.FnCutLeftClosed:
 		return cut(name, fn == expr.FnCutLeftClosed, ops, n)
 	}
@@ -117,6 +119,42 @@ func structOf(name string, out dtype.DataType, ops []*data.Column, n int) (*data
 		children[i] = c.Rename(fields[i].Name)
 	}
 	return data.NewStruct(name, children, bitmap.AllSet(n)), nil
+}
+
+// withFields is struct.with_fields (step 171): the first operand's struct with each
+// field an operand names replaced by it, and the operands of new names added after,
+// as expr's withFieldsOut types it. Each operand after the first carries its plan
+// name (evalHorizontal). The struct's own validity is the answer's: a null struct
+// stays null, whatever its fields are set to.
+func withFields(name string, out dtype.DataType, ops []*data.Column, n int) (*data.Column, error) {
+	spread := func(c *data.Column) (*data.Column, error) {
+		c, err := readable(c)
+		if err != nil || c.Len() == n {
+			return c, err
+		}
+		return Take(c, make([]int32, n))
+	}
+	recv, err := spread(ops[0])
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]*data.Column, len(ops)-1)
+	for _, c := range ops[1:] {
+		if set[c.Name()], err = spread(c); err != nil {
+			return nil, err
+		}
+	}
+	children := make([]*data.Column, len(out.Fields()))
+	for i, f := range out.Fields() {
+		c, ok := set[f.Name]
+		if !ok {
+			if c, ok = recv.Field(f.Name); !ok {
+				return nil, uerr.Internalf("kernel: with_fields has no field %q", f.Name)
+			}
+		}
+		children[i] = c.Rename(f.Name)
+	}
+	return data.NewStruct(name, children, recv.Validity()), nil
 }
 
 // stringTooLong refuses a String column longer than its 32-bit offsets reach.

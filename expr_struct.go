@@ -38,3 +38,25 @@ func (e Expr) Struct() StructExpr { return StructExpr{e} }
 func (s StructExpr) Field(name string) Expr {
 	return wrap(&expr.Call{Fn: expr.FnStructField, Args: []expr.Node{s.e.node(), litNode(name)}})
 }
+
+// WithFields sets fields of each struct: an expression named as one of its fields
+// replaces that field in place, and one of a new name is added after the others,
+// each named as its expression is. Polars' struct.with_fields.
+//
+//	Col("person").Struct().WithFields(
+//		Col("person").Struct().Field("age").Add(1).Alias("age"),  // replaces age
+//		Col("city"),                                              // adds city
+//	)
+//
+// Each expression is read from the frame, so a field of the struct is read as it is
+// anywhere, through Field, and named as any expression is: a Field read is named after
+// its struct, so alias it to set a field of that name. The struct's own validity is kept: a null struct stays
+// null. Two expressions of one name would set one field twice, and are refused.
+func (s StructExpr) WithFields(exprs ...Expr) Expr {
+	args := make([]expr.Node, 0, len(exprs)+1)
+	args = append(args, s.e.node())
+	for _, e := range exprs {
+		args = append(args, e.node())
+	}
+	return wrap(&expr.Call{Fn: expr.FnStructWithFields, Args: args})
+}
