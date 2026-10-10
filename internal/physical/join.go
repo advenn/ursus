@@ -1488,9 +1488,13 @@ func (p *joinProbeOp) emit() (*data.Batch, error) {
 		}
 		// The zero-copy case is worth keeping: a semi join that selects every row it
 		// scanned hands the probe batch straight through, which is what the filter
-		// path used to do for free.
+		// path used to do for free; and one that selects a run of them shares it
+		// (step 170).
 		if p.cur != nil && len(p.lsel) == p.cur.Rows() {
 			return p.cur, nil
+		}
+		if start, ok := runOf(p.lsel, p.cur); ok {
+			return p.cur.Slice(start, len(p.lsel)), nil
 		}
 		return takeBatch(p.schema, p.cur, p.lsel)
 	}
@@ -1518,6 +1522,10 @@ func gatherOut(schema *dtype.Schema, layout *plan.JoinLayout, left, right *data.
 ) (*data.Batch, error) {
 
 	n := len(lsel)
+	// When every probe row of a run matched once, in order, as a fact table probing
+	// a dimension on its key does, the left side's rows are a run of its batch, and
+	// its columns are shared rather than gathered (step 170).
+	start, run := runOf(lsel, left)
 	cols := make([]*data.Column, schema.Len())
 	for i, jc := range layout.Columns {
 		var (
@@ -1534,6 +1542,8 @@ func gatherOut(schema *dtype.Schema, layout *plan.JoinLayout, left, right *data.
 		case jc.CoalesceWith >= 0 && from == keyFromEither:
 			c, err = eitherKey(schema.Field(i).Type, left.Column(jc.Index), lsel,
 				right.Column(jc.CoalesceWith), rsel)
+		case run:
+			c = left.Column(jc.Index).Slice(start, n)
 		default:
 			c, err = kernel.Take(left.Column(jc.Index), lsel)
 		}
@@ -1564,6 +1574,24 @@ func gatherOut(schema *dtype.Schema, layout *plan.JoinLayout, left, right *data.
 		return data.NewBatchRows(schema, nil, n), nil
 	}
 	return data.NewBatch(schema, cols)
+}
+
+// runOf reports whether sel is start, start+1, and so on, all rows of b: a run a
+// Slice shares rather than a Take gathers. A NullIndex is never part of one.
+func runOf(sel []int32, b *data.Batch) (int, bool) {
+	if len(sel) == 0 || b == nil {
+		return 0, false
+	}
+	start := sel[0]
+	if start < 0 || int(start)+len(sel) > b.Rows() {
+		return 0, false
+	}
+	for i, r := range sel {
+		if r != start+int32(i) {
+			return 0, false
+		}
+	}
+	return int(start), true
 }
 
 // keyFrom says which side a merged key is read from, by join kind.
