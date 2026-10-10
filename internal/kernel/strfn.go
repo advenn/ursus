@@ -62,6 +62,10 @@ func StrCall(fn expr.CallFn, name string, out dtype.DataType,
 	case expr.FnStrContains, expr.FnStrStartsWith, expr.FnStrEndsWith:
 		bits := bitmap.NewBuilder(n)
 		pat, _ := argString(args, 0)
+		var chain []string
+		if re != nil {
+			chain = literalChain(re.String())
+		}
 		for i := range n {
 			if !valid.Get(i) {
 				bits.Append(false)
@@ -70,9 +74,12 @@ func StrCall(fn expr.CallFn, name string, out dtype.DataType,
 			s := acc.Get(i)
 			switch fn {
 			case expr.FnStrContains:
-				if re != nil {
+				switch {
+				case chain != nil && strings.IndexByte(s, '\n') < 0:
+					bits.Append(containsChain(s, chain))
+				case re != nil:
 					bits.Append(re.MatchString(s))
-				} else {
+				default:
 					bits.Append(strings.Contains(s, pat))
 				}
 			case expr.FnStrStartsWith:
@@ -431,6 +438,43 @@ func strToList(fn expr.CallFn, name string, c *data.Column,
 // Only the functions that accept a pattern get one, and only when the call asked
 // for regex. Extract is the exception: it is regex-only, because "extract the
 // first literal occurrence" is just Find.
+// literalChain is a pattern's literals when it is nothing but literals joined by .*,
+// as SQL's LIKE '%special%requests%' is written: "special.*requests". nil for any
+// other pattern: one with another metacharacter, a flag, an anchor or a newline.
+//
+// Such a pattern matches where its literals appear in order, each after the end of
+// the one before, on one line: '.' matches anything but a newline. On a value with no
+// newline that is a run of strings.Index, which is what containsChain does, and the
+// regexp decides every other value. Go's backtracker took about 18% of PDS-H q13 on
+// that one pattern (step 160).
+func literalChain(pat string) []string {
+	chain := []string{}
+	for _, part := range strings.Split(pat, ".*") {
+		if part == "" {
+			continue
+		}
+		if regexp.QuoteMeta(part) != part || strings.ContainsRune(part, '\n') {
+			return nil
+		}
+		chain = append(chain, part)
+	}
+	return chain
+}
+
+// containsChain reports whether s holds chain's literals in order, none overlapping
+// the one before. The leftmost of each leaves the most of s for the rest, so it finds
+// a match wherever there is one.
+func containsChain(s string, chain []string) bool {
+	for _, lit := range chain {
+		i := strings.Index(s, lit)
+		if i < 0 {
+			return false
+		}
+		s = s[i+len(lit):]
+	}
+	return true
+}
+
 func CompilePattern(fn expr.CallFn, args []any) (*regexp.Regexp, error) {
 	needsRegex := false
 	switch fn {
