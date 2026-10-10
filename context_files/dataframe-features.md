@@ -677,6 +677,13 @@ knows whether they can be pushed down.
 
 ## 14. Scope recommendation for `ursus`
 
+*The recommendation as written before v0.1, kept as it was. It is not the plan: what
+each release did is in `CHANGELOG.md`, and what 0.6 takes and leaves is in
+`v0.6-scope.md`. Of the v0.3 line below, `Unpivot` and the list and struct
+namespaces shipped; SQL and cloud object stores are out by decision (step 156); and
+`Pivot`, Delta, Iceberg and plan serialization are Tier 3, each with its reason.
+Step 166's audit found this read as a roadmap.*
+
 **v0.1 (prove the thesis):** Arrow-backed `Series`/`DataFrame`; `Expr` with arithmetic,
 comparison, boolean, cast, alias; contexts `Select` / `WithColumns` / `Filter` /
 `GroupBy.Agg` / `Sort`; expression expansion by name, regex, and dtype; inner/left/

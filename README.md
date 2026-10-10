@@ -160,8 +160,9 @@ once, so it must be safe for that.
 Not done: built-in object stores and SQL, both out by decision (the seam above reaches a store today); `MapGroups`
 and `RollingMap`; `Pivot`, whose output columns are the distinct values of a column, so its schema would depend on data
 and no plan node here does (`Unpivot`, melt, ships); `Upsample`; rolling windows by time as expressions, `Corr`, `Cov`,
-`MinBy`, `MaxBy` and `ReplaceTimeZone`; Arrow IPC files and NDJSON. [`v0.6-scope.md`](./context_files/v0.6-scope.md)
-says which of these 0.6 takes, and why the rest wait.
+`MinBy`, `MaxBy`, `ReplaceTimeZone`, `WithFields` and `Interpolate`'s nearest method; list set operations, `Sample` and
+`List().Eval`; Arrow IPC files and NDJSON. [`v0.6-scope.md`](./context_files/v0.6-scope.md) says which of these 0.6
+takes, and why the rest wait.
 
 **ursus stays 0.x; there will be no 1.0.** Version numbers follow Go's rule for v0, **nothing is promised**, and that
 is permanent rather than a phase: a minor version renames, removes or reshapes an API whenever the result is better,
@@ -232,7 +233,7 @@ Timings come from a laptop under real conditions, so treat small differences as 
 | h2o.ai, 10M rows, Parquet |   947 ms |   547 ms | 1.7x  |      1.9x |      3.3x |
 | h2o.ai, 10M rows, CSV     | 2,195 ms | 1,116 ms | 2.0x  |      3.3x |      3.6x |
 | TPC-H SF=1                |   276 ms |    78 ms | 3.6x  |      4.4x |     10.8x |
-| TPC-H SF=0.1              |    24 ms |     9 ms | 2.6x  |      4.0x |      7.5x |
+| TPC-H SF=0.1              |    29 ms |     9 ms | 3.1x  |      4.0x |      7.5x |
 | TPC-H SF=1 peak memory    |  1.10 GB |  0.84 GB | 1.3x  |      1.1x |      2.0x |
 
 Geomeans over each engine's passed queries; ursus and Polars pass every one. The gap narrows as the data gets smaller, which is the shape of the trade

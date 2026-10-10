@@ -208,7 +208,7 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 	}
 
 	// 1. Each batch's keys, evaluated, hashed and routed.
-	err := s.eachConcurrently(len(batches), nParts, func(bi int) error {
+	err := eachConcurrently(len(batches), nParts, func(bi int) error {
 		b := batches[bi]
 		cols := b.Columns()
 		if s.spec.needBuildRows {
@@ -266,7 +266,7 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 	intTables := make([]*kernel.IntKeyTable, nParts)
 	counts := make([][]int32, nParts)
 	dup := make([]int, nParts)
-	err = s.eachConcurrently(nParts, nParts, func(p int) error {
+	err = eachConcurrently(nParts, nParts, func(p int) error {
 		rows := 0
 		for _, c := range inPart {
 			rows += len(c[p])
@@ -392,8 +392,10 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 }
 
 // eachConcurrently runs fn(0) to fn(n-1) on up to workers goroutines, and returns
-// their errors joined. A panic in one is its error.
-func (s *joinBuildSink) eachConcurrently(n, workers int, fn func(i int) error) error {
+// their errors joined. A panic in one is its error. A join's partitioned build and a
+// group-by's partitioned fold both fan out through it (step 166), so neither can
+// lose the process to a panic the other would have returned.
+func eachConcurrently(n, workers int, fn func(i int) error) error {
 	var (
 		next atomic.Int64
 		wg   sync.WaitGroup

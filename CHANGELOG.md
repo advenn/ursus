@@ -15,6 +15,62 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.6.0
+
+Everything on master since `v0.5.0`: steps 156–166, so far.
+[`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
+0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
+took stock after step 165. Each step below was timed against the one before it; how
+far ursus has moved against v0.5.0 is measured once, at the end.
+
+### Faster
+
+- **A probe row that misses does no work** when nothing spilled and nothing validates
+  (158): q17 −19% CPU.
+- **A key of one integer column is never encoded,** in a join's partitioned build and
+  probe (159) and in a group-by, nulls included (160): q17 −29%, q7 and q16 −15%; q18
+  −11%; h2o's integer group-bys about −20%.
+- **Semi and Anti joins build in parallel,** keeping their keys alone until the build
+  ends (161): q4 and q22 about −45% wall clock.
+- **A join's sides are exchanged by what survives** (162). The planner still chooses
+  from its estimates, but a join whose build runs in parallel, and whose probe side
+  turns out the smaller by half, builds from that side instead: q12 −24% CPU.
+- **The Parquet reader writes each value once** (163): a column takes the slices it
+  was decoded into, and reading allocates 1.2× what it produces, from 1.7×. q19 −7%.
+- **Kleene logic runs a word at a time, a filter's `And`s are applied one after
+  another, and `IsIn` on an integer column compares its values directly** (164): q6
+  and q15 −23 to −24%, q14 −14%, q7 −11%.
+- **What a predicate above a join implies about one side goes below it** (165), with
+  the predicate kept above: q19's part side keeps one part in a hundred, its CPU −12%.
+
+### What a user of v0.5.0 can trip on
+
+- **`Filter(a.And(b))` evaluates b only on the rows a keeps** (164), as `Filter(a, b)`
+  always has. An error b would have raised only on rows a drops is no longer raised.
+- **An inner join's row order may follow either input,** chosen at run time by the
+  inputs' sizes (162). It is exchanged only where the planner already allowed it:
+  nothing above the join depends on its order, `JoinMaintainOrder` is not set, and
+  the left input was not sorted by the caller.
+- **`Explain` shows more:** `swap_at_runtime` on a join that may be exchanged (162),
+  and the predicates a filter above a join implies, below it (165).
+- **A deferred Semi or Anti join holds its build side's key columns until its build
+  ends** (161), where it held only the distinct keys, as other joins hold their build
+  rows. Past half the memory budget it streams, as before.
+
+### Fixed
+
+- **The group-by's partitioned fold** routed each worker's groups on a goroutine with
+  no panic guard, so an internal panic there ended the process rather than failing
+  the query (166).
+- **The record:** v0.5.0's PDS-H SF=0.1 figure, below, read DuckDB-Go's column (166).
+
+### Breaks
+
+None yet. `v0.6-scope.md` lists the breaks 0.6 means to make, each with its
+replacement.
+
+---
+
 ## v0.5.0 — 2026-10-09
 
 Everything since `v0.4.0` (2026-10-09): steps 140–155.
@@ -36,7 +92,8 @@ features users reach for first.** Object stores stayed out, by decision. Its
     3.9×, from its own 310 ms. On h2o over Parquet, ursus went from 914 to 947 ms,
     and only Polars' 475 to 547 ms moved that ratio. *This reading was added on master
     after the tag (step 156).*
-  - **PDS-H SF=0.1:** 2.6×, from 4.0×.
+  - **PDS-H SF=0.1:** 3.1×, from 4.0×. *This read 2.6× until step 166, which found
+    it had been taken from the report's DuckDB-Go column: ursus was 29 ms.*
   - **h2o, 10 million rows:** 1.7× over Parquet, from 1.9×; 2.0× over CSV, from 3.3×.
   - **Peak memory at SF=1:** 1.10 GB against Polars' 0.84, from 1.02.
 
@@ -157,8 +214,10 @@ Newest first. The numbers are steps, each with an as-built record in
   aggregates over a few very large groups.
 - **Not built:** SQL, `Pivot`, `MapGroups`, `Upsample`, rolling windows by time,
   `Corr`, `Cov`, `MinBy`, `MaxBy`, list set operations, `Sample`, `WithFields`,
-  `List().Eval`, `ReplaceTimeZone`, and `Interpolate`'s nearest method.
-  `v0.5-scope.md`'s Tier 2 and Tier 3 give each one's reason.
+  `List().Eval`, `ReplaceTimeZone`, and `Interpolate`'s nearest method; and
+  `RollingMap`, Arrow IPC files and NDJSON, which only the README named until step
+  166 found the two lists differing. `v0.5-scope.md`'s Tier 2 and Tier 3 give each
+  one's reason.
 - **Types:** as in v0.4.0. Nesting deeper than a List of a primitive or a Struct of
   primitives is refused by name in Parquet; Array has no column representation;
   CSV refuses nested columns; Enum is not written to Parquet or Arrow; Duration is

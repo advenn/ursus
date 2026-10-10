@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"strconv"
-	"sync"
 	"sync/atomic"
 
 	"github.com/advenn/ursus/dtype"
@@ -893,27 +892,22 @@ func (s *hashAggSink) foldPartitioned(sinks []Sink, newSink SinkFactory) (Operat
 	// Route each worker's groups, in id order: routed[w][p] is worker w's share of
 	// partition p.
 	routed := make([][][]int32, len(ws))
-	var wg sync.WaitGroup
-	for w := range ws {
-		wg.Go(func() {
-			r := make([][]int32, nParts)
-			for id := range ws[w].ids.Len() {
-				p := kernel.PartitionOf(ws[w].ids.HashAt(int32(id)), nParts)
-				r[p] = append(r[p], int32(id))
-			}
-			routed[w] = r
-		})
+	err := eachConcurrently(len(ws), len(ws), func(w int) error {
+		r := make([][]int32, nParts)
+		for id := range ws[w].ids.Len() {
+			p := kernel.PartitionOf(ws[w].ids.HashAt(int32(id)), nParts)
+			r[p] = append(r[p], int32(id))
+		}
+		routed[w] = r
+		return nil
+	})
+	if err != nil {
+		return nil, made, err
 	}
-	wg.Wait()
-
-	errs := make([]error, nParts)
-	for p := range parts {
-		wg.Go(func() {
-			errs[p] = uerr.GuardErr("", func() error { return parts[p].mergeShare(ws, routed, p) })
-		})
-	}
-	wg.Wait()
-	if err := errors.Join(errs...); err != nil {
+	err = eachConcurrently(nParts, nParts, func(p int) error {
+		return parts[p].mergeShare(ws, routed, p)
+	})
+	if err != nil {
 		return nil, made, err
 	}
 

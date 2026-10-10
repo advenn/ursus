@@ -36,8 +36,12 @@ size and 30 at each h2o one, counting both engines.
 | h2o 10M, Parquet | 947 ms | 547 ms | 1.73× | 1.93× | 3.32× |
 | h2o 10M, CSV | 2,195 ms | 1,116 ms | 1.97× | 3.28× | 3.55× |
 | PDS-H SF=1 | 276 ms | 78 ms | 3.56× | 4.43× | 10.8× |
-| PDS-H SF=0.1 | 24 ms | 9 ms | 2.55× | 4.01× | 7.5× |
+| PDS-H SF=0.1 | 29 ms | 9 ms | 3.09× | 4.01× | 7.5× |
 | PDS-H SF=1, peak memory | 1.10 GB | 0.84 GB | 1.31× | 1.12× | 2.0× |
+
+*Corrected at step 166:* the SF=0.1 row read 24 ms and 2.55×, which are DuckDB-Go's
+geomean and ratio in the report's table, one column to the right of ursus's. The raw
+timings of this run give ursus 29.0 ms, 3.09× Polars.
 
 **The target is not met.** §5 set PDS-H SF=1 within 3× of Polars, with q15 and q2
 under 4×:

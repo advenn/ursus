@@ -6,7 +6,7 @@
 //
 // # A tour
 //
-//	df, err := ursus.Scan(src).
+//	df, err := ursus.ScanParquet("sales.parquet").
 //		Filter(ursus.Col("price").Gt(5)).
 //		Select(ursus.Col("id"), ursus.Col("price")).
 //		Collect(ctx)

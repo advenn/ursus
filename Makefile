@@ -1,9 +1,10 @@
 # ursus — build targets.
 #
-# GOEXPERIMENT=simd is MANDATORY, not optional: package `simd` does not compile
-# without it ("build constraints exclude all Go files in .../src/simd"). Every
-# target below exports it. If you invoke `go` by hand, export it too, or set it
-# in your shell profile and in your IDE's run configuration.
+# GOEXPERIMENT=simd switches on the SIMD kernels, and every target below exports it.
+# It is optional: without it, package `simd` is excluded by its build constraints
+# and each kernel falls back to its scalar twin, which test-all runs the whole suite
+# against. This said it was mandatory, from before the scalar fallbacks existed; the
+# package doc (ursus.go) and test-all's own scalar run have said otherwise since.
 #
 # GOAMD64=v3 only affects ordinary scalar codegen (AVX/FMA/BMI baseline). It has
 # no effect on package `simd`, which dispatches on vector width at runtime.
