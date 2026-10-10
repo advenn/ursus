@@ -551,7 +551,7 @@ func (s *joinBuildSink) newProbeOp(t *joinTable, probe Operator, pad *data.Batch
 		pairLayout: s.pairLayout,
 	}
 	op.mem = s.mem
-	op.sink, op.level = s, s.level
+	op.sink, op.level, op.routes = s, s.level, s.spilled()
 	op.pparts = make([]*partWriter, nBuckets)
 	op.pfiles = make([]string, nBuckets)
 	op.ppend = make([][]int32, nBuckets)
@@ -734,10 +734,13 @@ type joinProbeOp struct {
 	pfiles []string       // closed probe files, indexed by bucket
 	ppend  [][]int32      // scratch: this batch's rows bound for each bucket
 
-	level int      // radix depth; must match the sink's, or the two route apart
-	next  int      // the next build bucket to replay
-	rep   Operator // the live sub-join's output, or the null bucket's streamer
-	sub   *joinBuildSink
+	level int // radix depth; must match the sink's, or the two route apart
+	next  int // the next build bucket to replay
+	// routes is whether any bucket has a build file, so a key the table misses could
+	// belong to one. Without it, a miss is only a miss (enter).
+	routes bool
+	rep    Operator // the live sub-join's output, or the null bucket's streamer
+	sub    *joinBuildSink
 
 	leftPad *data.Batch
 	flushJ  int
@@ -1094,6 +1097,13 @@ func (p *joinProbeOp) enter() error {
 		// Looked up in startBatch. The key's bytes are needed only to route it or to
 		// police Validate, so they are encoded again only then.
 		id = p.found[p.row]
+		if id < 0 && !p.routes && p.seen == nil {
+			// Nothing spilled and nothing validates, so the key's bytes have no use:
+			// it matches nothing. Encoding them again, and hashing them byte by byte
+			// to look for a bucket that cannot exist, was about 16% of PDS-H q17,
+			// whose lineitem rows nearly all miss its 200 parts (step 158).
+			return nil
+		}
 		if id < 0 {
 			k := p.enc.Encode(p.row)
 			// Not resident. Three lines decide the rest, and they need no split-state
