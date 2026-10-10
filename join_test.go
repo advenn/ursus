@@ -2,6 +2,7 @@ package ursus_test
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -846,7 +847,11 @@ func TestJoinOptimizerSoundness(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unoptimized: %v", err)
 			}
-			if on.String() != off.String() {
+			// As sets: an inner join's order is unspecified unless something above it
+			// asks for one, and since step 162 the join may follow either input,
+			// chosen at run time; since step 167 a runtime filter can change which.
+			// A Head above a join is such an ask, and the planner keeps that order.
+			if !sameRows(t, on, off) {
 				p, _ := q.lf().Explain(t.Context())
 				t.Errorf("the optimizer changed the result\n optimized:\n%s\n unoptimized:\n%s\n plan:\n%s",
 					on, off, p)
@@ -1281,4 +1286,39 @@ func TestJoinPredicatePushdownWithDifferentlyNamedKeys(t *testing.T) {
 	if on.String() != off.String() {
 		t.Errorf("coalesced-key pushdown changed the result\n with:\n%s\n without:\n%s", on, off)
 	}
+}
+
+// sameRows reports whether two frames hold the same rows, in any order, as their
+// rendered rows sorted.
+func sameRows(t *testing.T, a, b *ursus.DataFrame) bool {
+	t.Helper()
+	if a.Height() != b.Height() || a.Schema().String() != b.Schema().String() {
+		return false
+	}
+	return slices.Equal(sortedRenderedRows(t, a), sortedRenderedRows(t, b))
+}
+
+// sortedRenderedRows is every row of df rendered by casting to String, sorted.
+func sortedRenderedRows(t *testing.T, df *ursus.DataFrame) []string {
+	t.Helper()
+	text, err := df.Select(t.Context(), ursus.All().Cast(ursus.String))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := make([]string, df.Height())
+	for _, name := range text.Columns() {
+		col, err := text.Column[string](name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range rows {
+			v, ok := col.Get(i)
+			if !ok {
+				v = "∅"
+			}
+			rows[i] += v + "|"
+		}
+	}
+	slices.Sort(rows)
+	return rows
 }

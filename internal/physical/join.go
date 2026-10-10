@@ -297,6 +297,12 @@ type joinBuildSink struct {
 	nRows  int
 	chunk  keyChunk // admit's scratch
 
+	// publish is the slot this join's built keys go to for a RuntimeFilter on its
+	// probe side, or nil (step 167). Only integer key tables are published.
+	publish *plan.RuntimeSlot
+	// built is the partitioned build's tables once built, by publishEarly or freeze.
+	built *builtKeys
+
 	// keyParts are a deferred Semi or Anti join's evaluated keys, a batch of them for
 	// each build batch, which it keeps in place of the batches (step 161): it reads
 	// its build rows for their keys alone. keySchema names their columns.
@@ -521,6 +527,12 @@ func (s *joinBuildSink) Probe(ctx context.Context, probe Operator) (Operator, er
 	if err != nil {
 		return nil, err
 	}
+	// The probe side is pulled from here on, so a RuntimeFilter in it sees the keys
+	// from its first batch (step 167). A join that could be exchanged published them
+	// already, before reading its probe side ahead (publishEarly).
+	if s.publish != nil && t.ints != nil && s.publish.Published() == nil {
+		s.publish.Publish(t.ints)
+	}
 
 	pad, err := emptyBatch(s.left)
 	if err != nil {
@@ -619,7 +631,7 @@ func (s *joinBuildSink) freeze(ctx context.Context) (*joinTable, error) {
 	nKeys := s.ids.Len()
 	t := &joinTable{ids: s.ids, nKeys: nKeys}
 	if s.deferred {
-		keys, err := s.buildPartitioned(ctx)
+		keys, err := s.partitionedKeys(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -633,11 +645,6 @@ func (s *joinBuildSink) freeze(ctx context.Context) (*joinTable, error) {
 		// A Semi or Anti join's keys are in the tables now; the rebase below drops
 		// their charge.
 		s.keyParts = nil
-		// Charged as reaccount charges the streaming build's, so the peak sees the
-		// tables as it sees the one, before the rebase below lets them go.
-		st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + keys.NBytes()
-		s.mem.RetainBytes(st - s.stateBytes)
-		s.stateBytes = st
 	}
 
 	// Rebase UNCONDITIONALLY. This release used to sit inside the needBuildRows
@@ -1771,6 +1778,7 @@ func planJoin(ctx context.Context, j *plan.Join, opts Options) (Operator, error)
 		threads:    opts.Threads,
 		deferred:   deferBuild(j, opts),
 		pairLayout: pairLayout,
+		publish:    j.Publish,
 		ids:        kernel.NewKeyTable(),
 		mem:        opts.Budget.Account("join"),
 

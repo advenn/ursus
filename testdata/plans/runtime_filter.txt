@@ -1,0 +1,13 @@
+JOIN INNER [col("k")] = [col("k")] coalesce swap_at_runtime publish #1
+  left:
+    JOIN INNER [col("s")] = [col("s")] coalesce swap_at_runtime
+      left:
+        RUNTIME FILTER [col("k")] by join #1
+          MEMORY SCAN 4 rows
+            projection: [k, s] (2/2 cols)
+      right:
+        MEMORY SCAN 2 rows
+          projection: [s, name] (2/2 cols)
+  right:
+    MEMORY SCAN 2 rows
+      projection: [k, tag] (2/2 cols)

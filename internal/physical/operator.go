@@ -561,6 +561,9 @@ func Plan(ctx context.Context, n plan.Node, opts Options) (Operator, error) {
 	case *plan.Cache:
 		return planCache(ctx, t, opts)
 
+	case *plan.RuntimeFilter:
+		return planRuntimeFilter(ctx, t, opts)
+
 	default:
 		return nil, uerr.Internalf("physical: no operator for plan node %T", n)
 	}

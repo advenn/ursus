@@ -59,6 +59,9 @@ func (j *joinBreaker) swapIfSmaller(ctx context.Context) (Operator, error) {
 	if !ok || !s.deferred || !s.spec.needBuildRows || s.nBuild == 0 {
 		return nil, nil
 	}
+	if err := s.publishEarly(ctx); err != nil {
+		return nil, err
+	}
 	limit := s.nBuild / swapRatio
 	var (
 		read []*data.Batch

@@ -310,6 +310,13 @@ var planCoverage = []struct {
 			Rolling(ursus.Col("ts"), ursus.RollingOptions{Period: ursus.Every("1h")}).
 			Agg(ursus.Len().Alias("n"))
 	}},
+	// Step 167: the outer join filters a's scan by its keys, below the join on s.
+	{"runtime filter", "testdata/plans/runtime_filter.txt", func(t *testing.T) *ursus.LazyFrame {
+		a := ursus.Frame(ursus.Values("k", []int64{1, 2, 3, 4}), ursus.Values("s", []int64{10, 20, 10, 20}))
+		sup := ursus.Frame(ursus.Values("s", []int64{10, 20}), ursus.Values("name", []string{"x", "y"}))
+		c := ursus.Frame(ursus.Values("k", []int64{2, 3}), ursus.Values("tag", []string{"p", "q"}))
+		return a.Join(sup, ursus.JoinOn(ursus.Col("s"))).Join(c, ursus.JoinOn(ursus.Col("k")))
+	}},
 	{"unnest (walk only)", "", func(t *testing.T) *ursus.LazyFrame {
 		return ursus.ScanParquet(structFixture(t)).Unnest("person")
 	}},

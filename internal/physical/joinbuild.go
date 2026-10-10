@@ -126,6 +126,49 @@ func (s *joinBuildSink) catchUp(ctx context.Context) error {
 	return nil
 }
 
+// partitionedKeys is buildPartitioned, once: a join that publishes its keys before
+// its runtime swap has built them already (publishEarly), and freeze reuses them.
+// Charged as reaccount charges the streaming build's, so the peak sees the tables
+// as it sees the one, until freeze's rebase lets them go.
+func (s *joinBuildSink) partitionedKeys(ctx context.Context) (builtKeys, error) {
+	if s.built != nil {
+		return *s.built, nil
+	}
+	keys, err := s.buildPartitioned(ctx)
+	if err != nil {
+		return builtKeys{}, err
+	}
+	s.built = &keys
+	st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + keys.NBytes()
+	s.mem.RetainBytes(st - s.stateBytes)
+	s.stateBytes = st
+	return keys, nil
+}
+
+// publishEarly builds a deferred, integer-keyed build's tables and publishes them to
+// its runtime filter before the join reads its probe side ahead to decide a swap
+// (step 167). Read ahead first, the pipeline below would start, and its workers
+// fetch batches through the filter before any key was published. If the join is
+// exchanged after all, these tables go unused; the batches stay for the exchanged
+// join to probe with, since only freeze consumes them.
+//
+// Only a small build: a filter by a few keys is the one that pays, and only a small
+// build is cheap to waste. A larger one reads ahead first, and publishes at freeze.
+func (s *joinBuildSink) publishEarly(ctx context.Context) error {
+	if s.publish == nil || !s.deferred || !s.intKeyed() || s.nBuild > earlyPublishRows {
+		return nil
+	}
+	keys, err := s.partitionedKeys(ctx)
+	if err != nil {
+		return err
+	}
+	s.publish.Publish(keys.ints)
+	return nil
+}
+
+// earlyPublishRows is the largest build publishEarly builds before a swap's read-ahead.
+const earlyPublishRows = 1 << 17
+
 // intKeyed reports whether the join's key is one integer column whose nulls match
 // nothing, which the partitioned build keys in IntKeyTables (step 159).
 func (s *joinBuildSink) intKeyed() bool {

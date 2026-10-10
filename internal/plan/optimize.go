@@ -63,6 +63,10 @@ type Flags struct {
 	// inputs when the right one is estimated much larger. See buildSide.
 	BuildSide bool
 
+	// RuntimeFilters lets a join's built keys filter its probe side where the probe
+	// key comes from, below the operators between (step 167).
+	RuntimeFilters bool
+
 	// ShareSubplans runs a subtree the query uses at more than one place once,
 	// and replays it at each. It is applied before Resolve, by MarkShared, rather
 	// than as a rule: once Resolve has copied a shared subtree, nothing says the
@@ -81,6 +85,7 @@ func DefaultFlags() Flags {
 		JoinPredicatePushdown: true,
 		CollapseCrossJoin:     true,
 		BuildSide:             true,
+		RuntimeFilters:        true,
 		ShareSubplans:         true,
 	}
 }
@@ -177,6 +182,13 @@ func NewOptimizer() *Optimizer {
 				rule:    buildSide{},
 				mode:    Once,
 				enabled: func(f Flags) bool { return f.BuildSide },
+			},
+			// Runtime filters follow the build side, so the side they filter is the
+			// one that probes.
+			{
+				rule:    runtimeFilters{},
+				mode:    Once,
+				enabled: func(f Flags) bool { return f.RuntimeFilters },
 			},
 			// Simplification runs LAST, because the pushdowns make work for it that
 			// does not exist beforehand: an identity Project only becomes one once

@@ -319,6 +319,8 @@ func EstimateRows(n Node) (int64, bool) {
 		return EstimateRows(t.Input)
 	case *Cache:
 		return EstimateRows(t.Input)
+	case *RuntimeFilter:
+		return EstimateRows(t.Input)
 	case *Limit:
 		in, ok := EstimateRows(t.Input)
 		return min(in, int64(t.N)), ok

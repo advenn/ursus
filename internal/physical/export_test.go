@@ -9,3 +9,9 @@ func CallCacheLen() int {
 
 // PartitionedFolds is how many group-by folds have run partitioned (step 150).
 func PartitionedFolds() int64 { return partitionedFolds.Load() }
+
+// RuntimeFiltered is the rows runtime filters have dropped (step 167).
+func RuntimeFiltered() int64 { return runtimeFiltered.Load() }
+
+// RuntimeRetired is the runtime filters that have retired as unselective.
+func RuntimeRetired() int64 { return runtimeRetired.Load() }

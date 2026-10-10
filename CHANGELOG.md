@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–166, so far.
+Everything on master since `v0.5.0`: steps 156–167, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -42,6 +42,9 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   and q15 −23 to −24%, q14 −14%, q7 −11%.
 - **What a predicate above a join implies about one side goes below it** (165), with
   the predicate kept above: q19's part side keeps one part in a hundred, its CPU −12%.
+- **Runtime filters** (167): an inner or semi join's built integer keys drop the rows
+  below the joins between it and its probe key's source. q21 −56% CPU, q2 −35%, q11
+  −30%. A filter that keeps three quarters of what it sees retires.
 
 ### What a user of v0.5.0 can trip on
 
@@ -52,7 +55,8 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   nothing above the join depends on its order, `JoinMaintainOrder` is not set, and
   the left input was not sorted by the caller.
 - **`Explain` shows more:** `swap_at_runtime` on a join that may be exchanged (162),
-  and the predicates a filter above a join implies, below it (165).
+  the predicates a filter above a join implies, below it (165), and `RUNTIME FILTER`
+  nodes with the `publish #n` of the join that fills each (167).
 - **A deferred Semi or Anti join holds its build side's key columns until its build
   ends** (161), where it held only the distinct keys, as other joins hold their build
   rows. Past half the memory budget it streams, as before.

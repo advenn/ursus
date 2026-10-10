@@ -172,6 +172,11 @@ type Join struct {
 	// rest: an inner join, nothing above it depending on its order, SwapJoin exact.
 	SwapAtRuntime bool
 
+	// Publish is the slot this join publishes its build side's keys to, for the
+	// RuntimeFilter the runtimeFilters rule placed on its probe side; nil when none
+	// was (step 167).
+	Publish *RuntimeSlot
+
 	// Residual is evaluated per candidate PAIR, before the match verdict, and is
 	// SEMI/ANTI ONLY.
 	//
@@ -319,6 +324,9 @@ func (j *Join) Label() string {
 	// may come in either input's order (step 162).
 	if j.SwapAtRuntime {
 		b.WriteString(" swap_at_runtime")
+	}
+	if j.Publish != nil {
+		b.WriteString(" publish #" + strconv.Itoa(j.Publish.ID))
 	}
 	return b.String()
 }

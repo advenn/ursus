@@ -191,3 +191,76 @@ func sameRow(a, b string) bool {
 	}
 	return true
 }
+
+// TestARuntimeFilterDropsRowsBelowAJoin: the fact rows whose key the small
+// dimension lacks are dropped at the fact's scan, below the join on s, once the
+// outer join has built (step 167); and the answer is the one without the filter.
+func TestARuntimeFilterDropsRowsBelowAJoin(t *testing.T) {
+	n := 20_000
+	k, s, v := make([]int64, n), make([]int64, n), make([]int64, n)
+	for i := range n {
+		k[i], s[i], v[i] = int64(i%5_000), int64(i%40), int64(i)
+	}
+	ms := make([]int64, 40)
+	for i := range ms {
+		ms[i] = int64(i)
+	}
+	dk := []int64{3, 17, 4_000, 4_999}
+	q := func() *ursus.LazyFrame {
+		fact := ursus.Frame(ursus.Values("k", k), ursus.Values("s", s), ursus.Values("v", v))
+		middle := ursus.Frame(ursus.Values("s", ms), ursus.Values("m", ms))
+		dim := ursus.Frame(ursus.Values("k", dk), ursus.Values("d", dk))
+		return fact.Join(middle, ursus.JoinOn(ursus.Col("s"))).Join(dim, ursus.JoinOn(ursus.Col("k")))
+	}
+	before := physical.RuntimeFiltered()
+	got, err := q().Collect(t.Context(), ursus.WithThreads(4), ursus.WithBatchSize(1024))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropped := physical.RuntimeFiltered() - before
+	if got.Height() != 16 {
+		t.Fatalf("%d rows, want 16: four keys, four rows each", got.Height())
+	}
+	// Every fact row but the 16 whose key the dimension has, less any a runtime swap
+	// read ahead of the build: most of the 20,000.
+	if dropped < 15_000 {
+		t.Fatalf("the runtime filter dropped %d rows", dropped)
+	}
+}
+
+// TestAnUnselectiveRuntimeFilterRetires: a dimension holding nearly every fact key
+// keeps nearly every row, so its filter costs a lookup a row and saves nothing; past
+// its first rows it keeps every row without looking (step 167). The answer is the
+// same, and a runtime filter retired.
+func TestAnUnselectiveRuntimeFilterRetires(t *testing.T) {
+	n := 200_000
+	k, s := make([]int64, n), make([]int64, n)
+	for i := range n {
+		k[i], s[i] = int64(i%5_000), int64(i%40)
+	}
+	ms := make([]int64, 40)
+	for i := range ms {
+		ms[i] = int64(i)
+	}
+	dk := make([]int64, 4_900) // all but a hundred of the 5,000 keys
+	for i := range dk {
+		dk[i] = int64(i)
+	}
+	q := func() *ursus.LazyFrame {
+		fact := ursus.Frame(ursus.Values("k", k), ursus.Values("s", s))
+		middle := ursus.Frame(ursus.Values("s", ms), ursus.Values("m", ms))
+		dim := ursus.Frame(ursus.Values("k", dk), ursus.Values("d", dk))
+		return fact.Join(middle, ursus.JoinOn(ursus.Col("s"))).Join(dim, ursus.JoinOn(ursus.Col("k")))
+	}
+	before := physical.RuntimeRetired()
+	got, err := q().Collect(t.Context(), ursus.WithThreads(4), ursus.WithBatchSize(4096))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := n / 5_000 * 4_900; got.Height() != want {
+		t.Fatalf("%d rows, want %d", got.Height(), want)
+	}
+	if physical.RuntimeRetired() == before {
+		t.Fatal("a filter keeping 98% of its rows did not retire")
+	}
+}
