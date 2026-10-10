@@ -429,6 +429,11 @@ type compiledCall struct {
 	// stored, with no key encoded for it.
 	members []string
 	plain   map[string]struct{}
+	// ints and intLookup are the set's members as integers, when is_in compares at
+	// an integer type, for kernel.InInts (step 164); intLookup only past eight.
+	ints      []int64
+	intLookup map[int64]struct{}
+	intsOK    bool
 	// needle is list.contains's value, encoded against the ELEMENT type. Prepared
 	// here for the reason the set is: the cast has to be strict and the encoding
 	// has to match the child's, and doing it per batch would repeat both.
@@ -495,6 +500,9 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 		}
 		if cc.plain != nil && recv.DType().HasStringStorage() {
 			return kernel.InStrings(name, recv, cc.members, cc.plain), nil
+		}
+		if cc.intsOK && kernel.IsIntKey(recv.DType()) {
+			return kernel.InInts(name, recv, cc.ints, cc.intLookup), nil
 		}
 		return kernel.InSet(name, recv, cc.set)
 	case c.Fn.IsMath():
@@ -576,6 +584,17 @@ func compileCall(c *expr.Call, recvType dtype.DataType) compiledCall {
 		if cc.err == nil && cc.meet.HasStringStorage() {
 			if m, p, ok := kernel.StringMembers(cc.set); ok {
 				cc.members, cc.plain = m, p
+			}
+		}
+		if cc.err == nil {
+			if m, ok := kernel.IntMembers(cc.set, cc.meet); ok {
+				cc.ints, cc.intsOK = m, true
+				if len(m) > 8 {
+					cc.intLookup = make(map[int64]struct{}, len(m))
+					for _, v := range m {
+						cc.intLookup[v] = struct{}{}
+					}
+				}
 			}
 		}
 	}

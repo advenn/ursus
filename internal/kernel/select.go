@@ -1,6 +1,8 @@
 package kernel
 
 import (
+	"slices"
+
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/bitmap"
@@ -177,6 +179,75 @@ func InStrings(name string, c *data.Column, members []string, set map[string]str
 	}
 	return memberBits(name, c.Len(), c.Validity(), func(i int) bool {
 		_, ok := set[acc.Get(i)]
+		return ok
+	})
+}
+
+// IntMembers recovers the integers of a set of keys one integer column of type dt
+// encoded, widened as IntKeys widens a column (step 164): keyWriter's 0x01 and the
+// value's bytes, big-endian, a signed type's sign bit flipped. It reports false for
+// a set of any other shape, or a dt that is not IsIntKey.
+func IntMembers(set map[string]struct{}, dt dtype.DataType) ([]int64, bool) {
+	if !IsIntKey(dt) {
+		return nil, false
+	}
+	var w int
+	signed := false
+	switch dt.Physical().ID() {
+	case dtype.TypeInt8, dtype.TypeUint8:
+		w = 1
+	case dtype.TypeInt16, dtype.TypeUint16:
+		w = 2
+	case dtype.TypeInt32, dtype.TypeUint32:
+		w = 4
+	default:
+		w = 8
+	}
+	switch dt.Physical().ID() {
+	case dtype.TypeInt8, dtype.TypeInt16, dtype.TypeInt32, dtype.TypeInt64:
+		signed = true
+	}
+	members := make([]int64, 0, len(set))
+	for k := range set {
+		if len(k) != 1+w || k[0] != 0x01 {
+			return nil, false
+		}
+		var u uint64
+		for i := 1; i <= w; i++ {
+			u = u<<8 | uint64(k[i])
+		}
+		if signed {
+			u ^= 1 << (8*w - 1)
+			shift := 64 - 8*w
+			members = append(members, int64(u<<shift)>>shift)
+			continue
+		}
+		members = append(members, int64(u))
+	}
+	slices.Sort(members) // map order is random; a stable order keeps runs comparable
+	return members, true
+}
+
+// InInts is InSet for an integer column, against the set's members as IntMembers
+// recovers them once per query: a row's value is read from the column and compared,
+// with no key built for it. As InStrings, a few members are compared one by one, and
+// more through a map. lookup is the members as a map, or nil when there are few.
+func InInts(name string, c *data.Column, members []int64, lookup map[int64]struct{}) *data.Column {
+	var scratch []int64
+	vals := IntKeys(c, &scratch)
+	if lookup == nil {
+		return memberBits(name, c.Len(), c.Validity(), func(i int) bool {
+			v := vals[i]
+			for _, m := range members {
+				if v == m {
+					return true
+				}
+			}
+			return false
+		})
+	}
+	return memberBits(name, c.Len(), c.Validity(), func(i int) bool {
+		_, ok := lookup[vals[i]]
 		return ok
 	})
 }

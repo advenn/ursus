@@ -355,59 +355,53 @@ func missingCompare(op expr.BinaryOp, name string, l, r *data.Column, n int) (*d
 //	true  OR  null == true    (valid, not null)
 //
 // Getting this wrong is a silent filter bug: rows that should survive disappear.
+//
+// # A word at a time (step 164)
+//
+// With a the left value bits under the left validity, and b the right's, so a null
+// lane's payload is never trusted (Arrow does not promise it is zero):
+//
+//	AND  value a & b   valid (lv & rv) | (lv &^ a) | (rv &^ b)   a known false decides
+//	OR   value a | b   valid (lv & rv) | a | b                    a known true decides
+//	XOR  value a ^ b   valid lv & rv, the value cleared under a null
+//
+// Each is a few passes of bitmap's word loops, and with no nulls on either side the
+// validity is all-set without one. It went row by row, three closure calls a row:
+// 21% of PDS-H q6 and 9% of q15 at step 164.
 func kleene(op expr.BinaryOp, name string, l, r *data.Column, n int) (*data.Column, error) {
-	lb, rb := l.Bools(), r.Bools()
-	lv, rv := l.Validity(), r.Validity()
-
-	getb := func(v bitmap.View, i, ln int) bool {
-		if ln == 1 {
-			return v.Get(0)
-		}
-		return v.Get(i)
+	lv, rv := spread(l.Validity(), l.Len(), n), spread(r.Validity(), r.Len(), n)
+	a := bitmap.And(spread(l.Bools(), l.Len(), n), lv)
+	b := bitmap.And(spread(r.Bools(), r.Len(), n), rv)
+	var val, valid bitmap.View
+	switch op {
+	case expr.OpAnd:
+		val = bitmap.And(a, b)
+		valid = bitmap.Or(bitmap.And(lv, rv), bitmap.Or(bitmap.AndNot(lv, a), bitmap.AndNot(rv, b)))
+	case expr.OpOr:
+		val = bitmap.Or(a, b)
+		valid = bitmap.Or(bitmap.And(lv, rv), val)
+	case expr.OpXor:
+		valid = bitmap.And(lv, rv)
+		val = bitmap.And(bitmap.Or(bitmap.AndNot(a, b), bitmap.AndNot(b, a)), valid)
+	default:
+		return nil, uerr.Internalf("kernel: %s is not a Kleene operator", op)
 	}
+	return data.NewBool(name, val, valid), nil
+}
 
-	vals := bitmap.NewBuilder(n)
-	valid := bitmap.NewBuilder(n)
-
-	for i := range n {
-		lok, rok := getb(lv, i, l.Len()), getb(rv, i, r.Len())
-		// Canonicalise: Arrow does not guarantee the value bit of a null slot is
-		// zero, so a null lane's payload must never be trusted.
-		a := lok && getb(lb, i, l.Len())
-		b := rok && getb(rb, i, r.Len())
-
-		switch op {
-		case expr.OpAnd:
-			switch {
-			case lok && rok:
-				vals.Append(a && b)
-				valid.Append(true)
-			case (lok && !a) || (rok && !b):
-				vals.Append(false) // false AND anything is false
-				valid.Append(true)
-			default:
-				vals.Append(false)
-				valid.Append(false)
-			}
-		case expr.OpOr:
-			switch {
-			case lok && rok:
-				vals.Append(a || b)
-				valid.Append(true)
-			case (lok && a) || (rok && b):
-				vals.Append(true) // true OR anything is true
-				valid.Append(true)
-			default:
-				vals.Append(false)
-				valid.Append(false)
-			}
-		case expr.OpXor:
-			// XOR has no absorbing element, so a null operand always yields null.
-			vals.Append(a != b)
-			valid.Append(lok && rok)
-		}
+// spread is v, the bits of a column of ln rows, over n rows: itself, or a scalar's
+// one bit repeated. A payload-free column's value bits are absent, and read as clear.
+func spread(v bitmap.View, ln, n int) bitmap.View {
+	switch {
+	case v.Len() != ln:
+		return bitmap.Zeros(n)
+	case ln == n:
+		return v
+	case v.Get(0):
+		return bitmap.AllSet(n)
+	default:
+		return bitmap.Zeros(n)
 	}
-	return data.NewBool(name, vals.Finish(), valid.Finish()), nil
 }
 
 // --- arithmetic --------------------------------------------------------------

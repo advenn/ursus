@@ -200,6 +200,29 @@ func (f *filterOp) Apply(ctx context.Context, in *data.Batch) (*data.Batch, erro
 	return takeBatch(in.Schema(), in, sel)
 }
 
+// conjuncts is preds with every top-level And split into its sides, left first
+// (step 164). A row passes `a AND b` exactly when it passes a and then b, under
+// Kleene logic as under two-valued, so the filter applies b to a's survivors alone:
+// IsBetween is an And of two comparisons, and its second ran over every row the
+// first had already dropped. It is what Filter(a, b) has always done, so an error b
+// raises only on rows a drops is not raised, as there.
+func conjuncts(preds []expr.Node) []expr.Node {
+	out := make([]expr.Node, 0, len(preds))
+	var walk func(p expr.Node)
+	walk = func(p expr.Node) {
+		if b, ok := p.(*expr.Binary); ok && b.Op == expr.OpAnd {
+			walk(b.L)
+			walk(b.R)
+			return
+		}
+		out = append(out, p)
+	}
+	for _, p := range preds {
+		walk(p)
+	}
+	return out
+}
+
 // gatherRead gathers, at sel, only the columns of in that p reads.
 func gatherRead(p expr.Node, in *data.Batch, sel []int32) (*data.Batch, error) {
 	names := expr.RootNames(p)
@@ -465,7 +488,7 @@ func Plan(ctx context.Context, n plan.Node, opts Options) (Operator, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &stage{child: child, op: &filterOp{schema: s, preds: t.Preds}}, nil
+		return &stage{child: child, op: &filterOp{schema: s, preds: conjuncts(t.Preds)}}, nil
 
 	case *plan.Project:
 		child, err := Plan(ctx, t.Input, opts)
