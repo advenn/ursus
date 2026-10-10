@@ -195,6 +195,19 @@ func NewFixed[T Fixed](name string, dt dtype.DataType, vals []T, valid bitmap.Vi
 	return NewFixedBuffer(name, dt, buf, len(vals), valid)
 }
 
+// NewFixedOwned is NewFixed taking vals rather than copying it (step 163): the
+// column wraps vals' allocation, all of it, and the caller hands vals over and never
+// writes it again. A reader that decodes a batch's values into a fresh slice uses it,
+// so the values are written once.
+func NewFixedOwned[T Fixed](name string, dt dtype.DataType, vals []T, valid bitmap.View) *Column {
+	if want, ok := physicalID[T](); ok && want != dt.Physical().ID() {
+		panic(uerr.Internalf(
+			"data: column %q declares %s, stored as %s, but its values are %s",
+			name, dt, dt.Physical().ID(), want))
+	}
+	return NewFixedBuffer(name, dt, ownedBuffer(vals), len(vals), valid)
+}
+
 // NewFixedBuffer builds a fixed-width column directly over an existing buffer.
 // This is the path a kernel takes: allocate the output buffer, write into it, and
 // wrap it with no copy.
@@ -435,6 +448,20 @@ func NewStringParts(name string, offs []int32, chars []byte, valid bitmap.View) 
 		valid = bitmap.AllSet(n)
 	}
 	return &Column{name: name, dt: dtype.String, len: n, valid: valid, offs: ob, chars: cb}
+}
+
+// NewStringOwned is NewStringParts taking offs and chars rather than copying them
+// (step 163); the caller hands both over and never writes them again.
+func NewStringOwned(name string, offs []int32, chars []byte, valid bitmap.View) *Column {
+	if int64(len(chars)) > MaxStringBytes {
+		tooManyChars(name, int64(len(chars)))
+	}
+	n := max(len(offs)-1, 0)
+	if valid.Len() == 0 && n > 0 {
+		valid = bitmap.AllSet(n)
+	}
+	return &Column{name: name, dt: dtype.String, len: n, valid: valid,
+		offs: ownedBuffer(offs), chars: ownedBuffer(chars)}
 }
 
 // NewStringBuffers builds a String column over existing offset and character

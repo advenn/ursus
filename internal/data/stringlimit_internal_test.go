@@ -39,6 +39,12 @@ func TestStringColumnsRefusePastTheirOffsets(t *testing.T) {
 		{"NewStringParts past it is refused", func() {
 			NewStringParts("s", []int32{0, 1025}, make([]byte, 1025), bitmap.View{})
 		}, false},
+		{"NewStringOwned at the limit builds", func() {
+			NewStringOwned("s", []int32{0, 1024}, make([]byte, 1024), bitmap.View{})
+		}, true},
+		{"NewStringOwned past it is refused", func() {
+			NewStringOwned("s", []int32{0, 1025}, make([]byte, 1025), bitmap.View{})
+		}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

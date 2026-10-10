@@ -1,6 +1,10 @@
 package data
 
-import "unsafe"
+import (
+	"unsafe"
+
+	"github.com/apache/arrow-go/v18/arrow/memory"
+)
 
 // unsafeString reinterprets a byte slice as a string without copying.
 //
@@ -34,4 +38,25 @@ func unsafeData[T Fixed](b []byte) []T {
 	var z T
 	sz := int(unsafe.Sizeof(z))
 	return unsafe.Slice((*T)(unsafe.Pointer(&b[0])), len(b)/sz)
+}
+
+// ownedBuffer wraps s's elements as a buffer without copying. The buffer's capacity
+// is s's, so it reports the allocation it holds, as Buffers measures by capacity.
+//
+// The memory is Go heap, kept alive by the buffer's slice like any arrowx buffer's;
+// it is 8-byte aligned rather than 64, which arrowx.Alignment allows a buffer ursus
+// observes and every kernel treats as a hint.
+func ownedBuffer[T Fixed](s []T) *memory.Buffer {
+	if cap(s) == 0 {
+		return memory.NewBufferBytes(nil)
+	}
+	var z T
+	sz := int(unsafe.Sizeof(z))
+	all := unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(s))), cap(s)*sz)
+	// The whole allocation, so Cap reports it; then the length in use. A resize
+	// within the capacity only sets the length: a wrapped buffer has no allocator,
+	// and nothing here reaches one.
+	b := memory.NewBufferBytes(all)
+	b.ResizeNoShrink(len(s) * sz)
+	return b
 }

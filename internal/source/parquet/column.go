@@ -2,7 +2,6 @@ package parquet
 
 import (
 	"encoding/binary"
-	"slices"
 
 	"github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/file"
@@ -200,7 +199,7 @@ func (c *fixedCol[P, T]) read(n int) (int, error) {
 
 	if c.maxDef == 0 {
 		// A REQUIRED column has no nulls and no levels; the values are already dense.
-		c.out = slices.Grow(c.out, valuesRead)
+		c.out = growExact(c.out, valuesRead)
 		for i := range valuesRead {
 			c.out = append(c.out, c.conv(vals[i]))
 		}
@@ -210,7 +209,7 @@ func (c *fixedCol[P, T]) read(n int) (int, error) {
 
 	var zero T
 	vi := 0
-	c.out = slices.Grow(c.out, rows)
+	c.out = growExact(c.out, rows)
 	for i := 0; i < rows; {
 		// Pack validity 64 bits at a time. AppendBits is width-safe, which matters
 		// because the tail word is partial for any row count not a multiple of 64.
@@ -244,7 +243,7 @@ func (c *fixedCol[P, T]) read(n int) (int, error) {
 // back, where no value is overwritten before it is moved.
 func (c *fixedCol[P, T]) readDirect(n int) (int, error) {
 	start := len(c.out)
-	c.out = slices.Grow(c.out, n)
+	c.out = growExact(c.out, n)
 	out := c.out[start : start+n]
 	vals := any(out).([]P)
 	var defs []int16
@@ -308,15 +307,14 @@ func (c *fixedCol[P, T]) trackParentDefs(defs []int16) {
 }
 
 func (c *fixedCol[P, T]) finish(name string) *data.Column {
-	col := data.NewFixed(name, c.dt, c.out, c.valid.finish())
-	// The values slice is kept for the next batch: NewFixed copies into a fresh Arrow
-	// buffer, so the column just made does not alias it. This said NewFixed wrapped
-	// the slice, and dropped it every batch to be safe, but NewFixed has copied since
-	// the first commit, so each batch's values were allocated twice: 0.74 GB of h2o
-	// j5's profile over Parquet (step 137), the CSV reader's mistake of step 136.
-	// TestReadingAllocatesAboutWhatItProduces checks an earlier batch is intact after
-	// the later ones.
-	c.out = c.out[:0]
+	// The column takes the values slice, and the next batch's are decoded into a new
+	// one. Until step 163 the slice was kept and NewFixed copied it into an Arrow
+	// buffer each batch, so every value was written twice. Step 137 had found it
+	// dropped every batch as well, allocated twice; keeping it fixed that, and this
+	// the copy. TestReadingAllocatesAboutWhatItProduces checks an earlier batch is
+	// intact after the later ones.
+	col := data.NewFixedOwned(name, c.dt, c.out, c.valid.finish())
+	c.out = nil
 	return col
 }
 
@@ -574,7 +572,10 @@ func (c *byteArrayCol) take(rows, valuesRead int, defs []int16) int {
 }
 
 func (c *byteArrayCol) finish(name string) *data.Column {
-	col := data.NewStringParts(name, c.offs, c.chars, c.valid.finish())
+	// The column takes both slices, which are sized for this batch alone, and the
+	// next batch makes its own. NewStringParts copied them, writing every string's
+	// characters a second time (step 163).
+	col := data.NewStringOwned(name, c.offs, c.chars, c.valid.finish())
 	c.offs, c.chars = nil, nil
 	return col.WithDType(c.dt)
 }
