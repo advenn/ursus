@@ -161,8 +161,8 @@ once, so it must be safe for that.
 Not done: built-in object stores and SQL, both out by decision (the seam above reaches a store today); `MapGroups`
 and `RollingMap`; `Pivot`, whose output columns are the distinct values of a column, so its schema would depend on data
 and no plan node here does (`Unpivot`, melt, ships); `Upsample`; list set operations, `Sample` and
-`List().Eval`; Arrow IPC files and NDJSON. [`v0.6-scope.md`](./context_files/v0.6-scope.md) says which of these 0.6
-takes, and why the rest wait.
+`List().Eval`; a rolling median, quantile or rank, and a rolling window by an integer `by`; Spearman's correlation;
+Arrow IPC files and NDJSON. [`v0.6-scope.md`](./context_files/v0.6-scope.md) says why each waits.
 
 **ursus stays 0.x; there will be no 1.0.** Version numbers follow Go's rule for v0, **nothing is promised**, and that
 is permanent rather than a phase: a minor version renames, removes or reshapes an API whenever the result is better,

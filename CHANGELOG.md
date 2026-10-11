@@ -218,6 +218,62 @@ the module could name or build:
 - **`DataFrame.Column[T]`** returns `*Series[T]`, the public name of the type it
   returned. Code that used the result compiles unchanged.
 
+### Known limitations
+
+- **Object stores and SQL:** none, by decision. `ScanParquetFrom` and `ScanCSVFrom`
+  are the seam.
+- **Operators that do not spill** each fail under a budget with an error naming
+  themselves:
+  - reverse, hstack and tail;
+  - `JoinAsOf` forward and nearest, which hold the right side. Backward streams, as
+    `MergeSorted` does;
+  - `Rolling` and `GroupByDynamic`;
+  - a window with no partition key, and one partition larger than the limit, the
+    rolling and ewm functions included;
+  - a cross join;
+  - quantile-like aggregates over a few very large groups.
+- **Not built:**
+  - `Pivot`, `MapGroups`, `Upsample` and `RollingMap`;
+  - list set operations, `Sample` and `List().Eval`;
+  - a rolling median, quantile or rank, by rows or by time, and a window by an
+    integer `by`;
+  - Spearman's correlation;
+  - Arrow IPC files and NDJSON.
+
+  `v0.6-scope.md`'s Tier 2 and Tier 3, and `v0.5-scope.md`'s, give each one's
+  reason. 0.6's Tier 2, its speed items among them, moves to 0.7, as the midpoint
+  audit planned.
+- **Types:** as in v0.5.0, except the mean and median of instants, which are built:
+  - nesting deeper than a List of a primitive or a Struct of primitives is refused
+    by name in Parquet;
+  - Array has no column representation, and CSV refuses nested columns;
+  - Enum is not written to Parquet or Arrow, and Duration is not written to Parquet;
+  - a temporal column's `Quantile`, `Var` and `Std` are refused;
+  - `Cut` and `QCut` answer a String, not Polars' Categorical.
+- **Open audit rows:** none. Each of `audit.md`'s is fixed or closed with a decision
+  (178–180).
+- **Where ursus differs from Polars on purpose:** as in v0.5.0, and, each in the doc
+  of what answers it:
+  - `MaxBy` over a NaN answers the NaN's row, as `Max` orders NaN greatest, where
+    Polars skips it;
+  - `Cov` of one pair at ddof 1 is null, where Polars answers 0.0 when there were no
+    nulls;
+  - a rolling window by time that is empty, or holds only nulls, is null, where
+    Polars' sum answers 0.0;
+  - a rolling min or max by time takes a String, which Polars refuses;
+  - `ReplaceTimeZone`'s policy is the whole column's, where Polars also takes one a
+    row;
+  - a dynamic group keeps its empty windows, which Polars drops;
+  - a weekday start is refused on a grid not in weeks, where Polars answers by no rule
+    its documentation states.
+- **Speed:** ursus is slower than Polars and DuckDB. It is 2.32× Polars on PDS-H at
+  SF=1, within the 3× the scope set. The widest gaps are q19 at 5.8×, q7 at 4.1× and
+  q15 at 3.9×. h2o's group-bys by strings and by several keys are where v0.5.0 had
+  them.
+- **Memory:** with no limit set, h2o's `gb10` peaks at 7.77 GB over CSV and `j5` at
+  6.87 GB, where Polars' highest is 5.18 GB. Under 3 GB both pass. PDS-H at SF=1
+  peaks at 0.85 GB, and Polars at 0.86.
+
 ---
 
 ## v0.5.0 — 2026-10-09

@@ -114,5 +114,14 @@ least 20% faster than v0.5.0 on it.**
   `raw/`, `timings.csv`, `summary.json`, `validation.csv` and `REPORT.md`, copied
   before the run.
 - **The README's report section and its table,** with a column for v0.5.0.
-- **The CHANGELOG,** with these figures.
+- **The CHANGELOG,** with these figures in "Where it ends".
+- **The CHANGELOG's Known limitations,** the release's last section, written
+  afresh from v0.5.0's:
+  - `MergeSorted` and backward `JoinAsOf` leave the operators that do not spill;
+  - what 0.6 built leaves "Not built", and what its features leave out joins it;
+  - the default budget off Linux, and the open audit rows, are gone;
+  - the differences from Polars that steps 175, 177, 174 and 187 recorded are listed;
+  - speed and memory are from §2.
+- **The README's "Not done" list** matches the CHANGELOG's "Not built" again, as
+  step 166 left them.
 - **No code changed.**
