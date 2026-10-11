@@ -335,3 +335,56 @@ func TestTheSplitterCutsWellFormedQuotingWithoutStopping(t *testing.T) {
 		}
 	}
 }
+
+// TestSpeculativeCutsHoldOnOrdinaryFiles: step 199 cuts blocks after the first line
+// ending past their size, and a block that does not end cleanly sends the rest of
+// the stream back to be cut exactly. That is correct either way; what this pins is
+// that it is fast: a file of quoted fields holding no line ending is read without a
+// single fallback, and one quoted line ending, past the first blocks, costs exactly
+// one, and reads as the serial path does.
+func TestSpeculativeCutsHoldOnOrdinaryFiles(t *testing.T) {
+	o := DefaultOptions()
+	o.Schema = allStrings("a", "b", "c")
+	defer func(size int) { splitBlockSize = size }(splitBlockSize)
+	splitBlockSize = 4 << 10
+	var plain strings.Builder
+	plain.WriteString("a,b,c\n")
+	for i := range 20_000 {
+		fmt.Fprintf(&plain, "\"id%03d\",%d,\"x, %d\"\n", i%997, i, i*7)
+	}
+	resumed := func(text string) int {
+		t.Helper()
+		bs, err := NewMulti([]Opener{textOpener(text)}, "spec", o).Open(t.Context(), source.ScanSpec{Threads: 4})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer bs.Close()
+		r := bs.(*reader)
+		n := 0
+		for {
+			b, err := bs.Next(t.Context())
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			n += b.Rows()
+			if r.split != nil && r.split.resumed > 0 {
+				return r.split.resumed
+			}
+		}
+		return 0
+	}
+	if got := resumed(plain.String()); got != 0 {
+		t.Errorf("a file of quoted fields with no line ending in one fell back %d times", got)
+	}
+	// A quoted line ending 300 KB in: one fallback, and the rows as the serial path's.
+	text := plain.String()
+	at := strings.Index(text[300<<10:], "\"x, ") + 300<<10
+	odd := text[:at] + "\"x,\nwrapped\"" + text[at+len("\"x, "):]
+	if got := resumed(odd); got != 1 {
+		t.Errorf("a quoted line ending fell back %d times, want 1", got)
+	}
+	sameBothWays(t, "a quoted line ending past the first blocks", []Opener{textOpener(odd)}, o)
+}

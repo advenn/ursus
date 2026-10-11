@@ -1,6 +1,7 @@
 package csv
 
 import (
+	"bytes"
 	"context"
 	"io"
 
@@ -45,6 +46,21 @@ func (r *reader) nextParallel(ctx context.Context) (*data.Batch, error) {
 			<-p.done
 			r.window[0] = nil
 			r.window = r.window[1:]
+			if p.blk.spec && p.err != nil {
+				// A block cut speculatively did not end cleanly: the cut ran through
+				// a quoted field, or the block holds an error. Either way the rest of
+				// the stream, this block on, is cut exactly, and the exact path
+				// reports any error as it always has.
+				data := p.blk.data
+				for _, q := range r.window {
+					<-q.done
+					data = append(data[:len(data):len(data)], q.blk.data...)
+				}
+				r.window = nil
+				r.split.resume(data)
+				r.splitEnd = false // the splitter holds the stream's rest again
+				continue
+			}
 			if p.err != nil {
 				r.failed, r.split, r.window = p.err, nil, nil
 				return nil, p.err
@@ -52,7 +68,13 @@ func (r *reader) nextParallel(ctx context.Context) (*data.Batch, error) {
 			for off := 0; off < p.b.Rows(); off += r.batchSize {
 				r.ready = append(r.ready, p.b.Slice(off, min(r.batchSize, p.b.Rows()-off)))
 			}
-			r.row = p.blk.firstRow + p.blk.rows
+			if p.blk.spec {
+				r.split.row += p.b.Rows()
+				r.split.line += p.lines
+				r.row = r.split.row
+			} else {
+				r.row = p.blk.firstRow + p.blk.rows
+			}
 			continue
 		}
 
@@ -75,7 +97,7 @@ func (r *reader) nextParallel(ctx context.Context) (*data.Batch, error) {
 		case err != nil:
 			return nil, err
 		}
-		r.split, r.splitEnd = newSplitter(r.sc, r.split.row), false
+		r.split, r.splitEnd = newSplitter(r.sc, r.row), false
 	}
 	b := r.ready[0]
 	r.ready[0] = nil
@@ -85,10 +107,11 @@ func (r *reader) nextParallel(ctx context.Context) (*data.Batch, error) {
 
 // parsing is one block being parsed in the background.
 type parsing struct {
-	blk  block
-	done chan struct{}
-	b    *data.Batch
-	err  error
+	blk   block
+	done  chan struct{}
+	b     *data.Batch
+	err   error
+	lines int // a speculative block's physical lines, counted as it is parsed
 }
 
 // parseLater starts blk's parse on a goroutine of its own. Close waits for every
@@ -102,7 +125,11 @@ func (r *reader) parseLater(blk block) *parsing {
 				p.err = uerr.Internalf("scan_csv: parsing a block panicked: %v", v)
 			}
 		}()
+		blk.count()
 		p.b, p.err = r.parseBlock(blk)
+		if blk.spec && p.err == nil {
+			p.lines = blk.lines
+		}
 	})
 	return p
 }
@@ -172,4 +199,20 @@ func (r *reader) textHint(i int, blk block) int {
 		n = int((rate - 1) * int64(blk.rows) / 64)
 	}
 	return n + n/16
+}
+
+// count gives a speculative block its line endings, and its rows as many, since its
+// rows are not counted when it is cut and its builders are sized by them: its rows
+// but for blank lines, comments and line endings inside quotes, which only make the
+// estimate high, and take copies a slice an eighth unused down to its size. The
+// count is SIMD-fast, and is the block's physical lines besides.
+func (blk *block) count() {
+	if !blk.spec {
+		return
+	}
+	blk.lines = bytes.Count(blk.data, newline)
+	blk.rows = blk.lines
+	if len(blk.data) > 0 && blk.data[len(blk.data)-1] != '\n' {
+		blk.rows++
+	}
 }

@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.1
 
-Everything on master since `v0.6.0`: steps 191–198, so far.
+Everything on master since `v0.6.0`: steps 191–199, so far.
 [`v0.6.1-scope.md`](./context_files/v0.6.1-scope.md) set the scope: **speed where the
 profile points, and out-of-core.** Each step is timed against v0.6.0's code,
 alternated in one session.
@@ -29,6 +29,11 @@ alternated in one session.
   and each dictionary string copied once, short ones as two words. q19 and q12 take
   about 22% less wall time, and h2o's j2, j3 and gb1 over Parquet 10 to 15% less.
   Every other chunk reads through arrow-go as before.
+- **The CSV reader cuts its blocks speculatively** (199), after the first line ending
+  past a block's size, and lets each block's parse prove the cut. A block that does
+  not end cleanly sends the rest of the stream back to be cut exactly, as before, so
+  answers and errors are unchanged. The splitter had been 60% of h2o gb1's read over
+  CSV, on one goroutine; h2o over CSV takes 5 to 12% less wall time.
 - **A string conjunct runs once per dictionary value, in the Parquet reader** (193).
   `l_shipmode IN ('AIR', 'AIR REG')`, `==`, `StartsWith`, a regexp, any row-local
   expression of one String or Binary column, is evaluated on each row group's

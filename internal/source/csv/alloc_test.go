@@ -181,6 +181,7 @@ func TestABlockAllocatesWhatItHolds(t *testing.T) {
 			break
 		}
 		blk.wanted, blk.part = r.wanted, r.src.partName(r.next-1)
+		blk.count() // as parseLater counts a speculative block, before its parse
 		runtime.GC()
 		before := allocatedBytes()
 		b, err := r.parseBlock(blk)

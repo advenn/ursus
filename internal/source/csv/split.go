@@ -32,6 +32,18 @@ import (
 // quote still open at the end of the stream, a record longer than MaxRecordSize —
 // it does not guess at. It stops before that record, and the reader hands the rest
 // of the stream to the serial scanner, which reports it exactly as it always has.
+//
+// # Speculative first (step 199)
+//
+// Cutting exactly reads every byte on the splitter's one goroutine, and for h2o's
+// CSV that was the read's bound. So a stream is first cut speculatively: after the
+// first line ending past a block's size, at the cost of one byte search. A block's
+// parse starts where a record starts, if the block before it ended cleanly, and so
+// ends cleanly exactly when its cut fell where a record ends: a cut through a quoted
+// field leaves the quote open at the block's end, which its parse refuses. A block
+// that does not end cleanly, for that or for any error in it, sends itself and every
+// block cut after it back here (resume), and the rest of the stream is cut exactly,
+// by the rules above, with the errors and row numbers the serial path gives.
 type splitter struct {
 	r     io.Reader
 	carry []byte // the start of a record the last block did not reach the end of
@@ -46,6 +58,14 @@ type splitter struct {
 	row  int // data rows before the next block
 
 	stopped bool // an anomaly was met: the rest of the stream is the serial path's
+
+	// spec is set while blocks are cut speculatively (step 199): after the first
+	// line ending past the block's size, with no record scanned. line and row are
+	// then the reader's to advance, as each block is delivered, since only its parse
+	// counts them; a block that does not end cleanly sends the rest of the stream
+	// back here, to be cut exactly (resume).
+	spec    bool
+	resumed int // how many times a speculative block sent the stream back; for tests
 }
 
 // block is a run of whole records, and where it sits in its stream.
@@ -57,11 +77,17 @@ type block struct {
 	wanted    []int
 	part      string // the stream's name, for errors
 	width     int    // the scanner's width for the stream
+	spec      bool   // cut speculatively: firstLine, firstRow and rows are unknown
+	lines     int    // a speculative block's line endings, counted as it is parsed
 }
 
 // splitBlockSize is how much a block holds, give or take a record. A variable so a
 // test can make it small enough to put block boundaries everywhere.
 var splitBlockSize = 1 << 20
+
+// splitSlack is how far past a block's size a speculative cut reads, to find the line
+// ending it cuts after in the same read.
+const splitSlack = 64 << 10
 
 // newSplitter takes over sc's stream after its header: what sc has buffered, and
 // what is still to be read. row is the data rows the query has read before it.
@@ -77,6 +103,63 @@ func newSplitter(sc *scanner, row int) *splitter {
 		width:   sc.width,
 		line:    sc.line,
 		row:     row,
+		spec:    true,
+	}
+}
+
+// resume takes back the stream from a block cut speculatively that did not end
+// cleanly: data is that block and every block cut after it, and the splitter cuts
+// exactly from there on, its line and row those before that block.
+func (sp *splitter) resume(data []byte) {
+	sp.carry = append(append([]byte(nil), data...), sp.carry...)
+	sp.spec = false
+	sp.resumed++
+}
+
+// specNext cuts a block speculatively: after the first line ending at or past the
+// block's size, or at the stream's end. It scans no record, so it costs a search for
+// one byte, where exact cutting read every byte of the file on one goroutine: 0.43 s
+// of h2o gb1's 0.72 over CSV (step 199). Whether the cut fell where a record ends is
+// the block's parse to find: a quoted field the cut runs through is left open at the
+// block's end, which the parse refuses.
+func (sp *splitter) specNext() (block, bool, error) {
+	buf := sp.carry
+	sp.carry = nil
+	var err error
+	// Read a little past the block's size, so the line ending the cut is after is
+	// in the first read: read to the size exactly, the buffer was grown, copied, and
+	// most of a block copied again as the next one's start, two copies of nearly
+	// every byte on the splitter's one goroutine.
+	want := splitBlockSize + splitSlack
+	for !sp.eof && len(buf) < want {
+		if buf, err = sp.read(buf, want); err != nil {
+			return block{}, false, err
+		}
+	}
+	from := max(splitBlockSize-1, 0)
+	for {
+		if from < len(buf) {
+			if i := bytes.IndexByte(buf[from:], '\n'); i >= 0 {
+				cut := from + i + 1
+				sp.carry = append([]byte(nil), buf[cut:]...)
+				return block{data: buf[:cut], width: sp.width, spec: true}, true, nil
+			}
+		}
+		if sp.eof {
+			if len(buf) == 0 {
+				return block{}, false, nil
+			}
+			return block{data: buf, width: sp.width, spec: true}, true, nil
+		}
+		if len(buf) >= sp.maxRec {
+			// No line ends within the record limit: the exact splitter decides.
+			sp.carry, sp.spec = buf, false
+			return sp.next()
+		}
+		from = max(from, len(buf))
+		if buf, err = sp.read(buf, 2*len(buf)); err != nil {
+			return block{}, false, err
+		}
 	}
 }
 
@@ -85,6 +168,9 @@ func newSplitter(sc *scanner, row int) *splitter {
 func (sp *splitter) next() (blk block, ok bool, err error) {
 	if sp.stopped {
 		return block{}, false, nil
+	}
+	if sp.spec {
+		return sp.specNext()
 	}
 	buf := sp.carry
 	sp.carry = nil
