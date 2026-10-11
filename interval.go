@@ -14,6 +14,10 @@ type Interval = dtype.Interval
 // Every parses an interval: "1y", "3mo", "1w", "2d", "6h", "15m", "30s", "1ns".
 // Components may be concatenated ("1h30m") and a leading "-" negates the whole thing.
 //
+// A grid of weeks starts on a Monday, as Polars': Truncate(Every("1w")) and a
+// GroupByDynamic every "1w" give Mondays, where "7d" counts days from the epoch, a
+// Thursday. Weeks mixed with any other unit count from the epoch too.
+//
 // A parse failure is carried in the value rather than returned, and surfaces when the
 // query is built — the deferred-error rule the rest of the library follows. Note "m"
 // is minutes and "mo" is months.

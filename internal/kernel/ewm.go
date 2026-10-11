@@ -23,8 +23,10 @@ import (
 //
 //   - A null is no observation. Without IgnoreNulls it still ages the weights
 //     before it, as a row does; with it, the weights count values only.
-//   - A row's answer is the running value, a null row's too, once MinSamples values
-//     have been seen; MinSamples is one unless set.
+//   - A row's answer is the running value once MinSamples values have been seen;
+//     MinSamples is one unless set. A null row's answer is null, as Polars' is
+//     (step 184, found by the Polars oracle); it answered the running value, as
+//     pandas does, until then.
 //   - ewm_var's unbiased estimate needs more weight than one value's, so a first
 //     value's is null where pandas answers NaN.
 //
@@ -92,7 +94,7 @@ func winEwm(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataT
 			if obs {
 				nobs++
 			}
-			if !seen || nobs < minN {
+			if !obs || !seen || nobs < minN {
 				continue
 			}
 			switch fn {

@@ -46,6 +46,11 @@ type Interval struct {
 	days   int32
 	nanos  int64
 	err    error
+
+	// weekly: the days were written in weeks alone, "1w" or "2w", and a grid of them
+	// starts on a Monday, as Polars' does; "7d" counts days from the epoch, a
+	// Thursday (step 184, found by the Polars oracle). See floorWall.
+	weekly bool
 }
 
 // Months, Days and Nanos are the three components. Exported as accessors rather than
@@ -82,8 +87,25 @@ func (i Interval) Negative() bool {
 // FromDuration refuse the minimum outright. A guard here could not fire, and this
 // codebase treats an unreachable guard as protection that is not there.
 func (i Interval) Neg() Interval {
-	return Interval{months: -i.months, days: -i.days, nanos: -i.nanos, err: i.err}
+	return Interval{months: -i.months, days: -i.days, nanos: -i.nanos, err: i.err, weekly: i.weekly}
 }
+
+// Weekly reports whether the interval was written in weeks alone, so that a grid of
+// it starts on a Monday.
+func (i Interval) Weekly() bool { return i.weekly }
+
+// AsWeekly is i, written in weeks: the kernel's way back to a weekly interval, which
+// crosses into it as three numbers. It is i unchanged unless i is whole weeks alone.
+func (i Interval) AsWeekly() Interval {
+	if i.months == 0 && i.nanos == 0 && i.days != 0 && i.days%7 == 0 {
+		i.weekly = true
+	}
+	return i
+}
+
+// mondayDay is the day number of the first Monday on or after the epoch, 1970-01-05,
+// from which a weekly grid counts.
+const mondayDay = 4
 
 // FromDuration builds an absolute interval. The result is never calendar-aware —
 // 24*time.Hour is twenty-four hours, not one day.
@@ -171,6 +193,7 @@ func Every(s string) Interval {
 	raw := s
 	var out Interval
 	neg := false
+	onlyWeeks := true
 	if rest, ok := strings.CutPrefix(s, "-"); ok {
 		neg, s = true, rest
 	}
@@ -203,6 +226,7 @@ func Every(s string) Interval {
 			return Interval{err: everyErr(raw, "%q is not a unit", s)}
 		}
 		s = s[len(u.suffix):]
+		onlyWeeks = onlyWeeks && u.suffix == "w"
 
 		months, ok := addMul(int64(out.months), v, int64(u.months), math.MaxInt32)
 		if !ok {
@@ -233,6 +257,7 @@ func Every(s string) Interval {
 	if out.IsZero() {
 		return Interval{err: everyErr(raw, "it spans no time")}
 	}
+	out.weekly = onlyWeeks
 	return out
 }
 
@@ -311,8 +336,13 @@ func (i Interval) String() string {
 	}
 	write(int64(months/12), "y")
 	write(int64(months%12), "mo")
-	write(int64(days/7), "w")
-	write(int64(days%7), "d")
+	// Weeks only for an interval written in weeks: "7d" and "1w" are two grids,
+	// and a rendering deduplication keys on must not make them one.
+	if i.weekly {
+		write(int64(days/7), "w")
+		days %= 7
+	}
+	write(int64(days), "d")
 	write(nanos/int64(time.Hour), "h")
 	nanos %= int64(time.Hour)
 	write(nanos/int64(time.Minute), "m")
@@ -526,6 +556,11 @@ func (i Interval) floorWall(t time.Time) (int64, int64) {
 		// date after the transition. That bug is invisible for eight months a year.
 		y, m, d := t.Date()
 		day := int(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix() / secondsPerDay)
+		if i.weekly {
+			// Weeks start on Monday, counted from 1970-01-05.
+			start := int(i.days)*floorDiv(day-mondayDay, int(i.days)) + mondayDay
+			return int64(start) * secondsPerDay, 0
+		}
 		start := int(i.days) * floorDiv(day, int(i.days))
 		return int64(start) * secondsPerDay, 0
 

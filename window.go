@@ -293,9 +293,9 @@ func (e Expr) rolling(fn expr.WinFnOp, size int, ddof int64, opts []WindowOption
 // rolling functions' of the same names.
 //
 // Where Polars differs: it also takes an integer by, with a period such as "2i",
-// and RollingMedianBy and RollingQuantileBy; and it answers an empty window's sum,
-// under closed="left" or "none", as 0.0 although min_samples is 1. Here that window
-// is null.
+// and RollingMedianBy and RollingQuantileBy; and it answers the sum of a window
+// holding no value, one empty under closed="left" or "none" or one whose rows are
+// all null, as 0.0, although min_samples is 1. Here that window is null.
 func (e Expr) RollingSumBy(by Expr, period Interval, opts ...WindowOption) Expr {
 	return e.rollingBy(expr.WinRollingSum, by, period, 0, opts)
 }
@@ -404,10 +404,11 @@ func Biased() WindowOption {
 //	Col("price").EwmMean(EwmSpan(20))                         // a 20-row moving average
 //	Col("price").EwmStd(EwmHalfLife(5)).OverWith(byDayPerTicker)
 //
-// A null row is no observation and answers the running value; MinSamples sets how
-// many values must have been seen before a row answers, one by default. Each is a
-// Float64, or a Float32 for one. A NaN is a value, and makes the answer NaN from
-// there on, where pandas would skip it.
+// A null row is no observation, and answers null, as Polars' does, where pandas
+// answers the running value; MinSamples sets how many values must have been seen
+// before a row answers, one by default. Each is a Float64, or a Float32 for one. A
+// NaN is a value, and makes the answer NaN from there on, where pandas would skip
+// it.
 func (e Expr) EwmMean(decay EwmDecay, opts ...WindowOption) Expr {
 	return e.ewm(expr.WinEwmMean, decay, opts)
 }

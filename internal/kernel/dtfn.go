@@ -326,6 +326,10 @@ func truncateTemporal(fn expr.CallFn, name string, out, dt dtype.DataType, ticks
 	dd, _ := argInt(args, 1)
 	ns, _ := argInt(args, 2)
 	iv := dtype.IntervalOf(int32(mo), int32(dd), ns)
+	wall, _ := argInt(args, 3) // 0 a Duration, 1 an Interval, 2 one in weeks
+	if wall == 2 {
+		iv = iv.AsWeekly()
+	}
 	// The plan-time rule, asked again: DtCall is reachable without resolving.
 	if err := expr.GridRefusal(fn, iv, dt); err != nil {
 		return nil, err
@@ -339,7 +343,7 @@ func truncateTemporal(fn expr.CallFn, name string, out, dt dtype.DataType, ticks
 	// calendar path whenever the column has a zone; a Duration (wall == 0) floors
 	// the absolute instant below. Without a zone the two grids are one, and the
 	// tick arithmetic below is the faster way to it.
-	if wall, _ := argInt(args, 3); iv.IsCalendar() || (wall == 1 && locationOf(dt) != nil) {
+	if iv.IsCalendar() || (wall >= 1 && locationOf(dt) != nil) {
 		return truncateCalendar(fn, name, out, dt, ticks, valid, iv)
 	}
 	every := iv.Nanos()

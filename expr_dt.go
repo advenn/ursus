@@ -91,6 +91,9 @@ func (d DtExpr) Truncate[T Span](every T) Expr {
 	wall := int64(0)
 	if _, ok := any(every).(Interval); ok {
 		wall = 1
+		if iv.Weekly() {
+			wall = 2 // weeks, which start on a Monday
+		}
 	}
 	return d.call(expr.FnDtTruncate,
 		int64(iv.Months()), int64(iv.Days()), iv.Nanos(), wall)
@@ -158,6 +161,9 @@ func (d DtExpr) Round[T Span](every T) Expr {
 	wall := int64(0)
 	if _, ok := any(every).(Interval); ok {
 		wall = 1
+		if iv.Weekly() {
+			wall = 2 // weeks, which start on a Monday
+		}
 	}
 	return d.call(expr.FnDtRound, int64(iv.Months()), int64(iv.Days()), iv.Nanos(), wall)
 }

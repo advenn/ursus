@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–183, so far.
+Everything on master since `v0.5.0`: steps 156–184, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -92,6 +92,13 @@ far ursus has moved against v0.5.0 is measured once, at the end.
 
 ### What a user of v0.5.0 can trip on
 
+- **Weekly windows move to Mondays** (184): `GroupByDynamic` every `"1w"`, and
+  `Truncate` and `Round` by weeks, answer Polars' windows, Monday to Sunday, where
+  they ran Thursday to Wednesday. Write `"7d"` for windows from the epoch.
+- **`Every("7d")` renders as "7d"** (184), where it read "1w"; an interval renders in
+  weeks only when it was written in weeks alone.
+- **`EwmMean`, `EwmStd` and `EwmVar` are null at a null row** (184).
+
 - **`MergeSorted` refuses an unsorted side when it reaches the first row that goes
   back** (182), after emitting the rows before it, where it read both sides whole
   first. A streaming consumer such as `CollectBatches` can see those rows.
@@ -126,6 +133,12 @@ far ursus has moved against v0.5.0 is measured once, at the end.
 
 ### Fixed
 
+- **A grid of weeks starts on a Monday,** as Polars' does (184): `Truncate`, `Round`
+  and `GroupByDynamic` with `Every("1w")` gave weeks from Thursday, the epoch's day,
+  because "1w" was read as seven days. `"7d"` still counts from the epoch. Found by
+  the Polars oracle.
+- **An ewm function answers null at a null row,** as Polars' does (184), where it
+  answered the running value, as pandas does. The rows around it are unchanged.
 - **A spilled join refuses only on evidence, and says what is over the limit**
   (180). It refused at a fifth level of partitioning on the depth alone, so two keys
   that shared every bucket to that level were refused though the next divides them.

@@ -36,8 +36,10 @@ func TestEwmByHand(t *testing.T) {
 		{"mean from two values", lf, x.EwmMean(half, ursus.MinSamples(2)), []string{"null", "1.667", "2.429"}},
 		// A null ages the weights before it, unless nulls are ignored; its row
 		// answers the running value.
-		{"a null", gap, x.EwmMean(half), []string{"1", "1", "2.6"}},
-		{"a null, ignored", gap, x.EwmMean(half, ursus.IgnoreNulls()), []string{"1", "1", "2.333"}},
+		// A null row answers null, as Polars' does (step 184); it ages the weights
+		// all the same, unless IgnoreNulls.
+		{"a null", gap, x.EwmMean(half), []string{"1", "null", "2.6"}},
+		{"a null, ignored", gap, x.EwmMean(half, ursus.IgnoreNulls()), []string{"1", "null", "2.333"}},
 		{"a leading null", lead, x.EwmMean(half), []string{"null", "1", "1.667"}},
 		// A NaN is a value, and the mean is NaN from there on.
 		{"a NaN", ursus.Frame(ursus.Values("x", []float64{1, math.NaN(), 3})), x.EwmMean(half),
@@ -135,8 +137,8 @@ func ewmOracle(alpha float64, ignoreNulls, variance bool, xs []float64, ok []boo
 			seen++
 		}
 		out[t] = "null"
-		if seen == 0 {
-			continue
+		if seen == 0 || !ok[t] {
+			continue // a null row answers null, as Polars' does (step 184)
 		}
 		mean := swx / sw
 		if !variance {
