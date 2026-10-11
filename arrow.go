@@ -130,7 +130,7 @@ func ScanArrowRecords(recs ...arrow.RecordBatch) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
-	return Scan(src)
+	return scan(src)
 }
 
 // ScanArrow reads a stream of Arrow records.
@@ -161,7 +161,7 @@ func ScanArrow(open func() (array.RecordReader, error)) *LazyFrame {
 	if open == nil {
 		return &LazyFrame{err: uerr.New(uerr.KindValue, "scan_arrow", "ScanArrow needs an open function")}
 	}
-	return Scan(arrowsrc.New(open))
+	return scan(arrowsrc.New(open))
 }
 
 func recordsSource(recs []arrow.RecordBatch) (*memsrc.Source, error) {

@@ -15,13 +15,12 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/ursustest"
 )
 
 // noBuildSide is the default optimizer with the build_side rule off.
-func noBuildSide() plan.Flags {
-	f := plan.DefaultFlags()
+func noBuildSide() ursus.OptFlags {
+	f := ursus.DefaultOptFlags()
 	f.BuildSide = false
 	return f
 }

@@ -15,7 +15,6 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/source/memsrc"
 	"github.com/advenn/ursus/ursustest"
 )
@@ -406,7 +405,7 @@ func TestOptimizerFlagsDoNotAffectParallelAggregation(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := q().Collect(t.Context(), ursus.WithThreads(8),
-		ursus.WithOptFlags(plan.NoFlags()))
+		ursus.WithOptFlags(ursus.NoOptFlags()))
 	if err != nil {
 		t.Fatal(err)
 	}

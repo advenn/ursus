@@ -11,7 +11,6 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/source/memsrc"
 	"github.com/advenn/ursus/internal/uerr"
 	"github.com/advenn/ursus/ursustest"
@@ -377,7 +376,7 @@ func TestAsOfIsAPredicateBarrierOnTheRight(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	off, err := q().Collect(t.Context(), ursus.WithOptFlags(plan.NoFlags()))
+	off, err := q().Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,7 +21,7 @@ import (
 //
 // Every builder method returns a NEW LazyFrame sharing an immutable plan. So
 //
-//	base := ursus.Scan(src)
+//	base := ursus.ScanParquet("events.parquet")
 //	a := base.Filter(ursus.Col("x").Gt(5))
 //	b := base.Filter(ursus.Col("x").Lt(0))
 //
@@ -40,21 +40,17 @@ type LazyFrame struct {
 	err  error
 }
 
-// Scan starts a query against a source.
-func Scan(src plan.Source) *LazyFrame {
+// scan starts a query against a source. It was exported as Scan until step 186, with
+// FromPlan and LazyFrame.Plan beside it; each took or returned a type in an internal
+// package, which no caller outside the module could name. The public scans, Frame
+// and Explain are their replacements; the module's own tests reach them through
+// export_test.go.
+func scan(src plan.Source) *LazyFrame {
 	if src == nil {
 		return &LazyFrame{err: uerr.New(uerr.KindValue, "scan", "nil source")}
 	}
 	return &LazyFrame{node: &plan.Scan{Src: src}}
 }
-
-// FromPlan builds a LazyFrame over an existing logical plan. It exists so that a
-// future SQL frontend can lower into the same IR and hand back a frame, without
-// the root package having to import it — which would be a cycle.
-func FromPlan(n plan.Node) *LazyFrame { return &LazyFrame{node: n} }
-
-// Plan returns the underlying logical plan.
-func (lf *LazyFrame) Plan() plan.Node { return lf.node }
 
 // Err returns the first deferred error, or nil.
 func (lf *LazyFrame) Err() error { return lf.err }
@@ -242,9 +238,41 @@ type collectCfg struct {
 // suite varies it precisely to check that.
 func WithBatchSize(n int) CollectOption { return func(c *collectCfg) { c.batchSize = n } }
 
+// OptFlags chooses which optimizer rules run, for WithOptFlags: each is on in
+// DefaultOptFlags, the optimizer every query gets, and off in NoOptFlags.
+//
+//	q.Collect(ctx, ursus.WithOptFlags(ursus.NoOptFlags()))   // the plan as written
+//
+//	f := ursus.DefaultOptFlags()
+//	f.BuildSide = false                                     // all but one rule
+//	q.Collect(ctx, ursus.WithOptFlags(f))
+//
+// A rule changes how a query runs, never its answer; turning one off is how a wrong
+// answer is bisected to the rule that caused it, or a rule's worth measured.
+type OptFlags struct {
+	ProjectionPushdown    bool // read only the columns a query uses
+	PredicatePushdown     bool // filter as early as the rows allow
+	LimitPushdown         bool // stop reading once a Head has its rows
+	SimplifyExprs         bool // fold constants and simplify expressions
+	JoinPredicatePushdown bool // predicate pushdown's arm through joins
+	CollapseCrossJoin     bool // a filter over a cross join becomes a join
+	BuildSide             bool // an inner join hashes its smaller input
+	RuntimeFilters        bool // a join's keys filter its probe side's source
+	ShareSubplans         bool // a subtree used twice runs once
+}
+
+// DefaultOptFlags is every rule on, as a query runs by default.
+func DefaultOptFlags() OptFlags { return OptFlags(plan.DefaultFlags()) }
+
+// NoOptFlags is every rule off: the plan runs as it was written.
+func NoOptFlags() OptFlags { return OptFlags{} }
+
 // WithOptFlags overrides which optimizer rules run. Use it to benchmark a rule's
-// value or to bisect a wrong answer down to the rule that caused it.
-func WithOptFlags(f plan.Flags) CollectOption { return func(c *collectCfg) { c.flags = f } }
+// value or to bisect a wrong answer down to the rule that caused it. It took the
+// internal plan.Flags until step 186, which no caller outside the module could build.
+func WithOptFlags(f OptFlags) CollectOption {
+	return func(c *collectCfg) { c.flags = plan.Flags(f) }
+}
 
 // WithVerify makes the optimizer assert schema preservation after every rule.
 // On in tests, off by default because it costs a schema resolution per rule.

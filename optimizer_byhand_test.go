@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/internal/plan"
 )
 
 // sortedInt64s reads one Int64 column, sorted, so a case can state its answer as a
@@ -276,7 +275,7 @@ func TestOptimizerByHand(t *testing.T) {
 				opts []ursus.CollectOption
 			}{
 				{"optimized", nil},
-				{"unoptimized", []ursus.CollectOption{ursus.WithOptFlags(plan.NoFlags())}},
+				{"unoptimized", []ursus.CollectOption{ursus.WithOptFlags(ursus.NoOptFlags())}},
 			} {
 				df, err := tc.lf.Collect(t.Context(), mode.opts...)
 				if err == nil {

@@ -216,21 +216,20 @@ func apply(opts []Option) config {
 // between a working WithTolerance and a decorative one.
 func renderRows(t testing.TB, df *ursus.DataFrame, skipFloats bool) []string {
 	t.Helper()
-	b := df.Batch()
-	out := make([]string, b.Rows())
+	out := make([]string, df.Height())
 	var sb strings.Builder
-	for r := range b.Rows() {
+	for r := range df.Height() {
 		sb.Reset()
 		first := true
-		for c := range b.NumCols() {
-			if skipFloats && isFloat(b.Column(c).DType()) {
+		for c := range df.Width() {
+			if skipFloats && isFloat(df.ColumnAt(c).DType()) {
 				continue
 			}
 			if !first {
 				sb.WriteString(" | ")
 			}
 			first = false
-			s, err := cell(b.Column(c), r)
+			s, err := cell(df.ColumnAt(c), r)
 			if err != nil {
 				t.Fatalf("%v — AssertFrameEqual cannot compare this frame, and passing "+
 					"on values it cannot read would be a false pass", err)
@@ -269,9 +268,8 @@ func cell(c *data.Column, row int) (string, error) {
 // no caller, until step 17 needed one.
 func assertFloatsClose(t testing.TB, got, want *ursus.DataFrame, cfg config) {
 	t.Helper()
-	gb, wb := got.Batch(), want.Batch()
-	for ci := range wb.NumCols() {
-		gc, wc := gb.Column(ci), wb.Column(ci)
+	for ci := range want.Width() {
+		gc, wc := got.ColumnAt(ci), want.ColumnAt(ci)
 		if !isFloat(wc.DType()) {
 			continue
 		}
@@ -282,7 +280,7 @@ func assertFloatsClose(t testing.TB, got, want *ursus.DataFrame, cfg config) {
 				wc.Name(), wc.DType(), gerr, werr)
 			continue
 		}
-		for r := range wb.Rows() {
+		for r := range want.Height() {
 			gok, wok := gc.Validity().Get(r), wc.Validity().Get(r)
 			if gok != wok {
 				t.Errorf("column %q row %d: valid = %v, want %v", wc.Name(), r, gok, wok)

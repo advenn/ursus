@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/ursustest"
 )
 
@@ -144,8 +143,8 @@ func TestTopKAndBottomK(t *testing.T) {
 	}
 }
 
-func noLimitPushdown() plan.Flags {
-	f := plan.DefaultFlags()
+func noLimitPushdown() ursus.OptFlags {
+	f := ursus.DefaultOptFlags()
 	f.LimitPushdown = false
 	return f
 }

@@ -147,7 +147,7 @@ func Frame(cols ...*Column) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
-	return Scan(src)
+	return scan(src)
 }
 
 // FrameOf is Frame for callers who want the error separately.
@@ -156,7 +156,7 @@ func FrameOf(cols ...*Column) (*LazyFrame, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Scan(src), nil
+	return scan(src), nil
 }
 
 // convertNamedSlice handles a slice of a DEFINED type over a permitted underlying

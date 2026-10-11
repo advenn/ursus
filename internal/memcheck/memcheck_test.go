@@ -362,8 +362,8 @@ func TestAGroupByHoldsItsAnswerOnce(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, col := range out.Batch().Columns() {
-				for id, size := range col.Buffers() {
+			for i := range out.Width() {
+				for id, size := range out.ColumnAt(i).Buffers() {
 					answer[id] = size
 				}
 			}

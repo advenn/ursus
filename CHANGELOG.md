@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–185, so far.
+Everything on master since `v0.5.0`: steps 156–186, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -171,8 +171,21 @@ far ursus has moved against v0.5.0 is measured once, at the end.
 
 ### Breaks
 
-None yet. `v0.6-scope.md` lists the breaks 0.6 means to make, each with its
-replacement.
+ursus stays 0.x, and these break code written against v0.5.0, each for a better API
+(186). Each took or returned a type in an internal package, which no caller outside
+the module could name or build:
+
+- **`Scan(plan.Source)`** is gone. Scan a file or frame with `ScanParquet`,
+  `ScanCSV`, `ScanParquetFrom`, `ScanCSVFrom`, `Frame` or `FromArrow`.
+- **`FromPlan(plan.Node)` and `LazyFrame.Plan()`** are gone; `Explain` shows a plan.
+  `FromPlan` was kept for a SQL frontend, and SQL is out by decision.
+- **`DataFrame.Batch()`** is gone. `ColumnAt(i)` gives a column by position,
+  `Column[T](name)` a typed one, and `Record()` the whole frame as Arrow.
+- **`WithOptFlags`** takes `OptFlags`, a public struct with the same fields, where it
+  took `plan.Flags`; `DefaultOptFlags()` and `NoOptFlags()` replace
+  `plan.DefaultFlags()` and `plan.NoFlags()`.
+- **`DataFrame.Column[T]`** returns `*Series[T]`, the public name of the type it
+  returned. Code that used the result compiles unchanged.
 
 ---
 

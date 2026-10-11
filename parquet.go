@@ -61,7 +61,7 @@ func fileOpener(path string) parquet.Opener {
 // a list of lists — is refused with an error naming it when a query reads it,
 // rather than dropped.
 func ScanParquet(path string, opts ...ParquetOption) *LazyFrame {
-	return Scan(parquet.New([]parquet.Opener{fileOpener(path)}, path, parquetOptions(opts)))
+	return scan(parquet.New([]parquet.Opener{fileOpener(path)}, path, parquetOptions(opts)))
 }
 
 // ScanParquetGlob reads every file matching a shell pattern as one frame, sorted by
@@ -99,7 +99,7 @@ func ScanParquetFiles(paths []string, opts ...ParquetOption) *LazyFrame {
 	if len(paths) > 1 {
 		desc += " and " + strconv.Itoa(len(paths)-1) + " more"
 	}
-	return Scan(parquet.NewNamed(opens, paths, desc, parquetOptions(opts)))
+	return scan(parquet.NewNamed(opens, paths, desc, parquetOptions(opts)))
 }
 
 // ScanParquetBytes reads a Parquet file from memory.
@@ -107,7 +107,7 @@ func ScanParquetBytes(b []byte, name string, opts ...ParquetOption) *LazyFrame {
 	open := func(context.Context) (arrowpq.ReaderAtSeeker, io.Closer, error) {
 		return bytes.NewReader(b), nil, nil
 	}
-	return Scan(parquet.New([]parquet.Opener{open}, name, parquetOptions(opts)))
+	return scan(parquet.New([]parquet.Opener{open}, name, parquetOptions(opts)))
 }
 
 // ParquetFile is one Parquet file, read through ReadAt from wherever it lives — an
@@ -165,7 +165,7 @@ func ScanParquetFrom(files []ParquetFile, opts ...ParquetOption) *LazyFrame {
 	if len(names) > 1 {
 		desc += " and " + strconv.Itoa(len(names)-1) + " more"
 	}
-	return Scan(parquet.NewNamed(opens, names, desc, parquetOptions(opts)))
+	return scan(parquet.NewNamed(opens, names, desc, parquetOptions(opts)))
 }
 
 // readerAtOpener adapts a ParquetFile's Open to the reader's Opener: a section of

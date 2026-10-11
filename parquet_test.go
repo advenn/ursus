@@ -17,7 +17,6 @@ import (
 	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/source/memsrc"
 	"github.com/advenn/ursus/internal/source/parquet"
 	"github.com/advenn/ursus/internal/uerr"
@@ -205,7 +204,7 @@ func TestParquetPruningIsSound(t *testing.T) {
 				t.Fatalf("pruning on: %v", err)
 			}
 			off, err := q.f(ursus.ScanParquet(path, ursus.WithPruning(false))).
-				Collect(t.Context(), ursus.WithOptFlags(plan.NoFlags()))
+				Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()))
 			if err != nil {
 				t.Fatalf("pruning off: %v", err)
 			}

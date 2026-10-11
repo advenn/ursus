@@ -8,7 +8,6 @@ import (
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/dtype"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/uerr"
 	"github.com/advenn/ursus/ursustest"
 )
@@ -843,7 +842,7 @@ func TestJoinOptimizerSoundness(t *testing.T) {
 			if err != nil {
 				t.Fatalf("optimized: %v", err)
 			}
-			off, err := q.lf().Collect(t.Context(), ursus.WithOptFlags(plan.NoFlags()))
+			off, err := q.lf().Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()))
 			if err != nil {
 				t.Fatalf("unoptimized: %v", err)
 			}
@@ -1045,8 +1044,8 @@ func pdRight() *ursus.LazyFrame {
 
 // noJoinPushdown keeps every other rule on and turns off only the join arm. That is
 // what the flag is for: bisecting a wrong answer to this rule specifically.
-func noJoinPushdown() plan.Flags {
-	f := plan.DefaultFlags()
+func noJoinPushdown() ursus.OptFlags {
+	f := ursus.DefaultOptFlags()
 	f.JoinPredicatePushdown = false
 	return f
 }

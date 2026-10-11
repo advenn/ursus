@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/uerr"
 	"github.com/advenn/ursus/ursustest"
 )
@@ -100,8 +99,8 @@ func TestReshapingRefusalsAreUserErrors(t *testing.T) {
 
 // noProjectionPushdown is DefaultFlags with the one rule off, so every pruning test
 // below is a differential: the answer must not depend on it.
-func noProjectionPushdown() plan.Flags {
-	f := plan.DefaultFlags()
+func noProjectionPushdown() ursus.OptFlags {
+	f := ursus.DefaultOptFlags()
 	f.ProjectionPushdown = false
 	return f
 }

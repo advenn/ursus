@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/uerr"
 	"github.com/advenn/ursus/ursustest"
 )
@@ -15,8 +14,8 @@ import (
 // makes every test below a differential rather than a self-comparison. With the
 // rule off the query runs as a cross join plus a filter — code that shares nothing
 // with the hash path — so the two answers agreeing is evidence, not tautology.
-func noCollapse() plan.Flags {
-	f := plan.DefaultFlags()
+func noCollapse() ursus.OptFlags {
+	f := ursus.DefaultOptFlags()
 	f.CollapseCrossJoin = false
 	return f
 }
@@ -233,7 +232,7 @@ func TestJoinWhereMixedPredicateOrder(t *testing.T) {
 // collapse rule ever sees it, so the test also runs with that pushdown OFF, which
 // is what leaves the one-sided conjunct sitting where the trap is.
 func TestJoinWhereOneSidedPredicateIsNotAKey(t *testing.T) {
-	noJoinPush := plan.DefaultFlags()
+	noJoinPush := ursus.DefaultOptFlags()
 	noJoinPush.PredicatePushdown = false
 
 	lf := joinLeft().JoinWhere(joinRight(),
@@ -243,9 +242,9 @@ func TestJoinWhereOneSidedPredicateIsNotAKey(t *testing.T) {
 
 	for _, tc := range []struct {
 		name  string
-		flags plan.Flags
+		flags ursus.OptFlags
 	}{
-		{"default", plan.DefaultFlags()},
+		{"default", ursus.DefaultOptFlags()},
 		{"no predicate pushdown", noJoinPush},
 		{"no collapse", noCollapse()},
 	} {

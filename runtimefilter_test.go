@@ -11,12 +11,11 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/internal/plan"
 )
 
 // noRuntimeFilters is the default optimizer without the runtime filters.
-func noRuntimeFilters() plan.Flags {
-	f := plan.DefaultFlags()
+func noRuntimeFilters() ursus.OptFlags {
+	f := ursus.DefaultOptFlags()
 	f.RuntimeFilters = false
 	return f
 }

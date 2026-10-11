@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/ursustest"
 )
 
@@ -142,7 +141,7 @@ func TestReverseCommutesWithFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	off, err := q().Collect(t.Context(), ursus.WithOptFlags(plan.NoFlags()))
+	off, err := q().Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +181,7 @@ func TestSlicePositionalNodesStayBarriers(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			off, err := c.lf.Collect(t.Context(), ursus.WithOptFlags(plan.NoFlags()))
+			off, err := c.lf.Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()))
 			if err != nil {
 				t.Fatal(err)
 			}

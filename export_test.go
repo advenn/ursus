@@ -1,8 +1,10 @@
 package ursus
 
 import (
+	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/execopt"
 	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/plan"
 )
 
 // ExprOf wraps a node built by hand, for the tests that need a node no public
@@ -20,3 +22,19 @@ func SetDefaultMemoryLimit(n int64) (restore func()) {
 	defaultMemoryLimit = func() int64 { return n }
 	return func() { defaultMemoryLimit = old }
 }
+
+// What step 186 took out of the public API, each because it took or returned a type
+// in an internal package that no caller outside the module could name, the module's
+// own tests still reach through these.
+
+// Scan starts a query against a source.
+func Scan(src plan.Source) *LazyFrame { return scan(src) }
+
+// FromPlan builds a LazyFrame over a logical plan.
+func FromPlan(n plan.Node) *LazyFrame { return &LazyFrame{node: n} }
+
+// Plan returns the LazyFrame's logical plan.
+func (lf *LazyFrame) Plan() plan.Node { return lf.node }
+
+// Batch returns the DataFrame's batch.
+func (df *DataFrame) Batch() *data.Batch { return df.batch }

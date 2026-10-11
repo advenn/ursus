@@ -10,7 +10,7 @@ import (
 //
 // # The obvious spelling is wrong in three specific ways
 //
-// `ursus.Frame(df.Batch().Columns()...)` compiles and runs, because Column is a
+// `ursus.Frame(df.batch.Columns()...)` compiles and runs, because Column is a
 // type alias — and it is wrong:
 //
 //   - It would re-derive nullability from the data. Field.Nullable is a static
@@ -30,7 +30,7 @@ func (df *DataFrame) Lazy() *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
-	return Scan(src)
+	return scan(src)
 }
 
 // --- eager mirrors --------------------------------------------------------------

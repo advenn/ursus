@@ -87,7 +87,7 @@ func bothWays(t *testing.T, lf func() *ursus.LazyFrame) string {
 	if err != nil {
 		t.Fatalf("optimized: %v", err)
 	}
-	off, err := lf().Collect(t.Context(), ursus.WithOptFlags(plan.NoFlags()))
+	off, err := lf().Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()))
 	if err != nil {
 		t.Fatalf("unoptimized: %v", err)
 	}

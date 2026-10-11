@@ -35,7 +35,6 @@ import (
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/dtype"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/ursustest"
 )
 
@@ -505,7 +504,7 @@ type outcome struct {
 }
 
 func compare(t testing.TB, lf *ursus.LazyFrame, mode compareMode) outcome {
-	off, errOff := lf.Collect(t.Context(), ursus.WithOptFlags(plan.NoFlags()), ursus.WithThreads(1))
+	off, errOff := lf.Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()), ursus.WithThreads(1))
 	on, errOn := lf.Collect(t.Context(), ursus.WithVerify(), ursus.WithThreads(1))
 	return judgeOne(t, on, errOn, off, errOff, mode)
 }
@@ -553,11 +552,11 @@ func firstLine(s string) string {
 // of predicate pushdown only exists inside predicate pushdown, so it is enabled
 // with it.
 func bisect(t testing.TB, lf *ursus.LazyFrame, mode compareMode) []string {
-	off, errOff := lf.Collect(t.Context(), ursus.WithOptFlags(plan.NoFlags()), ursus.WithThreads(1))
+	off, errOff := lf.Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()), ursus.WithThreads(1))
 	var guilty []string
-	flags := reflect.TypeOf(plan.Flags{})
+	flags := reflect.TypeOf(ursus.OptFlags{})
 	for i := range flags.NumField() {
-		f := plan.NoFlags()
+		f := ursus.NoOptFlags()
 		v := reflect.ValueOf(&f).Elem()
 		v.Field(i).SetBool(true)
 		if flags.Field(i).Name == "JoinPredicatePushdown" {
@@ -715,7 +714,7 @@ func TestOptimizerAgreesWithItself(t *testing.T) {
 			lf = next
 			label = append(label, tr.name)
 		}
-		off, err := lf.Collect(t.Context(), ursus.WithOptFlags(plan.NoFlags()), ursus.WithThreads(1))
+		off, err := lf.Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()), ursus.WithThreads(1))
 		var tps []top
 		if err != nil {
 			tps = []top{{name: "none", lf: lf}}

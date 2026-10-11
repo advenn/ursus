@@ -32,7 +32,6 @@ import (
 	"github.com/apache/arrow-go/v18/parquet/schema"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/source/parquet"
 	"github.com/advenn/ursus/ursustest"
 )
@@ -349,7 +348,7 @@ func TestParquetPruningAgreesWithoutIt(t *testing.T) {
 		// shares no Parquet read path with the pruned side, so it is the stronger
 		// oracle as well as the cheaper one.
 		whole, err := ursus.ScanParquet(path, ursus.WithPruning(false)).
-			Collect(t.Context(), ursus.WithOptFlags(plan.NoFlags()))
+			Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()))
 		if err != nil {
 			t.Fatal(err)
 		}

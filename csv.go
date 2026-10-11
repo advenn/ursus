@@ -94,7 +94,7 @@ func csvOptions(opts []CSVOption) csv.Options {
 //	    Select(ursus.Col("region"), ursus.Col("qty")).
 //	    Collect(ctx)
 func ScanCSV(path string, opts ...CSVOption) *LazyFrame {
-	return Scan(csv.FromFile(path, csvOptions(opts)))
+	return scan(csv.FromFile(path, csvOptions(opts)))
 }
 
 // ScanCSVGlob reads every file matching a shell pattern as one frame.
@@ -137,7 +137,7 @@ func ScanCSVFiles(paths []string, opts ...CSVOption) *LazyFrame {
 		return ScanCSV(paths[0], opts...)
 	}
 	desc := paths[0] + " and " + strconv.Itoa(len(paths)-1) + " more"
-	return Scan(csv.FromFiles(paths, desc, csvOptions(opts)))
+	return scan(csv.FromFiles(paths, desc, csvOptions(opts)))
 }
 
 // ScanCSVReader reads CSV from memory.
@@ -146,7 +146,7 @@ func ScanCSVFiles(paths []string, opts ...CSVOption) *LazyFrame {
 // once — once for inference, once per execution — and a Reader cannot be rewound.
 func ScanCSVReader(b []byte, name string, opts ...CSVOption) *LazyFrame {
 	open := func(context.Context) (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(b)), nil }
-	return Scan(csv.New(open, name, csvOptions(opts)))
+	return scan(csv.New(open, name, csvOptions(opts)))
 }
 
 // CSVFile is one CSV file, read as a stream from wherever it lives — an object
@@ -189,7 +189,7 @@ func ScanCSVFrom(files []CSVFile, opts ...CSVOption) *LazyFrame {
 	if len(names) > 1 {
 		desc += " and " + strconv.Itoa(len(names)-1) + " more"
 	}
-	return Scan(csv.NewNamed(opens, names, desc, csvOptions(opts)))
+	return scan(csv.NewNamed(opens, names, desc, csvOptions(opts)))
 }
 
 // --- writing -------------------------------------------------------------------

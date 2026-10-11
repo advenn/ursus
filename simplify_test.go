@@ -11,14 +11,13 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/ursustest"
 )
 
 // noSimplify is DefaultFlags with just this step's rule off, so a comparison
 // isolates simplification rather than turning the whole optimizer off.
-func noSimplify() plan.Flags {
-	f := plan.DefaultFlags()
+func noSimplify() ursus.OptFlags {
+	f := ursus.DefaultOptFlags()
 	f.SimplifyExprs = false
 	return f
 }

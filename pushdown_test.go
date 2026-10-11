@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/ursustest"
 )
 
@@ -79,7 +78,7 @@ func TestPushdownSoundness(t *testing.T) {
 			if err != nil {
 				t.Fatalf("optimized: %v", err)
 			}
-			off, err := q.lf().Collect(t.Context(), ursus.WithOptFlags(plan.NoFlags()))
+			off, err := q.lf().Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()))
 			if err != nil {
 				t.Fatalf("unoptimized: %v", err)
 			}

@@ -32,14 +32,16 @@ func (df *DataFrame) Shape() (int, int) { return df.batch.Rows(), df.batch.NumCo
 // Columns returns the column names in order.
 func (df *DataFrame) Columns() []string { return df.batch.Schema().Names() }
 
-// Batch exposes the underlying batch for internal use and tests.
-func (df *DataFrame) Batch() *data.Batch { return df.batch }
+// ColumnAt returns the i-th column, in order, untyped: what DataFrame.Batch gave
+// before step 186, a column at a time, through the public Column rather than the
+// internal batch.
+func (df *DataFrame) ColumnAt(i int) *Column { return df.batch.Column(i) }
 
 // Column returns a typed view of a column.
 //
 // A generic METHOD — the thing Go 1.27 unlocked. Previously this had to be
 // `ursus.Column[int64](df, "x")`, with the receiver demoted to an argument.
-func (df *DataFrame) Column[T any](name string) (*data.Series[T], error) {
+func (df *DataFrame) Column[T any](name string) (*Series[T], error) {
 	c, ok := df.batch.ByName(name)
 	if !ok {
 		return nil, uerr.UnknownColumn("column", name, df.Columns())

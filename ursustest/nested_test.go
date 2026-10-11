@@ -15,7 +15,6 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
-	"github.com/advenn/ursus/internal/source/memsrc"
 	"github.com/advenn/ursus/ursustest"
 )
 
@@ -34,11 +33,8 @@ func frameFrom(t *testing.T, cols ...*data.Column) *ursus.DataFrame {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src, err := memsrc.FromBatch(b)
-	if err != nil {
-		t.Fatal(err)
-	}
-	df, err := ursus.Scan(src).Collect(t.Context())
+	_ = b
+	df, err := ursus.Frame(cols...).Collect(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +229,7 @@ func TestASlicedListRendersOnlyItsRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lo, _ := tail.Batch().Column(0).Lists().Window(); lo == 0 {
+	if lo, _ := tail.ColumnAt(0).Lists().Window(); lo == 0 {
 		t.Fatal("Tail rebuilt the list from zero, so this test no longer holds a sliced List")
 	}
 

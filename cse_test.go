@@ -11,13 +11,12 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/internal/plan"
 )
 
 // noSharing is the default flags with ShareSubplans off: the query as it ran
 // before step 143.
 func noSharing() ursus.CollectOption {
-	f := plan.DefaultFlags()
+	f := ursus.DefaultOptFlags()
 	f.ShareSubplans = false
 	return ursus.WithOptFlags(f)
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
-	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/source/memsrc"
 	"github.com/advenn/ursus/internal/uerr"
 	"github.com/advenn/ursus/ursustest"
@@ -388,7 +387,7 @@ func TestSpillingJoinIsBounded(t *testing.T) {
 	// The build is the 60,000 rows on the right, and this measures it spilling. The
 	// build_side rule would hash the 500 on the left instead (step 104), so it is
 	// off here: this pins the operator, not the planner's choice.
-	rightBuilds := plan.DefaultFlags()
+	rightBuilds := ursus.DefaultOptFlags()
 	rightBuilds.BuildSide = false
 
 	var unbounded ursus.MemoryStats
