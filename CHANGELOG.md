@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–176, so far.
+Everything on master since `v0.5.0`: steps 156–177, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -75,6 +75,11 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   `pl.corr`, `pl.cov`, `min_by` and `max_by`, in a group-by or a window. Corr and Cov
   skip a pair with a null and run on every worker; MinBy and MaxBy order by any
   ordered type, a tie going to the earliest row.
+- **`RollingSumBy`, `RollingMeanBy`, `RollingMinBy`, `RollingMaxBy`, `RollingVarBy`
+  and `RollingStdBy(by, period)`** (177): Polars' `rolling_*_by`, each row's window
+  the rows whose Date, Datetime or Time `by` lies within `period` of its own, closed
+  as `WindowClosed` says. `by` need not be sorted; a calendar period follows by's
+  zone.
 
 ### What a user of v0.5.0 can trip on
 

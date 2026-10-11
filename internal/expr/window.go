@@ -409,6 +409,14 @@ type WinParams struct {
 	NoAdjust    bool
 	IgnoreNulls bool
 	Bias        bool
+
+	// A rolling function by time (step 177), Polars' rolling_*_by: each row's window
+	// is the rows whose by value lies within Period of its own, closed as Closed says,
+	// ClosedRight by default. The function's child is then PairOf(value, by), and N is
+	// unused.
+	By     bool
+	Period dtype.Interval
+	Closed Closed
 }
 
 func (p WinParams) args(op WinFnOp) string {
@@ -428,10 +436,10 @@ func (p WinParams) args(op WinFnOp) string {
 		return strconv.FormatInt(p.N, 10)
 	case WinRollingVar, WinRollingStd:
 		// Every parameter the answer depends on, for the reason the arm above gives.
-		return strconv.FormatInt(p.N, 10) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10) +
+		return window(p) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10) +
 			", ddof " + strconv.FormatInt(p.Ddof, 10) + centered(p)
 	case WinRollingSum, WinRollingMean, WinRollingMin, WinRollingMax:
-		return strconv.FormatInt(p.N, 10) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10) + centered(p)
+		return window(p) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10) + centered(p)
 	case WinInterpolate:
 		if p.Nearest {
 			return "nearest"
@@ -451,6 +459,15 @@ func (p WinParams) args(op WinFnOp) string {
 		}
 		return ""
 	}
+}
+
+// window renders a rolling function's window: its rows, or by time its period and
+// how it is closed.
+func window(p WinParams) string {
+	if p.By {
+		return p.Period.String() + ", closed " + p.Closed.Or(ClosedRight).String()
+	}
+	return strconv.FormatInt(p.N, 10)
 }
 
 // centered renders a rolling window's center, which its answer depends on.
@@ -495,6 +512,11 @@ func (f *WinFn) Children() []Node {
 }
 
 func (f *WinFn) String() string {
+	// A rolling function by time reads as written, col("v").rolling_sum_by(col("t"),
+	// …), not through the struct that carries its two inputs.
+	if x, y, ok := pairArgs(f.Child); ok && f.Params.By {
+		return x.String() + "." + f.Fn.String() + "_by(" + y.String() + ", " + f.Params.args(f.Fn) + ")"
+	}
 	s := f.Child.String() + "." + f.Fn.String() + "(" + f.Params.args(f.Fn) + ")"
 	if f.Fill != nil {
 		s += ".fill(" + f.Fill.String() + ")"
@@ -654,6 +676,9 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 // its type over a long enough window, and a mean of a Duration is a Duration, so
 // those are refused: cast to Float64 first.
 func rollingOut(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, error) {
+	if p.By {
+		return rollingByOut(fn, p, in)
+	}
 	if p.N < 1 {
 		return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
 			"a rolling window needs at least one row, got %d", p.N)
@@ -666,6 +691,62 @@ func rollingOut(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, err
 		return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
 			"ddof is %d, and must be between 0 and 255", p.Ddof)
 	}
+	return rollingValueOut(fn, in)
+}
+
+// rollingByOut types a rolling function by time (step 177): its by column and
+// period first, as the frame-level Rolling checks its index, then its value as any
+// rolling function's.
+func rollingByOut(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, error) {
+	fs := in.Fields()
+	if in.ID() != dtype.TypeStruct || len(fs) != 2 {
+		return dtype.Null, uerr.Internalf("expr: %s by time over %s, not a pair", fn, in)
+	}
+	value, by := fs[0].Type, fs[1].Type
+	name := fn.String() + "_by"
+	switch by.ID() {
+	case dtype.TypeDate, dtype.TypeDatetime, dtype.TypeTime:
+	default:
+		return dtype.Null, uerr.New(uerr.KindType, name,
+			"%s orders its windows by a Date, Datetime or Time, got %s", name, by).
+			Hint("Polars also takes an integer by with a period such as \"2i\"; ursus does not yet")
+	}
+	switch {
+	case p.Period.Err() != nil:
+		return dtype.Null, p.Period.Err()
+	case p.Period.IsZero() || p.Period.Negative():
+		return dtype.Null, uerr.New(uerr.KindValue, name,
+			"the period is %s, and must be positive", p.Period)
+	case p.Center:
+		return dtype.Null, uerr.New(uerr.KindValue, name,
+			"a window by time ends at its row's own instant, and cannot be centered")
+	case !p.Closed.Valid():
+		return dtype.Null, uerr.New(uerr.KindValue, name, "closed is %d, not a Closed", uint8(p.Closed))
+	case p.MinSamples < 1:
+		return dtype.Null, uerr.New(uerr.KindValue, name,
+			"min_samples is %d, and must be at least 1", p.MinSamples)
+	case p.Ddof < 0 || p.Ddof > 255:
+		return dtype.Null, uerr.New(uerr.KindValue, name,
+			"ddof is %d, and must be between 0 and 255", p.Ddof)
+	}
+	// What the frame-level Rolling refuses of its index, for the same reasons: a
+	// Time has no date for a calendar period to count, and a period finer than the
+	// by column's tick would floor every window's start to the row's own.
+	if by.ID() == dtype.TypeTime && p.Period.IsCalendar() {
+		return dtype.Null, uerr.New(uerr.KindType, name,
+			"the period %s is a calendar interval and by is %s, which has no date", p.Period, by).
+			Hint("use a sub-day period, or cast by to Datetime first")
+	}
+	if npt, ok := by.NanosPerTick(); ok && p.Period.Nanos()%npt != 0 {
+		return dtype.Null, uerr.New(uerr.KindValue, name,
+			"the period %s is finer than by's %s ticks", p.Period, by).
+			Hint("use a period of whole ticks, or cast by to a finer unit first")
+	}
+	return rollingValueOut(fn, value)
+}
+
+// rollingValueOut types a rolling function's value.
+func rollingValueOut(fn WinFnOp, in dtype.DataType) (dtype.DataType, error) {
 	if fn == WinRollingMin || fn == WinRollingMax {
 		if !in.IsOrdered() {
 			return dtype.Null, uerr.New(uerr.KindType, fn.String(),

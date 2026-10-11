@@ -26,9 +26,20 @@ import (
 //     has left the window leaves no NaN behind. Subtracting rounds, so the state is
 //     computed afresh from the window every N removals, which keeps the error that
 //     of at most 2N steps however long the partition.
+//
+// # A window is a range of the partition's rows (step 177)
+//
+// Each kernel walks a partition's rows and gives row i the rows [lo_i, hi_i), with
+// lo and hi never falling as i rises: a row enters as hi passes it and leaves as lo
+// does. A window of N rows is lo_i = i−N+1, hi_i = i+1. A window by time is the rows
+// whose by value lies within the period of row i's, in by's order (rollingBy), so
+// hi_i may pass i, where later rows tie with it.
 func winRolling(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
 	col *data.Column, seg Segments) (*data.Column, error) {
 
+	if params.By {
+		return rollingBy(fn, params, name, out, col, seg)
+	}
 	if params.Center {
 		return rollingCentered(fn, params, name, out, col, seg)
 	}
@@ -39,17 +50,34 @@ func winRolling(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.D
 	if size < 1 || minN < 1 || minN > size {
 		return nil, uerr.Internalf("kernel: %s over %d rows needing %d", fn, size, minN)
 	}
+	trailing := func(rows []int32) (lo, hi []int32) {
+		lo, hi = make([]int32, len(rows)), make([]int32, len(rows))
+		for i := range rows {
+			lo[i], hi[i] = int32(max(0, i-size+1)), int32(i+1)
+		}
+		return lo, hi
+	}
+	return rollingOver(fn, params, name, out, col, seg, trailing, minN)
+}
+
+// windowsOf gives each position of a partition's rows its window, rows[lo[i]:hi[i]].
+type windowsOf func(rows []int32) (lo, hi []int32)
+
+// rollingOver runs fn's kernel over the windows win gives.
+func rollingOver(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
+	col *data.Column, seg Segments, win windowsOf, minN int) (*data.Column, error) {
+
 	col, err := readable(col)
 	if err != nil {
 		return nil, err
 	}
 	switch {
 	case fn == expr.WinRollingMin || fn == expr.WinRollingMax:
-		return rollingExtremum(fn == expr.WinRollingMax, name, col, seg, size, minN)
+		return rollingExtremum(fn == expr.WinRollingMax, name, col, seg, win, minN)
 	case fn == expr.WinRollingSum && out.Physical().ID() == dtype.TypeInt128:
-		return rollingIntSum(name, out, col, seg, size, minN)
+		return rollingIntSum(name, out, col, seg, win, minN)
 	}
-	return rollingFloat(fn, int(params.Ddof), name, out, col, seg, size, minN)
+	return rollingFloat(fn, int(params.Ddof), name, out, col, seg, win, minN)
 }
 
 // rollingCentered is a rolling window labelled at its middle row, as Polars'
@@ -110,38 +138,46 @@ func rollingCentered(fn expr.WinFnOp, params expr.WinParams, name string, out dt
 // rollingExtremum answers each row with the window's least or greatest row, kept at
 // the front of a deque whose rows only worsen toward the back: a row that can never
 // be the answer again — a better one has arrived after it — is dropped as it does.
-func rollingExtremum(max bool, name string, col *data.Column, seg Segments, size, minN int) (*data.Column, error) {
+func rollingExtremum(max bool, name string, col *data.Column, seg Segments, win windowsOf, minN int) (*data.Column, error) {
 	cmp, err := valueComparator(col)
 	if err != nil {
 		return nil, err
 	}
 	valid := col.Validity()
+	// A row no window walk reaches, one whose by is null, is null.
 	sel := make([]int32, col.Len())
+	for i := range sel {
+		sel[i] = NullIndex
+	}
 	var deque []int // positions in the partition
 	forEachOrdered(seg, false, func(rows []int32) {
+		lo, hi := win(rows)
 		deque = deque[:0]
-		count := 0
+		count, from, to := 0, 0, 0
 		for i, row := range rows {
-			if valid.Get(int(row)) {
+			for ; to < int(hi[i]); to++ {
+				r := rows[to]
+				if !valid.Get(int(r)) {
+					continue
+				}
 				count++
 				for len(deque) > 0 {
-					c := cmp(int(rows[deque[len(deque)-1]]), int(row))
+					c := cmp(int(rows[deque[len(deque)-1]]), int(r))
 					if (max && c > 0) || (!max && c < 0) {
 						break
 					}
 					deque = deque[:len(deque)-1]
 				}
-				deque = append(deque, i)
+				deque = append(deque, to)
 			}
-			if i >= size {
-				if valid.Get(int(rows[i-size])) {
+			for ; from < int(lo[i]); from++ {
+				if valid.Get(int(rows[from])) {
 					count--
 				}
-				if len(deque) > 0 && deque[0] <= i-size {
-					deque = deque[1:]
-				}
 			}
-			sel[row] = NullIndex
+			for len(deque) > 0 && deque[0] < from {
+				deque = deque[1:]
+			}
 			if count >= minN {
 				sel[row] = rows[deque[0]]
 			}
@@ -156,7 +192,7 @@ func rollingExtremum(max bool, name string, col *data.Column, seg Segments, size
 
 // rollingIntSum sums an integer or Bool window exactly, as an Int128: N values of 64
 // bits cannot leave 128.
-func rollingIntSum(name string, out dtype.DataType, col *data.Column, seg Segments, size, minN int) (*data.Column, error) {
+func rollingIntSum(name string, out dtype.DataType, col *data.Column, seg Segments, win windowsOf, minN int) (*data.Column, error) {
 	vals, err := widenToInt128(col)
 	if err != nil {
 		return nil, err
@@ -165,14 +201,17 @@ func rollingIntSum(name string, out dtype.DataType, col *data.Column, seg Segmen
 	res := make([]i128.Int128, col.Len())
 	ok := make([]bool, col.Len())
 	forEachOrdered(seg, false, func(rows []int32) {
+		lo, hi := win(rows)
 		var sum i128.Int128
-		count := 0
+		count, from, to := 0, 0, 0
 		for i, row := range rows {
-			if valid.Get(int(row)) {
-				sum, count = sum.Add(vals[row]), count+1
+			for ; to < int(hi[i]); to++ {
+				if r := rows[to]; valid.Get(int(r)) {
+					sum, count = sum.Add(vals[r]), count+1
+				}
 			}
-			if i >= size {
-				if old := rows[i-size]; valid.Get(int(old)) {
+			for ; from < int(lo[i]); from++ {
+				if old := rows[from]; valid.Get(int(old)) {
 					sum, count = sum.Sub(vals[old]), count-1
 				}
 			}
@@ -264,7 +303,7 @@ func (s *rollingState) nonFinite() (float64, bool) {
 
 // rollingFloat computes a float sum, mean, var or std over each row's window.
 func rollingFloat(fn expr.WinFnOp, ddof int, name string, out dtype.DataType, col *data.Column,
-	seg Segments, size, minN int) (*data.Column, error) {
+	seg Segments, win windowsOf, minN int) (*data.Column, error) {
 
 	vals, err := toFloat64(col)
 	if err != nil {
@@ -274,27 +313,34 @@ func rollingFloat(fn expr.WinFnOp, ddof int, name string, out dtype.DataType, co
 	res := make([]float64, col.Len())
 	ok := make([]bool, col.Len())
 	forEachOrdered(seg, false, func(rows []int32) {
+		lo, hi := win(rows)
 		var s rollingState
-		count, removed := 0, 0
+		count, removed, from, to := 0, 0, 0, 0
 		for i, row := range rows {
-			if valid.Get(int(row)) {
-				s.add(vals[row])
-				count++
+			for ; to < int(hi[i]); to++ {
+				if r := rows[to]; valid.Get(int(r)) {
+					s.add(vals[r])
+					count++
+				}
 			}
-			if i >= size {
-				if old := rows[i-size]; valid.Get(int(old)) {
-					s.remove(vals[old])
-					count--
-					if removed++; removed == size {
-						// Afresh from the window, so rounding cannot build up.
-						s = rollingState{}
-						for _, r := range rows[i-size+1 : i+1] {
-							if valid.Get(int(r)) {
-								s.add(vals[r])
-							}
+			for ; from < int(lo[i]); from++ {
+				old := rows[from]
+				if !valid.Get(int(old)) {
+					continue
+				}
+				s.remove(vals[old])
+				count--
+				// Afresh from the window once as many values have left it as it
+				// holds rows, so rounding cannot build up: an N-row window's every
+				// N removals, as before windows by time.
+				if removed++; removed >= max(to-from-1, 1) {
+					s = rollingState{}
+					for _, r := range rows[from+1 : to] {
+						if valid.Get(int(r)) {
+							s.add(vals[r])
 						}
-						removed = 0
 					}
+					removed = 0
 				}
 			}
 			if count < minN {

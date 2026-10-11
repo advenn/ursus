@@ -273,6 +273,69 @@ func (e Expr) rolling(fn expr.WinFnOp, size int, ddof int64, opts []WindowOption
 	return e.winFn(fn, p)
 }
 
+// RollingSumBy, RollingMeanBy, RollingMinBy, RollingMaxBy, RollingVarBy and
+// RollingStdBy answer each row over the rows whose by value lies within period of
+// its own, (t − period, t]: Polars' rolling_*_by, and the expression form of the
+// frame-level Rolling.
+//
+//	Col("amount").RollingSumBy(Col("at"), Every("1h"))               // the hour up to each row
+//	Col("amount").RollingMeanBy(Col("at"), Every("7d")).Over(Col("account"))
+//
+// The window is found by value, not position: by need not be sorted, the rows that
+// tie with a row's by are in its window, the later ones too, and a row whose by is
+// null is in no window and is null. By default a window answers from one value, as
+// Polars' min_samples=1; MinSamples asks for more. WindowClosed chooses which ends of
+// the window are in it.
+//
+// by is a Date, Datetime or Time. A calendar period counts months and days on the
+// wall clock of by's zone, so Every("1d") across a change of offset is a calendar
+// day, and FromDuration(24*time.Hour) twenty-four hours. The answers' types are the
+// rolling functions' of the same names.
+//
+// Where Polars differs: it also takes an integer by, with a period such as "2i",
+// and RollingMedianBy and RollingQuantileBy; and it answers an empty window's sum,
+// under closed="left" or "none", as 0.0 although min_samples is 1. Here that window
+// is null.
+func (e Expr) RollingSumBy(by Expr, period Interval, opts ...WindowOption) Expr {
+	return e.rollingBy(expr.WinRollingSum, by, period, 0, opts)
+}
+
+func (e Expr) RollingMeanBy(by Expr, period Interval, opts ...WindowOption) Expr {
+	return e.rollingBy(expr.WinRollingMean, by, period, 0, opts)
+}
+
+func (e Expr) RollingMinBy(by Expr, period Interval, opts ...WindowOption) Expr {
+	return e.rollingBy(expr.WinRollingMin, by, period, 0, opts)
+}
+
+func (e Expr) RollingMaxBy(by Expr, period Interval, opts ...WindowOption) Expr {
+	return e.rollingBy(expr.WinRollingMax, by, period, 0, opts)
+}
+
+func (e Expr) RollingVarBy(by Expr, period Interval, opts ...WindowOption) Expr {
+	return e.rollingBy(expr.WinRollingVar, by, period, 1, opts)
+}
+
+func (e Expr) RollingStdBy(by Expr, period Interval, opts ...WindowOption) Expr {
+	return e.rollingBy(expr.WinRollingStd, by, period, 1, opts)
+}
+
+func (e Expr) rollingBy(fn expr.WinFnOp, by Expr, period Interval, ddof int64, opts []WindowOption) Expr {
+	p := expr.WinParams{By: true, Period: period, MinSamples: 1, Ddof: ddof}
+	for _, o := range opts {
+		o(&p)
+	}
+	return wrap(&expr.WinFn{Fn: fn, Child: expr.PairOf(e.node(), by.node()), Params: p})
+}
+
+// WindowClosed chooses which ends of a rolling window by time hold their instant:
+// ClosedRight, the default, is (t − period, t], as Polars' closed="right";
+// ClosedLeft is [t − period, t), ClosedBoth both ends and ClosedNone neither. A
+// rolling window of N rows has no use for it.
+func WindowClosed(c Closed) WindowOption {
+	return func(p *expr.WinParams) { p.Closed = c }
+}
+
 // EwmDecay is how fast an exponentially weighted function forgets: the weight a row
 // loses with each row after it. Build it from whichever quantity is to hand, as
 // Polars' com, span, half_life and alpha are.

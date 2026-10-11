@@ -129,6 +129,11 @@ func OutputName(n Node) string {
 		// stops a later reordering of Children from silently renaming every window.
 		return OutputName(t.Child)
 	case *WinFn:
+		// A rolling function by time is named after its value, not the struct
+		// carrying it with its by column, whose first field is named "0".
+		if x, _, ok := pairArgs(t.Child); ok && t.Params.By {
+			return OutputName(x)
+		}
 		return OutputName(t.Child)
 	case *Call:
 		// A horizontal call's first argument is an operand like the rest, so it is
