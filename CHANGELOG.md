@@ -15,12 +15,36 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.6.2
+## v0.6.2 — candidate, not tagged
 
-Everything on master since step 200, v0.6.1's candidate: steps 201–207 and 209–211, so far; 208, the report, waits for h2o.
+Everything since v0.6.1's candidate (step 200): steps 201–211.
 [`v0.6.2-scope.md`](./context_files/v0.6.2-scope.md) set the scope: **speed and
-out-of-core, continued.** Each step is timed against 0.6.1's code, alternated in one
-session.
+out-of-core, continued.** Each step was timed against 0.6.1's code, alternated in one
+session, and step 208 measured the whole.
+
+### Where it ends
+
+- **Against v0.6.1,** both built alike and alternated over PDS-H at SF=1: 8.6% less
+  CPU by geomean, 2.5% less wall time. q7, q21 and q4 take 23% less CPU and 11 to
+  12% less time, q17 19% and 10%.
+- **The scope's claims** were q7 and q21 at least 20% faster, and PDS-H at SF=1 at
+  least 5%: **met by CPU, not by wall time.** The work removed was per-row hash work
+  that ran on every core at once.
+- **Against Polars, in one session,** every answer validated against DuckDB's:
+
+  | suite | ursus | Polars | ratio | at v0.6.1 |
+  | --- | --: | --: | --: | --: |
+  | PDS-H SF=1 | 159 ms | 77 ms | 2.07× | 2.16× |
+  | PDS-H SF=0.1 | 24 ms | 9 ms | 2.76× | 2.43× |
+  | h2o 10M, Parquet | 822 ms | 541 ms | 1.52× | 1.51× |
+  | h2o 10M, CSV | 1,764 ms | 1,071 ms | 1.65× | 1.70× |
+
+  At SF=0.1 ursus is as it was, 24.6 to 24.1 ms, and Polars ran faster, 10.1 to
+  8.7 ms.
+- **Out of core:** reverse, an unkeyed `Rolling` or `GroupByDynamic`, and one
+  partition of a keyed window, each past a limit that refused or held its answer
+  before. Reverse passes under a tenth of its input, and the unkeyed `Rolling` too
+  at batches of 2,048: it holds a batch's worth, about 700 KB at 8,192 rows.
 
 ### Faster
 
@@ -65,6 +89,29 @@ session.
 - **A spilled window keeps to its limit** (210). Merging its partition files'
   answers, it held each file's whole answer, so the input: 971 KB under a 121 KB
   limit over 20,000 rows. It holds a batch across the files now.
+
+### Known limitations
+
+As v0.6.1's, except:
+
+- **Operators that do not spill,** each failing under a budget with an error naming
+  itself:
+  - hstack and tail;
+  - a window, with or without a `partition_by`, whose one partition is larger than
+    the limit and that computes a rank, an ewm function, an interpolation, a
+    reversed cumulative function, an unlimited backward fill or a rolling window by
+    time, or that is ordered;
+  - a join with no keys and a residual, a `WhereExists` of a predicate alone;
+  - quantile-like aggregates over a few very large groups.
+- **What streams but holds its answer:** a keyed `Rolling` or `GroupByDynamic`, which
+  gives its answer per bucket.
+- **Spilling a keyed window** needs about 128 KiB for its partition writers, past any
+  limit set below that.
+- **Speed:** 2.07× Polars on PDS-H at SF=1. The widest gaps are q15 at 3.6×, q19 and
+  q16 at 3.5×. A string group-by of many groups (h2o gb3) is bound by memory across
+  the workers' tables.
+- **Memory:** with no limit set, h2o's `gb10` peaks at 5.3 to 9.1 GB, noisy by the
+  collector's timing; Polars at 4.5 to 5.2 GB.
 
 ---
 
