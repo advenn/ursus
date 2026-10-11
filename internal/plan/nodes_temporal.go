@@ -61,6 +61,25 @@ type TemporalGroup struct {
 
 	Every, Period, Offset dtype.Interval
 	Closed                expr.Closed
+
+	// A dynamic group's options, as Polars' group_by_dynamic's (step 187):
+	// WindowLabel is "left", the window's start and the default, "right", its end,
+	// or "datapoint", its first row's instant; StartBy is "window", the grid and the
+	// default, "datapoint", the first row, or a weekday, which a weekly grid starts
+	// on; Boundaries adds _lower_boundary and _upper_boundary before the index.
+	WindowLabel string
+	StartBy     string
+	Boundaries  bool
+}
+
+// StartByWeekday is the weekday a StartBy names, and whether it names one.
+func StartByWeekday(s string) (time.Weekday, bool) {
+	for d := time.Sunday; d <= time.Saturday; d++ {
+		if strings.EqualFold(s, d.String()) {
+			return d, true
+		}
+	}
+	return 0, false
 }
 
 // checkIndexResolution refuses a window an index column cannot represent.
@@ -174,7 +193,28 @@ func (t *TemporalGroup) Schema() (*dtype.Schema, error) {
 			Hint("use ClosedLeft, ClosedRight, ClosedBoth or ClosedNone, or leave it unset for the default")
 	}
 
-	fields := make([]dtype.Field, 0, 1+len(t.Keys)+len(t.Aggs))
+	switch t.WindowLabel {
+	case "", "left", "right", "datapoint":
+	default:
+		return nil, uerr.New(uerr.KindValue, t.op(),
+			"the label %q is not one of left, right or datapoint", t.WindowLabel)
+	}
+	_, day := StartByWeekday(t.StartBy)
+	if !day && t.StartBy != "" && t.StartBy != "window" && t.StartBy != "datapoint" {
+		return nil, uerr.New(uerr.KindValue, t.op(),
+			"start_by %q is not one of window, datapoint, or a weekday such as monday", t.StartBy)
+	}
+	// Polars documents a weekday as taking effect only on a grid of weeks, and
+	// answers otherwise by a rule it does not document: every 5h from Friday starts
+	// at 20:00, every 3d from Friday on a Tuesday. Refused here rather than guessed.
+	if day && !t.Every.Weekly() {
+		return nil, uerr.New(uerr.KindValue, t.op(),
+			"start_by %q is a weekday, which only a grid of weeks starts on; every is %s",
+			t.StartBy, t.Every).
+			Hint("use every in weeks, such as Every(\"1w\"), or start_by window or datapoint")
+	}
+
+	fields := make([]dtype.Field, 0, 3+len(t.Keys)+len(t.Aggs))
 	idx, err := expr.Resolve(t.Index, in)
 	if err != nil {
 		return nil, uerr.Annotate(err, t.op(), "TemporalGroup")
@@ -191,6 +231,11 @@ func (t *TemporalGroup) Schema() (*dtype.Schema, error) {
 	// Never null: a window start always exists, and a row whose index is null belongs
 	// to no window at all — which the operator refuses rather than silently dropping.
 	idx.Nullable = false
+	if t.Boundaries {
+		for _, name := range []string{"_lower_boundary", "_upper_boundary"} {
+			fields = append(fields, dtype.Field{Name: name, Type: idx.Type})
+		}
+	}
 	fields = append(fields, idx)
 
 	for _, k := range t.Keys {
@@ -243,6 +288,15 @@ func (t *TemporalGroup) Label() string {
 	}
 	b.WriteString(" closed=")
 	b.WriteString(t.Closed.String())
+	if t.WindowLabel != "" && t.WindowLabel != "left" {
+		b.WriteString(" label=" + t.WindowLabel)
+	}
+	if t.StartBy != "" && t.StartBy != "window" {
+		b.WriteString(" start_by=" + t.StartBy)
+	}
+	if t.Boundaries {
+		b.WriteString(" include_boundaries")
+	}
 	b.WriteString(" -> [")
 	b.WriteString(expr.StringAll(t.Aggs))
 	b.WriteString("]")

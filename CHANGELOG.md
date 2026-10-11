@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–186, so far.
+Everything on master since `v0.5.0`: steps 156–187, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -87,6 +87,11 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   zone.
 - **`DataFrame.Rows` decodes a List column** into a slice, `[][]T` and `[]*T` too,
   and a Binary one into a `[]byte` (178).
+- **`DynamicOptions.Label`, `StartBy` and `IncludeBoundaries`** (187), which were
+  declared only to be refused: a window labelled by its start, its end or its first
+  row; a grid started at the first row, or on a weekday for windows in weeks; and
+  `_lower_boundary` and `_upper_boundary` columns. Polars' `label`, `start_by` and
+  `include_boundaries`.
 - **A default memory budget on macOS and Windows** (181): half the machine's RAM,
   read from sysctl's `hw.memsize` and `GlobalMemoryStatusEx`, as Linux's has been.
 

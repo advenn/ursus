@@ -1,14 +1,12 @@
 package ursus_test
 
 import (
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/dtype"
-	"github.com/advenn/ursus/internal/uerr"
 	"github.com/advenn/ursus/ursustest"
 )
 
@@ -275,34 +273,8 @@ func TestTemporalGroupRefusesUnsortedIndex(t *testing.T) {
 	}
 }
 
-// TestRefusedDynamicOptionsAreRefused: the three unimplemented fields produce an
-// error naming themselves rather than being silently dropped.
-func TestRefusedDynamicOptionsAreRefused(t *testing.T) {
-	for _, c := range []struct {
-		name string
-		o    ursus.DynamicOptions
-	}{
-		{"Label", ursus.DynamicOptions{Every: ursus.Every("1h"), Label: "right"}},
-		{"StartBy", ursus.DynamicOptions{Every: ursus.Every("1h"), StartBy: "monday"}},
-		{"IncludeBoundaries", ursus.DynamicOptions{
-			Every: ursus.Every("1h"), IncludeBoundaries: true}},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			_, err := hourly(t, "2024-01-01T00:00:00").
-				GroupByDynamic(ursus.Col("ts"), c.o).
-				Agg(ursus.Len()).Collect(t.Context())
-			if err == nil {
-				t.Fatalf("%s was accepted and ignored", c.name)
-			}
-			if !errors.Is(err, uerr.ErrUnsupported) {
-				t.Errorf("want an unsupported error, got %v", err)
-			}
-			if !strings.Contains(err.Error(), c.name) {
-				t.Errorf("the message must name %s:\n%v", c.name, err)
-			}
-		})
-	}
-}
+// DynamicOptions' Label, StartBy and IncludeBoundaries were refused, each naming
+// itself, until step 187 built them; dynamicopts_test.go checks them against Polars.
 
 // TestTemporalGroupWithCategoricalKeys: windows are cut independently inside each
 // distinct key combination.

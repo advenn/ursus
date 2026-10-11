@@ -1,9 +1,10 @@
 package ursus
 
 import (
+	"strings"
+
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/plan"
-	"github.com/advenn/ursus/internal/uerr"
 )
 
 // DynamicOptions configures GroupByDynamic.
@@ -42,10 +43,20 @@ type DynamicOptions struct {
 	// distinct combination, so an hourly rollup per service is one call.
 	GroupBy []Expr
 
-	// Label, StartBy and IncludeBoundaries are not implemented. They are declared so
-	// that setting one is an error naming it rather than silence.
-	Label             string
-	StartBy           string
+	// Label is what each window's index column holds: "left", its start, the default;
+	// "right", its end, the start plus Period; or "datapoint", the instant of its
+	// first row, or its start for a window with no row. Polars' label (step 187).
+	Label string
+
+	// StartBy is where the grid begins: "window", Every's own grid, the default;
+	// "datapoint", the first row's instant, with Offset ignored, as Polars ignores it;
+	// or a weekday, "monday" to "sunday", that a grid of weeks starts on: the one at
+	// or before the grid's own first Monday, plus Offset. A weekday on a grid not in
+	// weeks is refused: Polars documents it for weeks alone. Polars' start_by.
+	StartBy string
+
+	// IncludeBoundaries adds _lower_boundary and _upper_boundary, each window's start
+	// and end, before the index column: Polars' include_boundaries.
 	IncludeBoundaries bool
 }
 
@@ -88,8 +99,11 @@ type RollingOptions struct {
 // SetSorted-style hint is a user claim that deletes a correctness check, and its
 // failure mode is wrong rows with no error. Sort first if the check refuses.
 func (lf *LazyFrame) GroupByDynamic(index Expr, o DynamicOptions) *GroupBy {
-	return lf.temporalGroup(index, false, o.Every, o.Period, o.Offset, o.Closed,
-		o.GroupBy, refusedDynamicFields(o))
+	g := lf.temporalGroup(index, false, o.Every, o.Period, o.Offset, o.Closed, o.GroupBy, nil)
+	g.temporal.WindowLabel = strings.ToLower(o.Label)
+	g.temporal.StartBy = strings.ToLower(o.StartBy)
+	g.temporal.Boundaries = o.IncludeBoundaries
+	return g
 }
 
 // Rolling gives every row its own window, reaching back Period from that row's own
@@ -100,31 +114,6 @@ func (lf *LazyFrame) GroupByDynamic(index Expr, o DynamicOptions) *GroupBy {
 func (lf *LazyFrame) Rolling(index Expr, o RollingOptions) *GroupBy {
 	return lf.temporalGroup(index, true, Interval{}, o.Period, o.Offset, o.Closed,
 		o.GroupBy, nil)
-}
-
-// refusedDynamicFields names any unimplemented option the caller set.
-func refusedDynamicFields(o DynamicOptions) error {
-	var set []string
-	if o.Label != "" {
-		set = append(set, "Label")
-	}
-	if o.StartBy != "" {
-		set = append(set, "StartBy")
-	}
-	if o.IncludeBoundaries {
-		set = append(set, "IncludeBoundaries")
-	}
-	if len(set) == 0 {
-		return nil
-	}
-	e := uerr.New(uerr.KindUnsupported, "group_by_dynamic",
-		"DynamicOptions.%s is not implemented yet", set[0])
-	if len(set) > 1 {
-		e = uerr.New(uerr.KindUnsupported, "group_by_dynamic",
-			"these DynamicOptions fields are not implemented yet: %v", set)
-	}
-	return e.Hint("implemented: Every, Period, Offset, Closed, GroupBy").
-		Hint("they are declared so that setting one is an error rather than silence")
 }
 
 func (lf *LazyFrame) temporalGroup(index Expr, rolling bool,
