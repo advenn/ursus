@@ -145,9 +145,9 @@ func NewAccumulator(op expr.AggOp, in dtype.DataType, bind expr.AggBinding,
 		return &productAcc{exact: !in.IsFloat()}, nil
 
 	case expr.AggArgMin:
-		return &argExtremumAcc{max: false}, nil
+		return newArgExtremum(in, false)
 	case expr.AggArgMax:
-		return &argExtremumAcc{max: true}, nil
+		return newArgExtremum(in, true)
 
 	case expr.AggMedian:
 		// The median IS the 0.5 quantile, linearly interpolated. Giving it its own

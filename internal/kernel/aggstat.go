@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/bits"
 	"slices"
+	"unsafe"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
@@ -38,20 +39,46 @@ import (
 // delta²·nA·nB/(nA+nB), which is exactly the between-group contribution the pooled
 // mean introduces. Getting this wrong is invisible in a single-threaded run and
 // wrong under every partition, which is what TestMergeEquivalence exists to catch.
+//
+// # Shifted by each group's first value
+//
+// Welford's alone is not enough when the spread is small beside the mean: the
+// running mean of 1e9+1, 1e9+2 and 1e9+4 rounds in its eighth digit of the spread,
+// and the variance came out 2.333333283662796, where it is 7/3 (step 176). So each
+// group's values are shifted by its first, k, and mean is the mean of the shifted
+// values. M2 is the same either way, since a shift moves every value and the mean
+// alike.
+//
+// Where the shift itself overflows, two finite values more than float64's range
+// apart, the group moves back to no shift: its mean takes k back and k becomes 0.
+// The unshifted update then meets the overflow it already handles below.
+//
+// # A group's state is one struct
+//
+// One cache line a row, where four slices were four. The shift costs about a tenth
+// of the accumulator's time: 17 to 19 ms for a million rows over 200k groups,
+// measured alone (step 176). Eight digits are worth it.
 type varAcc struct {
 	ddof uint8
 	std  bool
 
-	n    []uint64
-	mean []float64
-	m2   []float64
+	st []varState
 }
 
-func (a *varAcc) Reserve(n int) {
-	a.n = Extend(a.n, n, 0)
-	a.mean = Extend(a.mean, n, 0)
-	a.m2 = Extend(a.m2, n, 0)
+type varState struct {
+	n    uint64
+	k    float64 // the shift: the group's first value, or 0 once that overflowed
+	mean float64
+	m2   float64
 }
+
+// unshift moves the state to no shift.
+func (s *varState) unshift() {
+	s.mean += s.k
+	s.k = 0
+}
+
+func (a *varAcc) Reserve(n int) { a.st = Extend(a.st, n, varState{}) }
 
 func (a *varAcc) AddBatch(groups []int32, col *data.Column) error {
 	vals, err := widenFloat(col)
@@ -63,20 +90,28 @@ func (a *varAcc) AddBatch(groups []int32, col *data.Column) error {
 		if !valid.Get(i) {
 			continue
 		}
-		x := vals[i]
-		a.n[g]++
-		n := float64(a.n[g])
-		delta := x - a.mean[g]
-		if math.IsInf(delta, 0) && !math.IsInf(x, 0) && !math.IsInf(a.mean[g], 0) {
+		s := &a.st[g]
+		if s.n == 0 {
+			s.k = vals[i]
+		}
+		x := vals[i] - s.k
+		if math.IsInf(x, 0) && !math.IsInf(vals[i], 0) && !math.IsInf(s.k, 0) {
+			s.unshift()
+			x = vals[i]
+		}
+		s.n++
+		n := float64(s.n)
+		delta := x - s.mean
+		if math.IsInf(delta, 0) && !math.IsInf(x, 0) && !math.IsInf(s.mean, 0) {
 			// The difference of two finite values overflowed. Welford's mean update
 			// then made the mean infinite too, and m2 took -Inf*(+Inf): the variance
 			// of [1e308, -1e308] came out NEGATIVE. Updated without forming delta,
 			// the mean stays finite and m2 takes the +Inf it truly overflows to.
-			a.mean[g] += x/n - a.mean[g]/n
+			s.mean += x/n - s.mean/n
 		} else {
-			a.mean[g] += delta / n
+			s.mean += delta / n
 		}
-		a.m2[g] += delta * (x - a.mean[g])
+		s.m2 += delta * (x - s.mean)
 	}
 	return nil
 }
@@ -93,23 +128,30 @@ func (a *varAcc) Merge(other Accumulator, remap []int32) error {
 		return uerr.Internalf("kernel: cannot merge a var/std accumulator with " +
 			"different parameters")
 	}
-	a.Reserve(mergeCap(remap, len(o.n)))
-	mergeEach(remap, len(o.n), func(dst, src int) {
-		nb := o.n[src]
-		if nb == 0 {
+	a.Reserve(mergeCap(remap, len(o.st)))
+	mergeEach(remap, len(o.st), func(dst, src int) {
+		b, d := o.st[src], &a.st[dst]
+		if b.n == 0 {
 			return
 		}
-		na := a.n[dst]
-		if na == 0 {
-			a.n[dst], a.mean[dst], a.m2[dst] = nb, o.mean[src], o.m2[src]
+		if d.n == 0 {
+			*d = b
 			return
 		}
-		fa, fb := float64(na), float64(nb)
+		fa, fb := float64(d.n), float64(b.n)
 		total := fa + fb
-		delta := o.mean[src] - a.mean[dst]
-		a.mean[dst] += delta * fb / total
-		a.m2[dst] += o.m2[src] + delta*delta*fa*fb/total
-		a.n[dst] = na + nb
+		// b's mean, moved to this group's shift; both unshifted if the two shifts are
+		// too far apart to subtract.
+		shift := b.k - d.k
+		om := b.mean + shift
+		if math.IsInf(shift, 0) && !math.IsInf(b.k, 0) && !math.IsInf(d.k, 0) {
+			d.unshift()
+			om = b.mean + b.k
+		}
+		delta := om - d.mean
+		d.mean += delta * fb / total
+		d.m2 += b.m2 + delta*delta*fa*fb/total
+		d.n += b.n
 	})
 	return nil
 }
@@ -118,14 +160,14 @@ func (a *varAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
 	out := make([]float64, nGroups)
 	seen := make([]bool, nGroups)
-	for i := range nGroups {
+	for i, s := range a.st[:nGroups] {
 		// n − ddof <= 0 is NULL, not zero and not NaN: a sample variance of one
 		// observation is undefined, and reporting 0 would claim the data has no
 		// spread rather than that the question has no answer.
-		if a.n[i] <= uint64(a.ddof) {
+		if s.n <= uint64(a.ddof) {
 			continue
 		}
-		v := a.m2[i] / float64(a.n[i]-uint64(a.ddof))
+		v := s.m2 / float64(s.n-uint64(a.ddof))
 		if a.std {
 			v = math.Sqrt(v)
 		}
@@ -233,82 +275,86 @@ func (a *productAcc) Finish(name string, nGroups int) (*data.Column, error) {
 // accumulator's own row count for the group. That shift is why the merge-equivalence
 // test folds both left-to-right and right-to-left: a left fold alone would let a
 // missing shift pass whenever the receiver happened to be the whole prefix.
+//
+// # Typed keys a group, not a one-row column (step 176)
+//
+// It kept each group's winning value as a one-row column, and compared a batch's
+// candidate with it by concatenating the two: the shape step 168 removed from First
+// and Last. Over 200k groups it took 7.8 s where MinBy, on the same data, took
+// 111 ms. It now keeps MinBy's typed key a group (byKeys), and finds each group's
+// best row of a batch before comparing it with the kept key.
 type argExtremumAcc struct {
-	max bool
+	max  bool
+	keys byOrder
 
-	n     []uint64       // rows seen per group, including nulls
-	best  []*data.Column // the winning value, as a single-row column
-	bestI []uint64       // its position within the group
+	n     []uint64 // rows seen per group, including nulls
+	bestI []uint64 // the winner's position within the group
+	has   []bool   // whether the group has a winner: a non-null value
+
+	// cand[g] and candI[g] are group g's best row of the batch seen[g] names, and
+	// its position.
+	cand  []int32
+	candI []uint64
+	seen  []int32
+	batch int32
+}
+
+func newArgExtremum(in dtype.DataType, max bool) (Accumulator, error) {
+	keys, err := newByOrder(in)
+	if err != nil {
+		return nil, err
+	}
+	return &argExtremumAcc{max: max, keys: keys}, nil
 }
 
 func (a *argExtremumAcc) Reserve(n int) {
 	a.n = Extend(a.n, n, 0)
-	a.best = Extend(a.best, n, nil)
 	a.bestI = Extend(a.bestI, n, 0)
+	a.has = Extend(a.has, n, false)
+	a.cand = Extend(a.cand, n, 0)
+	a.candI = Extend(a.candI, n, 0)
+	a.seen = Extend(a.seen, n, 0)
+	a.keys.reserve(n)
+}
+
+// better reports whether c, a candidate's comparison with the incumbent, wins.
+// Strictly: a tie keeps the earlier row, matching min and max and making the
+// answer independent of batch boundaries.
+func (a *argExtremumAcc) better(c int) bool {
+	if a.max {
+		return c > 0
+	}
+	return c < 0
 }
 
 func (a *argExtremumAcc) AddBatch(groups []int32, col *data.Column) error {
-	cmp, err := valueComparator(col)
-	if err != nil {
+	if err := a.keys.load(col); err != nil {
 		return err
 	}
+	a.batch++
 	valid := col.Validity()
-
-	// Best row within this batch first, exactly as extremumAcc does, so the
-	// cross-batch comparison — which needs a materialised single-row column — runs
-	// once per group per batch rather than once per row.
-	bestRow := map[int32]int{}
-	bestPos := map[int32]uint64{}
+	var touched []int32
 	for i, g := range groups {
 		pos := a.n[g]
 		a.n[g]++
 		if !valid.Get(i) {
 			continue
 		}
-		if prev, ok := bestRow[g]; !ok {
-			bestRow[g], bestPos[g] = i, pos
-		} else if c := cmp(i, prev); (a.max && c > 0) || (!a.max && c < 0) {
-			// Strict: a tie keeps the earlier row, matching min/max and making the
-			// answer independent of batch boundaries.
-			bestRow[g], bestPos[g] = i, pos
+		if a.seen[g] != a.batch {
+			a.seen[g], a.cand[g], a.candI[g] = a.batch, int32(i), pos
+			touched = append(touched, g)
+		} else if a.better(a.keys.rows(i, int(a.cand[g]))) {
+			a.cand[g], a.candI[g] = int32(i), pos
 		}
 	}
-
-	for g, row := range bestRow {
-		cand, err := Take(col, []int32{int32(row)})
-		if err != nil {
-			return err
-		}
-		better, err := a.better(a.best[g], cand)
-		if err != nil {
-			return err
-		}
-		if better {
-			a.best[g], a.bestI[g] = cand, bestPos[g]
+	for _, g := range touched {
+		i := int(a.cand[g])
+		if !a.has[g] || a.better(a.keys.vsKept(i, g)) {
+			a.keys.keep(i, g)
+			a.bestI[g], a.has[g] = a.candI[g], true
 		}
 	}
 	return nil
-}
-
-// better reports whether cand beats the incumbent. A nil incumbent always loses; a
-// tie always keeps the incumbent, which is what makes the earliest position win.
-func (a *argExtremumAcc) better(incumbent, cand *data.Column) (bool, error) {
-	if incumbent == nil {
-		return true, nil
-	}
-	pair, err := concatColumn([]*data.Column{incumbent, cand}, 2)
-	if err != nil {
-		return false, err
-	}
-	cmp, err := valueComparator(pair)
-	if err != nil {
-		return false, err
-	}
-	c := cmp(1, 0) // cand versus incumbent
-	if a.max {
-		return c > 0, nil
-	}
-	return c < 0, nil
 }
 
 // Merge shifts o's positions by this accumulator's row count, which only makes
@@ -329,15 +375,20 @@ func (a *argExtremumAcc) Merge(other Accumulator, remap []int32) error {
 		if ferr != nil {
 			return
 		}
-		if o.best[src] != nil {
-			better, err := a.better(a.best[dst], o.best[src])
-			if err != nil {
-				ferr = err
-				return
+		if o.has[src] {
+			win := !a.has[dst]
+			if !win {
+				c, err := a.keys.merged(o.keys, src, dst)
+				if err != nil {
+					ferr = err
+					return
+				}
+				win = a.better(c)
 			}
-			if better {
+			if win {
 				// The shift: o's positions are relative to the later portion it saw.
-				a.best[dst], a.bestI[dst] = o.best[src], a.n[dst]+o.bestI[src]
+				a.keys.adopt(o.keys, src, dst)
+				a.bestI[dst], a.has[dst] = a.n[dst]+o.bestI[src], true
 			}
 		}
 		a.n[dst] += o.n[src]
@@ -347,16 +398,9 @@ func (a *argExtremumAcc) Merge(other Accumulator, remap []int32) error {
 
 func (a *argExtremumAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
-	out := make([]uint64, nGroups)
-	seen := make([]bool, nGroups)
-	for i := range nGroups {
-		if a.best[i] == nil {
-			continue // no non-null value, so no position to report
-		}
-		out[i] = a.bestI[i]
-		seen[i] = true
-	}
-	return data.NewFixed(name, dtype.Uint64, out, seenBitmap(seen, nGroups)), nil
+	// A group with no non-null value has no position to report.
+	return data.NewFixed(name, dtype.Uint64, slices.Clone(a.bestI[:nGroups]),
+		seenBitmap(a.has, nGroups)), nil
 }
 
 // --- median and quantile ---------------------------------------------------------
@@ -664,14 +708,13 @@ func newBoolExtremum(op expr.AggOp) Accumulator {
 	return &extremumBool{out: dtype.Bool, max: op == expr.AggAny}
 }
 
-func (a *varAcc) NBytes() int64 {
-	return int64(cap(a.n))*8 + int64(cap(a.mean))*8 + int64(cap(a.m2))*8
-}
+func (a *varAcc) NBytes() int64 { return int64(cap(a.st)) * int64(unsafe.Sizeof(varState{})) }
 
 func (a *productAcc) NBytes() int64 { return int64(cap(a.p))*8 + int64(cap(a.seen)) }
 
 func (a *argExtremumAcc) NBytes() int64 {
-	return int64(cap(a.n))*8 + int64(cap(a.bestI))*8 + colBytes(a.best)
+	return int64(cap(a.n)+cap(a.bestI)+cap(a.candI))*8 + int64(cap(a.has)) +
+		int64(cap(a.cand)+cap(a.seen))*4 + a.keys.nbytes()
 }
 
 // NBytes for quantile is the one that matters. It keeps EVERY value it has seen,

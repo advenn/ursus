@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–175, so far.
+Everything on master since `v0.5.0`: steps 156–176, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -51,6 +51,8 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   written, searches for the literals rather than backtracking (169): q13 −15%.
 - **A join shares its probe batch's columns** when the rows it takes from it are a
   run, rather than copying them (170).
+- **`ArgMin` and `ArgMax` over many groups** (176): over 200,000 groups, from 7.8 s to
+  0.1 s. They keep a typed key a group, as `MinBy` does, not a one-row column.
 
 ### New
 
@@ -91,6 +93,10 @@ far ursus has moved against v0.5.0 is measured once, at the end.
 
 ### Fixed
 
+- **`Var` and `Std` of large near-equal values** (176) lost about eight digits:
+  1e9+1, 1e9+2 and 1e9+4 gave a variance of 2.333333283662796, where it is 7/3. Each
+  group's values are now shifted by its first, and the answer is Polars' to the last
+  digits.
 - **The group-by's partitioned fold** routed each worker's groups on a goroutine with
   no panic guard, so an internal panic there ended the process rather than failing
   the query (166).

@@ -3,6 +3,7 @@ package kernel
 import (
 	"math"
 	"strings"
+	"unsafe"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
@@ -38,28 +39,25 @@ func pairFields(col *data.Column) (a, b *data.Column, err error) {
 // digits of a correlation over values near 1e9 that vary by a few units, as
 // epoch seconds do: the mean of 1e9+1, 1e9+2 and 1e9+4 rounds in its eighth
 // significant digit of the spread. Shifted, the values are the spread itself.
+//
+// A group's state is one struct, one cache line, as varAcc's is (step 176). It was
+// eight slices, and Corr over 200k groups took about a fifth less time once it was
+// one.
 type coMomentAcc struct {
 	corr bool
 	ddof uint8
 
-	n           []uint64
-	kx, ky      []float64 // the shift: the group's first pair
-	mx, my, cxy []float64
-	m2x, m2y    []float64 // Corr's only
+	st []coState
 }
 
-func (a *coMomentAcc) Reserve(n int) {
-	a.n = Extend(a.n, n, 0)
-	a.kx = Extend(a.kx, n, 0)
-	a.ky = Extend(a.ky, n, 0)
-	a.mx = Extend(a.mx, n, 0)
-	a.my = Extend(a.my, n, 0)
-	a.cxy = Extend(a.cxy, n, 0)
-	if a.corr {
-		a.m2x = Extend(a.m2x, n, 0)
-		a.m2y = Extend(a.m2y, n, 0)
-	}
+type coState struct {
+	n           uint64
+	kx, ky      float64 // the shift: the group's first pair
+	mx, my, cxy float64
+	m2x, m2y    float64 // Corr's only
 }
+
+func (a *coMomentAcc) Reserve(n int) { a.st = Extend(a.st, n, coState{}) }
 
 func (a *coMomentAcc) AddBatch(groups []int32, col *data.Column) error {
 	fx, fy, err := pairFields(col)
@@ -79,20 +77,21 @@ func (a *coMomentAcc) AddBatch(groups []int32, col *data.Column) error {
 		if !sv.Get(i) || !xv.Get(i) || !yv.Get(i) {
 			continue
 		}
-		if a.n[g] == 0 {
-			a.kx[g], a.ky[g] = xs[i], ys[i]
+		s := &a.st[g]
+		if s.n == 0 {
+			s.kx, s.ky = xs[i], ys[i]
 		}
-		x, y := xs[i]-a.kx[g], ys[i]-a.ky[g]
-		a.n[g]++
-		n := float64(a.n[g])
-		dx, dy := x-a.mx[g], y-a.my[g]
-		a.mx[g] += dx / n
-		a.my[g] += dy / n
+		x, y := xs[i]-s.kx, ys[i]-s.ky
+		s.n++
+		n := float64(s.n)
+		dx, dy := x-s.mx, y-s.my
+		s.mx += dx / n
+		s.my += dy / n
 		// The old dx and the new mean, which is the update's exact form.
-		a.cxy[g] += dx * (y - a.my[g])
+		s.cxy += dx * (y - s.my)
 		if a.corr {
-			a.m2x[g] += dx * (x - a.mx[g])
-			a.m2y[g] += dy * (y - a.my[g])
+			s.m2x += dx * (x - s.mx)
+			s.m2y += dy * (y - s.my)
 		}
 	}
 	return nil
@@ -107,35 +106,30 @@ func (a *coMomentAcc) Merge(other Accumulator, remap []int32) error {
 	if a.corr != o.corr || a.ddof != o.ddof {
 		return uerr.Internalf("kernel: cannot merge corr/cov accumulators with different parameters")
 	}
-	a.Reserve(mergeCap(remap, len(o.n)))
-	mergeEach(remap, len(o.n), func(dst, src int) {
-		nb := o.n[src]
-		if nb == 0 {
+	a.Reserve(mergeCap(remap, len(o.st)))
+	mergeEach(remap, len(o.st), func(dst, src int) {
+		b, d := o.st[src], &a.st[dst]
+		if b.n == 0 {
 			return
 		}
-		na := a.n[dst]
-		if na == 0 {
-			a.n[dst], a.mx[dst], a.my[dst], a.cxy[dst] = nb, o.mx[src], o.my[src], o.cxy[src]
-			a.kx[dst], a.ky[dst] = o.kx[src], o.ky[src]
-			if a.corr {
-				a.m2x[dst], a.m2y[dst] = o.m2x[src], o.m2y[src]
-			}
+		if d.n == 0 {
+			*d = b
 			return
 		}
-		fa, fb := float64(na), float64(nb)
+		fa, fb := float64(d.n), float64(b.n)
 		total := fa + fb
-		// o's means, moved to this group's shift.
-		dx := o.mx[src] + (o.kx[src] - a.kx[dst]) - a.mx[dst]
-		dy := o.my[src] + (o.ky[src] - a.ky[dst]) - a.my[dst]
+		// b's means, moved to this group's shift.
+		dx := b.mx + (b.kx - d.kx) - d.mx
+		dy := b.my + (b.ky - d.ky) - d.my
 		w := fa * fb / total
-		a.cxy[dst] += o.cxy[src] + dx*dy*w
+		d.cxy += b.cxy + dx*dy*w
 		if a.corr {
-			a.m2x[dst] += o.m2x[src] + dx*dx*w
-			a.m2y[dst] += o.m2y[src] + dy*dy*w
+			d.m2x += b.m2x + dx*dx*w
+			d.m2y += b.m2y + dy*dy*w
 		}
-		a.mx[dst] += dx * fb / total
-		a.my[dst] += dy * fb / total
-		a.n[dst] = na + nb
+		d.mx += dx * fb / total
+		d.my += dy * fb / total
+		d.n += b.n
 	})
 	return nil
 }
@@ -147,27 +141,25 @@ func (a *coMomentAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
 	out := make([]float64, nGroups)
 	if a.corr {
-		for i := range nGroups {
+		for i, s := range a.st[:nGroups] {
 			// Each moment rooted first, so their product cannot overflow where the
 			// answer, at most 1, is well within range.
-			out[i] = a.cxy[i] / (math.Sqrt(a.m2x[i]) * math.Sqrt(a.m2y[i]))
+			out[i] = s.cxy / (math.Sqrt(s.m2x) * math.Sqrt(s.m2y))
 		}
 		return data.NewFixed(name, dtype.Float64, out, bitmap.AllSet(nGroups)), nil
 	}
 	seen := make([]bool, nGroups)
-	for i := range nGroups {
-		if a.n[i] <= uint64(a.ddof) {
+	for i, s := range a.st[:nGroups] {
+		if s.n <= uint64(a.ddof) {
 			continue
 		}
-		out[i] = a.cxy[i] / float64(a.n[i]-uint64(a.ddof))
+		out[i] = s.cxy / float64(s.n-uint64(a.ddof))
 		seen[i] = true
 	}
 	return data.NewFixed(name, dtype.Float64, out, seenBitmap(seen, nGroups)), nil
 }
 
-func (a *coMomentAcc) NBytes() int64 {
-	return int64(cap(a.n)+cap(a.kx)+cap(a.ky)+cap(a.mx)+cap(a.my)+cap(a.cxy)+cap(a.m2x)+cap(a.m2y)) * 8
-}
+func (a *coMomentAcc) NBytes() int64 { return int64(cap(a.st)) * int64(unsafe.Sizeof(coState{})) }
 
 // --- min_by and max_by ---------------------------------------------------------
 
