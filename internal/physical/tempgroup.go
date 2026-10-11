@@ -2,7 +2,6 @@ package physical
 
 import (
 	"context"
-	"sort"
 	"time"
 
 	"github.com/advenn/ursus/dtype"
@@ -37,12 +36,16 @@ import (
 // kernel.Accumulator has no Remove — adding one is a second kernel family, not a
 // tweak, and it is deliberately not this step.
 //
-// # It buffers, like windowSink and for the same reason
+// # It streams (step 196)
 //
-// The grid's extent comes from the observed [min, max] of the index, which is not
-// known until the last row. Buffering is also what makes EMPTY windows fall out for
-// free, and empty windows are the whole difference between this and
-// GroupBy(truncate(ts, every)).
+// It buffered its input, like windowSink, because the grid's extent comes from the
+// observed [min, max] of the index, not known until the last row. A sorted index
+// needs no extent, though: a bucket's grid starts at its first row, and each row
+// makes the windows that start at or before it, EMPTY ones included, which are the
+// whole difference between this and GroupBy(truncate(ts, every)). So rows are given
+// to their windows as they arrive, and what is held is the windows' state, the open
+// windows, and for a rolling group the rows a window yet to come reaches.
+// tempstream.go has the stream.
 type temporalSink struct {
 	schema    *dtype.Schema // index + keys + __aggN
 	inSchema  *dtype.Schema
@@ -79,11 +82,24 @@ type temporalSink struct {
 	// bucket, so a per-call ceiling let fifty buckets build fifty times it.
 	gridPoints int
 
-	parts  []*data.Batch
-	ticks  []int64 // the index column, whole stream, in input order
+	// The stream (tempstream.go): rows read, the order check, the buckets, and one
+	// entry a window in the order made.
 	nRows  int
 	sorted bool // whether a violation has already been seen
 	badRow int
+	lastT  int64
+
+	keyOnly *dtype.Schema // the key columns of keySchema
+	bIDs    map[string]int32
+	bkts    []*tgBucket
+
+	wStart, wEnd []int64 // its bounds, kept only for IncludeBoundaries
+	wLabel       []int64
+	wFed         []bool
+	parts        []*data.Batch // the batches the queued pairs and kept rows point into
+	pairs        []rowRef
+	pgroups      []int32
+	unseen       int // pairs fed since the state was last charged
 }
 
 func (s *temporalSink) Schema() *dtype.Schema { return s.schema }
@@ -96,45 +112,6 @@ func (s *temporalSink) Merge(Sink) error {
 	return uerr.Internalf("physical: temporalSink cannot be merged")
 }
 
-func (s *temporalSink) Consume(ctx context.Context, in *data.Batch) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	n := in.Rows()
-	if n == 0 {
-		return nil
-	}
-	idx, err := evalColumn(ctx, s.index, in)
-	if err != nil {
-		return err
-	}
-	ticks, err := temporalTicks(idx)
-	if err != nil {
-		return err
-	}
-	for i := range n {
-		if !idx.IsValid(i) {
-			// A null index belongs to no window. Dropping it would change the row
-			// count with no error; assigning it one would invent an instant.
-			return uerr.New(uerr.KindValue, s.op(),
-				"the index column %q is null at row %d", idx.Name(), s.nRows+i).
-				Hint("filter the nulls out, or fill them, before grouping by time")
-		}
-		if s.sorted && s.nRows+i > 0 && ticks[i] < s.lastTick() {
-			s.sorted, s.badRow = false, s.nRows+i
-		}
-		s.ticks = append(s.ticks, ticks[i])
-	}
-
-	s.parts = append(s.parts, in)
-	s.mem.Retain(in)
-	s.mem.RetainBytes(int64(n) * 8)
-	s.nRows += n
-	return s.mem.Check()
-}
-
-func (s *temporalSink) lastTick() int64 { return s.ticks[len(s.ticks)-1] }
-
 func (s *temporalSink) op() string {
 	if s.rolling {
 		return "rolling"
@@ -142,204 +119,11 @@ func (s *temporalSink) op() string {
 	return "group_by_dynamic"
 }
 
-// Finish cuts the windows and aggregates each one.
-func (s *temporalSink) Finish(ctx context.Context) (Operator, error) {
-	if !s.sorted {
-		return nil, uerr.New(uerr.KindValue, s.op(),
-			"the index column is not sorted: row %d goes backwards", s.badRow).
-			Hint("a temporal group-by cuts windows from a sorted index, so the rows " +
-				"of a window are contiguous").
-			Hint("sort first, e.g. .Sort(ursus.Asc(ursus.Col(...))) before this call")
-	}
-
-	all, err := kernel.Concat(s.inSchema, s.parts)
-	if err != nil {
-		return nil, err
-	}
-
-	// Bucket the rows by the categorical keys. Each bucket is already in index order,
-	// because the whole input is and bucketing preserves relative order.
-	buckets, reps, err := s.bucket(ctx, all)
-	if err != nil {
-		return nil, err
-	}
-
-	// Windows overlap, so a row is fed to the aggregates once for every window that
-	// reaches it: one (window, row) pair per membership, and a gathered copy of the
-	// input per pair. A rolling window a thousand rows long over a million rows is
-	// a billion pairs. They are built and fed a chunk at a time — one batch's worth —
-	// so the expansion is bounded by the chunk, not by how much the windows overlap.
-	// Built whole, it was neither bounded nor charged (step 96).
-	//
-	// What the aggregates keep is charged as it grows. For a sum that is a number
-	// per window; a median or an implode keeps every value it is fed, one per pair,
-	// and is refused here under the budget rather than growing past it.
-	var (
-		starts   []int64    // the index value of each window: its label
-		bounds   [2][]int64 // each window's start and end, for IncludeBoundaries
-		bucketOf []int      // which bucket each window came from, for its key values
-		charged  int64      // the aggregates' state, as last charged
-		unseen   int        // pairs fed since it was charged
-	)
-	rows := make([]int32, 0, s.chunk())   // input row per (window, row) pair
-	groups := make([]int32, 0, s.chunk()) // the window each pair belongs to
-	flush := func() error {
-		if len(rows) == 0 {
-			return nil
-		}
-		if err := s.accumulate(ctx, all, rows, groups, len(starts)); err != nil {
-			return err
-		}
-		unseen += len(rows)
-		rows, groups = rows[:0], groups[:0]
-		// NBytes is O(windows), so it is read once per that many pairs: O(1) a pair,
-		// with the state at most one pair per window ahead of its charge.
-		if unseen < max(s.chunk(), len(starts)) {
-			return nil
-		}
-		unseen = 0
-		return s.chargeState(&charged, len(starts))
-	}
-	for b, rowsIn := range buckets {
-		wins, err := s.windows(rowsIn)
-		if err != nil {
-			return nil, err
-		}
-		for _, w := range wins {
-			g := int32(len(starts))
-			label := w.start
-			switch {
-			case s.label == "right":
-				label = w.end
-			case s.label == "datapoint" && w.lo < w.hi:
-				label = s.ticks[rowsIn[w.lo]] // its first row; an empty window keeps its start
-			}
-			starts = append(starts, label)
-			if s.boundaries {
-				bounds[0], bounds[1] = append(bounds[0], w.start), append(bounds[1], w.end)
-			}
-			bucketOf = append(bucketOf, b)
-			for _, r := range rowsIn[w.lo:w.hi] {
-				rows = append(rows, r)
-				groups = append(groups, g)
-				if len(rows) == cap(rows) {
-					if err := flush(); err != nil {
-						return nil, err
-					}
-				}
-			}
-		}
-	}
-	if err := flush(); err != nil {
-		return nil, err
-	}
-	nGroups := len(starts)
-	if err := s.chargeState(&charged, nGroups); err != nil {
-		return nil, err
-	}
-
-	cols := make([]*data.Column, 0, 3+len(s.keys)+len(s.specs))
-	if s.boundaries {
-		cols = append(cols, packTemporal("_lower_boundary", s.idxType, bounds[0]),
-			packTemporal("_upper_boundary", s.idxType, bounds[1]))
-	}
-	cols = append(cols, packTemporal(s.keySchema.Field(0).Name, s.idxType, starts))
-	if len(s.keys) > 0 {
-		pick := make([]int32, nGroups)
-		for i, b := range bucketOf {
-			pick[i] = reps[b]
-		}
-		keyCols, err := s.keyColumns(ctx, all)
-		if err != nil {
-			return nil, err
-		}
-		for i, c := range keyCols {
-			g, err := kernel.Take(c, pick)
-			if err != nil {
-				return nil, err
-			}
-			cols = append(cols, g.Rename(s.keySchema.Field(i+1).Name))
-		}
-	}
-	for i, spec := range s.specs {
-		s.accs[i].Reserve(nGroups)
-		c, err := s.accs[i].Finish(spec.name, nGroups)
-		if err != nil {
-			return nil, err
-		}
-		cols = append(cols, c)
-	}
-
-	out, err := data.NewBatch(s.schema, cols)
-	if err != nil {
-		return nil, err
-	}
-	// The account held the input; it holds the answer now, which is the rebase
-	// hashAggSink.Finish and joinBuildSink.freeze both make. The aggregates' state
-	// goes with it: kept, it stayed alive until the query ended — a rolling median
-	// holds a value per window and row — while the account no longer counted it.
-	s.parts, s.ticks, s.accs = nil, nil, nil
-	s.mem.Release()
-	s.mem.Retain(out)
-
-	if out.Rows() <= s.chunk() {
-		return newBatchOperator(s.schema, out), nil
-	}
-	return &runOperator{schema: s.schema, src: &batchRun{b: out, n: s.chunk()}}, nil
-}
-
-// chargeState charges what the aggregates hold, and the two per-window arrays
-// Finish builds, to the budget, and checks it. charged is what was charged last.
-func (s *temporalSink) chargeState(charged *int64, nWindows int) error {
-	st := int64(nWindows) * 16 // starts and bucketOf
-	for _, a := range s.accs {
-		st += a.NBytes()
-	}
-	s.mem.RetainBytes(st - *charged)
-	*charged = st
-	return s.mem.Check()
-}
-
 func (s *temporalSink) chunk() int {
 	if s.batch <= 0 {
 		return DefaultOptions().BatchSize
 	}
 	return s.batch
-}
-
-// bucket splits the row indices by categorical key, preserving index order inside
-// each bucket, and returns one representative row per bucket for the key columns.
-func (s *temporalSink) bucket(ctx context.Context, all *data.Batch) ([][]int32, []int32, error) {
-	if len(s.keys) == 0 {
-		rows := make([]int32, all.Rows())
-		for i := range rows {
-			rows[i] = int32(i)
-		}
-		return [][]int32{rows}, []int32{0}, nil
-	}
-	keyCols, err := s.keyColumns(ctx, all)
-	if err != nil {
-		return nil, nil, err
-	}
-	enc, err := kernel.NewGroupKeyEncoder(s.op(), keyCols)
-	if err != nil {
-		return nil, nil, err
-	}
-	ids := make(map[string]int, 16)
-	var buckets [][]int32
-	var reps []int32
-	for i := range all.Rows() {
-		k := enc.Encode(i)
-		id, seen := ids[string(k)]
-		if !seen {
-			id = len(buckets)
-			ids[string(k)] = id
-			buckets = append(buckets, nil)
-			reps = append(reps, int32(i))
-		}
-		buckets[id] = append(buckets[id], int32(i))
-	}
-	return buckets, reps, nil
 }
 
 func (s *temporalSink) keyColumns(ctx context.Context, all *data.Batch) ([]*data.Column, error) {
@@ -352,28 +136,6 @@ func (s *temporalSink) keyColumns(ctx context.Context, all *data.Batch) ([]*data
 		out[i] = c
 	}
 	return out, nil
-}
-
-// window is one output row: the index value it is labelled with, and the half-open
-// range of positions WITHIN ITS BUCKET that fall in it.
-type window struct {
-	start, end int64 // the window's bounds, as ticks of the index
-	lo, hi     int
-}
-
-// windows generates the window list for one bucket.
-func (s *temporalSink) windows(rows []int32) ([]window, error) {
-	if len(rows) == 0 {
-		return nil, nil
-	}
-	bts := make([]int64, len(rows))
-	for i, r := range rows {
-		bts[i] = s.ticks[r]
-	}
-	if s.rolling {
-		return s.rollingWindows(bts)
-	}
-	return s.gridWindows(bts)
 }
 
 // gridStart is where the grid begins, as StartBy says: Every's own grid plus Offset,
@@ -394,108 +156,6 @@ func (s *temporalSink) gridStart(first time.Time) (time.Time, error) {
 	}
 	return s.offset.AddTo(start), nil
 }
-
-// gridWindows walks offset + k*every from the first row to the last.
-//
-// The grid is generated by REPEATED ADDITION rather than by multiplying the interval
-// by k, because a calendar interval does not multiply: three months added one at a
-// time from January 31st clamps at each step, and 3*1mo has no meaning that agrees
-// with it.
-func (s *temporalSink) gridWindows(bts []int64) ([]window, error) {
-	first, err := s.toTime(bts[0])
-	if err != nil {
-		return nil, err
-	}
-	last := bts[len(bts)-1]
-
-	start, err := s.gridStart(first)
-	if err != nil {
-		return nil, err
-	}
-	back := s.every.Neg()
-	// A positive offset can push the first window past the first row, which would
-	// leave early rows in no window at all. Step back until it does not.
-	//
-	// The bound is the same one the forward walk uses, because it is the same
-	// quantity: how many grid points this query is asking for. It used to be 4096,
-	// which is not a number anything derives — Every("1s") with Offset("2h") needs
-	// 7200 steps and is an ordinary request, so 4096 stopped early and left the
-	// invariant this loop exists to establish quietly broken. Exhausting it is a
-	// REFUSAL now, not a shrug.
-	for steps := 0; start.After(first); steps++ {
-		if steps >= s.maxWindows() {
-			return nil, s.gridTooLarge("stepping back from the offset to the first row")
-		}
-		prev := start
-		if start = back.AddTo(start); !start.Before(prev) {
-			return nil, s.gridAtTheEdge(prev)
-		}
-	}
-	// And when the LOWER end is open, a row sitting exactly on the first boundary is
-	// in no window either — the grid has to reach one step further back to catch it.
-	// This is the only place the boundary convention changes the grid rather than the
-	// range search, and forgetting it silently drops the first row of every
-	// closed-right query.
-	if s.closed.LowerOpen() {
-		start = back.AddTo(start)
-	}
-
-	// How many windows this will be, before building any of them.
-	//
-	// Only for a FIXED interval, where the count is a division: a calendar every
-	// cannot be divided into a tick range, and cannot reach the ceiling anyway
-	// without a span of millennia. Without this the ceiling would still be honest
-	// but expensive to reach — it would build sixteen million windows and then
-	// refuse, which is 384 MiB spent to say no.
-	if first, err := s.fromTime(start); err == nil {
-		if want, ok := s.gridPointsBetween(first, last); ok && want > int64(s.maxWindows()) {
-			return nil, s.gridTooLarge("walking from the first row to the last")
-		}
-	}
-
-	var out []window
-	accounted := int64(0)
-	for {
-		lo, err := s.fromTime(start)
-		if err != nil {
-			return nil, err
-		}
-		if lo > last {
-			break
-		}
-		if len(out) >= s.maxWindows() {
-			return nil, s.gridTooLarge("walking from the first row to the last")
-		}
-		hi, err := s.fromTime(s.period.AddTo(start))
-		if err != nil {
-			return nil, err
-		}
-		l, h := s.rangeOf(bts, lo, hi)
-		out = append(out, window{start: lo, end: hi, lo: l, hi: h})
-
-		// Account the grid as it grows, on capacity rather than length, which is the
-		// stateBytes shape windowSink uses: append grows geometrically, so this is a
-		// handful of retains over the whole walk rather than one per window.
-		if grown := int64(cap(out)) * windowBytes; grown != accounted {
-			s.mem.RetainBytes(grown - accounted)
-			accounted = grown
-			if err := s.mem.Check(); err != nil {
-				return nil, err
-			}
-		}
-
-		next := s.every.AddTo(start)
-		if !next.After(start) {
-			return nil, s.gridAtTheEdge(start)
-		}
-		start = next
-	}
-	s.gridPoints += len(out)
-	return out, nil
-}
-
-// windowBytes is one grid point: {int64, int, int} on a 64-bit word.
-const windowBytes = 24
 
 // defaultMaxWindows bounds a grid when no memory limit is set.
 //
@@ -581,55 +241,6 @@ func (s *temporalSink) gridAtTheEdge(at time.Time) error {
 }
 
 // rollingWindows gives every row a window ending at its own instant.
-func (s *temporalSink) rollingWindows(bts []int64) ([]window, error) {
-	back := s.period.Neg()
-	out := make([]window, len(bts))
-	for i, t := range bts {
-		end, err := s.toTime(t)
-		if err != nil {
-			return nil, err
-		}
-		if !s.offset.IsZero() {
-			end = s.offset.AddTo(end)
-		}
-		hi, err := s.fromTime(end)
-		if err != nil {
-			return nil, err
-		}
-		lo, err := s.fromTime(back.AddTo(end))
-		if err != nil {
-			return nil, err
-		}
-		l, h := s.rangeOf(bts, lo, hi)
-		out[i] = window{start: t, end: hi, lo: l, hi: h}
-	}
-	return out, nil
-}
-
-// rangeOf is the half-open position range of a window, by binary search.
-//
-// Closed picks which end is strict. This is the ONLY place the four boundary
-// conventions are interpreted, so a window's membership rule cannot disagree with
-// itself between the two generators.
-func (s *temporalSink) rangeOf(bts []int64, lo, hi int64) (int, int) {
-	l := sort.Search(len(bts), func(i int) bool {
-		if s.closed.LowerOpen() {
-			return bts[i] > lo
-		}
-		return bts[i] >= lo
-	})
-	h := sort.Search(len(bts), func(i int) bool {
-		if s.closed.UpperClosed() {
-			return bts[i] > hi
-		}
-		return bts[i] >= hi
-	})
-	if h < l {
-		h = l
-	}
-	return l, h
-}
-
 func (s *temporalSink) toTime(tick int64) (time.Time, error) {
 	v, ok := s.idxType.ToTime(tick)
 	if !ok {
@@ -657,33 +268,6 @@ func (s *temporalSink) fromTime(t time.Time) (int64, error) {
 				".Cast(ursus.Datetime(ursus.Micro, \"\"))")
 	}
 	return v, nil
-}
-
-// accumulate feeds the expanded (row, group) pairs to the ordinary accumulators.
-func (s *temporalSink) accumulate(ctx context.Context, all *data.Batch,
-	rows, groups []int32, nGroups int,
-) error {
-	if len(rows) == 0 {
-		for i := range s.accs {
-			s.accs[i].Reserve(nGroups)
-		}
-		return nil
-	}
-	src, err := takeBatch(s.inSchema, all, rows)
-	if err != nil {
-		return err
-	}
-	for i, spec := range s.specs {
-		col, err := evalColumn(ctx, spec.input, src)
-		if err != nil {
-			return err
-		}
-		s.accs[i].Reserve(nGroups)
-		if err := s.accs[i].AddBatch(groups, col); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // temporalTicks reads a temporal column's storage as int64 ticks, whatever its
@@ -817,6 +401,9 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 		mem:     opts.Budget.Account(opName(t.Rolling)),
 		batch:   opts.batchSize(),
 		sorted:  true,
+	}
+	if sink.keyOnly, err = keyOnlySchema(keySchema); err != nil {
+		return nil, err
 	}
 
 	op := Operator(&breaker{child: child, sink: sink})

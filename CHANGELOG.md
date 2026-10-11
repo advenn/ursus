@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.1
 
-Everything on master since `v0.6.0`: steps 191–195, so far.
+Everything on master since `v0.6.0`: steps 191–196, so far.
 [`v0.6.1-scope.md`](./context_files/v0.6.1-scope.md) set the scope: **speed where the
 profile points, and out-of-core.** Each step is timed against v0.6.0's code,
 alternated in one session.
@@ -43,6 +43,11 @@ alternated in one session.
   a by-key's next one. Over a 300,000-row right side every strategy peaks under
   1 MiB, where forward held the right side twice. A left by-key the right side lacks
   still reads that side to its end, and is charged for it.
+- **`GroupByDynamic` and `Rolling` stream their input** (196), where they buffered it
+  whole: each row is given to its windows as it arrives, and a rolling group keeps
+  only the rows a window yet to come reaches. Over 300,000 rows, a dynamic group's
+  peak falls from 7.5 MB to 0.4 MB. A rolling group's answer is a row an input row,
+  and it now holds that rather than its input as well: 10 MB from 17 MB.
 - **A cross join spills** (195). Past its limit its build side goes to disk whole,
   and each probe row reads it back, in the in-memory order. It refused before, and
   so did `JoinWhere`, a cross join under a filter. A join with no keys and a residual,
