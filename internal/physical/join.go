@@ -191,6 +191,7 @@ type joinTable struct {
 // A partitioned build of one integer key leaves joinTable.ints instead (step 159).
 type joinKeys interface {
 	GetMany(keys [][]byte, ids []int32, found []bool)
+	NBytes() int64
 }
 
 // --- the spec -------------------------------------------------------------------
@@ -732,9 +733,13 @@ func (s *joinBuildSink) freeze(ctx context.Context) (*joinTable, error) {
 	// are 8 to 12 — so the account was under-reporting by more than half, in the
 	// operator budget.go cites as its motivating example for RetainBytes existing.
 	s.tableBytes = int64(cap(t.off))*4 + int64(cap(t.rows))*4 + int64(cap(t.rowKey))*4
-	if t.ints != nil && t.ints.Index() {
-		// Dense integer keys: the probe finds them by index (step 203), charged here.
-		s.tableBytes += t.ints.IndexBytes()
+	// And the keys the probe looks up: hash tables, a direct index (step 203), or a
+	// dense build's index alone (step 204). The rebase dropped their charge, and the
+	// probe holds them to its end.
+	if t.ints != nil {
+		s.tableBytes += t.ints.NBytes()
+	} else if t.ids != nil {
+		s.tableBytes += t.ids.NBytes()
 	}
 	s.mem.RetainBytes(s.tableBytes)
 	s.rowKey, s.counts = nil, nil

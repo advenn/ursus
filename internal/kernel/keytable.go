@@ -366,13 +366,16 @@ func pushDoubling[T any](s []T, v T) []T {
 	return append(s, v)
 }
 
-// NBytes is what this table holds, EXACTLY.
+// NBytes is what this table holds, EXACTLY, and 0 for nil.
 //
 // The map it replaced could not answer this — join.go carried a 48-bytes-per-key
 // estimate covering a string header, a value, a tophash byte and Go's load-factor
 // slack, and said so. A memory limit is enforced against this number, so an
 // estimate spills too early or too late; four slices can simply be measured.
 func (t *KeyTable) NBytes() int64 {
+	if t == nil {
+		return 0
+	}
 	return int64(cap(t.slots))*8 +
 		int64(cap(t.hashes))*8 +
 		int64(cap(t.refs))*8 +

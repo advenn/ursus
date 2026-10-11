@@ -568,3 +568,51 @@ func TestMergedDeferredSemiSinksKeepBothKeys(t *testing.T) {
 		t.Fatalf("the merged sink built %d keys, the build side has %d", got, want)
 	}
 }
+
+// TestADenseBuildHoldsOneIndexAndNoTables: a deferred build of dense integer keys
+// fills a direct index in one pass and builds no hash tables (step 204), which no
+// answer shows. Keys over 1.5 million values, past the index's flat allowance, fit
+// only by their count, gathered from every batch; moved 2^40 up, they fit by their
+// own range, not one stretched to zero; spread 2^33 apart, they hash.
+func TestADenseBuildHoldsOneIndexAndNoTables(t *testing.T) {
+	opts := Options{Threads: 4, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
+	lit := func(v int64) expr.Node { return &expr.Lit{Value: v, DT: dtype.Int64} }
+	cases := []struct {
+		name  string
+		key   func(col string) expr.Node
+		dense bool
+	}{
+		{"from 0", func(col string) expr.Node { return &expr.Col{Name: col} }, true},
+		{"from 2^40", func(col string) expr.Node {
+			return &expr.Binary{Op: expr.OpAdd, L: &expr.Col{Name: col}, R: lit(1 << 40)}
+		}, true},
+		{"2^33 apart", func(col string) expr.Node {
+			return &expr.Binary{Op: expr.OpMul, L: &expr.Col{Name: col}, R: lit(1 << 33)}
+		}, false},
+	}
+	for _, c := range cases {
+		rng := rand.New(rand.NewPCG(204, 1))
+		right := sideScan(t, rng, "k2", "r", 500_000, 1_500_000, 40)
+		j := &plan.Join{
+			Left:    sideScan(t, rng, "k", "l", 2_000, 1_500_000, 40),
+			Right:   right,
+			LeftOn:  []expr.Node{c.key("k")},
+			RightOn: []expr.Node{c.key("k2")},
+			Kind:    plan.JoinSemi,
+		}
+		_, sink, keys, err := runJoin(t, j, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !sink.deferred {
+			t.Fatalf("%s: the build did not defer", c.name)
+		}
+		parts, ok := keys.(*kernel.IntKeyParts)
+		if !ok {
+			t.Fatalf("%s: the probe read a %T", c.name, keys)
+		}
+		if dense := parts.Tables() == 1 && parts.Index(); dense != c.dense {
+			t.Errorf("%s: %d tables, an index %v", c.name, parts.Tables(), parts.Index())
+		}
+	}
+}

@@ -225,7 +225,8 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 	nRows := starts[len(batches)]
 	part := make([]uint8, nRows)
 	keyCols := make([][]*data.Column, len(batches))
-	keyInts := make([][]int64, len(batches)) // an intKeyed join's keys, by batch
+	keyInts := make([][]int64, len(batches))    // an intKeyed join's keys, by batch
+	keyStat := make([]intKeyStat, len(batches)) // and their range, for buildDense
 	// inPart[bi][p] are batch bi's rows in partition p, ascending, so a partition's
 	// goroutine visits its own rows alone: scanning every row's partition, once a
 	// partition, was a ninth of q4's CPU at eight (step 161).
@@ -250,7 +251,8 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 		return out
 	}
 
-	// 1. Each batch's keys, evaluated, hashed and routed.
+	// 1. Each batch's keys, evaluated, hashed and routed. An intKeyed join's are only
+	// gathered, with their range, and routed below unless they are dense.
 	err := eachConcurrently(len(batches), nParts, func(bi int) error {
 		b := batches[bi]
 		cols := b.Columns()
@@ -261,29 +263,30 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 			}
 		}
 		ok := keyValidity(cols)
-		counts := make([]int, nParts)
-		route := func(i int, h uint64) {
-			p := kernel.PartitionOf(h, nParts)
-			part[starts[bi]+i] = uint8(p)
-			counts[p]++
-		}
 		if ints {
 			var scratch []int64
 			v := kernel.IntKeys(cols[0], &scratch)
+			st := &keyStat[bi]
 			for i := range b.Rows() {
 				if !ok.Get(i) {
 					part[starts[bi]+i] = noPart
 					continue
 				}
-				route(i, kernel.IntHash(v[i]))
+				if k := v[i]; st.n == 0 {
+					st.lo, st.hi = k, k
+				} else {
+					st.lo, st.hi = min(st.lo, k), max(st.hi, k)
+				}
+				st.n++
 			}
-			keyInts[bi], inPart[bi] = v, byPart(bi, counts)
+			keyInts[bi] = v
 			return nil
 		}
 		enc, err := kernel.NewGroupKeyEncoder("join", cols)
 		if err != nil {
 			return err
 		}
+		counts := make([]int, nParts)
 		var key []byte
 		for i := range b.Rows() {
 			if !s.spec.nullsEqual && !ok.Get(i) {
@@ -291,13 +294,55 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 				continue
 			}
 			key = enc.AppendKey(key[:0], i)
-			route(i, kernel.KeyHash(key))
+			p := kernel.PartitionOf(kernel.KeyHash(key), nParts)
+			part[starts[bi]+i] = uint8(p)
+			counts[p]++
 		}
 		keyCols[bi], inPart[bi] = cols, byPart(bi, counts)
 		return nil
 	})
 	if err != nil {
 		return builtKeys{}, err
+	}
+
+	// Integer keys are routed now, once their range is known. Dense ones go to a
+	// partition by their place in the range, a shift where others hash, and skip the
+	// tables (step 204).
+	if ints {
+		var all intKeyStat
+		for _, st := range keyStat {
+			all = all.merge(st)
+		}
+		dense := kernel.DenseIndexFits(all.lo, all.hi, all.n)
+		var shift uint // a dense key's partition is its place in the range >> shift
+		for dense && (uint64(all.hi)-uint64(all.lo))>>shift >= uint64(nParts) {
+			shift++
+		}
+		err := eachConcurrently(len(batches), nParts, func(bi int) error {
+			counts := make([]int, nParts)
+			v, at := keyInts[bi], part[starts[bi]:starts[bi+1]]
+			for i := range at {
+				if at[i] == noPart {
+					continue
+				}
+				var p int
+				if dense {
+					p = int((uint64(v[i]) - uint64(all.lo)) >> shift)
+				} else {
+					p = kernel.PartitionOf(kernel.IntHash(v[i]), nParts)
+				}
+				at[i] = uint8(p)
+				counts[p]++
+			}
+			inPart[bi] = byPart(bi, counts)
+			return nil
+		})
+		if err != nil {
+			return builtKeys{}, err
+		}
+		if dense {
+			return s.buildDense(batches, keyInts, inPart, starts, all, nParts, shift)
+		}
 	}
 
 	// 2. Each partition's keys, in row order, into its own table. Every row is
@@ -432,6 +477,135 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 		}
 	}
 	return keys, nil
+}
+
+// intKeyStat is a batch's valid integer keys: how many, and their range.
+type intKeyStat struct {
+	lo, hi int64
+	n      int
+}
+
+func (a intKeyStat) merge(b intKeyStat) intKeyStat {
+	switch {
+	case b.n == 0:
+		return a
+	case a.n == 0:
+		return b
+	}
+	return intKeyStat{lo: min(a.lo, b.lo), hi: max(a.hi, b.hi), n: a.n + b.n}
+}
+
+// buildDense is buildPartitioned's steps 2 and 3 for integer keys dense enough for a
+// direct index (step 204). Partition p's keys are a run of the range, slots p<<shift
+// on, so its goroutine fills that run of the index alone, in row order, each key's id
+// found or made by subtraction, where the partitioned build hashed and probed every
+// row into its partition's table, q21's 19%. Then each partition's ids move past the
+// partitions' before it, in the index and in rowKey, as step 3 numbers the tables.
+func (s *joinBuildSink) buildDense(batches []*data.Batch, keyInts [][]int64, inPart [][][]int32,
+	starts []int, st intKeyStat, nParts int, shift uint) (builtKeys, error) {
+	index := make([]int32, uint64(st.hi)-uint64(st.lo)+1)
+	slots := func(p int) []int32 {
+		return index[min(p<<shift, len(index)):min((p+1)<<shift, len(index))]
+	}
+	track := s.spec.tracksRows()
+	if track {
+		s.rowKey = kernel.Extend(s.rowKey[:0], starts[len(batches)], noKey)
+	}
+	keys := make([][]int64, nParts)
+	counts := make([][]int32, nParts)
+	dup := make([]int, nParts)
+	err := eachConcurrently(nParts, nParts, func(p int) error {
+		mine := slots(p)
+		for i := range mine {
+			mine[i] = -1
+		}
+		var (
+			ks  []int64
+			cnt []int32
+		)
+		dup[p] = -1
+		for bi := range batches {
+			v := keyInts[bi]
+			for _, r := range inPart[bi][p] {
+				g := starts[bi] + int(r)
+				d := uint64(v[r]) - uint64(st.lo)
+				id := index[d]
+				if id < 0 {
+					id = int32(len(ks))
+					index[d] = id
+					ks = append(ks, v[r])
+					if track {
+						cnt = append(cnt, 1)
+					}
+				} else {
+					if dup[p] < 0 {
+						dup[p] = g
+					}
+					if track {
+						cnt[id]++
+					}
+				}
+				if track {
+					s.rowKey[g] = id
+				}
+			}
+		}
+		keys[p], counts[p] = ks, cnt
+		return nil
+	})
+	if err != nil {
+		return builtKeys{}, err
+	}
+	if s.spec.validate.RequiresRightUnique() {
+		first := -1
+		for _, d := range dup {
+			if d >= 0 && (first < 0 || d < first) {
+				first = d
+			}
+		}
+		if first >= 0 {
+			return builtKeys{}, duplicateKeyErr(s.spec.validate, "right", s.right, s.keys, first)
+		}
+	}
+
+	base := make([]int32, nParts+1)
+	for p, ks := range keys {
+		base[p+1] = base[p] + int32(len(ks))
+	}
+	all := make([]int64, 0, base[nParts])
+	for _, ks := range keys {
+		all = append(all, ks...)
+	}
+	if track {
+		s.counts = s.counts[:0]
+		for _, c := range counts {
+			s.counts = append(s.counts, c...)
+		}
+	}
+	err = eachConcurrently(nParts, nParts, func(p int) error {
+		b := base[p]
+		if b == 0 {
+			return nil
+		}
+		mine := slots(p)
+		for i, id := range mine {
+			if id >= 0 {
+				mine[i] = id + b
+			}
+		}
+		if track {
+			for bi := range batches {
+				for _, r := range inPart[bi][p] {
+					s.rowKey[starts[bi]+int(r)] += b
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return builtKeys{}, err
+	}
+	return builtKeys{ints: kernel.NewDenseIntKeyParts(all, index, st.lo)}, nil
 }
 
 // eachConcurrently runs fn(0) to fn(n-1) on up to workers goroutines, and returns

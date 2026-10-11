@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.2
 
-Everything on master since step 200, v0.6.1's candidate: steps 201–203, so far.
+Everything on master since step 200, v0.6.1's candidate: steps 201–204, so far.
 [`v0.6.2-scope.md`](./context_files/v0.6.2-scope.md) set the scope: **speed and
 out-of-core, continued.** Each step is timed against 0.6.1's code, alternated in one
 session.
@@ -30,6 +30,16 @@ session.
 - **A join finds a dense integer key by index** (203): a slot for each value in the
   build keys' range, holding its id, where the probe hashed every row. q17 takes 12%
   less CPU, q3 and q7 4% less.
+- **A join's dense build skips the hash tables** (204). A deferred build whose
+  integer keys are dense routes them by their place in the range, and fills that
+  index directly, in parallel; it hashed every row into partitioned tables. q21
+  takes 18% less CPU and 13% less time, q4 20% and 11%.
+
+### Fixed
+
+- **A join's key tables are on the memory ledger while it probes** (204). The
+  account was rebased at the end of the build without them, so a join probing
+  200,000 keys under-reported by 6 to 10 MB.
 
 ---
 

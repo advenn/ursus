@@ -324,9 +324,9 @@ func (k *IntKeyParts) Base(p int) int32         { return k.base[p] }
 func (k *IntKeyParts) Tables() int              { return len(k.tables) }
 func (k *IntKeyParts) Table(p int) *IntKeyTable { return k.tables[p] }
 
-// NBytes is what every table holds.
+// NBytes is what every table holds, and the direct index if there is one.
 func (k *IntKeyParts) NBytes() int64 {
-	var n int64
+	n := k.IndexBytes()
 	for _, t := range k.tables {
 		n += t.NBytes()
 	}
@@ -351,6 +351,27 @@ func (k *IntKeyParts) Index() bool {
 	return k.index != nil
 }
 
+// NewDenseIntKeyParts is the keys of a dense build (step 204): keys[id] is id's key,
+// and index[key - lo] its id or -1. It holds no hash table, and finds every key by
+// the index.
+func NewDenseIntKeyParts(keys []int64, index []int32, lo int64) *IntKeyParts {
+	k := &IntKeyParts{
+		tables: []*IntKeyTable{{keys: keys, null: -1}},
+		base:   []int32{0},
+		n:      len(keys),
+		index:  index, indexLo: lo,
+	}
+	k.indexOnce.Do(func() {}) // the index is built
+	return k
+}
+
+// DenseIndexFits reports whether keys spanning lo to hi, n of them, are dense enough
+// for a direct index, by Index's rule.
+func DenseIndexFits(lo, hi int64, n int) bool {
+	span := uint64(hi) - uint64(lo) + 1
+	return n > 0 && span != 0 && (span/maxIndexPerKey <= uint64(n) || span <= maxIndexAnyway)
+}
+
 // IndexBytes is what the direct index holds, or 0.
 func (k *IntKeyParts) IndexBytes() int64 { return int64(cap(k.index)) * 4 }
 
@@ -373,11 +394,10 @@ func intKeyIndex(tables []*IntKeyTable, base []int32) ([]int32, int64) {
 	if n == 0 {
 		return nil, 0
 	}
-	span := uint64(hi) - uint64(lo) + 1
-	if span == 0 || (span/maxIndexPerKey > uint64(n) && span > maxIndexAnyway) {
+	if !DenseIndexFits(lo, hi, n) {
 		return nil, 0
 	}
-	index := make([]int32, span)
+	index := make([]int32, uint64(hi)-uint64(lo)+1)
 	for i := range index {
 		index[i] = -1
 	}

@@ -442,9 +442,12 @@ func TestJoinAccountsItsHashTable(t *testing.T) {
 		left := memFrame(t, n, 512, n)
 		right := memFrame(t, n, 512, n)
 
+		// Keys 2^33 apart, past a direct index, so several threads build hash tables;
+		// TestADenseJoinAccountsItsIndex has the dense keys (step 204).
+		spread := ursus.Col("k").Mul(int64(1) << 33)
 		var stats ursus.MemoryStats
-		df, err := ursus.Scan(left).Select(ursus.Col("k")).
-			Join(ursus.Scan(right).Select(ursus.Col("k").Alias("k2"), ursus.Col("seq")),
+		df, err := ursus.Scan(left).Select(spread.Alias("k")).
+			Join(ursus.Scan(right).Select(spread.Alias("k2"), ursus.Col("seq")),
 				ursus.JoinLeftOn(ursus.Col("k")), ursus.JoinRightOn(ursus.Col("k2"))).
 			Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithMemoryStats(&stats),
 				ursus.WithThreads(c.threads))
@@ -760,5 +763,67 @@ func TestMemoryLimitIsNotASemanticKnob(t *testing.T) {
 				t.Errorf("spilled %d times; bounded = %v", spilled, sh.bounded)
 			}
 		})
+	}
+}
+
+// TestADenseJoinAccountsItsIndex: a build of dense integer keys holds a direct index
+// and its keys in place of hash tables (step 204), and both are on the ledger. Over
+// 200,000 distinct keys three apart, a slot of four bytes for each of 600,000 values
+// is 2.4 MB, beside 1.6 MB of keys. Measured, the peak is 9.84 MB charged and
+// 7.44 MB with the index left out, so the floor is set between them, at 43 bytes a
+// key.
+func TestADenseJoinAccountsItsIndex(t *testing.T) {
+	const n = 200_000
+	left := memFrame(t, n, 512, n)
+	right := memFrame(t, n, 512, n)
+	thrice := ursus.Col("k").Mul(3)
+	var stats ursus.MemoryStats
+	df, err := ursus.Scan(left).Select(thrice.Alias("k")).
+		Join(ursus.Scan(right).Select(thrice.Alias("k2"), ursus.Col("seq")),
+			ursus.JoinLeftOn(ursus.Col("k")), ursus.JoinRightOn(ursus.Col("k2"))).
+		Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithMemoryStats(&stats),
+			ursus.WithThreads(4))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if df.Height() != n {
+		t.Fatalf("joined %d rows, want %d", df.Height(), n)
+	}
+	if floor := int64(n) * 43; stats.Peak < floor {
+		t.Errorf("peak = %d, under %d: the index and the keys are not on the ledger", stats.Peak, floor)
+	}
+}
+
+// TestAJoinAccountsItsKeysWhileItProbes: freeze rebases a join's account on what its
+// probe holds, the build rows and the arrays over them, and until step 204 left out
+// the key tables the probe looks up. A Semi join keeps no build rows, so after
+// freeze its tables are all it holds, beside a Sort that buffers the probe's whole
+// output: the peak is there, and the tables must be in it. Keys 2^33 apart, so the
+// build hashes them. Measured over 200,000 keys, the peak is 23.6 MB on one thread
+// and 19.7 MB on four charged, and 13.1 MB on both not, so the floor is set between
+// them, at 80 bytes a key.
+func TestAJoinAccountsItsKeysWhileItProbes(t *testing.T) {
+	const n = 200_000
+	left := memFrame(t, n, 512, n)
+	right := memFrame(t, n, 512, n)
+	spread := ursus.Col("k").Mul(int64(1) << 33)
+	for _, threads := range []int{1, 4} {
+		var stats ursus.MemoryStats
+		df, err := ursus.Scan(left).WithColumns(spread.Alias("k")).
+			Join(ursus.Scan(right).Select(spread.Alias("k")), ursus.JoinOn(ursus.Col("k")),
+				ursus.JoinHow(ursus.JoinSemi)).
+			Sort(ursus.Asc(ursus.Col("seq"))).
+			Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithMemoryStats(&stats),
+				ursus.WithThreads(threads))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if df.Height() != n {
+			t.Fatalf("%d threads: joined %d rows, want %d", threads, df.Height(), n)
+		}
+		if floor := int64(n) * 80; stats.Peak < floor {
+			t.Errorf("%d threads: peak = %d, under %d: the probe's key tables are not on the ledger",
+				threads, stats.Peak, floor)
+		}
 	}
 }

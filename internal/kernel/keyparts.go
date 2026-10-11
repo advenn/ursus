@@ -41,8 +41,11 @@ func (k *KeyParts) Len() int { return k.n }
 // Base is the first id of table p's keys.
 func (k *KeyParts) Base(p int) int32 { return k.base[p] }
 
-// NBytes is what every table holds.
+// NBytes is what every table holds, 0 for nil.
 func (k *KeyParts) NBytes() int64 {
+	if k == nil {
+		return 0
+	}
 	var n int64
 	for _, t := range k.tables {
 		n += t.NBytes()
