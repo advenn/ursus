@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–187, so far.
+Everything on master since `v0.5.0`: steps 156–188, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -58,6 +58,10 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   it.
 - **`ArgMin` and `ArgMax` over many groups** (176): over 200,000 groups, from 7.8 s to
   0.1 s. They keep a typed key a group, as `MinBy` does, not a one-row column.
+- **The CSV reader allocates a third of what it did on several threads** (188): a
+  block's builders are sized from its counted rows, its columns take their slices,
+  and the block is scanned in place. Reading h2o's 2M-row CSV on four threads
+  allocates 315 MB, from 1,041 MB, for 255 MB of columns.
 
 ### New
 

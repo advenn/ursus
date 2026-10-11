@@ -37,8 +37,19 @@ type colBuilder interface {
 	appendNull()
 	// finish produces the column and resets the builder for the next batch.
 	finish(name string) *data.Column
+	// size readies a builder for rows values, and a String one for about chars
+	// bytes of them, so that a block whose rows are counted grows nothing.
+	size(rows, chars int)
+	// take is finish for a builder used once: the column takes the builder's
+	// slices rather than copying them, and the builder is not used again.
+	take(name string) *data.Column
 	len() int
 }
+
+// wasteful reports whether a slice of n values in an allocation of c is worth a
+// copy before a column takes it. A column holds all of what it takes, for as long
+// as the query holds the column, so more than an eighth unused is copied away.
+func wasteful(n, c int) bool { return c-n > n/8 }
 
 type fixedBuilder[T data.Fixed] struct {
 	dt    dtype.DataType
@@ -79,6 +90,18 @@ func (b *fixedBuilder[T]) finish(name string) *data.Column {
 	return c
 }
 
+func (b *fixedBuilder[T]) size(rows, _ int) {
+	b.vals = make([]T, 0, rows)
+	b.valid = bitmap.NewBuilder(rows)
+}
+
+func (b *fixedBuilder[T]) take(name string) *data.Column {
+	if wasteful(len(b.vals), cap(b.vals)) {
+		return data.NewFixed(name, b.dt, b.vals, b.valid.Finish())
+	}
+	return data.NewFixedOwned(name, b.dt, b.vals, b.valid.Finish())
+}
+
 // boolBuilder is separate because Bool is stored as a bitmap, not a values
 // buffer — it is the one type outside data.Fixed.
 type boolBuilder struct {
@@ -113,6 +136,13 @@ func (b *boolBuilder) finish(name string) *data.Column {
 	b.n = 0
 	return c
 }
+
+func (b *boolBuilder) size(rows, _ int) {
+	b.vals, b.valid = bitmap.NewBuilder(rows), bitmap.NewBuilder(rows)
+}
+
+// take is finish: a bitmap's Finish already hands its bytes over.
+func (b *boolBuilder) take(name string) *data.Column { return b.finish(name) }
 
 // stringBuilder accumulates Arrow's string layout directly: one offsets slice and
 // one character buffer.
@@ -167,6 +197,26 @@ func (b *stringBuilder) finish(name string) *data.Column {
 	b.chars = b.chars[:0]
 	b.valid = bitmap.NewBuilder(0)
 	return c
+}
+
+func (b *stringBuilder) size(rows, chars int) {
+	b.offs = make([]int32, 1, rows+1)
+	b.chars = make([]byte, 0, chars)
+	b.valid = bitmap.NewBuilder(rows)
+}
+
+// take hands both buffers over. The characters are sized by an estimate, so the
+// slice is copied first when the estimate was well over, or append grew it well
+// past them.
+func (b *stringBuilder) take(name string) *data.Column {
+	offs, chars := b.offs, b.chars
+	if wasteful(len(offs), cap(offs)) {
+		offs = append(make([]int32, 0, len(offs)), offs...)
+	}
+	if wasteful(len(chars), cap(chars)) {
+		chars = append(make([]byte, 0, len(chars)), chars...)
+	}
+	return data.NewStringOwned(name, offs, chars, b.valid.Finish())
 }
 
 // newBuilder returns a builder for dt, or an error naming the type if CSV cannot

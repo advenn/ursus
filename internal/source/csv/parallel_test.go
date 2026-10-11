@@ -220,6 +220,41 @@ func TestParallelReadsAsSerialDoes(t *testing.T) {
 	}, projected)
 }
 
+// TestParallelMeasuresARecordAsSerialDoes: a record at MaxRecordSize, either side
+// of it, with its line end and without, in the middle of the input and at its end.
+// A block's scanner reads the block in place since step 188, with no buffer for the
+// limit to bound, so it measures each record; the serial scanner's buffer fits a
+// record and its line end, and a last record without one only if a byte is left.
+func TestParallelMeasuresARecordAsSerialDoes(t *testing.T) {
+	o := DefaultOptions()
+	o.Schema = allStrings("a", "b")
+	o.MaxRecordSize = 64
+	for _, n := range []int{62, 63, 64, 65} {
+		// "1," and the field: n bytes with the line end, n-1 without.
+		rec := "1," + strings.Repeat("z", n-3)
+		sameBothWays(t, fmt.Sprintf("%d bytes, mid-input", n), []Opener{
+			textOpener("a,b\n2,y\n" + rec + "\n3,x\n"),
+		}, o)
+		sameBothWays(t, fmt.Sprintf("%d bytes, last, with its line end", n), []Opener{
+			textOpener("a,b\n2,y\n" + rec + "\n"),
+		}, o)
+		sameBothWays(t, fmt.Sprintf("%d bytes, last, without", n-1), []Opener{
+			textOpener("a,b\n2,y\n" + rec),
+		}, o)
+		sameBothWays(t, fmt.Sprintf("%d bytes, ending CRLF", n+1), []Opener{
+			textOpener("a,b\r\n2,y\r\n" + rec + "\r\n3,x\r\n"),
+		}, o)
+		// And the limit itself, which the comparison cannot see if both paths move
+		// it: 64 bytes with the line end are read, and 65 refused.
+		for _, text := range []string{"a,b\n2,y\n" + rec + "\n3,x\n", "a,b\n2,y\n" + rec} {
+			_, err := readAllRows(t, NewMulti([]Opener{textOpener(text)}, "limit", o), 4)
+			if (err != nil) != (n > 64) {
+				t.Errorf("a %d-byte record: error %v", n, err)
+			}
+		}
+	}
+}
+
 // TestParallelErrorsAsSerialDoes: an input the serial path refuses is refused the
 // same way, naming the same row and line, wherever the blocks fall.
 func TestParallelErrorsAsSerialDoes(t *testing.T) {

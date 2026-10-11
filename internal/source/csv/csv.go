@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
@@ -232,6 +233,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		isNull:    s.nullTest(),
 		stage:     make([]colStage, out.Len()),
 		threads:   spec.Threads,
+		textRate:  make([]atomic.Int64, out.Len()),
 	}
 	if err := r.openNext(ctx); err != nil {
 		// openNext may have opened the stream before failing on its header. The
@@ -294,6 +296,10 @@ type reader struct {
 	inflight sync.WaitGroup // their goroutines, which Close waits for
 	splitEnd bool           // the splitter has no more blocks for this stream
 	splitErr error          // reading failed; delivered after the window drains
+	// textRate is, by output position, 1 plus the bytes 64 rows of a String column
+	// held in the last block parsed, or 0 before any; textHint sizes a block's
+	// builders by it.
+	textRate []atomic.Int64
 	// failed is the error the reader has stopped on, delivered after what is ready.
 	failed error
 

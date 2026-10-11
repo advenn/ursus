@@ -131,3 +131,120 @@ func TestReadingAllocatesAboutWhatItProduces(t *testing.T) {
 		}
 	}
 }
+
+// TestABlockAllocatesWhatItHolds: the parallel path's blocks, parsed one after
+// another, against the bytes of the columns they produce. Before step 188 a block's
+// builders were fresh, grew by append, about a quarter at a time once large, and
+// were copied out by NewFixed and NewStringParts: reading h2o's 2M-row CSV on four
+// threads allocated 1,041 MB to produce 251 MB. A block's rows are counted before
+// it is parsed, so its builders are now sized once and its columns take them.
+//
+// TestReadingAllocatesAboutWhatItProduces reads past the first window of blocks
+// before it measures, and a small file is parsed by then, so it never saw this.
+//
+// Two String columns change width halfway, one from 20 bytes to 1 and one the
+// other way, so the blocks there are sized from a block of the other width: the
+// one too large is copied to its size, and the one too small grows.
+func TestABlockAllocatesWhatItHolds(t *testing.T) {
+	const rows = 100_000
+	var sb strings.Builder
+	sb.WriteString("id,v,b,s,w,u\n")
+	wide := strings.Repeat("x", 20)
+	for i := range rows {
+		w, u := wide, "y"
+		if i >= rows/2 {
+			w, u = u, w
+		}
+		fmt.Fprintf(&sb, "%d,%d.5,%t,k%d,%s,%s\n", i, i%977, i%3 == 0, i%1000, w, u)
+	}
+	path := filepath.Join(t.TempDir(), "t.csv")
+	if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defer func(size int) { splitBlockSize = size }(splitBlockSize)
+	splitBlockSize = 256 << 10
+
+	bs, err := FromFile(path, DefaultOptions()).Open(t.Context(), source.ScanSpec{Threads: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bs.Close()
+	r := bs.(*reader)
+	var allocated, held, ideal int64
+	n, blocks := 0, 0
+	for {
+		blk, ok, err := r.split.next()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			break
+		}
+		blk.wanted, blk.part = r.wanted, r.src.partName(r.next-1)
+		runtime.GC()
+		before := allocatedBytes()
+		b, err := r.parseBlock(blk)
+		allocated += int64(allocatedBytes() - before)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if b.Rows() != blk.rows {
+			t.Fatalf("block %d: %d rows parsed, %d counted", blocks, b.Rows(), blk.rows)
+		}
+		for i, c := range b.Columns() {
+			// What the column needs: its values, a validity bit a row, and for a
+			// String its offsets and characters. It may hold an eighth more, and
+			// what aligns each of its buffers to 64 bytes.
+			bits := int64(b.Rows()+7) / 8
+			need := bits
+			switch i {
+			case 0, 1:
+				need += int64(b.Rows()) * 8
+			case 2:
+				need += bits
+			default:
+				ss, err := data.TypedColumn[string](c)
+				if err != nil {
+					t.Fatal(err)
+				}
+				need += int64(b.Rows()+1) * 4
+				for j := range b.Rows() {
+					s, _ := ss.Get(j)
+					need += int64(len(s))
+				}
+			}
+			if got := c.NBytes(); got > need+need/8+3*64 {
+				t.Errorf("block %d: column %s holds %d bytes, and needs %d", blocks, c.Name(), got, need)
+			}
+			held += c.NBytes()
+			ideal += need
+		}
+		ids, err := data.TypedColumn[int64](b.Column(0))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ws, err := data.TypedColumn[string](b.Column(4))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for j := range b.Rows() {
+			id, _ := ids.Get(j)
+			w, _ := ws.Get(j)
+			if want := wide; id != int64(n+j) || (id < rows/2) != (w == want) {
+				t.Fatalf("block %d row %d: id %d, w %q", blocks, j, id, w)
+			}
+		}
+		n += b.Rows()
+		blocks++
+	}
+	if n != rows || blocks < 8 {
+		t.Fatalf("%d rows in %d blocks, want %d rows in at least 8", n, blocks, rows)
+	}
+	t.Logf("%d blocks: allocated %.2f MB, the columns hold %.2f MB and need %.2f MB",
+		blocks, float64(allocated)/(1<<20), float64(held)/(1<<20), float64(ideal)/(1<<20))
+	// A block's scanner and builders allocate what its columns hold, a fifth more
+	// at most: the columns that grew past their estimate, where the width changed.
+	if allocated > held+held/5 {
+		t.Errorf("the blocks allocated %d bytes, and their columns hold %d", allocated, held)
+	}
+}

@@ -1,10 +1,10 @@
 package csv
 
 import (
-	"bytes"
 	"context"
 	"io"
 
+	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -117,14 +117,19 @@ func (r *reader) parseBlock(blk block) (*data.Batch, error) {
 	if blockStart != nil {
 		blockStart()
 	}
-	sc := newScannerFrom(bytes.NewReader(blk.data), r.src.opts)
+	sc := newScannerOver(blk.data, r.src.opts)
 	sc.width, sc.line = blk.width, blk.firstLine
+	// The splitter counted the block's rows, so each builder is sized once and its
+	// column takes its slices. Grown by append, about a quarter at a time once large,
+	// and then copied out, each value was allocated about six times: reading h2o's
+	// 2M-row CSV on four threads allocated 1,041 MB to produce 251 MB (step 188).
 	builders := make([]colBuilder, r.out.Len())
 	for i, f := range r.out.All() {
 		b, err := newBuilder(f.Type)
 		if err != nil {
 			return nil, uerr.Annotate(err, "scan_csv", r.src.desc)
 		}
+		b.size(blk.rows, r.textHint(i, blk))
 		builders[i] = b
 	}
 	row := blk.firstRow
@@ -141,7 +146,10 @@ func (r *reader) parseBlock(blk block) (*data.Batch, error) {
 	rows := row - blk.firstRow
 	cols := make([]*data.Column, r.out.Len())
 	for i, f := range r.out.All() {
-		cols[i] = builders[i].finish(f.Name)
+		if sb, ok := builders[i].(*stringBuilder); ok && rows > 0 {
+			r.textRate[i].Store(1 + int64(len(sb.chars))*64/int64(rows))
+		}
+		cols[i] = builders[i].take(f.Name)
 	}
 	if err := r.checkNonNullable(cols, rows, blk.firstRow); err != nil {
 		return nil, err
@@ -150,4 +158,18 @@ func (r *reader) parseBlock(blk block) (*data.Batch, error) {
 		return data.NewBatchRows(r.out, nil, rows), nil
 	}
 	return data.NewBatch(r.out, cols)
+}
+
+// textHint is how many bytes of text to size output column i's builder for in
+// blk: what a row of the column held in the last block parsed, or before that an
+// average field of blk's, with a sixteenth more either way.
+func (r *reader) textHint(i int, blk block) int {
+	if r.out.Field(i).Type.ID() != dtype.TypeString || blk.rows == 0 {
+		return 0
+	}
+	n := len(blk.data) / max(blk.width, 1)
+	if rate := r.textRate[i].Load(); rate > 0 {
+		n = int((rate - 1) * int64(blk.rows) / 64)
+	}
+	return n + n/16
 }

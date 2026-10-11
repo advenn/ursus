@@ -117,6 +117,28 @@ func newScannerFrom(r io.Reader, o Options) *scanner {
 	}
 }
 
+// newScannerOver is newScannerFrom for input held whole: a block of the parallel
+// path, which it scans in place. newScannerFrom read the block through a buffer of
+// its own, 64 KB a block and a second copy of its bytes (step 188). The buffer is
+// never written, since fill alone moves it and is not called at the end of input;
+// and the splitter never cuts a block holding a record over MaxRecordSize, so the
+// limit fill enforces is already met.
+func newScannerOver(data []byte, o Options) *scanner {
+	maxRec := o.MaxRecordSize
+	if maxRec <= 0 {
+		maxRec = defaultMaxRecord
+	}
+	return &scanner{
+		buf:     data,
+		end:     len(data),
+		eof:     true,
+		sep:     o.Separator,
+		quote:   o.Quote,
+		comment: o.Comment,
+		maxRec:  maxRec,
+	}
+}
+
 // Line and Record report the position of the record just returned, both 1-based.
 // They differ whenever a field contains a newline, a line is a comment, or rows
 // were skipped — which is exactly when a "line 3" in an error message would point
@@ -184,6 +206,13 @@ func (s *scanner) readRecord() (bool, error) {
 				return false, err
 			}
 			if ok {
+				// A scanner reading through a buffer never holds a record longer than
+				// the limit, which fill enforces. One over a whole block holds them
+				// all, so the record is measured: with its line end it must fit, and a
+				// last one without must leave a byte, where fill learns the input ended.
+				if n > s.maxRec || n == s.maxRec && s.buf[s.beg+n-1] != '\n' {
+					return false, s.tooLong()
+				}
 				// parse indexed into the sub-slice; shift to buffer coordinates.
 				for i := range s.fields {
 					if !s.fields[i].esc {
@@ -218,11 +247,7 @@ func (s *scanner) fill() error {
 	}
 	if s.end == len(s.buf) {
 		if len(s.buf) >= s.maxRec {
-			return uerr.New(uerr.KindValue, "scan_csv",
-				"a single record exceeds the %d-byte limit near line %d",
-				s.maxRec, s.line+1).
-				Hint("an unterminated quote makes the rest of the file one record").
-				Hint("raise it with WithMaxRecordSize if the data really is this wide")
+			return s.tooLong()
 		}
 		grown := min(len(s.buf)*2, s.maxRec)
 		next := make([]byte, grown)
@@ -244,6 +269,15 @@ func (s *scanner) fill() error {
 		s.eof = true
 	}
 	return nil
+}
+
+// tooLong is the error for a record past MaxRecordSize, from the line it starts on.
+func (s *scanner) tooLong() error {
+	return uerr.New(uerr.KindValue, "scan_csv",
+		"a single record exceeds the %d-byte limit near line %d",
+		s.maxRec, s.line+1).
+		Hint("an unterminated quote makes the rest of the file one record").
+		Hint("raise it with WithMaxRecordSize if the data really is this wide")
 }
 
 // parse reads one record from b. ok=false means b does not hold a complete record
