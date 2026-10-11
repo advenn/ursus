@@ -428,15 +428,18 @@ func (s *joinBuildSink) spilled() bool {
 // in the sub-sink holding that key alone, because only the recursion can tell
 // "this bucket did not narrow" from "this bucket is merely large".
 func (s *joinBuildSink) overBudget() error {
-	if s.split != splitNone {
+	if s.split != splitNone || s.crossW != nil {
 		return nil
+	}
+	if s.budget.Limit() > 0 && s.crossSpills() && s.mem.Over() {
+		return s.spillCross()
 	}
 	if s.budget.Limit() > 0 && len(s.keys) == 0 && s.mem.Over() {
 		return uerr.New(uerr.KindResource, "join",
-			"memory limit of %s exceeded: a cross join buffers its whole build side "+
-				"and cannot spill", execopt.Bytes(s.budget.Limit())).
-			Hint("a cross join has NO join key, and partitioning divides work across " +
-				"keys — so there is nothing to divide").
+			"memory limit of %s exceeded: a join with no keys and a residual buffers "+
+				"its whole build side and cannot spill", execopt.Bytes(s.budget.Limit())).
+			Hint("a join with NO join key has nothing to partition on; a plain cross " +
+				"join spills its build side whole, but one carrying a residual does not").
 			Hint("raise the limit with WithMemoryLimit, or add a join key")
 	}
 	return s.mem.Check()

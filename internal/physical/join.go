@@ -15,6 +15,7 @@ import (
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/spill"
 	"github.com/advenn/ursus/internal/uerr"
 )
 
@@ -337,12 +338,20 @@ type joinBuildSink struct {
 	pend     [][]int32     // scratch: this batch's rows bound for each bucket
 	keep     []int32       // scratch: this batch's rows that stay resident
 	nBuild   int           // resident build rows, which is what rowKey indexes
+
+	// A cross join past its limit writes its build side here (crossspill.go).
+	crossW    *spill.Writer
+	crossFile string
 }
 
 func (s *joinBuildSink) Schema() *dtype.Schema { return s.out }
 
 func (s *joinBuildSink) Close() error {
 	errs := []error{s.closeBuildParts()}
+	if s.crossW != nil {
+		errs = append(errs, s.crossW.Close())
+		s.crossW = nil
+	}
 	s.mem.Release()
 	// Only the level-0 sink owns the directory. joinBreaker closes `out` before the
 	// builder, so every reader the replay opened is already shut by the time this
@@ -384,10 +393,18 @@ func (s *joinBuildSink) Consume(ctx context.Context, in *data.Batch) error {
 		s.mem.Retain(in)
 		s.nBuild += n
 
+	case s.crossW != nil:
+		// A cross join past its limit: its build side goes to disk (crossspill.go).
+		if err := s.crossW.Write(in); err != nil {
+			return uerr.Wrap(err, uerr.KindIO, "join", "spilling a cross join's build side")
+		}
+		s.nBuild += n
+
 	case len(s.keys) == 0:
 		// Cross join: one key, every row in it. The same shape hashAggSink uses for
 		// a global aggregate, which puts every row in group 0 and creates group 0
-		// lazily. It never splits — see overBudget.
+		// lazily. It never splits; past its limit a pure cross join spills its build
+		// side whole instead (crossspill.go), and any other refuses (overBudget).
 		if s.ids.Len() == 0 {
 			s.ids.GetOrInsert(nil)
 			s.counts = append(s.counts, 0)
@@ -526,6 +543,9 @@ func (s *joinBuildSink) Finish(ctx context.Context) (Operator, error) {
 // choice is made once here and nothing downstream knows which it got. See
 // parallelProbe for the four conditions that force the serial one.
 func (s *joinBuildSink) Probe(ctx context.Context, probe Operator) (Operator, error) {
+	if s.crossW != nil {
+		return s.crossProbe(probe)
+	}
 	t, err := s.freeze(ctx)
 	if err != nil {
 		return nil, err

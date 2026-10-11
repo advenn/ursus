@@ -451,8 +451,9 @@ func holdsHint(op string) string {
 		// could not help — and there are exactly two ways for that to be true, both
 		// of them "there is no key space left to divide".
 		return "join holds its whole build side, and partitions it to disk when it " +
-			"does not fit; reaching this means either a CROSS join, which has no key " +
-			"to partition on, or one key with more build rows than the limit"
+			"does not fit; reaching this means either a join with no keys and a " +
+			"residual, which has no key to partition on, or one key with more build " +
+			"rows than the limit (a plain CROSS join spills its build side whole)"
 	case "group_by":
 		// group_by spills since step 12, so reaching Check at all means the freeze
 		// could not help: either the limit is too small to admit one batch's keys, or

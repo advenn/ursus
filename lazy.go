@@ -401,10 +401,13 @@ type MemoryStats struct {
 // hold state per VALUE rather than per group — so a group-by over a few very large
 // groups still fails, with an error that says which of the two situations it is in.
 //
-// The join has the same wall in two places: a CROSS join has no key at all, and one
-// join key with more build rows than the limit cannot be split however deep the
-// recursion goes. Both refuse with a message naming which it is. A window has it
-// too: one partition with more rows than the limit refuses, saying so.
+// The join has the same wall in two places: a join with no key and a residual, a
+// WhereExists of a predicate alone, has nothing to divide, and one join key with
+// more build rows than the limit cannot be split however deep the recursion goes.
+// Both refuse with a message naming which it is. A plain CROSS join has no key
+// either, and needs none: past the limit its build side goes to disk whole, and
+// each probe row reads it back. A window has the wall too: one partition with more
+// rows than the limit refuses, saying so.
 //
 // # Without it
 //

@@ -328,30 +328,39 @@ func TestJoinSpillIsDeterministic(t *testing.T) {
 	ursustest.AssertFrameEqual(t, run(), run())
 }
 
-// TestCrossJoinUnderALimitRefuses is the pair that tells the whole story: the split
-// bounds CARDINALITY, and a cross join has exactly one key to divide.
-func TestCrossJoinUnderALimitRefuses(t *testing.T) {
-	left := joinFrame(t, 4000, 128, 900, 0, false)
-	right := joinFrame(t, 4000, 128, 900, 0, false)
-
-	_, err := ursus.Scan(left).Join(ursus.Scan(right), ursus.JoinHow(ursus.JoinCross)).
-		Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
-			ursus.WithSpillDir(t.TempDir()))
-	if err == nil {
-		t.Fatal("a cross join under a 4KiB limit must refuse")
+// TestCrossJoinUnderALimitSpills: the split bounds CARDINALITY, and a cross join has
+// exactly one key to divide, so until step 195 one under a limit refused. It needs
+// no dividing: past the limit its build side goes to disk whole, and each probe row
+// reads it back, a block nested loop. Under 4 KiB a 300-by-500 cross join reaches
+// disk and answers as it does in memory, in the same order; a keyed join of the
+// same data spills by partitioning; and a join with no keys and a residual, a
+// WhereExists, still refuses.
+func TestCrossJoinUnderALimitSpills(t *testing.T) {
+	left := joinFrame(t, 300, 128, 90, 0, false)
+	right := joinFrame(t, 500, 128, 90, 0, false)
+	cross := func() *ursus.LazyFrame {
+		return ursus.Scan(left).Join(ursus.Scan(right), ursus.JoinHow(ursus.JoinCross))
 	}
-	if !errors.Is(err, uerr.ErrResource) {
-		t.Fatalf("want a resource error, got %v", err)
+	want, err := cross().Collect(t.Context(), ursus.WithBatchSize(128))
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, want := range []string{"join", "cross join", "NO join key"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("the message should say %q:\n%v", want, err)
-		}
-	}
-
-	// The same data with a KEY succeeds at the same limit, by partitioning. Without
-	// this the case above is indistinguishable from "a join cannot spill".
 	var stats ursus.MemoryStats
+	got, err := cross().Collect(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
+		ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&stats))
+	if err != nil {
+		t.Fatalf("a cross join under a 4KiB limit must spill: %v", err)
+	}
+	if stats.Spills == 0 {
+		t.Fatal("the cross join answered without spilling, so it proves nothing")
+	}
+	if got.Height() != 300*500 {
+		t.Fatalf("%d rows, want %d", got.Height(), 300*500)
+	}
+	ursustest.AssertFrameEqual(t, got, want)
+
+	// The same data with a KEY succeeds at the same limit, by partitioning.
+	stats = ursus.MemoryStats{}
 	if _, err := joinQuery(left, right, ursus.JoinInner).Count(t.Context(),
 		ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
 		ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&stats)); err != nil {
@@ -359,6 +368,21 @@ func TestCrossJoinUnderALimitRefuses(t *testing.T) {
 	}
 	if stats.Spills == 0 {
 		t.Error("the keyed join succeeded without spilling, so it proves nothing")
+	}
+
+	// A join with no keys and a residual keeps its whole build side and refuses.
+	big := joinFrame(t, 4000, 128, 900, 0, false)
+	_, err = ursus.Scan(left).WhereExists(ursus.Scan(big).Select(ursus.Col("v").Alias("bv")),
+		ursus.Col("v").Lt(ursus.Col("bv"))).
+		Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
+			ursus.WithSpillDir(t.TempDir()))
+	if !errors.Is(err, uerr.ErrResource) {
+		t.Fatalf("a residual join with no keys under a 4KiB limit: want a resource error, got %v", err)
+	}
+	for _, want := range []string{"join", "residual", "NO join key"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the message should say %q:\n%v", want, err)
+		}
 	}
 }
 

@@ -492,12 +492,14 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 			return ursus.Scan(src).GroupBy(ursus.Col("k")).
 				Agg(ursus.Col("seq").Quantile(0.5, ursus.InterpLinear))
 		}, "group_by"},
-		// A CROSS join, not a keyed one. A keyed join partitions since step 13 and
-		// succeeds here — TestCrossJoinUnderALimitRefuses asserts that pair — but a
-		// cross join has exactly one key by construction, and radix partitioning
-		// divides the key space, so there is nothing to divide.
-		{"cross_join", func() *ursus.LazyFrame {
-			return ursus.Scan(src).Join(ursus.Scan(other), ursus.JoinHow(ursus.JoinCross))
+		// A join with no keys and a residual, not a keyed one. A keyed join
+		// partitions since step 13 and succeeds here, and a plain cross join spills
+		// its build side whole since step 195 — TestCrossJoinUnderALimitSpills
+		// asserts both — but a residual over no keys has nothing to divide and must
+		// keep its build rows for the predicate to read.
+		{"keyless_residual_join", func() *ursus.LazyFrame {
+			return ursus.Scan(src).WhereExists(ursus.Scan(other).Select(ursus.Col("seq").Alias("oseq")),
+				ursus.Col("seq").Lt(ursus.Col("oseq")))
 		}, "join"},
 		// With no partition_by: a window over keys spills since step 82, and
 		// over_spills below is its entry.
