@@ -46,9 +46,9 @@ to.
 **Where it is not**
 
 - Interactive analytics over hundreds of millions of rows. Use DuckDB or Polars.
-- Anywhere you can link cgo freely: `duckdb-go` is around 3.5x faster than this on TPC-H and is a binding to a mature
+- Anywhere you can link cgo freely: `duckdb-go` is around 2x faster than this on TPC-H and is a binding to a mature
   engine.
-- Anything production-critical today. This is v0.5, the API still moves, and nothing here is promised.
+- Anything production-critical today. This is v0.6, the API still moves, and nothing here is promised.
 
 The honest summary is that Go has not had a dataframe library of this shape, and one that is correct and a few times
 slower is more useful than none — for the sizes most services actually handle.
@@ -95,8 +95,8 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 
 ## Status
 
-**v0.5** — what changed since v0.4 is in [`CHANGELOG.md`](./CHANGELOG.md), and what 0.5 set out to do,
-and did, in [`v0.5-scope.md`](./context_files/v0.5-scope.md). What works today:
+**v0.6** — what changed since v0.5 is in [`CHANGELOG.md`](./CHANGELOG.md), and what 0.6 set out to do,
+and did, in [`v0.6-scope.md`](./context_files/v0.6-scope.md). What works today:
 
 |                 |                                                                                                                                                   |
 |-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------|

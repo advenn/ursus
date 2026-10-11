@@ -15,9 +15,9 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.6.0
+## v0.6.0 — 2026-10-11
 
-Everything on master since `v0.5.0`: steps 156–189.
+Everything since `v0.5.0` (2026-10-09): steps 156–190.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it, and
