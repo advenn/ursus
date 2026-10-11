@@ -943,3 +943,48 @@ func TestAKeyedWindowStreamsItsOneHugePartition(t *testing.T) {
 		}
 	}
 }
+
+// TestASpilledWindowHoldsABatchAFile: a window that spills computes each partition
+// file in memory, then merges the files' answers on the ordinal, a written batch of
+// each at a time. A file answered in memory was one batch, so until step 210 the
+// merge held every file's answer, the input, whatever the limit. Written a
+// sixteenth of a batch at a time, the merge holds a batch across the sixteen.
+//
+// What is left is the limit and the sixteen partition writers' 8 KiB buffers:
+// measured, 276 KB under 210 KB, where the whole input is 2.1 MB.
+func TestASpilledWindowHoldsABatchAFile(t *testing.T) {
+	const chunks, rows = 80, 500
+	var frames []*ursus.LazyFrame
+	for ch := range chunks {
+		k, seq := make([]int64, rows), make([]int64, rows)
+		pad := make([]string, rows)
+		for j := range rows {
+			i := ch*rows + j
+			k[j], seq[j], pad[j] = int64(i%1000), int64(i), fmt.Sprintf("%032d", i%97)
+		}
+		frames = append(frames, ursus.Frame(ursus.Values("k", k), ursus.Values("seq", seq), ursus.Values("pad", pad)))
+	}
+	frame := ursus.Concat(frames)
+	c := ursus.Col
+	q := frame.WithColumns(c("seq").Sum().Over(c("k")).Alias("total"),
+		c("seq").CumSum(false).Over(c("k")).Alias("running"))
+	in, err := frame.Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := in.Batch().NBytes() / 10
+	want, err := q.Collect(t.Context(), ursus.WithBatchSize(500))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stats ursus.MemoryStats
+	got, err := q.Collect(t.Context(), ursus.WithBatchSize(500), ursus.WithMemoryLimit(limit),
+		ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&stats))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, got, want)
+	if ceiling := limit*5/4 + 128<<10; stats.Peak > ceiling {
+		t.Errorf("peak %d, over %d: the limit, a quarter more, and the writers' buffers", stats.Peak, ceiling)
+	}
+}

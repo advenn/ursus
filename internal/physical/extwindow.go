@@ -382,8 +382,17 @@ func (s *windowSink) runPass(ctx context.Context, exprs []expr.Node, outSch *dty
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		if err == nil {
-			err = w.Write(b)
+		// A sixteenth of a batch at a time, as the partition files are written: the
+		// merge on the ordinal holds a written batch of each of the sixteen files at
+		// once. A sink that answered in memory answers its whole file in one batch,
+		// so the merge held the input; a batch apiece, it held sixteen (step 210).
+		step := s.batch
+		if step <= 0 {
+			step = DefaultOptions().BatchSize
+		}
+		step = max(step/nParts, 1)
+		for off := 0; err == nil && off < b.Rows(); off += step {
+			err = w.Write(b.Slice(off, min(step, b.Rows()-off)))
 		}
 		if err != nil {
 			return "", errors.Join(err, w.Close())

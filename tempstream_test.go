@@ -250,31 +250,15 @@ func TestUnkeyedTemporalGroupsHandOutTheirWindows(t *testing.T) {
 	}
 
 	big := minuteSeries(200_000)
-	in, err := big.Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	tenth := in.Batch().NBytes() / 10
 	small := minuteSeries(3_000)
 	for _, tc := range cases {
-		want, err := keyed(tc.q, big).Collect(t.Context(), ursus.WithBatchSize(8192))
-		if err != nil {
-			t.Fatal(err)
+		// The large half measures the budget, not a race, and under the race
+		// detector it made the root package's run pass its ten minutes (step 210).
+		if !raceDetector {
+			measureUnkeyed(t, tc.name, tc.q(big, nil), keyed(tc.q, big), big)
 		}
-		var st ursus.MemoryStats
-		got, err := tc.q(big, nil).Collect(t.Context(), ursus.WithBatchSize(2048),
-			ursus.WithMemoryLimit(tenth), ursus.WithMemoryStats(&st))
-		if err != nil {
-			t.Fatalf("%s, under %d bytes: %v", tc.name, tenth, err)
-		}
-		ursustest.AssertFrameEqual(t, got, want)
-		if st.Peak > tenth {
-			t.Errorf("%s: a peak of %d bytes under a limit of %d", tc.name, st.Peak, tenth)
-		}
-		t.Logf("%s: a peak of %d under %d, for an answer of %d", tc.name, st.Peak, tenth, want.Batch().NBytes())
-
 		aggs = append(bounded, c("v").Implode().Alias("all"))
-		want, err = keyed(tc.q, small).Collect(t.Context(), ursus.WithBatchSize(64))
+		want, err := keyed(tc.q, small).Collect(t.Context(), ursus.WithBatchSize(64))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -286,5 +270,31 @@ func TestUnkeyedTemporalGroupsHandOutTheirWindows(t *testing.T) {
 			ursustest.AssertFrameEqual(t, got, want)
 		}
 		aggs = bounded
+	}
+}
+
+// measureUnkeyed is TestUnkeyedTemporalGroupsHandOutTheirWindows's large half: lf,
+// under a tenth of input's bytes at batches of 2,048, answers as keyed does, and
+// peaks under that limit.
+func measureUnkeyed(t *testing.T, name string, lf, keyed, input *ursus.LazyFrame) {
+	t.Helper()
+	in, err := input.Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := in.Batch().NBytes() / 10
+	want, err := keyed.Collect(t.Context(), ursus.WithBatchSize(8192))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var st ursus.MemoryStats
+	got, err := lf.Collect(t.Context(), ursus.WithBatchSize(2048),
+		ursus.WithMemoryLimit(limit), ursus.WithMemoryStats(&st))
+	if err != nil {
+		t.Fatalf("%s, under %d bytes: %v", name, limit, err)
+	}
+	ursustest.AssertFrameEqual(t, got, want)
+	if st.Peak > limit {
+		t.Errorf("%s: a peak of %d bytes under a limit of %d", name, st.Peak, limit)
 	}
 }

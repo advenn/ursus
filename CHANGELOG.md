@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.2
 
-Everything on master since step 200, v0.6.1's candidate: steps 201–207 and 209, so far; 208, the report, waits for h2o.
+Everything on master since step 200, v0.6.1's candidate: steps 201–207, 209 and 210, so far; 208, the report, waits for h2o.
 [`v0.6.2-scope.md`](./context_files/v0.6.2-scope.md) set the scope: **speed and
 out-of-core, continued.** Each step is timed against 0.6.1's code, alternated in one
 session.
@@ -59,6 +59,9 @@ session.
 - **A join's key tables are on the memory ledger while it probes** (204). The
   account was rebased at the end of the build without them, so a join probing
   200,000 keys under-reported by 6 to 10 MB.
+- **A spilled window keeps to its limit** (210). Merging its partition files'
+  answers, it held each file's whole answer, so the input: 971 KB under a 121 KB
+  limit over 20,000 rows. It holds a batch across the files now.
 
 ---
 
