@@ -430,6 +430,9 @@ func (s *joinBuildSink) Consume(ctx context.Context, in *data.Batch) error {
 	// that the invariant every proof here rests on — a key is wholly resident or
 	// wholly routed — is visible rather than argued.
 	if s.split != splitAll && s.budget.Limit() > 0 && len(s.keys) > 0 && s.mem.Over() {
+		if err := s.oneKeyOver(); err != nil {
+			return err
+		}
 		if err := s.escalate(ctx); err != nil {
 			return err
 		}

@@ -40,7 +40,15 @@ const (
 	// the cause rather than a long descent. Termination does not depend on it: a
 	// sub-sink admits every key of its first batch before it can freeze, so each
 	// level strictly reduces the largest partition's distinct-key count.
-	maxSpillDepth = 4
+	//
+	// A join refuses past it only on evidence, a sink holding one key (step 180,
+	// audit row J11): it refused on the depth alone, and a join of two keys that
+	// share every bucket to the fifth level was refused there, though the sixth
+	// divides them. maxSpillLevels bounds its descent instead, which each level's
+	// fresh hash makes all but impossible to reach while two keys remain. The
+	// group-by still refuses on the depth: no shape a test can afford reaches it.
+	maxSpillDepth  = 4
+	maxSpillLevels = 32
 
 	// ordCol carries a routed row's input ordinal so first-appearance order can be
 	// rebuilt. It is in the SPILL schema only, never in the sink's output, and

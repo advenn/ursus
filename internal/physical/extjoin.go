@@ -424,8 +424,8 @@ func (s *joinBuildSink) spilled() bool {
 //
 // What is left is the shape partitioning cannot help. Radix partitioning divides the
 // KEY SPACE, so it cannot divide a cross join, which has exactly one key by
-// construction; and it cannot divide one key's build rows, which is caught by
-// maxSpillDepth in newSub rather than here, because only the recursion can tell
+// construction; and it cannot divide one key's build rows, which oneKeyOver catches
+// in the sub-sink holding that key alone, because only the recursion can tell
 // "this bucket did not narrow" from "this bucket is merely large".
 func (s *joinBuildSink) overBudget() error {
 	if s.split != splitNone {
@@ -442,6 +442,40 @@ func (s *joinBuildSink) overBudget() error {
 	return s.mem.Check()
 }
 
+// oneKeyOver refuses a sub-sink past maxSpillDepth that must split again while it
+// holds one key: partitioning divides keys, so nothing below it can fit that key's
+// rows. With two keys or more it can, and the sink splits as at any level.
+//
+// It names which of two things is over the limit (step 180, audit row J11). The key's
+// rows, or the sink's own partition writers: each buffers partBufBytes, and a limit
+// smaller than the ones a spilling sink holds open leaves every sink over it whatever
+// its keys. That second case was reported as the first, about a key of two rows.
+func (s *joinBuildSink) oneKeyOver() error {
+	if s.level < maxSpillDepth || s.ids == nil || s.ids.Len() > 1 {
+		return nil
+	}
+	var writers int64
+	for _, w := range s.bparts {
+		if w != nil {
+			writers++
+		}
+	}
+	limit := s.budget.Limit()
+	if writers > 0 && s.mem.Used()-writers*partBufBytes <= limit {
+		return uerr.New(uerr.KindResource, "join",
+			"memory limit of %s exceeded: the join's own spill writers need more, "+
+				"%d of them buffering %s each, before any row is held",
+			execopt.Bytes(limit), writers, execopt.Bytes(partBufBytes)).
+			Hint("a join that spills writes up to %d partitions at once; give it at least %s "+
+				"with WithMemoryLimit", nParts, execopt.Bytes(nParts*partBufBytes))
+	}
+	return uerr.New(uerr.KindResource, "join",
+		"memory limit of %s exceeded: a single join key has more build rows than the limit",
+		execopt.Bytes(limit)).
+		Hint("partitioning divides work across KEYS, so it cannot split one key's rows").
+		Hint("raise the limit with WithMemoryLimit")
+}
+
 // --- replay -----------------------------------------------------------------------
 
 // newSub builds the sink that re-joins one spilled bucket.
@@ -450,12 +484,14 @@ func (s *joinBuildSink) overBudget() error {
 // budget — and gets fresh state at the next radix depth. The recursion is not extra
 // machinery: this returns the same type, so a sub-join splits, routes and recurses
 // by the same code.
+//
+// It refuses only past maxSpillLevels. A key whose rows do not fit is refused by
+// oneKeyOver, in the sub-sink that holds it alone, where the evidence is.
 func (s *joinBuildSink) newSub() (*joinBuildSink, error) {
-	if s.level+1 > maxSpillDepth {
+	if s.level+1 > maxSpillLevels {
 		return nil, uerr.New(uerr.KindResource, "join",
-			"memory limit exceeded: a single join key has more build rows than the limit").
-			Hint("partitioning divides work across KEYS, so %d levels of it have not "+
-				"split this one — one key's rows do not fit", maxSpillDepth).
+			"memory limit exceeded: partitioning the join's build side %d levels deep "+
+				"has not fitted it in the limit", maxSpillLevels).
 			Hint("raise the limit with WithMemoryLimit")
 	}
 	// Every field the sub-sink needs is copied BY HAND, which is what makes this
@@ -485,7 +521,7 @@ func (s *joinBuildSink) newSub() (*joinBuildSink, error) {
 //
 // The null bucket is NOT replayed through a sub-join, and that is not an
 // optimisation. Its rows have no key, so a sub-sink would classify them noKey again,
-// route them to ITS null bucket, and repeat until maxSpillDepth — reporting "a
+// route them to ITS null bucket, and repeat level after level — reporting "a
 // single join key has more build rows than the limit" about data that has no key at
 // all. Step 12 shipped that exact class of confident-and-wrong diagnosis once.
 //

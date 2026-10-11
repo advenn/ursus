@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–179, so far.
+Everything on master since `v0.5.0`: steps 156–180, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -109,6 +109,11 @@ far ursus has moved against v0.5.0 is measured once, at the end.
 
 ### Fixed
 
+- **A spilled join refuses only on evidence, and says what is over the limit**
+  (180). It refused at a fifth level of partitioning on the depth alone, so two keys
+  that shared every bucket to that level were refused though the next divides them.
+  And under a limit smaller than its own spill writers, 8 KiB each, it blamed "a
+  single join key" for keys of two rows; it now names the writers.
 - **Two types that rendered alike are no longer one computation** (179). An Enum's
   category or a struct's field name holding a comma, a colon, a bracket or a quote
   made two types render alike, and aggregates and window functions are
