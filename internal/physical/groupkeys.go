@@ -14,18 +14,34 @@ import (
 // sink's new key, where partitionOf takes the encoded key as it does on the encoded
 // path. Its sub-sinks, its workers and the partitioned fold's partitions all come
 // from the same key schema, so they share its form.
+//
+// A key of one String or Binary column is the third form (step 205): raw, a
+// KeyTable of each value's own bytes, read in place from the column, and a null
+// placeholder as the integers' is. Encoding copied every row's string behind a
+// validity byte and a length, before the hash read it again: 14% of h2o gb1.
 type groupKeys struct {
 	bytes *kernel.KeyTable
 	ints  *kernel.IntKeyTable
+	raw   bool // bytes holds one string column's values, not encoded keys
 }
 
 // newGroupKeys is the table for a key of these fields: integers for one integer
-// field, else encoded.
+// field, a string's own bytes for one String or Binary field, else encoded.
 func newGroupKeys(keys *dtype.Schema) groupKeys {
-	if keys.Len() == 1 && kernel.IsIntKey(keys.Field(0).Type) {
-		return groupKeys{ints: kernel.NewIntKeyTable()}
+	if keys.Len() == 1 {
+		switch t := keys.Field(0).Type; {
+		case kernel.IsIntKey(t):
+			return groupKeys{ints: kernel.NewIntKeyTable()}
+		case isRawKey(t):
+			return groupKeys{bytes: kernel.NewKeyTable(), raw: true}
+		}
 	}
 	return groupKeys{bytes: kernel.NewKeyTable()}
+}
+
+// isRawKey reports whether a group key of this one type is kept as its own bytes.
+func isRawKey(t dtype.DataType) bool {
+	return t.ID() == dtype.TypeString || t.ID() == dtype.TypeBinary
 }
 
 // empty is a new table of the same form.
@@ -33,7 +49,7 @@ func (g groupKeys) empty() groupKeys {
 	if g.ints != nil {
 		return groupKeys{ints: kernel.NewIntKeyTable()}
 	}
-	return groupKeys{bytes: kernel.NewKeyTable()}
+	return groupKeys{bytes: kernel.NewKeyTable(), raw: g.raw}
 }
 
 func (g groupKeys) Len() int {
@@ -86,6 +102,13 @@ func (g groupKeys) insertFrom(o groupKeys, oids []int32, ids []int32, inserted [
 	)
 	for j, oid := range oids {
 		keys[j], hs[j] = o.bytes.KeyAt(oid), o.bytes.HashAt(oid)
+	}
+	if g.raw {
+		// A raw key's null is a placeholder, whose empty key is the empty string's.
+		null := o.bytes.NullID()
+		g.bytes.GetOrInsertNullable(keys[:len(oids)], hs[:len(oids)],
+			func(j int) bool { return oids[j] == null }, ids, inserted)
+		return
 	}
 	g.bytes.GetOrInsertHashed(keys[:len(oids)], hs[:len(oids)], ids, inserted)
 }

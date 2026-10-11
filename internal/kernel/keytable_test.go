@@ -256,3 +256,50 @@ func itoa(i int) string {
 	}
 	return string(b[p:])
 }
+
+// TestAKeyTablesNullIsNoValue: a group-by on one String key keeps its values' own
+// bytes, so its null is a placeholder (step 205): an id in order with the keys
+// around it, an empty key and a fixed hash, and no slot. The empty string is a
+// value of its own, and no growth makes either find the other.
+func TestAKeyTablesNullIsNoValue(t *testing.T) {
+	var tab kernel.KeyTable // a zero table has no null
+	if tab.NullID() != -1 {
+		t.Fatalf("a zero table's null is %d", tab.NullID())
+	}
+	keys := [][]byte{[]byte("a"), nil, []byte(""), []byte("b"), nil, []byte("a")}
+	isNull := func(j int) bool { return j == 1 || j == 4 }
+	ids, inserted := make([]int32, len(keys)), make([]bool, len(keys))
+	tab.GetOrInsertNullable(keys, nil, isNull, ids, inserted)
+	wantIDs := []int32{0, 1, 2, 3, 1, 0}
+	wantNew := []bool{true, true, true, true, false, false}
+	for j := range keys {
+		if ids[j] != wantIDs[j] || inserted[j] != wantNew[j] {
+			t.Fatalf("key %d: id %d, inserted %v; want %d, %v", j, ids[j], inserted[j], wantIDs[j], wantNew[j])
+		}
+	}
+	if tab.NullID() != 1 || tab.HashAt(1) != 0 || len(tab.KeyAt(1)) != 0 {
+		t.Fatalf("the null: id %d, hash %d, key %q", tab.NullID(), tab.HashAt(1), tab.KeyAt(1))
+	}
+	// Grown many times over, the null keeps its id and still has no slot.
+	for i := range 5_000 {
+		tab.GetOrInsert([]byte{byte(i), byte(i >> 8), 'x'})
+	}
+	if id, ok := tab.Get([]byte("")); !ok || id != 2 {
+		t.Fatalf("the empty string: %d, %v; want 2", id, ok)
+	}
+	if id, ok := tab.Get(nil); !ok || id != 2 {
+		t.Fatalf("a nil key is the empty string: %d, %v", id, ok)
+	}
+	if id, inserted := tab.GetOrInsertNull(); id != 1 || inserted {
+		t.Fatalf("the null again: %d, %v", id, inserted)
+	}
+	// Hashed, as a fold moves keys: the null by the predicate, not its empty key.
+	var into kernel.KeyTable
+	hs := []uint64{tab.HashAt(2), tab.HashAt(1)}
+	got := make([]int32, 2)
+	into.GetOrInsertNullable([][]byte{tab.KeyAt(2), tab.KeyAt(1)}, hs,
+		func(j int) bool { return j == 1 }, got, make([]bool, 2))
+	if got[0] != 0 || got[1] != 1 || into.NullID() != 1 {
+		t.Fatalf("moved: ids %v, null %d", got, into.NullID())
+	}
+}

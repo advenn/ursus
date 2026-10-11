@@ -376,6 +376,11 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 		if keep, newRows, routed, err = s.consumeInts(in, keyCols[0], keep); err != nil {
 			return err
 		}
+	} else if s.ids.raw {
+		var err error
+		if keep, newRows, routed, err = s.consumeStrings(in, keyCols[0], keep); err != nil {
+			return err
+		}
 	} else {
 		enc, err := kernel.NewGroupKeyEncoder("group_by", keyCols)
 		if err != nil {
@@ -592,6 +597,85 @@ func (s *hashAggSink) consumeInts(in *data.Batch, col *data.Column, keep []int32
 			t.GetOrInsertMany(chunk, ids[:m], inserted[:m])
 		} else {
 			t.GetOrInsertNullable(chunk, null, ids[:m], inserted[:m])
+		}
+		for j := range m {
+			i := int32(base + j)
+			if inserted[j] {
+				newRows = append(newRows, i)
+				if s.ordered {
+					s.firstSeen = append(s.firstSeen, s.ordinalOf(in, int(i)))
+				}
+			}
+			keep = append(keep, i)
+			s.groups = append(s.groups, ids[j])
+		}
+	}
+	return keep, newRows, routed, nil
+}
+
+// consumeStrings is Consume's key assignment for a key of one String or Binary column
+// (step 205), as consumeInts's is for an integer one: each value's own bytes, read
+// in place a chunk at a time, never encoded except to route a frozen sink's new key.
+// A null is the table's placeholder, never the empty string.
+func (s *hashAggSink) consumeStrings(in *data.Batch, col *data.Column, keep []int32,
+) (_ []int32, newRows []int32, routed int, _ error) {
+	if !isRawKey(col.DType()) {
+		return nil, nil, 0, uerr.Internalf("physical: a string group key evaluated to %s", col.DType())
+	}
+	t := s.ids.bytes
+	n := col.Len()
+	valid := col.Validity()
+	// A payload-free column is all null, and has no characters to read.
+	free := col.IsPayloadFree()
+	strs := col.Strings()
+	var (
+		keys     [kernel.ManyChunk][]byte
+		ids      [kernel.ManyChunk]int32
+		inserted [kernel.ManyChunk]bool
+		enc      *kernel.GroupKeyEncoder
+		base     int
+	)
+	null := func(j int) bool { return free || !valid.Get(base+j) }
+	for base = 0; base < n; base += kernel.ManyChunk {
+		m := min(kernel.ManyChunk, n-base)
+		for j := range m {
+			keys[j] = nil
+			if !null(j) {
+				keys[j] = strs.Bytes(base + j)
+			}
+		}
+		if s.frozen {
+			// Residency is closed, as on the other paths: a resident key, a null among
+			// them, behaves as before, and a new one is routed by partitionOf of its
+			// encoded key.
+			t.GetMany(keys[:m], ids[:m], inserted[:m])
+			for j := range m {
+				i := base + j
+				id := ids[j]
+				if null(j) {
+					id = t.NullID()
+				}
+				if id < 0 {
+					if enc == nil {
+						var err error
+						if enc, err = kernel.NewGroupKeyEncoder("group_by", []*data.Column{col}); err != nil {
+							return nil, nil, 0, err
+						}
+					}
+					p := partitionOf(enc.Encode(i), s.level)
+					s.pend[p] = append(s.pend[p], int32(i))
+					routed++
+					continue
+				}
+				keep = append(keep, int32(i))
+				s.groups = append(s.groups, id)
+			}
+			continue
+		}
+		if !free && valid.IsAllSet() {
+			t.GetOrInsertMany(keys[:m], ids[:m], inserted[:m])
+		} else {
+			t.GetOrInsertNullable(keys[:m], nil, null, ids[:m], inserted[:m])
 		}
 		for j := range m {
 			i := int32(base + j)

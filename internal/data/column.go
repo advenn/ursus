@@ -777,6 +777,13 @@ func (a StringAccessor) Get(i int) string {
 	return unsafeString(a.chars[lo:hi])
 }
 
+// Bytes returns row i as bytes without copying: the result aliases the character
+// buffer, and must not be written.
+func (a StringAccessor) Bytes(i int) []byte {
+	lo, hi := a.offsets[i], a.offsets[i+1]
+	return a.chars[lo:hi:hi]
+}
+
 // Len returns the number of values.
 func (a StringAccessor) Len() int {
 	if len(a.offsets) == 0 {

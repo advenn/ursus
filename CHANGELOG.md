@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.2
 
-Everything on master since step 200, v0.6.1's candidate: steps 201–204, so far.
+Everything on master since step 200, v0.6.1's candidate: steps 201–205, so far.
 [`v0.6.2-scope.md`](./context_files/v0.6.2-scope.md) set the scope: **speed and
 out-of-core, continued.** Each step is timed against 0.6.1's code, alternated in one
 session.
@@ -34,6 +34,9 @@ session.
   integer keys are dense routes them by their place in the range, and fills that
   index directly, in parallel; it hashed every row into partitioned tables. q21
   takes 18% less CPU and 13% less time, q4 20% and 11%.
+- **A group-by on one String or Binary key hashes the values themselves** (205),
+  read in place from the column, where it encoded each first. h2o gb1 takes 31% less
+  CPU and 23% less time over Parquet.
 
 ### Fixed
 

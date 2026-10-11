@@ -98,6 +98,12 @@ type KeyTable struct {
 
 	// touched holds touch's sum, which nothing reads.
 	touched uint64
+
+	// null is the null key's id plus one, or 0, so a zero table has none. A
+	// group-by on one String key keeps the key's own bytes (step 205), where any
+	// bytes may be a value, so its null is a placeholder as IntKeyTable's is: an id,
+	// an empty key and a fixed hash, and no slot, so no value finds it.
+	null int32
 }
 
 // initialSlots is small because most group-bys are small, and growth is cheap:
@@ -211,8 +217,53 @@ func (t *KeyTable) GetOrInsertHashed(keys [][]byte, hs []uint64, ids []int32, in
 	}
 }
 
-// HashAt is the hash of the key with this id, as the table stored it.
+// HashAt is the hash of the key with this id, as the table stored it: nullKeyHash
+// for the null key, so the nulls of several tables meet in one partition.
 func (t *KeyTable) HashAt(id int32) uint64 { return t.hashes[id] }
+
+// NullID is the null key's id, or -1 when no null has been inserted.
+func (t *KeyTable) NullID() int32 { return t.null - 1 }
+
+// GetOrInsertNull is the null key's id, given the next one if it has none.
+func (t *KeyTable) GetOrInsertNull() (int32, bool) {
+	if t.null > 0 {
+		return t.null - 1, false
+	}
+	if t.slots == nil {
+		t.init(initialSlots)
+	}
+	id := int32(len(t.refs) - 1)
+	t.hashes = pushDoubling(t.hashes, nullKeyHash)
+	t.refs = pushDoubling(t.refs, t.store(nil))
+	t.null = id + 1
+	return id, true
+}
+
+// GetOrInsertNullable is GetOrInsertMany where null(j) marks keys[j] the null key.
+// Ids are given in order, so a new null between two new keys is numbered between
+// them, which a group-by numbering its groups by first appearance needs. hs, when
+// not nil, are the keys' hashes, as GetOrInsertHashed takes them.
+func (t *KeyTable) GetOrInsertNullable(keys [][]byte, hs []uint64, null func(j int) bool,
+	ids []int32, inserted []bool) {
+	lo := 0
+	run := func(hi int) {
+		switch {
+		case lo == hi:
+		case hs != nil:
+			t.GetOrInsertHashed(keys[lo:hi], hs[lo:hi], ids[lo:hi], inserted[lo:hi])
+		default:
+			t.GetOrInsertMany(keys[lo:hi], ids[lo:hi], inserted[lo:hi])
+		}
+	}
+	for j := range keys {
+		if null(j) {
+			run(j)
+			ids[j], inserted[j] = t.GetOrInsertNull()
+			lo = j + 1
+		}
+	}
+	run(len(keys))
+}
 
 // GetMany is Get for up to ManyChunk keys, with GetOrInsertMany's reason: ids[j] is
 // keys[j]'s id, or -1, and found[j] says which.
@@ -423,6 +474,9 @@ func (t *KeyTable) grow() {
 	slots := make([]uint64, len(t.slots)*2)
 	mask := uint64(len(slots) - 1)
 	for id, h := range t.hashes {
+		if int32(id) == t.null-1 {
+			continue // the null key has no slot
+		}
 		for i := h & mask; ; i = (i + 1) & mask {
 			if slots[i] == 0 {
 				slots[i] = slotOf(h, int32(id))
