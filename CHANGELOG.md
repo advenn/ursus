@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.1
 
-Everything on master since `v0.6.0`: steps 191–197, so far.
+Everything on master since `v0.6.0`: steps 191–198, so far.
 [`v0.6.1-scope.md`](./context_files/v0.6.1-scope.md) set the scope: **speed where the
 profile points, and out-of-core.** Each step is timed against v0.6.0's code,
 alternated in one session.
