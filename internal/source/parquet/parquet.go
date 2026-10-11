@@ -718,6 +718,14 @@ func openColumnIn(full *dtype.Schema, fv fileView, rg *file.RowGroupReader,
 		if err := checkEncodings(rgMeta, ci, f.Name); err != nil {
 			return nil, err
 		}
+		if desc := fv.pf.MetaData().Schema.Column(ci); ownable(rgMeta, ci, desc, dt) {
+			pr, err := rg.GetColumnPageReader(ci)
+			if err != nil {
+				return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
+					"opening column %q of %s", f.Name, fv.name)
+			}
+			return newOwnColReader(pr, desc, dt)
+		}
 		cr, err := rg.Column(ci)
 		if err != nil {
 			return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",

@@ -17,10 +17,23 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.1
 
-Everything on master since `v0.6.0`: step 191, so far.
+Everything on master since `v0.6.0`: steps 191–192, so far.
 [`v0.6.1-scope.md`](./context_files/v0.6.1-scope.md) set the scope: **speed where the
 profile points, and out-of-core.** Each step is timed against v0.6.0's code,
 alternated in one session.
+
+### Faster
+
+- **The Parquet reader decodes its own pages** (192) for a flat column of an integer,
+  float or byte-array type, PLAIN or dictionary-encoded: definition levels as runs,
+  and each dictionary string copied once, short ones as two words. q19 and q12 take
+  about 22% less wall time, and h2o's j2, j3 and gb1 over Parquet 10 to 15% less.
+  Every other chunk reads through arrow-go as before.
+
+### Fixed
+
+- **A Parquet page whose RLE run holds a value wider than its bit width** is refused
+  as corrupt (192), found by fuzzing the new decoder.
 
 ---
 

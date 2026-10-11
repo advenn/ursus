@@ -141,9 +141,17 @@ type batchReader[P any] interface {
 	Close() error
 }
 
+// spacedReader is a chunk read from its pages (step 192): values in their rows'
+// places, and validity appended directly, with no level a row.
+type spacedReader[P any] interface {
+	readSpaced(n int, out []P, valid *lazyValid) (int, error)
+	close() error
+}
+
 // fixedCol reads a physical Parquet type P and stores it as an ursus type T.
 type fixedCol[P any, T data.Fixed] struct {
 	cr     batchReader[P]
+	own    spacedReader[P] // set instead of cr when the chunk is read from its pages
 	maxDef int16
 	conv   func(P) T
 	// direct is set when P and T are one type and conv is the identity: Int32,
@@ -173,6 +181,9 @@ func (c *fixedCol[P, T]) parentValidity() bitmap.View {
 }
 
 func (c *fixedCol[P, T]) read(n int) (int, error) {
+	if c.own != nil {
+		return c.readOwn(n)
+	}
 	if c.direct {
 		return c.readDirect(n)
 	}
@@ -294,6 +305,33 @@ func (c *fixedCol[P, T]) readDirect(n int) (int, error) {
 	return rows, nil
 }
 
+// readOwn is read for a chunk read from its pages: straight into out when P is T,
+// and through the scratch values and conv otherwise, where a null's zero converts
+// to T's zero.
+func (c *fixedCol[P, T]) readOwn(n int) (int, error) {
+	start := len(c.out)
+	c.out = growExact(c.out, n)
+	if c.direct {
+		rows, err := c.own.readSpaced(n, any(c.out[start:start+n]).([]P), &c.valid)
+		if err != nil {
+			return 0, err
+		}
+		c.out = c.out[:start+rows]
+		return rows, nil
+	}
+	if cap(c.vals) < n {
+		c.vals = make([]P, n)
+	}
+	rows, err := c.own.readSpaced(n, c.vals[:n], &c.valid)
+	if err != nil {
+		return 0, err
+	}
+	for _, v := range c.vals[:rows] {
+		c.out = append(c.out, c.conv(v))
+	}
+	return rows, nil
+}
+
 // trackParentDefs records, for a field of a struct, whether the struct was present
 // on each row: >=, not ==, because the enclosing group is present for every level at
 // or above its own, including the ones where this field is null.
@@ -318,7 +356,18 @@ func (c *fixedCol[P, T]) finish(name string) *data.Column {
 	return col
 }
 
-func (c *fixedCol[P, T]) close() error { return c.cr.Close() }
+func (c *fixedCol[P, T]) close() error {
+	if c.own != nil {
+		return c.own.close()
+	}
+	return c.cr.Close()
+}
+
+func ownFixed[P int32 | int64 | float32 | float64, T data.Fixed](src pageFixed[P], maxDef int16,
+	dt dtype.DataType, conv func(P) T) colReader {
+	_, direct := any([]P(nil)).([]T)
+	return &fixedCol[P, T]{own: src, maxDef: maxDef, dt: dt, conv: conv, direct: direct}
+}
 
 // boolCol is separate because Bool is stored as a bitmap rather than a values
 // buffer — the one ursus type outside data.Fixed.
@@ -409,6 +458,7 @@ func (c *boolCol) close() error { return c.cr.Close() }
 // byteArrayCol reads BYTE_ARRAY as String or Binary.
 type byteArrayCol struct {
 	cr     byteArrayReader
+	pages  pageStrings // set instead of cr when the chunk is read from its pages
 	maxDef int16
 	dt     dtype.DataType
 
@@ -483,6 +533,9 @@ type inPageReader interface {
 }
 
 func (c *byteArrayCol) read(n int) (int, error) {
+	if c.pages.pageChunk != nil {
+		return c.pages.appendStrings(n, c)
+	}
 	if cap(c.vals) < n {
 		c.vals = make([]parquet.ByteArray, n)
 		if c.maxDef > 0 {
@@ -580,7 +633,12 @@ func (c *byteArrayCol) finish(name string) *data.Column {
 	return col.WithDType(c.dt)
 }
 
-func (c *byteArrayCol) close() error { return c.cr.Close() }
+func (c *byteArrayCol) close() error {
+	if c.pages.pageChunk != nil {
+		return c.pages.close()
+	}
+	return c.cr.Close()
+}
 
 // --- decimal conversions --------------------------------------------------------
 
