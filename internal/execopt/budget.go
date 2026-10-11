@@ -395,9 +395,10 @@ func (a *Account) Check() error {
 		"memory limit of %s exceeded: the query is holding %s, %s of it in this operator",
 		Bytes(a.b.Limit()), Bytes(a.b.Used()), Bytes(a.Used())).
 		Hint("%s", holdsHint(a.op)).
-		Hint("sort, group_by, join, unique and a partitioned over spill to disk; " +
-			"join_asof and merge_sorted stream; reverse, hstack, tail, rolling, " +
-			"group_by_dynamic and an unpartitioned over fail rather than exceed the limit")
+		Hint("sort, group_by, join, unique and over spill to disk; join_asof, " +
+			"merge_sorted, rolling and group_by_dynamic stream their input; reverse, " +
+			"hstack, tail, and an unpartitioned over computing a rank, an ewm or an " +
+			"interpolation fail rather than exceed the limit")
 }
 
 // Release drops everything this account holds.
@@ -472,7 +473,9 @@ func holdsHint(op string) string {
 			"subset of columns unique is called on"
 	case "over":
 		return "over holds its whole input, and partitions it to disk by its " +
-			"partition_by when it does not fit; raise the limit with WithMemoryLimit"
+			"partition_by when it does not fit, or with none writes it to one file and " +
+			"reads it back when every function needs only a bounded part of it; raise " +
+			"the limit with WithMemoryLimit"
 	case "join_asof":
 		// Every strategy streams since step 194.
 		return "join_asof streams both sides, holding a right row a by-key and the " +

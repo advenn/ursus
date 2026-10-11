@@ -238,7 +238,9 @@ func TestSpillingByHand(t *testing.T) {
 			Agg(c("__ord").Sum()))},
 
 		// --- the walls that stay, each named ---
-		{"Over() with no keys says it has no partition", refused(base.WithColumns(c("seq").Sum().Over().Alias("t")),
+		// A Sum() over no keys streams since step 197; a rank needs the whole frame.
+		{"Over() with no keys and a rank says it has no partition", refused(
+			base.WithColumns(c("seq").Rank(ursus.RankOrdinal, false).Over().Alias("t")),
 			"over", "no partition")},
 		{"one partition larger than the limit says so", refused(spillFrame(n, 1).
 			WithColumns(c("seq").Sum().Over(c("k")).Alias("t")), "over", "one partition")},
@@ -349,8 +351,8 @@ func TestSpillingByHand(t *testing.T) {
 			if !errors.Is(err, ursus.ErrResource) {
 				return fmt.Sprintf("want a resource error, got %v", err)
 			}
-			for _, w := range []string{"unique and a partitioned over spill", "join_asof", "merge_sorted",
-				"rolling", "group_by_dynamic", "an unpartitioned over"} {
+			for _, w := range []string{"unique and over spill", "join_asof", "merge_sorted",
+				"rolling", "group_by_dynamic", "an unpartitioned over computing a rank"} {
 				if !strings.Contains(err.Error(), w) {
 					return fmt.Sprintf("the hint does not say %q: %v", w, err)
 				}

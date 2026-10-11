@@ -502,10 +502,11 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 				ursus.Col("seq").Lt(ursus.Col("oseq")))
 		}, "join"},
 		// With no partition_by: a window over keys spills since step 82, and
-		// over_spills below is its entry.
+		// over_spills below is its entry; one with no keys streams an aggregate or a
+		// cumulative function since step 197, and a rank needs the whole frame.
 		{"over", func() *ursus.LazyFrame {
 			return ursus.Scan(src).WithColumns(
-				ursus.Col("seq").Sum().Over().Alias("t"))
+				ursus.Col("seq").Rank(ursus.RankOrdinal, false).Over().Alias("t"))
 		}, "over"},
 		{"reverse", func() *ursus.LazyFrame {
 			return ursus.Scan(src).Reverse()

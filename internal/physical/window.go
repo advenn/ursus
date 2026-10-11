@@ -2,6 +2,7 @@ package physical
 
 import (
 	"context"
+	"errors"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
@@ -10,6 +11,7 @@ import (
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/spill"
 	"github.com/advenn/ursus/internal/uerr"
 )
 
@@ -73,6 +75,11 @@ type windowSink struct {
 	routeSch    *dtype.Schema
 	routeParts  []*partWriter
 	pend        [][]int32
+
+	// A window with no partition_by past its limit writes its rows to one file and
+	// reads them back (winstream.go).
+	oneW    *spill.Writer
+	oneFile string
 }
 
 // winPartition is one distinct PARTITION BY, with its group table and the group id
@@ -106,7 +113,12 @@ func (s *windowSink) Schema() *dtype.Schema { return s.schema }
 
 func (s *windowSink) Close() error {
 	s.mem.Release()
-	return s.closeSpill()
+	var err error
+	if s.oneW != nil {
+		err = s.oneW.Close()
+		s.oneW = nil
+	}
+	return errors.Join(err, s.closeSpill())
 }
 
 func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
@@ -119,6 +131,9 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 	}
 	if s.spilling {
 		return s.route(ctx, in, s.parts[0].keys)
+	}
+	if s.oneW != nil {
+		return s.consumeOneSpill(ctx, in)
 	}
 	s.rows = append(s.rows, in)
 	s.mem.Retain(in)
@@ -206,6 +221,9 @@ func (s *windowSink) Merge(other Sink) error {
 func (s *windowSink) Finish(ctx context.Context) (Operator, error) {
 	if s.spilling {
 		return s.finishSpilled(ctx)
+	}
+	if s.oneW != nil {
+		return s.finishOneSpill()
 	}
 	if len(s.rows) == 0 {
 		// No row ever arrived. The result is still one column per output field, all

@@ -52,11 +52,20 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 	if !s.mem.Over() {
 		return nil
 	}
+	if s.streamable() && s.budget.Limit() > 0 {
+		// One partition, and every function bounded: to one file, read back a batch
+		// at a time (winstream.go).
+		return s.startOneSpill()
+	}
 	for _, p := range s.parts {
 		if len(p.keys) == 0 {
 			return s.refuse("a window with no partition_by is one partition, which partitioning "+
-				"to disk cannot divide",
-				"give the window a partition_by, or raise the limit with WithMemoryLimit")
+				"to disk cannot divide, and this one computes a function that needs all of it "+
+				"or mixes it with a partition_by",
+				"aggregates, cumulative functions, Shift, the fills with a limit and rolling "+
+					"windows of rows stream past the limit; rank, ewm, interpolation and "+
+					"ordered windows do not. Give the window a partition_by, or raise the "+
+					"limit with WithMemoryLimit")
 		}
 	}
 	if s.level >= maxSpillDepth || (s.level > 0 && len(s.parts) == 1 && s.parts[0].ids.Len() == 1) {

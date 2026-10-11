@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.1
 
-Everything on master since `v0.6.0`: steps 191–196, so far.
+Everything on master since `v0.6.0`: steps 191–197, so far.
 [`v0.6.1-scope.md`](./context_files/v0.6.1-scope.md) set the scope: **speed where the
 profile points, and out-of-core.** Each step is timed against v0.6.0's code,
 alternated in one session.
@@ -48,6 +48,11 @@ alternated in one session.
   only the rows a window yet to come reaches. Over 300,000 rows, a dynamic group's
   peak falls from 7.5 MB to 0.4 MB. A rolling group's answer is a row an input row,
   and it now holds that rather than its input as well: 10 MB from 17 MB.
+- **A window with no `partition_by` spills** (197) when every function in it needs
+  only a bounded part of the frame: aggregates broadcast to the rows, cumulative
+  functions, `Shift` and `Diff`, fills with a limit, a forward fill without one, and
+  rolling windows of rows. Its rows go to one file and are read back a batch at a
+  time. Rank, ewm, interpolation and an ordered window still refuse.
 - **A cross join spills** (195). Past its limit its build side goes to disk whole,
   and each probe row reads it back, in the in-memory order. It refused before, and
   so did `JoinWhere`, a cross join under a filter. A join with no keys and a residual,
