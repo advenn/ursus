@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.2
 
-Everything on master since step 200, v0.6.1's candidate: steps 201–205, so far.
+Everything on master since step 200, v0.6.1's candidate: steps 201–206, so far.
 [`v0.6.2-scope.md`](./context_files/v0.6.2-scope.md) set the scope: **speed and
 out-of-core, continued.** Each step is timed against 0.6.1's code, alternated in one
 session.
@@ -37,6 +37,12 @@ session.
 - **A group-by on one String or Binary key hashes the values themselves** (205),
   read in place from the column, where it encoded each first. h2o gb1 takes 31% less
   CPU and 23% less time over Parquet.
+
+### Out of core
+
+- **Reverse spills** (206). Past the budget it writes what it holds to a run file,
+  and gives the runs back last to first, each read whole, so it holds one at a time.
+  It refused. In memory it no longer concatenates its input before reversing it.
 
 ### Fixed
 

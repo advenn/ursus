@@ -511,9 +511,6 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 			return ursus.Scan(src).WithColumns(
 				ursus.Col("seq").Rank(ursus.RankOrdinal, false).Over().Alias("t"))
 		}, "over"},
-		{"reverse", func() *ursus.LazyFrame {
-			return ursus.Scan(src).Reverse()
-		}, "reverse"},
 		{"hstack", func() *ursus.LazyFrame {
 			return ursus.Scan(src).HStack(
 				ursus.Scan(other).Select(ursus.Col("k").Alias("k2")))
@@ -575,6 +572,21 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 				ursus.WithSpillDir(t.TempDir()),
 				ursus.WithMemoryStats(&stats)); err != nil {
 			t.Errorf("unique must partition rather than refuse: %v", err)
+		}
+		if stats.Spills == 0 {
+			t.Error("it succeeded without spilling, so it proves nothing")
+		}
+	})
+
+	// reverse spills since step 206; TestReverseSpillsUnderATenthOfItsInput checks
+	// its answer.
+	t.Run("reverse_spills", func(t *testing.T) {
+		var stats ursus.MemoryStats
+		if _, err := ursus.Scan(src).Reverse().
+			Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
+				ursus.WithSpillDir(t.TempDir()),
+				ursus.WithMemoryStats(&stats)); err != nil {
+			t.Errorf("reverse must spill rather than refuse: %v", err)
 		}
 		if stats.Spills == 0 {
 			t.Error("it succeeded without spilling, so it proves nothing")
@@ -825,5 +837,40 @@ func TestAJoinAccountsItsKeysWhileItProbes(t *testing.T) {
 			t.Errorf("%d threads: peak = %d, under %d: the probe's key tables are not on the ledger",
 				threads, stats.Peak, floor)
 		}
+	}
+}
+
+// TestReverseSpillsUnderATenthOfItsInput: reverse writes what it holds to a run
+// past the budget and gives the runs back last to first, each read whole (step
+// 206), where it held its whole input and refused. Under a tenth of the input, on
+// one thread and on four, the answer is the in-memory one, row for row, and the
+// peak is the limit and a batch.
+func TestReverseSpillsUnderATenthOfItsInput(t *testing.T) {
+	src := memFrame(t, 20_000, 512, 20_000)
+	in, err := ursus.Scan(src).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := in.Batch().NBytes() / 10
+	want, err := ursus.Scan(src).Reverse().Collect(t.Context(), ursus.WithBatchSize(512))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, threads := range []int{1, 4} {
+		var stats ursus.MemoryStats
+		got, err := ursus.Scan(src).Reverse().Collect(t.Context(), ursus.WithBatchSize(512),
+			ursus.WithThreads(threads), ursus.WithMemoryLimit(limit),
+			ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&stats))
+		if err != nil {
+			t.Fatalf("%d threads, under %d bytes: %v", threads, limit, err)
+		}
+		if stats.Spills < 5 {
+			t.Fatalf("%d threads: %d runs; a tenth of the input should make about ten", threads, stats.Spills)
+		}
+		// Measured, 133,888 under 131,296: a run held, and a batch past it.
+		if stats.Peak > limit+limit/2 {
+			t.Errorf("%d threads: peak %d under a limit of %d", threads, stats.Peak, limit)
+		}
+		ursustest.AssertFrameEqual(t, got, want)
 	}
 }

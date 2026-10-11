@@ -365,9 +365,12 @@ type MemoryStats struct {
 // partition_by routes whole partitions; both stamp each row with its input
 // position and merge back on it, so their answers keep their order exactly.
 //
-// Reverse, hstack and tail cannot spill: past the limit they FAIL, with an error
-// naming the operator, which is a better outcome than being killed by the OS with
-// no explanation. Neither can a window with no partition_by that computes a rank,
+// Reverse writes what it holds to a file past the limit, and gives the files back
+// last to first, each read whole, so it holds one at a time.
+//
+// Hstack and tail cannot spill: past the limit they FAIL, with an error naming the
+// operator, which is a better outcome than being killed by the OS with no
+// explanation. Neither can a window with no partition_by that computes a rank,
 // an ewm function or an interpolation, which need the whole frame; with only
 // aggregates, cumulative functions, shifts, limited fills and rolling windows of
 // rows, it writes its rows to one file and reads them back. JoinAsOf and

@@ -395,9 +395,9 @@ func (a *Account) Check() error {
 		"memory limit of %s exceeded: the query is holding %s, %s of it in this operator",
 		Bytes(a.b.Limit()), Bytes(a.b.Used()), Bytes(a.Used())).
 		Hint("%s", holdsHint(a.op)).
-		Hint("sort, group_by, join, unique and over spill to disk; join_asof, " +
-			"merge_sorted, rolling and group_by_dynamic stream their input; reverse, " +
-			"hstack, tail, and an unpartitioned over computing a rank, an ewm or an " +
+		Hint("sort, group_by, join, unique, over and reverse spill to disk; join_asof, " +
+			"merge_sorted, rolling and group_by_dynamic stream their input; hstack, " +
+			"tail, and an unpartitioned over computing a rank, an ewm or an " +
 			"interpolation fail rather than exceed the limit")
 }
 

@@ -196,6 +196,7 @@ func TestSpillingByHand(t *testing.T) {
 
 	cases := []ioCase{
 		// --- nested columns through the spill format ---
+		{"reverse carrying a List(String) and a Struct", spills(nested().Reverse())},
 		{"sort carrying a List(String) and a Struct", spills(nested().Sort(ursus.Asc(c("k")), ursus.Asc(c("seq"))))},
 		{"group_by MaintainOrder, First of a list", spills(nested().GroupBy(c("k")).MaintainOrder().
 			Agg(c("l").First(), c("s").First(), c("seq").Sum()))},
@@ -347,11 +348,11 @@ func TestSpillingByHand(t *testing.T) {
 
 		// --- the words ---
 		{"the hint says what spills and what fails", func(t *testing.T) string {
-			_, _, err := spillCollect(t, base.Reverse(), limit, t.TempDir())
+			_, _, err := spillCollect(t, base.Tail(n), limit, t.TempDir())
 			if !errors.Is(err, ursus.ErrResource) {
 				return fmt.Sprintf("want a resource error, got %v", err)
 			}
-			for _, w := range []string{"unique and over spill", "join_asof", "merge_sorted",
+			for _, w := range []string{"over and reverse spill", "join_asof", "merge_sorted",
 				"rolling", "group_by_dynamic", "an unpartitioned over computing a rank"} {
 				if !strings.Contains(err.Error(), w) {
 					return fmt.Sprintf("the hint does not say %q: %v", w, err)
@@ -362,6 +363,7 @@ func TestSpillingByHand(t *testing.T) {
 
 		// --- cleanup ---
 		{"a spilled unique leaves no files", leavesNoFiles(base.Unique("k"))},
+		{"a spilled reverse leaves no files", leavesNoFiles(base.Reverse())},
 		{"a spilled over leaves no files", leavesNoFiles(twoKeyed())},
 	}
 

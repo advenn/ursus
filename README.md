@@ -107,7 +107,7 @@ and did, in [`v0.6-scope.md`](./context_files/v0.6-scope.md). What works today:
 | **Joins**       | all seven equi-join kinds with `Validate`, `JoinWhere` and `WhereExists`/`WhereNotExists` (non-equi), as-of join with tolerance and `by` keys, merge-sorted                          |
 | **Grouping**    | group-by, `GroupByDynamic`, `Rolling`, calendar-aware intervals                                                                                   |
 | **Optimizer**   | predicate pushdown (including through joins), projection pushdown, limit/top-k pushdown, cross-join collapse, constant folding and simplification, a shared subtree run once |
-| **Execution**   | order-preserving pipeline parallelism, Parquet row groups decoded and CSV parsed in parallel, parallel hash aggregation with a partitioned fold, a partitioned parallel join build, inner joins that hash their smaller input, and spilling for sort, hash aggregation, hash join, unique and partitioned windows (`WithMemoryLimit` names the rest, which fail rather than spill) |
+| **Execution**   | order-preserving pipeline parallelism, Parquet row groups decoded and CSV parsed in parallel, parallel hash aggregation with a partitioned fold, a partitioned parallel join build, inner joins that hash their smaller input, and spilling for sort, hash aggregation, hash join, unique, partitioned windows and reverse (`WithMemoryLimit` names the rest, which fail rather than spill) |
 | **UDFs**        | `MapElements` (per value) and `MapBatches` (per column) — generic methods, so the Go types are inferred from your function                        |
 
 Nested types are partly there: **List and Struct read from Parquet and Arrow and write to Parquet**, with

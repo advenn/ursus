@@ -8,7 +8,6 @@ import (
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/execopt"
-	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/plan"
 )
 
@@ -153,89 +152,6 @@ func (t *tailOp) drain(ctx context.Context) error {
 	return nil
 }
 
-// reverseSink emits its input backwards.
-//
-// The cheapest possible pipeline breaker: buffer, concatenate, gather a descending
-// selection. It is sortSink with the comparator deleted — and writing it that way
-// rather than as `Sort` by a synthesised index is what keeps it O(n) instead of
-// O(n log n).
-type reverseSink struct {
-	schema *dtype.Schema
-	rows   []*data.Batch
-	mem    *execopt.Account
-}
-
-func (s *reverseSink) Schema() *dtype.Schema { return s.schema }
-
-func (s *reverseSink) Close() error {
-	s.mem.Release()
-	return nil
-}
-
-func (s *reverseSink) Consume(_ context.Context, in *data.Batch) error {
-	if in.Rows() > 0 {
-		// Retained, not copied, on the same grounds sortSink gives: a Batch is a
-		// schema pointer plus immutable Columns.
-		s.rows = append(s.rows, in)
-		s.mem.Retain(in)
-	}
-	return s.mem.Check()
-}
-
-func (s *reverseSink) Merge(other Sink) error {
-	o, ok := other.(*reverseSink)
-	if !ok {
-		return uerrInternal("reverseSink", other)
-	}
-	// APPEND, exactly as sortSink does, and for exactly sortSink's reason: both
-	// sinks buffer their input untouched and defer the order-changing work to
-	// Finish, which reverses the whole concatenation once. So the buffer must be
-	// left in INPUT order, and `other` saw a later portion of it.
-	//
-	// The tempting argument — "reversal turns later into earlier, so it goes in
-	// FRONT" — would hold only if Consume or Merge reversed each batch. Neither
-	// does, so prepending merely concatenates in the wrong order: two sinks over
-	// [1,2] and [3,4] then yield [2,1,4,3] where one sink yields [4,3,2,1].
-	//
-	// Retained, not copied, so the batches must be accounted here too. Merging
-	// without retaining is the defect joinBuildSink.Merge was fixed for.
-	s.rows = append(s.rows, o.rows...)
-	for _, b := range o.rows {
-		s.mem.Retain(b)
-	}
-	return s.mem.Check()
-}
-
-func (s *reverseSink) Finish(_ context.Context) (Operator, error) {
-	if len(s.rows) == 0 {
-		empty, err := data.NewBatch(s.schema, emptyColumns(s.schema))
-		if err != nil {
-			return nil, err
-		}
-		return newBatchOperator(s.schema, empty), nil
-	}
-	all, err := kernel.Concat(s.schema, s.rows)
-	if err != nil {
-		return nil, err
-	}
-	n := all.Rows()
-	sel := make([]int32, n)
-	for i := range n {
-		sel[i] = int32(n - 1 - i)
-	}
-	cols := make([]*data.Column, all.NumCols())
-	for i, c := range all.Columns() {
-		if cols[i], err = kernel.Take(c, sel); err != nil {
-			return nil, err
-		}
-	}
-	out, err := data.NewBatch(s.schema, cols)
-	if err != nil {
-		return nil, err
-	}
-	return newBatchOperator(s.schema, out), nil
-}
-
 // rowIndexOp prepends a counter.
 //
 // Stateful and streaming — the third operator shape. It is NOT a BatchOp, because
@@ -296,7 +212,7 @@ func planReverse(ctx context.Context, r *plan.Reverse, opts Options) (Operator, 
 	if err != nil {
 		return nil, err
 	}
-	sink := &reverseSink{schema: in, mem: opts.Budget.Account("reverse")}
+	sink := &reverseSink{schema: in, mem: opts.Budget.Account("reverse"), budget: opts.Budget}
 	return &breaker{child: child, sink: sink}, nil
 }
 
