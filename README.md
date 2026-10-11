@@ -2,7 +2,8 @@
 
 A (experimental) dataframe library for Go 1.27, modelled on Polars — lazy execution with a query optimizer, Arrow memory layout, SIMD
 kernels, and streaming execution that spills to disk rather than falling over. Sort, group-by, join, unique and
-partitioned windows spill — by default once a query holds half the memory its container or machine allows — and an
+partitioned windows spill — by default once a query holds half the memory its container or machine allows, on Linux, macOS
+and Windows — and an
 operator that cannot spill fails with an error naming itself. Under that default budget ursus also sets the Go runtime's
 soft memory limit near the same ceiling, so the heap's own slack stays under it too; `GOMEMLIMIT`, or
 `ursus.LeaveProcessMemoryLimit()`, keeps a program's own choice.

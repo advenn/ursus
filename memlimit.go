@@ -51,7 +51,7 @@ import (
 //
 // A limit already chosen — GOMEMLIMIT in the environment, "off" included, or an
 // earlier debug.SetMemoryLimit — is kept, and returned. Where no ceiling can be read
-// (anywhere but Linux) nothing is set.
+// (anywhere but Linux, macOS and Windows) nothing is set.
 func SetProcessMemoryLimit() int64 {
 	cur := debug.SetMemoryLimit(-1)
 	if _, set := os.LookupEnv("GOMEMLIMIT"); set || cur != math.MaxInt64 {

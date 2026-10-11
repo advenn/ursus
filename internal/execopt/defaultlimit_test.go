@@ -70,3 +70,49 @@ func TestDefaultLimitIsHalfTheSmallerCeiling(t *testing.T) {
 		})
 	}
 }
+
+// TestSysctlUint64ReadsDarwinsBytes: syscall.Sysctl hands back hw.memsize's eight
+// little-endian bytes less one trailing zero, so most sizes arrive as seven.
+func TestSysctlUint64ReadsDarwinsBytes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		want int64
+		ok   bool
+	}{
+		{"16 GiB, its last zero dropped", "\x00\x00\x00\x00\x04\x00\x00", 16 << 30, true},
+		{"8 GiB", "\x00\x00\x00\x00\x02\x00\x00", 8 << 30, true},
+		{"all eight bytes", "\x01\x00\x00\x00\x00\x00\x00\x01", 1<<56 + 1, true},
+		{"one byte", "\x40", 64, true},
+		{"empty", "", 0, false},
+		{"too long", "\x01\x00\x00\x00\x00\x00\x00\x00\x00", 0, false},
+		{"zero", "\x00", 0, false},
+		{"past int64", "\x00\x00\x00\x00\x00\x00\x00\x80", 0, false},
+	} {
+		got, ok := sysctlUint64(tc.in)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("%s: %d %v, want %d %v", tc.name, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+// TestCeilingUsesThePlatformsRAMWithoutProc: on macOS and Windows there is no
+// /proc/meminfo, and the platform's own answer is the ceiling; a cgroup limit, where
+// one is readable, still wins when it is smaller.
+func TestCeilingUsesThePlatformsRAMWithoutProc(t *testing.T) {
+	ram := func() (int64, bool) { return 16 << 30, true }
+	if got := detectCeiling(fakeFS{}.read, ram); got != 16<<30 {
+		t.Errorf("RAM alone: %d", got)
+	}
+	if got := detectCeiling(fakeFS{}.read, noMemory); got != 0 {
+		t.Errorf("nothing readable: %d, want 0, unbudgeted", got)
+	}
+	withCgroup := fakeFS{"/proc/self/cgroup": "0::/\n", "/sys/fs/cgroup/memory.max": "1073741824\n"}
+	if got := detectCeiling(withCgroup.read, ram); got != 1<<30 {
+		t.Errorf("a smaller cgroup limit: %d", got)
+	}
+	// /proc/meminfo, where there is one, is still read first.
+	if got := detectCeiling(fakeFS{"/proc/meminfo": meminfo16G}.read, func() (int64, bool) { return 1, true }); got != 16000000*1024 {
+		t.Errorf("/proc/meminfo first: %d", got)
+	}
+}

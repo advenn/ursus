@@ -3,6 +3,8 @@ package execopt
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
+	"math"
 	"os"
 	"path"
 	"strconv"
@@ -30,14 +32,16 @@ import (
 // keeps the process's true peak under it. Set GOMEMLIMIT, or WithMemoryLimit, to
 // choose differently; WithMemoryLimit(0) turns the budget off.
 //
-// Detected once per process. Linux only: elsewhere nothing is readable and the
-// default stays unlimited, as it always was.
+// Detected once per process. On Linux from /proc and the cgroup files; on macOS and
+// Windows the machine's RAM, from sysctl's hw.memsize and GlobalMemoryStatusEx (step
+// 181, scope item R3: both had been unbudgeted, so nothing spilled unless the caller
+// set a limit). Elsewhere nothing is readable, and the default stays unlimited.
 func DefaultLimit() int64 { return Ceiling() / 2 }
 
 // Ceiling is the memory this process may use: the smaller of its cgroup's limit and
 // the machine's RAM, or 0 where neither can be read. Detected once per process.
 func Ceiling() int64 {
-	ceilingOnce.Do(func() { ceiling = detectCeiling(os.ReadFile) })
+	ceilingOnce.Do(func() { ceiling = detectCeiling(os.ReadFile, physicalMemory) })
 	return ceiling
 }
 
@@ -46,14 +50,19 @@ var (
 	ceiling     int64
 )
 
-// detectLimit is DefaultLimit over a file reader, so a test can hand it fixtures.
+// detectLimit is DefaultLimit over a file reader and no other source of RAM, so a
+// test can hand it fixtures.
 func detectLimit(read func(string) ([]byte, error)) int64 {
-	return detectCeiling(read) / 2
+	return detectCeiling(read, noMemory) / 2
 }
 
-// detectCeiling is Ceiling over a file reader.
-func detectCeiling(read func(string) ([]byte, error)) int64 {
+// detectCeiling is Ceiling over a file reader, and ram, the platform's own answer
+// for the machine's memory where /proc/meminfo is not there to read.
+func detectCeiling(read func(string) ([]byte, error), ram func() (int64, bool)) int64 {
 	c, ok := memTotal(read)
+	if !ok {
+		c, ok = ram()
+	}
 	if cg, cok := cgroupLimit(read); cok && (!ok || cg < c) {
 		c, ok = cg, true
 	}
@@ -152,4 +161,24 @@ func readLimit(read func(string) ([]byte, error), file string) (int64, bool) {
 		return 0, false
 	}
 	return v, true
+}
+
+// noMemory is a platform with nothing to say about its memory.
+func noMemory() (int64, bool) { return 0, false }
+
+// sysctlUint64 reads a uint64 sysctl value as syscall.Sysctl returns it on Darwin: its
+// eight little-endian bytes as a string, less one trailing zero byte, which Sysctl
+// drops as though it ended a C string. So 16 GiB, 00 00 00 00 04 00 00 00, arrives
+// as seven bytes.
+func sysctlUint64(s string) (int64, bool) {
+	if len(s) == 0 || len(s) > 8 {
+		return 0, false
+	}
+	var b [8]byte
+	copy(b[:], s)
+	v := binary.LittleEndian.Uint64(b[:])
+	if v == 0 || v > math.MaxInt64 {
+		return 0, false
+	}
+	return int64(v), true
 }

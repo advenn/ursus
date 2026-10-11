@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–180, so far.
+Everything on master since `v0.5.0`: steps 156–181, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -82,8 +82,16 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   zone.
 - **`DataFrame.Rows` decodes a List column** into a slice, `[][]T` and `[]*T` too,
   and a Binary one into a `[]byte` (178).
+- **A default memory budget on macOS and Windows** (181): half the machine's RAM,
+  read from sysctl's `hw.memsize` and `GlobalMemoryStatusEx`, as Linux's has been.
 
 ### What a user of v0.5.0 can trip on
+
+- **On macOS and Windows a query now has a default budget,** half the machine's RAM,
+  and spills, or refuses where it cannot spill, past it (181). Under it ursus also
+  sets the Go runtime's soft memory limit to nine tenths of the RAM, as on Linux.
+  `WithMemoryLimit(0)` is unbudgeted, as before; `GOMEMLIMIT` or
+  `LeaveProcessMemoryLimit()` keeps a program's own soft limit.
 
 - **A type whose Enum category or struct field name holds a comma, a colon, a
   bracket, a quote or an edge space renders it quoted** (179): `Enum("a, b")`, where
