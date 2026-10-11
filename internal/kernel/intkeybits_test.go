@@ -78,3 +78,66 @@ func spreadKeys(n int, step int64) []int64 {
 	}
 	return out
 }
+
+// TestIntKeyIndexAnswersAsTheTables: step 203's direct index gives every key the id
+// the tables give it, across three tables whose ids it offsets by their bases, with
+// a null key, negative keys, absent keys and keys outside the range; and is built
+// only where the keys are dense enough.
+func TestIntKeyIndexAnswersAsTheTables(t *testing.T) {
+	// Each key in the table PartitionOf gives it, as a partitioned build places it.
+	parts := make([][]int64, 3)
+	for k := int64(-300); k < 3_000; k += 2 {
+		p := PartitionOf(IntHash(k), 3)
+		parts[p] = append(parts[p], k)
+	}
+	tables := []*IntKeyTable{keyParts(parts[0]).Table(0), keyParts(parts[1]).Table(0), keyParts(parts[2]).Table(0)}
+	tables[1].GetOrInsertNull()
+	hashed := NewIntKeyParts(tables)
+	indexed := NewIntKeyParts(tables)
+	if !indexed.Index() || indexed.IndexBytes() == 0 {
+		t.Fatal("dense keys made no index")
+	}
+	probe := []int64{math.MinInt64, math.MaxInt64, -301, -300, -299, 0, 1, 2999, 3000, 3001}
+	for k := int64(-310); k < 3_010; k++ {
+		probe = append(probe, k)
+	}
+	for lo := 0; lo < len(probe); lo += ManyChunk {
+		keys := probe[lo:min(lo+ManyChunk, len(probe))]
+		want, got := make([]int32, len(keys)), make([]int32, len(keys))
+		// The hash path, read before any index exists on this one.
+		var hs, first [ManyChunk]uint64
+		var part [ManyChunk]int
+		for j, key := range keys {
+			h := IntHash(key)
+			p := PartitionOf(h, len(hashed.tables))
+			hs[j], part[j], first[j] = h, p, hashed.tables[p].slots[h&hashed.tables[p].mask]
+		}
+		for j, key := range keys {
+			want[j] = hashed.tables[part[j]].getFrom(key, hs[j], first[j])
+			if want[j] >= 0 {
+				want[j] += hashed.base[part[j]]
+			}
+		}
+		indexed.GetMany(keys, got)
+		for j := range keys {
+			if got[j] != want[j] {
+				t.Fatalf("key %d: index %d, tables %d", keys[j], got[j], want[j])
+			}
+		}
+	}
+	for _, c := range []struct {
+		name string
+		keys []int64
+		want bool
+	}{
+		{"4 slots a key, past a mega-slot", spreadKeys(1<<19, 4), true},
+		{"5 slots a key, past a mega-slot", spreadKeys(1<<19, 5), false},
+		{"two keys a mega-slot apart", []int64{0, 1<<20 - 1}, true},
+		{"two keys past it", []int64{0, 1 << 20}, false},
+		{"none", nil, false},
+	} {
+		if got := keyParts(c.keys).Index(); got != c.want {
+			t.Errorf("%s: an index is %v, want %v", c.name, got, c.want)
+		}
+	}
+}

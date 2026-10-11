@@ -231,6 +231,10 @@ type IntKeyParts struct {
 
 	bitsOnce sync.Once
 	bits     *IntKeyBits // the keys as a bitmap, when dense; see Bits
+
+	indexOnce sync.Once
+	index     []int32 // key - indexLo to its id, or -1, when dense; see Index
+	indexLo   int64
 }
 
 // IntKeyBits is a set of integer keys as a bitmap over their range (step 202).
@@ -329,8 +333,79 @@ func (k *IntKeyParts) NBytes() int64 {
 	return n
 }
 
-// GetMany is IntKeyTable.GetMany across the tables, for up to ManyChunk keys.
+// A direct index is built when the keys' range is at most maxIndexPerKey slots a
+// key, sixteen bytes a key, about what the tables spend on each; or at most
+// maxIndexAnyway slots, four megabytes, whatever the count.
+const (
+	maxIndexPerKey = 4
+	maxIndexAnyway = 1 << 20
+)
+
+// Index builds, once, a direct index of dense keys (step 203): a slot for each value
+// in their range, holding its id or -1, so GetMany finds a key by subtraction where
+// it hashed and probed. A join's probe looked every probe row up: 17% of q17. It
+// reports whether there is one. The tables must be complete; a join's freeze calls
+// it, and GetMany after, from any worker.
+func (k *IntKeyParts) Index() bool {
+	k.indexOnce.Do(func() { k.index, k.indexLo = intKeyIndex(k.tables, k.base) })
+	return k.index != nil
+}
+
+// IndexBytes is what the direct index holds, or 0.
+func (k *IntKeyParts) IndexBytes() int64 { return int64(cap(k.index)) * 4 }
+
+func intKeyIndex(tables []*IntKeyTable, base []int32) ([]int32, int64) {
+	lo, hi, n := int64(0), int64(0), 0
+	for _, t := range tables {
+		for id, key := range t.keys {
+			if int32(id) == t.null {
+				continue
+			}
+			if n == 0 || key < lo {
+				lo = key
+			}
+			if n == 0 || key > hi {
+				hi = key
+			}
+			n++
+		}
+	}
+	if n == 0 {
+		return nil, 0
+	}
+	span := uint64(hi) - uint64(lo) + 1
+	if span == 0 || (span/maxIndexPerKey > uint64(n) && span > maxIndexAnyway) {
+		return nil, 0
+	}
+	index := make([]int32, span)
+	for i := range index {
+		index[i] = -1
+	}
+	for p, t := range tables {
+		for id, key := range t.keys {
+			if int32(id) == t.null {
+				continue
+			}
+			index[uint64(key)-uint64(lo)] = base[p] + int32(id)
+		}
+	}
+	return index, lo
+}
+
+// GetMany is IntKeyTable.GetMany across the tables, for up to ManyChunk keys. With a
+// direct index, a key's id is a subtraction and a read.
 func (k *IntKeyParts) GetMany(keys []int64, ids []int32) {
+	if k.Index() {
+		index, lo := k.index, uint64(k.indexLo)
+		for j, key := range keys {
+			if d := uint64(key) - lo; d < uint64(len(index)) {
+				ids[j] = index[d]
+			} else {
+				ids[j] = -1
+			}
+		}
+		return
+	}
 	var (
 		hs, first [ManyChunk]uint64
 		part      [ManyChunk]int

@@ -732,6 +732,10 @@ func (s *joinBuildSink) freeze(ctx context.Context) (*joinTable, error) {
 	// are 8 to 12 — so the account was under-reporting by more than half, in the
 	// operator budget.go cites as its motivating example for RetainBytes existing.
 	s.tableBytes = int64(cap(t.off))*4 + int64(cap(t.rows))*4 + int64(cap(t.rowKey))*4
+	if t.ints != nil && t.ints.Index() {
+		// Dense integer keys: the probe finds them by index (step 203), charged here.
+		s.tableBytes += t.ints.IndexBytes()
+	}
 	s.mem.RetainBytes(s.tableBytes)
 	s.rowKey, s.counts = nil, nil
 	return t, nil

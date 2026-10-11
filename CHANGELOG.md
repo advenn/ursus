@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.2
 
-Everything on master since step 200, v0.6.1's candidate: steps 201–202, so far.
+Everything on master since step 200, v0.6.1's candidate: steps 201–203, so far.
 [`v0.6.2-scope.md`](./context_files/v0.6.2-scope.md) set the scope: **speed and
 out-of-core, continued.** Each step is timed against 0.6.1's code, alternated in one
 session.
@@ -27,6 +27,9 @@ session.
 - **A runtime filter tests a dense key against a bitmap** (202), a bit for each
   value in the join keys' range, where it looked each probe row up in the join's
   hash tables. q8, q7, q5 and q21 take 10 to 19% less CPU.
+- **A join finds a dense integer key by index** (203): a slot for each value in the
+  build keys' range, holding its id, where the probe hashed every row. q17 takes 12%
+  less CPU, q3 and q7 4% less.
 
 ---
 
