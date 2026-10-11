@@ -15,12 +15,29 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.6.1
+## v0.6.1 — candidate, not tagged
 
-Everything on master since `v0.6.0`: steps 191–199, so far.
+Everything since `v0.6.0` (2026-10-11): steps 191–200.
 [`v0.6.1-scope.md`](./context_files/v0.6.1-scope.md) set the scope: **speed where the
-profile points, and out-of-core.** Each step is timed against v0.6.0's code,
-alternated in one session.
+profile points, and out-of-core.** Each step was timed against v0.6.0's code,
+alternated in one session, and step 200 measured the whole.
+
+### Where it ends
+
+- **Against v0.6.0,** both built alike and alternated over PDS-H at SF=1: 10.9% less
+  wall time by geomean, 3.5% less CPU. q19 takes 45% less, q12 27%, q1 25%.
+- **Against Polars, in one session,** every answer validated against DuckDB's:
+
+  | suite | ursus | Polars | ratio | at v0.6.0 |
+  | --- | --: | --: | --: | --: |
+  | PDS-H SF=1 | 168 ms | 78 ms | 2.16× | 2.32× |
+  | PDS-H SF=0.1 | 25 ms | 10 ms | 2.43× | 2.56× |
+  | h2o 10M, Parquet | 796 ms | 528 ms | 1.51× | 1.61× |
+  | h2o 10M, CSV | 1,886 ms | 1,110 ms | 1.70× | 1.81× |
+
+- **Out of core:** a forward or nearest `JoinAsOf`, a cross join, `GroupByDynamic`,
+  `Rolling`, and a window with no `partition_by`, each past a limit that refused it
+  before. h2o's `gb10` and `j5` pass under 3 GB, peaking at 2.74 to 2.91 GB.
 
 ### Faster
 
@@ -67,6 +84,29 @@ alternated in one session.
 
 - **A Parquet page whose RLE run holds a value wider than its bit width** is refused
   as corrupt (192), found by fuzzing the new decoder.
+
+### Known limitations
+
+As v0.6.0's, except:
+
+- **Operators that do not spill,** each failing under a budget with an error naming
+  itself:
+  - reverse, hstack and tail;
+  - a window with no `partition_by` that computes a rank, an ewm function, an
+    interpolation, a reversed cumulative function, an unlimited backward fill or a
+    rolling window by time, or that is ordered;
+  - one partition of a keyed window larger than the limit;
+  - a join with no keys and a residual, a `WhereExists` of a predicate alone;
+  - quantile-like aggregates over a few very large groups.
+- **What streams but holds its answer:** `Rolling` and `GroupByDynamic` hold their
+  windows' state, which is their answer, until the end.
+- **What streams but may read ahead:** a forward or nearest `JoinAsOf` whose left
+  by-key the right side lacks reads the right side to its end.
+- **Speed:** 2.16× Polars on PDS-H at SF=1. The widest gaps are q7 at 3.6×, q16 and
+  q17 at 3.4×, and q15 at 3.3×. ZSTD decompression is 17 to 48% of the widest, and
+  has no faster pure Go decoder.
+- **Memory:** with no limit set, h2o's `gb10` peaks at 6.76 GB over CSV, Polars at
+  5.13 GB.
 
 ---
 
