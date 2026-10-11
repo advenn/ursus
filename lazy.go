@@ -377,7 +377,8 @@ type MemoryStats struct {
 // MergeSorted stream both sides, holding a few batches; a forward or nearest
 // JoinAsOf also holds the right rows it reads ahead, which for a left by-key the
 // right side lacks is the rest of that side. Rolling and GroupByDynamic stream their
-// input, and hold their answer.
+// input; with no key they hand their windows out as they close, a batch's worth at a
+// time, and with a key they hold their answer, which they give per bucket.
 //
 // A bounded sort — one under a Head or a TopK — never spills at all: past the
 // limit it discards everything outside the current best k, which is exact.

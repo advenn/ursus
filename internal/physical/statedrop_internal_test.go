@@ -2,6 +2,7 @@ package physical
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -56,11 +57,14 @@ func TestFinishedGroupingsDropTheirState(t *testing.T) {
 		if !ok {
 			t.Fatalf("planned a %T, not a stage", op)
 		}
-		br, ok := st.child.(*breaker)
-		if !ok {
-			t.Fatalf("the stage holds a %T, not a breaker", st.child)
+		switch c := st.child.(type) {
+		case *breaker:
+			return c.sink
+		case *tempStreamOp: // an unkeyed temporal group (step 207)
+			return c.sink
 		}
-		return br.sink
+		t.Fatalf("the stage holds a %T, not a breaker", st.child)
+		return nil
 	}
 
 	t.Run("a group-by", func(t *testing.T) {
@@ -73,14 +77,16 @@ func TestFinishedGroupingsDropTheirState(t *testing.T) {
 			t.Errorf("the finished sink still holds %d accumulators and %d keys", len(s.accs), s.ids.Len())
 		}
 	})
-	t.Run("a rolling group-by", func(t *testing.T) {
-		op, err := planTemporalGroup(ctx, &plan.TemporalGroup{Input: scan,
-			Index: &expr.Col{Name: "t"}, Aggs: median, Rolling: true, Period: dtype.Every("2h")}, opts)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if s := sinkOf(t, op).(*temporalSink); s.accs != nil {
-			t.Errorf("the finished sink still holds %d accumulators", len(s.accs))
-		}
-	})
+	for _, keys := range [][]expr.Node{nil, {&expr.Col{Name: "g"}}} {
+		t.Run(fmt.Sprintf("a rolling group-by, %d keys", len(keys)), func(t *testing.T) {
+			op, err := planTemporalGroup(ctx, &plan.TemporalGroup{Input: scan, Keys: keys,
+				Index: &expr.Col{Name: "t"}, Aggs: median, Rolling: true, Period: dtype.Every("2h")}, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s := sinkOf(t, op).(*temporalSink); s.segs != nil {
+				t.Errorf("the finished sink still holds %d segments of accumulators", len(s.segs))
+			}
+		})
+	}
 }

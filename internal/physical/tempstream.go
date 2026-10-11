@@ -211,7 +211,10 @@ func (s *temporalSink) gridRow(b *tgBucket, ref rowRef, t int64) error {
 		if err != nil {
 			return err
 		}
-		w := s.newWindow(b, lo, hi, lo, hi)
+		w, err := s.newWindow(b, lo, hi, lo, hi)
+		if err != nil {
+			return err
+		}
 		s.gridPoints++
 		b.active = append(b.active, w)
 		next := s.every.AddTo(b.next)
@@ -285,7 +288,10 @@ func (s *temporalSink) rollRow(b *tgBucket, ref rowRef, t int64) error {
 		b.recent = append(b.recent[:0], b.recent[drop:]...)
 	}
 	s.place(b, ref, t)
-	w := s.newWindow(b, lo, hi, t, hi)
+	w, err := s.newWindow(b, lo, hi, t, hi)
+	if err != nil {
+		return err
+	}
 	for _, r := range b.recent {
 		if s.holds(w, r.tick) {
 			s.addPair(r.ref, r.tick, w.id)
@@ -342,8 +348,11 @@ func (s *temporalSink) passed(w tgWin, t int64) bool {
 
 // newWindow numbers a window of bucket b with membership [lo, hi] under closed, and
 // start and end as it is reported, which are kept only for IncludeBoundaries.
-func (s *temporalSink) newWindow(b *tgBucket, lo, hi, start, end int64) tgWin {
-	w := int32(len(s.wLabel))
+func (s *temporalSink) newWindow(b *tgBucket, lo, hi, start, end int64) (tgWin, error) {
+	w := s.wBase + int32(len(s.wLabel))
+	if err := s.openSeg(w); err != nil {
+		return tgWin{}, err
+	}
 	if s.boundaries {
 		s.wStart, s.wEnd = append(s.wStart, start), append(s.wEnd, end)
 	}
@@ -352,23 +361,26 @@ func (s *temporalSink) newWindow(b *tgBucket, lo, hi, start, end int64) tgWin {
 		label = end
 	}
 	s.wLabel, s.wFed = append(s.wLabel, label), append(s.wFed, false)
-	b.wins = append(b.wins, w)
-	return tgWin{id: w, lo: lo, hi: hi}
+	if !s.stream {
+		b.wins = append(b.wins, w) // the order Finish gives them in
+	}
+	return tgWin{id: w, lo: lo, hi: hi}, nil
 }
 
 // addPair queues the row for window w. A datapoint label is the window's first row.
 func (s *temporalSink) addPair(ref rowRef, t int64, w int32) {
-	if !s.wFed[w] {
-		s.wFed[w] = true
+	if at := w - s.wBase; !s.wFed[at] {
+		s.wFed[at] = true
 		if s.label == "datapoint" {
-			s.wLabel[w] = t
+			s.wLabel[at] = t
 		}
 	}
 	s.pairs = append(s.pairs, ref)
 	s.pgroups = append(s.pgroups, w)
 }
 
-// feed gathers the queued pairs' rows once and gives them to the aggregates.
+// feed gathers the queued pairs' rows once and gives them to the aggregates of
+// their windows' segments: almost always one, and then the pairs go as they are.
 func (s *temporalSink) feed(ctx context.Context) error {
 	nGroups := len(s.wLabel)
 	if len(s.pairs) == 0 {
@@ -378,18 +390,49 @@ func (s *temporalSink) feed(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	cols := make([]*data.Column, len(s.specs))
 	for i, spec := range s.specs {
-		col, err := evalColumn(ctx, spec.input, src)
-		if err != nil {
+		if cols[i], err = evalColumn(ctx, spec.input, src); err != nil {
 			return err
 		}
-		s.accs[i].Reserve(nGroups)
-		if err := s.accs[i].AddBatch(s.pgroups, col); err != nil {
-			return err
+	}
+	lo, hi := len(s.segs), -1
+	for _, w := range s.pgroups {
+		j := s.segIndex(w)
+		lo, hi = min(lo, j), max(hi, j)
+	}
+	for j := lo; j <= hi; j++ {
+		g := s.segs[j]
+		var sel []int32 // the pairs in g, when not all are
+		local := s.local[:0]
+		for k, w := range s.pgroups {
+			if lo == hi || s.segIndex(w) == j {
+				local = append(local, w-g.base)
+				if lo != hi {
+					sel = append(sel, int32(k))
+				}
+			}
+		}
+		s.local = local
+		for i, col := range cols {
+			if sel != nil {
+				if col, err = kernel.Take(col, sel); err != nil {
+					return err
+				}
+			}
+			g.accs[i].Reserve(int(g.n))
+			if err := g.accs[i].AddBatch(local, col); err != nil {
+				return err
+			}
 		}
 	}
 	s.unseen += len(s.pairs)
 	s.pairs, s.pgroups = s.pairs[:0], s.pgroups[:0]
+	if s.stream {
+		if err := s.handOut(false); err != nil {
+			return err
+		}
+	}
 	// What the aggregates keep is charged as it grows, not once a batch: a median or
 	// an implode keeps a value a pair, and one batch of a long rolling window is
 	// millions of pairs. NBytes is O(windows), so it is read once per that many
@@ -402,17 +445,23 @@ func (s *temporalSink) feed(ctx context.Context) error {
 }
 
 // letGo drops the batches nothing points into, after a batch is fed: every one, for a
-// dynamic group; for a rolling one, once eight are held, all but one batch of the
-// rows still kept.
+// dynamic group; for a rolling one, the rows still kept are gathered into one batch
+// once eight are held, or whenever they are under an eighth of a batch, which is
+// cheap. The second is step 207's: a rolling group that hands its answer out holds
+// little else, and eight batches for a few rows in reach were most of it.
 func (s *temporalSink) letGo() error {
 	if !s.rolling {
 		s.parts = s.parts[:0]
 		return nil
 	}
-	if len(s.parts) < maxTempParts {
+	nKept := 0
+	for _, b := range s.bkts {
+		nKept += len(b.recent)
+	}
+	if len(s.parts) < 2 || (len(s.parts) < maxTempParts && nKept > s.chunk()/8) {
 		return nil
 	}
-	var refs []rowRef
+	refs := make([]rowRef, 0, nKept)
 	for _, b := range s.bkts {
 		for _, r := range b.recent {
 			refs = append(refs, r.ref)
@@ -451,8 +500,10 @@ func (s *temporalSink) chargeState() error {
 			st += b.key.NBytes()
 		}
 	}
-	for _, a := range s.accs {
-		st += a.NBytes()
+	for _, g := range s.segs {
+		for _, a := range g.accs {
+			st += a.NBytes()
+		}
 	}
 	s.mem.RetainBytes(st)
 	return s.mem.Check()
@@ -461,16 +512,20 @@ func (s *temporalSink) chargeState() error {
 // Finish puts the windows in the order the buffered sink gave them, per bucket and
 // each bucket's in order, and builds the answer.
 func (s *temporalSink) Finish(ctx context.Context) (Operator, error) {
+	if s.stream {
+		out, err := s.finishStream(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return newBatchOperator(s.schema, out...), nil
+	}
 	if !s.sorted {
-		return nil, uerr.New(uerr.KindValue, s.op(),
-			"the index column is not sorted: row %d goes backwards", s.badRow).
-			Hint("a temporal group-by cuts windows from a sorted index, so the rows " +
-				"of a window are contiguous").
-			Hint("sort first, e.g. .Sort(ursus.Asc(ursus.Col(...))) before this call")
+		return nil, s.unsorted()
 	}
 	if err := s.feed(ctx); err != nil {
 		return nil, err
 	}
+	accs := s.segs[0].accs
 	nGroups := len(s.wLabel)
 	perm := make([]int32, 0, nGroups)
 	bucketOf := make([]int32, 0, nGroups)
@@ -512,8 +567,8 @@ func (s *temporalSink) Finish(ctx context.Context) (Operator, error) {
 	}
 	identity := len(s.bkts) <= 1
 	for i, spec := range s.specs {
-		s.accs[i].Reserve(nGroups)
-		c, err := s.accs[i].Finish(spec.name, nGroups)
+		accs[i].Reserve(nGroups)
+		c, err := accs[i].Finish(spec.name, nGroups)
 		if err != nil {
 			return nil, err
 		}
@@ -531,7 +586,7 @@ func (s *temporalSink) Finish(ctx context.Context) (Operator, error) {
 	// The account held the state; it holds the answer now, which is the rebase
 	// hashAggSink.Finish and joinBuildSink.freeze both make. The aggregates' state
 	// goes with it: kept, it stayed alive until the query ended.
-	s.parts, s.accs, s.bkts = nil, nil, nil
+	s.parts, s.segs, s.bkts = nil, nil, nil
 	s.mem.Release()
 	s.mem.Retain(out)
 

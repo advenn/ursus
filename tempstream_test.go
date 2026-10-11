@@ -203,3 +203,88 @@ func TestTemporalGroupsStreamTheirInput(t *testing.T) {
 		t.Logf("%s: a peak of %d bytes under %d", c.name, st.Peak, c.limit)
 	}
 }
+
+// TestUnkeyedTemporalGroupsHandOutTheirWindows: step 207, v0.6.2 item O2. A
+// temporal group with no key hands its windows out as they close, a segment of a
+// batch's worth at a time, where it held its answer to the end. Each case answers
+// as the same group under a key that is the same in every row, which still holds
+// its answer:
+//
+//   - over 200,000 rows a minute apart, under a tenth of their bytes, which a
+//     rolling group's answer is many times. What it holds is a batch's worth
+//     whatever the input: the batch, a segment of as many windows, and their pairs,
+//     about 700 KB at 8,192 rows a batch, more than a tenth of this input; so
+//     batches of 2,048;
+//   - over 3,000, at batches of 1, 7 and 64, so that segments end everywhere, among
+//     windows that overlap, reach forward, and close both ends.
+func TestUnkeyedTemporalGroupsHandOutTheirWindows(t *testing.T) {
+	c := ursus.Col
+	// Implode keeps a window's every value, an answer many times its input, so only
+	// the small cases take it.
+	bounded := []ursus.Expr{c("v").Sum().Alias("s"), ursus.Len().Alias("n"), c("v").Last().Alias("l")}
+	aggs := bounded
+	one := []ursus.Expr{c("one")}
+	type group func(lf *ursus.LazyFrame, by []ursus.Expr) *ursus.LazyFrame
+	cases := []struct {
+		name string
+		q    group
+	}{
+		{"rolling, 30m", func(lf *ursus.LazyFrame, by []ursus.Expr) *ursus.LazyFrame {
+			return lf.Rolling(c("ts"), ursus.RollingOptions{Period: ursus.Every("30m"), GroupBy: by}).Agg(aggs...)
+		}},
+		{"rolling, 2h, 15m forward, closed both", func(lf *ursus.LazyFrame, by []ursus.Expr) *ursus.LazyFrame {
+			return lf.Rolling(c("ts"), ursus.RollingOptions{Period: ursus.Every("2h"),
+				Offset: ursus.Every("15m"), Closed: ursus.ClosedBoth, GroupBy: by}).Agg(aggs...)
+		}},
+		{"dynamic, every 1h, period 3h, boundaries, labelled by a row", func(lf *ursus.LazyFrame, by []ursus.Expr) *ursus.LazyFrame {
+			return lf.GroupByDynamic(c("ts"), ursus.DynamicOptions{Every: ursus.Every("1h"),
+				Period: ursus.Every("3h"), IncludeBoundaries: true, Label: "datapoint", GroupBy: by}).Agg(aggs...)
+		}},
+		{"dynamic, every 10m, offset -20m, closed none", func(lf *ursus.LazyFrame, by []ursus.Expr) *ursus.LazyFrame {
+			return lf.GroupByDynamic(c("ts"), ursus.DynamicOptions{Every: ursus.Every("10m"),
+				Offset: ursus.Every("-20m"), Closed: ursus.ClosedNone, GroupBy: by}).Agg(aggs...)
+		}},
+	}
+	keyed := func(q group, lf *ursus.LazyFrame) *ursus.LazyFrame {
+		return q(lf.WithColumns(ursus.Lit("x").Alias("one")), one).Drop("one")
+	}
+
+	big := minuteSeries(200_000)
+	in, err := big.Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenth := in.Batch().NBytes() / 10
+	small := minuteSeries(3_000)
+	for _, tc := range cases {
+		want, err := keyed(tc.q, big).Collect(t.Context(), ursus.WithBatchSize(8192))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var st ursus.MemoryStats
+		got, err := tc.q(big, nil).Collect(t.Context(), ursus.WithBatchSize(2048),
+			ursus.WithMemoryLimit(tenth), ursus.WithMemoryStats(&st))
+		if err != nil {
+			t.Fatalf("%s, under %d bytes: %v", tc.name, tenth, err)
+		}
+		ursustest.AssertFrameEqual(t, got, want)
+		if st.Peak > tenth {
+			t.Errorf("%s: a peak of %d bytes under a limit of %d", tc.name, st.Peak, tenth)
+		}
+		t.Logf("%s: a peak of %d under %d, for an answer of %d", tc.name, st.Peak, tenth, want.Batch().NBytes())
+
+		aggs = append(bounded, c("v").Implode().Alias("all"))
+		want, err = keyed(tc.q, small).Collect(t.Context(), ursus.WithBatchSize(64))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, bs := range []int{1, 7, 64} {
+			got, err := tc.q(small, nil).Collect(t.Context(), ursus.WithBatchSize(bs))
+			if err != nil {
+				t.Fatalf("%s, batch %d: %v", tc.name, bs, err)
+			}
+			ursustest.AssertFrameEqual(t, got, want)
+		}
+		aggs = bounded
+	}
+}

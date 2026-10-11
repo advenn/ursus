@@ -202,11 +202,16 @@ func TestRollingAnswersDoNotDependOnTheChunk(t *testing.T) {
 // slot, its start and bucket, and each aggregate's state — is charged, so the
 // budget's peak is at least their sum. Two rows four hours apart at a one-second
 // grid are 14,400 windows and almost nothing else.
+//
+// Under a key, the same in both rows: an unkeyed group hands its windows out as
+// they close since step 207, and holds them no longer.
 func TestDynamicWindowStateIsCharged(t *testing.T) {
 	lo := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	var stats ursus.MemoryStats
-	df, err := ursus.Frame(ursus.Values("ts", []time.Time{lo, lo.Add(4*time.Hour - time.Second)})).
-		GroupByDynamic(ursus.Col("ts"), ursus.DynamicOptions{Every: ursus.Every("1s")}).
+	df, err := ursus.Frame(ursus.Values("ts", []time.Time{lo, lo.Add(4*time.Hour - time.Second)}),
+		ursus.Values("k", []string{"a", "a"})).
+		GroupByDynamic(ursus.Col("ts"), ursus.DynamicOptions{Every: ursus.Every("1s"),
+			GroupBy: []ursus.Expr{ursus.Col("k")}}).
 		Agg(ursus.Len().Alias("n")).
 		Collect(t.Context(), ursus.WithMemoryStats(&stats))
 	if err != nil {

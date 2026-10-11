@@ -54,7 +54,17 @@ type temporalSink struct {
 	index expr.Node
 	keys  []expr.Node
 	specs []aggSpec
-	accs  []kernel.Accumulator
+
+	// The windows' aggregates, by segment (tempstream.go). A keyed group keeps every
+	// window in one; an unkeyed one streams its answer, a segment of chunk() windows
+	// at a time (step 207), and wBase is the first window the per-window arrays
+	// still hold.
+	stream  bool
+	segs    []*tgSeg
+	wBase   int32
+	emitted bool          // whether a segment has been handed out
+	local   []int32       // feed's scratch: a segment's pairs' windows, numbered in it
+	ready   []*data.Batch // segments' answers handed out, for the operator to give
 
 	rolling bool
 	every   dtype.Interval
@@ -117,6 +127,19 @@ func (s *temporalSink) op() string {
 		return "rolling"
 	}
 	return "group_by_dynamic"
+}
+
+// newAccs is a fresh aggregate for each spec, for a new segment of windows.
+func (s *temporalSink) newAccs() ([]kernel.Accumulator, error) {
+	accs := make([]kernel.Accumulator, len(s.specs))
+	for i, spec := range s.specs {
+		acc, err := kernel.NewAccumulator(spec.op, spec.inType, spec.bind, spec.params)
+		if err != nil {
+			return nil, err
+		}
+		accs[i] = acc
+	}
+	return accs, nil
 }
 
 func (s *temporalSink) chunk() int {
@@ -391,7 +414,8 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 
 	sink := &temporalSink{
 		schema: sinkSchema, inSchema: in, keySchema: keySchema,
-		index: t.Index, keys: t.Keys, specs: specs, accs: accs,
+		index: t.Index, keys: t.Keys, specs: specs, segs: []*tgSeg{{accs: accs}},
+		stream:  len(t.Keys) == 0,
 		rolling: t.Rolling,
 		every:   t.Every, period: t.Period, offset: t.Offset,
 		closed: t.Closed.Or(def),
@@ -407,6 +431,9 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 	}
 
 	op := Operator(&breaker{child: child, sink: sink})
+	if sink.stream {
+		op = &tempStreamOp{child: child, sink: sink}
+	}
 	if !compound && len(specs) == len(t.Aggs) {
 		return &stage{child: op, op: &renameOp{schema: outSchema}}, nil
 	}
