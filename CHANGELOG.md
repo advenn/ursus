@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.2
 
-Everything on master since step 200, v0.6.1's candidate: steps 201–207, 209 and 210, so far; 208, the report, waits for h2o.
+Everything on master since step 200, v0.6.1's candidate: steps 201–207 and 209–211, so far; 208, the report, waits for h2o.
 [`v0.6.2-scope.md`](./context_files/v0.6.2-scope.md) set the scope: **speed and
 out-of-core, continued.** Each step is timed against 0.6.1's code, alternated in one
 session.
@@ -37,6 +37,9 @@ session.
 - **A group-by on one String or Binary key hashes the values themselves** (205),
   read in place from the column, where it encoded each first. h2o gb1 takes 31% less
   CPU and 23% less time over Parquet.
+- **A short quoted CSV field is scanned once** (211), where its line endings were
+  counted and its carriage returns searched for by two more calls. h2o gb1 and gb3
+  over CSV take 7 to 9% less CPU and 6% less time.
 
 ### Out of core
 

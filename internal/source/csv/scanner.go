@@ -398,8 +398,24 @@ func (s *scanner) quotedField(b []byte, i int, atEOF bool, nlSoFar int) (consume
 	content := b[start:i]
 	i++ // step over the closing quote
 
-	// Count the newlines the field spanned, so line numbers stay physical.
-	lines = bytes.Count(content, []byte{'\n'})
+	// Count the newlines the field spanned, so line numbers stay physical, and look
+	// for a carriage return. A short field is looked at once, a byte at a time: a
+	// count and a search, each a call, cost more than a five-byte "id001" did, 13%
+	// of h2o's quoted CSV (step 211).
+	cr := false
+	if len(content) <= shortField {
+		for _, c := range content {
+			switch c {
+			case '\n':
+				lines++
+			case '\r':
+				cr = true
+			}
+		}
+	} else {
+		lines = bytes.Count(content, []byte{'\n'})
+		cr = bytes.IndexByte(content, '\r') >= 0
+	}
 
 	// A CRLF inside a quoted field is normalised to LF, matching encoding/csv
 	// ("carriage returns before newline characters are silently removed"). The
@@ -407,7 +423,7 @@ func (s *scanner) quotedField(b []byte, i int, atEOF bool, nlSoFar int) (consume
 	// a Windows-authored file read by every other Go program yields \n, and a CSV
 	// reader that disagrees with encoding/csv about the contents of a field is a
 	// worse trap than the rare field that genuinely wants a literal CRLF.
-	if esc || bytes.Contains(content, crlf) {
+	if esc || (cr && bytes.Contains(content, crlf)) {
 		off := len(s.unesc)
 		s.unesc = appendNormalised(s.unesc, content, s.quote)
 		s.fields = append(s.fields, fieldRef{off: off, n: len(s.unesc) - off, esc: true, quoted: true})
@@ -444,6 +460,9 @@ func (s *scanner) quotedField(b []byte, i int, atEOF bool, nlSoFar int) (consume
 }
 
 var crlf = []byte{'\r', '\n'}
+
+// shortField is the longest quoted field quotedField scans a byte at a time.
+const shortField = 32
 
 // appendNormalised copies src to dst, collapsing each doubled quote to one and
 // each CRLF to LF. Both transformations shrink the input, so one pass suffices.

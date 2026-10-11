@@ -253,3 +253,32 @@ func equal(a, b [][]string) bool {
 	}
 	return true
 }
+
+// TestALongQuotedFieldIsNormalisedAndCounted: a quoted field longer than shortField
+// is searched for its line endings and carriage returns, where a short one is looked
+// at a byte at a time (step 211). Fields either side of the threshold, each holding
+// a CRLF and a LF: the CRLF reads as LF, as encoding/csv reads it, and the records
+// after start on their physical lines.
+func TestALongQuotedFieldIsNormalisedAndCounted(t *testing.T) {
+	for _, n := range []int{shortField - 4, shortField + 8, 3 * shortField} {
+		pad := strings.Repeat("x", n)
+		in := "a,b\n\"" + pad + "\r\nmid\nend\",1\nlast,2\n"
+		sc := newScanner(strings.NewReader(in), DefaultOptions().normalise())
+		var lines []int
+		var fields []string
+		for sc.Next() {
+			lines = append(lines, sc.Line())
+			fields = append(fields, string(sc.Field(0)))
+		}
+		if err := sc.Err(); err != nil {
+			t.Fatal(err)
+		}
+		if want := pad + "\nmid\nend"; len(fields) != 3 || fields[1] != want {
+			t.Fatalf("a field of %d: %q, want %q", n, fields, want)
+		}
+		// The field spans lines 2 to 4, so the last record is on line 5.
+		if lines[2] != 5 {
+			t.Errorf("a field of %d: the record after it on line %d, want 5", n, lines[2])
+		}
+	}
+}
