@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–178, so far.
+Everything on master since `v0.5.0`: steps 156–179, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -85,6 +85,12 @@ far ursus has moved against v0.5.0 is measured once, at the end.
 
 ### What a user of v0.5.0 can trip on
 
+- **A type whose Enum category or struct field name holds a comma, a colon, a
+  bracket, a quote or an edge space renders it quoted** (179): `Enum("a, b")`, where
+  it read `Enum(a, b)`. Ordinary names render as before.
+- **A Parquet file from a writer outside the known list is not pruned by null
+  counts or by a number's bounds** (179); its strings' bounds still prune.
+
 - **A field tagged `ursus:"name"` now reads that column** (178). One whose tag named
   a column but whose own name matched another read the other before.
 
@@ -103,6 +109,17 @@ far ursus has moved against v0.5.0 is measured once, at the end.
 
 ### Fixed
 
+- **Two types that rendered alike are no longer one computation** (179). An Enum's
+  category or a struct's field name holding a comma, a colon, a bracket or a quote
+  made two types render alike, and aggregates and window functions are
+  deduplicated by rendering: `Enum("a, b")` and `Enum("a", "b")` casts of one column
+  failed as an ursus bug in an aggregate, and silently shared an answer in a window.
+- **Parquet statistics from an unknown writer** (179): a null count, or a number's
+  bounds, now prunes only in a file whose writer always writes them (Arrow's C++, Go
+  and Rust writers, parquet-mr, DuckDB, Polars). Another writer's absent null count
+  read as zero, and `IsNull` could skip groups that held nulls.
+- **`x OR true` and `x AND false` keep an error x raises** (179), as Polars does: a
+  failing strict cast in x fails the query, rather than being folded away.
 - **`DataFrame.Rows` reads `ursus:"name"` tags again** (178). The module's rename had
   rewritten the tag key to the module path, so since then a field matched a column
   only by its own name.

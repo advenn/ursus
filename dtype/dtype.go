@@ -352,6 +352,13 @@ func (d DataType) Equal(o DataType) bool { return d == o }
 //
 // This output is load-bearing: it appears in golden Explain files, in
 // ursustest failure messages, and in every type error. It must stay stable.
+//
+// The rendering is unambiguous, so two types render alike only if they are one
+// type: an Enum's category or a Struct's field name is quoted where it holds a
+// character the rendering itself uses (QuoteName). Deduplication keys aggregates,
+// window functions and literals on renderings, and Enum("a, b") and Enum("a", "b")
+// both rendered Enum(a, b): two casts of one column, one to each, became one
+// aggregate, or one window function's answer, until step 179 (audit row O13).
 func (d DataType) String() string {
 	switch d.id {
 	case TypeTime, TypeDuration:
@@ -385,7 +392,11 @@ func (d DataType) String() string {
 		return b.String()
 
 	case TypeEnum:
-		return "Enum(" + strings.Join(d.Categories(), ", ") + ")"
+		cats := make([]string, len(d.Categories()))
+		for i, c := range d.Categories() {
+			cats[i] = QuoteName(c)
+		}
+		return "Enum(" + strings.Join(cats, ", ") + ")"
 
 	default:
 		return d.id.String()

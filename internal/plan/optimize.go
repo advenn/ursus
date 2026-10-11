@@ -14,6 +14,19 @@ import (
 // changed anything. It must be SOUND: the rewritten plan must produce the same
 // rows, in the same order, with the same schema. The optimizer verifies the
 // schema half of that automatically — see Optimizer.Run.
+//
+// # Errors (step 179, audit row O12)
+//
+// A rule never adds an error the plan did not have: that is why predicate
+// pushdown holds back a conjunct that can fail (fallible) and treats a join that
+// validates its keys as a barrier. And it never removes one from a value the answer
+// reads: `x OR true` is folded to true only when x cannot fail, since the query
+// that evaluates x fails, and Polars' does too.
+//
+// Whether a value nothing reads is computed is not promised either way. Today it
+// is: a column a later Select leaves out is still computed, and a strict cast in it
+// that fails fails the query. Polars and DuckDB drop such a column, its errors with
+// it, and a rule here may come to as well.
 // Apply receives the Flags so a rule can gate an individual ARM, not just its own
 // existence. Predicate pushdown needs that: moving a filter through a join is far
 // riskier than moving one through a sort, and "turn off all predicate pushdown" is

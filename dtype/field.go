@@ -1,5 +1,11 @@
 package dtype
 
+import (
+	"strconv"
+	"strings"
+	"unicode"
+)
+
 // Field is a named, typed column slot.
 //
 // Nullable is a static property of the schema, not a count of nulls actually
@@ -53,7 +59,19 @@ func (f Field) Equal(o Field) bool { return f == o }
 // Stable: golden files depend on it.
 func (f Field) String() string {
 	if f.Nullable {
-		return f.Name + ": " + f.Type.String()
+		return QuoteName(f.Name) + ": " + f.Type.String()
 	}
-	return f.Name + ": " + f.Type.String() + "!"
+	return QuoteName(f.Name) + ": " + f.Type.String() + "!"
+}
+
+// QuoteName renders a field name or an Enum category as it is, unless that would
+// make a type's rendering ambiguous: empty, edged with a space, or holding a
+// separator, a bracket, a quote or anything unprintable. Then it is quoted, as Go
+// quotes a string. Every ordinary name stays bare.
+func QuoteName(s string) string {
+	if s == "" || strings.TrimSpace(s) != s || strings.ContainsAny(s, ",:()\"\\!") ||
+		strings.ContainsFunc(s, func(r rune) bool { return !unicode.IsPrint(r) }) {
+		return strconv.Quote(s)
+	}
+	return s
 }

@@ -1,6 +1,8 @@
 package parquet
 
 import (
+	"strings"
+
 	"github.com/apache/arrow-go/v18/parquet/metadata"
 
 	"github.com/advenn/ursus/dtype"
@@ -57,11 +59,35 @@ import (
 //     struct's fields, a list's elements — and none of them states whether the
 //     column itself is null. Nested columns are never pruned (I5).
 //
-// Two more are recorded and not handled, because only a third-party writer
-// reaches them and nothing in arrow-go's read API can detect them: HasNullCount()
-// is true for every statistic read from a file, so a file written without
-// null_count reads as having no nulls; and a one-sided integer or float min or max
-// reads its absent side as 0.
+// # And two that only some writers' files reach (step 179, audit row I23)
+//
+//  6. HasNullCount() is true for every statistic read from a file, and an absent
+//     null_count reads as 0, so a file written without one reads as having no
+//     nulls, and IsNull would skip groups that hold them.
+//  7. A one-sided integer or float min or max reads its absent side as 0.
+//
+// Nothing in arrow-go's read API tells either from the real thing. So the pruner
+// trusts a null count, and a number's bounds, only in a file whose writer always
+// writes them (knownWriter, from the footer's created_by). A file from any other
+// writer is read whole wherever either would decide.
+
+// knownWriters are the writers whose statistics always carry a null count and, when
+// they carry bounds, both: Arrow's C++, Go and Rust writers, pyarrow among them;
+// parquet-mr, which Spark and Hive write with; DuckDB; and Polars. The three the
+// bench's environment can run were read back with pyarrow (step 179), and so are
+// ursus's own files, written by arrow-go as "parquet-go version …".
+var knownWriters = []string{"parquet-cpp", "parquet-go", "parquet-mr", "parquet-rs", "duckdb", "polars"}
+
+// knownWriter reports whether a footer's created_by names one of knownWriters.
+func knownWriter(createdBy string) bool {
+	s := strings.ToLower(strings.TrimSpace(createdBy))
+	for _, w := range knownWriters {
+		if strings.HasPrefix(s, w) {
+			return true
+		}
+	}
+	return false
+}
 
 // prunable reports whether the pruner understands this conjunct at all. It runs at
 // PLAN time, to decide what to classify Inexact, and must agree with what
@@ -156,9 +182,9 @@ func flipped(op expr.BinaryOp) expr.BinaryOp {
 
 // canSkipRowGroup reports whether every row of the group provably fails at least
 // one conjunct.
-func canSkipRowGroup(rg *metadata.RowGroupMetaData, leaf leafOf, preds []expr.Node) (bool, error) {
+func canSkipRowGroup(rg *metadata.RowGroupMetaData, leaf leafOf, preds []expr.Node, full bool) (bool, error) {
 	for _, p := range preds {
-		may, err := mayMatch(rg, leaf, p)
+		may, err := mayMatch(rg, leaf, p, full)
 		if err != nil {
 			return false, err
 		}
@@ -172,26 +198,26 @@ func canSkipRowGroup(rg *metadata.RowGroupMetaData, leaf leafOf, preds []expr.No
 
 // mayMatch reports whether any row of the group could satisfy e. "true" means
 // maybe; only "false" is a claim, and it must be provable.
-func mayMatch(rg *metadata.RowGroupMetaData, leaf leafOf, e expr.Node) (bool, error) {
+func mayMatch(rg *metadata.RowGroupMetaData, leaf leafOf, e expr.Node, full bool) (bool, error) {
 	switch t := e.(type) {
 	case *expr.Binary:
 		switch t.Op {
 		case expr.OpAnd:
-			l, err := mayMatch(rg, leaf, t.L)
+			l, err := mayMatch(rg, leaf, t.L, full)
 			if err != nil || !l {
 				return false, err
 			}
-			return mayMatch(rg, leaf, t.R)
+			return mayMatch(rg, leaf, t.R, full)
 
 		case expr.OpOr:
-			l, err := mayMatch(rg, leaf, t.L)
+			l, err := mayMatch(rg, leaf, t.L, full)
 			if err != nil {
 				return false, err
 			}
 			if l {
 				return true, nil
 			}
-			return mayMatch(rg, leaf, t.R)
+			return mayMatch(rg, leaf, t.R, full)
 
 		case expr.OpEq, expr.OpNe, expr.OpLt, expr.OpLe, expr.OpGt, expr.OpGe:
 			name, lit, ok := colAndLit(t)
@@ -206,7 +232,7 @@ func mayMatch(rg *metadata.RowGroupMetaData, leaf leafOf, e expr.Node) (bool, er
 			if _, isCol := t.L.(*expr.Col); !isCol {
 				op = flipped(op)
 			}
-			return compareToStats(rg, col, op, lit)
+			return compareToStats(rg, col, op, lit, full)
 		}
 
 	case *expr.Unary:
@@ -220,7 +246,7 @@ func mayMatch(rg *metadata.RowGroupMetaData, leaf leafOf, e expr.Node) (bool, er
 		}
 		switch t.Op {
 		case expr.OpIsNull:
-			return mayHaveNull(rg, col)
+			return mayHaveNull(rg, col, full)
 		case expr.OpIsNotNull:
 			return mayHaveValue(rg, col)
 		}
@@ -254,12 +280,14 @@ func statsFor(rg *metadata.RowGroupMetaData, col int) (metadata.TypedStatistics,
 }
 
 // mayHaveNull reports whether the group could contain a null in this column.
-func mayHaveNull(rg *metadata.RowGroupMetaData, col int) (bool, error) {
+//
+// Only a known writer's null count is read: another's may be absent, and so 0.
+func mayHaveNull(rg *metadata.RowGroupMetaData, col int, full bool) (bool, error) {
 	st, _, err := statsFor(rg, col)
 	if err != nil {
 		return false, err
 	}
-	if st == nil || !st.HasNullCount() {
+	if st == nil || !st.HasNullCount() || !full {
 		return true, nil
 	}
 	return st.NullCount() > 0, nil
@@ -286,7 +314,7 @@ func mayHaveValue(rg *metadata.RowGroupMetaData, col int) (bool, error) {
 // A null never satisfies a comparison, so a group whose column is entirely null
 // can be skipped regardless of the bounds — which is worth doing separately
 // because such a group typically has no min or max at all.
-func compareToStats(rg *metadata.RowGroupMetaData, col int, op expr.BinaryOp, lit *expr.Lit) (bool, error) {
+func compareToStats(rg *metadata.RowGroupMetaData, col int, op expr.BinaryOp, lit *expr.Lit, full bool) (bool, error) {
 	st, cc, err := statsFor(rg, col)
 	if err != nil {
 		return false, err
@@ -304,6 +332,10 @@ func compareToStats(rg *metadata.RowGroupMetaData, col int, op expr.BinaryOp, li
 	lo, hi, ok := statBounds(st)
 	if !ok {
 		return true, nil // a type this pruner does not compare
+	}
+	// Another writer's number may have one bound, the other read as 0.
+	if !full && (lo.kind == boundInt || lo.kind == boundUint || lo.kind == boundFloat) {
+		return true, nil
 	}
 	// The sanity check that defends against arrow-go dropping one bound and leaving
 	// HasMinMax true. If min > max the pair is not a range, so it tells us nothing.

@@ -120,7 +120,7 @@ func (r *parallelReader) openFile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	lay, err := r.src.layoutFor(r.full, pf.MetaData().Schema, r.fileIdx)
+	lay, err := r.src.layoutFor(r.full, pf.MetaData(), r.fileIdx)
 	if err == nil {
 		for _, p := range r.cols {
 			if e := lay.unread[p.field]; e != nil {

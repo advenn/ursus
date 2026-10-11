@@ -319,7 +319,7 @@ func (s simplify) node(e expr.Node, in *dtype.Schema) (expr.Node, bool, error) {
 		}
 
 	case *expr.Binary:
-		if got, ok := boolIdentity(t); ok {
+		if got, ok := boolIdentity(t, in); ok {
 			return got, true, nil
 		}
 	}
@@ -339,7 +339,11 @@ func (s simplify) node(e expr.Node, in *dtype.Schema) (expr.Node, bool, error) {
 // rewrite is accepted only when x is already non-nullable and refused otherwise.
 // Making it unconditional would need Binary.Field to model absorption, which is a
 // change to the null contract rather than to this rule.
-func boolIdentity(b *expr.Binary) (expr.Node, bool) {
+//
+// The bottom two drop x, and so any error x would raise: a strict cast that fails
+// on a row is an error the query has, and Polars' raises it too. So they fold only
+// an x that cannot fail (fallible, step 179), as Rule's contract asks.
+func boolIdentity(b *expr.Binary, in *dtype.Schema) (expr.Node, bool) {
 	if b.Op != expr.OpAnd && b.Op != expr.OpOr {
 		return nil, false
 	}
@@ -360,7 +364,7 @@ func boolIdentity(b *expr.Binary) (expr.Node, bool) {
 		switch {
 		case b.Op == expr.OpAnd && v, b.Op == expr.OpOr && !v:
 			return other, true // x AND true, x OR false
-		case b.Op == expr.OpAnd && !v, b.Op == expr.OpOr && v:
+		case (b.Op == expr.OpAnd && !v || b.Op == expr.OpOr && v) && !fallible(other, in):
 			return l, true // x AND false, x OR true
 		}
 	}

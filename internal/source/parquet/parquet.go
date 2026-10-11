@@ -325,6 +325,11 @@ type fileLayout struct {
 	leaves   [][]int
 	optional []bool
 	unread   map[int]error
+
+	// fullStats: the file's writer is one whose statistics always carry a null
+	// count and both bounds (knownWriter), so the pruner may read their absence
+	// as nothing to say rather than as a zero (step 179, audit row I23).
+	fullStats bool
 }
 
 // layoutFor derives file k's layout from the footer actually being read.
@@ -333,15 +338,16 @@ type fileLayout struct {
 // between CollectSchema and Collect is then read by name, or refused. It is also
 // refused if it now allows nulls in a column the plan treats as non-null, because
 // the engine would be handed nulls it has promised cannot occur.
-func (s *Source) layoutFor(full *dtype.Schema, sc *schema.Schema, k int) (fileLayout, error) {
-	fs, leaves, un, err := fileSchema(sc)
+func (s *Source) layoutFor(full *dtype.Schema, md *metadata.FileMetaData, k int) (fileLayout, error) {
+	fs, leaves, un, err := fileSchema(md.Schema)
 	if err != nil {
 		return fileLayout{}, uerr.Annotate(err, "scan_parquet", s.partName(k))
 	}
 	if err := sameColumns(full, fs, "the planned schema", s.partName(k)); err != nil {
 		return fileLayout{}, err
 	}
-	lay := fileLayout{leaves: make([][]int, full.Len()), optional: make([]bool, full.Len())}
+	lay := fileLayout{leaves: make([][]int, full.Len()), optional: make([]bool, full.Len()),
+		fullStats: knownWriter(md.GetCreatedBy())}
 	for i := range full.Len() {
 		f := full.Field(i)
 		j := fs.IndexOf(f.Name)
@@ -621,7 +627,7 @@ func (r *reader) openNext(ctx context.Context) error {
 			}
 			// Held at once, so Close releases the file even if what follows panics.
 			r.pf, r.closeFn = pf, closeFn
-			lay, err := r.src.layoutFor(r.full, pf.MetaData().Schema, r.fileIdx)
+			lay, err := r.src.layoutFor(r.full, pf.MetaData(), r.fileIdx)
 			if err == nil {
 				for _, p := range r.cols {
 					if e := lay.unread[p.field]; e != nil {
@@ -751,7 +757,7 @@ func shouldSkipIn(src *Source, full *dtype.Schema, lay fileLayout, preds []expr.
 		}
 		return lay.leaves[i][0], true
 	}
-	return canSkipRowGroup(rg, leafOf, preds)
+	return canSkipRowGroup(rg, leafOf, preds, lay.fullStats)
 }
 
 func (r *reader) Next(ctx context.Context) (_ *data.Batch, err error) {
