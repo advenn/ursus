@@ -17,11 +17,33 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–188, so far.
+Everything on master since `v0.5.0`: steps 156–189.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
-took stock after step 165. Each step below was timed against the one before it; how
-far ursus has moved against v0.5.0 is measured once, at the end.
+took stock after step 165. Each step below was timed against the one before it, and
+step 189 measured the whole against v0.5.0 and against Polars.
+
+### Where it ends
+
+The scope claimed ursus within 3× of Polars on PDS-H at SF=1, and at least 20% faster
+than v0.5.0 on it. Both are met. Measured on 2026-10-11, at `c6aa77d` (step 189):
+
+- **Against Polars, in one session,** with every answer validated against DuckDB's:
+
+  | suite | ursus | Polars | ratio | at v0.5.0 |
+  | --- | --: | --: | --: | --: |
+  | PDS-H SF=1 | 180 ms | 78 ms | 2.32× | 3.56× |
+  | PDS-H SF=0.1 | 24 ms | 9 ms | 2.56× | 3.09× |
+  | h2o 10M, Parquet | 832 ms | 519 ms | 1.61× | 1.73× |
+  | h2o 10M, CSV | 2,034 ms | 1,123 ms | 1.81× | 1.97× |
+  | PDS-H SF=1, peak memory | 0.85 GB | 0.86 GB | 0.99× | 1.31× |
+
+- **Against v0.5.0,** both built alike and alternated in one session: PDS-H SF=1
+  takes 27% less wall time and 32% less CPU. h2o takes about 9% less of each. Its
+  group-bys by one integer key moved by 12 to 29%, and most of the others, by strings
+  or several keys, did not.
+- **Under a 3 GB container,** h2o's `gb10` and `j5` pass over Parquet and CSV,
+  peaking at 2.77 to 2.92 GB.
 
 ### Faster
 

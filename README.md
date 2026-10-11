@@ -31,8 +31,8 @@ core. None of that is visible in the query.
 static binary like any other Go dependency, and `go get` is the whole install.
 
 That is the reason to pick it, and the cost should be just as plain: **ursus is slower than the serious analytical
-engines.** On the h2o.ai benchmark at ten million rows it is about 1.7x Polars over Parquet and 2x over CSV; on TPC-H
-at scale factor 1 it is about 3.6x. It is not trying to beat Polars or DuckDB, and on current evidence it is not going
+engines.** On the h2o.ai benchmark at ten million rows it is about 1.6x Polars over Parquet and 1.8x over CSV; on
+TPC-H at scale factor 1 it is about 2.3x. It is not trying to beat Polars or DuckDB, and on current evidence it is not going
 to.
 
 **Where that trade is a good one**
@@ -184,7 +184,7 @@ bitmap byte — a coincidence that hides an entire class of sub-byte bitmap bug.
 
 Correctness is also checked against other engines. The benchmark suite validates every result against a duckdb
 reference, and ursus currently passes **22/22 PDS-H (TPC-H) queries and 15/15 h2o.ai queries** — PDS-H at scale factor
-0.1, re-run at every step, and both suites at the published sizes in the v0.3.0 report; every answer ursus gave there
+0.1, re-run at every step, and both suites at the published sizes in the report below; every answer ursus gave there
 validates.
 
 ---
@@ -206,35 +206,38 @@ See [`bench/README.md`](./bench/README.md) for what is timed and why.
 [`bench/results/REPORT.md`](./bench/results/REPORT.md) is checked in. Every result in it is validated against a duckdb
 reference, and a disagreement is struck through rather than quietly reported as a fast number.
 
-**How current it is, precisely.** ursus and Polars were re-run together on v0.5.0's code, `fb7788b`, on
-2026-10-09, every query of all four suites (step 154). The other engines' numbers are from the full session before it,
-every engine together on `5a721e0` on 2026-10-08 (step 127): their code has not changed, and re-running them would have
-taken the laptop for an hour and more. So ursus is compared with Polars within one session, and with the rest across
-two.
+**How current it is, precisely.** ursus and Polars were re-run together on step 188's code, `c6aa77d`, on
+2026-10-11, every query of all four suites (step 189). The other engines' numbers are from an earlier session, every
+engine together on `5a721e0` on 2026-10-08 (step 127): their code has not changed, and re-running them would have taken
+the laptop for an hour and more. So ursus is compared with Polars within one session, and with the rest across
+sessions.
 
 The caveats that apply to *this* run:
 
-- **Every query ran in an 8 GB cgroup** with swap off, on 8 threads, on a laptop with an IDE still open. Nothing else of
-  this project's ran alongside it. An earlier run that day did not have that, and understated ursus; step 123's as-built
-  records how.
+- **No cgroup was set,** where v0.5.0's report ran every query in an 8 GB one. It ran on 8 threads, on a laptop with
+  5.6 GB of memory available and 10 GB of swap already in use by an IDE and the rest. Nothing else of this project's ran
+  alongside it.
 - **ursus passed every query of all four suites,** and every answer validated against duckdb's. v0.3.0 was killed on h2o
   `gb10` over CSV; it now spills under the default budget and passes.
-- **ursus's highest peak is h2o `gb10` over CSV, 7.28 GB**, under the cap; it was 7.60 GB at step 127. Under a 3 GB
-  container, `gb10` and `j5` pass over Parquet and over CSV, peaking at 2.73 to 2.86 GB.
+- **ursus's highest peak is h2o `gb10` over CSV, 7.77 GB,** with no limit set; Polars' highest is 5.18 GB. Under a 3 GB
+  container, `gb10` and `j5` pass over Parquet and over CSV, peaking at 2.77 to 2.92 GB, and their answers match.
+- **Against v0.5.0,** both built alike and alternated in one session, PDS-H SF=1 takes 27% less wall time and 32% less
+  CPU; h2o about 9% less of each. Step 189's as-built has it query by query.
 - **Other engines:** chDB timed out on three group-bys and failed `gb6` in both h2o suites; gota ran out of memory on
   two group-bys; DataFusion, and chDB at SF=0.1, answered PDS-H `q15` wrongly, and are struck through.
 
 Timings come from a laptop under real conditions, so treat small differences as noise and the ordering as the signal.
 
-**Where it stands, in one place.** Against Polars, on the current report, with v0.4.0's and v0.3.0's for comparison:
+**Where it stands, in one place.** Against Polars, on the current report, with v0.5.0's, v0.4.0's and v0.3.0's for
+comparison:
 
-|                           |    ursus |   Polars |       | at v0.4.0 | at v0.3.0 |
-|---------------------------|---------:|---------:|-------|----------:|----------:|
-| h2o.ai, 10M rows, Parquet |   947 ms |   547 ms | 1.7x  |      1.9x |      3.3x |
-| h2o.ai, 10M rows, CSV     | 2,195 ms | 1,116 ms | 2.0x  |      3.3x |      3.6x |
-| TPC-H SF=1                |   276 ms |    78 ms | 3.6x  |      4.4x |     10.8x |
-| TPC-H SF=0.1              |    29 ms |     9 ms | 3.1x  |      4.0x |      7.5x |
-| TPC-H SF=1 peak memory    |  1.10 GB |  0.84 GB | 1.3x  |      1.1x |      2.0x |
+|                           |    ursus |   Polars |       | at v0.5.0 | at v0.4.0 | at v0.3.0 |
+|---------------------------|---------:|---------:|-------|----------:|----------:|----------:|
+| h2o.ai, 10M rows, Parquet |   832 ms |   519 ms | 1.6x  |      1.7x |      1.9x |      3.3x |
+| h2o.ai, 10M rows, CSV     | 2,034 ms | 1,123 ms | 1.8x  |      2.0x |      3.3x |      3.6x |
+| TPC-H SF=1                |   180 ms |    78 ms | 2.3x  |      3.6x |      4.4x |     10.8x |
+| TPC-H SF=0.1              |    24 ms |     9 ms | 2.6x  |      3.1x |      4.0x |      7.5x |
+| TPC-H SF=1 peak memory    |  0.85 GB |  0.86 GB | 1.0x  |      1.3x |      1.1x |      2.0x |
 
 Geomeans over each engine's passed queries; ursus and Polars pass every one. The gap narrows as the data gets smaller, which is the shape of the trade
 described at the top of this file.
