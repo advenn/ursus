@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"slices"
+	"sync"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
@@ -227,6 +228,81 @@ type IntKeyParts struct {
 	tables []*IntKeyTable
 	base   []int32
 	n      int
+
+	bitsOnce sync.Once
+	bits     *IntKeyBits // the keys as a bitmap, when dense; see Bits
+}
+
+// IntKeyBits is a set of integer keys as a bitmap over their range (step 202).
+//
+// A runtime filter asks only whether a row's key is among a join's, and a hash
+// lookup a row to ask it was 19% of q7. TPC-H's keys are dense integers, suppkey
+// 1 to 10,000 and orderkey to six million with a quarter of them used, so a bit for
+// each value in their range answers it with one test.
+type IntKeyBits struct {
+	lo   int64
+	span uint64 // keys lo to lo+span-1
+	bits []uint64
+}
+
+// Has reports whether k is in the set. A key below lo wraps to past span.
+func (b *IntKeyBits) Has(k int64) bool {
+	d := uint64(k) - uint64(b.lo)
+	return d < b.span && b.bits[d>>6]&(1<<(d&63)) != 0
+}
+
+// A key bitmap is built when its range is at most maxBitsPerKey bits a key, eight
+// bytes a key, about what the table spends on each; or at most maxBitsAnyway bits,
+// a megabyte, whatever the count. q7's filter holds a fiftieth of the orderkeys,
+// 120,000 over a range of six million: a bitmap of 750 KB, which stays in cache,
+// beside a table of 2 MB, which does not.
+const (
+	maxBitsPerKey = 64
+	maxBitsAnyway = 1 << 23
+)
+
+// Bits is the keys as a bitmap, built once, on first use; nil when their range is
+// too sparse for one (maxBitsPerKey), or there are none. Safe to call from every
+// worker at once.
+func (k *IntKeyParts) Bits() *IntKeyBits {
+	k.bitsOnce.Do(func() { k.bits = intKeyBits(k.tables) })
+	return k.bits
+}
+
+func intKeyBits(tables []*IntKeyTable) *IntKeyBits {
+	lo, hi, n := int64(0), int64(0), 0
+	for _, t := range tables {
+		for id, key := range t.keys {
+			if int32(id) == t.null {
+				continue
+			}
+			if n == 0 || key < lo {
+				lo = key
+			}
+			if n == 0 || key > hi {
+				hi = key
+			}
+			n++
+		}
+	}
+	if n == 0 {
+		return nil
+	}
+	span := uint64(hi) - uint64(lo) + 1 // wraps to 0 only for the whole int64 range
+	if span == 0 || (span/maxBitsPerKey > uint64(n) && span > maxBitsAnyway) {
+		return nil
+	}
+	b := &IntKeyBits{lo: lo, span: span, bits: make([]uint64, (span+63)/64)}
+	for _, t := range tables {
+		for id, key := range t.keys {
+			if int32(id) == t.null {
+				continue
+			}
+			d := uint64(key) - uint64(lo)
+			b.bits[d>>6] |= 1 << (d & 63)
+		}
+	}
+	return b
 }
 
 // NewIntKeyParts reads tables, in order, as one.

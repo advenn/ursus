@@ -164,3 +164,33 @@ func TestARuntimeFilterNeverEntersACache(t *testing.T) {
 		t.Fatalf("%d rows, want %d", got.Height(), want.Height())
 	}
 }
+
+// TestRuntimeFiltersKeepTheAnswerOnSparseKeys: the keys of
+// TestRuntimeFiltersKeepTheAnswer span 2,000, so a published filter tests them
+// against a bitmap (step 202). Here they are spread 2^33 apart, past any bitmap, and
+// a filter looks each up in the join's tables, as before.
+func TestRuntimeFiltersKeepTheAnswerOnSparseKeys(t *testing.T) {
+	c := ursus.Col
+	for _, top := range []ursus.JoinKind{ursus.JoinInner, ursus.JoinSemi} {
+		q := func() *ursus.LazyFrame {
+			fact, middle, dim := runtimeSides(8)
+			spread := func(lf *ursus.LazyFrame) *ursus.LazyFrame {
+				return lf.WithColumns(c("k").Mul(int64(1) << 33).Alias("k"))
+			}
+			return spread(fact).Join(middle, ursus.JoinOn(c("s"))).
+				Join(spread(dim), ursus.JoinOn(c("k")), ursus.JoinHow(top))
+		}
+		opts := []ursus.CollectOption{ursus.WithThreads(8), ursus.WithBatchSize(256)}
+		want, err := q().Collect(t.Context(), append(opts, ursus.WithOptFlags(noRuntimeFilters()))...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := q().Collect(t.Context(), opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !sameRows(t, got, want) {
+			t.Fatalf("%s: %d rows, without runtime filters %d, or they differ", top, got.Height(), want.Height())
+		}
+	}
+}

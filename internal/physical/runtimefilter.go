@@ -67,13 +67,22 @@ func (r *runtimeFilterOp) Apply(_ context.Context, in *data.Batch) (*data.Batch,
 		ids  [kernel.ManyChunk]int32
 		keep []int32
 	)
-	for lo := 0; lo < n; lo += kernel.ManyChunk {
-		hi := min(lo+kernel.ManyChunk, n)
-		keys.GetMany(vals[lo:hi], ids[:hi-lo])
-		for j := range hi - lo {
+	if bits := keys.Bits(); bits != nil {
+		// Dense keys: a bit a key, where a lookup a row was q7's 19% (step 202).
+		for j, v := range vals[:n] {
 			// A null key matches nothing: the joins that publish are not NullsEqual.
-			if ids[j] >= 0 && (valid.IsAllSet() || valid.Get(lo+j)) {
-				keep = append(keep, int32(lo+j))
+			if bits.Has(v) && (valid.IsAllSet() || valid.Get(j)) {
+				keep = append(keep, int32(j))
+			}
+		}
+	} else {
+		for lo := 0; lo < n; lo += kernel.ManyChunk {
+			hi := min(lo+kernel.ManyChunk, n)
+			keys.GetMany(vals[lo:hi], ids[:hi-lo])
+			for j := range hi - lo {
+				if ids[j] >= 0 && (valid.IsAllSet() || valid.Get(lo+j)) {
+					keep = append(keep, int32(lo+j))
+				}
 			}
 		}
 	}
