@@ -584,5 +584,11 @@ func planAsOfJoin(ctx context.Context, a *plan.AsOfJoin, opts Options) (Operator
 	if err := sink.prepareTolerance(); err != nil {
 		return nil, err
 	}
+	// A backward match streams both sides (asOfStreamOp); forward and nearest buffer
+	// the right side, as their match may lie anywhere ahead of the left key.
+	if a.Strategy == plan.AsOfBackward {
+		return &asOfStreamOp{cfg: sink, schema: layout.Schema, layout: layout,
+			left: left, right: right, cur: -1, ids: map[string]int32{}}, nil
+	}
 	return &joinBreaker{build: right, probe: left, builder: sink}, nil
 }

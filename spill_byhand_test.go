@@ -245,10 +245,13 @@ func TestSpillingByHand(t *testing.T) {
 
 		// --- what an operator that holds its input is charged for ---
 		{"over is charged for the copy Finish makes", peakAtLeast(twoKeyed(), base, 2)},
-		{"join_asof is charged for the copy Probe makes", peakAtLeast(
-			base.JoinAsOf(base.Select(c("seq"), c("k").Alias("r"), c("pad").Alias("p")), ursus.AsOfOn(c("seq"))),
+		// A forward as-of join holds its right side; a backward one, the default,
+		// streams it (step 183), and answers under the same limit.
+		{"join_asof forward is charged for the copy Probe makes", peakAtLeast(
+			base.JoinAsOf(base.Select(c("seq"), c("k").Alias("r"), c("pad").Alias("p")), ursus.AsOfOn(c("seq")),
+				ursus.AsOfStrategyOpt(ursus.AsOfForward)),
 			base.Select(c("seq"), c("k").Alias("r"), c("pad").Alias("p")), 2)},
-		{"join_asof refuses between one and two right sides", func(t *testing.T) string {
+		{"join_asof forward refuses between one and two right sides; backward answers", func(t *testing.T) string {
 			right := base.Select(c("seq"), c("k").Alias("r"), c("pad").Alias("p"))
 			r, err := right.Collect(t.Context())
 			if err != nil {
@@ -257,8 +260,19 @@ func TestSpillingByHand(t *testing.T) {
 			// The keys the sink keeps are 8 bytes a row on top of the right side, so
 			// 1.7 right sides hold it once and not twice.
 			lim := int64(1.7 * float64(r.Batch().NBytes()))
-			df, _, err := spillCollect(t, base.JoinAsOf(right, ursus.AsOfOn(c("seq"))), lim, t.TempDir())
-			return refusal(df, err, ursus.ErrResource, "join_asof")
+			df, _, err := spillCollect(t, base.JoinAsOf(right, ursus.AsOfOn(c("seq")),
+				ursus.AsOfStrategyOpt(ursus.AsOfForward)), lim, t.TempDir())
+			if why := refusal(df, err, ursus.ErrResource, "join_asof"); why != "" {
+				return why
+			}
+			df, _, err = spillCollect(t, base.JoinAsOf(right, ursus.AsOfOn(c("seq"))), lim, t.TempDir())
+			if err != nil {
+				return "backward, streaming, refused: " + err.Error()
+			}
+			if df.Height() != r.Height() {
+				return fmt.Sprintf("backward answered %d rows, want %d", df.Height(), r.Height())
+			}
+			return ""
 		}},
 		{"group_by is charged for its key table", func(t *testing.T) string {
 			// 20000 distinct 40-byte keys: the input batch in flight holds them once,

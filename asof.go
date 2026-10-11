@@ -123,6 +123,12 @@ func AsOfSuffix(s string) AsOfOption {
 // trusting an assertion — an unchecked sortedness hint is a user claim that deletes a
 // correctness check, and its failure mode is wrong matches with no error. Sort first
 // if the check refuses.
+//
+// # Memory
+//
+// The default, backward, streams both sides: it holds a row a by-key and a few right
+// batches, however long the right side is (step 183). Forward and nearest hold the
+// right side, since a row at or after a left key may lie anywhere ahead.
 func (lf *LazyFrame) JoinAsOf(other *LazyFrame, opts ...AsOfOption) *LazyFrame {
 	if lf.err != nil {
 		return lf

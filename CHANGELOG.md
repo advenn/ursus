@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–182, so far.
+Everything on master since `v0.5.0`: steps 156–183, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -53,6 +53,9 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   run, rather than copying them (170).
 - **`MergeSorted` streams** (182): a batch of each side at a time, where it held
   both inputs whole.
+- **A backward `JoinAsOf` streams** (183), the default: it holds a row a by-key and a
+  few right batches, where it held the right side. Forward and nearest still hold
+  it.
 - **`ArgMin` and `ArgMax` over many groups** (176): over 200,000 groups, from 7.8 s to
   0.1 s. They keep a typed key a group, as `MinBy` does, not a one-row column.
 
