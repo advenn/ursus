@@ -80,6 +80,11 @@ type windowSink struct {
 	// reads them back (winstream.go).
 	oneW    *spill.Writer
 	oneFile string
+
+	// A keyed window's one partition past its limit, a level down, goes to that file
+	// too, and every other key to rest (winskew.go).
+	skewKey []byte
+	rest    *windowSink
 }
 
 // winPartition is one distinct PARTITION BY, with its group table and the group id
@@ -118,6 +123,10 @@ func (s *windowSink) Close() error {
 		err = s.oneW.Close()
 		s.oneW = nil
 	}
+	if s.rest != nil {
+		err = errors.Join(err, s.rest.Close())
+		s.rest = nil
+	}
 	return errors.Join(err, s.closeSpill())
 }
 
@@ -131,6 +140,9 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 	}
 	if s.spilling {
 		return s.route(ctx, in, s.parts[0].keys)
+	}
+	if s.rest != nil {
+		return s.consumeSkew(ctx, in)
 	}
 	if s.oneW != nil {
 		return s.consumeOneSpill(ctx, in)
@@ -221,6 +233,9 @@ func (s *windowSink) Merge(other Sink) error {
 func (s *windowSink) Finish(ctx context.Context) (Operator, error) {
 	if s.spilling {
 		return s.finishSpilled(ctx)
+	}
+	if s.rest != nil {
+		return s.finishSkew(ctx)
 	}
 	if s.oneW != nil {
 		return s.finishOneSpill()

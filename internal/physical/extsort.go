@@ -339,11 +339,6 @@ func mergeByOrdinal(sch *dtype.Schema, ord string, files []string, mem *execopt.
 	if len(files) == 0 {
 		return emptyOperator{schema: sch}, nil
 	}
-	keys := []plan.SortKey{{Expr: &expr.Col{Name: ord}}}
-	kSch, err := keySchema(keys, sch)
-	if err != nil {
-		return nil, err
-	}
 	srcs := make([]runSource, 0, len(files))
 	for _, f := range files {
 		r, err := spill.Open(f)
@@ -354,6 +349,21 @@ func mergeByOrdinal(sch *dtype.Schema, ord string, files []string, mem *execopt.
 			return nil, err
 		}
 		srcs = append(srcs, &fileRun{r: r})
+	}
+	return mergeRuns(sch, ord, srcs, mem, batch)
+}
+
+// mergeRuns merges runs, each already in ordinal order, on the ordinal.
+func mergeRuns(sch *dtype.Schema, ord string, srcs []runSource, mem *execopt.Account,
+	batch int) (Operator, error) {
+
+	keys := []plan.SortKey{{Expr: &expr.Col{Name: ord}}}
+	kSch, err := keySchema(keys, sch)
+	if err != nil {
+		for _, o := range srcs {
+			o.Close()
+		}
+		return nil, err
 	}
 	rs, err := kernel.NewRunSet(len(srcs), []dtype.DataType{dtype.Int64}, []kernel.SortSpec{{}})
 	if err != nil {

@@ -43,8 +43,9 @@ import (
 // # What still fails
 //
 // A window with no partition keys is one partition, and so is one group larger
-// than the limit: routing divides partitions, not the rows of one. Both refuse,
-// saying which.
+// than the limit: routing divides partitions, not the rows of one. Both stream when
+// every function needs only a bounded part of the partition (winstream.go,
+// winskew.go), and refuse, saying which, when one needs all of it.
 
 // overBudget starts spilling when the query is over its limit and the window can
 // be divided, and refuses, naming why, when it cannot.
@@ -68,10 +69,18 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 					"limit with WithMemoryLimit")
 		}
 	}
+	if s.skewable() && s.budget.Limit() > 0 {
+		// One partition alone, and every function bounded: its rows to one file, the
+		// file's other keys to a sink of their own (winskew.go).
+		return s.startSkew()
+	}
 	if s.level >= maxSpillDepth || (s.level > 0 && len(s.parts) == 1 && s.parts[0].ids.Len() == 1) {
 		return s.refuse("one partition holds more rows than the limit, and partitioning to disk "+
-			"divides partitions, not the rows of one",
-			"raise the limit with WithMemoryLimit")
+			"divides partitions, not the rows of one; this one computes a function that "+
+			"needs all of it at once",
+			"aggregates, cumulative functions, Shift, the fills with a limit and rolling "+
+				"windows of rows stream a partition past the limit; rank, ewm, interpolation "+
+				"and ordered windows do not. Raise the limit with WithMemoryLimit")
 	}
 	return s.startSpill(ctx)
 }

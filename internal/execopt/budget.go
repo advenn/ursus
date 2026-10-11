@@ -473,9 +473,10 @@ func holdsHint(op string) string {
 			"subset of columns unique is called on"
 	case "over":
 		return "over holds its whole input, and partitions it to disk by its " +
-			"partition_by when it does not fit, or with none writes it to one file and " +
-			"reads it back when every function needs only a bounded part of it; raise " +
-			"the limit with WithMemoryLimit"
+			"partition_by when it does not fit; a window with none, or one partition " +
+			"larger than the limit, goes to one file and is read back when every " +
+			"function needs only a bounded part of it; raise the limit with " +
+			"WithMemoryLimit"
 	case "join_asof":
 		// Every strategy streams since step 194.
 		return "join_asof streams both sides, holding a right row a by-key and the " +

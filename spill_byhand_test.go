@@ -243,8 +243,12 @@ func TestSpillingByHand(t *testing.T) {
 		{"Over() with no keys and a rank says it has no partition", refused(
 			base.WithColumns(c("seq").Rank(ursus.RankOrdinal, false).Over().Alias("t")),
 			"over", "no partition")},
-		{"one partition larger than the limit says so", refused(spillFrame(n, 1).
-			WithColumns(c("seq").Sum().Over(c("k")).Alias("t")), "over", "one partition")},
+		// One partition larger than the limit streams since step 209 when every
+		// function needs only a bounded part of it; a rank needs all of it.
+		{"one partition larger than the limit, ranked, says so", refused(spillFrame(n, 1).
+			WithColumns(c("seq").Rank(ursus.RankOrdinal, false).Over(c("k")).Alias("t")), "over", "one partition")},
+		{"one partition larger than the limit streams its bounded functions", spills(spillFrame(n, 1).
+			WithColumns(c("seq").Sum().Over(c("k")).Alias("t"), c("f").CumSum(false).Over(c("k")).Alias("u")))},
 
 		// --- what an operator that holds its input is charged for ---
 		{"over is charged for the copy Finish makes", peakAtLeast(twoKeyed(), base, 2)},

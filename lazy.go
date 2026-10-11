@@ -371,9 +371,10 @@ type MemoryStats struct {
 // Hstack and tail cannot spill: past the limit they FAIL, with an error naming the
 // operator, which is a better outcome than being killed by the OS with no
 // explanation. Neither can a window with no partition_by that computes a rank,
-// an ewm function or an interpolation, which need the whole frame; with only
-// aggregates, cumulative functions, shifts, limited fills and rolling windows of
-// rows, it writes its rows to one file and reads them back. JoinAsOf and
+// an ewm function or an interpolation, which need the whole frame, nor one whose
+// single partition is larger than the limit; with only aggregates, cumulative
+// functions, shifts, limited fills and rolling windows of rows, such a frame or
+// partition is written to one file and read back. JoinAsOf and
 // MergeSorted stream both sides, holding a few batches; a forward or nearest
 // JoinAsOf also holds the right rows it reads ahead, which for a left by-key the
 // right side lacks is the rest of that side. Rolling and GroupByDynamic stream their

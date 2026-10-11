@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.2
 
-Everything on master since step 200, v0.6.1's candidate: steps 201–207, so far.
+Everything on master since step 200, v0.6.1's candidate: steps 201–207 and 209, so far; 208, the report, waits for h2o.
 [`v0.6.2-scope.md`](./context_files/v0.6.2-scope.md) set the scope: **speed and
 out-of-core, continued.** Each step is timed against 0.6.1's code, alternated in one
 session.
@@ -48,6 +48,11 @@ session.
   A 30-minute rolling group over 300,000 rows peaks at 0.73 MB, where it peaked at
   about 20 MB; over 200,000 it answers under a tenth of its input. With a key the
   answer is still held: it is given per bucket.
+- **A window's one partition larger than the limit streams** (209) when every
+  function in it needs only a bounded part of it: its rows go to one file and are
+  read back, as a window with no `partition_by` has since 197, and the other keys
+  spill as before. It refused. A rank, an ewm or an ordered window over it still
+  does.
 
 ### Fixed
 

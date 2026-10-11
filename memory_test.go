@@ -3,6 +3,7 @@ package ursus_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -872,5 +873,73 @@ func TestReverseSpillsUnderATenthOfItsInput(t *testing.T) {
 			t.Errorf("%d threads: peak %d under a limit of %d", threads, stats.Peak, limit)
 		}
 		ursustest.AssertFrameEqual(t, got, want)
+	}
+}
+
+// TestAKeyedWindowStreamsItsOneHugePartition: a window whose partition_by has one key
+// with most of the rows splits that key off a level down, streams it as a window
+// with no partition_by streams its frame, and merges it back with the other keys'
+// answer on the ordinal (step 209), where it refused. Under a tenth of the input,
+// on one thread and on four, the answer is the in-memory one, row for row.
+//
+// The input is forty frames of 500 rows, not one: a batch sliced from one frame
+// holds that frame's whole buffers, and is charged for them. The spill directory is
+// empty after.
+func TestAKeyedWindowStreamsItsOneHugePartition(t *testing.T) {
+	const chunks, rows = 40, 500
+	var frames []*ursus.LazyFrame
+	for ch := range chunks {
+		k, seq := make([]int64, rows), make([]int64, rows)
+		f, fok := make([]float64, rows), make([]bool, rows)
+		pad := make([]string, rows)
+		for j := range rows {
+			i := ch*rows + j
+			// The huge partition alone at first, so a sink a level down holds it alone
+			// when it goes over; then every other row is one of 500 other keys, some
+			// sure to share its file, which arrive after it has split.
+			k[j] = 0
+			if i >= 12_000 && i%2 == 1 {
+				k[j] = int64(1 + i%500)
+			}
+			seq[j], f[j], fok[j] = int64(i), float64(i%50), i%7 != 0
+			pad[j] = fmt.Sprintf("%032d", i%97)
+		}
+		frames = append(frames, ursus.Frame(ursus.Values("k", k), ursus.Values("seq", seq),
+			ursus.ValuesNullable("f", f, fok), ursus.Values("pad", pad)))
+	}
+	frame := ursus.Concat(frames)
+	c := ursus.Col
+	q := frame.WithColumns(
+		c("seq").Sum().Over(c("k")).Alias("total"),
+		c("f").CumSum(false).Over(c("k")).Alias("running"),
+		c("seq").Shift(2).Over(c("k")).Alias("before"),
+		c("f").RollingMean(5).Over(c("k")).Alias("smooth"),
+		c("f").ForwardFill(3).Over(c("k")).Alias("filled"),
+		c("seq").CumCount(false).Over(c("k")).Alias("nth"),
+	)
+	in, err := frame.Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := in.Batch().NBytes() / 10
+	want, err := q.Collect(t.Context(), ursus.WithBatchSize(500))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, threads := range []int{1, 4} {
+		var stats ursus.MemoryStats
+		dir := t.TempDir()
+		got, err := q.Collect(t.Context(), ursus.WithBatchSize(500), ursus.WithThreads(threads),
+			ursus.WithMemoryLimit(limit), ursus.WithSpillDir(dir), ursus.WithMemoryStats(&stats))
+		if err != nil {
+			t.Fatalf("%d threads, under %d bytes: %v", threads, limit, err)
+		}
+		if stats.Spills == 0 {
+			t.Fatalf("%d threads: nothing spilled", threads)
+		}
+		ursustest.AssertFrameEqual(t, got, want)
+		if left, _ := os.ReadDir(dir); len(left) > 0 {
+			t.Errorf("%d threads: %d entries left in the spill directory", threads, len(left))
+		}
 	}
 }
