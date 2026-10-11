@@ -15,6 +15,15 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.6.2
+
+Everything on master since step 200, v0.6.1's candidate: step 201, so far.
+[`v0.6.2-scope.md`](./context_files/v0.6.2-scope.md) set the scope: **speed and
+out-of-core, continued.** Each step is timed against 0.6.1's code, alternated in one
+session.
+
+---
+
 ## v0.6.1 — candidate, not tagged
 
 Everything since `v0.6.0` (2026-10-11): steps 191–200.
