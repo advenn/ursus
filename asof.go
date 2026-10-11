@@ -210,7 +210,8 @@ func asOfErr(format string, args ...any) error {
 // dropped, so the output height is always the sum of the two.
 //
 // Both schemas must match EXACTLY and both inputs must be sorted on key, which is
-// checked rather than assumed.
+// checked rather than assumed, as the rows arrive: it streams, a batch of each side
+// at a time, so its memory does not grow with the inputs (step 182).
 func (lf *LazyFrame) MergeSorted(other *LazyFrame, key string) *LazyFrame {
 	if lf.err != nil {
 		return lf

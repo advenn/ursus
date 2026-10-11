@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–181, so far.
+Everything on master since `v0.5.0`: steps 156–182, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -51,6 +51,8 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   written, searches for the literals rather than backtracking (169): q13 −15%.
 - **A join shares its probe batch's columns** when the rows it takes from it are a
   run, rather than copying them (170).
+- **`MergeSorted` streams** (182): a batch of each side at a time, where it held
+  both inputs whole.
 - **`ArgMin` and `ArgMax` over many groups** (176): over 200,000 groups, from 7.8 s to
   0.1 s. They keep a typed key a group, as `MinBy` does, not a one-row column.
 
@@ -86,6 +88,10 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   read from sysctl's `hw.memsize` and `GlobalMemoryStatusEx`, as Linux's has been.
 
 ### What a user of v0.5.0 can trip on
+
+- **`MergeSorted` refuses an unsorted side when it reaches the first row that goes
+  back** (182), after emitting the rows before it, where it read both sides whole
+  first. A streaming consumer such as `CollectBatches` can see those rows.
 
 - **On macOS and Windows a query now has a default budget,** half the machine's RAM,
   and spills, or refuses where it cannot spill, past it (181). Under it ursus also
