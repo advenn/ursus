@@ -395,9 +395,9 @@ func (a *Account) Check() error {
 		"memory limit of %s exceeded: the query is holding %s, %s of it in this operator",
 		Bytes(a.b.Limit()), Bytes(a.b.Used()), Bytes(a.Used())).
 		Hint("%s", holdsHint(a.op)).
-		Hint("sort, group_by, join, unique and a partitioned over spill to disk; reverse, " +
-			"hstack, tail, join_asof, merge_sorted, rolling, group_by_dynamic and an " +
-			"unpartitioned over fail rather than exceed the limit")
+		Hint("sort, group_by, join, unique and a partitioned over spill to disk; " +
+			"join_asof and merge_sorted stream; reverse, hstack, tail, rolling, " +
+			"group_by_dynamic and an unpartitioned over fail rather than exceed the limit")
 }
 
 // Release drops everything this account holds.
@@ -473,11 +473,14 @@ func holdsHint(op string) string {
 		return "over holds its whole input, and partitions it to disk by its " +
 			"partition_by when it does not fit; raise the limit with WithMemoryLimit"
 	case "join_asof":
-		return "join_asof holds its whole right side, and a second copy while it " +
-			"builds the buckets it probes; raise the limit with WithMemoryLimit"
+		// Every strategy streams since step 194.
+		return "join_asof streams both sides, holding a right row a by-key and the " +
+			"right rows a forward or nearest join reads ahead to find a by-key's next " +
+			"one: a left by-key the right side lacks reads that side to its end; " +
+			"raise the limit with WithMemoryLimit"
 	case "merge_sorted":
-		return "merge_sorted holds each side whole, to check it is sorted before " +
-			"interleaving; raise the limit with WithMemoryLimit"
+		return "merge_sorted holds a batch of each side; raise the limit with " +
+			"WithMemoryLimit, or lower the batch size"
 	case "group_by_dynamic", "rolling":
 		// The default sentence is actively wrong here. What these hold that grows is
 		// the window GRID, which is derived from the index range and the interval

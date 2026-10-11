@@ -17,10 +17,11 @@ import (
 
 // TestRefusingSinksRefuse covers the three Merges that exist only to say no.
 //
-// windowSink, temporalSink and asOfBuildSink all refuse for one reason: two partial
-// sinks assigned their own partition or group numbering independently, and folding
-// them would attribute one partition's value to another. None of the three had any
-// test at all — the refusals were as unexercised as reverseSink's implementation
+// windowSink and temporalSink refuse for one reason: two partial sinks assigned
+// their own partition or group numbering independently, and folding them would
+// attribute one partition's value to another. asOfBuildSink refused too, until the
+// as-of join streamed every strategy and stopped being a sink (step 194). None of
+// them had any test at all — the refusals were as unexercised as reverseSink's implementation
 // was, and an untested refusal is one statement away from becoming an untested
 // implementation.
 //
@@ -35,7 +36,6 @@ func TestRefusingSinksRefuse(t *testing.T) {
 	}{
 		{"windowSink", &windowSink{}, "remap"},
 		{"temporalSink", &temporalSink{}, "cannot be merged"},
-		{"asOfBuildSink", &asOfBuildSink{}, "cannot be merged"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			// Same type: still refused. This is the arm that matters — a merge of

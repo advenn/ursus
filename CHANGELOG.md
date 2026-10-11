@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.1
 
-Everything on master since `v0.6.0`: steps 191–193, so far.
+Everything on master since `v0.6.0`: steps 191–194, so far.
 [`v0.6.1-scope.md`](./context_files/v0.6.1-scope.md) set the scope: **speed where the
 profile points, and out-of-core.** Each step is timed against v0.6.0's code,
 alternated in one session.
@@ -35,6 +35,14 @@ alternated in one session.
   dictionary, and the rows it rejects are dropped before their strings are copied.
   The Filter above still decides. q19 takes 27% less wall time than at step 192, and
   q8, q10 and q12 3 to 8% less.
+
+### Out of core
+
+- **A forward or nearest `JoinAsOf` streams both sides** (194), as a backward one has
+  since step 183: it holds a row a by-key and the right rows it reads ahead to find
+  a by-key's next one. Over a 300,000-row right side every strategy peaks under
+  1 MiB, where forward held the right side twice. A left by-key the right side lacks
+  still reads that side to its end, and is charged for it.
 
 ### Fixed
 

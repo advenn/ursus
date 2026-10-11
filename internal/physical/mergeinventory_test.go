@@ -60,9 +60,9 @@ func findMergeImpls(t *testing.T) []mergeImpl {
 			if !ok || fn.Name.Name != "Merge" || fn.Recv == nil || len(fn.Recv.List) == 0 {
 				continue
 			}
-			// Match on the PARAMETER TYPE, not its name: asOfBuildSink and
-			// temporalSink both declare `Merge(Sink) error` with no identifier, and
-			// a name-based matcher drops them silently.
+			// Match on the PARAMETER TYPE, not its name: temporalSink declares
+			// `Merge(Sink) error` with no identifier, as asOfBuildSink did, and a
+			// name-based matcher drops it silently.
 			if len(fn.Type.Params.List) != 1 {
 				continue
 			}
@@ -124,7 +124,8 @@ func isRefusal(fn *ast.FuncDecl) bool {
 // TestEverySinkMergeIsExercised is the inventory.
 func TestEverySinkMergeIsExercised(t *testing.T) {
 	impls := findMergeImpls(t)
-	if len(impls) < 7 {
+	// Six since step 194, when asOfBuildSink stopped being a sink.
+	if len(impls) < 6 {
 		t.Fatalf("found only %d Sink.Merge implementations — the parse is not "+
 			"reaching this package, so the check has gone vacuous", len(impls))
 	}

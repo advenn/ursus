@@ -245,34 +245,45 @@ func TestSpillingByHand(t *testing.T) {
 
 		// --- what an operator that holds its input is charged for ---
 		{"over is charged for the copy Finish makes", peakAtLeast(twoKeyed(), base, 2)},
-		// A forward as-of join holds its right side; a backward one, the default,
-		// streams it (step 183), and answers under the same limit.
-		{"join_asof forward is charged for the copy Probe makes", peakAtLeast(
-			base.JoinAsOf(base.Select(c("seq"), c("k").Alias("r"), c("pad").Alias("p")), ursus.AsOfOn(c("seq")),
-				ursus.AsOfStrategyOpt(ursus.AsOfForward)),
-			base.Select(c("seq"), c("k").Alias("r"), c("pad").Alias("p")), 2)},
-		{"join_asof forward refuses between one and two right sides; backward answers", func(t *testing.T) string {
+		// Every as-of strategy streams its right side (steps 183 and 194). A forward
+		// one holds the rows it reads ahead: where a left by-key has no right row at
+		// all, it reads the right side to its end, and holds all of it.
+		{"join_asof forward holds the right side for a by-key it lacks", peakAtLeast(
+			base.Select(c("seq"), ursus.Lit("absent").Alias("b")).JoinAsOf(
+				base.Select(c("seq"), c("k").Alias("r"), c("pad").Alias("p"), ursus.Lit("there").Alias("b")),
+				ursus.AsOfOn(c("seq")), ursus.AsOfBy(c("b")), ursus.AsOfStrategyOpt(ursus.AsOfForward)),
+			base.Select(c("seq"), c("k").Alias("r"), c("pad").Alias("p")), 1)},
+		// Buffered, a forward join held the right side twice, the copy Probe made
+		// included; streaming, every strategy answers under one right side, holding
+		// what backward holds, and only the by-key the right side lacks is refused.
+		{"join_asof forward and nearest answer under one right side; a by-key it lacks refuses", func(t *testing.T) string {
 			right := base.Select(c("seq"), c("k").Alias("r"), c("pad").Alias("p"))
 			r, err := right.Collect(t.Context())
 			if err != nil {
 				t.Fatal(err)
 			}
-			// The keys the sink keeps are 8 bytes a row on top of the right side, so
-			// 1.7 right sides hold it once and not twice.
-			lim := int64(1.7 * float64(r.Batch().NBytes()))
-			df, _, err := spillCollect(t, base.JoinAsOf(right, ursus.AsOfOn(c("seq")),
+			lim := r.Batch().NBytes()
+			for _, st := range []ursus.AsOfStrategy{ursus.AsOfForward, ursus.AsOfNearest, ursus.AsOfBackward} {
+				df, _, err := spillCollect(t, base.JoinAsOf(right, ursus.AsOfOn(c("seq")), ursus.AsOfStrategyOpt(st)),
+					lim, t.TempDir())
+				if err != nil {
+					return fmt.Sprintf("%v, streaming, refused: %v", st, err)
+				}
+				if df.Height() != r.Height() {
+					return fmt.Sprintf("%v answered %d rows, want %d", st, df.Height(), r.Height())
+				}
+			}
+			// A null left by-key matches nothing, and reads nothing ahead to find it.
+			df, _, err := spillCollect(t, base.Select(c("seq"), ursus.Null(ursus.String).Alias("b")).JoinAsOf(
+				right.WithColumns(ursus.Lit("there").Alias("b")), ursus.AsOfOn(c("seq")), ursus.AsOfBy(c("b")),
 				ursus.AsOfStrategyOpt(ursus.AsOfForward)), lim, t.TempDir())
-			if why := refusal(df, err, ursus.ErrResource, "join_asof"); why != "" {
-				return why
-			}
-			df, _, err = spillCollect(t, base.JoinAsOf(right, ursus.AsOfOn(c("seq"))), lim, t.TempDir())
 			if err != nil {
-				return "backward, streaming, refused: " + err.Error()
+				return "a null by-key, streaming, refused: " + err.Error()
 			}
-			if df.Height() != r.Height() {
-				return fmt.Sprintf("backward answered %d rows, want %d", df.Height(), r.Height())
-			}
-			return ""
+			df, _, err = spillCollect(t, base.Select(c("seq"), ursus.Lit("absent").Alias("b")).JoinAsOf(
+				right.WithColumns(ursus.Lit("there").Alias("b")), ursus.AsOfOn(c("seq")), ursus.AsOfBy(c("b")),
+				ursus.AsOfStrategyOpt(ursus.AsOfForward)), lim, t.TempDir())
+			return refusal(df, err, ursus.ErrResource, "join_asof")
 		}},
 		{"group_by is charged for its key table", func(t *testing.T) string {
 			// 20000 distinct 40-byte keys: the input batch in flight holds them once,

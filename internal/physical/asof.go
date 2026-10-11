@@ -2,14 +2,10 @@ package physical
 
 import (
 	"context"
-	"errors"
-	"io"
 	"math"
-	"sort"
 	"time"
 
 	"github.com/advenn/ursus/dtype"
-	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/execopt"
 	"github.com/advenn/ursus/internal/expr"
@@ -20,25 +16,16 @@ import (
 
 // The as-of join: for each left row, the NEAREST right row rather than an equal one.
 //
-// # It reuses the equi-join's output machinery and replaces only the match rule
-//
-// gatherOut, the JoinLayout, evalKeys and joinBreaker are all the ordinary join's, so
-// what is new here is one binary search. An unmatched left row is rsel[i] =
-// kernel.NullIndex, which gatherOut has handled since step 13 built it for the
-// spilling join's null bucket — so "left join semantics" costs nothing.
-//
-// # Sorted input makes the search a binary search
-//
-// The right side is bucketed by the `by` key and each bucket is in `on` order,
-// because the whole input is and bucketing preserves relative order. So finding the
-// last right key at or before a left key is sort.Search over one bucket — the same
-// move step 14's temporalSink.rangeOf makes, for the same reason.
-//
-// It is O(n log m) rather than the O(n + m) a true merge walk would give. The right
-// side is buffered either way, and a binary search per left row cannot drift out of
-// step with a cursor the way a hand-rolled merge can.
+// It streams both sides (asofstream.go): backward since step 183, forward and nearest
+// since step 194, when this file's buffered join, which held the whole right side
+// and searched it, was removed. It reuses the equi-join's output machinery, gatherOut,
+// the JoinLayout and evalKeys, and replaces only the match rule. An unmatched left
+// row is rsel[i] = kernel.NullIndex, which gatherOut has handled since step 13 built
+// it for the spilling join's null bucket, so "left join semantics" costs nothing.
 
-// asOfBuildSink buffers the right side and answers nearest-key queries against it.
+// asOfBuildSink is an as-of join's configuration and its rules: the keys, the
+// by-keys, the strategy, the tolerance and the budget account. The name is the
+// buffered join's, whose sink it was.
 type asOfBuildSink struct {
 	out    *dtype.Schema
 	layout *plan.JoinLayout
@@ -54,146 +41,8 @@ type asOfBuildSink struct {
 	allowExact bool
 	keyType    dtype.DataType
 	loc        *time.Location
-	batch      int
 
-	mem   *execopt.Account
-	parts []*data.Batch
-	// copy is every distinct allocation parts hold, reserved as the copy Probe's
-	// Concat makes of them; reserved is what has been charged for it.
-	copy     data.BufferSet
-	reserved int64
-	keys     []int64 // the ordering key, whole stream, in input order
-	nRows    int
-
-	sorted bool
-	badRow int
-}
-
-func (s *asOfBuildSink) Schema() *dtype.Schema { return s.out }
-func (s *asOfBuildSink) Close() error          { s.mem.Release(); return nil }
-
-func (s *asOfBuildSink) Merge(Sink) error {
-	// Two partial sinks cannot be reconciled without knowing the global key order,
-	// which is exactly what a partial sink does not have. windowSink and temporalSink
-	// refuse for the same reason.
-	return uerr.Internalf("physical: asOfBuildSink cannot be merged")
-}
-
-func (s *asOfBuildSink) Consume(ctx context.Context, in *data.Batch) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	n := in.Rows()
-	if n == 0 {
-		return nil
-	}
-	ks, err := asOfKeys(ctx, s.rightOn, in, s.keyType)
-	if err != nil {
-		return err
-	}
-	if err := s.checkSorted(ks, in, "right"); err != nil {
-		return err
-	}
-	s.keys = append(s.keys, ks...)
-	s.parts = append(s.parts, in)
-	s.mem.Retain(in)
-	s.copy.AddBatch(in)
-	s.mem.RetainBytes(int64(n)*8 + s.copy.Total() - s.reserved)
-	s.reserved = s.copy.Total()
-	s.nRows += n
-	return s.mem.Check()
-}
-
-// checkSorted records the first backwards step rather than failing here, so the error
-// can name the side and be raised once, at Finish, alongside the left side's.
-func (s *asOfBuildSink) checkSorted(ks []int64, in *data.Batch, side string) error {
-	_ = side
-	for i, k := range ks {
-		if s.sorted && (len(s.keys) > 0 || i > 0) {
-			var prev int64
-			if i > 0 {
-				prev = ks[i-1]
-			} else {
-				prev = s.keys[len(s.keys)-1]
-			}
-			if k < prev {
-				s.sorted, s.badRow = false, s.nRows+i
-			}
-		}
-	}
-	return nil
-}
-
-func (s *asOfBuildSink) Finish(ctx context.Context) (Operator, error) {
-	return s.Probe(ctx, emptyOperator{schema: s.left})
-}
-
-func (s *asOfBuildSink) Probe(ctx context.Context, probe Operator) (Operator, error) {
-	if !s.sorted {
-		return nil, unsortedErr("right", s.badRow)
-	}
-	right, err := kernel.Concat(s.right, s.parts)
-	if err != nil {
-		return nil, err
-	}
-	buckets, err := s.bucket(ctx, right)
-	if err != nil {
-		return nil, err
-	}
-	// The bucket map: an int32 per right row, and a key and two headers per bucket.
-	held := int64(right.Rows()) * 4
-	for k, rows := range buckets {
-		held += int64(len(k)) + 56 + int64(cap(rows)-len(rows))*4
-	}
-	s.mem.RetainBytes(held)
-	if err := s.mem.Check(); err != nil {
-		return nil, err
-	}
-	pad, err := emptyBatch(s.right)
-	if err != nil {
-		return nil, err
-	}
-	return &asOfProbeOp{
-		schema: s.out, layout: s.layout, sink: s,
-		probe: probe, right: right, buckets: buckets, pad: pad,
-	}, nil
-}
-
-// bucket groups right row indices by the `by` key, preserving key order inside each.
-func (s *asOfBuildSink) bucket(ctx context.Context, right *data.Batch) (map[string][]int32, error) {
-	if len(s.rightBy) == 0 {
-		rows := make([]int32, right.Rows())
-		for i := range rows {
-			rows[i] = int32(i)
-		}
-		return map[string][]int32{"": rows}, nil
-	}
-	// Cast to the promoted by-key types, KeyTypes[1:] — [0] is the On key. These
-	// were never cast, so an Int32 by-key and an Int64 one encoded to different
-	// bytes and no row ever matched, while the schema showed the promoted type.
-	cols, err := evalKeys(ctx, "join_asof", s.rightBy, right, s.layout.KeyTypes[1:])
-	if err != nil {
-		return nil, err
-	}
-	enc, err := kernel.NewGroupKeyEncoder("join_asof", cols)
-	if err != nil {
-		return nil, err
-	}
-	// A right row with a null by-key joins no bucket, so no left row can find it.
-	// The encoder writes a null as a group of its own, and that group used to match
-	// a null left by-key — against every other null rule in ursus's joins, where a
-	// null key matches nothing unless NullsEqual says so, and as-of has no
-	// NullsEqual. Polars and DuckDB match nothing too.
-	valid := keyValidity(cols)
-	out := make(map[string][]int32, 16)
-	for i := range right.Rows() {
-		if !valid.Get(i) {
-			continue
-		}
-		k := string(enc.Encode(i))
-		out[k] = append(out[k], int32(i))
-	}
-	return out, nil
+	mem *execopt.Account
 }
 
 func unsortedErr(side string, row int) error {
@@ -246,192 +95,14 @@ func asOfKeys(ctx context.Context, on expr.Node, in *data.Batch, to dtype.DataTy
 	return orderKeys(c)
 }
 
-// --- the probe --------------------------------------------------------------------
-
-type asOfProbeOp struct {
-	schema  *dtype.Schema
-	layout  *plan.JoinLayout
-	sink    *asOfBuildSink
-	probe   Operator
-	right   *data.Batch
-	buckets map[string][]int32
-	pad     *data.Batch
-
-	nRows    int
-	lastSeen int64 // the previous batch's final key, so the sort check spans batches
-	done     bool
-}
-
-func (p *asOfProbeOp) Schema() *dtype.Schema { return p.schema }
-func (p *asOfProbeOp) Close() error          { return nil }
-
-func (p *asOfProbeOp) Next(ctx context.Context) (*data.Batch, error) {
-	for {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if p.done {
-			return nil, io.EOF
-		}
-		in, err := p.probe.Next(ctx)
-		if errors.Is(err, io.EOF) {
-			p.done = true
-			return nil, io.EOF
-		}
-		if err != nil {
-			return nil, err
-		}
-		if in.Rows() == 0 {
-			continue // an empty batch is not end-of-stream
-		}
-		out, err := p.match(ctx, in)
-		if err != nil {
-			return nil, err
-		}
-		return out, nil
+// preferBack is nearest's choice between a backward candidate at key b and a forward
+// one at f, for the left key k: the closer, a tie going backward. The buffered join
+// and the streaming one (asOfStreamOp) both ask it, so they cannot disagree.
+func (s *asOfBuildSink) preferBack(k, b, f int64) bool {
+	if s.keyType.IsFloat() {
+		return floatDistance(k, b) <= floatDistance(f, k)
 	}
-}
-
-// match emits one output batch: every left row, with its nearest right row or nulls.
-func (p *asOfProbeOp) match(ctx context.Context, in *data.Batch) (*data.Batch, error) {
-	s := p.sink
-	lk, err := asOfKeys(ctx, s.leftOn, in, s.keyType)
-	if err != nil {
-		return nil, err
-	}
-	// The LEFT side must be sorted too, and it is checked as it streams.
-	for i, k := range lk {
-		if p.nRows+i > 0 && k < p.lastKey(lk, i) {
-			return nil, unsortedErr("left", p.nRows+i)
-		}
-	}
-
-	var byEnc *kernel.GroupKeyEncoder
-	var byValid bitmap.View
-	if len(s.leftBy) > 0 {
-		cols, err := evalKeys(ctx, "join_asof", s.leftBy, in, s.layout.KeyTypes[1:])
-		if err != nil {
-			return nil, err
-		}
-		if byEnc, err = kernel.NewGroupKeyEncoder("join_asof", cols); err != nil {
-			return nil, err
-		}
-		byValid = keyValidity(cols)
-	}
-
-	n := in.Rows()
-	lsel := make([]int32, n)
-	rsel := make([]int32, n)
-	for i := range n {
-		lsel[i] = int32(i)
-		key := ""
-		if byEnc != nil {
-			if !byValid.Get(i) {
-				rsel[i] = kernel.NullIndex // a null by-key matches nothing
-				continue
-			}
-			key = string(byEnc.Encode(i))
-		}
-		var err error
-		if rsel[i], err = s.nearest(p.buckets[key], lk[i]); err != nil {
-			return nil, err
-		}
-	}
-	p.nRows += n
-	p.lastSeen = lk[n-1]
-	return gatherOut(p.schema, p.layout, in, p.right, lsel, rsel, keyFromLeft)
-}
-
-// lastSeen is the previous batch's final key, so the sortedness check spans batches.
-func (p *asOfProbeOp) lastKey(lk []int64, i int) int64 {
-	if i > 0 {
-		return lk[i-1]
-	}
-	return p.lastSeen
-}
-
-// nearest finds the right row this left key matches, or NullIndex.
-//
-// This is the whole of the as-of rule, in one place, so the three strategies and the
-// exact-match flag cannot disagree with each other about what "nearest" means.
-func (s *asOfBuildSink) nearest(bucket []int32, k int64) (int32, error) {
-	if len(bucket) == 0 {
-		return kernel.NullIndex, nil
-	}
-	keys := s.keys
-
-	// back: the last position whose key is <= k (or < k when exact matches are off).
-	back := sort.Search(len(bucket), func(i int) bool {
-		if s.allowExact {
-			return keys[bucket[i]] > k
-		}
-		return keys[bucket[i]] >= k
-	}) - 1
-	// fwd: the first position whose key is >= k (or > k).
-	fwd := sort.Search(len(bucket), func(i int) bool {
-		if s.allowExact {
-			return keys[bucket[i]] >= k
-		}
-		return keys[bucket[i]] > k
-	})
-
-	pick := -1
-	switch s.strategy {
-	case plan.AsOfForward:
-		if fwd < len(bucket) {
-			pick = fwd
-		}
-	case plan.AsOfNearest:
-		switch {
-		case back < 0:
-			if fwd < len(bucket) {
-				pick = fwd
-			}
-		case fwd >= len(bucket):
-			pick = back
-		default:
-			// Ties go BACKWARD, matching the default strategy: with an exact match
-			// available both distances are zero, and "the most recent" is the answer
-			// the operator is named for.
-			// Unsigned distances, because both subtractions can wrap: with k at
-			// 0, a backward candidate at MinInt64 and a forward one at +1 — all
-			// valid instants — the left side became MinInt64 and nearest chose the
-			// candidate 292 YEARS away over the one a nanosecond away. Under the
-			// default options, with no tolerance involved.
-			//
-			// back and fwd bracket k by construction of the two searches above, so
-			// these are the exact distances and <= still sends a tie backward.
-			//
-			// A float key's order key says nothing about distance, so its distances
-			// are measured on the floats themselves.
-			closerBack := absDiffU64(k, keys[bucket[back]]) <= absDiffU64(keys[bucket[fwd]], k)
-			if s.keyType.IsFloat() {
-				closerBack = floatDistance(k, keys[bucket[back]]) <=
-					floatDistance(keys[bucket[fwd]], k)
-			}
-			if closerBack {
-				pick = back
-			} else {
-				pick = fwd
-			}
-		}
-	default: // AsOfBackward
-		if back >= 0 {
-			pick = back
-		}
-	}
-	if pick < 0 {
-		return kernel.NullIndex, nil
-	}
-	row := bucket[pick]
-	ok, err := s.withinTolerance(k, keys[row])
-	if err != nil {
-		return kernel.NullIndex, err
-	}
-	if !ok {
-		return kernel.NullIndex, nil
-	}
-	return row, nil
+	return absDiffU64(k, b) <= absDiffU64(f, k)
 }
 
 // absDiffU64 is |a - b|, exactly.
@@ -576,19 +247,14 @@ func planAsOfJoin(ctx context.Context, a *plan.AsOfJoin, opts Options) (Operator
 		allowExact: a.AllowExactMatches,
 		// KeyTypes[0] is the ordering key's promoted type: asJoin puts On first.
 		keyType: layout.KeyTypes[0],
-		batch:   opts.batchSize(),
 		mem:     opts.Budget.Account("join_asof"),
-		sorted:  true,
 	}
 	sink.loc = temporalLocation(sink.keyType)
 	if err := sink.prepareTolerance(); err != nil {
 		return nil, err
 	}
-	// A backward match streams both sides (asOfStreamOp); forward and nearest buffer
-	// the right side, as their match may lie anywhere ahead of the left key.
-	if a.Strategy == plan.AsOfBackward {
-		return &asOfStreamOp{cfg: sink, schema: layout.Schema, layout: layout,
-			left: left, right: right, cur: -1, ids: map[string]int32{}}, nil
-	}
-	return &joinBreaker{build: right, probe: left, builder: sink}, nil
+	// Every strategy streams both sides (asOfStreamOp): backward since step 183,
+	// forward and nearest since step 194, holding the rows they read ahead.
+	return &asOfStreamOp{cfg: sink, schema: layout.Schema, layout: layout,
+		left: left, right: right, cur: -1, ids: map[string]int32{}}, nil
 }

@@ -365,10 +365,12 @@ type MemoryStats struct {
 // partition_by routes whole partitions; both stamp each row with its input
 // position and merge back on it, so their answers keep their order exactly.
 //
-// Reverse, hstack, tail, join_asof, merge_sorted, rolling, group_by_dynamic and a
-// window with no partition_by cannot spill: past the limit they FAIL, with an
-// error naming the operator, which is a better outcome than being killed by the OS
-// with no explanation.
+// Reverse, hstack, tail, rolling, group_by_dynamic and a window with no
+// partition_by cannot spill: past the limit they FAIL, with an error naming the
+// operator, which is a better outcome than being killed by the OS with no
+// explanation. JoinAsOf and MergeSorted stream both sides instead, holding a few
+// batches; a forward or nearest JoinAsOf also holds the right rows it reads ahead,
+// which for a left by-key the right side lacks is the rest of that side.
 //
 // A bounded sort — one under a Head or a TopK — never spills at all: past the
 // limit it discards everything outside the current best k, which is exact.
