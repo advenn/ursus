@@ -166,9 +166,9 @@ func StrCall(fn expr.CallFn, name string, out dtype.DataType,
 func applyStr(fn expr.CallFn, s string, args []any, re *regexp.Regexp) (string, bool) {
 	switch fn {
 	case expr.FnStrToLower:
-		return strings.ToLower(s), true
+		return fullLower(s), true
 	case expr.FnStrToUpper:
-		return strings.ToUpper(s), true
+		return fullUpper(s), true
 
 	case expr.FnStrReverse:
 		// By RUNE, not by byte: reversing bytes would corrupt every multi-byte

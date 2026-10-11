@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.0
 
-Everything on master since `v0.5.0`: steps 156–177, so far.
+Everything on master since `v0.5.0`: steps 156–178, so far.
 [`v0.6-scope.md`](./context_files/v0.6-scope.md) set the scope: **speed, the features
 0.5 left, and robustness.** [`audit-0.6-midpoint.md`](./context_files/audit-0.6-midpoint.md)
 took stock after step 165. Each step below was timed against the one before it; how
@@ -80,8 +80,13 @@ far ursus has moved against v0.5.0 is measured once, at the end.
   the rows whose Date, Datetime or Time `by` lies within `period` of its own, closed
   as `WindowClosed` says. `by` need not be sorted; a calendar period follows by's
   zone.
+- **`DataFrame.Rows` decodes a List column** into a slice, `[][]T` and `[]*T` too,
+  and a Binary one into a `[]byte` (178).
 
 ### What a user of v0.5.0 can trip on
+
+- **A field tagged `ursus:"name"` now reads that column** (178). One whose tag named
+  a column but whose own name matched another read the other before.
 
 - **`Filter(a.And(b))` evaluates b only on the rows a keeps** (164), as `Filter(a, b)`
   always has. An error b would have raised only on rows a drops is no longer raised.
@@ -98,6 +103,11 @@ far ursus has moved against v0.5.0 is measured once, at the end.
 
 ### Fixed
 
+- **`DataFrame.Rows` reads `ursus:"name"` tags again** (178). The module's rename had
+  rewritten the tag key to the module path, so since then a field matched a column
+  only by its own name.
+- **`ToUpper` and `ToLower` map case fully,** as Polars does (178): `"ß"` is `"SS"`,
+  ligatures expand, and Σ is ς at the end of a word.
 - **`Var` and `Std` of large near-equal values** (176) lost about eight digits:
   1e9+1, 1e9+2 and 1e9+4 gave a variance of 2.333333283662796, where it is 7/3. Each
   group's values are now shifted by its first, and the answer is Polars' to the last

@@ -95,7 +95,10 @@ func buildSetters(rt reflect.Type, b *data.Batch) ([]setter, error) {
 }
 
 func columnName(f reflect.StructField) (name string, skip bool) {
-	tag, ok := f.Tag.Lookup("github.com/advenn/ursus")
+	// "ursus", the key the doc gives. The module's rename rewrote it to the module
+	// path, so from that commit to step 178 no tag was read: a field matched only
+	// by its own name.
+	tag, ok := f.Tag.Lookup("ursus")
 	if !ok {
 		return f.Name, false
 	}
@@ -165,10 +168,52 @@ func makeSetter(ft reflect.Type, c *data.Column) (func(reflect.Value, int), erro
 		if ft == reflect.TypeOf(time.Time{}) {
 			return timeSetter(c)
 		}
+
+	case reflect.Slice:
+		return sliceSetter(ft, c)
 	}
 
 	return nil, uerr.New(uerr.KindType, "", "no decoder for Go type %s from column %s",
 		ft, c.DType())
+}
+
+// sliceSetter decodes a List into a slice, each element through its type's own
+// setter, so a []*int64 sees a null element as nil and a [][]string a list of lists
+// (step 178; it was refused). A Binary or String column decodes into a []byte, a
+// copy. A null is a nil slice, which a *[]T field tells apart from an empty list.
+func sliceSetter(ft reflect.Type, c *data.Column) (func(reflect.Value, int), error) {
+	if ft.Elem().Kind() == reflect.Uint8 && c.DType().HasStringStorage() {
+		acc := c.Strings()
+		return func(dst reflect.Value, row int) {
+			if !c.IsValid(row) {
+				dst.SetZero()
+				return
+			}
+			dst.SetBytes([]byte(acc.Get(row)))
+		}, nil
+	}
+	if c.DType().ID() != dtype.TypeList {
+		return nil, uerr.New(uerr.KindType, "", "no decoder for Go type %s from column %s",
+			ft, c.DType()).Hint("a slice field decodes a List column, or a []byte a Binary one")
+	}
+	lists := c.Lists()
+	elem, err := makeSetter(ft.Elem(), lists.Child())
+	if err != nil {
+		return nil, uerr.New(uerr.KindType, "", "no decoder for Go type %s from column %s: "+
+			"its elements: %v", ft, c.DType(), err)
+	}
+	return func(dst reflect.Value, row int) {
+		lo, hi, ok := lists.Get(row)
+		if !ok {
+			dst.SetZero()
+			return
+		}
+		out := reflect.MakeSlice(ft, int(hi-lo), int(hi-lo))
+		for j := lo; j < hi; j++ {
+			elem(out.Index(int(j-lo)), int(j))
+		}
+		dst.Set(out)
+	}, nil
 }
 
 func intSetter(c *data.Column) (func(reflect.Value, int), error) {

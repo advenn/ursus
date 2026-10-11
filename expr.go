@@ -240,6 +240,12 @@ func (e Expr) CastLossy(to dtype.DataType) Expr {
 // Every binary operator takes an Operand, so both `a.Add(b)` and `a.Add(1)` work.
 // The scalar form is by far the common one and requiring Lit(1) at every site
 // would be a tax paid thousands of times.
+//
+// An integer result that leaves its type wraps, two's complement, as Polars' and
+// Go's do: MaxInt64 + 1 is MinInt64, and MinInt64 // −1, the one quotient that
+// leaves its type, is MinInt64 (step 178 decided it, audit row S26). An instant or
+// a Duration is checked instead, and refuses; Sum and Mean widen to Int128, so a
+// column's total cannot wrap.
 
 func (e Expr) Add[T Operand](v T) Expr { return e.bin(expr.OpAdd, lift(v)) }
 func (e Expr) Sub[T Operand](v T) Expr { return e.bin(expr.OpSub, lift(v)) }
