@@ -35,6 +35,14 @@ func allocatedBytes() uint64 {
 // From the second batch on: the first grows what every reader grows once, its
 // staging and its builders, which 200,000 rows do not amortize and ten million do.
 //
+// On four threads each worker grows its own, so the reading starts after every
+// worker's first batch, and its bound is looser: the reader parses ahead, and how
+// much of the reading's allocation happened before it began is the scheduler's.
+// From the second batch it read 1.14 to 1.47 on one machine, and a gate failed on it
+// (step 185); from each worker's second, 0.21 to 1.11. The whole read is no measure
+// either: each worker's staging, about 8 MB, is a fixed cost these rows do not
+// amortize. The fault this test is for allocated each value about six times.
+//
 // Not parallel, so no other test allocates while it reads.
 func TestReadingAllocatesAboutWhatItProduces(t *testing.T) {
 	const rows = 200_000
@@ -58,6 +66,15 @@ func TestReadingAllocatesAboutWhatItProduces(t *testing.T) {
 			t.Fatal(err)
 		}
 		n := first.Rows()
+		// Every worker's first batch precedes the reading; the batches come in input
+		// order, a worker's chunks in turn.
+		for range 2*threads - 2 {
+			b, err := bs.Next(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			n += b.Rows()
+		}
 		runtime.GC()
 		before := allocatedBytes()
 		var produced int64
@@ -81,7 +98,11 @@ func TestReadingAllocatesAboutWhatItProduces(t *testing.T) {
 		}
 		t.Logf("%d threads: allocated %.1f MB to produce %.1f MB: %.2f", threads,
 			float64(allocated)/(1<<20), float64(produced)/(1<<20), float64(allocated)/float64(produced))
-		if allocated > produced*5/4 {
+		bound := produced * 5 / 4
+		if threads > 1 {
+			bound = produced * 3 / 2
+		}
+		if allocated > bound {
 			t.Errorf("%d threads: reading allocated %d bytes to produce %d", threads, allocated, produced)
 		}
 		// The builders keep their buffers from batch to batch, which is safe only

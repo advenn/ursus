@@ -178,6 +178,15 @@ func TestQueriesHoldWhatTheBudgetCounts(t *testing.T) {
 			t.Errorf("freezing the build side held %d MB; the join charged a peak of %d MB",
 				atFreeze/mb, st.Peak/mb)
 		}
+		// And against the build side itself, which the charge cannot be: a freeze that
+		// held the build side twice and counted it twice passes the bound above, as
+		// step 135 found and left silent. Held once, the freeze reads 2.24 times the
+		// build side's 80 MB, its copy, its table and the probe in flight; held twice,
+		// 3.26 (step 185).
+		if side := int64(n) * 5 * 8; atFreeze > side*26/10 {
+			t.Errorf("freezing the build side held %d MB, %.2f times its %d MB",
+				atFreeze/mb, float64(atFreeze)/float64(side), side/mb)
+		}
 	})
 	t.Run("a group-by holds what it charges", func(t *testing.T) {
 		var st ursus.MemoryStats
@@ -187,6 +196,26 @@ func TestQueriesHoldWhatTheBudgetCounts(t *testing.T) {
 		report(t, t.Name(), live, st)
 		if live > st.Peak*13/10+16*mb {
 			t.Errorf("the live heap rose %d MB; the group-by charged a peak of %d MB", live/mb, st.Peak/mb)
+		}
+	})
+	// Under the default budget a group-by runs on every worker and folds their
+	// tables together; under a limit the caller set it is serial (step 92), so the
+	// case above never reached the fold that step 131 named and left unmeasured.
+	// Step 185 measured it: it counts 168.8 MB, and the live heap reads 188.3 at its
+	// largest, exactly, as the fold concatenates.
+	t.Run("a parallel group-by holds what it charges", func(t *testing.T) {
+		var st ursus.MemoryStats
+		live, atConcat := liveDuring(func() {
+			stream(t, build.GroupBy(c("k")).Agg(c("v0").Sum()), ursus.WithThreads(8),
+				ursus.WithBatchSize(1<<16), ursus.WithMemoryStats(&st))
+		}, build)
+		report(t, t.Name(), live, st)
+		report(t, t.Name()+" (folding)", atConcat, st)
+		for name, v := range map[string]int64{"sampled": live, "at a concatenation": atConcat} {
+			if v > st.Peak*13/10+16*mb {
+				t.Errorf("%s, the live heap rose %d MB; the group-by charged a peak of %d MB",
+					name, v/mb, st.Peak/mb)
+			}
 		}
 	})
 	t.Run("a join under a small budget spills and stays near it", func(t *testing.T) {
