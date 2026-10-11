@@ -127,20 +127,23 @@ func (h *hybrid) unpack(dst []uint32) {
 	mask := uint64(1)<<uint(w) - 1
 	d := h.data
 	i := 0
-	// A group of eight values of at most eight bits is at most one word: at a group's
-	// start, where the bit offset is whole bytes, it is read with one load.
-	if w <= 8 {
-		for ; i+8 <= len(dst) && h.bit&7 == 0; i += 8 {
-			at := h.packed + h.bit>>3
-			if at+8 > len(d) {
-				break
-			}
-			word := binary.LittleEndian.Uint64(d[at:])
-			for j := range 8 {
-				dst[i+j] = uint32(word >> uint(j*w) & mask)
-			}
-			h.bit += 8 * w
+	// A load of eight bytes, shifted past the bits already taken, holds at least 57
+	// bits: as many whole values as fit are taken from it, four 12-bit indices or
+	// 28 2-bit levels a load, where a load a value was a profile's 9% of q12.
+	per := 57 / w
+	for i < len(dst) {
+		at := h.packed + h.bit>>3
+		if at+8 > len(d) {
+			break
 		}
+		word := binary.LittleEndian.Uint64(d[at:]) >> uint(h.bit&7)
+		cnt := min(per, len(dst)-i)
+		for j := range cnt {
+			dst[i+j] = uint32(word & mask)
+			word >>= uint(w)
+		}
+		h.bit += cnt * w
+		i += cnt
 	}
 	for ; i < len(dst); i++ {
 		at := h.packed + h.bit>>3

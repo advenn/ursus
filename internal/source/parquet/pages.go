@@ -112,6 +112,14 @@ type pageChunk struct {
 
 	lvl []uint32 // scratch: one batch's levels where a run is bit-packed
 	ids []uint32 // scratch: indices
+
+	// A String chunk marked for a dictionary's conjuncts (dictfilter.go): the
+	// table, once, and the rows mark read for emit.
+	tableDone bool
+	keep      []bool
+	pend      []int32 // a row's dictionary index, -1 for a null, -1-p for PLAIN value p
+	poffs     []int32
+	pchars    []byte
 }
 
 func newPageChunk(pr file.PageReader, desc *schema.Column, size int) *pageChunk {

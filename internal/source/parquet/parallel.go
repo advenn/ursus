@@ -51,6 +51,7 @@ type parallelReader struct {
 	cols      []colPlan
 	batchSize int
 	preds     []expr.Node
+	df        *dictFilter
 	threads   int
 
 	mu        sync.Mutex // Next's state, against Close
@@ -226,6 +227,7 @@ func (r *parallelReader) decode(f *sharedFile, rgIndex int, rgMeta *metadata.Row
 		}
 		chunks[i] = c
 	}
+	want := r.batchSize
 	for left := int(rgMeta.NumRows()); left > 0; {
 		select {
 		case <-r.stop:
@@ -233,13 +235,19 @@ func (r *parallelReader) decode(f *sharedFile, rgIndex int, rgMeta *metadata.Row
 			return
 		default:
 		}
-		b, rows, err := readBatch(chunks, r.out, min(r.batchSize, left), rgIndex, f.name, left)
+		b, rows, err := readBatch(chunks, r.out, min(want, left), rgIndex, f.name, left, r.df)
 		if err != nil {
 			send(rgResult{err: err})
 			finished = true
 			return
 		}
 		left -= rows
+		if r.df != nil {
+			want = widen(r.batchSize, rows, b.Rows())
+		}
+		if b.Rows() == 0 {
+			continue // every row failed a dictionary's conjunct
+		}
 		if !send(rgResult{b: b}) {
 			finished = true
 			return

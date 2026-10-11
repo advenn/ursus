@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.1
 
-Everything on master since `v0.6.0`: steps 191–192, so far.
+Everything on master since `v0.6.0`: steps 191–193, so far.
 [`v0.6.1-scope.md`](./context_files/v0.6.1-scope.md) set the scope: **speed where the
 profile points, and out-of-core.** Each step is timed against v0.6.0's code,
 alternated in one session.
@@ -29,6 +29,12 @@ alternated in one session.
   and each dictionary string copied once, short ones as two words. q19 and q12 take
   about 22% less wall time, and h2o's j2, j3 and gb1 over Parquet 10 to 15% less.
   Every other chunk reads through arrow-go as before.
+- **A string conjunct runs once per dictionary value, in the Parquet reader** (193).
+  `l_shipmode IN ('AIR', 'AIR REG')`, `==`, `StartsWith`, a regexp, any row-local
+  expression of one String or Binary column, is evaluated on each row group's
+  dictionary, and the rows it rejects are dropped before their strings are copied.
+  The Filter above still decides. q19 takes 27% less wall time than at step 192, and
+  q8, q10 and q12 3 to 8% less.
 
 ### Fixed
 

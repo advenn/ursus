@@ -83,6 +83,13 @@ type ScanSpec struct {
 
 	// BatchSize is the requested rows per batch. A source may return fewer.
 	BatchSize int
+
+	// Eval evaluates an expression over a batch, as the engine does. A source that
+	// evaluates a pushed conjunct itself uses it; the engine sets it, and a source
+	// handed none evaluates nothing. The Parquet reader evaluates a string
+	// conjunct once per dictionary value, to drop the rows that fail it before
+	// copying them (step 193).
+	Eval func(ctx context.Context, n expr.Node, b *data.Batch) (*data.Column, error)
 }
 
 // ReadSet returns the columns this scan must decode: Projection plus every column

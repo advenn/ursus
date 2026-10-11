@@ -29,9 +29,10 @@ import (
 
 // Options configures a Parquet source.
 type Options struct {
-	// Prune enables row-group skipping from column statistics. On by default; the
-	// switch exists so a wrong answer can be bisected to the pruner, which is the
-	// one part of this package that can change which rows come back.
+	// Prune enables the reader's use of pushed predicates: row-group skipping from
+	// column statistics, and string conjuncts judged on each dictionary (step 193).
+	// On by default; the switch exists so a wrong answer can be bisected to them,
+	// the parts of this package that can change which rows come back.
 	Prune bool
 }
 
@@ -169,6 +170,10 @@ func (s *Source) ClassifyPredicates(preds []expr.Node) []plan.Pushdown {
 	}
 	for i, p := range preds {
 		if prunable(p, full) {
+			out[i] = plan.Inexact
+		} else if anyDictable(p, full) {
+			// Evaluated on a dictionary in the reader, which drops only rows that
+			// fail it (step 193): the Filter above stays.
 			out[i] = plan.Inexact
 		}
 	}
@@ -494,6 +499,8 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 	if batchSize <= 0 {
 		batchSize = 8192
 	}
+	// Predicates arrive only as ClassifyPredicates claimed them, which Prune gates.
+	df := newDictFilter(spec.Predicate, out, spec.Eval, spec.MaxRows)
 
 	// Row groups are decoded in parallel unless there is one thread, or a limit:
 	// reading ahead under MaxRows decodes row groups the query will never use. See
@@ -506,6 +513,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 			cols:      cols,
 			batchSize: batchSize,
 			preds:     spec.Predicate,
+			df:        df,
 			threads:   spec.Threads,
 			stop:      make(chan struct{}),
 		}
@@ -534,6 +542,8 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		batchSize: batchSize,
 		remaining: spec.MaxRows,
 		preds:     spec.Predicate,
+		df:        df,
+		wide:      batchSize,
 		rgIndex:   -1,
 	}
 	// The first row group is opened here, outside Next, so it is recovered here as
@@ -564,6 +574,8 @@ type reader struct {
 	batchSize int
 	remaining int // rows left to produce; 0 means unlimited
 	preds     []expr.Node
+	df        *dictFilter
+	wide      int // under df, the rows the next read takes; see widen
 
 	mu      sync.Mutex
 	err     error  // a recovered panic, returned from every Next after it
@@ -813,11 +825,21 @@ func (r *reader) Next(ctx context.Context) (_ *data.Batch, err error) {
 			continue
 		}
 
-		b, rows, err := readBatch(r.chunks, r.out, min(want, r.rgLeft), r.rgIndex, r.name, r.rgLeft)
+		n := want
+		if r.df != nil {
+			n = r.wide
+		}
+		b, rows, err := readBatch(r.chunks, r.out, min(n, r.rgLeft), r.rgIndex, r.name, r.rgLeft, r.df)
 		if err != nil {
 			return nil, err
 		}
 		r.rgLeft -= rows
+		if r.df != nil {
+			r.wide = widen(r.batchSize, rows, b.Rows())
+		}
+		if b.Rows() == 0 {
+			continue // every row failed a dictionary's conjunct
+		}
 
 		if r.remaining > 0 {
 			r.remaining -= rows
@@ -833,23 +855,58 @@ func (r *reader) Next(ctx context.Context) (_ *data.Batch, err error) {
 // returning it and the rows it holds. rgLeft is what the footer says remains of the
 // row group, for the error when the chunks hold less.
 func readBatch(chunks []colReader, out *dtype.Schema, n, rgIndex int, name string,
-	rgLeft int) (*data.Batch, int, error) {
+	rgLeft int, df *dictFilter) (*data.Batch, int, error) {
 
 	rows := -1
-	for _, c := range chunks {
-		got, err := c.read(n)
-		if err != nil {
-			return nil, 0, err
-		}
+	agree := func(got int) error {
 		// Every column of a row group has the same number of rows. A disagreement
 		// means the file's column chunks are inconsistent, and continuing would
 		// build a ragged batch.
 		if rows == -1 {
 			rows = got
 		} else if got != rows {
-			return nil, 0, uerr.New(uerr.KindValue, "scan_parquet",
+			return uerr.New(uerr.KindValue, "scan_parquet",
 				"row group %d: columns disagree on row count (%d vs %d)",
 				rgIndex, rows, got)
+		}
+		return nil
+	}
+	// The columns a dictionary judges are marked first, so every one has cleared
+	// keep before any copies a row (dictfilter.go).
+	var keep, marked []bool
+	if df != nil {
+		for i, c := range chunks {
+			bc, ok := df.marker(i, c)
+			if !ok {
+				continue
+			}
+			if keep == nil {
+				keep, marked = make([]bool, n), make([]bool, len(chunks))
+				for j := range keep {
+					keep[j] = true
+				}
+			}
+			got, err := bc.pages.mark(n, keep, df, i, bc.dt)
+			if err != nil {
+				return nil, 0, err
+			}
+			if err := agree(got); err != nil {
+				return nil, 0, err
+			}
+			marked[i] = true
+		}
+	}
+	for i, c := range chunks {
+		if marked != nil && marked[i] {
+			c.(*byteArrayCol).pages.emit(c.(*byteArrayCol), keep[:rows])
+			continue
+		}
+		got, err := c.read(n)
+		if err != nil {
+			return nil, 0, err
+		}
+		if err := agree(got); err != nil {
+			return nil, 0, err
 		}
 	}
 	if rows == 0 {
@@ -863,6 +920,15 @@ func readBatch(chunks []colReader, out *dtype.Schema, n, rgIndex int, name strin
 	cols := make([]*data.Column, len(chunks))
 	for i, c := range chunks {
 		cols[i] = c.finish(out.Field(i).Name)
+	}
+	if keep != nil {
+		kept, err := compact(cols, marked, keep, rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		if kept == 0 {
+			return data.NewBatchRows(out, cols, 0), rows, nil
+		}
 	}
 	b, err := data.NewBatch(out, cols)
 	return b, rows, err
