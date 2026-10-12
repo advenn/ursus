@@ -1,0 +1,201 @@
+package kernel
+
+import (
+	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
+	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
+)
+
+// The list set operations and gather (step 223), which take a second List column.
+//
+// # As Polars has them
+//
+//   - set_union is the first list's distinct elements in the order they first
+//     appear, then the second's not among them;
+//   - set_intersection is the first's distinct elements the second holds, in the
+//     first's order, and set_difference those it does not;
+//   - set_symmetric_difference is set_difference, then the second's distinct
+//     elements the first does not hold, in the second's order;
+//   - elements are equal as group_by keys are: a null element is a value equal to
+//     another null, NaN equals NaN, and −0 equals +0, the first list's spelling kept;
+//   - a null list on either side gives a null list.
+//
+// gather picks each list's elements at a list of indices: a negative index counts
+// from the end, a null index gives a null element, and an index out of range is
+// refused, or gives null for gather_or_null. A null list, or null indices, give a
+// null list.
+
+// listSet is a set operation over the lists of a and b, whose elements are cast to
+// out's.
+func listSet(fn expr.CallFn, name string, out dtype.DataType, a, b *data.Column, n int) (*data.Column, error) {
+	ac, alo, err := listElems(a, out.Inner())
+	if err != nil {
+		return nil, err
+	}
+	bc, blo, err := listElems(b, out.Inner())
+	if err != nil {
+		return nil, err
+	}
+	// One column of both lists' elements, so one encoder compares across them and
+	// one Take builds the answer: a's first, then b's from base.
+	both, err := ConcatColumns(ac.Name(), []*data.Column{ac, bc})
+	if err != nil {
+		return nil, err
+	}
+	base := int32(ac.Len())
+	enc, err := NewGroupKeyEncoder(fn.String(), []*data.Column{both})
+	if err != nil {
+		return nil, err
+	}
+	al, bl := a.Lists(), b.Lists()
+	offs := make([]int32, 1, n+1)
+	var pick []int32
+	valid := bitmap.NewBuilder(n)
+	inA := make(map[string]struct{})
+	inB := make(map[string]struct{})
+	out1 := make(map[string]struct{}) // what this row has given out
+	for i := range n {
+		as, ae, aok := al.Get(rowOf(a, i))
+		bs, be, bok := bl.Get(rowOf(b, i))
+		valid.Append(aok && bok)
+		if !aok || !bok {
+			offs = append(offs, int32(len(pick)))
+			continue
+		}
+		clear(inA)
+		clear(inB)
+		clear(out1)
+		// Positions in both: a's from its window's start, b's after all of a's.
+		as, ae, bs, be = as-alo, ae-alo, bs-blo+base, be-blo+base
+		key := func(e int32) string { return string(enc.Encode(int(e))) }
+		give := func(e int32, k string) {
+			if _, done := out1[k]; !done {
+				out1[k] = struct{}{}
+				pick = append(pick, e)
+			}
+		}
+		if fn != expr.FnListSetUnion {
+			for e := bs; e < be; e++ {
+				inB[key(e)] = struct{}{}
+			}
+		}
+		for e := as; e < ae; e++ {
+			k := key(e)
+			_, held := inB[k]
+			switch fn {
+			case expr.FnListSetUnion:
+				give(e, k)
+			case expr.FnListSetIntersection:
+				if held {
+					give(e, k)
+				}
+			default: // difference, and the first half of the symmetric one
+				if !held {
+					give(e, k)
+				}
+			}
+			if fn == expr.FnListSetSymmetricDifference {
+				inA[k] = struct{}{}
+			}
+		}
+		switch fn {
+		case expr.FnListSetUnion:
+			for e := bs; e < be; e++ {
+				give(e, key(e))
+			}
+		case expr.FnListSetSymmetricDifference:
+			for e := bs; e < be; e++ {
+				k := key(e)
+				if _, held := inA[k]; !held {
+					give(e, k)
+				}
+			}
+		}
+		offs = append(offs, int32(len(pick)))
+	}
+	child, err := Take(both, pick)
+	if err != nil {
+		return nil, err
+	}
+	return data.NewList(name, offs, child, valid.Finish()), nil
+}
+
+// listGatherAt picks each list's elements at its indices.
+func listGatherAt(name string, orNull bool, a, idx *data.Column, n int) (*data.Column, error) {
+	ac, alo, err := listElems(a, a.DType().Inner())
+	if err != nil {
+		return nil, err
+	}
+	ic, ilo, err := listElems(idx, dtype.Int64)
+	if err != nil {
+		return nil, err
+	}
+	at := data.MustValues[int64](ic)
+	al, il := a.Lists(), idx.Lists()
+	offs := make([]int32, 1, n+1)
+	var pick []int32
+	valid := bitmap.NewBuilder(n)
+	for i := range n {
+		as, ae, aok := al.Get(rowOf(a, i))
+		is, ie, iok := il.Get(rowOf(idx, i))
+		valid.Append(aok && iok)
+		if aok && iok {
+			size := int64(ae - as)
+			for e := is - ilo; e < ie-ilo; e++ {
+				if !ic.IsValid(int(e)) {
+					pick = append(pick, NullIndex)
+					continue
+				}
+				k := at[e]
+				if k < 0 {
+					k += size
+				}
+				if k < 0 || k >= size {
+					if orNull {
+						pick = append(pick, NullIndex)
+						continue
+					}
+					return nil, uerr.New(uerr.KindValue, "list.gather",
+						"index %d is out of range for a list of %d elements, in row %d",
+						at[e], size, i).
+						Hint("Gather(indices, true) gives null for an index out of range")
+				}
+				pick = append(pick, as-alo+int32(k))
+			}
+		}
+		offs = append(offs, int32(len(pick)))
+	}
+	child, err := Take(ac, pick)
+	if err != nil {
+		return nil, err
+	}
+	return data.NewList(name, offs, child, valid.Finish()), nil
+}
+
+// listElems is a List column's own elements, its window of its child, cast to elem,
+// and where the window starts.
+func listElems(c *data.Column, elem dtype.DataType) (*data.Column, int32, error) {
+	if c.DType().ID() != dtype.TypeList {
+		return nil, 0, uerr.Internalf("kernel: a list operand of %s", c.DType())
+	}
+	l := c.Lists()
+	lo, hi := l.Window()
+	child := l.Child().Slice(int(lo), int(hi-lo))
+	if child.DType() != elem {
+		var err error
+		if child, err = Cast(child.Name(), elem, true, child); err != nil {
+			return nil, 0, err
+		}
+	}
+	return child, lo, nil
+}
+
+// rowOf is the row of c that answers row i: row 0 of a literal, one row long.
+func rowOf(c *data.Column, i int) int {
+	if c.Len() == 1 {
+		return 0
+	}
+	return i
+}

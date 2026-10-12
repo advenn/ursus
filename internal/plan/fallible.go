@@ -31,7 +31,8 @@ import (
 //   - a udf, which is the caller's code;
 //   - arithmetic with a temporal operand, which refuses an overflow;
 //   - dt.truncate, dt.round, dt.epoch, dt.offset_by, dt.month_start and
-//     dt.month_end, which refuse an instant the type cannot hold.
+//     dt.month_end, which refuse an instant the type cannot hold;
+//   - list.gather, which refuses an index out of range.
 //
 // An expression this cannot type is treated as fallible.
 func fallible(p expr.Node, in *dtype.Schema) bool {
@@ -58,7 +59,7 @@ func fallible(p expr.Node, in *dtype.Schema) bool {
 		case *expr.Call:
 			switch t.Fn {
 			case expr.FnDtTruncate, expr.FnDtEpoch, expr.FnDtRound, expr.FnDtOffsetBy,
-				expr.FnDtMonthStart, expr.FnDtMonthEnd:
+				expr.FnDtMonthStart, expr.FnDtMonthEnd, expr.FnListGather:
 				found = true
 			}
 		}

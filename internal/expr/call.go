@@ -200,6 +200,16 @@ const (
 	FnCut
 	FnCutLeftClosed
 	FnStructWithFields
+
+	// The list set operations and gather (step 223): their second List is an
+	// operand, a column, not a parameter, so they take this family's shape. The
+	// answer is named after the first.
+	FnListSetUnion
+	FnListSetIntersection
+	FnListSetDifference
+	FnListSetSymmetricDifference
+	FnListGather       // an index out of range is refused
+	FnListGatherOrNull // and here gives null
 	fnHorizontalEnd
 )
 
@@ -265,7 +275,11 @@ var callNames = map[CallFn]string{
 	FnListSort: "list.sort", FnListUnique: "list.unique",
 	FnListDropNulls: "list.drop_nulls", FnListJoin: "list.join",
 	FnListNUnique: "list.n_unique", FnListArgMin: "list.arg_min",
-	FnListArgMax: "list.arg_max",
+	FnListArgMax:   "list.arg_max",
+	FnListSetUnion: "list.set_union", FnListSetIntersection: "list.set_intersection",
+	FnListSetDifference:          "list.set_difference",
+	FnListSetSymmetricDifference: "list.set_symmetric_difference",
+	FnListGather:                 "list.gather", FnListGatherOrNull: "list.gather_or_null",
 
 	FnStructField: "struct.field",
 }
@@ -468,8 +482,59 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			return dtype.Null, uerr.Internalf("expr: %s with %d breaks and %d labels", fn, k, labels)
 		}
 		return dtype.String, nil
+
+	case FnListSetUnion, FnListSetIntersection, FnListSetDifference,
+		FnListSetSymmetricDifference:
+		return listSetOut(fn, ops)
+
+	case FnListGather, FnListGatherOrNull:
+		if len(ops) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		if ops[0].Type.ID() != dtype.TypeList {
+			return dtype.Null, uerr.New(uerr.KindType, "list",
+				"%s requires a List operand, got %s", fn, ops[0].Type).
+				Hint("only a List column has elements to gather")
+		}
+		if ops[1].Type.ID() != dtype.TypeList || !ops[1].Type.Inner().IsInteger() {
+			return dtype.Null, uerr.New(uerr.KindType, "list",
+				"%s takes its indices as a List of integers, got %s", fn, ops[1].Type).
+				Hint("each row's indices are a list; Implode a column of them, or cast")
+		}
+		return ops[0].Type, nil
 	}
 	return dtype.Null, uerr.Internalf("expr: unknown horizontal call %d", fn)
+}
+
+// listSetOut types a list set operation: a List of the type both lists' elements
+// meet at, compared by grouping equality.
+//
+// PromoteExact, as a join's keys and a Concat meet: an Int64 against a Float64 would
+// be compared after rounding, so 2⁵³+1 would equal 2⁵³. Polars meets them at Float64;
+// this refuses. Elements are compared as group_by compares keys, so they must be
+// hashable.
+func listSetOut(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
+	if len(ops) != 2 {
+		return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+	}
+	a, b := ops[0].Type, ops[1].Type
+	if a.ID() != dtype.TypeList || b.ID() != dtype.TypeList {
+		return dtype.Null, uerr.New(uerr.KindType, "list",
+			"%s requires two Lists, got %s and %s", fn, a, b).
+			Hint("only List columns have elements to compare")
+	}
+	elem, ok := dtype.PromoteExact(a.Inner(), b.Inner())
+	if !ok {
+		return dtype.Null, uerr.New(uerr.KindType, "list",
+			"%s: the two lists' elements have no common type: %s and %s", fn, a.Inner(), b.Inner()).
+			Hint("cast one of them, e.g. .Cast(ursus.List(%s))", a.Inner())
+	}
+	if !elem.IsHashable() && !elem.IsNull() {
+		return dtype.Null, uerr.New(uerr.KindType, "list",
+			"%s compares elements, and %s elements cannot be compared", fn, elem).
+			Hint("the elements must be numeric, temporal, string or boolean")
+	}
+	return dtype.List(elem), nil
 }
 
 // genCallOut types the family that does not dispatch on the receiver's type.

@@ -102,7 +102,7 @@ and did, in [`v0.6-scope.md`](./context_files/v0.6-scope.md). What works today:
 |-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Sources**     | Parquet and CSV (read and write, List and Struct included for Parquet), from paths, memory, or any `io.ReaderAt` / stream you open (`ScanParquetFrom`, `ScanCSVFrom`); in-memory frames; Arrow (records and streams in; records out, zero-copy) |
 | **Types**       | Bool, Int8–64, Uint8–64, Float32/64, String, Binary, Date, Time, Datetime (unit + zone), Duration, Decimal (128-bit; exact `+ - *` and `sum`, refused past 38 digits; `/` to the nearest Float64; casts to and from every numeric type exact or refused, except to a float, which rounds to the nearest), Enum (built from String, ordered by its categories) |
-| **Expressions** | arithmetic, comparison, Kleene three-valued logic, conditionals, casts, null repair, trigonometric and hyperbolic functions, bit counts, `ConcatStr`, `Struct`, `Cut`/`QCut`, `.str` (incl. `Split` → List, `Join`, and `Strptime` with strftime formats), `.dt` (incl. `Strftime`, `OffsetBy`, `Round`, `MonthStart`/`MonthEnd`, `ConvertTimeZone`, `ReplaceTimeZone`) and `.list` (incl. `Join`, `NUnique`, `ArgMin` and `ArgMax`) namespaces, 26 aggregates including `Implode`, `TopK`, `BottomK`, `Corr`, `Cov`, `MinBy` and `MaxBy`, window functions (incl. `Rolling*`, `Rolling*By` by time, `Ewm*`, `Interpolate`, and any body around an aggregate inside `.Over`) |
+| **Expressions** | arithmetic, comparison, Kleene three-valued logic, conditionals, casts, null repair, trigonometric and hyperbolic functions, bit counts, `ConcatStr`, `Struct`, `Cut`/`QCut`, `.str` (incl. `Split` → List, `Join`, and `Strptime` with strftime formats), `.dt` (incl. `Strftime`, `OffsetBy`, `Round`, `MonthStart`/`MonthEnd`, `ConvertTimeZone`, `ReplaceTimeZone`) and `.list` (incl. `Join`, `NUnique`, `ArgMin`/`ArgMax`, the set operations and `Gather`) namespaces, 26 aggregates including `Implode`, `TopK`, `BottomK`, `Corr`, `Cov`, `MinBy` and `MaxBy`, window functions (incl. `Rolling*`, `Rolling*By` by time, `Ewm*`, `Interpolate`, and any body around an aggregate inside `.Over`) |
 | **Frame ops**   | filter, select, with-columns, sort, top-k, distinct, concat/vstack/hstack, slice/tail/reverse/row-index, drop/rename/drop-nulls, unpivot, `ValueCounts`, `Describe` |
 | **Joins**       | all seven equi-join kinds with `Validate`, `JoinWhere` and `WhereExists`/`WhereNotExists` (non-equi), as-of join with tolerance and `by` keys, merge-sorted                          |
 | **Grouping**    | group-by, `GroupByDynamic`, `Rolling`, calendar-aware intervals                                                                                   |
@@ -160,7 +160,7 @@ once, so it must be safe for that.
 
 Not done: built-in object stores and SQL, both out by decision (the seam above reaches a store today); `MapGroups`
 and `RollingMap`; `Pivot`, whose output columns are the distinct values of a column, so its schema would depend on data
-and no plan node here does (`Unpivot`, melt, ships); `Upsample`; list set operations, `Sample` and
+and no plan node here does (`Unpivot`, melt, ships); `Upsample`; `Sample` and
 `List().Eval`; a rolling median, quantile or rank, and a rolling window by an integer `by`; Spearman's correlation;
 Arrow IPC files and NDJSON. [`v0.6-scope.md`](./context_files/v0.6-scope.md) says why each waits.
 

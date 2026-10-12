@@ -20,8 +20,8 @@ import (
 // `Sort().Head(3).Get(0)`. The element type is unchanged by all seven — reshaping
 // a list cannot change what it is a list OF.
 //
-// The set operations (`set_union` and friends) and `gather` take a SECOND list and
-// are not here yet.
+// The set operations and Gather take a SECOND list, a column like the first, and
+// hand back a list (step 223).
 //
 // # A null list is not an empty list
 //
@@ -184,3 +184,45 @@ func (l ListExpr) DropNulls() Expr { return l.call(expr.FnListDropNulls) }
 // joins to "", and a null list is null. The list must be of String; cast it first
 // otherwise, e.g. .Cast(List(String)).
 func (l ListExpr) Join(sep string) Expr { return l.call(expr.FnListJoin, sep) }
+
+// operand is a function of this list and a second one.
+func (l ListExpr) operand(fn expr.CallFn, other Expr) Expr {
+	return wrap(&expr.Call{Fn: fn, Args: []expr.Node{l.e.node(), other.node()}})
+}
+
+// SetUnion, SetIntersection, SetDifference and SetSymmetricDifference treat each
+// row's two lists as sets, as Polars' set_union and its siblings do:
+//
+//   - SetUnion is this list's distinct elements in the order they first appear,
+//     then other's that are not among them;
+//   - SetIntersection is this list's distinct elements that other holds, in this
+//     list's order, and SetDifference those it does not;
+//   - SetSymmetricDifference is SetDifference, then other's distinct elements this
+//     list does not hold, in other's order.
+//
+// Elements are equal as group_by keys are: a null element is a value, equal to
+// another null; NaN equals NaN; −0 equals +0. A null list on either side gives a null
+// list. The two element types meet as a join's keys do: an Int64 and a Float64 are
+// refused, where Polars meets them at Float64 and compares rounded integers.
+func (l ListExpr) SetUnion(other Expr) Expr { return l.operand(expr.FnListSetUnion, other) }
+func (l ListExpr) SetIntersection(other Expr) Expr {
+	return l.operand(expr.FnListSetIntersection, other)
+}
+func (l ListExpr) SetDifference(other Expr) Expr {
+	return l.operand(expr.FnListSetDifference, other)
+}
+func (l ListExpr) SetSymmetricDifference(other Expr) Expr {
+	return l.operand(expr.FnListSetSymmetricDifference, other)
+}
+
+// Gather picks each list's elements at the positions in indices, a List of
+// integers a row, as Polars' list.gather does: a negative index counts from the end,
+// and a null index gives a null element. An index out of range fails the query, or
+// with nullOnOOB gives a null element. A null list, or null indices, give a null
+// list.
+func (l ListExpr) Gather(indices Expr, nullOnOOB bool) Expr {
+	if nullOnOOB {
+		return l.operand(expr.FnListGatherOrNull, indices)
+	}
+	return l.operand(expr.FnListGather, indices)
+}

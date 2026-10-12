@@ -43,6 +43,11 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return withFields(name, out, ops, n)
 	case expr.FnCut, expr.FnCutLeftClosed:
 		return cut(name, fn == expr.FnCutLeftClosed, ops, n)
+	case expr.FnListSetUnion, expr.FnListSetIntersection, expr.FnListSetDifference,
+		expr.FnListSetSymmetricDifference:
+		return listSet(fn, name, out, ops[0], ops[1], n)
+	case expr.FnListGather, expr.FnListGatherOrNull:
+		return listGatherAt(name, fn == expr.FnListGatherOrNull, ops[0], ops[1], n)
 	}
 	return nil, uerr.Internalf("kernel: no horizontal kernel for %s", fn)
 }
