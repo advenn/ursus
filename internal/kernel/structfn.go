@@ -69,6 +69,9 @@ func StructCall(fn expr.CallFn, name string, c *data.Column, args []any) (*data.
 			fields[i] = f.Rename(to)
 		}
 		return data.NewStruct(name, fields, c.Validity()), nil
+
+	case expr.FnStructJSONEncode:
+		return JSONEncode(name, c)
 	}
 	return nil, uerr.Internalf("kernel: unknown struct call %s", fn)
 }

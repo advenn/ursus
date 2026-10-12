@@ -52,6 +52,18 @@ func (s StructExpr) RenameFields(names ...string) Expr {
 	return wrap(&expr.Call{Fn: expr.FnStructRenameFields, Args: args})
 }
 
+// JsonEncode writes each struct as a JSON object, its fields in order, as Polars'
+// struct.json_encode: a null is null, a Bool and a number as JSON has them, a float
+// the shortest decimal that reads back to it with NaN and the infinities null, a
+// String quoted and escaped, a List an array and a Struct an object. A Decimal, a
+// Date, a Time, a Datetime, a Duration and an Enum are strings of the text a Cast to
+// String gives them, the one the CSV writer writes; Polars writes a Datetime with no
+// zone as "2024-01-02 03:04:05" and a Duration in ISO 8601, which this does not. A
+// null struct is a null String, where Polars writes "null". A Binary is refused.
+func (s StructExpr) JsonEncode() Expr {
+	return wrap(&expr.Call{Fn: expr.FnStructJSONEncode, Args: []expr.Node{s.e.node()}})
+}
+
 // WithFields sets fields of each struct: an expression named as one of its fields
 // replaces that field in place, and one of a new name is added after the others,
 // each named as its expression is. Polars' struct.with_fields.

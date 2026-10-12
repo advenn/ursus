@@ -190,6 +190,7 @@ const (
 const (
 	FnStructField        CallFn = iota + 500
 	FnStructRenameFields        // every field renamed, in order (step 224)
+	FnStructJSONEncode          // each struct as a JSON object (step 231)
 	fnStructEnd
 )
 
@@ -312,7 +313,8 @@ var callNames = map[CallFn]string{
 	FnDtCombine: "dt.combine",
 
 	FnStructField: "struct.field", FnStructRenameFields: "struct.rename_fields",
-	FnReplace: "replace", FnReplaceStrict: "replace_strict", FnReplaceOr: "replace_or",
+	FnStructJSONEncode: "struct.json_encode",
+	FnReplace:          "replace", FnReplaceStrict: "replace_strict", FnReplaceOr: "replace_or",
 	FnListToStruct: "list.to_struct",
 }
 
@@ -1231,8 +1233,34 @@ func structCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 			fields[i] = dtype.Field{Name: names[i], Type: f.Type, Nullable: true}
 		}
 		return dtype.Struct(fields...), nil
+
+	case FnStructJSONEncode:
+		if bad, ok := jsonUnencodable(in); ok {
+			return dtype.Null, uerr.New(uerr.KindType, "struct",
+				"%s cannot write a %s, which JSON has no value for", c.Fn, bad).
+				Hint("cast it to String first, or drop the field")
+		}
+		return dtype.String, nil
 	}
 	return dtype.Null, uerr.Internalf("expr: unknown struct call %d", c.Fn)
+}
+
+// jsonUnencodable finds a type within t that json_encode cannot write: a Binary,
+// whose bytes JSON has no value for. Polars panics on one.
+func jsonUnencodable(t dtype.DataType) (dtype.DataType, bool) {
+	switch t.ID() {
+	case dtype.TypeBinary:
+		return t, true
+	case dtype.TypeList:
+		return jsonUnencodable(t.Inner())
+	case dtype.TypeStruct:
+		for _, f := range t.Fields() {
+			if bad, ok := jsonUnencodable(f.Type); ok {
+				return bad, true
+			}
+		}
+	}
+	return dtype.Null, false
 }
 
 // callFieldNames reads the constant strings after a call's receiver: the names a

@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.3
 
-Everything since `v0.6.2` (2026-10-12): steps 213–230, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–231, so far.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
 out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
 one session.
@@ -90,6 +90,9 @@ one session.
   column meets at.
 - **`Dt().DaysInMonth()` and `Dt().Combine(t)`** (230): a month's length, and a
   day with a Time of day, read and written on the column's own wall clock.
+- **`Struct().JsonEncode()`** (231): each struct as a JSON object, floats in their
+  shortest form, NaN as null, strings escaped, temporals and Decimals as the text
+  their String cast gives.
 
 ---
 

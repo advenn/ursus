@@ -111,7 +111,7 @@ and did, in [`v0.6-scope.md`](./context_files/v0.6-scope.md). What works today:
 | **UDFs**        | `MapElements` (per value) and `MapBatches` (per column) — generic methods, so the Go types are inferred from your function                        |
 
 Nested types are partly there: **List and Struct read from Parquet and Arrow and write to Parquet**, with
-`Explode`, `Unnest`, a `.list` namespace and `.struct` (`Field`, `WithFields`, `RenameFields`). An Arrow Map arrives as a list of key/value structs.
+`Explode`, `Unnest`, a `.list` namespace and `.struct` (`Field`, `WithFields`, `RenameFields`, `JsonEncode`). An Arrow Map arrives as a list of key/value structs.
 Array is not there, and a List of Lists or of Structs is refused by name on both sides.
 
 **Arrow** goes both ways, in pure Go. `df.Record()` and `lf.CollectRecords(ctx)` export without copying;
