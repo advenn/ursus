@@ -59,7 +59,11 @@ func TestReadingAllocatesAboutWhatItProduces(t *testing.T) {
 	writeIntsAndStrings(t, path, []string{"a", "b", "c"}, cols, "s", strs)
 
 	for _, threads := range []int{1, 4} {
-		bs, err := openSource(t, path).Open(t.Context(), source.ScanSpec{Threads: threads, BatchSize: 8192})
+		// A read-ahead of a byte, the floor alone: the workers hold a few batches, as
+		// they did before step 214. With the default they decode most of the file
+		// before the count starts, and the four-thread case would measure nothing.
+		bs, err := openSource(t, path).Open(t.Context(),
+			source.ScanSpec{Threads: threads, BatchSize: 8192, ReadAhead: 1})
 		if err != nil {
 			t.Fatal(err)
 		}

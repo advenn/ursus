@@ -84,6 +84,17 @@ type ScanSpec struct {
 	// BatchSize is the requested rows per batch. A source may return fewer.
 	BatchSize int
 
+	// ReadAhead is how many bytes of decoded batches a source may hold ahead of its
+	// consumer; 0 is the source's own default. The Parquet reader decodes several
+	// row groups at once and returns them in order, and before step 214 a row group
+	// not at the head stopped three batches in, so most of each decoded only once it
+	// was the head, one at a time.
+	//
+	// It is not charged to the memory budget: it is transient and bounded, and
+	// charging it would make sinks spill for bytes about to be consumed. The engine
+	// derives the bound from the budget instead.
+	ReadAhead int64
+
 	// Eval evaluates an expression over a batch, as the engine does. A source that
 	// evaluates a pushed conjunct itself uses it; the engine sets it, and a source
 	// handed none evaluates nothing. The Parquet reader evaluates a string

@@ -36,9 +36,19 @@ import (
 //
 // # How much it holds
 //
-// At most threads row groups are decoding, each at most rgBuffer batches ahead of
-// the reader, plus the one batch it is building: about threads × 3 batches in
-// flight. A row group is issued only when an earlier one has been read to the end.
+// At most threads row groups are decoding at once. A row group is issued only when an
+// earlier one has been read to the end.
+//
+// Each may decode its whole row group ahead of the reader, while the decoded bytes
+// all of them hold stay under ScanSpec.ReadAhead (the aheadGate, step 214); and
+// always aheadFloor batches, the depth before step 214, whatever is held. So it
+// holds at most the read-ahead, plus threads × aheadFloor batches.
+//
+// Before step 214 each held at most rgBuffer = 2 batches and the one it was
+// building. A row group not at the head stopped three batches in, and the rest of it
+// decoded only once it was the head, one row group at a time: traced on h2o gb4 and
+// PDS-H q1 and q6, four to five workers sat parked at their send, and the consumer
+// waited on the head for about 60% of the run (step 213).
 //
 // # When it is not used
 //
@@ -66,6 +76,7 @@ type parallelReader struct {
 	stop     chan struct{} // closed by Close: workers stop sending and return
 	stopOnce sync.Once
 	wg       sync.WaitGroup
+	gate     *aheadGate // bounds what the workers hold ahead of Next
 }
 
 // sharedFile is a file several row-group workers read at once. Its readers are
@@ -88,16 +99,93 @@ func (f *sharedFile) release() {
 // rgTask is one row group being decoded. out carries its batches, then an error or
 // nothing, and is closed when the worker is done.
 type rgTask struct {
-	out chan rgResult
+	out     chan rgResult
+	pending int // batches sent and not yet taken, under the gate's lock
 }
 
 type rgResult struct {
-	b   *data.Batch
-	err error
+	b    *data.Batch
+	size int64 // b's bytes, as the gate counted them
+	err  error
 }
 
-// rgBuffer is how many batches a row group may decode ahead of the reader.
-const rgBuffer = 2
+// aheadFloor is how many batches a row group may always hold ahead of the reader,
+// whatever the gate holds: the depth before step 214. A row group the reader waits
+// on holds none, so it can always decode its next.
+const aheadFloor = 3
+
+// maxRGBatches caps a row group's channel.
+const maxRGBatches = 1024
+
+// defaultReadAhead is the read-ahead when the scan names none.
+const defaultReadAhead = 64 << 20
+
+// aheadGate bounds the decoded bytes the workers hold ahead of the reader (step
+// 214). A worker asks before it decodes a batch, and the reader gives back what it
+// takes.
+type aheadGate struct {
+	mu      sync.Mutex
+	cond    *sync.Cond
+	held    int64
+	limit   int64
+	peak    int64 // the most held at once, for tests
+	stopped bool
+}
+
+func newAheadGate(limit int64) *aheadGate {
+	if limit <= 0 {
+		limit = defaultReadAhead
+	}
+	g := &aheadGate{limit: limit}
+	g.cond = sync.NewCond(&g.mu)
+	return g
+}
+
+// wait reports whether t may decode its next batch, waiting while it holds
+// aheadFloor or more and the workers hold the limit. False once the reader stops.
+func (g *aheadGate) wait(t *rgTask) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for !g.stopped && t.pending >= aheadFloor && g.held >= g.limit {
+		g.cond.Wait()
+	}
+	return !g.stopped
+}
+
+// sent counts a batch of n bytes t is about to send.
+func (g *aheadGate) sent(t *rgTask, n int64) {
+	g.mu.Lock()
+	t.pending++
+	g.held += n
+	g.peak = max(g.peak, g.held)
+	g.mu.Unlock()
+}
+
+// taken gives back a batch of n bytes the reader took from t.
+func (g *aheadGate) taken(t *rgTask, n int64) {
+	g.mu.Lock()
+	t.pending--
+	g.held -= n
+	g.mu.Unlock()
+	g.cond.Broadcast()
+}
+
+// stop wakes every waiting worker for good.
+func (g *aheadGate) stop() {
+	g.mu.Lock()
+	g.stopped = true
+	g.mu.Unlock()
+	g.cond.Broadcast()
+}
+
+// batchBytes is what b holds, column by column.
+func batchBytes(b *data.Batch) int64 {
+	var n int64
+	for _, c := range b.Columns() {
+		n += c.NBytes()
+	}
+	return n
+}
 
 // errClosed is what Next returns once Close has run.
 var errClosed = errors.New("parquet: reader closed")
@@ -168,7 +256,13 @@ func (r *parallelReader) issue(ctx context.Context) (bool, error) {
 		if skip {
 			continue
 		}
-		t := &rgTask{out: make(chan rgResult, rgBuffer)}
+		// Room for every batch of the row group and an error, so a send does not wait:
+		// the gate decides how far ahead a worker runs. A batch reads at least
+		// batchSize rows (widen never narrows below it). Capped, so a row count a
+		// corrupt footer inflates makes no huge channel; past the cap a send waits, as
+		// every send did before step 214.
+		batches := (int(rgMeta.NumRows())+r.batchSize-1)/r.batchSize + 1
+		t := &rgTask{out: make(chan rgResult, min(max(batches, aheadFloor), maxRGBatches))}
 		r.cur.refs.Add(1)
 		r.inflight = append(r.inflight, t)
 		r.wg.Add(1)
@@ -235,6 +329,10 @@ func (r *parallelReader) decode(f *sharedFile, rgIndex int, rgMeta *metadata.Row
 			return
 		default:
 		}
+		if !r.gate.wait(t) {
+			finished = true
+			return
+		}
 		b, rows, err := readBatch(chunks, r.out, min(want, left), rgIndex, f.name, left, r.df)
 		if err != nil {
 			send(rgResult{err: err})
@@ -248,7 +346,9 @@ func (r *parallelReader) decode(f *sharedFile, rgIndex int, rgMeta *metadata.Row
 		if b.Rows() == 0 {
 			continue // every row failed a dictionary's conjunct
 		}
-		if !send(rgResult{b: b}) {
+		size := batchBytes(b)
+		r.gate.sent(t, size)
+		if !send(rgResult{b: b, size: size}) {
 			finished = true
 			return
 		}
@@ -286,6 +386,9 @@ func (r *parallelReader) Next(ctx context.Context) (_ *data.Batch, err error) {
 				r.err = res.err
 			}
 			r.mu.Unlock()
+			if res.b != nil {
+				r.gate.taken(head, res.size)
+			}
 			return res.b, res.err
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -368,6 +471,8 @@ func (r *parallelReader) Close() error {
 	r.mu.Lock()
 	r.stopOnce.Do(func() { close(r.stop) })
 	r.mu.Unlock()
+	// Workers waiting at the gate cannot see stop.
+	r.gate.stop()
 	r.wg.Wait()
 	r.mu.Lock()
 	defer r.mu.Unlock()

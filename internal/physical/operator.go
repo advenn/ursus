@@ -587,6 +587,7 @@ func planScan(ctx context.Context, s *plan.Scan, opts Options) (Operator, error)
 		MaxRows:    s.MaxRows,
 		BatchSize:  opts.BatchSize,
 		Threads:    opts.Threads,
+		ReadAhead:  readAhead(opts.Budget),
 		Eval:       Eval,
 	}
 	src, err := op.Open(ctx, spec)
@@ -634,3 +635,16 @@ func (t *trimOp) Apply(_ context.Context, in *data.Batch) (*data.Batch, error) {
 	}
 	return data.NewBatch(t.target, cols)
 }
+
+// readAhead is the read-ahead a scan may hold under budget b: a thirty-second of
+// its limit, so four scans at once hold an eighth, and at most maxReadAhead (step
+// 214).
+func readAhead(b *execopt.Budget) int64 {
+	if lim := b.Limit(); lim > 0 {
+		return max(min(maxReadAhead, lim/32), 1)
+	}
+	return maxReadAhead
+}
+
+// maxReadAhead is the most decoded bytes a scan holds ahead of its consumer.
+const maxReadAhead = 256 << 20

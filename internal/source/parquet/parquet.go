@@ -516,6 +516,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 			df:        df,
 			threads:   spec.Threads,
 			stop:      make(chan struct{}),
+			gate:      newAheadGate(spec.ReadAhead),
 		}
 		// As the serial reader does: the first file is opened now, so one that
 		// cannot be read is refused while the query is planned. A panic in its

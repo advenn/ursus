@@ -17,10 +17,18 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.3
 
-Everything since `v0.6.2` (2026-10-12): step 213, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–214, so far.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
 out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
 one session.
+
+### Faster
+
+- **The Parquet reader reads ahead** (214). A row group not at the head decoded three
+  batches and waited, so most of each decoded only once it was the head, one at a time.
+  Each now decodes ahead while what the workers hold stays under a read-ahead of a
+  thirty-second of the memory limit, at most 256 MiB. h2o gb1 takes 28% less time,
+  PDS-H q6 10% and q1 8%; peak memory grows by up to about 90 MB.
 
 ---
 
