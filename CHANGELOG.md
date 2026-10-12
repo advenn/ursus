@@ -15,9 +15,9 @@ Step numbers below point at those records.
 
 ---
 
-## v0.6.2 — candidate, not tagged
+## v0.6.2 — 2026-10-12
 
-Everything since v0.6.1's candidate (step 200): steps 201–211.
+Everything since `v0.6.1` (2026-10-11): steps 201–212.
 [`v0.6.2-scope.md`](./context_files/v0.6.2-scope.md) set the scope: **speed and
 out-of-core, continued.** Each step was timed against 0.6.1's code, alternated in one
 session, and step 208 measured the whole.
@@ -115,7 +115,7 @@ As v0.6.1's, except:
 
 ---
 
-## v0.6.1 — candidate, not tagged
+## v0.6.1 — 2026-10-11
 
 Everything since `v0.6.0` (2026-10-11): steps 191–200.
 [`v0.6.1-scope.md`](./context_files/v0.6.1-scope.md) set the scope: **speed where the
