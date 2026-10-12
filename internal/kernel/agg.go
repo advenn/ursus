@@ -507,12 +507,14 @@ func (a *nuniqueAcc) Finish(name string, nGroups int) (*data.Column, error) {
 // accept [Max, 1, -1] in one order and refuse it in another, and a parallel merge
 // does not fix the order.
 type sumAcc struct {
-	in    dtype.DataType
-	bind  expr.AggBinding
-	isInt bool
-	wide  bool // the input is 128 bits wide, so carry is kept
+	in     dtype.DataType
+	bind   expr.AggBinding
+	isInt  bool
+	wide   bool // the input is 128 bits wide, so carry is kept
+	narrow bool // the input is 32 bits or fewer, so it adds in int64 first
 
 	i     []i128.Int128
+	ni    narrowSums // a narrow input's partials, which fold into i
 	carry []int64
 	f     []float64
 	seen  []bool
@@ -521,7 +523,8 @@ type sumAcc struct {
 func newSumAcc(in dtype.DataType, bind expr.AggBinding) (Accumulator, error) {
 	isInt := bind.Acc.ID() == dtype.TypeInt128
 	return &sumAcc{in: in, bind: bind, isInt: isInt,
-		wide: isInt && in.Physical().ID() == dtype.TypeInt128}, nil
+		wide:   isInt && in.Physical().ID() == dtype.TypeInt128,
+		narrow: isInt && isNarrowInt(in)}, nil
 }
 
 func (a *sumAcc) Reserve(n int) {
@@ -530,6 +533,9 @@ func (a *sumAcc) Reserve(n int) {
 		a.i = Extend(a.i, n, i128.Zero)
 		if a.wide {
 			a.carry = Extend(a.carry, n, 0)
+		}
+		if a.narrow {
+			a.ni.reserve(n)
 		}
 	} else {
 		a.f = Extend(a.f, n, 0)
@@ -555,6 +561,9 @@ func addCarry(a, b i128.Int128) (i128.Int128, int64) {
 func (a *sumAcc) AddBatch(groups []int32, col *data.Column) error {
 	valid := col.Validity()
 
+	if a.narrow && isNarrowInt(col.DType()) {
+		return a.ni.add(a.i, groups, col, a.seen, nil)
+	}
 	if a.isInt {
 		add := func(g int32, v i128.Int128) {
 			a.i[g] = a.i[g].Add(v)
@@ -638,7 +647,8 @@ func (a *sumAcc) Merge(other Accumulator, remap []int32) error {
 			a.i[dst], c = addCarry(a.i[dst], o.i[src])
 			a.carry[dst] += o.carry[src] + c
 		case a.isInt:
-			a.i[dst] = a.i[dst].Add(o.i[src])
+			// The other's partial with its exact sum, read without folding it.
+			a.i[dst] = a.i[dst].Add(o.i[src]).Add(o.ni.at(src))
 		default:
 			a.f[dst] += o.f[src]
 		}
@@ -648,6 +658,10 @@ func (a *sumAcc) Merge(other Accumulator, remap []int32) error {
 }
 
 func (a *sumAcc) Finish(name string, nGroups int) (*data.Column, error) {
+	if a.narrow {
+		a.Reserve(nGroups)
+		a.ni.fold(a.i)
+	}
 	a.Reserve(nGroups)
 	valid := seenBitmap(a.seen, nGroups)
 
@@ -760,13 +774,15 @@ func sumOverflow(out dtype.DataType, g, nGroups int, total i128.Int128, carry in
 // values are 128 bits wide, and its mean is a Float64 that exists even when the sum
 // would not fit. Finish divides once — see finishDecimal.
 type meanAcc struct {
-	in    dtype.DataType
-	bind  expr.AggBinding
-	isInt bool
-	wide  bool // a 128-bit input: carry is kept
+	in     dtype.DataType
+	bind   expr.AggBinding
+	isInt  bool
+	wide   bool // a 128-bit input: carry is kept
+	narrow bool // an input of 32 bits or fewer: it adds in int64 first
 
 	sum   []float64
 	i     []i128.Int128
+	ni    narrowSums // a narrow input's partials, which fold into i
 	carry []int64
 	n     []uint64
 }
@@ -774,7 +790,8 @@ type meanAcc struct {
 func newMeanAcc(in dtype.DataType, bind expr.AggBinding) (Accumulator, error) {
 	isInt := bind.Acc.ID() == dtype.TypeInt128
 	return &meanAcc{in: in, bind: bind, isInt: isInt,
-		wide: isInt && in.Physical().ID() == dtype.TypeInt128}, nil
+		wide:   isInt && in.Physical().ID() == dtype.TypeInt128,
+		narrow: isInt && isNarrowInt(in)}, nil
 }
 
 func (a *meanAcc) Reserve(n int) {
@@ -784,6 +801,9 @@ func (a *meanAcc) Reserve(n int) {
 		if a.wide {
 			a.carry = Extend(a.carry, n, 0)
 		}
+		if a.narrow {
+			a.ni.reserve(n)
+		}
 	} else {
 		a.sum = Extend(a.sum, n, 0)
 	}
@@ -791,6 +811,9 @@ func (a *meanAcc) Reserve(n int) {
 
 func (a *meanAcc) AddBatch(groups []int32, col *data.Column) error {
 	valid := col.Validity()
+	if a.narrow && isNarrowInt(col.DType()) {
+		return a.ni.add(a.i, groups, col, nil, a.n)
+	}
 	if a.isInt {
 		// The exact path, for an output type that cannot absorb a rounding: a
 		// Duration mean must equal sum // count, and the sum is exact.
@@ -849,7 +872,8 @@ func (a *meanAcc) Merge(other Accumulator, remap []int32) error {
 			a.i[dst], c = addCarry(a.i[dst], o.i[src])
 			a.carry[dst] += o.carry[src] + c
 		case a.isInt:
-			a.i[dst] = a.i[dst].Add(o.i[src])
+			// The other's partial with its exact sum, read without folding it.
+			a.i[dst] = a.i[dst].Add(o.i[src]).Add(o.ni.at(src))
 		default:
 			a.sum[dst] += o.sum[src]
 		}
@@ -860,6 +884,9 @@ func (a *meanAcc) Merge(other Accumulator, remap []int32) error {
 
 func (a *meanAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
+	if a.narrow {
+		a.ni.fold(a.i)
+	}
 	// An exact sum with a float output — a Decimal's, or an integer's — is divided
 	// once, to the nearest double. An integer is a Decimal of scale 0.
 	if a.in.ID() == dtype.TypeDecimal || (a.isInt && a.bind.Out.IsFloat()) {
@@ -1599,11 +1626,13 @@ func (a *nuniqueAcc) NBytes() int64 {
 }
 
 func (a *sumAcc) NBytes() int64 {
-	return int64(cap(a.i))*16 + int64(cap(a.carry))*8 + int64(cap(a.f))*8 + int64(cap(a.seen))
+	return int64(cap(a.i))*16 + int64(cap(a.ni.s))*8 + int64(cap(a.carry))*8 + int64(cap(a.f))*8 +
+		int64(cap(a.seen))
 }
 
 func (a *meanAcc) NBytes() int64 {
-	return int64(cap(a.sum))*8 + int64(cap(a.i))*16 + int64(cap(a.carry))*8 + int64(cap(a.n))*8
+	return int64(cap(a.sum))*8 + int64(cap(a.i))*16 + int64(cap(a.ni.s))*8 + int64(cap(a.carry))*8 +
+		int64(cap(a.n))*8
 }
 
 func (a *positionAcc) NBytes() int64 {

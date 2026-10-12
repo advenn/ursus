@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.3
 
-Everything since `v0.6.2` (2026-10-12): steps 213–214, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–215, so far.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
 out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
 one session.
@@ -29,6 +29,9 @@ one session.
   Each now decodes ahead while what the workers hold stays under a read-ahead of a
   thirty-second of the memory limit, at most 256 MiB. h2o gb1 takes 28% less time,
   PDS-H q6 10% and q1 8%; peak memory grows by up to about 90 MB.
+- **A sum or mean of an integer of 32 bits or fewer adds in int64** (215), folding
+  into its exact 128-bit sum every 2³⁰ rows and at the end, where every value was
+  widened to 128 bits first. h2o gb4 takes 15% less time, gb5 8%.
 
 ---
 
