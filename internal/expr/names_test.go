@@ -224,11 +224,12 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	// 87 since step 174 added dt.replace_time_zone, after step 171's
-	// struct.with_fields, step 147's cut and cut_left_closed, and step 146's
-	// list.join, six bit counts, concat_str and struct.
-	if classified != 87 {
-		t.Errorf("%d call functions are classified, want 87 — the families and the "+
+	// 90 since step 222 added list.n_unique, list.arg_min and list.arg_max, after
+	// step 174's dt.replace_time_zone, step 171's struct.with_fields, step 147's cut
+	// and cut_left_closed, and step 146's list.join, six bit counts, concat_str and
+	// struct.
+	if classified != 90 {
+		t.Errorf("%d call functions are classified, want 90 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }

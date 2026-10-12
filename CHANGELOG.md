@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.3
 
-Everything since `v0.6.2` (2026-10-12): steps 213–221, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–222, so far.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
 out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
 one session.
@@ -53,6 +53,13 @@ one session.
   with no partition_by or for one key of a partition_by: an ewm carries its running
   state from batch to batch, and a reversed count counts down from the rows written.
   They refused.
+
+### Features
+
+- **`List().NUnique()`, `List().ArgMin()` and `List().ArgMax()`** (222), each the
+  column aggregate over a list's elements: Uint64s, nulls skipped and NaN the
+  largest, as the aggregates have them. A null list is null, an empty list counts 0
+  and has no position.
 
 ---
 

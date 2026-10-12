@@ -81,7 +81,8 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 	case expr.FnListContains:
 		return listContains(name, c, needle)
 
-	case expr.FnListMin, expr.FnListMax, expr.FnListSum, expr.FnListMean:
+	case expr.FnListMin, expr.FnListMax, expr.FnListSum, expr.FnListMean,
+		expr.FnListNUnique, expr.FnListArgMin, expr.FnListArgMax:
 		return listReduce(fn, name, c)
 
 	case expr.FnListReverse:
@@ -490,6 +491,12 @@ func listReduce(fn expr.CallFn, name string,
 	if err != nil {
 		return nil, err
 	}
+	// A count of no elements is 0, which an empty list is owed and a null list is
+	// not: the null list has no elements to count. Every other aggregate here answers
+	// null for no elements, which covers it.
+	if op.IsCounting() {
+		res = res.WithValidity(bitmap.And(res.Validity(), c.Validity()))
+	}
 	return res, nil
 }
 
@@ -503,6 +510,12 @@ func listAggOp(fn expr.CallFn) (expr.AggOp, error) {
 		return expr.AggSum, nil
 	case expr.FnListMean:
 		return expr.AggMean, nil
+	case expr.FnListNUnique:
+		return expr.AggNUnique, nil
+	case expr.FnListArgMin:
+		return expr.AggArgMin, nil
+	case expr.FnListArgMax:
+		return expr.AggArgMax, nil
 	}
 	return 0, uerr.Internalf("kernel: %s is not a list aggregate", fn)
 }

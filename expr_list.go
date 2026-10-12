@@ -11,8 +11,9 @@ import (
 //
 // # Two halves, told apart by what they return
 //
-// Len, Get, Contains, Min, Max, Sum and Mean answer a question ABOUT a list and
-// hand back an ordinary column — a length, an element, a total.
+// Len, Get, Contains, Min, Max, Sum, Mean, NUnique, ArgMin and ArgMax answer a
+// question ABOUT a list and hand back an ordinary column — a length, an element, a
+// total, a position.
 //
 // Reverse, Head, Tail, Slice, Sort, Unique and DropNulls RESHAPE the list and hand
 // back a list, so they chain into each other and into the first half:
@@ -106,6 +107,26 @@ func (l ListExpr) Sum() Expr { return l.call(expr.FnListSum) }
 // Mean averages each list, as a Float64. Null elements are skipped, so the
 // divisor is the count of PRESENT elements.
 func (l ListExpr) Mean() Expr { return l.call(expr.FnListMean) }
+
+// NUnique counts each list's distinct elements, as a Uint64, as the column-wide
+// NUnique counts a group's: null elements are skipped, NaN is one value, and −0 and
+// +0 are one. An empty list counts 0, a null list is null.
+//
+// Polars counts a null element as one more value, and answers a UInt32: [3, null, 1,
+// 1, null] is 3 there and 2 here. Agreeing with the aggregate beside it is the rule
+// Sum states.
+func (l ListExpr) NUnique() Expr { return l.call(expr.FnListNUnique) }
+
+// ArgMin and ArgMax are the position in each list of its smallest or largest
+// element, as a Uint64, as the column-wide ArgMin and ArgMax give a group's: the
+// first of equal elements, counting null elements as positions but never choosing
+// one. An empty list, a list of nulls, and a null list are null. The element type
+// must have an order.
+//
+// NaN is the largest value, as it is for Max: [2.0, NaN, 1.0] has its ArgMax at 1.
+// Polars skips NaN there, answering 0, and its positions are UInt32s.
+func (l ListExpr) ArgMin() Expr { return l.call(expr.FnListArgMin) }
+func (l ListExpr) ArgMax() Expr { return l.call(expr.FnListArgMax) }
 
 // Reverse puts each list's elements in the opposite order. Null elements move with
 // everything else — they occupy a slot.

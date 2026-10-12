@@ -166,6 +166,12 @@ const (
 	FnListSort
 	FnListUnique
 	FnListDropNulls
+
+	// list -> a SCALAR again, each a column aggregate over a list's elements (step
+	// 222), after the reshaping half because that is where the family ends.
+	FnListNUnique
+	FnListArgMin
+	FnListArgMax
 	fnListEnd
 )
 
@@ -258,6 +264,8 @@ var callNames = map[CallFn]string{
 	FnListTail: "list.tail", FnListSlice: "list.slice",
 	FnListSort: "list.sort", FnListUnique: "list.unique",
 	FnListDropNulls: "list.drop_nulls", FnListJoin: "list.join",
+	FnListNUnique: "list.n_unique", FnListArgMin: "list.arg_min",
+	FnListArgMax: "list.arg_max",
 
 	FnStructField: "struct.field",
 }
@@ -1011,6 +1019,22 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		// future parameterised list type carries through without this needing to
 		// know about it.
 		return in, nil
+
+	case FnListNUnique, FnListArgMin, FnListArgMax:
+		// The aggregate's rule, as for Sum below: a count is a Uint64, a position
+		// too, and arg_min refuses an element type with no ordering, naming itself.
+		op := AggNUnique
+		switch fn {
+		case FnListArgMin:
+			op = AggArgMin
+		case FnListArgMax:
+			op = AggArgMax
+		}
+		b, err := ResolveAggBinding(op, elem)
+		if err != nil {
+			return dtype.Null, err
+		}
+		return b.Out, nil
 
 	case FnListSum:
 		// Delegated to the AGGREGATE's rule rather than restated, so a per-row sum
