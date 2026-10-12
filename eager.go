@@ -125,3 +125,98 @@ func (df *DataFrame) Concat(ctx context.Context, others ...*DataFrame) (*DataFra
 	}
 	return df.Lazy().Concat(lfs...).Collect(ctx)
 }
+
+// Slice keeps length rows from offset; a negative length keeps to the end.
+func (df *DataFrame) Slice(ctx context.Context, offset, length int) (*DataFrame, error) {
+	return df.Lazy().Slice(offset, length).Collect(ctx)
+}
+
+// Limit keeps the first n rows, as Head does.
+func (df *DataFrame) Limit(ctx context.Context, n int) (*DataFrame, error) {
+	return df.Lazy().Limit(n).Collect(ctx)
+}
+
+// DropNulls removes rows with a null in subset, or in any column.
+func (df *DataFrame) DropNulls(ctx context.Context, subset ...string) (*DataFrame, error) {
+	return df.Lazy().DropNulls(subset...).Collect(ctx)
+}
+
+// FillNull fills the nulls of subset's columns, or every column v fits, with v.
+func (df *DataFrame) FillNull[T Operand](ctx context.Context, v T, subset ...string) (*DataFrame, error) {
+	return df.Lazy().FillNull(v, subset...).Collect(ctx)
+}
+
+// FillNan fills the NaNs of subset's float columns, or every float column, with v.
+func (df *DataFrame) FillNan[T Operand](ctx context.Context, v T, subset ...string) (*DataFrame, error) {
+	return df.Lazy().FillNan(v, subset...).Collect(ctx)
+}
+
+// TopK keeps the k rows with the largest keys and BottomK the k with the smallest,
+// a null key last in both.
+func (df *DataFrame) TopK(ctx context.Context, k int, by ...SortKey) (*DataFrame, error) {
+	return df.Lazy().TopK(k, by...).Collect(ctx)
+}
+
+func (df *DataFrame) BottomK(ctx context.Context, k int, by ...SortKey) (*DataFrame, error) {
+	return df.Lazy().BottomK(k, by...).Collect(ctx)
+}
+
+// HStack places frames side by side; VStack stacks one under this one.
+func (df *DataFrame) HStack(ctx context.Context, others ...*DataFrame) (*DataFrame, error) {
+	lfs := make([]*LazyFrame, len(others))
+	for i, o := range others {
+		lfs[i] = o.Lazy()
+	}
+	return df.Lazy().HStack(lfs...).Collect(ctx)
+}
+
+func (df *DataFrame) VStack(ctx context.Context, other *DataFrame) (*DataFrame, error) {
+	return df.Lazy().VStack(other.Lazy()).Collect(ctx)
+}
+
+// JoinAsOf joins each row to the nearest row of other by an ordered key.
+func (df *DataFrame) JoinAsOf(ctx context.Context, other *DataFrame, opts ...AsOfOption) (*DataFrame, error) {
+	return df.Lazy().JoinAsOf(other.Lazy(), opts...).Collect(ctx)
+}
+
+// MergeSorted merges two frames sorted by key into one sorted by it.
+func (df *DataFrame) MergeSorted(ctx context.Context, other *DataFrame, key string) (*DataFrame, error) {
+	return df.Lazy().MergeSorted(other.Lazy(), key).Collect(ctx)
+}
+
+// Explode gives each element of the named List columns a row of its own; Unnest
+// gives each field of the named Struct columns a column of its own.
+func (df *DataFrame) Explode(ctx context.Context, names ...string) (*DataFrame, error) {
+	return df.Lazy().Explode(names...).Collect(ctx)
+}
+
+func (df *DataFrame) Unnest(ctx context.Context, names ...string) (*DataFrame, error) {
+	return df.Lazy().Unnest(names...).Collect(ctx)
+}
+
+// WithRowIndex adds a column numbering the rows from offset.
+func (df *DataFrame) WithRowIndex(ctx context.Context, name string, offset uint32) (*DataFrame, error) {
+	return df.Lazy().WithRowIndex(name, offset).Collect(ctx)
+}
+
+// Remove drops the rows where any predicate is true, or null.
+func (df *DataFrame) Remove(ctx context.Context, preds ...Expr) (*DataFrame, error) {
+	return df.Lazy().Remove(preds...).Collect(ctx)
+}
+
+// GroupBy, GroupByDynamic and Rolling start a grouping of the frame. Each gives the
+// lazy builder, whose Agg, or Sum, Mean and the rest, is then collected:
+//
+//	out, err := df.GroupBy(Col("k")).Agg(Col("v").Sum()).Collect(ctx)
+//
+// An eager answer would need a second builder with every aggregate again, each
+// taking a context; the context belongs to Collect.
+func (df *DataFrame) GroupBy(keys ...Expr) *GroupBy { return df.Lazy().GroupBy(keys...) }
+
+func (df *DataFrame) GroupByDynamic(index Expr, o DynamicOptions) *GroupBy {
+	return df.Lazy().GroupByDynamic(index, o)
+}
+
+func (df *DataFrame) Rolling(index Expr, o RollingOptions) *GroupBy {
+	return df.Lazy().Rolling(index, o)
+}
