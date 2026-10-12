@@ -39,6 +39,19 @@ func (s StructExpr) Field(name string) Expr {
 	return wrap(&expr.Call{Fn: expr.FnStructField, Args: []expr.Node{s.e.node(), litNode(name)}})
 }
 
+// RenameFields gives each field of the struct a new name, in order, as Polars'
+// struct.rename_fields does. Every field must be named, and each differently:
+// Polars renames as many as it is given and drops the rest, and warns that 2.0 will
+// refuse it, so this refuses it now. A null struct stays null.
+func (s StructExpr) RenameFields(names ...string) Expr {
+	args := make([]expr.Node, 0, len(names)+1)
+	args = append(args, s.e.node())
+	for _, n := range names {
+		args = append(args, litNode(n))
+	}
+	return wrap(&expr.Call{Fn: expr.FnStructRenameFields, Args: args})
+}
+
 // WithFields sets fields of each struct: an expression named as one of its fields
 // replaces that field in place, and one of a new name is added after the others,
 // each named as its expression is. Polars' struct.with_fields.

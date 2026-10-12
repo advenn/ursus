@@ -226,3 +226,17 @@ func (l ListExpr) Gather(indices Expr, nullOnOOB bool) Expr {
 	}
 	return l.operand(expr.FnListGather, indices)
 }
+
+// ToStruct makes each list a Struct whose fields are its first elements, named by
+// names: field i is element i, null where the list is shorter, and the elements past
+// the last field are dropped. A null list is a null struct, where Polars gives a
+// struct of nulls. At least one name, each different. Polars' to_struct with its
+// fields named; the names are needed because a plan's schema cannot wait for the
+// data to say how long the lists are.
+func (l ListExpr) ToStruct(names ...string) Expr {
+	args := make([]any, len(names))
+	for i, n := range names {
+		args[i] = n
+	}
+	return l.call(expr.FnListToStruct, args...)
+}

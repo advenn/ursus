@@ -52,6 +52,23 @@ func StructCall(fn expr.CallFn, name string, c *data.Column, args []any) (*data.
 			return nil, uerr.Internalf("kernel: no field %q in %s", want, c.DType())
 		}
 		return f.Rename(name), nil
+
+	case expr.FnStructRenameFields:
+		// Each field as it is under a new name, the struct's validity kept: a null
+		// struct stays null.
+		old := c.Fields()
+		if len(args) != len(old) {
+			return nil, uerr.Internalf("kernel: %d names for %d fields", len(args), len(old))
+		}
+		fields := make([]*data.Column, len(old))
+		for i, f := range old {
+			to, ok := argString(args, i)
+			if !ok {
+				return nil, uerr.Internalf("kernel: struct.rename_fields argument %d", i)
+			}
+			fields[i] = f.Rename(to)
+		}
+		return data.NewStruct(name, fields, c.Validity()), nil
 	}
 	return nil, uerr.Internalf("kernel: unknown struct call %s", fn)
 }

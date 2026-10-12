@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.3
 
-Everything since `v0.6.2` (2026-10-12): steps 213–223, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–224, so far.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
 out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
 one session.
@@ -65,6 +65,9 @@ one session.
   taking a second List column, in Polars' order and with its equality: a null
   element is a value, NaN meets NaN, −0 meets +0. An Int64 list against a Float64
   list is refused, as a join of the two is.
+- **`List().ToStruct(names...)` and `Struct().RenameFields(names...)`** (224). A
+  list's first elements become named fields, null where it is shorter; a null list
+  is a null struct. Renaming must name every field, which Polars only warns about.
 
 ---
 

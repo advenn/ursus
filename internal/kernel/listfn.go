@@ -109,6 +109,9 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 	case expr.FnListUnique:
 		return listUnique(name, c)
 
+	case expr.FnListToStruct:
+		return listToStruct(name, c, args)
+
 	case expr.FnListDropNulls:
 		child := acc.Child()
 		return listRebuild(name, c, func(start, end int32, out []int32) []int32 {
@@ -550,4 +553,33 @@ func listJoin(name string, c *data.Column, sep string) (*data.Column, error) {
 		offs = append(offs, int32(len(chars)))
 	}
 	return data.NewStringParts(name, offs, chars, valid), nil
+}
+
+// listToStruct makes each list a struct whose field i is its element i, named by
+// args[i]: null where the list is shorter, and the elements past the last field
+// dropped, as Polars' to_struct with its fields named. A null list is a null struct.
+func listToStruct(name string, c *data.Column, args []any) (*data.Column, error) {
+	acc := c.Lists()
+	child := acc.Child()
+	fields := make([]*data.Column, len(args))
+	sel := make([]int32, c.Len())
+	for j := range args {
+		field, ok := argString(args, j)
+		if !ok {
+			return nil, uerr.Internalf("kernel: list.to_struct argument %d", j)
+		}
+		for i := range sel {
+			start, end, ok := acc.Get(i)
+			sel[i] = NullIndex
+			if ok && int32(j) < end-start {
+				sel[i] = start + int32(j)
+			}
+		}
+		f, err := Take(child, sel)
+		if err != nil {
+			return nil, err
+		}
+		fields[j] = f.Rename(field)
+	}
+	return data.NewStruct(name, fields, c.Validity()), nil
 }

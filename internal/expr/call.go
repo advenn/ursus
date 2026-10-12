@@ -172,12 +172,16 @@ const (
 	FnListNUnique
 	FnListArgMin
 	FnListArgMax
+
+	// list -> STRUCT (step 224): element i as field i, its names the arguments.
+	FnListToStruct
 	fnListEnd
 )
 
 // The `.struct` family.
 const (
-	FnStructField CallFn = iota + 500
+	FnStructField        CallFn = iota + 500
+	FnStructRenameFields        // every field renamed, in order (step 224)
 	fnStructEnd
 )
 
@@ -281,7 +285,8 @@ var callNames = map[CallFn]string{
 	FnListSetSymmetricDifference: "list.set_symmetric_difference",
 	FnListGather:                 "list.gather", FnListGatherOrNull: "list.gather_or_null",
 
-	FnStructField: "struct.field",
+	FnStructField: "struct.field", FnStructRenameFields: "struct.rename_fields",
+	FnListToStruct: "list.to_struct",
 }
 
 func (f CallFn) String() string {
@@ -998,8 +1003,49 @@ func structCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		return dtype.Null, uerr.New(uerr.KindSchema, "struct",
 			"no field %q in %s", name, in).
 			Hint("the fields are: %s", strings.Join(names, ", "))
+
+	case FnStructRenameFields:
+		names, err := callFieldNames(c, "struct")
+		if err != nil {
+			return dtype.Null, err
+		}
+		old := in.Fields()
+		if len(names) != len(old) {
+			// Polars renames as many as it is given and drops the rest, and warns that
+			// 2.0 will refuse it; this refuses it now.
+			return dtype.Null, uerr.New(uerr.KindSchema, "struct",
+				"rename_fields was given %d names for %d fields", len(names), len(old)).
+				Hint("name every field, in order; select a field with Field to keep fewer")
+		}
+		fields := make([]dtype.Field, len(old))
+		for i, f := range old {
+			fields[i] = dtype.Field{Name: names[i], Type: f.Type, Nullable: true}
+		}
+		return dtype.Struct(fields...), nil
 	}
 	return dtype.Null, uerr.Internalf("expr: unknown struct call %d", c.Fn)
+}
+
+// callFieldNames reads the constant strings after a call's receiver: the names a
+// struct's fields are given. Two of one name are refused, as a struct cannot hold
+// them.
+func callFieldNames(c *Call, op string) ([]string, error) {
+	names := make([]string, 0, len(c.Args)-1)
+	seen := make(map[string]bool, len(c.Args)-1)
+	for i := 1; i < len(c.Args); i++ {
+		name, ok := callLitString(c, i)
+		if !ok {
+			return nil, uerr.Internalf("expr: %s argument %d is not a name", c.Fn, i)
+		}
+		if seen[name] {
+			return nil, uerr.New(uerr.KindSchema, op,
+				"%s names two fields %q", c.Fn, name).
+				Hint("give each field a name of its own")
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return names, nil
 }
 
 // callLitString reads a constant string argument.
@@ -1100,6 +1146,22 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 			return dtype.Null, err
 		}
 		return b.Out, nil
+
+	case FnListToStruct:
+		names, err := callFieldNames(c, "list")
+		if err != nil {
+			return dtype.Null, err
+		}
+		if len(names) == 0 {
+			return dtype.Null, uerr.New(uerr.KindSchema, "list",
+				"to_struct needs at least one field name").
+				Hint("name the fields the first elements become, e.g. ToStruct(\"x\", \"y\")")
+		}
+		fields := make([]dtype.Field, len(names))
+		for i, name := range names {
+			fields[i] = dtype.Field{Name: name, Type: elem, Nullable: true}
+		}
+		return dtype.Struct(fields...), nil
 
 	case FnListSum:
 		// Delegated to the AGGREGATE's rule rather than restated, so a per-row sum

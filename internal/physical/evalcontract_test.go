@@ -439,6 +439,13 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 		{label: ",g", args: []any{"g"}},
 		{label: ",absent", args: []any{"nope"}},
 	},
+	// Every field named, too few, and two of one name.
+	expr.FnStructRenameFields: {
+		{label: ",both", args: []any{"p", "q"}},
+		{label: ",one", args: []any{"p"}},
+		{label: ",twice", args: []any{"p", "p"}},
+	},
+	expr.FnListToStruct: {{args: []any{"x", "y"}}},
 }
 
 // noCallArgs is the default: one set, no arguments. is_in takes it deliberately —
