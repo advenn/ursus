@@ -214,6 +214,16 @@ const (
 	FnListSetSymmetricDifference
 	FnListGather       // an index out of range is refused
 	FnListGatherOrNull // and here gives null
+
+	// The horizontal reductions (step 225): one value a row from every operand,
+	// max, min, sum and mean each the column aggregate over the row's values, and
+	// any and all Kleene's.
+	FnMaxHorizontal
+	FnMinHorizontal
+	FnSumHorizontal
+	FnMeanHorizontal
+	FnAnyHorizontal
+	FnAllHorizontal
 	fnHorizontalEnd
 )
 
@@ -284,6 +294,9 @@ var callNames = map[CallFn]string{
 	FnListSetDifference:          "list.set_difference",
 	FnListSetSymmetricDifference: "list.set_symmetric_difference",
 	FnListGather:                 "list.gather", FnListGatherOrNull: "list.gather_or_null",
+	FnMaxHorizontal: "max_horizontal", FnMinHorizontal: "min_horizontal",
+	FnSumHorizontal: "sum_horizontal", FnMeanHorizontal: "mean_horizontal",
+	FnAnyHorizontal: "any_horizontal", FnAllHorizontal: "all_horizontal",
 
 	FnStructField: "struct.field", FnStructRenameFields: "struct.rename_fields",
 	FnListToStruct: "list.to_struct",
@@ -492,6 +505,27 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 		FnListSetSymmetricDifference:
 		return listSetOut(fn, ops)
 
+	case FnMaxHorizontal, FnMinHorizontal, FnSumHorizontal, FnMeanHorizontal:
+		in, err := HorizontalInput(fn, ops)
+		if err != nil {
+			return dtype.Null, err
+		}
+		b, err := ResolveAggBinding(HorizontalAgg(fn), in)
+		if err != nil {
+			return dtype.Null, err
+		}
+		return b.Out, nil
+
+	case FnAnyHorizontal, FnAllHorizontal:
+		for i, f := range ops {
+			if !f.Type.IsBool() && !f.Type.IsNull() {
+				return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+					"%s requires Boolean operands, and operand %d (%s) is a %s", fn, i+1, f.Name, f.Type).
+					Hint("compare it first, e.g. Col(%q).Gt(0)", f.Name)
+			}
+		}
+		return dtype.Bool, nil
+
 	case FnListGather, FnListGatherOrNull:
 		if len(ops) != 2 {
 			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
@@ -509,6 +543,36 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 		return ops[0].Type, nil
 	}
 	return dtype.Null, uerr.Internalf("expr: unknown horizontal call %d", fn)
+}
+
+// HorizontalAgg is the aggregate a horizontal reduction runs over each row's values.
+func HorizontalAgg(fn CallFn) AggOp {
+	switch fn {
+	case FnMinHorizontal:
+		return AggMin
+	case FnSumHorizontal:
+		return AggSum
+	case FnMeanHorizontal:
+		return AggMean
+	}
+	return AggMax
+}
+
+// HorizontalInput is the type a horizontal reduction's operands meet at, as a
+// conditional's branches meet: Promote, so an Int32 and a Float64 are a Float64.
+// The aggregate's binding then types the answer, as for a column.
+func HorizontalInput(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
+	in := dtype.Null
+	for _, f := range ops {
+		t, ok := dtype.Promote(in, f.Type)
+		if !ok {
+			return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+				"%s: its operands have no common type: %s and %s (%s)", fn, in, f.Type, f.Name).
+				Hint("cast the operands so they agree")
+		}
+		in = t
+	}
+	return in, nil
 }
 
 // listSetOut types a list set operation: a List of the type both lists' elements

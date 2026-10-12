@@ -50,3 +50,52 @@ func Struct(exprs ...Expr) Expr {
 	}
 	return wrap(&expr.Call{Fn: expr.FnStructOf, Args: args})
 }
+
+// horizontalOf is fn over exprs, at least one.
+func horizontalOf(fn expr.CallFn, api string, exprs []Expr) Expr {
+	if len(exprs) == 0 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindSchema, fn.String(),
+			"%s requires at least one expression", api)})
+	}
+	args := make([]expr.Node, len(exprs))
+	for i, e := range exprs {
+		args[i] = e.node()
+	}
+	return wrap(&expr.Call{Fn: fn, Args: args})
+}
+
+// MaxHorizontal and MinHorizontal are each row's largest and smallest value across
+// exprs, as Polars' max_horizontal and min_horizontal. The values meet at one type
+// as a conditional's branches do, an Int32 and a Float64 at Float64, and are
+// compared as Max and Min compare a column's: nulls skipped, null when every value
+// is, and NaN the largest, where Polars skips it. The answer is named after the
+// first expression.
+func MaxHorizontal(exprs ...Expr) Expr {
+	return horizontalOf(expr.FnMaxHorizontal, "MaxHorizontal", exprs)
+}
+func MinHorizontal(exprs ...Expr) Expr {
+	return horizontalOf(expr.FnMinHorizontal, "MinHorizontal", exprs)
+}
+
+// SumHorizontal and MeanHorizontal are each row's sum and mean across exprs, as Sum
+// and Mean give a column's: nulls skipped, an integer sum widened to Int128, a mean
+// the nearest double to the exact one, and either null when every value is null.
+// Polars' sum_horizontal keeps an integer operand's type, so wraps, and sums a row
+// of nulls to 0. The answer is named after the first expression.
+func SumHorizontal(exprs ...Expr) Expr {
+	return horizontalOf(expr.FnSumHorizontal, "SumHorizontal", exprs)
+}
+func MeanHorizontal(exprs ...Expr) Expr {
+	return horizontalOf(expr.FnMeanHorizontal, "MeanHorizontal", exprs)
+}
+
+// AnyHorizontal and AllHorizontal are each row's Or and And across exprs, Kleene's,
+// as Polars' any_horizontal and all_horizontal: a true decides Any and a false
+// decides All, and a row that nothing decides is null if it holds a null. The
+// expressions must be Boolean. The answer is named after the first.
+func AnyHorizontal(exprs ...Expr) Expr {
+	return horizontalOf(expr.FnAnyHorizontal, "AnyHorizontal", exprs)
+}
+func AllHorizontal(exprs ...Expr) Expr {
+	return horizontalOf(expr.FnAllHorizontal, "AllHorizontal", exprs)
+}

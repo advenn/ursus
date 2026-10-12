@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.3
 
-Everything since `v0.6.2` (2026-10-12): steps 213–224, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–225, so far.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
 out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
 one session.
@@ -68,6 +68,10 @@ one session.
 - **`List().ToStruct(names...)` and `Struct().RenameFields(names...)`** (224). A
   list's first elements become named fields, null where it is shorter; a null list
   is a null struct. Renaming must name every field, which Polars only warns about.
+- **`MaxHorizontal`, `MinHorizontal`, `SumHorizontal`, `MeanHorizontal`,
+  `AnyHorizontal` and `AllHorizontal`** (225): each row's reduction across
+  expressions, max to mean answering as the column aggregates do over the row's
+  values, any and all as Kleene's Or and And.
 
 ---
 
