@@ -7,7 +7,6 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
-	"github.com/advenn/ursus/internal/execopt"
 	"github.com/advenn/ursus/internal/plan"
 )
 
@@ -59,99 +58,6 @@ func (s *sliceOp) Next(ctx context.Context) (*data.Batch, error) {
 	}
 }
 
-// tailOp keeps the last n rows.
-//
-// A ring of batches rather than a ring of rows: batches are immutable and already
-// allocated, so dropping one from the front is free, whereas a row ring would copy
-// every row twice. The cost is that it can hold up to n + (batchSize - 1) rows
-// rather than exactly n — bounded either way, which is the property that matters.
-type tailOp struct {
-	child Operator
-	n     int
-
-	buf   []*data.Batch
-	held  int
-	out   Operator
-	drawn bool
-
-	// mem is accounted even though the ring is bounded by construction. A budget
-	// that only tracks the operators it expects to be large is a budget that
-	// reports a number nobody can check.
-	mem *execopt.Account
-}
-
-func (t *tailOp) Schema() *dtype.Schema { return t.child.Schema() }
-
-func (t *tailOp) Close() error {
-	t.mem.Release()
-	if t.out != nil {
-		if err := t.out.Close(); err != nil {
-			return err
-		}
-	}
-	return t.child.Close()
-}
-
-func (t *tailOp) Next(ctx context.Context) (*data.Batch, error) {
-	if !t.drawn {
-		if err := t.drain(ctx); err != nil {
-			return nil, err
-		}
-		t.drawn = true
-	}
-	return t.out.Next(ctx)
-}
-
-func (t *tailOp) drain(ctx context.Context) error {
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		b, err := t.child.Next(ctx)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		t.buf = append(t.buf, b)
-		t.held += b.Rows()
-
-		// Drop whole batches from the front while the remainder still covers n.
-		for len(t.buf) > 0 && t.held-t.buf[0].Rows() >= t.n {
-			t.held -= t.buf[0].Rows()
-			t.buf = t.buf[1:]
-		}
-
-		// The ring EVICTS, so accounting is recomputed rather than accumulated.
-		// It is bounded by n plus one batch, so this is a short loop.
-		t.mem.Release()
-		for _, held := range t.buf {
-			t.mem.Retain(held)
-		}
-		if err := t.mem.Check(); err != nil {
-			return err
-		}
-	}
-
-	schema := t.child.Schema()
-	if t.n <= 0 || len(t.buf) == 0 {
-		empty, err := data.NewBatch(schema, emptyColumns(schema))
-		if err != nil {
-			return err
-		}
-		t.out = newBatchOperator(schema, empty)
-		return nil
-	}
-	// The ring may hold more than n; trim the excess off the front batch.
-	if excess := t.held - t.n; excess > 0 {
-		first := t.buf[0]
-		t.buf[0] = first.Slice(excess, first.Rows()-excess)
-	}
-	t.out = newBatchOperator(schema, t.buf...)
-	return nil
-}
-
 // rowIndexOp prepends a counter.
 //
 // Stateful and streaming — the third operator shape. It is NOT a BatchOp, because
@@ -200,7 +106,7 @@ func planTail(ctx context.Context, t *plan.Tail, opts Options) (Operator, error)
 	if err != nil {
 		return nil, err
 	}
-	return &tailOp{child: child, n: t.N, mem: opts.Budget.Account("tail")}, nil
+	return &tailOp{child: child, n: t.N, mem: opts.Budget.Account("tail"), budget: opts.Budget}, nil
 }
 
 func planReverse(ctx context.Context, r *plan.Reverse, opts Options) (Operator, error) {

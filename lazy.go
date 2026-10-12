@@ -366,11 +366,12 @@ type MemoryStats struct {
 // position and merge back on it, so their answers keep their order exactly.
 //
 // Reverse writes what it holds to a file past the limit, and gives the files back
-// last to first, each read whole, so it holds one at a time.
+// last to first, each read whole, so it holds one at a time. Tail writes the last
+// rows it holds to files too, drops the oldest as later rows cover them, and gives
+// them back in order.
 //
-// Hstack and tail cannot spill: past the limit they FAIL, with an error naming the
-// operator, which is a better outcome than being killed by the OS with no
-// explanation. Neither can a window with no partition_by that computes a rank,
+// Hstack cannot spill: past the limit it FAILS, with an error naming the operator,
+// which is a better outcome than being killed by the OS with no explanation. Neither can a window with no partition_by that computes a rank,
 // an ewm function or an interpolation, which need the whole frame, nor one whose
 // single partition is larger than the limit; with only aggregates, cumulative
 // functions, shifts, limited fills and rolling windows of rows, such a frame or

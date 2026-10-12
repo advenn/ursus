@@ -516,9 +516,6 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 			return ursus.Scan(src).HStack(
 				ursus.Scan(other).Select(ursus.Col("k").Alias("k2")))
 		}, "hstack"},
-		{"tail", func() *ursus.LazyFrame {
-			return ursus.Scan(src).Tail(3000)
-		}, "tail"},
 	}
 
 	for _, c := range cases {
@@ -573,6 +570,21 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 				ursus.WithSpillDir(t.TempDir()),
 				ursus.WithMemoryStats(&stats)); err != nil {
 			t.Errorf("unique must partition rather than refuse: %v", err)
+		}
+		if stats.Spills == 0 {
+			t.Error("it succeeded without spilling, so it proves nothing")
+		}
+	})
+
+	// tail spills since step 217; TestTailSpillsUnderATenthOfItsInput checks its
+	// answer.
+	t.Run("tail_spills", func(t *testing.T) {
+		var stats ursus.MemoryStats
+		if _, err := ursus.Scan(src).Tail(3000).
+			Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
+				ursus.WithSpillDir(t.TempDir()),
+				ursus.WithMemoryStats(&stats)); err != nil {
+			t.Errorf("tail must spill rather than refuse: %v", err)
 		}
 		if stats.Spills == 0 {
 			t.Error("it succeeded without spilling, so it proves nothing")
@@ -986,5 +998,39 @@ func TestASpilledWindowHoldsABatchAFile(t *testing.T) {
 	ursustest.AssertFrameEqual(t, got, want)
 	if ceiling := limit*5/4 + 128<<10; stats.Peak > ceiling {
 		t.Errorf("peak %d, over %d: the limit, a quarter more, and the writers' buffers", stats.Peak, ceiling)
+	}
+}
+
+// TestTailSpillsUnderATenthOfItsInput: tail writes the last rows it holds to runs
+// past the budget, drops runs the later rows cover, and gives the rest back in order
+// (step 217), where it refused. Over 20,000 rows under a tenth of their bytes, the
+// last 15,000, all of them, more than all, and none answer as in memory, and nothing
+// is left on disk.
+func TestTailSpillsUnderATenthOfItsInput(t *testing.T) {
+	src := memFrame(t, 20_000, 512, 20_000)
+	in, err := ursus.Scan(src).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := in.Batch().NBytes() / 10
+	for _, n := range []int{15_000, 20_000, 25_000, 1, 0} {
+		want, err := ursus.Scan(src).Tail(n).Collect(t.Context(), ursus.WithBatchSize(512))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var stats ursus.MemoryStats
+		dir := t.TempDir()
+		got, err := ursus.Scan(src).Tail(n).Collect(t.Context(), ursus.WithBatchSize(512),
+			ursus.WithMemoryLimit(limit), ursus.WithSpillDir(dir), ursus.WithMemoryStats(&stats))
+		if err != nil {
+			t.Fatalf("tail %d, under %d bytes: %v", n, limit, err)
+		}
+		if n >= 15_000 && stats.Spills == 0 {
+			t.Fatalf("tail %d: nothing spilled", n)
+		}
+		ursustest.AssertFrameEqual(t, got, want)
+		if left, _ := os.ReadDir(dir); len(left) > 0 {
+			t.Errorf("tail %d: %d entries left in the spill directory", n, len(left))
+		}
 	}
 }

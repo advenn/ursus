@@ -395,9 +395,9 @@ func (a *Account) Check() error {
 		"memory limit of %s exceeded: the query is holding %s, %s of it in this operator",
 		Bytes(a.b.Limit()), Bytes(a.b.Used()), Bytes(a.Used())).
 		Hint("%s", holdsHint(a.op)).
-		Hint("sort, group_by, join, unique, over and reverse spill to disk; join_asof, " +
-			"merge_sorted, rolling and group_by_dynamic stream their input; hstack, " +
-			"tail, and an unpartitioned over computing a rank, an ewm or an " +
+		Hint("sort, group_by, join, unique, over, reverse and tail spill to disk; " +
+			"join_asof, merge_sorted, rolling and group_by_dynamic stream their input; " +
+			"hstack, and an unpartitioned over computing a rank, an ewm or an " +
 			"interpolation fail rather than exceed the limit")
 }
 
@@ -446,7 +446,12 @@ func (a *Account) CheckResult() error {
 func holdsHint(op string) string {
 	switch op {
 	case "tail":
-		return "tail holds the last N rows; reduce N or raise the limit with WithMemoryLimit"
+		// tail spills since v0.6.3 step 217; what it holds in memory past that is
+		// what it has not yet written, so reaching Check means the limit is under a
+		// batch.
+		return "tail holds the last N rows, and writes them to disk past the limit; " +
+			"reaching this means the limit is under one batch, so raise it with " +
+			"WithMemoryLimit or lower the batch size"
 	case "join":
 		// join spills since step 13, so reaching Check at all means partitioning
 		// could not help — and there are exactly two ways for that to be true, both
