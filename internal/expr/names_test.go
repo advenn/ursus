@@ -224,14 +224,15 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	// 104 since step 225 added the six horizontal reductions, after step 224's
-	// list.to_struct and struct.rename_fields, step 223's four list set operations
-	// and two gathers, step 222's list.n_unique, list.arg_min and list.arg_max, step
-	// 174's dt.replace_time_zone, step 171's struct.with_fields, step 147's cut and
+	// 107 since step 226 added replace, replace_strict and replace_or, after step
+	// 225's six horizontal reductions, step 224's list.to_struct and
+	// struct.rename_fields, step 223's four list set operations and two gathers,
+	// step 222's list.n_unique, list.arg_min and list.arg_max, step 174's
+	// dt.replace_time_zone, step 171's struct.with_fields, step 147's cut and
 	// cut_left_closed, and step 146's list.join, six bit counts, concat_str and
 	// struct.
-	if classified != 104 {
-		t.Errorf("%d call functions are classified, want 104 — the families and the "+
+	if classified != 107 {
+		t.Errorf("%d call functions are classified, want 107 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }

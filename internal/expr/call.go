@@ -108,6 +108,13 @@ const (
 	// applies to anything hashable, so it needs its own classifier rather than
 	// widening either of theirs.
 	FnIsIn CallFn = iota + 200
+
+	// A value map (step 226). Args[0] is the receiver, Args[1] the count k of old
+	// values as an Int64 literal, then the k old values, the k new ones, and for
+	// FnReplaceOr the default. ReplaceParts reads them.
+	FnReplace       // a value not among old keeps itself
+	FnReplaceStrict // and here is refused
+	FnReplaceOr     // and here, a null too, is the default
 	fnGenEnd
 
 	// --- maths ---
@@ -299,6 +306,7 @@ var callNames = map[CallFn]string{
 	FnAnyHorizontal: "any_horizontal", FnAllHorizontal: "all_horizontal",
 
 	FnStructField: "struct.field", FnStructRenameFields: "struct.rename_fields",
+	FnReplace: "replace", FnReplaceStrict: "replace_strict", FnReplaceOr: "replace_or",
 	FnListToStruct: "list.to_struct",
 }
 
@@ -623,9 +631,99 @@ func genCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 			}
 		}
 		return dtype.Bool, nil
+
+	case FnReplace, FnReplaceStrict, FnReplaceOr:
+		return replaceOut(c, in)
+
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown general call %d", fn)
 	}
+}
+
+// ReplaceParts reads a replace call's literals: its old values, its new ones, and
+// its default, nil but for FnReplaceOr.
+func ReplaceParts(c *Call) (old, new []*Lit, def *Lit, err error) {
+	lits := make([]*Lit, 0, len(c.Args)-1)
+	for _, a := range c.Args[1:] {
+		l, ok := a.(*Lit)
+		if !ok {
+			return nil, nil, nil, uerr.Internalf("expr: %s argument %s is not a literal", c.Fn, a)
+		}
+		lits = append(lits, l)
+	}
+	if len(lits) == 0 {
+		return nil, nil, nil, uerr.Internalf("expr: %s has no count", c.Fn)
+	}
+	k, ok := lits[0].Value.(int64)
+	want := 1 + 2*int(k)
+	if c.Fn == FnReplaceOr {
+		want++
+	}
+	if !ok || k < 0 || len(lits) != want {
+		return nil, nil, nil, uerr.Internalf("expr: %s with %d literals", c.Fn, len(lits))
+	}
+	old, new = lits[1:1+k], lits[1+k:1+2*k]
+	if c.Fn == FnReplaceOr {
+		def = lits[1+2*k]
+	}
+	return old, new, def, nil
+}
+
+// replaceOut types a value map.
+//
+// The old values meet the receiver as is_in's do (membershipOf), so `x.Replace(old,
+// new)` replaces exactly the rows `x.IsIn(old...)` holds. Replace answers as the
+// conditional `When(x.IsIn(old_j)).Then(new_j)…Otherwise(x)` would: each new value
+// meets the receiver as a branch meets the other, a weak literal taking the
+// column's type when it fits, so 20 into an Int32 is an Int32 and 2.5 into an Int64
+// is a Float64, where Polars truncates it to 2. ReplaceStrict and ReplaceOr answer
+// the type their new values and default meet at, as Polars' replace_strict does.
+func replaceOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
+	old, new, def, err := ReplaceParts(c)
+	if err != nil {
+		return dtype.Null, err
+	}
+	if !in.IsHashable() && !in.IsNull() {
+		return dtype.Null, uerr.New(uerr.KindType, c.Fn.String(),
+			"%s is not defined for %s", c.Fn, in).
+			Hint("the value must be hashable: numeric, temporal, string or boolean")
+	}
+	if !in.IsNull() {
+		if _, err := membershipOf(c.Fn, in, old); err != nil {
+			return dtype.Null, err
+		}
+	}
+	if c.Fn == FnReplace {
+		out := in
+		for _, l := range new {
+			if out, err = ResolveCond(l, c.Args[0], l.DT, out); err != nil {
+				return dtype.Null, uerr.New(uerr.KindType, c.Fn.String(),
+					"%s cannot put a %s value in a %s column", c.Fn, l.DT, in).
+					Hint("cast the column, or use ReplaceStrict, whose answer is the new values' type")
+			}
+		}
+		return out, nil
+	}
+	vals := new
+	if def != nil {
+		vals = append(slices.Clone(new), def)
+	}
+	if len(vals) == 0 {
+		return dtype.Null, uerr.New(uerr.KindSchema, c.Fn.String(),
+			"%s has no values to answer with", c.Fn).
+			Hint("give it at least one old value and its new one")
+	}
+	out := vals[0].DT
+	for _, l := range vals[1:] {
+		t, ok := dtype.Promote(out, l.DT)
+		if !ok {
+			return dtype.Null, uerr.New(uerr.KindType, c.Fn.String(),
+				"%s: its new values have no common type: %s and %s", c.Fn, out, l.DT).
+				Hint("give new values of one type")
+		}
+		out = t
+	}
+	return out, nil
 }
 
 // MembershipType is the type is_in and list.contains compare at: the type Eq would
@@ -643,16 +741,32 @@ func genCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 // Equality is still grouping equality, so NaN matches NaN — the one place the two
 // differ, and on purpose.
 func MembershipType(c *Call, against dtype.DataType) (dtype.DataType, error) {
-	common := against
+	if c.Fn == FnReplace || c.Fn == FnReplaceStrict || c.Fn == FnReplaceOr {
+		old, _, _, err := ReplaceParts(c)
+		if err != nil {
+			return dtype.Null, err
+		}
+		return membershipOf(c.Fn, against, old)
+	}
+	lits := make([]*Lit, 0, len(c.Args)-1)
 	for _, a := range c.Args[1:] {
 		l, ok := a.(*Lit)
 		if !ok {
 			return dtype.Null, uerr.Internalf("expr: %s argument %s is not a literal", c.Fn, a)
 		}
+		lits = append(lits, l)
+	}
+	return membershipOf(c.Fn, against, lits)
+}
+
+// membershipOf is MembershipType over the values lits.
+func membershipOf(fn CallFn, against dtype.DataType, lits []*Lit) (dtype.DataType, error) {
+	common := against
+	for _, l := range lits {
 		b, err := ResolveBinary(OpEq, common, l.DT)
 		if err != nil {
-			return dtype.Null, uerr.New(uerr.KindType, c.Fn.String(),
-				"%s cannot compare %s with a %s value", c.Fn, against, l.DT).
+			return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+				"%s cannot compare %s with a %s value", fn, against, l.DT).
 				Hint("it compares as == does, and == has no common type for these").
 				Hint("cast one side so the two meet, e.g. .Cast(ursus.%s)", l.DT)
 		}

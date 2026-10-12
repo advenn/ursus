@@ -446,6 +446,18 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 		{label: ",twice", args: []any{"p", "p"}},
 	},
 	expr.FnListToStruct: {{args: []any{"x", "y"}}},
+	// The count of old values, the old values, the new ones, and ReplaceOr's
+	// default (step 226).
+	expr.FnReplace: {
+		{label: ",int", args: []any{int64(1), int64(1), int64(10)}},
+		{label: ",float", args: []any{int64(1), int64(1), 2.5}},
+		{label: ",str", args: []any{int64(1), "a", "b"}},
+	},
+	// replace_strict refuses a value its map does not hold, which every fixed map
+	// meets in one of the receivers, and a value refusal is not a contract breach;
+	// so it is driven, as is_in is, with an empty map, which is refused when typed.
+	expr.FnReplaceStrict: {{args: []any{int64(0)}}},
+	expr.FnReplaceOr:     {{args: []any{int64(1), int64(1), "one", "other"}}},
 }
 
 // noCallArgs is the default: one set, no arguments. is_in takes it deliberately —

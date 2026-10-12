@@ -8,6 +8,7 @@ import (
 	"math"
 	"regexp"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 	"weak"
@@ -397,6 +398,62 @@ func buildInSet(c *expr.Call, meet dtype.DataType) (map[string]struct{}, error) 
 	return set, nil
 }
 
+// buildValueMap prepares a value map: its old values encoded at meet, as is_in's
+// are, and its new values and default cast to the answer's type. Two old values
+// alike are refused, as Polars refuses them: one would hide the other.
+func buildValueMap(c *expr.Call, recvType, meet dtype.DataType) (*kernel.ValueMap, error) {
+	out, err := expr.ResolveCall(c, recvType)
+	if err != nil {
+		return nil, err
+	}
+	old, new, def, err := expr.ReplaceParts(c)
+	if err != nil {
+		return nil, err
+	}
+	m := &kernel.ValueMap{Fn: c.Fn, Out: out, Keys: make(map[string]int32, len(old)), Default: -1}
+	for j, l := range old {
+		col, err := litColumn(l)
+		if err != nil {
+			return nil, err
+		}
+		if col, err = kernel.Cast(col.Name(), meet, true, col); err != nil {
+			return nil, err
+		}
+		key, err := kernel.EncodeOne(col)
+		if err != nil {
+			return nil, err
+		}
+		if _, dup := m.Keys[string(key)]; dup {
+			return nil, uerr.New(uerr.KindValue, c.Fn.String(),
+				"%s's old values hold %v twice", c.Fn, l.Value).
+				Hint("each old value can be replaced once")
+		}
+		m.Keys[string(key)] = int32(j)
+	}
+	vals := new
+	if def != nil {
+		vals = append(slices.Clone(new), def)
+		m.Default = int32(len(new))
+	}
+	cols := make([]*data.Column, 0, len(vals))
+	for _, l := range vals {
+		col, err := litColumn(l)
+		if err != nil {
+			return nil, err
+		}
+		if col, err = kernel.Cast("value", out, true, col); err != nil {
+			return nil, err
+		}
+		cols = append(cols, col)
+	}
+	if len(cols) > 0 {
+		if m.Values, err = kernel.ConcatColumns("value", cols); err != nil {
+			return nil, err
+		}
+	}
+	return m, nil
+}
+
 // callCache memoises one compiled regex per Call node.
 //
 // A pattern is a constant of the expression, so compiling it per batch would repeat
@@ -441,6 +498,8 @@ type compiledCall struct {
 	// meet is the type is_in's column, or list.contains' list, is compared at:
 	// expr.MembershipType's, as a List for list.contains.
 	meet dtype.DataType
+	// repl is a value map's old values, encoded at meet, and its answers.
+	repl *kernel.ValueMap
 	err  error
 }
 
@@ -505,6 +564,12 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 			return kernel.InInts(name, recv, cc.ints, cc.intLookup), nil
 		}
 		return kernel.InSet(name, recv, cc.set)
+	case c.Fn == expr.FnReplace || c.Fn == expr.FnReplaceStrict || c.Fn == expr.FnReplaceOr:
+		look, err := meetType(recv, cc.meet)
+		if err != nil {
+			return nil, err
+		}
+		return cc.repl.Apply(name, look, recv)
 	case c.Fn.IsMath():
 		return kernel.MathCall(c.Fn, name, out, recv, cc.args)
 	case c.Fn.IsList():
@@ -582,6 +647,12 @@ func compileCall(c *expr.Call, recvType dtype.DataType) compiledCall {
 	}
 	var cc compiledCall
 	cc.args, cc.err = expr.CallArgs(c)
+	if cc.err == nil && (c.Fn == expr.FnReplace || c.Fn == expr.FnReplaceStrict ||
+		c.Fn == expr.FnReplaceOr) {
+		if cc.meet, cc.err = expr.MembershipType(c, recvType); cc.err == nil {
+			cc.repl, cc.err = buildValueMap(c, recvType, cc.meet)
+		}
+	}
 	if cc.err == nil && c.Fn == expr.FnIsIn {
 		if cc.meet, cc.err = expr.MembershipType(c, recvType); cc.err == nil {
 			cc.set, cc.err = buildInSet(c, cc.meet)

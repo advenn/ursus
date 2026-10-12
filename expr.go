@@ -498,6 +498,60 @@ func (e Expr) IsIn[T Literal](vs ...T) Expr {
 	return wrap(&expr.Call{Fn: expr.FnIsIn, Args: args})
 }
 
+// Replace maps values: a row equal to old[j] becomes new[j], and every other row
+// keeps its value, a null too, as Polars' replace does.
+//
+// The old values meet the column as IsIn's do, so Replace(old, new) replaces
+// exactly the rows IsIn(old...) holds, NaN matching NaN. The answer is the type the
+// conditional When(x.IsIn(old_j)).Then(new_j)….Otherwise(x) would have: a new value
+// that fits the column's type exactly keeps it, so 20 into an Int32 is an Int32, and
+// one that does not widens it, so 2.5 into an Int64 makes a Float64, where Polars
+// truncates 2.5 to 2. old and new are as long as each other, and old holds no value
+// twice. To replace a null, use FillNull.
+func (e Expr) Replace[K, V Literal](old []K, new []V) Expr {
+	return replaceCall(e, expr.FnReplace, old, new, nil)
+}
+
+// ReplaceStrict maps every value: a row equal to old[j] becomes new[j], a null stays
+// null, and any other value fails the query, naming it, as Polars' replace_strict
+// does. The answer is the type the new values meet at.
+func (e Expr) ReplaceStrict[K, V Literal](old []K, new []V) Expr {
+	return replaceCall(e, expr.FnReplaceStrict, old, new, nil)
+}
+
+// ReplaceOr maps values with a default: a row equal to old[j] becomes new[j], and
+// every other row, a null too, becomes def, as Polars' replace_strict with a
+// default does. The answer is the type the new values and def meet at.
+func (e Expr) ReplaceOr[K, V Literal](old []K, new []V, def V) Expr {
+	return replaceCall(e, expr.FnReplaceOr, old, new, &def)
+}
+
+func replaceCall[K, V Literal](e Expr, fn expr.CallFn, old []K, new []V, def *V) Expr {
+	if len(old) != len(new) {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindSchema, fn.String(),
+			"%s was given %d old values and %d new ones", fn, len(old), len(new)).
+			Hint("give a new value for each old one, in the same order")})
+	}
+	args := make([]expr.Node, 0, 3+2*len(old))
+	args = append(args, e.node(), litNode(int64(len(old))))
+	for _, v := range old {
+		args = append(args, litNode(any(v)))
+	}
+	for _, v := range new {
+		// Replace's new values fill the column, so they are weak as FillNullWith's
+		// value is: a value that fits the column's type takes it.
+		n := litNode(any(v))
+		if fn == expr.FnReplace {
+			n = weaken(n)
+		}
+		args = append(args, n)
+	}
+	if def != nil {
+		args = append(args, litNode(any(*def)))
+	}
+	return wrap(&expr.Call{Fn: fn, Args: args})
+}
+
 // --- boolean -----------------------------------------------------------------
 //
 // Kleene three-valued logic: `false AND null` is false, `true OR null` is true.

@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.3
 
-Everything since `v0.6.2` (2026-10-12): steps 213–225, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–226, so far.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
 out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
 one session.
@@ -72,6 +72,10 @@ one session.
   `AnyHorizontal` and `AllHorizontal`** (225): each row's reduction across
   expressions, max to mean answering as the column aggregates do over the row's
   values, any and all as Kleene's Or and And.
+- **`Replace`, `ReplaceStrict` and `ReplaceOr`** (226), a value map matching as
+  `IsIn` does. Replace keeps unmatched values and types as the matching `When`
+  chain would; ReplaceStrict refuses an unmatched value; ReplaceOr gives unmatched
+  values and nulls a default.
 
 ---
 

@@ -32,7 +32,8 @@ import (
 //   - arithmetic with a temporal operand, which refuses an overflow;
 //   - dt.truncate, dt.round, dt.epoch, dt.offset_by, dt.month_start and
 //     dt.month_end, which refuse an instant the type cannot hold;
-//   - list.gather, which refuses an index out of range.
+//   - list.gather, which refuses an index out of range, and replace_strict, which
+//     refuses a value its map does not hold.
 //
 // An expression this cannot type is treated as fallible.
 func fallible(p expr.Node, in *dtype.Schema) bool {
@@ -59,7 +60,7 @@ func fallible(p expr.Node, in *dtype.Schema) bool {
 		case *expr.Call:
 			switch t.Fn {
 			case expr.FnDtTruncate, expr.FnDtEpoch, expr.FnDtRound, expr.FnDtOffsetBy,
-				expr.FnDtMonthStart, expr.FnDtMonthEnd, expr.FnListGather:
+				expr.FnDtMonthStart, expr.FnDtMonthEnd, expr.FnListGather, expr.FnReplaceStrict:
 				found = true
 			}
 		}
