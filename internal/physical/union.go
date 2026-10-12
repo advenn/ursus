@@ -8,7 +8,6 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/execopt"
-	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -105,32 +104,38 @@ func planUnion(ctx context.Context, u *plan.Union, opts Options) (Operator, erro
 
 // hstackOp places frames side by side.
 //
-// # It buffers, and there is no way around it
+// # In lockstep (v0.6.3 step 218)
 //
 // Nothing aligns batch boundaries across independent pipelines: one child may
-// deliver 8192 rows while another delivers 100, and pairing row i of each means
-// having row i of each in hand. So every child is drained and concatenated, and
-// memory is O(total rows) — the same shape as sortSink, for a much simpler reason.
+// deliver 8192 rows while another delivers 100. Until step 218 every child was
+// drained and concatenated, so memory was O(total rows), and past the budget it
+// refused. Pairing row i of each needs only row i of each in hand: hstackOp keeps one
+// batch per child and where it is in it, and each output batch is the fewest rows any
+// child has left, sliced from each. Column.Slice shares the buffers, fixed-width
+// included, so a boundary costs a view, not a copy.
 //
-// A re-chunking scheme would bound it, at the cost of slicing every child on every
-// boundary — and Column.Slice copies for fixed-width types, so it would trade
-// memory for a copy per column per boundary rather than removing the cost.
+// A child that ends before the others is a height mismatch, refused as it always
+// was, naming the first frame whose height differs from frame 0's: the others are
+// read to their ends to count them. Rows paired before it have already been given
+// out, as mergeSortedOp's out-of-order refusal does.
 type hstackOp struct {
 	children []Operator
 	schema   *dtype.Schema
-	out      Operator
-	drawn    bool
-	mem      *execopt.Account
+
+	cur     []*data.Batch // each child's batch in hand, nil once it has ended
+	off     []int         // the next row of it
+	rows    []int         // rows each child has delivered
+	ended   []bool
+	emitted bool // whether a batch has been given out
+	done    bool
+	mem     *execopt.Account // the batches in hand
 }
 
 func (h *hstackOp) Schema() *dtype.Schema { return h.schema }
 
 func (h *hstackOp) Close() error {
 	h.mem.Release()
-	errs := make([]error, 0, len(h.children)+1)
-	if h.out != nil {
-		errs = append(errs, h.out.Close())
-	}
+	errs := make([]error, 0, len(h.children))
 	for _, c := range h.children {
 		errs = append(errs, c.Close())
 	}
@@ -138,66 +143,103 @@ func (h *hstackOp) Close() error {
 }
 
 func (h *hstackOp) Next(ctx context.Context) (*data.Batch, error) {
-	if !h.drawn {
-		if err := h.draw(ctx); err != nil {
+	if h.done {
+		return nil, io.EOF
+	}
+	if h.cur == nil {
+		k := len(h.children)
+		h.cur, h.off, h.rows, h.ended = make([]*data.Batch, k), make([]int, k), make([]int, k), make([]bool, k)
+	}
+	n, anyEnded, allEnded := -1, false, true
+	for i := range h.children {
+		if err := h.fill(ctx, i); err != nil {
 			return nil, err
 		}
-		h.drawn = true
+		if h.ended[i] {
+			anyEnded = true
+			continue
+		}
+		allEnded = false
+		if left := h.cur[i].Rows() - h.off[i]; n < 0 || left < n {
+			n = left
+		}
 	}
-	return h.out.Next(ctx)
+	switch {
+	case allEnded:
+		h.done = true
+		if !h.emitted {
+			// No row at all: one empty batch, so the schema is still delivered.
+			h.emitted = true
+			return data.NewBatch(h.schema, emptyColumns(h.schema))
+		}
+		return nil, io.EOF
+	case anyEnded:
+		h.done = true
+		return nil, h.mismatch(ctx)
+	}
+	cols := make([]*data.Column, 0, h.schema.Len())
+	for i, b := range h.cur {
+		for _, c := range b.Columns() {
+			cols = append(cols, c.Slice(h.off[i], n))
+		}
+		h.off[i] += n
+	}
+	h.emitted = true
+	return data.NewBatchRows(h.schema, cols, n), nil
 }
 
-func (h *hstackOp) draw(ctx context.Context) error {
-	cols := make([]*data.Column, 0, h.schema.Len())
-	rows := -1
-	for i, child := range h.children {
-		var parts []*data.Batch
-		for {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			b, err := child.Next(ctx)
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if err != nil {
-				return err
-			}
-			parts = append(parts, b)
-			h.mem.Retain(b)
-			if err := h.mem.Check(); err != nil {
-				return err
-			}
-		}
-		cs := child.Schema()
-		var one *data.Batch
-		var err error
-		if len(parts) == 0 {
-			if one, err = data.NewBatch(cs, emptyColumns(cs)); err != nil {
-				return err
-			}
-		} else if one, err = kernel.Concat(cs, parts); err != nil {
+// fill gives child i a batch with rows left in hand, or marks it ended.
+func (h *hstackOp) fill(ctx context.Context, i int) error {
+	for !h.ended[i] && (h.cur[i] == nil || h.off[i] >= h.cur[i].Rows()) {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
+		b, err := h.children[i].Next(ctx)
+		if errors.Is(err, io.EOF) {
+			h.cur[i], h.ended[i] = nil, true
+			break
+		}
+		if err != nil {
+			return err
+		}
+		h.cur[i], h.off[i] = b, 0
+		h.rows[i] += b.Rows()
+	}
+	h.recharge()
+	return nil
+}
 
-		if rows < 0 {
-			rows = one.Rows()
-		} else if one.Rows() != rows {
+// recharge charges the batches in hand.
+func (h *hstackOp) recharge() {
+	h.mem.Release()
+	for _, b := range h.cur {
+		if b != nil {
+			h.mem.Retain(b)
+		}
+	}
+}
+
+// mismatch reads every child to its end, and names the first whose height differs
+// from frame 0's.
+func (h *hstackOp) mismatch(ctx context.Context) error {
+	for i := range h.children {
+		for !h.ended[i] {
+			h.off[i] = h.cur[i].Rows() // counted already; read on
+			if err := h.fill(ctx, i); err != nil {
+				return err
+			}
+		}
+	}
+	for i, n := range h.rows {
+		if n != h.rows[0] {
 			return uerr.New(uerr.KindValue, "hstack",
-				"frame %d has %d rows, frame 0 has %d", i, one.Rows(), rows).
+				"frame %d has %d rows, frame 0 has %d", i, n, h.rows[0]).
 				Hint("hstack pairs rows positionally, so every frame must be the " +
 					"same height").
 				Hint("use a join to combine frames of different heights by key")
 		}
-		cols = append(cols, one.Columns()...)
 	}
-
-	out, err := data.NewBatchRows(h.schema, cols, max(rows, 0)), error(nil)
-	if err != nil {
-		return err
-	}
-	h.out = newBatchOperator(h.schema, out)
-	return nil
+	return uerr.Internalf("physical: hstack's frames ended apart with the same heights")
 }
 
 func planHStack(ctx context.Context, h *plan.HStack, opts Options) (Operator, error) {

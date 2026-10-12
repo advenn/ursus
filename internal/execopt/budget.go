@@ -396,9 +396,9 @@ func (a *Account) Check() error {
 		Bytes(a.b.Limit()), Bytes(a.b.Used()), Bytes(a.Used())).
 		Hint("%s", holdsHint(a.op)).
 		Hint("sort, group_by, join, unique, over, reverse and tail spill to disk; " +
-			"join_asof, merge_sorted, rolling and group_by_dynamic stream their input; " +
-			"hstack, and an unpartitioned over computing a rank, an ewm or an " +
-			"interpolation fail rather than exceed the limit")
+			"join_asof, merge_sorted, hstack, rolling and group_by_dynamic stream " +
+			"their input; an unpartitioned over computing a rank, an ewm or an " +
+			"interpolation fails rather than exceed the limit")
 }
 
 // Release drops everything this account holds.

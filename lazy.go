@@ -370,12 +370,15 @@ type MemoryStats struct {
 // rows it holds to files too, drops the oldest as later rows cover them, and gives
 // them back in order.
 //
-// Hstack cannot spill: past the limit it FAILS, with an error naming the operator,
-// which is a better outcome than being killed by the OS with no explanation. Neither can a window with no partition_by that computes a rank,
-// an ewm function or an interpolation, which need the whole frame, nor one whose
-// single partition is larger than the limit; with only aggregates, cumulative
-// functions, shifts, limited fills and rolling windows of rows, such a frame or
-// partition is written to one file and read back. JoinAsOf and
+// Hstack pairs its frames a batch at a time, holding one of each.
+//
+// A window with no partition_by that computes a rank, an ewm function or an
+// interpolation cannot spill, since those need the whole frame, nor can one whose
+// single partition is larger than the limit: past the limit it FAILS, with an error
+// naming the operator, which is a better outcome than being killed by the OS with no
+// explanation. With only aggregates, cumulative functions, shifts, limited fills and
+// rolling windows of rows, such a frame or partition is written to one file and read
+// back. JoinAsOf and
 // MergeSorted stream both sides, holding a few batches; a forward or nearest
 // JoinAsOf also holds the right rows it reads ahead, which for a left by-key the
 // right side lacks is the rest of that side. Rolling and GroupByDynamic stream their

@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.3
 
-Everything since `v0.6.2` (2026-10-12): steps 213–217, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–218, so far.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
 out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
 one session.
@@ -38,6 +38,9 @@ one session.
 - **Tail spills** (217). The last rows it holds go to run files past the budget, the
   oldest dropped as later rows cover them, and come back in order a batch at a time.
   It refused.
+- **Hstack streams** (218), pairing a batch of each frame at a time, sliced to the
+  fewest rows any has left. It held every frame whole, and refused. Frames of
+  different heights are still refused, after the rows paired before.
 
 ---
 

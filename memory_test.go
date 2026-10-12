@@ -512,10 +512,6 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 			return ursus.Scan(src).WithColumns(
 				ursus.Col("seq").Rank(ursus.RankOrdinal, false).Over().Alias("t"))
 		}, "over"},
-		{"hstack", func() *ursus.LazyFrame {
-			return ursus.Scan(src).HStack(
-				ursus.Scan(other).Select(ursus.Col("k").Alias("k2")))
-		}, "hstack"},
 	}
 
 	for _, c := range cases {
@@ -573,6 +569,15 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 		}
 		if stats.Spills == 0 {
 			t.Error("it succeeded without spilling, so it proves nothing")
+		}
+	})
+
+	// hstack streams since step 218; TestHStackPairsItsFramesABatchAtATime checks its
+	// answer.
+	t.Run("hstack_streams", func(t *testing.T) {
+		if _, err := ursus.Scan(src).HStack(ursus.Scan(other).Select(ursus.Col("k").Alias("k2"))).
+			Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(32<<10)); err != nil {
+			t.Errorf("hstack must stream rather than refuse: %v", err)
 		}
 	})
 
@@ -1031,6 +1036,55 @@ func TestTailSpillsUnderATenthOfItsInput(t *testing.T) {
 		ursustest.AssertFrameEqual(t, got, want)
 		if left, _ := os.ReadDir(dir); len(left) > 0 {
 			t.Errorf("tail %d: %d entries left in the spill directory", n, len(left))
+		}
+	}
+}
+
+// TestHStackPairsItsFramesABatchAtATime: hstack holds a batch of each frame and pairs
+// them in lockstep (step 218), where it drained and concatenated every frame and
+// refused past the budget. Frames of 300-row and 700-row pieces, whose boundaries
+// never align, pair as the whole frames do, under a tenth of their bytes; frames of
+// different heights are still refused, naming the first that differs.
+func TestHStackPairsItsFramesABatchAtATime(t *testing.T) {
+	const n = 21_000
+	pieces := func(size int, name string, scale int64) *ursus.LazyFrame {
+		var frames []*ursus.LazyFrame
+		for lo := 0; lo < n; lo += size {
+			v := make([]int64, min(size, n-lo))
+			for i := range v {
+				v[i] = int64(lo+i) * scale
+			}
+			frames = append(frames, ursus.Frame(ursus.Values(name, v)))
+		}
+		return ursus.Concat(frames)
+	}
+	q := pieces(300, "a", 1).HStack(pieces(700, "b", 2), pieces(1_000, "c", 3))
+	in, err := pieces(300, "a", 1).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := 3 * in.Batch().NBytes() / 10
+	got, err := q.Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithMemoryLimit(limit))
+	if err != nil {
+		t.Fatalf("under %d bytes: %v", limit, err)
+	}
+	if got.Height() != n {
+		t.Fatalf("%d rows, want %d", got.Height(), n)
+	}
+	a, b, c := int64Col(t, got, "a"), int64Col(t, got, "b"), int64Col(t, got, "c")
+	for i := range n {
+		if a[i] != int64(i) || b[i] != 2*int64(i) || c[i] != 3*int64(i) {
+			t.Fatalf("row %d: %d, %d, %d", i, a[i], b[i], c[i])
+		}
+	}
+	// A frame a row short, and one half as long: the longer is read to its end to
+	// count it, so the refusal gives both heights in full.
+	for short, want := range map[int]string{n - 1: "frame 1 has 20999 rows, frame 0 has 21000",
+		n / 2: "frame 1 has 10500 rows, frame 0 has 21000"} {
+		_, err = pieces(300, "a", 1).HStack(pieces(700, "b", 2).Head(short)).
+			Collect(t.Context(), ursus.WithBatchSize(512))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("a frame of %d rows: %v", short, err)
 		}
 	}
 }
