@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.3
 
-Everything since `v0.6.2` (2026-10-12): steps 213–218, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–219, so far.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
 out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
 one session.
@@ -41,6 +41,9 @@ one session.
 - **Hstack streams** (218), pairing a batch of each frame at a time, sliced to the
   fewest rows any has left. It held every frame whole, and refused. Frames of
   different heights are still refused, after the rows paired before.
+- **A `WhereExists` or `WhereNotExists` of a predicate alone spills** (219): a
+  keyless Semi or Anti join with a residual writes its build side to a file and
+  reads it for each probe batch until each row is decided. It refused.
 
 ---
 

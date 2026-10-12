@@ -2,7 +2,6 @@ package ursus_test
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,7 +13,6 @@ import (
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/source/memsrc"
-	"github.com/advenn/ursus/internal/uerr"
 	"github.com/advenn/ursus/ursustest"
 )
 
@@ -370,18 +368,68 @@ func TestCrossJoinUnderALimitSpills(t *testing.T) {
 		t.Error("the keyed join succeeded without spilling, so it proves nothing")
 	}
 
-	// A join with no keys and a residual keeps its whole build side and refuses.
+	// A join with no keys and a residual spills its build side whole since step 219,
+	// and answers as it does in memory: TestAKeylessExistsSpillsItsBuildSide.
 	big := joinFrame(t, 4000, 128, 900, 0, false)
-	_, err = ursus.Scan(left).WhereExists(ursus.Scan(big).Select(ursus.Col("v").Alias("bv")),
+	var bigStats ursus.MemoryStats
+	if _, err := ursus.Scan(left).WhereExists(ursus.Scan(big).Select(ursus.Col("v").Alias("bv")),
 		ursus.Col("v").Lt(ursus.Col("bv"))).
 		Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
-			ursus.WithSpillDir(t.TempDir()))
-	if !errors.Is(err, uerr.ErrResource) {
-		t.Fatalf("a residual join with no keys under a 4KiB limit: want a resource error, got %v", err)
+			ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&bigStats)); err != nil {
+		t.Fatalf("a residual join with no keys under a 4KiB limit must spill: %v", err)
 	}
-	for _, want := range []string{"join", "residual", "NO join key"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("the message should say %q:\n%v", want, err)
+	if bigStats.Spills == 0 {
+		t.Error("the residual join succeeded without spilling, so it proves nothing")
+	}
+}
+
+// TestAKeylessExistsSpillsItsBuildSide: a WhereExists or WhereNotExists of a predicate
+// alone has no key to partition on, so past the budget it writes its build side to a
+// file and reads it for each probe batch until each row is decided (step 219), where
+// it refused. Under 4 KiB, on one thread and on four, each answers as it does in
+// memory, in the probe's order, and leaves no file; over a column with nulls, a null
+// predicate is no match.
+func TestAKeylessExistsSpillsItsBuildSide(t *testing.T) {
+	left := joinFrame(t, 3000, 128, 500, 0, false)
+	right := joinFrame(t, 2000, 128, 700, 5, false) // every fifth k null
+	c := ursus.Col
+	for _, q := range []struct {
+		name string
+		lf   func() *ursus.LazyFrame
+	}{
+		{"exists", func() *ursus.LazyFrame {
+			return ursus.Scan(left).WhereExists(ursus.Scan(right).Select(c("v").Alias("bv")),
+				// No equality between the sides, which the planner would take for a key.
+				c("v").Lt(c("bv")), c("v").Add(c("bv")).Mod(7).Eq(ursus.Lit(int64(0))))
+		}},
+		// Over the build side's k, a fifth of it null: a null predicate is no match.
+		{"not exists", func() *ursus.LazyFrame {
+			return ursus.Scan(left).WhereNotExists(ursus.Scan(right).Select(c("k").Alias("bk")),
+				c("v").Gt(c("bk").Mul(2)))
+		}},
+	} {
+		want, err := q.lf().Collect(t.Context(), ursus.WithBatchSize(128))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, threads := range []int{1, 4} {
+			var stats ursus.MemoryStats
+			dir := t.TempDir()
+			got, err := q.lf().Collect(t.Context(), ursus.WithBatchSize(128), ursus.WithThreads(threads),
+				ursus.WithMemoryLimit(4<<10), ursus.WithSpillDir(dir), ursus.WithMemoryStats(&stats))
+			if err != nil {
+				t.Fatalf("%s, %d threads: %v", q.name, threads, err)
+			}
+			if stats.Spills == 0 {
+				t.Fatalf("%s, %d threads: nothing spilled", q.name, threads)
+			}
+			if want.Height() == 0 || want.Height() == 3000 {
+				t.Fatalf("%s: %d rows; the fixture decides nothing", q.name, want.Height())
+			}
+			ursustest.AssertFrameEqual(t, got, want)
+			if left, _ := os.ReadDir(dir); len(left) > 0 {
+				t.Errorf("%s, %d threads: %d entries left", q.name, threads, len(left))
+			}
 		}
 	}
 }
