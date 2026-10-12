@@ -69,7 +69,7 @@ type parallelSink struct {
 // hashAggSink.foldPartitioned. A nil Operator means it does not apply, and the
 // serial fold runs.
 type partitionedFolder interface {
-	foldPartitioned(sinks []Sink, newSink SinkFactory) (Operator, []Sink, error)
+	foldPartitioned(ctx context.Context, sinks []Sink, newSink SinkFactory) (Operator, []Sink, error)
 }
 
 // errWantSerial is a worker's sink saying it has reached the memory budget and would
@@ -201,7 +201,7 @@ func (p *parallelSink) drain(parent context.Context) error {
 	// Many groups fold partitioned, on every worker at once. Not once a worker has
 	// reached the budget: the rest of the input is the merged sink's then.
 	if f, ok := p.sinks[0].(partitionedFolder); ok && p.newSink != nil && !serial.Load() {
-		out, extra, err := f.foldPartitioned(p.sinks, p.newSink)
+		out, extra, err := f.foldPartitioned(parent, p.sinks, p.newSink)
 		p.extra = extra
 		if err != nil {
 			return err

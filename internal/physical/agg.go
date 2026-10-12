@@ -103,6 +103,8 @@ type hashAggSink struct {
 	frozen    bool  // residency is closed: a NEW key is routed, never admitted
 	frozenAcc int64 // accBytes at the freeze — the baseline overBudget measures from
 
+	vspill []*valueSpill // where each accumulator's values went past the budget, if any
+
 	dir      string // spill directory; only the level-0 sink removes it
 	dirOwner bool
 	prefix   string        // filename prefix, derived from the parent's file
@@ -313,6 +315,11 @@ func (s *hashAggSink) Schema() *dtype.Schema { return s.schema }
 
 func (s *hashAggSink) Close() error {
 	errs := []error{s.closeParts()}
+	for _, vs := range s.vspill {
+		if vs != nil {
+			errs = append(errs, vs.close())
+		}
+	}
 	s.mem.Release()
 	if s.dirOwner && s.dir != "" {
 		dir := s.dir
@@ -503,15 +510,7 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 		}
 	}
 
-	// Accumulator state is tracked as a DELTA rather than released and re-retained,
-	// so accounting stays O(groups) per batch rather than O(groups) map churn.
-	var acc int64
-	for _, a := range s.accs {
-		acc += a.NBytes()
-	}
-	acc += int64(cap(s.firstSeen))*8 + s.ids.NBytes()
-	s.mem.RetainBytes(acc - s.accBytes)
-	s.accBytes = acc
+	acc := s.recharge()
 	s.nRows += int64(n)
 
 	// The freeze is tested at a BATCH BOUNDARY, so no batch is ever half-frozen.
@@ -538,7 +537,7 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 	if !s.frozen && s.budget.Limit() > 0 && s.mem.Over() && len(s.keys) > 0 {
 		s.frozen, s.frozenAcc = true, acc
 	}
-	return s.overBudget()
+	return s.overBudget(ctx)
 }
 
 // consumeInts is Consume's key assignment for a key of one integer column (step 160):
@@ -702,6 +701,22 @@ func (s *hashAggSink) discard() {
 	s.ids, s.accs, s.keyParts, s.firstSeen = s.ids.empty(), nil, nil, nil
 }
 
+// recharge measures the accumulator state again and charges the difference, and
+// returns it.
+//
+// Accumulator state is tracked as a DELTA rather than released and re-retained, so
+// accounting stays O(groups) per batch rather than O(groups) map churn.
+func (s *hashAggSink) recharge() int64 {
+	var acc int64
+	for _, a := range s.accs {
+		acc += a.NBytes()
+	}
+	acc += int64(cap(s.firstSeen))*8 + s.ids.NBytes()
+	s.mem.RetainBytes(acc - s.accBytes)
+	s.accBytes = acc
+	return acc
+}
+
 func (s *hashAggSink) Merge(other Sink) error {
 	o, ok := other.(*hashAggSink)
 	if !ok {
@@ -712,7 +727,8 @@ func (s *hashAggSink) Merge(other Sink) error {
 	// the residency invariant. sortSink.Merge and joinBuildSink.Merge have the same
 	// guard, and aggCanParallelise refuses to build workers under a memory limit at
 	// all, so this is the second line of defence rather than the first.
-	if s.frozen || o.frozen || len(s.files) > 0 || len(o.files) > 0 {
+	if s.frozen || o.frozen || len(s.files) > 0 || len(o.files) > 0 ||
+		s.vspill != nil || o.vspill != nil {
 		return uerr.Internalf("physical: cannot merge hashAggSinks that have spilled")
 	}
 	// MaintainOrder is not mergeable here. firstSeen holds each group's input
@@ -797,13 +813,7 @@ func (s *hashAggSink) Merge(other Sink) error {
 	// Re-measure the accumulator state as a delta, exactly as Consume does. The
 	// merge grew both the group count and the per-group state, and without this the
 	// reported peak omits everything the fold pulled in.
-	var acc int64
-	for _, a := range s.accs {
-		acc += a.NBytes()
-	}
-	acc += int64(cap(s.firstSeen))*8 + s.ids.NBytes()
-	s.mem.RetainBytes(acc - s.accBytes)
-	s.accBytes = acc
+	s.recharge()
 	// other's state now lives in s, which has charged for it, so other's account
 	// is released here rather than at Close: under a budget, the merged sink would
 	// otherwise see the query as over it twice and freeze early (step 91). Buffers
@@ -938,7 +948,7 @@ var partitionedFolds atomic.Int64
 //
 // It returns a nil Operator, and folds nothing, when it does not apply. The sinks it
 // returns are the partitions', for the driver to close.
-func (s *hashAggSink) foldPartitioned(sinks []Sink, newSink SinkFactory) (Operator, []Sink, error) {
+func (s *hashAggSink) foldPartitioned(ctx context.Context, sinks []Sink, newSink SinkFactory) (Operator, []Sink, error) {
 	ws := make([]*hashAggSink, len(sinks))
 	total, held := 0, int64(0)
 	for i, x := range sinks {
@@ -1007,7 +1017,7 @@ func (s *hashAggSink) foldPartitioned(sinks []Sink, newSink SinkFactory) (Operat
 	// One answer per partition, in partition order.
 	runs := make([]*batchRun, 0, nParts)
 	for _, h := range parts {
-		res, err := h.residentResult()
+		res, err := h.residentResult(ctx)
 		if err != nil {
 			return nil, made, err
 		}
@@ -1150,7 +1160,7 @@ func (s *hashAggSink) Finish(ctx context.Context) (Operator, error) {
 	if err := s.closeParts(); err != nil {
 		return nil, err
 	}
-	resident, err := s.residentResult()
+	resident, err := s.residentResult(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1228,7 +1238,12 @@ func (s *hashAggSink) releaseState() {
 // alive what it holds. Released after the answer was built, as it used to be, the
 // account kept every key part until then, whatever ConcatOwned let go of.
 // finishOrdered reads firstSeen, which stays.
-func (s *hashAggSink) residentResult() (*data.Batch, error) {
+func (s *hashAggSink) residentResult(ctx context.Context) (*data.Batch, error) {
+	for _, vs := range s.vspill {
+		if vs != nil {
+			vs.ctx = ctx // a quantile's Finish reads its spilled values back
+		}
+	}
 	nGroups := s.ids.Len()
 	keyParts, accs := s.keyParts, s.accs
 	s.releaseState()

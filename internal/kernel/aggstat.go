@@ -450,6 +450,11 @@ type quantileAcc struct {
 	// Datetime(us) answer, and every other value is itself, 0 meaning 1.
 	out   dtype.DataType
 	scale float64
+
+	// Past its sink's budget its values go to sp, and cnt counts a group's values
+	// there (quantspill.go, step 220).
+	sp  ValueSpill
+	cnt []int
 }
 
 // microsPerDay is a Date's day in a Datetime(us).
@@ -485,6 +490,10 @@ func (a *quantileAcc) Merge(other Accumulator, remap []int32) error {
 		return uerr.Internalf("kernel: cannot merge quantile accumulators with " +
 			"different parameters")
 	}
+	if a.sp != nil || o.sp != nil {
+		// Only a serial sink spills its values: parallel workers go serial first.
+		return uerr.Internalf("kernel: cannot merge a quantile whose values spilled")
+	}
 	a.Reserve(mergeCap(remap, len(o.vals)))
 	mergeEach(remap, len(o.vals), func(dst, src int) {
 		a.vals[dst] = append(a.vals[dst], o.vals[src]...)
@@ -498,13 +507,19 @@ func (a *quantileAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
 	out := make([]float64, nGroups)
 	seen := make([]bool, nGroups)
-	for i := range nGroups {
-		v := a.vals[i]
-		if len(v) == 0 {
-			continue
+	if a.sp != nil {
+		if err := a.finishSpilled(out, seen); err != nil {
+			return nil, err
 		}
-		out[i] = quantileOf(v, a.q, a.interp)
-		seen[i] = true
+	} else {
+		for i := range nGroups {
+			v := a.vals[i]
+			if len(v) == 0 {
+				continue
+			}
+			out[i] = quantileOf(v, a.q, a.interp)
+			seen[i] = true
+		}
 	}
 	if a.out.IsTemporal() {
 		ticks := make([]int64, nGroups)
@@ -592,38 +607,13 @@ func quantileOf(v []float64, q float64, interp expr.Interpolation) float64 {
 	if n == 1 {
 		return v[0]
 	}
-	pos := q * float64(n-1)
-	lo := int(math.Floor(pos))
-	hi := int(math.Ceil(pos))
-	// Guard the ends against a float rank landing a hair outside the slice.
-	lo = max(0, min(lo, n-1))
-	hi = max(0, min(hi, n-1))
-	frac := pos - float64(lo)
-
+	lo, hi, frac := ranks(n, q)
 	selectNth(v, lo)
 	a, b := v[lo], v[lo]
 	if hi > lo {
 		b = minTotalF64(v[lo+1:])
 	}
-
-	switch interp {
-	case expr.InterpLower:
-		return a
-	case expr.InterpHigher:
-		return b
-	case expr.InterpNearest:
-		if frac < 0.5 {
-			return a
-		}
-		return b
-	case expr.InterpMidpoint:
-		return midpoint(a, b)
-	case expr.InterpLinear:
-		return lerp(a, b, frac)
-	}
-	// Agg.Field refuses any other interpolation, and this has no error to return:
-	// an assertion, recovered into ErrInternal. It was the linear arm, silently.
-	panic(uerr.Internalf("kernel: interpolation %d reached the kernel", uint8(interp)))
+	return interpolate(a, b, frac, interp)
 }
 
 // selectNth reorders v so that v[k] is what sorting v under compareTotalF64 would
@@ -721,7 +711,7 @@ func (a *argExtremumAcc) NBytes() int64 {
 // per group, so its state is O(rows) rather than O(groups) — the single place
 // where an aggregation's memory is not bounded by cardinality.
 func (a *quantileAcc) NBytes() int64 {
-	n := int64(cap(a.vals)) * 24 // one slice header per group
+	n := int64(cap(a.vals))*24 + int64(cap(a.cnt))*8 // a slice header and a count per group
 	for _, v := range a.vals {
 		n += int64(cap(v)) * 8
 	}

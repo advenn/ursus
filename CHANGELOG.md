@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.3
 
-Everything since `v0.6.2` (2026-10-12): steps 213–219, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–220, so far.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
 out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
 one session.
@@ -44,6 +44,11 @@ one session.
 - **A `WhereExists` or `WhereNotExists` of a predicate alone spills** (219): a
   keyless Semi or Anti join with a residual writes its build side to a file and
   reads it for each probe batch until each row is decided. It refused.
+- **A median or quantile over a huge group spills its values** (220): over a few hot
+  keys, or over no key, past the budget its values go to sorted run files, which are
+  merged as they gather and read back in one pass at the end. A group-by partitions
+  keys, never the values of one, so it refused. n_unique and implode over a hot key
+  still refuse.
 
 ---
 

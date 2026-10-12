@@ -135,15 +135,8 @@ func (s *hashAggSink) writer(p int) (*partWriter, error) {
 	if w := s.parts[p]; w != nil {
 		return w, nil
 	}
-	if s.dir == "" {
-		dir, err := os.MkdirTemp(s.budget.SpillDir(), "ursus-agg-")
-		if err != nil {
-			return nil, uerr.Wrap(err, uerr.KindResource, "group_by",
-				"creating a spill directory").
-				Hint("choose a writable location with WithSpillDir")
-		}
-		s.dir, s.dirOwner = dir, true
-		s.prefix = filepath.Join(dir, "p")
+	if err := s.ensureDir(); err != nil {
+		return nil, err
 	}
 	path := s.prefix + itoa(p) + ".ursspill"
 	w, err := spill.CreateSized(path, s.spillSchema, partBufBytes)
@@ -154,6 +147,22 @@ func (s *hashAggSink) writer(p int) (*partWriter, error) {
 	s.mem.RetainBytes(partBufBytes)
 	s.budget.NoteSpill()
 	return s.parts[p], nil
+}
+
+// ensureDir creates the spill directory on first use.
+func (s *hashAggSink) ensureDir() error {
+	if s.dir != "" {
+		return nil
+	}
+	dir, err := os.MkdirTemp(s.budget.SpillDir(), "ursus-agg-")
+	if err != nil {
+		return uerr.Wrap(err, uerr.KindResource, "group_by",
+			"creating a spill directory").
+			Hint("choose a writable location with WithSpillDir")
+	}
+	s.dir, s.dirOwner = dir, true
+	s.prefix = filepath.Join(dir, "p")
+	return nil
 }
 
 // closeParts finishes every open writer and records its file.
@@ -230,7 +239,7 @@ func (s *hashAggSink) ordinalOf(in *data.Batch, i int) int64 {
 
 // --- the budget rule ------------------------------------------------------------
 
-// overBudget reports the one kind of pressure the freeze cannot relieve.
+// overBudget reports the pressure neither the freeze nor a spill of values relieves.
 //
 // Before the freeze this is Account.Check verbatim. After it the query is over
 // budget BY CONSTRUCTION — that is what froze it — so a bare Check would fail every
@@ -242,11 +251,25 @@ func (s *hashAggSink) ordinalOf(in *data.Batch, i int) int64 {
 // freeze. The only things that can still grow are the holistic accumulators —
 // quantile keeps every value of a group, n_unique every distinct value, and implode
 // every value again as the answer itself — and radix partitioning divides across
-// KEYS, never within one, so there is nothing left to try.
+// KEYS, never within one.
 //
-// So the property this states is exact rather than heuristic: a spilling group-by
-// refuses exactly when an accumulator's state is O(rows), and never otherwise.
-func (s *hashAggSink) overBudget() error {
+// A quantile's values can go to disk instead (step 220): its answer is two order
+// statistics a group, which values sorted by group read back in one pass. So before
+// refusing, either way, the sink spills the values of every accumulator that keeps
+// them, is charged again, and refuses only if it is still over. What remains is
+// n_unique and implode, whose state per value is the answer or decides it.
+func (s *hashAggSink) overBudget(ctx context.Context) error {
+	if s.budgetErr() == nil {
+		return nil
+	}
+	if err := s.spillValues(ctx); err != nil {
+		return err
+	}
+	return s.budgetErr()
+}
+
+// budgetErr is overBudget without the spill of values.
+func (s *hashAggSink) budgetErr() error {
 	if !s.frozen {
 		return s.mem.Check()
 	}
@@ -259,10 +282,37 @@ func (s *hashAggSink) overBudget() error {
 			"disk and is still holding %s of per-group state for %d resident groups",
 		execopt.Bytes(limit), execopt.Bytes(s.accBytes), s.ids.Len()).
 		Hint("radix partitioning divides work across KEYS, never within one — " +
-			"quantile and median keep every value of a group, n_unique every " +
-			"distinct value, and implode every value as its answer, so a single " +
-			"hot key cannot be spilled").
+			"n_unique keeps every distinct value of a group and implode every value " +
+			"as its answer, so a single hot key cannot be spilled; quantile and " +
+			"median spill their values").
 		Hint("raise the limit with WithMemoryLimit, or use a bounded aggregate")
+}
+
+// spillValues hands the values of every accumulator that keeps them to its spill,
+// and charges the sink again for what it still holds.
+func (s *hashAggSink) spillValues(ctx context.Context) error {
+	for i, a := range s.accs {
+		vs, ok := a.(kernel.ValueSpiller)
+		if !ok {
+			continue
+		}
+		if s.vspill == nil {
+			s.vspill = make([]*valueSpill, len(s.accs))
+		}
+		if s.vspill[i] == nil {
+			if err := s.ensureDir(); err != nil {
+				return err
+			}
+			s.vspill[i] = &valueSpill{budget: s.budget, batch: s.batch,
+				prefix: s.prefix + "v" + itoa(i) + "-"}
+		}
+		s.vspill[i].ctx = ctx
+		if _, err := vs.SpillValues(s.vspill[i]); err != nil {
+			return err
+		}
+	}
+	s.recharge()
+	return nil
 }
 
 // --- replay ----------------------------------------------------------------------
@@ -462,7 +512,7 @@ func (s *hashAggSink) collectOrdered(ctx context.Context, resident *data.Batch,
 			sub.Close()
 			return nil, nil, err
 		}
-		subRes, err := sub.residentResult()
+		subRes, err := sub.residentResult(ctx)
 		if err != nil {
 			sub.Close()
 			return nil, nil, err

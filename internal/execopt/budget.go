@@ -465,9 +465,10 @@ func holdsHint(op string) string {
 		// could not help: either the limit is too small to admit one batch's keys, or
 		// the state that is growing is INSIDE one key. Radix partitioning divides the
 		// key space, so the second kind cannot be partitioned away at any depth.
-		return "group_by holds one entry per distinct key, and quantile, median and " +
-			"n_unique hold state per VALUE — which partitioning to disk cannot divide, " +
-			"because it divides across keys; raise the limit with WithMemoryLimit"
+		return "group_by holds one entry per distinct key, and n_unique and implode " +
+			"hold state per VALUE — which partitioning to disk cannot divide, because " +
+			"it divides across keys (quantile and median spill their values); raise " +
+			"the limit with WithMemoryLimit"
 	case "unique":
 		// unique spills since step 82, so reaching Check means the freeze could not
 		// help: the limit was gone before the first key, or four levels of

@@ -81,10 +81,12 @@ func TestSpillingHashAggMatchesInMemory(t *testing.T) {
 		t.Fatalf("%d groups is too few for a spill to mean anything", want.Height())
 	}
 
-	// The smallest limit is 64 KiB, not lower, and the reason is the point of
-	// TestSpilledQuantileStillRefuses: median and q90 keep every value of every
-	// RESIDENT group, so the post-freeze growth is O(rows in the resident set). Below
-	// ~64 KiB this list refuses — correctly — and the refusal is covered there.
+	// The smallest limit is 64 KiB, not lower. Until step 220 that was because median
+	// and q90 kept every value of every RESIDENT group; they spill their values now
+	// (TestAHotGroupsQuantileSpillsItsValues). What still grows after the freeze is
+	// last's gathered rows, kept a part at a time until enough are dead, and a
+	// quantile's count a group, made at its first spill: at 16 KiB the two alone
+	// pass the limit.
 	for _, limit := range []int64{64 << 10, 256 << 10, 1 << 20} {
 		var stats ursus.MemoryStats
 		got, err := q().Collect(t.Context(),
@@ -538,24 +540,77 @@ func TestGroupBySpillRecursesOnSkew(t *testing.T) {
 	ursustest.AssertFrameEqual(t, got, want, ursustest.IgnoreRowOrder())
 }
 
-// TestSpilledQuantileStillRefuses is the pair that tells the whole story: the
-// freeze bounds CARDINALITY, never per-key state.
-func TestSpilledQuantileStillRefuses(t *testing.T) {
+// TestAHotGroupsQuantileSpillsItsValues: the freeze bounds CARDINALITY, never
+// per-key state, so a quantile over five hot keys refused until step 220. Now its
+// values spill, a run each time the sink is over, and it answers as it does in
+// memory: keyed and not, on one thread and four, maintaining order or not, with
+// NaN, ±Inf and ±0 among the values and nulls among the rows. n_unique, whose state
+// per value decides its answer, still refuses.
+func TestAHotGroupsQuantileSpillsItsValues(t *testing.T) {
 	src := memFrame(t, 20000, 512, 4000)
+	// −2…2 over −1, 0 or 1: NaN, ±Inf and −0 among plain values. Added to 0.0, which
+	// makes a −0 answer +0: the two are one value to a quantile, so which of them a
+	// group's rank lands on is not part of the answer.
+	f := ursus.Col("seq").Mod(int64(5)).Sub(int64(2)).Cast(dtype.Float64).
+		Div(ursus.Col("seq").Mod(int64(3)).Sub(int64(1)).Cast(dtype.Float64))
+	aggs := []ursus.Expr{
+		ursus.Col("seq").Quantile(0.5, ursus.InterpLinear).Alias("q50"),
+		ursus.Col("opt").Median().Alias("med"),
+		f.Quantile(0.9, ursus.InterpNearest).Add(0.0).Alias("f90"),
+		f.Quantile(0.3, ursus.InterpMidpoint).Add(0.0).Alias("f30"),
+		ursus.Col("seq").Cast(dtype.Datetime(dtype.Micro, "")).Median().Alias("tmed"),
+		ursus.Col("seq").Sum().Alias("sum"),
+	}
+	cases := []struct {
+		name string
+		q    func() *ursus.LazyFrame
+	}{
+		{"keyed", func() *ursus.LazyFrame {
+			return ursus.Scan(src).GroupBy(ursus.Col("grp")).Agg(aggs...)
+		}},
+		{"ordered", func() *ursus.LazyFrame {
+			return ursus.Scan(src).GroupBy(ursus.Col("grp")).MaintainOrder().Agg(aggs...)
+		}},
+		{"keyless", func() *ursus.LazyFrame { return ursus.Scan(src).GroupBy().Agg(aggs...) }},
+	}
+	for _, c := range cases {
+		want, err := c.q().Collect(t.Context(), ursus.WithBatchSize(512))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, threads := range []int{1, 4} {
+			var stats ursus.MemoryStats
+			got, err := c.q().Collect(t.Context(), ursus.WithBatchSize(512),
+				ursus.WithThreads(threads), ursus.WithVerify(),
+				ursus.WithMemoryLimit(8<<10), ursus.WithSpillDir(t.TempDir()),
+				ursus.WithMemoryStats(&stats))
+			if err != nil {
+				t.Fatalf("%s on %d threads: %v", c.name, threads, err)
+			}
+			if stats.Spills == 0 {
+				t.Errorf("%s on %d threads: nothing spilled under 8 KiB", c.name, threads)
+			}
+			if c.name == "ordered" {
+				ursustest.AssertFrameEqual(t, got, want)
+			} else {
+				ursustest.AssertFrameEqual(t, got, want, ursustest.IgnoreRowOrder())
+			}
+		}
+	}
 
-	// Five groups over twenty thousand rows: every key is resident, nothing routes,
-	// and a quantile keeps every value of every group.
+	// n_unique over the same keys still refuses: what it holds a value decides its
+	// answer, so there is nothing to put aside.
 	_, err := ursus.Scan(src).GroupBy(ursus.Col("grp")).
-		Agg(ursus.Col("seq").Quantile(0.5, ursus.InterpLinear)).
-		Collect(t.Context(), ursus.WithBatchSize(512),
+		Agg(ursus.Col("seq").NUnique()).
+		Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithThreads(1),
 			ursus.WithMemoryLimit(8<<10), ursus.WithSpillDir(t.TempDir()))
 	if err == nil {
-		t.Fatal("a quantile over five hot keys must still refuse")
+		t.Fatal("n_unique over five hot keys must still refuse")
 	}
 	if !errors.Is(err, uerr.ErrResource) {
 		t.Fatalf("want a resource error, got %v", err)
 	}
-	for _, want := range []string{"group_by", "quantile"} {
+	for _, want := range []string{"group_by", "n_unique"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the message should name %q:\n%v", want, err)
 		}
@@ -576,8 +631,7 @@ func TestSpilledQuantileStillRefuses(t *testing.T) {
 			stats.Spills)
 	}
 
-	// And spilling DOES rescue a quantile when the cardinality is what is large:
-	// each replayed partition's quantile state is bounded by that partition.
+	// And a quantile over many small groups spills by its keys.
 	if _, err := ursus.Scan(src).GroupBy(ursus.Col("k")).
 		Agg(ursus.Col("opt").Quantile(0.5, ursus.InterpLinear).Alias("p")).
 		Collect(t.Context(), ursus.WithBatchSize(512),
@@ -657,19 +711,39 @@ func TestGroupBySpillFilesAreCleanedUp(t *testing.T) {
 		}
 	})
 
-	t.Run("error", func(t *testing.T) {
-		dir := t.TempDir()
-		src := memFrame(t, 20000, 512, 4000)
-		// A quantile over five hot keys refuses partway through, after partitions
-		// for the high-cardinality key have been written.
-		_, _ = ursus.Scan(src).GroupBy(ursus.Col("k")).
-			Agg(ursus.Col("opt").Quantile(0.5, ursus.InterpLinear)).
-			Collect(t.Context(), ursus.WithBatchSize(512),
-				ursus.WithMemoryLimit(8<<10), ursus.WithSpillDir(dir))
-		if n := entries(dir); n != 0 {
-			t.Errorf("%d entries left after an error", n)
-		}
-	})
+	// Each refuses partway through: n_unique keeps every distinct value of a group.
+	// By key, after partitions for the high-cardinality key have been written; by
+	// five hot keys, after a quantile beside it has spilled its values (step 220).
+	for _, c := range []struct {
+		name string
+		key  string
+		aggs []ursus.Expr
+	}{
+		{"error", "k", []ursus.Expr{ursus.Col("seq").NUnique()}},
+		{"error_after_values", "grp", []ursus.Expr{
+			ursus.Col("opt").Quantile(0.5, ursus.InterpLinear).Alias("q"),
+			ursus.Col("seq").NUnique().Alias("n"),
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			src := memFrame(t, 20000, 512, 4000)
+			var stats ursus.MemoryStats
+			_, err := ursus.Scan(src).GroupBy(ursus.Col(c.key)).Agg(c.aggs...).
+				Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithThreads(1),
+					ursus.WithMemoryLimit(8<<10), ursus.WithSpillDir(dir),
+					ursus.WithMemoryStats(&stats))
+			if err == nil {
+				t.Fatal("n_unique over a hot key fitted 8 KiB")
+			}
+			if stats.Spills == 0 {
+				t.Fatal("it refused before anything was written, so nothing is tested")
+			}
+			if n := entries(dir); n != 0 {
+				t.Errorf("%d entries left after an error", n)
+			}
+		})
+	}
 }
 
 // TestDistinctIsAccounted: the seventh buffering operator, which had no account at
