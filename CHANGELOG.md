@@ -15,6 +15,15 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.6.3
+
+Everything since `v0.6.2` (2026-10-12): step 213, so far.
+[`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
+out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
+one session.
+
+---
+
 ## v0.6.2 — 2026-10-12
 
 Everything since `v0.6.1` (2026-10-11): steps 201–212.

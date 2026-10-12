@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"runtime/metrics"
 	"runtime/pprof"
+	"runtime/trace"
 	"sort"
 	"strconv"
 	"strings"
@@ -169,6 +170,12 @@ func ParseArgs() Args {
 		"write a CPU profile of the timed iterations to this file")
 	flag.StringVar(&allocProfile, "allocprofile", "",
 		"write the allocs profile to this file after the timed iterations")
+	flag.StringVar(&traceFile, "trace", "",
+		"write an execution trace of the timed iterations to this file")
+	flag.StringVar(&blockProfile, "blockprofile", "",
+		"write a block profile of the timed iterations to this file")
+	flag.StringVar(&mutexProfile, "mutexprofile", "",
+		"write a mutex profile of the timed iterations to this file")
 	flag.Parse()
 
 	for _, name := range strings.Split(checksum, ",") {
@@ -280,6 +287,14 @@ var (
 // the process started, by site — written after the timed iterations. It answers
 // what heapProfile cannot: not what is live at the peak, but what churns.
 var cpuProfile, allocProfile string
+
+// traceFile, blockProfile and mutexProfile cover the timed iterations, as
+// cpuProfile does, and answer what it cannot: where goroutines wait rather than run.
+// A CPU profile samples only running goroutines, so a reader whose workers sit
+// blocked shows as fewer busy cores and nothing else (v0.6.3 step 213). A trace
+// records every block and unblock; the block and mutex profiles are its cheap
+// summaries, by stack.
+var traceFile, blockProfile, mutexProfile string
 
 func startHeapSampler() *heapSampler {
 	h := &heapSampler{stop: make(chan struct{}), done: make(chan struct{})}
@@ -421,6 +436,22 @@ func execute(a Args, build Build, out *payload) error {
 			return err
 		}
 	}
+	if traceFile != "" {
+		f, err := os.Create(traceFile)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		if err := trace.Start(f); err != nil {
+			return err
+		}
+	}
+	if blockProfile != "" {
+		runtime.SetBlockProfileRate(1)
+	}
+	if mutexProfile != "" {
+		runtime.SetMutexProfileFraction(1)
+	}
 	var answer Answer
 	for i := 0; i < a.Iterations; i++ {
 		started := time.Now()
@@ -446,6 +477,21 @@ func execute(a Args, build Build, out *payload) error {
 	}
 	if cpuProfile != "" {
 		pprof.StopCPUProfile()
+	}
+	if traceFile != "" {
+		trace.Stop()
+	}
+	if blockProfile != "" {
+		runtime.SetBlockProfileRate(0)
+		if err := writeProfile("block", blockProfile); err != nil {
+			return err
+		}
+	}
+	if mutexProfile != "" {
+		runtime.SetMutexProfileFraction(0)
+		if err := writeProfile("mutex", mutexProfile); err != nil {
+			return err
+		}
 	}
 	if allocProfile != "" {
 		if err := writeProfile("allocs", allocProfile); err != nil {
