@@ -52,6 +52,8 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return horizontalReduce(fn, name, ops, n)
 	case expr.FnAnyHorizontal, expr.FnAllHorizontal:
 		return horizontalKleene(fn == expr.FnAllHorizontal, name, ops, n)
+	case expr.FnDtCombine:
+		return dtCombine(name, out, ops[0], ops[1], n)
 	}
 	return nil, uerr.Internalf("kernel: no horizontal kernel for %s", fn)
 }

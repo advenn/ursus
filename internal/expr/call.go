@@ -99,6 +99,7 @@ const (
 	// Step 174: replace_time_zone's args are the zone, "" for none, then the
 	// ambiguous and non_existent policies, in Polars' words (ZonePolicies).
 	FnDtReplaceTimeZone
+	FnDtDaysInMonth // the month's length, read in the column's zone (step 230)
 	fnDtEnd
 
 	// --- type-agnostic ---
@@ -231,6 +232,10 @@ const (
 	FnMeanHorizontal
 	FnAnyHorizontal
 	FnAllHorizontal
+
+	// A Date's or Datetime's day with a Time of day (step 230): its second operand
+	// is a column, so it takes this family's shape.
+	FnDtCombine
 	fnHorizontalEnd
 )
 
@@ -277,7 +282,7 @@ var callNames = map[CallFn]string{
 	FnDtStrftime: "dt.strftime", FnDtOffsetBy: "dt.offset_by", FnDtRound: "dt.round",
 	FnDtMonthStart: "dt.month_start", FnDtMonthEnd: "dt.month_end",
 	FnDtIsLeapYear: "dt.is_leap_year", FnDtConvertTimeZone: "dt.convert_time_zone",
-	FnDtReplaceTimeZone: "dt.replace_time_zone",
+	FnDtReplaceTimeZone: "dt.replace_time_zone", FnDtDaysInMonth: "dt.days_in_month",
 
 	FnIsIn: "is_in",
 
@@ -304,6 +309,7 @@ var callNames = map[CallFn]string{
 	FnMaxHorizontal: "max_horizontal", FnMinHorizontal: "min_horizontal",
 	FnSumHorizontal: "sum_horizontal", FnMeanHorizontal: "mean_horizontal",
 	FnAnyHorizontal: "any_horizontal", FnAllHorizontal: "all_horizontal",
+	FnDtCombine: "dt.combine",
 
 	FnStructField: "struct.field", FnStructRenameFields: "struct.rename_fields",
 	FnReplace: "replace", FnReplaceStrict: "replace_strict", FnReplaceOr: "replace_or",
@@ -533,6 +539,28 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			}
 		}
 		return dtype.Bool, nil
+
+	case FnDtCombine:
+		if len(ops) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		if t := ops[1].Type; t.ID() != dtype.TypeTime && !t.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"%s takes a Time of day, got %s (%s)", fn, t, ops[1].Name).
+				Hint("cast it first, e.g. .Cast(ursus.Time(ursus.Nano))")
+		}
+		// The receiver's own unit, a Date's microseconds, and its zone: Polars
+		// answers microseconds unless asked, and a Cast gives another unit.
+		switch in := ops[0].Type; in.ID() {
+		case dtype.TypeDate:
+			return dtype.Datetime(dtype.Micro, ""), nil
+		case dtype.TypeDatetime:
+			return in, nil
+		default:
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"%s requires a Date or Datetime operand, got %s", fn, in).
+				Hint("a Time has no day to combine with")
+		}
 
 	case FnListGather, FnListGatherOrNull:
 		if len(ops) != 2 {
@@ -888,7 +916,7 @@ func dtCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		}
 		return truncateOut(c, in)
 
-	case FnDtOffsetBy, FnDtMonthStart, FnDtMonthEnd, FnDtIsLeapYear:
+	case FnDtOffsetBy, FnDtMonthStart, FnDtMonthEnd, FnDtIsLeapYear, FnDtDaysInMonth:
 		// A Time has no date to move or to read a year from.
 		if in.ID() != dtype.TypeDate && in.ID() != dtype.TypeDatetime {
 			e := uerr.New(uerr.KindType, "dt", "%s requires a Date or Datetime operand, got %s", fn, in)
@@ -900,6 +928,9 @@ func dtCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		switch fn {
 		case FnDtIsLeapYear:
 			return dtype.Bool, nil
+		case FnDtDaysInMonth:
+			// Int8, as Polars': a month has 28 to 31 days.
+			return dtype.Int8, nil
 		case FnDtOffsetBy:
 			args, err := CallArgs(c)
 			if err != nil {

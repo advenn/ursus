@@ -634,8 +634,8 @@ func TestCalendarAgainstTheOracle(t *testing.T) {
 	t.Logf("%d answers checked", checked)
 }
 
-// TestACalendarRefusalIsNotPushedPastAJoin: offset_by, round, month_start and
-// month_end refuse an answer the type cannot hold, so, like a strict cast, they must
+// TestACalendarRefusalIsNotPushedPastAJoin: offset_by, round, month_start,
+// month_end and combine refuse an answer the type cannot hold, so, like a strict cast, they must
 // not run on rows the join removes before them (internal/plan/fallible.go). Pushed
 // into the join's left side, each meets a row it refuses.
 func TestACalendarRefusalIsNotPushedPastAJoin(t *testing.T) {
@@ -652,6 +652,8 @@ func TestACalendarRefusalIsNotPushedPastAJoin(t *testing.T) {
 		ursus.Col("ts").Dt().Round(ursus.Every("1d")),
 		ursus.Col("ts").Dt().MonthStart(),
 		ursus.Col("ts").Dt().MonthEnd(),
+		// 23:59 on 2262-04-11 is past Datetime(ns)'s last instant (step 230).
+		ursus.Col("ts").Dt().Combine(ursus.Lit(int64((23*3600 + 59*60) * 1e9)).Cast(dtype.Time(dtype.Nano))),
 	} {
 		df, err := ursus.Frame(data.NewFixed("ts", ns, ticks, bitmap.AllSet(3)),
 			ursus.Values("k", []int64{1, 2, 3})).

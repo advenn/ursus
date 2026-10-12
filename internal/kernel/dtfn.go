@@ -139,6 +139,27 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 	}
 
 	loc := locationOf(dt)
+	if fn == expr.FnDtDaysInMonth {
+		// The month's length, read in the column's zone, as the year is below.
+		if !isDateLike(dt) {
+			return nil, uerr.Internalf("kernel: %s on %s", fn, dt)
+		}
+		days := make([]int8, n)
+		for i, t := range ticks {
+			if !valid.Get(i) {
+				continue
+			}
+			tm, ok := dt.ToTime(t)
+			if !ok {
+				return nil, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
+			}
+			if loc != nil {
+				tm = tm.In(loc)
+			}
+			days[i] = int8(time.Date(tm.Year(), tm.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day())
+		}
+		return data.NewFixed(name, dtype.Int8, days, valid), nil
+	}
 	if fn == expr.FnDtIsLeapYear {
 		if !isDateLike(dt) {
 			return nil, uerr.Internalf("kernel: %s on %s", fn, dt)

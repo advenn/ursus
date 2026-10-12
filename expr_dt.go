@@ -181,6 +181,19 @@ func (d DtExpr) MonthEnd() Expr { return d.call(expr.FnDtMonthEnd) }
 // read in the column's own zone.
 func (d DtExpr) IsLeapYear() Expr { return d.call(expr.FnDtIsLeapYear) }
 
+// DaysInMonth is the number of days in a Date's or Datetime's month, 28 to 31, the
+// month read in the column's own zone: Polars' dt.days_in_month, an Int8.
+func (d DtExpr) DaysInMonth() Expr { return d.call(expr.FnDtDaysInMonth) }
+
+// Combine puts each row's day together with the Time of day in t, a column or a
+// literal: Polars' dt.combine. A Date makes a Datetime(us); a Datetime keeps its
+// unit and zone, its day read on its own wall clock, where Polars answers
+// microseconds unless asked, and a Cast gives another unit. In a zone, a wall clock
+// the zone skips or repeats fails the query, as Polars' does.
+func (d DtExpr) Combine(t Expr) Expr {
+	return wrap(&expr.Call{Fn: expr.FnDtCombine, Args: []expr.Node{d.e.node(), t.node()}})
+}
+
 // ConvertTimeZone reads a zoned Datetime's instants in another zone: the same
 // instants, whose components, Strftime and rendering now follow tz. Polars'
 // dt.convert_time_zone.

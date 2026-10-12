@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.3
 
-Everything since `v0.6.2` (2026-10-12): steps 213–229, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–230, so far.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
 out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
 one session.
@@ -88,6 +88,8 @@ one session.
   columns come from the data: a pivot in Polars' row and column order and naming,
   refusing a cell of two values without an aggregate; a transpose at the type every
   column meets at.
+- **`Dt().DaysInMonth()` and `Dt().Combine(t)`** (230): a month's length, and a
+  day with a Time of day, read and written on the column's own wall clock.
 
 ---
 
