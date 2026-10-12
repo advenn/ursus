@@ -15,12 +15,42 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.6.3
+## v0.6.3 — untagged
 
-Everything since `v0.6.2` (2026-10-12): steps 213–231, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–232.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
-out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
-one session.
+out-of-core, and features.** Each step was timed against 0.6.2's code, alternated in
+one session, and step 232 measured the whole.
+
+### Where it ends
+
+- **Against v0.6.2,** both built alike and alternated over PDS-H at SF=1: 7.6% less
+  wall time by geomean, 2.2% more CPU, the Parquet reader decoding ahead. q11 takes
+  30% less time, q4 22%, q15, q21 and q12 15 to 17%. Over h2o, gb1 takes 31% less,
+  gb4 24%, gb5 8%.
+- **The scope's claims:** PDS-H at least 7% faster by wall time, no query slower
+  beyond about 5%, and q1's and gb4's peak memory within +100 MB, **met**; gb4 at
+  least 35% faster, **not met**, at 24%: it is bound by this laptop's four cores.
+- **Against Polars, in one session,** every answer validated against DuckDB's:
+
+  | suite | ursus | Polars | ratio | at v0.6.2 |
+  | --- | --: | --: | --: | --: |
+  | PDS-H SF=1 | 148 ms | 76 ms | 1.94× | 2.07× |
+  | PDS-H SF=0.1 | 18 ms | 10 ms | 1.82× | 2.76× |
+  | h2o 10M, Parquet | 928 ms | 774 ms | 1.20× | 1.52× |
+  | h2o 10M, CSV | 2,535 ms | 1,434 ms | 1.77× | 1.65× |
+
+  The laptop was short of memory, and both engines ran h2o slower than in 0.6.2's
+  session, by different amounts. The h2o ratios measure that session, and the
+  alternated runs what 0.6.3 changed: faster than 0.6.2 over Parquet and CSV.
+- **Out of core:** tail, hstack, a keyless `WhereExists` with a predicate, a median or
+  quantile over a few huge groups, and ewm and a reversed `cum_count` over one huge
+  partition, each past a limit that refused it before.
+- **Features:** the list namespace's set operations, `Gather`, `ToStruct`,
+  `NUnique`, `ArgMin` and `ArgMax`; six horizontal reductions; `Replace` and its
+  strict forms; rolling median and quantile; eager `Pivot` and `Transpose`;
+  `DaysInMonth`, `Combine`, `RenameFields` and `JsonEncode`. Each answers as Polars
+  does, checked against its answers, except where its docs say otherwise.
 
 ### Faster
 
@@ -93,6 +123,31 @@ one session.
 - **`Struct().JsonEncode()`** (231): each struct as a JSON object, floats in their
   shortest form, NaN as null, strings escaped, temporals and Decimals as the text
   their String cast gives.
+
+
+### Known limitations
+
+As v0.6.2's, except:
+
+- **Operators that do not spill,** each failing under a budget with an error naming
+  itself:
+  - a window, with or without a `partition_by`, whose one partition is larger than
+    the limit and that computes a rank, an interpolation, a reversed cumulative
+    function other than `cum_count`, an unlimited backward fill or a rolling window
+    by time, or that is ordered;
+  - n_unique and implode over a few very large groups.
+- **What streams but holds its answer:** a keyed `Rolling` or `GroupByDynamic`, which
+  gives its answer per bucket.
+- **Spilling a keyed window** needs about 128 KiB for its partition writers, past any
+  limit set below that.
+- **Speed:** 1.94× Polars on PDS-H at SF=1. The widest gaps are q7 at 3.9×, q19 at
+  3.3×, q16 at 3.2× and q15 at 3.1×; over h2o, the joins at 1.6 to 2.0×. On this
+  four-core laptop the queries the reader no longer waits on are bound by the CPU.
+- **Memory:** with no limit set, h2o's `gb10` peaks at 6.8 GB over Parquet and 8.2 GB
+  over CSV; Polars at 4.7 and 5.1 GB. The read-ahead adds up to about 90 MB to a
+  Parquet query's peak.
+- **Pivot and Transpose are eager only,** their columns coming from the data, which a
+  lazy plan's schema cannot wait for.
 
 ---
 
