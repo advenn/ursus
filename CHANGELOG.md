@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ---
 
-## v0.6.3 — untagged
+## v0.6.3 — 2026-10-12
 
 Everything since `v0.6.2` (2026-10-12): steps 213–232.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
