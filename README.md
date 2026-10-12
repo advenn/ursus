@@ -159,8 +159,8 @@ required, and `Explain` shows it. Your function is called from several goroutine
 once, so it must be safe for that.
 
 Not done: built-in object stores and SQL, both out by decision (the seam above reaches a store today); `MapGroups`
-and `RollingMap`; `Pivot`, whose output columns are the distinct values of a column, so its schema would depend on data
-and no plan node here does (`Unpivot`, melt, ships); `Upsample`; `Sample` and
+and `RollingMap`; a lazy `Pivot`, whose output columns are the distinct values of a column, so its schema would depend on
+data and no plan node here does (`Unpivot` ships, and `DataFrame.Pivot` and `Transpose` eagerly); `Upsample`; `Sample` and
 `List().Eval`; a rolling rank, and a rolling window by an integer `by`; Spearman's correlation;
 Arrow IPC files and NDJSON. [`v0.6-scope.md`](./context_files/v0.6-scope.md) says why each waits.
 

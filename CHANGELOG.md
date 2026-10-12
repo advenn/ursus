@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.3
 
-Everything since `v0.6.2` (2026-10-12): steps 213–228, so far.
+Everything since `v0.6.2` (2026-10-12): steps 213–229, so far.
 [`v0.6.3-scope.md`](./context_files/v0.6.3-scope.md) set the scope: **wall-time speed,
 out-of-core, and features.** Each step is timed against 0.6.2's code, alternated in
 one session.
@@ -84,6 +84,10 @@ one session.
   `HStack`, `VStack`, `JoinAsOf`, `MergeSorted`, `Explode`, `Unnest`,
   `WithRowIndex` and `Remove`; `GroupBy`, `GroupByDynamic` and `Rolling` start the
   lazy builder.
+- **`DataFrame.Pivot` and `DataFrame.Transpose`** (229), eager only since their
+  columns come from the data: a pivot in Polars' row and column order and naming,
+  refusing a cell of two values without an aggregate; a transpose at the type every
+  column meets at.
 
 ---
 
