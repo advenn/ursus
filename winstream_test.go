@@ -23,7 +23,8 @@ import (
 //   - shifts back and forward, with a fill, and a diff, which is a shift;
 //   - forward fills with and without a limit, and a backward fill with one, over
 //     runs of nulls longer than a batch;
-//   - rolling windows of rows, centred and with a minimum count.
+//   - rolling windows of rows, centred and with a minimum count, and a rolling
+//     median and quantile (step 227).
 //
 // 20,000 rows in batches of 64 under a 16 KiB limit, frame-equal to the answer
 // without a limit.
@@ -55,6 +56,8 @@ func TestUnpartitionedWindowsStreamPastTheirLimit(t *testing.T) {
 		c("v").ForwardFill(0).Alias("ff"), c("v").ForwardFill(2).Alias("ff2"), c("v").BackwardFill(3).Alias("bf3"),
 		c("f").RollingSum(5).Alias("rs"), c("f").RollingMean(4, ursus.RollingCenter()).Alias("rm"),
 		c("f").RollingMin(6, ursus.MinSamples(2)).Alias("rmin"),
+		c("f").RollingMedian(5).Alias("rmed"),
+		c("v").RollingQuantile(0.9, ursus.InterpNearest, 7, ursus.RollingCenter(), ursus.MinSamples(2)).Alias("rq"),
 	)
 	want, err := lf.Collect(t.Context(), ursus.WithBatchSize(64))
 	if err != nil {

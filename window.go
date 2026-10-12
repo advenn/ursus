@@ -265,6 +265,25 @@ func (e Expr) RollingStd(size int, opts ...WindowOption) Expr {
 	return e.rolling(expr.WinRollingStd, size, 1, opts)
 }
 
+// RollingMedian and RollingQuantile answer each row over the size rows up to and
+// including it, as the rolling functions above do: the median, and the q-quantile
+// interpolated as interp says, of the window's values (step 227). Polars'
+// rolling_median and rolling_quantile; Polars' rolling_quantile defaults to
+// InterpNearest. Each answers as Median and Quantile do over the window: NaN is the
+// largest value, as in Polars, and the answer is a Float64, where Polars keeps a
+// Float32 window a Float32.
+func (e Expr) RollingMedian(size int, opts ...WindowOption) Expr {
+	return e.rolling(expr.WinRollingMedian, size, 0, opts)
+}
+
+func (e Expr) RollingQuantile(q float64, interp Interpolation, size int, opts ...WindowOption) Expr {
+	p := expr.WinParams{N: int64(size), Q: q, Interp: interp}
+	for _, o := range opts {
+		o(&p)
+	}
+	return e.winFn(expr.WinRollingQuantile, p)
+}
+
 func (e Expr) rolling(fn expr.WinFnOp, size int, ddof int64, opts []WindowOption) Expr {
 	p := expr.WinParams{N: int64(size), Ddof: ddof}
 	for _, o := range opts {
@@ -292,8 +311,8 @@ func (e Expr) rolling(fn expr.WinFnOp, size int, ddof int64, opts []WindowOption
 // day, and FromDuration(24*time.Hour) twenty-four hours. The answers' types are the
 // rolling functions' of the same names.
 //
-// Where Polars differs: it also takes an integer by, with a period such as "2i",
-// and RollingMedianBy and RollingQuantileBy; and it answers the sum of a window
+// Where Polars differs: it also takes an integer by, with a period such as "2i";
+// and it answers the sum of a window
 // holding no value, one empty under closed="left" or "none" or one whose rows are
 // all null, as 0.0, although min_samples is 1. Here that window is null.
 func (e Expr) RollingSumBy(by Expr, period Interval, opts ...WindowOption) Expr {
@@ -318,6 +337,19 @@ func (e Expr) RollingVarBy(by Expr, period Interval, opts ...WindowOption) Expr 
 
 func (e Expr) RollingStdBy(by Expr, period Interval, opts ...WindowOption) Expr {
 	return e.rollingBy(expr.WinRollingStd, by, period, 1, opts)
+}
+
+// RollingMedianBy and RollingQuantileBy are RollingMedian and RollingQuantile over
+// the windows of RollingSumBy and its kin (step 227): Polars' rolling_median_by and
+// rolling_quantile_by.
+func (e Expr) RollingMedianBy(by Expr, period Interval, opts ...WindowOption) Expr {
+	return e.rollingBy(expr.WinRollingMedian, by, period, 0, opts)
+}
+
+func (e Expr) RollingQuantileBy(q float64, interp Interpolation, by Expr, period Interval,
+	opts ...WindowOption) Expr {
+	return e.rollingBy(expr.WinRollingQuantile, by, period, 0,
+		append([]WindowOption{func(p *expr.WinParams) { p.Q, p.Interp = q, interp }}, opts...))
 }
 
 func (e Expr) rollingBy(fn expr.WinFnOp, by Expr, period Interval, ddof int64, opts []WindowOption) Expr {

@@ -290,6 +290,10 @@ const (
 	WinRollingMax
 	WinRollingVar
 	WinRollingStd
+	// A median and a quantile of the window's values (step 227): Params.Q and
+	// Params.Interp, a median's 0.5 and linear.
+	WinRollingMedian
+	WinRollingQuantile
 
 	// The exponentially weighted functions (step 153), Polars' and pandas' ewm_*:
 	// each row's answer over every row of its partition up to it, weighted by
@@ -313,6 +317,7 @@ var winFnNames = [winFnCount]string{
 	WinRollingSum: "rolling_sum", WinRollingMean: "rolling_mean",
 	WinRollingMin: "rolling_min", WinRollingMax: "rolling_max",
 	WinRollingVar: "rolling_var", WinRollingStd: "rolling_std",
+	WinRollingMedian: "rolling_median", WinRollingQuantile: "rolling_quantile",
 	WinEwmMean: "ewm_mean", WinEwmStd: "ewm_std", WinEwmVar: "ewm_var",
 	WinInterpolate: "interpolate",
 }
@@ -334,7 +339,7 @@ func (o WinFnOp) String() string {
 func (o WinFnOp) IsCumulative() bool { return o >= WinCumSum && o <= WinCumMax }
 
 // IsRolling reports whether the op is over a fixed number of rows up to each.
-func (o WinFnOp) IsRolling() bool { return o >= WinRollingSum && o <= WinRollingStd }
+func (o WinFnOp) IsRolling() bool { return o >= WinRollingSum && o <= WinRollingQuantile }
 
 // IsEwm reports whether the op is exponentially weighted.
 func (o WinFnOp) IsEwm() bool { return o >= WinEwmMean && o <= WinEwmVar }
@@ -396,6 +401,10 @@ type WinParams struct {
 	MinSamples int64
 	Ddof       int64
 
+	// Q and Interp are rolling_quantile's quantile and interpolation (step 227).
+	Q      float64
+	Interp Interpolation
+
 	// Center labels a rolling window at its middle row rather than its last, as
 	// Polars' center=True; Nearest is Interpolate's method="nearest" (step 172).
 	Center  bool
@@ -438,8 +447,11 @@ func (p WinParams) args(op WinFnOp) string {
 		// Every parameter the answer depends on, for the reason the arm above gives.
 		return window(p) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10) +
 			", ddof " + strconv.FormatInt(p.Ddof, 10) + centered(p)
-	case WinRollingSum, WinRollingMean, WinRollingMin, WinRollingMax:
+	case WinRollingSum, WinRollingMean, WinRollingMin, WinRollingMax, WinRollingMedian:
 		return window(p) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10) + centered(p)
+	case WinRollingQuantile:
+		return strconv.FormatFloat(p.Q, 'g', -1, 64) + ", " + p.Interp.String() + ", " +
+			window(p) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10) + centered(p)
 	case WinInterpolate:
 		if p.Nearest {
 			return "nearest"
@@ -627,7 +639,14 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 	case WinShift, WinForwardFill, WinBackwardFill:
 		return in, nil
 
-	case WinRollingSum, WinRollingMean, WinRollingMin, WinRollingMax, WinRollingVar, WinRollingStd:
+	case WinRollingSum, WinRollingMean, WinRollingMin, WinRollingMax, WinRollingVar, WinRollingStd,
+		WinRollingMedian, WinRollingQuantile:
+		if fn == WinRollingQuantile && (!(p.Q >= 0 && p.Q <= 1) || !p.Interp.Valid()) {
+			return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
+				"%s needs a quantile in [0, 1] and a known interpolation, got %v and %s",
+				fn, p.Q, p.Interp).
+				Hint("e.g. RollingQuantile(0.9, ursus.InterpNearest, 10)")
+		}
 		return rollingOut(fn, p, in)
 
 	case WinEwmMean, WinEwmStd, WinEwmVar, WinInterpolate:
@@ -768,7 +787,8 @@ func rollingValueOut(fn WinFnOp, in dtype.DataType) (dtype.DataType, error) {
 			Hint("cast it first, e.g. .Cast(ursus.Float64)")
 	}
 	op := map[WinFnOp]AggOp{WinRollingSum: AggSum, WinRollingMean: AggMean,
-		WinRollingVar: AggVar, WinRollingStd: AggStd}[fn]
+		WinRollingVar: AggVar, WinRollingStd: AggStd, WinRollingMedian: AggMedian,
+		WinRollingQuantile: AggQuantile}[fn]
 	b, err := ResolveAggBinding(op, in)
 	if err != nil {
 		return dtype.Null, cumulativeErr(fn, in, err)

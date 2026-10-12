@@ -76,6 +76,8 @@ func rollingOver(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.
 		return rollingExtremum(fn == expr.WinRollingMax, name, col, seg, win, minN)
 	case fn == expr.WinRollingSum && out.Physical().ID() == dtype.TypeInt128:
 		return rollingIntSum(name, out, col, seg, win, minN)
+	case fn == expr.WinRollingMedian || fn == expr.WinRollingQuantile:
+		return rollingQuantile(fn, params, name, out, col, seg, win, minN)
 	}
 	return rollingFloat(fn, int(params.Ddof), name, out, col, seg, win, minN)
 }
