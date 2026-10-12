@@ -27,16 +27,17 @@ import (
 //     context around it: Shift by n, the n rows before or after; a rolling window of
 //     N rows, the N before, and after when centred; a fill with a limit, that many.
 //     A cumulative function, and a fill without a limit, carry their last answer
-//     instead: it leads the next batch, which the kernel then continues from.
+//     instead: it leads the next batch, which the kernel then continues from;
+//   - an ewm function carries its running state, seven scalars (step 221), and
+//     cum_count only a count: reversed, it counts down from the file's rows.
 //
 // So past the limit the input is written to one file, and read back a batch at a
 // time, each function run by the ordinary kernel over the batch and its context,
 // and its answer for the batch sliced out. The rows keep their order, the file's.
 //
-// Rank, the ewm functions, interpolation, a backward fill without a limit, a
-// reversed cumulative function, a rolling window by time and an ordered window need
-// the whole partition, or an unbounded part of it, and still refuse; so does a
-// window with a partition_by whose one partition is over the limit.
+// Rank, interpolation, a backward fill without a limit, a reversed cumulative
+// function other than cum_count, a rolling window by time and an ordered window need
+// the whole partition, or an unbounded part of it, and still refuse.
 
 // winNeed is what an ordered function needs around a batch to answer it exactly: h
 // rows before and l after, or, with carry, its own last answer.
@@ -44,6 +45,7 @@ type winNeed struct {
 	h, l  int
 	carry bool // a cumulative function, or a forward fill without a limit
 	count bool // cum_count, which numbers on from the rows before
+	ewm   bool // an ewm function, which carries its running state
 }
 
 // streamNeed is spec sp's need, and false when no bounded one answers it.
@@ -57,7 +59,9 @@ func streamNeed(sp *winSpec) (winNeed, bool) {
 	}
 	switch {
 	case fn == expr.WinCumCount:
-		return winNeed{count: true}, !p.Reverse
+		return winNeed{count: true}, true
+	case fn.IsEwm():
+		return winNeed{ewm: true}, true
 	case fn.IsCumulative():
 		return winNeed{carry: true}, !p.Reverse
 	case fn == expr.WinShift:
@@ -167,12 +171,13 @@ func (s *windowSink) chargeOneSpill() error {
 
 // finishOneSpill closes the file and returns the operator that reads it back.
 func (s *windowSink) finishOneSpill() (Operator, error) {
+	rows := s.oneW.Rows()
 	err := s.oneW.Close()
 	s.oneW = nil
 	if err != nil {
 		return nil, uerr.Wrap(err, uerr.KindIO, "over", "spilling a window's rows")
 	}
-	op := &winStreamOp{schema: s.schema, inSchema: s.inSchema, file: s.oneFile}
+	op := &winStreamOp{schema: s.schema, inSchema: s.inSchema, file: s.oneFile, rows: rows}
 	for i := range s.specs {
 		sp := &s.specs[i]
 		st := &winStreamSpec{sp: sp}
@@ -198,10 +203,11 @@ type winStreamSpec struct {
 	need winNeed
 	agg  *data.Column // an aggregate's one value
 
-	hist  *data.Column // the last h rows of the child before the batch
-	histF *data.Column // and of the fill
-	last  *data.Column // carry: the last answer that held a value, one row
-	n     int64        // count: rows numbered so far
+	hist  *data.Column    // the last h rows of the child before the batch
+	histF *data.Column    // and of the fill
+	last  *data.Column    // carry: the last answer that held a value, one row
+	n     int64           // count: rows numbered so far
+	ewm   kernel.EwmState // ewm: the running state
 }
 
 // winStreamOp reads a window's spilled rows back, a batch at a time, with the window
@@ -210,6 +216,7 @@ type winStreamOp struct {
 	schema   *dtype.Schema
 	inSchema *dtype.Schema
 	file     string
+	rows     int64 // in the file: a reversed cum_count counts down from them
 	specs    []*winStreamSpec
 	maxL     int // the most rows any function needs after a batch
 
@@ -294,7 +301,11 @@ func (p *winStreamOp) answer(ctx context.Context, st *winStreamSpec, target *dat
 	if st.need.count {
 		vals := make([]uint32, n)
 		for i := range vals {
-			vals[i] = uint32(st.n + int64(i) + 1)
+			if sp.fn.Params.Reverse {
+				vals[i] = uint32(p.rows - st.n - int64(i))
+			} else {
+				vals[i] = uint32(st.n + int64(i) + 1)
+			}
 		}
 		st.n += int64(n)
 		return data.NewFixedOwned(sp.name, dtype.Uint32, vals, bitmap.AllSet(n)), nil
@@ -305,6 +316,9 @@ func (p *winStreamOp) answer(ctx context.Context, st *winStreamSpec, target *dat
 	}
 	if st.need.carry {
 		return p.carried(st, child)
+	}
+	if st.need.ewm {
+		return kernel.EwmNext(sp.fn.Fn, sp.fn.Params, sp.name, sp.out, child, &st.ewm)
 	}
 	// The context: the last h rows before, the batch, and the first l after.
 	parts := []*data.Column{}

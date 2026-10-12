@@ -397,8 +397,8 @@ func (a *Account) Check() error {
 		Hint("%s", holdsHint(a.op)).
 		Hint("sort, group_by, join, unique, over, reverse and tail spill to disk; " +
 			"join_asof, merge_sorted, hstack, rolling and group_by_dynamic stream " +
-			"their input; an unpartitioned over computing a rank, an ewm or an " +
-			"interpolation fails rather than exceed the limit")
+			"their input; an unpartitioned over computing a rank, a reversed " +
+			"cumulative function or an interpolation fails rather than exceed the limit")
 }
 
 // Release drops everything this account holds.

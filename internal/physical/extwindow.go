@@ -63,8 +63,9 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 			return s.refuse("a window with no partition_by is one partition, which partitioning "+
 				"to disk cannot divide, and this one computes a function that needs all of it "+
 				"or mixes it with a partition_by",
-				"aggregates, cumulative functions, Shift, the fills with a limit and rolling "+
-					"windows of rows stream past the limit; rank, ewm, interpolation and "+
+				"aggregates, cumulative functions, cum_count either way, ewm, Shift, the "+
+					"fills with a limit and rolling windows of rows stream past the limit; "+
+					"rank, interpolation, the other reversed cumulative functions and "+
 					"ordered windows do not. Give the window a partition_by, or raise the "+
 					"limit with WithMemoryLimit")
 		}
@@ -78,9 +79,10 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 		return s.refuse("one partition holds more rows than the limit, and partitioning to disk "+
 			"divides partitions, not the rows of one; this one computes a function that "+
 			"needs all of it at once",
-			"aggregates, cumulative functions, Shift, the fills with a limit and rolling "+
-				"windows of rows stream a partition past the limit; rank, ewm, interpolation "+
-				"and ordered windows do not. Raise the limit with WithMemoryLimit")
+			"aggregates, cumulative functions, cum_count either way, ewm, Shift, the "+
+				"fills with a limit and rolling windows of rows stream a partition past the "+
+				"limit; rank, interpolation, the other reversed cumulative functions and "+
+				"ordered windows do not. Raise the limit with WithMemoryLimit")
 	}
 	return s.startSpill(ctx)
 }

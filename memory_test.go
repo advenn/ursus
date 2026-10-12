@@ -887,7 +887,8 @@ func TestReverseSpillsUnderATenthOfItsInput(t *testing.T) {
 // TestAKeyedWindowStreamsItsOneHugePartition: a window whose partition_by has one key
 // with most of the rows splits that key off a level down, streams it as a window
 // with no partition_by streams its frame, and merges it back with the other keys'
-// answer on the ordinal (step 209), where it refused. Under a tenth of the input,
+// answer on the ordinal (step 209), where it refused. A reversed cum_count and an
+// ewm mean stream with it since step 221. Under a tenth of the input,
 // on one thread and on four, the answer is the in-memory one, row for row.
 //
 // The input is forty frames of 500 rows, not one: a batch sliced from one frame
@@ -924,6 +925,8 @@ func TestAKeyedWindowStreamsItsOneHugePartition(t *testing.T) {
 		c("f").RollingMean(5).Over(c("k")).Alias("smooth"),
 		c("f").ForwardFill(3).Over(c("k")).Alias("filled"),
 		c("seq").CumCount(false).Over(c("k")).Alias("nth"),
+		c("seq").CumCount(true).Over(c("k")).Alias("left"),
+		c("f").EwmMean(ursus.EwmAlpha(0.2)).Over(c("k")).Alias("ewm"),
 	)
 	in, err := frame.Collect(t.Context())
 	if err != nil {

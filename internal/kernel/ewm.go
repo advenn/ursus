@@ -35,11 +35,61 @@ import (
 func winEwm(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
 	col *data.Column, seg Segments) (*data.Column, error) {
 
+	e, err := newEwmRun(fn, params, col)
+	if err != nil {
+		return nil, err
+	}
+	forEachOrdered(seg, false, func(rows []int32) {
+		var st EwmState
+		for _, row := range rows {
+			e.step(&st, int(row))
+		}
+	})
+	return floatsAs(name, out, e.res, seenBitmap(e.ok, len(e.ok))), nil
+}
+
+// EwmState is what an ewm function keeps between the rows of one partition, so a
+// window streaming its one partition carries it between batches (step 221). Its zero
+// value is a partition's start.
+type EwmState struct {
+	seen                 bool
+	nobs                 int
+	mean, cov            float64
+	oldWt, sumWt, sumWt2 float64
+}
+
+// EwmNext answers col, the next rows of a partition in its order, continuing st.
+func EwmNext(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
+	col *data.Column, st *EwmState) (*data.Column, error) {
+
+	e, err := newEwmRun(fn, params, col)
+	if err != nil {
+		return nil, err
+	}
+	for row := range col.Len() {
+		e.step(st, row)
+	}
+	return floatsAs(name, out, e.res, seenBitmap(e.ok, len(e.ok))), nil
+}
+
+// ewmRun is one ewm function over one column: its parameters, its input, and its
+// answers so far.
+type ewmRun struct {
+	fn          expr.WinFnOp
+	params      expr.WinParams
+	minN        int
+	keep, newWt float64
+	vals        []float64
+	valid       bitmap.View
+	res         []float64
+	ok          []bool
+}
+
+func newEwmRun(fn expr.WinFnOp, params expr.WinParams, col *data.Column) (*ewmRun, error) {
 	alpha := params.Alpha
 	if !(alpha > 0 && alpha <= 1) {
 		return nil, uerr.Internalf("kernel: %s with alpha %v", fn, alpha)
 	}
-	minN := max(int(params.MinSamples), 1)
 	col, err := readable(col)
 	if err != nil {
 		return nil, err
@@ -48,76 +98,69 @@ func winEwm(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataT
 	if err != nil {
 		return nil, err
 	}
-	valid := col.Validity()
-	res := make([]float64, col.Len())
-	ok := make([]bool, col.Len())
-	keep := 1 - alpha
-	newWt := 1.0
+	e := &ewmRun{fn: fn, params: params, minN: max(int(params.MinSamples), 1),
+		keep: 1 - alpha, newWt: 1, vals: vals, valid: col.Validity(),
+		res: make([]float64, col.Len()), ok: make([]bool, col.Len())}
 	if params.NoAdjust {
-		newWt = alpha
+		e.newWt = alpha
 	}
-	forEachOrdered(seg, false, func(rows []int32) {
-		var (
-			seen                 bool
-			nobs                 int
-			mean, cov            float64
-			oldWt, sumWt, sumWt2 = 1.0, 1.0, 1.0
-		)
-		for _, row := range rows {
-			x, obs := vals[row], valid.Get(int(row))
-			switch {
-			case !seen && obs:
-				seen, mean, cov = true, x, 0
-				oldWt, sumWt, sumWt2 = 1, 1, 1
-			case seen && (obs || !params.IgnoreNulls):
-				sumWt *= keep
-				sumWt2 *= keep * keep
-				oldWt *= keep
-				if obs {
-					prev := mean
-					// pandas' guard: a constant run keeps its exact mean.
-					if mean != x {
-						mean = (oldWt*prev + newWt*x) / (oldWt + newWt)
-					}
-					cov = (oldWt*(cov+(prev-mean)*(prev-mean)) + newWt*(x-mean)*(x-mean)) /
-						(oldWt + newWt)
-					sumWt += newWt
-					sumWt2 += newWt * newWt
-					oldWt += newWt
-					if params.NoAdjust {
-						sumWt /= oldWt
-						sumWt2 /= oldWt * oldWt
-						oldWt = 1
-					}
-				}
+	return e, nil
+}
+
+// step takes row into st and answers it.
+func (e *ewmRun) step(st *EwmState, row int) {
+	x, obs := e.vals[row], e.valid.Get(row)
+	keep, newWt := e.keep, e.newWt
+	switch {
+	case !st.seen && obs:
+		st.seen, st.mean, st.cov = true, x, 0
+		st.oldWt, st.sumWt, st.sumWt2 = 1, 1, 1
+	case st.seen && (obs || !e.params.IgnoreNulls):
+		st.sumWt *= keep
+		st.sumWt2 *= keep * keep
+		st.oldWt *= keep
+		if obs {
+			prev := st.mean
+			// pandas' guard: a constant run keeps its exact mean.
+			if st.mean != x {
+				st.mean = (st.oldWt*prev + newWt*x) / (st.oldWt + newWt)
 			}
-			if obs {
-				nobs++
-			}
-			if !obs || !seen || nobs < minN {
-				continue
-			}
-			switch fn {
-			case expr.WinEwmMean:
-				res[row], ok[row] = mean, true
-			default:
-				v := cov
-				if !params.Bias {
-					num := sumWt * sumWt
-					den := num - sumWt2
-					if !(den > 0) {
-						continue
-					}
-					v = num / den * cov
-				}
-				if fn == expr.WinEwmStd {
-					v = math.Sqrt(v)
-				}
-				res[row], ok[row] = v, true
+			st.cov = (st.oldWt*(st.cov+(prev-st.mean)*(prev-st.mean)) +
+				newWt*(x-st.mean)*(x-st.mean)) / (st.oldWt + newWt)
+			st.sumWt += newWt
+			st.sumWt2 += newWt * newWt
+			st.oldWt += newWt
+			if e.params.NoAdjust {
+				st.sumWt /= st.oldWt
+				st.sumWt2 /= st.oldWt * st.oldWt
+				st.oldWt = 1
 			}
 		}
-	})
-	return floatsAs(name, out, res, seenBitmap(ok, len(ok))), nil
+	}
+	if obs {
+		st.nobs++
+	}
+	if !obs || !st.seen || st.nobs < e.minN {
+		return
+	}
+	switch e.fn {
+	case expr.WinEwmMean:
+		e.res[row], e.ok[row] = st.mean, true
+	default:
+		v := st.cov
+		if !e.params.Bias {
+			num := st.sumWt * st.sumWt
+			den := num - st.sumWt2
+			if !(den > 0) {
+				return
+			}
+			v = num / den * st.cov
+		}
+		if e.fn == expr.WinEwmStd {
+			v = math.Sqrt(v)
+		}
+		e.res[row], e.ok[row] = v, true
+	}
 }
 
 // winInterpolate fills each run of nulls between two values with the points on the

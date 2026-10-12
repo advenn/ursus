@@ -16,7 +16,7 @@ import (
 // than the limit refused, a level down, once its sub-sink held that partition
 // alone. It need not, for the functions a window with no partition_by streams (step
 // 197): an aggregate, a cumulative function, a shift, a limited fill, a rolling
-// window of rows. The partition is one, and its rows arrive in their order. So that
+// window of rows, and since step 221 an ewm function and a reversed cum_count. The partition is one, and its rows arrive in their order. So that
 // sub-sink splits its file:
 //
 //   - the one key's rows go to the one-partition file, its aggregates fed as group 0,

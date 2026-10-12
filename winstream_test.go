@@ -15,7 +15,11 @@ import (
 //
 //   - aggregates broadcast to every row, of an integer, a float and a string;
 //   - cumulative functions carrying their last answer across batches, a sum
-//     widening an Int32 to Int128, a max over strings, a count;
+//     widening an Int32 to Int128, a max over strings, a count, and a count
+//     reversed, which counts down from the file's rows (step 221);
+//   - ewm functions carrying their running state (step 221): a mean, a variance
+//     ignoring nulls across runs of them longer than a batch, and an unadjusted,
+//     biased standard deviation wanting five values;
 //   - shifts back and forward, with a fill, and a diff, which is a shift;
 //   - forward fills with and without a limit, and a backward fill with one, over
 //     runs of nulls longer than a batch;
@@ -43,6 +47,10 @@ func TestUnpartitionedWindowsStreamPastTheirLimit(t *testing.T) {
 		c("v").Sum().Over().Alias("sum"), c("f").Mean().Over().Alias("mean"), c("s").Max().Over().Alias("smax"),
 		c("v").CumSum(false).Alias("cs"), c("i32").CumSum(false).Alias("cs32"),
 		c("f").CumMax(false).Alias("cmax"), c("s").CumMin(false).Alias("smin"), c("v").CumCount(false).Alias("cc"),
+		c("v").CumCount(true).Alias("ccr"),
+		c("f").EwmMean(ursus.EwmAlpha(0.3)).Alias("em"),
+		c("v").EwmVar(ursus.EwmSpan(10), ursus.IgnoreNulls()).Alias("ev"),
+		c("v").EwmStd(ursus.EwmCom(2), ursus.EwmAdjust(false), ursus.Biased(), ursus.MinSamples(5)).Alias("es"),
 		c("v").Shift(2).Alias("lag2"), c("v").ShiftFill(-3, int64(-1)).Alias("lead3"), c("v").Diff(1).Alias("diff"),
 		c("v").ForwardFill(0).Alias("ff"), c("v").ForwardFill(2).Alias("ff2"), c("v").BackwardFill(3).Alias("bf3"),
 		c("f").RollingSum(5).Alias("rs"), c("f").RollingMean(4, ursus.RollingCenter()).Alias("rm"),
@@ -66,9 +74,9 @@ func TestUnpartitionedWindowsStreamPastTheirLimit(t *testing.T) {
 
 // TestUnpartitionedWindowsThatNeedTheWholeFrameStillRefuse: what step 197 leaves
 // refusing, each a function whose answer for a batch needs an unbounded part of the
-// frame: a rank, a reversed cumulative sum, an ewm mean, an interpolation, a backward
-// fill with no limit, and a rolling window by time. Each names the window and says
-// it has no partition.
+// frame: a rank, a reversed cumulative sum, an interpolation, a backward fill with no
+// limit, and a rolling window by time. Each names the window and says it has no
+// partition. An ewm mean was here until step 221.
 func TestUnpartitionedWindowsThatNeedTheWholeFrameStillRefuse(t *testing.T) {
 	const n = 4000
 	v, vok, ts := make([]int64, n), make([]bool, n), make([]int64, n)
@@ -81,7 +89,6 @@ func TestUnpartitionedWindowsThatNeedTheWholeFrameStillRefuse(t *testing.T) {
 	for name, e := range map[string]ursus.Expr{
 		"rank":                      c("v").Rank(ursus.RankOrdinal, false),
 		"a reversed cumulative sum": c("v").CumSum(true),
-		"an ewm mean":               c("v").EwmMean(ursus.EwmAlpha(0.5)),
 		"interpolation":             c("v").Interpolate(),
 		"a backward fill, no limit": c("v").BackwardFill(0),
 		"a rolling window by time":  c("v").RollingSumBy(c("ts"), ursus.Every("1s")),
