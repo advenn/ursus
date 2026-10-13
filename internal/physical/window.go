@@ -238,7 +238,7 @@ func (s *windowSink) Finish(ctx context.Context) (Operator, error) {
 		return s.finishSkew(ctx)
 	}
 	if s.oneW != nil {
-		return s.finishOneSpill()
+		return s.finishOneSpill(ctx)
 	}
 	if len(s.rows) == 0 {
 		// No row ever arrived. The result is still one column per output field, all

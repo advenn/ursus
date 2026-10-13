@@ -17,9 +17,16 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.4
 
-Everything since `v0.6.3` (2026-10-12): step 234, so far.
+Everything since `v0.6.3` (2026-10-12): steps 234–235, so far.
 [`v0.6.4-scope.md`](./context_files/v0.6.4-scope.md) set the scope: **out of core, the
 leftovers** — what still refuses under a memory budget, made to spill or stream.
+
+### Out of core
+
+- **A window with an order_by streams over one huge partition** (235), with no
+  partition_by or over one hot key: its rows' order keys and inputs are sorted, the
+  functions walked over them, and the answers sorted back beside the rows. It
+  refused.
 
 ---
 

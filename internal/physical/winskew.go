@@ -25,8 +25,9 @@ import (
 //     any does.
 //
 // Both answer in their rows' order, which is the ordinal's, and the two answers are
-// merged on the ordinal. A function that needs the whole partition at once, a rank or
-// an ordered window, still refuses.
+// merged on the ordinal. A function in an order of its own is answered in a sorted
+// pass over the one-partition file (winsorted.go, step 235). A function that needs
+// the whole partition at once, a rank, still refuses.
 
 // skewable reports whether the sink can split its one key off: a sink a level down,
 // of one keyed partitioning, holding a single key so far, every function bounded.
@@ -35,7 +36,7 @@ func (s *windowSink) skewable() bool {
 		return false
 	}
 	for i := range s.specs {
-		if _, ok := streamNeed(&s.specs[i]); !ok {
+		if !streamsAlone(&s.specs[i]) {
 			return false
 		}
 	}
@@ -104,7 +105,7 @@ func (s *windowSink) consumeSkew(ctx context.Context, in *data.Batch) error {
 
 // finishSkew merges the key's answer and the rest's on the ordinal.
 func (s *windowSink) finishSkew(ctx context.Context) (Operator, error) {
-	one, err := s.finishOneSpill()
+	one, err := s.finishOneSpill(ctx)
 	if err != nil {
 		return nil, err
 	}

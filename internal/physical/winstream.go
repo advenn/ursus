@@ -35,9 +35,12 @@ import (
 // time, each function run by the ordinary kernel over the batch and its context,
 // and its answer for the batch sliced out. The rows keep their order, the file's.
 //
+// A function with an order_by of its own is answered in a sorted pass: the rows put
+// in its order, walked, and the answers put back (winsorted.go, step 235).
+//
 // Rank, interpolation, a backward fill without a limit, a reversed cumulative
-// function other than cum_count, a rolling window by time and an ordered window need
-// the whole partition, or an unbounded part of it, and still refuse.
+// function other than cum_count and a rolling window by time need the whole
+// partition, or an unbounded part of it, and still refuse.
 
 // winNeed is what an ordered function needs around a batch to answer it exactly: h
 // rows before and l after, or, with carry, its own last answer.
@@ -90,7 +93,8 @@ func streamNeed(sp *winSpec) (winNeed, bool) {
 }
 
 // streamable reports whether the sink can stream its one partition: every
-// partitioning has no keys, and every function has a bounded need.
+// partitioning has no keys, and every function has a bounded need, in the file's
+// order or its own (winsorted.go).
 func (s *windowSink) streamable() bool {
 	for _, p := range s.parts {
 		if len(p.keys) > 0 {
@@ -98,7 +102,7 @@ func (s *windowSink) streamable() bool {
 		}
 	}
 	for i := range s.specs {
-		if _, ok := streamNeed(&s.specs[i]); !ok {
+		if !streamsAlone(&s.specs[i]) {
 			return false
 		}
 	}
@@ -169,19 +173,56 @@ func (s *windowSink) chargeOneSpill() error {
 	return s.mem.Check()
 }
 
-// finishOneSpill closes the file and returns the operator that reads it back.
-func (s *windowSink) finishOneSpill() (Operator, error) {
+// finishOneSpill closes the file and returns the operator that reads it back. A spec
+// with an order of its own is answered first, in a sorted pass with the others of its
+// order (winsorted.go), and its answers read back beside the rows.
+func (s *windowSink) finishOneSpill(ctx context.Context) (Operator, error) {
 	rows := s.oneW.Rows()
 	err := s.oneW.Close()
 	s.oneW = nil
 	if err != nil {
 		return nil, uerr.Wrap(err, uerr.KindIO, "over", "spilling a window's rows")
 	}
-	op := &winStreamOp{schema: s.schema, inSchema: s.inSchema, file: s.oneFile, rows: rows}
+	op := &winStreamOp{schema: s.schema, inSchema: s.inSchema, open: fileOpener(s.oneFile), rows: rows}
+
+	// The sorted passes, one for each distinct order.
+	var keys []string
+	groups := map[string][]int{}
+	for i := range s.specs {
+		if _, ok := sortedNeed(&s.specs[i]); ok {
+			k := orderKey(s.specs[i].order)
+			if _, seen := groups[k]; !seen {
+				keys = append(keys, k)
+			}
+			groups[k] = append(groups[k], i)
+		}
+	}
+	from := map[int][2]int{} // a sorted spec's answer file and column there
+	for g, k := range keys {
+		idx := groups[k]
+		group := make([]*winSpec, len(idx))
+		for j, i := range idx {
+			group[j] = &s.specs[i]
+			from[i] = [2]int{g, j}
+		}
+		path, err := s.sortedPass(ctx, group, rows)
+		if err != nil {
+			return nil, errors.Join(err, op.Close())
+		}
+		r, err := spill.Open(path)
+		if err != nil {
+			return nil, errors.Join(uerr.Wrap(err, uerr.KindIO, "over", "reading a window's answers"),
+				op.Close())
+		}
+		op.answers = append(op.answers, &answerReader{r: r})
+	}
+
 	for i := range s.specs {
 		sp := &s.specs[i]
 		st := &winStreamSpec{sp: sp}
-		if sp.acc != nil {
+		if at, ok := from[i]; ok {
+			st.sorted, st.ans, st.col = true, at[0], at[1]
+		} else if sp.acc != nil {
 			sp.acc.Reserve(1)
 			res, err := sp.acc.Finish(sp.name, 1)
 			if err != nil {
@@ -208,19 +249,25 @@ type winStreamSpec struct {
 	last  *data.Column    // carry: the last answer that held a value, one row
 	n     int64           // count: rows numbered so far
 	ewm   kernel.EwmState // ewm: the running state
+
+	// A spec with an order of its own is answered in a sorted pass: its answer is
+	// column col of the answer file ans (winsorted.go).
+	sorted   bool
+	ans, col int
 }
 
-// winStreamOp reads a window's spilled rows back, a batch at a time, with the window
-// columns beside them.
+// winStreamOp reads a window's rows back, a batch at a time, with the window columns
+// beside them: from the one-partition file, or a sorted pass's sorted stream.
 type winStreamOp struct {
 	schema   *dtype.Schema
 	inSchema *dtype.Schema
-	file     string
-	rows     int64 // in the file: a reversed cum_count counts down from them
+	open     func() (runSource, error) // the rows, opened on the first Next
+	rows     int64                     // in all: a reversed cum_count counts down from them
 	specs    []*winStreamSpec
-	maxL     int // the most rows any function needs after a batch
+	maxL     int             // the most rows any function needs after a batch
+	answers  []*answerReader // the sorted passes' answers, read beside the rows
 
-	rd    *spill.Reader
+	src   runSource
 	queue []*data.Batch // read ahead: the batch to answer, then its lookahead
 	eof   bool
 }
@@ -228,34 +275,37 @@ type winStreamOp struct {
 func (p *winStreamOp) Schema() *dtype.Schema { return p.schema }
 
 func (p *winStreamOp) Close() error {
-	if p.rd != nil {
-		err := p.rd.Close()
-		p.rd = nil
-		return err
+	var errs []error
+	if p.src != nil {
+		errs = append(errs, p.src.Close())
+		p.src = nil
 	}
-	return nil
+	for _, a := range p.answers {
+		errs = append(errs, a.Close())
+	}
+	return errors.Join(errs...)
 }
 
 func (p *winStreamOp) Next(ctx context.Context) (*data.Batch, error) {
-	if p.rd == nil && !p.eof {
-		rd, err := spill.Open(p.file)
+	if p.src == nil && !p.eof {
+		src, err := p.open()
 		if err != nil {
-			return nil, uerr.Wrap(err, uerr.KindIO, "over", "reading a window's rows back")
+			return nil, err
 		}
-		p.rd = rd
+		p.src = src
 	}
 	// The batch to answer, and enough after it for every function's lookahead.
 	for !p.eof && (len(p.queue) == 0 || p.ahead() < p.maxL) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		b, err := p.rd.Next()
+		b, err := p.src.Next()
 		if errors.Is(err, io.EOF) {
 			p.eof = true
 			break
 		}
 		if err != nil {
-			return nil, uerr.Wrap(err, uerr.KindIO, "over", "reading a window's rows back")
+			return nil, err
 		}
 		if b.Rows() > 0 {
 			p.queue = append(p.queue, b)
@@ -266,7 +316,19 @@ func (p *winStreamOp) Next(ctx context.Context) (*data.Batch, error) {
 	}
 	target := p.queue[0]
 	cols := append([]*data.Column(nil), target.Columns()...)
+	got := make([][]*data.Column, len(p.answers))
+	for i, a := range p.answers {
+		c, err := a.take(target.Rows())
+		if err != nil {
+			return nil, err
+		}
+		got[i] = c
+	}
 	for _, st := range p.specs {
+		if st.sorted {
+			cols = append(cols, got[st.ans][st.col].Rename(st.sp.name))
+			continue
+		}
 		c, err := p.answer(ctx, st, target)
 		if err != nil {
 			return nil, err
