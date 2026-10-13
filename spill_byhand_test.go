@@ -239,15 +239,27 @@ func TestSpillingByHand(t *testing.T) {
 		{"group_by MaintainOrder over a column named __ord", spills(ord.GroupBy(c("k")).MaintainOrder().
 			Agg(c("__ord").Sum()))},
 
+		// A rank over no keys, and over one partition larger than the limit, is
+		// answered in a sorted pass since step 237: max and average from min both ways.
+		{"Over() with no keys ranks in a sorted pass", spills(base.WithColumns(
+			c("f").Rank(ursus.RankOrdinal, false).Over().Alias("t"),
+			c("f").Rank(ursus.RankMax, true).Over().Alias("u"),
+			c("f").Rank(ursus.RankAverage, false).Over().Alias("v")))},
+		{"one partition larger than the limit ranks in a sorted pass", spills(spillFrame(n, 1).
+			WithColumns(c("f").Rank(ursus.RankDense, true).Over(c("k")).Alias("t")))},
+
 		// --- the walls that stay, each named ---
-		// A Sum() over no keys streams since step 197; a rank needs the whole frame.
-		{"Over() with no keys and a rank says it has no partition", refused(
-			base.WithColumns(c("seq").Rank(ursus.RankOrdinal, false).Over().Alias("t")),
+		// A Sum() over no keys streams since step 197; a rolling window by time needs
+		// every row of its period, however many.
+		{"Over() with no keys and a rolling sum by time says it has no partition", refused(
+			base.WithColumns(c("seq").RollingSumBy(c("seq").Cast(ursus.Datetime(ursus.Micro, "")),
+				ursus.Every("1s")).Over().Alias("t")),
 			"over", "no partition")},
 		// One partition larger than the limit streams since step 209 when every
-		// function needs only a bounded part of it; a rank needs all of it.
-		{"one partition larger than the limit, ranked, says so", refused(spillFrame(n, 1).
-			WithColumns(c("seq").Rank(ursus.RankOrdinal, false).Over(c("k")).Alias("t")), "over", "one partition")},
+		// function needs only a bounded part of it; a rolling window by time does not.
+		{"one partition larger than the limit, summed by time, says so", refused(spillFrame(n, 1).
+			WithColumns(c("seq").RollingSumBy(c("seq").Cast(ursus.Datetime(ursus.Micro, "")),
+				ursus.Every("1s")).Over(c("k")).Alias("t")), "over", "one partition")},
 		{"one partition larger than the limit streams its bounded functions", spills(spillFrame(n, 1).
 			WithColumns(c("seq").Sum().Over(c("k")).Alias("t"), c("f").CumSum(false).Over(c("k")).Alias("u")))},
 

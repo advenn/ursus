@@ -498,10 +498,12 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 		}, "group_by"},
 		// With no partition_by: a window over keys spills since step 82, and
 		// over_spills below is its entry; one with no keys streams an aggregate or a
-		// cumulative function since step 197, and a rank needs the whole frame.
+		// cumulative function since step 197, and a rank since step 237. A rolling
+		// window by time needs every row of its period, however many.
 		{"over", func() *ursus.LazyFrame {
 			return ursus.Scan(src).WithColumns(
-				ursus.Col("seq").Rank(ursus.RankOrdinal, false).Over().Alias("t"))
+				ursus.Col("seq").RollingSumBy(ursus.Col("seq").Cast(ursus.Datetime(ursus.Micro, "")),
+					ursus.Every("1s")).Over().Alias("t"))
 		}, "over"},
 	}
 

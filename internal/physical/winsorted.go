@@ -43,6 +43,31 @@ import (
 // stream goes through a reverse sink after the forward walk, so one sort serves both
 // directions, and its reverse is exact: the same rows, ties and nulls, backward.
 
+// passOrder is the order a spec's pass walks: rank's own, its child in its direction,
+// nulls first, as window.go's segments sorts it, or the spec's order_by.
+func passOrder(sp *winSpec) []plan.SortKey {
+	if sp.fn != nil && sp.fn.Fn == expr.WinRank {
+		return []plan.SortKey{{Expr: sp.fn.Child, Descending: sp.fn.Params.Descending}}
+	}
+	return sp.order
+}
+
+// passStep is one walk of a pass: a spec rewritten to read the projection, its need,
+// its direction, and the type of the column it makes.
+type passStep struct {
+	walk winSpec
+	need winNeed
+	back bool
+	typ  dtype.DataType
+}
+
+// passPlan is how a spec is answered in a sorted pass: its steps, and how their
+// columns make its answer, the one step's column when combine is nil.
+type passPlan struct {
+	steps   []passStep
+	combine func(rows int64, cols []*data.Column) (*data.Column, error)
+}
+
 // sortedPlan is how a spec is answered in a sorted pass, and false when it is not:
 //
 //   - forward, a function under an order_by of its own whose need, over the rows in
@@ -50,16 +75,38 @@ import (
 //   - backward, a reversed cumulative function or a backward fill with no limit,
 //     with an order or none (step 236): over the rows in the order reversed it is the
 //     forward function, cum_* with Reverse cleared and the fill a forward one, and
-//     those carry their last answer.
-//
-// The spec a pass walks is the plan's: its need is that spec's.
-func sortedPlan(sp *winSpec) (walk winSpec, need winNeed, back, ok bool) {
+//     those carry their last answer;
+//   - rank (step 237), in its own order: ordinal, dense and min forward. A peer
+//     group's last position is not known until it ends, so max is min over the order
+//     reversed, counted from the end, and average is min and max halved, as winRank
+//     computes it.
+func sortedPlan(sp *winSpec) (passPlan, bool) {
 	if sp.acc != nil {
-		return winSpec{}, winNeed{}, false, false
+		return passPlan{}, false
 	}
-	walk = *sp
+	walk := *sp
 	walk.order = nil
 	fn := *sp.fn
+	if fn.Fn == expr.WinRank {
+		step := func(m expr.RankMethod, back bool) passStep {
+			f := fn
+			f.Params.Method = m
+			w := walk
+			w.fn, w.out = &f, dtype.Uint32
+			return passStep{walk: w, need: winNeed{rank: true}, back: back, typ: dtype.Uint32}
+		}
+		switch m := fn.Params.Method; m {
+		case expr.RankOrdinal, expr.RankDense, expr.RankMin:
+			return passPlan{steps: []passStep{step(m, false)}}, true
+		case expr.RankMax:
+			return passPlan{steps: []passStep{step(expr.RankMin, true)}, combine: rankMax}, true
+		case expr.RankAverage:
+			return passPlan{steps: []passStep{step(expr.RankMin, false), step(expr.RankMin, true)},
+				combine: rankAverage}, true
+		}
+		return passPlan{}, false
+	}
+	back := false
 	switch {
 	case fn.Fn.IsCumulative() && fn.Params.Reverse:
 		fn.Params.Reverse = false
@@ -68,16 +115,39 @@ func sortedPlan(sp *winSpec) (walk winSpec, need winNeed, back, ok bool) {
 		fn.Fn = expr.WinForwardFill
 		back = true
 	case len(sp.order) == 0:
-		return winSpec{}, winNeed{}, false, false // the file's order: streamNeed's
+		return passPlan{}, false // the file's order: streamNeed's
 	}
 	walk.fn = &fn
-	need, ok = streamNeed(&walk)
-	return walk, need, back, ok
+	need, ok := streamNeed(&walk)
+	return passPlan{steps: []passStep{{walk: walk, need: need, back: back, typ: sp.out}}}, ok
+}
+
+// rankMax is a rank's max from min over its order reversed: the group's last
+// position is its first counted from the end.
+func rankMax(rows int64, cols []*data.Column) (*data.Column, error) {
+	rev := data.MustValues[uint32](cols[0])
+	out := make([]uint32, len(rev))
+	for i, r := range rev {
+		out[i] = uint32(rows) + 1 - r
+	}
+	return data.NewFixed("rank", dtype.Uint32, out, bitmap.AllSet(len(out))), nil
+}
+
+// rankAverage is a rank's average from its min and min over the order reversed, as
+// winRank computes it: the sum of the two, then halved as a float.
+func rankAverage(rows int64, cols []*data.Column) (*data.Column, error) {
+	first, rev := data.MustValues[uint32](cols[0]), data.MustValues[uint32](cols[1])
+	out := make([]float64, len(first))
+	for i := range out {
+		last := uint32(rows) + 1 - rev[i]
+		out[i] = float64(first[i]+last) / 2
+	}
+	return data.NewFixed("rank", dtype.Float64, out, bitmap.AllSet(len(out))), nil
 }
 
 // sortedNeed reports whether a spec is answered in a sorted pass.
 func sortedNeed(sp *winSpec) bool {
-	_, _, _, ok := sortedPlan(sp)
+	_, ok := sortedPlan(sp)
 	return ok
 }
 
@@ -109,24 +179,16 @@ func orderKey(order []plan.SortKey) string {
 
 const posName = "__pos" // a row's position in the one-partition file
 
-// passStep is one spec of a pass, as walked.
-type passStep struct {
-	walk winSpec
-	need winNeed
-	back bool
-}
-
 // sortedPass answers group, the specs that share one order, over the one-partition
 // file of rows rows, and returns the answer file: the position, then each spec's
 // answer, in position order.
 //
 // The rows go to the order: sorted by its keys and the position, or, with no keys,
-// the file as it is. The forward specs walk that stream; the backward ones walk it
-// reversed, through a reverse sink, after the forward ones. Then everything is sorted
-// back by position.
+// the file as it is. The forward steps walk that stream; the backward ones walk it
+// reversed, through a reverse sink, after the forward ones. Then each spec's answer
+// is made from its steps' columns, and everything sorted back by position.
 func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int64) (path string, err error) {
-	order := group[0].order
-	steps := make([]passStep, len(group))
+	order := passOrder(group[0])
 
 	// The projection: the position, the order keys, each function's child and fill.
 	fields := []dtype.Field{dtype.NotNull(posName, dtype.Int64)}
@@ -142,8 +204,11 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 			Descending: k.Descending, NullsLast: k.NullsLast})
 	}
 	keys = append(keys, plan.SortKey{Expr: &expr.Col{Name: posName}})
+	plans := make([]passPlan, len(group))
+	var steps []passStep
+	stepsOf := make([][]int, len(group)) // each spec's steps, by index into steps
 	for j, sp := range group {
-		walk, need, back, _ := sortedPlan(sp)
+		pl, _ := sortedPlan(sp)
 		f, err := sp.fn.Child.Field(s.inSchema)
 		if err != nil {
 			return "", err
@@ -154,14 +219,21 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 		}
 		c, fl := "__c"+itoa(j), "__f"+itoa(j)
 		fields = append(fields, dtype.Of(c, ct))
-		fn := *walk.fn
-		fn.Child = &expr.Col{Name: c}
-		walk.fn = &fn
 		if sp.fillOf != nil {
 			fields = append(fields, dtype.Of(fl, sp.out))
-			walk.fillOf = &expr.Col{Name: fl}
 		}
-		steps[j] = passStep{walk: walk, need: need, back: back}
+		for _, st := range pl.steps {
+			fn := *st.walk.fn
+			fn.Child = &expr.Col{Name: c}
+			st.walk.fn = &fn
+			if sp.fillOf != nil {
+				st.walk.fillOf = &expr.Col{Name: fl}
+			}
+			st.walk.name = "__s" + itoa(len(steps))
+			stepsOf[j] = append(stepsOf[j], len(steps))
+			steps = append(steps, st)
+		}
+		plans[j] = pl
 	}
 	narrow, err := dtype.NewSchema(fields...)
 	if err != nil {
@@ -170,8 +242,9 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 
 	// The stream in the order.
 	var stream Operator
+	proj := &projOp{s: s, group: group, order: order, narrow: narrow}
 	if len(order) == 0 {
-		stream = &projOp{s: s, group: group, narrow: narrow}
+		stream = proj
 	} else {
 		kSch, err := keySchema(keys, narrow)
 		if err != nil {
@@ -180,7 +253,7 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 		fwd := &sortSink{schema: narrow, keys: keys, kSch: kSch, budget: s.budget,
 			mem: s.budget.Account("over"), batch: s.batch}
 		defer func() { err = errors.Join(err, fwd.Close()) }()
-		if err := feedEach(ctx, &projOp{s: s, group: group, narrow: narrow}, fwd.Consume); err != nil {
+		if err := feedEach(ctx, proj, fwd.Consume); err != nil {
 			return "", err
 		}
 		if stream, err = fwd.Finish(ctx); err != nil {
@@ -188,15 +261,14 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 		}
 	}
 
-	// The forward walk, then the backward one. Each spec's answer is placed where
-	// the walks put it: at[j] is its column in the last walk's batches.
-	at := make([]int, len(group))
-	if stream, err = s.walkPass(ctx, stream, steps, false, rows, at); err != nil {
+	// The forward walk, then the backward one. at[i] is step i's column in the last
+	// walk's batches.
+	at := make([]int, len(steps))
+	if stream, err = walkPass(ctx, stream, steps, false, rows, at); err != nil {
 		return "", err
 	}
-	var rev *reverseSink
 	if hasBack(steps) {
-		rev = &reverseSink{schema: stream.Schema(), mem: s.budget.Account("over"), budget: s.budget}
+		rev := &reverseSink{schema: stream.Schema(), mem: s.budget.Account("over"), budget: s.budget}
 		defer func() { err = errors.Join(err, rev.Close()) }()
 		if err := feedEach(ctx, stream, rev.Consume); err != nil {
 			return "", err
@@ -205,12 +277,12 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 		if err != nil {
 			return "", err
 		}
-		if stream, err = s.walkPass(ctx, reversed, steps, true, rows, at); err != nil {
+		if stream, err = walkPass(ctx, reversed, steps, true, rows, at); err != nil {
 			return "", err
 		}
 	}
 
-	// The answers, sorted back by position.
+	// The answers, made from the steps' columns, sorted back by position.
 	ans := []dtype.Field{dtype.NotNull(posName, dtype.Int64)}
 	for _, sp := range group {
 		i := s.schema.IndexOf(sp.name)
@@ -237,10 +309,21 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 	err = feedEach(ctx, stream, func(ctx context.Context, b *data.Batch) error {
 		cols := make([]*data.Column, 0, len(ans))
 		cols = append(cols, b.Column(0))
-		for _, i := range at {
-			cols = append(cols, b.Column(i))
+		for j, pl := range plans {
+			in := make([]*data.Column, len(stepsOf[j]))
+			for k, i := range stepsOf[j] {
+				in[k] = b.Column(at[i])
+			}
+			c := in[0]
+			if pl.combine != nil {
+				var err error
+				if c, err = pl.combine(rows, in); err != nil {
+					return err
+				}
+			}
+			cols = append(cols, c)
 		}
-		ab, err := data.NewBatch(ansSch, cols)
+		ab, err := data.NewBatch(ansSch, renamed(ansSch, cols))
 		if err != nil {
 			return err
 		}
@@ -266,28 +349,22 @@ func hasBack(steps []passStep) bool {
 	return false
 }
 
-// walkPass walks in with the steps of the direction back, appending their answers
-// to its rows, and records each one's column in at. With no such step, in is the
-// walk.
-func (s *windowSink) walkPass(ctx context.Context, in Operator, steps []passStep, back bool,
+// walkPass walks in with the steps of the direction back, appending their columns to
+// its rows, and records each one's place in at. With no such step, in is the walk.
+func walkPass(ctx context.Context, in Operator, steps []passStep, back bool,
 	rows int64, at []int) (Operator, error) {
 
 	inSch := in.Schema()
 	fields := append([]dtype.Field(nil), inSch.FieldSlice()...)
 	walk := &winStreamOp{inSchema: inSch, rows: rows,
 		open: func() (runSource, error) { return &opRun{ctx: ctx, op: in}, nil }}
-	for j := range steps {
-		st := &steps[j]
+	for i := range steps {
+		st := &steps[i]
 		if st.back != back {
 			continue
 		}
-		i := s.schema.IndexOf(st.walk.name)
-		if i < 0 {
-			in.Close()
-			return nil, uerr.Internalf("physical: window column %s is not in the window's schema", st.walk.name)
-		}
-		at[j] = len(fields)
-		fields = append(fields, s.schema.Field(i))
+		at[i] = len(fields)
+		fields = append(fields, dtype.Of(st.walk.name, st.typ))
 		walk.specs = append(walk.specs, &winStreamSpec{sp: &st.walk, need: st.need})
 		walk.maxL = max(walk.maxL, st.need.l)
 	}
@@ -325,6 +402,7 @@ func feedEach(ctx context.Context, op Operator, consume func(context.Context, *d
 type projOp struct {
 	s      *windowSink
 	group  []*winSpec
+	order  []plan.SortKey
 	narrow *dtype.Schema
 
 	r   *spill.Reader
@@ -381,7 +459,7 @@ func (p *projOp) project(ctx context.Context, b *data.Batch) (*data.Batch, error
 	}
 	p.pos += int64(n)
 	cols := []*data.Column{data.NewFixed(posName, dtype.Int64, at, bitmap.AllSet(n))}
-	for _, k := range p.group[0].order {
+	for _, k := range p.order {
 		c, err := evalColumn(ctx, k.Expr, b)
 		if err != nil {
 			return nil, err

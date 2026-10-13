@@ -70,6 +70,13 @@ func sortedWindows(part ...ursus.Expr) []ursus.Expr {
 		c("v").CumProd(true).OverWith(byX).Alias("cpr_x"),
 		c("x").CumMax(true).OverWith(byF).Alias("cmaxr_f"),
 		c("v").BackwardFill(0).OverWith(byF).Alias("bf_f"),
+		// Rank, in its own order (step 237), whatever the window's order_by.
+		c("f").Rank(ursus.RankOrdinal, false).OverWith(byX).Alias("r_ord"),
+		c("f").Rank(ursus.RankDense, true).Over(part...).Alias("r_dense"),
+		c("v").Rank(ursus.RankMin, false).Over(part...).Alias("r_min"),
+		c("v").Rank(ursus.RankMax, true).Over(part...).Alias("r_max"),
+		c("f").Rank(ursus.RankAverage, false).Over(part...).Alias("r_avg"),
+		c("s").Rank(ursus.RankMax, false).Over(part...).Alias("r_smax"),
 		c("x").Sum().Over(part...).Alias("total"),
 	}
 }
@@ -85,8 +92,10 @@ func sortedWindows(part ...ursus.Expr) []ursus.Expr {
 // shift forward with a fill. And, walked backward (step 236), reversed cumulative
 // sums, minima of strings, products and maxima, and backward fills with no limit,
 // over runs of nulls longer than two batches, in the file's order and in an order of
-// their own. Under a tenth of the input, on one thread and four, the answer is the
-// in-memory one, row for row, and the spill directory is empty after.
+// their own. And rank (step 237), every method, both directions, over a float with
+// nulls, NaN and ±0, an integer with long runs of nulls, and strings with many ties.
+// Under a tenth of the input, on one thread and four, the answer is the in-memory
+// one, row for row, and the spill directory is empty after.
 func TestAWindowInAnOrderOfItsOwnStreamsPastItsLimit(t *testing.T) {
 	frame := sortedFrame(40, 500)
 	in, err := frame.Collect(t.Context())

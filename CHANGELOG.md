@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.4
 
-Everything since `v0.6.3` (2026-10-12): steps 234–236, so far.
+Everything since `v0.6.3` (2026-10-12): steps 234–237, so far.
 [`v0.6.4-scope.md`](./context_files/v0.6.4-scope.md) set the scope: **out of core, the
 leftovers** — what still refuses under a memory budget, made to spill or stream.
 
@@ -29,6 +29,9 @@ leftovers** — what still refuses under a memory budget, made to spill or strea
   refused.
 - **A reversed cumulative function and a backward fill with no limit stream over one
   huge partition** (236), walked backward through a reverse of that stream. They
+  refused.
+- **Rank, every method, streams over one huge partition** (237), in its child's
+  order: max and average from the peer group's first position counted both ways. It
   refused.
 
 ---

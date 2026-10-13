@@ -49,6 +49,7 @@ type winNeed struct {
 	carry bool // a cumulative function, or a forward fill without a limit
 	count bool // cum_count, which numbers on from the rows before
 	ewm   bool // an ewm function, which carries its running state
+	rank  bool // rank, in its own order, which carries its peer group (step 237)
 }
 
 // streamNeed is spec sp's need, and false when no bounded one answers it.
@@ -190,7 +191,7 @@ func (s *windowSink) finishOneSpill(ctx context.Context) (Operator, error) {
 	groups := map[string][]int{}
 	for i := range s.specs {
 		if sortedNeed(&s.specs[i]) {
-			k := orderKey(s.specs[i].order)
+			k := orderKey(passOrder(&s.specs[i]))
 			if _, seen := groups[k]; !seen {
 				keys = append(keys, k)
 			}
@@ -244,11 +245,12 @@ type winStreamSpec struct {
 	need winNeed
 	agg  *data.Column // an aggregate's one value
 
-	hist  *data.Column    // the last h rows of the child before the batch
-	histF *data.Column    // and of the fill
-	last  *data.Column    // carry: the last answer that held a value, one row
-	n     int64           // count: rows numbered so far
-	ewm   kernel.EwmState // ewm: the running state
+	hist  *data.Column     // the last h rows of the child before the batch
+	histF *data.Column     // and of the fill
+	last  *data.Column     // carry: the last answer that held a value, one row
+	n     int64            // count: rows numbered so far
+	ewm   kernel.EwmState  // ewm: the running state
+	rank  kernel.RankState // rank: its position, groups and last row
 
 	// A spec with an order of its own is answered in a sorted pass: its answer is
 	// column col of the answer file ans (winsorted.go).
@@ -381,6 +383,9 @@ func (p *winStreamOp) answer(ctx context.Context, st *winStreamSpec, target *dat
 	}
 	if st.need.ewm {
 		return kernel.EwmNext(sp.fn.Fn, sp.fn.Params, sp.name, sp.out, child, &st.ewm)
+	}
+	if st.need.rank {
+		return kernel.RankNext(sp.fn.Params.Method, sp.name, child, &st.rank)
 	}
 	// The context: the last h rows before, the batch, and the first l after.
 	parts := []*data.Column{}

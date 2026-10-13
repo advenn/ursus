@@ -77,9 +77,10 @@ func TestUnpartitionedWindowsStreamPastTheirLimit(t *testing.T) {
 
 // TestUnpartitionedWindowsThatNeedTheWholeFrameStillRefuse: what step 197 leaves
 // refusing, each a function whose answer for a batch needs an unbounded part of the
-// frame: a rank, an interpolation, and a rolling window by time. Each names the
-// window and says it has no partition. An ewm mean was here until step 221, and a
-// reversed cumulative sum and a backward fill with no limit until step 236.
+// frame: an interpolation, and a rolling window by time. Each names the window and
+// says it has no partition. An ewm mean was here until step 221, a reversed
+// cumulative sum and a backward fill with no limit until step 236, and a rank until
+// step 237.
 func TestUnpartitionedWindowsThatNeedTheWholeFrameStillRefuse(t *testing.T) {
 	const n = 4000
 	v, vok, ts := make([]int64, n), make([]bool, n), make([]int64, n)
@@ -90,7 +91,6 @@ func TestUnpartitionedWindowsThatNeedTheWholeFrameStillRefuse(t *testing.T) {
 		WithColumns(ursus.Col("ts").Cast(ursus.Datetime(ursus.Micro, "")).Alias("ts"))
 	c := ursus.Col
 	for name, e := range map[string]ursus.Expr{
-		"rank":                     c("v").Rank(ursus.RankOrdinal, false),
 		"interpolation":            c("v").Interpolate(),
 		"a rolling window by time": c("v").RollingSumBy(c("ts"), ursus.Every("1s")),
 	} {
