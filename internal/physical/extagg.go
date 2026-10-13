@@ -254,10 +254,11 @@ func (s *hashAggSink) ordinalOf(in *data.Batch, i int) int64 {
 // KEYS, never within one.
 //
 // A quantile's values can go to disk instead (step 220): its answer is two order
-// statistics a group, which values sorted by group read back in one pass. So before
+// statistics a group, which values sorted by group read back in one pass; and so can
+// n_unique's (step 241), whose answer is a count of the distinct ones. So before
 // refusing, either way, the sink spills the values of every accumulator that keeps
 // them, is charged again, and refuses only if it is still over. What remains is
-// n_unique and implode, whose state per value is the answer or decides it.
+// implode, whose state per value is its answer.
 func (s *hashAggSink) overBudget(ctx context.Context) error {
 	if s.budgetErr() == nil {
 		return nil
@@ -282,37 +283,58 @@ func (s *hashAggSink) budgetErr() error {
 			"disk and is still holding %s of per-group state for %d resident groups",
 		execopt.Bytes(limit), execopt.Bytes(s.accBytes), s.ids.Len()).
 		Hint("radix partitioning divides work across KEYS, never within one — " +
-			"n_unique keeps every distinct value of a group and implode every value " +
-			"as its answer, so a single hot key cannot be spilled; quantile and " +
-			"median spill their values").
+			"implode keeps every value of a group as its answer, so a single hot " +
+			"key's cannot be spilled; quantile, median and n_unique spill their " +
+			"values").
 		Hint("raise the limit with WithMemoryLimit, or use a bounded aggregate")
 }
 
-// spillValues hands the values of every accumulator that keeps them to its spill,
-// and charges the sink again for what it still holds.
+// spillValues hands the state of every accumulator that keeps it a value at a time
+// to its spill: a quantile's values (step 220), n_unique's keys (step 241). Then it
+// charges the sink again for what it still holds.
 func (s *hashAggSink) spillValues(ctx context.Context) error {
 	for i, a := range s.accs {
-		vs, ok := a.(kernel.ValueSpiller)
-		if !ok {
-			continue
-		}
-		if s.vspill == nil {
-			s.vspill = make([]*valueSpill, len(s.accs))
-		}
-		if s.vspill[i] == nil {
-			if err := s.ensureDir(); err != nil {
+		switch acc := a.(type) {
+		case kernel.ValueSpiller:
+			sp, err := s.spillOf(ctx, i, func(prefix string) groupSpill {
+				return newValueSpill(ctx, s.budget, s.batch, prefix)
+			})
+			if err != nil {
 				return err
 			}
-			s.vspill[i] = &valueSpill{budget: s.budget, batch: s.batch,
-				prefix: s.prefix + "v" + itoa(i) + "-"}
-		}
-		s.vspill[i].ctx = ctx
-		if _, err := vs.SpillValues(s.vspill[i]); err != nil {
-			return err
+			if _, err := acc.SpillValues(sp.(*valueSpill)); err != nil {
+				return err
+			}
+		case kernel.KeySpiller:
+			sp, err := s.spillOf(ctx, i, func(prefix string) groupSpill {
+				return newKeySpill(ctx, s.budget, s.batch, prefix)
+			})
+			if err != nil {
+				return err
+			}
+			if _, err := acc.SpillKeys(sp.(*keySpill)); err != nil {
+				return err
+			}
 		}
 	}
 	s.recharge()
 	return nil
+}
+
+// spillOf is accumulator i's spill, made by build the first time, in the sink's spill
+// directory, and given ctx.
+func (s *hashAggSink) spillOf(ctx context.Context, i int, build func(prefix string) groupSpill) (groupSpill, error) {
+	if s.spills == nil {
+		s.spills = make([]groupSpill, len(s.accs))
+	}
+	if s.spills[i] == nil {
+		if err := s.ensureDir(); err != nil {
+			return nil, err
+		}
+		s.spills[i] = build(s.prefix + "v" + itoa(i) + "-")
+	}
+	s.spills[i].setCtx(ctx)
+	return s.spills[i], nil
 }
 
 // --- replay ----------------------------------------------------------------------

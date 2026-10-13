@@ -398,8 +398,8 @@ func (a *Account) Check() error {
 		Hint("sort, group_by, join, unique, over, reverse and tail spill to disk; " +
 			"join_asof, merge_sorted, hstack, rolling and group_by_dynamic stream " +
 			"their input; an over computing a rolling window by time over one " +
-			"partition larger than the limit fails rather than exceed it, and so do " +
-			"n_unique and implode over one group larger than it")
+			"partition larger than the limit fails rather than exceed it, and so does " +
+			"implode over one group larger than it")
 }
 
 // Release drops everything this account holds.
@@ -466,10 +466,10 @@ func holdsHint(op string) string {
 		// could not help: either the limit is too small to admit one batch's keys, or
 		// the state that is growing is INSIDE one key. Radix partitioning divides the
 		// key space, so the second kind cannot be partitioned away at any depth.
-		return "group_by holds one entry per distinct key, and n_unique and implode " +
-			"hold state per VALUE — which partitioning to disk cannot divide, because " +
-			"it divides across keys (quantile and median spill their values); raise " +
-			"the limit with WithMemoryLimit"
+		return "group_by holds one entry per distinct key, and implode holds every " +
+			"VALUE as its answer — which partitioning to disk cannot divide, because " +
+			"it divides across keys (quantile, median and n_unique spill their " +
+			"values); raise the limit with WithMemoryLimit"
 	case "unique":
 		// unique spills since step 82, so reaching Check means the freeze could not
 		// help: the limit was gone before the first key, or four levels of

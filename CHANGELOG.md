@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.4
 
-Everything since `v0.6.3` (2026-10-12): steps 234–240, so far.
+Everything since `v0.6.3` (2026-10-12): steps 234–241, so far.
 [`v0.6.4-scope.md`](./context_files/v0.6.4-scope.md) set the scope: **out of core, the
 leftovers** — what still refuses under a memory budget, made to spill or stream.
 
@@ -41,6 +41,9 @@ leftovers** — what still refuses under a memory budget, made to spill or strea
 - **A window with no partition_by beside a keyed one spills** (240), its keyless
   functions one more pass of the keyed spill. It refused. Of windows over one huge
   partition, only a rolling window by time still refuses.
+- **n_unique over a few huge groups, or with no key, spills its values** (241), as
+  sorted runs of their bytes, counted as they merge back. It refused. Implode, whose
+  answer is every value, still does.
 
 ---
 

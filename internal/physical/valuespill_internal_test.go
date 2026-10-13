@@ -64,24 +64,23 @@ func filesIn(t *testing.T, dir string) int {
 	return len(es)
 }
 
-// TestAValueSpillMergesItsRunsAsTheyGather: past valueFanIn² runs, a value spill
-// holds fewer than valueFanIn runs a level, and as many files as runs; it gives every
+// TestAValueSpillMergesItsRunsAsTheyGather: past runFanIn² runs, a value spill
+// holds fewer than runFanIn runs a level, and as many files as runs; it gives every
 // value back in order of (group, value), the order a quantile reads, and leaves no
 // file behind (step 220).
 func TestAValueSpillMergesItsRunsAsTheyGather(t *testing.T) {
 	dir := t.TempDir()
-	s := &valueSpill{ctx: t.Context(), budget: execopt.NewBudget(0, dir), batch: 7,
-		prefix: filepath.Join(dir, "v0-")}
+	s := newValueSpill(t.Context(), execopt.NewBudget(0, dir), 7, filepath.Join(dir, "v0-"))
 	rng := rand.New(rand.NewPCG(220, 2))
-	all := spillRuns(t, s, rng, valueFanIn*valueFanIn+5)
+	all := spillRuns(t, s, rng, runFanIn*runFanIn+5)
 
 	if len(s.levels) < 3 {
 		t.Fatalf("%d levels after %d runs: the runs were not merged", len(s.levels),
-			valueFanIn*valueFanIn+5)
+			runFanIn*runFanIn+5)
 	}
 	held := 0
 	for l, runs := range s.levels {
-		if len(runs) >= valueFanIn {
+		if len(runs) >= runFanIn {
 			t.Errorf("level %d holds %d runs", l, len(runs))
 		}
 		held += len(runs)
@@ -115,9 +114,8 @@ func TestAValueSpillMergesItsRunsAsTheyGather(t *testing.T) {
 // run still open, a value spill removes every run.
 func TestAClosedValueSpillLeavesNoFile(t *testing.T) {
 	dir := t.TempDir()
-	s := &valueSpill{ctx: t.Context(), budget: execopt.NewBudget(0, dir),
-		prefix: filepath.Join(dir, "v0-")}
-	spillRuns(t, s, rand.New(rand.NewPCG(220, 3)), valueFanIn+3)
+	s := newValueSpill(t.Context(), execopt.NewBudget(0, dir), 0, filepath.Join(dir, "v0-"))
+	spillRuns(t, s, rand.New(rand.NewPCG(220, 3)), runFanIn+3)
 	if err := s.Put([]int32{1}, []float64{1}); err != nil {
 		t.Fatal(err)
 	}

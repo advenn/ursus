@@ -103,7 +103,7 @@ type hashAggSink struct {
 	frozen    bool  // residency is closed: a NEW key is routed, never admitted
 	frozenAcc int64 // accBytes at the freeze — the baseline overBudget measures from
 
-	vspill []*valueSpill // where each accumulator's values went past the budget, if any
+	spills []groupSpill // where each accumulator's values went past the budget, if any
 
 	dir      string // spill directory; only the level-0 sink removes it
 	dirOwner bool
@@ -315,9 +315,9 @@ func (s *hashAggSink) Schema() *dtype.Schema { return s.schema }
 
 func (s *hashAggSink) Close() error {
 	errs := []error{s.closeParts()}
-	for _, vs := range s.vspill {
-		if vs != nil {
-			errs = append(errs, vs.close())
+	for _, sp := range s.spills {
+		if sp != nil {
+			errs = append(errs, sp.close())
 		}
 	}
 	s.mem.Release()
@@ -728,7 +728,7 @@ func (s *hashAggSink) Merge(other Sink) error {
 	// guard, and aggCanParallelise refuses to build workers under a memory limit at
 	// all, so this is the second line of defence rather than the first.
 	if s.frozen || o.frozen || len(s.files) > 0 || len(o.files) > 0 ||
-		s.vspill != nil || o.vspill != nil {
+		s.spills != nil || o.spills != nil {
 		return uerr.Internalf("physical: cannot merge hashAggSinks that have spilled")
 	}
 	// MaintainOrder is not mergeable here. firstSeen holds each group's input
@@ -1239,9 +1239,9 @@ func (s *hashAggSink) releaseState() {
 // account kept every key part until then, whatever ConcatOwned let go of.
 // finishOrdered reads firstSeen, which stays.
 func (s *hashAggSink) residentResult(ctx context.Context) (*data.Batch, error) {
-	for _, vs := range s.vspill {
-		if vs != nil {
-			vs.ctx = ctx // a quantile's Finish reads its spilled values back
+	for _, sp := range s.spills {
+		if sp != nil {
+			sp.setCtx(ctx) // a Finish reads its spilled values back
 		}
 	}
 	nGroups := s.ids.Len()

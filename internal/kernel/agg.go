@@ -382,6 +382,10 @@ type nuniqueAcc struct {
 	tab    KeyTable
 	counts []int32
 	key    []byte // scratch, reused across rows
+
+	// Past its sink's budget its keys go to sp, and counts are recounted from there
+	// at Finish (keyspill.go, step 241).
+	sp KeySpill
 }
 
 // groupPrefixLen is the width of the group id inside a key.
@@ -438,6 +442,10 @@ func (a *nuniqueAcc) Merge(other Accumulator, remap []int32) error {
 	if !ok {
 		return uerr.Internalf("kernel: cannot merge %T into nuniqueAcc", other)
 	}
+	if a.sp != nil || o.sp != nil {
+		// Only a serial sink spills its keys: parallel workers go serial first.
+		return uerr.Internalf("kernel: cannot merge an n_unique whose keys spilled")
+	}
 	a.Reserve(mergeCap(remap, len(o.counts)))
 	if isSparse(remap) {
 		// Its lookup is by source group, which a list of pairs is not.
@@ -478,6 +486,12 @@ func (a *nuniqueAcc) Merge(other Accumulator, remap []int32) error {
 func (a *nuniqueAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
 	out := make([]uint64, nGroups)
+	if a.sp != nil {
+		if err := a.finishSpilled(out); err != nil {
+			return nil, err
+		}
+		return data.NewFixed(name, dtype.Uint64, out, bitmap.AllSet(nGroups)), nil
+	}
 	for i := range nGroups {
 		out[i] = uint64(a.counts[i])
 	}

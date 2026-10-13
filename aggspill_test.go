@@ -598,19 +598,19 @@ func TestAHotGroupsQuantileSpillsItsValues(t *testing.T) {
 		}
 	}
 
-	// n_unique over the same keys still refuses: what it holds a value decides its
-	// answer, so there is nothing to put aside.
+	// implode over the same keys still refuses: its answer is every value of a
+	// group, a list as large as the group (n_unique spills since step 241).
 	_, err := ursus.Scan(src).GroupBy(ursus.Col("grp")).
-		Agg(ursus.Col("seq").NUnique()).
+		Agg(ursus.Col("seq").Implode()).
 		Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithThreads(1),
 			ursus.WithMemoryLimit(8<<10), ursus.WithSpillDir(t.TempDir()))
 	if err == nil {
-		t.Fatal("n_unique over five hot keys must still refuse")
+		t.Fatal("implode over five hot keys must still refuse")
 	}
 	if !errors.Is(err, uerr.ErrResource) {
 		t.Fatalf("want a resource error, got %v", err)
 	}
-	for _, want := range []string{"group_by", "n_unique"} {
+	for _, want := range []string{"group_by", "implode"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the message should name %q:\n%v", want, err)
 		}
@@ -637,6 +637,66 @@ func TestAHotGroupsQuantileSpillsItsValues(t *testing.T) {
 		Collect(t.Context(), ursus.WithBatchSize(512),
 			ursus.WithMemoryLimit(256<<10), ursus.WithSpillDir(t.TempDir())); err != nil {
 		t.Errorf("a quantile over many small groups should spill rather than refuse: %v", err)
+	}
+}
+
+// TestAHotGroupsNUniqueSpillsItsKeys: n_unique over five hot keys, and over no key,
+// keeps every distinct value of a group, and refused until step 241. Now its values,
+// as the group-key encoder's bytes, spill in sorted runs, and each group's are
+// counted as they merge back. Over all-distinct integers, a constant string, an
+// integer with nulls, a float with NaN, ±Inf and ±0, and a string of 97 values;
+// keyed, maintaining order or not, and keyless; on one thread and four, under 8 KiB.
+func TestAHotGroupsNUniqueSpillsItsKeys(t *testing.T) {
+	src := memFrame(t, 20000, 512, 4000)
+	f := ursus.Col("seq").Mod(int64(5)).Sub(int64(2)).Cast(dtype.Float64).
+		Div(ursus.Col("seq").Mod(int64(3)).Sub(int64(1)).Cast(dtype.Float64))
+	aggs := []ursus.Expr{
+		ursus.Col("seq").NUnique().Alias("seq"),
+		ursus.Col("pad").NUnique().Alias("pad"),
+		ursus.Col("opt").NUnique().Alias("opt"),
+		f.NUnique().Alias("f"),
+		ursus.Col("seq").Mod(int64(97)).Cast(ursus.String).NUnique().Alias("s"),
+		ursus.Col("seq").Sum().Alias("sum"),
+	}
+	cases := []struct {
+		name string
+		q    func() *ursus.LazyFrame
+	}{
+		{"keyed", func() *ursus.LazyFrame {
+			return ursus.Scan(src).GroupBy(ursus.Col("grp")).Agg(aggs...)
+		}},
+		{"ordered", func() *ursus.LazyFrame {
+			return ursus.Scan(src).GroupBy(ursus.Col("grp")).MaintainOrder().Agg(aggs...)
+		}},
+		{"keyless", func() *ursus.LazyFrame { return ursus.Scan(src).GroupBy().Agg(aggs...) }},
+	}
+	for _, c := range cases {
+		want, err := c.q().Collect(t.Context(), ursus.WithBatchSize(512))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, threads := range []int{1, 4} {
+			var stats ursus.MemoryStats
+			dir := t.TempDir()
+			got, err := c.q().Collect(t.Context(), ursus.WithBatchSize(512),
+				ursus.WithThreads(threads), ursus.WithVerify(),
+				ursus.WithMemoryLimit(8<<10), ursus.WithSpillDir(dir),
+				ursus.WithMemoryStats(&stats))
+			if err != nil {
+				t.Fatalf("%s on %d threads: %v", c.name, threads, err)
+			}
+			if stats.Spills == 0 {
+				t.Errorf("%s on %d threads: nothing spilled under 8 KiB", c.name, threads)
+			}
+			if c.name == "ordered" {
+				ursustest.AssertFrameEqual(t, got, want)
+			} else {
+				ursustest.AssertFrameEqual(t, got, want, ursustest.IgnoreRowOrder())
+			}
+			if left, _ := os.ReadDir(dir); len(left) > 0 {
+				t.Errorf("%s on %d threads: %d entries left in the spill directory", c.name, threads, len(left))
+			}
+		}
 	}
 }
 
@@ -713,16 +773,18 @@ func TestGroupBySpillFilesAreCleanedUp(t *testing.T) {
 
 	// Each refuses partway through: n_unique keeps every distinct value of a group.
 	// By key, after partitions for the high-cardinality key have been written; by
-	// five hot keys, after a quantile beside it has spilled its values (step 220).
+	// five hot keys, after a quantile and an n_unique beside it have spilled their
+	// values (steps 220 and 241). implode refuses: its answer is every value.
 	for _, c := range []struct {
 		name string
 		key  string
 		aggs []ursus.Expr
 	}{
-		{"error", "k", []ursus.Expr{ursus.Col("seq").NUnique()}},
+		{"error", "k", []ursus.Expr{ursus.Col("seq").Implode()}},
 		{"error_after_values", "grp", []ursus.Expr{
 			ursus.Col("opt").Quantile(0.5, ursus.InterpLinear).Alias("q"),
 			ursus.Col("seq").NUnique().Alias("n"),
+			ursus.Col("seq").Implode().Alias("all"),
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -734,7 +796,7 @@ func TestGroupBySpillFilesAreCleanedUp(t *testing.T) {
 					ursus.WithMemoryLimit(8<<10), ursus.WithSpillDir(dir),
 					ursus.WithMemoryStats(&stats))
 			if err == nil {
-				t.Fatal("n_unique over a hot key fitted 8 KiB")
+				t.Fatal("implode over a hot key fitted 8 KiB")
 			}
 			if stats.Spills == 0 {
 				t.Fatal("it refused before anything was written, so nothing is tested")

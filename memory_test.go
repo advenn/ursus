@@ -488,13 +488,14 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 		want  string
 	}{
 		// Fifty keys over four thousand rows: every key is resident, nothing routes,
-		// and n_unique keeps every distinct value of every group. This case USED TO
-		// PASS for a different reason — before step 12 the group table itself was what
-		// overflowed — which is worse than failing, because the message was right for
-		// the wrong cause. It was a quantile until step 220, which spills its values.
+		// and implode keeps every value of every group, as its answer. This case USED
+		// TO PASS for a different reason — before step 12 the group table itself was
+		// what overflowed — which is worse than failing, because the message was right
+		// for the wrong cause. It was a quantile until step 220, and n_unique until
+		// step 241, both of which spill their values.
 		{"group_by_holistic", func() *ursus.LazyFrame {
 			return ursus.Scan(src).GroupBy(ursus.Col("k")).
-				Agg(ursus.Col("seq").NUnique())
+				Agg(ursus.Col("seq").Implode())
 		}, "group_by"},
 		// With no partition_by: a window over keys spills since step 82, and
 		// over_spills below is its entry; one with no keys streams an aggregate or a
