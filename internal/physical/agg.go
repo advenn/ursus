@@ -286,25 +286,30 @@ func planAggregate(ctx context.Context, a *plan.Aggregate, opts Options) (Operat
 //
 // The aggregate sink names its outputs __agg0, __agg1, … so that a temporary can
 // never collide with a user column. This puts the user's names back.
-type renameOp struct{ schema *dtype.Schema }
+// renameOp gives a batch's columns the schema's names and types, in order, and drops
+// the last drop columns, which the schema does not have.
+type renameOp struct {
+	schema *dtype.Schema
+	drop   int
+}
 
 func (r *renameOp) Schema() *dtype.Schema { return r.schema }
 func (r *renameOp) Close() error          { return nil }
 
 func (r *renameOp) Apply(_ context.Context, in *data.Batch) (*data.Batch, error) {
-	if in.NumCols() != r.schema.Len() {
+	if in.NumCols() != r.schema.Len()+r.drop {
 		return nil, uerr.Internalf("physical: rename got %d columns, want %d",
-			in.NumCols(), r.schema.Len())
+			in.NumCols(), r.schema.Len()+r.drop)
 	}
 	if in.NumCols() == 0 {
 		// GroupBy().Agg() with nothing to aggregate: the global row, which has no
 		// columns to count it by, so its height is carried, not derived.
 		return data.NewBatchRows(r.schema, nil, in.Rows()), nil
 	}
-	cols := make([]*data.Column, in.NumCols())
-	for i, c := range in.Columns() {
+	cols := make([]*data.Column, r.schema.Len())
+	for i := range cols {
 		f := r.schema.Field(i)
-		cols[i] = c.Rename(f.Name).WithDType(f.Type)
+		cols[i] = in.Column(i).Rename(f.Name).WithDType(f.Type)
 	}
 	return data.NewBatch(r.schema, cols)
 }

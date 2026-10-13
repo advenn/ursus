@@ -55,11 +55,9 @@ type temporalSink struct {
 	keys  []expr.Node
 	specs []aggSpec
 
-	// The windows' aggregates, by segment (tempstream.go). A keyed group keeps every
-	// window in one; an unkeyed one streams its answer, a segment of chunk() windows
-	// at a time (step 207), and wBase is the first window the per-window arrays
-	// still hold.
-	stream  bool
+	// The windows' aggregates, by segment (tempsegment.go): the answer streams, a
+	// segment of chunk() windows at a time (steps 207, 243), and wBase is the first
+	// window the per-window arrays still hold.
 	segs    []*tgSeg
 	wBase   int32
 	emitted bool          // whether a segment has been handed out
@@ -85,6 +83,7 @@ type temporalSink struct {
 	// window, by a whole day, and never say so.
 	loc   *time.Location
 	mem   *execopt.Account
+	limit int64 // the budget's: the sink refuses once its own state is past it
 	batch int
 
 	// gridPoints is how many window slots this query has already built, across
@@ -103,9 +102,19 @@ type temporalSink struct {
 	bIDs    map[string]int32
 	bkts    []*tgBucket
 
+	// A keyed group's bucket keys, a row a bucket in the order they appeared: in
+	// batches of chunk() rows (keyRows), and the newest, a batch each (keyNew). And
+	// the hidden columns its segments carry, each window's bucket and number, for the
+	// sort that puts them in bucket order (tempsegment.go).
+	keyRows, keyNew  []*data.Batch
+	keyTail          *data.Batch // keyNew in one batch, as windowKeys last made it
+	keyBytes         int64       // what keyRows and keyNew hold
+	bktName, winName string
+
 	wStart, wEnd []int64 // its bounds, kept only for IncludeBoundaries
 	wLabel       []int64
 	wFed         []bool
+	wBkt         []int32       // its bucket, kept only for a keyed group
 	parts        []*data.Batch // the batches the queued pairs and kept rows point into
 	pairs        []rowRef
 	pgroups      []int32
@@ -399,6 +408,18 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 			Nullable: !spec.op.IsCounting(),
 		})
 	}
+	// A keyed group's segments carry each window's bucket and number, for the sort
+	// that puts its answer in bucket order (tempsegment.go).
+	var bktName, winName string
+	if len(t.Keys) > 0 {
+		sofar, err := dtype.NewSchema(sinkFields...)
+		if err != nil {
+			return nil, err
+		}
+		bktName = unusedName(sofar, "__bkt")
+		winName = unusedName(sofar, "__win")
+		sinkFields = append(sinkFields, dtype.NotNull(bktName, dtype.Int32), dtype.NotNull(winName, dtype.Int32))
+	}
 	sinkSchema, err := dtype.NewSchema(sinkFields...)
 	if err != nil {
 		return nil, err
@@ -415,7 +436,7 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 	sink := &temporalSink{
 		schema: sinkSchema, inSchema: in, keySchema: keySchema,
 		index: t.Index, keys: t.Keys, specs: specs, segs: []*tgSeg{{accs: accs}},
-		stream:  len(t.Keys) == 0,
+		bktName: bktName, winName: winName,
 		rolling: t.Rolling,
 		every:   t.Every, period: t.Period, offset: t.Offset,
 		closed: t.Closed.Or(def),
@@ -423,6 +444,7 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 		idxType: idxField.Type,
 		loc:     temporalLocation(idxField.Type),
 		mem:     opts.Budget.Account(opName(t.Rolling)),
+		limit:   opts.Budget.Limit(),
 		batch:   opts.batchSize(),
 		sorted:  true,
 	}
@@ -430,9 +452,13 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 		return nil, err
 	}
 
-	op := Operator(&breaker{child: child, sink: sink})
-	if sink.stream {
-		op = &tempStreamOp{child: child, sink: sink}
+	op := Operator(&tempStreamOp{child: child, sink: sink})
+	if len(t.Keys) > 0 {
+		order, err := bucketOrder(sink, opts)
+		if err != nil {
+			return nil, err
+		}
+		op = &breaker{child: op, sink: order}
 	}
 	if !compound && len(specs) == len(t.Aggs) {
 		return &stage{child: op, op: &renameOp{schema: outSchema}}, nil
@@ -446,6 +472,24 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 	}
 	projExprs = append(projExprs, rewritten...)
 	return &stage{child: op, op: &projectOp{schema: outSchema, exprs: projExprs}}, nil
+}
+
+// bucketOrder is the sink after a keyed group that puts its windows in bucket order
+// (tempsegment.go). Its sort's runs are at least a sixteenth of the limit, as a
+// window's sorted pass's are: the group's own state can keep the query over.
+func bucketOrder(s *temporalSink, opts Options) (*bucketOrderSink, error) {
+	keys := []plan.SortKey{{Expr: &expr.Col{Name: s.bktName}}, {Expr: &expr.Col{Name: s.winName}}}
+	kSch, err := keySchema(keys, s.schema)
+	if err != nil {
+		return nil, err
+	}
+	out, err := dtype.NewSchema(s.schema.FieldSlice()[:s.schema.Len()-2]...)
+	if err != nil {
+		return nil, err
+	}
+	return &bucketOrderSink{out: out, bkt: s.schema.IndexOf(s.bktName), sort: &sortSink{schema: s.schema,
+		keys: keys, kSch: kSch, budget: opts.Budget, mem: opts.Budget.Account(s.op()),
+		batch: opts.batchSize(), minRun: opts.Budget.Limit() / 16}}, nil
 }
 
 // temporalLocation resolves a Datetime's zone once per query. An unloadable zone

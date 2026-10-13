@@ -502,9 +502,11 @@ func holdsHint(op string) string {
 		// million windows, and telling its author to reduce the input would send
 		// them nowhere. This is the same falsity holdsHint was written for when the
 		// generic line said tail "buffers its whole input".
-		return op + " holds one window per every= between the first and last row, " +
-			"plus the rows each window covers; a coarser every=, a smaller offset= " +
-			"or a narrower index range is what makes it smaller"
+		return op + " holds its open windows and the rows they cover, handing each " +
+			"out as the index passes its end; a gap in the index makes one window per " +
+			"every= across it at once, and a median or an implode keeps every value " +
+			"of its windows; a coarser every=, a smaller offset= or a narrower index " +
+			"range is what makes it smaller"
 	default:
 		return op + " buffers its whole input; raise the limit with WithMemoryLimit"
 	}

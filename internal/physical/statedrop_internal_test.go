@@ -59,6 +59,9 @@ func TestFinishedGroupingsDropTheirState(t *testing.T) {
 		}
 		switch c := st.child.(type) {
 		case *breaker:
+			if g, ok := c.child.(*tempStreamOp); ok {
+				return g.sink // a keyed temporal group, under its bucket-order sort (step 243)
+			}
 			return c.sink
 		case *tempStreamOp: // an unkeyed temporal group (step 207)
 			return c.sink

@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.4
 
-Everything since `v0.6.3` (2026-10-12): steps 234–242, so far.
+Everything since `v0.6.3` (2026-10-12): steps 234–243, so far.
 [`v0.6.4-scope.md`](./context_files/v0.6.4-scope.md) set the scope: **out of core, the
 leftovers** — what still refuses under a memory budget, made to spill or stream.
 
@@ -48,6 +48,10 @@ leftovers** — what still refuses under a memory budget, made to spill or strea
   partition** (242), as a group-by's does. It refused. A run of spilled values, a
   group-by's too, is now written a batch at a time, so the merge back holds a batch
   of each run rather than a chunk of 8,192 values.
+- **Keyed `Rolling` and `GroupByDynamic` hand their answer out** (243) as their
+  windows close, and a sort that spills puts it in bucket order. They held every
+  window, and refused past the limit. In memory a keyed group is a little slower:
+  over 2,000,000 rows under 1,000 keys, +4% rolling and +13% dynamic.
 
 ---
 

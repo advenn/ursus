@@ -38,22 +38,22 @@ import (
 //
 // The rows kept for rolling windows point into the batches they came in, which are
 // gathered into one when eight are held, as the as-of join does; a dynamic group
-// keeps none past the batch. The aggregates hold a state a window, which is the
-// output. A window is numbered as it is made, so across buckets they interleave; the
-// output is per bucket, in the order the buckets appeared, and each bucket's windows
-// in order, as the buffered sink gave it, by a Take at the end.
+// keeps none past the batch. The aggregates hold a state a window, a segment of
+// windows at a time (tempsegment.go). A window is numbered as it is made, so across
+// buckets they interleave; the output is per bucket, in the order the buckets
+// appeared, and each bucket's windows in order, as the buffered sink gave it, by a
+// sort after the group.
 //
 // The pairs of a row and a window are fed to the ordinary accumulators a chunk at a
 // time, gathered once, as the buffered sink fed them: a window's rows in index order.
 
 // tgBucket is one categorical key's share of a temporal group.
 type tgBucket struct {
-	key     *data.Batch // its first row's key values, one row
+	id      int32 // its place among the buckets, in the order they appeared
 	started bool
 	next    time.Time // a dynamic group's next grid start, not yet a window
 	active  []tgWin   // windows a later row may still fall in, oldest first
 	recent  []tgRow   // a rolling group's rows that a window yet to come may reach
-	wins    []int32   // its windows, in order
 }
 
 // tgWin is an open window: its number and its membership, [lo, hi] under closed.
@@ -173,9 +173,25 @@ func (s *temporalSink) bucketOf(enc *kernel.GroupKeyEncoder, keyCols []*data.Col
 	if s.bIDs == nil {
 		s.bIDs = map[string]int32{}
 	}
-	s.bIDs[k] = int32(len(s.bkts))
-	b := &tgBucket{key: key}
+	id := int32(len(s.bkts))
+	s.bIDs[k] = id
+	b := &tgBucket{id: id}
 	s.bkts = append(s.bkts, b)
+	// Its key, kept for its windows' rows: a batch's worth of buckets at a time
+	// goes into one batch.
+	s.keyNew = append(s.keyNew, key)
+	s.keyBytes += key.NBytes()
+	if len(s.keyNew) == s.chunk() {
+		all, err := kernel.Concat(s.keyOnly, s.keyNew)
+		if err != nil {
+			return nil, err
+		}
+		for _, k := range s.keyNew {
+			s.keyBytes -= k.NBytes()
+		}
+		s.keyRows, s.keyNew = append(s.keyRows, all), nil
+		s.keyBytes += all.NBytes()
+	}
 	return b, nil
 }
 
@@ -350,7 +366,7 @@ func (s *temporalSink) passed(w tgWin, t int64) bool {
 // start and end as it is reported, which are kept only for IncludeBoundaries.
 func (s *temporalSink) newWindow(b *tgBucket, lo, hi, start, end int64) (tgWin, error) {
 	w := s.wBase + int32(len(s.wLabel))
-	if err := s.openSeg(w); err != nil {
+	if err := s.openSeg(w, hi); err != nil {
 		return tgWin{}, err
 	}
 	if s.boundaries {
@@ -361,8 +377,8 @@ func (s *temporalSink) newWindow(b *tgBucket, lo, hi, start, end int64) (tgWin, 
 		label = end
 	}
 	s.wLabel, s.wFed = append(s.wLabel, label), append(s.wFed, false)
-	if !s.stream {
-		b.wins = append(b.wins, w) // the order Finish gives them in
+	if len(s.keys) > 0 {
+		s.wBkt = append(s.wBkt, b.id)
 	}
 	return tgWin{id: w, lo: lo, hi: hi}, nil
 }
@@ -428,16 +444,15 @@ func (s *temporalSink) feed(ctx context.Context) error {
 	}
 	s.unseen += len(s.pairs)
 	s.pairs, s.pgroups = s.pairs[:0], s.pgroups[:0]
-	if s.stream {
-		if err := s.handOut(false); err != nil {
-			return err
-		}
+	if err := s.handOut(false); err != nil {
+		return err
 	}
 	// What the aggregates keep is charged as it grows, not once a batch: a median or
 	// an implode keeps a value a pair, and one batch of a long rolling window is
-	// millions of pairs. NBytes is O(windows), so it is read once per that many
-	// pairs, as the buffered sink read it.
-	if s.unseen >= max(s.chunk(), nGroups) {
+	// millions of pairs. NBytes is O(windows), and the charge walks the buckets, so
+	// it is made once per that many pairs, as the buffered sink made it: a keyed
+	// group that hands its windows out holds few of them, and may have many buckets.
+	if s.unseen >= max(s.chunk(), nGroups, len(s.bkts)) {
 		s.unseen = 0
 		return s.chargeState()
 	}
@@ -488,112 +503,44 @@ func (s *temporalSink) letGo() error {
 
 // chargeState charges the batches held, the per-window arrays and what the
 // aggregates hold, and checks the budget.
+//
+// What it holds is its open windows' state and the rows they reach, which it cannot
+// spill; what it has handed out, a keyed group's sort holds, and spills. So it
+// refuses only once its own state is past the limit, as a frozen group-by does
+// (step 243): checking the query, it refused while the sort it fed held the query
+// over, a batch before the sort would have spilled.
 func (s *temporalSink) chargeState() error {
 	s.mem.Release()
 	for _, p := range s.parts {
 		s.mem.Retain(p)
 	}
-	st := int64(cap(s.wLabel))*9 + int64(cap(s.wStart)+cap(s.wEnd))*8 + int64(cap(s.pairs))*12
+	st := int64(cap(s.wLabel))*9 + int64(cap(s.wStart)+cap(s.wEnd))*8 + int64(cap(s.pairs))*12 +
+		int64(cap(s.wBkt))*4
 	for _, b := range s.bkts {
-		st += int64(cap(b.recent))*16 + int64(cap(b.active))*24 + int64(cap(b.wins))*4
-		if b.key != nil {
-			st += b.key.NBytes()
-		}
+		st += int64(cap(b.recent))*16 + int64(cap(b.active))*24
 	}
+	st += s.keyBytes
 	for _, g := range s.segs {
 		for _, a := range g.accs {
 			st += a.NBytes()
 		}
 	}
 	s.mem.RetainBytes(st)
+	if s.mem.Used() <= s.limit {
+		return nil
+	}
 	return s.mem.Check()
 }
 
-// Finish puts the windows in the order the buffered sink gave them, per bucket and
-// each bucket's in order, and builds the answer.
+// Finish hands out every segment left. A temporal group runs as a tempStreamOp,
+// which feeds the sink and gives its segments as they close; Finish is the sink's
+// whole answer at once.
 func (s *temporalSink) Finish(ctx context.Context) (Operator, error) {
-	if s.stream {
-		out, err := s.finishStream(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return newBatchOperator(s.schema, out...), nil
-	}
-	if !s.sorted {
-		return nil, s.unsorted()
-	}
-	if err := s.feed(ctx); err != nil {
-		return nil, err
-	}
-	accs := s.segs[0].accs
-	nGroups := len(s.wLabel)
-	perm := make([]int32, 0, nGroups)
-	bucketOf := make([]int32, 0, nGroups)
-	for bi, b := range s.bkts {
-		for _, w := range b.wins {
-			perm = append(perm, w)
-			bucketOf = append(bucketOf, int32(bi))
-		}
-	}
-	pick := func(v []int64) []int64 {
-		out := make([]int64, len(perm))
-		for i, w := range perm {
-			out[i] = v[w]
-		}
-		return out
-	}
-	cols := make([]*data.Column, 0, 3+len(s.keys)+len(s.specs))
-	if s.boundaries {
-		cols = append(cols, packTemporal("_lower_boundary", s.idxType, pick(s.wStart)),
-			packTemporal("_upper_boundary", s.idxType, pick(s.wEnd)))
-	}
-	cols = append(cols, packTemporal(s.keySchema.Field(0).Name, s.idxType, pick(s.wLabel)))
-	if len(s.keys) > 0 {
-		reps := make([]*data.Batch, len(s.bkts))
-		for i, b := range s.bkts {
-			reps[i] = b.key
-		}
-		keys, err := kernel.Concat(s.keyOnly, reps)
-		if err != nil {
-			return nil, err
-		}
-		for _, c := range keys.Columns() {
-			g, err := kernel.Take(c, bucketOf)
-			if err != nil {
-				return nil, err
-			}
-			cols = append(cols, g)
-		}
-	}
-	identity := len(s.bkts) <= 1
-	for i, spec := range s.specs {
-		accs[i].Reserve(nGroups)
-		c, err := accs[i].Finish(spec.name, nGroups)
-		if err != nil {
-			return nil, err
-		}
-		if !identity {
-			if c, err = kernel.Take(c, perm); err != nil {
-				return nil, err
-			}
-		}
-		cols = append(cols, c)
-	}
-	out, err := data.NewBatch(s.schema, cols)
+	out, err := s.finishStream(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// The account held the state; it holds the answer now, which is the rebase
-	// hashAggSink.Finish and joinBuildSink.freeze both make. The aggregates' state
-	// goes with it: kept, it stayed alive until the query ended.
-	s.parts, s.segs, s.bkts = nil, nil, nil
-	s.mem.Release()
-	s.mem.Retain(out)
-
-	if out.Rows() <= s.chunk() {
-		return newBatchOperator(s.schema, out), nil
-	}
-	return &runOperator{schema: s.schema, src: &batchRun{b: out, n: s.chunk()}}, nil
+	return newBatchOperator(s.schema, out...), nil
 }
 
 // keyOnlySchema is the key columns' part of keySchema, under their output names.

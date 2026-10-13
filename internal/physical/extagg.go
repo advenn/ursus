@@ -61,8 +61,10 @@ const (
 // A fixed name collided with an input column of that name: a MaintainOrder group-by
 // over a frame with a column called __ord failed under a limit with "duplicate
 // column", for a column the user never asked for.
-func ordinalName(in *dtype.Schema) string {
-	name := ordCol
+func ordinalName(in *dtype.Schema) string { return unusedName(in, ordCol) }
+
+// unusedName is name, lengthened until no column of in has it.
+func unusedName(in *dtype.Schema, name string) string {
 	for in.IndexOf(name) >= 0 {
 		name += "_"
 	}
