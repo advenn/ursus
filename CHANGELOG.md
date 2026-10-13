@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.4
 
-Everything since `v0.6.3` (2026-10-12): steps 234–244, so far.
+Everything since `v0.6.3` (2026-10-12): steps 234–245, so far.
 [`v0.6.4-scope.md`](./context_files/v0.6.4-scope.md) set the scope: **out of core, the
 leftovers** — what still refuses under a memory budget, made to spill or stream.
 
@@ -56,6 +56,9 @@ leftovers** — what still refuses under a memory budget, made to spill or strea
   values** (244), keyed or not, as a group-by's does. Windows that overlap hold a
   value for every (window, row) pair, many times their input, and refused past the
   limit. Implode still does.
+- **`Sort(...).Head(k)` with a large k spills** (245): past the limit its best k rows
+  go to disk as runs, and the first k of their merge are the answer, ties in input
+  order. It held them past the limit.
 
 ---
 

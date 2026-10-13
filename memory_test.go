@@ -226,6 +226,52 @@ func TestTopKSurvivesSpilling(t *testing.T) {
 	}
 }
 
+// TestALargeTopKSpills: a top-k whose best k rows are themselves past its limit
+// spills them as runs, each the best k of its stretch of the input, and takes the
+// first k of their merge, where it held them past the limit (v0.6.4 step 245). The
+// best 12,000 of 20,000 rows, by a key of six values whose ties span every batch,
+// and by a nullable key descending, nulls last: under 64 KB the rows and their
+// order, ties included, are the in-memory answer's, it spills, it peaks at most
+// twice the limit, and the spill directory is empty after. Until then it compacted
+// to its best k and held them, past the limit, without a word.
+//
+// At 64 rows a batch: the merge of sixteen runs holds a batch of each, at 512 rows
+// eight times this limit, and of a real one far less.
+func TestALargeTopKSpills(t *testing.T) {
+	src := memFrame(t, 20000, 512, 6)
+	c := ursus.Col
+	for name, keys := range map[string][]ursus.SortKey{
+		"k":                   {ursus.Asc(c("k"))},
+		"opt desc nulls last": {ursus.Desc(c("opt")).NullsLast(), ursus.Asc(c("grp"))},
+	} {
+		want, err := ursus.Scan(src).Sort(keys...).Head(12000).Collect(t.Context(), ursus.WithBatchSize(512))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var stats ursus.MemoryStats
+		dir := t.TempDir()
+		got, err := ursus.Scan(src).Sort(keys...).Head(12000).Collect(t.Context(),
+			ursus.WithBatchSize(64), ursus.WithMemoryLimit(64<<10), ursus.WithSpillDir(dir),
+			ursus.WithMemoryStats(&stats))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if stats.Spills == 0 {
+			t.Errorf("%s: twelve thousand rows under 64 KB, and nothing spilled", name)
+		}
+		if !slices.Equal(int64Col(t, got, "seq"), int64Col(t, want, "seq")) {
+			t.Errorf("%s: a large top-k under a budget picked different rows, or put them in another order", name)
+		}
+		ursustest.AssertFrameEqual(t, got, want)
+		if stats.Peak > 2*(64<<10) {
+			t.Errorf("%s: a peak of %d KB under a 64 KB limit", name, stats.Peak>>10)
+		}
+		if left, _ := os.ReadDir(dir); len(left) > 0 {
+			t.Errorf("%s: %d entries left in the spill directory", name, len(left))
+		}
+	}
+}
+
 // TestSortedSinkIsBounded is the deliverable, stated as a measurement.
 //
 // A query that FINISHES proves only that it did not run out of memory. What has

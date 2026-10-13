@@ -143,7 +143,15 @@ func (s *sortSink) Consume(ctx context.Context, in *data.Batch) error {
 		return nil
 	}
 	if s.limit > 0 {
-		return s.compact(ctx)
+		if err := s.compact(ctx); err != nil {
+			return err
+		}
+		// A large k: its best rows alone keep the query over, so they go to disk as
+		// a run, as a sort's rows do (v0.6.4 step 245). A small k's never do: they
+		// spill only when they are a sixteenth of the limit.
+		if !s.mem.Over() || s.mem.Used() < max(s.minRun, s.budget.Limit()/16) {
+			return nil
+		}
 	}
 	return s.spill(ctx)
 }
@@ -230,13 +238,18 @@ func (s *sortSink) order(limit int) ([]rowRef, error) {
 
 // compact reduces a BOUNDED sort's buffer to the best `limit` rows.
 //
-// This is why a top-k never spills. Pruning a prefix to its own top k cannot drop
-// a row that the whole input's top k would have kept — adding rows only pushes
-// rows out — and it preserves stability: the retained rows keep their relative
-// order, and they all precede every row consumed afterwards, which is exactly the
-// order their input positions had. So ArgTopK == ArgSort[:k] survives compaction,
-// which is the contract the merge would otherwise have had to reproduce across
-// runs with no original row index left to break ties on.
+// This is why a small top-k never spills. Pruning a prefix to its own top k cannot
+// drop a row that the whole input's top k would have kept — adding rows only
+// pushes rows out — and it preserves stability: the retained rows keep their
+// relative order, and they all precede every row consumed afterwards, which is
+// exactly the order their input positions had. So ArgTopK == ArgSort[:k] survives
+// compaction.
+//
+// A large k's best rows can themselves be past the limit, and then they spill as a
+// run (step 245). The same argument holds across runs: each run is the best k of
+// its stretch of the input, in order, so the whole input's best k are among the
+// runs' together, and the merge breaks ties by run, which is input order. Finish
+// takes the first k the merge gives.
 func (s *sortSink) compact(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -464,7 +477,11 @@ func (s *sortSink) Finish(ctx context.Context) (Operator, error) {
 	if tail != nil {
 		srcs = append(srcs, tail)
 	}
-	return s.merger(srcs, s.budget.Account("sort"))
+	op, err := s.merger(srcs, s.budget.Account("sort"))
+	if err != nil || s.limit <= 0 {
+		return op, err
+	}
+	return &limitOp{child: op, remaining: s.limit}, nil
 }
 
 func planSort(ctx context.Context, sn *plan.Sort, opts Options) (Operator, error) {

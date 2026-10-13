@@ -119,3 +119,60 @@ func TestASortWithAMinimumRunWaitsForIt(t *testing.T) {
 		}
 	}
 }
+
+// TestASpilledTopKGivesItsBestK: a top-k past its limit at every batch spills its
+// best k each time, as a run, and Finish gives the first k of their merge, which
+// are the stable sort's first k: no more, ties in input order (step 245). The plan
+// keeps a Limit above every top-k, so this holds the sink to its own word.
+func TestASpilledTopKGivesItsBestK(t *testing.T) {
+	sch := testSchema(t)
+	budget := execopt.NewBudget(1, t.TempDir()) // over at every batch
+	keys := []plan.SortKey{{Expr: &expr.Col{Name: "k"}}}
+	kSch, err := keySchema(keys, sch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const k = 40
+	s := &sortSink{schema: sch, keys: keys, kSch: kSch, budget: budget,
+		mem: budget.Account("sort"), batch: 7, limit: k}
+	defer s.Close()
+	rng := rand.New(rand.NewPCG(245, 1))
+	type row struct{ k, v int64 }
+	var all []row
+	for r := range 200 {
+		ks, vs := make([]int64, 5), make([]int64, 5)
+		for i := range ks {
+			ks[i], vs[i] = int64(rng.IntN(9)), int64(r*5+i)
+			all = append(all, row{ks[i], vs[i]})
+		}
+		if err := s.Consume(t.Context(), testBatch(t, sch, ks, vs)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(s.runs) == 0 {
+		t.Fatal("a top-k over its limit at every batch spilled nothing")
+	}
+	op, err := s.Finish(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := drain(t, op)
+	op.Close()
+	slices.SortStableFunc(all, func(a, b row) int { return int(a.k - b.k) })
+	i := 0
+	for _, b := range got {
+		ks, vs := data.MustValues[int64](b.Column(0)), data.MustValues[int64](b.Column(1))
+		for j := range ks {
+			if i >= k {
+				t.Fatalf("more than the best %d rows", k)
+			}
+			if ks[j] != all[i].k || vs[j] != all[i].v {
+				t.Fatalf("row %d is (%d, %d), want (%d, %d)", i, ks[j], vs[j], all[i].k, all[i].v)
+			}
+			i++
+		}
+	}
+	if i != k {
+		t.Fatalf("%d rows out, want the best %d", i, k)
+	}
+}
