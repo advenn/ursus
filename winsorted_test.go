@@ -63,6 +63,13 @@ func sortedWindows(part ...ursus.Expr) []ursus.Expr {
 		c("v").ShiftFill(-3, int64(-1)).OverWith(byX).Alias("lead_x"),
 		c("v").CumCount(true).OverWith(byX).Alias("ccr_x"),
 		c("v").CumSum(false).Over(part...).Alias("cs_file"),
+		// Backward (step 236): in the file's order, and in an order of their own.
+		c("v").CumSum(true).Over(part...).Alias("csr_file"),
+		c("s").CumMin(true).Over(part...).Alias("sminr_file"),
+		c("v").BackwardFill(0).Over(part...).Alias("bf_file"),
+		c("v").CumProd(true).OverWith(byX).Alias("cpr_x"),
+		c("x").CumMax(true).OverWith(byF).Alias("cmaxr_f"),
+		c("v").BackwardFill(0).OverWith(byF).Alias("bf_f"),
 		c("x").Sum().Over(part...).Alias("total"),
 	}
 }
@@ -75,8 +82,11 @@ func sortedWindows(part ...ursus.Expr) []ursus.Expr {
 // every batch — a function in the file's order, and an aggregate.
 // Cumulative sums, a shift, cum_count either way, a forward fill over runs of nulls
 // longer than two batches, a rolling mean, a cumulative max of strings, an ewm and a
-// shift forward with a fill. Under a tenth of the input, on one thread and four, the
-// answer is the in-memory one, row for row, and the spill directory is empty after.
+// shift forward with a fill. And, walked backward (step 236), reversed cumulative
+// sums, minima of strings, products and maxima, and backward fills with no limit,
+// over runs of nulls longer than two batches, in the file's order and in an order of
+// their own. Under a tenth of the input, on one thread and four, the answer is the
+// in-memory one, row for row, and the spill directory is empty after.
 func TestAWindowInAnOrderOfItsOwnStreamsPastItsLimit(t *testing.T) {
 	frame := sortedFrame(40, 500)
 	in, err := frame.Collect(t.Context())

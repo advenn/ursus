@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.4
 
-Everything since `v0.6.3` (2026-10-12): steps 234–235, so far.
+Everything since `v0.6.3` (2026-10-12): steps 234–236, so far.
 [`v0.6.4-scope.md`](./context_files/v0.6.4-scope.md) set the scope: **out of core, the
 leftovers** — what still refuses under a memory budget, made to spill or stream.
 
@@ -26,6 +26,9 @@ leftovers** — what still refuses under a memory budget, made to spill or strea
 - **A window with an order_by streams over one huge partition** (235), with no
   partition_by or over one hot key: its rows' order keys and inputs are sorted, the
   functions walked over them, and the answers sorted back beside the rows. It
+  refused.
+- **A reversed cumulative function and a backward fill with no limit stream over one
+  huge partition** (236), walked backward through a reverse of that stream. They
   refused.
 
 ---

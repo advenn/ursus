@@ -63,11 +63,10 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 			return s.refuse("a window with no partition_by is one partition, which partitioning "+
 				"to disk cannot divide, and this one computes a function that needs all of it "+
 				"or mixes it with a partition_by",
-				"aggregates, cumulative functions, cum_count either way, ewm, Shift, the "+
-					"fills with a limit and rolling windows of rows stream past the limit, "+
-					"in an order_by too; rank, interpolation and the other reversed "+
-					"cumulative functions do not. Give the window a partition_by, or raise "+
-					"the limit with WithMemoryLimit")
+				"aggregates, cumulative functions either way, cum_count, ewm, Shift, the "+
+					"fills and rolling windows of rows stream past the limit, in an order_by "+
+					"too; rank, interpolation and rolling windows by time do not. Give the "+
+					"window a partition_by, or raise the limit with WithMemoryLimit")
 		}
 	}
 	if s.skewable() && s.budget.Limit() > 0 {
@@ -79,10 +78,10 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 		return s.refuse("one partition holds more rows than the limit, and partitioning to disk "+
 			"divides partitions, not the rows of one; this one computes a function that "+
 			"needs all of it at once",
-			"aggregates, cumulative functions, cum_count either way, ewm, Shift, the "+
-				"fills with a limit and rolling windows of rows stream a partition past the "+
-				"limit, in an order_by too; rank, interpolation and the other reversed "+
-				"cumulative functions do not. Raise the limit with WithMemoryLimit")
+			"aggregates, cumulative functions either way, cum_count, ewm, Shift, the "+
+				"fills and rolling windows of rows stream a partition past the limit, in an "+
+				"order_by too; rank, interpolation and rolling windows by time do not. "+
+				"Raise the limit with WithMemoryLimit")
 	}
 	return s.startSpill(ctx)
 }

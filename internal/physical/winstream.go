@@ -38,9 +38,9 @@ import (
 // A function with an order_by of its own is answered in a sorted pass: the rows put
 // in its order, walked, and the answers put back (winsorted.go, step 235).
 //
-// Rank, interpolation, a backward fill without a limit, a reversed cumulative
-// function other than cum_count and a rolling window by time need the whole
-// partition, or an unbounded part of it, and still refuse.
+// A reversed cumulative function and a backward fill without a limit walk that
+// stream backward (step 236). Rank, interpolation and a rolling window by time need
+// the whole partition, or an unbounded part of it, and still refuse.
 
 // winNeed is what an ordered function needs around a batch to answer it exactly: h
 // rows before and l after, or, with carry, its own last answer.
@@ -189,7 +189,7 @@ func (s *windowSink) finishOneSpill(ctx context.Context) (Operator, error) {
 	var keys []string
 	groups := map[string][]int{}
 	for i := range s.specs {
-		if _, ok := sortedNeed(&s.specs[i]); ok {
+		if sortedNeed(&s.specs[i]) {
 			k := orderKey(s.specs[i].order)
 			if _, seen := groups[k]; !seen {
 				keys = append(keys, k)
