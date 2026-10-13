@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.4
 
-Everything since `v0.6.3` (2026-10-12): steps 234–237, so far.
+Everything since `v0.6.3` (2026-10-12): steps 234–238, so far.
 [`v0.6.4-scope.md`](./context_files/v0.6.4-scope.md) set the scope: **out of core, the
 leftovers** — what still refuses under a memory budget, made to spill or stream.
 
@@ -33,6 +33,8 @@ leftovers** — what still refuses under a memory budget, made to spill or strea
 - **Rank, every method, streams over one huge partition** (237), in its child's
   order: max and average from the peer group's first position counted both ways. It
   refused.
+- **Interpolation, linear and nearest, streams over one huge partition** (238), from
+  a walk each way finding the values on either side and their positions. It refused.
 
 ---
 

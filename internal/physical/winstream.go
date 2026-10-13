@@ -50,6 +50,9 @@ type winNeed struct {
 	count bool // cum_count, which numbers on from the rows before
 	ewm   bool // an ewm function, which carries its running state
 	rank  bool // rank, in its own order, which carries its peer group (step 237)
+	// lastPos is the position, among the rows walked, of the last that holds a value,
+	// at or before each row: interpolation's (step 238).
+	lastPos bool
 }
 
 // streamNeed is spec sp's need, and false when no bounded one answers it.
@@ -251,6 +254,7 @@ type winStreamSpec struct {
 	n     int64            // count: rows numbered so far
 	ewm   kernel.EwmState  // ewm: the running state
 	rank  kernel.RankState // rank: its position, groups and last row
+	held  int64            // lastPos: the last position holding a value, or −1; walkPass sets −1
 
 	// A spec with an order of its own is answered in a sorted pass: its answer is
 	// column col of the answer file ans (winsorted.go).
@@ -387,6 +391,9 @@ func (p *winStreamOp) answer(ctx context.Context, st *winStreamSpec, target *dat
 	if st.need.rank {
 		return kernel.RankNext(sp.fn.Params.Method, sp.name, child, &st.rank)
 	}
+	if st.need.lastPos {
+		return p.lastHeld(st, child), nil
+	}
 	// The context: the last h rows before, the batch, and the first l after.
 	parts := []*data.Column{}
 	fparts := []*data.Column{}
@@ -471,6 +478,23 @@ func (p *winStreamOp) carried(st *winStreamSpec, child *data.Column) (*data.Colu
 		}
 	}
 	return res, nil
+}
+
+// lastHeld is, for each row of child, the position among the rows walked of the last
+// one at or before it that holds a value, null before the first.
+func (p *winStreamOp) lastHeld(st *winStreamSpec, child *data.Column) *data.Column {
+	n := child.Len()
+	vals := make([]int64, n)
+	ok := bitmap.NewBuilder(n)
+	for i := range n {
+		if child.IsValid(i) {
+			st.held = st.n + int64(i)
+		}
+		vals[i] = st.held
+		ok.Append(st.held >= 0)
+	}
+	st.n += int64(n)
+	return data.NewFixed(st.sp.name, dtype.Int64, vals, ok.Finish())
 }
 
 // inputs evaluates a function's child, and its fill, over one batch, cast as the

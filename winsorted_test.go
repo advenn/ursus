@@ -77,6 +77,12 @@ func sortedWindows(part ...ursus.Expr) []ursus.Expr {
 		c("v").Rank(ursus.RankMax, true).Over(part...).Alias("r_max"),
 		c("f").Rank(ursus.RankAverage, false).Over(part...).Alias("r_avg"),
 		c("s").Rank(ursus.RankMax, false).Over(part...).Alias("r_smax"),
+		// Interpolation (step 238), linear and nearest, with an order or none, over
+		// runs of nulls longer than two batches and nulls before the first value.
+		c("v").Interpolate().Over(part...).Alias("ip_lin"),
+		c("v").Interpolate(ursus.InterpolateNearest()).Over(part...).Alias("ip_near"),
+		c("f").Cast(ursus.Float32).Interpolate().OverWith(byX).Alias("ip_f32"),
+		c("v").Interpolate(ursus.InterpolateNearest()).OverWith(byF).Alias("ip_near_f"),
 		c("x").Sum().Over(part...).Alias("total"),
 	}
 }
@@ -95,7 +101,9 @@ func sortedWindows(part ...ursus.Expr) []ursus.Expr {
 // their own. And rank (step 237), every method, both directions, over a float with
 // nulls, NaN and ±0, an integer with long runs of nulls, and strings with many ties.
 // Under a tenth of the input, on one thread and four, the answer is the in-memory
-// one, row for row, and the spill directory is empty after.
+// one, row for row, and the spill directory is empty after. And interpolation (step
+// 238), linear and nearest, of an integer and a Float32, in the file's order and in
+// orders of their own.
 func TestAWindowInAnOrderOfItsOwnStreamsPastItsLimit(t *testing.T) {
 	frame := sortedFrame(40, 500)
 	in, err := frame.Collect(t.Context())

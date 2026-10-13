@@ -59,6 +59,8 @@ type passStep struct {
 	need winNeed
 	back bool
 	typ  dtype.DataType
+	// childTyp makes the column the child's type, which sortedPass knows: a fill's.
+	childTyp bool
 }
 
 // passPlan is how a spec is answered in a sorted pass: its steps, and how their
@@ -79,7 +81,10 @@ type passPlan struct {
 //   - rank (step 237), in its own order: ordinal, dense and min forward. A peer
 //     group's last position is not known until it ends, so max is min over the order
 //     reversed, counted from the end, and average is min and max halved, as winRank
-//     computes it.
+//     computes it;
+//   - interpolation (step 238), with an order or none: forward, the last value and
+//     its position, and each row's own; backward, the next value and its position.
+//     kernel.InterpolateFrom answers from the five as the kernel does.
 func sortedPlan(sp *winSpec) (passPlan, bool) {
 	if sp.acc != nil {
 		return passPlan{}, false
@@ -105,6 +110,32 @@ func sortedPlan(sp *winSpec) (passPlan, bool) {
 				combine: rankAverage}, true
 		}
 		return passPlan{}, false
+	}
+	if fn.Fn == expr.WinInterpolate {
+		fill := func(back bool) passStep {
+			f := fn
+			f.Fn, f.Params = expr.WinForwardFill, expr.WinParams{}
+			w := walk
+			w.fn = &f
+			need, _ := streamNeed(&w)
+			return passStep{walk: w, need: need, back: back, childTyp: true}
+		}
+		held := func(back bool) passStep {
+			return passStep{walk: walk, need: winNeed{lastPos: true}, back: back, typ: dtype.Int64}
+		}
+		f := fn
+		f.Fn, f.Params = expr.WinCumCount, expr.WinParams{}
+		own := walk
+		own.fn = &f
+		nearest, out := fn.Params.Nearest, sp.out
+		return passPlan{
+			steps: []passStep{fill(false), held(false),
+				{walk: own, need: winNeed{count: true}, typ: dtype.Uint32},
+				fill(true), held(true)},
+			combine: func(rows int64, c []*data.Column) (*data.Column, error) {
+				return kernel.InterpolateFrom(nearest, "interpolate", out, rows, c[0], c[1], c[2], c[3], c[4])
+			},
+		}, true
 	}
 	back := false
 	switch {
@@ -230,6 +261,9 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 				st.walk.fillOf = &expr.Col{Name: fl}
 			}
 			st.walk.name = "__s" + itoa(len(steps))
+			if st.childTyp {
+				st.typ, st.walk.out = ct, ct
+			}
 			stepsOf[j] = append(stepsOf[j], len(steps))
 			steps = append(steps, st)
 		}
@@ -365,7 +399,7 @@ func walkPass(ctx context.Context, in Operator, steps []passStep, back bool,
 		}
 		at[i] = len(fields)
 		fields = append(fields, dtype.Of(st.walk.name, st.typ))
-		walk.specs = append(walk.specs, &winStreamSpec{sp: &st.walk, need: st.need})
+		walk.specs = append(walk.specs, &winStreamSpec{sp: &st.walk, need: st.need, held: -1})
 		walk.maxL = max(walk.maxL, st.need.l)
 	}
 	if len(walk.specs) == 0 {
