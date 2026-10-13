@@ -15,6 +15,14 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.6.4
+
+Everything since `v0.6.3` (2026-10-12): step 234, so far.
+[`v0.6.4-scope.md`](./context_files/v0.6.4-scope.md) set the scope: **out of core, the
+leftovers** — what still refuses under a memory budget, made to spill or stream.
+
+---
+
 ## v0.6.3 — 2026-10-12
 
 Everything since `v0.6.2` (2026-10-12): steps 213–232.
