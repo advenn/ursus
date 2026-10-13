@@ -138,3 +138,57 @@ func TestAWindowInAnOrderOfItsOwnStreamsPastItsLimit(t *testing.T) {
 		}
 	}
 }
+
+// TestASortedPassStaysNearItsLimit: a window with no partition_by that ranks,
+// interpolates and sums in an order of its own, under a tenth of its input, peaks
+// within twice the limit, and leaves no file behind after an early break (step 239).
+// In batches of 64 rows: a merge holds a batch of each of up to sixteen runs a level,
+// and the bound is for a limit well above sixteen batches, as a real one is. At
+// 8,192-row batches of a few narrow columns that is a few megabytes.
+func TestASortedPassStaysNearItsLimit(t *testing.T) {
+	frame := sortedFrame(40, 500)
+	in, err := frame.Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := in.Batch().NBytes() / 10
+	c := ursus.Col
+	q := frame.WithColumns(
+		c("f").Rank(ursus.RankAverage, false).Over().Alias("r"),
+		c("v").Interpolate().Over().Alias("ip"),
+		c("v").CumSum(false).OverWith(ursus.WindowSpec{OrderBy: []ursus.SortKey{ursus.Asc(c("x"))}}).Alias("cs"),
+	)
+	var stats ursus.MemoryStats
+	if _, err := q.Collect(t.Context(), ursus.WithBatchSize(64), ursus.WithMemoryLimit(limit),
+		ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&stats)); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("limit %d, peak %d (%.2fx), spills %d", limit, stats.Peak, float64(stats.Peak)/float64(limit), stats.Spills)
+	if stats.Peak > 2*limit {
+		t.Errorf("peaked at %d, over twice the limit of %d", stats.Peak, limit)
+	}
+	if stats.Spills <= sortFanInForTest {
+		t.Errorf("%d spills: too few for a sort to merge its runs a level up", stats.Spills)
+	}
+	// Its sorts spill no run under a sixteenth of the limit: 135 files here, where a
+	// run at every batch the query is over made 389.
+	if stats.Spills > 250 {
+		t.Errorf("%d spills: the pass's sorts spill runs smaller than their minimum", stats.Spills)
+	}
+
+	// Stopped after its first batch, it leaves nothing behind.
+	dir := t.TempDir()
+	for _, err := range q.CollectBatches(t.Context(), ursus.WithBatchSize(64),
+		ursus.WithMemoryLimit(limit), ursus.WithSpillDir(dir)) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		break
+	}
+	if left, _ := os.ReadDir(dir); len(left) > 0 {
+		t.Errorf("%d entries left in the spill directory after an early break", len(left))
+	}
+}
+
+// sortFanInForTest is the sort's fan-in, physical.sortFanIn.
+const sortFanInForTest = 16

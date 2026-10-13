@@ -373,7 +373,7 @@ func TestSpillingByHand(t *testing.T) {
 				return fmt.Sprintf("want a resource error, got %v", err)
 			}
 			for _, w := range []string{"reverse and tail spill", "hstack", "join_asof", "merge_sorted",
-				"rolling", "group_by_dynamic", "an unpartitioned over computing a rank"} {
+				"rolling", "group_by_dynamic", "rolling window by time", "n_unique and implode"} {
 				if !strings.Contains(err.Error(), w) {
 					return fmt.Sprintf("the hint does not say %q: %v", w, err)
 				}

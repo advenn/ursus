@@ -2,6 +2,8 @@ package physical
 
 import (
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -54,7 +56,22 @@ type sortSink struct {
 
 	dir  string   // spill directory, created on the first spill
 	runs []string // spilled run files, in input order
+
+	// levels is each run's: how many merges made it (step 239). Every sortFanIn
+	// runs of one level at the end of runs are merged into one of the next, in
+	// place, so the runs stay in input order and the final merge holds a batch of
+	// at most sortFanIn runs a level.
+	levels []int
+	named  int // run files named so far, which names the next
+
+	// minRun, when set, is the least a sink holds before it spills: a query over its
+	// limit because of others' state spills no run smaller than this. The sorted
+	// window pass sets it; a plain sort spills whenever the query is over.
+	minRun int64
 }
+
+// sortFanIn is how many runs of one level a sort merges into one of the next.
+const sortFanIn = 16
 
 func (s *sortSink) Schema() *dtype.Schema { return s.schema }
 
@@ -122,7 +139,7 @@ func (s *sortSink) Consume(ctx context.Context, in *data.Batch) error {
 	s.mem.Retain(in)
 	s.mem.Retain(kb)
 
-	if !s.mem.Over() {
+	if !s.mem.Over() || s.mem.Used() < s.minRun {
 		return nil
 	}
 	if s.limit > 0 {
@@ -268,7 +285,7 @@ func (s *sortSink) spill(ctx context.Context) error {
 		}
 		s.dir = dir
 	}
-	path := filepath.Join(s.dir, "run"+itoa(len(s.runs))+".ursspill")
+	path := s.nextRun()
 	w, err := spill.Create(path, s.schema)
 	if err != nil {
 		return err
@@ -296,10 +313,122 @@ func (s *sortSink) spill(ctx context.Context) error {
 	}
 
 	s.runs = append(s.runs, path)
+	s.levels = append(s.levels, 0)
 	s.rows, s.keyB = nil, nil
 	s.mem.Release()
 	s.budget.NoteSpill()
+	return s.cascade(ctx)
+}
+
+// nextRun names a run file.
+func (s *sortSink) nextRun() string {
+	s.named++
+	return filepath.Join(s.dir, "run"+itoa(s.named-1)+".ursspill")
+}
+
+// cascade merges the last sortFanIn runs into one of the next level while they are
+// all of one level (step 239). They are contiguous in input order, and the merge
+// breaks ties by run, so the merged run keeps the order the stable sort needs.
+func (s *sortSink) cascade(ctx context.Context) error {
+	for k := len(s.runs); k >= sortFanIn; k = len(s.runs) {
+		lvl := s.levels[k-1]
+		for _, l := range s.levels[k-sortFanIn:] {
+			if l != lvl {
+				return nil
+			}
+		}
+		path, err := s.mergeToRun(ctx, s.runs[k-sortFanIn:])
+		if err != nil {
+			return err
+		}
+		s.runs = append(s.runs[:k-sortFanIn], path)
+		s.levels = append(s.levels[:k-sortFanIn], lvl+1)
+	}
 	return nil
+}
+
+// mergeToRun merges run files into a new one, and removes them.
+func (s *sortSink) mergeToRun(ctx context.Context, runs []string) (path string, err error) {
+	srcs, err := openRuns(runs)
+	if err != nil {
+		return "", err
+	}
+	op, err := s.merger(srcs, s.budget.Account("sort"))
+	if err != nil {
+		return "", err
+	}
+	path = s.nextRun()
+	w, err := spill.Create(path, s.schema)
+	if err != nil {
+		return "", errors.Join(err, op.Close())
+	}
+	for {
+		b, err := op.Next(ctx)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err == nil {
+			err = w.Write(b)
+		}
+		if err != nil {
+			w.Close()
+			return "", errors.Join(err, op.Close())
+		}
+	}
+	op.mem.Release()
+	if err := errors.Join(w.Close(), op.Close()); err != nil {
+		return "", err
+	}
+	for _, r := range runs {
+		if err := os.Remove(r); err != nil {
+			return "", uerr.Wrap(err, uerr.KindIO, "sort", "removing spill run %s", r)
+		}
+	}
+	return path, nil
+}
+
+// openRuns opens run files for a merge.
+func openRuns(paths []string) ([]runSource, error) {
+	srcs := make([]runSource, 0, len(paths)+1)
+	for _, p := range paths {
+		r, err := spill.Open(p)
+		if err != nil {
+			for _, o := range srcs {
+				o.Close()
+			}
+			return nil, err
+		}
+		srcs = append(srcs, &fileRun{r: r})
+	}
+	return srcs, nil
+}
+
+// merger merges srcs, each in the sort's order, into one in it.
+func (s *sortSink) merger(srcs []runSource, mem *execopt.Account) (*mergeOperator, error) {
+	types := make([]dtype.DataType, s.kSch.Len())
+	for i, f := range s.kSch.All() {
+		types[i] = f.Type
+	}
+	rs, err := kernel.NewRunSet(len(srcs), types, s.specs())
+	if err != nil {
+		for _, o := range srcs {
+			o.Close()
+		}
+		return nil, err
+	}
+	return &mergeOperator{
+		schema: s.schema,
+		keys:   s.keys,
+		kSch:   s.kSch,
+		batch:  s.chunk(),
+		runs:   srcs,
+		rs:     rs,
+		m:      kernel.NewMerger(rs),
+		mem:    mem,
+		cur:    make([]*data.Batch, len(srcs)),
+		pos:    make([]int, len(srcs)),
+		rows:   make([]int, len(srcs)),
+	}, nil
 }
 
 func (s *sortSink) Finish(ctx context.Context) (Operator, error) {
@@ -328,42 +457,14 @@ func (s *sortSink) Finish(ctx context.Context) (Operator, error) {
 
 	// The spilled runs first, the in-memory remainder last: runs are created in
 	// input order, and the merge's stability tie-break depends on that.
-	srcs := make([]runSource, 0, len(s.runs)+1)
-	for _, p := range s.runs {
-		r, err := spill.Open(p)
-		if err != nil {
-			for _, o := range srcs {
-				o.Close()
-			}
-			return nil, err
-		}
-		srcs = append(srcs, &fileRun{r: r})
+	srcs, err := openRuns(s.runs)
+	if err != nil {
+		return nil, err
 	}
 	if tail != nil {
 		srcs = append(srcs, tail)
 	}
-
-	types := make([]dtype.DataType, s.kSch.Len())
-	for i, f := range s.kSch.All() {
-		types[i] = f.Type
-	}
-	rs, err := kernel.NewRunSet(len(srcs), types, s.specs())
-	if err != nil {
-		return nil, err
-	}
-	return &mergeOperator{
-		schema: s.schema,
-		keys:   s.keys,
-		kSch:   s.kSch,
-		batch:  s.chunk(),
-		runs:   srcs,
-		rs:     rs,
-		m:      kernel.NewMerger(rs),
-		mem:    s.budget.Account("sort"),
-		cur:    make([]*data.Batch, len(srcs)),
-		pos:    make([]int, len(srcs)),
-		rows:   make([]int, len(srcs)),
-	}, nil
+	return s.merger(srcs, s.budget.Account("sort"))
 }
 
 func planSort(ctx context.Context, sn *plan.Sort, opts Options) (Operator, error) {

@@ -233,9 +233,9 @@ const (
 	FillBackward
 
 	// FillMin, FillMax and FillMean fill with the column's own aggregate over the
-	// WHOLE FRAME. That makes them pipeline breakers too, and worse ones: the
-	// window sink holds every row, and it is one of the operators that is accounted
-	// and refused under a memory limit rather than spilled.
+	// WHOLE FRAME. That makes them pipeline breakers too: the window sink holds
+	// every row, and past a memory limit writes them to one file and reads them
+	// back beside the aggregate (step 197).
 	//
 	// FillMean returns a FLOAT even for an integer column, because a mean is a
 	// float. FillMin and FillMax preserve the type.

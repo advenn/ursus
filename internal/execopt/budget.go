@@ -397,8 +397,9 @@ func (a *Account) Check() error {
 		Hint("%s", holdsHint(a.op)).
 		Hint("sort, group_by, join, unique, over, reverse and tail spill to disk; " +
 			"join_asof, merge_sorted, hstack, rolling and group_by_dynamic stream " +
-			"their input; an unpartitioned over computing a rank, a reversed " +
-			"cumulative function or an interpolation fails rather than exceed the limit")
+			"their input; an over computing a rolling window by time over one " +
+			"partition larger than the limit fails rather than exceed it, and so do " +
+			"n_unique and implode over one group larger than it")
 }
 
 // Release drops everything this account holds.
@@ -457,9 +458,9 @@ func holdsHint(op string) string {
 		// could not help — and there are exactly two ways for that to be true, both
 		// of them "there is no key space left to divide".
 		return "join holds its whole build side, and partitions it to disk when it " +
-			"does not fit; reaching this means either a join with no keys and a " +
-			"residual, which has no key to partition on, or one key with more build " +
-			"rows than the limit (a plain CROSS join spills its build side whole)"
+			"does not fit; reaching this means one key with more build rows than the " +
+			"limit (a CROSS join, and a WhereExists of a predicate alone, spill their " +
+			"build side whole)"
 	case "group_by":
 		// group_by spills since step 12, so reaching Check at all means the freeze
 		// could not help: either the limit is too small to admit one batch's keys, or
@@ -480,9 +481,9 @@ func holdsHint(op string) string {
 	case "over":
 		return "over holds its whole input, and partitions it to disk by its " +
 			"partition_by when it does not fit; a window with none, or one partition " +
-			"larger than the limit, goes to one file and is read back when every " +
-			"function needs only a bounded part of it; raise the limit with " +
-			"WithMemoryLimit"
+			"larger than the limit, goes to one file and is read back, its functions " +
+			"in an order of their own sorted on disk, unless one is a rolling window " +
+			"by time; raise the limit with WithMemoryLimit"
 	case "join_asof":
 		// Every strategy streams since step 194.
 		return "join_asof streams both sides, holding a right row a by-key and the " +

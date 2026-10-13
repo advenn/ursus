@@ -285,7 +285,7 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 			return "", err
 		}
 		fwd := &sortSink{schema: narrow, keys: keys, kSch: kSch, budget: s.budget,
-			mem: s.budget.Account("over"), batch: s.batch}
+			mem: s.budget.Account("over"), batch: s.batch, minRun: s.minRun()}
 		defer func() { err = errors.Join(err, fwd.Close()) }()
 		if err := feedEach(ctx, proj, fwd.Consume); err != nil {
 			return "", err
@@ -338,7 +338,7 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 		return "", err
 	}
 	back := &sortSink{schema: ansSch, keys: posKey, kSch: posSch, budget: s.budget,
-		mem: s.budget.Account("over"), batch: s.batch}
+		mem: s.budget.Account("over"), batch: s.batch, minRun: s.minRun()}
 	defer func() { err = errors.Join(err, back.Close()) }()
 	err = feedEach(ctx, stream, func(ctx context.Context, b *data.Batch) error {
 		cols := make([]*data.Column, 0, len(ans))
@@ -371,6 +371,13 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 		return "", err
 	}
 	return s.writeAnswers(ctx, answers, ansSch)
+}
+
+// minRun is the least a pass's sort holds before it spills (step 239): a sixteenth of
+// the limit. The pass's walks and merges keep the query over its limit at times, and
+// a sort that spilled at every batch then would leave hundreds of runs for one merge.
+func (s *windowSink) minRun() int64 {
+	return s.budget.Limit() / 16
 }
 
 // hasBack reports whether a pass walks backward.
