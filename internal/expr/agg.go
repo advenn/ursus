@@ -134,6 +134,9 @@ func PairOf(a, b Node) Node {
 		&Alias{Child: a, Name: PairFirst}, &Alias{Child: b, Name: PairSecond}}}
 }
 
+// PairArgs is PairOf's two inputs as written, or false if child is not its shape.
+func PairArgs(child Node) (a, b Node, ok bool) { return pairArgs(child) }
+
 // pairArgs is PairOf's two inputs as written, or false if child is not its shape.
 func pairArgs(child Node) (a, b Node, ok bool) {
 	c, ok := child.(*Call)

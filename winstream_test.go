@@ -75,12 +75,13 @@ func TestUnpartitionedWindowsStreamPastTheirLimit(t *testing.T) {
 	ursustest.AssertFrameEqual(t, got, want)
 }
 
-// TestUnpartitionedWindowsThatNeedTheWholeFrameStillRefuse: what step 197 leaves
+// TestUnpartitionedWindowsThatNeedTheWholeFrameStillRefuse: what step 197 left
 // refusing, each a function whose answer for a batch needs an unbounded part of the
-// frame: a rolling window by time, which names the window and says it has no
-// partition. An ewm mean was here until step 221, a reversed cumulative sum and a
-// backward fill with no limit until step 236, a rank until step 237, and an
-// interpolation until step 238.
+// frame. An ewm mean was here until step 221, a reversed cumulative sum and a
+// backward fill with no limit until step 236, a rank until step 237, an interpolation
+// until step 238, and a rolling window by time until step 246. What is left is a
+// rolling window by time one of whose periods holds more than the limit: an hour of
+// rows a second apart under 16 KiB. It names the window and the period.
 func TestUnpartitionedWindowsThatNeedTheWholeFrameStillRefuse(t *testing.T) {
 	const n = 4000
 	v, vok, ts := make([]int64, n), make([]bool, n), make([]int64, n)
@@ -91,7 +92,7 @@ func TestUnpartitionedWindowsThatNeedTheWholeFrameStillRefuse(t *testing.T) {
 		WithColumns(ursus.Col("ts").Cast(ursus.Datetime(ursus.Micro, "")).Alias("ts"))
 	c := ursus.Col
 	for name, e := range map[string]ursus.Expr{
-		"a rolling window by time": c("v").RollingSumBy(c("ts"), ursus.Every("1s")),
+		"a rolling window by time over an hour": c("v").RollingSumBy(c("ts"), ursus.Every("1h")),
 	} {
 		_, err := frame.WithColumns(e.Alias("w")).Collect(t.Context(), ursus.WithBatchSize(64),
 			ursus.WithMemoryLimit(16<<10), ursus.WithSpillDir(t.TempDir()))
@@ -99,8 +100,8 @@ func TestUnpartitionedWindowsThatNeedTheWholeFrameStillRefuse(t *testing.T) {
 			t.Errorf("%s over the whole frame answered under 16 KiB", name)
 			continue
 		}
-		if !strings.Contains(err.Error(), "over") || !strings.Contains(err.Error(), "no partition") {
-			t.Errorf("%s: the refusal should name the window and its one partition: %v", name, err)
+		if !strings.Contains(err.Error(), "over") || !strings.Contains(err.Error(), "period of 1h") {
+			t.Errorf("%s: the refusal should name the window and its period: %v", name, err)
 		}
 	}
 }

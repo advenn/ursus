@@ -9,6 +9,7 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/execopt"
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/spill"
@@ -59,6 +60,9 @@ type winNeed struct {
 	// lastPos is the position, among the rows walked, of the last that holds a value,
 	// at or before each row: interpolation's (step 238).
 	lastPos bool
+	// rollingBy is a rolling window by time, in its by order, which carries the rows
+	// in reach of a window and its kernel's state (step 246).
+	rollingBy bool
 }
 
 // streamNeed is spec sp's need, and false when no bounded one answers it.
@@ -305,6 +309,8 @@ type winStreamSpec struct {
 	ewm   kernel.EwmState  // ewm: the running state
 	rank  kernel.RankState // rank: its position, groups and last row
 	held  int64            // lastPos: the last position holding a value, or −1; walkPass sets −1
+	rby   kernel.RollingByState
+	rbyAt int64 // what rby was charged
 
 	// A spec with an order of its own is answered in a sorted pass: its answer is
 	// column col of the answer file ans (winsorted.go).
@@ -317,11 +323,15 @@ type winStreamSpec struct {
 type winStreamOp struct {
 	schema   *dtype.Schema
 	inSchema *dtype.Schema
-	open     func() (runSource, error) // the rows, opened on the first Next
-	rows     int64                     // in all: a reversed cum_count counts down from them
-	specs    []*winStreamSpec
-	maxL     int             // the most rows any function needs after a batch
-	answers  []*answerReader // the sorted passes' answers, read beside the rows
+	// A walk by time holds a period's rows: they are charged, and past the limit
+	// refused (step 246). Nil for any other walk.
+	mem     *execopt.Account
+	limit   int64
+	open    func() (runSource, error) // the rows, opened on the first Next
+	rows    int64                     // in all: a reversed cum_count counts down from them
+	specs   []*winStreamSpec
+	maxL    int             // the most rows any function needs after a batch
+	answers []*answerReader // the sorted passes' answers, read beside the rows
 
 	src   runSource
 	queue []*data.Batch // read ahead: the batch to answer, then its lookahead
@@ -331,6 +341,7 @@ type winStreamOp struct {
 func (p *winStreamOp) Schema() *dtype.Schema { return p.schema }
 
 func (p *winStreamOp) Close() error {
+	p.mem.Release()
 	var errs []error
 	if p.src != nil {
 		errs = append(errs, p.src.Close())
@@ -440,6 +451,9 @@ func (p *winStreamOp) answer(ctx context.Context, st *winStreamSpec, target *dat
 	}
 	if st.need.rank {
 		return kernel.RankNext(sp.fn.Params.Method, sp.name, child, &st.rank)
+	}
+	if st.need.rollingBy {
+		return p.rollingBy(st, child)
 	}
 	if st.need.lastPos {
 		return p.lastHeld(st, child), nil
@@ -602,4 +616,27 @@ func concatCols(cols []*data.Column) (*data.Column, error) {
 		return nil, err
 	}
 	return out.Column(0).Rename(cols[0].Name()), nil
+}
+
+// rollingBy answers a rolling window by time for the next batch in its by order, and
+// charges the rows it holds: a period's, the densest's at most. A period that alone
+// is past the limit is refused, naming it; the sorts around the walk spill.
+func (p *winStreamOp) rollingBy(st *winStreamSpec, child *data.Column) (*data.Column, error) {
+	sp := st.sp
+	c, err := kernel.RollingByNext(sp.fn.Fn, sp.fn.Params, sp.name, sp.out, child, &st.rby)
+	if err != nil {
+		return nil, err
+	}
+	held := st.rby.NBytes()
+	p.mem.RetainBytes(held - st.rbyAt)
+	st.rbyAt = held
+	if p.limit > 0 && held > p.limit {
+		return nil, uerr.New(uerr.KindResource, "over",
+			"memory limit of %s exceeded: a rolling window by time holds every row of its period, "+
+				"and one period of %s holds %d rows, %s", execopt.Bytes(p.limit), sp.fn.Params.Period,
+			st.rby.Held(), execopt.Bytes(held)).
+			Hint("a shorter period, or a partition_by that divides the rows, holds fewer; " +
+				"or raise the limit with WithMemoryLimit")
+	}
+	return c, nil
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/execopt"
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/plan"
@@ -44,12 +45,26 @@ import (
 // directions, and its reverse is exact: the same rows, ties and nulls, backward.
 
 // passOrder is the order a spec's pass walks: rank's own, its child in its direction,
-// nulls first, as window.go's segments sorts it, or the spec's order_by.
+// nulls first, as window.go's segments sorts it; a rolling window by time's, its by
+// and then its order_by, as rollingBy sorts the order_by's order by its by, stably
+// (step 246); or the spec's order_by.
 func passOrder(sp *winSpec) []plan.SortKey {
 	if sp.fn != nil && sp.fn.Fn == expr.WinRank {
 		return []plan.SortKey{{Expr: sp.fn.Child, Descending: sp.fn.Params.Descending}}
 	}
+	if by, ok := rollingByOf(sp); ok {
+		return append([]plan.SortKey{{Expr: by, NullsLast: true}}, sp.order...)
+	}
 	return sp.order
+}
+
+// rollingByOf is a rolling window by time's by, and false for any other spec.
+func rollingByOf(sp *winSpec) (expr.Node, bool) {
+	if sp.fn == nil || !sp.fn.Fn.IsRolling() || !sp.fn.Params.By {
+		return nil, false
+	}
+	_, by, ok := expr.PairArgs(sp.fn.Child)
+	return by, ok
 }
 
 // passStep is one walk of a pass: a spec rewritten to read the projection, its need,
@@ -84,13 +99,19 @@ type passPlan struct {
 //     computes it;
 //   - interpolation (step 238), with an order or none: forward, the last value and
 //     its position, and each row's own; backward, the next value and its position.
-//     kernel.InterpolateFrom answers from the five as the kernel does.
+//     kernel.InterpolateFrom answers from the five as the kernel does;
+//   - a rolling window by time (step 246), in its by order: kernel.RollingByNext
+//     walks it as rollingBy does, holding the rows in reach of a window, over batches
+//     cut between runs of equal by values.
 func sortedPlan(sp *winSpec) (passPlan, bool) {
 	if sp.acc != nil {
 		return passPlan{}, false
 	}
 	walk := *sp
 	walk.order = nil
+	if _, ok := rollingByOf(sp); ok {
+		return passPlan{steps: []passStep{{walk: walk, need: winNeed{rollingBy: true}, typ: sp.out}}}, true
+	}
 	fn := *sp.fn
 	if fn.Fn == expr.WinRank {
 		step := func(m expr.RankMethod, back bool) passStep {
@@ -296,9 +317,16 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 	}
 
 	// The forward walk, then the backward one. at[i] is step i's column in the last
-	// walk's batches.
+	// walk's batches. A walk by time takes batches cut between runs of equal by
+	// values, the first order key's.
 	at := make([]int, len(steps))
-	if stream, err = walkPass(ctx, stream, steps, false, rows, at); err != nil {
+	for _, st := range steps {
+		if st.need.rollingBy {
+			stream = &tieAligned{in: stream, col: narrow.IndexOf("__k0")}
+			break
+		}
+	}
+	if stream, err = walkPass(ctx, stream, steps, false, rows, at, s.budget); err != nil {
 		return "", err
 	}
 	if hasBack(steps) {
@@ -311,7 +339,7 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 		if err != nil {
 			return "", err
 		}
-		if stream, err = walkPass(ctx, reversed, steps, true, rows, at); err != nil {
+		if stream, err = walkPass(ctx, reversed, steps, true, rows, at, s.budget); err != nil {
 			return "", err
 		}
 	}
@@ -393,7 +421,7 @@ func hasBack(steps []passStep) bool {
 // walkPass walks in with the steps of the direction back, appending their columns to
 // its rows, and records each one's place in at. With no such step, in is the walk.
 func walkPass(ctx context.Context, in Operator, steps []passStep, back bool,
-	rows int64, at []int) (Operator, error) {
+	rows int64, at []int, budget *execopt.Budget) (Operator, error) {
 
 	inSch := in.Schema()
 	fields := append([]dtype.Field(nil), inSch.FieldSlice()...)
@@ -403,6 +431,9 @@ func walkPass(ctx context.Context, in Operator, steps []passStep, back bool,
 		st := &steps[i]
 		if st.back != back {
 			continue
+		}
+		if st.need.rollingBy && walk.mem == nil {
+			walk.mem, walk.limit = budget.Account("over"), budget.Limit()
 		}
 		at[i] = len(fields)
 		fields = append(fields, dtype.Of(st.walk.name, st.typ))
@@ -652,4 +683,67 @@ func fileOpener(path string) func() (runSource, error) {
 		}
 		return &fileRun{r: r}, nil
 	}
+}
+
+// tieAligned passes a sorted stream on in batches cut between runs of equal values
+// of column col, as a walk by time needs: a run is held back to the next batch, and
+// a batch that is all one run is joined to the next.
+type tieAligned struct {
+	in    Operator
+	col   int
+	carry *data.Batch
+}
+
+func (t *tieAligned) Schema() *dtype.Schema { return t.in.Schema() }
+func (t *tieAligned) Close() error          { return t.in.Close() }
+
+func (t *tieAligned) Next(ctx context.Context) (*data.Batch, error) {
+	for {
+		b, err := t.in.Next(ctx)
+		if errors.Is(err, io.EOF) {
+			if t.carry == nil {
+				return nil, io.EOF
+			}
+			out := t.carry
+			t.carry = nil
+			return out, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if b.Rows() == 0 {
+			continue
+		}
+		if t.carry != nil {
+			if b, err = kernel.Concat(b.Schema(), []*data.Batch{t.carry, b}); err != nil {
+				return nil, err
+			}
+			t.carry = nil
+		}
+		cut, err := lastRun(b.Column(t.col))
+		if err != nil {
+			return nil, err
+		}
+		if cut == 0 {
+			t.carry = b
+			continue
+		}
+		t.carry = b.Slice(cut, b.Rows()-cut)
+		return b.Slice(0, cut), nil
+	}
+}
+
+// lastRun is where c's last run of equal values begins: nulls are one run.
+func lastRun(c *data.Column) (int, error) {
+	ticks, err := temporalTicks(c)
+	if err != nil {
+		return 0, err
+	}
+	v := c.Validity()
+	n := c.Len()
+	i := n - 1
+	for i > 0 && v.Get(i-1) == v.Get(n-1) && (!v.Get(n-1) || ticks[i-1] == ticks[n-1]) {
+		i--
+	}
+	return i, nil
 }

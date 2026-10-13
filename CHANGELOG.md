@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.4
 
-Everything since `v0.6.3` (2026-10-12): steps 234–245, so far.
+Everything since `v0.6.3` (2026-10-12): steps 234–246, so far.
 [`v0.6.4-scope.md`](./context_files/v0.6.4-scope.md) set the scope: **out of core, the
 leftovers** — what still refuses under a memory budget, made to spill or stream.
 
@@ -59,6 +59,11 @@ leftovers** — what still refuses under a memory budget, made to spill or strea
 - **`Sort(...).Head(k)` with a large k spills** (245): past the limit its best k rows
   go to disk as runs, and the first k of their merge are the answer, ties in input
   order. It held them past the limit.
+- **A rolling window by time streams over one huge partition** (246), in a sorted pass
+  by its by, each function's state carried from batch to batch so that the answers
+  match the in-memory ones to the bit. It refused. It holds the rows of its period,
+  and refuses, naming the period, only when one period is past the limit. Every
+  window function now streams past the limit.
 
 ---
 

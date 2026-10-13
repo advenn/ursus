@@ -397,9 +397,9 @@ func (a *Account) Check() error {
 		Hint("%s", holdsHint(a.op)).
 		Hint("sort, group_by, join, unique, over, reverse and tail spill to disk; " +
 			"join_asof, merge_sorted, hstack, rolling and group_by_dynamic stream " +
-			"their input; an over computing a rolling window by time over one " +
-			"partition larger than the limit fails rather than exceed it, and so does " +
-			"implode over one group larger than it")
+			"their input; an over computing a rolling window by time one of whose " +
+			"periods holds more than the limit fails rather than exceed it, and so " +
+			"does implode over one group larger than it")
 }
 
 // Release drops everything this account holds.
@@ -483,9 +483,9 @@ func holdsHint(op string) string {
 			"partition_by when it does not fit; a window with none, or one partition " +
 			"larger than the limit, goes to one file and is read back, its functions " +
 			"in an order of their own sorted on disk and its quantiles and n_unique " +
-			"spilling their values, unless one is a rolling window by time, or an " +
-			"implode, whose answer is every value of the partition; raise the limit " +
-			"with WithMemoryLimit"
+			"spilling their values; a rolling window by time holds the rows of its " +
+			"period, and an implode every value of the partition, its answer; raise " +
+			"the limit with WithMemoryLimit"
 	case "join_asof":
 		// Every strategy streams since step 194.
 		return "join_asof streams both sides, holding a right row a by-key and the " +

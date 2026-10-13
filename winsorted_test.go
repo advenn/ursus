@@ -1,11 +1,13 @@
 package ursus_test
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/ursustest"
@@ -205,11 +207,10 @@ const sortFanInForTest = 16
 
 // TestAWindowWithNoPartitionBesideAKeyedOneStreams: windows with no partition_by
 // beside keyed ones (step 240), where they refused: a cumulative sum in the file's
-// order, a rank, and an interpolation in an order of its own, with a sum over k —
-// whose key 0 holds most of the rows — and a max over k mod 7. Under a tenth of the
-// input, on one thread and four, the answer is the in-memory one, and the spill
-// directory is empty after. A rolling window by time among them still refuses,
-// saying the window has no partition.
+// order, a rank, an interpolation in an order of its own, and since step 246 a
+// rolling sum by time, with a sum over k — whose key 0 holds most of the rows — and a
+// max over k mod 7. Under a tenth of the input, on one thread and four, the answer is
+// the in-memory one, and the spill directory is empty after.
 func TestAWindowWithNoPartitionBesideAKeyedOneStreams(t *testing.T) {
 	frame := sortedFrame(40, 500)
 	in, err := frame.Collect(t.Context())
@@ -223,6 +224,7 @@ func TestAWindowWithNoPartitionBesideAKeyedOneStreams(t *testing.T) {
 		c("v").CumSum(false).Over().Alias("cs"),
 		c("f").Rank(ursus.RankAverage, true).Over().Alias("r"),
 		c("v").Interpolate().OverWith(byX).Alias("ip"),
+		c("v").RollingSumBy(c("x").Cast(ursus.Datetime(ursus.Micro, "")), ursus.Every("10us")).Over().Alias("rs"),
 		c("v").Sum().Over(c("k")).Alias("ks"),
 		c("x").Max().Over(c("k").Mod(7)).Alias("km"),
 	)
@@ -245,14 +247,6 @@ func TestAWindowWithNoPartitionBesideAKeyedOneStreams(t *testing.T) {
 		if left, _ := os.ReadDir(dir); len(left) > 0 {
 			t.Errorf("on %d threads: %d entries left in the spill directory", threads, len(left))
 		}
-	}
-
-	_, err = frame.WithColumns(
-		c("v").RollingSumBy(c("x").Cast(ursus.Datetime(ursus.Micro, "")), ursus.Every("1s")).Over().Alias("rs"),
-		c("v").Sum().Over(c("k")).Alias("ks"),
-	).Collect(t.Context(), ursus.WithBatchSize(500), ursus.WithMemoryLimit(limit), ursus.WithSpillDir(t.TempDir()))
-	if err == nil || !strings.Contains(err.Error(), "no partition") {
-		t.Errorf("a rolling sum by time beside a keyed window should refuse, saying it has no partition: %v", err)
 	}
 }
 
@@ -345,5 +339,118 @@ func TestAGrowingWindowAggregateSpillsItsValues(t *testing.T) {
 		ursus.WithBatchSize(500), ursus.WithMemoryLimit(limit), ursus.WithSpillDir(t.TempDir()))
 	if err == nil || !strings.Contains(err.Error(), "implode") {
 		t.Errorf("implode over one partition past its limit should refuse, naming implode: %v", err)
+	}
+}
+
+// timedFrame is n rows a third of a second apart in threes, with a run of 1,200 rows
+// at one instant, longer than two batches; by null every 23rd row; v an integer with
+// nulls, f a float whose sums round, s a string, x an integer to order by, and k a key
+// that is 0 for the first 12,000 rows and one of 500 others after.
+func timedFrame(chunks, rows int) *ursus.LazyFrame {
+	t0 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	var frames []*ursus.LazyFrame
+	for ch := range chunks {
+		ts := make([]time.Time, rows)
+		tok, vok := make([]bool, rows), make([]bool, rows)
+		k, v, x := make([]int64, rows), make([]int64, rows), make([]int64, rows)
+		f := make([]float64, rows)
+		s := make([]string, rows)
+		for j := range rows {
+			i := ch*rows + j
+			at := i / 3
+			if i >= 9000 && i < 10200 {
+				at = 3000
+			}
+			ts[j], tok[j] = t0.Add(time.Duration(at)*time.Second), i%23 != 0
+			if i >= 12_000 && i%2 == 1 {
+				k[j] = int64(1 + i%500)
+			}
+			v[j], vok[j] = int64(i%977)-400, i%11 != 0
+			x[j] = int64(i * 7919 % 100_003)
+			f[j] = float64(i%101)*0.1 + 1.0/3
+			s[j] = fmt.Sprintf("s%03d", i*13%211)
+		}
+		frames = append(frames, ursus.Frame(ursus.ValuesNullable("ts", ts, tok), ursus.Values("k", k),
+			ursus.ValuesNullable("v", v, vok), ursus.Values("f", f), ursus.Values("s", s), ursus.Values("x", x)))
+	}
+	return ursus.Concat(frames)
+}
+
+// TestARollingWindowByTimeStreamsPastItsLimit: rolling windows by time over one huge
+// partition (step 246), with no partition_by and over one hot key, where they
+// refused. A mean and a sum of a float whose sums round, closed both ways; an
+// integer's sum, an Int128, and its std wanting three values; a string's max closed
+// on the left; a median; a quantile closed on neither side; and a float's std in an
+// order_by of its own, which orders its ties, and so how Welford's state rounds. By a Datetime in runs of three, with a run
+// of 1,200 rows at one instant and nulls. Under a tenth of the input, on one thread
+// and four, the answer is the in-memory one, to the bit, it spills, and the spill
+// directory is empty after. A period holding more rows than the limit refuses,
+// naming it.
+func TestARollingWindowByTimeStreamsPastItsLimit(t *testing.T) {
+	frame := timedFrame(40, 500)
+	in, err := frame.Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := in.Batch().NBytes() / 10
+	c := ursus.Col
+	windows := func(part ...ursus.Expr) []ursus.Expr {
+		byX := ursus.WindowSpec{PartitionBy: part, OrderBy: []ursus.SortKey{ursus.Desc(c("x"))}}
+		return []ursus.Expr{
+			c("f").RollingMeanBy(c("ts"), ursus.Every("90s")).Over(part...).Alias("fmean"),
+			c("f").RollingSumBy(c("ts"), ursus.Every("5m"), ursus.WindowClosed(ursus.ClosedBoth)).Over(part...).Alias("fsum"),
+			c("v").RollingSumBy(c("ts"), ursus.Every("4m")).Over(part...).Alias("vsum"),
+			c("v").RollingStdBy(c("ts"), ursus.Every("4m"), ursus.MinSamples(3)).Over(part...).Alias("vstd"),
+			c("s").RollingMaxBy(c("ts"), ursus.Every("3m"), ursus.WindowClosed(ursus.ClosedLeft)).Over(part...).Alias("smax"),
+			c("f").RollingMedianBy(c("ts"), ursus.Every("2m")).Over(part...).Alias("fmed"),
+			c("v").RollingQuantileBy(0.9, ursus.InterpNearest, c("ts"), ursus.Every("7m"),
+				ursus.WindowClosed(ursus.ClosedNone)).Over(part...).Alias("vq"),
+			c("f").RollingStdBy(c("ts"), ursus.Every("5m")).OverWith(byX).Alias("fstd_x"),
+			c("v").CumSum(false).Over(part...).Alias("cs"),
+			c("x").Sum().Over(part...).Alias("total"),
+		}
+	}
+	shapes := map[string]*ursus.LazyFrame{
+		"no partition_by": frame.WithColumns(windows()...),
+		"one hot key":     frame.WithColumns(windows(c("k"))...),
+	}
+	threadCounts := []int{1, 4}
+	if raceDetector {
+		// The root package's race run is near its limit: the hot key on four threads
+		// drives the pass, the split and the parallel scan.
+		delete(shapes, "no partition_by")
+		threadCounts = []int{4}
+	}
+	for name, q := range shapes {
+		want, err := q.Collect(t.Context(), ursus.WithBatchSize(500))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, threads := range threadCounts {
+			var stats ursus.MemoryStats
+			dir := t.TempDir()
+			got, err := q.Collect(t.Context(), ursus.WithBatchSize(500), ursus.WithThreads(threads),
+				ursus.WithMemoryLimit(limit), ursus.WithSpillDir(dir), ursus.WithMemoryStats(&stats))
+			if err != nil {
+				t.Fatalf("%s on %d threads, under %d bytes: %v", name, threads, limit, err)
+			}
+			if stats.Spills == 0 {
+				t.Fatalf("%s on %d threads: nothing spilled", name, threads)
+			}
+			ursustest.AssertFrameEqual(t, got, want)
+			if left, _ := os.ReadDir(dir); len(left) > 0 {
+				t.Errorf("%s on %d threads: %d entries left in the spill directory", name, threads, len(left))
+			}
+		}
+	}
+
+	dir := t.TempDir()
+	_, err = frame.WithColumns(c("f").RollingMedianBy(c("ts"), ursus.Every("3h")).Over().Alias("m")).
+		Collect(t.Context(), ursus.WithBatchSize(500), ursus.WithMemoryLimit(limit), ursus.WithSpillDir(dir))
+	if !errors.Is(err, ursus.ErrResource) || !strings.Contains(err.Error(), "period of 3h") {
+		t.Errorf("a period holding every row under a tenth of them should refuse, naming it: %v", err)
+	}
+	if left, _ := os.ReadDir(dir); len(left) > 0 {
+		t.Errorf("%d entries left in the spill directory after the refusal", len(left))
 	}
 }

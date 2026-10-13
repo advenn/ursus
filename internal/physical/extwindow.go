@@ -68,9 +68,9 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 		}
 		return s.refuse("a window with no partition_by is one partition, which partitioning "+
 			"to disk cannot divide, and this one computes a function that needs all of it",
-			"every window function streams past the limit, in an order_by too, but a "+
-				"rolling window by time, which needs every row of its period. Give the "+
-				"window a partition_by, or raise the limit with WithMemoryLimit")
+			"every window function streams past the limit, in an order_by too, a rolling "+
+				"window by time holding its period's rows. Give the window a partition_by, "+
+				"or raise the limit with WithMemoryLimit")
 	}
 	if s.skewable() && s.budget.Limit() > 0 {
 		// One partition alone, and every function bounded: its rows to one file, the
@@ -82,8 +82,8 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 			"divides partitions, not the rows of one; this one computes a function that "+
 			"needs all of it at once",
 			"every window function streams a partition past the limit, in an order_by "+
-				"too, but a rolling window by time, which needs every row of its period. "+
-				"Raise the limit with WithMemoryLimit")
+				"too, a rolling window by time holding its period's rows. Raise the limit "+
+				"with WithMemoryLimit")
 	}
 	return s.startSpill(ctx)
 }
