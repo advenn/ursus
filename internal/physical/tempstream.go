@@ -2,6 +2,8 @@ package physical
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/advenn/ursus/dtype"
@@ -143,7 +145,7 @@ func (s *temporalSink) Consume(ctx context.Context, in *data.Batch) error {
 	if err := s.letGo(); err != nil {
 		return err
 	}
-	return s.chargeState()
+	return s.chargeState(ctx)
 }
 
 // bucketOf is row i's bucket, made as its key first appears.
@@ -444,7 +446,7 @@ func (s *temporalSink) feed(ctx context.Context) error {
 	}
 	s.unseen += len(s.pairs)
 	s.pairs, s.pgroups = s.pairs[:0], s.pgroups[:0]
-	if err := s.handOut(false); err != nil {
+	if err := s.handOut(ctx, false); err != nil {
 		return err
 	}
 	// What the aggregates keep is charged as it grows, not once a batch: a median or
@@ -454,7 +456,7 @@ func (s *temporalSink) feed(ctx context.Context) error {
 	// group that hands its windows out holds few of them, and may have many buckets.
 	if s.unseen >= max(s.chunk(), nGroups, len(s.bkts)) {
 		s.unseen = 0
-		return s.chargeState()
+		return s.chargeState(ctx)
 	}
 	return nil
 }
@@ -504,12 +506,41 @@ func (s *temporalSink) letGo() error {
 // chargeState charges the batches held, the per-window arrays and what the
 // aggregates hold, and checks the budget.
 //
-// What it holds is its open windows' state and the rows they reach, which it cannot
-// spill; what it has handed out, a keyed group's sort holds, and spills. So it
-// refuses only once its own state is past the limit, as a frozen group-by does
-// (step 243): checking the query, it refused while the sort it fed held the query
-// over, a batch before the sort would have spilled.
-func (s *temporalSink) chargeState() error {
+// What it holds is its open windows' state and the rows they reach; what it has
+// handed out, a keyed group's sort holds, and spills. So it refuses only once its
+// own state is past the limit, as a frozen group-by does (step 243): checking the
+// query, it refused while the sort it fed held the query over, a batch before the
+// sort would have spilled.
+//
+// Past the limit, the windows of an aggregate that keeps every value, a median's,
+// a quantile's or n_unique's, hand their values to disk first, as a group-by's do
+// (step 244), and it refuses only if it is still past. What is left to refuse is
+// implode, whose answer is every value, and the windows themselves.
+func (s *temporalSink) chargeState(ctx context.Context) error {
+	s.charge()
+	if s.limit <= 0 || s.mem.Used() <= s.limit {
+		return nil
+	}
+	for _, g := range s.segs {
+		err := spillState(ctx, g.accs, &g.spills, s.budget, s.batch, func(i int) (string, error) {
+			if err := s.ensureDir(); err != nil {
+				return "", err
+			}
+			return filepath.Join(s.dir, "w"+itoa(int(g.base))+"-"+itoa(i)+"-"), nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+	s.charge()
+	if s.mem.Used() <= s.limit {
+		return nil
+	}
+	return s.mem.Check()
+}
+
+// charge charges what the sink holds.
+func (s *temporalSink) charge() {
 	s.mem.Release()
 	for _, p := range s.parts {
 		s.mem.Retain(p)
@@ -526,10 +557,20 @@ func (s *temporalSink) chargeState() error {
 		}
 	}
 	s.mem.RetainBytes(st)
-	if s.mem.Used() <= s.limit {
+}
+
+// ensureDir creates the sink's spill directory, the first time.
+func (s *temporalSink) ensureDir() error {
+	if s.dir != "" {
 		return nil
 	}
-	return s.mem.Check()
+	dir, err := os.MkdirTemp(s.budget.SpillDir(), "ursus-"+s.op()+"-")
+	if err != nil {
+		return uerr.Wrap(err, uerr.KindResource, s.op(), "creating a spill directory").
+			Hint("choose a writable location with WithSpillDir")
+	}
+	s.dir = dir
+	return nil
 }
 
 // Finish hands out every segment left. A temporal group runs as a tempStreamOp,

@@ -33,7 +33,7 @@ test:
 
 .PHONY: race
 race:
-	$(GO) test -race -count=$(COUNT) $(PKGS)
+	$(GO) test -race -timeout 20m -count=$(COUNT) $(PKGS)
 
 # The width matrix. `simd=0` forces software emulation (where ToArch() returns an
 # unnameable internal bridge type) and `simd=128` gives 2 float64 lanes instead of

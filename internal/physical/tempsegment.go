@@ -35,12 +35,14 @@ import (
 // two hidden columns, and a sort on them after the group puts the answer in that
 // order (tempgroup.go), spilling as any sort does.
 
-// tgSeg is a run of windows numbered from base, with their aggregates.
+// tgSeg is a run of windows numbered from base, with their aggregates, and where
+// those that keep every value put them past the limit (step 244).
 type tgSeg struct {
-	base int32
-	n    int32 // windows so far
-	hi   int64 // the largest upper end of its windows, once it has one
-	accs []kernel.Accumulator
+	base   int32
+	n      int32 // windows so far
+	hi     int64 // the largest upper end of its windows, once it has one
+	accs   []kernel.Accumulator
+	spills []groupSpill
 }
 
 // segSize is how many windows a segment takes.
@@ -75,7 +77,7 @@ func (s *temporalSink) openSeg(w int32, hi int64) error {
 // every one. It runs after each feed, so a segment goes as soon as its last
 // window's rows are in, not at the end of the batch that closed it: by then the
 // next segment's windows were held too.
-func (s *temporalSink) handOut(final bool) error {
+func (s *temporalSink) handOut(ctx context.Context, final bool) error {
 	for len(s.segs) > 0 {
 		g := s.segs[0]
 		last := len(s.segs) == 1
@@ -86,7 +88,7 @@ func (s *temporalSink) handOut(final bool) error {
 		if g.n == 0 && (s.emitted || !final) {
 			return nil // nothing made yet, or an input that ended on a boundary
 		}
-		b, err := s.segBatch(g)
+		b, err := s.segBatch(ctx, g)
 		if err != nil {
 			return err
 		}
@@ -121,8 +123,10 @@ func (s *temporalSink) takeReady() []*data.Batch {
 }
 
 // segBatch is segment g's answer: its windows are the first the arrays hold. A
-// keyed group's carries its windows' keys, and their buckets and numbers.
-func (s *temporalSink) segBatch(g *tgSeg) (*data.Batch, error) {
+// keyed group's carries its windows' keys, and their buckets and numbers. An
+// aggregate whose values spilled reads them back, and lets go of its spill.
+func (s *temporalSink) segBatch(ctx context.Context, g *tgSeg) (*data.Batch, error) {
+	setSpillsCtx(ctx, g.spills)
 	n := int(g.n)
 	cols := make([]*data.Column, 0, 5+len(s.keys)+len(s.specs))
 	if s.boundaries {
@@ -144,6 +148,11 @@ func (s *temporalSink) segBatch(g *tgSeg) (*data.Batch, error) {
 			return nil, err
 		}
 		cols = append(cols, c)
+	}
+	err := closeSpills(g.spills)
+	g.spills = nil
+	if err != nil {
+		return nil, err
 	}
 	if len(s.keys) > 0 {
 		win := make([]int32, n)
@@ -201,7 +210,7 @@ func (s *temporalSink) finishStream(ctx context.Context) ([]*data.Batch, error) 
 	if err := s.feed(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.handOut(true); err != nil {
+	if err := s.handOut(ctx, true); err != nil {
 		return nil, err
 	}
 	s.parts, s.bkts, s.segs, s.keyRows, s.keyNew, s.keyTail = nil, nil, nil, nil, nil, nil

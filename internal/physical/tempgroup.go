@@ -2,6 +2,8 @@ package physical
 
 import (
 	"context"
+	"errors"
+	"os"
 	"time"
 
 	"github.com/advenn/ursus/dtype"
@@ -81,10 +83,12 @@ type temporalSink struct {
 	// LOCAL instant — "every day" means local midnight — so a grid built from UTC
 	// components would put every row between local and UTC midnight in the wrong
 	// window, by a whole day, and never say so.
-	loc   *time.Location
-	mem   *execopt.Account
-	limit int64 // the budget's: the sink refuses once its own state is past it
-	batch int
+	loc    *time.Location
+	mem    *execopt.Account
+	budget *execopt.Budget
+	limit  int64  // the budget's: the sink refuses once its own state is past it
+	dir    string // where its aggregates' values spill, made on the first (step 244)
+	batch  int
 
 	// gridPoints is how many window slots this query has already built, across
 	// every categorical bucket. Query-wide on purpose: Finish generates a grid per
@@ -122,7 +126,22 @@ type temporalSink struct {
 }
 
 func (s *temporalSink) Schema() *dtype.Schema { return s.schema }
-func (s *temporalSink) Close() error          { s.mem.Release(); return nil }
+
+func (s *temporalSink) Close() error {
+	s.mem.Release()
+	var errs []error
+	for _, g := range s.segs {
+		errs = append(errs, closeSpills(g.spills))
+		g.spills = nil
+	}
+	if s.dir != "" {
+		if err := os.RemoveAll(s.dir); err != nil {
+			errs = append(errs, uerr.Wrap(err, uerr.KindIO, s.op(), "removing spill directory %s", s.dir))
+		}
+		s.dir = ""
+	}
+	return errors.Join(errs...)
+}
 
 // Merge is refused for the reason windowSink's is, one step further along: two sinks
 // that saw different rows cannot have their window grids reconciled without knowing
@@ -444,6 +463,7 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 		idxType: idxField.Type,
 		loc:     temporalLocation(idxField.Type),
 		mem:     opts.Budget.Account(opName(t.Rolling)),
+		budget:  opts.Budget,
 		limit:   opts.Budget.Limit(),
 		batch:   opts.batchSize(),
 		sorted:  true,

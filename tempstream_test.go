@@ -167,13 +167,19 @@ func TestTemporalGroupsAnswerAsTheBufferedSinkDid(t *testing.T) {
 //     answer built from it. It answers under 24 MB, where the buffered sink peaked
 //     at 29 and 30 MB.
 func TestTemporalGroupsStreamTheirInput(t *testing.T) {
-	const n = 300_000
+	n, batch, scale := 300_000, 8192, int64(1)
+	if raceDetector {
+		// The budget is measured without the race detector; under it this took a
+		// minute and a half of the root package's run (step 244). A tenth of the rows,
+		// a batch of a tenth, and the full run's limits.
+		n, batch, scale = 30_000, 1024, 10
+	}
 	lf := minuteSeries(n)
 	in, err := lf.Collect(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	fifth := in.Batch().NBytes() / 5
+	fifth := in.Batch().NBytes() / 5 * scale
 	k := []ursus.Expr{ursus.Col("k")}
 	aggs := []ursus.Expr{ursus.Col("v").Sum().Alias("s"), ursus.Len().Alias("n"), ursus.Col("v").Last().Alias("l")}
 	for _, c := range []struct {
@@ -190,12 +196,12 @@ func TestTemporalGroupsStreamTheirInput(t *testing.T) {
 		{"rolling, 30m, by k", lf.Rolling(ursus.Col("ts"),
 			ursus.RollingOptions{Period: ursus.Every("30m"), GroupBy: k}).Agg(aggs...), 24 << 20},
 	} {
-		want, err := c.lf.Collect(t.Context(), ursus.WithBatchSize(8192))
+		want, err := c.lf.Collect(t.Context(), ursus.WithBatchSize(batch))
 		if err != nil {
 			t.Fatal(err)
 		}
 		var st ursus.MemoryStats
-		got, err := c.lf.Collect(t.Context(), ursus.WithBatchSize(8192), ursus.WithMemoryLimit(c.limit),
+		got, err := c.lf.Collect(t.Context(), ursus.WithBatchSize(batch), ursus.WithMemoryLimit(c.limit),
 			ursus.WithMemoryStats(&st))
 		if err != nil {
 			t.Fatalf("%s, under %d bytes: %v", c.name, c.limit, err)

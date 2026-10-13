@@ -504,9 +504,9 @@ func holdsHint(op string) string {
 		// generic line said tail "buffers its whole input".
 		return op + " holds its open windows and the rows they cover, handing each " +
 			"out as the index passes its end; a gap in the index makes one window per " +
-			"every= across it at once, and a median or an implode keeps every value " +
-			"of its windows; a coarser every=, a smaller offset= or a narrower index " +
-			"range is what makes it smaller"
+			"every= across it at once, and an implode keeps every value of its " +
+			"windows (a median, a quantile and n_unique spill theirs); a coarser " +
+			"every=, a smaller offset= or a narrower index range is what makes it smaller"
 	default:
 		return op + " buffers its whole input; raise the limit with WithMemoryLimit"
 	}

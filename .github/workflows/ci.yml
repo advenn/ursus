@@ -104,7 +104,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.27.0'
-      - run: go test -race -count=1 ./...
+      # The root package passed the default ten minutes under the race detector
+      # (v0.6.4 step 244).
+      - run: go test -race -timeout 20m -count=1 ./...
 
   riskgate:
     # The arrow-go foundational claims. Allowed to be slow; must never be skipped.

@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.4
 
-Everything since `v0.6.3` (2026-10-12): steps 234–243, so far.
+Everything since `v0.6.3` (2026-10-12): steps 234–244, so far.
 [`v0.6.4-scope.md`](./context_files/v0.6.4-scope.md) set the scope: **out of core, the
 leftovers** — what still refuses under a memory budget, made to spill or stream.
 
@@ -52,6 +52,10 @@ leftovers** — what still refuses under a memory budget, made to spill or strea
   windows close, and a sort that spills puts it in bucket order. They held every
   window, and refused past the limit. In memory a keyed group is a little slower:
   over 2,000,000 rows under 1,000 keys, +4% rolling and +13% dynamic.
+- **A median, quantile or n_unique in `Rolling` or `GroupByDynamic` spills its
+  values** (244), keyed or not, as a group-by's does. Windows that overlap hold a
+  value for every (window, row) pair, many times their input, and refused past the
+  limit. Implode still does.
 
 ---
 

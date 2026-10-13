@@ -14,6 +14,7 @@ package ursus_test
 import (
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"runtime/debug"
 	"runtime/metrics"
@@ -93,9 +94,11 @@ func TestRollingExpansionIsBounded(t *testing.T) {
 	}
 }
 
-// TestRollingStateIsCharged: an aggregate that keeps every value — a median, a
-// list — holds one per (window, row) pair, so overlapping windows under a limit are
-// refused, naming the operator, instead of growing past it.
+// TestRollingStateIsCharged: an aggregate that keeps every value holds one per
+// (window, row) pair, so overlapping windows under a limit grow many times their
+// input. A list is its answer, so it is refused, naming the operator, instead of
+// growing past the limit. A median's, a quantile's and n_unique's values spill since
+// step 244: TestTemporalMediansSpillTheirValues.
 func TestRollingStateIsCharged(t *testing.T) {
 	const n = 4000
 	for _, tc := range []struct {
@@ -103,21 +106,16 @@ func TestRollingStateIsCharged(t *testing.T) {
 		lf   func() *ursus.LazyFrame
 		op   string
 	}{
-		{"rolling median", func() *ursus.LazyFrame {
-			return minuteSeries(n).
-				Rolling(ursus.Col("ts"), ursus.RollingOptions{Period: ursus.Every("7d")}).
-				Agg(ursus.Col("v").Median().Alias("m"))
-		}, "rolling"},
 		{"rolling implode", func() *ursus.LazyFrame {
 			return minuteSeries(n).
 				Rolling(ursus.Col("ts"), ursus.RollingOptions{Period: ursus.Every("7d")}).
 				Agg(ursus.Col("v").Implode().Alias("vs"))
 		}, "rolling"},
-		{"dynamic median, period far past every", func() *ursus.LazyFrame {
+		{"dynamic implode, period far past every", func() *ursus.LazyFrame {
 			return minuteSeries(n).
 				GroupByDynamic(ursus.Col("ts"), ursus.DynamicOptions{
 					Every: ursus.Every("1m"), Period: ursus.Every("7d")}).
-				Agg(ursus.Col("v").Median().Alias("m"))
+				Agg(ursus.Col("v").Implode().Alias("vs"))
 		}, "group_by_dynamic"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -151,6 +149,88 @@ func TestRollingStateIsCharged(t *testing.T) {
 			t.Fatalf("%d rows, want %d", df.Height(), n)
 		}
 	})
+}
+
+// TestTemporalMediansSpillTheirValues: step 244. A median's windows keep every
+// value, one a (window, row) pair, so windows that overlap hold many times their
+// input. Past the limit they hand their values to disk, as a group-by's do, where
+// they refused. Over 2,000 rows a minute apart whose windows reach back a week, two
+// million values: a rolling median, a dynamic one whose period is far past its
+// every, and a rolling quantile and n_unique by key. Under 2 MB, at batches of 256
+// rows, so that eight segments of windows, none closed before the end, spill side
+// by side, the answer is the one without a limit, it spills, it peaks at most twice
+// the limit, the live heap grows by under 10 MB of the 16 MB the values are, and the
+// spill directory is empty after. Beside an implode, the median spills and the
+// implode refuses, and the directory is empty after the error too.
+func TestTemporalMediansSpillTheirValues(t *testing.T) {
+	const n = 2000
+	c := ursus.Col
+	cases := []struct {
+		name string
+		lf   *ursus.LazyFrame
+	}{
+		{"rolling median", minuteSeries(n).
+			Rolling(c("ts"), ursus.RollingOptions{Period: ursus.Every("7d")}).
+			Agg(c("v").Median().Alias("m"))},
+		{"dynamic median, period far past every", minuteSeries(n).
+			GroupByDynamic(c("ts"), ursus.DynamicOptions{Every: ursus.Every("1m"), Period: ursus.Every("7d")}).
+			Agg(c("v").Median().Alias("m"))},
+		{"rolling quantile and n_unique by key", minuteSeries(n).
+			Rolling(c("ts"), ursus.RollingOptions{Period: ursus.Every("7d"), GroupBy: []ursus.Expr{c("k")}}).
+			Agg(c("v").Quantile(0.25, ursus.InterpLinear).Alias("q"), c("v").NUnique().Alias("u"))},
+	}
+	if raceDetector {
+		// The root package's race run is near its limit: the keyed case, which
+		// spills two aggregates, drives the spill and the segments alone.
+		cases = cases[2:]
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			want, err := tc.lf.Collect(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got *ursus.DataFrame
+			var st ursus.MemoryStats
+			dir := t.TempDir()
+			grown := peakHeapGrowth(t, func() {
+				got, err = tc.lf.Collect(t.Context(), ursus.WithBatchSize(256), ursus.WithMemoryLimit(2<<20),
+					ursus.WithSpillDir(dir), ursus.WithMemoryStats(&st))
+			})
+			if err != nil {
+				t.Fatalf("under 2 MB: %v", err)
+			}
+			if st.Spills == 0 {
+				t.Error("nothing spilled")
+			}
+			if st.Peak > 2*(2<<20) {
+				t.Errorf("a peak of %d KB under a 2 MB limit", st.Peak>>10)
+			}
+			if grown > 10<<20 {
+				t.Errorf("the live heap grew by %d MB under a 2 MB limit", grown>>20)
+			}
+			ursustest.AssertFrameEqual(t, got, want)
+			if left, _ := os.ReadDir(dir); len(left) > 0 {
+				t.Errorf("%d entries left in the spill directory", len(left))
+			}
+		})
+	}
+
+	dir := t.TempDir()
+	var st ursus.MemoryStats
+	_, err := minuteSeries(n).Rolling(c("ts"), ursus.RollingOptions{Period: ursus.Every("7d")}).
+		Agg(c("v").Median().Alias("m"), c("v").Implode().Alias("vs")).
+		Collect(t.Context(), ursus.WithBatchSize(256), ursus.WithMemoryLimit(2<<20), ursus.WithSpillDir(dir),
+			ursus.WithMemoryStats(&st))
+	if !errors.Is(err, ursus.ErrResource) {
+		t.Errorf("a median beside an implode under 2 MB: want a memory refusal, got %v", err)
+	}
+	if st.Spills == 0 {
+		t.Error("a median beside an implode refused before the median spilled")
+	}
+	if left, _ := os.ReadDir(dir); len(left) > 0 {
+		t.Errorf("%d entries left in the spill directory after the refusal", len(left))
+	}
 }
 
 // TestRollingAnswersDoNotDependOnTheChunk: windows are expanded a chunk at a time,
