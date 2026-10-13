@@ -55,10 +55,77 @@ type groupRuns struct {
 // runFanIn is how many runs of one level are merged into one of the next.
 const runFanIn = 16
 
-// groupSpill is a spill a group-by's sink keeps for an accumulator.
+// groupSpill is a spill a sink keeps for an accumulator: a group-by's, or a
+// window's over one partition (step 242).
 type groupSpill interface {
 	setCtx(context.Context)
+	// take hands every value acc holds to the spill, as one run, and lets them go.
+	take(acc kernel.Accumulator) error
 	close() error
+}
+
+// spillable reports whether acc keeps its state a value at a time, so a groupSpill
+// can take it: a quantile's values or n_unique's keys.
+func spillable(acc kernel.Accumulator) bool {
+	switch acc.(type) {
+	case kernel.ValueSpiller, kernel.KeySpiller:
+		return true
+	}
+	return false
+}
+
+// spillState hands the state of every spillable accumulator of accs to its spill,
+// made the first time under the prefix prefix(i) gives; *spills is made when the
+// first is. A nil accumulator is passed over.
+func spillState(ctx context.Context, accs []kernel.Accumulator, spills *[]groupSpill,
+	budget *execopt.Budget, batch int, prefix func(i int) (string, error)) error {
+
+	for i, a := range accs {
+		if !spillable(a) {
+			continue
+		}
+		if *spills == nil {
+			*spills = make([]groupSpill, len(accs))
+		}
+		sp := (*spills)[i]
+		if sp == nil {
+			p, err := prefix(i)
+			if err != nil {
+				return err
+			}
+			if _, ok := a.(kernel.KeySpiller); ok {
+				sp = newKeySpill(ctx, budget, batch, p)
+			} else {
+				sp = newValueSpill(ctx, budget, batch, p)
+			}
+			(*spills)[i] = sp
+		}
+		sp.setCtx(ctx)
+		if err := sp.take(a); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// setSpillsCtx gives every spill ctx, for a Finish that reads its values back.
+func setSpillsCtx(ctx context.Context, spills []groupSpill) {
+	for _, sp := range spills {
+		if sp != nil {
+			sp.setCtx(ctx)
+		}
+	}
+}
+
+// closeSpills lets go of every spill's runs.
+func closeSpills(spills []groupSpill) error {
+	var errs []error
+	for _, sp := range spills {
+		if sp != nil {
+			errs = append(errs, sp.close())
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func newGroupRuns(ctx context.Context, budget *execopt.Budget, batch int, prefix string,
@@ -72,7 +139,9 @@ func newGroupRuns(ctx context.Context, budget *execopt.Budget, batch int, prefix
 
 func (s *groupRuns) setCtx(ctx context.Context) { s.ctx = ctx }
 
-// write adds b to the open run, opening one if none is.
+// write adds b to the open run, opening one if none is, a batch at a time: the
+// merge holds a block of every run it reads, and the kernel puts its values in
+// chunks of its own size, whatever the query's batch.
 func (s *groupRuns) write(b *data.Batch) error {
 	if err := s.ctx.Err(); err != nil {
 		return err
@@ -85,8 +154,11 @@ func (s *groupRuns) write(b *data.Batch) error {
 		}
 		s.w, s.path = w, path
 	}
-	if err := s.w.Write(b); err != nil {
-		return uerr.Wrap(err, uerr.KindIO, "group_by", "writing spill run %s", s.path)
+	step := s.chunk()
+	for off := 0; off < b.Rows(); off += step {
+		if err := s.w.Write(b.Slice(off, min(step, b.Rows()-off))); err != nil {
+			return uerr.Wrap(err, uerr.KindIO, "group_by", "writing spill run %s", s.path)
+		}
 	}
 	return nil
 }
@@ -224,6 +296,11 @@ func newValueSpill(ctx context.Context, budget *execopt.Budget, batch int, prefi
 	return &valueSpill{newGroupRuns(ctx, budget, batch, prefix, dtype.NotNull("v", dtype.Float64))}
 }
 
+func (s *valueSpill) take(acc kernel.Accumulator) error {
+	_, err := acc.(kernel.ValueSpiller).SpillValues(s)
+	return err
+}
+
 func (s *valueSpill) Put(gids []int32, vals []float64) error {
 	return s.write(data.NewBatchRows(s.schema, []*data.Column{
 		data.NewFixed("gid", dtype.Int32, gids, bitmap.View{}),
@@ -248,6 +325,11 @@ type keySpill struct{ groupRuns }
 
 func newKeySpill(ctx context.Context, budget *execopt.Budget, batch int, prefix string) *keySpill {
 	return &keySpill{newGroupRuns(ctx, budget, batch, prefix, dtype.NotNull("k", dtype.Binary))}
+}
+
+func (s *keySpill) take(acc kernel.Accumulator) error {
+	_, err := acc.(kernel.KeySpiller).SpillKeys(s)
+	return err
 }
 
 func (s *keySpill) Put(gids []int32, keys [][]byte) error {

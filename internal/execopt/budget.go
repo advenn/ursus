@@ -482,8 +482,10 @@ func holdsHint(op string) string {
 		return "over holds its whole input, and partitions it to disk by its " +
 			"partition_by when it does not fit; a window with none, or one partition " +
 			"larger than the limit, goes to one file and is read back, its functions " +
-			"in an order of their own sorted on disk, unless one is a rolling window " +
-			"by time; raise the limit with WithMemoryLimit"
+			"in an order of their own sorted on disk and its quantiles and n_unique " +
+			"spilling their values, unless one is a rolling window by time, or an " +
+			"implode, whose answer is every value of the partition; raise the limit " +
+			"with WithMemoryLimit"
 	case "join_asof":
 		// Every strategy streams since step 194.
 		return "join_asof streams both sides, holding a right row a by-key and the " +

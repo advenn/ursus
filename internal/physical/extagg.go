@@ -293,48 +293,17 @@ func (s *hashAggSink) budgetErr() error {
 // to its spill: a quantile's values (step 220), n_unique's keys (step 241). Then it
 // charges the sink again for what it still holds.
 func (s *hashAggSink) spillValues(ctx context.Context) error {
-	for i, a := range s.accs {
-		switch acc := a.(type) {
-		case kernel.ValueSpiller:
-			sp, err := s.spillOf(ctx, i, func(prefix string) groupSpill {
-				return newValueSpill(ctx, s.budget, s.batch, prefix)
-			})
-			if err != nil {
-				return err
-			}
-			if _, err := acc.SpillValues(sp.(*valueSpill)); err != nil {
-				return err
-			}
-		case kernel.KeySpiller:
-			sp, err := s.spillOf(ctx, i, func(prefix string) groupSpill {
-				return newKeySpill(ctx, s.budget, s.batch, prefix)
-			})
-			if err != nil {
-				return err
-			}
-			if _, err := acc.SpillKeys(sp.(*keySpill)); err != nil {
-				return err
-			}
+	err := spillState(ctx, s.accs, &s.spills, s.budget, s.batch, func(i int) (string, error) {
+		if err := s.ensureDir(); err != nil {
+			return "", err
 		}
+		return s.prefix + "v" + itoa(i) + "-", nil
+	})
+	if err != nil {
+		return err
 	}
 	s.recharge()
 	return nil
-}
-
-// spillOf is accumulator i's spill, made by build the first time, in the sink's spill
-// directory, and given ctx.
-func (s *hashAggSink) spillOf(ctx context.Context, i int, build func(prefix string) groupSpill) (groupSpill, error) {
-	if s.spills == nil {
-		s.spills = make([]groupSpill, len(s.accs))
-	}
-	if s.spills[i] == nil {
-		if err := s.ensureDir(); err != nil {
-			return nil, err
-		}
-		s.spills[i] = build(s.prefix + "v" + itoa(i) + "-")
-	}
-	s.spills[i].setCtx(ctx)
-	return s.spills[i], nil
 }
 
 // --- replay ----------------------------------------------------------------------

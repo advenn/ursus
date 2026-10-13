@@ -16,8 +16,9 @@ import (
 // than the limit refused, a level down, once its sub-sink held that partition
 // alone. It need not, for the functions a window with no partition_by streams (step
 // 197): an aggregate, a cumulative function, a shift, a limited fill, a rolling
-// window of rows, and since step 221 an ewm function and a reversed cum_count. The partition is one, and its rows arrive in their order. So that
-// sub-sink splits its file:
+// window of rows, and since step 221 an ewm function and a reversed cum_count. The
+// partition is one, and its rows arrive in their order. So that sub-sink splits its
+// file:
 //
 //   - the one key's rows go to the one-partition file, its aggregates fed as group 0,
 //     and are read back a batch at a time with their bounded context (winstream.go);
@@ -26,8 +27,9 @@ import (
 //
 // Both answer in their rows' order, which is the ordinal's, and the two answers are
 // merged on the ordinal. A function in an order of its own is answered in a sorted
-// pass over the one-partition file (winsorted.go, step 235). A function that needs
-// the whole partition at once, a rank, still refuses.
+// pass over the one-partition file (winsorted.go, step 235), and so are rank and
+// interpolation (steps 237, 238); a quantile's or n_unique's values spill (step
+// 242). A rolling window by time still refuses.
 
 // skewable reports whether the sink can split its one key off: a sink a level down,
 // of one keyed partitioning, holding a single key so far, every function bounded.
@@ -45,7 +47,7 @@ func (s *windowSink) skewable() bool {
 
 // startSkew sends the key held, and the rows held, to the one-partition file, and
 // makes the sink every other key goes to.
-func (s *windowSink) startSkew() error {
+func (s *windowSink) startSkew(ctx context.Context) error {
 	rest, err := newWindowSink(s.inSchema, s.schema, s.exprs, s.budget.Account("over"))
 	if err != nil {
 		return err
@@ -54,7 +56,7 @@ func (s *windowSink) startSkew() error {
 	rest.ord, rest.spillSchema = s.ord, s.spillSchema
 	s.skewKey = append([]byte(nil), s.parts[0].ids.KeyAt(0)...)
 	s.rest = rest
-	return s.startOneSpill()
+	return s.startOneSpill(ctx)
 }
 
 // consumeSkew splits a batch: the key's rows to the file, the rest to their sink.

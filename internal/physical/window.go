@@ -80,6 +80,9 @@ type windowSink struct {
 	// reads them back (winstream.go).
 	oneW    *spill.Writer
 	oneFile string
+	// There, an aggregate that keeps its values, a quantile's or n_unique's, hands
+	// them to disk past the limit (step 242): spill i is spec i's.
+	spills []groupSpill
 
 	// A keyed window's one partition past its limit, a level down, goes to that file
 	// too, and every other key to rest (winskew.go).
@@ -123,6 +126,8 @@ func (s *windowSink) Close() error {
 		err = s.oneW.Close()
 		s.oneW = nil
 	}
+	err = errors.Join(err, closeSpills(s.spills))
+	s.spills = nil
 	if s.rest != nil {
 		err = errors.Join(err, s.rest.Close())
 		s.rest = nil

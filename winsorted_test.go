@@ -255,3 +255,95 @@ func TestAWindowWithNoPartitionBesideAKeyedOneStreams(t *testing.T) {
 		t.Errorf("a rolling sum by time beside a keyed window should refuse, saying it has no partition: %v", err)
 	}
 }
+
+// TestAGrowingWindowAggregateSpillsItsValues: over one huge partition, with no
+// partition_by and over a hot key, a median, a quantile of a float with nulls, NaN and
+// ±0 among its values, and n_unique of an integer whose every value is distinct, of
+// that float, whose NaN and ±0 count once each, and of strings spill their values
+// (step 242), where they refused; beside a sum and a cumulative sum. Under a tenth of
+// the input, on one thread and four, the answer is the in-memory one, the peak is at
+// most twice the limit, and the spill directory is empty after. Implode, whose answer
+// is every value, still refuses.
+//
+// The batch is 64 rows, as TestASortedPassStaysNearItsLimit's is: the merge of the
+// spilled values holds a batch of every run, which at 500 rows is about a tenth of
+// this limit, and of a real one far less. With no partition_by the peak is under
+// twice the limit at 500 rows too, as the sink lets go of its values once they are
+// on disk, before a merge reads them back; over a hot key, the other keys' sink
+// still holds their rows then.
+func TestAGrowingWindowAggregateSpillsItsValues(t *testing.T) {
+	frame := sortedFrame(40, 500)
+	in, err := frame.Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := in.Batch().NBytes() / 10
+	c := ursus.Col
+	aggs := func(part ...ursus.Expr) []ursus.Expr {
+		return []ursus.Expr{
+			c("v").Median().Over(part...).Alias("med"),
+			c("f").Quantile(0.9, ursus.InterpLinear).Over(part...).Alias("q90"),
+			c("x").NUnique().Over(part...).Alias("nx"),
+			c("f").NUnique().Over(part...).Alias("nf"),
+			c("s").NUnique().Over(part...).Alias("ns"),
+			c("x").Sum().Over(part...).Alias("total"),
+			c("v").CumSum(false).Over(part...).Alias("cs"),
+		}
+	}
+	keyless := frame.WithColumns(aggs()...)
+	shapes := map[string]*ursus.LazyFrame{
+		"no partition_by": keyless,
+		"one hot key":     frame.WithColumns(aggs(c("k"))...),
+	}
+	threadCounts := []int{1, 4}
+	if raceDetector {
+		// The root package's race run is near its ten minutes: the hot key on four
+		// threads drives the spill, the hot key's split and the parallel scan.
+		delete(shapes, "no partition_by")
+		threadCounts = []int{4}
+	}
+	for name, q := range shapes {
+		want, err := q.Collect(t.Context(), ursus.WithBatchSize(500))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, threads := range threadCounts {
+			var stats ursus.MemoryStats
+			dir := t.TempDir()
+			got, err := q.Collect(t.Context(), ursus.WithBatchSize(64), ursus.WithThreads(threads),
+				ursus.WithMemoryLimit(limit), ursus.WithSpillDir(dir), ursus.WithMemoryStats(&stats))
+			if err != nil {
+				t.Fatalf("%s on %d threads, under %d bytes: %v", name, threads, limit, err)
+			}
+			if stats.Spills == 0 {
+				t.Fatalf("%s on %d threads: nothing spilled", name, threads)
+			}
+			if stats.Peak > 2*limit {
+				t.Errorf("%s on %d threads: peak %d, %.2fx the limit of %d", name, threads,
+					stats.Peak, float64(stats.Peak)/float64(limit), limit)
+			}
+			ursustest.AssertFrameEqual(t, got, want)
+			if left, _ := os.ReadDir(dir); len(left) > 0 {
+				t.Errorf("%s on %d threads: %d entries left in the spill directory", name, threads, len(left))
+			}
+		}
+	}
+
+	if !raceDetector {
+		var stats ursus.MemoryStats
+		if _, err := keyless.Collect(t.Context(), ursus.WithBatchSize(500), ursus.WithMemoryLimit(limit),
+			ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&stats)); err != nil {
+			t.Fatal(err)
+		}
+		if stats.Peak > 2*limit {
+			t.Errorf("no partition_by at 500 rows a batch: peak %d, %.2fx the limit of %d", stats.Peak,
+				float64(stats.Peak)/float64(limit), limit)
+		}
+	}
+
+	_, err = frame.WithColumns(c("v").Implode().Over().Alias("all")).Collect(t.Context(),
+		ursus.WithBatchSize(500), ursus.WithMemoryLimit(limit), ursus.WithSpillDir(t.TempDir()))
+	if err == nil || !strings.Contains(err.Error(), "implode") {
+		t.Errorf("implode over one partition past its limit should refuse, naming implode: %v", err)
+	}
+}

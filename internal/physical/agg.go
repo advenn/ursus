@@ -314,12 +314,7 @@ func (r *renameOp) Apply(_ context.Context, in *data.Batch) (*data.Batch, error)
 func (s *hashAggSink) Schema() *dtype.Schema { return s.schema }
 
 func (s *hashAggSink) Close() error {
-	errs := []error{s.closeParts()}
-	for _, sp := range s.spills {
-		if sp != nil {
-			errs = append(errs, sp.close())
-		}
-	}
+	errs := []error{s.closeParts(), closeSpills(s.spills)}
 	s.mem.Release()
 	if s.dirOwner && s.dir != "" {
 		dir := s.dir
@@ -1239,11 +1234,7 @@ func (s *hashAggSink) releaseState() {
 // account kept every key part until then, whatever ConcatOwned let go of.
 // finishOrdered reads firstSeen, which stays.
 func (s *hashAggSink) residentResult(ctx context.Context) (*data.Batch, error) {
-	for _, sp := range s.spills {
-		if sp != nil {
-			sp.setCtx(ctx) // a Finish reads its spilled values back
-		}
-	}
+	setSpillsCtx(ctx, s.spills)
 	nGroups := s.ids.Len()
 	keyParts, accs := s.keyParts, s.accs
 	s.releaseState()

@@ -56,7 +56,7 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 	if s.streamable() && s.budget.Limit() > 0 {
 		// One partition, and every function bounded: to one file, read back a batch
 		// at a time (winstream.go).
-		return s.startOneSpill()
+		return s.startOneSpill(ctx)
 	}
 	// A window with no partition_by beside a keyed one (step 240) is one more pass
 	// of the spill: routing by no key sends every row to one file, whose sink is a
@@ -75,7 +75,7 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 	if s.skewable() && s.budget.Limit() > 0 {
 		// One partition alone, and every function bounded: its rows to one file, the
 		// file's other keys to a sink of their own (winskew.go).
-		return s.startSkew()
+		return s.startSkew(ctx)
 	}
 	if s.level >= maxSpillDepth || (s.level > 0 && len(s.parts) == 1 && s.parts[0].ids.Len() == 1) {
 		return s.refuse("one partition holds more rows than the limit, and partitioning to disk "+
@@ -222,16 +222,25 @@ func (s *windowSink) writer(p int, sch *dtype.Schema) (*partWriter, error) {
 
 // newFile names a fresh file in this sink's own spill directory, creating it first.
 func (s *windowSink) newFile() (string, error) {
-	if s.dir == "" {
-		dir, err := os.MkdirTemp(s.budget.SpillDir(), "ursus-over-")
-		if err != nil {
-			return "", uerr.Wrap(err, uerr.KindResource, "over", "creating a spill directory").
-				Hint("choose a writable location with WithSpillDir")
-		}
-		s.dir = dir
+	if err := s.ensureDir(); err != nil {
+		return "", err
 	}
 	s.files++
 	return filepath.Join(s.dir, "f"+itoa(s.files)+".ursspill"), nil
+}
+
+// ensureDir creates this sink's own spill directory, the first time.
+func (s *windowSink) ensureDir() error {
+	if s.dir != "" {
+		return nil
+	}
+	dir, err := os.MkdirTemp(s.budget.SpillDir(), "ursus-over-")
+	if err != nil {
+		return uerr.Wrap(err, uerr.KindResource, "over", "creating a spill directory").
+			Hint("choose a writable location with WithSpillDir")
+	}
+	s.dir = dir
+	return nil
 }
 
 // closeParts finishes every open partition file and returns them in partition order.

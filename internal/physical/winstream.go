@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
@@ -39,8 +40,13 @@ import (
 // in its order, walked, and the answers put back (winsorted.go, step 235).
 //
 // A reversed cumulative function and a backward fill without a limit walk that
-// stream backward (step 236). Rank, interpolation and a rolling window by time need
-// the whole partition, or an unbounded part of it, and still refuse.
+// stream backward (step 236), and rank and interpolation walk it both ways (steps
+// 237, 238). A rolling window by time needs every row of its period, and still
+// refuses.
+//
+// An aggregate that keeps every value, a quantile's or n_unique's, hands them to
+// disk past the limit, as a group-by's does (step 242). Implode, whose answer is
+// every value, refuses.
 
 // winNeed is what an ordered function needs around a batch to answer it exactly: h
 // rows before and l after, or, with carry, its own last answer.
@@ -115,7 +121,7 @@ func (s *windowSink) streamable() bool {
 
 // startOneSpill writes the rows held so far to the window's one file, and every
 // later batch after them.
-func (s *windowSink) startOneSpill() error {
+func (s *windowSink) startOneSpill(ctx context.Context) error {
 	path, err := s.newFile()
 	if err != nil {
 		return err
@@ -137,7 +143,7 @@ func (s *windowSink) startOneSpill() error {
 	s.budget.NoteSpill()
 	s.mem.Release()
 	s.stateBytes = 0
-	return s.chargeOneSpill()
+	return s.chargeOneSpill(ctx)
 }
 
 // consumeOneSpill writes a batch to the file and feeds the aggregates, whose one
@@ -161,11 +167,43 @@ func (s *windowSink) consumeOneSpill(ctx context.Context, in *data.Batch) error 
 			return err
 		}
 	}
-	return s.chargeOneSpill()
+	return s.chargeOneSpill(ctx)
 }
 
-// chargeOneSpill charges what is left in memory: the aggregates' state.
-func (s *windowSink) chargeOneSpill() error {
+// chargeOneSpill charges what is left in memory: the aggregates' state. Over the
+// limit, an aggregate that keeps its values, a quantile's or n_unique's, hands them
+// to disk first, as a group-by's does (step 242), and the sink refuses only if it
+// is still over. What is left to refuse is implode, whose answer is every value.
+func (s *windowSink) chargeOneSpill(ctx context.Context) error {
+	s.chargeAggs()
+	if !s.mem.Over() {
+		return nil
+	}
+	accs := make([]kernel.Accumulator, len(s.specs))
+	for i := range s.specs {
+		accs[i] = s.specs[i].acc
+	}
+	err := spillState(ctx, accs, &s.spills, s.budget, s.batch, func(i int) (string, error) {
+		if err := s.ensureDir(); err != nil {
+			return "", err
+		}
+		return filepath.Join(s.dir, "v"+itoa(i)+"-"), nil
+	})
+	if err != nil {
+		return err
+	}
+	// What is left is the aggregates' own state. It is refused only once it alone is
+	// past the limit, as a frozen group-by's is: short of that, what holds the rest
+	// of the query is what spills.
+	if s.chargeAggs() <= s.budget.Limit() {
+		return nil
+	}
+	return s.mem.Check()
+}
+
+// chargeAggs charges the aggregates' state, which is all the sink holds once its
+// rows go to the file, and returns it.
+func (s *windowSink) chargeAggs() int64 {
 	st := int64(0)
 	for i := range s.specs {
 		if s.specs[i].acc != nil {
@@ -174,7 +212,7 @@ func (s *windowSink) chargeOneSpill() error {
 	}
 	s.mem.RetainBytes(st - s.stateBytes)
 	s.stateBytes = st
-	return s.mem.Check()
+	return st
 }
 
 // finishOneSpill closes the file and returns the operator that reads it back. A spec
@@ -221,6 +259,18 @@ func (s *windowSink) finishOneSpill(ctx context.Context) (Operator, error) {
 		op.answers = append(op.answers, &answerReader{r: r})
 	}
 
+	// An aggregate whose values went to disk puts the rest there too, as its Finish
+	// would, before any Finish reads them back: so the sink is charged for none of
+	// them while a merge holds a batch of every run.
+	setSpillsCtx(ctx, s.spills)
+	for i, sp := range s.spills {
+		if sp != nil {
+			if err := sp.take(s.specs[i].acc); err != nil {
+				return nil, errors.Join(err, op.Close())
+			}
+		}
+	}
+	s.chargeAggs()
 	for i := range s.specs {
 		sp := &s.specs[i]
 		st := &winStreamSpec{sp: sp}
