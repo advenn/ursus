@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.4
 
-Everything since `v0.6.3` (2026-10-12): steps 234–239, so far.
+Everything since `v0.6.3` (2026-10-12): steps 234–240, so far.
 [`v0.6.4-scope.md`](./context_files/v0.6.4-scope.md) set the scope: **out of core, the
 leftovers** — what still refuses under a memory budget, made to spill or stream.
 
@@ -38,6 +38,9 @@ leftovers** — what still refuses under a memory budget, made to spill or strea
 - **A sort merges its spilled runs as they gather,** sixteen of one level into one of
   the next (239), so its final merge holds a batch of fewer than sixteen runs a
   level. A window's sorted pass peaked at 6.7× its limit and now at 1.2×.
+- **A window with no partition_by beside a keyed one spills** (240), its keyless
+  functions one more pass of the keyed spill. It refused. Of windows over one huge
+  partition, only a rolling window by time still refuses.
 
 ---
 

@@ -58,16 +58,19 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 		// at a time (winstream.go).
 		return s.startOneSpill()
 	}
-	for _, p := range s.parts {
-		if len(p.keys) == 0 {
-			return s.refuse("a window with no partition_by is one partition, which partitioning "+
-				"to disk cannot divide, and this one computes a function that needs all of it "+
-				"or mixes it with a partition_by",
-				"aggregates, cumulative functions either way, cum_count, ewm, Shift, the "+
-					"fills and rolling windows of rows stream past the limit, in an order_by "+
-					"too; rank, interpolation and rolling windows by time do not. Give the "+
-					"window a partition_by, or raise the limit with WithMemoryLimit")
+	// A window with no partition_by beside a keyed one (step 240) is one more pass
+	// of the spill: routing by no key sends every row to one file, whose sink is a
+	// keyless window, which streams. It refuses only when one of its functions needs
+	// all of its one partition at once.
+	for i, p := range s.parts {
+		if len(p.keys) > 0 || s.keylessStreams(i) {
+			continue
 		}
+		return s.refuse("a window with no partition_by is one partition, which partitioning "+
+			"to disk cannot divide, and this one computes a function that needs all of it",
+			"every window function streams past the limit, in an order_by too, but a "+
+				"rolling window by time, which needs every row of its period. Give the "+
+				"window a partition_by, or raise the limit with WithMemoryLimit")
 	}
 	if s.skewable() && s.budget.Limit() > 0 {
 		// One partition alone, and every function bounded: its rows to one file, the
@@ -78,12 +81,22 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 		return s.refuse("one partition holds more rows than the limit, and partitioning to disk "+
 			"divides partitions, not the rows of one; this one computes a function that "+
 			"needs all of it at once",
-			"aggregates, cumulative functions either way, cum_count, ewm, Shift, the "+
-				"fills and rolling windows of rows stream a partition past the limit, in an "+
-				"order_by too; rank, interpolation and rolling windows by time do not. "+
+			"every window function streams a partition past the limit, in an order_by "+
+				"too, but a rolling window by time, which needs every row of its period. "+
 				"Raise the limit with WithMemoryLimit")
 	}
 	return s.startSpill(ctx)
+}
+
+// keylessStreams reports whether every function of partitioning i streams over its
+// one partition.
+func (s *windowSink) keylessStreams(i int) bool {
+	for j := range s.specs {
+		if s.specs[j].part == i && !streamsAlone(&s.specs[j]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *windowSink) refuse(why, hint string) error {

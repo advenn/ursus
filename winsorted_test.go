@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/advenn/ursus"
@@ -112,15 +113,24 @@ func TestAWindowInAnOrderOfItsOwnStreamsPastItsLimit(t *testing.T) {
 	}
 	limit := in.Batch().NBytes() / 10
 	c := ursus.Col
-	for name, q := range map[string]*ursus.LazyFrame{
+	shapes := map[string]*ursus.LazyFrame{
 		"no partition_by": frame.WithColumns(sortedWindows()...),
 		"one hot key":     frame.WithColumns(sortedWindows(c("k"))...),
-	} {
+	}
+	threadCounts := []int{1, 4}
+	if raceDetector {
+		// Under the race detector this takes a minute and a half, and the root
+		// package's runs have ten. The hot key on four threads drives the sorted pass,
+		// the hot key's split and the parallel scan; the rest runs without it.
+		delete(shapes, "no partition_by")
+		threadCounts = []int{4}
+	}
+	for name, q := range shapes {
 		want, err := q.Collect(t.Context(), ursus.WithBatchSize(500))
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, threads := range []int{1, 4} {
+		for _, threads := range threadCounts {
 			var stats ursus.MemoryStats
 			dir := t.TempDir()
 			got, err := q.Collect(t.Context(), ursus.WithBatchSize(500), ursus.WithThreads(threads),
@@ -192,3 +202,56 @@ func TestASortedPassStaysNearItsLimit(t *testing.T) {
 
 // sortFanInForTest is the sort's fan-in, physical.sortFanIn.
 const sortFanInForTest = 16
+
+// TestAWindowWithNoPartitionBesideAKeyedOneStreams: windows with no partition_by
+// beside keyed ones (step 240), where they refused: a cumulative sum in the file's
+// order, a rank, and an interpolation in an order of its own, with a sum over k —
+// whose key 0 holds most of the rows — and a max over k mod 7. Under a tenth of the
+// input, on one thread and four, the answer is the in-memory one, and the spill
+// directory is empty after. A rolling window by time among them still refuses,
+// saying the window has no partition.
+func TestAWindowWithNoPartitionBesideAKeyedOneStreams(t *testing.T) {
+	frame := sortedFrame(40, 500)
+	in, err := frame.Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := in.Batch().NBytes() / 10
+	c := ursus.Col
+	byX := ursus.WindowSpec{OrderBy: []ursus.SortKey{ursus.Asc(c("x"))}}
+	q := frame.WithColumns(
+		c("v").CumSum(false).Over().Alias("cs"),
+		c("f").Rank(ursus.RankAverage, true).Over().Alias("r"),
+		c("v").Interpolate().OverWith(byX).Alias("ip"),
+		c("v").Sum().Over(c("k")).Alias("ks"),
+		c("x").Max().Over(c("k").Mod(7)).Alias("km"),
+	)
+	want, err := q.Collect(t.Context(), ursus.WithBatchSize(500))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, threads := range []int{1, 4} {
+		var stats ursus.MemoryStats
+		dir := t.TempDir()
+		got, err := q.Collect(t.Context(), ursus.WithBatchSize(500), ursus.WithThreads(threads),
+			ursus.WithMemoryLimit(limit), ursus.WithSpillDir(dir), ursus.WithMemoryStats(&stats))
+		if err != nil {
+			t.Fatalf("on %d threads, under %d bytes: %v", threads, limit, err)
+		}
+		if stats.Spills == 0 {
+			t.Fatalf("on %d threads: nothing spilled", threads)
+		}
+		ursustest.AssertFrameEqual(t, got, want)
+		if left, _ := os.ReadDir(dir); len(left) > 0 {
+			t.Errorf("on %d threads: %d entries left in the spill directory", threads, len(left))
+		}
+	}
+
+	_, err = frame.WithColumns(
+		c("v").RollingSumBy(c("x").Cast(ursus.Datetime(ursus.Micro, "")), ursus.Every("1s")).Over().Alias("rs"),
+		c("v").Sum().Over(c("k")).Alias("ks"),
+	).Collect(t.Context(), ursus.WithBatchSize(500), ursus.WithMemoryLimit(limit), ursus.WithSpillDir(t.TempDir()))
+	if err == nil || !strings.Contains(err.Error(), "no partition") {
+		t.Errorf("a rolling sum by time beside a keyed window should refuse, saying it has no partition: %v", err)
+	}
+}
