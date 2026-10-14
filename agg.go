@@ -374,7 +374,13 @@ func (lf *LazyFrame) WithColumns(exprs ...Expr) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
-	return lf.derive(&plan.WithColumns{Input: lf.node, Exprs: bindScalars(lowerReshapes(ns, false))})
+	ns = lowerReshapes(ns, false)
+	for _, n := range ns {
+		if changesLength(n) {
+			return lf.withColumnsReshaped(ns)
+		}
+	}
+	return lf.derive(&plan.WithColumns{Input: lf.node, Exprs: bindScalars(ns)})
 }
 
 // Sort orders rows by one or more keys.

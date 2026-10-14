@@ -287,6 +287,9 @@ const (
 	FnListQuantile
 	FnListDropNans
 	FnListGatherEvery
+	// A List of Lists flattened a level (step 259), which Explode in an aggregation
+	// lowers to: an empty or null inner list one null, as explode makes it a row.
+	FnListExplode
 	fnListMoreEnd
 )
 
@@ -371,8 +374,8 @@ var callNames = map[CallFn]string{
 	FnListToStruct: "list.to_struct",
 	FnListMedian:   "list.median", FnListStd: "list.std", FnListVar: "list.var",
 	FnListQuantile: "list.quantile", FnListDropNans: "list.drop_nans",
-	FnListGatherEvery: "list.gather_every",
-	FnListSortBy:      "list.sort_by", FnListSortByDesc: "list.sort_by_desc",
+	FnListGatherEvery: "list.gather_every", FnListExplode: "list.explode",
+	FnListSortBy: "list.sort_by", FnListSortByDesc: "list.sort_by_desc",
 	FnIsInExpr: "is_in_expr", FnListGetExpr: "list.get_expr",
 	FnListContainsExpr: "list.contains_expr",
 	FnStrContainsExpr:  "str.contains_expr", FnStrStartsWithExpr: "str.starts_with_expr",
@@ -1593,6 +1596,14 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 			return dtype.Null, err
 		}
 		return b.Out, nil
+
+	case FnListExplode:
+		if elem.ID() != dtype.TypeList {
+			return dtype.Null, uerr.New(uerr.KindType, "explode",
+				"explode requires a List column, got %s", elem).
+				Hint("a column that is not a List has nothing to explode")
+		}
+		return elem, nil
 
 	case FnListDropNans:
 		if !elem.IsFloat() {

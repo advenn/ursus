@@ -72,19 +72,9 @@ func (lf *LazyFrame) selectReshaped(ns []expr.Node) *LazyFrame {
 	parts := make([]zipPart, len(ns))
 	for i, n := range ns {
 		if changesLength(n) && hasMatch(n) {
-			return &LazyFrame{err: uerr.New(uerr.KindUnsupported, "select",
-				"%s reshapes a selection of several columns, which is not there yet", n).
-				Hint("name each column: Col(\"a\").Sort(), Col(\"b\").Sort()")}
+			return &LazyFrame{err: errSeveralReshaped(n)}
 		}
-		core := n
-		for {
-			a, ok := core.(*expr.Alias)
-			if !ok {
-				break
-			}
-			core = a.Child
-		}
-		p, err := z.lift(core)
+		p, err := z.lift(unalias(n))
 		if err != nil {
 			return &LazyFrame{err: err}
 		}
@@ -100,6 +90,57 @@ func (lf *LazyFrame) selectReshaped(ns []expr.Node) *LazyFrame {
 		out[i] = wrap(refs[i]).Alias(expr.OutputName(n))
 	}
 	return frame.Select(out...)
+}
+
+// withColumnsReshaped is WithColumns of ns, at least one of which changes its length
+// (step 259): the frame zipped with them first, so a column of another length than
+// the frame's is refused, naming the frame; then the frame's own WithColumns, and the
+// zipped columns dropped.
+func (lf *LazyFrame) withColumnsReshaped(ns []expr.Node) *LazyFrame {
+	z := &zipper{in: lf}
+	parts := make([]zipPart, len(ns)+1)
+	parts[0] = zipPart{lf: lf, text: "the frame"}
+	var tmps []string
+	for i, n := range ns {
+		if changesLength(n) && hasMatch(n) {
+			return &LazyFrame{err: errSeveralReshaped(n)}
+		}
+		p, err := z.lift(unalias(n))
+		if err != nil {
+			return &LazyFrame{err: err}
+		}
+		p.text = n.String()
+		parts[i+1] = p
+		if p.lf != nil {
+			tmps = append(tmps, p.col)
+		}
+	}
+	frame, refs := z.zip(parts)
+	if frame.err != nil {
+		return frame
+	}
+	out := make([]Expr, len(ns))
+	for i, n := range ns {
+		out[i] = wrap(refs[i+1]).Alias(expr.OutputName(n))
+	}
+	return frame.WithColumns(out...).Drop(tmps...)
+}
+
+// unalias is n beneath its aliases, whose name the caller keeps.
+func unalias(n expr.Node) expr.Node {
+	for {
+		a, ok := n.(*expr.Alias)
+		if !ok {
+			return n
+		}
+		n = a.Child
+	}
+}
+
+func errSeveralReshaped(n expr.Node) error {
+	return uerr.New(uerr.KindUnsupported, "select",
+		"%s reshapes a selection of several columns, which is not there yet", n).
+		Hint("name each column: Col(\"a\").Sort(), Col(\"b\").Sort()")
 }
 
 // lift is n's value as a column of a plan over the input, or n itself if it is a
@@ -236,6 +277,11 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 		out = p.lf.Filter(c.IsNotNull())
 	case expr.ReshapeDropNans:
 		out = p.lf.Filter(c.IsNotNan().Or(c.IsNull()))
+	case expr.ReshapeExplode:
+		// Exploded under the values' own name, which the refusal of a column that is
+		// not a List then names.
+		name := expr.OutputName(r.Child)
+		out = p.lf.Select(c.Alias(name)).Explode(name).Select(Col(name).Alias(p.col))
 	case expr.ReshapeGatherEvery:
 		every, off := arg[0], arg[1]
 		idx := z.tmp()

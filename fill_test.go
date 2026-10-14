@@ -531,8 +531,8 @@ func TestDiffAndPctChange(t *testing.T) {
 // TestExprDropNullsIsRefused: refused while the plan is built, so CollectSchema and
 // Explain fail too rather than printing a plan that cannot run. Since step 252
 // DropNulls is an expression, a column of its own length, in an aggregation, and
-// since step 258 in Select; in WithColumns it is still refused, naming the
-// frame-level form.
+// since steps 258 and 259 in Select and WithColumns; in Filter it is still refused,
+// naming the frame-level form.
 func TestExprDropNullsIsRefused(t *testing.T) {
 	f := ursus.Frame(ursus.Values("v", []float64{1}))
 	for _, c := range []struct {
@@ -544,7 +544,7 @@ func TestExprDropNullsIsRefused(t *testing.T) {
 		{"DropNans", ursus.Col("v").DropNans(), "IsNotNan().Or("},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := f.WithColumns(c.e.Alias("w")).CollectSchema(t.Context())
+			_, err := f.Filter(c.e.Gt(0)).CollectSchema(t.Context())
 			if err == nil {
 				t.Fatal("expected a refusal")
 			}
@@ -554,7 +554,7 @@ func TestExprDropNullsIsRefused(t *testing.T) {
 			if !strings.Contains(err.Error(), c.want) {
 				t.Errorf("the message must name the working spelling %q:\n%v", c.want, err)
 			}
-			if _, err := f.WithColumns(c.e.Alias("w")).Explain(t.Context()); err == nil {
+			if _, err := f.Filter(c.e.Gt(0)).Explain(t.Context()); err == nil {
 				t.Error("Explain must fail too; a refusal only Collect notices lets " +
 					"Explain print a plan that cannot run")
 			}

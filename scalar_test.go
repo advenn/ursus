@@ -141,9 +141,9 @@ func TestAFilterIsAnAggregatesInput(t *testing.T) {
 		}
 	}
 
-	// Anywhere but an aggregate's input or a Select (step 258) a filter is refused,
-	// naming the frame's.
-	for _, q := range []*ursus.LazyFrame{lf.WithColumns(c("a").Filter(p).Add(1)),
+	// Anywhere but an aggregate's input, a Select or a WithColumns (steps 258 and 259)
+	// a filter is refused, naming the frame's.
+	for _, q := range []*ursus.LazyFrame{lf.Filter(c("a").Filter(p).Gt(1)),
 		lf.GroupBy(c("g")).Agg(c("a").Filter(p).Add(1).Sum())} {
 		_, err := q.Collect(t.Context())
 		if err == nil || !strings.Contains(err.Error(), "changes the column's length") {
@@ -265,10 +265,10 @@ func TestALengthChangingExpressionInAnAggregation(t *testing.T) {
 		t.Errorf("rolling:\n got %q\nwant %q", got.String(), want)
 	}
 
-	for _, q := range []*ursus.LazyFrame{lf.WithColumns(c("a").Sort().Alias("s")), lf.GroupBy(c("g")).Agg(c("a").Sum().Sort()),
+	for _, q := range []*ursus.LazyFrame{lf.Filter(c("a").Sort().Gt(1)), lf.GroupBy(c("g")).Agg(c("a").Sum().Sort()),
 		lf.GroupBy(c("g")).Agg(c("a").Filter(c("a").Gt(1)).Sort())} {
 		if _, err := q.Collect(t.Context()); err == nil {
-			t.Error("a reshape in WithColumns, of an aggregate, or of a filter should be refused")
+			t.Error("a reshape in Filter, of an aggregate, or of a filter should be refused")
 		}
 	}
 }

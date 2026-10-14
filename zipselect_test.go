@@ -71,11 +71,13 @@ func TestLengthChangingExpressionsRefuse(t *testing.T) {
 		q    *ursus.LazyFrame
 		want string
 	}{
-		"two lengths":         {lf.Select(c("a").Head(2), c("b")), "a Select's columns are of one length"},
-		"two lengths, nested": {lf.Select(c("a").Head(2).Add(c("b"))), "a Select's columns are of one length"},
-		"several columns":     {lf.Select(c("a", "b").Sort()), "name each column"},
-		"a gather":            {lf.Select(c("a").Gather(ursus.Lit([]int64{0}))), "not there yet"},
-		"sort_by a head":      {lf.Select(c("a").Head(2).SortBy(c("b"))), "keys of another length"},
+		"two lengths":         {lf.Select(c("a").Head(2), c("b")), "columns side by side are of one length"},
+		"two lengths, nested": {lf.Select(c("a").Head(2).Add(c("b"))), "columns side by side are of one length"},
+		"another height than the frame's": {lf.WithColumns(c("a").Head(2).Alias("h")),
+			"is 2 rows and the frame is 3"},
+		"several columns": {lf.Select(c("a", "b").Sort()), "name each column"},
+		"a gather":        {lf.Select(c("a").Gather(ursus.Lit([]int64{0}))), "not there yet"},
+		"sort_by a head":  {lf.Select(c("a").Head(2).SortBy(c("b"))), "keys of another length"},
 	} {
 		if _, err := tc.q.Collect(t.Context()); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: got %v, want an error naming %q", name, err, tc.want)

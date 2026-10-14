@@ -37,13 +37,14 @@ const (
 	ReshapeGatherEvery                  // Args: n, offset (step 253)
 	ReshapeSortBy                       // Args: descending, 0 or 1; By the keys (step 253)
 	ReshapeGather                       // no args; By the indices (step 257)
+	ReshapeExplode                      // no args: a List's elements (step 259)
 )
 
 var reshapeNames = map[ReshapeOp]string{
 	ReshapeSort: "sort", ReshapeHead: "head", ReshapeTail: "tail", ReshapeSlice: "slice",
 	ReshapeReverse: "reverse", ReshapeUnique: "unique", ReshapeDropNulls: "drop_nulls",
 	ReshapeGet: "get", ReshapeDropNans: "drop_nans", ReshapeGatherEvery: "gather_every",
-	ReshapeSortBy: "sort_by", ReshapeGather: "gather",
+	ReshapeSortBy: "sort_by", ReshapeGather: "gather", ReshapeExplode: "explode",
 }
 
 func (o ReshapeOp) String() string { return reshapeNames[o] }
@@ -90,8 +91,21 @@ func (r *Reshape) String() string {
 	return r.Child.String() + "." + r.Op.String() + "(" + args + ")"
 }
 
-// Field is the child's: a reshape keeps its values' type.
-func (r *Reshape) Field(in *dtype.Schema) (dtype.Field, error) { return r.Child.Field(in) }
+// Field is the child's: a reshape keeps its values' type, but Explode, whose values
+// are its List's elements.
+func (r *Reshape) Field(in *dtype.Schema) (dtype.Field, error) {
+	f, err := r.Child.Field(in)
+	if err != nil || r.Op != ReshapeExplode {
+		return f, err
+	}
+	if f.Type.ID() != dtype.TypeList {
+		return dtype.Field{}, uerr.New(uerr.KindType, "explode",
+			"explode requires a List column, got %s", f.Type).
+			Hint("a column that is not a List has nothing to explode")
+	}
+	f.Type, f.Nullable = f.Type.Inner(), true
+	return f, nil
+}
 
 // LooseReshape is the first Reshape in n that LowerReshapes left, or nil: one outside
 // an aggregation.
@@ -124,6 +138,7 @@ func looseReshapeErr(r *Reshape) error {
 var frameForms = map[ReshapeOp]string{
 	ReshapeSort: "lf.Sort", ReshapeHead: "lf.Head", ReshapeTail: "lf.Tail", ReshapeSlice: "lf.Slice",
 	ReshapeReverse: "lf.Reverse", ReshapeUnique: "lf.Unique", ReshapeDropNulls: "lf.DropNulls",
+	ReshapeExplode: "lf.Explode",
 	// The .Or is required: IsNotNan is null on a null row, and Filter drops a null
 	// predicate, so the bare spelling would drop the nulls too.
 	ReshapeDropNans: `lf.Filter(Col("x").IsNotNan().Or(Col("x").IsNull()))`,
@@ -202,6 +217,8 @@ func lowerReshape(r *Reshape) Node {
 		return &Call{Fn: FnListDropNans, Args: []Node{list}}
 	case ReshapeGatherEvery:
 		return &Call{Fn: FnListGatherEvery, Args: []Node{list, arg(0), arg(1)}}
+	case ReshapeExplode:
+		return &Call{Fn: FnListExplode, Args: []Node{list}}
 	case ReshapeSortBy:
 		// The keys imploded beside the values: each group's keys are a list of its
 		// length. A chain before sort_by would leave the two of different lengths.

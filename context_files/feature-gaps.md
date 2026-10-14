@@ -249,6 +249,8 @@ decide whether to keep or switch each one.
   (step 250).
 - `DropNans` of a column that is not a float is refused; Polars returns it as it was
   (steps 253 and 258).
+- `Explode` of a column that is not a List is refused; Polars returns it as it was
+  (step 259).
 
 ## 10. What ursus has that most others do not
 

@@ -154,14 +154,16 @@ func TestExplodeRefusesNonList(t *testing.T) {
 		}
 	})
 
-	t.Run("as an expression", func(t *testing.T) {
+	// Since step 259 Explode is an expression, a column of its own length; of a
+	// column that is not a List it is refused, naming the column.
+	t.Run("as an expression, not a list", func(t *testing.T) {
 		_, err := ursus.ScanParquet(path).
-			Select(ursus.Col("tags").Explode()).Collect(t.Context())
+			Select(ursus.Col("id").Explode()).Collect(t.Context())
 		if err == nil {
-			t.Fatal("Explode as an expression must be refused")
+			t.Fatal("exploding a non-list column must fail")
 		}
-		if !strings.Contains(err.Error(), "height") {
-			t.Errorf("the refusal should say it changes the frame's height: %v", err)
+		if !strings.Contains(err.Error(), `"id" is Int64, not a List`) {
+			t.Errorf("the refusal should name the column: %v", err)
 		}
 	})
 }

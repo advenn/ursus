@@ -78,6 +78,8 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 
 	case expr.FnListGet:
 		return listGet(name, c, args)
+	case expr.FnListExplode:
+		return listExplode(name, c)
 
 	case expr.FnListContains:
 		return listContains(name, c, needle)
@@ -424,6 +426,39 @@ func listGet(name string, c *data.Column, args []any) (*data.Column, error) {
 		return nil, err
 	}
 	return out.Rename(name), nil
+}
+
+// listExplode flattens a List of Lists a level, each row's inner lists end to end
+// (step 259): a group's lists exploded, as Explode in an aggregation is. An empty or
+// null inner list is one null element, as explode makes it a null row; a null row
+// stays null.
+func listExplode(name string, c *data.Column) (*data.Column, error) {
+	outer := c.Lists()
+	inner := outer.Child().Lists()
+	n := c.Len()
+	offs := make([]int32, 1, n+1)
+	var pick []int32
+	valid := bitmap.NewBuilder(n)
+	for i := range n {
+		s, e, ok := outer.Get(i)
+		for j := s; ok && j < e; j++ {
+			is, ie, iok := inner.Get(int(j))
+			if !iok || is == ie {
+				pick = append(pick, NullIndex)
+				continue
+			}
+			for k := is; k < ie; k++ {
+				pick = append(pick, k)
+			}
+		}
+		offs = append(offs, int32(len(pick)))
+		valid.Append(ok)
+	}
+	child, err := Take(inner.Child(), pick)
+	if err != nil {
+		return nil, err
+	}
+	return data.NewList(name, offs, child, valid.Finish()), nil
 }
 
 // listContains reports whether each row holds the value.

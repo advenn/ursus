@@ -234,7 +234,7 @@ func (h *hstackOp) mismatch(ctx context.Context) error {
 	for i, n := range h.rows {
 		if n != h.rows[0] && len(h.labels) == len(h.rows) {
 			return uerr.New(uerr.KindValue, "select",
-				"%s is %d rows and %s is %d: a Select's columns are of one length",
+				"%s is %d rows and %s is %d: columns side by side are of one length",
 				h.labels[i], n, h.labels[0], h.rows[0]).
 				Hint("one value, an aggregate, stands beside a column of any length; " +
 					"columns of two lengths are refused, as Polars refuses them")

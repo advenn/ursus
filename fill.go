@@ -296,18 +296,14 @@ func (e Expr) FillNull(s FillStrategy) Expr {
 	}
 }
 
-// Explode is refused as an expression for the reason DropNulls is: it changes the
-// frame's height, and an expression produces one value per input row.
+// Explode is a List's elements, a column of their number (step 259): Polars'
+// explode. An empty or null list is one null, as the frame-level lf.Explode makes
+// it a null row.
 //
-// It is the same refusal rather than a new one on purpose. A caller who reaches
-// for `Col("tags").Explode()` has made the height mistake, not a list mistake,
-// and the answer is the same shape as it is for DropNulls.
-func (e Expr) Explode() Expr {
-	return wrap(&expr.Err{E: uerr.New(uerr.KindUnsupported, "explode",
-		"Explode is not an expression; it changes the frame's height").
-		Hint("use the frame-level form: lf.Explode(\"tags\")").
-		Hint("an expression produces one value per input row, so it cannot add rows")})
-}
+// In Select it is the frame-level Explode of its one column; in an aggregation each
+// group's lists end to end, and Col("tags").Explode().Sum() their sum. A column that
+// is not a List is refused, where Polars returns it as it was.
+func (e Expr) Explode() Expr { return e.reshape(expr.ReshapeExplode) }
 
 // Unnest is refused as an expression, and for a DIFFERENT reason than Explode.
 //

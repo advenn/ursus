@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.5
 
-Everything since `v0.6.4` (2026-10-14): steps 248–258, so far.
+Everything since `v0.6.4` (2026-10-14): steps 248–259, so far.
 [`v0.6.5-scope.md`](./context_files/v0.6.5-scope.md) set the scope: **feature
 completeness, part 1 — the bugs, and the expression model.** The rest of 0.6 is
 feature completeness, and 0.7 performance;
@@ -76,6 +76,9 @@ feature completeness, and 0.7 performance;
   refused for its two lengths and `Select(Col("a").Head(3), Col("b").Sum())` is
   three rows. Each is a plan of its own over the frame, so it spills as the
   frame-level operation does.
+- **`WithColumns` takes them at the frame's height, and `Expr.Explode` is an
+  expression** (259), in `Select`, in an aggregation and under an aggregate; it was a
+  refusal.
 
 ---
 
