@@ -15,11 +15,40 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.6.4
+## v0.6.4 — 2026-10-14
 
-Everything since `v0.6.3` (2026-10-12): steps 234–246, so far.
+Everything since `v0.6.3` (2026-10-12): steps 234–247.
 [`v0.6.4-scope.md`](./context_files/v0.6.4-scope.md) set the scope: **out of core, the
 leftovers** — what still refuses under a memory budget, made to spill or stream.
+Step 247 measured the whole.
+
+### Where it ends
+
+- **Every window function streams past a memory limit,** over one huge partition too;
+  a rolling window by time holds the rows of its period. **Keyed `Rolling` and
+  `GroupByDynamic` hand their answer out.** n_unique, and a median, quantile or
+  n_unique in a window or a temporal group, spill their values; a large top-k spills.
+- **Out of core, measured:** each new path under a tenth of its input gives the
+  answer it gives without a limit, the same to the byte, peaking at 1.01 to 2.11
+  times the limit (step 247 §3).
+- **Against v0.6.3,** both built alike and alternated: level. PDS-H at SF=1 takes
+  1.4% less wall time by geomean and 0.4% more CPU, at SF=0.1 2% less; h2o's gb1,
+  gb4, gb5 and j1 move by −8% to +2%. 0.6.4 changed what happens past a limit, and
+  these run without one.
+- **Against Polars, in one session,** every answer validated against DuckDB's:
+
+  | suite | ursus | Polars | ratio | at v0.6.3 |
+  | --- | --: | --: | --: | --: |
+  | PDS-H SF=1 | 158 ms | 79 ms | 2.01× | 1.94× |
+  | PDS-H SF=0.1 | 20 ms | 9 ms | 2.29× | 1.82× |
+  | h2o 10M, Parquet | 697 ms | 531 ms | 1.31× | 1.20× |
+  | h2o 10M, CSV | 1,784 ms | 1,088 ms | 1.64× | 1.77× |
+
+  The builds are level, so the ratios move with the session: both engines ran h2o
+  faster than in 0.6.3's, which was short of memory, Polars by more over Parquet and
+  ursus by more over CSV.
+- **CI's race job,** which had timed out since step 237, has twenty minutes, and its
+  heaviest budget tests run smaller under the race detector (244).
 
 ### Out of core
 
@@ -64,6 +93,30 @@ leftovers** — what still refuses under a memory budget, made to spill or strea
   match the in-memory ones to the bit. It refused. It holds the rows of its period,
   and refuses, naming the period, only when one period is past the limit. Every
   window function now streams past the limit.
+
+### Known limitations
+
+As v0.6.3's, except:
+
+- **Operators that do not spill,** each failing under a budget with an error naming
+  itself:
+  - a rolling window by time one of whose periods holds more rows than the limit;
+  - implode over a group, a window partition or a temporal window larger than the
+    limit: its answer is every value;
+  - join_asof's read-ahead: a left by-key the right side lacks reads that side to its
+    end and holds it;
+  - a dynamic group's long gap in its index makes every empty window in it at once,
+    under the window ceiling.
+- **A keyed `Rolling` or `GroupByDynamic` is a little slower in memory,** +4% and +13%
+  over 2,000,000 rows under 1,000 keys: its windows go out in segments and are put in
+  bucket order at the end.
+- **Speed:** 2.01× Polars on PDS-H at SF=1. The widest gaps are q12 at 4.3×, q19 at
+  3.5× and q16 at 2.9×; over h2o, gb4 at 2.3× over Parquet and 3.1× over CSV, the
+  joins at 1.7 to 2.1×.
+- **Memory:** with no limit set, h2o's `gb10` peaks at 7.7 GB over Parquet and 6.4 GB
+  over CSV; Polars' highest is 5.0 GB.
+- **A large top-k is slower in memory than under a limit:** the best half of two
+  million rows takes 1.35 s as a heap, and 0.42 s as spilled sorted runs.
 
 ---
 
