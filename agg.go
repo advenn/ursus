@@ -360,6 +360,9 @@ func (k SortKey) NullsLast() SortKey {
 //
 // Later expressions can reference columns that earlier ones added, so
 // `WithColumns(a.Alias("x"), Col("x").Mul(2))` works.
+//
+// An aggregate is the whole frame's, broadcast to every row, as in Polars:
+// WithColumns(Col("x").Sub(Col("x").Mean())) centres x (step 250).
 func (lf *LazyFrame) WithColumns(exprs ...Expr) *LazyFrame {
 	if lf.err != nil {
 		return lf
@@ -371,7 +374,7 @@ func (lf *LazyFrame) WithColumns(exprs ...Expr) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
-	return lf.derive(&plan.WithColumns{Input: lf.node, Exprs: ns})
+	return lf.derive(&plan.WithColumns{Input: lf.node, Exprs: bindScalars(ns)})
 }
 
 // Sort orders rows by one or more keys.

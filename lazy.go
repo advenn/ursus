@@ -86,6 +86,14 @@ func nodes(exprs []Expr) ([]expr.Node, error) {
 //
 // Expressions may expand: Select(All()) keeps everything, and
 // Select(ColDType(Float64).Suffix("_f")) selects and renames every float column.
+//
+// # An aggregate is a scalar
+//
+// As in Polars, an aggregate here is one value broadcast to every row:
+// Select(Col("x"), Col("x").Sum()) gives each row the total. A Select whose every
+// expression aggregates is one row, GroupBy().Agg(...) with no keys:
+// Select(Col("x").Sum(), Col("x").Mean()). The broadcast is the aggregate over a
+// window with no partition, .Over(), which streams past a memory limit (step 250).
 func (lf *LazyFrame) Select(exprs ...Expr) *LazyFrame {
 	if lf.err != nil {
 		return lf
@@ -94,7 +102,36 @@ func (lf *LazyFrame) Select(exprs ...Expr) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
-	return lf.derive(&plan.Project{Input: lf.node, Exprs: ns})
+	if allScalar(ns) {
+		return lf.derive(&plan.Aggregate{Input: lf.node, Aggs: ns})
+	}
+	return lf.derive(&plan.Project{Input: lf.node, Exprs: bindScalars(ns)})
+}
+
+// allScalar reports whether every expression is one value for the frame, an
+// aggregate or a literal, and one at least an aggregate: a Select of them is one row,
+// as Polars makes it. A Select of literals alone is left as it was, a row for each.
+func allScalar(ns []expr.Node) bool {
+	agg := false
+	for _, n := range ns {
+		switch {
+		case expr.IsScalar(n):
+			agg = true
+		case !expr.IsConstant(n):
+			return false
+		}
+	}
+	return agg
+}
+
+// bindScalars broadcasts each aggregate of a row context to every row: see
+// expr.BindScalars.
+func bindScalars(ns []expr.Node) []expr.Node {
+	out := make([]expr.Node, len(ns))
+	for i, n := range ns {
+		out[i] = expr.BindScalars(n)
+	}
+	return out
 }
 
 // Filter keeps rows where every predicate is true.
@@ -102,6 +139,9 @@ func (lf *LazyFrame) Select(exprs ...Expr) *LazyFrame {
 // Predicates are AND-ed. A row whose predicate is NULL is DROPPED, matching SQL's
 // WHERE. One consequence worth knowing: Filter(p) and Filter(p.Not()) do not
 // partition the input, because a row where p is null is dropped by both.
+//
+// An aggregate in a predicate is over the whole frame, as in Polars:
+// Filter(Col("x").Gt(Col("x").Mean())) keeps the rows above the mean (step 250).
 func (lf *LazyFrame) Filter(preds ...Expr) *LazyFrame {
 	if lf.err != nil {
 		return lf
@@ -113,7 +153,7 @@ func (lf *LazyFrame) Filter(preds ...Expr) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
-	return lf.derive(&plan.Filter{Input: lf.node, Preds: ns})
+	return lf.derive(&plan.Filter{Input: lf.node, Preds: bindScalars(ns)})
 }
 
 // Remove is the inverse of Filter: it drops rows where ANY predicate is true.

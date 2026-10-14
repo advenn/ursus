@@ -395,20 +395,33 @@ func TestUniqueKeepsFirstRow(t *testing.T) {
 	}
 }
 
-// TestAggregateRejectedInSelect is the fix for a defect that would have shipped:
-// rejectAggregate was documented as guarding Select and was never called from it,
-// so this query reached the evaluator and died as "a bug in ursus".
-func TestAggregateRejectedInSelect(t *testing.T) {
-	_, err := sales().Select(ursus.Col("qty").Sum()).Collect(t.Context())
-	if err == nil {
-		t.Fatal("Select over an aggregate must be rejected")
+// TestAnAggregateInSelectIsAScalar: since step 250 an aggregate in Select is one
+// value, as Polars makes it, where it was refused pointing at GroupBy. Alone, or
+// beside a literal, it is one row, GroupBy().Agg(...) with no keys; beside a column
+// it is broadcast to every row, the aggregate over .Over() with no partition.
+func TestAnAggregateInSelectIsAScalar(t *testing.T) {
+	c := ursus.Col
+	got, err := sales().Select(c("qty").Sum(), c("amount").Mean().Alias("m"), ursus.Lit("x").Alias("l")).
+		Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
 	}
-	msg := err.Error()
-	for _, want := range []string{"aggregate expression is not allowed", "GroupBy"} {
-		if !strings.Contains(msg, want) {
-			t.Errorf("message missing %q:\n%s", want, msg)
-		}
+	want, err := sales().GroupBy().Agg(c("qty").Sum(), c("amount").Mean().Alias("m"), ursus.Lit("x").Alias("l")).
+		Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
 	}
+	ursustest.AssertFrameEqual(t, got, want)
+
+	got, err = sales().Select(c("rep"), c("qty").Sum()).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err = sales().Select(c("rep"), c("qty").Sum().Over()).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, got, want)
 }
 
 func TestNestedAggregateRejected(t *testing.T) {

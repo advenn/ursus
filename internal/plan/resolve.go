@@ -174,6 +174,21 @@ func resolveFilter(f *Filter) (Node, error) {
 		return f.Input, nil
 	}
 
+	// A window in a predicate, SQL's QUALIFY, and since step 250 an aggregate,
+	// which Filter broadcasts over a window with no partition: the windows are
+	// computed beneath the filter into temporaries, as WithColumns computes them,
+	// and projected away above it.
+	input, preds, temps, err := extractWindows(f.Input, preds, "filter")
+	if err != nil {
+		return nil, err
+	}
+	keep := in.Names()
+	if len(temps) > 0 {
+		if in, err = input.Schema(); err != nil {
+			return nil, err
+		}
+	}
+
 	for _, p := range preds {
 		// A predicate over an aggregate is HAVING, which belongs after the
 		// aggregation rather than in a row-filter. Rejecting it here with that
@@ -198,8 +213,11 @@ func resolveFilter(f *Filter) (Node, error) {
 	}
 
 	c := *f
-	c.Preds = preds
-	return &c, nil
+	c.Input, c.Preds = input, preds
+	if len(temps) == 0 {
+		return &c, nil
+	}
+	return dropTemps(&c, keep), nil
 }
 
 func resolveProject(p *Project) (Node, error) {

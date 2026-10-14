@@ -255,8 +255,9 @@ func dropTemps(n Node, keep []string) Node {
 
 // rejectWindow refuses a window in a context that cannot host one yet.
 //
-// Filter, Sort and join keys are all row-preserving, so a window is meaningful in
-// each — `Filter(x.Sum().Over(g).Gt(100))` is SQL's QUALIFY. What is missing is not
+// Sort and join keys are row-preserving, so a window is meaningful in each, as it is
+// in Filter, where `Filter(x.Sum().Over(g).Gt(100))` is SQL's QUALIFY and is computed
+// beneath the filter since step 250. What is missing is not
 // the semantics but the plumbing: each would need the window computed below it and
 // the temporary projected away above it, and the node above them does not choose its
 // own columns. The message names the rewrite that works today rather than implying

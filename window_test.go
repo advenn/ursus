@@ -40,10 +40,10 @@ func u32(t *testing.T, df *ursus.DataFrame, name string) []uint32 {
 
 // TestWindowAcceptedWhereAggregateIsNot is the scoping change, stated directly.
 //
-// The same aggregate is illegal bare and legal under a window, in every
-// row-preserving context — because a window preserves the frame's height and a bare
-// aggregate does not. Before this step the seven rejectAggregate sites could not
-// tell the two apart.
+// The same aggregate is legal under a window in every row-preserving context,
+// because a window preserves the frame's height. Bare, it was refused there; since
+// step 250 it is the frame's, broadcast, the same as under .Over() with no partition,
+// as Polars has it.
 func TestWindowAcceptedWhereAggregateIsNot(t *testing.T) {
 	cases := []struct {
 		name string
@@ -63,10 +63,8 @@ func TestWindowAcceptedWhereAggregateIsNot(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if _, err := c.bare().Collect(t.Context()); err == nil {
-				t.Error("a bare aggregate must still be refused here")
-			} else if !strings.Contains(err.Error(), "aggregate expression is not allowed") {
-				t.Errorf("wrong refusal for the bare aggregate: %v", err)
+			if _, err := c.bare().Collect(t.Context()); err != nil {
+				t.Errorf("a bare aggregate is the frame's, broadcast: %v", err)
 			}
 			df, err := c.win().Collect(t.Context(), ursus.WithVerify())
 			if err != nil {
@@ -581,9 +579,6 @@ func TestWindowRefusals(t *testing.T) {
 		lf   func() *ursus.LazyFrame
 		want string
 	}{
-		{"window in a filter", func() *ursus.LazyFrame {
-			return wf().Filter(ursus.Col("v").Sum().Over(ursus.Col("g")).Gt(int64(5)))
-		}, "not supported in filter"},
 		{"window in a sort key", func() *ursus.LazyFrame {
 			return wf().Sort(ursus.Desc(ursus.Col("v").Sum().Over(ursus.Col("g"))))
 		}, "not supported in sort"},

@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.5
 
-Everything since `v0.6.4` (2026-10-14): steps 248–249, so far.
+Everything since `v0.6.4` (2026-10-14): steps 248–250, so far.
 [`v0.6.5-scope.md`](./context_files/v0.6.5-scope.md) set the scope: **feature
 completeness, part 1 — the bugs, and the expression model.** The rest of 0.6 is
 feature completeness, and 0.7 performance;
@@ -37,6 +37,14 @@ feature completeness, and 0.7 performance;
 - **`Dt().Date()` and `Dt().Time()`** (249), Polars' `dt.date` and `dt.time`: the
   date and time of day on the column's zone's wall clock. `Cast(Date)` reads the UTC
   one, as Polars' cast does.
+- **An aggregate in `Select`, `WithColumns` and `Filter` is a scalar** (250), as in
+  Polars: `Select(Col("x"), Col("x").Sum())` gives each row the total,
+  `WithColumns(Col("x").Sub(Col("x").Mean()))` centres x, and
+  `Filter(Col("x").Gt(Col("x").Mean()))` keeps the rows above the mean. A `Select` of
+  aggregates, with or without literals, is one row. It was refused. The broadcast
+  streams past a memory limit.
+- **A window in `Filter`** (250), SQL's QUALIFY:
+  `Filter(Col("x").Sum().Over(Col("g")).Gt(10))`. It was refused.
 
 ---
 

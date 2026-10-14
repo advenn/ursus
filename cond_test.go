@@ -2,6 +2,7 @@ package ursus_test
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -219,21 +220,22 @@ func TestCondInsideGroupByAgg(t *testing.T) {
 	}
 }
 
-// TestCondRejectedInSelect: an aggregate anywhere inside a conditional is still an
-// aggregate, and Select must refuse it. This works with no new code — HasAgg is a
-// plain Walk — so the test pins behaviour rather than fixing it.
-func TestCondRejectedInSelect(t *testing.T) {
-	_, err := sales().Select(
-		ursus.When(ursus.Col("qty").Gt(1)).Then(ursus.Col("amount").Sum()).Otherwise(0),
+// TestAnAggregateInsideAConditionalBroadcasts: an aggregate inside a conditional in
+// Select was refused; since step 250 it is the frame's, broadcast to every row, as
+// Polars has it: rows with qty over 1 get the total amount, 150, and the rest 0.
+func TestAnAggregateInsideAConditionalBroadcasts(t *testing.T) {
+	df, err := sales().Select(
+		ursus.When(ursus.Col("qty").Gt(1)).Then(ursus.Col("amount").Sum()).Otherwise(0).Alias("s"),
 	).Collect(t.Context())
-	if err == nil {
-		t.Fatal("an aggregate inside a conditional must be rejected in Select")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !errors.Is(err, uerr.ErrType) {
-		t.Errorf("kind should be Type: %v", err)
+	s, err := df.Column[float64]("s")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "aggregate expression is not allowed") {
-		t.Errorf("error should name the problem:\n%v", err)
+	if got := s.Values(); !slices.Equal(got, []float64{0, 150, 150, 150, 150, 150, 150}) {
+		t.Errorf("got %v", got)
 	}
 }
 

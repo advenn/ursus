@@ -77,11 +77,12 @@ func TestTheWindowHintMovesTheWindow(t *testing.T) {
 		}
 	})
 	t.Run("a window in a filter", func(t *testing.T) {
-		refusedSaying(t, f.Filter(c("x").Sum().Over(c("k")).Gt(3)), ursus.ErrUnsupported,
-			[]string{`.WithColumns(col("x").sum().over(col("k")).Alias("w"))`}, []string{`gt(`})
-		got := runs(t, f.WithColumns(c("x").Sum().Over(c("k")).Alias("w")).Filter(c("w").Gt(3)), "x")
-		if !slices.Equal(got, []string{"4"}) {
-			t.Errorf("%v", got)
+		// Computed beneath the filter since step 250, SQL's QUALIFY: the same rows
+		// as the WithColumns the hint used to give.
+		got := runs(t, f.Filter(c("x").Sum().Over(c("k")).Gt(3)), "x")
+		want := runs(t, f.WithColumns(c("x").Sum().Over(c("k")).Alias("w")).Filter(c("w").Gt(3)), "x")
+		if !slices.Equal(got, []string{"4"}) || !slices.Equal(got, want) {
+			t.Errorf("%v, want %v", got, want)
 		}
 	})
 }
