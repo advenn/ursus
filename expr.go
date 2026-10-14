@@ -456,16 +456,23 @@ func (e Expr) IsBetween[L, H Operand](lo L, hi H, closed ...Closed) Expr {
 	return lower.And(upper)
 }
 
-// IsIn tests membership in a set of values: Col("region").IsIn("eu", "us").
+// IsIn tests membership in a set of values, Col("region").IsIn("eu", "us"), or in
+// each row's own list, Col("x").IsIn(Col("tags")).
 //
-// # Values, not an expression
+// # Values, or one expression
 //
-// The published sketch was IsIn(other Expr), and it cannot be written: Literal's
-// only slice term is ~[]byte, so there is no way to spell a list-valued literal.
-// The Expr-valued form — testing membership in another frame's column — is a semi
-// join wearing a predicate's clothes, and it belongs with the join machinery.
+// Values are one set for every row. They share one type parameter, so the set is
+// homogeneous by construction.
 //
-// All values share one type parameter, so the set is homogeneous by construction.
+// One expression is a List column, and each row's value is looked for in the row's
+// own list, as Polars' is_in(list) does (step 254). A null value or a null list is
+// null; a value its list does not hold is false, a null element too, as Polars'
+// is_in with nulls_equal=False. A column of the value's own type is refused, as
+// Polars deprecates it for being ambiguous: membership among a column's values is
+// IsIn(Col("b").Implode()), which is not there yet.
+//
+// Membership in another frame's column is a semi join wearing a predicate's
+// clothes, and belongs with the join machinery.
 //
 // # IsIn(v) answers what Eq(v) answers
 //
@@ -489,13 +496,33 @@ func (e Expr) IsBetween[L, H Operand](lo L, hi H, closed ...Closed) Expr {
 // null, because these are Go values.
 //
 // An empty set makes every non-null row false, matching SQL's `x IN ()`.
-func (e Expr) IsIn[T Literal](vs ...T) Expr {
+func (e Expr) IsIn[T Operand](vs ...T) Expr {
+	var zero T
+	if _, ok := any(zero).(Expr); ok {
+		return e.isInExpr(vs)
+	}
 	args := make([]expr.Node, 0, len(vs)+1)
 	args = append(args, e.node())
 	for _, v := range vs {
 		args = append(args, litNode(any(v)))
 	}
 	return wrap(&expr.Call{Fn: expr.FnIsIn, Args: args})
+}
+
+// isInExpr is IsIn of an expression, which must be one, and a value a row.
+func (e Expr) isInExpr(vs any) Expr {
+	xs := vs.([]Expr)
+	if len(xs) != 1 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindType, "is_in",
+			"is_in takes one expression, a List column, and was given %d", len(xs)).
+			Hint("for several values, pass the values: IsIn(1, 2, 3)")})
+	}
+	if x := xs[0].node(); expr.HasAgg(x) {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindUnsupported, "is_in",
+			"%s.is_in(%s): membership among an aggregate's values is not there yet", e.node(), x).
+			Hint("a List column is looked in a row at a time: IsIn(Col(\"tags\"))")})
+	}
+	return wrap(&expr.Call{Fn: expr.FnIsInExpr, Args: []expr.Node{e.node(), xs[0].node()}})
 }
 
 // Replace maps values: a row equal to old[j] becomes new[j], and every other row

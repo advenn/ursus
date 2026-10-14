@@ -71,7 +71,16 @@ func (l ListExpr) Len() Expr { return l.call(expr.FnListLen) }
 // Out of range is null rather than an error. Lists are ragged by nature, so
 // asking for element 3 of a column whose rows mostly hold two is an ordinary
 // question — erroring would make `Get` unusable on exactly the data it is for.
-func (l ListExpr) Get(i int) Expr { return l.call(expr.FnListGet, int64(i)) }
+//
+// i is a constant, or an expression of an integer type, one index a row (step
+// 254), null where it is null. Polars' list.get(expr) errs out of range unless
+// null_on_oob; here it is null either way, as for a constant.
+func (l ListExpr) Get[I int | Expr](i I) Expr {
+	if x, ok := any(i).(Expr); ok {
+		return wrap(&expr.Call{Fn: expr.FnListGetExpr, Args: []expr.Node{l.e.node(), x.node()}})
+	}
+	return l.call(expr.FnListGet, int64(any(i).(int)))
+}
 
 // First is Get(0) and Last is Get(-1).
 func (l ListExpr) First() Expr { return l.Get(0) }
@@ -85,7 +94,15 @@ func (l ListExpr) Last() Expr  { return l.Get(-1) }
 //
 // The element and v meet as == would compare them, as IsIn's values do: v of a type
 // == refuses is refused, and `Contains(5000)` against Int8 elements is false.
-func (l ListExpr) Contains(v any) Expr { return l.call(expr.FnListContains, v) }
+//
+// v may be an expression, one value a row (step 254). A null value there is found
+// where the list holds a null, as Polars' list.contains finds it.
+func (l ListExpr) Contains(v any) Expr {
+	if x, ok := v.(Expr); ok {
+		return wrap(&expr.Call{Fn: expr.FnListContainsExpr, Args: []expr.Node{l.e.node(), x.node()}})
+	}
+	return l.call(expr.FnListContains, v)
+}
 
 // Min and Max reduce each list to its smallest or largest element, keeping the
 // element type. Null elements are skipped, exactly as the column-wide aggregates

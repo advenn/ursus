@@ -239,6 +239,9 @@ decide whether to keep or switch each one.
 - `Time` takes a unit; Polars' is nanoseconds.
 - `GroupByDynamic` with keys puts the index column first and the keys after it;
   Polars puts the keys first (found at step 251).
+- `List().Get` is null out of range, with a constant or an expression index; Polars'
+  `list.get` errs unless `null_on_oob`. A float index is refused; Polars takes it
+  (step 254).
 
 ## 10. What ursus has that most others do not
 

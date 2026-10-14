@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.5
 
-Everything since `v0.6.4` (2026-10-14): steps 248–253, so far.
+Everything since `v0.6.4` (2026-10-14): steps 248–254, so far.
 [`v0.6.5-scope.md`](./context_files/v0.6.5-scope.md) set the scope: **feature
 completeness, part 1 — the bugs, and the expression model.** The rest of 0.6 is
 feature completeness, and 0.7 performance;
@@ -58,6 +58,9 @@ feature completeness, and 0.7 performance;
   `median`, `std`, `var` and `quantile` over any of them (253). `Expr.DropNans` was a
   refusal. The list namespace gains `Median`, `Std`, `Var`, `Quantile`, `DropNans`,
   `GatherEvery`, `SortBy` and `SortByDesc`.
+- **`IsIn(Col("tags"))`,** a value in each row's own list, and **`List().Get` and
+  `List().Contains` of an expression,** a per-row index and value (254). `IsIn` now
+  takes `Operand`s, and `Get` an `int` or an `Expr`.
 
 ---
 

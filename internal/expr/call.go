@@ -246,6 +246,14 @@ const (
 	// ascending or descending, nulls first: its second list is an operand.
 	FnListSortBy
 	FnListSortByDesc
+
+	// Membership and indexing whose argument is a column (step 254): is_in against
+	// each row's own list, and list.get and list.contains with a per-row index and
+	// value. The constant forms are their families' own; these take this one's
+	// shape, every operand a column.
+	FnIsInExpr
+	FnListGetExpr
+	FnListContainsExpr
 	fnHorizontalEnd
 )
 
@@ -349,6 +357,8 @@ var callNames = map[CallFn]string{
 	FnListQuantile: "list.quantile", FnListDropNans: "list.drop_nans",
 	FnListGatherEvery: "list.gather_every",
 	FnListSortBy:      "list.sort_by", FnListSortByDesc: "list.sort_by_desc",
+	FnIsInExpr: "is_in_expr", FnListGetExpr: "list.get_expr",
+	FnListContainsExpr: "list.contains_expr",
 }
 
 func (f CallFn) String() string {
@@ -611,6 +621,70 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 				"%s sorts by %s, which has no order", fn, ops[1].Type.Inner())
 		}
 		return ops[0].Type, nil
+
+	case FnIsInExpr:
+		if len(ops) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		x, l := ops[0].Type, ops[1].Type
+		if l.ID() != dtype.TypeList {
+			e := uerr.New(uerr.KindType, "is_in",
+				"is_in takes a List of each row's values, and %s is a %s", ops[1].Name, l)
+			if l == x {
+				// Polars 1.44 deprecates this spelling as ambiguous, and asks for implode.
+				e.Hint("for membership among the whole column's values, Implode it: IsIn(Col(%q).Implode())",
+					ops[1].Name)
+			}
+			return dtype.Null, e
+		}
+		if x.IsNull() {
+			return dtype.Bool, nil
+		}
+		if !x.IsHashable() {
+			return dtype.Null, uerr.New(uerr.KindType, "is_in", "is_in is not defined for %s", x).
+				Hint("the value must be hashable: numeric, temporal, string or boolean")
+		}
+		if _, err := ResolveBinary(OpEq, x, l.Inner()); err != nil {
+			return dtype.Null, uerr.New(uerr.KindType, "is_in",
+				"is_in cannot compare %s with a List of %s", x, l.Inner()).
+				Hint("it compares as == does, and == has no common type for these")
+		}
+		return dtype.Bool, nil
+
+	case FnListContainsExpr:
+		if len(ops) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		l, v := ops[0].Type, ops[1].Type
+		if l.ID() != dtype.TypeList {
+			return dtype.Null, uerr.New(uerr.KindType, "list",
+				"%s requires a List operand, got %s", fn, l).
+				Hint("only a List column has elements to look among")
+		}
+		if !v.IsNull() {
+			if _, err := ResolveBinary(OpEq, l.Inner(), v); err != nil {
+				return dtype.Null, uerr.New(uerr.KindType, "list.contains",
+					"list.contains cannot compare a List of %s with a %s value", l.Inner(), v).
+					Hint("it compares as == does, and == has no common type for these")
+			}
+		}
+		return dtype.Bool, nil
+
+	case FnListGetExpr:
+		if len(ops) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		if ops[0].Type.ID() != dtype.TypeList {
+			return dtype.Null, uerr.New(uerr.KindType, "list",
+				"%s requires a List operand, got %s", fn, ops[0].Type).
+				Hint("only a List column has elements to get")
+		}
+		if i := ops[1].Type; !i.IsInteger() && !i.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "list.get",
+				"list.get takes an integer index, got %s", i).
+				Hint("cast it first, e.g. .Cast(ursus.Int64)")
+		}
+		return ops[0].Type.Inner(), nil
 
 	case FnListGather, FnListGatherOrNull:
 		if len(ops) != 2 {
