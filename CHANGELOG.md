@@ -15,6 +15,31 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.6.5
+
+Everything since `v0.6.4` (2026-10-14): steps 248–249, so far.
+[`v0.6.5-scope.md`](./context_files/v0.6.5-scope.md) set the scope: **feature
+completeness, part 1 — the bugs, and the expression model.** The rest of 0.6 is
+feature completeness, and 0.7 performance;
+[`feature-gaps.md`](./context_files/feature-gaps.md) lists what is missing.
+
+### Fixed
+
+- **`lf.FillNull(ursus.FillForward)` fills by the strategy** (249). It filled every
+  null with the constant 2: `FillStrategy` is a `uint8`, so it was taken for a value.
+  `Expr.FillNullWith(strategy)` did the same. With no subset, forward and backward
+  fill every column, min and max every ordered one, and zero, one and mean every
+  numeric one; Polars fills a String with "" and a Bool with false for zero, and
+  refuses a String for one and mean.
+
+### Features
+
+- **`Dt().Date()` and `Dt().Time()`** (249), Polars' `dt.date` and `dt.time`: the
+  date and time of day on the column's zone's wall clock. `Cast(Date)` reads the UTC
+  one, as Polars' cast does.
+
+---
+
 ## v0.6.4 — 2026-10-14
 
 Everything since `v0.6.3` (2026-10-12): steps 234–247.

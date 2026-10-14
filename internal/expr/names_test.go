@@ -224,15 +224,16 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	// 110 since step 231 added struct.json_encode, after step 230's dt.days_in_month
+	// 112 since step 249 added dt.date and dt.time; 110 after step 231's
+	// struct.json_encode, step 230's dt.days_in_month
 	// and dt.combine, step 226's replace, replace_strict and replace_or, step 225's
 	// six horizontal reductions, step 224's list.to_struct and struct.rename_fields,
 	// step 223's four list set operations and two gathers, step 222's list.n_unique,
 	// list.arg_min and list.arg_max, step 174's dt.replace_time_zone, step 171's
 	// struct.with_fields, step 147's cut and cut_left_closed, and step 146's
 	// list.join, six bit counts, concat_str and struct.
-	if classified != 110 {
-		t.Errorf("%d call functions are classified, want 110 — the families and the "+
+	if classified != 112 {
+		t.Errorf("%d call functions are classified, want 112 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }

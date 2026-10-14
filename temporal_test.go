@@ -10,6 +10,7 @@ import (
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/source/memsrc"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // tsFrame builds a Datetime column in a named zone, which Values cannot do — it maps
@@ -256,5 +257,51 @@ func TestTemporalArithmeticAndComparisonAgree(t *testing.T) {
 	if _, err := lf.Select(ursus.Col("a").Gt(ursus.Col("b")).Alias("g")).
 		CollectSchema(t.Context()); err != nil {
 		t.Errorf("comparison across units should work too: %v", err)
+	}
+}
+
+// TestDtDateAndTimeReadTheLocalWallClock: Dt().Date() and Dt().Time() are Polars'
+// dt.date and dt.time, the date and time of day on the column's zone's wall clock,
+// where a cast reads the UTC one, as Polars' cast does (step 249). Polars 1.44.1, on
+// 2024-01-01 23:30 UTC in Asia/Tashkent: dt.date 2024-01-02, dt.time 04:30:00, cast
+// to Date 2024-01-01 and to Time 23:30:00. A naive Datetime reads the same either
+// way; a Date's date is itself; a Date has no time of day.
+func TestDtDateAndTimeReadTheLocalWallClock(t *testing.T) {
+	at := time.Date(2024, 1, 1, 23, 30, 0, 0, time.UTC)
+	lf := ursus.Frame(ursus.Values("t", []time.Time{at, at.Add(-24 * time.Hour)})).
+		WithColumns(ursus.Col("t").Cast(ursus.Datetime(ursus.Micro, "UTC")).Dt().ConvertTimeZone("Asia/Tashkent").Alias("z"),
+			ursus.Col("t").Cast(ursus.Datetime(ursus.Micro, "")).Alias("n"))
+	got, err := lf.Select(
+		ursus.Col("z").Dt().Date().Alias("date"), ursus.Col("z").Cast(ursus.Date).Alias("cast_date"),
+		ursus.Col("z").Dt().Time().Alias("time"), ursus.Col("z").Cast(ursus.TimeOf(ursus.Micro)).Alias("cast_time"),
+		ursus.Col("n").Dt().Date().Alias("naive_date"), ursus.Col("n").Dt().Time().Alias("naive_time"),
+		ursus.Col("n").Dt().Date().Dt().Date().Alias("date_date"),
+	).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := func(y, m, day int) time.Time { return time.Date(y, time.Month(m), day, 0, 0, 0, 0, time.UTC) }
+	clock := func(h, m int) time.Duration { return time.Duration(h)*time.Hour + time.Duration(m)*time.Minute }
+	want, err := ursus.Frame(
+		ursus.Values("date", []time.Time{d(2024, 1, 2), d(2024, 1, 1)}),
+		ursus.Values("cast_date", []time.Time{d(2024, 1, 1), d(2023, 12, 31)}),
+		ursus.Values("time", []time.Duration{clock(4, 30), clock(4, 30)}),
+		ursus.Values("cast_time", []time.Duration{clock(23, 30), clock(23, 30)}),
+		ursus.Values("naive_date", []time.Time{d(2024, 1, 1), d(2023, 12, 31)}),
+		ursus.Values("naive_time", []time.Duration{clock(23, 30), clock(23, 30)}),
+		ursus.Values("date_date", []time.Time{d(2024, 1, 1), d(2023, 12, 31)}),
+	).Select(
+		ursus.Col("date", "cast_date", "naive_date", "date_date").Cast(ursus.Date),
+		ursus.Col("time", "cast_time", "naive_time").Cast(ursus.Int64).Div(1000).Cast(ursus.Int64).Cast(ursus.TimeOf(ursus.Micro)),
+	).Select(ursus.Col("date", "cast_date", "time", "cast_time", "naive_date", "naive_time", "date_date")).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, got, want)
+
+	_, err = ursus.Frame(ursus.Values("t", []time.Time{at})).Select(
+		ursus.Col("t").Cast(ursus.Date).Dt().Time()).Collect(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "no time of day") {
+		t.Errorf("a Date's time of day should be refused, saying it has none: %v", err)
 	}
 }

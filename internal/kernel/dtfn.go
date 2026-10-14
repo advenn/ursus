@@ -42,6 +42,8 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 		return convertTimeZone(name, out, c)
 	case expr.FnDtReplaceTimeZone:
 		return replaceTimeZone(name, out, c, args)
+	case expr.FnDtDate, expr.FnDtTime:
+		return localDateTime(fn, name, out, c)
 	}
 
 	dt := c.DType()
@@ -539,4 +541,57 @@ func locationOf(dt dtype.DataType) *time.Location {
 		return nil
 	}
 	return loc
+}
+
+// localDateTime is an instant's date or time of day on its own zone's wall clock,
+// Polars' dt.date and dt.time (step 249). A cast to Date or Time reads the UTC wall
+// clock instead, as Polars' cast does; for a naive Datetime the two agree. A Date's
+// date, and a Time's time, are themselves.
+func localDateTime(fn expr.CallFn, name string, out dtype.DataType, c *data.Column) (*data.Column, error) {
+	dt := c.DType()
+	if dt.ID() != dtype.TypeDatetime {
+		return c.Rename(name).WithDType(out), nil
+	}
+	ticks, err := readTicks(c)
+	if err != nil {
+		return nil, err
+	}
+	valid := c.Validity()
+	loc := locationOf(dt)
+	n := c.Len()
+	var days []int32
+	var tods []int64
+	var per int64
+	if fn == expr.FnDtDate {
+		days = make([]int32, n)
+	} else {
+		tods = make([]int64, n)
+		if per, _ = out.NanosPerTick(); per <= 0 {
+			return nil, uerr.Internalf("kernel: %s to %s", fn, out)
+		}
+	}
+	for i, t := range ticks {
+		if !valid.Get(i) {
+			continue
+		}
+		tm, ok := dt.ToTime(t)
+		if !ok {
+			return nil, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
+		}
+		if loc != nil {
+			tm = tm.In(loc)
+		}
+		if days != nil {
+			// Midnight UTC of the local date is a whole number of days from the epoch.
+			days[i] = int32(time.Date(tm.Year(), tm.Month(), tm.Day(), 0, 0, 0, 0, time.UTC).Unix() / 86400)
+			continue
+		}
+		ns := int64(tm.Hour())*int64(time.Hour) + int64(tm.Minute())*int64(time.Minute) +
+			int64(tm.Second())*int64(time.Second) + int64(tm.Nanosecond())
+		tods[i] = ns / per
+	}
+	if days != nil {
+		return data.NewFixed(name, out, days, valid), nil
+	}
+	return data.NewFixed(name, out, tods, valid), nil
 }

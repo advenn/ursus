@@ -216,9 +216,12 @@ func (lf *LazyFrame) Join(other *LazyFrame, opts ...JoinOption) *LazyFrame {
 // # Which names the predicates use
 //
 // The join's OUTPUT names, which is to say left columns by their own name and a
-// colliding right column with the suffix — `k` and `k_right` by default. There is no
-// separate left/right namespace to qualify with, and the same rule applies here as
-// to a Filter written after any other join. JoinSuffix changes the suffix.
+// colliding right column with the suffix — `k` and `k_right`. There is no separate
+// left/right namespace to qualify with, and the same rule applies here as to a Filter
+// written after any other join. JoinWhere takes no options; for another suffix write
+// what it is, a cross join and a filter, which the optimizer plans the same way:
+//
+//	lf.Join(other, ursus.JoinHow(ursus.JoinCross), ursus.JoinSuffix("_r")).Filter(preds...)
 //
 // # What it costs
 //

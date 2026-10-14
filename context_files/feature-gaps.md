@@ -35,7 +35,7 @@ maybe never), or inferred where it gives none.
 
 ## 1. Bugs and stale documents found on the way
 
-Fix these before anything new.
+Fix these before anything new. **Step 249 fixed every row** (see its record).
 
 | what | where | |
 | --- | --- | --- |

@@ -301,8 +301,8 @@ func WithVerify() CollectOption { return func(c *collectCfg) { c.verify = true }
 // limit, because a sink that has spilled cannot be merged. Every one of those
 // falls back to the serial path silently and exactly.
 //
-// Sort and join breakers remain serial. They still benefit, because their input
-// arrives faster.
+// A join's build and probe run in parallel too (parjoin.go, joinbuild.go). A sort
+// remains serial; it still benefits, because its input arrives faster.
 //
 // The trade, stated: a parallel group-by holds roughly N times the group table,
 // because each worker builds its own. That is why the memory limit disables it
@@ -647,7 +647,9 @@ func (lf *LazyFrame) CollectBatches(ctx context.Context, opts ...CollectOption) 
 	}
 }
 
-// Count runs the query and returns the row count, retaining no data.
+// Count runs the query and returns its row count, retaining no data. It is not
+// Polars' count(), which counts each column's non-null values; that is
+// GroupBy().Agg(All().Count()).
 func (lf *LazyFrame) Count(ctx context.Context, opts ...CollectOption) (n int64, err error) {
 	defer uerr.Catch(&err, "count")
 	cfg := newCollectCfg(opts)

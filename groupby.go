@@ -9,17 +9,14 @@ import (
 
 // DynamicOptions configures GroupByDynamic.
 //
-// # Five fields, and three that are refused rather than ignored
+// # Every field is implemented
 //
-// Every, Period, Offset, Closed and GroupBy are implemented. Label, StartBy and
-// IncludeBoundaries are named in the design docs and are NOT — and they produce an
-// error saying so rather than being accepted and dropped.
-//
-// That is deliberate and it is a lesson this library has already paid for once:
-// plan.Aggregate.MaintainOrder sat assigned, rendered and unread for four steps, and
-// its own doc had to say "the flag documents the guarantee rather than changing
-// behaviour". A field that is accepted and does nothing is worse than one that does
-// not exist, because the next reader believes it.
+// Every, Period, Offset, Closed and GroupBy since step 40; Label, StartBy and
+// IncludeBoundaries since step 187. Until then those three produced an error saying
+// so rather than being accepted and dropped, which is the rule a new field still
+// follows: plan.Aggregate.MaintainOrder once sat assigned, rendered and unread for
+// four steps, and a field that is accepted and does nothing is worse than one that
+// does not exist, because the next reader believes it.
 type DynamicOptions struct {
 	// Every is where windows START. Consecutive windows are Every apart.
 	Every Interval

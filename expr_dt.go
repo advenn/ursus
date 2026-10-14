@@ -54,6 +54,18 @@ func (d DtExpr) Quarter() Expr { return d.call(expr.FnDtQuarter) }
 // week of a year can begin in the previous one.
 func (d DtExpr) Week() Expr { return d.call(expr.FnDtWeek) }
 
+// Date is each instant's date on its own zone's wall clock, Polars' dt.date: 23:30
+// UTC on the 1st, read in a zone five hours ahead, is the 2nd. A Date is itself.
+//
+// Where it differs from Cast(ursus.Date): a cast reads the UTC wall clock, as
+// Polars' cast does, so the two agree only for a naive Datetime or one in UTC.
+func (d DtExpr) Date() Expr { return d.call(expr.FnDtDate) }
+
+// Time is each instant's time of day on its own zone's wall clock, Polars' dt.time,
+// in the Datetime's unit. A Time is itself; a Date has none and is refused. Cast
+// reads the UTC wall clock instead, as Date's doc says.
+func (d DtExpr) Time() Expr { return d.call(expr.FnDtTime) }
+
 // Epoch is whole seconds since 1970-01-01T00:00:00Z, floored: the second an
 // instant lies in, so half a second before the epoch is -1.
 func (d DtExpr) Epoch() Expr { return d.call(expr.FnDtEpoch) }

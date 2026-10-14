@@ -35,8 +35,8 @@ func CutLeftClosed() CutOption {
 //
 // The breaks must be finite and increase. A value is compared as a Float64; a null
 // or a NaN has no bin and is null. The answer is named after the value. Polars
-// answers a Categorical; ursus a String, since an Enum column cannot yet be built
-// from the public API.
+// answers a Categorical, which ursus does not have; ursus a String, which
+// .Cast(ursus.Enum(labels...)) makes an Enum of the bins in their order.
 func (e Expr) Cut(breaks []float64, opts ...CutOption) Expr {
 	for i, b := range breaks {
 		if math.IsNaN(b) || math.IsInf(b, 0) {

@@ -647,3 +647,63 @@ func TestClipPreservesType(t *testing.T) {
 		}
 	}
 }
+
+// TestAFrameFillsNullsByAStrategy: lf.FillNull(strategy) fills by the strategy, as
+// Polars 1.44.1's fill_null(strategy=) does on the same frame, where until step 249
+// it filled every null with the strategy's number: FillStrategy is a uint8, so it
+// satisfies Operand. FillZero, FillOne and FillMean leave the String and Bool
+// columns alone, as lf.FillNull(0) does, where Polars fills them with "" and false
+// or refuses them. Expr.FillNullWith(strategy) fills by it too.
+func TestAFrameFillsNullsByAStrategy(t *testing.T) {
+	ok := func(b ...bool) []bool { return b }
+	frame := ursus.Frame(
+		nullable("i", []int64{1, 0, 3}, ok(true, false, true)),
+		nullable("f", []float64{1.5, 0, 0}, ok(true, false, false)),
+		nullable("s", []string{"a", "", "c"}, ok(true, false, true)),
+		nullable("b", []bool{true, false, false}, ok(true, false, true)),
+	)
+	all := ok(true, true, true)
+	cases := []struct {
+		s    ursus.FillStrategy
+		want *ursus.LazyFrame
+	}{
+		{ursus.FillForward, ursus.Frame(nullable("i", []int64{1, 1, 3}, all), nullable("f", []float64{1.5, 1.5, 1.5}, all),
+			nullable("s", []string{"a", "a", "c"}, all), nullable("b", []bool{true, true, false}, all))},
+		{ursus.FillBackward, ursus.Frame(nullable("i", []int64{1, 3, 3}, all), nullable("f", []float64{1.5, 0, 0}, ok(true, false, false)),
+			nullable("s", []string{"a", "c", "c"}, all), nullable("b", []bool{true, false, false}, all))},
+		{ursus.FillMin, ursus.Frame(nullable("i", []int64{1, 1, 3}, all), nullable("f", []float64{1.5, 1.5, 1.5}, all),
+			nullable("s", []string{"a", "a", "c"}, all), nullable("b", []bool{true, false, false}, all))},
+		{ursus.FillMax, ursus.Frame(nullable("i", []int64{1, 3, 3}, all), nullable("f", []float64{1.5, 1.5, 1.5}, all),
+			nullable("s", []string{"a", "c", "c"}, all), nullable("b", []bool{true, true, false}, all))},
+		{ursus.FillZero, ursus.Frame(nullable("i", []int64{1, 0, 3}, all), nullable("f", []float64{1.5, 0, 0}, all),
+			nullable("s", []string{"a", "", "c"}, ok(true, false, true)), nullable("b", []bool{true, false, false}, ok(true, false, true)))},
+		{ursus.FillOne, ursus.Frame(nullable("i", []int64{1, 1, 3}, all), nullable("f", []float64{1.5, 1, 1}, all),
+			nullable("s", []string{"a", "", "c"}, ok(true, false, true)), nullable("b", []bool{true, false, false}, ok(true, false, true)))},
+		{ursus.FillMean, ursus.Frame(nullable("i", []float64{1, 2, 3}, all), nullable("f", []float64{1.5, 1.5, 1.5}, all),
+			nullable("s", []string{"a", "", "c"}, ok(true, false, true)), nullable("b", []bool{true, false, false}, ok(true, false, true)))},
+	}
+	for _, c := range cases {
+		got, err := frame.FillNull(c.s).Collect(t.Context())
+		if err != nil {
+			t.Fatalf("%s: %v", c.s, err)
+		}
+		want, err := c.want.Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		ursustest.AssertFrameEqual(t, got, want)
+	}
+
+	// A subset, and the expression form.
+	got, err := frame.FillNull(ursus.FillForward, "i").
+		WithColumns(ursus.Col("f").FillNullWith(ursus.FillForward)).Select(ursus.Col("i", "f", "s")).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := ursus.Frame(nullable("i", []int64{1, 1, 3}, all), nullable("f", []float64{1.5, 1.5, 1.5}, all),
+		nullable("s", []string{"a", "", "c"}, ok(true, false, true))).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, got, want)
+}

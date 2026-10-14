@@ -58,6 +58,11 @@ func weaken(n expr.Node) expr.Node {
 // This desugars to a conditional, so the receiver is MENTIONED twice and, with no
 // common-subexpression pass, EVALUATED twice — exactly as Coalesce is.
 func (e Expr) FillNullWith[T Operand](v T) Expr {
+	// A FillStrategy is a uint8, so it is an Operand too; taken for its value it
+	// filled with its number (step 249).
+	if s, ok := any(v).(FillStrategy); ok {
+		return e.FillNull(s)
+	}
 	return wrap(&expr.Cond{
 		Pred:  &expr.Unary{Op: expr.OpIsNotNull, Child: e.node()},
 		Then:  e.node(),

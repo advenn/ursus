@@ -331,10 +331,24 @@ func (lf *LazyFrame) WithRowIndex(name string, offset uint32) *LazyFrame {
 }
 
 // FillNull replaces nulls in the named columns, or in every column the value can
-// fill when no subset is given.
+// fill when no subset is given. A FillStrategy fills by the strategy, as Polars'
+// fill_null(strategy=) does, rather than with a value.
 //
-//	lf.FillNull(0)                  // every numeric column
-//	lf.FillNull(0, "qty", "amount") // exactly these
+//	lf.FillNull(0)                    // every numeric column
+//	lf.FillNull(0, "qty", "amount")   // exactly these
+//	lf.FillNull(ursus.FillForward)    // every column, from the value before
+//
+// # A strategy's columns
+//
+// With no subset, FillForward and FillBackward fill every column; FillMin and FillMax
+// every column of an ordered type; FillZero, FillOne and FillMean every numeric one,
+// as the value 0 would. Polars applies each to every column, filling a String with ""
+// and a Bool with false for FillZero, and refusing a String for FillOne and FillMean;
+// here they leave those columns alone, as `lf.FillNull(0)` does. A limit on a forward
+// or backward fill is Expr.ForwardFill(n) or BackwardFill(n), per column.
+//
+// Until step 249 a strategy was taken for its value: FillStrategy is a uint8, so it
+// satisfies Operand, and `lf.FillNull(ursus.FillForward)` filled every null with 2.
 //
 // # Why the no-subset form restricts rather than refuses
 //
@@ -350,27 +364,48 @@ func (lf *LazyFrame) WithRowIndex(name string, offset uint32) *LazyFrame {
 //
 // The value is a WEAK literal, so filling an Int32 column with 0 leaves it Int32.
 func (lf *LazyFrame) FillNull[T Operand](v T, subset ...string) *LazyFrame {
-	return lf.fillEach(subset, fillTargets(v), func(e Expr) Expr { return e.FillNullWith(v) })
+	if s, ok := any(v).(FillStrategy); ok {
+		return lf.fillEach(subset, s.frameColumns(), func(e Expr) Expr { return e.FillNull(s) })
+	}
+	return lf.fillEach(subset, typesMatcher(fillTargets(v)), func(e Expr) Expr { return e.FillNullWith(v) })
 }
 
 // FillNan replaces NaN in the named columns, or in every FLOAT column when no
 // subset is given. Nulls are left alone — see Expr.FillNan.
 func (lf *LazyFrame) FillNan[T Operand](v T, subset ...string) *LazyFrame {
 	floats := []DataType{dtype.Float32, dtype.Float64}
-	return lf.fillEach(subset, floats, func(e Expr) Expr { return e.FillNan(v) })
+	return lf.fillEach(subset, typesMatcher(floats), func(e Expr) Expr { return e.FillNan(v) })
 }
 
-// fillEach applies fn to the named columns, or to every column of one of the given
-// types when no names are supplied.
-func (lf *LazyFrame) fillEach(subset []string, types []DataType, fn func(Expr) Expr) *LazyFrame {
+// frameColumns is the columns a strategy fills when no subset is named: see
+// LazyFrame.FillNull.
+func (s FillStrategy) frameColumns() expr.Matcher {
+	switch s {
+	case FillForward, FillBackward:
+		return &expr.AllMatcher{}
+	case FillMin, FillMax:
+		return &expr.FieldMatcher{Label: "dtype: ordered",
+			Pred: func(f dtype.Field) bool { return f.Type.IsOrdered() }}
+	}
+	return typesMatcher(numericTypes)
+}
+
+// typesMatcher is the columns of one of the given types, or every column when none
+// is given.
+func typesMatcher(types []DataType) expr.Matcher {
+	if len(types) == 0 {
+		return &expr.AllMatcher{}
+	}
+	return &expr.DTypeMatcher{Types: types}
+}
+
+// fillEach applies fn to the named columns, or to every column m matches when no
+// names are supplied.
+func (lf *LazyFrame) fillEach(subset []string, m expr.Matcher, fn func(Expr) Expr) *LazyFrame {
 	if lf.err != nil {
 		return lf
 	}
 	if len(subset) == 0 {
-		var m expr.Matcher = &expr.AllMatcher{}
-		if len(types) > 0 {
-			m = &expr.DTypeMatcher{Types: types}
-		}
 		return lf.WithColumns(fn(wrap(&expr.Match{M: m})))
 	}
 	cols := make([]Expr, len(subset))

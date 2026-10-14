@@ -100,6 +100,10 @@ const (
 	// ambiguous and non_existent policies, in Polars' words (ZonePolicies).
 	FnDtReplaceTimeZone
 	FnDtDaysInMonth // the month's length, read in the column's zone (step 230)
+	// The local date and time of day of an instant, Polars' dt.date and dt.time
+	// (step 249).
+	FnDtDate
+	FnDtTime
 	fnDtEnd
 
 	// --- type-agnostic ---
@@ -284,6 +288,7 @@ var callNames = map[CallFn]string{
 	FnDtMonthStart: "dt.month_start", FnDtMonthEnd: "dt.month_end",
 	FnDtIsLeapYear: "dt.is_leap_year", FnDtConvertTimeZone: "dt.convert_time_zone",
 	FnDtReplaceTimeZone: "dt.replace_time_zone", FnDtDaysInMonth: "dt.days_in_month",
+	FnDtDate: "dt.date", FnDtTime: "dt.time",
 
 	FnIsIn: "is_in",
 
@@ -965,6 +970,28 @@ func dtCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 				"%s requires a Date, Time or Datetime operand, got %s", fn, in)
 		}
 		return dtype.Int64, nil
+
+	case FnDtDate:
+		if in.ID() != dtype.TypeDate && in.ID() != dtype.TypeDatetime {
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"%s requires a Date or Datetime operand, got %s", fn, in)
+		}
+		return dtype.Date, nil
+
+	case FnDtTime:
+		switch in.ID() {
+		case dtype.TypeTime:
+			return in, nil
+		case dtype.TypeDatetime:
+			// The Datetime's own unit: a time of day in it is exact, and Polars'
+			// nanoseconds would overflow nothing but gain nothing either.
+			return dtype.Time(in.TimeUnit()), nil
+		}
+		e := uerr.New(uerr.KindType, "dt", "%s requires a Time or Datetime operand, got %s", fn, in)
+		if in.ID() == dtype.TypeDate {
+			e.Hint("a Date has no time of day")
+		}
+		return dtype.Null, e
 
 	default:
 		if !isInstant {

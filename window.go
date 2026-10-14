@@ -15,9 +15,9 @@ const (
 	// row order. The default, and the only one that composes with other columns.
 	MapGroupsToRows = expr.MapGroupsToRows
 
-	// MapExplode leaves the output in partition order instead of permuting it back.
-	// Cheaper, because it skips the inverse permutation — and it REORDERS the frame,
-	// so it is only meaningful when every column is windowed the same way.
+	// MapExplode would leave the output in partition order instead of permuting it
+	// back, Polars' mapping_strategy="explode". Refused while the plan is built: it
+	// reorders the frame to partition-major order, which no operator produces yet.
 	MapExplode = expr.MapExplode
 
 	// MapJoin would aggregate each partition into a List repeated across its rows.

@@ -2,15 +2,16 @@
 //
 // # Why ursus has its own format
 //
-// Parquet is the only structured writer in the engine and it REFUSES Int128 —
-// which is the accumulator and output type of every integer Sum, and therefore
-// the engine's most common intermediate. It also refuses Time, Datetime, Duration
-// and Enum on write. Arrow IPC is not implemented at all. So the one format
-// available cannot serialise the values that most need spilling.
+// When the first operator spilled, Parquet was the only structured writer in the
+// engine and it refused Int128, the accumulator and output type of every integer
+// Sum and so the engine's most common intermediate, and Time, Datetime, Duration
+// and Enum too. Arrow IPC is not built in. So the one format available could not
+// serialise the values that most need spilling.
 //
-// The favourable fact is that a data.Column is only four payload slots and there
-// are no List or Struct columns to handle, so a length-prefixed dump of
-// {schema, rows, validity, payload} is small, total, and exactly round-tripping.
+// A data.Column is a few payload slots, so a length-prefixed dump of {schema, rows,
+// validity, payload} is small, total, and exactly round-tripping; List and Struct
+// columns write their children the same way. Only Array, which has no storage yet,
+// is refused.
 //
 // # It is internal, and that is the point
 //
