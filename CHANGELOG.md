@@ -15,13 +15,43 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.6.5
+## v0.6.5 — 2026-10-14
 
-Everything since `v0.6.4` (2026-10-14): steps 248–260, so far.
+Everything since `v0.6.4` (2026-10-14): steps 248–261.
 [`v0.6.5-scope.md`](./context_files/v0.6.5-scope.md) set the scope: **feature
 completeness, part 1 — the bugs, and the expression model.** The rest of 0.6 is
 feature completeness, and 0.7 performance;
-[`feature-gaps.md`](./context_files/feature-gaps.md) lists what is missing.
+[`feature-gaps.md`](./context_files/feature-gaps.md) lists what is missing. Step 261
+checked the whole.
+
+### Where it ends
+
+- **Expressions work where Polars' do.** An aggregate is a scalar in `Select`,
+  `WithColumns` and `Filter`. `Expr.Filter` is an aggregate's input. A
+  length-changing expression is a list a group in an aggregation, and a column of its
+  own length in `Select` and `WithColumns`. Arguments take expressions, and a Go
+  slice is a List literal. `Explode` and `Unnest` are expressions, as `DropNulls` and
+  `DropNans` became.
+- **Each answers as Polars 1.44.1 does,** checked against its answers on the same
+  inputs, but for the differences `feature-gaps.md` §9 records.
+- **Each spills or streams where its pieces do:** a broadcast aggregate as a window, a
+  filtered aggregate through the same accumulators, a column of another length as a
+  plan of its own over the frame. A group's values in an aggregation are held by its
+  implode, which refuses past the limit, as it did.
+- **Nothing the benchmarks run changed:** the optimized plans of the 22 PDS-H and 15
+  h2o queries are byte-identical to v0.6.4's, so no timing ran; 0.6.4's figures
+  stand. Every PDS-H answer at SF=0.1, at every step, and every h2o answer at
+  2,000,000 rows match DuckDB's.
+
+### Breaks
+
+- **`List().Get`, and `Str()`'s `Contains`, `StartsWith`, `EndsWith`, `StripPrefix`,
+  `StripSuffix`, `Split`, `Replace` and `ReplaceAll`, are generic methods now,** over
+  a constant or an `Expr`. A call compiles as before; a method value needs its type
+  argument: `l.Get[int]`, not `l.Get`. `IsIn`, `OffsetBy` and `Lit` were generic
+  already and take a wider type set.
+- **`Expr.Explode`, `Unnest`, `DropNulls` and `DropNans` no longer refuse;** code that
+  relied on the refusal to catch a mistake gets an answer.
 
 ### Fixed
 
@@ -82,6 +112,24 @@ feature completeness, and 0.7 performance;
 - **`Expr.Unnest`** (260): a struct's fields, a column each named after its field,
   in `Select`, `WithColumns` and under an operation, as Polars' `struct.unnest()`;
   it was a refusal. `StructExpr.Unnest` spells it as Polars does.
+
+### Known limitations
+
+As v0.6.4's, except:
+
+- **Of the expression model,** each refused by name:
+  - `IsIn(Col("b").Implode())`, membership among a column's values: 0.7's scalar
+    subqueries;
+  - a length-changing expression in `Filter`;
+  - `Gather` in `Select`;
+  - a reshape of a selection of several columns, `Col("a", "b").Sort()`;
+  - `DropNans` of a column that is not a float, and `Explode` of one that is not a
+    List, where Polars returns them as they were.
+- **A `Select` of literals alone** is a row for each of the frame's rows; Polars'
+  is one row.
+- **A column of another length in `Select` reads the frame again:** each is a plan
+  of its own over it. A frame that joins, aggregates or sorts is computed once and
+  replayed; a scan is read once a plan.
 
 ---
 
