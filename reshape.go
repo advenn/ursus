@@ -15,10 +15,11 @@ import "github.com/advenn/ursus/internal/expr"
 //	)
 //
 // An aggregate over one works in Select, WithColumns, Filter and .Over too, over the
-// frame or the window: Select(Col("a").Sort().First()). A reshape on its own outside
-// an aggregation, a column of another length beside the frame's, is refused at
-// planning until a later step gives it a place; the frame-level forms, lf.Sort,
-// lf.Head, lf.Unique and the rest, keep rows.
+// frame or the window: Select(Col("a").Sort().First()). In Select a reshape on its
+// own is a column of its own length (step 258), Select(Col("a").Sort(),
+// Col("b").Head(3)) refused for its two lengths as Polars refuses it. In WithColumns
+// and Filter it is refused at planning until a later step; the frame-level forms,
+// lf.Sort, lf.Head, lf.Unique and the rest, keep rows.
 //
 // Each is an implode of the group's values and the List kernel of the same name, so
 // a group's values are held, as Polars holds them, and past a memory limit the
@@ -56,7 +57,7 @@ func (e Expr) Unique() Expr { return e.reshape(expr.ReshapeUnique) }
 // DropNulls is the values that are not null.
 //
 // The frame-level lf.DropNulls drops rows; this is the column's values, a shorter
-// column, in an aggregation.
+// column, in an aggregation or a Select.
 func (e Expr) DropNulls() Expr { return e.reshape(expr.ReshapeDropNulls) }
 
 // Get is the value at index i, one value a group; a negative index counts from the
@@ -64,7 +65,8 @@ func (e Expr) DropNulls() Expr { return e.reshape(expr.ReshapeDropNulls) }
 func (e Expr) Get(i int) Expr { return e.reshape(expr.ReshapeGet, int64(i)) }
 
 // DropNans is the values that are not NaN; a null stays, as Polars' drop_nans keeps
-// it. A column of floats (step 253).
+// it. A column of floats (step 253): another is refused, where Polars returns it as it
+// was.
 func (e Expr) DropNans() Expr { return e.reshape(expr.ReshapeDropNans) }
 
 // GatherEvery is every n-th value, from offset (step 253).

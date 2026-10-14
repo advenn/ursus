@@ -196,8 +196,10 @@ func (e Expr) IsClose(other Expr, relTol, absTol float64) Expr {
 // row, as the frame's Filter does. A group none of whose rows pass aggregates no
 // rows: its sum is null, as an all-null group's is here, where Polars gives 0.
 //
-// Anywhere but an aggregate's input it is refused at planning, until a later step
-// gives a column of another length a place; the frame's Filter keeps rows.
+// In Select it is a column of its own length, the values that pass (step 258):
+// Select(Col("a").Filter(Col("b").Gt(0))). Anywhere else it is refused at planning,
+// until a later step gives a column of another length a place; the frame's Filter
+// keeps rows.
 func (e Expr) Filter(preds ...Expr) Expr {
 	if len(preds) == 0 {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "filter", "Filter needs a predicate")})

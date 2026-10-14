@@ -247,6 +247,8 @@ decide whether to keep or switch each one.
 - A `Select` of literals alone is a row for each of the frame's rows; Polars' is one
   row. A `Select` of aggregates, with or without literals, is one row, as Polars'
   (step 250).
+- `DropNans` of a column that is not a float is refused; Polars returns it as it was
+  (steps 253 and 258).
 
 ## 10. What ursus has that most others do not
 

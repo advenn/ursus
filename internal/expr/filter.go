@@ -12,8 +12,9 @@ import (
 // aggregate, SQL's FILTER (WHERE ...). col("a").filter(col("b") > 0).sum() sums the
 // a's whose b is positive, in a group-by, a window, a temporal group, and as a
 // scalar in Select. The aggregate's sink feeds its accumulator only the rows the
-// predicate is true on, so len, first and last count and pick among them. A filter
-// anywhere else is refused (LooseFilter) until E4 gives it a place.
+// predicate is true on, so len, first and last count and pick among them. In a
+// Select it is a column of its own length, the root package's plan of its own
+// (step 258); anywhere else it is refused (LooseFilter).
 type Filter struct {
 	Child Node
 	Pred  Node
@@ -82,7 +83,8 @@ func FilterChain(n Node) (Node, []Node) {
 // looseFilterErr refuses a filter that is not an aggregate's input.
 func looseFilterErr(f *Filter) error {
 	return uerr.New(uerr.KindUnsupported, "filter",
-		"%s changes the column's length, and is only an aggregate's input yet", f.String()).
+		"%s changes the column's length, which only an aggregate's input and a Select take yet",
+		f.String()).
 		Hint("as an aggregate's input it filters the rows the aggregate reads: %s.sum()", f.String()).
 		Hint("to keep the frame's rows where the predicate holds, use the frame's Filter: lf.Filter(%s)",
 			f.Pred.String())

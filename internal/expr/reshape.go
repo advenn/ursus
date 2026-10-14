@@ -17,8 +17,9 @@ import (
 // a.sort().first() is list.first(list.sort(a.implode())).
 //
 // The implode holds a group's values, as Polars' does, and refuses past a memory
-// limit rather than spill, as implode does. A reshape outside an aggregation, a
-// column of another length in Select, is refused (LooseReshape) until E4.
+// limit rather than spill, as implode does. In a Select a reshape is a column of its
+// own length, a plan of its own in the root package (step 258); anywhere else outside
+// an aggregation it is refused (LooseReshape).
 
 // ReshapeOp is a length-changing operation on a column.
 type ReshapeOp uint8
@@ -108,7 +109,8 @@ func LooseReshape(n Node) *Reshape {
 
 func looseReshapeErr(r *Reshape) error {
 	e := uerr.New(uerr.KindUnsupported, r.Op.String(),
-		"%s is a column of its own length, which is only an aggregation's yet", r.String()).
+		"%s is a column of its own length, which only an aggregation and a Select take yet",
+		r.String()).
 		Hint("in GroupBy(...).Agg(...) it is a list a group, and an aggregate over it one value: %s.first()",
 			r.String())
 	if frame, ok := frameForms[r.Op]; ok {

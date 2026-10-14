@@ -106,7 +106,7 @@ func TestGatherInAnAggregation(t *testing.T) {
 		// Polars: gather indices are out of bounds.
 		"an index out of range":  {lf.GroupBy(c("g")).Agg(c("a").Gather(lit([]int64{0, 2}))), "out of range"},
 		"one index":              {lf.GroupBy(c("g")).Agg(c("a").Gather(ursus.Lit(1))), "List of them"},
-		"outside an aggregation": {lf.Select(c("a").Gather(lit([]int64{0}))), "only an aggregation's"},
+		"outside an aggregation": {lf.Select(c("a").Gather(lit([]int64{0}))), "not there yet"},
 	} {
 		if _, err := tc.q.Collect(t.Context()); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: got %v, want an error naming %q", name, err, tc.want)

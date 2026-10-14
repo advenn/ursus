@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.5
 
-Everything since `v0.6.4` (2026-10-14): steps 248–257, so far.
+Everything since `v0.6.4` (2026-10-14): steps 248–258, so far.
 [`v0.6.5-scope.md`](./context_files/v0.6.5-scope.md) set the scope: **feature
 completeness, part 1 — the bugs, and the expression model.** The rest of 0.6 is
 feature completeness, and 0.7 performance;
@@ -71,6 +71,11 @@ feature completeness, and 0.7 performance;
 - **List literals** (257): `Lit([]int64{1, 2})` and the other slices are one List
   value, e.g. `Col("x").IsIn(Lit([]int64{1, 2}))`. And `Expr.Gather` in an
   aggregation, by a List literal or a column of indices.
+- **Length-changing expressions in `Select`** (258): a reshape or an `Expr.Filter` is
+  a column of its own length, e.g. `Select(Col("a").Sort(), Col("b").Head(3))` is
+  refused for its two lengths and `Select(Col("a").Head(3), Col("b").Sum())` is
+  three rows. Each is a plan of its own over the frame, so it spills as the
+  frame-level operation does.
 
 ---
 

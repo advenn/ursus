@@ -94,6 +94,14 @@ func nodes(exprs []Expr) ([]expr.Node, error) {
 // expression aggregates is one row, GroupBy().Agg(...) with no keys:
 // Select(Col("x").Sum(), Col("x").Mean()). The broadcast is the aggregate over a
 // window with no partition, .Over(), which streams past a memory limit (step 250).
+//
+// # A column of another length
+//
+// A reshape or an Expr.Filter is a column of its own length, as in Polars (step
+// 258): Select(Col("a").Sort(), Col("b").Reverse()) sorts a and reverses b each
+// alone, and Select(Col("a").Head(3), Col("b").Sum()) is three rows. Columns of two
+// lengths are refused when the query runs. Each is a plan of its own over the frame,
+// so it spills where the frame-level Sort, Unique and the rest do (zipselect.go).
 func (lf *LazyFrame) Select(exprs ...Expr) *LazyFrame {
 	if lf.err != nil {
 		return lf
@@ -103,6 +111,11 @@ func (lf *LazyFrame) Select(exprs ...Expr) *LazyFrame {
 		return &LazyFrame{err: err}
 	}
 	ns = lowerReshapes(ns, false)
+	for _, n := range ns {
+		if changesLength(n) {
+			return lf.selectReshaped(ns)
+		}
+	}
 	if allScalar(ns) {
 		return lf.derive(&plan.Aggregate{Input: lf.node, Aggs: ns})
 	}

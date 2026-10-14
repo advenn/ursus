@@ -221,7 +221,13 @@ func strictMatch(want, s *dtype.Schema, idx int) error {
 // Column names must be distinct across the inputs. Silently suffixing, as the join
 // does, would be wrong: a join has a principled left/right asymmetry to name the
 // suffix after, and here the inputs are peers.
-type HStack struct{ Inputs []Node }
+//
+// Labels, when set, are the expressions a Select's inputs compute (step 258), which
+// a height mismatch names instead of frame numbers; nil for a frame's HStack.
+type HStack struct {
+	Inputs []Node
+	Labels []string
+}
 
 func (h *HStack) planNode()        {}
 func (h *HStack) Children() []Node { return h.Inputs }
@@ -230,7 +236,7 @@ func (h *HStack) WithChildren(kids []Node) Node {
 	if len(kids) == 0 {
 		panic("plan: HStack takes at least one child")
 	}
-	return &HStack{Inputs: append([]Node(nil), kids...)}
+	return &HStack{Inputs: append([]Node(nil), kids...), Labels: h.Labels}
 }
 
 func (h *HStack) Schema() (*dtype.Schema, error) {

@@ -121,6 +121,7 @@ func planUnion(ctx context.Context, u *plan.Union, opts Options) (Operator, erro
 type hstackOp struct {
 	children []Operator
 	schema   *dtype.Schema
+	labels   []string // a Select's expressions, which a mismatch names (step 258)
 
 	cur     []*data.Batch // each child's batch in hand, nil once it has ended
 	off     []int         // the next row of it
@@ -231,6 +232,13 @@ func (h *hstackOp) mismatch(ctx context.Context) error {
 		}
 	}
 	for i, n := range h.rows {
+		if n != h.rows[0] && len(h.labels) == len(h.rows) {
+			return uerr.New(uerr.KindValue, "select",
+				"%s is %d rows and %s is %d: a Select's columns are of one length",
+				h.labels[i], n, h.labels[0], h.rows[0]).
+				Hint("one value, an aggregate, stands beside a column of any length; " +
+					"columns of two lengths are refused, as Polars refuses them")
+		}
 		if n != h.rows[0] {
 			return uerr.New(uerr.KindValue, "hstack",
 				"frame %d has %d rows, frame 0 has %d", i, n, h.rows[0]).
@@ -255,5 +263,5 @@ func planHStack(ctx context.Context, h *plan.HStack, opts Options) (Operator, er
 		}
 		kids[i] = op
 	}
-	return &hstackOp{children: kids, schema: out, mem: opts.Budget.Account("hstack")}, nil
+	return &hstackOp{children: kids, schema: out, labels: h.Labels, mem: opts.Budget.Account("hstack")}, nil
 }
