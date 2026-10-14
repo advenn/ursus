@@ -244,6 +244,9 @@ decide whether to keep or switch each one.
   (step 254).
 - `Str().Replace` and `ReplaceAll` with a null value a row give null; Polars keeps
   the string as it was (step 255).
+- A `Select` of literals alone is a row for each of the frame's rows; Polars' is one
+  row. A `Select` of aggregates, with or without literals, is one row, as Polars'
+  (step 250).
 
 ## 10. What ursus has that most others do not
 

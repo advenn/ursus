@@ -80,6 +80,15 @@ func (e Expr) SortBy(by Expr) Expr {
 	return wrap(&expr.Reshape{Op: expr.ReshapeSortBy, Child: e.node(), Args: []int64{0}, By: by.node()})
 }
 
+// Gather is the values at indices, in their order, Polars' gather (step 257). indices
+// is a List literal, the same for every group, Gather(Lit([]int64{0, 2})), or a
+// column of integers, each group's own. A negative index counts from the end, and one
+// out of range is refused, as Polars refuses it. Col("a").Sort().Gather(...) gathers
+// from the sorted values.
+func (e Expr) Gather(indices Expr) Expr {
+	return wrap(&expr.Reshape{Op: expr.ReshapeGather, Child: e.node(), By: indices.node()})
+}
+
 // SortByDesc is SortBy in descending order of by, nulls first.
 func (e Expr) SortByDesc(by Expr) Expr {
 	return wrap(&expr.Reshape{Op: expr.ReshapeSortBy, Child: e.node(), Args: []int64{1}, By: by.node()})

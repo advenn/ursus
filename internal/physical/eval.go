@@ -307,6 +307,26 @@ func litColumn(l *expr.Lit) (*data.Column, error) {
 
 	valid := bitmap.AllSet(1)
 	switch v := l.Value.(type) {
+	case []*expr.Lit:
+		// A List literal (step 257): its elements' columns end to end, one list.
+		parts := make([]*data.Column, len(v))
+		for i, e := range v {
+			c, err := litColumn(e)
+			if err != nil {
+				return nil, err
+			}
+			parts[i] = c
+		}
+		child, err := kernel.NullColumn("item", l.DT.Inner(), 0)
+		if err != nil {
+			return nil, err
+		}
+		if len(parts) > 0 {
+			if child, err = kernel.ConcatColumns("item", parts); err != nil {
+				return nil, err
+			}
+		}
+		return data.NewList("literal", []int32{0, int32(len(v))}, child, valid), nil
 	case bool:
 		bits := bitmap.NewBuilder(1)
 		bits.Append(v)

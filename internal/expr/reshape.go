@@ -35,19 +35,20 @@ const (
 	ReshapeDropNans                     // no args (step 253)
 	ReshapeGatherEvery                  // Args: n, offset (step 253)
 	ReshapeSortBy                       // Args: descending, 0 or 1; By the keys (step 253)
+	ReshapeGather                       // no args; By the indices (step 257)
 )
 
 var reshapeNames = map[ReshapeOp]string{
 	ReshapeSort: "sort", ReshapeHead: "head", ReshapeTail: "tail", ReshapeSlice: "slice",
 	ReshapeReverse: "reverse", ReshapeUnique: "unique", ReshapeDropNulls: "drop_nulls",
 	ReshapeGet: "get", ReshapeDropNans: "drop_nans", ReshapeGatherEvery: "gather_every",
-	ReshapeSortBy: "sort_by",
+	ReshapeSortBy: "sort_by", ReshapeGather: "gather",
 }
 
 func (o ReshapeOp) String() string { return reshapeNames[o] }
 
-// Reshape is a length-changing operation on Child. By is SortBy's keys, nil for
-// every other.
+// Reshape is a length-changing operation on Child. By is SortBy's keys and Gather's
+// indices, nil for every other.
 type Reshape struct {
 	Op    ReshapeOp
 	Child Node
@@ -67,7 +68,7 @@ func (r *Reshape) Children() []Node {
 func (r *Reshape) String() string {
 	args := ""
 	switch r.Op {
-	case ReshapeSort, ReshapeSortBy:
+	case ReshapeSort, ReshapeSortBy, ReshapeGather:
 		if r.By != nil {
 			args = r.By.String()
 		}
@@ -216,6 +217,23 @@ func lowerReshape(r *Reshape) Node {
 			fn = FnListSortByDesc
 		}
 		return &Call{Fn: fn, Args: []Node{list, &Agg{Op: AggImplode, Child: r.By}}}
+	case ReshapeGather:
+		// A List literal is the same indices for every group; a column is each
+		// group's own, imploded beside its values, which may be reshaped first: the
+		// indices are positions, not partners.
+		if l, ok := r.By.(*Lit); ok && l.DT.ID() == dtype.TypeList {
+			return &Call{Fn: FnListGather, Args: []Node{list, l}}
+		}
+		if _, ok := r.By.(*Lit); ok {
+			return &Err{E: uerr.New(uerr.KindType, "gather",
+				"%s gathers by one index, and takes a List of them", r.String()).
+				Hint("for one element, Get(i); for several, Gather(Lit([]int64{0, 2}))")}
+		}
+		if HasAgg(r.By) || LooseReshape(r.By) != nil || LooseFilter(r.By) != nil {
+			return &Err{E: uerr.New(uerr.KindType, "gather",
+				"%s gathers by indices that are not a value a row", r.String())}
+		}
+		return &Call{Fn: FnListGather, Args: []Node{list, &Agg{Op: AggImplode, Child: r.By}}}
 	}
 	return &Err{E: uerr.Internalf("expr: reshape %d has no list form", r.Op)}
 }

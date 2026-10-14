@@ -8,6 +8,25 @@ import (
 	"github.com/advenn/ursus/internal/uerr"
 )
 
+// listLit is a Go slice as a List literal (step 257): one value, a list of the
+// elements' type, each element the literal it would be on its own. The element type
+// is the zero element's, so an empty slice has one too.
+func listLit(v any, rv reflect.Value) expr.Node {
+	zero, ok := litNode(reflect.Zero(rv.Type().Elem()).Interface()).(*expr.Lit)
+	if !ok {
+		return &expr.Err{E: uerr.New(uerr.KindValue, "lit", "cannot build a literal from %T", v)}
+	}
+	elems := make([]*expr.Lit, rv.Len())
+	for i := range elems {
+		e, ok := litNode(rv.Index(i).Interface()).(*expr.Lit)
+		if !ok {
+			return &expr.Err{E: uerr.New(uerr.KindValue, "lit", "cannot build a literal from %T", v)}
+		}
+		elems[i] = e
+	}
+	return &expr.Lit{Value: elems, DT: dtype.List(zero.DT)}
+}
+
 // litNodeReflect handles literals whose type is a DEFINED type over a permitted
 // underlying type — `type UserID int64`, `type Region string`.
 //
@@ -53,6 +72,7 @@ func litNodeReflect(v any) expr.Node {
 		if rv.Type().Elem().Kind() == reflect.Uint8 {
 			return &expr.Lit{Value: rv.Bytes(), DT: dtype.Binary}
 		}
+		return listLit(v, rv)
 	}
 
 	return &expr.Err{E: uerr.New(uerr.KindValue, "lit",

@@ -108,8 +108,24 @@ func (l *Lit) String() string {
 		}
 		return "lit(null:" + l.DT.String() + ")"
 	}
+	v := l.text()
+	if l.Weak {
+		return "weak_lit(" + v + ":" + l.DT.String() + ")"
+	}
+	return "lit(" + v + ")"
+}
+
+// text is the literal's value as it reads in String: a List literal's its elements'
+// (step 257), [1, 2].
+func (l *Lit) text() string {
 	var v string
 	switch x := l.Value.(type) {
+	case []*Lit:
+		parts := make([]string, len(x))
+		for i, e := range x {
+			parts[i] = e.text()
+		}
+		v = "[" + strings.Join(parts, ", ") + "]"
 	case string:
 		v = strconv.Quote(x)
 	case int32:
@@ -127,10 +143,7 @@ func (l *Lit) String() string {
 	default:
 		v = fmt.Sprint(x)
 	}
-	if l.Weak {
-		return "weak_lit(" + v + ":" + l.DT.String() + ")"
-	}
-	return "lit(" + v + ")"
+	return v
 }
 
 // --- Binary ------------------------------------------------------------------

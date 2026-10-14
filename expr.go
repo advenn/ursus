@@ -156,8 +156,26 @@ func ExcludeRegex(pattern string) Expr {
 	}})
 }
 
-// Lit builds a literal.
-func Lit[T Literal](v T) Expr { return wrap(litNode(any(v))) }
+// ListLiteral is a Go slice that Lit makes a List literal (step 257): one value, a
+// list of the elements' type, Lit([]int64{1, 2}) a List(Int64). Every element is a
+// value; a list with a null element is built by an expression, not a literal.
+//
+// []byte is absent: it is a Binary literal, as it always was, and a List of Uint8 is
+// Lit([]uint16{...}).Cast(List(Uint8)). The terms are exact, so a defined slice type
+// must be converted to its slice first.
+type ListLiteral interface {
+	[]bool | []int | []int8 | []int16 | []int32 | []int64 |
+		[]uint | []uint16 | []uint32 | []uint64 |
+		[]float32 | []float64 | []string | []time.Time | []time.Duration
+}
+
+// Lit builds a literal: a value, or a Go slice, which is one List value (step 257).
+//
+// A List literal is one row: alone in Select it is a frame of one row, beside a
+// column it is that list in every row, and against a column a List argument, the
+// same for every row: Col("x").IsIn(Lit([]int64{1, 2})), whose list goes into a
+// hash set once.
+func Lit[T Literal | ListLiteral](v T) Expr { return wrap(litNode(any(v))) }
 
 // Null builds a typed null literal.
 func Null(dt dtype.DataType) Expr { return wrap(&expr.Lit{Value: nil, DT: dt}) }
