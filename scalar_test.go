@@ -189,3 +189,84 @@ func TestAFilteredAggregateSpills(t *testing.T) {
 		}
 	}
 }
+
+// TestALengthChangingExpressionInAnAggregation: Sort, SortDesc, Head, Tail, Slice,
+// Reverse, Unique, DropNulls and Get are Polars' expressions of the same name: in a
+// group-by a list a group, and an aggregate over one a value a group (step 252).
+// Every value here is Polars 1.44.1's on the same frame: the lists as Polars printed
+// them, nulls first in a sort either way, Unique keeping first-seen order and the
+// null, and the aggregates over them. An aggregate over a reshape is a scalar in
+// Select and works in .Over and a rolling group. A reshape on its own outside an
+// aggregation, a reshape of an aggregate, and one of a filter are refused.
+func TestALengthChangingExpressionInAnAggregation(t *testing.T) {
+	c := ursus.Col
+	lf := ursus.Frame(ursus.Values("g", []int64{1, 1, 1, 1, 2, 2}),
+		ursus.ValuesNullable("a", []int64{3, 0, 1, 3, 5, 2}, []bool{true, false, true, true, true, true}))
+	lists, err := lf.GroupBy(c("g")).Agg(c("a").Sort().Alias("sort"), c("a").SortDesc().Alias("sortd"),
+		c("a").Head(2).Alias("head"), c("a").Tail(2).Alias("tail"), c("a").Slice(1, 2).Alias("slice"),
+		c("a").Reverse().Alias("rev"), c("a").Unique().Alias("uniq"), c("a").DropNulls().Alias("dn")).
+		Sort(ursus.Asc(c("g"))).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const polars = "shape: (2, 9)\n" +
+		"┌───────┬─────────────────┬─────────────────┬─────────────┬─────────────┬─────────────┬─────────────────┬──────────────┬─────────────┐\n" +
+		"│ g     │ sort            │ sortd           │ head        │ tail        │ slice       │ rev             │ uniq         │ dn          │\n" +
+		"│ Int64 │ List(Int64)     │ List(Int64)     │ List(Int64) │ List(Int64) │ List(Int64) │ List(Int64)     │ List(Int64)  │ List(Int64) │\n" +
+		"├───────┼─────────────────┼─────────────────┼─────────────┼─────────────┼─────────────┼─────────────────┼──────────────┼─────────────┤\n" +
+		"│ 1     │ [null, 1, 3, 3] │ [null, 3, 3, 1] │ [3, null]   │ [1, 3]      │ [null, 1]   │ [3, 1, null, 3] │ [3, null, 1] │ [3, 1, 3]   │\n" +
+		"│ 2     │ [2, 5]          │ [5, 2]          │ [5, 2]      │ [5, 2]      │ [2]         │ [2, 5]          │ [5, 2]       │ [5, 2]      │\n" +
+		"└───────┴─────────────────┴─────────────────┴─────────────┴─────────────┴─────────────┴─────────────────┴──────────────┴─────────────┘\n"
+	if got := lists.String(); got != polars {
+		t.Errorf("the lists:\n%s\nwant (Polars' values)\n%s", got, polars)
+	}
+
+	cases := []struct {
+		q    *ursus.LazyFrame
+		want string
+	}{
+		{lf.GroupBy(c("g")).Agg(c("a").Get(1).Alias("get"),
+			c("a").Sort().First().Alias("sort_first"), c("a").Head(2).Sum().Alias("head_sum"),
+			c("a").Unique().Len().Alias("uniq_len"), c("a").DropNulls().Len().Alias("dn_len"),
+			c("a").Sort().Last().Alias("sort_last"), c("a").Reverse().First().Alias("rev_first"),
+			c("a").Unique().Sum().Alias("uniq_sum"), c("a").Head(2).Count().Alias("head_count")).Sort(ursus.Asc(c("g"))),
+			"g,get,sort_first,head_sum,uniq_len,dn_len,sort_last,rev_first,uniq_sum,head_count\n1,,,3,3,3,3,3,4,1\n2,2,2,7,2,2,5,2,7,2\n"},
+		{lf.Select(c("a").Sort().First().Alias("f"), c("a").Unique().Len().Alias("u"), c("a").Tail(3).Mean().Alias("m")),
+			"f,u,m\n,5,3.3333333333333335\n"},
+		// Chains: each reshape of the one before.
+		{lf.GroupBy(c("g")).Agg(c("a").Sort().Head(2).Sum().Alias("s2"), c("a").DropNulls().Sort().First().Alias("f")).
+			Sort(ursus.Asc(c("g"))), "g,s2,f\n1,1,1\n2,7,2\n"},
+		{lf.Select(c("g"), c("a").Head(2).Sum().Over(c("g")).Alias("s")), "g,s\n1,3\n1,3\n1,3\n1,3\n2,7\n2,7\n"},
+	}
+	for i, tc := range cases {
+		var got bytes.Buffer
+		if err := tc.q.WriteCSV(t.Context(), &got); err != nil {
+			t.Fatalf("case %d: %v", i, err)
+		}
+		if got.String() != tc.want {
+			t.Errorf("case %d:\n got %q\nwant %q", i, got.String(), tc.want)
+		}
+	}
+
+	// A rolling group's windows, reshaped: the first two values of each 2-row window.
+	t0 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	ts := []time.Time{t0, t0.Add(time.Hour), t0.Add(2 * time.Hour), t0.Add(3 * time.Hour)}
+	var got bytes.Buffer
+	err = ursus.Frame(ursus.Values("ts", ts), ursus.Values("v", []int64{4, 1, 3, 2})).
+		Rolling(c("ts"), ursus.RollingOptions{Period: ursus.Every("2h")}).
+		Agg(c("v").Sort().First().Alias("lo"), c("v").Reverse().First().Alias("latest")).Select(c("lo", "latest")).
+		WriteCSV(t.Context(), &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "lo,latest\n4,4\n1,1\n1,3\n2,2\n"; got.String() != want {
+		t.Errorf("rolling:\n got %q\nwant %q", got.String(), want)
+	}
+
+	for _, q := range []*ursus.LazyFrame{lf.Select(c("a").Sort()), lf.GroupBy(c("g")).Agg(c("a").Sum().Sort()),
+		lf.GroupBy(c("g")).Agg(c("a").Filter(c("a").Gt(1)).Sort())} {
+		if _, err := q.Collect(t.Context()); err == nil {
+			t.Error("a reshape outside an aggregation, of an aggregate, or of a filter should be refused")
+		}
+	}
+}

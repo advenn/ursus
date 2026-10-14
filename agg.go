@@ -374,7 +374,7 @@ func (lf *LazyFrame) WithColumns(exprs ...Expr) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
-	return lf.derive(&plan.WithColumns{Input: lf.node, Exprs: bindScalars(ns)})
+	return lf.derive(&plan.WithColumns{Input: lf.node, Exprs: bindScalars(lowerReshapes(ns, false))})
 }
 
 // Sort orders rows by one or more keys.
@@ -495,6 +495,7 @@ func (g *GroupBy) Agg(exprs ...Expr) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
+	ns = lowerReshapes(ns, true)
 	if g.temporal != nil {
 		t := *g.temporal
 		t.Input, t.Aggs = g.lf.node, ns

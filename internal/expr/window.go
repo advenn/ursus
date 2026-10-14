@@ -891,6 +891,10 @@ func Rebuild(n Node, kids []Node) Node {
 		c := *t
 		c.Child, c.Pred = kids[0], kids[1]
 		return &c
+	case *Reshape:
+		c := *t
+		c.Child = kids[0]
+		return &c
 	case *Call:
 		c := *t
 		c.Args = append([]Node(nil), kids...)

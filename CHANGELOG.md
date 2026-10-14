@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.5
 
-Everything since `v0.6.4` (2026-10-14): steps 248–251, so far.
+Everything since `v0.6.4` (2026-10-14): steps 248–252, so far.
 [`v0.6.5-scope.md`](./context_files/v0.6.5-scope.md) set the scope: **feature
 completeness, part 1 — the bugs, and the expression model.** The rest of 0.6 is
 feature completeness, and 0.7 performance;
@@ -49,6 +49,11 @@ feature completeness, and 0.7 performance;
   `Col("a").Filter(Col("b").Gt(0)).Sum()`, in a group-by, a window, a rolling or
   dynamic group, and as a scalar. The aggregate reads only the rows that pass, so
   `Len` counts them. Anywhere else a filter is refused for now.
+- **`Sort`, `SortDesc`, `Head`, `Tail`, `Slice`, `Reverse`, `Unique`, `DropNulls` and
+  `Get` on an expression** (252), as Polars has them: in an aggregation a list a
+  group, and an aggregate over one a value, `Col("a").Head(2).Sum()`, there and in
+  `Select`, `WithColumns`, `Filter` and `.Over`. `Expr.DropNulls` was a refusal.
+  Alone outside an aggregation they are refused for now.
 
 ---
 

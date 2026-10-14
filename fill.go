@@ -209,30 +209,10 @@ func (e Expr) Filter(preds ...Expr) Expr {
 	return wrap(&expr.Filter{Child: e.node(), Pred: pred.node()})
 }
 
-// DropNulls is not an expression. It is refused here so the mistake is caught at
-// build time with a message naming the operation that does exist.
-//
-// # Why there is no expression form
-//
-// Every expression must produce exactly one value per input row — the evaluator
-// enforces it — and dropping rows changes the frame's height. Filter is the one
-// that may change it, and only as an aggregate's input (step 251), so this is not a
-// missing case but a different shape of thing.
-//
-// Refused at BUILD time rather than at plan time on purpose: the deferred error is
-// the first thing expression resolution looks at, so CollectSchema and Explain
-// both fail too. A refusal that only Collect notices — which is what happened to
-// one of the window mapping strategies — lets Explain print a plan that cannot run.
-func (e Expr) DropNulls() Expr {
-	return wrap(&expr.Err{E: uerr.New(uerr.KindUnsupported, "drop_nulls",
-		"DropNulls is not an expression; it changes the frame's height").
-		Hint("use the frame-level form: lf.DropNulls(\"x\"), or lf.DropNulls() for " +
-			"every column").
-		Hint("an expression produces one value per input row, so it cannot remove rows")})
-}
-
-// DropNans is refused for the same reason as DropNulls, and its hint carries the
-// asymmetry that keeps a frame-level DropNans from being written the obvious way.
+// DropNans is refused, unlike DropNulls, which is a column of its own length in an
+// aggregation since step 252: a list kernel that drops NaN is a later step's. Its
+// hint carries the asymmetry that keeps a frame-level DropNans from being written the
+// obvious way.
 func (e Expr) DropNans() Expr {
 	return wrap(&expr.Err{E: uerr.New(uerr.KindUnsupported, "drop_nans",
 		"DropNans is not an expression; it changes the frame's height").

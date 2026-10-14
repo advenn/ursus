@@ -25,6 +25,9 @@ func Resolve(n Node, in *dtype.Schema) (dtype.Field, error) {
 	if f := LooseFilter(n); f != nil {
 		return dtype.Field{}, looseFilterErr(f)
 	}
+	if r := LooseReshape(n); r != nil {
+		return dtype.Field{}, looseReshapeErr(r)
+	}
 	return n.Field(in)
 }
 

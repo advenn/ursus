@@ -528,8 +528,10 @@ func TestDiffAndPctChange(t *testing.T) {
 	}
 }
 
-// TestExprDropNullsIsRefused: refused at BUILD time, so CollectSchema and Explain
-// fail too rather than printing a plan that cannot run.
+// TestExprDropNullsIsRefused: refused while the plan is built, so CollectSchema and
+// Explain fail too rather than printing a plan that cannot run. Since step 252
+// DropNulls is an expression, a column of its own length, in an aggregation; on its
+// own in Select it is still refused, naming the frame-level form.
 func TestExprDropNullsIsRefused(t *testing.T) {
 	f := ursus.Frame(ursus.Values("v", []int64{1}))
 	for _, c := range []struct {

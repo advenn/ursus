@@ -102,6 +102,7 @@ func (lf *LazyFrame) Select(exprs ...Expr) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
+	ns = lowerReshapes(ns, false)
 	if allScalar(ns) {
 		return lf.derive(&plan.Aggregate{Input: lf.node, Aggs: ns})
 	}
@@ -122,6 +123,16 @@ func allScalar(ns []expr.Node) bool {
 		}
 	}
 	return agg
+}
+
+// lowerReshapes rewrites length-changing expressions into implodes and list kernels:
+// see expr.LowerReshapes. agg is whether the context aggregates.
+func lowerReshapes(ns []expr.Node, agg bool) []expr.Node {
+	out := make([]expr.Node, len(ns))
+	for i, n := range ns {
+		out[i] = expr.LowerReshapes(n, agg)
+	}
+	return out
 }
 
 // bindScalars broadcasts each aggregate of a row context to every row: see
@@ -153,7 +164,7 @@ func (lf *LazyFrame) Filter(preds ...Expr) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
-	return lf.derive(&plan.Filter{Input: lf.node, Preds: bindScalars(ns)})
+	return lf.derive(&plan.Filter{Input: lf.node, Preds: bindScalars(lowerReshapes(ns, false))})
 }
 
 // Remove is the inverse of Filter: it drops rows where ANY predicate is true.
