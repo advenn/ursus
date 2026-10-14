@@ -85,3 +85,7 @@ func (s StructExpr) WithFields(exprs ...Expr) Expr {
 	}
 	return wrap(&expr.Call{Fn: expr.FnStructWithFields, Args: args})
 }
+
+// Unnest is the struct's fields, a column each: Expr.Unnest, spelled as Polars spells
+// it, struct.unnest() (step 260).
+func (s StructExpr) Unnest() Expr { return s.e.Unnest() }

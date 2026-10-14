@@ -35,7 +35,8 @@ func changesLength(n expr.Node) bool {
 // hasMatch reports whether n selects columns by a pattern or a list, which only the
 // input's schema expands.
 func hasMatch(n expr.Node) bool {
-	if _, ok := n.(*expr.Match); ok {
+	switch n.(type) {
+	case *expr.Match, *expr.Unnest:
 		return true
 	}
 	for _, c := range n.Children() {

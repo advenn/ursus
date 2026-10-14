@@ -243,13 +243,11 @@ func TestUnnestRefusals(t *testing.T) {
 		t.Errorf("this is unnest's refusal, not NewSchema's generic one: %v", err)
 	}
 
-	// Unnest is not an expression, and says which rule it broke.
-	_, err = ursus.ScanParquet(path).Select(ursus.Col("person").Unnest()).
+	// Since step 260 Unnest is an expression of a column a field; aliased, every field
+	// would have the alias's name.
+	_, err = ursus.ScanParquet(path).Select(ursus.Col("person").Unnest().Alias("x")).
 		Collect(t.Context())
-	if err == nil {
-		t.Fatal("`Col(...).Unnest()` must be refused")
-	}
-	if !strings.Contains(err.Error(), "one column per struct field") {
-		t.Errorf("the message should say WHY — width, not height: %v", err)
+	if err == nil || !strings.Contains(err.Error(), `would all be named "x"`) {
+		t.Errorf("an aliased Unnest of two fields must be refused: %v", err)
 	}
 }

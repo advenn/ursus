@@ -35,6 +35,16 @@ func Expand(n Node, in *dtype.Schema) ([]Node, error) {
 	if err := FirstErr(n); err != nil {
 		return nil, err
 	}
+	if us := unnests(n); len(us) > 0 {
+		// A struct's fields are a selection too (step 260), and two in one
+		// expression pair as ambiguously as two selections do.
+		if len(us) > 1 || len(distinctMatchers(n)) > 0 {
+			return nil, uerr.New(uerr.KindSchema, "unnest",
+				"%s expands over more than one selection or struct", n).
+				Hint("an expression may expand over one; split it into several")
+		}
+		return expandUnnest(n, us[0], in)
+	}
 
 	matchers := distinctMatchers(n)
 	switch len(matchers) {

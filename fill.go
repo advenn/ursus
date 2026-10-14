@@ -305,20 +305,20 @@ func (e Expr) FillNull(s FillStrategy) Expr {
 // is not a List is refused, where Polars returns it as it was.
 func (e Expr) Explode() Expr { return e.reshape(expr.ReshapeExplode) }
 
-// Unnest is refused as an expression, and for a DIFFERENT reason than Explode.
+// Unnest is a Struct column's fields, a column each named after its field: Polars'
+// struct.unnest() (step 260). It denotes several columns, as Col("a", "b") does, and
+// is written out when the query is planned:
 //
-// Explode is not an expression because it changes the frame's HEIGHT. Unnest leaves
-// the height alone and changes the WIDTH: an expression produces exactly one column,
-// and this produces one per field. Saying which of the two rules was broken is the
-// difference between a message that teaches and one that just refuses.
+//	lf.Select(Col("person").Unnest(), Col("id"))     // age, city, id
+//	lf.WithColumns(Col("person").Unnest())            // the frame, then age and city
+//	lf.Select(Col("point").Unnest().Mul(2))           // each field doubled
 //
-// The single-column form exists and is spelled `Col("person").Struct().Field("age")`.
-func (e Expr) Unnest() Expr {
-	return wrap(&expr.Err{E: uerr.New(uerr.KindUnsupported, "unnest",
-		"Unnest is not an expression; it produces one column per struct field").
-		Hint("use the frame-level form: lf.Unnest(\"person\")").
-		Hint("for a single field, use Col(\"person\").Struct().Field(\"age\")")})
-}
+// The frame-level lf.Unnest replaces the struct in place; this keeps it where
+// WithColumns keeps the frame's columns. A null struct's fields are null. An Alias
+// names every field alike, and so is refused for a struct of two fields or more.
+//
+// The single-field form is `Col("person").Struct().Field("age")`.
+func (e Expr) Unnest() Expr { return wrap(&expr.Unnest{Child: e.node()}) }
 
 // inheritedOver is e.Over() for a sugar: over the whole frame alone, and over an
 // enclosing Over's partitions inside one (expr.Window.Inherits).

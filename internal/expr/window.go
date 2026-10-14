@@ -891,6 +891,8 @@ func Rebuild(n Node, kids []Node) Node {
 		c := *t
 		c.Child, c.Pred = kids[0], kids[1]
 		return &c
+	case *Unnest:
+		return &Unnest{Child: kids[0]}
 	case *Reshape:
 		c := *t
 		c.Child = kids[0]
