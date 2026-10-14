@@ -6,6 +6,7 @@ import (
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/uerr"
+	"slices"
 )
 
 // The list set operations and gather (step 223), which take a second List column.
@@ -198,4 +199,49 @@ func rowOf(c *data.Column, i int) int {
 		return 0
 	}
 	return i
+}
+
+// listSortBy sorts each list by the list beside it, element for element, as Polars'
+// sort_by sorts a group by another column (step 253): stably, nulls first either way,
+// descending when asked. The two lists of a row must be of one length; a null list
+// on either side is a null answer.
+func listSortBy(name string, desc bool, a, by *data.Column) (*data.Column, error) {
+	if a.Len() != by.Len() {
+		return nil, uerr.Internalf("kernel: list.sort_by over %d and %d rows", a.Len(), by.Len())
+	}
+	keys := by.Lists()
+	cmp, err := NewComparator([]*data.Column{keys.Child()}, []SortSpec{{Descending: desc}})
+	if err != nil {
+		return nil, err
+	}
+	vals := a.Lists()
+	valid := bitmap.And(a.Validity(), by.Validity())
+	offs := make([]int32, 1, a.Len()+1)
+	var sel []int32
+	order := []int32{}
+	for i := range a.Len() {
+		as, ae, okA := vals.Get(i)
+		bs, be, okB := keys.Get(i)
+		if okA && okB {
+			if ae-as != be-bs {
+				return nil, uerr.New(uerr.KindValue, "list.sort_by",
+					"row %d has %d values and %d keys to sort them by", i, ae-as, be-bs).
+					Hint("each row's keys are its own values' keys, one for each")
+			}
+			order = order[:0]
+			for k := range ae - as {
+				order = append(order, k)
+			}
+			slices.SortStableFunc(order, func(x, y int32) int { return cmp(int(bs+x), int(bs+y)) })
+			for _, k := range order {
+				sel = append(sel, as+k)
+			}
+		}
+		offs = append(offs, int32(len(sel)))
+	}
+	child, err := Take(vals.Child(), sel)
+	if err != nil {
+		return nil, err
+	}
+	return data.NewList(name, offs, child, valid), nil
 }

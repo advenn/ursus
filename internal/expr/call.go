@@ -241,7 +241,29 @@ const (
 	// A Date's or Datetime's day with a Time of day (step 230): its second operand
 	// is a column, so it takes this family's shape.
 	FnDtCombine
+
+	// A list sorted by another of its length, element for element (step 253),
+	// ascending or descending, nulls first: its second list is an operand.
+	FnListSortBy
+	FnListSortByDesc
 	fnHorizontalEnd
+)
+
+// The list family, continued (step 253): the aggregates a list did not have, which a
+// reshape's aggregate lowers to, and the reshapes of E3's second half. std and var
+// take ddof, quantile q and an interpolation; gather_every n and an offset.
+//
+// A block of its own: the first families share one const block, whose iota runs on,
+// so the list family's first block already ends at the struct family's base, and
+// six more there collided with FnStructField. IsList covers both blocks.
+const (
+	FnListMedian CallFn = iota + 700
+	FnListStd
+	FnListVar
+	FnListQuantile
+	FnListDropNans
+	FnListGatherEvery
+	fnListMoreEnd
 )
 
 // IsString, IsTemporal and IsGeneral classify a function by family.
@@ -252,8 +274,10 @@ func (f CallFn) IsString() bool   { return f < fnStrEnd }
 func (f CallFn) IsTemporal() bool { return f >= FnDtYear && f < fnDtEnd }
 func (f CallFn) IsGeneral() bool  { return f >= FnIsIn && f < fnGenEnd }
 func (f CallFn) IsMath() bool     { return f >= FnMathRound && f < fnMathEnd }
-func (f CallFn) IsList() bool     { return f >= FnListLen && f < fnListEnd }
-func (f CallFn) IsStruct() bool   { return f >= FnStructField && f < fnStructEnd }
+func (f CallFn) IsList() bool {
+	return f >= FnListLen && f < fnListEnd || f >= FnListMedian && f < fnListMoreEnd
+}
+func (f CallFn) IsStruct() bool { return f >= FnStructField && f < fnStructEnd }
 func (f CallFn) IsHorizontal() bool {
 	return f >= FnConcatStr && f < fnHorizontalEnd
 }
@@ -321,6 +345,10 @@ var callNames = map[CallFn]string{
 	FnStructJSONEncode: "struct.json_encode",
 	FnReplace:          "replace", FnReplaceStrict: "replace_strict", FnReplaceOr: "replace_or",
 	FnListToStruct: "list.to_struct",
+	FnListMedian:   "list.median", FnListStd: "list.std", FnListVar: "list.var",
+	FnListQuantile: "list.quantile", FnListDropNans: "list.drop_nans",
+	FnListGatherEvery: "list.gather_every",
+	FnListSortBy:      "list.sort_by", FnListSortByDesc: "list.sort_by_desc",
 }
 
 func (f CallFn) String() string {
@@ -568,6 +596,21 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 				"%s requires a Date or Datetime operand, got %s", fn, in).
 				Hint("a Time has no day to combine with")
 		}
+
+	case FnListSortBy, FnListSortByDesc:
+		if len(ops) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		if ops[0].Type.ID() != dtype.TypeList || ops[1].Type.ID() != dtype.TypeList {
+			return dtype.Null, uerr.New(uerr.KindType, "list",
+				"%s requires two Lists, got %s and %s", fn, ops[0].Type, ops[1].Type).
+				Hint("each row's keys are a list of the row's length")
+		}
+		if !ops[1].Type.Inner().IsOrdered() {
+			return dtype.Null, uerr.New(uerr.KindType, "list",
+				"%s sorts by %s, which has no order", fn, ops[1].Type.Inner())
+		}
+		return ops[0].Type, nil
 
 	case FnListGather, FnListGatherOrNull:
 		if len(ops) != 2 {
@@ -1387,8 +1430,26 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		}
 		return b.Out, nil
 
+	case FnListDropNans:
+		if !elem.IsFloat() {
+			return dtype.Null, uerr.New(uerr.KindType, "list",
+				"%s requires a List of floats, got %s", fn, in).
+				Hint("only a float is ever NaN")
+		}
+		return in, nil
+
+	case FnListMedian, FnListStd, FnListVar, FnListQuantile:
+		// The aggregate's rule, as for Sum and Mean.
+		op := map[CallFn]AggOp{FnListMedian: AggMedian, FnListStd: AggStd, FnListVar: AggVar,
+			FnListQuantile: AggQuantile}[fn]
+		b, err := ResolveAggBinding(op, elem)
+		if err != nil {
+			return dtype.Null, err
+		}
+		return b.Out, nil
+
 	case FnListReverse, FnListHead, FnListTail, FnListSlice,
-		FnListSort, FnListUnique, FnListDropNulls:
+		FnListSort, FnListUnique, FnListDropNulls, FnListGatherEvery:
 		// The receiver's type, unchanged. Reshaping a list cannot change what it is
 		// a list OF — and returning `in` rather than rebuilding List(elem) means a
 		// future parameterised list type carries through without this needing to

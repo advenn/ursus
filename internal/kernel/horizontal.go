@@ -48,6 +48,8 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return listSet(fn, name, out, ops[0], ops[1], n)
 	case expr.FnListGather, expr.FnListGatherOrNull:
 		return listGatherAt(name, fn == expr.FnListGatherOrNull, ops[0], ops[1], n)
+	case expr.FnListSortBy, expr.FnListSortByDesc:
+		return listSortBy(name, fn == expr.FnListSortByDesc, ops[0], ops[1])
 	case expr.FnMaxHorizontal, expr.FnMinHorizontal, expr.FnSumHorizontal, expr.FnMeanHorizontal:
 		return horizontalReduce(fn, name, ops, n)
 	case expr.FnAnyHorizontal, expr.FnAllHorizontal:

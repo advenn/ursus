@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"math"
 	"slices"
 
 	"github.com/advenn/ursus/dtype"
@@ -82,8 +83,55 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 		return listContains(name, c, needle)
 
 	case expr.FnListMin, expr.FnListMax, expr.FnListSum, expr.FnListMean,
-		expr.FnListNUnique, expr.FnListArgMin, expr.FnListArgMax:
-		return listReduce(fn, name, c)
+		expr.FnListNUnique, expr.FnListArgMin, expr.FnListArgMax, expr.FnListMedian:
+		return listReduce(fn, name, c, expr.AggParams{})
+
+	case expr.FnListStd, expr.FnListVar:
+		// ddof, as the aggregate's: the step-253 lists' parameters are literals.
+		ddof, ok := args[0].(int64)
+		if !ok || ddof < 0 || ddof > 255 {
+			return nil, uerr.Internalf("kernel: %s with ddof %v", fn, args[0])
+		}
+		return listReduce(fn, name, c, expr.AggParams{DDof: uint8(ddof)})
+
+	case expr.FnListQuantile:
+		q, okQ := args[0].(float64)
+		interp, okI := args[1].(int64)
+		if !okQ || !okI {
+			return nil, uerr.Internalf("kernel: %s with %v", fn, args)
+		}
+		return listReduce(fn, name, c, expr.AggParams{Q: q, Interp: expr.Interpolation(interp)})
+
+	case expr.FnListDropNans:
+		// A NaN goes; a null stays, as Polars' list.drop_nans keeps it.
+		vals, err := toFloat64(acc.Child())
+		if err != nil {
+			return nil, err
+		}
+		child := acc.Child()
+		return listRebuild(name, c, func(start, end int32, out []int32) []int32 {
+			for e := start; e < end; e++ {
+				if !child.IsValid(int(e)) || !math.IsNaN(vals[e]) {
+					out = append(out, e)
+				}
+			}
+			return out
+		})
+
+	case expr.FnListGatherEvery:
+		every, okN := args[0].(int64)
+		offset, okO := args[1].(int64)
+		if !okN || !okO || every < 1 || offset < 0 {
+			return nil, uerr.New(uerr.KindValue, "list",
+				"gather_every takes n of at least 1 and an offset of at least 0, got %v and %v",
+				args[0], args[1])
+		}
+		return listRebuild(name, c, func(start, end int32, out []int32) []int32 {
+			for e := start + int32(offset); e < end; e += int32(every) {
+				out = append(out, e)
+			}
+			return out
+		})
 
 	case expr.FnListReverse:
 		return listRebuild(name, c, func(start, end int32, out []int32) []int32 {
@@ -453,7 +501,7 @@ func listContains(name string, c *data.Column, needle []byte) (*data.Column, err
 // it was silently ignored, which is how list.mean promised Float64 for a decade of
 // element types and delivered whatever the binding said.
 func listReduce(fn expr.CallFn, name string,
-	c *data.Column) (*data.Column, error) {
+	c *data.Column, params expr.AggParams) (*data.Column, error) {
 
 	op, err := listAggOp(fn)
 	if err != nil {
@@ -464,7 +512,7 @@ func listReduce(fn expr.CallFn, name string,
 	if err != nil {
 		return nil, err
 	}
-	acc, err := NewAccumulator(op, elem, bind, expr.AggParams{})
+	acc, err := NewAccumulator(op, elem, bind, params)
 	if err != nil {
 		return nil, err
 	}
@@ -519,6 +567,14 @@ func listAggOp(fn expr.CallFn) (expr.AggOp, error) {
 		return expr.AggArgMin, nil
 	case expr.FnListArgMax:
 		return expr.AggArgMax, nil
+	case expr.FnListMedian:
+		return expr.AggMedian, nil
+	case expr.FnListStd:
+		return expr.AggStd, nil
+	case expr.FnListVar:
+		return expr.AggVar, nil
+	case expr.FnListQuantile:
+		return expr.AggQuantile, nil
 	}
 	return 0, uerr.Internalf("kernel: %s is not a list aggregate", fn)
 }

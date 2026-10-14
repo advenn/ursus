@@ -62,3 +62,25 @@ func (e Expr) DropNulls() Expr { return e.reshape(expr.ReshapeDropNulls) }
 // Get is the value at index i, one value a group; a negative index counts from the
 // end, and an index past the end is null.
 func (e Expr) Get(i int) Expr { return e.reshape(expr.ReshapeGet, int64(i)) }
+
+// DropNans is the values that are not NaN; a null stays, as Polars' drop_nans keeps
+// it. A column of floats (step 253).
+func (e Expr) DropNans() Expr { return e.reshape(expr.ReshapeDropNans) }
+
+// GatherEvery is every n-th value, from offset (step 253).
+func (e Expr) GatherEvery(n, offset int) Expr {
+	return e.reshape(expr.ReshapeGatherEvery, int64(n), int64(offset))
+}
+
+// SortBy is the values in the order of by's, ascending, nulls first, stably: in a
+// group, each value sorted by the by of its own row, as Polars' sort_by sorts
+// (step 253). by is read on the same rows, so Col("a").SortBy(Col("b")).Last() is the
+// a of the group's largest b.
+func (e Expr) SortBy(by Expr) Expr {
+	return wrap(&expr.Reshape{Op: expr.ReshapeSortBy, Child: e.node(), Args: []int64{0}, By: by.node()})
+}
+
+// SortByDesc is SortBy in descending order of by, nulls first.
+func (e Expr) SortByDesc(by Expr) Expr {
+	return wrap(&expr.Reshape{Op: expr.ReshapeSortBy, Child: e.node(), Args: []int64{1}, By: by.node()})
+}

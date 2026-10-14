@@ -240,3 +240,32 @@ func (l ListExpr) ToStruct(names ...string) Expr {
 	}
 	return l.call(expr.FnListToStruct, args...)
 }
+
+// Median is each list's median, the column aggregate over its elements (step 253).
+func (l ListExpr) Median() Expr { return l.call(expr.FnListMedian) }
+
+// Std is each list's standard deviation with ddof, as the aggregate's (step 253).
+func (l ListExpr) Std(ddof int) Expr { return l.call(expr.FnListStd, int64(ddof)) }
+
+// Var is each list's variance with ddof, as the aggregate's (step 253).
+func (l ListExpr) Var(ddof int) Expr { return l.call(expr.FnListVar, int64(ddof)) }
+
+// Quantile is each list's q-quantile, interpolated as the aggregate's (step 253).
+func (l ListExpr) Quantile(q float64, interp Interpolation) Expr {
+	return l.call(expr.FnListQuantile, q, int64(interp))
+}
+
+// DropNans drops each list's NaN elements; a null stays (step 253).
+func (l ListExpr) DropNans() Expr { return l.call(expr.FnListDropNans) }
+
+// GatherEvery is every n-th element of each list, from offset (step 253).
+func (l ListExpr) GatherEvery(n, offset int) Expr {
+	return l.call(expr.FnListGatherEvery, int64(n), int64(offset))
+}
+
+// SortBy sorts each list by the list beside it, element for element, ascending,
+// nulls first, stably (step 253). Two lists of a row must be of one length.
+func (l ListExpr) SortBy(by Expr) Expr { return l.operand(expr.FnListSortBy, by) }
+
+// SortByDesc is SortBy in descending order, nulls first.
+func (l ListExpr) SortByDesc(by Expr) Expr { return l.operand(expr.FnListSortByDesc, by) }

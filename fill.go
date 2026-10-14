@@ -209,18 +209,6 @@ func (e Expr) Filter(preds ...Expr) Expr {
 	return wrap(&expr.Filter{Child: e.node(), Pred: pred.node()})
 }
 
-// DropNans is refused, unlike DropNulls, which is a column of its own length in an
-// aggregation since step 252: a list kernel that drops NaN is a later step's. Its
-// hint carries the asymmetry that keeps a frame-level DropNans from being written the
-// obvious way.
-func (e Expr) DropNans() Expr {
-	return wrap(&expr.Err{E: uerr.New(uerr.KindUnsupported, "drop_nans",
-		"DropNans is not an expression; it changes the frame's height").
-		Hint("use Filter(Col(\"x\").IsNotNan().Or(Col(\"x\").IsNull()))").
-		Hint("the .Or is required: IsNotNan is NULL on a null row and Filter drops " +
-			"null predicates, so the bare spelling would silently drop nulls too")})
-}
-
 // --- named fill strategies -------------------------------------------------------
 
 // FillStrategy names a fill rule that needs no value at the call site.

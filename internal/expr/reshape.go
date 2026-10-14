@@ -24,40 +24,58 @@ import (
 type ReshapeOp uint8
 
 const (
-	ReshapeSort      ReshapeOp = iota // Args: descending, 0 or 1
-	ReshapeHead                       // Args: n
-	ReshapeTail                       // Args: n
-	ReshapeSlice                      // Args: offset, length
-	ReshapeReverse                    // no args
-	ReshapeUnique                     // no args: first-seen order, null a value
-	ReshapeDropNulls                  // no args
-	ReshapeGet                        // Args: index; one value, not a column
+	ReshapeSort        ReshapeOp = iota // Args: descending, 0 or 1
+	ReshapeHead                         // Args: n
+	ReshapeTail                         // Args: n
+	ReshapeSlice                        // Args: offset, length
+	ReshapeReverse                      // no args
+	ReshapeUnique                       // no args: first-seen order, null a value
+	ReshapeDropNulls                    // no args
+	ReshapeGet                          // Args: index; one value, not a column
+	ReshapeDropNans                     // no args (step 253)
+	ReshapeGatherEvery                  // Args: n, offset (step 253)
+	ReshapeSortBy                       // Args: descending, 0 or 1; By the keys (step 253)
 )
 
 var reshapeNames = map[ReshapeOp]string{
 	ReshapeSort: "sort", ReshapeHead: "head", ReshapeTail: "tail", ReshapeSlice: "slice",
 	ReshapeReverse: "reverse", ReshapeUnique: "unique", ReshapeDropNulls: "drop_nulls",
-	ReshapeGet: "get",
+	ReshapeGet: "get", ReshapeDropNans: "drop_nans", ReshapeGatherEvery: "gather_every",
+	ReshapeSortBy: "sort_by",
 }
 
 func (o ReshapeOp) String() string { return reshapeNames[o] }
 
-// Reshape is a length-changing operation on Child.
+// Reshape is a length-changing operation on Child. By is SortBy's keys, nil for
+// every other.
 type Reshape struct {
 	Op    ReshapeOp
 	Child Node
 	Args  []int64
+	By    Node
 }
 
-func (r *Reshape) node()            {}
-func (r *Reshape) Children() []Node { return []Node{r.Child} }
+func (r *Reshape) node() {}
+
+func (r *Reshape) Children() []Node {
+	if r.By != nil {
+		return []Node{r.Child, r.By}
+	}
+	return []Node{r.Child}
+}
 
 func (r *Reshape) String() string {
 	args := ""
 	switch r.Op {
-	case ReshapeSort:
+	case ReshapeSort, ReshapeSortBy:
+		if r.By != nil {
+			args = r.By.String()
+		}
 		if len(r.Args) > 0 && r.Args[0] != 0 {
-			args = "descending"
+			if args != "" {
+				args += ", "
+			}
+			args += "descending"
 		}
 	default:
 		for i, a := range r.Args {
@@ -103,6 +121,9 @@ func looseReshapeErr(r *Reshape) error {
 var frameForms = map[ReshapeOp]string{
 	ReshapeSort: "lf.Sort", ReshapeHead: "lf.Head", ReshapeTail: "lf.Tail", ReshapeSlice: "lf.Slice",
 	ReshapeReverse: "lf.Reverse", ReshapeUnique: "lf.Unique", ReshapeDropNulls: "lf.DropNulls",
+	// The .Or is required: IsNotNan is null on a null row, and Filter drops a null
+	// predicate, so the bare spelling would drop the nulls too.
+	ReshapeDropNans: `lf.Filter(Col("x").IsNotNan().Or(Col("x").IsNull()))`,
 }
 
 // LowerReshapes rewrites n's reshapes into implodes and list kernels: an aggregate
@@ -114,7 +135,12 @@ func LowerReshapes(n Node, agg bool) Node {
 		if !agg {
 			// A reshape outside an aggregation is left for LooseReshape to refuse,
 			// but an aggregate over one inside it is still lowered.
-			return Rebuild(t, []Node{LowerReshapes(t.Child, false)})
+			kids := t.Children()
+			out := make([]Node, len(kids))
+			for i, c := range kids {
+				out[i] = LowerReshapes(c, false)
+			}
+			return Rebuild(t, out)
 		}
 		return lowerReshape(t)
 	case *Agg:
@@ -169,6 +195,27 @@ func lowerReshape(r *Reshape) Node {
 		return &Call{Fn: FnListDropNulls, Args: []Node{list}}
 	case ReshapeGet:
 		return &Call{Fn: FnListGet, Args: []Node{list, arg(0)}}
+	case ReshapeDropNans:
+		return &Call{Fn: FnListDropNans, Args: []Node{list}}
+	case ReshapeGatherEvery:
+		return &Call{Fn: FnListGatherEvery, Args: []Node{list, arg(0), arg(1)}}
+	case ReshapeSortBy:
+		// The keys imploded beside the values: each group's keys are a list of its
+		// length. A chain before sort_by would leave the two of different lengths.
+		if _, chained := r.Child.(*Reshape); chained {
+			return &Err{E: uerr.New(uerr.KindUnsupported, "sort_by",
+				"%s sorts a reshaped column by keys of the group's length", r.String()).
+				Hint("sort_by first, then reshape: %s", "Col(\"a\").SortBy(Col(\"b\")).Head(2)")}
+		}
+		if HasAgg(r.By) || LooseReshape(r.By) != nil || LooseFilter(r.By) != nil {
+			return &Err{E: uerr.New(uerr.KindType, "sort_by",
+				"%s sorts by keys that are not a value a row", r.String())}
+		}
+		fn := FnListSortBy
+		if r.Args[0] != 0 {
+			fn = FnListSortByDesc
+		}
+		return &Call{Fn: fn, Args: []Node{list, &Agg{Op: AggImplode, Child: r.By}}}
 	}
 	return &Err{E: uerr.Internalf("expr: reshape %d has no list form", r.Op)}
 }
@@ -200,8 +247,18 @@ func lowerAggOver(a *Agg, list Node) Node {
 		return call(FnListArgMin)
 	case AggArgMax:
 		return call(FnListArgMax)
+	case AggMedian:
+		return call(FnListMedian)
+	case AggStd:
+		return call(FnListStd, &Lit{Value: int64(a.Params.DDof), DT: dtype.Int64})
+	case AggVar:
+		return call(FnListVar, &Lit{Value: int64(a.Params.DDof), DT: dtype.Int64})
+	case AggQuantile:
+		return call(FnListQuantile, &Lit{Value: a.Params.Q, DT: dtype.Float64},
+			&Lit{Value: int64(a.Params.Interp), DT: dtype.Int64})
 	}
 	return &Err{E: uerr.New(uerr.KindUnsupported, a.Op.String(),
 		"%s over a reshaped column is not there yet", a.Op).
-		Hint("first, last, sum, mean, min, max, len, count, n_unique, arg_min and arg_max are")}
+		Hint("first, last, sum, mean, min, max, len, count, n_unique, arg_min, arg_max, " +
+			"median, std, var and quantile are")}
 }

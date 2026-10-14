@@ -894,6 +894,9 @@ func Rebuild(n Node, kids []Node) Node {
 	case *Reshape:
 		c := *t
 		c.Child = kids[0]
+		if t.By != nil {
+			c.By = kids[1]
+		}
 		return &c
 	case *Call:
 		c := *t

@@ -2,6 +2,7 @@ package ursus_test
 
 import (
 	"bytes"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -268,5 +269,70 @@ func TestALengthChangingExpressionInAnAggregation(t *testing.T) {
 		if _, err := q.Collect(t.Context()); err == nil {
 			t.Error("a reshape outside an aggregation, of an aggregate, or of a filter should be refused")
 		}
+	}
+}
+
+// TestSortByGatherEveryAndDropNansInAnAggregation: E3's second half (step 253).
+// SortBy and SortByDesc, GatherEvery and DropNans in a group-by, as lists, and
+// median, std, var and quantile over a reshape, each Polars 1.44.1's answer on the
+// same frame: sort_by stable and nulls first, gather_every from an offset, drop_nans
+// keeping a null. One std is held to 1e-15 of Polars': both are its aggregate's
+// answer, rounded along different paths.
+func TestSortByGatherEveryAndDropNansInAnAggregation(t *testing.T) {
+	c := ursus.Col
+	lf := ursus.Frame(ursus.Values("g", []int64{1, 1, 1, 1, 2, 2}),
+		ursus.ValuesNullable("a", []int64{3, 0, 1, 3, 5, 2}, []bool{true, false, true, true, true, true}),
+		ursus.Values("b", []int64{4, 3, 2, 1, 1, 2}),
+		ursus.ValuesNullable("f", []float64{1.5, math.NaN(), 0, 2.5, math.NaN(), 4}, []bool{true, true, false, true, true, true}))
+	q := lf.GroupBy(c("g")).Agg(
+		c("a").SortBy(c("b")).Alias("sortby"), c("a").SortByDesc(c("b")).Alias("sortbyd"),
+		c("a").GatherEvery(2, 0).Alias("ge"), c("a").GatherEvery(2, 1).Alias("ge1"), c("f").DropNans().Alias("dnan"),
+		c("a").SortBy(c("b")).Last().Alias("sb_last"), c("a").Head(3).Median().Alias("hmed"),
+		c("a").DropNulls().Std(1).Alias("sd"), c("a").Head(3).Var(0).Alias("v0"),
+		c("a").Head(3).Quantile(0.25, ursus.InterpLinear).Alias("q25"), c("f").DropNans().Len().Alias("dnan_len"),
+	).Sort(ursus.Asc(c("g")))
+	lists, err := q.Select(c("sortby", "sortbyd", "ge", "ge1", "dnan")).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Polars: sortby [[3, 1, None, 3], [5, 2]], sortbyd [[3, None, 1, 3], [2, 5]],
+	// ge [[3, 1], [5]], ge1 [[None, 3], [2]], dnan [[1.5, None, 2.5], [4.0]].
+	for _, want := range []string{"[3, 1, null, 3]", "[3, null, 1, 3]", "[3, 1]", "[null, 3]", "[1.5, null, 2.5]",
+		"[5, 2]", "[2, 5]", "[5]", "[2]", "[4]"} {
+		if !strings.Contains(lists.String(), want) {
+			t.Errorf("the lists lack Polars' %s:\n%s", want, lists)
+		}
+	}
+	var got bytes.Buffer
+	if err := q.Select(c("g", "sb_last", "hmed", "v0", "q25", "dnan_len")).WriteCSV(t.Context(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if want := "g,sb_last,hmed,v0,q25,dnan_len\n1,3,2.0,1.0,1.5,3\n2,2,3.5,2.25,2.75,1\n"; got.String() != want {
+		t.Errorf("got %q\nwant %q", got.String(), want)
+	}
+	sd, err := q.Select(c("sd")).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := ursus.Frame(ursus.Values("sd", []float64{1.1547005383792515, 2.1213203435596424})).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, sd, want, ursustest.WithTolerance(0, 1e-15))
+
+	// Ties keep their order, either way: Polars gives [20, 40, 10, 30] and [10, 30, 20, 40].
+	ties, err := ursus.Frame(ursus.Values("g", []int64{1, 1, 1, 1}), ursus.Values("a", []int64{10, 20, 30, 40}),
+		ursus.Values("b", []int64{1, 0, 1, 0})).GroupBy(c("g")).
+		Agg(c("a").SortBy(c("b")).Alias("s"), c("a").SortByDesc(c("b")).Alias("d")).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := ties.String(); !strings.Contains(s, "[20, 40, 10, 30]") || !strings.Contains(s, "[10, 30, 20, 40]") {
+		t.Errorf("ties reordered:\n%s", s)
+	}
+
+	// Keys of another length than the values, after a reshape, are refused.
+	if _, err := lf.GroupBy(c("g")).Agg(c("a").Head(2).SortBy(c("b"))).Collect(t.Context()); err == nil {
+		t.Error("sort_by of a reshaped column should be refused")
 	}
 }
