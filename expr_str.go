@@ -34,19 +34,38 @@ func (s StrExpr) call(fn expr.CallFn, args ...any) Expr {
 	return wrap(&expr.Call{Fn: fn, Args: nodes})
 }
 
+// each is a call of a per-row pattern or value (step 255): the receiver, then args.
+func (s StrExpr) each(fn expr.CallFn, args ...expr.Node) Expr {
+	return wrap(&expr.Call{Fn: fn, Args: append([]expr.Node{s.e.node()}, args...)})
+}
+
 // Contains reports whether each value contains pattern.
-func (s StrExpr) Contains(pattern string, literal bool) Expr {
-	return s.call(expr.FnStrContains, pattern, literal)
+//
+// pattern is a string, or an expression, a pattern a row: a regex compiled once for
+// each distinct pattern in a batch, and an invalid one an error naming its row. A
+// null pattern gives null. The same holds for StartsWith, EndsWith, StripPrefix,
+// StripSuffix and Split, and for Replace's and ReplaceAll's value (step 255).
+func (s StrExpr) Contains[P string | Expr](pattern P, literal bool) Expr {
+	if p, ok := any(pattern).(Expr); ok {
+		return s.each(expr.FnStrContainsExpr, p.node(), litNode(literal))
+	}
+	return s.call(expr.FnStrContains, any(pattern).(string), literal)
 }
 
 // StartsWith and EndsWith are always literal — a prefix match against a regex is
 // not a well-defined thing to ask for.
-func (s StrExpr) StartsWith(prefix string) Expr {
-	return s.call(expr.FnStrStartsWith, prefix)
+func (s StrExpr) StartsWith[P string | Expr](prefix P) Expr {
+	if p, ok := any(prefix).(Expr); ok {
+		return s.each(expr.FnStrStartsWithExpr, p.node())
+	}
+	return s.call(expr.FnStrStartsWith, any(prefix).(string))
 }
 
-func (s StrExpr) EndsWith(suffix string) Expr {
-	return s.call(expr.FnStrEndsWith, suffix)
+func (s StrExpr) EndsWith[P string | Expr](suffix P) Expr {
+	if p, ok := any(suffix).(Expr); ok {
+		return s.each(expr.FnStrEndsWithExpr, p.node())
+	}
+	return s.call(expr.FnStrEndsWith, any(suffix).(string))
 }
 
 // Find returns the byte offset of the first match, or NULL when there is none.
@@ -74,12 +93,23 @@ func (s StrExpr) Extract(pattern string, group int) Expr {
 // For a regex, the replacement expands $1, ${1} and ${name} in both, as Go's
 // regexp.Expand does — so $1x names a group called "1x", and ${1}x is group 1 then
 // an x. A literal pattern's replacement is literal, $ and all.
-func (s StrExpr) Replace(pattern, value string, literal bool) Expr {
-	return s.call(expr.FnStrReplace, pattern, value, literal)
+//
+// value may be an expression, a value a row, which is inserted as it is written:
+// $1 is not expanded, as Polars does not expand it. A null value gives null, where
+// Polars keeps the string as it was. The pattern stays a constant, as Polars'
+// does.
+func (s StrExpr) Replace[V string | Expr](pattern string, value V, literal bool) Expr {
+	if v, ok := any(value).(Expr); ok {
+		return s.each(expr.FnStrReplaceExpr, litNode(pattern), v.node(), litNode(literal))
+	}
+	return s.call(expr.FnStrReplace, pattern, any(value).(string), literal)
 }
 
-func (s StrExpr) ReplaceAll(pattern, value string, literal bool) Expr {
-	return s.call(expr.FnStrReplaceAll, pattern, value, literal)
+func (s StrExpr) ReplaceAll[V string | Expr](pattern string, value V, literal bool) Expr {
+	if v, ok := any(value).(Expr); ok {
+		return s.each(expr.FnStrReplaceAllExpr, litNode(pattern), v.node(), litNode(literal))
+	}
+	return s.call(expr.FnStrReplaceAll, pattern, any(value).(string), literal)
 }
 
 func (s StrExpr) ToLower() Expr { return s.call(expr.FnStrToLower) }
@@ -106,12 +136,18 @@ func (s StrExpr) StripChars(chars string) Expr {
 	return s.call(expr.FnStrStripChars, chars)
 }
 
-func (s StrExpr) StripPrefix(prefix string) Expr {
-	return s.call(expr.FnStrStripPrefix, prefix)
+func (s StrExpr) StripPrefix[P string | Expr](prefix P) Expr {
+	if p, ok := any(prefix).(Expr); ok {
+		return s.each(expr.FnStrStripPrefixExpr, p.node())
+	}
+	return s.call(expr.FnStrStripPrefix, any(prefix).(string))
 }
 
-func (s StrExpr) StripSuffix(suffix string) Expr {
-	return s.call(expr.FnStrStripSuffix, suffix)
+func (s StrExpr) StripSuffix[P string | Expr](suffix P) Expr {
+	if p, ok := any(suffix).(Expr); ok {
+		return s.each(expr.FnStrStripSuffixExpr, p.node())
+	}
+	return s.call(expr.FnStrStripSuffix, any(suffix).(string))
 }
 
 // Reverse reverses by RUNE, not by byte.
@@ -133,8 +169,11 @@ func (s StrExpr) Reverse() Expr { return s.call(expr.FnStrReverse) }
 //
 // The separator is LITERAL. A regex split would be a different function, and
 // splitting on "." meaning "any character" is the mistake it would invite.
-func (s StrExpr) Split(by string) Expr {
-	return s.call(expr.FnStrSplit, by)
+func (s StrExpr) Split[P string | Expr](by P) Expr {
+	if p, ok := any(by).(Expr); ok {
+		return s.each(expr.FnStrSplitExpr, p.node())
+	}
+	return s.call(expr.FnStrSplit, any(by).(string))
 }
 
 // SplitN is Split with at most n parts; the last part keeps the rest, separators

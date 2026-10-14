@@ -242,6 +242,8 @@ decide whether to keep or switch each one.
 - `List().Get` is null out of range, with a constant or an expression index; Polars'
   `list.get` errs unless `null_on_oob`. A float index is refused; Polars takes it
   (step 254).
+- `Str().Replace` and `ReplaceAll` with a null value a row give null; Polars keeps
+  the string as it was (step 255).
 
 ## 10. What ursus has that most others do not
 

@@ -50,6 +50,10 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return listGatherAt(name, fn == expr.FnListGatherOrNull, ops[0], ops[1], n)
 	case expr.FnListSortBy, expr.FnListSortByDesc:
 		return listSortBy(name, fn == expr.FnListSortByDesc, ops[0], ops[1])
+	case expr.FnStrContainsExpr, expr.FnStrStartsWithExpr, expr.FnStrEndsWithExpr,
+		expr.FnStrStripPrefixExpr, expr.FnStrStripSuffixExpr, expr.FnStrSplitExpr,
+		expr.FnStrReplaceExpr, expr.FnStrReplaceAllExpr:
+		return strEach(fn, name, out, ops, n)
 	case expr.FnIsInExpr:
 		return isInEach(name, ops[0], ops[1], n)
 	case expr.FnListGetExpr:

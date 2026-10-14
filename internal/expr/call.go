@@ -254,6 +254,18 @@ const (
 	FnIsInExpr
 	FnListGetExpr
 	FnListContainsExpr
+
+	// String functions whose pattern is a column, and replace's whose value is (step
+	// 255). Each takes the constant form's arguments after the receiver, any of the
+	// pattern or value a column; the flags stay literals.
+	FnStrContainsExpr   // the receiver, the pattern, literal
+	FnStrStartsWithExpr // the receiver, the prefix
+	FnStrEndsWithExpr
+	FnStrStripPrefixExpr
+	FnStrStripSuffixExpr
+	FnStrSplitExpr
+	FnStrReplaceExpr // the receiver, the pattern (a literal), the value, literal
+	FnStrReplaceAllExpr
 	fnHorizontalEnd
 )
 
@@ -359,6 +371,10 @@ var callNames = map[CallFn]string{
 	FnListSortBy:      "list.sort_by", FnListSortByDesc: "list.sort_by_desc",
 	FnIsInExpr: "is_in_expr", FnListGetExpr: "list.get_expr",
 	FnListContainsExpr: "list.contains_expr",
+	FnStrContainsExpr:  "str.contains_expr", FnStrStartsWithExpr: "str.starts_with_expr",
+	FnStrEndsWithExpr: "str.ends_with_expr", FnStrStripPrefixExpr: "str.strip_prefix_expr",
+	FnStrStripSuffixExpr: "str.strip_suffix_expr", FnStrSplitExpr: "str.split_expr",
+	FnStrReplaceExpr: "str.replace_expr", FnStrReplaceAllExpr: "str.replace_all_expr",
 }
 
 func (f CallFn) String() string {
@@ -622,6 +638,10 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 		}
 		return ops[0].Type, nil
 
+	case FnStrContainsExpr, FnStrStartsWithExpr, FnStrEndsWithExpr, FnStrStripPrefixExpr,
+		FnStrStripSuffixExpr, FnStrSplitExpr, FnStrReplaceExpr, FnStrReplaceAllExpr:
+		return strExprOut(fn, ops)
+
 	case FnIsInExpr:
 		if len(ops) != 2 {
 			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
@@ -703,6 +723,52 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 		return ops[0].Type, nil
 	}
 	return dtype.Null, uerr.Internalf("expr: unknown horizontal call %d", fn)
+}
+
+// strConstant is each per-row string function's constant form, which types it.
+var strConstant = map[CallFn]CallFn{
+	FnStrContainsExpr: FnStrContains, FnStrStartsWithExpr: FnStrStartsWith,
+	FnStrEndsWithExpr: FnStrEndsWith, FnStrStripPrefixExpr: FnStrStripPrefix,
+	FnStrStripSuffixExpr: FnStrStripSuffix, FnStrSplitExpr: FnStrSplit,
+	FnStrReplaceExpr: FnStrReplace, FnStrReplaceAllExpr: FnStrReplaceAll,
+}
+
+// strExprOut types a string function of a per-row pattern or value (step 255): the
+// receiver, pattern and value Strings, the flags Bools, and the answer the constant
+// form's.
+func strExprOut(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
+	flag := -1 // the literal flag's operand
+	want := 2
+	switch fn {
+	case FnStrContainsExpr:
+		flag, want = 2, 3
+	case FnStrReplaceExpr, FnStrReplaceAllExpr:
+		flag, want = 3, 4
+	}
+	if len(ops) != want {
+		return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+	}
+	for i, f := range ops {
+		if i == flag {
+			if f.Type.ID() != dtype.TypeBool {
+				return dtype.Null, uerr.Internalf("expr: %s's flag is a %s", fn, f.Type)
+			}
+			continue
+		}
+		if !f.Type.HasStringStorage() && !f.Type.IsNull() {
+			what := "pattern"
+			switch {
+			case i == 0:
+				what = "operand"
+			case want == 4 && i == 2:
+				what = "value"
+			}
+			return dtype.Null, uerr.New(uerr.KindType, "str",
+				"%s requires a String %s, got %s", fn, what, f.Type).
+				Hint("cast it first, e.g. .Cast(ursus.String)")
+		}
+	}
+	return strCallOut(strConstant[fn]), nil
 }
 
 // HorizontalAgg is the aggregate a horizontal reduction runs over each row's values.
