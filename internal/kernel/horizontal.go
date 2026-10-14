@@ -54,6 +54,8 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		expr.FnStrStripPrefixExpr, expr.FnStrStripSuffixExpr, expr.FnStrSplitExpr,
 		expr.FnStrReplaceExpr, expr.FnStrReplaceAllExpr:
 		return strEach(fn, name, out, ops, n)
+	case expr.FnDtOffsetByExpr:
+		return dtOffsetEach(name, out, ops[0], ops[1], n)
 	case expr.FnIsInExpr:
 		return isInEach(name, ops[0], ops[1], n)
 	case expr.FnListGetExpr:

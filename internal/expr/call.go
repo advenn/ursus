@@ -266,6 +266,10 @@ const (
 	FnStrSplitExpr
 	FnStrReplaceExpr // the receiver, the pattern (a literal), the value, literal
 	FnStrReplaceAllExpr
+
+	// dt.offset_by with an offset a row, a duration string as Every reads it (step
+	// 256).
+	FnDtOffsetByExpr
 	fnHorizontalEnd
 )
 
@@ -375,6 +379,7 @@ var callNames = map[CallFn]string{
 	FnStrEndsWithExpr: "str.ends_with_expr", FnStrStripPrefixExpr: "str.strip_prefix_expr",
 	FnStrStripSuffixExpr: "str.strip_suffix_expr", FnStrSplitExpr: "str.split_expr",
 	FnStrReplaceExpr: "str.replace_expr", FnStrReplaceAllExpr: "str.replace_all_expr",
+	FnDtOffsetByExpr: "dt.offset_by_expr",
 }
 
 func (f CallFn) String() string {
@@ -641,6 +646,25 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 	case FnStrContainsExpr, FnStrStartsWithExpr, FnStrEndsWithExpr, FnStrStripPrefixExpr,
 		FnStrStripSuffixExpr, FnStrSplitExpr, FnStrReplaceExpr, FnStrReplaceAllExpr:
 		return strExprOut(fn, ops)
+
+	case FnDtOffsetByExpr:
+		if len(ops) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		in := ops[0].Type
+		if in.ID() != dtype.TypeDate && in.ID() != dtype.TypeDatetime {
+			e := uerr.New(uerr.KindType, "dt", "%s requires a Date or Datetime operand, got %s", fn, in)
+			if in.ID() == dtype.TypeDuration || in.ID() == dtype.TypeTime {
+				e.Hint("add a Duration with Add instead")
+			}
+			return dtype.Null, e
+		}
+		if by := ops[1].Type; !by.HasStringStorage() && !by.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"%s takes its offsets as Strings such as \"1mo2d\", got %s", fn, by).
+				Hint("a Duration column is added with Add")
+		}
+		return in, nil
 
 	case FnIsInExpr:
 		if len(ops) != 2 {

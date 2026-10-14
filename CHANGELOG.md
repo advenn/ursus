@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.5
 
-Everything since `v0.6.4` (2026-10-14): steps 248–255, so far.
+Everything since `v0.6.4` (2026-10-14): steps 248–256, so far.
 [`v0.6.5-scope.md`](./context_files/v0.6.5-scope.md) set the scope: **feature
 completeness, part 1 — the bugs, and the expression model.** The rest of 0.6 is
 feature completeness, and 0.7 performance;
@@ -65,6 +65,9 @@ feature completeness, and 0.7 performance;
   `StripPrefix`, `StripSuffix` and `Split` take a pattern a row, and `Replace` and
   `ReplaceAll` a value a row, inserted as written. A null replacement value gives
   null, where Polars keeps the string.
+- **`Dt().OffsetBy` of an expression** (256): an offset a row, a String such as
+  `"1mo2d"`. One that does not parse, or that the type cannot hold, is an error
+  naming its row.
 
 ---
 

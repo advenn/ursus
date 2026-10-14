@@ -1,6 +1,8 @@
 package ursus
 
 import (
+	"time"
+
 	"github.com/advenn/ursus/internal/expr"
 )
 
@@ -147,8 +149,21 @@ func (d DtExpr) Strftime(format string) Expr { return d.call(expr.FnDtStrftime, 
 // An offset the type cannot hold is refused while the query is planned: an hour on a
 // Date, a nanosecond on Datetime(us). An answer past the type's range is refused
 // when it is computed. A Time has no date to move: add a Duration to it instead.
-func (d DtExpr) OffsetBy[T Span](by T) Expr {
-	iv := span(by)
+//
+// by may be an expression, an offset a row, each a String that Every reads, such as
+// "1mo2d" (step 256): Polars' offset_by(expr). A null offset gives null. An offset
+// that does not parse, or that the type cannot hold, is refused when it is read,
+// naming its row.
+func (d DtExpr) OffsetBy[T Span | Expr](by T) Expr {
+	var iv Interval
+	switch v := any(by).(type) {
+	case Expr:
+		return wrap(&expr.Call{Fn: expr.FnDtOffsetByExpr, Args: []expr.Node{d.e.node(), v.node()}})
+	case Interval:
+		iv = v
+	case time.Duration:
+		iv = span(v)
+	}
 	if err := iv.Err(); err != nil {
 		return wrap(&expr.Err{E: err})
 	}

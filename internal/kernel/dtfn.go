@@ -470,11 +470,7 @@ func offsetBy(name string, out, dt dtype.DataType, ticks []int64, valid bitmap.V
 	if err := expr.OffsetRefusal(iv, dt); err != nil {
 		return nil, err
 	}
-	refuse := func(t int64) error {
-		return uerr.New(uerr.KindValue, "dt",
-			"offset_by of %s by %s is outside the range of %s", dtype.FormatTemporal(dt, t), iv, dt).
-			Hint(widerUnitHint)
-	}
+	refuse := func(t int64) error { return offsetRange(dt, t, iv) }
 	if iv.IsCalendar() {
 		return eachInstant(expr.FnDtOffsetBy, name, out, dt, ticks, valid, iv.AddTo, refuse)
 	}
