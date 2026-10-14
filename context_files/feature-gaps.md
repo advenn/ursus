@@ -40,7 +40,6 @@ Fix these before anything new.
 | what | where | |
 | --- | --- | --- |
 | **`lf.FillNull(ursus.FillForward)` fills every null with the constant 2.** `FillStrategy` is a `uint8`, so it satisfies `Operand`, and the frame-level `FillNull` takes it as a literal value. Reproduced: `[1, null, null, 7]` → `[1, 2, 2, 7]`. | frameops.go:352, fill.go:220 | **silent wrong answer** |
-| `.Cast(ursus.Date)` and `.Cast(TimeOf(u))` of a zoned Datetime give the UTC date and time; Polars' `dt.date()` and `dt.time()` give the local ones | internal/kernel/unary.go | surprise |
 | `DynamicOptions`' doc says `Label`, `StartBy` and `IncludeBoundaries` produce an error; all three work | groupby.go:12–22 | stale doc |
 | `MapExplode` is documented as a working strategy; it is refused at planning | window.go:18–21 | stale doc |
 | `JoinWhere`'s doc names `JoinSuffix`; it takes no options | join.go:221, 235 | doc and API |
@@ -105,7 +104,9 @@ differs from their input's, or scalars outside a group-by.
   - `with_time_unit`;
   - `total_milliseconds`, `total_microseconds`, `total_nanoseconds`.
 - **Partial:**
-  - `date` and `time` through `Cast`, in UTC (§1);
+  - `date` and `time` only through `Cast`, which gives the UTC date and time of a
+    zoned Datetime, as Polars' `cast` does (checked against Polars 1.44.1); Polars'
+    `dt.date()` and `dt.time()` give the local ones, and ursus has no such method;
   - `epoch` in whole seconds only;
   - `timestamp` and `from_epoch` only through casts;
   - `second(fractional=)`;
