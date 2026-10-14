@@ -162,12 +162,12 @@ func (s *windowSink) consumeOneSpill(ctx context.Context, in *data.Batch) error 
 		if sp.acc == nil {
 			continue
 		}
-		col, err := evalColumn(ctx, sp.input, in)
+		col, gids, err := aggInput(ctx, sp.input, in, zeros)
 		if err != nil {
 			return err
 		}
 		sp.acc.Reserve(1)
-		if err := sp.acc.AddBatch(zeros, col); err != nil {
+		if err := sp.acc.AddBatch(gids, col); err != nil {
 			return err
 		}
 	}

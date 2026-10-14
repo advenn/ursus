@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.5
 
-Everything since `v0.6.4` (2026-10-14): steps 248–250, so far.
+Everything since `v0.6.4` (2026-10-14): steps 248–251, so far.
 [`v0.6.5-scope.md`](./context_files/v0.6.5-scope.md) set the scope: **feature
 completeness, part 1 — the bugs, and the expression model.** The rest of 0.6 is
 feature completeness, and 0.7 performance;
@@ -45,6 +45,10 @@ feature completeness, and 0.7 performance;
   streams past a memory limit.
 - **A window in `Filter`** (250), SQL's QUALIFY:
   `Filter(Col("x").Sum().Over(Col("g")).Gt(10))`. It was refused.
+- **`Expr.Filter` as an aggregate's input** (251), a conditional aggregate:
+  `Col("a").Filter(Col("b").Gt(0)).Sum()`, in a group-by, a window, a rolling or
+  dynamic group, and as a scalar. The aggregate reads only the rows that pass, so
+  `Len` counts them. Anywhere else a filter is refused for now.
 
 ---
 

@@ -194,12 +194,12 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 		if sp.acc == nil {
 			continue // ordered functions run once, at Finish, over the whole frame
 		}
-		col, err := evalColumn(ctx, sp.input, in)
+		col, gids, err := aggInput(ctx, sp.input, in, batchIDs[sp.part])
 		if err != nil {
 			return err
 		}
 		sp.acc.Reserve(s.parts[sp.part].ids.Len())
-		if err := sp.acc.AddBatch(batchIDs[sp.part], col); err != nil {
+		if err := sp.acc.AddBatch(gids, col); err != nil {
 			return err
 		}
 	}

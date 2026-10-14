@@ -8,6 +8,7 @@ import (
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -408,10 +409,23 @@ func (s *temporalSink) feed(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Each aggregate's input, and under Expr.Filter which pairs it reads (step 251).
 	cols := make([]*data.Column, len(s.specs))
+	reads := make([][]bool, len(s.specs))
 	for i, spec := range s.specs {
-		if cols[i], err = evalColumn(ctx, spec.input, src); err != nil {
+		inner, preds := expr.FilterChain(spec.input)
+		if cols[i], err = evalColumn(ctx, inner, src); err != nil {
 			return err
+		}
+		if len(preds) > 0 {
+			sel, err := passingRows(ctx, preds, src)
+			if err != nil {
+				return err
+			}
+			reads[i] = make([]bool, src.Rows())
+			for _, r := range sel {
+				reads[i][r] = true
+			}
 		}
 	}
 	lo, hi := len(s.segs), -1
@@ -433,13 +447,17 @@ func (s *temporalSink) feed(ctx context.Context) error {
 		}
 		s.local = local
 		for i, col := range cols {
-			if sel != nil {
-				if col, err = kernel.Take(col, sel); err != nil {
+			isel, ilocal := sel, local
+			if reads[i] != nil {
+				isel, ilocal = readPairs(reads[i], sel, local)
+			}
+			if isel != nil {
+				if col, err = kernel.Take(col, isel); err != nil {
 					return err
 				}
 			}
 			g.accs[i].Reserve(int(g.n))
-			if err := g.accs[i].AddBatch(local, col); err != nil {
+			if err := g.accs[i].AddBatch(ilocal, col); err != nil {
 				return err
 			}
 		}
@@ -591,4 +609,20 @@ func keyOnlySchema(keySchema *dtype.Schema) (*dtype.Schema, error) {
 		fields = append(fields, keySchema.Field(i))
 	}
 	return dtype.NewSchema(fields...)
+}
+
+// readPairs narrows a segment's pairs, sel into the gathered rows (nil for all of
+// them, in order) with their windows local, to those a filtered aggregate reads.
+func readPairs(reads []bool, sel, local []int32) (isel, ilocal []int32) {
+	isel, ilocal = []int32{}, []int32{}
+	for m, w := range local {
+		k := int32(m)
+		if sel != nil {
+			k = sel[m]
+		}
+		if reads[k] {
+			isel, ilocal = append(isel, k), append(ilocal, w)
+		}
+	}
+	return isel, ilocal
 }

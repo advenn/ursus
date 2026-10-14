@@ -22,6 +22,9 @@ func Resolve(n Node, in *dtype.Schema) (dtype.Field, error) {
 	if HasMatch(n) {
 		return dtype.Field{}, uerr.Internalf("%v: %s", ErrUnexpanded, n.String())
 	}
+	if f := LooseFilter(n); f != nil {
+		return dtype.Field{}, looseFilterErr(f)
+	}
 	return n.Field(in)
 }
 

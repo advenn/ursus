@@ -237,6 +237,8 @@ decide whether to keep or switch each one.
 - `Cut` returns String, not Categorical.
 - An expression's `TopK` and `BottomK` return a List.
 - `Time` takes a unit; Polars' is nanoseconds.
+- `GroupByDynamic` with keys puts the index column first and the keys after it;
+  Polars puts the keys first (found at step 251).
 
 ## 10. What ursus has that most others do not
 

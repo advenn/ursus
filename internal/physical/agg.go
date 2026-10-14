@@ -499,12 +499,12 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 			// evalColumn broadcasts a literal input so it lines up with `groups`. That
 			// is what makes Len() — which aggregates over a literal precisely so it
 			// needs no column — work on a frame that has only key columns.
-			col, err := evalColumn(ctx, spec.input, src)
+			col, gids, err := aggInput(ctx, spec.input, src, s.groups)
 			if err != nil {
 				return err
 			}
 			s.accs[i].Reserve(nGroups)
-			if err := s.accs[i].AddBatch(s.groups, col); err != nil {
+			if err := s.accs[i].AddBatch(gids, col); err != nil {
 				return err
 			}
 		}
@@ -1416,4 +1416,64 @@ func extractAggs(n expr.Node, in *dtype.Schema, specs *[]aggSpec, byKey map[stri
 	default:
 		return nil, uerr.Internalf("physical: extractAggs: unhandled node %T", n)
 	}
+}
+
+// aggInput is an aggregate's input over src, with each of its rows' group: under
+// Expr.Filter, only the rows every predicate is true on, a null dropping its row as
+// the frame's Filter drops it (step 251). The group-by, the windows and the
+// temporal groups all feed their accumulators through it.
+func aggInput(ctx context.Context, input expr.Node, src *data.Batch, gids []int32) (*data.Column, []int32, error) {
+	inner, preds := expr.FilterChain(input)
+	col, err := evalColumn(ctx, inner, src)
+	if err != nil || len(preds) == 0 {
+		return col, gids, err
+	}
+	sel, err := passingRows(ctx, preds, src)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(sel) == src.Rows() {
+		return col, gids, nil
+	}
+	if col, err = kernel.Take(col, sel); err != nil {
+		return nil, nil, err
+	}
+	kept := make([]int32, len(sel))
+	for j, r := range sel {
+		kept[j] = gids[r]
+	}
+	return col, kept, nil
+}
+
+// passingRows is the rows of src, in order, that every predicate is true on.
+func passingRows(ctx context.Context, preds []expr.Node, src *data.Batch) ([]int32, error) {
+	var sel []int32
+	for i, p := range preds {
+		mask, err := evalColumn(ctx, p, src)
+		if err != nil {
+			return nil, err
+		}
+		kept, err := kernel.SelectionFromMask(mask)
+		if err != nil {
+			return nil, err
+		}
+		if i == 0 {
+			sel = kept
+			continue
+		}
+		both := sel[:0:0]
+		for a, b := 0, 0; a < len(sel) && b < len(kept); {
+			switch {
+			case sel[a] < kept[b]:
+				a++
+			case sel[a] > kept[b]:
+				b++
+			default:
+				both = append(both, sel[a])
+				a, b = a+1, b+1
+			}
+		}
+		sel = both
+	}
+	return sel, nil
 }

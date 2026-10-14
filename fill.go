@@ -184,15 +184,40 @@ func (e Expr) IsClose(other Expr, relTol, absTol float64) Expr {
 	return a.Eq(b).Or(finite.And(a.Sub(b).Abs().Le(limit)))
 }
 
+// Filter is the values where every predicate holds, Polars' Expr.filter. Its length
+// is not the frame's, so it is an aggregate's input (step 251): a conditional
+// aggregate, SQL's FILTER (WHERE ...).
+//
+//	Col("amount").Filter(Col("qty").Gt(1)).Sum()             // in Agg, Over, Rolling, or Select
+//	Col("amount").Filter(Col("region").Eq("eu")).Len()       // the rows that pass
+//
+// The aggregate reads only the rows where the predicates are true, so Len counts
+// them and First and Last pick among them, as Polars' do. A null predicate drops the
+// row, as the frame's Filter does. A group none of whose rows pass aggregates no
+// rows: its sum is null, as an all-null group's is here, where Polars gives 0.
+//
+// Anywhere but an aggregate's input it is refused at planning, until a later step
+// gives a column of another length a place; the frame's Filter keeps rows.
+func (e Expr) Filter(preds ...Expr) Expr {
+	if len(preds) == 0 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "filter", "Filter needs a predicate")})
+	}
+	pred := preds[0]
+	for _, p := range preds[1:] {
+		pred = pred.And(p)
+	}
+	return wrap(&expr.Filter{Child: e.node(), Pred: pred.node()})
+}
+
 // DropNulls is not an expression. It is refused here so the mistake is caught at
 // build time with a message naming the operation that does exist.
 //
 // # Why there is no expression form
 //
 // Every expression must produce exactly one value per input row — the evaluator
-// enforces it — and dropping rows changes the frame's height. There is no
-// Expr.Filter, Expr.Slice or Expr.Gather family to hang a height-changing
-// expression on, so this is not a missing case but a different shape of thing.
+// enforces it — and dropping rows changes the frame's height. Filter is the one
+// that may change it, and only as an aggregate's input (step 251), so this is not a
+// missing case but a different shape of thing.
 //
 // Refused at BUILD time rather than at plan time on purpose: the deferred error is
 // the first thing expression resolution looks at, so CollectSchema and Explain
