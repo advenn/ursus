@@ -270,6 +270,13 @@ const (
 	// dt.offset_by with an offset a row, a duration string as Every reads it (step
 	// 256).
 	FnDtOffsetByExpr
+
+	// Generators, a list a row (step 263): int_ranges(start, end, step),
+	// linear_spaces(start, end, n, closed) with closed a literal Closed, and
+	// value.repeat_by(n). The scalar forms are these over one row, exploded.
+	FnIntRanges
+	FnLinearSpaces
+	FnRepeatBy
 	fnHorizontalEnd
 )
 
@@ -383,6 +390,7 @@ var callNames = map[CallFn]string{
 	FnStrStripSuffixExpr: "str.strip_suffix_expr", FnStrSplitExpr: "str.split_expr",
 	FnStrReplaceExpr: "str.replace_expr", FnStrReplaceAllExpr: "str.replace_all_expr",
 	FnDtOffsetByExpr: "dt.offset_by_expr",
+	FnIntRanges:      "int_ranges", FnLinearSpaces: "linear_spaces", FnRepeatBy: "repeat_by",
 }
 
 func (f CallFn) String() string {
@@ -650,6 +658,43 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 		FnStrStripSuffixExpr, FnStrSplitExpr, FnStrReplaceExpr, FnStrReplaceAllExpr:
 		return strExprOut(fn, ops)
 
+	case FnIntRanges:
+		if len(ops) != 3 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		for _, f := range ops {
+			if !f.Type.IsInteger() && !f.Type.IsNull() {
+				return dtype.Null, uerr.New(uerr.KindType, "int_range",
+					"int_range takes integers, and %s is a %s", f.Name, f.Type).
+					Hint("cast it first, e.g. .Cast(ursus.Int64)")
+			}
+		}
+		return dtype.List(dtype.Int64), nil
+
+	case FnLinearSpaces:
+		if len(ops) != 4 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		if n := ops[2].Type; !n.IsInteger() && !n.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "linear_space",
+				"linear_space takes its number of samples as an integer, got %s", n)
+		}
+		elem, err := linearElem(ops[0].Type, ops[1].Type)
+		if err != nil {
+			return dtype.Null, err
+		}
+		return dtype.List(elem), nil
+
+	case FnRepeatBy:
+		if len(ops) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		if n := ops[1].Type; !n.IsInteger() && !n.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "repeat_by",
+				"repeat_by takes its count as an integer, got %s", n)
+		}
+		return dtype.List(ops[0].Type), nil
+
 	case FnDtOffsetByExpr:
 		if len(ops) != 2 {
 			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
@@ -750,6 +795,35 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 		return ops[0].Type, nil
 	}
 	return dtype.Null, uerr.Internalf("expr: unknown horizontal call %d", fn)
+}
+
+// linearElem is the element type of linear_space from ends of types s and e, as
+// Polars types it: Float32 for two Float32 ends, Float64 for other numbers, and a
+// temporal type for two ends of it, a Date's spaced as Datetime(us).
+func linearElem(s, e dtype.DataType) (dtype.DataType, error) {
+	switch {
+	case s.IsNull() && e.IsNull():
+		return dtype.Float64, nil
+	case s.IsNull():
+		s = e
+	case e.IsNull():
+		e = s
+	}
+	switch {
+	case s.IsNumeric() && e.IsNumeric():
+		if s == dtype.Float32 && e == dtype.Float32 {
+			return dtype.Float32, nil
+		}
+		return dtype.Float64, nil
+	case s.IsTemporal() && s == e:
+		if s.ID() == dtype.TypeDate {
+			return dtype.Datetime(dtype.Micro, ""), nil
+		}
+		return s, nil
+	}
+	return dtype.Null, uerr.New(uerr.KindType, "linear_space",
+		"linear_space spaces two numbers or two values of one temporal type, got %s and %s", s, e).
+		Hint("cast one end to the other's type")
 }
 
 // strConstant is each per-row string function's constant form, which types it.

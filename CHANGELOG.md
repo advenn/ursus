@@ -17,9 +17,16 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): step 262, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–263, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
+
+### Features
+
+- **Generators** (263): `IntRange`, `LinearSpace`, `Repeat`, `Ones` and `Zeros`, a
+  column of their own length, e.g. `WithColumns(IntRange(0, Len(), 1).Alias("i"))`;
+  and their per-row forms `IntRanges`, `LinearSpaces` and `Expr.RepeatBy`, a List a
+  row. `LinearSpace` agrees with Polars' to the bit.
 
 ---
 

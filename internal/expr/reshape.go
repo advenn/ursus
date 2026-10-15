@@ -1,6 +1,8 @@
 package expr
 
 import (
+	"strings"
+
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -37,7 +39,7 @@ const (
 	ReshapeGatherEvery                  // Args: n, offset (step 253)
 	ReshapeSortBy                       // Args: descending, 0 or 1; By the keys (step 253)
 	ReshapeGather                       // no args; By the indices (step 257)
-	ReshapeExplode                      // no args: a List's elements (step 259)
+	ReshapeExplode                      // a List's elements (step 259); Args [1]: a generator's, an empty list no row (step 263)
 )
 
 var reshapeNames = map[ReshapeOp]string{
@@ -68,6 +70,9 @@ func (r *Reshape) Children() []Node {
 }
 
 func (r *Reshape) String() string {
+	if g, ok := generatorText(r); ok {
+		return g
+	}
 	args := ""
 	switch r.Op {
 	case ReshapeSort, ReshapeSortBy, ReshapeGather:
@@ -89,6 +94,36 @@ func (r *Reshape) String() string {
 		}
 	}
 	return r.Child.String() + "." + r.Op.String() + "(" + args + ")"
+}
+
+// generators are the per-row functions whose list a scalar generator explodes,
+// and the name the generator reads as (step 263).
+var generators = map[CallFn]string{
+	FnIntRanges: "int_range", FnLinearSpaces: "linear_space", FnRepeatBy: "repeat",
+}
+
+// IsGenerator reports whether r is a scalar generator: an explode in which an empty
+// list is no row, Polars' int_range and the rest.
+func (r *Reshape) IsGenerator() bool {
+	return r.Op == ReshapeExplode && len(r.Args) > 0 && r.Args[0] == 1
+}
+
+// generatorText is a generator's text, int_range(lit(0), lit(5), lit(1)), apart from
+// an Explode of the same list, whose empty list is a null row.
+func generatorText(r *Reshape) (string, bool) {
+	c, ok := r.Child.(*Call)
+	if !ok || !r.IsGenerator() {
+		return "", false
+	}
+	name, ok := generators[c.Fn]
+	if !ok {
+		return "", false
+	}
+	parts := make([]string, len(c.Args))
+	for i, a := range c.Args {
+		parts[i] = a.String()
+	}
+	return name + "(" + strings.Join(parts, ", ") + ")", true
 }
 
 // Field is the child's: a reshape keeps its values' type, but Explode, whose values
@@ -180,6 +215,11 @@ func LowerReshapes(n Node, agg bool) Node {
 // lowerReshape is a reshape as a list a group: its child imploded, or reshaped
 // first, then the list kernel.
 func lowerReshape(r *Reshape) Node {
+	if r.Op == ReshapeExplode && (IsConstant(r.Child) || HasAgg(r.Child) && LooseReshape(r.Child) == nil) {
+		// A List that is one value a group, a generator's or an aggregate's (step
+		// 263): exploded, its elements are the group's values, which is the list.
+		return r.Child
+	}
 	var list Node
 	if inner, ok := r.Child.(*Reshape); ok {
 		list = lowerReshape(inner)

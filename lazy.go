@@ -110,13 +110,16 @@ func (lf *LazyFrame) Select(exprs ...Expr) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
+	// One value before lowering stays one value after it: an aggregate over a
+	// generator lowers to a list function of a literal (step 263).
+	scalar := allScalar(ns)
 	ns = lowerReshapes(ns, false)
 	for _, n := range ns {
 		if changesLength(n) {
 			return lf.selectReshaped(ns)
 		}
 	}
-	if allScalar(ns) {
+	if scalar || allScalar(ns) {
 		return lf.derive(&plan.Aggregate{Input: lf.node, Aggs: ns})
 	}
 	return lf.derive(&plan.Project{Input: lf.node, Exprs: bindScalars(ns)})

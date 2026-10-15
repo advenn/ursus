@@ -148,7 +148,7 @@ func errSeveralReshaped(n expr.Node) error {
 // constant.
 func (z *zipper) lift(n expr.Node) (zipPart, error) {
 	switch {
-	case expr.IsConstant(n):
+	case expr.IsConstant(n) && !changesLength(n):
 		return zipPart{node: n}, nil
 	case !changesLength(n):
 		// A value a row, or one value: the input's own projection, or its keyless
@@ -161,6 +161,13 @@ func (z *zipper) lift(n expr.Node) (zipPart, error) {
 		return z.reshape(t)
 	case *expr.Filter:
 		return z.filter(t)
+	case *expr.Window:
+		// Polars maps a partition's column of another length back onto its rows; a
+		// window here answers a value a row of its partition, or one for it.
+		return zipPart{}, uerr.New(uerr.KindUnsupported, "over",
+			"%s maps a column of another length back onto its partitions' rows, which is not there yet", t).
+			Hint("an aggregate over it is one value a partition, e.g. a .Sum() before .Over").
+			Hint("a row's number within its partition is CumCount(false).Over(...), from 1")
 	}
 	// Anything else over columns of other lengths: each operand lifted, the operands
 	// zipped, and n a projection of them.
@@ -225,6 +232,10 @@ func (z *zipper) zip(parts []zipPart) (*LazyFrame, []expr.Node) {
 	return frame, refs
 }
 
+// oneRow is a frame of one row that reads nothing of the input: what a constant's
+// plan stands on.
+func oneRow() *LazyFrame { return Frame(Values("__one", []bool{true})) }
+
 // reshape lifts a length-changing operation: its values' plan, then the frame-level
 // operation of the same effect.
 func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
@@ -243,7 +254,13 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 	if err != nil {
 		return zipPart{}, err
 	}
-	if p.lf == nil || p.one {
+	if r.Op == expr.ReshapeExplode && p.lf == nil {
+		// One List value exploded, a generator's (step 263): its row of one, apart
+		// from the frame, which it does not read.
+		col := z.tmp()
+		p = zipPart{lf: oneRow().Select(wrap(p.node).Alias(col)), col: col, one: true}
+	}
+	if (p.lf == nil || p.one) && r.Op != expr.ReshapeExplode {
 		return zipPart{}, uerr.New(uerr.KindType, r.Op.String(),
 			"%s reshapes one value, which has no rows to reshape", r)
 	}
@@ -280,9 +297,14 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 		out = p.lf.Filter(c.IsNotNan().Or(c.IsNull()))
 	case expr.ReshapeExplode:
 		// Exploded under the values' own name, which the refusal of a column that is
-		// not a List then names.
+		// not a List then names. A generator's empty list is no row, where an
+		// explode's is a null one (step 263): its row is dropped first.
 		name := expr.OutputName(r.Child)
-		out = p.lf.Select(c.Alias(name)).Explode(name).Select(Col(name).Alias(p.col))
+		base := p.lf.Select(c.Alias(name))
+		if r.IsGenerator() {
+			base = base.Filter(Col(name).List().Len().Gt(0))
+		}
+		out = base.Explode(name).Select(Col(name).Alias(p.col))
 	case expr.ReshapeGatherEvery:
 		every, off := arg[0], arg[1]
 		idx := z.tmp()

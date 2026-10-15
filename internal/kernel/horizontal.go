@@ -56,6 +56,12 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return strEach(fn, name, out, ops, n)
 	case expr.FnDtOffsetByExpr:
 		return dtOffsetEach(name, out, ops[0], ops[1], n)
+	case expr.FnIntRanges:
+		return intRanges(name, ops, n)
+	case expr.FnLinearSpaces:
+		return linearSpaces(name, out, ops, n)
+	case expr.FnRepeatBy:
+		return repeatBy(name, ops[0], ops[1], n)
 	case expr.FnIsInExpr:
 		return isInEach(name, ops[0], ops[1], n)
 	case expr.FnListGetExpr:
