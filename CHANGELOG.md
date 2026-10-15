@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ---
 
-## v0.6.5 — 2026-10-14
+## v0.6.5 — 2026-10-15
 
 Everything since `v0.6.4` (2026-10-14): steps 248–261.
 [`v0.6.5-scope.md`](./context_files/v0.6.5-scope.md) set the scope: **feature
