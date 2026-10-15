@@ -283,6 +283,18 @@ const (
 	FnDateRanges
 	FnDatetimeRanges
 	FnTimeRanges
+
+	// Values from their components (step 265): date(y, m, d), datetime(y, m, d, h,
+	// mi, s, us), time(h, mi, s, us); a duration's and an epoch count's ticks, Int64,
+	// which the root package casts; and business_day_count(start, end, mask,
+	// holidays), the mask an Int64 literal and the holidays a List(Int64) literal of
+	// days.
+	FnMakeDate
+	FnMakeDatetime
+	FnMakeTime
+	FnDurationTicks
+	FnEpochTicks
+	FnBusinessDayCount
 	fnHorizontalEnd
 )
 
@@ -398,6 +410,9 @@ var callNames = map[CallFn]string{
 	FnDtOffsetByExpr: "dt.offset_by_expr",
 	FnIntRanges:      "int_ranges", FnLinearSpaces: "linear_spaces", FnRepeatBy: "repeat_by",
 	FnDateRanges: "date_ranges", FnDatetimeRanges: "datetime_ranges", FnTimeRanges: "time_ranges",
+	FnMakeDate: "date", FnMakeDatetime: "datetime", FnMakeTime: "time",
+	FnDurationTicks: "duration_ticks", FnEpochTicks: "epoch_ticks",
+	FnBusinessDayCount: "business_day_count",
 }
 
 func (f CallFn) String() string {
@@ -691,6 +706,51 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			return dtype.Null, err
 		}
 		return dtype.List(elem), nil
+
+	case FnMakeDate, FnMakeDatetime, FnMakeTime:
+		if want := map[CallFn]int{FnMakeDate: 3, FnMakeDatetime: 7, FnMakeTime: 4}[fn]; len(ops) != want {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		for _, f := range ops {
+			if !f.Type.IsInteger() && !f.Type.IsNull() {
+				return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+					"%s takes integer components, and %s is a %s", fn, f.Name, f.Type).
+					Hint("cast it first, e.g. .Cast(ursus.Int64)")
+			}
+		}
+		switch fn {
+		case FnMakeDate:
+			return dtype.Date, nil
+		case FnMakeDatetime:
+			return dtype.Datetime(dtype.Micro, ""), nil
+		}
+		return dtype.Time(dtype.Nano), nil
+
+	case FnDurationTicks, FnEpochTicks:
+		if want := map[CallFn]int{FnDurationTicks: 9, FnEpochTicks: 2}[fn]; len(ops) != want {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		for _, f := range ops {
+			if !f.Type.IsInteger() && !f.Type.IsFloat() && !f.Type.IsNull() {
+				op := map[CallFn]string{FnDurationTicks: "duration", FnEpochTicks: "from_epoch"}[fn]
+				return dtype.Null, uerr.New(uerr.KindType, op,
+					"%s takes numbers, and %s is a %s", op, f.Name, f.Type)
+			}
+		}
+		return dtype.Int64, nil
+
+	case FnBusinessDayCount:
+		if len(ops) != 4 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		for _, f := range ops[:2] {
+			if f.Type.ID() != dtype.TypeDate && !f.Type.IsNull() {
+				return dtype.Null, uerr.New(uerr.KindType, "business_day_count",
+					"business_day_count counts between Dates, and %s is a %s", f.Name, f.Type).
+					Hint("take the date first, e.g. .Dt().Date()")
+			}
+		}
+		return dtype.Int32, nil
 
 	case FnDateRanges, FnDatetimeRanges, FnTimeRanges:
 		if len(ops) != 6 {

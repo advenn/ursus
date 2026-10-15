@@ -64,6 +64,14 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return repeatBy(name, ops[0], ops[1], n)
 	case expr.FnDateRanges, expr.FnDatetimeRanges, expr.FnTimeRanges:
 		return temporalRanges(fn, name, out, ops, n)
+	case expr.FnMakeDate, expr.FnMakeDatetime, expr.FnMakeTime:
+		return makeTemporal(fn.String(), name, out, ops, n)
+	case expr.FnDurationTicks:
+		return durationTicks(name, ops, n)
+	case expr.FnEpochTicks:
+		return epochTicks(name, ops[0], data.MustValues[int64](ops[1])[0], n)
+	case expr.FnBusinessDayCount:
+		return businessDayCount(name, ops, n)
 	case expr.FnIsInExpr:
 		return isInEach(name, ops[0], ops[1], n)
 	case expr.FnListGetExpr:

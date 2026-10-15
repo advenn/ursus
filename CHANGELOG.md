@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–264, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–265, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
 
@@ -30,6 +30,9 @@ completeness, part 2 — namespaces and generators.**
 - **Temporal ranges** (264): `DateRange`, `DatetimeRange` and `TimeRange`, and
   `DateRanges`, `DatetimeRanges` and `TimeRanges` a row, by an `Interval` or a
   `time.Duration`, each value start plus k intervals as Polars counts them.
+- **Values from their components** (265): `MakeDate`, `MakeDatetime`, `MakeTime` and
+  `MakeDuration`, Polars' `pl.date` and its kin, from constants or expressions;
+  `FromEpoch`; and `BusinessDayCount` with a `BusinessCalendar`.
 
 ---
 

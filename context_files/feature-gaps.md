@@ -253,6 +253,8 @@ decide whether to keep or switch each one.
 - `IntRange` and `IntRanges` refuse a float argument, which Polars casts; a null
   argument to a scalar generator gives no rows, where Polars refuses it; a literal
   integer in `Repeat` is Int64, where Polars makes it Int32 (step 263).
+- `MakeDuration` and `FromEpoch` refuse a total past int64, which Polars wraps; a
+  duration of columns is named `duration`, where Polars names it `literal` (step 265).
 
 ## 10. What ursus has that most others do not
 
