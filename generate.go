@@ -1,6 +1,9 @@
 package ursus
 
 import (
+	"time"
+
+	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -113,4 +116,102 @@ func Ones[N Operand](n N) Expr {
 
 func Zeros[N Operand](n N) Expr {
 	return explodeOf(horizontal(expr.FnRepeatBy, litNode(0.0), lift(n))).Alias("zeros")
+}
+
+// Temporal ranges (step 264, G2 of v0.6.6-scope.md): Polars' date_range,
+// datetime_range and time_range, and their per-row forms. The k-th value is start
+// plus k intervals, k = 0, 1, …, not each from the one before, so a month from
+// January 31st is February 29th, then March 31st. every is an Interval, Every("1mo"),
+// or a time.Duration. Its calendar parts move the wall clock in the ends' zone and the
+// rest elapsed time, as OffsetBy moves them. Both ends belong unless closed says
+// otherwise, and a negative interval gives none, as Polars gives none.
+
+const nanosPerDay = int64(24 * time.Hour)
+
+// temporalRange is a temporal range's call over start and end: the scalar form
+// exploded, or the per-row form.
+func temporalRange(fn expr.CallFn, start, end expr.Node, iv Interval, closed []Closed, scalar bool) Expr {
+	op := expr.Generators[fn]
+	if err := iv.Err(); err != nil {
+		return wrap(&expr.Err{E: err})
+	}
+	if iv.IsZero() {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, op, "%s steps by an interval of zero", op)})
+	}
+	c, err := closedOf(op, closed)
+	if err != nil {
+		return wrap(&expr.Err{E: err})
+	}
+	call := horizontal(fn, start, end, litNode(int64(iv.Months())), litNode(int64(iv.Days())),
+		litNode(iv.Nanos()), litNode(int64(c)))
+	if scalar {
+		return explodeOf(call)
+	}
+	return wrap(call)
+}
+
+// dateInterval is iv in whole days, which a Date steps by: Polars refuses a finer
+// one.
+func dateInterval(op string, iv Interval) (Interval, error) {
+	if iv.Nanos()%nanosPerDay != 0 {
+		return iv, uerr.New(uerr.KindValue, op, "%s steps by whole days, and %s is not", op, iv).
+			Hint("a finer interval is DatetimeRange's")
+	}
+	return dtype.IntervalOf(iv.Months(), iv.Days()+int32(iv.Nanos()/nanosPerDay), 0), nil
+}
+
+func dateRange[S, E Operand, T Span](fn expr.CallFn, start S, end E, every T, closed []Closed, scalar bool) Expr {
+	iv, err := dateInterval(expr.Generators[fn], span(every))
+	if err != nil {
+		return wrap(&expr.Err{E: err})
+	}
+	return temporalRange(fn, lift(start), lift(end), iv, closed, scalar)
+}
+
+// DateRange is the dates from start to end every interval, a Date column: Polars'
+// date_range. A Datetime end is read as its UTC date, as a cast reads it. The
+// interval is whole days, weeks, months or years.
+//
+//	lf.Select(DateRange(Lit(jan31).Cast(Date), Lit(may1).Cast(Date), Every("1mo")))
+func DateRange[S, E Operand, T Span](start S, end E, every T, closed ...Closed) Expr {
+	return dateRange(expr.FnDateRanges, start, end, every, closed, true)
+}
+
+// DateRanges is DateRange a row, a List(Date): Polars' date_ranges.
+func DateRanges[S, E Operand, T Span](start S, end E, every T, closed ...Closed) Expr {
+	return dateRange(expr.FnDateRanges, start, end, every, closed, false)
+}
+
+// DatetimeRange is the instants from start to end every interval: Polars'
+// datetime_range. Its type is the ends', two Dates Datetime(us); cast the ends for
+// another unit or zone, e.g. Lit(t).Cast(Datetime(Micro, "")).Dt().ReplaceTimeZone(z),
+// and the range steps on z's wall clock.
+func DatetimeRange[S, E Operand, T Span](start S, end E, every T, closed ...Closed) Expr {
+	return temporalRange(expr.FnDatetimeRanges, lift(start), lift(end), span(every), closed, true)
+}
+
+// DatetimeRanges is DatetimeRange a row, a List: Polars' datetime_ranges.
+func DatetimeRanges[S, E Operand, T Span](start S, end E, every T, closed ...Closed) Expr {
+	return temporalRange(expr.FnDatetimeRanges, lift(start), lift(end), span(every), closed, false)
+}
+
+func timeRange[S, E Operand, T Span](start S, end E, every T, closed []Closed, scalar bool) Expr {
+	iv := span(every)
+	if iv.IsCalendar() {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "time_range",
+			"time_range steps by a duration within a day, and %s has a calendar part", iv)})
+	}
+	return temporalRange(expr.FnTimeRanges, lift(start), lift(end), iv, closed, scalar)
+}
+
+// TimeRange is the times of day from start to end every interval, a Time column:
+// Polars' time_range. Polars' defaults, midnight to 23:59:59.999999 by the hour,
+// are spelled out here.
+func TimeRange[S, E Operand, T Span](start S, end E, every T, closed ...Closed) Expr {
+	return timeRange(start, end, every, closed, true)
+}
+
+// TimeRanges is TimeRange a row, a List(Time): Polars' time_ranges.
+func TimeRanges[S, E Operand, T Span](start S, end E, every T, closed ...Closed) Expr {
+	return timeRange(start, end, every, closed, false)
 }

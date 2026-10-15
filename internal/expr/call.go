@@ -277,6 +277,12 @@ const (
 	FnIntRanges
 	FnLinearSpaces
 	FnRepeatBy
+
+	// Temporal ranges, a list a row (step 264): start, end, the interval's months,
+	// days and nanoseconds, and closed, the last four literals.
+	FnDateRanges
+	FnDatetimeRanges
+	FnTimeRanges
 	fnHorizontalEnd
 )
 
@@ -391,6 +397,7 @@ var callNames = map[CallFn]string{
 	FnStrReplaceExpr: "str.replace_expr", FnStrReplaceAllExpr: "str.replace_all_expr",
 	FnDtOffsetByExpr: "dt.offset_by_expr",
 	FnIntRanges:      "int_ranges", FnLinearSpaces: "linear_spaces", FnRepeatBy: "repeat_by",
+	FnDateRanges: "date_ranges", FnDatetimeRanges: "datetime_ranges", FnTimeRanges: "time_ranges",
 }
 
 func (f CallFn) String() string {
@@ -685,6 +692,16 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 		}
 		return dtype.List(elem), nil
 
+	case FnDateRanges, FnDatetimeRanges, FnTimeRanges:
+		if len(ops) != 6 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		elem, err := rangeElem(fn, ops[0].Type, ops[1].Type)
+		if err != nil {
+			return dtype.Null, err
+		}
+		return dtype.List(elem), nil
+
 	case FnRepeatBy:
 		if len(ops) != 2 {
 			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
@@ -795,6 +812,43 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 		return ops[0].Type, nil
 	}
 	return dtype.Null, uerr.Internalf("expr: unknown horizontal call %d", fn)
+}
+
+// rangeElem is a temporal range's element type from ends of types s and e (step
+// 264), as Polars types it: a Date for date_range, from Dates or Datetimes; for
+// datetime_range the Datetime of the ends, a Date's taken as Datetime(us); a Time
+// for time_range.
+func rangeElem(fn CallFn, s, e dtype.DataType) (dtype.DataType, error) {
+	switch {
+	case s.IsNull():
+		s = e
+	case e.IsNull():
+		e = s
+	}
+	date := func(t dtype.DataType) bool { return t.ID() == dtype.TypeDate }
+	stamp := func(t dtype.DataType) bool { return t.ID() == dtype.TypeDatetime }
+	switch fn {
+	case FnDateRanges:
+		if (date(s) || stamp(s)) && (date(e) || stamp(e)) {
+			return dtype.Date, nil
+		}
+	case FnDatetimeRanges:
+		switch {
+		case date(s) && date(e):
+			return dtype.Datetime(dtype.Micro, ""), nil
+		case stamp(s) && (s == e || date(e)):
+			return s, nil
+		case date(s) && stamp(e):
+			return e, nil
+		}
+	case FnTimeRanges:
+		if s.ID() == dtype.TypeTime && s == e {
+			return s, nil
+		}
+	}
+	return dtype.Null, uerr.New(uerr.KindType, Generators[fn],
+		"%s takes two ends of its type, got %s and %s", Generators[fn], s, e).
+		Hint("cast one end to the other's type")
 }
 
 // linearElem is the element type of linear_space from ends of types s and e, as

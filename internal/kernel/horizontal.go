@@ -62,6 +62,8 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return linearSpaces(name, out, ops, n)
 	case expr.FnRepeatBy:
 		return repeatBy(name, ops[0], ops[1], n)
+	case expr.FnDateRanges, expr.FnDatetimeRanges, expr.FnTimeRanges:
+		return temporalRanges(fn, name, out, ops, n)
 	case expr.FnIsInExpr:
 		return isInEach(name, ops[0], ops[1], n)
 	case expr.FnListGetExpr:

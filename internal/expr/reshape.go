@@ -96,10 +96,11 @@ func (r *Reshape) String() string {
 	return r.Child.String() + "." + r.Op.String() + "(" + args + ")"
 }
 
-// generators are the per-row functions whose list a scalar generator explodes,
+// Generators are the per-row functions whose list a scalar generator explodes,
 // and the name the generator reads as (step 263).
-var generators = map[CallFn]string{
+var Generators = map[CallFn]string{
 	FnIntRanges: "int_range", FnLinearSpaces: "linear_space", FnRepeatBy: "repeat",
+	FnDateRanges: "date_range", FnDatetimeRanges: "datetime_range", FnTimeRanges: "time_range",
 }
 
 // IsGenerator reports whether r is a scalar generator: an explode in which an empty
@@ -115,7 +116,7 @@ func generatorText(r *Reshape) (string, bool) {
 	if !ok || !r.IsGenerator() {
 		return "", false
 	}
-	name, ok := generators[c.Fn]
+	name, ok := Generators[c.Fn]
 	if !ok {
 		return "", false
 	}
