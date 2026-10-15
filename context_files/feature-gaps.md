@@ -103,10 +103,9 @@ differs from their input's, or scalars outside a group-by.
   - `base_utc_offset`, `dst_offset`;
   - `with_time_unit`;
   - `total_milliseconds`, `total_microseconds`, `total_nanoseconds`.
+- **Built in 0.6.5:** `dt.date()` and `dt.time()`, the local date and time (step
+  249).
 - **Partial:**
-  - `date` and `time` only through `Cast`, which gives the UTC date and time of a
-    zoned Datetime, as Polars' `cast` does (checked against Polars 1.44.1); Polars'
-    `dt.date()` and `dt.time()` give the local ones, and ursus has no such method;
   - `epoch` in whole seconds only;
   - `timestamp` and `from_epoch` only through casts;
   - `second(fractional=)`;
@@ -118,21 +117,21 @@ differs from their input's, or scalars outside a group-by.
   - `eval` and `pl.element()`;
   - `filter`, `agg`, `concat`;
   - `shift`, `diff`;
-  - `median`, `std`, `var`;
-  - `count_matches`, `gather_every`, `sample`;
+  - `count_matches`, `sample`;
   - `any`, `all`, `item`;
   - `to_array`.
 - **Partial:**
   - `sort` has no `nulls_last`;
   - `get` has no `null_on_oob` (always null);
   - `n_unique` does not count null;
-  - the sum of an empty list is null, where Polars gives 0;
-  - explode only at frame level.
+  - the sum of an empty list is null, where Polars gives 0.
+- **Built in 0.6.5:** `median`, `std`, `var` and `gather_every` (step 253); `Explode` as
+  an expression (259).
 
 ### 4.4 `.struct` (P1)
 
 - **Missing:** `drop`; `field` of several names or a regex.
-- **Partial:** unnest only at frame level.
+- **Built in 0.6.5:** `Unnest` as an expression (step 260).
 
 ### 4.5 Whole namespaces
 

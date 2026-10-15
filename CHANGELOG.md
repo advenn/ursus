@@ -15,6 +15,14 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.6.6
+
+Everything since `v0.6.5` (2026-10-15): step 262, so far.
+[`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
+completeness, part 2 — namespaces and generators.**
+
+---
+
 ## v0.6.5 — 2026-10-15
 
 Everything since `v0.6.4` (2026-10-14): steps 248–261.
