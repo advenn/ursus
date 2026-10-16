@@ -895,6 +895,10 @@ func Rebuild(n Node, kids []Node) Node {
 		return &Unnest{Child: kids[0]}
 	case *Fold:
 		return t.rebuild(kids)
+	case *Element, *OuterRef:
+		return n // leaves of a list's body
+	case *ListMap:
+		return &ListMap{List: kids[0], Body: t.Body, Outer: append([]Node(nil), kids[1:]...)}
 	case *Reshape:
 		c := *t
 		c.Child = kids[0]

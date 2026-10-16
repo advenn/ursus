@@ -49,6 +49,12 @@ Fix these before anything new. **Step 249 fixed every row** (see its record).
 | `LazyFrame.Count(ctx)` returns the row count; Polars' `count()` returns each column's non-null count | lazy.go:651 | name trap |
 | `Expr.Explode`, `Expr.Unnest`, `Expr.DropNulls` and `Expr.DropNans` exist only to refuse | fill.go:196–320 | API trap |
 
+**Found since:**
+
+| what | where | |
+| --- | --- | --- |
+| **`Rank` ranks a null, as the smallest value;** Polars leaves a null's rank null and ranks the rest among themselves. `[5, null, 4]` ranks `[3, 1, 2]` here and `[2, None, 1]` there, in a window and in `List().Eval` alike (found at step 268). | internal/kernel/window.go `winRank`, and the streamed rank (`RankNext`) | **wrong answer** |
+
 ## 2. The expression model
 
 The structural gap. Each item needs the planner to allow expressions whose length
@@ -127,6 +133,7 @@ differs from their input's, or scalars outside a group-by.
   - the sum of an empty list is null, where Polars gives 0.
 - **Built in 0.6.5:** `median`, `std`, `var` and `gather_every` (step 253); `Explode` as
   an expression (259).
+- **Built in 0.6.6:** `eval` and `pl.element()`, `filter` and `agg` (step 268).
 
 ### 4.4 `.struct` (P1)
 

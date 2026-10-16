@@ -104,6 +104,37 @@ func (l ListExpr) Contains(v any) Expr {
 	return l.call(expr.FnListContains, v)
 }
 
+// Eval runs body over each list's elements, the list its group: Polars' list.eval
+// (step 268). Element() is the elements; the body reads nothing else.
+//
+//	Col("l").List().Eval(Element().Mul(2))                  // each element doubled
+//	Col("l").List().Eval(Element().Sub(Element().Mean()))   // each list centred
+//	Col("l").List().Eval(Element().Rank(RankAverage, false)) // ranked within its list
+//
+// An expression of a value an element keeps each list's length; a constant is
+// repeated along it. An aggregate is a list of one, its value; a reshape or a filter
+// is the list it makes. A window function, rank or cum_sum, is computed a list at a
+// time. A null list stays null. As the list functions here, the sum of an empty list
+// is null, where Polars' is 0.
+func (l ListExpr) Eval(body Expr) Expr {
+	return wrap(expr.LowerListEval(l.e.node(), body.node(), false))
+}
+
+// Agg is Eval whose aggregate is its value, not a list of one: Polars' list.agg.
+//
+//	Col("l").List().Agg(Element().Filter(Element().Gt(0)).Sum())   // each list's positive sum
+func (l ListExpr) Agg(body Expr) Expr {
+	return wrap(expr.LowerListEval(l.e.node(), body.node(), true))
+}
+
+// Filter keeps each list's elements pred is true on: Polars' list.filter, Eval of
+// Element().Filter(pred). A null predicate drops the element, as Filter drops a row.
+func (l ListExpr) Filter(pred Expr) Expr { return l.Eval(Element().Filter(pred)) }
+
+// Element is a list's elements, inside List().Eval, Agg and Filter: Polars'
+// pl.element(). Anywhere else it is refused.
+func Element() Expr { return wrap(&expr.Element{}) }
+
 // Min and Max reduce each list to its smallest or largest element, keeping the
 // element type. Null elements are skipped, exactly as the column-wide aggregates
 // skip null rows.

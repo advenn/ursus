@@ -55,6 +55,25 @@ func Eval(ctx context.Context, n expr.Node, b *data.Batch) (*data.Column, error)
 	case *expr.Lit:
 		return litColumn(t)
 
+	case *expr.Element:
+		// A list's elements, in its body's batch (step 268).
+		c, ok := b.ByName(expr.ElementName)
+		if !ok {
+			return nil, uerr.New(uerr.KindUnsupported, "element",
+				"element() is a list's elements, read only inside List().Eval")
+		}
+		return c, nil
+
+	case *expr.OuterRef:
+		c, ok := b.ByName(expr.OuterName(t.I))
+		if !ok {
+			return nil, uerr.Internalf("physical: %s read outside its list's body", t)
+		}
+		return c, nil
+
+	case *expr.ListMap:
+		return evalListMap(ctx, t, b)
+
 	case *expr.Alias:
 		c, err := Eval(ctx, t.Child, b)
 		if err != nil {

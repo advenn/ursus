@@ -25,7 +25,7 @@ func readsRows(n Node) bool {
 	switch n.(type) {
 	case *Agg:
 		return false
-	case *Col, *Match, *Window:
+	case *Col, *Match, *Window, *Element:
 		return true
 	}
 	for _, c := range n.Children() {
