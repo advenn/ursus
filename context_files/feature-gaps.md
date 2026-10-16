@@ -255,6 +255,8 @@ decide whether to keep or switch each one.
   integer in `Repeat` is Int64, where Polars makes it Int32 (step 263).
 - `MakeDuration` and `FromEpoch` refuse a total past int64, which Polars wraps; a
   duration of columns is named `duration`, where Polars names it `literal` (step 265).
+- `ConcatList` refuses a number beside a string, which Polars casts to text (step
+  266).
 
 ## 10. What ursus has that most others do not
 

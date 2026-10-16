@@ -35,6 +35,11 @@ func Expand(n Node, in *dtype.Schema) ([]Node, error) {
 	if err := FirstErr(n); err != nil {
 		return nil, err
 	}
+	// A fold is built once its expressions are written out (step 266).
+	n, err := buildFolds(n, in)
+	if err != nil {
+		return nil, err
+	}
 	if us := unnests(n); len(us) > 0 {
 		// A struct's fields are a selection too (step 260), and two in one
 		// expression pair as ambiguously as two selections do.

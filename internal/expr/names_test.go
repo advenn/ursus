@@ -224,7 +224,7 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	// 145 since step 265's date, datetime, time, duration_ticks, epoch_ticks and
+	// 146 since step 266's concat_list; 145 after step 265's date, datetime, time, duration_ticks, epoch_ticks and
 	// business_day_count; 139 after step 264's date_ranges, datetime_ranges and time_ranges; 136 after step 263's int_ranges, linear_spaces and repeat_by; 133 after step 259's list.explode; 132 after step 256's dt.offset_by of an expression; 131 after step 255's eight string functions of an expression; 123 after step 254's is_in, list.get and list.contains of an expression; 120
 	// after step 253 added six list functions in a block of their own at 700
 	// and list.sort_by and its descending form; 112 after step 249's dt.date and
@@ -236,8 +236,8 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 	// list.arg_min and list.arg_max, step 174's dt.replace_time_zone, step 171's
 	// struct.with_fields, step 147's cut and cut_left_closed, and step 146's
 	// list.join, six bit counts, concat_str and struct.
-	if classified != 145 {
-		t.Errorf("%d call functions are classified, want 145 — the families and the "+
+	if classified != 146 {
+		t.Errorf("%d call functions are classified, want 146 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }

@@ -245,3 +245,75 @@ func listSortBy(name string, desc bool, a, by *data.Column) (*data.Column, error
 	}
 	return data.NewList(name, offs, child, valid), nil
 }
+
+// listsOf is concat_list(ops...) (step 266): each row's operands end to end in one
+// list of out's element type, a List operand's elements and another's value, a null
+// value a null element. A null List operand makes the row null, as Polars makes it.
+func listsOf(name string, out dtype.DataType, ops []*data.Column, n int) (*data.Column, error) {
+	elem := out.Inner()
+	type source struct {
+		list *data.Column // the operand, a List; nil for a value
+		val  *data.Column // the operand of a value, at the element type
+		lo   int32        // where the List's window of its child starts
+		base int32        // where its elements, or its values, start in the pool
+	}
+	srcs := make([]source, len(ops))
+	parts := make([]*data.Column, 0, len(ops))
+	var size int32
+	for k, c := range ops {
+		if c.DType().ID() == dtype.TypeList {
+			elems, lo, err := listElems(c, elem)
+			if err != nil {
+				return nil, err
+			}
+			srcs[k] = source{list: c, lo: lo, base: size}
+			parts = append(parts, elems)
+			size += int32(elems.Len())
+			continue
+		}
+		if c.DType() != elem {
+			var err error
+			if c, err = Cast(c.Name(), elem, true, c); err != nil {
+				return nil, err
+			}
+		}
+		srcs[k] = source{val: c, base: size}
+		parts = append(parts, c)
+		size += int32(c.Len())
+	}
+	pool, err := ConcatColumns(name, parts)
+	if err != nil {
+		return nil, err
+	}
+	var pick []int32
+	offs := make([]int32, 1, n+1)
+	valid := bitmap.NewBuilder(n)
+	for i := range n {
+		ok := true
+		for _, s := range srcs {
+			if s.list != nil && !s.list.IsValid(rowOf(s.list, i)) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			for _, s := range srcs {
+				if s.list == nil {
+					pick = append(pick, s.base+int32(rowOf(s.val, i)))
+					continue
+				}
+				st, e, _ := s.list.Lists().Get(rowOf(s.list, i))
+				for j := st; j < e; j++ {
+					pick = append(pick, s.base+j-s.lo)
+				}
+			}
+		}
+		offs = append(offs, int32(len(pick)))
+		valid.Append(ok)
+	}
+	child, err := Take(pool, pick)
+	if err != nil {
+		return nil, err
+	}
+	return data.NewList(name, offs, child, valid.Finish()), nil
+}

@@ -295,6 +295,10 @@ const (
 	FnDurationTicks
 	FnEpochTicks
 	FnBusinessDayCount
+
+	// concat_list(exprs...): each row's operands in one list, a List operand's
+	// elements and another's value (step 266).
+	FnConcatList
 	fnHorizontalEnd
 )
 
@@ -412,7 +416,7 @@ var callNames = map[CallFn]string{
 	FnDateRanges: "date_ranges", FnDatetimeRanges: "datetime_ranges", FnTimeRanges: "time_ranges",
 	FnMakeDate: "date", FnMakeDatetime: "datetime", FnMakeTime: "time",
 	FnDurationTicks: "duration_ticks", FnEpochTicks: "epoch_ticks",
-	FnBusinessDayCount: "business_day_count",
+	FnBusinessDayCount: "business_day_count", FnConcatList: "concat_list",
 }
 
 func (f CallFn) String() string {
@@ -738,6 +742,20 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			}
 		}
 		return dtype.Int64, nil
+
+	case FnConcatList:
+		elems := make([]dtype.Field, len(ops))
+		for i, f := range ops {
+			elems[i] = f
+			if f.Type.ID() == dtype.TypeList {
+				elems[i].Type = f.Type.Inner()
+			}
+		}
+		elem, err := HorizontalInput(fn, elems)
+		if err != nil {
+			return dtype.Null, err
+		}
+		return dtype.List(elem), nil
 
 	case FnBusinessDayCount:
 		if len(ops) != 4 {

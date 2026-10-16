@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–265, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–266, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
 
@@ -33,6 +33,10 @@ completeness, part 2 — namespaces and generators.**
 - **Values from their components** (265): `MakeDate`, `MakeDatetime`, `MakeTime` and
   `MakeDuration`, Polars' `pl.date` and its kin, from constants or expressions;
   `FromEpoch`; and `BusinessDayCount` with a `BusinessCalendar`.
+- **Folds and constructors** (266): `ConcatList`, `Fold`, `Reduce`, `CumFold`,
+  `CumReduce`, `CumSumHorizontal` and `Format`. A fold's function builds the
+  expression once, when the query is planned, over a selection's columns too:
+  `Fold(0, func(acc, x Expr) Expr { return acc.Add(x) }, All())`.
 
 ---
 
