@@ -92,12 +92,14 @@ differs from their input's, or scalars outside a group-by.
   - `split_exact`, `to_titlecase`, `normalize`;
   - `encode` and `decode` (hex, base64);
   - `json_decode`, `json_path_match`.
+- **Built in 0.6.6:** `contains_any`, `find_many`, `extract_groups`, `extract_many`,
+  `replace_many`, `split_exact`, `to_titlecase`, `normalize`, `split`'s `inclusive`,
+  and `splitn` as a Struct (step 270). Their patterns are constants; Polars takes an
+  expression too.
 - **Partial:**
-  - `splitn` returns a List, not a Struct;
   - `to_integer` has no `base` or `strict`;
   - `to_decimal` only through `CastLossy(Decimal(p, s))`, with no inference;
   - `replace` has no count `n`;
-  - `split` has no `inclusive`;
   - `concat_str` has no `ignore_nulls`.
 
 ### 4.2 `.dt` (P0/P1)

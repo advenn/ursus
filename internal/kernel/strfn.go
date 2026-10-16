@@ -45,6 +45,10 @@ func StrCall(fn expr.CallFn, name string, out dtype.DataType,
 	switch fn {
 	case expr.FnStrToDateFmt, expr.FnStrToDatetimeFmt, expr.FnStrToTimeFmt:
 		return strptimeCall(fn, name, out, c, args)
+	case expr.FnStrContainsAny, expr.FnStrReplaceMany, expr.FnStrExtractMany, expr.FnStrFindMany:
+		return strMany(fn, name, c, args)
+	case expr.FnStrExtractGroups, expr.FnStrSplitExact, expr.FnStrSplitN:
+		return strStruct(fn, name, out, c, args, re)
 	}
 
 	acc := c.Strings()
@@ -143,7 +147,7 @@ func StrCall(fn expr.CallFn, name string, out dtype.DataType,
 	// List-producing functions. The fourth output shape, and the first kernel in
 	// ursus that BUILDS a list rather than reshaping one it was given.
 	switch fn {
-	case expr.FnStrSplit, expr.FnStrSplitN, expr.FnStrExtractAll:
+	case expr.FnStrSplit, expr.FnStrSplitInclusive, expr.FnStrExtractAll:
 		return strToList(fn, name, c, args, re)
 	}
 
@@ -243,6 +247,13 @@ func applyStr(fn expr.CallFn, s string, args []any, re *regexp.Regexp) (string, 
 
 	case expr.FnStrEscapeRegex:
 		return regexp.QuoteMeta(s), true
+
+	case expr.FnStrToTitlecase:
+		return titlecase(s), true
+	case expr.FnStrNormalize:
+		form, _ := argString(args, 0)
+		f, _ := normalForm(form)
+		return f.String(s), true
 
 	case expr.FnStrPadStart, expr.FnStrPadEnd:
 		width, _ := argInt(args, 0)
@@ -409,15 +420,13 @@ func strToList(fn expr.CallFn, name string, c *data.Column,
 		case expr.FnStrSplit:
 			sep, _ := argString(args, 0)
 			parts = append(parts, strings.Split(s, sep)...)
-		case expr.FnStrSplitN:
-			sep, _ := argString(args, 0)
-			limit, has := argInt(args, 1)
-			// n <= 0 is unlimited, as the doc says. strings.SplitN reads 0 as "no
-			// parts" and returned an empty list.
-			if !has || limit <= 0 {
-				limit = -1
+		case expr.FnStrSplitInclusive:
+			// Each part keeps the separator after it, and an empty string is no part,
+			// as Polars' split(inclusive=True) makes them (step 270).
+			if s != "" {
+				sep, _ := argString(args, 0)
+				parts = append(parts, strings.SplitAfter(s, sep)...)
 			}
-			parts = append(parts, strings.SplitN(s, sep, int(limit))...)
 		default: // ExtractAll
 			if re != nil {
 				parts = append(parts, re.FindAllString(s, -1)...)
@@ -478,7 +487,7 @@ func containsChain(s string, chain []string) bool {
 func CompilePattern(fn expr.CallFn, args []any) (*regexp.Regexp, error) {
 	needsRegex := false
 	switch fn {
-	case expr.FnStrExtract, expr.FnStrExtractAll:
+	case expr.FnStrExtract, expr.FnStrExtractAll, expr.FnStrExtractGroups:
 		// Regex-only, for Extract's reason: "extract every literal occurrence" is
 		// CountMatches copies of the pattern, which nobody wants.
 		needsRegex = true

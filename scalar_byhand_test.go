@@ -181,13 +181,14 @@ func TestScalarFunctionsByHand(t *testing.T) {
 			want: ursus.Frame(ursus.ValuesNullable("d", []int64{0}, []bool{false}),
 				ursus.ValuesNullable("m", []int64{0}, []bool{false}))},
 
-		// --- S9: SplitN with n <= 0 is unlimited ---
-		{name: "S9 SplitN with n = 0",
-			got:  strs("a b c").Select(c("s").Str().SplitN(" ", 0).List().Len()),
+		// --- S9: SplitN with n <= 0 was unlimited; since step 270 SplitN is a Struct
+		// of n fields, as Polars' splitn, and the unlimited form is Split ---
+		{name: "S9 Split is every part",
+			got:  strs("a b c").Select(c("s").Str().Split(" ").List().Len()),
 			want: ursus.Frame(ursus.Values("s", []uint32{3}))},
-		{name: "control: SplitN with n = -1",
-			got:  strs("a b c").Select(c("s").Str().SplitN(" ", -1).List().Len()),
-			want: ursus.Frame(ursus.Values("s", []uint32{3}))},
+		{name: "control: SplitN's last field is the rest",
+			got:  strs("a b c").Select(c("s").Str().SplitN(" ", 2).Struct().Field("field_1")),
+			want: ursus.Frame(ursus.Values("s", []string{"b c"}))},
 
 		// --- S10: an Interval floors on the column's wall clock ---
 		// Kolkata is +05:30: 10:47 local is 05:17Z, the local hour starts at 04:30Z,

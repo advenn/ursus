@@ -2,7 +2,10 @@ module github.com/advenn/ursus
 
 go 1.27
 
-require github.com/apache/arrow-go/v18 v18.7.0
+require (
+	github.com/apache/arrow-go/v18 v18.7.0
+	golang.org/x/text v0.37.0
+)
 
 require (
 	github.com/andybalholm/brotli v1.2.2 // indirect

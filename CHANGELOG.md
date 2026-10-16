@@ -17,9 +17,14 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–269, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–270, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
+
+### Breaks
+
+- **`Str().SplitN(by, n)` is a Struct,** fields `field_0` to `field_{n-1}`, as Polars'
+  `splitn` (270). It was a List, `n <= 0` unlimited: `Str().Split(by)` is every part.
 
 ### Features
 
@@ -47,6 +52,10 @@ completeness, part 2 — namespaces and generators.**
 - **The list namespace's missing methods** (269): `Concat`, `Shift`, `Diff`,
   `CountMatches`, `Any`, `All`, `Item`, `SampleN`, `SampleFraction`, and `SortWith`
   for nulls last.
+- **Matching, splitting and forms of strings** (270): `ContainsAny`, `ReplaceMany`,
+  `ExtractMany` and `FindMany` over many patterns, by Polars' matching rules;
+  `ExtractGroups` and `SplitExact`, a Struct; `SplitInclusive`; `ToTitlecase`; and
+  `Normalize` to NFC, NFD, NFKC or NFKD.
 
 ---
 

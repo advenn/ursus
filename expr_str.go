@@ -176,10 +176,97 @@ func (s StrExpr) Split[P string | Expr](by P) Expr {
 	return s.call(expr.FnStrSplit, any(by).(string))
 }
 
-// SplitN is Split with at most n parts; the last part keeps the rest, separators
-// and all. n <= 0 means unlimited — unlike strings.SplitN, whose 0 means none.
+// SplitN is the first n parts of each value split on by, a Struct of fields field_0
+// to field_{n-1}, the last holding the rest, separators and all: Polars' splitn. A
+// field is null where there are fewer parts, and a null value's fields are null.
+// Before step 270 it was a List; Split(by) is that, and SplitExact drops the rest.
 func (s StrExpr) SplitN(by string, n int) Expr {
 	return s.call(expr.FnStrSplitN, by, int64(n))
+}
+
+// SplitExact is the first n+1 parts of each value split on by, a Struct of fields
+// field_0 to field_n, what follows them dropped: Polars' split_exact. With inclusive
+// each part keeps the separator after it.
+func (s StrExpr) SplitExact(by string, n int, inclusive bool) Expr {
+	if n < 0 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "str.split_exact", "split_exact takes %d", n)})
+	}
+	return s.call(expr.FnStrSplitExact, by, int64(n), inclusive)
+}
+
+// SplitInclusive is Split whose parts keep the separator after them, Polars'
+// split(inclusive=True): "a,b" is ["a,", "b"], and an empty value no part.
+func (s StrExpr) SplitInclusive(by string) Expr { return s.call(expr.FnStrSplitInclusive, by) }
+
+// ContainsAny reports whether each value contains one of patterns, literally:
+// Polars' contains_any. With asciiCaseInsensitive an ASCII letter matches its other
+// case; other letters keep theirs, as Polars' do.
+func (s StrExpr) ContainsAny(patterns []string, asciiCaseInsensitive bool) Expr {
+	return s.call(expr.FnStrContainsAny, patterns, asciiCaseInsensitive)
+}
+
+// ReplaceMany replaces each of patterns with the replacement at its place, or with
+// one replacement for all, literally: Polars' replace_many. Matches do not overlap.
+// By default the match that ends first is taken, and of two ending together the one
+// that starts first, as Polars' default is; leftmost takes the match that starts
+// first, and of two starting together the pattern listed first.
+func (s StrExpr) ReplaceMany(patterns, replaceWith []string, asciiCaseInsensitive, leftmost bool) Expr {
+	if len(replaceWith) != 1 && len(replaceWith) != len(patterns) {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "str.replace_many",
+			"replace_many has %d patterns and %d replacements", len(patterns), len(replaceWith)).
+			Hint("one replacement for every pattern, or one for all")})
+	}
+	return s.call(expr.FnStrReplaceMany, patterns, replaceWith, asciiCaseInsensitive, false, leftmost)
+}
+
+// ExtractMany is each value's matches of patterns, a List(String), and FindMany
+// where they start, in bytes, a List(UInt32): Polars' extract_many and find_many.
+// overlapping finds every match, ordered by where it ends; it takes the default
+// matching, not leftmost, as Polars' does.
+func (s StrExpr) ExtractMany(patterns []string, asciiCaseInsensitive, overlapping, leftmost bool) Expr {
+	return s.many(expr.FnStrExtractMany, patterns, asciiCaseInsensitive, overlapping, leftmost)
+}
+
+func (s StrExpr) FindMany(patterns []string, asciiCaseInsensitive, overlapping, leftmost bool) Expr {
+	return s.many(expr.FnStrFindMany, patterns, asciiCaseInsensitive, overlapping, leftmost)
+}
+
+func (s StrExpr) many(fn expr.CallFn, patterns []string, fold, overlapping, leftmost bool) Expr {
+	if overlapping && leftmost {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, fn.String(),
+			"%s finds overlapping matches by the default matching, not leftmost", fn)})
+	}
+	return s.call(fn, patterns, fold, overlapping, leftmost)
+}
+
+// ExtractGroups is the first match of a regex's capture groups, a Struct of String
+// fields, each named after its group or numbered where it has none, all null where
+// nothing matches: Polars' extract_groups.
+func (s StrExpr) ExtractGroups(pattern string) Expr { return s.call(expr.FnStrExtractGroups, pattern) }
+
+// ToTitlecase upper-cases each letter that follows a character that is not a letter,
+// and lower-cases the rest: Polars' to_titlecase, "3rd place" "3Rd Place".
+func (s StrExpr) ToTitlecase() Expr { return s.call(expr.FnStrToTitlecase) }
+
+// UnicodeForm is a Unicode normal form for Normalize.
+type UnicodeForm string
+
+const (
+	NFC  UnicodeForm = "NFC"
+	NFD  UnicodeForm = "NFD"
+	NFKC UnicodeForm = "NFKC"
+	NFKD UnicodeForm = "NFKD"
+)
+
+// Normalize puts each value in a Unicode normal form: Polars' normalize, NFC its
+// default.
+func (s StrExpr) Normalize(form UnicodeForm) Expr {
+	switch form {
+	case NFC, NFD, NFKC, NFKD:
+		return s.call(expr.FnStrNormalize, string(form))
+	}
+	return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "str.normalize", "%q is not a Unicode normal form", form).
+		Hint("NFC, NFD, NFKC or NFKD")})
 }
 
 // ExtractAll returns every non-overlapping match of a regex as a List(String).

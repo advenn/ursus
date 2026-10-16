@@ -271,9 +271,14 @@ func TestSplitNAndExtractAll(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	two, _ := lists(t, df, "two")
-	if strings.Join(two[0], "|") != "a|b,c" {
-		t.Errorf("SplitN(2) = %q, want [a, \"b,c\"] — the last part keeps the rest", two[0])
+	// SplitN is a Struct since step 270, as Polars' splitn: field_1 keeps the rest.
+	rest, err := ursus.Frame(ursus.Values("s", []string{"a,b,c"})).
+		Select(ursus.Col("s").Str().SplitN(",", 2).Struct().Field("field_1")).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _, _ := rest.At[string](0, "s"); v != "b,c" {
+		t.Errorf("SplitN(2)'s second field = %q, want \"b,c\" — the last part keeps the rest", v)
 	}
 
 	nums, valid := lists(t, df, "nums")

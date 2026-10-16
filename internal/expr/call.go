@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -338,11 +339,34 @@ const (
 	fnListMoreEnd
 )
 
+// The string family, continued (step 270): many literal patterns at once
+// (contains_any, replace_many, extract_many, find_many), a List literal of them
+// first; extract_groups and split_exact, a Struct; split keeping its separator;
+// to_titlecase; normalize, the form's name.
+//
+// A block of its own, as the list family's at 700 is: nine more in the first block
+// pushed the list family's end onto the struct family's base, 500, and the build
+// caught the duplicate keys. IsString covers both blocks.
+const (
+	FnStrContainsAny CallFn = iota + 800
+	FnStrReplaceMany
+	FnStrExtractMany
+	FnStrFindMany
+	FnStrExtractGroups
+	FnStrSplitExact
+	FnStrSplitInclusive
+	FnStrToTitlecase
+	FnStrNormalize
+	fnStrMoreEnd
+)
+
 // IsString, IsTemporal and IsGeneral classify a function by family.
 //
 // These are range comparisons over declaration order, which is why the enum is
 // append-only within each block and the blocks are spaced 100 apart.
-func (f CallFn) IsString() bool   { return f < fnStrEnd }
+func (f CallFn) IsString() bool {
+	return f < fnStrEnd || f >= FnStrContainsAny && f < fnStrMoreEnd
+}
 func (f CallFn) IsTemporal() bool { return f >= FnDtYear && f < fnDtEnd }
 func (f CallFn) IsGeneral() bool  { return f >= FnIsIn && f < fnGenEnd }
 func (f CallFn) IsMath() bool     { return f >= FnMathRound && f < fnMathEnd }
@@ -369,6 +393,11 @@ var callNames = map[CallFn]string{
 	FnStrStripCharsEnd:   "str.strip_chars_end",
 	FnStrEscapeRegex:     "str.escape_regex", FnStrSplit: "str.split",
 	FnStrSplitN: "str.splitn", FnStrExtractAll: "str.extract_all",
+	FnStrContainsAny: "str.contains_any", FnStrReplaceMany: "str.replace_many",
+	FnStrExtractMany: "str.extract_many", FnStrFindMany: "str.find_many",
+	FnStrExtractGroups: "str.extract_groups", FnStrSplitExact: "str.split_exact",
+	FnStrSplitInclusive: "str.split_inclusive", FnStrToTitlecase: "str.to_titlecase",
+	FnStrNormalize: "str.normalize",
 	FnStrToDateFmt: "str.to_date", FnStrToDatetimeFmt: "str.to_datetime",
 	FnStrToTimeFmt: "str.to_time",
 
@@ -540,6 +569,10 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		}
 		if fn.isStrptime() {
 			return strptimeOut(c)
+		}
+		switch fn {
+		case FnStrExtractGroups, FnStrSplitExact, FnStrSplitN:
+			return strStructOut(c)
 		}
 		return strCallOut(fn), nil
 
@@ -1336,11 +1369,13 @@ func mathCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 
 func strCallOut(fn CallFn) dtype.DataType {
 	switch fn {
-	case FnStrContains, FnStrStartsWith, FnStrEndsWith:
+	case FnStrContains, FnStrStartsWith, FnStrEndsWith, FnStrContainsAny:
 		return dtype.Bool
 	case FnStrFind, FnStrCountMatches, FnStrLenBytes, FnStrLenChars:
 		return dtype.Uint32
-	case FnStrSplit, FnStrSplitN, FnStrExtractAll:
+	case FnStrFindMany:
+		return dtype.List(dtype.Uint32)
+	case FnStrSplit, FnStrSplitInclusive, FnStrExtractAll, FnStrExtractMany:
 		// The first calls in the namespace whose output is a NESTED type, and the
 		// only place that fact is written down. The kernel never names List(String)
 		// — data.NewList derives the element type from the child column it is
@@ -1354,6 +1389,71 @@ func strCallOut(fn CallFn) dtype.DataType {
 	default:
 		return dtype.String
 	}
+}
+
+// strStructOut types the string functions that answer a Struct (step 270), whose
+// fields their arguments name: extract_groups a String field a capture group, named
+// as GroupNames names it; split_exact field_0 to field_n; splitn field_0 to
+// field_{n-1}, as Polars names them.
+func strStructOut(c *Call) (dtype.DataType, error) {
+	var names []string
+	switch c.Fn {
+	case FnStrExtractGroups:
+		pat, ok := callLitString(c, 1)
+		if !ok {
+			return dtype.Null, uerr.Internalf("expr: %s without its pattern", c.Fn)
+		}
+		re, err := regexp.Compile(pat)
+		if err != nil {
+			return dtype.Null, uerr.Wrap(err, uerr.KindValue, "str", "invalid regular expression %q", pat)
+		}
+		if names = GroupNames(re); len(names) == 0 {
+			return dtype.Null, uerr.New(uerr.KindValue, "str.extract_groups",
+				"extract_groups's pattern %q has no capture group", pat).
+				Hint("a group is (...), and named (?<name>...)")
+		}
+	default:
+		l, ok := c.Args[len(c.Args)-1].(*Lit)
+		if c.Fn == FnStrSplitExact && len(c.Args) == 4 {
+			l, ok = c.Args[2].(*Lit)
+		}
+		var n int64
+		if ok {
+			n, ok = l.Value.(int64)
+		}
+		if !ok {
+			return dtype.Null, uerr.Internalf("expr: %s without its count", c.Fn)
+		}
+		if c.Fn == FnStrSplitExact {
+			n++
+		}
+		if n < 1 {
+			return dtype.Null, uerr.New(uerr.KindValue, "str.splitn", "splitn takes at least one part, got %d", n).
+				Hint("Split makes a List of every part")
+		}
+		for j := range n {
+			names = append(names, "field_"+strconv.FormatInt(j, 10))
+		}
+	}
+	fields := make([]dtype.Field, len(names))
+	for i, nm := range names {
+		fields[i] = dtype.Field{Name: nm, Type: dtype.String, Nullable: true}
+	}
+	return dtype.Struct(fields...), nil
+}
+
+// GroupNames are a pattern's capture groups' field names, as Polars names them:
+// each group's name, or its number where it has none.
+func GroupNames(re *regexp.Regexp) []string {
+	names := re.SubexpNames()[1:]
+	out := make([]string, len(names))
+	for i, nm := range names {
+		if nm == "" {
+			nm = strconv.Itoa(i + 1)
+		}
+		out[i] = nm
+	}
+	return out
 }
 
 // dtCallOut takes the Call rather than the CallFn because truncate's answer depends
