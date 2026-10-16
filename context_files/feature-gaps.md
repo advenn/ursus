@@ -133,7 +133,9 @@ differs from their input's, or scalars outside a group-by.
   - the sum of an empty list is null, where Polars gives 0.
 - **Built in 0.6.5:** `median`, `std`, `var` and `gather_every` (step 253); `Explode` as
   an expression (259).
-- **Built in 0.6.6:** `eval` and `pl.element()`, `filter` and `agg` (step 268).
+- **Built in 0.6.6:** `eval` and `pl.element()`, `filter` and `agg` (step 268);
+  `concat`, `shift`, `diff`, `count_matches`, `any`, `all`, `item`, `sample` and
+  `sort` with `nulls_last` (step 269). Left: `to_array`, with an Array type.
 
 ### 4.4 `.struct` (P1)
 

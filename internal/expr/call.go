@@ -299,6 +299,10 @@ const (
 	// concat_list(exprs...): each row's operands in one list, a List operand's
 	// elements and another's value (step 266).
 	FnConcatList
+
+	// list.shift(n) and list.count_matches(v), n and v a value a row (step 269).
+	FnListShift
+	FnListCountMatches
 	fnHorizontalEnd
 )
 
@@ -324,6 +328,13 @@ const (
 	FnListArgSort
 	FnListArgTrue
 	FnListArgUnique
+	// list.any and list.all, ignore_nulls a literal Boolean; list.item, allow_empty
+	// one; list.sample, n (negative for a fraction), the fraction, with_replacement,
+	// shuffle and the seed (step 269).
+	FnListAny
+	FnListAll
+	FnListItem
+	FnListSample
 	fnListMoreEnd
 )
 
@@ -423,6 +434,8 @@ var callNames = map[CallFn]string{
 	FnMakeDate: "date", FnMakeDatetime: "datetime", FnMakeTime: "time",
 	FnDurationTicks: "duration_ticks", FnEpochTicks: "epoch_ticks",
 	FnBusinessDayCount: "business_day_count", FnConcatList: "concat_list",
+	FnListShift: "list.shift", FnListCountMatches: "list.count_matches",
+	FnListAny: "list.any", FnListAll: "list.all", FnListItem: "list.item", FnListSample: "list.sample",
 }
 
 func (f CallFn) String() string {
@@ -748,6 +761,28 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			}
 		}
 		return dtype.Int64, nil
+
+	case FnListShift, FnListCountMatches:
+		if len(ops) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		l, v := ops[0].Type, ops[1].Type
+		if l.ID() != dtype.TypeList {
+			return dtype.Null, uerr.New(uerr.KindType, "list", "%s requires a List operand, got %s", fn, l)
+		}
+		if fn == FnListShift {
+			if !v.IsInteger() && !v.IsNull() {
+				return dtype.Null, uerr.New(uerr.KindType, "list.shift", "list.shift takes an integer count, got %s", v)
+			}
+			return l, nil
+		}
+		if !v.IsNull() {
+			if _, err := ResolveBinary(OpEq, l.Inner(), v); err != nil {
+				return dtype.Null, uerr.New(uerr.KindType, "list.count_matches",
+					"list.count_matches cannot compare a List of %s with a %s value", l.Inner(), v)
+			}
+		}
+		return dtype.Uint32, nil
 
 	case FnConcatList:
 		elems := make([]dtype.Field, len(ops))
@@ -1808,6 +1843,18 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 			return dtype.Null, err
 		}
 		return b.Out, nil
+
+	case FnListAny, FnListAll:
+		if elem.ID() != dtype.TypeBool && !elem.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "list", "%s takes a List of Booleans, got %s", fn, in)
+		}
+		return dtype.Bool, nil
+
+	case FnListItem:
+		return elem, nil
+
+	case FnListSample:
+		return in, nil
 
 	case FnListArgSort, FnListArgTrue, FnListArgUnique:
 		switch {

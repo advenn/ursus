@@ -82,6 +82,12 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 		return listExplode(name, c)
 	case expr.FnListArgSort, expr.FnListArgTrue, expr.FnListArgUnique:
 		return listArgs(fn, name, c, args)
+	case expr.FnListAny, expr.FnListAll:
+		return listAnyAll(fn, name, c, args)
+	case expr.FnListItem:
+		return listItem(name, c, args)
+	case expr.FnListSample:
+		return listSample(name, c, args)
 
 	case expr.FnListContains:
 		return listContains(name, c, needle)
@@ -342,8 +348,9 @@ func listSort(name string, c *data.Column, args []any) (*data.Column, error) {
 		return nil, uerr.Internalf("kernel: list.sort has no direction argument")
 	}
 	desc, _ := args[0].(bool)
+	last, _ := argBool(args, 1) // nulls last (step 269), first when absent
 	cmp, err := NewComparator([]*data.Column{c.Lists().Child()},
-		[]SortSpec{{Descending: desc}})
+		[]SortSpec{{Descending: desc, NullsLast: last}})
 	if err != nil {
 		return nil, err
 	}

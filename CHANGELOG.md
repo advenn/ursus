@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–268, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–269, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
 
@@ -44,6 +44,9 @@ completeness, part 2 — namespaces and generators.**
   values an element, aggregates, reshapes, filters and window functions, e.g.
   `Col("l").List().Eval(Element().Sub(Element().Mean()))`. And `List().Agg` and
   `List().Filter`.
+- **The list namespace's missing methods** (269): `Concat`, `Shift`, `Diff`,
+  `CountMatches`, `Any`, `All`, `Item`, `SampleN`, `SampleFraction`, and `SortWith`
+  for nulls last.
 
 ---
 

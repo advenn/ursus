@@ -1,7 +1,11 @@
 package ursus
 
 import (
+	"math"
+
+	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // ListExpr is the list namespace: `Col("tags").List().Len()`.
@@ -213,6 +217,84 @@ func (l ListExpr) Slice(offset, length int) Expr {
 // Equal elements keep their input order.
 func (l ListExpr) Sort() Expr     { return l.call(expr.FnListSort, false) }
 func (l ListExpr) SortDesc() Expr { return l.call(expr.FnListSort, true) }
+
+// SortWith sorts each list in either direction with its nulls first or last: Polars'
+// list.sort(descending, nulls_last) (step 269).
+func (l ListExpr) SortWith(descending, nullsLast bool) Expr {
+	return l.call(expr.FnListSort, descending, nullsLast)
+}
+
+// Concat is each list followed by others' elements, or their values: Polars'
+// list.concat, ConcatList(l, others...). A null list among them makes the row's null.
+func (l ListExpr) Concat(others ...Expr) Expr { return ConcatList(append([]Expr{l.e}, others...)...) }
+
+// Shift moves each list's elements n places later, nulls in the places they leave, a
+// negative n earlier: Polars' list.shift. n is a constant or an expression, a count a
+// row; a null count gives a null list.
+func (l ListExpr) Shift[N Operand](n N) Expr {
+	return wrap(&expr.Call{Fn: expr.FnListShift, Args: []expr.Node{l.e.node(), lift(n)}})
+}
+
+// Diff is each element less the one n places before it, null for the first n:
+// Polars' list.diff, its null_behavior "ignore"; with dropNulls, "drop", those first
+// n are dropped. It is Eval(Element().Diff(n)).
+func (l ListExpr) Diff(n int, dropNulls bool) Expr {
+	d := Element().Diff(n)
+	if dropNulls {
+		d = d.Slice(n, math.MaxInt32)
+	}
+	return l.Eval(d)
+}
+
+// CountMatches is how many of each list's elements equal v, a UInt32: Polars'
+// list.count_matches. v is a value, nil for null, which counts the null elements as
+// Polars counts them, or an expression, a value a row; they meet as == compares.
+func (l ListExpr) CountMatches(v any) Expr {
+	var arg expr.Node
+	switch x := v.(type) {
+	case nil:
+		arg = &expr.Lit{DT: dtype.Null}
+	case Expr:
+		arg = x.node()
+	default:
+		arg = litNode(x)
+	}
+	return wrap(&expr.Call{Fn: expr.FnListCountMatches, Args: []expr.Node{l.e.node(), arg}})
+}
+
+// Any and All are whether some, or every, element of a List of Booleans is true:
+// Polars' list.any and list.all. With ignoreNulls, Polars' default, a null element is
+// skipped, so an empty list is false for Any and true for All; without it they are
+// Kleene's, all of a true and a null null.
+func (l ListExpr) Any(ignoreNulls bool) Expr { return l.call(expr.FnListAny, ignoreNulls) }
+func (l ListExpr) All(ignoreNulls bool) Expr { return l.call(expr.FnListAll, ignoreNulls) }
+
+// Item is each list's one element: Polars' list.item. A list of another length is
+// refused, but an empty one with allowEmpty, which is null.
+func (l ListExpr) Item(allowEmpty bool) Expr { return l.call(expr.FnListItem, allowEmpty) }
+
+// SampleN is n of each list's elements at random, and SampleFraction the fraction of
+// its length, rounded down: Polars' list.sample. Without replacement a list shorter
+// than the sample is refused, as Polars refuses it, and the sample keeps the list's
+// order unless shuffle.
+//
+// The draw is seeded by seed and the list's own elements, so it does not depend on how
+// the rows are batched and two equal lists draw alike. Polars draws a seed when none
+// is given; here it is always given. The values are not Polars', whose generator is
+// its own.
+func (l ListExpr) SampleN(n int, withReplacement, shuffle bool, seed uint64) Expr {
+	if n < 0 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "list.sample", "list.sample takes %d elements", n)})
+	}
+	return l.call(expr.FnListSample, int64(n), 0.0, withReplacement, shuffle, int64(seed))
+}
+
+func (l ListExpr) SampleFraction(fraction float64, withReplacement, shuffle bool, seed uint64) Expr {
+	if fraction < 0 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "list.sample", "list.sample takes a fraction of %g", fraction)})
+	}
+	return l.call(expr.FnListSample, int64(-1), fraction, withReplacement, shuffle, int64(seed))
+}
 
 // Unique drops repeated elements, keeping the FIRST occurrence and leaving the
 // order alone — sorting as a side effect would make `Unique().Head(2)` mean
