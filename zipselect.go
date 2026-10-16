@@ -245,6 +245,8 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 		return z.lift(expr.LowerReshapes(r, true))
 	case expr.ReshapeSortBy:
 		return z.sortBy(r)
+	case expr.ReshapeArgSortBy:
+		return z.argSortBy(r)
 	case expr.ReshapeGather:
 		return zipPart{}, uerr.New(uerr.KindUnsupported, "gather",
 			"%s in a Select is not there yet", r).
@@ -305,6 +307,28 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 			base = base.Filter(Col(name).List().Len().Gt(0))
 		}
 		out = base.Explode(name).Select(Col(name).Alias(p.col))
+	case expr.ReshapeArgSort:
+		// The rows' indices in the order the frame-level Sort, stable, puts them, as
+		// Polars' arg_sort keeps ties in order (step 267).
+		idx := z.tmp()
+		key := Asc(c)
+		if arg[0] != 0 {
+			key = Desc(c)
+		}
+		if arg[1] != 0 {
+			key = key.NullsLast()
+		}
+		out = p.lf.WithRowIndex(idx, 0).Sort(key).Select(Col(idx).Alias(p.col))
+	case expr.ReshapeArgTrue:
+		// Filtered under the values' own name, which the refusal of a predicate that
+		// is not Boolean then names.
+		idx, name := z.tmp(), expr.OutputName(r.Child)
+		out = p.lf.Select(c.Alias(name)).WithRowIndex(idx, 0).Filter(Col(name)).Select(Col(idx).Alias(p.col))
+	case expr.ReshapeArgUnique:
+		// The frame-level Unique keeps each value's first row, in the order they
+		// first appear.
+		idx := z.tmp()
+		out = p.lf.WithRowIndex(idx, 0).Unique(p.col).Select(Col(idx).Alias(p.col))
 	case expr.ReshapeGatherEvery:
 		every, off := arg[0], arg[1]
 		idx := z.tmp()
@@ -330,6 +354,32 @@ func (z *zipper) sortBy(r *expr.Reshape) (zipPart, error) {
 		k = Desc(Col(key))
 	}
 	out := z.in.Select(wrap(r.Child).Alias(col), wrap(r.By).Alias(key)).Sort(k).Select(Col(col))
+	return zipPart{lf: out, col: col}, nil
+}
+
+// argSortBy lifts ArgSortBy: its keys projected together beside a row index, sorted
+// by them, stably, and the indices kept (step 267).
+func (z *zipper) argSortBy(r *expr.Reshape) (zipPart, error) {
+	keys := r.Child.Children()
+	cols := make([]Expr, len(keys))
+	by := make([]SortKey, len(keys))
+	for i, k := range keys {
+		if changesLength(k) {
+			return zipPart{}, uerr.New(uerr.KindUnsupported, "arg_sort_by",
+				"%s sorts by a key of another length", r)
+		}
+		name := z.tmp()
+		cols[i] = wrap(k).Alias(name)
+		by[i] = Asc(Col(name))
+		if r.Args[2*i] != 0 {
+			by[i] = Desc(Col(name))
+		}
+		if r.Args[2*i+1] != 0 {
+			by[i] = by[i].NullsLast()
+		}
+	}
+	idx, col := z.tmp(), z.tmp()
+	out := z.in.Select(cols...).WithRowIndex(idx, 0).Sort(by...).Select(Col(idx).Alias(col))
 	return zipPart{lf: out, col: col}, nil
 }
 

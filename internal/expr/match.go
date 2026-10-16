@@ -50,6 +50,38 @@ func (m *NameMatcher) String() string {
 	return "cols(" + strings.Join(q, ", ") + ")"
 }
 
+// --- position ----------------------------------------------------------------
+
+// IndexMatcher selects columns by position, in the order written: Polars' nth (step
+// 267). A negative index counts from the end, and one past either end is an error,
+// as Polars refuses it.
+type IndexMatcher struct{ Indices []int }
+
+func (m *IndexMatcher) Match(in *dtype.Schema) ([]string, error) {
+	names := in.Names()
+	out := make([]string, len(m.Indices))
+	for i, k := range m.Indices {
+		j := k
+		if j < 0 {
+			j += len(names)
+		}
+		if j < 0 || j >= len(names) {
+			return nil, uerr.New(uerr.KindSchema, "nth", "nth(%d) of a frame of %d columns", k, len(names)).
+				Hint("a negative index counts from the end")
+		}
+		out[i] = names[j]
+	}
+	return out, nil
+}
+
+func (m *IndexMatcher) String() string {
+	q := make([]string, len(m.Indices))
+	for i, k := range m.Indices {
+		q[i] = strconv.Itoa(k)
+	}
+	return "nth(" + strings.Join(q, ", ") + ")"
+}
+
 // --- regex -------------------------------------------------------------------
 
 // RegexMatcher selects columns whose name matches a pattern.

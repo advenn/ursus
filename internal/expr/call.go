@@ -319,6 +319,11 @@ const (
 	// A List of Lists flattened a level (step 259), which Explode in an aggregation
 	// lowers to: an empty or null inner list one null, as explode makes it a row.
 	FnListExplode
+	// Each list's indices (step 267): in its elements' sorted order, descending and
+	// nulls last two literal Booleans; of its true elements; of each value's first.
+	FnListArgSort
+	FnListArgTrue
+	FnListArgUnique
 	fnListMoreEnd
 )
 
@@ -404,6 +409,7 @@ var callNames = map[CallFn]string{
 	FnListMedian:   "list.median", FnListStd: "list.std", FnListVar: "list.var",
 	FnListQuantile: "list.quantile", FnListDropNans: "list.drop_nans",
 	FnListGatherEvery: "list.gather_every", FnListExplode: "list.explode",
+	FnListArgSort: "list.arg_sort", FnListArgTrue: "list.arg_true", FnListArgUnique: "list.arg_unique",
 	FnListSortBy: "list.sort_by", FnListSortByDesc: "list.sort_by_desc",
 	FnIsInExpr: "is_in_expr", FnListGetExpr: "list.get_expr",
 	FnListContainsExpr: "list.contains_expr",
@@ -1802,6 +1808,17 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 			return dtype.Null, err
 		}
 		return b.Out, nil
+
+	case FnListArgSort, FnListArgTrue, FnListArgUnique:
+		switch {
+		case fn == FnListArgSort && !elem.IsOrdered() && !elem.IsNull():
+			return dtype.Null, uerr.New(uerr.KindType, "arg_sort", "arg_sort orders values, and %s has no order", elem)
+		case fn == FnListArgTrue && elem.ID() != dtype.TypeBool && !elem.IsNull():
+			return dtype.Null, uerr.New(uerr.KindType, "arg_true", "arg_true takes Booleans, got %s", elem)
+		case fn == FnListArgUnique && !elem.IsHashable() && !elem.IsNull():
+			return dtype.Null, uerr.New(uerr.KindType, "arg_unique", "arg_unique compares values, and %s cannot be", elem)
+		}
+		return dtype.List(dtype.Uint32), nil
 
 	case FnListExplode:
 		if elem.ID() != dtype.TypeList {

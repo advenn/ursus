@@ -80,6 +80,8 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 		return listGet(name, c, args)
 	case expr.FnListExplode:
 		return listExplode(name, c)
+	case expr.FnListArgSort, expr.FnListArgTrue, expr.FnListArgUnique:
+		return listArgs(fn, name, c, args)
 
 	case expr.FnListContains:
 		return listContains(name, c, needle)
@@ -673,4 +675,70 @@ func listToStruct(name string, c *data.Column, args []any) (*data.Column, error)
 		fields[j] = f.Rename(field)
 	}
 	return data.NewStruct(name, fields, c.Validity()), nil
+}
+
+// listArgs is each list's indices, a List(UInt32) (step 267): list.arg_sort, the
+// positions in the order its elements sort, stably, descending and nulls last two
+// Booleans in args; list.arg_true, the positions of its true elements; and
+// list.arg_unique, each distinct value's first position, a null among them.
+func listArgs(fn expr.CallFn, name string, c *data.Column, args []any) (*data.Column, error) {
+	l := c.Lists()
+	child := l.Child()
+	var cmp Comparator
+	var enc *GroupKeyEncoder
+	switch fn {
+	case expr.FnListArgSort:
+		desc, ok1 := argBool(args, 0)
+		last, ok2 := argBool(args, 1)
+		if !ok1 || !ok2 {
+			return nil, uerr.Internalf("kernel: %s without its direction", fn)
+		}
+		var err error
+		if cmp, err = NewComparator([]*data.Column{child}, []SortSpec{{Descending: desc, NullsLast: last}}); err != nil {
+			return nil, err
+		}
+	case expr.FnListArgUnique:
+		var err error
+		if enc, err = NewGroupKeyEncoder("arg_unique", []*data.Column{child}); err != nil {
+			return nil, err
+		}
+	}
+	var vals []uint32
+	offs := make([]int32, 1, c.Len()+1)
+	order := []int32{}
+	seen := map[string]struct{}{}
+	for i := range c.Len() {
+		s, e, ok := l.Get(i)
+		if ok {
+			switch fn {
+			case expr.FnListArgSort:
+				order = order[:0]
+				for k := range e - s {
+					order = append(order, k)
+				}
+				slices.SortStableFunc(order, func(x, y int32) int { return cmp(int(s+x), int(s+y)) })
+				for _, k := range order {
+					vals = append(vals, uint32(k))
+				}
+			case expr.FnListArgTrue:
+				for k := s; k < e; k++ {
+					if child.IsValid(int(k)) && child.Bools().Get(int(k)) {
+						vals = append(vals, uint32(k-s))
+					}
+				}
+			default:
+				clear(seen)
+				for k := s; k < e; k++ {
+					key := string(enc.Encode(int(k)))
+					if _, dup := seen[key]; !dup {
+						seen[key] = struct{}{}
+						vals = append(vals, uint32(k-s))
+					}
+				}
+			}
+		}
+		offs = append(offs, int32(len(vals)))
+	}
+	out := data.NewFixed(name, dtype.Uint32, vals, bitmap.AllSet(len(vals)))
+	return data.NewList(name, offs, out, c.Validity()), nil
 }

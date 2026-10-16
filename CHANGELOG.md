@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–266, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–267, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
 
@@ -37,6 +37,9 @@ completeness, part 2 — namespaces and generators.**
   `CumReduce`, `CumSumHorizontal` and `Format`. A fold's function builds the
   expression once, when the query is planned, over a selection's columns too:
   `Fold(0, func(acc, x Expr) Expr { return acc.Add(x) }, All())`.
+- **Selection by position and the index functions** (267): `Nth`, `First()` and
+  `Last()` as column selectors; `ArgWhere`, `ArgSortBy`, and `ArgSort`, `ArgTrue` and
+  `ArgUnique` on an expression, UInt32 indices, a list a group in an aggregation.
 
 ---
 

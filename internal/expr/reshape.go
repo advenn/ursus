@@ -40,6 +40,10 @@ const (
 	ReshapeSortBy                       // Args: descending, 0 or 1; By the keys (step 253)
 	ReshapeGather                       // no args; By the indices (step 257)
 	ReshapeExplode                      // a List's elements (step 259); Args [1]: a generator's, an empty list no row (step 263)
+	ReshapeArgSort                      // Args: descending, nulls last (step 267)
+	ReshapeArgTrue                      // no args: the true rows' indices (step 267)
+	ReshapeArgUnique                    // no args: each value's first index (step 267)
+	ReshapeArgSortBy                    // Child: struct_of the keys; Args: each key's descending and nulls last (step 267)
 )
 
 var reshapeNames = map[ReshapeOp]string{
@@ -47,6 +51,8 @@ var reshapeNames = map[ReshapeOp]string{
 	ReshapeReverse: "reverse", ReshapeUnique: "unique", ReshapeDropNulls: "drop_nulls",
 	ReshapeGet: "get", ReshapeDropNans: "drop_nans", ReshapeGatherEvery: "gather_every",
 	ReshapeSortBy: "sort_by", ReshapeGather: "gather", ReshapeExplode: "explode",
+	ReshapeArgSort: "arg_sort", ReshapeArgTrue: "arg_true", ReshapeArgUnique: "arg_unique",
+	ReshapeArgSortBy: "arg_sort_by",
 }
 
 func (o ReshapeOp) String() string { return reshapeNames[o] }
@@ -131,8 +137,23 @@ func generatorText(r *Reshape) (string, bool) {
 // are its List's elements.
 func (r *Reshape) Field(in *dtype.Schema) (dtype.Field, error) {
 	f, err := r.Child.Field(in)
-	if err != nil || r.Op != ReshapeExplode {
+	if err != nil {
 		return f, err
+	}
+	switch r.Op {
+	case ReshapeArgTrue:
+		if f.Type.ID() != dtype.TypeBool && !f.Type.IsNull() {
+			return dtype.Field{}, uerr.New(uerr.KindType, "arg_true",
+				"arg_true takes Booleans, and %s is a %s", f.Name, f.Type)
+		}
+		fallthrough
+	case ReshapeArgSort, ReshapeArgUnique, ReshapeArgSortBy:
+		// Indices, as Polars' are: UInt32.
+		f.Type, f.Nullable = dtype.Uint32, false
+		return f, nil
+	case ReshapeExplode:
+	default:
+		return f, nil
 	}
 	if f.Type.ID() != dtype.TypeList {
 		return dtype.Field{}, uerr.New(uerr.KindType, "explode",
@@ -216,6 +237,17 @@ func LowerReshapes(n Node, agg bool) Node {
 // lowerReshape is a reshape as a list a group: its child imploded, or reshaped
 // first, then the list kernel.
 func lowerReshape(r *Reshape) Node {
+	if r.Op == ReshapeArgSortBy {
+		// One key's order is its arg_sort's. Of several, Polars 1.44.1 answers with
+		// indices past the group's end; this refuses them.
+		keys := r.Child.Children()
+		if len(keys) != 1 {
+			return &Err{E: uerr.New(uerr.KindUnsupported, "arg_sort_by",
+				"%s sorts a group by %d keys, which is not there yet", r.String(), len(keys)).
+				Hint("in a Select it sorts by them all; in an aggregation, by one key: its ArgSort")}
+		}
+		return lowerReshape(&Reshape{Op: ReshapeArgSort, Child: keys[0], Args: r.Args[:2]})
+	}
 	if r.Op == ReshapeExplode && (IsConstant(r.Child) || HasAgg(r.Child) && LooseReshape(r.Child) == nil) {
 		// A List that is one value a group, a generator's or an aggregate's (step
 		// 263): exploded, its elements are the group's values, which is the list.
@@ -260,6 +292,13 @@ func lowerReshape(r *Reshape) Node {
 		return &Call{Fn: FnListGatherEvery, Args: []Node{list, arg(0), arg(1)}}
 	case ReshapeExplode:
 		return &Call{Fn: FnListExplode, Args: []Node{list}}
+	case ReshapeArgSort:
+		return &Call{Fn: FnListArgSort, Args: []Node{list, &Lit{Value: r.Args[0] != 0, DT: dtype.Bool},
+			&Lit{Value: r.Args[1] != 0, DT: dtype.Bool}}}
+	case ReshapeArgTrue:
+		return &Call{Fn: FnListArgTrue, Args: []Node{list}}
+	case ReshapeArgUnique:
+		return &Call{Fn: FnListArgUnique, Args: []Node{list}}
 	case ReshapeSortBy:
 		// The keys imploded beside the values: each group's keys are a list of its
 		// length. A chain before sort_by would leave the two of different lengths.

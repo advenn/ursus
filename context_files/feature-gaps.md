@@ -257,6 +257,8 @@ decide whether to keep or switch each one.
   duration of columns is named `duration`, where Polars names it `literal` (step 265).
 - `ConcatList` refuses a number beside a string, which Polars casts to text (step
   266).
+- `ArgSortBy` of several keys is refused in an aggregation, where Polars 1.44.1
+  answers with positions past the group's end (step 267).
 
 ## 10. What ursus has that most others do not
 
