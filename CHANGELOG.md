@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–270, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–271, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
 
@@ -56,6 +56,15 @@ completeness, part 2 — namespaces and generators.**
   `ExtractMany` and `FindMany` over many patterns, by Polars' matching rules;
   `ExtractGroups` and `SplitExact`, a Struct; `SplitInclusive`; `ToTitlecase`; and
   `Normalize` to NFC, NFD, NFKC or NFKD.
+- **Encodings, integers in a base, and JSON** (271): `Str().Encode` and `Decode`, hex
+  or base64; `ToIntegerWith(base, dtype, strict)`, the base a constant or a column;
+  `ReplaceN`, the first n matches; `ConcatStrIgnoreNulls`; `JsonPathMatch(path)`; and
+  `JsonDecode(dtype)`, to a type given, with Polars' conversions.
+
+### Fixes
+
+- **A list's eval over an aggregate in a `Select`,**
+  `Col("a").Implode().List().Eval(...)`, failed as an internal error (271).
 
 ---
 

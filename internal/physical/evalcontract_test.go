@@ -350,7 +350,19 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 	expr.FnStrReplace: {
 		{label: ",literal", args: []any{"1", "x", true}},
 		{label: ",regex", args: []any{"1", "x", false}},
+		{label: ",literal n", args: []any{"1", "x", int64(2), true}},
+		{label: ",regex n", args: []any{"1", "x", int64(-1), false}},
 	},
+	// Step 271. decode is driven without strict, which refuses on a value; json_decode
+	// takes no set, as every receiver here is text that is not JSON, which it refuses
+	// on a value too, so it asks only that a call without its type refuses alike.
+	expr.FnStrEncode:        {{label: ",hex", args: []any{"hex"}}, {label: ",base64", args: []any{"base64"}}},
+	expr.FnStrDecode:        {{label: ",hex", args: []any{"hex", false}}, {label: ",base64", args: []any{"base64", false}}},
+	expr.FnStrJsonPathMatch: {{args: []any{"$.a"}}},
+	// The horizontal ones: the column, then its base and strict, or the separator.
+	expr.FnStrParseInt:          {{label: ",16", args: []any{int64(16), false}}},
+	expr.FnStrParseUint:         {{label: ",16", args: []any{int64(16), false}}},
+	expr.FnConcatStrIgnoreNulls: {{label: ",alone"}, {label: ",sep", args: []any{"-"}}},
 	expr.FnStrReplaceAll: {
 		{label: ",literal", args: []any{"1", "x", true}},
 		{label: ",regex", args: []any{"1", "x", false}},

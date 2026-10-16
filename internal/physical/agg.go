@@ -1413,6 +1413,21 @@ func extractAggs(n expr.Node, in *dtype.Schema, specs *[]aggSpec, byKey map[stri
 		}
 		return &expr.Cond{Pred: pred, Then: then, Else: els}, nil
 
+	case *expr.ListMap:
+		// A list's eval over an aggregate, implode(x).list.eval(...): each aggregate
+		// below is a temporary, and the ListMap is rebuilt over them. Its body is not
+		// a child: an aggregate there is a list's.
+		kids := n.Children()
+		out := make([]expr.Node, len(kids))
+		for i, k := range kids {
+			r, err := extractAggs(k, in, specs, byKey)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = r
+		}
+		return expr.Rebuild(n, out), nil
+
 	default:
 		return nil, uerr.Internalf("physical: extractAggs: unhandled node %T", n)
 	}

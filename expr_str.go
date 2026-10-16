@@ -248,6 +248,84 @@ func (s StrExpr) ExtractGroups(pattern string) Expr { return s.call(expr.FnStrEx
 // and lower-cases the rest: Polars' to_titlecase, "3rd place" "3Rd Place".
 func (s StrExpr) ToTitlecase() Expr { return s.call(expr.FnStrToTitlecase) }
 
+// Encoding is a transfer encoding for Encode and Decode.
+type Encoding string
+
+const (
+	Hex    Encoding = "hex"
+	Base64 Encoding = "base64"
+)
+
+// Encode is each value's bytes as lowercase hex or padded base64: Polars' encode
+// (step 271).
+func (s StrExpr) Encode(enc Encoding) Expr {
+	if enc != Hex && enc != Base64 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "str.encode", "%q is not an encoding", enc).Hint("Hex or Base64")})
+	}
+	return s.call(expr.FnStrEncode, string(enc))
+}
+
+// Decode is each value's hex or base64 as Binary: Polars' decode. Text that is not of
+// the encoding is refused with strict, naming its row, and null without it; base64
+// must be padded, as Polars has it.
+func (s StrExpr) Decode(enc Encoding, strict bool) Expr {
+	if enc != Hex && enc != Base64 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "str.decode", "%q is not an encoding", enc).Hint("Hex or Base64")})
+	}
+	return s.call(expr.FnStrDecode, string(enc), strict)
+}
+
+// ToIntegerWith reads each value as an integer in base, a constant or an expression,
+// 2 to 36, as dt: Polars' to_integer(base, dtype, strict). A sign is read and nothing
+// else but digits: no space, 0x or underscore. A value that does not read, or does not
+// fit dt, is refused with strict and null without it.
+func (s StrExpr) ToIntegerWith[B int | Expr](base B, dt DataType, strict bool) Expr {
+	if !dt.IsInteger() {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindType, "str.to_integer", "to_integer reads integers, not %s", dt)})
+	}
+	var b expr.Node
+	if x, ok := any(base).(Expr); ok {
+		b = x.node()
+	} else {
+		b = litNode(int64(any(base).(int)))
+	}
+	fn, wide := expr.FnStrParseInt, Int64
+	if dt.IsUnsignedInteger() {
+		fn, wide = expr.FnStrParseUint, Uint64
+	}
+	e := wrap(&expr.Call{Fn: fn, Args: []expr.Node{s.e.node(), b, litNode(strict)}})
+	switch {
+	case dt == wide:
+		return e
+	case strict:
+		return e.Cast(dt)
+	}
+	return e.CastLossy(dt)
+}
+
+// ReplaceN replaces the first n matches of pattern, all where n is negative: Polars'
+// replace(n=). Polars takes n > 1 for a literal pattern only; here a regex takes it
+// too, each replacement expanding $1 as Replace's does.
+func (s StrExpr) ReplaceN(pattern, value string, literal bool, n int) Expr {
+	return s.call(expr.FnStrReplace, pattern, value, int64(n), literal)
+}
+
+// JsonPathMatch is each value's JSON at path, as text: Polars' json_path_match. The
+// path is $ then .key, ['key'], [n] (from the end where negative) and ..key, the
+// first key of that name at any depth. A string is unquoted and any other value its
+// compact JSON, its keys in their order; JSON null, a path that matches nothing and
+// text that is not JSON are null.
+func (s StrExpr) JsonPathMatch(path string) Expr { return s.call(expr.FnStrJsonPathMatch, path) }
+
+// JsonDecode reads each value's JSON as dt, of Booleans, numbers, Strings, and Lists
+// and Structs of them: Polars' json_decode with its dtype, which ursus does not infer.
+// A Struct's missing fields are null and its extra ones skipped; a float read as an
+// integer is truncated, as Polars casts it. Text that is not JSON, or JSON of another
+// shape than dt, is refused, naming its row.
+func (s StrExpr) JsonDecode(dt DataType) Expr {
+	return wrap(&expr.Call{Fn: expr.FnStrJsonDecode, Args: []expr.Node{s.e.node(), &expr.Lit{DT: dt}}})
+}
+
 // UnicodeForm is a Unicode normal form for Normalize.
 type UnicodeForm string
 

@@ -49,6 +49,18 @@ func StrCall(fn expr.CallFn, name string, out dtype.DataType,
 		return strMany(fn, name, c, args)
 	case expr.FnStrExtractGroups, expr.FnStrSplitExact, expr.FnStrSplitN:
 		return strStruct(fn, name, out, c, args, re)
+	case expr.FnStrEncode:
+		enc, _ := argString(args, 0)
+		return strEncode(name, c, enc)
+	case expr.FnStrDecode:
+		enc, _ := argString(args, 0)
+		strict, _ := argBool(args, 1)
+		return strDecode(name, c, enc, strict)
+	case expr.FnStrJsonPathMatch:
+		path, _ := argString(args, 0)
+		return jsonPathMatch(name, c, path)
+	case expr.FnStrJsonDecode:
+		return jsonDecode(name, out, c)
 	}
 
 	acc := c.Strings()
@@ -190,9 +202,28 @@ func applyStr(fn expr.CallFn, s string, args []any, re *regexp.Regexp) (string, 
 		if fn == expr.FnStrReplaceAll {
 			count = -1
 		}
+		if len(args) == 4 {
+			// ReplaceN's count, before the literal flag (step 271).
+			if k, ok := argInt(args, 2); ok {
+				count = int(k)
+			}
+		}
 		if re != nil {
 			if count == -1 {
 				return re.ReplaceAllString(s, rep), true
+			}
+			if count != 1 {
+				// The first count matches, each expanded as ReplaceAllString expands
+				// it. Polars refuses a regex with n > 1; this takes it.
+				var b strings.Builder
+				last := 0
+				for _, m := range re.FindAllStringSubmatchIndex(s, count) {
+					b.WriteString(s[last:m[0]])
+					b.Write(re.ExpandString(nil, rep, s, m))
+					last = m[1]
+				}
+				b.WriteString(s[last:])
+				return b.String(), true
 			}
 			// The first match, with $1 and ${name} expanded as ReplaceAllString
 			// expands them. This used ReplaceAllStringFunc, whose function returns

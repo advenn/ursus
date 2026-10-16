@@ -15,6 +15,21 @@ import (
 // null where any of its values is, as Polars' default is; to skip a null instead,
 // fill it first, e.g. Col("middle").FillNull(""). The answer is named after the first
 // expression.
+// ConcatStrIgnoreNulls is ConcatStr past nulls, Polars' concat_str(ignore_nulls=True):
+// each row's values that are not null joined by sep, and a row of nulls alone "",
+// not null (step 271).
+func ConcatStrIgnoreNulls(sep string, exprs ...Expr) Expr {
+	if len(exprs) == 0 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindSchema, "concat_str",
+			"ConcatStrIgnoreNulls requires at least one expression")})
+	}
+	args := make([]expr.Node, 0, len(exprs)+1)
+	for _, e := range exprs {
+		args = append(args, e.node())
+	}
+	return wrap(&expr.Call{Fn: expr.FnConcatStrIgnoreNulls, Args: append(args, litNode(sep))})
+}
+
 func ConcatStr(sep string, exprs ...Expr) Expr {
 	if len(exprs) == 0 {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindSchema, "concat_str",

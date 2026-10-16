@@ -304,6 +304,12 @@ const (
 	// list.shift(n) and list.count_matches(v), n and v a value a row (step 269).
 	FnListShift
 	FnListCountMatches
+
+	// to_integer in a base a row, signed or unsigned, strict a literal; and
+	// concat_str past nulls, the separator last (step 271).
+	FnStrParseInt
+	FnStrParseUint
+	FnConcatStrIgnoreNulls
 	fnHorizontalEnd
 )
 
@@ -357,6 +363,12 @@ const (
 	FnStrSplitInclusive
 	FnStrToTitlecase
 	FnStrNormalize
+	// Step 271: encode and decode, hex or base64; json_path_match, the path;
+	// json_decode, a null literal of the type it decodes to.
+	FnStrEncode
+	FnStrDecode
+	FnStrJsonPathMatch
+	FnStrJsonDecode
 	fnStrMoreEnd
 )
 
@@ -397,8 +409,11 @@ var callNames = map[CallFn]string{
 	FnStrExtractMany: "str.extract_many", FnStrFindMany: "str.find_many",
 	FnStrExtractGroups: "str.extract_groups", FnStrSplitExact: "str.split_exact",
 	FnStrSplitInclusive: "str.split_inclusive", FnStrToTitlecase: "str.to_titlecase",
-	FnStrNormalize: "str.normalize",
-	FnStrToDateFmt: "str.to_date", FnStrToDatetimeFmt: "str.to_datetime",
+	FnStrNormalize: "str.normalize", FnStrEncode: "str.encode", FnStrDecode: "str.decode",
+	FnStrJsonPathMatch: "str.json_path_match", FnStrJsonDecode: "str.json_decode",
+	FnStrParseInt: "str.to_integer", FnStrParseUint: "str.to_uinteger",
+	FnConcatStrIgnoreNulls: "concat_str_ignore_nulls",
+	FnStrToDateFmt:         "str.to_date", FnStrToDatetimeFmt: "str.to_datetime",
 	FnStrToTimeFmt: "str.to_time",
 
 	FnDtYear: "dt.year", FnDtMonth: "dt.month", FnDtDay: "dt.day",
@@ -573,6 +588,16 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		switch fn {
 		case FnStrExtractGroups, FnStrSplitExact, FnStrSplitN:
 			return strStructOut(c)
+		case FnStrJsonDecode:
+			return jsonDecodeOut(c)
+		case FnStrJsonPathMatch:
+			path, ok := callLitString(c, 1)
+			if !ok {
+				return dtype.Null, uerr.Internalf("expr: %s without its path", fn)
+			}
+			if _, err := ParseJSONPath(path); err != nil {
+				return dtype.Null, err
+			}
 		}
 		return strCallOut(fn), nil
 
@@ -794,6 +819,36 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			}
 		}
 		return dtype.Int64, nil
+
+	case FnStrParseInt, FnStrParseUint:
+		if len(ops) != 3 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		if s := ops[0].Type; !s.HasStringStorage() && !s.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "str", "%s requires a String operand, got %s", fn, s)
+		}
+		if b := ops[1].Type; !b.IsInteger() && !b.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "str.to_integer", "to_integer takes an integer base, got %s", b)
+		}
+		if ops[2].Type != dtype.Bool {
+			return dtype.Null, uerr.Internalf("expr: %s with strict a %s", fn, ops[2].Type)
+		}
+		if fn == FnStrParseUint {
+			return dtype.Uint64, nil
+		}
+		return dtype.Int64, nil
+
+	case FnConcatStrIgnoreNulls:
+		if len(ops) < 2 || !ops[len(ops)-1].Type.HasStringStorage() {
+			return dtype.Null, uerr.Internalf("expr: %s without its separator last", fn)
+		}
+		for i, f := range ops[:len(ops)-1] {
+			if !dtype.CanCast(f.Type, dtype.String) {
+				return dtype.Null, uerr.New(uerr.KindType, "concat_str",
+					"concat_str cannot format operand %d (%s), a %s, as text", i+1, f.Name, f.Type)
+			}
+		}
+		return dtype.String, nil
 
 	case FnListShift, FnListCountMatches:
 		if len(ops) != 2 {
@@ -1375,6 +1430,8 @@ func strCallOut(fn CallFn) dtype.DataType {
 		return dtype.Uint32
 	case FnStrFindMany:
 		return dtype.List(dtype.Uint32)
+	case FnStrDecode:
+		return dtype.Binary
 	case FnStrSplit, FnStrSplitInclusive, FnStrExtractAll, FnStrExtractMany:
 		// The first calls in the namespace whose output is a NESTED type, and the
 		// only place that fact is written down. The kernel never names List(String)
@@ -1440,6 +1497,55 @@ func strStructOut(c *Call) (dtype.DataType, error) {
 		fields[i] = dtype.Field{Name: nm, Type: dtype.String, Nullable: true}
 	}
 	return dtype.Struct(fields...), nil
+}
+
+// jsonDecodeOut is json_decode's type, the type of its literal argument: Booleans,
+// numbers, Strings, and Lists and Structs of them (step 271).
+func jsonDecodeOut(c *Call) (dtype.DataType, error) {
+	l, ok := c.Args[len(c.Args)-1].(*Lit)
+	if !ok || len(c.Args) != 2 {
+		return dtype.Null, uerr.Internalf("expr: %s without its type", c.Fn)
+	}
+	var check func(t dtype.DataType) error
+	check = func(t dtype.DataType) error {
+		switch {
+		case t.ID() == dtype.TypeList:
+			return check(t.Inner())
+		case t.ID() == dtype.TypeStruct:
+			for _, f := range t.Fields() {
+				if err := check(f.Type); err != nil {
+					return err
+				}
+			}
+			return nil
+		case t.ID() == dtype.TypeBool, t.ID() == dtype.TypeString, t.IsInteger(), t.IsFloat(), t.IsNull():
+			return nil
+		}
+		return uerr.New(uerr.KindType, "str.json_decode",
+			"json_decode decodes to Booleans, numbers, Strings, Lists and Structs, not %s", t).
+			Hint("decode to a String and convert it after")
+	}
+	if err := check(l.DT); err != nil {
+		return dtype.Null, err
+	}
+	return nullableThrough(l.DT), nil
+}
+
+// nullableThrough is t with every Struct field nullable, at any depth: a JSON object
+// may leave out any field.
+func nullableThrough(t dtype.DataType) dtype.DataType {
+	switch t.ID() {
+	case dtype.TypeList:
+		return dtype.List(nullableThrough(t.Inner()))
+	case dtype.TypeStruct:
+		fields := t.Fields()
+		out := make([]dtype.Field, len(fields))
+		for i, f := range fields {
+			out[i] = dtype.Field{Name: f.Name, Type: nullableThrough(f.Type), Nullable: true}
+		}
+		return dtype.Struct(out...)
+	}
+	return t
 }
 
 // GroupNames are a pattern's capture groups' field names, as Polars names them:

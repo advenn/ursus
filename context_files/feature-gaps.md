@@ -92,15 +92,16 @@ differs from their input's, or scalars outside a group-by.
   - `split_exact`, `to_titlecase`, `normalize`;
   - `encode` and `decode` (hex, base64);
   - `json_decode`, `json_path_match`.
-- **Built in 0.6.6:** `contains_any`, `find_many`, `extract_groups`, `extract_many`,
-  `replace_many`, `split_exact`, `to_titlecase`, `normalize`, `split`'s `inclusive`,
-  and `splitn` as a Struct (step 270). Their patterns are constants; Polars takes an
-  expression too.
+- **Built in 0.6.6:**
+  - `contains_any`, `find_many`, `extract_groups`, `extract_many`, `replace_many`,
+    `split_exact`, `to_titlecase`, `normalize`, `split`'s `inclusive`, and `splitn` as
+    a Struct (step 270). Their patterns are constants; Polars takes an expression too;
+  - `encode` and `decode`, `to_integer`'s `base`, `dtype` and `strict`, `replace`'s
+    `n`, `concat_str`'s `ignore_nulls`, `json_path_match` and `json_decode` (step 271).
+    `json_decode` takes its dtype and does not infer one. The JSONPath is `$` then
+    `.key`, `['key']`, `[n]` and `..key`, with no wildcard, slice or filter.
 - **Partial:**
-  - `to_integer` has no `base` or `strict`;
-  - `to_decimal` only through `CastLossy(Decimal(p, s))`, with no inference;
-  - `replace` has no count `n`;
-  - `concat_str` has no `ignore_nulls`.
+  - `to_decimal` only through `CastLossy(Decimal(p, s))`, with no inference.
 
 ### 4.2 `.dt` (P0/P1)
 
