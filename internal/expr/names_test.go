@@ -91,6 +91,7 @@ func enumTables() []enumTable {
 				{int(FnConcatStr), int(fnHorizontalEnd)},
 				{int(FnListMedian), int(fnListMoreEnd)},
 				{int(FnStrContainsAny), int(fnStrMoreEnd)},
+				{int(FnDtIsoYear), int(fnDtMoreEnd)}, // step 272's, at 900
 			},
 			str:     func(i int) string { return CallFn(i).String() },
 			unknown: func(s string) bool { return strings.HasPrefix(s, "call(") },
@@ -138,7 +139,7 @@ func TestTheEnumSweepCoversEveryEnumItClaimsTo(t *testing.T) {
 	want := map[string]int{
 		"UnaryOp": 18, "BinaryOp": 18, "AggOp": 19, "WinFnOp": 5,
 		"RankMethod": 5, "MappingStrategy": 3, "Interpolation": 4,
-		"CallFn": 62,
+		"CallFn": 186,
 	}
 	for _, tab := range enumTables() {
 		var count int
@@ -202,7 +203,7 @@ func TestUnknownConstantsRenderAsUnknown(t *testing.T) {
 // would fall to an Internalf. Both are silent until the call is used.
 func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 	var classified int
-	for i := range 900 {
+	for i := range 1000 {
 		fn := CallFn(i)
 		var claims []string
 		for _, c := range []struct {
@@ -230,7 +231,8 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	// 171 since step 271's encode, decode, json_path_match, json_decode, the two
+	// 186 since step 272's twelve temporal functions at 900, and is_business_day,
+	// add_business_days and dt.replace; 171 after step 271's encode, decode, json_path_match, json_decode, the two
 	// to_integers and concat_str past nulls; 164 after step 270's nine string functions; 155 after step 269's six list functions; 149 after step 267's list.arg_sort, list.arg_true and list.arg_unique; 146 after
 	// step 266's concat_list; 145 after step 265's date, datetime, time, duration_ticks, epoch_ticks and
 	// business_day_count; 139 after step 264's date_ranges, datetime_ranges and time_ranges; 136 after step 263's int_ranges, linear_spaces and repeat_by; 133 after step 259's list.explode; 132 after step 256's dt.offset_by of an expression; 131 after step 255's eight string functions of an expression; 123 after step 254's is_in, list.get and list.contains of an expression; 120
@@ -244,8 +246,8 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 	// list.arg_min and list.arg_max, step 174's dt.replace_time_zone, step 171's
 	// struct.with_fields, step 147's cut and cut_left_closed, and step 146's
 	// list.join, six bit counts, concat_str and struct.
-	if classified != 171 {
-		t.Errorf("%d call functions are classified, want 171 — the families and the "+
+	if classified != 186 {
+		t.Errorf("%d call functions are classified, want 186 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }

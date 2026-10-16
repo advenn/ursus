@@ -44,6 +44,11 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 		return replaceTimeZone(name, out, c, args)
 	case expr.FnDtDate, expr.FnDtTime:
 		return localDateTime(fn, name, out, c)
+	case expr.FnDtIsoYear, expr.FnDtCentury, expr.FnDtMillennium, expr.FnDtBaseUtcOffset,
+		expr.FnDtDstOffset, expr.FnDtWithTimeUnit, expr.FnDtTotalMilliseconds,
+		expr.FnDtTotalMicroseconds, expr.FnDtTotalNanoseconds, expr.FnDtTotalFractional,
+		expr.FnDtSecondFractional, expr.FnDtEpochIn:
+		return dtMore(fn, name, out, c, args)
 	}
 
 	dt := c.DType()

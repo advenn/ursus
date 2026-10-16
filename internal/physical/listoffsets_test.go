@@ -27,6 +27,7 @@ package physical
 
 import (
 	"context"
+	"math"
 	"strconv"
 	"testing"
 
@@ -79,11 +80,27 @@ func slicedListBatch(t *testing.T) *data.Batch {
 	}
 	strs := data.NewList("ls", offs, data.NewString("item", text, ev.Finish()), valid)
 
-	schema, err := dtype.NewSchema(dtype.Of("l", col.DType()), dtype.Of("ls", strs.DType()))
+	// The same lists as floats, a NaN in row 1, for drop_nans; as Booleans, each
+	// value's evenness, for any, all and arg_true; and each wrapped in a list of its
+	// own, for explode (step 272).
+	floats := make([]float64, len(elems))
+	evens := bitmap.NewBuilder(len(elems))
+	for i, e := range elems {
+		floats[i] = float64(e)
+		evens.Append(e%2 == 0)
+	}
+	floats[3] = math.NaN()
+	lf := data.NewList("lf", offs, data.NewFixed("item", dtype.Float64, floats, ev.Finish()), valid)
+	lb := data.NewList("lb", offs, data.NewBool("item", evens.Finish(), ev.Finish()), valid)
+	outer := []int32{0, 1, 2, 3, 4, 5, 6, 7}
+	ll := data.NewList("ll", outer, col, bitmap.AllSet(7))
+
+	schema, err := dtype.NewSchema(dtype.Of("l", col.DType()), dtype.Of("ls", strs.DType()),
+		dtype.Of("lf", lf.DType()), dtype.Of("lb", lb.DType()), dtype.Of("ll", ll.DType()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := data.NewBatch(schema, []*data.Column{col, strs})
+	b, err := data.NewBatch(schema, []*data.Column{col, strs, lf, lb, ll})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,8 +130,18 @@ func TestEveryListFunctionHonoursASlicedList(t *testing.T) {
 			continue
 		}
 		recv := "l"
-		if fn == expr.FnListJoin {
+		switch fn {
+		case expr.FnListJoin:
 			recv = "ls"
+		case expr.FnListDropNans:
+			recv = "lf"
+		case expr.FnListAny, expr.FnListAll, expr.FnListArgTrue:
+			recv = "lb"
+		case expr.FnListExplode:
+			recv = "ll"
+		case expr.FnListItem:
+			// It refuses a list of other than one element, which most rows here are.
+			continue
 		}
 		for _, set := range contractArgSets(fn) {
 			args := []expr.Node{&expr.Col{Name: recv}}
@@ -170,10 +197,11 @@ func TestEveryListFunctionHonoursASlicedList(t *testing.T) {
 	}
 
 	// Anti-vacuity, on the three things that could quietly stop being true.
-	if len(reached) < 15 {
-		t.Errorf("only %d list functions were reached; the enum declares 15", len(reached))
+	// 33 in the two blocks, but list.item, which refuses these lists.
+	if len(reached) < 32 {
+		t.Errorf("only %d list functions were reached; the enum declares 33, and all but item run", len(reached))
 	}
-	if compared < 15*len(listWindows) {
+	if compared < 32*len(listWindows) {
 		t.Errorf("only %d comparisons ran", compared)
 	}
 	// The fixture property this whole file exists for, stated exactly.

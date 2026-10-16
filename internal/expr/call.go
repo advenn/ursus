@@ -310,6 +310,14 @@ const (
 	FnStrParseInt
 	FnStrParseUint
 	FnConcatStrIgnoreNulls
+
+	// Step 272: is_business_day(value, mask, holidays), the calendar as
+	// business_day_count's; add_business_days(value, n, mask, holidays, roll); and
+	// replace(value, year, month, day, hour, minute, second, microsecond, ambiguous,
+	// non_existent), a component a null literal to keep the value's own.
+	FnDtIsBusinessDay
+	FnDtAddBusinessDays
+	FnDtReplace
 	fnHorizontalEnd
 )
 
@@ -372,6 +380,28 @@ const (
 	fnStrMoreEnd
 )
 
+// The temporal family, continued (step 272): iso_year, century and millennium; a
+// zone's base and daylight-saving offsets; with_time_unit, the TimeUnit's code; the
+// totals in the smaller units, and fractional in any, the unit's nanoseconds; second
+// with its fraction; and epoch in a unit, its nanoseconds, a day's being days.
+//
+// A block of its own, as the string family's at 800 is. IsTemporal covers both.
+const (
+	FnDtIsoYear CallFn = iota + 900
+	FnDtCentury
+	FnDtMillennium
+	FnDtBaseUtcOffset
+	FnDtDstOffset
+	FnDtWithTimeUnit
+	FnDtTotalMilliseconds
+	FnDtTotalMicroseconds
+	FnDtTotalNanoseconds
+	FnDtTotalFractional
+	FnDtSecondFractional
+	FnDtEpochIn
+	fnDtMoreEnd
+)
+
 // IsString, IsTemporal and IsGeneral classify a function by family.
 //
 // These are range comparisons over declaration order, which is why the enum is
@@ -379,9 +409,11 @@ const (
 func (f CallFn) IsString() bool {
 	return f < fnStrEnd || f >= FnStrContainsAny && f < fnStrMoreEnd
 }
-func (f CallFn) IsTemporal() bool { return f >= FnDtYear && f < fnDtEnd }
-func (f CallFn) IsGeneral() bool  { return f >= FnIsIn && f < fnGenEnd }
-func (f CallFn) IsMath() bool     { return f >= FnMathRound && f < fnMathEnd }
+func (f CallFn) IsTemporal() bool {
+	return f >= FnDtYear && f < fnDtEnd || f >= FnDtIsoYear && f < fnDtMoreEnd
+}
+func (f CallFn) IsGeneral() bool { return f >= FnIsIn && f < fnGenEnd }
+func (f CallFn) IsMath() bool    { return f >= FnMathRound && f < fnMathEnd }
 func (f CallFn) IsList() bool {
 	return f >= FnListLen && f < fnListEnd || f >= FnListMedian && f < fnListMoreEnd
 }
@@ -429,6 +461,14 @@ var callNames = map[CallFn]string{
 	FnDtIsLeapYear: "dt.is_leap_year", FnDtConvertTimeZone: "dt.convert_time_zone",
 	FnDtReplaceTimeZone: "dt.replace_time_zone", FnDtDaysInMonth: "dt.days_in_month",
 	FnDtDate: "dt.date", FnDtTime: "dt.time",
+	FnDtIsoYear: "dt.iso_year", FnDtCentury: "dt.century", FnDtMillennium: "dt.millennium",
+	FnDtBaseUtcOffset: "dt.base_utc_offset", FnDtDstOffset: "dt.dst_offset",
+	FnDtWithTimeUnit: "dt.with_time_unit", FnDtTotalMilliseconds: "dt.total_milliseconds",
+	FnDtTotalMicroseconds: "dt.total_microseconds", FnDtTotalNanoseconds: "dt.total_nanoseconds",
+	FnDtTotalFractional: "dt.total_fractional", FnDtSecondFractional: "dt.second_fractional",
+	FnDtEpochIn:       "dt.epoch_in",
+	FnDtIsBusinessDay: "dt.is_business_day", FnDtAddBusinessDays: "dt.add_business_days",
+	FnDtReplace: "dt.replace",
 
 	FnIsIn: "is_in",
 
@@ -885,6 +925,46 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			return dtype.Null, err
 		}
 		return dtype.List(elem), nil
+
+	case FnDtIsBusinessDay, FnDtAddBusinessDays:
+		want := map[CallFn]int{FnDtIsBusinessDay: 3, FnDtAddBusinessDays: 5}[fn]
+		if len(ops) != want {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		v := ops[0].Type
+		if v.ID() != dtype.TypeDate && v.ID() != dtype.TypeDatetime && !v.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"%s requires a Date or Datetime operand, got %s", fn, v)
+		}
+		if fn == FnDtIsBusinessDay {
+			return dtype.Bool, nil
+		}
+		if n := ops[1].Type; !n.IsInteger() && !n.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"add_business_days takes an integer count, got %s", n)
+		}
+		if v.IsNull() {
+			return dtype.Date, nil
+		}
+		return v, nil
+
+	case FnDtReplace:
+		if len(ops) != 10 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		v := ops[0].Type
+		if v.ID() != dtype.TypeDate && v.ID() != dtype.TypeDatetime {
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"%s requires a Date or Datetime operand, got %s", fn, v).
+				Hint("a Time is replaced by building it again with MakeTime")
+		}
+		for i, f := range ops[1:8] {
+			if !f.Type.IsInteger() && !f.Type.IsNull() {
+				return dtype.Null, uerr.New(uerr.KindType, "dt",
+					"replace's %s is an integer, got %s", DateTimeParts[i], f.Type)
+			}
+		}
+		return v, nil
 
 	case FnBusinessDayCount:
 		if len(ops) != 4 {
@@ -1562,6 +1642,19 @@ func GroupNames(re *regexp.Regexp) []string {
 	return out
 }
 
+// DateTimeParts are dt.replace's components, in their operands' order.
+var DateTimeParts = []string{"year", "month", "day", "hour", "minute", "second", "microsecond"}
+
+// TotalUnits are the units a fractional total counts in, as their nanoseconds: days
+// to nanoseconds. EpochUnits are epoch's: nanoseconds to seconds, and days.
+var (
+	TotalUnits = []int64{86_400e9, 3_600e9, 60e9, 1e9, 1e6, 1e3, 1}
+	EpochUnits = []int64{1, 1e3, 1e6, 1e9, EpochDay}
+)
+
+// EpochDay is a day's nanoseconds, epoch's unit for days.
+const EpochDay = 86_400e9
+
 // dtCallOut takes the Call rather than the CallFn because truncate's answer depends
 // on its INTERVAL and not only on its receiver. See ResolveCall's doc.
 func dtCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
@@ -1571,6 +1664,83 @@ func dtCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		in.ID() == dtype.TypeTime
 
 	switch fn {
+	case FnDtIsoYear, FnDtCentury, FnDtMillennium:
+		if in.ID() != dtype.TypeDate && in.ID() != dtype.TypeDatetime {
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"%s requires a Date or Datetime operand, got %s", fn, in)
+		}
+		return dtype.Int32, nil
+
+	case FnDtBaseUtcOffset, FnDtDstOffset:
+		if in.ID() != dtype.TypeDatetime || in.TimeZone() == "" {
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"%s requires a Datetime with a time zone, got %s", fn, in).
+				Hint("give it one with .Dt().ReplaceTimeZone(tz)")
+		}
+		// Milliseconds whatever the value's unit, as Polars answers.
+		return dtype.Duration(dtype.Milli), nil
+
+	case FnDtWithTimeUnit:
+		args, err := CallArgs(c)
+		if err != nil {
+			return dtype.Null, err
+		}
+		unit := dtype.TimeUnit(callLitInt(args, 0))
+		if len(args) != 1 || unit > dtype.Nano {
+			return dtype.Null, uerr.Internalf("expr: %s without its unit", fn)
+		}
+		switch in.ID() {
+		case dtype.TypeDatetime:
+			return dtype.Datetime(unit, in.TimeZone()), nil
+		case dtype.TypeDuration:
+			return dtype.Duration(unit), nil
+		}
+		return dtype.Null, uerr.New(uerr.KindType, "dt",
+			"%s requires a Datetime or Duration operand, got %s", fn, in)
+
+	case FnDtTotalMilliseconds, FnDtTotalMicroseconds, FnDtTotalNanoseconds, FnDtTotalFractional:
+		if !isDur {
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"%s requires a Duration operand, got %s", fn, in).
+				Hint("subtract two instants to get a Duration")
+		}
+		if fn != FnDtTotalFractional {
+			return dtype.Int64, nil
+		}
+		args, err := CallArgs(c)
+		if err != nil {
+			return dtype.Null, err
+		}
+		if per := callLitInt(args, 0); len(args) != 1 || !slices.Contains(TotalUnits, per) {
+			return dtype.Null, uerr.Internalf("expr: %s in %d nanoseconds", fn, per)
+		}
+		return dtype.Float64, nil
+
+	case FnDtSecondFractional:
+		if in.ID() != dtype.TypeDatetime && in.ID() != dtype.TypeTime {
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"%s requires a Datetime or Time operand, got %s", fn, in)
+		}
+		return dtype.Float64, nil
+
+	case FnDtEpochIn:
+		if in.ID() != dtype.TypeDate && in.ID() != dtype.TypeDatetime {
+			return dtype.Null, uerr.New(uerr.KindType, "dt",
+				"%s requires a Date or Datetime operand, got %s", fn, in)
+		}
+		args, err := CallArgs(c)
+		if err != nil {
+			return dtype.Null, err
+		}
+		per := callLitInt(args, 0)
+		if len(args) != 1 || !slices.Contains(EpochUnits, per) {
+			return dtype.Null, uerr.Internalf("expr: %s in %d nanoseconds", fn, per)
+		}
+		if per == EpochDay {
+			return dtype.Int32, nil
+		}
+		return dtype.Int64, nil
+
 	case FnDtTotalDays, FnDtTotalHours, FnDtTotalMinutes, FnDtTotalSeconds:
 		if !isDur {
 			return dtype.Null, uerr.New(uerr.KindType, "dt",
@@ -1810,6 +1980,14 @@ const (
 	ZoneEarliest = "earliest" // a fold's first reading, at the offset before it
 	ZoneLatest   = "latest"   // a fold's second reading
 	ZoneNull     = "null"     // a null
+)
+
+// Rolls are add_business_days' answers to a value not on a business day, in Polars'
+// words (step 272).
+const (
+	RollRaise    = "raise"
+	RollForward  = "forward"
+	RollBackward = "backward"
 )
 
 // replaceZoneOut types replace_time_zone: a Datetime, naive or zoned, keeps its unit
@@ -2057,6 +2235,12 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		return dtype.Bool, nil
 
 	case FnListItem:
+		// allow_empty, which the kernel reads and cannot run without.
+		if args, err := CallArgs(c); err != nil || len(args) != 1 {
+			return dtype.Null, uerr.Internalf("expr: %s without allow_empty", fn)
+		} else if _, ok := args[0].(bool); !ok {
+			return dtype.Null, uerr.Internalf("expr: %s with allow_empty %v", fn, args[0])
+		}
 		return elem, nil
 
 	case FnListSample:

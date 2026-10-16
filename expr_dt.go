@@ -3,7 +3,9 @@ package ursus
 import (
 	"time"
 
+	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // DtExpr is the temporal namespace: `Col("ts").Dt().Year()`.
@@ -119,6 +121,83 @@ func (d DtExpr) TotalDays() Expr    { return d.call(expr.FnDtTotalDays) }
 func (d DtExpr) TotalHours() Expr   { return d.call(expr.FnDtTotalHours) }
 func (d DtExpr) TotalMinutes() Expr { return d.call(expr.FnDtTotalMinutes) }
 func (d DtExpr) TotalSeconds() Expr { return d.call(expr.FnDtTotalSeconds) }
+
+// TotalMilliseconds, TotalMicroseconds and TotalNanoseconds are the Total family in
+// the smaller units, truncating toward zero. A Duration whose total in nanoseconds
+// is past an Int64 is refused.
+func (d DtExpr) TotalMilliseconds() Expr { return d.call(expr.FnDtTotalMilliseconds) }
+func (d DtExpr) TotalMicroseconds() Expr { return d.call(expr.FnDtTotalMicroseconds) }
+func (d DtExpr) TotalNanoseconds() Expr  { return d.call(expr.FnDtTotalNanoseconds) }
+
+// The Fractional totals are the Total family with the unit's fraction, a Float64:
+// Polars' total_*(fractional=True). Each is the tick count times the unit's
+// reciprocal, as Polars divides by a constant, so each agrees with Polars' to the
+// bit.
+func (d DtExpr) TotalDaysFractional() Expr    { return d.totalFractional(24 * time.Hour) }
+func (d DtExpr) TotalHoursFractional() Expr   { return d.totalFractional(time.Hour) }
+func (d DtExpr) TotalMinutesFractional() Expr { return d.totalFractional(time.Minute) }
+func (d DtExpr) TotalSecondsFractional() Expr { return d.totalFractional(time.Second) }
+func (d DtExpr) TotalMillisecondsFractional() Expr {
+	return d.totalFractional(time.Millisecond)
+}
+func (d DtExpr) TotalMicrosecondsFractional() Expr {
+	return d.totalFractional(time.Microsecond)
+}
+func (d DtExpr) TotalNanosecondsFractional() Expr { return d.totalFractional(time.Nanosecond) }
+
+func (d DtExpr) totalFractional(unit time.Duration) Expr {
+	return d.call(expr.FnDtTotalFractional, int64(unit))
+}
+
+// SecondFractional is the second with its fraction, 0 up to 60, a Float64: Polars'
+// second(fractional=True). A Datetime or a Time; a Date has no seconds.
+func (d DtExpr) SecondFractional() Expr { return d.call(expr.FnDtSecondFractional) }
+
+// IsoYear is the ISO 8601 year, the year of the ISO week a day is in, so 2024-12-30
+// is in 2025's first week; Century and Millennium count from year 1, so 2000 is in
+// the 20th century and 2001 the 21st, and year 0 is in neither, as Polars counts.
+// Each is an Int32 of a Date or a Datetime, read on its zone's wall clock.
+func (d DtExpr) IsoYear() Expr    { return d.call(expr.FnDtIsoYear) }
+func (d DtExpr) Century() Expr    { return d.call(expr.FnDtCentury) }
+func (d DtExpr) Millennium() Expr { return d.call(expr.FnDtMillennium) }
+
+// EpochIn is the time since 1970-01-01T00:00:00Z in unit, floored, so a microsecond
+// before it is millisecond -1: Polars' epoch(time_unit). EpochDays is it in days, an
+// Int32. A Date or a Datetime; a zoned one counts from its instant.
+func (d DtExpr) EpochIn(unit TimeUnit) Expr {
+	if unit > Nano {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "dt.epoch", "%s is not a time unit", unit)})
+	}
+	return d.call(expr.FnDtEpochIn, int64(unit.Duration()))
+}
+func (d DtExpr) EpochDays() Expr { return d.call(expr.FnDtEpochIn, int64(expr.EpochDay)) }
+
+// Timestamp is EpochIn in milliseconds, microseconds or nanoseconds: Polars'
+// timestamp(time_unit), which takes no seconds.
+func (d DtExpr) Timestamp(unit TimeUnit) Expr {
+	if unit == Second {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "dt.timestamp",
+			"timestamp counts in milliseconds, microseconds or nanoseconds").Hint("EpochIn(ursus.Second) counts seconds")})
+	}
+	return d.EpochIn(unit)
+}
+
+// WithTimeUnit reads a Datetime's or a Duration's integers in unit, so the values
+// change by the ratio of the units: Polars' with_time_unit. A Datetime keeps its
+// zone. Cast converts instead, keeping the values.
+func (d DtExpr) WithTimeUnit(unit TimeUnit) Expr {
+	if unit > Nano {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "dt.with_time_unit", "%s is not a time unit", unit)})
+	}
+	return d.call(expr.FnDtWithTimeUnit, int64(unit))
+}
+
+// BaseUtcOffset is a zoned Datetime's zone's offset from UTC without daylight-saving
+// time, and DstOffset that time's own offset, the two summing to the offset in force,
+// each a Duration(ms): Polars' base_utc_offset and dst_offset. Daylight-saving time
+// can be negative, as Dublin's winter is.
+func (d DtExpr) BaseUtcOffset() Expr { return d.call(expr.FnDtBaseUtcOffset) }
+func (d DtExpr) DstOffset() Expr     { return d.call(expr.FnDtDstOffset) }
 
 // ToString formats using the same ISO 8601 layouts the CSV writer emits, so a
 // frame printed to a terminal and a frame written to a file agree.
@@ -286,3 +365,82 @@ const (
 
 func (Ambiguous) zoneOption()   {}
 func (NonExistent) zoneOption() {}
+
+// IsBusinessDay is whether each value's date, on its zone's wall clock, is a business
+// day of cal, Monday to Friday by default: Polars' is_business_day.
+func (d DtExpr) IsBusinessDay(cal ...BusinessCalendar) Expr {
+	args, err := calendarArgs("is_business_day", cal)
+	if err != nil {
+		return wrap(&expr.Err{E: err})
+	}
+	return wrap(horizontal(expr.FnDtIsBusinessDay, append([]expr.Node{d.e.node()}, args...)...))
+}
+
+// Roll answers a value that AddBusinessDays is given on a day that is not a business
+// day: Polars' roll.
+type Roll string
+
+const (
+	RollRaise    Roll = expr.RollRaise    // refuse the query, naming the value; the default
+	RollForward  Roll = expr.RollForward  // move it to the next business day first
+	RollBackward Roll = expr.RollBackward // or to the one before
+)
+
+// AddBusinessDays moves each value n business days of cal, backward where n is
+// negative, keeping its time of day: Polars' add_business_days. n is a constant or an
+// expression of integers. A value not on a business day is refused, or rolled first.
+// A zoned value moves on its wall clock, and a wall clock its zone reads twice or
+// never is refused, as Polars refuses it.
+func (d DtExpr) AddBusinessDays[N Operand](n N, roll Roll, cal ...BusinessCalendar) Expr {
+	if roll != RollRaise && roll != RollForward && roll != RollBackward {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "dt.add_business_days", "%q is not a roll", roll).
+			Hint("RollRaise, RollForward or RollBackward")})
+	}
+	args, err := calendarArgs("add_business_days", cal)
+	if err != nil {
+		return wrap(&expr.Err{E: err})
+	}
+	ops := append([]expr.Node{d.e.node(), lift(n)}, args...)
+	return wrap(horizontal(expr.FnDtAddBusinessDays, append(ops, litNode(string(roll)))...))
+}
+
+// DateTimeParts are the components Replace sets, Polars' replace keywords. Each is
+// nil, to keep the value's own, a Go integer, or an Expr of integers, whose null
+// keeps the value's own too.
+type DateTimeParts struct {
+	Year, Month, Day, Hour, Minute, Second, Microsecond any
+}
+
+// Replace sets the components p gives on each value's wall clock: Polars' dt.replace.
+//
+//	Col("ts").Dt().Replace(DateTimeParts{Day: 1, Hour: 0})
+//
+// A Date's time components are not read. A Microsecond sets the whole fraction of the
+// second, a Datetime(ns)'s nanoseconds too. Components that are no date or time, the
+// 30th of February or an hour of 24, are refused. A zoned value is read again in its
+// zone, and a wall clock it reads twice or never is refused, unless opts answer it as
+// ReplaceTimeZone's do; Polars takes ambiguous, and refuses a gap always.
+func (d DtExpr) Replace(p DateTimeParts, opts ...ZoneOption) Expr {
+	args := []expr.Node{d.e.node()}
+	for _, v := range []any{p.Year, p.Month, p.Day, p.Hour, p.Minute, p.Second, p.Microsecond} {
+		switch x := v.(type) {
+		case nil:
+			args = append(args, &expr.Lit{DT: dtype.Null})
+		case Expr:
+			args = append(args, x.node())
+		default:
+			args = append(args, litNode(x))
+		}
+	}
+	ambiguous, nonExistent := AmbiguousRaise, NonExistentRaise
+	for _, o := range opts {
+		switch o := o.(type) {
+		case Ambiguous:
+			ambiguous = o
+		case NonExistent:
+			nonExistent = o
+		}
+	}
+	args = append(args, litNode(string(ambiguous)), litNode(string(nonExistent)))
+	return wrap(horizontal(expr.FnDtReplace, args...))
+}

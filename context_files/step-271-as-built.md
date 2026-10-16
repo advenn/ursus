@@ -114,6 +114,10 @@ error, and is fixed.
 `to_integer`, `concat_str` with `ignore_nulls`, and `replace` with `n`. `json_decode`
 is driven without its type, since every receiver there is text that is not JSON.
 
+*Corrected at step 272:* the matrix's sweep stopped at 700, so of these it drove only
+`to_integer`, `concat_str` and `replace`, which are below it. The four at 800 were
+first driven at step 272, which widened the sweep, and they agreed.
+
 **Public:**
 
 - `Str().Encode`, `Decode` and the `Encoding` constants `Hex` and `Base64`;

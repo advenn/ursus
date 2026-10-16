@@ -273,7 +273,7 @@ func allUnaryOps() []expr.UnaryOp {
 // nothing wrong, which is the failure this file exists to prevent.
 func allCallFns() []expr.CallFn {
 	var fns []expr.CallFn
-	for i := range 700 {
+	for i := range 1000 {
 		fn := expr.CallFn(i)
 		if fn.IsString() || fn.IsTemporal() || fn.IsGeneral() ||
 			fn.IsMath() || fn.IsList() || fn.IsStruct() || fn.IsHorizontal() {
@@ -437,11 +437,50 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 	// no List and no Struct column — every combination is an agreed refusal. The
 	// arguments are here so that the day a List column is added the arm drives them
 	// correctly rather than with a short slice, which listSort would index bare.
-	expr.FnListGet:      {{args: []any{int64(0)}}},
-	expr.FnListHead:     {{args: []any{int64(1)}}},
-	expr.FnListTail:     {{args: []any{int64(1)}}},
-	expr.FnListSlice:    {{args: []any{int64(0), int64(1)}}},
-	expr.FnListSort:     {{args: []any{false}}},
+	expr.FnListGet:   {{args: []any{int64(0)}}},
+	expr.FnListHead:  {{args: []any{int64(1)}}},
+	expr.FnListTail:  {{args: []any{int64(1)}}},
+	expr.FnListSlice: {{args: []any{int64(0), int64(1)}}},
+	expr.FnListSort:  {{args: []any{false}}},
+	// The list family's second block, at 700, and the string family's, at 800, were
+	// outside allCallFns' sweep until step 272, which widened it: each takes its
+	// arguments as its public method passes them. list.item takes none: it refuses a
+	// list of other than one element on its value, which every list here is, so it
+	// asks only that a call without allow_empty refuses alike.
+	expr.FnListStd:         {{args: []any{int64(1)}}},
+	expr.FnListVar:         {{args: []any{int64(1)}}},
+	expr.FnListQuantile:    {{args: []any{0.5, int64(0)}}},
+	expr.FnListGatherEvery: {{args: []any{int64(2), int64(0)}}},
+	expr.FnListArgSort:     {{args: []any{false, false}}},
+	expr.FnListAny:         {{args: []any{true}}},
+	expr.FnListAll:         {{args: []any{true}}},
+	expr.FnListSample:      {{args: []any{int64(1), 0.0, true, false, int64(1)}}},
+	expr.FnStrContainsAny:  {{args: []any{[]string{"1", "a"}, false}}},
+	expr.FnStrReplaceMany:  {{args: []any{[]string{"1", "a"}, []string{"x"}, false, false}}},
+	expr.FnStrExtractMany:  {{args: []any{[]string{"1", "a"}, false, false, false}}},
+	expr.FnStrFindMany:     {{args: []any{[]string{"1", "a"}, false, true, false}}},
+	expr.FnStrExtractGroups: {{label: ",named", args: []any{`(?<d>\d)`}},
+		{label: ",none", args: []any{`\d`}}},
+	expr.FnStrSplitExact:     {{args: []any{",", int64(1), false}}},
+	expr.FnStrSplitInclusive: {{args: []any{","}}},
+	expr.FnStrNormalize:      {{args: []any{"NFKC"}}},
+
+	// Step 272's temporal functions: the unit's code or nanoseconds; the calendar's
+	// mask and holidays; replace's seven components, nil where not given, and its two
+	// policies. add_business_days rolls forward, as raise refuses the Saturday here
+	// on its value.
+	expr.FnDtWithTimeUnit: {{label: ",ms", args: []any{int64(dtype.Milli)}},
+		{label: ",ns", args: []any{int64(dtype.Nano)}}},
+	expr.FnDtTotalFractional: {{label: ",s", args: []any{int64(time.Second)}},
+		{label: ",d", args: []any{int64(24 * time.Hour)}}},
+	expr.FnDtEpochIn: {{label: ",ms", args: []any{int64(time.Millisecond)}},
+		{label: ",d", args: []any{int64(expr.EpochDay)}}},
+	expr.FnDtIsBusinessDay:   {{args: []any{int64(0b11111), []int64{2}}}},
+	expr.FnDtAddBusinessDays: {{args: []any{int64(1), int64(0b11111), []int64{2}, "forward"}}},
+	expr.FnDtReplace: {
+		{label: ",day", args: []any{nil, nil, int64(1), nil, nil, nil, nil, "raise", "raise"}},
+		{label: ",hour", args: []any{nil, nil, nil, int64(5), nil, nil, int64(7), "raise", "raise"}},
+	},
 	expr.FnListContains: {{args: []any{int64(1)}}},
 	// THREE sets, following FnDtTruncate above: the answer must come from the
 	// argument, so a second field of a different type is what proves it, and a name
@@ -498,6 +537,21 @@ func callLit(v any) expr.Node {
 		return &expr.Lit{Value: x, DT: dtype.Bool}
 	case float64:
 		return &expr.Lit{Value: x, DT: dtype.Float64}
+	case nil:
+		return &expr.Lit{DT: dtype.Null}
+	case []int64:
+		elems := make([]*expr.Lit, len(x))
+		for i, v := range x {
+			elems[i] = &expr.Lit{Value: v, DT: dtype.Int64}
+		}
+		return &expr.Lit{Value: elems, DT: dtype.List(dtype.Int64)}
+	case []string:
+		// A List literal, as litNode builds one from a Go slice.
+		elems := make([]*expr.Lit, len(x))
+		for i, s := range x {
+			elems[i] = &expr.Lit{Value: s, DT: dtype.String}
+		}
+		return &expr.Lit{Value: elems, DT: dtype.List(dtype.String)}
 	default:
 		panic("contractCallArgs holds a value callLit cannot type")
 	}

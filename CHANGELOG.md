@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–271, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–272, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
 
@@ -60,6 +60,13 @@ completeness, part 2 — namespaces and generators.**
   or base64; `ToIntegerWith(base, dtype, strict)`, the base a constant or a column;
   `ReplaceN`, the first n matches; `ConcatStrIgnoreNulls`; `JsonPathMatch(path)`; and
   `JsonDecode(dtype)`, to a type given, with Polars' conversions.
+- **The temporal namespace's missing functions** (272): `IsoYear`, `Century` and
+  `Millennium`; `BaseUtcOffset` and `DstOffset`; `WithTimeUnit`;
+  `TotalMilliseconds`, `TotalMicroseconds` and `TotalNanoseconds`, and every total
+  and the second with its fraction, `TotalSecondsFractional` and the rest; `EpochIn`,
+  `EpochDays` and `Timestamp` in a unit; `IsBusinessDay` and `AddBusinessDays` with a
+  `BusinessCalendar` and a `Roll`; and `Replace(DateTimeParts{...})`, setting
+  components.
 
 ### Fixes
 

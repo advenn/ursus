@@ -114,11 +114,16 @@ differs from their input's, or scalars outside a group-by.
   - `total_milliseconds`, `total_microseconds`, `total_nanoseconds`.
 - **Built in 0.6.5:** `dt.date()` and `dt.time()`, the local date and time (step
   249).
+- **Built in 0.6.6:**
+  - `business_day_count` (step 265);
+  - every function listed missing above, with `epoch` and `timestamp` in a unit and
+    `fractional` on `second` and every total (step 272).
+  - A Polars keyword flag is a name's suffix: `total_seconds(fractional=True)` is
+    `TotalSecondsFractional()`, `epoch("ms")` `EpochIn(Milli)`, `epoch("d")`
+    `EpochDays()`.
 - **Partial:**
-  - `epoch` in whole seconds only;
-  - `timestamp` and `from_epoch` only through casts;
-  - `second(fractional=)`;
-  - `replace_time_zone`'s ambiguity policy is one for the whole column, not a column of choices.
+  - `replace_time_zone`'s ambiguity policy is one for the whole column, not a column
+    of choices; so are `replace`'s and `add_business_days`' roll.
 
 ### 4.3 `.list` (P1)
 
