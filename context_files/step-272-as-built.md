@@ -37,6 +37,17 @@ it found.
   - São Paulo in 2018 and Moscow in 2013, base +4h.
 - **Speed:** the offsets are found once per period of the zone.
 - **Refused:** a naive Datetime.
+- **The system's zone database decides Dublin and Casablanca:**
+  - its main form, which Polars bundles and Debian installs, has their daylight-saving
+    time negative;
+  - its rearguard form, which Ubuntu installs, has it positive: Dublin's winter is
+    standard time, base 0, and its summer an hour of daylight saving;
+  - Go reads the system's database and only its daylight-saving flag, so the answer
+    is the installed form's;
+  - the forms differ in no other zone of today, and in no offset in force.
+- **Found by CI:** the first push of this step failed on Ubuntu's runners, where the
+  test expected the main form. The test now reads the installed form, from Dublin's
+  January, and checks its answer.
 
 **Units, totals and epochs:**
 
@@ -194,4 +205,5 @@ Every answer is Polars 1.44.1's.
 | the sweep stops at 700 (the sliced-list floor) | **bites** |
 
 **Gate:** test-all 115 ok, race 23 ok, levels, vet ×3 and the bench engine tests
-clean; the 22 PDS-H answers match DuckDB.
+clean; the 22 PDS-H answers match DuckDB. The CI fix, a test and a doc comment, ran
+the root package's tests again under v1 and v3, clean.

@@ -292,8 +292,19 @@ func TestReplace(t *testing.T) {
 }
 
 // TestZoneOffsets: base_utc_offset and dst_offset, in milliseconds. Every answer is
-// Polars 1.44.1's, Dublin's negative winter daylight-saving time among them.
+// Polars 1.44.1's.
+//
+// Dublin's and Casablanca's daylight-saving time is negative in the zone database's
+// main form, which Polars bundles and Debian installs, and positive in its rearguard
+// form, which Ubuntu installs: there Dublin's winter is standard time and its summer
+// an hour of daylight saving. Go reads the system's, so the answer is each form's,
+// and either way the two sum to the offset in force.
 func TestZoneOffsets(t *testing.T) {
+	dublin, err := time.LoadLocation("Europe/Dublin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mainForm := time.Date(2024, 1, 15, 12, 0, 0, 0, dublin).IsDST()
 	c := ursus.Col
 	d := c("d").Dt()
 	at := func(zone string) *ursus.LazyFrame {
@@ -301,13 +312,17 @@ func TestZoneOffsets(t *testing.T) {
 			Select(ursus.MakeDatetime(2024, c("m"), 15, 12, 0, 0, 0).Dt().ReplaceTimeZone(zone).Alias("d"))
 	}
 	ms := func(e ursus.Expr, name string) ursus.Expr { return e.Cast(ursus.Int64).Alias(name) }
-	const h = 3_600_000
+	dublinWant := "b,o\n3600000,-3600000\n3600000,0\n,\n"
+	casaWant := "b,o\n3600000,-3600000\n"
+	if !mainForm {
+		dublinWant, casaWant = "b,o\n0,0\n0,3600000\n,\n", "b,o\n0,0\n"
+	}
 	for _, tc := range []struct {
 		zone string
 		want string
 	}{
 		{"America/New_York", "b,o\n-18000000,0\n-18000000,3600000\n,\n"},
-		{"Europe/Dublin", "b,o\n3600000,-3600000\n3600000,0\n,\n"},
+		{"Europe/Dublin", dublinWant},
 		{"Australia/Lord_Howe", "b,o\n37800000,1800000\n37800000,0\n,\n"},
 		{"Asia/Kolkata", "b,o\n19800000,0\n19800000,0\n,\n"},
 		{"UTC", "b,o\n0,0\n0,0\n,\n"},
@@ -316,12 +331,11 @@ func TestZoneOffsets(t *testing.T) {
 			t.Errorf("%s:\ngot  %q\nwant %q", tc.zone, got, tc.want)
 		}
 	}
-	_ = h
 	// Casablanca's clocks go back an hour in Ramadan: 2024-03-20 is in it.
 	casa := ursus.Frame(ursus.Values("y", []int64{2024})).
 		Select(ursus.MakeDatetime(c("y"), 3, 20, 12, 0, 0, 0).Dt().ReplaceTimeZone("Africa/Casablanca").Alias("d"))
-	if got := csvOf(t, casa.Select(ms(d.BaseUtcOffset(), "b"), ms(d.DstOffset(), "o"))); got != "b,o\n3600000,-3600000\n" {
-		t.Errorf("Ramadan: %q", got)
+	if got := csvOf(t, casa.Select(ms(d.BaseUtcOffset(), "b"), ms(d.DstOffset(), "o"))); got != casaWant {
+		t.Errorf("Ramadan: %q, want %q", got, casaWant)
 	}
 	got, err := at("UTC").Select(d.DstOffset()).Collect(t.Context())
 	if err != nil || got.Schema().Field(0).Type != ursus.Duration(ursus.Milli) {

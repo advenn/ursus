@@ -276,6 +276,10 @@ decide whether to keep or switch each one.
   266).
 - `ArgSortBy` of several keys is refused in an aggregation, where Polars 1.44.1
   answers with positions past the group's end (step 267).
+- `BaseUtcOffset` and `DstOffset` read the system's zone database, so where it is in
+  the rearguard form, as Ubuntu's is, Dublin's and Casablanca's daylight-saving time
+  is positive. Polars bundles the main form, where it is negative. Other zones agree
+  (step 272).
 
 ## 10. What ursus has that most others do not
 

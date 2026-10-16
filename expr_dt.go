@@ -194,8 +194,12 @@ func (d DtExpr) WithTimeUnit(unit TimeUnit) Expr {
 
 // BaseUtcOffset is a zoned Datetime's zone's offset from UTC without daylight-saving
 // time, and DstOffset that time's own offset, the two summing to the offset in force,
-// each a Duration(ms): Polars' base_utc_offset and dst_offset. Daylight-saving time
-// can be negative, as Dublin's winter is.
+// each a Duration(ms): Polars' base_utc_offset and dst_offset.
+//
+// They are read from the system's zone database. Its main form, which Polars bundles,
+// has Dublin's and Casablanca's daylight-saving time negative, Dublin's in winter; its
+// rearguard form, which some systems install (Ubuntu's), has it positive, Dublin's in
+// summer. The two forms differ in no other zone of today, and in no offset in force.
 func (d DtExpr) BaseUtcOffset() Expr { return d.call(expr.FnDtBaseUtcOffset) }
 func (d DtExpr) DstOffset() Expr     { return d.call(expr.FnDtDstOffset) }
 
