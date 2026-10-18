@@ -54,6 +54,11 @@ func TestFieldResolution(t *testing.T) {
 		{"uint64 + int64 widens to Int128",
 			bin(expr.OpAdd, col("big"), col("id")), "big", dtype.Int128, true},
 
+		// Integers as bits (step 278): their common type, as arithmetic's.
+		{"int & int", bin(expr.OpAnd, col("id"), col("qty")), "id", dtype.Int64, true},
+		{"uint64 | int64 in Int128", bin(expr.OpOr, col("big"), col("id")), "big", dtype.Int128, true},
+		{"not of an int", &expr.Unary{Op: expr.OpNot, Child: col("qty")}, "qty", dtype.Int32, true},
+
 		// True division is always float, even for two integers.
 		{"int / int", bin(expr.OpDiv, col("id"), col("qty")), "id", dtype.Float64, true},
 		{"f32 / f32", bin(expr.OpDiv, col("weight"), col("weight")), "weight", dtype.Float32, true},
@@ -160,7 +165,10 @@ func TestFieldResolutionErrors(t *testing.T) {
 		// by the numeric check — which produces the clearer message of the two.
 		{"bool arithmetic", bin(expr.OpAdd, col("flag"), col("flag")), uerr.ErrType,
 			"operator + is not defined for Bool"},
-		{"and on ints", bin(expr.OpAnd, col("id"), col("id")), uerr.ErrType, "requires Boolean operands"},
+		// Two integers are their bits since step 278; a float, or a Boolean beside an
+		// integer, is not.
+		{"and of a float", bin(expr.OpAnd, col("price"), col("id")), uerr.ErrType, "Boolean or integer operands"},
+		{"and of a Boolean and an int", bin(expr.OpAnd, col("flag"), col("id")), uerr.ErrType, "mixes logic and bits"},
 		{"datetime + datetime", bin(expr.OpAdd, col("ts"), col("ts")), uerr.ErrType, "not defined"},
 		{"is_nan on int", &expr.Unary{Op: expr.OpIsNan, Child: col("id")}, uerr.ErrType, "floating-point"},
 		{"neg on unsigned", &expr.Unary{Op: expr.OpNeg, Child: col("big")}, uerr.ErrType, "unsigned"},

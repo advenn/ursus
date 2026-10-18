@@ -285,7 +285,7 @@ func evalBinary(ctx context.Context, bn *expr.Binary, b *data.Batch) (*data.Colu
 
 	// The single source of truth for promotion. The evaluator's job is to obey it,
 	// not to reproduce it.
-	bind, err := expr.ResolveBinary(bn.Op, l.DType(), r.DType())
+	bind, err := expr.ResolveBinaryNode(bn, l.DType(), r.DType())
 	if err != nil {
 		return nil, err
 	}

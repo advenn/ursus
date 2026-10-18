@@ -38,6 +38,8 @@ func Binary(op expr.BinaryOp, name string, out dtype.DataType, l, r *data.Column
 	}
 
 	switch {
+	case op.IsLogical() && out.IsInteger():
+		return bitwise(op, name, out, l, r, n)
 	case op.IsLogical():
 		return kleene(op, name, l, r, n)
 	case op.IsMissingComparison():

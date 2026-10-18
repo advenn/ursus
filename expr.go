@@ -606,11 +606,16 @@ func replaceCall[K, V Literal](e Expr, fn expr.CallFn, old []K, new []V, def *V)
 //
 // Kleene three-valued logic: `false AND null` is false, `true OR null` is true.
 
-func (e Expr) And[T Operand](v T) Expr { return e.bin(expr.OpAnd, lift(v)) }
-func (e Expr) Or[T Operand](v T) Expr  { return e.bin(expr.OpOr, lift(v)) }
-func (e Expr) Xor[T Operand](v T) Expr { return e.bin(expr.OpXor, lift(v)) }
+// And, Or and Xor of two Booleans are Kleene logic. Of two integers they are the
+// integers' bits, at their common type as arithmetic's;
+// a Go integer beside one is of its type where it fits, as Polars keeps
+// Col("u8").And(6) a UInt8 (step 278). A Boolean beside an integer is refused.
+func (e Expr) And[T Operand](v T) Expr { return e.bin(expr.OpAnd, liftWeak(v)) }
+func (e Expr) Or[T Operand](v T) Expr  { return e.bin(expr.OpOr, liftWeak(v)) }
+func (e Expr) Xor[T Operand](v T) Expr { return e.bin(expr.OpXor, liftWeak(v)) }
 
-// Not is Kleene negation: NOT null is null.
+// Not is Kleene negation: NOT null is null. Of an integer it is its bits flipped,
+// ~x, of its type (step 278).
 func (e Expr) Not() Expr { return e.un(expr.OpNot) }
 
 // --- predicates --------------------------------------------------------------

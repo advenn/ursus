@@ -176,7 +176,7 @@ func (b *Binary) Field(in *dtype.Schema) (dtype.Field, error) {
 		return dtype.Field{}, err
 	}
 
-	res, err := ResolveBinary(b.Op, lf.Type, rf.Type)
+	res, err := ResolveBinaryNode(b, lf.Type, rf.Type)
 	if err != nil {
 		return dtype.Field{}, err
 	}

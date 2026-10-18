@@ -58,8 +58,12 @@ func Unary(op expr.UnaryOp, name string, out dtype.DataType, c *data.Column) (*d
 		bits.AppendView(c.Validity())
 		return data.NewBool(name, bits.Finish(), bitmap.AllSet(n)), nil
 
-	// Kleene NOT: NOT null is null, so validity passes straight through.
+	// Kleene NOT: NOT null is null, so validity passes straight through. An
+	// integer's is its bits' (step 278).
 	case expr.OpNot:
+		if c.DType().IsInteger() {
+			return bitwiseNot(name, c)
+		}
 		return data.NewBool(name, bitmap.Not(c.Bools()), c.Validity()), nil
 
 	// NaN predicates are NOT total. `null.is_nan()` is null, not false, because a

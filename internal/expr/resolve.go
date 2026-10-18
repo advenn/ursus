@@ -23,6 +23,23 @@ type Binding struct {
 func (b Binding) NeedsCastL(l dtype.DataType) bool { return l != b.CastL }
 func (b Binding) NeedsCastR(r dtype.DataType) bool { return r != b.CastR }
 
+// ResolveBinaryNode is ResolveBinary for the node b, whose operands are of types l
+// and r: an integer's bits beside a weak literal that fits its type exactly are of
+// that type, as Polars keeps Col("u8") & 6 a UInt8 (step 278). A bitwise result is
+// never wider than its operands, so the narrowing never overflows, where arithmetic's
+// would. Binary.Field and the evaluator both ask it, so the two agree.
+func ResolveBinaryNode(b *Binary, l, r dtype.DataType) (Binding, error) {
+	if b.Op.IsLogical() {
+		switch {
+		case IsWeakLit(b.R) && l.IsInteger() && FitsExactly(b.R.(*Lit).Value, l):
+			r = l
+		case IsWeakLit(b.L) && r.IsInteger() && FitsExactly(b.L.(*Lit).Value, r):
+			l = r
+		}
+	}
+	return ResolveBinary(b.Op, l, r)
+}
+
 // ResolveBinary computes the operand and result types of op applied to l and r.
 func ResolveBinary(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 	switch {
@@ -38,17 +55,32 @@ func ResolveBinary(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 }
 
 func resolveLogical(op BinaryOp, l, r dtype.DataType) (Binding, error) {
-	// Bool only. Integers are NOT implicitly truthy: `Col("count") & Col("flag")`
-	// is far more likely to be a mistake than an intent, and bitwise operations on
-	// integers get their own named methods rather than sharing a spelling with
-	// logical AND.
-	ok := func(d dtype.DataType) bool { return d.IsBool() || d.IsNull() }
-	if !ok(l) || !ok(r) {
+	// Two Booleans are Kleene logic. Two integers are their bits, as Polars' &, |
+	// and ^ are (step 278, M2 of v0.6.6-scope.md), at their common type, as arithmetic promotes them:
+	// a UInt8 and an Int8 are an Int16. An integer is NOT truthy beside a Boolean:
+	// `Col("count") & Col("flag")` is far more likely a mistake than an intent, and
+	// Polars deprecates it for the 2.0 that refuses it.
+	isBool := func(d dtype.DataType) bool { return d.IsBool() || d.IsNull() }
+	isInt := func(d dtype.DataType) bool { return d.IsInteger() || d.IsNull() }
+	switch {
+	case isBool(l) && isBool(r):
+		return Binding{CastL: dtype.Bool, CastR: dtype.Bool, Out: dtype.Bool}, nil
+	case isInt(l) && isInt(r):
+		common, ok := dtype.Promote(l, r)
+		if ok && common.IsInteger() {
+			return Binding{CastL: common, CastR: common, Out: common}, nil
+		}
 		return Binding{}, uerr.New(uerr.KindType, "",
-			"operator %s requires Boolean operands, got %s and %s", op, l, r).
-			Hint("use a comparison to produce a Boolean, e.g. col.Gt(0)")
+			"operator %s of %s and %s has no common integer type to take their bits in", op, l, r).
+			Hint("cast one first, e.g. .Cast(ursus.Int64)")
+	case l.IsBool() && r.IsInteger() || l.IsInteger() && r.IsBool():
+		return Binding{}, uerr.New(uerr.KindType, "",
+			"operator %s of %s and %s mixes logic and bits", op, l, r).
+			Hint("cast the Boolean to the integer's type first, or compare the integer, e.g. col.Gt(0)")
 	}
-	return Binding{CastL: dtype.Bool, CastR: dtype.Bool, Out: dtype.Bool}, nil
+	return Binding{}, uerr.New(uerr.KindType, "",
+		"operator %s requires Boolean or integer operands, got %s and %s", op, l, r).
+		Hint("use a comparison to produce a Boolean, e.g. col.Gt(0)")
 }
 
 func resolveMissingComparison(op BinaryOp, l, r dtype.DataType) (Binding, error) {
@@ -594,9 +626,13 @@ func ResolveUnary(op UnaryOp, in dtype.DataType) (dtype.DataType, error) {
 		return dtype.Bool, nil
 
 	case OpNot:
+		// An integer's NOT is its bits', ~x, as Polars' is (step 278).
+		if in.IsInteger() {
+			return in, nil
+		}
 		if !in.IsBool() && !in.IsNull() {
 			return dtype.Null, uerr.New(uerr.KindType, "",
-				"not() requires a Boolean operand, got %s", in)
+				"not() requires a Boolean or an integer operand, got %s", in)
 		}
 		return dtype.Bool, nil
 
