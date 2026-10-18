@@ -328,6 +328,11 @@ const (
 	FnBinEndsWith
 	FnBinGet
 	FnBinSlice
+
+	// order_cmp(a, b): -1, 0 or 1 as a sorts before, with or after b in the total
+	// order Sort uses, NaN above every number and -0 with 0 (step 279), which
+	// search_sorted, index_of and the peaks are written in.
+	FnOrderCmp
 	fnHorizontalEnd
 )
 
@@ -430,6 +435,14 @@ const (
 // The binary family (step 274): encode and decode, the encoding's name and decode's
 // strict; size, the unit's bytes, 1 for bytes; and reinterpret, a null literal of
 // the type and the endianness. Its functions of a row's operands are horizontal.
+// The general family, continued (step 279): hash, the seed; and order_sign, a
+// value's sign in the total order, beside its type's zero. IsGeneral covers it.
+const (
+	FnHash CallFn = iota + 1200
+	FnOrderSign
+	fnGenMoreEnd
+)
+
 const (
 	FnBinEncode CallFn = iota + 1100
 	FnBinDecode
@@ -449,7 +462,8 @@ func (f CallFn) IsTemporal() bool {
 	return f >= FnDtYear && f < fnDtEnd || f >= FnDtIsoYear && f < fnDtMoreEnd
 }
 func (f CallFn) IsGeneral() bool {
-	return f >= FnIsIn && f < fnGenEnd || f >= FnCatGetCategories && f < fnCatEnd
+	return f >= FnIsIn && f < fnGenEnd || f >= FnCatGetCategories && f < fnCatEnd ||
+		f >= FnHash && f < fnGenMoreEnd
 }
 func (f CallFn) IsMath() bool { return f >= FnMathRound && f < fnMathEnd }
 func (f CallFn) IsList() bool {
@@ -512,6 +526,7 @@ var callNames = map[CallFn]string{
 	FnBinContains: "bin.contains", FnBinStartsWith: "bin.starts_with", FnBinEndsWith: "bin.ends_with",
 	FnBinGet: "bin.get", FnBinSlice: "bin.slice", FnBinEncode: "bin.encode", FnBinDecode: "bin.decode",
 	FnBinSize: "bin.size", FnBinReinterpret: "bin.reinterpret",
+	FnOrderCmp: "order_cmp", FnHash: "hash", FnOrderSign: "order_sign",
 
 	FnIsIn: "is_in",
 
@@ -1018,6 +1033,15 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 	case FnBinContains, FnBinStartsWith, FnBinEndsWith, FnBinGet, FnBinSlice:
 		return binHorizontalOut(fn, ops)
 
+	case FnOrderCmp:
+		if len(ops) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		if _, err := OrderCmpType(ops[0].Type, ops[1].Type); err != nil {
+			return dtype.Null, err
+		}
+		return dtype.Int8, nil
+
 	case FnDtReplace:
 		if len(ops) != 10 {
 			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
@@ -1367,6 +1391,20 @@ func genCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 
 	case FnCatGetCategories:
 		return dtype.Null, uerr.Internalf("expr: %s is written out when its expression is expanded", fn)
+
+	case FnHash:
+		if !in.IsHashable() && !in.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "hash", "hash reads values a group-by can key on, not %s", in)
+		}
+		return dtype.Uint64, nil
+
+	case FnOrderSign:
+		// Numbers, instants and Booleans have a zero; text has none, and Polars'
+		// peaks refuse it.
+		if !in.IsOrdered() || in.HasStringStorage() || in.ID() == dtype.TypeEnum {
+			return dtype.Null, uerr.New(uerr.KindType, "order_sign", "a %s has no zero to be measured from", in)
+		}
+		return dtype.Int8, nil
 
 	case FnCatPhysical:
 		if in.ID() != dtype.TypeEnum {
@@ -1720,6 +1758,16 @@ func GroupNames(re *regexp.Regexp) []string {
 		out[i] = nm
 	}
 	return out
+}
+
+// OrderCmpType is the type order_cmp compares a and b in: their common one, which
+// must have an order.
+func OrderCmpType(a, b dtype.DataType) (dtype.DataType, error) {
+	common, ok := dtype.Promote(a, b)
+	if !ok || !common.IsOrdered() && !common.IsNull() {
+		return dtype.Null, uerr.New(uerr.KindType, "", "%s and %s have no order to compare them in", a, b)
+	}
+	return common, nil
 }
 
 // DateTimeParts are dt.replace's components, in their operands' order.

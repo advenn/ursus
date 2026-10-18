@@ -187,7 +187,8 @@ differs from their input's, or scalars outside a group-by.
 | missing | prio |
 | --- | --- |
 | **Statistics:** `hist`. `skew`, `kurtosis` and `approx_n_unique` built in step 276; `entropy`, `mode` and Spearman `corr` in step 277 | P1 |
-| **Search and hashing:** `search_sorted`, `index_of`, `hash`, `unique_counts`, `value_counts` on an expression, `peak_min`, `peak_max`. `dot` built in step 276 | P1 |
+| **Search and hashing:** `unique_counts`, `value_counts` on an expression. `dot` built in step 276; `search_sorted`, `index_of`, `hash`, `peak_min` and `peak_max` in step 279, a search's value a Go value only | P1 |
+| **An aggregate inside an aggregate's input:** `Col("a").Sub(Col("a").Mean()).Abs().Sum()` is refused, in a `Select` or an `Agg`, as "not an aggregate"; Polars takes it (found at step 279) | P1 |
 | **Integers as bits:** built: `& \| ^ ~` of integers in step 278, the `bitwise_and/or/xor` aggregates in step 276. Polars has no shifts | — |
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
 | **Rolling:** `skew`, `kurtosis`, `rank`, `map`; weights; an integer index (`"2i"` periods) for `_by`; `rolling_corr`, `rolling_cov`; the generic `Expr.rolling(index_column)` | P1 |

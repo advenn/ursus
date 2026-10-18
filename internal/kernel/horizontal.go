@@ -106,6 +106,8 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return binGet(name, ops, n)
 	case expr.FnBinSlice:
 		return binSlice(name, ops, n)
+	case expr.FnOrderCmp:
+		return orderCmp(name, ops, n)
 	case expr.FnListShift:
 		return listShift(name, ops[0], ops[1], n)
 	case expr.FnListCountMatches:

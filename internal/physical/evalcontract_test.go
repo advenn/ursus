@@ -273,7 +273,7 @@ func allUnaryOps() []expr.UnaryOp {
 // nothing wrong, which is the failure this file exists to prevent.
 func allCallFns() []expr.CallFn {
 	var fns []expr.CallFn
-	for i := range 1200 {
+	for i := range 1300 {
 		fn := expr.CallFn(i)
 		if fn.IsString() || fn.IsTemporal() || fn.IsGeneral() ||
 			fn.IsMath() || fn.IsList() || fn.IsStruct() || fn.IsHorizontal() || fn.IsBinary() {
@@ -480,7 +480,10 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 	// Step 274's binary functions. get takes null_on_oob, as the fixture's values are
 	// of every length; reinterpret is driven without its type, which callLit cannot
 	// build, so it asks that a call without one refuses alike.
-	expr.FnBinEncode:     {{label: ",hex", args: []any{"hex"}}},
+	expr.FnBinEncode: {{label: ",hex", args: []any{"hex"}}},
+	// Step 279: hash's seed; order_cmp's second operand.
+	expr.FnHash:          {{args: []any{int64(7)}}},
+	expr.FnOrderCmp:      {{label: ",1", args: []any{int64(1)}}, {label: ",x", args: []any{"x"}}},
 	expr.FnBinDecode:     {{label: ",hex", args: []any{"hex", false}}},
 	expr.FnBinSize:       {{label: ",b", args: []any{int64(1)}}, {label: ",kb", args: []any{int64(1024)}}},
 	expr.FnBinContains:   {{args: []any{"a"}}},

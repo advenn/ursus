@@ -611,6 +611,14 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 		return cc.repl.Apply(name, look, recv)
 	case c.Fn == expr.FnCatPhysical:
 		return kernel.EnumPhysical(name, out, recv)
+	case c.Fn == expr.FnOrderSign:
+		return kernel.OrderSign(name, recv)
+	case c.Fn == expr.FnHash:
+		var seed int64
+		if len(cc.args) > 0 {
+			seed, _ = cc.args[0].(int64)
+		}
+		return kernel.Hash(name, recv, uint64(seed))
 	case c.Fn.IsMath():
 		return kernel.MathCall(c.Fn, name, out, recv, cc.args)
 	case c.Fn.IsList():
