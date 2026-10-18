@@ -333,6 +333,11 @@ const (
 	// order Sort uses, NaN above every number and -0 with 0 (step 279), which
 	// search_sorted, index_of and the peaks are written in.
 	FnOrderCmp
+
+	// list.append(a, b, mode): each row's two lists one after the other, their
+	// elements met as Append's mode says (step 282), which Append in an aggregation
+	// lowers to.
+	FnListAppend
 	fnHorizontalEnd
 )
 
@@ -532,6 +537,7 @@ var callNames = map[CallFn]string{
 	FnBinGet: "bin.get", FnBinSlice: "bin.slice", FnBinEncode: "bin.encode", FnBinDecode: "bin.decode",
 	FnBinSize: "bin.size", FnBinReinterpret: "bin.reinterpret",
 	FnOrderCmp: "order_cmp", FnHash: "hash", FnOrderSign: "order_sign",
+	FnListAppend: "list.append",
 
 	FnIsIn: "is_in",
 
@@ -635,6 +641,15 @@ func (c *Call) Field(in *dtype.Schema) (dtype.Field, error) {
 				return dtype.Field{}, err
 			}
 			fields[i] = f
+		}
+		if c.Fn == FnListAppend {
+			// Typed by its mode, a literal the lowering wrote, which ResolveHorizontal's
+			// types alone do not carry.
+			out, err := listAppendOut(c, fields)
+			if err != nil {
+				return dtype.Field{}, err
+			}
+			return dtype.Field{Name: fields[0].Name, Type: out, Nullable: true}, nil
 		}
 		out, err := ResolveHorizontal(c.Fn, fields)
 		if err != nil {
@@ -1038,6 +1053,9 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 
 	case FnBinContains, FnBinStartsWith, FnBinEndsWith, FnBinGet, FnBinSlice:
 		return binHorizontalOut(fn, ops)
+
+	case FnListAppend:
+		return dtype.Null, uerr.Internalf("expr: %s is typed by its call, whose mode is a literal", fn)
 
 	case FnOrderCmp:
 		if len(ops) != 2 {
@@ -1764,6 +1782,32 @@ func GroupNames(re *regexp.Regexp) []string {
 		out[i] = nm
 	}
 	return out
+}
+
+// listAppendOut is list.append's type: a List of its two lists' elements met by its
+// mode, a literal.
+func listAppendOut(c *Call, ops []dtype.Field) (dtype.DataType, error) {
+	if len(ops) != 3 {
+		return dtype.Null, uerr.Internalf("expr: %s of %d operands", c.Fn, len(ops))
+	}
+	mode, ok := c.Args[2].(*Lit)
+	m, isInt := mode.Value.(int64)
+	if !ok || !isInt {
+		return dtype.Null, uerr.Internalf("expr: %s without its mode", c.Fn)
+	}
+	a, b := ops[0].Type, ops[1].Type
+	if a.ID() != dtype.TypeList || b.ID() != dtype.TypeList && !b.IsNull() {
+		return dtype.Null, uerr.Internalf("expr: %s of %s and %s", c.Fn, a, b)
+	}
+	inner := dtype.Null
+	if !b.IsNull() {
+		inner = b.Inner()
+	}
+	t, err := AppendType(m, a.Inner(), inner)
+	if err != nil {
+		return dtype.Null, err
+	}
+	return dtype.List(t), nil
 }
 
 // OrderCmpType is the type order_cmp compares a and b in: their common one, which

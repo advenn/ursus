@@ -5,6 +5,7 @@ import (
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/uerr"
+	"math"
 )
 
 // Interpolation selects how Quantile resolves a rank falling between two values.
@@ -304,6 +305,69 @@ func (e Expr) Mode(maintainOrder bool) Expr {
 		m = 1
 	}
 	return e.reshape(expr.ReshapeMode, m)
+}
+
+// Append is the values, then other's: Polars' append, a column of its own length in
+// a Select and a list a group in an aggregation. With upcast the two meet at their
+// common type, as Polars' default does; without, they must be of one type. Polars
+// meets text with anything as text; a common type here is a numeric one.
+func (e Expr) Append(other Expr, upcast bool) Expr {
+	mode := expr.AppendStrict
+	if upcast {
+		mode = expr.AppendUpcast
+	}
+	return wrap(&expr.Reshape{Op: expr.ReshapeAppend, Child: e.node(), By: other.node(), Args: []int64{mode}})
+}
+
+// ExtendConstant is the values, then value n times: Polars' extend_constant. value is
+// a Go value or nil, cast to the column's type, a float truncated toward zero to an
+// integer and one out of its range null, as Polars casts it; n is an int or an Expr.
+func (e Expr) ExtendConstant[N int | Expr](value any, n N) Expr {
+	var v expr.Node = &expr.Lit{DT: dtype.Null}
+	if value != nil {
+		v = litNode(value)
+	}
+	var k expr.Node
+	if x, ok := any(n).(Expr); ok {
+		k = x.node()
+	} else {
+		k = litNode(int64(any(n).(int)))
+	}
+	repeat := explodeOf(horizontal(expr.FnRepeatBy, v, k))
+	return wrap(&expr.Reshape{Op: expr.ReshapeAppend, Child: e.node(), By: repeat.node(), Args: []int64{expr.AppendCast}})
+}
+
+// SampleN is n of the values drawn, and SampleFraction a fraction of them, as Polars'
+// sample: with replacement or without, a sample of more than there are refused then;
+// in their order, or shuffled. Each draw is seeded, by the seed and the values, so a
+// group's sample does not depend on how the rows came in batches. The generator is
+// ursus's, so the values are not Polars' (v0.6.6-scope.md §6.3). A column of its own
+// length in a Select and a list a group in an aggregation.
+func (e Expr) SampleN(n int, withReplacement, shuffle bool, seed uint64) Expr {
+	if n < 0 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "sample", "sample takes %d values", n)})
+	}
+	return e.sample(int64(n), 0, withReplacement, shuffle, seed)
+}
+func (e Expr) SampleFraction(fraction float64, withReplacement, shuffle bool, seed uint64) Expr {
+	if fraction < 0 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "sample", "sample takes a fraction of %g", fraction)})
+	}
+	return e.sample(-1, fraction, withReplacement, shuffle, seed)
+}
+
+// Shuffle is the values in an order drawn by seed: Polars' shuffle.
+func (e Expr) Shuffle(seed uint64) Expr { return e.SampleFraction(1, false, true, seed) }
+
+func (e Expr) sample(n int64, fraction float64, withReplacement, shuffle bool, seed uint64) Expr {
+	b := func(x bool) int64 {
+		if x {
+			return 1
+		}
+		return 0
+	}
+	return wrap(&expr.Reshape{Op: expr.ReshapeSample, Child: e.node(),
+		Args: []int64{n, int64(math.Float64bits(fraction)), b(withReplacement), b(shuffle), int64(seed)}})
 }
 
 // UniqueCounts is each distinct value's count, in the order the values first appear,

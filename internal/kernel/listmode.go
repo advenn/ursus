@@ -1,11 +1,13 @@
 package kernel
 
 import (
+	"math"
 	"slices"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
 )
 
 // listMode is each list's most frequent elements, each once, null a value, as
@@ -177,4 +179,60 @@ func listRle(name string, out dtype.DataType, c *data.Column) (*data.Column, err
 		values.Rename(fields[1].Name),
 	}, bitmap.AllSet(len(lens)))
 	return data.NewList(name, offs, runs, c.Validity()), nil
+}
+
+// listAppend is each row's first list then its second, a List of out's elements:
+// Append in an aggregation (step 282). ops are the two lists and the mode; the second
+// is cast to out's element, a float truncated toward zero where the mode is
+// AppendCast and the element an integer, as Polars' extend_constant casts its value.
+func listAppend(name string, out dtype.DataType, ops []*data.Column, n int) (*data.Column, error) {
+	cast := data.MustValues[int64](ops[2])[0] == expr.AppendCast
+	lists := make([]*data.Column, 2)
+	for k, c := range ops[:2] {
+		if c.DType() == out {
+			lists[k] = c
+			continue
+		}
+		var err error
+		if k == 1 && cast {
+			c, err = truncatedFor(c, out.Inner())
+			if err != nil {
+				return nil, err
+			}
+		}
+		if lists[k], err = Cast(c.Name(), out, !cast, c); err != nil {
+			return nil, err
+		}
+	}
+	return listsOf(name, out, lists, n)
+}
+
+// truncatedFor is a List of floats with each element truncated toward zero, where to
+// is an integer type; c as it is otherwise.
+func truncatedFor(c *data.Column, to dtype.DataType) (*data.Column, error) {
+	if c.DType().ID() != dtype.TypeList || !c.DType().Inner().IsFloat() || !to.IsInteger() {
+		return c, nil
+	}
+	// The list's own elements, zero-based, so a sliced list keeps only its window.
+	offs, elems, err := listGather(c, func(start, end int32, out []int32) []int32 {
+		for e := start; e < end; e++ {
+			out = append(out, e)
+		}
+		return out
+	})
+	if err != nil {
+		return nil, err
+	}
+	if elems, err = Cast(elems.Name(), dtype.Float64, true, elems); err != nil {
+		return nil, err
+	}
+	if elems, err = readable(elems); err != nil {
+		return nil, err
+	}
+	v := data.MustValues[float64](elems)
+	t := make([]float64, len(v))
+	for i, x := range v {
+		t[i] = math.Trunc(x)
+	}
+	return data.NewList(c.Name(), offs, data.NewFixed(elems.Name(), dtype.Float64, t, elems.Validity()), c.Validity()), nil
 }

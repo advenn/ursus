@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"math"
 	"strconv"
 	"strings"
 
@@ -49,6 +50,8 @@ const (
 	ReshapeUniqueCounts                  // no args: each value's count, in first-seen order (step 280)
 	ReshapeValueCounts                   // Args: sort, normalize; Label: the count's name; a Struct a value (step 280)
 	ReshapeRle                           // no args: a Struct of each run's length and value (step 281)
+	ReshapeAppend                        // By: the values appended; Args: their meeting, AppendStrict, AppendUpcast or AppendCast (step 282)
+	ReshapeSample                        // Args: n, or -1 for a fraction; the fraction's bits; with_replacement; shuffle; the seed (step 282)
 )
 
 var reshapeNames = map[ReshapeOp]string{
@@ -59,7 +62,17 @@ var reshapeNames = map[ReshapeOp]string{
 	ReshapeArgSort: "arg_sort", ReshapeArgTrue: "arg_true", ReshapeArgUnique: "arg_unique",
 	ReshapeArgSortBy: "arg_sort_by", ReshapeMode: "mode",
 	ReshapeUniqueCounts: "unique_counts", ReshapeValueCounts: "value_counts", ReshapeRle: "rle",
+	ReshapeAppend: "append", ReshapeSample: "sample",
 }
+
+// How Append meets its two sides' types (step 282): the same type, as Polars'
+// upcast=False; their common one, as its default; or the other side cast to this
+// one's, a float truncated toward zero, as extend_constant casts its value.
+const (
+	AppendStrict int64 = iota
+	AppendUpcast
+	AppendCast
+)
 
 func (o ReshapeOp) String() string { return reshapeNames[o] }
 
@@ -88,7 +101,11 @@ func (r *Reshape) String() string {
 	}
 	args := ""
 	switch r.Op {
-	case ReshapeSort, ReshapeSortBy, ReshapeGather:
+	case ReshapeSort, ReshapeSortBy, ReshapeGather, ReshapeAppend:
+		if r.Op == ReshapeAppend {
+			args = r.By.String() + ", " + itoa(int(r.Args[0]))
+			break
+		}
 		if r.By != nil {
 			args = r.By.String()
 		}
@@ -113,6 +130,25 @@ func (r *Reshape) String() string {
 		args += strconv.Quote(r.Label)
 	}
 	return r.Child.String() + "." + r.Op.String() + "(" + args + ")"
+}
+
+// AppendType is the type Append's answer is of, its sides of types a and b met by
+// mode.
+func AppendType(mode int64, a, b dtype.DataType) (dtype.DataType, error) {
+	switch {
+	case mode == AppendCast:
+		return a, nil
+	case a == b || b.IsNull():
+		return a, nil
+	case a.IsNull():
+		return b, nil
+	case mode == AppendUpcast:
+		if t, ok := dtype.Promote(a, b); ok {
+			return t, nil
+		}
+	}
+	return dtype.Null, uerr.New(uerr.KindType, "append", "append of %s to %s, which do not meet", b, a).
+		Hint("cast one first; Polars' upcast meets numbers, and text with anything")
 }
 
 // RleType is rle's Struct: each run's length, a UInt32, and its value, as Polars'.
@@ -180,6 +216,19 @@ func (r *Reshape) Field(in *dtype.Schema) (dtype.Field, error) {
 	case ReshapeArgSort, ReshapeArgUnique, ReshapeArgSortBy:
 		// Indices, as Polars' are: UInt32.
 		f.Type, f.Nullable = dtype.Uint32, false
+		return f, nil
+	case ReshapeAppend:
+		g, err := r.By.Field(in)
+		if err != nil {
+			return dtype.Field{}, err
+		}
+		t, err := AppendType(r.Args[0], f.Type, g.Type)
+		if err != nil {
+			return dtype.Field{}, err
+		}
+		f.Type, f.Nullable = t, f.Nullable || g.Nullable
+		return f, nil
+	case ReshapeSample:
 		return f, nil
 	case ReshapeRle:
 		// Runs of equal keys, as the group-by's keys are equal.
@@ -354,6 +403,31 @@ func lowerReshape(r *Reshape) Node {
 		return &Call{Fn: FnListUniqueCounts, Args: []Node{list}}
 	case ReshapeRle:
 		return &Call{Fn: FnListRle, Args: []Node{list}}
+	case ReshapeSample:
+		frac := math.Float64frombits(uint64(r.Args[1]))
+		return &Call{Fn: FnListSample, Args: []Node{list, arg(0), &Lit{Value: frac, DT: dtype.Float64},
+			&Lit{Value: r.Args[2] != 0, DT: dtype.Bool}, &Lit{Value: r.Args[3] != 0, DT: dtype.Bool}, arg(4)}}
+	case ReshapeAppend:
+		// The appended side a list a group too: a constant's one value, a generator's
+		// list, a reshape's lowered, or its values imploded.
+		var other Node
+		switch b := r.By.(type) {
+		case *Lit:
+			other = &Lit{Value: []*Lit{b}, DT: dtype.List(b.DT)}
+		case *Reshape:
+			if b.IsGenerator() {
+				other = b.Child
+			} else {
+				other = lowerReshape(b)
+			}
+		default:
+			if IsConstant(b) {
+				other = &Agg{Op: AggImplode, Child: &Reshape{Op: ReshapeHead, Child: b, Args: []int64{1}}}
+			} else {
+				other = &Agg{Op: AggImplode, Child: b}
+			}
+		}
+		return &Call{Fn: FnListAppend, Args: []Node{list, other, arg(0)}}
 	case ReshapeValueCounts:
 		// The value's name beside the count's, which a list's type has no other way to
 		// carry: the struct's first field is named as the column.

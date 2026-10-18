@@ -2,6 +2,7 @@ package ursus
 
 import (
 	"context"
+	"math"
 	"slices"
 	"strconv"
 
@@ -277,6 +278,8 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 		return z.sortBy(r)
 	case expr.ReshapeArgSortBy:
 		return z.argSortBy(r)
+	case expr.ReshapeAppend:
+		return z.appendOf(r)
 	case expr.ReshapeGather:
 		return zipPart{}, uerr.New(uerr.KindUnsupported, "gather",
 			"%s in a Select is not there yet", r).
@@ -371,6 +374,15 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 		} else {
 			out = top.Sort(Asc(c)).Select(c)
 		}
+	case expr.ReshapeSample:
+		// The values imploded, the list sampled, and exploded again, an empty sample
+		// no row (step 282).
+		l := Col(p.col).Implode().List()
+		sampled := l.SampleFraction(math.Float64frombits(uint64(arg[1])), arg[2] != 0, arg[3] != 0, uint64(arg[4]))
+		if arg[0] >= 0 {
+			sampled = l.SampleN(int(arg[0]), arg[2] != 0, arg[3] != 0, uint64(arg[4]))
+		}
+		out = p.lf.Select(sampled.Alias(p.col)).Filter(Col(p.col).List().Len().Gt(0)).Explode(p.col)
 	case expr.ReshapeRle:
 		// Each run's rows grouped by its number, in their order, its first value kept
 		// (step 281).
@@ -407,6 +419,60 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 		return zipPart{}, uerr.Internalf("ursus: reshape %s has no frame form", r.Op)
 	}
 	return zipPart{lf: out, col: p.col}, nil
+}
+
+// appendOf lifts Append: each side's plan, a constant's its row of one, stacked by
+// Concat. The type is the Reshape's own, AppendType's, by the input's schema, and
+// each side is cast to it. With AppendCast a float is first truncated toward zero
+// where the type is an integer, and what the type cannot hold is null, as Polars'
+// extend_constant casts (step 282).
+func (z *zipper) appendOf(r *expr.Reshape) (zipPart, error) {
+	frame := func(n expr.Node) (*LazyFrame, string, error) {
+		p, err := z.lift(n)
+		if err != nil {
+			return nil, "", err
+		}
+		if p.lf == nil {
+			col := z.tmp()
+			return oneRow().Select(wrap(p.node).Alias(col)), col, nil
+		}
+		return p.lf, p.col, nil
+	}
+	resolved, err := plan.Resolve(context.Background(), z.in.node)
+	if err != nil {
+		return zipPart{}, err
+	}
+	s, err := resolved.Schema()
+	if err != nil {
+		return zipPart{}, err
+	}
+	out, err := r.Field(s)
+	if err != nil {
+		return zipPart{}, err
+	}
+	b, err := r.By.Field(s)
+	if err != nil {
+		return zipPart{}, err
+	}
+	left, lc, err := frame(r.Child)
+	if err != nil {
+		return zipPart{}, err
+	}
+	right, rc, err := frame(r.By)
+	if err != nil {
+		return zipPart{}, err
+	}
+	col := z.tmp()
+	v := Col(rc)
+	if r.Args[0] == expr.AppendCast {
+		if out.Type.IsInteger() && b.Type.IsFloat() {
+			v = When(v.Ge(0)).Then(v.Floor()).Otherwise(v.Ceil())
+		}
+		v = v.CastLossy(out.Type)
+	} else {
+		v = v.Cast(out.Type)
+	}
+	return zipPart{lf: left.Select(Col(lc).Cast(out.Type).Alias(col)).Concat(right.Select(v.Alias(col))), col: col}, nil
 }
 
 // sortBy lifts a sort by keys of the values' own rows: both projected together, then
