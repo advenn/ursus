@@ -147,8 +147,10 @@ differs from their input's, or scalars outside a group-by.
 
 ### 4.4 `.struct` (P1)
 
-- **Missing:** `drop`; `field` of several names or a regex.
+- **Missing:** `drop`.
 - **Built in 0.6.5:** `Unnest` as an expression (step 260).
+- **Built in 0.6.6:** `field` of several names, a regex or `"*"`, and a field named
+  after itself (step 275).
 
 ### 4.5 Whole namespaces
 
@@ -281,6 +283,13 @@ decide whether to keep or switch each one.
   266).
 - `ArgSortBy` of several keys is refused in an aggregation, where Polars 1.44.1
   answers with positions past the group's end (step 267).
+- An expression is named after its leftmost column, and an Alias, a struct field's
+  name or a literal counts only at the root. Polars names it after its leftmost
+  input's own name: `Col("a").Alias("x").Add(1)` is `x` there and `a` here,
+  `Col("s").Struct().Field("c").Mul(2)` `c` there and `s` here, and
+  `Lit(1).Add(Col("a"))` `literal` there and `a` here. A field alone, and each field
+  of `Field` of several names, is named after the field, as Polars names it (step
+  275).
 - `BaseUtcOffset` and `DstOffset` read the system's zone database, so where it is in
   the rearguard form, as Ubuntu's is, Dublin's and Casablanca's daylight-saving time
   is positive. Polars bundles the main form, where it is negative. Other zones agree

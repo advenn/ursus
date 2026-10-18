@@ -142,6 +142,9 @@ func OutputName(n Node) string {
 		if t.Fn.IsHorizontal() {
 			return OutputName(t.Args[0])
 		}
+		if t.Fn == FnStructField && len(t.Args) > 0 {
+			return CallOutputName(t, OutputName(t.Args[0]))
+		}
 	case *Cond:
 		// Named after the VALUE, not the test. Leftmost-column-wins would otherwise
 		// pick the condition's column, so

@@ -188,7 +188,7 @@ func TestScalarFunctionsByHand(t *testing.T) {
 			want: ursus.Frame(ursus.Values("s", []uint32{3}))},
 		{name: "control: SplitN's last field is the rest",
 			got:  strs("a b c").Select(c("s").Str().SplitN(" ", 2).Struct().Field("field_1")),
-			want: ursus.Frame(ursus.Values("s", []string{"b c"}))},
+			want: ursus.Frame(ursus.Values("field_1", []string{"b c"}))}, // named after the field, as Polars names it
 
 		// --- S10: an Interval floors on the column's wall clock ---
 		// Kolkata is +05:30: 10:47 local is 05:17Z, the local hour starts at 04:30Z,

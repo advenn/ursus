@@ -1,7 +1,10 @@
 package ursus
 
 import (
+	"slices"
+
 	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // StructExpr is the struct namespace: `Col("person").Struct().Field("age")`.
@@ -35,8 +38,20 @@ func (e Expr) Struct() StructExpr { return StructExpr{e} }
 // A name the struct does not have is refused when the query is PLANNED, with the
 // available names listed — the type of the result depends on which field was asked
 // for, so the name has to be resolved against the schema anyway.
-func (s StructExpr) Field(name string) Expr {
-	return wrap(&expr.Call{Fn: expr.FnStructField, Args: []expr.Node{s.e.node(), litNode(name)}})
+//
+// Of several names, or of a regex between ^ and $, or "*", it is several columns, a
+// field each, as Polars' struct.field of several names is (step 275): written out as
+// Unnest is, in the struct's order, each field once, each named after its field.
+// Like a selection of several columns it may be the whole of an expression or a part,
+// Field("a", "b").Mul(2) each field doubled. A regex may match no field.
+func (s StructExpr) Field(names ...string) Expr {
+	switch {
+	case len(names) == 0:
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "struct.field", "struct.field takes at least one name")})
+	case len(names) == 1 && !expr.IsFieldPattern(names[0]):
+		return wrap(&expr.Call{Fn: expr.FnStructField, Args: []expr.Node{s.e.node(), litNode(names[0])}})
+	}
+	return wrap(&expr.Unnest{Child: s.e.node(), Fields: slices.Clone(names)})
 }
 
 // RenameFields gives each field of the struct a new name, in order, as Polars'

@@ -585,7 +585,7 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 	if err != nil {
 		return nil, err
 	}
-	name := recv.Name()
+	name := expr.CallOutputName(c, recv.Name())
 
 	switch {
 	case c.Fn.IsString():

@@ -82,21 +82,21 @@ func sortedStrings(ss []string) []string {
 	return out
 }
 
-// TestWithFieldsNamesAFieldAsPlanned: a Field read is named after its struct in the
-// plan, p, though its kernel may name the column after the field. WithFields sets the
-// field the plan names, a new p, and leaves name as it was.
+// TestWithFieldsNamesAFieldAsPlanned: a Field read is named after its field, as
+// Polars names it (step 275), so WithFields of p's "name" sets "name", itself, and q
+// is age and name with no "p". Until step 275 the read was named after its struct, p,
+// and WithFields added a field p. Polars 1.44.1 gives Struct({'age': Int64, 'name':
+// String}), and refuses q's field p.
 func TestWithFieldsNamesAFieldAsPlanned(t *testing.T) {
 	c := ursus.Col
 	frame := ursus.Frame(ursus.Values("age", []int64{30, 40}), ursus.Values("name", []string{"ann", "bo"}))
 	p := c("p").Struct()
-	out, err := frame.Select(ursus.Struct(c("age"), c("name")).Alias("p")).
-		Select(p.WithFields(p.Field("name")).Alias("q")).
-		Select(c("q").Struct().Field("p").Alias("copy"), c("q").Struct().Field("name").Alias("name")).
-		Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
+	q := frame.Select(ursus.Struct(c("age"), c("name")).Alias("p")).
+		Select(p.WithFields(p.Field("name")).Alias("q"))
+	if got, want := csvOf(t, q.Select(c("q").Struct().Field("*"))), "age,name\n30,ann\n40,bo\n"; got != want {
+		t.Errorf("q's fields:\ngot  %q\nwant %q", got, want)
 	}
-	if got := sortedRenderedRows(t, out); strings.Join(got, ",") != "ann|ann|,bo|bo|" {
-		t.Fatalf("rows %v", got)
+	if _, err := q.Select(c("q").Struct().Field("p")).Collect(t.Context()); err == nil {
+		t.Error("q has no field p")
 	}
 }

@@ -73,11 +73,11 @@ func TestFolds(t *testing.T) {
 		{"fold over every column", lf.Select(c("a", "b")).Select(ursus.Fold(0, add, ursus.All())), "literal\n11\n\n\n"},
 		{"reduce", lf.Select(ursus.Reduce(add, c("a", "b"))), "a\n11\n\n\n"},
 		{"cum_fold", lf.Select(ursus.CumFold(0, add, c("a", "b"))).
-			Select(c("cum_fold").Struct().Field("a"), c("cum_fold").Struct().Field("b").Alias("b")), "cum_fold,b\n1,11\n2,\n,\n"},
+			Select(c("cum_fold").Struct().Field("a"), c("cum_fold").Struct().Field("b").Alias("b")), "a,b\n1,11\n2,\n,\n"},
 		{"cum_reduce", lf.Select(ursus.CumReduce(add, c("a", "b"))).
-			Select(c("cum_reduce").Struct().Field("a"), c("cum_reduce").Struct().Field("b").Alias("b")), "cum_reduce,b\n1,11\n2,\n,\n"},
+			Select(c("cum_reduce").Struct().Field("a"), c("cum_reduce").Struct().Field("b").Alias("b")), "a,b\n1,11\n2,\n,\n"},
 		{"cum_sum_horizontal", lf.Select(ursus.CumSumHorizontal(c("a"), c("f"))).
-			Select(c("cum_sum").Struct().Field("a"), c("cum_sum").Struct().Field("f").Alias("f")), "cum_sum,f\n1.0,1.5\n2.0,3.5\n,\n"},
+			Select(c("cum_sum").Struct().Field("a"), c("cum_sum").Struct().Field("f").Alias("f")), "a,f\n1.0,1.5\n2.0,3.5\n,\n"},
 		{"in an aggregation", lf.Select(ursus.Fold(0, add, c("a").Sum(), c("b").Sum())), "literal\n43\n"},
 	} {
 		if got := csvOf(t, tc.q); got != tc.want {

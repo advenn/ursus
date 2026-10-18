@@ -892,7 +892,7 @@ func Rebuild(n Node, kids []Node) Node {
 		c.Child, c.Pred = kids[0], kids[1]
 		return &c
 	case *Unnest:
-		return &Unnest{Child: kids[0]}
+		return &Unnest{Child: kids[0], Fields: t.Fields}
 	case *Fold:
 		return t.rebuild(kids)
 	case *Element, *OuterRef:

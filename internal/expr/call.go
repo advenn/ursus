@@ -626,8 +626,20 @@ func (c *Call) Field(in *dtype.Schema) (dtype.Field, error) {
 		return dtype.Field{}, err
 	}
 	// The name follows the receiver — leftmost-column-wins, same as everywhere
-	// else — so `Col("s").Str().ToLower()` is still called "s" unless aliased.
-	return dtype.Field{Name: recv.Name, Type: out, Nullable: true}, nil
+	// else — so `Col("s").Str().ToLower()` is still called "s" unless aliased. But a
+	// struct's field is named after the field, as Polars names it (step 275).
+	return dtype.Field{Name: CallOutputName(c, recv.Name), Type: out, Nullable: true}, nil
+}
+
+// CallOutputName is a call's name for a receiver named recv: the receiver's, but a
+// struct's field's, which is the field's own.
+func CallOutputName(c *Call, recv string) string {
+	if c.Fn == FnStructField {
+		if name, ok := callLitString(c, 1); ok {
+			return name
+		}
+	}
+	return recv
 }
 
 // ResolveCall gives the output type of a call applied to a receiver of type in.

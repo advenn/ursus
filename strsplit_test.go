@@ -277,7 +277,7 @@ func TestSplitNAndExtractAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, _, _ := rest.At[string](0, "s"); v != "b,c" {
+	if v, _, _ := rest.At[string](0, "field_1"); v != "b,c" {
 		t.Errorf("SplitN(2)'s second field = %q, want \"b,c\" — the last part keeps the rest", v)
 	}
 
