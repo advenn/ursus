@@ -273,10 +273,10 @@ func allUnaryOps() []expr.UnaryOp {
 // nothing wrong, which is the failure this file exists to prevent.
 func allCallFns() []expr.CallFn {
 	var fns []expr.CallFn
-	for i := range 1100 {
+	for i := range 1200 {
 		fn := expr.CallFn(i)
 		if fn.IsString() || fn.IsTemporal() || fn.IsGeneral() ||
-			fn.IsMath() || fn.IsList() || fn.IsStruct() || fn.IsHorizontal() {
+			fn.IsMath() || fn.IsList() || fn.IsStruct() || fn.IsHorizontal() || fn.IsBinary() {
 			fns = append(fns, fn)
 		}
 	}
@@ -475,7 +475,20 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 		{label: ",d", args: []any{int64(24 * time.Hour)}}},
 	expr.FnDtEpochIn: {{label: ",ms", args: []any{int64(time.Millisecond)}},
 		{label: ",d", args: []any{int64(expr.EpochDay)}}},
-	expr.FnDtIsBusinessDay:   {{args: []any{int64(0b11111), []int64{2}}}},
+	expr.FnDtIsBusinessDay: {{args: []any{int64(0b11111), []int64{2}}}},
+
+	// Step 274's binary functions. get takes null_on_oob, as the fixture's values are
+	// of every length; reinterpret is driven without its type, which callLit cannot
+	// build, so it asks that a call without one refuses alike.
+	expr.FnBinEncode:     {{label: ",hex", args: []any{"hex"}}},
+	expr.FnBinDecode:     {{label: ",hex", args: []any{"hex", false}}},
+	expr.FnBinSize:       {{label: ",b", args: []any{int64(1)}}, {label: ",kb", args: []any{int64(1024)}}},
+	expr.FnBinContains:   {{args: []any{"a"}}},
+	expr.FnBinStartsWith: {{args: []any{"a"}}},
+	expr.FnBinEndsWith:   {{args: []any{"a"}}},
+	expr.FnBinGet:        {{args: []any{int64(0), true}}},
+	expr.FnBinSlice: {{label: ",slice", args: []any{int64(1), int64(2), "slice"}},
+		{label: ",head", args: []any{int64(-1), nil, "head"}}},
 	expr.FnDtAddBusinessDays: {{args: []any{int64(1), int64(0b11111), []int64{2}, "forward"}}},
 	expr.FnDtReplace: {
 		{label: ",day", args: []any{nil, nil, int64(1), nil, nil, nil, nil, "raise", "raise"}},

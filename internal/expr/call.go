@@ -318,6 +318,16 @@ const (
 	FnDtIsBusinessDay
 	FnDtAddBusinessDays
 	FnDtReplace
+
+	// Step 274's binary functions of a row's operands: contains, starts_with and
+	// ends_with(value, pattern); get(value, index, null_on_oob); and slice(value, a,
+	// b, mode), mode "slice" with a the offset and b the length, a null for the rest,
+	// or "head" or "tail" with a their n and b a null.
+	FnBinContains
+	FnBinStartsWith
+	FnBinEndsWith
+	FnBinGet
+	FnBinSlice
 	fnHorizontalEnd
 )
 
@@ -414,6 +424,17 @@ const (
 	fnCatEnd
 )
 
+// The binary family (step 274): encode and decode, the encoding's name and decode's
+// strict; size, the unit's bytes, 1 for bytes; and reinterpret, a null literal of
+// the type and the endianness. Its functions of a row's operands are horizontal.
+const (
+	FnBinEncode CallFn = iota + 1100
+	FnBinDecode
+	FnBinSize
+	FnBinReinterpret
+	fnBinEnd
+)
+
 // IsString, IsTemporal and IsGeneral classify a function by family.
 //
 // These are range comparisons over declaration order, which is why the enum is
@@ -432,6 +453,7 @@ func (f CallFn) IsList() bool {
 	return f >= FnListLen && f < fnListEnd || f >= FnListMedian && f < fnListMoreEnd
 }
 func (f CallFn) IsStruct() bool { return f >= FnStructField && f < fnStructEnd }
+func (f CallFn) IsBinary() bool { return f >= FnBinEncode && f < fnBinEnd }
 func (f CallFn) IsHorizontal() bool {
 	return f >= FnConcatStr && f < fnHorizontalEnd
 }
@@ -484,6 +506,9 @@ var callNames = map[CallFn]string{
 	FnDtIsBusinessDay: "dt.is_business_day", FnDtAddBusinessDays: "dt.add_business_days",
 	FnDtReplace:        "dt.replace",
 	FnCatGetCategories: "cat.get_categories", FnCatPhysical: "cat.physical",
+	FnBinContains: "bin.contains", FnBinStartsWith: "bin.starts_with", FnBinEndsWith: "bin.ends_with",
+	FnBinGet: "bin.get", FnBinSlice: "bin.slice", FnBinEncode: "bin.encode", FnBinDecode: "bin.decode",
+	FnBinSize: "bin.size", FnBinReinterpret: "bin.reinterpret",
 
 	FnIsIn: "is_in",
 
@@ -635,10 +660,15 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		//
 		// An Enum is read as its text, which the string kernels decode it to first
 		// (step 273).
-		if !in.HasStringStorage() && in.ID() != dtype.TypeNull && in.ID() != dtype.TypeEnum {
-			return dtype.Null, uerr.New(uerr.KindType, "str",
-				"%s requires a String operand, got %s", fn, in).
-				Hint("cast the column first, e.g. .Cast(ursus.String)")
+		//
+		// A Binary is refused, as Polars refuses it (step 274): its bytes are
+		// Bin()'s, and a text function such as slice would split them as runes.
+		if in.ID() != dtype.TypeString && in.ID() != dtype.TypeNull && in.ID() != dtype.TypeEnum {
+			e := uerr.New(uerr.KindType, "str", "%s requires a String operand, got %s", fn, in)
+			if in.ID() == dtype.TypeBinary {
+				return dtype.Null, e.Hint("a Binary column's functions are Bin()'s, e.g. .Bin().Slice(0, 4)")
+			}
+			return dtype.Null, e.Hint("cast the column first, e.g. .Cast(ursus.String)")
 		}
 		if fn.isStrptime() {
 			return strptimeOut(c)
@@ -673,6 +703,9 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 
 	case fn.IsStruct():
 		return structCallOut(c, in)
+
+	case fn.IsBinary():
+		return binCallOut(c, in)
 
 	case fn.IsHorizontal():
 		// Typed from every operand, which a receiver's type is not: Field and the
@@ -882,7 +915,7 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 		if len(ops) != 3 {
 			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
 		}
-		if s := ops[0].Type; !s.HasStringStorage() && !s.IsNull() && s.ID() != dtype.TypeEnum {
+		if s := ops[0].Type; s.ID() != dtype.TypeString && !s.IsNull() && s.ID() != dtype.TypeEnum {
 			return dtype.Null, uerr.New(uerr.KindType, "str", "%s requires a String operand, got %s", fn, s)
 		}
 		if b := ops[1].Type; !b.IsInteger() && !b.IsNull() {
@@ -965,6 +998,9 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			return dtype.Date, nil
 		}
 		return v, nil
+
+	case FnBinContains, FnBinStartsWith, FnBinEndsWith, FnBinGet, FnBinSlice:
+		return binHorizontalOut(fn, ops)
 
 	case FnDtReplace:
 		if len(ops) != 10 {
@@ -1215,7 +1251,7 @@ func strExprOut(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			}
 			continue
 		}
-		if !f.Type.HasStringStorage() && !f.Type.IsNull() && f.Type.ID() != dtype.TypeEnum {
+		if f.Type.ID() != dtype.TypeString && !f.Type.IsNull() && f.Type.ID() != dtype.TypeEnum {
 			what := "pattern"
 			switch {
 			case i == 0:

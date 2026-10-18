@@ -622,6 +622,8 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 		return kernel.ListCall(c.Fn, name, out, recv, cc.args, cc.needle)
 	case c.Fn.IsStruct():
 		return kernel.StructCall(c.Fn, name, recv, cc.args)
+	case c.Fn.IsBinary():
+		return kernel.BinCall(c.Fn, name, out, recv, cc.args)
 	default:
 		return nil, uerr.Internalf("physical: no kernel for %s", c.Fn)
 	}

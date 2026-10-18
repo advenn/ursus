@@ -100,6 +100,12 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return addBusinessDays(name, out, ops, n)
 	case expr.FnDtReplace:
 		return dtReplace(name, out, ops, n)
+	case expr.FnBinContains, expr.FnBinStartsWith, expr.FnBinEndsWith:
+		return binMatch(fn, name, ops, n)
+	case expr.FnBinGet:
+		return binGet(name, ops, n)
+	case expr.FnBinSlice:
+		return binSlice(name, ops, n)
 	case expr.FnListShift:
 		return listShift(name, ops[0], ops[1], n)
 	case expr.FnListCountMatches:

@@ -158,8 +158,10 @@ differs from their input's, or scalars outside a group-by.
   Polars 1.44 and are not built; `to`, from the physical indices, is unstable there
   and waits. Categorical itself is §3's.
 - **`.arr` (P2):** all of it, `dot` and `to_list` too.
-- **`.bin` (P2):** `contains`, `starts_with`, `ends_with`, `get`, `head`, `tail`,
-  `slice`, `size`, `encode`, `decode`, `reinterpret`.
+- **`.bin` (P2):** built in 0.6.6 (step 274): `contains`, `starts_with`, `ends_with`,
+  `get`, `head`, `tail`, `slice`, `size`, `encode`, `decode` and `reinterpret`, with
+  expressions where Polars takes them. `reinterpret` to an Array waits for the Array
+  type. `Str()` now refuses a Binary, as Polars' `.str` does.
 
 ### 4.6 Top-level functions (P0/P1)
 

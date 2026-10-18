@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–273, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–274, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
 
@@ -25,6 +25,9 @@ completeness, part 2 — namespaces and generators.**
 
 - **`Str().SplitN(by, n)` is a Struct,** fields `field_0` to `field_{n-1}`, as Polars'
   `splitn` (270). It was a List, `n <= 0` unlimited: `Str().Split(by)` is every part.
+- **`Str()` refuses a Binary column,** as Polars' `.str` does (274). It read one as text,
+  and a text function such as `Slice` split its bytes as runes; `Bin()` has the byte
+  functions.
 
 ### Features
 
@@ -70,6 +73,10 @@ completeness, part 2 — namespaces and generators.**
 - **The categorical namespace on an Enum** (273): `Cat().GetCategories`,
   `StartsWith`, `EndsWith`, `LenBytes`, `LenChars`, `Slice` and `Physical`; and
   `Str()` reads an Enum as its text, where it refused one.
+- **The binary namespace** (274): `Bin().Contains`, `StartsWith`, `EndsWith`, `Get`,
+  `Head`, `Tail` and `Slice`, each argument a constant or an expression; `Size`,
+  `Encode`, `Decode`, and `Reinterpret` to a number or an instant, little- or
+  big-endian.
 
 ### Fixes
 
