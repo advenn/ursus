@@ -164,6 +164,8 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 	case expr.FnListSort:
 		return listSort(name, c, args)
 
+	case expr.FnListRle:
+		return listRle(name, out, c)
 	case expr.FnListUniqueCounts:
 		return listUniqueCounts(name, c)
 	case expr.FnListValueCounts:

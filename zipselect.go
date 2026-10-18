@@ -371,6 +371,12 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 		} else {
 			out = top.Sort(Asc(c)).Select(c)
 		}
+	case expr.ReshapeRle:
+		// Each run's rows grouped by its number, in their order, its first value kept
+		// (step 281).
+		id, n, v := z.tmp(), z.tmp(), z.tmp()
+		out = p.lf.WithColumns(c.RleID().Alias(id)).GroupBy(Col(id)).Agg(Len().Alias(n), c.First().Alias(v)).
+			Sort(Asc(Col(id))).Select(Struct(Col(n).Cast(Uint32).Alias("len"), Col(v).Alias("value")).Alias(p.col))
 	case expr.ReshapeUniqueCounts, expr.ReshapeValueCounts:
 		// Each value's rows counted by a group-by, in the order the values first
 		// appear, or by count, most first, ties so, for a sorted value_counts

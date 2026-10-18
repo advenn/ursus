@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
@@ -50,6 +51,8 @@ func WinCall(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Data
 		return winRank(params, name, out, col, seg)
 	case fn == expr.WinCumCount:
 		return winCumCount(params, name, seg, col.Len())
+	case fn == expr.WinRleID:
+		return winRleID(name, col, seg)
 	case fn == expr.WinShift:
 		return winShift(params, name, col, fill, seg)
 	case fn == expr.WinForwardFill || fn == expr.WinBackwardFill:
@@ -88,6 +91,36 @@ func winCumCount(params expr.WinParams, name string, seg Segments, n int) (*data
 	}
 	// Never null: every row occupies a position whether or not it holds a value.
 	return data.NewFixed(name, dtype.Uint32, vals, bitmap.AllSet(n)), nil
+}
+
+// winRleID numbers each row's run within its partition, from 0, in the window's
+// order: a run is rows whose group-by keys are equal, so NaN runs with NaN, -0 with 0
+// and a null with a null, as Polars' rle_id runs them (step 281).
+func winRleID(name string, col *data.Column, seg Segments) (*data.Column, error) {
+	n := col.Len()
+	if col.DType().IsNull() {
+		// Every row a null, one run a partition.
+		return data.NewFixed(name, dtype.Uint32, make([]uint32, n), bitmap.AllSet(n)), nil
+	}
+	enc, err := NewGroupKeyEncoder("rle_id", []*data.Column{col})
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]uint32, n)
+	var prev []byte
+	for p := 0; p+1 < len(seg.Bounds); p++ {
+		lo, hi := seg.Bounds[p], seg.Bounds[p+1]
+		var id uint32
+		for j := lo; j < hi; j++ {
+			k := enc.Encode(int(seg.Perm[j]))
+			if j > lo && !bytes.Equal(k, prev) {
+				id++
+			}
+			prev = append(prev[:0], k...)
+			ids[seg.Perm[j]] = id
+		}
+	}
+	return data.NewFixed(name, dtype.Uint32, ids, bitmap.AllSet(n)), nil
 }
 
 // winRank numbers rows by VALUE within each partition.

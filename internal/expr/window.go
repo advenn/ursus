@@ -306,6 +306,10 @@ const (
 	// between them, by position in the window's order.
 	WinInterpolate
 
+	// WinRleID numbers each row's run of equal values, from 0, by the group-by's keys
+	// (step 281): Polars' rle_id.
+	WinRleID
+
 	winFnCount
 )
 
@@ -319,7 +323,7 @@ var winFnNames = [winFnCount]string{
 	WinRollingVar: "rolling_var", WinRollingStd: "rolling_std",
 	WinRollingMedian: "rolling_median", WinRollingQuantile: "rolling_quantile",
 	WinEwmMean: "ewm_mean", WinEwmStd: "ewm_std", WinEwmVar: "ewm_var",
-	WinInterpolate: "interpolate",
+	WinInterpolate: "interpolate", WinRleID: "rle_id",
 }
 
 func (o WinFnOp) String() string {
@@ -551,7 +555,7 @@ func (f *WinFn) Field(in *dtype.Schema) (dtype.Field, error) {
 	// column, and a running total inherits its input's nullability.
 	nullable := cf.Nullable
 	switch {
-	case f.Fn == WinRank || f.Fn == WinCumCount:
+	case f.Fn == WinRank || f.Fn == WinCumCount || f.Fn == WinRleID:
 		nullable = false
 	case f.Fn == WinShift || f.Fn.IsRolling() || f.Fn.IsEwm():
 		// A rolling window's first rows hold fewer values than it needs, and so can
@@ -609,6 +613,13 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 		return dtype.Uint32, nil
 
 	case WinCumCount:
+		return dtype.Uint32, nil
+
+	case WinRleID:
+		// A run is of values a group-by keys alike: NaN with NaN, -0 with 0.
+		if !in.IsHashable() && !in.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "rle_id", "rle_id compares values, and %s cannot be a key", in)
+		}
 		return dtype.Uint32, nil
 
 	case WinCumSum:

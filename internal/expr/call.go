@@ -372,6 +372,7 @@ const (
 	// value's (step 280).
 	FnListUniqueCounts
 	FnListValueCounts
+	FnListRle // list.rle, each list's runs, a Struct each (step 281)
 	fnListMoreEnd
 )
 
@@ -583,6 +584,7 @@ var callNames = map[CallFn]string{
 	FnListShift: "list.shift", FnListCountMatches: "list.count_matches",
 	FnListAny: "list.any", FnListAll: "list.all", FnListItem: "list.item", FnListSample: "list.sample",
 	FnListMode: "list.mode", FnListUniqueCounts: "list.unique_counts", FnListValueCounts: "list.value_counts",
+	FnListRle: "list.rle",
 }
 
 func (f CallFn) String() string {
@@ -2378,13 +2380,15 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 	case FnListSample:
 		return in, nil
 
-	case FnListMode, FnListUniqueCounts, FnListValueCounts:
+	case FnListMode, FnListUniqueCounts, FnListValueCounts, FnListRle:
 		// A Struct or a List cannot be a key here, so its mode is refused, where
 		// Polars counts them.
 		if !elem.IsHashable() && !elem.IsNull() {
 			return dtype.Null, uerr.New(uerr.KindType, "mode", "%s counts values, and %s cannot be a key", fn, elem)
 		}
 		switch fn {
+		case FnListRle:
+			return dtype.List(RleType(elem)), nil
 		case FnListUniqueCounts:
 			return dtype.List(dtype.Uint32), nil
 		case FnListValueCounts:

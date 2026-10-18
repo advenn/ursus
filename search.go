@@ -106,6 +106,18 @@ func (e Expr) peak(want int64) Expr {
 	return side(1).Eq(want).And(side(-1).Eq(want))
 }
 
+// RleID is each row's run's number, from 0, a run being rows of equal values, a
+// UInt32: Polars' rle_id. NaN runs with NaN, -0 with 0 and a null with a null, as
+// Polars runs them. It is a window function, over the column or .Over(key) a
+// partition's own; Polars' group_by gives each group's as a list. A Struct cannot be
+// a key here and is refused, where Polars runs it.
+func (e Expr) RleID() Expr { return e.winFn(expr.WinRleID, expr.WinParams{}) }
+
+// Rle is each run of equal values' length and value, a Struct of len, a UInt32, and
+// value: Polars' rle, a column of its own length in a Select and a list a group in an
+// aggregation. Its runs are RleID's.
+func (e Expr) Rle() Expr { return e.reshape(expr.ReshapeRle) }
+
 // Hash is each value's 64-bit hash, seeded, a UInt64: Polars' hash. Values a
 // group-by takes as one hash alike, -0 with 0 and NaN with NaN, and a null has a hash
 // of its own. The algorithm is ursus's, so the numbers are not Polars'

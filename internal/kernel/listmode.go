@@ -143,3 +143,38 @@ func listValueCounts(name string, out dtype.DataType, c *data.Column, args []any
 	pairs := data.NewStruct(name, []*data.Column{values.Rename(fields[0].Name), count}, bitmap.AllSet(len(counts)))
 	return data.NewList(name, offs, pairs, c.Validity()), nil
 }
+
+// listRle is each list's runs of equal elements, by the group-by's keys, so NaN runs
+// with NaN, -0 with 0 and a null with a null: a Struct of each run's length and its
+// first value, a List of them, Polars' rle in an aggregation (step 281).
+func listRle(name string, out dtype.DataType, c *data.Column) (*data.Column, error) {
+	child := c.Lists().Child()
+	enc, err := NewGroupKeyEncoder("rle", []*data.Column{child})
+	if err != nil {
+		return nil, err
+	}
+	var lens []uint32
+	offs, values, err := listGather(c, func(start, end int32, out []int32) []int32 {
+		var prev string
+		for e := start; e < end; e++ {
+			k := string(enc.Encode(int(e)))
+			if e > start && k == prev {
+				lens[len(lens)-1]++
+				continue
+			}
+			prev = k
+			out = append(out, e)
+			lens = append(lens, 1)
+		}
+		return out
+	})
+	if err != nil {
+		return nil, err
+	}
+	fields := out.Inner().Fields()
+	runs := data.NewStruct(name, []*data.Column{
+		data.NewFixed(fields[0].Name, dtype.Uint32, lens, bitmap.AllSet(len(lens))),
+		values.Rename(fields[1].Name),
+	}, bitmap.AllSet(len(lens)))
+	return data.NewList(name, offs, runs, c.Validity()), nil
+}
