@@ -45,6 +45,15 @@ const (
 	AggMinBy // the value at the row whose second field is the least
 	AggMaxBy // and the greatest
 
+	// Step 276: the third and fourth standardized moments, with Params.Bias and
+	// Params.Fisher; and the bitwise reductions of integers or Booleans.
+	AggSkew
+	AggKurtosis
+	AggBitAnd
+	AggBitOr
+	AggBitXor
+	AggNanMin // the minimum, NaN where there is one: Polars' nan_min
+
 	aggOpCount
 )
 
@@ -59,6 +68,9 @@ var aggOpNames = [aggOpCount]string{
 	AggImplode: "implode",
 	AggTopK:    "top_k", AggBottomK: "bottom_k",
 	AggCorr: "corr", AggCov: "cov", AggMinBy: "min_by", AggMaxBy: "max_by",
+	AggSkew: "skew", AggKurtosis: "kurtosis",
+	AggBitAnd: "bitwise_and", AggBitOr: "bitwise_or", AggBitXor: "bitwise_xor",
+	AggNanMin: "nan_min",
 }
 
 func (o AggOp) String() string {
@@ -170,7 +182,9 @@ type AggParams struct {
 	DDof   uint8
 	Q      float64
 	Interp Interpolation
-	K      int // TopK and BottomK
+	K      int  // TopK and BottomK
+	Bias   bool // Skew and Kurtosis: the biased estimator, Polars' default
+	Fisher bool // Kurtosis: the excess, Fisher's, less 3, Polars' default
 }
 
 // args renders the parameters op actually reads. See Agg.String for why this is
@@ -183,6 +197,10 @@ func (p AggParams) args(op AggOp) string {
 		return strconv.FormatFloat(p.Q, 'g', -1, 64) + ", " + p.Interp.String()
 	case AggTopK, AggBottomK:
 		return strconv.Itoa(p.K)
+	case AggSkew:
+		return "bias=" + strconv.FormatBool(p.Bias)
+	case AggKurtosis:
+		return "fisher=" + strconv.FormatBool(p.Fisher) + ", bias=" + strconv.FormatBool(p.Bias)
 	default:
 		return ""
 	}
@@ -347,7 +365,7 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		}
 		return AggBinding{Acc: in, Out: dtype.List(in)}, nil
 
-	case AggMin, AggMax:
+	case AggMin, AggMax, AggNanMin:
 		if !in.IsOrdered() {
 			return AggBinding{}, uerr.New(uerr.KindType, "",
 				"%s() is not defined for %s", op, in).
@@ -512,6 +530,20 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 
 	case AggCorr, AggCov, AggMinBy, AggMaxBy:
 		return pairedBinding(op, in)
+
+	case AggSkew, AggKurtosis:
+		// Float64, as Polars answers, from a number of any type.
+		if !in.IsNumeric() {
+			return AggBinding{}, uerr.New(uerr.KindType, "", "%s() requires a numeric operand, got %s", op, in)
+		}
+		return AggBinding{Acc: dtype.Float64, Out: dtype.Float64}, nil
+
+	case AggBitAnd, AggBitOr, AggBitXor:
+		// The input's type, as Polars keeps it: an integer to 64 bits, or a Boolean.
+		if !in.IsBool() && (!in.IsInteger() || in.ID() == dtype.TypeInt128) {
+			return AggBinding{}, uerr.New(uerr.KindType, "", "%s() requires an integer or a Boolean, got %s", op, in)
+		}
+		return AggBinding{Acc: in, Out: in}, nil
 
 	case AggArgMin, AggArgMax:
 		if !in.IsOrdered() {

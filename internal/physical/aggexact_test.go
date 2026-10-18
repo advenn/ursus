@@ -77,7 +77,8 @@ const (
 func classify(op expr.AggOp) (aggClass, bool) {
 	switch op {
 	case expr.AggSum, expr.AggMean, expr.AggMin, expr.AggMax,
-		expr.AggFirst, expr.AggLast, expr.AggAny, expr.AggAllTrue:
+		expr.AggFirst, expr.AggLast, expr.AggAny, expr.AggAllTrue,
+		expr.AggBitAnd, expr.AggBitOr, expr.AggBitXor, expr.AggNanMin:
 		return classIdentity, true
 	case expr.AggImplode, expr.AggTopK, expr.AggBottomK:
 		// A one-row group's top k, or bottom k, is the one value, in a list.
@@ -87,7 +88,7 @@ func classify(op expr.AggOp) (aggClass, bool) {
 	case expr.AggArgMin, expr.AggArgMax:
 		return classIndex, true
 	case expr.AggVar, expr.AggStd, expr.AggMedian, expr.AggQuantile, expr.AggProduct,
-		expr.AggCorr, expr.AggCov:
+		expr.AggCorr, expr.AggCov, expr.AggSkew, expr.AggKurtosis:
 		return classApproximate, true
 	case expr.AggMinBy, expr.AggMaxBy:
 		// One row's value, chosen by another input. Paired, so every operand here,

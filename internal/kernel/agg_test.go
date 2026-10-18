@@ -212,6 +212,12 @@ func TestMergeEquivalence(t *testing.T) {
 		{op: expr.AggStd, params: expr.AggParams{DDof: 1}},
 		{op: expr.AggQuantile, params: expr.AggParams{Q: 0.9, Interp: expr.InterpLinear}},
 		{op: expr.AggQuantile, params: expr.AggParams{Q: 0.25, Interp: expr.InterpLower}},
+		// Step 276: Pébay's merge of the moments, and the NaN-first minimum.
+		{op: expr.AggSkew, params: expr.AggParams{Bias: true}},
+		{op: expr.AggSkew, params: expr.AggParams{Bias: false}},
+		{op: expr.AggKurtosis, params: expr.AggParams{Fisher: true, Bias: true}},
+		{op: expr.AggKurtosis, params: expr.AggParams{Fisher: false, Bias: false}},
+		{op: expr.AggNanMin},
 	}
 
 	for _, tc := range ops {
@@ -286,6 +292,66 @@ func TestMergeEquivalence(t *testing.T) {
 				if err := columnsEqual(single, merged); err != nil {
 					t.Errorf("%s: %s merge of %d partitions disagreed with a single pass: %v",
 						op, name, parts, err)
+				}
+			}
+		}
+	}
+}
+
+// TestMergeEquivalenceOfBits: the bitwise reductions over integers, negatives among
+// them, merged in parts both ways, agree with a single pass (step 276).
+func TestMergeEquivalenceOfBits(t *testing.T) {
+	rng := rand.New(rand.NewPCG(41, 43))
+	const n, nGroups = 60, 4
+	vals := make([]int64, n)
+	groups := make([]int32, n)
+	vb := bitmap.NewBuilder(n)
+	for i := range n {
+		vals[i] = int64(rng.IntN(1<<12)) - 1<<11
+		groups[i] = int32(rng.IntN(nGroups))
+		vb.Append(rng.IntN(4) != 0)
+	}
+	col := data.NewFixed("v", dtype.Int64, vals, vb.Finish())
+	for _, op := range []expr.AggOp{expr.AggBitAnd, expr.AggBitOr, expr.AggBitXor} {
+		bind, err := expr.ResolveAggBinding(op, dtype.Int64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		single := run(t, op, dtype.Int64, col, groups, nGroups)
+		for _, parts := range []int{2, 3, 5} {
+			for _, leftToRight := range []bool{true, false} {
+				accs := make([]kernel.Accumulator, parts)
+				for p := range parts {
+					lo, hi := p*n/parts, (p+1)*n/parts
+					a, err := kernel.NewAccumulator(op, dtype.Int64, bind, expr.AggParams{})
+					if err != nil {
+						t.Fatal(err)
+					}
+					a.Reserve(nGroups)
+					if err := a.AddBatch(groups[lo:hi], col.Slice(lo, hi-lo)); err != nil {
+						t.Fatal(err)
+					}
+					accs[p] = a
+				}
+				if leftToRight {
+					for p := 1; p < parts; p++ {
+						if err := accs[0].Merge(accs[p], nil); err != nil {
+							t.Fatal(err)
+						}
+					}
+				} else {
+					for p := parts - 2; p >= 0; p-- {
+						if err := accs[p].Merge(accs[p+1], nil); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+				merged, err := accs[0].Finish("out", nGroups)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := columnsEqual(single, merged); err != nil {
+					t.Errorf("%s in %d parts, left to right %v: %v", op, parts, leftToRight, err)
 				}
 			}
 		}

@@ -237,6 +237,50 @@ func (e Expr) varStd(op expr.AggOp, ddof int) Expr {
 // column; Cast(Int64) gives its ticks.
 func (e Expr) Median() Expr { return e.agg(expr.AggMedian) }
 
+// Skew is the skewness of the non-null values, a Float64: Polars' skew. bias true is
+// the biased estimator, m3/m2^1.5, Polars' default; false corrects it, and is null
+// below 3 values. Kurtosis is m4/m2², less 3 with fisher, Fisher's excess and Polars'
+// default; bias false corrects it, and is null below 4 values. Over values all alike
+// either is NaN, as Polars'.
+//
+// The moments are kept online and merged pairwise, so a group-by runs N-ways; Polars
+// computes them in two passes, so the two agree to the last few bits.
+func (e Expr) Skew(bias bool) Expr { return e.aggP(expr.AggSkew, expr.AggParams{Bias: bias}) }
+func (e Expr) Kurtosis(fisher, bias bool) Expr {
+	return e.aggP(expr.AggKurtosis, expr.AggParams{Fisher: fisher, Bias: bias})
+}
+
+// BitwiseAnd, BitwiseOr and BitwiseXor fold the non-null values by their bits, an
+// integer or a Boolean, of the input's type: Polars' bitwise_and and its kin. A group
+// of no value is null.
+func (e Expr) BitwiseAnd() Expr { return e.agg(expr.AggBitAnd) }
+func (e Expr) BitwiseOr() Expr  { return e.agg(expr.AggBitOr) }
+func (e Expr) BitwiseXor() Expr { return e.agg(expr.AggBitXor) }
+
+// NanMin is the minimum, NaN where a value is NaN: Polars' nan_min. NanMax is Max,
+// whose order puts NaN above every number, so it is NaN where a value is: Polars'
+// nan_max. Min skips a NaN as Polars' min does; Max does not, as feature-gaps.md §9
+// records.
+func (e Expr) NanMin() Expr { return e.agg(expr.AggNanMin) }
+func (e Expr) NanMax() Expr { return e.Max() }
+
+// HasNulls is whether a value is null, and IsEmpty whether there are no rows, nulls
+// counted: Polars' has_nulls and is_empty, a Boolean each.
+func (e Expr) HasNulls() Expr { return e.NullCount().Gt(0) }
+func (e Expr) IsEmpty() Expr  { return e.Len().Eq(0) }
+
+// ApproxNUnique is the distinct values, a null among them, as Polars'
+// approx_n_unique counts it. It is exact: Polars estimates, and an exact count is an
+// estimate's best case (v0.6.6-scope.md §6.3). NUnique does not count a null.
+func (e Expr) ApproxNUnique() Expr {
+	return e.NUnique().Add(e.NullCount().Gt(0).Cast(Uint64))
+}
+
+// Dot is the sum of the products of e and other over the rows where both are
+// non-null: Polars' dot. It is Sum's, so an integer dot product is an Int128, and one
+// of no such row null, where Polars' is 0, as feature-gaps.md §9 records of Sum.
+func (e Expr) Dot(other Expr) Expr { return e.Mul(other).Sum() }
+
 // Quantile returns the value at rank q, where q runs from 0 (the minimum) to 1 (the
 // maximum). interp decides what happens when the rank falls between two values.
 //

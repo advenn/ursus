@@ -130,12 +130,34 @@ func NewAccumulator(op expr.AggOp, in dtype.DataType, bind expr.AggBinding,
 		return newMeanAcc(in, bind)
 	case expr.AggMin:
 		return newExtremum(in, bind.Out, false)
+	case expr.AggNanMin:
+		// A minimum whose order puts NaN first, so a NaN wins it, as Polars' nan_min.
+		switch in.Physical().ID() {
+		case dtype.TypeFloat64:
+			return &extremumNum[float64]{out: bind.Out, less: func(a, b float64) bool {
+				return math.IsNaN(a) && !math.IsNaN(b) || !math.IsNaN(b) && lessFloat64(a, b)
+			}}, nil
+		case dtype.TypeFloat32:
+			return &extremumNum[float32]{out: bind.Out, less: func(a, b float32) bool {
+				x, y := float64(a), float64(b)
+				return math.IsNaN(x) && !math.IsNaN(y) || !math.IsNaN(y) && lessFloat32(a, b)
+			}}, nil
+		}
+		return newExtremum(in, bind.Out, false)
 	case expr.AggMax:
 		return newExtremum(in, bind.Out, true)
 
 	case expr.AggAny, expr.AggAllTrue:
 		return newBoolExtremum(op), nil
 
+	case expr.AggSkew, expr.AggKurtosis:
+		return &momentAcc{kurtosis: op == expr.AggKurtosis, fisher: params.Fisher, bias: params.Bias}, nil
+	case expr.AggBitAnd:
+		return &bitAcc{op: bitAnd, in: in}, nil
+	case expr.AggBitOr:
+		return &bitAcc{op: bitOr, in: in}, nil
+	case expr.AggBitXor:
+		return &bitAcc{op: bitXor, in: in}, nil
 	case expr.AggVar:
 		return &varAcc{ddof: params.DDof, std: false}, nil
 	case expr.AggStd:

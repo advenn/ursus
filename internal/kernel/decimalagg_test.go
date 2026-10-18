@@ -64,9 +64,9 @@ func TestFloatAggregatesOverADecimalReadTheScale(t *testing.T) {
 		}
 		checked++
 	}
-	if checked != 6 {
-		t.Fatalf("%d Float64 aggregates over a Decimal, want 6 — mean, var, std, "+
-			"product, median, quantile", checked)
+	if checked != 8 {
+		t.Fatalf("%d Float64 aggregates over a Decimal, want 8 — mean, var, std, "+
+			"product, median, quantile, skew, kurtosis", checked)
 	}
 }
 
