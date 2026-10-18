@@ -54,6 +54,11 @@ const (
 	AggBitXor
 	AggNanMin // the minimum, NaN where there is one: Polars' nan_min
 
+	// Step 277: entropy, with Params.Base and Params.Normalize; and Spearman's
+	// correlation of a pair, PairOf's, as AggCorr.
+	AggEntropy
+	AggSpearman
+
 	aggOpCount
 )
 
@@ -70,7 +75,7 @@ var aggOpNames = [aggOpCount]string{
 	AggCorr: "corr", AggCov: "cov", AggMinBy: "min_by", AggMaxBy: "max_by",
 	AggSkew: "skew", AggKurtosis: "kurtosis",
 	AggBitAnd: "bitwise_and", AggBitOr: "bitwise_or", AggBitXor: "bitwise_xor",
-	AggNanMin: "nan_min",
+	AggNanMin: "nan_min", AggEntropy: "entropy", AggSpearman: "corr_spearman",
 }
 
 func (o AggOp) String() string {
@@ -124,7 +129,7 @@ func (o AggOp) IsOrderDependent() bool {
 }
 
 // IsPaired reports whether the aggregate reads two inputs, as PairOf's struct.
-func (o AggOp) IsPaired() bool { return o >= AggCorr && o <= AggMaxBy }
+func (o AggOp) IsPaired() bool { return o >= AggCorr && o <= AggMaxBy || o == AggSpearman }
 
 // IsBy reports whether the aggregate is MinBy or MaxBy. They are order-dependent as
 // ArgMin and ArgMax are: a tie goes to the earliest row, which a worker holding
@@ -185,6 +190,9 @@ type AggParams struct {
 	K      int  // TopK and BottomK
 	Bias   bool // Skew and Kurtosis: the biased estimator, Polars' default
 	Fisher bool // Kurtosis: the excess, Fisher's, less 3, Polars' default
+
+	Base      float64 // Entropy: the logarithm's base
+	Normalize bool    // Entropy: of the values as a distribution, each over their sum
 }
 
 // args renders the parameters op actually reads. See Agg.String for why this is
@@ -201,6 +209,8 @@ func (p AggParams) args(op AggOp) string {
 		return "bias=" + strconv.FormatBool(p.Bias)
 	case AggKurtosis:
 		return "fisher=" + strconv.FormatBool(p.Fisher) + ", bias=" + strconv.FormatBool(p.Bias)
+	case AggEntropy:
+		return "base=" + strconv.FormatFloat(p.Base, 'g', -1, 64) + ", normalize=" + strconv.FormatBool(p.Normalize)
 	default:
 		return ""
 	}
@@ -528,8 +538,18 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		// on inputs a Float64 still describes approximately.
 		return AggBinding{Acc: dtype.Float64, Out: dtype.Float64}, nil
 
-	case AggCorr, AggCov, AggMinBy, AggMaxBy:
+	case AggCorr, AggCov, AggMinBy, AggMaxBy, AggSpearman:
 		return pairedBinding(op, in)
+
+	case AggEntropy:
+		// A Float32's is a Float32, as Polars keeps it; any other number's a Float64.
+		if !in.IsNumeric() || in.IsBool() {
+			return AggBinding{}, uerr.New(uerr.KindType, "", "%s() requires a numeric operand, got %s", op, in)
+		}
+		if in == dtype.Float32 {
+			return AggBinding{Acc: dtype.Float64, Out: dtype.Float32}, nil
+		}
+		return AggBinding{Acc: dtype.Float64, Out: dtype.Float64}, nil
 
 	case AggSkew, AggKurtosis:
 		// Float64, as Polars answers, from a number of any type.

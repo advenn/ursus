@@ -204,3 +204,117 @@ func TestBitwiseAndSmallAggregates(t *testing.T) {
 		}
 	}
 }
+
+// TestEntropyModeSpearman is M1's second half (step 277): entropy, mode and
+// Spearman's correlation. Every answer is Polars 1.44.1's, the floats to a relative
+// 1e-12, but where noted.
+func TestEntropyModeSpearman(t *testing.T) {
+	c := ursus.Col
+	x := c("x")
+	lf := statsFrame()
+	byG := func(e ursus.Expr) *ursus.LazyFrame {
+		return lf.GroupBy(c("g")).Agg(e.Alias("r")).Sort(ursus.Asc(c("g"))).Select(c("r"))
+	}
+	nan := math.NaN()
+	for _, tc := range []struct {
+		name   string
+		e      ursus.Expr
+		all    float64
+		groups []float64
+	}{
+		{"entropy", x.Entropy(math.E, true), 1.6920198079084638, []float64{0.9556998911125343, 0.6931471805599453, 0}},
+		{"entropy in bits", x.Entropy(2, true), 2.4410685859554375, []float64{1.3787834934861756, 1, 0}},
+		// Polars gives a one-value group's raw entropy as 0.0, where −5·ln 5 is −8.05;
+		// over the frame it is −Σ x·ln x, as here.
+		{"entropy, raw", x.Entropy(math.E, false), -21.570335099778614,
+			[]float64{-6.931471805599453, -6.591673732008658, -5 * math.Log(5)}},
+		{"spearman", ursus.CorrSpearman(x, c("y")), -0.05270462766947299, []float64{0.5, nan, nan}},
+	} {
+		if got := floatsOf(t, lf.Select(tc.e.Alias("r"))); !nearFloats(got, []float64{tc.all}) {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.all)
+		}
+		if got := floatsOf(t, byG(tc.e)); !nearFloats(got, tc.groups) {
+			t.Errorf("%s by g: got %v, want %v", tc.name, got, tc.groups)
+		}
+	}
+	for _, tc := range []struct {
+		name string
+		q    *ursus.LazyFrame
+		want float64
+	}{
+		{"entropy of integers", lf.Select(c("i").Entropy(math.E, true)), 1.7016725572208458},
+		{"entropy of a zero", ursus.Frame(ursus.Values("x", []float64{0, 1, 3})).Select(x.Entropy(math.E, true)), nan},
+		{"entropy of a negative", ursus.Frame(ursus.Values("x", []float64{-1, 1, 3})).Select(x.Entropy(math.E, true)), nan},
+		{"entropy in base 1", lf.Select(x.Entropy(1, true)), math.Inf(1)},
+		{"spearman of ties", ursus.Frame(ursus.Values("a", []int64{1, 1, 2, 3, 3, 3}), ursus.Values("b", []int64{5, 6, 6, 7, 1, 1})).
+			Select(ursus.CorrSpearman(c("a"), c("b"))), -0.23836564731139806},
+		{"spearman of integers", ursus.Frame(ursus.Values("a", []int64{1, 2, 3, 4}), ursus.Values("b", []int64{1, 3, 2, 4})).
+			Select(ursus.CorrSpearman(c("a"), c("b"))), 0.8},
+		{"spearman of a constant", ursus.Frame(ursus.Values("a", []int64{1, 1, 1}), ursus.Values("b", []int64{1, 3, 2})).
+			Select(ursus.CorrSpearman(c("a"), c("b"))), nan},
+		// NaN ranks above every number.
+		{"spearman of a NaN", ursus.Frame(ursus.Values("a", []float64{1, nan, 2, 3}), ursus.Values("b", []float64{5, 6, 1, 7})).
+			Select(ursus.CorrSpearman(c("a"), c("b"))), 0.6},
+		{"spearman past nulls", ursus.Frame(ursus.ValuesNullable("a", []float64{1, 0, 2, 3}, []bool{true, false, true, true}),
+			ursus.ValuesNullable("b", []float64{5, 6, 0, 7}, []bool{true, true, false, true})).
+			Select(ursus.CorrSpearman(c("a"), c("b"))), 1},
+	} {
+		got := floatsOf(t, tc.q)
+		if len(got) != 1 || !(math.IsInf(tc.want, 1) && math.IsInf(got[0], 1) || nearFloats(got, []float64{tc.want})) {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	got, err := lf.Select(x.Cast(ursus.Float32).Entropy(2, true)).Collect(t.Context())
+	if err != nil || got.Schema().Field(0).Type != ursus.Float32 {
+		t.Errorf("a Float32's entropy: %v, %v", got, err)
+	}
+	// ursus's rule: a group of no value is null; Polars' entropy of none is −0.
+	null := ursus.Frame(ursus.ValuesNullable("x", []float64{0, 0}, []bool{false, false}))
+	if got := csvOf(t, null.Select(x.Entropy(math.E, true))); got != "x\n\n" {
+		t.Errorf("entropy of none: %q", got)
+	}
+
+	// Mode: in a Select a column of its own length, sorted, or in first-seen order.
+	text := func(e ursus.Expr) ursus.Expr {
+		return e.Cast(ursus.String).FillNullWith("null")
+	}
+	for _, tc := range []struct {
+		name string
+		q    *ursus.LazyFrame
+		want string
+	}{
+		{"mode", lf.Select(x.Mode(false)), "x\n3.0\n"},
+		{"ties, sorted", ursus.Frame(ursus.Values("a", []int64{3, 1, 3, 1, 2})).Select(c("a").Mode(false)), "a\n1\n3\n"},
+		{"ties, as they come", ursus.Frame(ursus.Values("a", []int64{3, 1, 3, 1, 2})).Select(c("a").Mode(true)), "a\n3\n1\n"},
+		{"a null among them", ursus.Frame(ursus.ValuesNullable("a", []string{"b", "a", "b", "", ""}, []bool{true, true, true, false, false})).
+			Select(text(c("a").Mode(false))), "a\nnull\nb\n"},
+		{"NaN", ursus.Frame(ursus.Values("a", []float64{1, nan, nan})).Select(c("a").Mode(false)), "a\nNaN\n"},
+		{"zero and minus zero", ursus.Frame(ursus.Values("a", []float64{0, math.Copysign(0, -1), 1})).Select(c("a").Mode(false)), "a\n0.0\n"},
+		{"Booleans", ursus.Frame(ursus.Values("a", []bool{true, false, true})).Select(c("a").Mode(false)), "a\ntrue\n"},
+		{"no rows", ursus.Frame(ursus.Values("a", []int64{1})).Filter(c("a").Gt(5)).Select(c("a").Mode(false)), "a\n"},
+		{"its length", lf.Select(x.Mode(false).Len()), "x\n1\n"},
+		// A group's modes, a list: Polars' in first-seen order with maintain_order.
+		{"by g, as they come", lf.GroupBy(c("g")).Agg(c("i").Mode(true).List().Eval(text(ursus.Element())).List().Join("|")).
+			Sort(ursus.Asc(c("g"))).Select(c("i")), "i\n6|3|5|null\n12|10\n7\n"},
+		// Without it Polars' order is its hash table's, [1.0, 4.0, None, 2.0]; sorted here.
+		{"by g, sorted", lf.GroupBy(c("g")).Agg(x.Mode(false).List().Eval(text(ursus.Element())).List().Join("|")).
+			Sort(ursus.Asc(c("g"))).Select(c("x")), "x\nnull|1|2|4\n3\n5\n"}, // a float cast to text drops ".0"
+	} {
+		if got := csvOf(t, tc.q); got != tc.want {
+			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
+	for name, tc := range map[string]struct {
+		q    *ursus.LazyFrame
+		want string
+	}{
+		// Polars: "length 1 doesn't match the DataFrame height of 3".
+		"mode beside a column": {ursus.Frame(ursus.Values("a", []int64{3, 1, 3})).Select(c("a"), c("a").Mode(false).Alias("m")), "length"},
+		"entropy of Booleans":  {ursus.Frame(ursus.Values("b", []bool{true})).Select(c("b").Entropy(2, true)), "numeric"},
+		"spearman of text":     {lf.Select(ursus.CorrSpearman(c("g").Cast(ursus.String), x)), "numeric"},
+	} {
+		if _, err := tc.q.Collect(t.Context()); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: got %v, want an error naming %q", name, err, tc.want)
+		}
+	}
+}

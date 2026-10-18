@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–276, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–277, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
 
@@ -80,6 +80,9 @@ completeness, part 2 — namespaces and generators.**
   `Head`, `Tail` and `Slice`, each argument a constant or an expression; `Size`,
   `Encode`, `Decode`, and `Reinterpret` to a number or an instant, little- or
   big-endian.
+- **Entropy, mode and Spearman's correlation** (277): `Entropy(base, normalize)`;
+  `Mode(maintainOrder)`, a column of its own length or a list a group; and
+  `CorrSpearman(a, b)`.
 - **Skew, kurtosis and small aggregates** (276): `Skew(bias)` and
   `Kurtosis(fisher, bias)`, kept online and merged pairwise; `BitwiseAnd`, `BitwiseOr`
   and `BitwiseXor` of integers or Booleans; `NanMin` and `NanMax`; `HasNulls`,

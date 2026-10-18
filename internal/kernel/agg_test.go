@@ -218,6 +218,9 @@ func TestMergeEquivalence(t *testing.T) {
 		{op: expr.AggKurtosis, params: expr.AggParams{Fisher: true, Bias: true}},
 		{op: expr.AggKurtosis, params: expr.AggParams{Fisher: false, Bias: false}},
 		{op: expr.AggNanMin},
+		// Step 277: entropy's two sums.
+		{op: expr.AggEntropy, params: expr.AggParams{Base: math.E, Normalize: true}},
+		{op: expr.AggEntropy, params: expr.AggParams{Base: 2, Normalize: false}},
 	}
 
 	for _, tc := range ops {

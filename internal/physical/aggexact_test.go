@@ -88,7 +88,7 @@ func classify(op expr.AggOp) (aggClass, bool) {
 	case expr.AggArgMin, expr.AggArgMax:
 		return classIndex, true
 	case expr.AggVar, expr.AggStd, expr.AggMedian, expr.AggQuantile, expr.AggProduct,
-		expr.AggCorr, expr.AggCov, expr.AggSkew, expr.AggKurtosis:
+		expr.AggCorr, expr.AggCov, expr.AggSkew, expr.AggKurtosis, expr.AggEntropy, expr.AggSpearman:
 		return classApproximate, true
 	case expr.AggMinBy, expr.AggMaxBy:
 		// One row's value, chosen by another input. Paired, so every operand here,

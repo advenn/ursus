@@ -44,6 +44,7 @@ const (
 	ReshapeArgTrue                      // no args: the true rows' indices (step 267)
 	ReshapeArgUnique                    // no args: each value's first index (step 267)
 	ReshapeArgSortBy                    // Child: struct_of the keys; Args: each key's descending and nulls last (step 267)
+	ReshapeMode                         // Args: maintain_order, 0 or 1: the most frequent values (step 277)
 )
 
 var reshapeNames = map[ReshapeOp]string{
@@ -52,7 +53,7 @@ var reshapeNames = map[ReshapeOp]string{
 	ReshapeGet: "get", ReshapeDropNans: "drop_nans", ReshapeGatherEvery: "gather_every",
 	ReshapeSortBy: "sort_by", ReshapeGather: "gather", ReshapeExplode: "explode",
 	ReshapeArgSort: "arg_sort", ReshapeArgTrue: "arg_true", ReshapeArgUnique: "arg_unique",
-	ReshapeArgSortBy: "arg_sort_by",
+	ReshapeArgSortBy: "arg_sort_by", ReshapeMode: "mode",
 }
 
 func (o ReshapeOp) String() string { return reshapeNames[o] }
@@ -299,6 +300,8 @@ func lowerReshape(r *Reshape) Node {
 		return &Call{Fn: FnListArgTrue, Args: []Node{list}}
 	case ReshapeArgUnique:
 		return &Call{Fn: FnListArgUnique, Args: []Node{list}}
+	case ReshapeMode:
+		return &Call{Fn: FnListMode, Args: []Node{list, &Lit{Value: r.Args[0] != 0, DT: dtype.Bool}}}
 	case ReshapeSortBy:
 		// The keys imploded beside the values: each group's keys are a list of its
 		// length. A chain before sort_by would leave the two of different lengths.

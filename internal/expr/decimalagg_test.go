@@ -59,6 +59,9 @@ func TestEveryAggregateOverADecimalHasItsStatedType(t *testing.T) {
 		"bitwise_or":  "refused: an integer or a Boolean",
 		"bitwise_xor": "refused: an integer or a Boolean",
 		"nan_min":     "Decimal(10, 2)",
+		// Step 277.
+		"entropy":       "Float64",
+		"corr_spearman": "refused: a pair of inputs",
 	}
 
 	for i := range int(aggOpCount) {

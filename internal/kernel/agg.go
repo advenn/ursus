@@ -185,6 +185,10 @@ func NewAccumulator(op expr.AggOp, in dtype.DataType, bind expr.AggBinding,
 
 	case expr.AggCorr:
 		return &coMomentAcc{corr: true}, nil
+	case expr.AggSpearman:
+		return &spearmanAcc{}, nil
+	case expr.AggEntropy:
+		return &entropyAcc{base: params.Base, normalize: params.Normalize, out: bind.Out}, nil
 	case expr.AggCov:
 		return &coMomentAcc{ddof: params.DDof}, nil
 	case expr.AggMinBy:

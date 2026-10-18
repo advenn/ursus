@@ -186,7 +186,7 @@ differs from their input's, or scalars outside a group-by.
 
 | missing | prio |
 | --- | --- |
-| **Statistics:** `entropy`, `mode`, `hist`; Spearman `corr`. `skew`, `kurtosis` and `approx_n_unique` built in step 276 | P1 |
+| **Statistics:** `hist`. `skew`, `kurtosis` and `approx_n_unique` built in step 276; `entropy`, `mode` and Spearman `corr` in step 277 | P1 |
 | **Search and hashing:** `search_sorted`, `index_of`, `hash`, `unique_counts`, `value_counts` on an expression, `peak_min`, `peak_max`. `dot` built in step 276 | P1 |
 | **Integers as bits:** `& \| ^ ~` and shifts (`And`/`Or`/`Xor` take Booleans only). The `bitwise_and/or/xor` aggregates built in step 276 | P1 |
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
@@ -290,6 +290,10 @@ decide whether to keep or switch each one.
   `Lit(1).Add(Col("a"))` `literal` there and `a` here. A field alone, and each field
   of `Field` of several names, is named after the field, as Polars names it (step
   275).
+- `Entropy` of a group of no value is null, as `Sum`'s is, where Polars' is −0.0.
+  `Mode` without `maintainOrder` is sorted, where Polars' order is its hash table's,
+  and refuses a Struct or a List, which Polars counts. `CorrSpearman` takes numbers;
+  Polars ranks text too (step 277).
 - `BaseUtcOffset` and `DstOffset` read the system's zone database, so where it is in
   the rearguard form, as Ubuntu's is, Dublin's and Casablanca's daylight-saving time
   is positive. Polars bundles the main form, where it is negative. Other zones agree

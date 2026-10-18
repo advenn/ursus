@@ -359,6 +359,18 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 		// first appear.
 		idx := z.tmp()
 		out = p.lf.WithRowIndex(idx, 0).Unique(p.col).Select(Col(idx).Alias(p.col))
+	case expr.ReshapeMode:
+		// The values whose rows are the most, each once, null a value: counted by a
+		// group-by, kept where the count is the largest, then sorted, or in the order
+		// they first appear (step 277).
+		cnt, first := z.tmp(), z.tmp()
+		top := p.lf.WithRowIndex(first, 0).GroupBy(c).Agg(Len().Alias(cnt), Col(first).Min().Alias(first)).
+			Filter(Col(cnt).Eq(Col(cnt).Max()))
+		if arg[0] != 0 {
+			out = top.Sort(Asc(Col(first))).Select(c)
+		} else {
+			out = top.Sort(Asc(c)).Select(c)
+		}
 	case expr.ReshapeGatherEvery:
 		every, off := arg[0], arg[1]
 		idx := z.tmp()

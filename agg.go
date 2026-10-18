@@ -180,6 +180,13 @@ func (e Expr) MaxBy(by Expr) Expr { return pairAgg(expr.AggMaxBy, e, by, expr.Ag
 // rank correlation, Polars' method="spearman", is not built.
 func Corr(a, b Expr) Expr { return pairAgg(expr.AggCorr, a, b, expr.AggParams{}) }
 
+// CorrSpearman is Spearman's rank correlation of a and b over the rows where both
+// are non-null: Pearson's of their ranks, a tie the mean of its ranks and NaN above
+// every number, Polars' pl.corr(method="spearman"). Fewer than two such rows, or
+// values all alike, are NaN, as Polars answers. It keeps every pair of a group, as
+// Median keeps its values. Polars ranks text too; this takes numbers.
+func CorrSpearman(a, b Expr) Expr { return pairAgg(expr.AggSpearman, a, b, expr.AggParams{}) }
+
 // Cov is the covariance of a and b over the rows where both are non-null: Polars'
 // pl.cov. ddof is Var's: 1 for the sample covariance, Polars' default, and 0 for the
 // population's. A group of ddof or fewer such rows is null, as Var is.
@@ -274,6 +281,29 @@ func (e Expr) IsEmpty() Expr  { return e.Len().Eq(0) }
 // estimate's best case (v0.6.6-scope.md §6.3). NUnique does not count a null.
 func (e Expr) ApproxNUnique() Expr {
 	return e.NUnique().Add(e.NullCount().Gt(0).Cast(Uint64))
+}
+
+// Entropy is the entropy of the non-null values over the logarithm of base: Polars'
+// entropy. With normalize the values are a distribution, each over their sum, and it
+// is −Σ p·ln p; without, −Σ x·ln x. A zero or negative value makes it NaN, as Polars'
+// 0·ln 0 is. A group of no value is null, as Sum's is, where Polars' is −0. A
+// Float32's is a Float32, any other
+// number's a Float64. It merges, as ln S − (Σ x·ln x)/S, so it agrees with Polars'
+// to the last few bits.
+func (e Expr) Entropy(base float64, normalize bool) Expr {
+	return e.aggP(expr.AggEntropy, expr.AggParams{Base: base, Normalize: normalize})
+}
+
+// Mode is the most frequent values, each once, a null among them where nulls are:
+// Polars' mode, a column of its own length in a Select and a list a group in an
+// aggregation. With maintainOrder they come in the order they first appear; without,
+// ascending, nulls first, where Polars' order is its hash table's.
+func (e Expr) Mode(maintainOrder bool) Expr {
+	m := int64(0)
+	if maintainOrder {
+		m = 1
+	}
+	return e.reshape(expr.ReshapeMode, m)
 }
 
 // Dot is the sum of the products of e and other over the rows where both are

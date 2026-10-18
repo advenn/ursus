@@ -360,6 +360,9 @@ const (
 	FnListAll
 	FnListItem
 	FnListSample
+	// list.mode, maintain_order a literal Boolean (step 277), which Mode in an
+	// aggregation lowers to.
+	FnListMode
 	fnListMoreEnd
 )
 
@@ -560,6 +563,7 @@ var callNames = map[CallFn]string{
 	FnBusinessDayCount: "business_day_count", FnConcatList: "concat_list",
 	FnListShift: "list.shift", FnListCountMatches: "list.count_matches",
 	FnListAny: "list.any", FnListAll: "list.all", FnListItem: "list.item", FnListSample: "list.sample",
+	FnListMode: "list.mode",
 }
 
 func (f CallFn) String() string {
@@ -2320,6 +2324,14 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		return elem, nil
 
 	case FnListSample:
+		return in, nil
+
+	case FnListMode:
+		// A Struct or a List cannot be a key here, so its mode is refused, where
+		// Polars counts them.
+		if !elem.IsHashable() && !elem.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "mode", "mode counts values, and %s cannot be a key", elem)
+		}
 		return in, nil
 
 	case FnListArgSort, FnListArgTrue, FnListArgUnique:
