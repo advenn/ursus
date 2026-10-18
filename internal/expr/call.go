@@ -368,6 +368,10 @@ const (
 	// list.mode, maintain_order a literal Boolean (step 277), which Mode in an
 	// aggregation lowers to.
 	FnListMode
+	// list.unique_counts; list.value_counts, sort, normalize, the count's name and the
+	// value's (step 280).
+	FnListUniqueCounts
+	FnListValueCounts
 	fnListMoreEnd
 )
 
@@ -578,7 +582,7 @@ var callNames = map[CallFn]string{
 	FnBusinessDayCount: "business_day_count", FnConcatList: "concat_list",
 	FnListShift: "list.shift", FnListCountMatches: "list.count_matches",
 	FnListAny: "list.any", FnListAll: "list.all", FnListItem: "list.item", FnListSample: "list.sample",
-	FnListMode: "list.mode",
+	FnListMode: "list.mode", FnListUniqueCounts: "list.unique_counts", FnListValueCounts: "list.value_counts",
 }
 
 func (f CallFn) String() string {
@@ -2374,11 +2378,24 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 	case FnListSample:
 		return in, nil
 
-	case FnListMode:
+	case FnListMode, FnListUniqueCounts, FnListValueCounts:
 		// A Struct or a List cannot be a key here, so its mode is refused, where
 		// Polars counts them.
 		if !elem.IsHashable() && !elem.IsNull() {
-			return dtype.Null, uerr.New(uerr.KindType, "mode", "mode counts values, and %s cannot be a key", elem)
+			return dtype.Null, uerr.New(uerr.KindType, "mode", "%s counts values, and %s cannot be a key", fn, elem)
+		}
+		switch fn {
+		case FnListUniqueCounts:
+			return dtype.List(dtype.Uint32), nil
+		case FnListValueCounts:
+			args, err := CallArgs(c)
+			if err != nil || len(args) != 4 {
+				return dtype.Null, uerr.Internalf("expr: %s without its arguments", fn)
+			}
+			label, _ := args[2].(string)
+			value, _ := args[3].(string)
+			normalize, _ := args[1].(bool)
+			return dtype.List(ValueCountsType(dtype.Field{Name: value, Type: elem}, label, normalize)), nil
 		}
 		return in, nil
 

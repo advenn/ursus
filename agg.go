@@ -306,6 +306,40 @@ func (e Expr) Mode(maintainOrder bool) Expr {
 	return e.reshape(expr.ReshapeMode, m)
 }
 
+// UniqueCounts is each distinct value's count, in the order the values first appear,
+// a null among them, a UInt32: Polars' unique_counts, a column of its own length in a
+// Select and a list a group in an aggregation.
+func (e Expr) UniqueCounts() Expr { return e.reshape(expr.ReshapeUniqueCounts) }
+
+// ValueCounts is each distinct value beside its count, a Struct of the value, named
+// as the column, and the count, a UInt32: Polars' value_counts, a column of its own
+// length in a Select and a list a group in an aggregation. With sort the most
+// frequent come first; without, the values come in the order they first appear,
+// where Polars' order is its hash table's. With normalize the count is its share of
+// the rows, nulls among them, a Float64. The count is named name if given, else
+// "count", or "proportion" with normalize, as Polars names it.
+func (e Expr) ValueCounts(sort, normalize bool, name ...string) Expr {
+	label := "count"
+	if normalize {
+		label = "proportion"
+	}
+	switch len(name) {
+	case 0:
+	case 1:
+		label = name[0]
+	default:
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "value_counts", "value_counts takes at most one name")})
+	}
+	var s, n int64
+	if sort {
+		s = 1
+	}
+	if normalize {
+		n = 1
+	}
+	return wrap(&expr.Reshape{Op: expr.ReshapeValueCounts, Child: e.node(), Args: []int64{s, n}, Label: label})
+}
+
 // Dot is the sum of the products of e and other over the rows where both are
 // non-null: Polars' dot. It is Sum's, so an integer dot product is an Int128, and one
 // of no such row null, where Polars' is 0, as feature-gaps.md §9 records of Sum.

@@ -162,3 +162,66 @@ func TestHash(t *testing.T) {
 		t.Errorf("one hash, two answers")
 	}
 }
+
+// TestUniqueAndValueCounts is M3's second half (step 280). Every answer is Polars
+// 1.44.1's, but where its order is its hash table's: there the values come in the
+// order they first appear.
+func TestUniqueAndValueCounts(t *testing.T) {
+	c := ursus.Col
+	a, s := c("a"), c("s")
+	lf := searchFrame()
+	// A struct's fields, unnested in a Select of their own: a reshape and its unnest
+	// together are a selection of several columns, which the zipper refuses.
+	counts := func(lf *ursus.LazyFrame, e ursus.Expr) *ursus.LazyFrame {
+		return lf.Select(e.Alias("v")).Select(c("v").Struct().Field("*"))
+	}
+	text := func(e ursus.Expr) ursus.Expr { return e.Cast(ursus.String).FillNullWith("null") }
+	for _, tc := range []struct {
+		name string
+		q    *ursus.LazyFrame
+		want string
+	}{
+		{"unique_counts", lf.Select(a.UniqueCounts()), "a\n1\n2\n1\n1\n1\n"},
+		{"of text", lf.Select(s.UniqueCounts()), "s\n3\n1\n1\n1\n"},
+		{"NaN and the zeros", ursus.Frame(ursus.Values("f", []float64{1, math.NaN(), math.NaN(), math.Copysign(0, -1), 0})).
+			Select(c("f").UniqueCounts()), "f\n1\n2\n2\n"},
+		{"by group", lf.GroupBy(c("g")).Agg(s.UniqueCounts().List().Eval(text(ursus.Element())).List().Join("|")).
+			Sort(ursus.Asc(c("g"))).Select(s), "s\n2|1\n1|1|1\n"},
+		// Polars: [y: 1, x: 3, z: 1, None: 1], its hash table's order.
+		{"value_counts", counts(lf, s.ValueCounts(false, false)), "s,count\nx,3\ny,1\n,1\nz,1\n"},
+		{"sorted", counts(lf, s.ValueCounts(true, false)), "s,count\nx,3\ny,1\n,1\nz,1\n"},
+		{"ties as they first appear", counts(ursus.Frame(ursus.Values("s", []string{"b", "a", "c", "a", "c"})), s.ValueCounts(true, false)), "s,count\na,2\nc,2\nb,1\n"},
+		{"shares, named", counts(lf, s.ValueCounts(true, true, "n")),
+			"s,n\nx,0.5\ny,0.16666666666666666\n,0.16666666666666666\nz,0.16666666666666666\n"},
+		{"by group, sorted", lf.GroupBy(c("g")).Agg(s.ValueCounts(true, false).List().Eval(
+			ursus.ConcatStr(":", text(ursus.Element().Struct().Field("s")), ursus.Element().Struct().Field("count").Cast(ursus.String))).
+			List().Join("|")).Sort(ursus.Asc(c("g"))).Select(s), "s\nx:2|y:1\nnull:1|x:1|z:1\n"},
+	} {
+		if got := csvOf(t, tc.q); got != tc.want {
+			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
+	// A group whose sorted order is not its first-seen one, sorted and in shares.
+	ba := ursus.Frame(ursus.Values("g", []int64{1, 1, 1}), ursus.Values("s", []string{"b", "a", "a"}))
+	sorted := ba.GroupBy(c("g")).Agg(s.ValueCounts(true, false).List().Eval(ursus.ConcatStr(":",
+		ursus.Element().Struct().Field("s"), ursus.Element().Struct().Field("count").Cast(ursus.String))).List().Join("|"))
+	if got := csvOf(t, sorted.Select(s)); got != "s\na:2|b:1\n" {
+		t.Errorf("a group sorted: %q", got)
+	}
+	shares := ba.GroupBy(c("g")).Agg(s.ValueCounts(true, true).List().Eval(ursus.ConcatStr(":",
+		ursus.Element().Struct().Field("s"), ursus.Element().Struct().Field("proportion").Cast(ursus.String))).List().Join("|"))
+	if got := csvOf(t, shares.Select(s)); got != "s\na:0.6666666666666666|b:0.3333333333333333\n" {
+		t.Errorf("a group's shares: %q", got)
+	}
+	got, err := lf.Select(s.ValueCounts(false, true)).Collect(t.Context())
+	if err != nil || got.Schema().Field(0).Type.String() != "Struct(s: String, proportion: Float64)" {
+		t.Errorf("a share's name and type: %v, %v", got, err)
+	}
+	got, err = lf.Select(a.UniqueCounts()).Collect(t.Context())
+	if err != nil || got.Schema().Field(0).Type != ursus.Uint32 {
+		t.Errorf("a UInt32: %v, %v", got, err)
+	}
+	if _, err := lf.Select(c("g"), s.ValueCounts(false, false)).Collect(t.Context()); err == nil || !strings.Contains(err.Error(), "length") {
+		t.Errorf("beside a column of another length: %v", err)
+	}
+}

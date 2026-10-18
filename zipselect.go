@@ -371,6 +371,27 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 		} else {
 			out = top.Sort(Asc(c)).Select(c)
 		}
+	case expr.ReshapeUniqueCounts, expr.ReshapeValueCounts:
+		// Each value's rows counted by a group-by, in the order the values first
+		// appear, or by count, most first, ties so, for a sorted value_counts
+		// (step 280).
+		cnt, first := z.tmp(), z.tmp()
+		counted := p.lf.WithRowIndex(first, 0).GroupBy(c).Agg(Len().Alias(cnt), Col(first).Min().Alias(first))
+		if r.Op == expr.ReshapeUniqueCounts {
+			out = counted.Sort(Asc(Col(first))).Select(Col(cnt).Cast(Uint32).Alias(p.col))
+			break
+		}
+		if arg[0] != 0 {
+			counted = counted.Sort(Desc(Col(cnt)), Asc(Col(first)))
+		} else {
+			counted = counted.Sort(Asc(Col(first)))
+		}
+		count := Col(cnt).Cast(Uint32)
+		if arg[1] != 0 {
+			count = Col(cnt).Cast(Float64).Div(Col(cnt).Sum().Cast(Float64))
+		}
+		value := expr.OutputName(r.Child)
+		out = counted.Select(Struct(c.Alias(value), count.Alias(r.Label)).Alias(p.col))
 	case expr.ReshapeGatherEvery:
 		every, off := arg[0], arg[1]
 		idx := z.tmp()

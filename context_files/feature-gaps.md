@@ -187,7 +187,7 @@ differs from their input's, or scalars outside a group-by.
 | missing | prio |
 | --- | --- |
 | **Statistics:** `hist`. `skew`, `kurtosis` and `approx_n_unique` built in step 276; `entropy`, `mode` and Spearman `corr` in step 277 | P1 |
-| **Search and hashing:** `unique_counts`, `value_counts` on an expression. `dot` built in step 276; `search_sorted`, `index_of`, `hash`, `peak_min` and `peak_max` in step 279, a search's value a Go value only | P1 |
+| **Search and hashing:** built: `dot` in step 276; `search_sorted`, `index_of`, `hash`, `peak_min` and `peak_max` in step 279, a search's value a Go value only; `unique_counts` and `value_counts` on an expression in step 280 | — |
 | **An aggregate inside an aggregate's input:** `Col("a").Sub(Col("a").Mean()).Abs().Sum()` is refused, in a `Select` or an `Agg`, as "not an aggregate"; Polars takes it (found at step 279) | P1 |
 | **Integers as bits:** built: `& \| ^ ~` of integers in step 278, the `bitwise_and/or/xor` aggregates in step 276. Polars has no shifts | — |
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
@@ -291,6 +291,8 @@ decide whether to keep or switch each one.
   `Lit(1).Add(Col("a"))` `literal` there and `a` here. A field alone, and each field
   of `Field` of several names, is named after the field, as Polars names it (step
   275).
+- `ValueCounts` without `sort` gives the values in the order they first appear, where
+  Polars' order is its hash table's (step 280).
 - `Entropy` of a group of no value is null, as `Sum`'s is, where Polars' is −0.0.
   `Mode` without `maintainOrder` is sorted, where Polars' order is its hash table's,
   and refuses a Struct or a List, which Polars counts. `CorrSpearman` takes numbers;

@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/advenn/ursus/dtype"
@@ -27,24 +28,26 @@ import (
 type ReshapeOp uint8
 
 const (
-	ReshapeSort        ReshapeOp = iota // Args: descending, 0 or 1
-	ReshapeHead                         // Args: n
-	ReshapeTail                         // Args: n
-	ReshapeSlice                        // Args: offset, length
-	ReshapeReverse                      // no args
-	ReshapeUnique                       // no args: first-seen order, null a value
-	ReshapeDropNulls                    // no args
-	ReshapeGet                          // Args: index; one value, not a column
-	ReshapeDropNans                     // no args (step 253)
-	ReshapeGatherEvery                  // Args: n, offset (step 253)
-	ReshapeSortBy                       // Args: descending, 0 or 1; By the keys (step 253)
-	ReshapeGather                       // no args; By the indices (step 257)
-	ReshapeExplode                      // a List's elements (step 259); Args [1]: a generator's, an empty list no row (step 263)
-	ReshapeArgSort                      // Args: descending, nulls last (step 267)
-	ReshapeArgTrue                      // no args: the true rows' indices (step 267)
-	ReshapeArgUnique                    // no args: each value's first index (step 267)
-	ReshapeArgSortBy                    // Child: struct_of the keys; Args: each key's descending and nulls last (step 267)
-	ReshapeMode                         // Args: maintain_order, 0 or 1: the most frequent values (step 277)
+	ReshapeSort         ReshapeOp = iota // Args: descending, 0 or 1
+	ReshapeHead                          // Args: n
+	ReshapeTail                          // Args: n
+	ReshapeSlice                         // Args: offset, length
+	ReshapeReverse                       // no args
+	ReshapeUnique                        // no args: first-seen order, null a value
+	ReshapeDropNulls                     // no args
+	ReshapeGet                           // Args: index; one value, not a column
+	ReshapeDropNans                      // no args (step 253)
+	ReshapeGatherEvery                   // Args: n, offset (step 253)
+	ReshapeSortBy                        // Args: descending, 0 or 1; By the keys (step 253)
+	ReshapeGather                        // no args; By the indices (step 257)
+	ReshapeExplode                       // a List's elements (step 259); Args [1]: a generator's, an empty list no row (step 263)
+	ReshapeArgSort                       // Args: descending, nulls last (step 267)
+	ReshapeArgTrue                       // no args: the true rows' indices (step 267)
+	ReshapeArgUnique                     // no args: each value's first index (step 267)
+	ReshapeArgSortBy                     // Child: struct_of the keys; Args: each key's descending and nulls last (step 267)
+	ReshapeMode                          // Args: maintain_order, 0 or 1: the most frequent values (step 277)
+	ReshapeUniqueCounts                  // no args: each value's count, in first-seen order (step 280)
+	ReshapeValueCounts                   // Args: sort, normalize; Label: the count's name; a Struct a value (step 280)
 )
 
 var reshapeNames = map[ReshapeOp]string{
@@ -54,6 +57,7 @@ var reshapeNames = map[ReshapeOp]string{
 	ReshapeSortBy: "sort_by", ReshapeGather: "gather", ReshapeExplode: "explode",
 	ReshapeArgSort: "arg_sort", ReshapeArgTrue: "arg_true", ReshapeArgUnique: "arg_unique",
 	ReshapeArgSortBy: "arg_sort_by", ReshapeMode: "mode",
+	ReshapeUniqueCounts: "unique_counts", ReshapeValueCounts: "value_counts",
 }
 
 func (o ReshapeOp) String() string { return reshapeNames[o] }
@@ -65,6 +69,7 @@ type Reshape struct {
 	Child Node
 	Args  []int64
 	By    Node
+	Label string // ValueCounts: its count's field name
 }
 
 func (r *Reshape) node() {}
@@ -100,7 +105,24 @@ func (r *Reshape) String() string {
 			args += itoa(int(a))
 		}
 	}
+	if r.Label != "" {
+		if args != "" {
+			args += ", "
+		}
+		args += strconv.Quote(r.Label)
+	}
 	return r.Child.String() + "." + r.Op.String() + "(" + args + ")"
+}
+
+// ValueCountsType is value_counts' Struct: the value, named as its column, and its
+// count, a UInt32, or with normalize its share, a Float64, named label.
+func ValueCountsType(value dtype.Field, label string, normalize bool) dtype.DataType {
+	count := dtype.Uint32
+	if normalize {
+		count = dtype.Float64
+	}
+	return dtype.Struct(dtype.Field{Name: value.Name, Type: value.Type, Nullable: true},
+		dtype.Field{Name: label, Type: count, Nullable: true})
 }
 
 // Generators are the per-row functions whose list a scalar generator explodes,
@@ -151,6 +173,18 @@ func (r *Reshape) Field(in *dtype.Schema) (dtype.Field, error) {
 	case ReshapeArgSort, ReshapeArgUnique, ReshapeArgSortBy:
 		// Indices, as Polars' are: UInt32.
 		f.Type, f.Nullable = dtype.Uint32, false
+		return f, nil
+	case ReshapeUniqueCounts, ReshapeValueCounts:
+		// Counted by the keys a group-by takes, as mode's are.
+		if !f.Type.IsHashable() && !f.Type.IsNull() {
+			return dtype.Field{}, uerr.New(uerr.KindType, r.Op.String(),
+				"%s counts values, and %s cannot be a key", r.Op, f.Type)
+		}
+		if r.Op == ReshapeUniqueCounts {
+			f.Type, f.Nullable = dtype.Uint32, false
+			return f, nil
+		}
+		f.Type, f.Nullable = ValueCountsType(f, r.Label, len(r.Args) > 1 && r.Args[1] != 0), false
 		return f, nil
 	case ReshapeExplode:
 	default:
@@ -302,6 +336,14 @@ func lowerReshape(r *Reshape) Node {
 		return &Call{Fn: FnListArgUnique, Args: []Node{list}}
 	case ReshapeMode:
 		return &Call{Fn: FnListMode, Args: []Node{list, &Lit{Value: r.Args[0] != 0, DT: dtype.Bool}}}
+	case ReshapeUniqueCounts:
+		return &Call{Fn: FnListUniqueCounts, Args: []Node{list}}
+	case ReshapeValueCounts:
+		// The value's name beside the count's, which a list's type has no other way to
+		// carry: the struct's first field is named as the column.
+		return &Call{Fn: FnListValueCounts, Args: []Node{list,
+			&Lit{Value: r.Args[0] != 0, DT: dtype.Bool}, &Lit{Value: r.Args[1] != 0, DT: dtype.Bool},
+			&Lit{Value: r.Label, DT: dtype.String}, &Lit{Value: OutputName(r.Child), DT: dtype.String}}}
 	case ReshapeSortBy:
 		// The keys imploded beside the values: each group's keys are a list of its
 		// length. A chain before sort_by would leave the two of different lengths.

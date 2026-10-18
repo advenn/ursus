@@ -234,7 +234,7 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	// 201 since step 279's order_cmp, hash and order_sign; 198 after step 277's list.mode; 197 after step 274's four binary functions and five of a row's operands; 188
+	// 203 since step 280's list.unique_counts and list.value_counts; 201 after step 279's order_cmp, hash and order_sign; 198 after step 277's list.mode; 197 after step 274's four binary functions and five of a row's operands; 188
 	// after step 273's cat.get_categories and cat.physical; 186 after step 272's twelve temporal functions at 900, and is_business_day,
 	// add_business_days and dt.replace; 171 after step 271's encode, decode, json_path_match, json_decode, the two
 	// to_integers and concat_str past nulls; 164 after step 270's nine string functions; 155 after step 269's six list functions; 149 after step 267's list.arg_sort, list.arg_true and list.arg_unique; 146 after
@@ -250,8 +250,8 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 	// list.arg_min and list.arg_max, step 174's dt.replace_time_zone, step 171's
 	// struct.with_fields, step 147's cut and cut_left_closed, and step 146's
 	// list.join, six bit counts, concat_str and struct.
-	if classified != 201 {
-		t.Errorf("%d call functions are classified, want 201 — the families and the "+
+	if classified != 203 {
+		t.Errorf("%d call functions are classified, want 203 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }

@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–279, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–280, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
 
@@ -80,6 +80,9 @@ completeness, part 2 — namespaces and generators.**
   `Head`, `Tail` and `Slice`, each argument a constant or an expression; `Size`,
   `Encode`, `Decode`, and `Reinterpret` to a number or an instant, little- or
   big-endian.
+- **Counts of values** (280): `UniqueCounts()` and `ValueCounts(sort, normalize,
+  name...)`, a Struct of each value and its count, a column of its own length in a
+  Select and a list a group in an aggregation.
 - **Search, peaks and hashing** (279): `SearchSorted(value, side, descending)`,
   `IndexOf`, `PeakMax`, `PeakMin` and `Hash(seed)`, each comparing in the total order
   Sort uses, NaN above every number, as Polars'.
