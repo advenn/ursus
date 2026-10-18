@@ -110,6 +110,9 @@ func (lf *LazyFrame) Select(exprs ...Expr) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
+	if ns, err = lf.writeCategories(ns); err != nil {
+		return &LazyFrame{err: err}
+	}
 	// One value before lowering stays one value after it: an aggregate over a
 	// generator lowers to a list function of a literal (step 263).
 	scalar := allScalar(ns)
@@ -178,6 +181,9 @@ func (lf *LazyFrame) Filter(preds ...Expr) *LazyFrame {
 	}
 	ns, err := nodes(preds)
 	if err != nil {
+		return &LazyFrame{err: err}
+	}
+	if ns, err = lf.writeCategories(ns); err != nil {
 		return &LazyFrame{err: err}
 	}
 	return lf.derive(&plan.Filter{Input: lf.node, Preds: bindScalars(lowerReshapes(ns, false))})

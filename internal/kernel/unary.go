@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"math"
+	"slices"
 	"strconv"
 
 	"github.com/advenn/ursus/dtype"
@@ -1447,4 +1448,34 @@ func encodeEnum(name string, to dtype.DataType, strict bool, c *data.Column) (*d
 		ok.Append(true)
 	}
 	return data.NewFixed(name, to, idx, ok.Finish()), nil
+}
+
+// EnumPhysical is an Enum's indices at out's width, Polars' cat.physical: each index
+// is below the category count, which out holds (step 273).
+func EnumPhysical(name string, out dtype.DataType, c *data.Column) (*data.Column, error) {
+	if c.DType().ID() != dtype.TypeEnum {
+		return nil, uerr.Internalf("kernel: cat.physical of %s", c.DType())
+	}
+	idx, err := data.Values[uint32](c)
+	if err != nil {
+		return nil, err
+	}
+	valid := c.Validity()
+	switch out {
+	case dtype.Uint32:
+		return data.NewFixed(name, out, slices.Clone(idx), valid), nil
+	case dtype.Uint16:
+		res := make([]uint16, len(idx))
+		for i, v := range idx {
+			res[i] = uint16(v)
+		}
+		return data.NewFixed(name, out, res, valid), nil
+	case dtype.Uint8:
+		res := make([]uint8, len(idx))
+		for i, v := range idx {
+			res[i] = uint8(v)
+		}
+		return data.NewFixed(name, out, res, valid), nil
+	}
+	return nil, uerr.Internalf("kernel: cat.physical to %s", out)
 }

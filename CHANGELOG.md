@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–272, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–273, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
 
@@ -67,11 +67,17 @@ completeness, part 2 — namespaces and generators.**
   `EpochDays` and `Timestamp` in a unit; `IsBusinessDay` and `AddBusinessDays` with a
   `BusinessCalendar` and a `Roll`; and `Replace(DateTimeParts{...})`, setting
   components.
+- **The categorical namespace on an Enum** (273): `Cat().GetCategories`,
+  `StartsWith`, `EndsWith`, `LenBytes`, `LenChars`, `Slice` and `Physical`; and
+  `Str()` reads an Enum as its text, where it refused one.
 
 ### Fixes
 
 - **A list's eval over an aggregate in a `Select`,**
   `Col("a").Implode().List().Eval(...)`, failed as an internal error (271).
+- **`Len()` is named `len`,** as Polars' `pl.len()` is; in most plans it was named
+  `literal` (273). `Alias` of an alias now replaces the name, so `Len().Alias("n")` is
+  unchanged.
 
 ---
 

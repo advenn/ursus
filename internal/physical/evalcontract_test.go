@@ -273,7 +273,7 @@ func allUnaryOps() []expr.UnaryOp {
 // nothing wrong, which is the failure this file exists to prevent.
 func allCallFns() []expr.CallFn {
 	var fns []expr.CallFn
-	for i := range 1000 {
+	for i := range 1100 {
 		fn := expr.CallFn(i)
 		if fn.IsString() || fn.IsTemporal() || fn.IsGeneral() ||
 			fn.IsMath() || fn.IsList() || fn.IsStruct() || fn.IsHorizontal() {

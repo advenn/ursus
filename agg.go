@@ -317,8 +317,9 @@ func (e Expr) aggP(op expr.AggOp, p expr.AggParams) Expr {
 //
 // It aggregates over a literal rather than a column, because counting rows must
 // not depend on any column existing: `GroupBy(k).Agg(Len())` has to work on a frame
-// whose only column is the key.
-func Len() Expr { return Lit(int64(1)).Len() }
+// whose only column is the key. It is named "len", as Polars' pl.len() is; the
+// literal's name, "literal", showed through in some plans until step 273.
+func Len() Expr { return Lit(int64(1)).Len().Alias("len") }
 
 // --- sort keys ----------------------------------------------------------------
 
@@ -372,6 +373,9 @@ func (lf *LazyFrame) WithColumns(exprs ...Expr) *LazyFrame {
 	}
 	ns, err := nodes(exprs)
 	if err != nil {
+		return &LazyFrame{err: err}
+	}
+	if ns, err = lf.writeCategories(ns); err != nil {
 		return &LazyFrame{err: err}
 	}
 	ns = lowerReshapes(ns, false)
@@ -499,6 +503,9 @@ func (g *GroupBy) Agg(exprs ...Expr) *LazyFrame {
 	}
 	ns, err := nodes(exprs)
 	if err != nil {
+		return &LazyFrame{err: err}
+	}
+	if ns, err = g.lf.writeCategories(ns); err != nil {
 		return &LazyFrame{err: err}
 	}
 	ns = lowerReshapes(ns, true)

@@ -187,6 +187,11 @@ func Null(dt dtype.DataType) Expr { return wrap(&expr.Lit{Value: nil, DT: dt}) }
 // It sets ONE fixed name, so applying it to a multi-column selection is an error.
 // Use Prefix or Suffix to rename an expansion.
 func (e Expr) Alias(name string) Expr {
+	// An alias of an alias is the one name: the outer wins either way, and one node
+	// keeps a plan's text as it was before Len was named (step 273).
+	if a, ok := e.node().(*expr.Alias); ok {
+		return wrap(&expr.Alias{Child: a.Child, Name: name})
+	}
 	return wrap(&expr.Alias{Child: e.node(), Name: name})
 }
 

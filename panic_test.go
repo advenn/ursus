@@ -437,9 +437,19 @@ func corruptSweep(ctx context.Context) (string, error) {
 						tally["caller panic"]++
 					}
 				}()
-				ctx, cancel := context.WithTimeout(ctx, time.Second)
-				defer cancel()
-				_, err := ursus.ScanParquetBytes(bad, "flipped.parquet").Collect(ctx, threads(4))
+				read := func(limit time.Duration) error {
+					ctx, cancel := context.WithTimeout(ctx, limit)
+					defer cancel()
+					_, err := ursus.ScanParquetBytes(bad, "flipped.parquet").Collect(ctx, threads(4))
+					return err
+				}
+				// A second past its deadline is read again with a minute: a read that
+				// hangs hangs again, and one the race detector under a whole
+				// repository's tests slowed past a second, as at step 273, does not.
+				err := read(time.Second)
+				if errors.Is(err, context.DeadlineExceeded) {
+					err = read(time.Minute)
+				}
 				var p *uerr.PanicError
 				switch {
 				case err == nil:

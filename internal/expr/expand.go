@@ -32,6 +32,20 @@ import (
 // its own mean. Two different matchers are rejected, because the intended pairing
 // is genuinely ambiguous: is it a zip, or a cross product?
 func Expand(n Node, in *dtype.Schema) ([]Node, error) {
+	out, err := expand(n, in)
+	if err != nil {
+		return nil, err
+	}
+	// get_categories is written out once its receiver is one column (step 273).
+	for i, x := range out {
+		if out[i], err = BuildCategories(x, in); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+func expand(n Node, in *dtype.Schema) ([]Node, error) {
 	if err := FirstErr(n); err != nil {
 		return nil, err
 	}

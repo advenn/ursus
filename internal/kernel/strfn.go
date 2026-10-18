@@ -42,6 +42,14 @@ import (
 func StrCall(fn expr.CallFn, name string, out dtype.DataType,
 	c *data.Column, args []any, re *regexp.Regexp) (*data.Column, error) {
 
+	// An Enum is read as its text (step 273).
+	if c.DType().ID() == dtype.TypeEnum {
+		text, err := decodeEnum(c.Name(), c)
+		if err != nil {
+			return nil, err
+		}
+		c = text
+	}
 	switch fn {
 	case expr.FnStrToDateFmt, expr.FnStrToDatetimeFmt, expr.FnStrToTimeFmt:
 		return strptimeCall(fn, name, out, c, args)

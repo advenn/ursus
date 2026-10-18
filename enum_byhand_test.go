@@ -321,9 +321,9 @@ func TestEnumByHand(t *testing.T) {
 			return ""
 		}},
 
-		// --- refusals that stay ---
-		{".str is refused, with the cast hint", refused(ef().Select(c("e").Str().LenChars()), ursus.ErrType,
-			"Cast(ursus.String)")},
+		// --- .str reads an Enum's text (step 273), where it was refused ---
+		{".str reads the text", wantInts(ef().Select(c("e").Str().LenChars().Cast(ursus.Int64)), "e",
+			2, 2, 3, math.MinInt64)},
 
 		// --- CSV ---
 		{"CSV writes an Enum's text", func(t *testing.T) string {

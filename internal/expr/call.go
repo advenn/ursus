@@ -402,6 +402,18 @@ const (
 	fnDtMoreEnd
 )
 
+// The categorical family (step 273): get_categories, which Expand writes out as its
+// Enum's categories once the receiver's type is known, so no kernel sees it; and
+// physical, an Enum's indices at Polars' width. The text functions of .cat are the
+// string family's, which read an Enum as its text.
+//
+// A block of its own, as the others after 600 are. IsGeneral covers it.
+const (
+	FnCatGetCategories CallFn = iota + 1000
+	FnCatPhysical
+	fnCatEnd
+)
+
 // IsString, IsTemporal and IsGeneral classify a function by family.
 //
 // These are range comparisons over declaration order, which is why the enum is
@@ -412,8 +424,10 @@ func (f CallFn) IsString() bool {
 func (f CallFn) IsTemporal() bool {
 	return f >= FnDtYear && f < fnDtEnd || f >= FnDtIsoYear && f < fnDtMoreEnd
 }
-func (f CallFn) IsGeneral() bool { return f >= FnIsIn && f < fnGenEnd }
-func (f CallFn) IsMath() bool    { return f >= FnMathRound && f < fnMathEnd }
+func (f CallFn) IsGeneral() bool {
+	return f >= FnIsIn && f < fnGenEnd || f >= FnCatGetCategories && f < fnCatEnd
+}
+func (f CallFn) IsMath() bool { return f >= FnMathRound && f < fnMathEnd }
 func (f CallFn) IsList() bool {
 	return f >= FnListLen && f < fnListEnd || f >= FnListMedian && f < fnListMoreEnd
 }
@@ -468,7 +482,8 @@ var callNames = map[CallFn]string{
 	FnDtTotalFractional: "dt.total_fractional", FnDtSecondFractional: "dt.second_fractional",
 	FnDtEpochIn:       "dt.epoch_in",
 	FnDtIsBusinessDay: "dt.is_business_day", FnDtAddBusinessDays: "dt.add_business_days",
-	FnDtReplace: "dt.replace",
+	FnDtReplace:        "dt.replace",
+	FnCatGetCategories: "cat.get_categories", FnCatPhysical: "cat.physical",
 
 	FnIsIn: "is_in",
 
@@ -617,7 +632,10 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		// about exactly this misuse and names HasStringStorage as the storage
 		// question's predicate. Latent today only because Enum columns cannot yet be
 		// built from the public API.
-		if !in.HasStringStorage() && in.ID() != dtype.TypeNull {
+		//
+		// An Enum is read as its text, which the string kernels decode it to first
+		// (step 273).
+		if !in.HasStringStorage() && in.ID() != dtype.TypeNull && in.ID() != dtype.TypeEnum {
 			return dtype.Null, uerr.New(uerr.KindType, "str",
 				"%s requires a String operand, got %s", fn, in).
 				Hint("cast the column first, e.g. .Cast(ursus.String)")
@@ -864,7 +882,7 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 		if len(ops) != 3 {
 			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
 		}
-		if s := ops[0].Type; !s.HasStringStorage() && !s.IsNull() {
+		if s := ops[0].Type; !s.HasStringStorage() && !s.IsNull() && s.ID() != dtype.TypeEnum {
 			return dtype.Null, uerr.New(uerr.KindType, "str", "%s requires a String operand, got %s", fn, s)
 		}
 		if b := ops[1].Type; !b.IsInteger() && !b.IsNull() {
@@ -1197,7 +1215,7 @@ func strExprOut(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			}
 			continue
 		}
-		if !f.Type.HasStringStorage() && !f.Type.IsNull() {
+		if !f.Type.HasStringStorage() && !f.Type.IsNull() && f.Type.ID() != dtype.TypeEnum {
 			what := "pattern"
 			switch {
 			case i == 0:
@@ -1294,6 +1312,16 @@ func genCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 
 	case FnReplace, FnReplaceStrict, FnReplaceOr:
 		return replaceOut(c, in)
+
+	case FnCatGetCategories:
+		return dtype.Null, uerr.Internalf("expr: %s is written out when its expression is expanded", fn)
+
+	case FnCatPhysical:
+		if in.ID() != dtype.TypeEnum {
+			return dtype.Null, uerr.New(uerr.KindType, "cat",
+				"%s requires an Enum operand, got %s", fn, in)
+		}
+		return EnumPhysical(in), nil
 
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown general call %d", fn)

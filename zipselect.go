@@ -1,6 +1,8 @@
 package ursus
 
 import (
+	"context"
+	"slices"
 	"strconv"
 
 	"github.com/advenn/ursus/internal/expr"
@@ -30,6 +32,34 @@ import (
 // column of another length than its input's.
 func changesLength(n expr.Node) bool {
 	return expr.LooseReshape(n) != nil || expr.LooseFilter(n) != nil
+}
+
+// writeCategories writes each get_categories in ns out as its Enum's categories, a
+// list literal exploded, against lf's schema, which it resolves only where an
+// expression holds one (step 273): Select, WithColumns, Filter and Agg decide what
+// changes a column's length before they are planned, and a get_categories does. One
+// over a selection is left to Expand.
+func (lf *LazyFrame) writeCategories(ns []expr.Node) ([]expr.Node, error) {
+	if !slices.ContainsFunc(ns, expr.HasCategories) {
+		return ns, nil
+	}
+	resolved, err := plan.Resolve(context.Background(), lf.node)
+	if err != nil {
+		return nil, err
+	}
+	s, err := resolved.Schema()
+	if err != nil {
+		return nil, err
+	}
+	out := slices.Clone(ns)
+	for i, n := range out {
+		if expr.HasCategories(n) && !hasMatch(n) {
+			if out[i], err = expr.BuildCategories(n, s); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return out, nil
 }
 
 // hasMatch reports whether n selects columns by a pattern or a list, which only the

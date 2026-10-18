@@ -152,8 +152,11 @@ differs from their input's, or scalars outside a group-by.
 
 ### 4.5 Whole namespaces
 
-- **`.cat` (P1):** `get_categories`, `starts_with`, `ends_with`, `len_bytes`,
-  `len_chars`, `physical`, `to_local`. `Str()` refuses an Enum.
+- **`.cat` (P1):** built on Enum in 0.6.6 (step 273): `get_categories`,
+  `starts_with`, `ends_with`, `len_bytes`, `len_chars`, `slice` and `physical`, and
+  `Str()` reads an Enum as its text. `to_local` and `is_local` are deprecated in
+  Polars 1.44 and are not built; `to`, from the physical indices, is unstable there
+  and waits. Categorical itself is §3's.
 - **`.arr` (P2):** all of it, `dot` and `to_list` too.
 - **`.bin` (P2):** `contains`, `starts_with`, `ends_with`, `get`, `head`, `tail`,
   `slice`, `size`, `encode`, `decode`, `reinterpret`.

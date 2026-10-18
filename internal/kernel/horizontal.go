@@ -22,6 +22,22 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 	if len(ops) == 0 {
 		return nil, uerr.Internalf("kernel: %s has no operands", fn)
 	}
+	// The string functions read an Enum operand as its text (step 273).
+	switch fn {
+	case expr.FnStrContainsExpr, expr.FnStrStartsWithExpr, expr.FnStrEndsWithExpr,
+		expr.FnStrStripPrefixExpr, expr.FnStrStripSuffixExpr, expr.FnStrSplitExpr,
+		expr.FnStrReplaceExpr, expr.FnStrReplaceAllExpr, expr.FnStrParseInt, expr.FnStrParseUint:
+		ops = slices.Clone(ops)
+		for k, c := range ops {
+			if c.DType().ID() == dtype.TypeEnum {
+				text, err := decodeEnum(c.Name(), c)
+				if err != nil {
+					return nil, err
+				}
+				ops[k] = text
+			}
+		}
+	}
 	// The height is the one operand longer than a literal's, or 1 if every operand
 	// is a literal; an empty batch's operands are 0 long.
 	n := 1
