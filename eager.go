@@ -87,6 +87,37 @@ func (df *DataFrame) Unique(ctx context.Context, subset ...string) (*DataFrame, 
 	return df.Lazy().Unique(subset...).Collect(ctx)
 }
 
+// IsDuplicated is whether each row is another row too, over every column, and
+// IsUnique whether no other row is: Polars' DataFrame.is_duplicated and is_unique
+// (step 290), compared as Unique compares rows.
+func (df *DataFrame) IsDuplicated(ctx context.Context) (*Series[bool], error) {
+	return df.markRows(ctx, "is_duplicated", IsDuplicated)
+}
+
+func (df *DataFrame) IsUnique(ctx context.Context) (*Series[bool], error) {
+	return df.markRows(ctx, "is_unique", IsUnique)
+}
+
+func (df *DataFrame) markRows(ctx context.Context, name string, mark func(...Expr) Expr) (*Series[bool], error) {
+	names := df.Columns()
+	keys := make([]Expr, len(names))
+	for i, n := range names {
+		keys[i] = Col(n)
+	}
+	out, err := df.Lazy().Select(mark(keys...).Alias(name)).Collect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return out.Column[bool](name)
+}
+
+// NUnique is the number of distinct rows over subset, every column when it is empty:
+// Polars' DataFrame.n_unique (step 290). Rows are compared as Unique compares them.
+func (df *DataFrame) NUnique(ctx context.Context, subset ...string) (int, error) {
+	n, err := df.Lazy().Unique(subset...).Count(ctx)
+	return int(n), err
+}
+
 // UniqueKeep removes duplicate rows, keeping the row keep says of each key.
 func (df *DataFrame) UniqueKeep(ctx context.Context, keep KeepStrategy, subset ...string) (*DataFrame, error) {
 	return df.Lazy().UniqueKeep(keep, subset...).Collect(ctx)

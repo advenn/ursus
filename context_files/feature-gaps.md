@@ -214,7 +214,7 @@ differs from their input's, or scalars outside a group-by.
 | **`sample`, `shuffle`** (fraction or n, seed) | P1 |
 | **`partition_by`** into frames | P1 |
 | **`upsample`**; `interpolate` and `drop_nans` on frames | P1 |
-| **`is_duplicated`, `is_unique` and `n_unique` over several columns** | P1 |
+| built: `is_duplicated`, `is_unique` and `n_unique` over several columns, in step 290 | — |
 | **`pivot` of several `On` columns, and a lazy pivot** with its columns given | P1 |
 | `concat`'s relaxed, horizontal and align modes; `ConcatStrict` meets Int32 and Int64 at Int64, where Polars' vertical refuses them, and refuses Int64 beside Float64, which `vertical_relaxed` meets; `DataFrame.Concat` modes | P1 |
 | join: emit a computed key column; `maintain_order` right, left-right and right-left; asof `tolerance` on numeric keys; asof `coalesce`; `JoinWhere` suffix | P1 |

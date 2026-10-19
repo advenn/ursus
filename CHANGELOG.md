@@ -17,12 +17,15 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–289, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–290, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Features
 
+- **Duplicates over several columns** (290): `IsDuplicated(exprs...)` and
+  `IsUnique(exprs...)`, a Boolean a row; `DataFrame.IsDuplicated` and `IsUnique` of
+  whole rows; `DataFrame.NUnique(subset...)`.
 - **`UniqueKeep(keep, subset...)`** (289): the first, last, any or none of each key's
   rows, kept in their order, as Polars' `unique(keep=, maintain_order=True)`.
 

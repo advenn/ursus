@@ -661,6 +661,34 @@ func (e Expr) IsUnique() Expr { return e.Len().Over(e).Eq(int64(1)) }
 
 func (e Expr) IsDuplicated() Expr { return e.Len().Over(e).Gt(int64(1)) }
 
+// IsDuplicated and IsUnique are Expr.IsDuplicated and IsUnique over several columns
+// at once: whether each row's values of exprs together are another row's too, or
+// no other row's (step 290). Polars' pl.struct(...).is_duplicated() and
+// DataFrame.is_duplicated(). They are named after their first expression, as Polars
+// names a struct after its first field. A key's equality is grouping's, so nulls,
+// NaNs and -0 with 0 are each equal, as Unique compares them.
+//
+// The columns are named: All() here would expand the whole expression once a column,
+// as Polars' over(pl.all()) does, each partitioned by one column. Whole rows are
+// DataFrame.IsDuplicated and IsUnique.
+func IsDuplicated(exprs ...Expr) Expr {
+	return rowsLen("is_duplicated", exprs, func(n Expr) Expr { return n.Gt(int64(1)) })
+}
+
+func IsUnique(exprs ...Expr) Expr {
+	return rowsLen("is_unique", exprs, func(n Expr) Expr { return n.Eq(int64(1)) })
+}
+
+// rowsLen is test of how many rows share each row's values of exprs, named after the
+// first.
+func rowsLen(op string, exprs []Expr, test func(Expr) Expr) Expr {
+	if len(exprs) == 0 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, op, "%s needs the columns it compares", op).
+			Hint("e.g. IsDuplicated(Col(\"a\"), Col(\"b\")); DataFrame.IsDuplicated for whole rows")})
+	}
+	return test(Len().Over(exprs...)).Alias(expr.OutputName(exprs[0].node()))
+}
+
 // IsFirstDistinct and IsLastDistinct mark the first and last occurrence of each
 // value, in input order.
 //
