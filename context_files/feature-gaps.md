@@ -202,10 +202,12 @@ differs from their input's, or scalars outside a group-by.
 
 ## 6. Frame operations
 
+`v0.6.7-scope.md` takes this section (step 288).
+
 | missing or partial | prio |
 | --- | --- |
 | **`unique(keep=last/any/none)`**; only first today | P0 |
-| **Frame `fill_null(strategy, limit)`**, which is the §1 bug's real fix; frame `null_count`, `std`, `var`, `product`, `shift`, `cum_*` shortcuts | P0/P1 |
+| **A frame `fill_null` strategy's `limit`** (the strategies were built at step 249); frame `null_count`, `sum`, `mean`, `median`, `min`, `max`, `std`, `var`, `quantile`, `product`, `shift`, `first`, `last` shortcuts | P0/P1 |
 | `slice` with a negative offset | P0 |
 | **`cast` of a frame** (a map of columns, or by dtype); `match_to_schema` | P1 |
 | **`sample`, `shuffle`** (fraction or n, seed) | P1 |
@@ -213,7 +215,7 @@ differs from their input's, or scalars outside a group-by.
 | **`upsample`**; `interpolate` and `drop_nans` on frames | P1 |
 | **`is_duplicated`, `is_unique` and `n_unique` over several columns** | P1 |
 | **`pivot` of several `On` columns, and a lazy pivot** with its columns given | P1 |
-| `concat` align modes and a type-strict vertical mode; `DataFrame.Concat` modes | P1 |
+| `concat`'s relaxed, horizontal and align modes; `ConcatStrict` meets Int32 and Int64 at Int64, where Polars' vertical refuses them, and refuses Int64 beside Float64, which `vertical_relaxed` meets; `DataFrame.Concat` modes | P1 |
 | join: emit a computed key column; `maintain_order` right, left-right and right-left; asof `tolerance` on numeric keys; asof `coalesce`; `JoinWhere` suffix | P1 |
 | group-by: `head`, `tail`, `having`, `map_groups`, iterating over groups; an integer index for `GroupByDynamic` and `Rolling`; `.over(order_by)` of an aggregate; mapping `explode` and `join` | P1/P2 |
 | `to_dummies`, `unstack`, `gather`, `gather_every`, `insert_column`, `extend`, `update`, `clear`, `is_empty`, `equals`, `glimpse`, `estimated_size`, `hash_rows`, `interpolate_by`, `with_columns_seq` | P2 |
