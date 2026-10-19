@@ -203,8 +203,8 @@ func MinSamples(k int) WindowOption {
 	return func(p *expr.WinParams) { p.MinSamples = int64(k) }
 }
 
-// Ddof sets RollingVar's and RollingStd's delta degrees of freedom; the default, 1,
-// is the sample variance, as Var(1) and Polars' rolling_var.
+// Ddof sets RollingVar's, RollingStd's and RollingCov's delta degrees of freedom; the
+// default, 1, is the sample variance, as Var(1) and Polars' rolling_var.
 func Ddof(d int) WindowOption {
 	return func(p *expr.WinParams) { p.Ddof = int64(d) }
 }
@@ -282,6 +282,67 @@ func (e Expr) RollingQuantile(q float64, interp Interpolation, size int, opts ..
 		o(&p)
 	}
 	return e.winFn(expr.WinRollingQuantile, p)
+}
+
+// RollingSkew and RollingKurtosis answer each row with the skew or kurtosis of its
+// window's values, as the rolling functions above do: Polars' rolling_skew and
+// rolling_kurtosis, bias and fisher as Skew's and Kurtosis's, Polars' defaults both
+// true (step 284). They are Polars' algorithm, a queue of mergeable moments, so a
+// kurtosis is Polars' to the bit, and a skew is but for about one in a thousand, an
+// ulp apart: its m2^1.5 is rounded once, where glibc's pow, Polars', can round the
+// other way near a midpoint. A Float32 answers a Float32 and any other number a
+// Float64. A window of values all alike is NaN, as is one holding a NaN or an
+// infinity; without bias, a skew needs three values and a kurtosis four.
+func (e Expr) RollingSkew(size int, bias bool, opts ...WindowOption) Expr {
+	return e.rolling(expr.WinRollingSkew, size, 0,
+		append([]WindowOption{func(p *expr.WinParams) { p.Bias = bias }}, opts...))
+}
+
+func (e Expr) RollingKurtosis(size int, fisher, bias bool, opts ...WindowOption) Expr {
+	return e.rolling(expr.WinRollingKurtosis, size, 0,
+		append([]WindowOption{func(p *expr.WinParams) { p.Fisher, p.Bias = fisher, bias }}, opts...))
+}
+
+// RollingRank answers each row with its own value's rank among its window's values:
+// Polars' rolling_rank (step 284). RankMin, RankMax and RankDense are a UInt32 and
+// RankAverage, Polars' default, a Float64; RankOrdinal is refused, as Polars has
+// none, and Polars' random is not here. Values compare as Sort orders them, NaN
+// above every number and -0 with 0. It ranks numbers, instants and Booleans; a row
+// whose value is null is null.
+//
+// With RollingCenter a row is ranked in the window centred on it. Polars then
+// answers null where the window's last row is null, though the row's own is not;
+// here such a row is ranked.
+func (e Expr) RollingRank(size int, method RankMethod, opts ...WindowOption) Expr {
+	return e.rolling(expr.WinRollingRank, size, 0,
+		append([]WindowOption{func(p *expr.WinParams) { p.Method = method }}, opts...))
+}
+
+// RollingCov is the covariance of a and b over each row's window of size rows, and
+// RollingCorr their Pearson correlation: Polars' rolling_cov and rolling_corr (step
+// 284). They are built as Polars builds them, from rolling means and variances,
+// pandas' way, over the window's rows where both hold a value, n of them:
+//
+//	cov  = (mean(a·b) − mean(a)·mean(b)) · n/(n − ddof)
+//	corr = the cov at ddof 1 / sqrt(var(a)·var(b))
+//
+// Ddof sets the covariance's, 1 by default; a correlation does not depend on it, as
+// Polars says of its own. Each is a Float32 for two Float32s and a Float64 otherwise.
+// A window needs size such rows, or MinSamples, and a correlation two.
+func RollingCov(a, b Expr, size int, opts ...WindowOption) Expr {
+	return rollingPair(expr.WinRollingCov, a, b, size, opts)
+}
+
+func RollingCorr(a, b Expr, size int, opts ...WindowOption) Expr {
+	return rollingPair(expr.WinRollingCorr, a, b, size, opts)
+}
+
+func rollingPair(fn expr.WinFnOp, a, b Expr, size int, opts []WindowOption) Expr {
+	p := expr.WinParams{N: int64(size), Ddof: 1}
+	for _, o := range opts {
+		o(&p)
+	}
+	return wrap(&expr.WinFn{Fn: fn, Child: expr.PairOf(a.node(), b.node()), Params: p})
 }
 
 func (e Expr) rolling(fn expr.WinFnOp, size int, ddof int64, opts []WindowOption) Expr {

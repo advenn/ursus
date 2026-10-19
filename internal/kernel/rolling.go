@@ -40,15 +40,20 @@ func winRolling(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.D
 	if params.By {
 		return rollingBy(fn, params, name, out, col, seg)
 	}
-	if params.Center {
-		return rollingCentered(fn, params, name, out, col, seg)
-	}
 	size, minN := int(params.N), int(params.MinSamples)
 	if minN == 0 {
 		minN = size
 	}
 	if size < 1 || minN < 1 || minN > size {
 		return nil, uerr.Internalf("kernel: %s over %d rows needing %d", fn, size, minN)
+	}
+	if params.Center {
+		if fn == expr.WinRollingRank {
+			// A rank is of the row's own value, so its window is centred on it, not
+			// a trailing window's answer taken from a later row (step 284).
+			return rollingOver(fn, params, name, out, col, seg, centeredWindows(size), minN)
+		}
+		return rollingCentered(fn, params, name, out, col, seg)
 	}
 	trailing := func(rows []int32) (lo, hi []int32) {
 		lo, hi = make([]int32, len(rows)), make([]int32, len(rows))
@@ -78,6 +83,12 @@ func rollingOver(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.
 		return rollingIntSum(name, out, col, seg, win, minN)
 	case fn == expr.WinRollingMedian || fn == expr.WinRollingQuantile:
 		return rollingQuantile(fn, params, name, out, col, seg, win, minN)
+	case fn == expr.WinRollingSkew || fn == expr.WinRollingKurtosis:
+		return rollingMoment(fn, params, name, out, col, seg, win, minN)
+	case fn == expr.WinRollingRank:
+		return rollingRank(params, name, out, col, seg, win, minN)
+	case fn == expr.WinRollingCov || fn == expr.WinRollingCorr:
+		return rollingCovCorr(fn, params, name, out, col, seg, win, minN)
 	}
 	return rollingFloat(fn, int(params.Ddof), name, out, col, seg, win, minN)
 }

@@ -310,6 +310,17 @@ const (
 	// (step 281): Polars' rle_id.
 	WinRleID
 
+	// More rolling functions (step 284), appended so no op moves: the skew and
+	// kurtosis of each row's window, Params.Bias and Params.Fisher as Polars' bias and
+	// fisher; each row's rank among its window's values, by Params.Method; and the
+	// covariance and correlation of a pair, the child PairOf(a, b), Params.Ddof the
+	// covariance's. IsRolling takes both blocks.
+	WinRollingSkew
+	WinRollingKurtosis
+	WinRollingRank
+	WinRollingCov
+	WinRollingCorr
+
 	winFnCount
 )
 
@@ -324,6 +335,8 @@ var winFnNames = [winFnCount]string{
 	WinRollingMedian: "rolling_median", WinRollingQuantile: "rolling_quantile",
 	WinEwmMean: "ewm_mean", WinEwmStd: "ewm_std", WinEwmVar: "ewm_var",
 	WinInterpolate: "interpolate", WinRleID: "rle_id",
+	WinRollingSkew: "rolling_skew", WinRollingKurtosis: "rolling_kurtosis", WinRollingRank: "rolling_rank",
+	WinRollingCov: "rolling_cov", WinRollingCorr: "rolling_corr",
 }
 
 func (o WinFnOp) String() string {
@@ -343,7 +356,13 @@ func (o WinFnOp) String() string {
 func (o WinFnOp) IsCumulative() bool { return o >= WinCumSum && o <= WinCumMax }
 
 // IsRolling reports whether the op is over a fixed number of rows up to each.
-func (o WinFnOp) IsRolling() bool { return o >= WinRollingSum && o <= WinRollingQuantile }
+func (o WinFnOp) IsRolling() bool {
+	return o >= WinRollingSum && o <= WinRollingQuantile || o >= WinRollingSkew && o <= WinRollingCorr
+}
+
+// IsPaired reports whether the op is of two series, its child PairOf(a, b): rolling_cov
+// and rolling_corr (step 284).
+func (o WinFnOp) IsPaired() bool { return o == WinRollingCov || o == WinRollingCorr }
 
 // IsEwm reports whether the op is exponentially weighted.
 func (o WinFnOp) IsEwm() bool { return o >= WinEwmMean && o <= WinEwmVar }
@@ -423,6 +442,10 @@ type WinParams struct {
 	IgnoreNulls bool
 	Bias        bool
 
+	// Fisher is rolling_kurtosis's fisher, the excess kurtosis; Bias is also the
+	// rolling skew's and kurtosis's bias (step 284).
+	Fisher bool
+
 	// A rolling function by time (step 177), Polars' rolling_*_by: each row's window
 	// is the rows whose by value lies within Period of its own, closed as Closed says,
 	// ClosedRight by default. The function's child is then PairOf(value, by), and N is
@@ -456,6 +479,22 @@ func (p WinParams) args(op WinFnOp) string {
 	case WinRollingQuantile:
 		return strconv.FormatFloat(p.Q, 'g', -1, 64) + ", " + p.Interp.String() + ", " +
 			window(p) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10) + centered(p)
+	case WinRollingSkew, WinRollingKurtosis:
+		s := window(p) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10) +
+			", bias " + strconv.FormatBool(p.Bias)
+		if op == WinRollingKurtosis {
+			s += ", fisher " + strconv.FormatBool(p.Fisher)
+		}
+		return s + centered(p)
+	case WinRollingRank:
+		return p.Method.String() + ", " + window(p) + ", min_samples " +
+			strconv.FormatInt(p.MinSamples, 10) + centered(p)
+	case WinRollingCov, WinRollingCorr:
+		s := window(p) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10)
+		if op == WinRollingCov {
+			s += ", ddof " + strconv.FormatInt(p.Ddof, 10)
+		}
+		return s + centered(p)
 	case WinInterpolate:
 		if p.Nearest {
 			return "nearest"
@@ -532,6 +571,9 @@ func (f *WinFn) String() string {
 	// …), not through the struct that carries its two inputs.
 	if x, y, ok := pairArgs(f.Child); ok && f.Params.By {
 		return x.String() + "." + f.Fn.String() + "_by(" + y.String() + ", " + f.Params.args(f.Fn) + ")"
+	}
+	if x, y, ok := pairArgs(f.Child); ok && f.Fn.IsPaired() {
+		return f.Fn.String() + "(" + x.String() + ", " + y.String() + ", " + f.Params.args(f.Fn) + ")"
 	}
 	s := f.Child.String() + "." + f.Fn.String() + "(" + f.Params.args(f.Fn) + ")"
 	if f.Fill != nil {
@@ -651,7 +693,8 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 		return in, nil
 
 	case WinRollingSum, WinRollingMean, WinRollingMin, WinRollingMax, WinRollingVar, WinRollingStd,
-		WinRollingMedian, WinRollingQuantile:
+		WinRollingMedian, WinRollingQuantile, WinRollingSkew, WinRollingKurtosis, WinRollingRank,
+		WinRollingCov, WinRollingCorr:
 		if fn == WinRollingQuantile && (!(p.Q >= 0 && p.Q <= 1) || !p.Interp.Valid()) {
 			return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
 				"%s needs a quantile in [0, 1] and a known interpolation, got %v and %s",
@@ -720,6 +763,53 @@ func rollingOut(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, err
 	if p.Ddof < 0 || p.Ddof > 255 {
 		return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
 			"ddof is %d, and must be between 0 and 255", p.Ddof)
+	}
+	switch fn {
+	case WinRollingSkew, WinRollingKurtosis:
+		// Polars' moments of a number, in float64, a Float32's given back as one.
+		if !in.IsFloat() && !in.IsInteger() {
+			return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+				"%s() is not defined for %s", fn, in).
+				Hint("cast it first, e.g. .Cast(ursus.Float64)")
+		}
+		if in == dtype.Float32 {
+			return dtype.Float32, nil
+		}
+		return dtype.Float64, nil
+	case WinRollingRank:
+		// Any value with an order but text and a Decimal, which Polars refuses.
+		if in.HasStringStorage() || in.ID() == dtype.TypeDecimal || !in.IsOrdered() {
+			return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+				"%s() is not defined for %s", fn, in).
+				Hint("it ranks numbers, instants and Booleans")
+		}
+		switch p.Method {
+		case RankAverage:
+			return dtype.Float64, nil
+		case RankMin, RankMax, RankDense:
+			return dtype.Uint32, nil
+		}
+		return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
+			"%s ranks by min, max, average or dense, got %s", fn, p.Method).
+			Hint("Polars' rolling_rank has no ordinal; its random is not here")
+	case WinRollingCov, WinRollingCorr:
+		// Two numbers, in their float type as Polars casts them: a Float32 for two
+		// Float32s, and a Float64 otherwise.
+		fs := in.Fields()
+		if in.ID() != dtype.TypeStruct || len(fs) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s over %s, not a pair", fn, in)
+		}
+		for _, f := range fs {
+			if !f.Type.IsNumeric() {
+				return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+					"%s() is not defined for %s", fn, f.Type).
+					Hint("cast it first, e.g. .Cast(ursus.Float64)")
+			}
+		}
+		if fs[0].Type == dtype.Float32 && fs[1].Type == dtype.Float32 {
+			return dtype.Float32, nil
+		}
+		return dtype.Float64, nil
 	}
 	return rollingValueOut(fn, in)
 }

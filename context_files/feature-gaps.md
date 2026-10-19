@@ -53,6 +53,7 @@ Fix these before anything new. **Step 249 fixed every row** (see its record).
 
 | what | where | |
 | --- | --- | --- |
+| **A streamed rolling var or std differs from the answer in memory in its last bits.** Over the whole frame under a memory limit, a window's state is rebuilt from each batch's history rows, so its periodic recompute falls at other rows: 35–52% of rows over `sin(i)·1000`. Step 284's skew, kurtosis, cov and corr do too. The streaming test's floats are quarters, whose sums are exact, so it never showed. The fix is to carry the kernel's state across batches, as an ewm's is (found at step 284). | internal/physical/winstream.go, internal/kernel/rolling.go | **not bit-exact** |
 | **`Rank` ranks a null, as the smallest value;** Polars leaves a null's rank null and ranks the rest among themselves. `[5, null, 4]` ranks `[3, 1, 2]` here and `[2, None, 1]` there, in a window and in `List().Eval` alike (found at step 268). | internal/kernel/window.go `winRank`, and the streamed rank (`RankNext`) | **wrong answer** |
 
 ## 2. The expression model
@@ -174,7 +175,7 @@ differs from their input's, or scalars outside a group-by.
     `concat_arr`, `fold`, `reduce`, `cum_fold`, `cum_reduce`, `cum_sum_horizontal`;
   - **selection and ordering:** `nth`, `element`, `field`, `arg_where`,
     `arg_sort_by`;
-  - **other:** `format`, `rolling_corr`, `rolling_cov`, `business_day_count`,
+  - **other:** `format`, `business_day_count`,
     `map_groups`, `sql_expr`; the `pl.sum("a")`-style shorthands.
 - **Partial:**
   - `date`, `datetime`, `time` and `duration` as Go literals only, not from
@@ -192,7 +193,7 @@ differs from their input's, or scalars outside a group-by.
 | **An aggregate inside an aggregate's input:** `Col("a").Sub(Col("a").Mean()).Abs().Sum()` is refused, in a `Select` or an `Agg`, as "not an aggregate"; Polars takes it (found at step 279) | P1 |
 | **Integers as bits:** built: `& \| ^ ~` of integers in step 278, the `bitwise_and/or/xor` aggregates in step 276. Polars has no shifts | — |
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
-| **Rolling:** `skew`, `kurtosis`, `rank`, `map`; weights; an integer index (`"2i"` periods) for `_by`; `rolling_corr`, `rolling_cov`; the generic `Expr.rolling(index_column)` | P1 |
+| **Rolling:** `map`; weights; an integer index (`"2i"` periods) for `_by`; `rolling_rank_by` and Polars' `random` rank; the generic `Expr.rolling(index_column)`. `skew`, `kurtosis`, `rank`, `rolling_cov` and `rolling_corr` built at step 284 | P1 |
 | **EWM:** `ewm_mean_by`, `ewm_sum`, `ewm_sum_by` | P1 |
 | **Other:** `cumulative_eval`, `cut`/`qcut` returning Categorical with `include_breaks`. `round_sig_figs`, `cot`, numeric `truncate`, the half-to-even mode and a one-sided `clip` were built at step 283 | P1/P2 |
 
@@ -302,6 +303,12 @@ decide whether to keep or switch each one.
   of `Field` of several names, is named after the field, as Polars names it (step
   275).
 - `RleID` and `Rle` refuse a Struct, which Polars runs (step 281).
+- `RollingSkew` is Polars' to the bit but for about one in a thousand, an ulp apart:
+  its m2^1.5 is rounded once, where glibc's pow, Polars', errs by up to 0.52 ulp
+  (step 284). `RollingCov` and `RollingCorr` keep Polars' formula on ursus's rolling
+  means, so their last bits are not Polars'.
+- `RollingRank` with `RollingCenter` ranks a row whose window's last row is null;
+  Polars answers null there, checking the end's validity (step 284).
 - `Append` with upcast meets numbers only: text and a number are refused, which Polars
   meets as text (step 282). `Sample` and `Shuffle` draw ursus's values, not Polars'.
 - `ValueCounts` without `sort` gives the values in the order they first appear, where
@@ -319,7 +326,8 @@ decide whether to keep or switch each one.
 
 A completeness release should keep these intact:
 
-- spilling for every blocking operator, with bit-exact answers;
+- spilling for every blocking operator, with bit-exact answers but a streamed rolling
+  var, std, skew, kurtosis, cov or corr (§1);
 - a memory budget on by default;
 - order-deterministic output at any thread count;
 - `ursustest` with golden plans;

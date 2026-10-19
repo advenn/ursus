@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–283, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–284, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
 
@@ -82,6 +82,9 @@ completeness, part 2 — namespaces and generators.**
   `Head`, `Tail` and `Slice`, each argument a constant or an expression; `Size`,
   `Encode`, `Decode`, and `Reinterpret` to a number or an instant, little- or
   big-endian.
+- **Rolling statistics** (284): `RollingSkew`, `RollingKurtosis` and `RollingRank`,
+  and `RollingCov` and `RollingCorr` of two expressions. The moments are Polars'
+  algorithm, a kurtosis Polars' to the bit.
 - **Numeric odds** (283): `Round(decimals, RoundHalfToEven)`, Polars' default mode;
   `Truncate(decimals)`; `RoundSigFigs(digits)`; `Cot()`; `ClipLower` and `ClipUpper`.
   Rounding is Polars' algorithm, so each answer is Polars' to the bit.

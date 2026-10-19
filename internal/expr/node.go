@@ -130,8 +130,9 @@ func OutputName(n Node) string {
 		return OutputName(t.Child)
 	case *WinFn:
 		// A rolling function by time is named after its value, not the struct
-		// carrying it with its by column, whose first field is named "0".
-		if x, _, ok := pairArgs(t.Child); ok && t.Params.By {
+		// carrying it with its by column, whose first field is named "0"; a rolling
+		// covariance or correlation after its first input, as Polars names it.
+		if x, _, ok := pairArgs(t.Child); ok && (t.Params.By || t.Fn.IsPaired()) {
 			return OutputName(x)
 		}
 		return OutputName(t.Child)
