@@ -87,6 +87,11 @@ func (df *DataFrame) Unique(ctx context.Context, subset ...string) (*DataFrame, 
 	return df.Lazy().Unique(subset...).Collect(ctx)
 }
 
+// UniqueKeep removes duplicate rows, keeping the row keep says of each key.
+func (df *DataFrame) UniqueKeep(ctx context.Context, keep KeepStrategy, subset ...string) (*DataFrame, error) {
+	return df.Lazy().UniqueKeep(keep, subset...).Collect(ctx)
+}
+
 // Reverse emits rows in the opposite order.
 func (df *DataFrame) Reverse(ctx context.Context) (*DataFrame, error) {
 	return df.Lazy().Reverse().Collect(ctx)

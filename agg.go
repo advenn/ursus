@@ -663,7 +663,8 @@ func (lf *LazyFrame) Sort(keys ...SortKey) *LazyFrame {
 //
 // With no arguments it compares whole rows. With column names it compares only
 // those, keeping the FIRST row for each distinct combination — so the other
-// columns come from that row rather than being chosen arbitrarily.
+// columns come from that row rather than being chosen arbitrarily. UniqueKeep keeps
+// the last, or only the rows whose key is not repeated.
 func (lf *LazyFrame) Unique(subset ...string) *LazyFrame {
 	if lf.err != nil {
 		return lf

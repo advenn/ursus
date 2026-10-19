@@ -85,6 +85,7 @@ differs from their input's, or scalars outside a group-by.
 | **UInt128, Float16, Object, Unknown** | Float16 is widened to Float32 on import | P2 |
 | **Dictionary, run-end, union, ListView** in memory | decoded or refused on import | P2 |
 | `Expr.ToPhysical`, `Reinterpret`, `ShrinkDtype` | `Cast(dt.Physical())` works for temporal types only | P2 |
+| **A List or a Struct column as a key** | `Unique`, `UniqueKeep`, `GroupBy`, `Over` and `Join` each refuse one ("cannot use a List(Int64) column as a key"), as `RleID`, `Rle` and `Mode` do (§9); Polars compares them (found at step 289) | P1 |
 
 ## 4. Expression namespaces
 
@@ -206,7 +207,7 @@ differs from their input's, or scalars outside a group-by.
 
 | missing or partial | prio |
 | --- | --- |
-| **`unique(keep=last/any/none)`**; only first today | P0 |
+| built: `unique(keep=)` with `maintain_order=True`, as `UniqueKeep`, in step 289 | — |
 | **A frame `fill_null` strategy's `limit`** (the strategies were built at step 249); frame `null_count`, `sum`, `mean`, `median`, `min`, `max`, `std`, `var`, `quantile`, `product`, `shift`, `first`, `last` shortcuts | P0/P1 |
 | `slice` with a negative offset | P0 |
 | **`cast` of a frame** (a map of columns, or by dtype); `match_to_schema` | P1 |
