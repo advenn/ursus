@@ -321,6 +321,12 @@ const (
 	WinRollingCov
 	WinRollingCorr
 
+	// WinEwmSum is Polars' ewm_sum (step 285): each value plus the running sum
+	// decayed by Params.Alpha, appended so no op moves; IsEwm takes it. With
+	// Params.By it and WinEwmMean are ewm_sum_by and ewm_mean_by, their child
+	// PairOf(value, by), decayed by Params.Period, a half-life, in by's order.
+	WinEwmSum
+
 	winFnCount
 )
 
@@ -336,7 +342,7 @@ var winFnNames = [winFnCount]string{
 	WinEwmMean: "ewm_mean", WinEwmStd: "ewm_std", WinEwmVar: "ewm_var",
 	WinInterpolate: "interpolate", WinRleID: "rle_id",
 	WinRollingSkew: "rolling_skew", WinRollingKurtosis: "rolling_kurtosis", WinRollingRank: "rolling_rank",
-	WinRollingCov: "rolling_cov", WinRollingCorr: "rolling_corr",
+	WinRollingCov: "rolling_cov", WinRollingCorr: "rolling_corr", WinEwmSum: "ewm_sum",
 }
 
 func (o WinFnOp) String() string {
@@ -365,7 +371,7 @@ func (o WinFnOp) IsRolling() bool {
 func (o WinFnOp) IsPaired() bool { return o == WinRollingCov || o == WinRollingCorr }
 
 // IsEwm reports whether the op is exponentially weighted.
-func (o WinFnOp) IsEwm() bool { return o >= WinEwmMean && o <= WinEwmVar }
+func (o WinFnOp) IsEwm() bool { return o >= WinEwmMean && o <= WinEwmVar || o == WinEwmSum }
 
 // RankMethod decides how Rank breaks ties.
 type RankMethod uint8
@@ -500,7 +506,10 @@ func (p WinParams) args(op WinFnOp) string {
 			return "nearest"
 		}
 		return ""
-	case WinEwmMean, WinEwmStd, WinEwmVar:
+	case WinEwmMean, WinEwmSum, WinEwmStd, WinEwmVar:
+		if p.By {
+			return "half_life " + p.Period.String()
+		}
 		// Every parameter, bias included where it does not apply, so two calls that
 		// differ in any one cannot share a temporary.
 		return "alpha " + strconv.FormatFloat(p.Alpha, 'g', -1, 64) +
@@ -703,7 +712,10 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 		}
 		return rollingOut(fn, p, in)
 
-	case WinEwmMean, WinEwmStd, WinEwmVar, WinInterpolate:
+	case WinEwmMean, WinEwmSum, WinEwmStd, WinEwmVar, WinInterpolate:
+		if p.By {
+			return ewmByOut(fn, p, in)
+		}
 		if fn == WinInterpolate && p.Nearest {
 			// The nearest value is a value of the column, so its type is kept, as
 			// Polars' method="nearest" keeps it.
@@ -738,6 +750,44 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown window function %d", fn)
 	}
+}
+
+// ewmByOut types ewm_mean_by and ewm_sum_by (step 285): a by of a Date or a
+// Datetime, and a half-life that is a constant duration, as Polars requires: no
+// months, and no days on a zoned by, whose days are not all 24 hours. The value is
+// an ewm's.
+func ewmByOut(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, error) {
+	fs := in.Fields()
+	if in.ID() != dtype.TypeStruct || len(fs) != 2 || (fn != WinEwmMean && fn != WinEwmSum) {
+		return dtype.Null, uerr.Internalf("expr: %s by over %s", fn, in)
+	}
+	value, by := fs[0].Type, fs[1].Type
+	name := fn.String() + "_by"
+	if by.ID() != dtype.TypeDate && by.ID() != dtype.TypeDatetime {
+		return dtype.Null, uerr.New(uerr.KindType, name,
+			"%s orders its rows by a Date or a Datetime, got %s", name, by).
+			Hint("Polars also takes an integer by with a half-life such as \"2i\"; ursus does not yet")
+	}
+	hl := p.Period
+	switch {
+	case hl.Err() != nil:
+		return dtype.Null, hl.Err()
+	case hl.Negative():
+		// Zero is taken, as Polars takes it: each row's answer is its own value.
+		return dtype.Null, uerr.New(uerr.KindValue, name, "the half-life is %s, and must not be negative", hl)
+	case hl.Months() != 0 || hl.Days() != 0 && by.TimeZone() != "":
+		return dtype.Null, uerr.New(uerr.KindValue, name,
+			"the half-life %s is not a constant duration over %s", hl, by).
+			Hint("a month's length varies, and so does a zoned day's: use hours, e.g. \"730h\" or \"24h\"")
+	}
+	switch {
+	case value.IsFloat():
+		return value, nil
+	case value.IsInteger() && value.ID() != dtype.TypeInt128:
+		return dtype.Float64, nil
+	}
+	return dtype.Null, uerr.New(uerr.KindType, name, "%s() is not defined for %s", name, value).
+		Hint("cast it first, e.g. .Cast(ursus.Float64)")
 }
 
 // rollingOut types a rolling function: its window first, then its operand.

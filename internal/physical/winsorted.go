@@ -52,10 +52,23 @@ func passOrder(sp *winSpec) []plan.SortKey {
 	if sp.fn != nil && sp.fn.Fn == expr.WinRank {
 		return []plan.SortKey{{Expr: sp.fn.Child, Descending: sp.fn.Params.Descending}}
 	}
-	if by, ok := rollingByOf(sp); ok {
+	if by, ok := timeByOf(sp); ok {
 		return append([]plan.SortKey{{Expr: by, NullsLast: true}}, sp.order...)
 	}
 	return sp.order
+}
+
+// timeByOf is a function by time's by, a rolling window's or an ewm's (step 285), and
+// false for any other spec.
+func timeByOf(sp *winSpec) (expr.Node, bool) {
+	if by, ok := rollingByOf(sp); ok {
+		return by, true
+	}
+	if sp.fn == nil || !sp.fn.Fn.IsEwm() || !sp.fn.Params.By {
+		return nil, false
+	}
+	_, by, ok := expr.PairArgs(sp.fn.Child)
+	return by, ok
 }
 
 // rollingByOf is a rolling window by time's by, and false for any other spec.
@@ -102,7 +115,8 @@ type passPlan struct {
 //     kernel.InterpolateFrom answers from the five as the kernel does;
 //   - a rolling window by time (step 246), in its by order: kernel.RollingByNext
 //     walks it as rollingBy does, holding the rows in reach of a window, over batches
-//     cut between runs of equal by values.
+//     cut between runs of equal by values;
+//   - an ewm by time (step 285), in its by order, carrying its running state.
 func sortedPlan(sp *winSpec) (passPlan, bool) {
 	if sp.acc != nil {
 		return passPlan{}, false
@@ -111,6 +125,11 @@ func sortedPlan(sp *winSpec) (passPlan, bool) {
 	walk.order = nil
 	if _, ok := rollingByOf(sp); ok {
 		return passPlan{steps: []passStep{{walk: walk, need: winNeed{rollingBy: true}, typ: sp.out}}}, true
+	}
+	if _, ok := timeByOf(sp); ok {
+		// An ewm by time (step 285) carries its running state over the rows in by's
+		// order, as an ewm does over the file's.
+		return passPlan{steps: []passStep{{walk: walk, need: winNeed{ewm: true}, typ: sp.out}}}, true
 	}
 	fn := *sp.fn
 	if fn.Fn == expr.WinRank {

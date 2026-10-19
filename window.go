@@ -514,6 +514,38 @@ func (e Expr) EwmVar(decay EwmDecay, opts ...WindowOption) Expr {
 	return e.ewm(expr.WinEwmVar, decay, opts)
 }
 
+// EwmSum is each value plus the sum before it decayed by decay, s = x + (1−alpha)·s,
+// the first value its own: Polars' ewm_sum (step 285). A null decays the sum, as a row
+// ages the weights, but with IgnoreNulls; a null row is null, and a row answers once
+// MinSamples values have been seen. EwmAdjust and Biased do nothing. A Float32 is
+// summed in float32, as Polars sums it, and any other number answers a Float64.
+func (e Expr) EwmSum(decay EwmDecay, opts ...WindowOption) Expr {
+	return e.ewm(expr.WinEwmSum, decay, opts)
+}
+
+// EwmMeanBy and EwmSumBy are exponentially weighted by time: Polars' ewm_mean_by and
+// ewm_sum_by (step 285). In by's order, each row decays the last answer by
+// d = 0.5^(Δt/halfLife), Δt the time since the last row holding a value:
+//
+//	mean: d·last + (1−d)·x
+//	sum:  d·last + x
+//
+// The first such row is its value. by is a Date or a Datetime and need not be sorted;
+// the answers go back to the rows' order. A row whose value or by is null is null and
+// skipped. halfLife is a constant duration: no months, and no days over a zoned by,
+// as Polars requires. A Float32 answers a Float32 and any other number a Float64.
+// Rows of one instant are taken in the window's order, where Polars' unstable sort
+// takes them as it finds them.
+func (e Expr) EwmMeanBy(by Expr, halfLife Interval) Expr {
+	return e.ewmBy(expr.WinEwmMean, by, halfLife)
+}
+func (e Expr) EwmSumBy(by Expr, halfLife Interval) Expr { return e.ewmBy(expr.WinEwmSum, by, halfLife) }
+
+func (e Expr) ewmBy(fn expr.WinFnOp, by Expr, halfLife Interval) Expr {
+	return wrap(&expr.WinFn{Fn: fn, Child: expr.PairOf(e.node(), by.node()),
+		Params: expr.WinParams{By: true, Period: halfLife}})
+}
+
 func (e Expr) ewm(fn expr.WinFnOp, decay EwmDecay, opts []WindowOption) Expr {
 	if decay.err != nil {
 		return wrap(&expr.Err{E: decay.err})

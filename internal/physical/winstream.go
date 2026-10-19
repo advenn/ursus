@@ -78,7 +78,8 @@ func streamNeed(sp *winSpec) (winNeed, bool) {
 	case fn == expr.WinCumCount:
 		return winNeed{count: true}, true
 	case fn.IsEwm():
-		return winNeed{ewm: true}, true
+		// One by time walks by's order, not the file's: a sorted pass (step 285).
+		return winNeed{ewm: true}, !p.By
 	case fn.IsCumulative():
 		return winNeed{carry: true}, !p.Reverse
 	case fn == expr.WinShift:

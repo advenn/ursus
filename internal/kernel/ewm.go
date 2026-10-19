@@ -35,6 +35,9 @@ import (
 func winEwm(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
 	col *data.Column, seg Segments) (*data.Column, error) {
 
+	if params.By {
+		return winEwmBy(fn, params, name, out, col, seg)
+	}
 	e, err := newEwmRun(fn, params, col)
 	if err != nil {
 		return nil, err
@@ -56,12 +59,27 @@ type EwmState struct {
 	nobs                 int
 	mean, cov            float64
 	oldWt, sumWt, sumWt2 float64
+	// sum is ewm_sum's running sum; prevTime is the last time of an ewm by time,
+	// whose last answer is mean (step 285).
+	sum      float64
+	prevTime int64
 }
 
 // EwmNext answers col, the next rows of a partition in its order, continuing st.
 func EwmNext(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
 	col *data.Column, st *EwmState) (*data.Column, error) {
 
+	if params.By {
+		// A sorted pass's stream, already in by's order (winsorted.go).
+		e, err := newEwmByRun(fn, params, out, col)
+		if err != nil {
+			return nil, err
+		}
+		for row := range col.Len() {
+			e.step(st, row)
+		}
+		return floatsAs(name, out, e.res, seenBitmap(e.ok, len(e.ok))), nil
+	}
 	e, err := newEwmRun(fn, params, col)
 	if err != nil {
 		return nil, err
@@ -78,6 +96,7 @@ type ewmRun struct {
 	fn          expr.WinFnOp
 	params      expr.WinParams
 	minN        int
+	f32         bool // ewm_sum of a Float32 is computed in float32, as Polars'
 	keep, newWt float64
 	vals        []float64
 	valid       bitmap.View
@@ -99,7 +118,7 @@ func newEwmRun(fn expr.WinFnOp, params expr.WinParams, col *data.Column) (*ewmRu
 		return nil, err
 	}
 	e := &ewmRun{fn: fn, params: params, minN: max(int(params.MinSamples), 1),
-		keep: 1 - alpha, newWt: 1, vals: vals, valid: col.Validity(),
+		f32: col.DType() == dtype.Float32, keep: 1 - alpha, newWt: 1, vals: vals, valid: col.Validity(),
 		res: make([]float64, col.Len()), ok: make([]bool, col.Len())}
 	if params.NoAdjust {
 		e.newWt = alpha
@@ -110,6 +129,10 @@ func newEwmRun(fn expr.WinFnOp, params expr.WinParams, col *data.Column) (*ewmRu
 // step takes row into st and answers it.
 func (e *ewmRun) step(st *EwmState, row int) {
 	x, obs := e.vals[row], e.valid.Get(row)
+	if e.fn == expr.WinEwmSum {
+		e.sumStep(st, row, x, obs)
+		return
+	}
 	keep, newWt := e.keep, e.newWt
 	switch {
 	case !st.seen && obs:
@@ -160,6 +183,39 @@ func (e *ewmRun) step(st *EwmState, row int) {
 			v = math.Sqrt(v)
 		}
 		e.res[row], e.ok[row] = v, true
+	}
+}
+
+// sumStep is Polars' EwmSumState (crates/polars-compute/src/ewm/sum.rs, step 285): a
+// value is the running sum decayed by 1−alpha, plus itself, the first its value; a
+// null decays the sum, but with IgnoreNulls; a row answers once MinSamples values
+// have been seen, and a null row is null. A Float32 is summed in float32.
+func (e *ewmRun) sumStep(st *EwmState, row int, x float64, obs bool) {
+	keep := e.keep
+	if e.f32 {
+		keep = float64(1 - float32(e.params.Alpha))
+	}
+	decay := func(v float64) float64 {
+		if e.f32 {
+			return float64(float32(v) * float32(keep))
+		}
+		return v * keep
+	}
+	switch {
+	case obs && st.nobs == 0:
+		st.sum = x
+	case obs && e.f32:
+		st.sum = float64(float32(decay(st.sum)) + float32(x))
+	case obs:
+		st.sum = float64(st.sum*keep) + x
+	case st.nobs > 0 && !e.params.IgnoreNulls:
+		st.sum = decay(st.sum)
+	}
+	if !obs {
+		return
+	}
+	if st.nobs++; st.nobs >= e.minN {
+		e.res[row], e.ok[row] = st.sum, true
 	}
 }
 

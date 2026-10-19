@@ -194,7 +194,7 @@ differs from their input's, or scalars outside a group-by.
 | **Integers as bits:** built: `& \| ^ ~` of integers in step 278, the `bitwise_and/or/xor` aggregates in step 276. Polars has no shifts | — |
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
 | **Rolling:** `map`; weights; an integer index (`"2i"` periods) for `_by`; `rolling_rank_by` and Polars' `random` rank; the generic `Expr.rolling(index_column)`. `skew`, `kurtosis`, `rank`, `rolling_cov` and `rolling_corr` built at step 284 | P1 |
-| **EWM:** `ewm_mean_by`, `ewm_sum`, `ewm_sum_by` | P1 |
+| **EWM:** an integer by with a `"2i"` half-life for `ewm_mean_by` and `ewm_sum_by`. `ewm_sum`, `ewm_mean_by` and `ewm_sum_by` built at step 285 | P2 |
 | **Other:** `cumulative_eval`, `cut`/`qcut` returning Categorical with `include_breaks`. `round_sig_figs`, `cot`, numeric `truncate`, the half-to-even mode and a one-sided `clip` were built at step 283 | P1/P2 |
 
 ## 6. Frame operations
@@ -307,6 +307,9 @@ decide whether to keep or switch each one.
   its m2^1.5 is rounded once, where glibc's pow, Polars', errs by up to 0.52 ulp
   (step 284). `RollingCov` and `RollingCorr` keep Polars' formula on ursus's rolling
   means, so their last bits are not Polars'.
+- `EwmMeanBy` and `EwmSumBy` take rows of one instant in the window's order, where
+  Polars' unstable sort takes them as it finds them; they take an Int8 or an Int16
+  value, which Polars refuses (step 285).
 - `RollingRank` with `RollingCenter` ranks a row whose window's last row is null;
   Polars answers null there, checking the end's validity (step 284).
 - `Append` with upcast meets numbers only: text and a number are refused, which Polars
