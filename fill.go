@@ -119,30 +119,39 @@ func (e Expr) FillNan[T Operand](v T) Expr {
 //
 // An Expr bound is used as written, so Clip(Lit(0), Lit(100)) still widens.
 //
-// # Edge cases, each of which falls out rather than being coded
+// # Edge cases, as Polars answers them
 //
-//	e is null      → the comparisons are null → neither branch → null
-//	e is NaN       → NaN < lo and NaN > hi are both false → e, unchanged
-//	a bound is null → every row's mask is null → the whole column is null
-//	lo > hi        → lo wins, because the chain is right-nested in written order
+//	e is null       → null
+//	e is NaN        → NaN < lo and NaN > hi are both false → e, unchanged
+//	a bound is null → no bound on that side, for that row (step 283)
+//	lo > hi         → lo wins, because the chain is right-nested in written order
 //
-// The third is the one to watch: a null bound is not "no bound", it is a null
-// result. Use two separate clips if only one side should apply.
-func (e Expr) Clip[L, H Operand](lo L, hi H) Expr {
-	// Built directly rather than through When/Then, because that builder lifts its
-	// values strongly and there is deliberately no weak spelling of it — Otherwise(0)
-	// must keep widening. The shape is identical: a right-nested pair of Conds in
-	// written order.
-	l, h := liftWeak(lo), liftWeak(hi)
-	return wrap(&expr.Cond{
-		Pred: &expr.Binary{Op: expr.OpLt, L: e.node(), R: l},
-		Then: l,
-		Else: &expr.Cond{
-			Pred: &expr.Binary{Op: expr.OpGt, L: e.node(), R: h},
-			Then: h,
-			Else: e.node(),
-		},
-	})
+// A null bound was a null result until step 283; it is no bound now, as Polars'
+// None is. Each comparison's null is taken as false, so a row whose bound is null
+// passes that side unchanged. ClipLower and ClipUpper bound one side alone.
+func (e Expr) Clip[L, H Operand](lo L, hi H) Expr { return e.clip(liftWeak(lo), liftWeak(hi)) }
+
+// ClipLower bounds each value below by lo, and ClipUpper above by hi: Polars' clip
+// with one bound. Each is Clip's sugar, its bound weak as Clip's are.
+func (e Expr) ClipLower[L Operand](lo L) Expr { return e.clip(liftWeak(lo), nil) }
+func (e Expr) ClipUpper[H Operand](hi H) Expr { return e.clip(nil, liftWeak(hi)) }
+
+// clip is the chain, a bound nil for none. Built directly rather than through
+// When/Then, because that builder lifts its values strongly and there is
+// deliberately no weak spelling of it — Otherwise(0) must keep widening. The shape is
+// a right-nested pair of Conds in written order.
+func (e Expr) clip(l, h expr.Node) Expr {
+	past := func(op expr.BinaryOp, bound expr.Node) expr.Node {
+		return wrap(&expr.Binary{Op: op, L: e.node(), R: bound}).FillNullWith(false).node()
+	}
+	out := e.node()
+	if h != nil {
+		out = &expr.Cond{Pred: past(expr.OpGt, h), Then: h, Else: out}
+	}
+	if l != nil {
+		out = &expr.Cond{Pred: past(expr.OpLt, l), Then: l, Else: out}
+	}
+	return wrap(out)
 }
 
 // IsClose reports whether each value is within a relative or absolute tolerance of

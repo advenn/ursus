@@ -273,7 +273,7 @@ func allUnaryOps() []expr.UnaryOp {
 // nothing wrong, which is the failure this file exists to prevent.
 func allCallFns() []expr.CallFn {
 	var fns []expr.CallFn
-	for i := range 1300 {
+	for i := range 1400 {
 		fn := expr.CallFn(i)
 		if fn.IsString() || fn.IsTemporal() || fn.IsGeneral() ||
 			fn.IsMath() || fn.IsList() || fn.IsStruct() || fn.IsHorizontal() || fn.IsBinary() {
@@ -419,7 +419,10 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 		{label: ",policy", args: []any{"UTC", "nearest", "raise"}},
 	},
 
-	expr.FnMathRound: {{args: []any{int64(1)}}},
+	// Step 283: round half to even, round_sig_figs and truncate.
+	expr.FnMathRound:        {{args: []any{int64(1)}}, {label: ",half_to_even", args: []any{int64(1), "half_to_even"}}},
+	expr.FnMathRoundSigFigs: {{args: []any{int64(2)}}},
+	expr.FnMathTruncate:     {{args: []any{int64(1)}}},
 
 	// The horizontal family's arguments are operands: the column, then a literal.
 	// One operand alone is the other set.

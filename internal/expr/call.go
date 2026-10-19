@@ -453,6 +453,15 @@ const (
 	fnGenMoreEnd
 )
 
+// The maths family, continued (step 283): round_sig_figs, the digits; truncate, the
+// decimals, round's kernel toward zero. round's mode is its own second argument.
+// IsMath covers it.
+const (
+	FnMathRoundSigFigs CallFn = iota + 1300
+	FnMathTruncate
+	fnMathMoreEnd
+)
+
 const (
 	FnBinEncode CallFn = iota + 1100
 	FnBinDecode
@@ -475,7 +484,9 @@ func (f CallFn) IsGeneral() bool {
 	return f >= FnIsIn && f < fnGenEnd || f >= FnCatGetCategories && f < fnCatEnd ||
 		f >= FnHash && f < fnGenMoreEnd
 }
-func (f CallFn) IsMath() bool { return f >= FnMathRound && f < fnMathEnd }
+func (f CallFn) IsMath() bool {
+	return f >= FnMathRound && f < fnMathEnd || f >= FnMathRoundSigFigs && f < fnMathMoreEnd
+}
 func (f CallFn) IsList() bool {
 	return f >= FnListLen && f < fnListEnd || f >= FnListMedian && f < fnListMoreEnd
 }
@@ -541,7 +552,8 @@ var callNames = map[CallFn]string{
 
 	FnIsIn: "is_in",
 
-	FnMathRound: "round", FnMathAsFloat: "as_float", FnMathDiffWiden: "diff_widen",
+	FnMathRound: "round", FnMathRoundSigFigs: "round_sig_figs", FnMathTruncate: "truncate",
+	FnMathAsFloat: "as_float", FnMathDiffWiden: "diff_widen",
 	FnMathCountOnes: "bitwise_count_ones", FnMathCountZeros: "bitwise_count_zeros",
 	FnMathLeadingOnes: "bitwise_leading_ones", FnMathLeadingZeros: "bitwise_leading_zeros",
 	FnMathTrailingOnes: "bitwise_trailing_ones", FnMathTrailingZeros: "bitwise_trailing_zeros",
@@ -1600,6 +1612,16 @@ func mathCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 				"round() is not defined for %s", in).
 				Hint("a decimal is stored as an unscaled integer, so rounding it would " +
 					"scale the wrong number"))
+		}
+		return in, nil
+	case FnMathRoundSigFigs, FnMathTruncate:
+		// round's siblings, in the operand's own type, as Polars keeps it: an integer
+		// is rounded to its figures, and truncating it is the identity. A Decimal is
+		// refused as round refuses it, where Polars rounds its digits.
+		if !in.IsNumeric() || in.ID() == dtype.TypeDecimal {
+			return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+				"%s requires a number other than a Decimal, got %s", fn, in).
+				Hint("cast it first, e.g. .Cast(ursus.Float64)")
 		}
 		return in, nil
 	case FnMathAsFloat:

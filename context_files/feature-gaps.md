@@ -194,7 +194,7 @@ differs from their input's, or scalars outside a group-by.
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
 | **Rolling:** `skew`, `kurtosis`, `rank`, `map`; weights; an integer index (`"2i"` periods) for `_by`; `rolling_corr`, `rolling_cov`; the generic `Expr.rolling(index_column)` | P1 |
 | **EWM:** `ewm_mean_by`, `ewm_sum`, `ewm_sum_by` | P1 |
-| **Other:** `cumulative_eval`, `round_sig_figs`, `cot`, numeric `truncate`, a rounding mode (half-to-even), a one-sided `clip`, `cut`/`qcut` returning Categorical with `include_breaks` | P1/P2 |
+| **Other:** `cumulative_eval`, `cut`/`qcut` returning Categorical with `include_breaks`. `round_sig_figs`, `cot`, numeric `truncate`, the half-to-even mode and a one-sided `clip` were built at step 283 | P1/P2 |
 
 ## 6. Frame operations
 
@@ -257,7 +257,16 @@ decide whether to keep or switch each one.
 - The sum or product of an all-null group is null, not 0 or 1.
 - `Max` propagates NaN. Polars' `max` ignores it, and `nan_max` propagates it.
 - `n_unique` does not count null; Polars counts it as a value.
-- `Round` rounds half away from zero; Polars rounds half to even.
+- `Round` rounds half away from zero by default; Polars rounds half to even, which
+  `RoundHalfToEven` selects (step 283).
+- `Round`, `Truncate` and `RoundSigFigs` refuse a Decimal, whose digits Polars rounds
+  (step 283).
+- `Cot`, like `Tan`, is Go's tangent: within 3 ulps of Polars' glibc one over
+  ordinary values, and further near a multiple of π/2, cot(π/2) an absolute 1e-30
+  apart (step 283).
+- A float bound of `Clip` on an integer column promotes the column, as a fill value
+  does; Polars casts the bound to the column's type, so `clip(2.5)` of an Int64 is 2
+  there and 2.5 here (step 283).
 - `Div` and `Pow` always return a float.
 - `Cut` returns String, not Categorical.
 - An expression's `TopK` and `BottomK` return a List.

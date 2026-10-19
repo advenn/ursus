@@ -206,7 +206,7 @@ func TestUnknownConstantsRenderAsUnknown(t *testing.T) {
 // would fall to an Internalf. Both are silent until the call is used.
 func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 	var classified int
-	for i := range 1300 {
+	for i := range 1400 {
 		fn := CallFn(i)
 		var claims []string
 		for _, c := range []struct {
@@ -234,7 +234,7 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	// 205 since step 282's list.append; 204 after step 281's list.rle; 203 after step 280's list.unique_counts and list.value_counts; 201 after step 279's order_cmp, hash and order_sign; 198 after step 277's list.mode; 197 after step 274's four binary functions and five of a row's operands; 188
+	// 207 since step 283's round_sig_figs and truncate; 205 after step 282's list.append; 204 after step 281's list.rle; 203 after step 280's list.unique_counts and list.value_counts; 201 after step 279's order_cmp, hash and order_sign; 198 after step 277's list.mode; 197 after step 274's four binary functions and five of a row's operands; 188
 	// after step 273's cat.get_categories and cat.physical; 186 after step 272's twelve temporal functions at 900, and is_business_day,
 	// add_business_days and dt.replace; 171 after step 271's encode, decode, json_path_match, json_decode, the two
 	// to_integers and concat_str past nulls; 164 after step 270's nine string functions; 155 after step 269's six list functions; 149 after step 267's list.arg_sort, list.arg_true and list.arg_unique; 146 after
@@ -250,8 +250,8 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 	// list.arg_min and list.arg_max, step 174's dt.replace_time_zone, step 171's
 	// struct.with_fields, step 147's cut and cut_left_closed, and step 146's
 	// list.join, six bit counts, concat_str and struct.
-	if classified != 205 {
-		t.Errorf("%d call functions are classified, want 205 — the families and the "+
+	if classified != 207 {
+		t.Errorf("%d call functions are classified, want 207 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }
@@ -270,6 +270,8 @@ func TestMathOpsAreClassified(t *testing.T) {
 		OpSinh: true, OpCosh: true, OpTanh: true,
 		OpArcSinh: true, OpArcCosh: true, OpArcTanh: true,
 		OpDegrees: true, OpRadians: true,
+		// The cotangent, appended in step 283.
+		OpCot: true,
 	}
 	preserving := []UnaryOp{OpNeg, OpAbs, OpSign, OpFloor, OpCeil}
 

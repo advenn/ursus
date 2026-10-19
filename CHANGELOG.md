@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.6
 
-Everything since `v0.6.5` (2026-10-15): steps 262–282, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–283, so far.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
 completeness, part 2 — namespaces and generators.**
 
@@ -28,6 +28,8 @@ completeness, part 2 — namespaces and generators.**
 - **A struct's field is named after the field,** as Polars names it (275):
   `Col("s").Struct().Field("b")` is `b`, where it was `s`. So `WithFields` of a field
   read sets that field, where it added one named after the struct.
+- **A null bound of `Clip` is no bound,** for its row, as Polars' `None` is (283). It
+  was a null result, and a null literal bound nulled the whole column.
 - **`Str()` refuses a Binary column,** as Polars' `.str` does (274). It read one as text,
   and a text function such as `Slice` split its bytes as runes; `Bin()` has the byte
   functions.
@@ -80,6 +82,9 @@ completeness, part 2 — namespaces and generators.**
   `Head`, `Tail` and `Slice`, each argument a constant or an expression; `Size`,
   `Encode`, `Decode`, and `Reinterpret` to a number or an instant, little- or
   big-endian.
+- **Numeric odds** (283): `Round(decimals, RoundHalfToEven)`, Polars' default mode;
+  `Truncate(decimals)`; `RoundSigFigs(digits)`; `Cot()`; `ClipLower` and `ClipUpper`.
+  Rounding is Polars' algorithm, so each answer is Polars' to the bit.
 - **Sequences** (282): `Append(other, upcast)`, `ExtendConstant(value, n)`,
   `SampleN`, `SampleFraction` and `Shuffle(seed)`, each a column of its own length in
   a Select and a list a group in an aggregation.

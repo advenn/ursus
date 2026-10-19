@@ -368,29 +368,81 @@ func (e Expr) ArcTanh() Expr { return e.un(expr.OpArcTanh) }
 func (e Expr) Degrees() Expr { return e.un(expr.OpDegrees) }
 func (e Expr) Radians() Expr { return e.un(expr.OpRadians) }
 
-// Round rounds to decimals decimal places, HALF AWAY FROM ZERO.
+// Cot is the cotangent, 1/tan, as Polars computes it: Cot(0) is +Inf and Cot(-0)
+// -Inf. It widens as Tan does. Its tangent is Go's, within 3 ulps of Polars' glibc
+// one over ordinary values, as each trigonometric function here is within a few;
+// near a multiple of pi/2 its relative error grows, its absolute error below 1e-30.
+func (e Expr) Cot() Expr { return e.un(expr.OpCot) }
+
+// RoundMode is how Round breaks a tie, a value halfway between its two roundings.
+type RoundMode string
+
+const (
+	// RoundHalfAwayFromZero takes a tie away from zero, 2.5 to 3 and -2.5 to -3, as a
+	// spreadsheet rounds: ursus's default, and Polars' mode="half_away_from_zero".
+	RoundHalfAwayFromZero RoundMode = "half_away_from_zero"
+	// RoundHalfToEven takes a tie to its even neighbour, 2.5 to 2 and 3.5 to 4:
+	// banker's rounding, IEEE's, and Polars' default.
+	RoundHalfToEven RoundMode = "half_to_even"
+)
+
+// Round rounds to decimals decimal places, HALF AWAY FROM ZERO, or by mode.
 //
 // Round(0.5) is 1 and Round(2.5) is 3, as a spreadsheet rounds, rather than IEEE's
 // round-half-to-even. That is Polars' `mode="half_away_from_zero"`, and NOT Polars'
-// default, which rounds half to even: Polars' `round(0)` gives 2 for 2.5. It
-// preserves the operand's type: rounding an integer column is the identity, not a
-// widening.
+// default, which rounds half to even: Polars' `round(0)` gives 2 for 2.5, as
+// Round(0, RoundHalfToEven) does here. It preserves the operand's type: rounding an
+// integer column is the identity, not a widening.
 //
 // It rounds twice — the value is scaled by 10^decimals first, and that multiply
 // rounds too. Round(2.675, 2) is 2.68, because 2.675 * 100 lands on exactly 267.5
-// even though 2.675 itself is stored as 2.67499999999999982…
+// even though 2.675 itself is stored as 2.67499999999999982… The scaling is
+// Polars', so each answer is Polars' to the bit.
 //
 // A Float32 is rounded as a Float64 and the result rounded once more to a float32,
 // so Round(0.1, 1) of a Float32 is the float32 nearest 0.1.
-func (e Expr) Round(decimals int) Expr {
+func (e Expr) Round(decimals int, mode ...RoundMode) Expr {
 	if decimals < 0 {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "round",
 			"decimals must not be negative, got %d", decimals)})
 	}
-	return wrap(&expr.Call{
-		Fn:   expr.FnMathRound,
-		Args: []expr.Node{e.node(), litNode(int64(decimals))},
-	})
+	args := []expr.Node{e.node(), litNode(int64(decimals))}
+	switch {
+	case len(mode) > 1:
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "round", "round takes one mode, got %d", len(mode))})
+	case len(mode) == 0 || mode[0] == RoundHalfAwayFromZero:
+		// The default's plan is the one it always had.
+	case mode[0] == RoundHalfToEven:
+		args = append(args, litNode(string(mode[0])))
+	default:
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "round", "%q is not a rounding mode", mode[0]).
+			Hint("RoundHalfAwayFromZero or RoundHalfToEven")})
+	}
+	return wrap(&expr.Call{Fn: expr.FnMathRound, Args: args})
+}
+
+// Truncate drops each value's digits past decimals decimal places, toward zero:
+// Polars' truncate, Round's scaling with math.Trunc for its rounding. Truncate(1) of
+// 0.29 is 0.2 and of -0.99 -0.9; an integer is its own truncation.
+func (e Expr) Truncate(decimals int) Expr {
+	if decimals < 0 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "truncate",
+			"decimals must not be negative, got %d", decimals)})
+	}
+	return wrap(&expr.Call{Fn: expr.FnMathTruncate, Args: []expr.Node{e.node(), litNode(int64(decimals))}})
+}
+
+// RoundSigFigs rounds to digits significant figures, half away from zero, in the
+// operand's own type: Polars' round_sig_figs. 1234.5678 to two figures is 1200 and
+// -0.0012345 is -0.0012. An integer is rounded through a float64 and brought back
+// saturating, as Polars brings it, so an Int8 127 to two figures stays 127, its 130
+// past the type. A Decimal is refused, as Round refuses it.
+func (e Expr) RoundSigFigs(digits int) Expr {
+	if digits < 1 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "round_sig_figs",
+			"digits must be at least 1, got %d", digits)})
+	}
+	return wrap(&expr.Call{Fn: expr.FnMathRoundSigFigs, Args: []expr.Node{e.node(), litNode(int64(digits))}})
 }
 
 // The bit counts of an integer of 8 to 64 bits, each a Uint32, in the type's own

@@ -29,6 +29,7 @@ func TestTrigonometry(t *testing.T) {
 		{"arctanh", ursus.Expr.ArcTanh, math.Atanh},
 		{"degrees", ursus.Expr.Degrees, func(r float64) float64 { return r * 180 / math.Pi }},
 		{"radians", ursus.Expr.Radians, func(d float64) float64 { return d * math.Pi / 180 }},
+		{"cot", ursus.Expr.Cot, func(x float64) float64 { return 1 / math.Tan(x) }},
 	}
 	for _, fn := range fns {
 		t.Run(fn.name, func(t *testing.T) {
