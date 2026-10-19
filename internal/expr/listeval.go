@@ -158,6 +158,27 @@ func LowerListEval(list, body Node, agg bool) Node {
 	return &Call{Fn: FnConcatList, Args: []Node{none, b}}
 }
 
+// CumulativeName is the column a lowered cumulative_eval body reads its prefixes from,
+// a name no frame's column can have.
+const CumulativeName = "\x00cumulative"
+
+// LowerCumulativeEval is cumulative_eval's body (step 286), lowered as List().Eval
+// lowers an aggregate, to one value a list of CumulativeName, a row's prefix. A body
+// that is not one value a prefix is refused, as Polars refuses it, and so is one
+// reading another column.
+func LowerCumulativeEval(body Node) (Node, error) {
+	b, kind, err := lowerEvalNode("cumulative_eval", &Col{Name: CumulativeName}, LowerReshapes(body, true))
+	if err != nil {
+		return nil, err
+	}
+	if kind != kindRow {
+		return nil, uerr.New(uerr.KindType, "cumulative_eval",
+			"cumulative_eval's body is one value a prefix, and %s is not", body).
+			Hint("an aggregate of Element(), e.g. Element().Sum() or Element().First().Sub(Element().Last())")
+	}
+	return b, nil
+}
+
 // listValued are the list functions lowering produces whose answer is a list, not a
 // value.
 var listValued = map[CallFn]bool{

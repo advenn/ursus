@@ -383,6 +383,11 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 			sampled = l.SampleN(int(arg[0]), arg[2] != 0, arg[3] != 0, uint64(arg[4]))
 		}
 		out = p.lf.Select(sampled.Alias(p.col)).Filter(Col(p.col).List().Len().Gt(0)).Explode(p.col)
+	case expr.ReshapeHist:
+		// The values imploded, counted a bin a row, and exploded again; no bin is no
+		// row (step 286).
+		h := wrap(expr.HistCall(Col(p.col).Implode().node(), arg))
+		out = p.lf.Select(h.Alias(p.col)).Filter(Col(p.col).List().Len().Gt(0)).Explode(p.col)
 	case expr.ReshapeRle:
 		// Each run's rows grouped by its number, in their order, its first value kept
 		// (step 281).

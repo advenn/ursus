@@ -52,6 +52,7 @@ const (
 	ReshapeRle                           // no args: a Struct of each run's length and value (step 281)
 	ReshapeAppend                        // By: the values appended; Args: their meeting, AppendStrict, AppendUpcast or AppendCast (step 282)
 	ReshapeSample                        // Args: n, or -1 for a fraction; the fraction's bits; with_replacement; shuffle; the seed (step 282)
+	ReshapeHist                          // Args: the bin count, or -1 for edges; include_category; include_breakpoint; the edges' bits (step 286)
 )
 
 var reshapeNames = map[ReshapeOp]string{
@@ -62,7 +63,7 @@ var reshapeNames = map[ReshapeOp]string{
 	ReshapeArgSort: "arg_sort", ReshapeArgTrue: "arg_true", ReshapeArgUnique: "arg_unique",
 	ReshapeArgSortBy: "arg_sort_by", ReshapeMode: "mode",
 	ReshapeUniqueCounts: "unique_counts", ReshapeValueCounts: "value_counts", ReshapeRle: "rle",
-	ReshapeAppend: "append", ReshapeSample: "sample",
+	ReshapeAppend: "append", ReshapeSample: "sample", ReshapeHist: "hist",
 }
 
 // How Append meets its two sides' types (step 282): the same type, as Polars'
@@ -151,6 +152,39 @@ func AppendType(mode int64, a, b dtype.DataType) (dtype.DataType, error) {
 		Hint("cast one first; Polars' upcast meets numbers, and text with anything")
 }
 
+// HistType is hist's answer a bin over in (step 286): its count, a UInt32, or a
+// Struct of the bin's right edge, its interval as text and its count, as Polars'
+// include_breakpoint and include_category ask. Polars' category is a Categorical;
+// here it is text, as Cut's labels are. in is a number other than a Decimal.
+func HistType(in dtype.DataType, category, breakpoint bool) (dtype.DataType, error) {
+	if !in.IsFloat() && !in.IsInteger() {
+		return dtype.Null, uerr.New(uerr.KindType, "hist", "hist is only defined for numbers, got %s", in).
+			Hint("cast it first, e.g. .Cast(ursus.Float64)")
+	}
+	if !category && !breakpoint {
+		return dtype.Uint32, nil
+	}
+	var fs []dtype.Field
+	if breakpoint {
+		fs = append(fs, dtype.Field{Name: "breakpoint", Type: dtype.Float64, Nullable: true})
+	}
+	if category {
+		fs = append(fs, dtype.Field{Name: "category", Type: dtype.String, Nullable: true})
+	}
+	return dtype.Struct(append(fs, dtype.Field{Name: "count", Type: dtype.Uint32, Nullable: true})...), nil
+}
+
+// HistCall is list.hist of list by a ReshapeHist's arguments: the bin count, the two
+// includes, and the edges as floats.
+func HistCall(list Node, args []int64) Node {
+	a := []Node{list, &Lit{Value: args[0], DT: dtype.Int64},
+		&Lit{Value: args[1] != 0, DT: dtype.Bool}, &Lit{Value: args[2] != 0, DT: dtype.Bool}}
+	for _, b := range args[3:] {
+		a = append(a, &Lit{Value: math.Float64frombits(uint64(b)), DT: dtype.Float64})
+	}
+	return &Call{Fn: FnListHist, Args: a}
+}
+
 // RleType is rle's Struct: each run's length, a UInt32, and its value, as Polars'.
 func RleType(value dtype.DataType) dtype.DataType {
 	return dtype.Struct(dtype.Field{Name: "len", Type: dtype.Uint32, Nullable: true},
@@ -229,6 +263,13 @@ func (r *Reshape) Field(in *dtype.Schema) (dtype.Field, error) {
 		f.Type, f.Nullable = t, f.Nullable || g.Nullable
 		return f, nil
 	case ReshapeSample:
+		return f, nil
+	case ReshapeHist:
+		t, err := HistType(f.Type, r.Args[1] != 0, r.Args[2] != 0)
+		if err != nil {
+			return dtype.Field{}, err
+		}
+		f.Type, f.Nullable = t, false
 		return f, nil
 	case ReshapeRle:
 		// Runs of equal keys, as the group-by's keys are equal.
@@ -403,6 +444,8 @@ func lowerReshape(r *Reshape) Node {
 		return &Call{Fn: FnListUniqueCounts, Args: []Node{list}}
 	case ReshapeRle:
 		return &Call{Fn: FnListRle, Args: []Node{list}}
+	case ReshapeHist:
+		return HistCall(list, r.Args)
 	case ReshapeSample:
 		frac := math.Float64frombits(uint64(r.Args[1]))
 		return &Call{Fn: FnListSample, Args: []Node{list, arg(0), &Lit{Value: frac, DT: dtype.Float64},

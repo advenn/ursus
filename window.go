@@ -148,6 +148,29 @@ func (e Expr) CumMax(reverse bool) Expr {
 	return e.winFn(expr.WinCumMax, expr.WinParams{Reverse: reverse})
 }
 
+// CumulativeEval answers each row with body over the values up to and including it,
+// in the window's order: Polars' cumulative_eval (step 286). body reads Element(), as
+// List().Eval's does, and is one value a prefix, an aggregate such as
+// Element().Sum() or Element().First().Sub(Element().Last().Pow(2)); another column
+// is refused, as Polars refuses it. A row whose prefix holds fewer than MinSamples
+// values, 1 by default, is null.
+//
+// It is a window: over the frame in its order, or .Over(key) a partition's own. Each
+// row evaluates its whole prefix, so its time grows with the square of a partition's
+// rows, as Polars' does; the prefixes are built a run of rows at a time. A window
+// over the whole frame needs the frame in memory.
+func (e Expr) CumulativeEval(body Expr, opts ...WindowOption) Expr {
+	b, err := expr.LowerCumulativeEval(body.node())
+	if err != nil {
+		return wrap(&expr.Err{E: err})
+	}
+	p := expr.WinParams{Body: b, MinSamples: 1}
+	for _, o := range opts {
+		o(&p)
+	}
+	return e.winFn(expr.WinCumulativeEval, p)
+}
+
 // Shift moves values n places later within the window, filling the vacated rows
 // with null. A negative n shifts earlier — Polars' lag and lead, one function.
 //

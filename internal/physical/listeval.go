@@ -105,6 +105,10 @@ func bodyWindows(ctx context.Context, n expr.Node, eb *data.Batch, list []int32)
 	default:
 		return n, eb, nil
 	}
+	if fn.Fn == expr.WinCumulativeEval {
+		return nil, nil, uerr.New(uerr.KindUnsupported, "list.eval",
+			"cumulative_eval inside list.eval is not there yet")
+	}
 	f, err := fn.Field(eb.Schema())
 	if err != nil {
 		return nil, nil, err

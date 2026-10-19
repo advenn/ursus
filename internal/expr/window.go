@@ -327,6 +327,11 @@ const (
 	// PairOf(value, by), decayed by Params.Period, a half-life, in by's order.
 	WinEwmSum
 
+	// WinCumulativeEval is Polars' cumulative_eval (step 286): Params.Body, lowered by
+	// LowerCumulativeEval, over each row's prefix of its partition. The physical
+	// window evaluates it, as no kernel can evaluate an expression.
+	WinCumulativeEval
+
 	winFnCount
 )
 
@@ -343,6 +348,7 @@ var winFnNames = [winFnCount]string{
 	WinInterpolate: "interpolate", WinRleID: "rle_id",
 	WinRollingSkew: "rolling_skew", WinRollingKurtosis: "rolling_kurtosis", WinRollingRank: "rolling_rank",
 	WinRollingCov: "rolling_cov", WinRollingCorr: "rolling_corr", WinEwmSum: "ewm_sum",
+	WinCumulativeEval: "cumulative_eval",
 }
 
 func (o WinFnOp) String() string {
@@ -452,6 +458,9 @@ type WinParams struct {
 	// rolling skew's and kurtosis's bias (step 284).
 	Fisher bool
 
+	// Body is cumulative_eval's, lowered over CumulativeName (step 286).
+	Body Node
+
 	// A rolling function by time (step 177), Polars' rolling_*_by: each row's window
 	// is the rows whose by value lies within Period of its own, closed as Closed says,
 	// ClosedRight by default. The function's child is then PairOf(value, by), and N is
@@ -495,6 +504,8 @@ func (p WinParams) args(op WinFnOp) string {
 	case WinRollingRank:
 		return p.Method.String() + ", " + window(p) + ", min_samples " +
 			strconv.FormatInt(p.MinSamples, 10) + centered(p)
+	case WinCumulativeEval:
+		return p.Body.String() + ", min_samples " + strconv.FormatInt(p.MinSamples, 10)
 	case WinRollingCov, WinRollingCorr:
 		s := window(p) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10)
 		if op == WinRollingCov {
@@ -608,7 +619,7 @@ func (f *WinFn) Field(in *dtype.Schema) (dtype.Field, error) {
 	switch {
 	case f.Fn == WinRank || f.Fn == WinCumCount || f.Fn == WinRleID:
 		nullable = false
-	case f.Fn == WinShift || f.Fn.IsRolling() || f.Fn.IsEwm():
+	case f.Fn == WinShift || f.Fn.IsRolling() || f.Fn.IsEwm() || f.Fn == WinCumulativeEval:
 		// A rolling window's first rows hold fewer values than it needs, and so can
 		// an ewm's; an ewm variance of one value has none.
 		nullable = true
@@ -711,6 +722,22 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 				Hint("e.g. RollingQuantile(0.9, ursus.InterpNearest, 10)")
 		}
 		return rollingOut(fn, p, in)
+
+	case WinCumulativeEval:
+		// The body's type over a list of the values, as List().Eval types it.
+		if p.Body == nil || p.MinSamples < 0 {
+			return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
+				"cumulative_eval needs a body and min_samples of at least 0, got %d", p.MinSamples)
+		}
+		s, err := dtype.NewSchema(dtype.Field{Name: CumulativeName, Type: dtype.List(in), Nullable: true})
+		if err != nil {
+			return dtype.Null, err
+		}
+		f, err := p.Body.Field(s)
+		if err != nil {
+			return dtype.Null, err
+		}
+		return f.Type, nil
 
 	case WinEwmMean, WinEwmSum, WinEwmStd, WinEwmVar, WinInterpolate:
 		if p.By {

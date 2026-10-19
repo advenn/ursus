@@ -187,7 +187,7 @@ differs from their input's, or scalars outside a group-by.
 
 | missing | prio |
 | --- | --- |
-| **Statistics:** `hist`. `skew`, `kurtosis` and `approx_n_unique` built in step 276; `entropy`, `mode` and Spearman `corr` in step 277 | P1 |
+| **Statistics:** built: `hist` in step 286; `skew`, `kurtosis` and `approx_n_unique` in step 276; `entropy`, `mode` and Spearman `corr` in step 277 | P1 |
 | **Search and hashing:** built: `dot` in step 276; `search_sorted`, `index_of`, `hash`, `peak_min` and `peak_max` in step 279, a search's value a Go value only; `unique_counts` and `value_counts` on an expression in step 280 | — |
 | **A window inside a window:** `Col("a").Shift(1).CumSum()` is refused, "compute the inner window into a column with WithColumns first"; Polars nests them (found at step 281) | P1 |
 | **An aggregate inside an aggregate's input:** `Col("a").Sub(Col("a").Mean()).Abs().Sum()` is refused, in a `Select` or an `Agg`, as "not an aggregate"; Polars takes it (found at step 279) | P1 |
@@ -195,7 +195,7 @@ differs from their input's, or scalars outside a group-by.
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
 | **Rolling:** `map`; weights; an integer index (`"2i"` periods) for `_by`; `rolling_rank_by` and Polars' `random` rank; the generic `Expr.rolling(index_column)`. `skew`, `kurtosis`, `rank`, `rolling_cov` and `rolling_corr` built at step 284 | P1 |
 | **EWM:** an integer by with a `"2i"` half-life for `ewm_mean_by` and `ewm_sum_by`. `ewm_sum`, `ewm_mean_by` and `ewm_sum_by` built at step 285 | P2 |
-| **Other:** `cumulative_eval`, `cut`/`qcut` returning Categorical with `include_breaks`. `round_sig_figs`, `cot`, numeric `truncate`, the half-to-even mode and a one-sided `clip` were built at step 283 | P1/P2 |
+| **Other:** `cut`/`qcut` returning Categorical with `include_breaks`. `cumulative_eval` built at step 286. `round_sig_figs`, `cot`, numeric `truncate`, the half-to-even mode and a one-sided `clip` were built at step 283 | P1/P2 |
 
 ## 6. Frame operations
 
@@ -307,6 +307,10 @@ decide whether to keep or switch each one.
   its m2^1.5 is rounded once, where glibc's pow, Polars', errs by up to 0.52 ulp
   (step 284). `RollingCov` and `RollingCorr` keep Polars' formula on ursus's rolling
   means, so their last bits are not Polars'.
+- `Hist`'s category is text, where Polars' is a Categorical, as `Cut`'s labels are
+  (step 286).
+- `CumulativeEval` is refused in `GroupBy(...).Agg`, as every window is, where Polars
+  gives a list a group; and inside `List().Eval` (step 286).
 - `EwmMeanBy` and `EwmSumBy` take rows of one instant in the window's order, where
   Polars' unstable sort takes them as it finds them; they take an Int8 or an Int16
   value, which Polars refuses (step 285).

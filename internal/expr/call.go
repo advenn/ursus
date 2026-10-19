@@ -378,6 +378,9 @@ const (
 	FnListUniqueCounts
 	FnListValueCounts
 	FnListRle // list.rle, each list's runs, a Struct each (step 281)
+	// list.hist, the bin count or -1, include_category, include_breakpoint and the
+	// edges (step 286), which Hist in an aggregation lowers to.
+	FnListHist
 	fnListMoreEnd
 )
 
@@ -602,7 +605,8 @@ var callNames = map[CallFn]string{
 	FnListShift: "list.shift", FnListCountMatches: "list.count_matches",
 	FnListAny: "list.any", FnListAll: "list.all", FnListItem: "list.item", FnListSample: "list.sample",
 	FnListMode: "list.mode", FnListUniqueCounts: "list.unique_counts", FnListValueCounts: "list.value_counts",
-	FnListRle: "list.rle",
+	FnListHist: "list.hist",
+	FnListRle:  "list.rle",
 }
 
 func (f CallFn) String() string {
@@ -2445,6 +2449,19 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 
 	case FnListSample:
 		return in, nil
+
+	case FnListHist:
+		args, err := CallArgs(c)
+		if err != nil || len(args) < 3 {
+			return dtype.Null, uerr.Internalf("expr: %s without its arguments", fn)
+		}
+		category, _ := args[1].(bool)
+		breakpoint, _ := args[2].(bool)
+		t, err := HistType(elem, category, breakpoint)
+		if err != nil {
+			return dtype.Null, err
+		}
+		return dtype.List(t), nil
 
 	case FnListMode, FnListUniqueCounts, FnListValueCounts, FnListRle:
 		// A Struct or a List cannot be a key here, so its mode is refused, where

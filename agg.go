@@ -370,6 +370,79 @@ func (e Expr) sample(n int64, fraction float64, withReplacement, shuffle bool, s
 		Args: []int64{n, int64(math.Float64bits(fraction)), b(withReplacement), b(shuffle), int64(seed)}})
 }
 
+// HistOption configures Hist.
+type HistOption func(*histOptions)
+
+type histOptions struct {
+	bins                 []float64
+	hasBins, hasCount    bool
+	count                int
+	category, breakpoint bool
+}
+
+// HistBins counts in the bins between edges, which must increase: Polars' bins. The
+// first bin holds its left edge too, and a value outside the edges is in none; fewer
+// than two edges make no bin.
+func HistBins(edges ...float64) HistOption {
+	return func(o *histOptions) { o.bins, o.hasBins = edges, true }
+}
+
+// HistBinCount counts in n bins of equal width, from the least value to the
+// greatest: Polars' bin_count, 10 by default.
+func HistBinCount(n int) HistOption {
+	return func(o *histOptions) { o.count, o.hasCount = n, true }
+}
+
+// HistBreakpoint and HistCategory make each bin a Struct of its right edge, a
+// Float64, and its interval as text, "[1.0, 3.333333]" then "(3.333333, 5.666667]",
+// beside its count: Polars' include_breakpoint and include_category. Polars' category
+// is a Categorical; here it is text, as Cut's labels are.
+func HistBreakpoint() HistOption { return func(o *histOptions) { o.breakpoint = true } }
+func HistCategory() HistOption   { return func(o *histOptions) { o.category = true } }
+
+// Hist counts the values in bins: Polars' hist (step 286), each bin's count a UInt32,
+// a column of its own length in a Select and a list a group in an aggregation. By
+// default the bins are 10 of equal width over the values' least to greatest, NaN
+// aside, the last edge the greatest itself; one value, or values all alike, are the
+// bins over the value ± 0.5, and none the bins over [0, 1]. A null or NaN is in no
+// bin. It is Polars' algorithm, edges and counts alike. It counts numbers.
+func (e Expr) Hist(opts ...HistOption) Expr {
+	var o histOptions
+	for _, f := range opts {
+		f(&o)
+	}
+	bad := func(format string, a ...any) Expr {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "hist", format, a...)})
+	}
+	count := int64(10)
+	switch {
+	case o.hasBins && o.hasCount:
+		// Polars: "can only provide one of `bin_count` or `bins`".
+		return bad("hist takes bins or a bin count, not both")
+	case o.hasBins:
+		count = -1
+	case o.hasCount && o.count < 0:
+		return bad("hist takes %d bins", o.count)
+	case o.hasCount:
+		count = int64(o.count)
+	}
+	args := []int64{count, b2i(o.category), b2i(o.breakpoint)}
+	for i, x := range o.bins {
+		if i > 0 && !(x > o.bins[i-1]) {
+			return bad("the bins' edges must increase, and %v follows %v", x, o.bins[i-1])
+		}
+		args = append(args, int64(math.Float64bits(x)))
+	}
+	return wrap(&expr.Reshape{Op: expr.ReshapeHist, Child: e.node(), Args: args})
+}
+
+func b2i(x bool) int64 {
+	if x {
+		return 1
+	}
+	return 0
+}
+
 // UniqueCounts is each distinct value's count, in the order the values first appear,
 // a null among them, a UInt32: Polars' unique_counts, a column of its own length in a
 // Select and a list a group in an aggregation.

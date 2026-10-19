@@ -197,11 +197,12 @@ func TestEveryListFunctionHonoursASlicedList(t *testing.T) {
 	}
 
 	// Anti-vacuity, on the three things that could quietly stop being true.
-	// 37 in the two blocks since step 281, but list.item, which refuses these lists.
-	if len(reached) < 36 {
-		t.Errorf("only %d list functions were reached; the enum declares 37, and all but item run", len(reached))
+	// 38 in the two blocks since step 286's list.hist, but list.item, which refuses
+	// these lists.
+	if len(reached) < 37 {
+		t.Errorf("only %d list functions were reached; the enum declares 38, and all but item run", len(reached))
 	}
-	if compared < 36*len(listWindows) {
+	if compared < 37*len(listWindows) {
 		t.Errorf("only %d comparisons ran", compared)
 	}
 	// The fixture property this whole file exists for, stated exactly.

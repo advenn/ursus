@@ -342,6 +342,9 @@ func (s *windowSink) finishOrdered(ctx context.Context, sp *winSpec,
 			}
 		}
 	}
+	if sp.fn.Fn == expr.WinCumulativeEval {
+		return cumulativeEval(ctx, sp.fn.Params, sp.name, sp.out, child, seg)
+	}
 	return kernel.WinCall(sp.fn.Fn, sp.fn.Params, sp.name, sp.out, child, fill, seg)
 }
 

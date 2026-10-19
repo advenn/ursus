@@ -461,6 +461,9 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 	expr.FnListMode:        {{args: []any{true}}},
 	expr.FnListValueCounts: {{label: ",sorted", args: []any{true, false, "count", "v"}},
 		{label: ",shares", args: []any{false, true, "proportion", "v"}}},
+	// Step 286: list.hist by a bin count, and by edges with both includes.
+	expr.FnListHist: {{label: ",3 bins", args: []any{int64(3), false, false}},
+		{label: ",edges", args: []any{int64(-1), true, true, 0.0, 2.0, 5.0}}},
 	expr.FnStrContainsAny: {{args: []any{[]string{"1", "a"}, false}}},
 	expr.FnStrReplaceMany: {{args: []any{[]string{"1", "a"}, []string{"x"}, false, false}}},
 	expr.FnStrExtractMany: {{args: []any{[]string{"1", "a"}, false, false, false}}},
