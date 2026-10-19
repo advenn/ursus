@@ -209,7 +209,7 @@ differs from their input's, or scalars outside a group-by.
 | --- | --- |
 | built: `unique(keep=)` with `maintain_order=True`, as `UniqueKeep`, in step 289 | — |
 | **A frame `fill_null` strategy's `limit`** (the strategies were built at step 249); frame `null_count`, `sum`, `mean`, `median`, `min`, `max`, `std`, `var`, `quantile`, `product`, `shift`, `first`, `last` shortcuts | P0/P1 |
-| `slice` with a negative offset | P0 |
+| built: `slice` with a negative offset, in step 291 | — |
 | **`cast` of a frame** (a map of columns, or by dtype); `match_to_schema` | P1 |
 | **`sample`, `shuffle`** (fraction or n, seed) | P1 |
 | **`partition_by`** into frames | P1 |

@@ -463,6 +463,7 @@ func TestListReshapeEdges(t *testing.T) {
 		ursus.Col("tags").List().Slice(1, 99).Alias("rest"),
 		ursus.Col("tags").List().Slice(9, 2).Alias("past"),
 		ursus.Col("tags").List().Slice(-99, 2).Alias("before"),
+		ursus.Col("tags").List().Slice(-4, 2).Alias("cut"),
 	).Collect(t.Context(), ursus.WithVerify())
 	if err != nil {
 		t.Fatal(err)
@@ -479,7 +480,10 @@ func TestListReshapeEdges(t *testing.T) {
 		{"back", elems(20)},        // -2 is measured from the end
 		{"rest", elems(20, 30)},    // a length past the end stops there
 		{"past", nil},              // an offset past the end selects nothing
-		{"before", elems(10, 20)},  // an offset before the start clamps to it
+		// An offset before the start cuts the length by as much, as Polars' does
+		// (step 291): it clamped to the start, keeping the whole length, until then.
+		{"before", nil},
+		{"cut", elems(10)},
 	} {
 		checkList(t, df, c.col, 0, lrow{vals: c.want, ok: true})
 	}

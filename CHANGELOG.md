@@ -17,11 +17,27 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–290, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–291, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
+### Breaks
+
+- **A slice whose window starts before the first element is cut by as much,** as
+  every Polars slice is (291): `Str().Slice(-7, 2)` of `"012345"` is `"0"`, and
+  `List().Slice(-99, 2)` of three elements is none. Both clamped the start to the
+  first element and kept the whole length.
+
+### Fixes
+
+- **The expression `Slice` in a `Select`** kept a row too many where its window began
+  before the first row, `Slice(-7, 2)` of six rows two (291); and in an aggregation, a
+  negative length, "to the end", failed.
+
 ### Features
+
+- **`Slice` with a negative offset** (291), counted from the end as Polars counts it:
+  `Slice(-3, 2)` is the last three rows' first two. It holds the rows `Tail` holds.
 
 - **Duplicates over several columns** (290): `IsDuplicated(exprs...)` and
   `IsUnique(exprs...)`, a Boolean a row; `DataFrame.IsDuplicated` and `IsUnique` of

@@ -121,7 +121,9 @@ func (s StrExpr) LenBytes() Expr { return s.call(expr.FnStrLenBytes) }
 func (s StrExpr) LenChars() Expr { return s.call(expr.FnStrLenChars) }
 
 // Slice takes length runes from offset, which may be negative to count from the
-// end. Runes rather than bytes, so it can never split a character in half.
+// end. Runes rather than bytes, so it can never split a character in half. The
+// window is clipped as Polars clips it: a start before the first rune cuts the
+// length by as much, so (-7, 2) of "012345" is "0" (step 291).
 func (s StrExpr) Slice(offset, length int) Expr {
 	return s.call(expr.FnStrSlice, int64(offset), int64(length))
 }

@@ -311,9 +311,8 @@ func TestFrameOpRefusals(t *testing.T) {
 		kind error
 		want string
 	}{
-		{"negative slice offset", func() *ursus.LazyFrame {
-			return frame().Slice(-1, 2)
-		}, uerr.ErrValue, "must not be negative"},
+		// A negative slice offset was refused here until step 291, which counts it
+		// from the end (negslice_test.go).
 		{"top-k with no keys", func() *ursus.LazyFrame {
 			return frame().TopK(3)
 		}, uerr.ErrValue, "at least one sort key"},

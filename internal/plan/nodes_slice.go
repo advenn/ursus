@@ -52,9 +52,18 @@ func (s *Slice) Label() string {
 // the last N is unknown until the input ends. It holds a ring of the most recent N
 // rows — O(N) memory, not O(input), so it is bounded but not free, and it is the
 // only operator here that buffers.
+//
+// # A slice from the end (step 291)
+//
+// With Limited it keeps only the first Len of those rows, fewer by as many as the
+// input falls short of N: Polars' slice(-N, Len), rows [height-N, height-N+Len) of the
+// input, clipped to it. So of six rows, N 7 and Len 2 keep row 0 alone, as the window
+// starts a row before the input does.
 type Tail struct {
-	Input Node
-	N     int
+	Input   Node
+	N       int
+	Limited bool
+	Len     int
 }
 
 func (t *Tail) planNode()        {}
@@ -70,7 +79,12 @@ func (t *Tail) WithChildren(kids []Node) Node {
 }
 
 func (t *Tail) Schema() (*dtype.Schema, error) { return t.Input.Schema() }
-func (t *Tail) Label() string                  { return "TAIL " + strconv.Itoa(t.N) }
+func (t *Tail) Label() string {
+	if t.Limited {
+		return "TAIL " + strconv.Itoa(t.N) + " len " + strconv.Itoa(t.Len)
+	}
+	return "TAIL " + strconv.Itoa(t.N)
+}
 
 // Reverse emits rows in the opposite order.
 //

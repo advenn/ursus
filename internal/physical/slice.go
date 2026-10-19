@@ -106,7 +106,8 @@ func planTail(ctx context.Context, t *plan.Tail, opts Options) (Operator, error)
 	if err != nil {
 		return nil, err
 	}
-	return &tailOp{child: child, n: t.N, mem: opts.Budget.Account("tail"), budget: opts.Budget}, nil
+	return &tailOp{child: child, n: t.N, limited: t.Limited, take: t.Len,
+		mem: opts.Budget.Account("tail"), budget: opts.Budget}, nil
 }
 
 func planReverse(ctx context.Context, r *plan.Reverse, opts Options) (Operator, error) {

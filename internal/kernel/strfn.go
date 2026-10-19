@@ -335,27 +335,19 @@ func applyStr(fn expr.CallFn, s string, args []any, re *regexp.Regexp) (string, 
 		// Offsets are in RUNES and may be negative, counting from the end — the
 		// convention every dataframe library uses, and the one that does not split
 		// a multi-byte character in half.
+		// The window is sliceWindow's, Polars' rule: a start before the first rune
+		// cuts the length by as much (step 291).
 		r := []rune(s)
 		off, _ := argInt(args, 0)
 		length, hasLen := argInt(args, 1)
-		start := int(off)
-		if start < 0 {
-			start += len(r)
+		if hasLen && length < 0 {
+			return "", true
 		}
-		start = max(0, min(start, len(r)))
-		end := len(r)
-		if hasLen {
-			if length < 0 {
-				return "", true
-			}
-			// Compared in int64 before adding: start+length wrapped for a length
-			// near MaxInt64 — Slice(1, math.MaxInt64), "to the end" — and the
-			// negative end panicked. listSlice has always compared this way.
-			if length < int64(len(r)-start) {
-				end = start + int(length)
-			}
+		if !hasLen {
+			length = -1
 		}
-		return string(r[start:end]), true
+		lo, hi := sliceWindow(int64(len(r)), off, length)
+		return string(r[lo:hi]), true
 
 	default:
 		return "", false

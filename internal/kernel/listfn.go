@@ -295,12 +295,35 @@ func listEnds(fn expr.CallFn, name string, c *data.Column, args []any) (*data.Co
 	})
 }
 
-// listSlice takes a sub-range of each row.
-//
-// The clamping is str.slice's, deliberately: a negative offset counts from the
-// end, an offset past either edge clamps into range, and a length running past
-// the end stops there. Two slice operations in one library that disagreed about
-// the edges would be worse than either rule alone.
+// sliceWindow is the elements [lo, hi) of n that a slice by off and length keeps,
+// by Polars' rule, which its frame, expression, string, binary and list slices
+// share: a negative offset counts from the end, and the window [off, off+length) is
+// clipped to [0, n), so a start before the first element cuts the length by as much.
+// Of six, (-7, 2) is element 0 alone and (-10, 2) none. A negative length is the
+// rest. Until step 291 the string and list slices clamped the start into range and
+// kept the whole length, so (-7, 2) was two elements.
+func sliceWindow(n, off, length int64) (lo, hi int64) {
+	lo = off
+	if lo < 0 {
+		lo += n
+	}
+	hi = n
+	if length >= 0 {
+		// Compared before adding: a length near MaxInt64, "to the end", would wrap.
+		if lo < 0 {
+			length = max(0, length+lo)
+		}
+		if length < n-max(lo, 0) {
+			hi = max(lo, 0) + length
+		}
+	}
+	lo = max(0, min(lo, n))
+	return lo, max(lo, min(hi, n))
+}
+
+// listSlice takes a sub-range of each row, by sliceWindow's rule, as str.slice and
+// bin.slice do: two slice operations in one library that disagreed about the edges
+// would be worse than either rule alone.
 func listSlice(name string, c *data.Column, args []any) (*data.Column, error) {
 	off, ok := argInt(args, 0)
 	length, hasLen := argInt(args, 1)
@@ -312,17 +335,8 @@ func listSlice(name string, c *data.Column, args []any) (*data.Column, error) {
 			"list.slice(%d, %d): the length cannot be negative", off, length)
 	}
 	return listRebuild(name, c, func(start, end int32, out []int32) []int32 {
-		n := int64(end - start)
-		at := off
-		if at < 0 {
-			at += n
-		}
-		at = max(0, min(at, n))
-		stop := n
-		if length < n-at {
-			stop = at + length
-		}
-		for e := start + int32(at); e < start+int32(stop); e++ {
+		lo, hi := sliceWindow(int64(end-start), off, length)
+		for e := start + int32(lo); e < start+int32(hi); e++ {
 			out = append(out, e)
 		}
 		return out

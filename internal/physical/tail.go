@@ -32,6 +32,10 @@ import (
 type tailOp struct {
 	child Operator
 	n     int
+	// limited keeps only the first take of the last n rows, fewer by as many as the
+	// input fell short of n: a slice from the end (step 291).
+	limited bool
+	take    int
 
 	pieces []tailPiece // in input order; only the last holds batches
 	held   int         // rows across every piece
@@ -124,6 +128,10 @@ func (t *tailOp) drain(ctx context.Context) error {
 		return nil
 	}
 	t.out = &tailOut{t: t, skip: max(t.held-t.n, 0)}
+	if t.limited {
+		kept := min(t.n, t.held)
+		t.out = &limitOp{child: t.out, remaining: max(t.take-(t.n-kept), 0)}
+	}
 	return nil
 }
 

@@ -326,6 +326,9 @@ func EstimateRows(n Node) (int64, bool) {
 		return min(in, int64(t.N)), ok
 	case *Tail:
 		in, ok := EstimateRows(t.Input)
+		if t.Limited {
+			return min(in, int64(t.N), int64(max(t.Len, 0))), ok
+		}
 		return min(in, int64(t.N)), ok
 	case *Join:
 		l, lok := EstimateRows(t.Left)

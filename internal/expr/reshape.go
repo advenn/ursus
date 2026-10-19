@@ -416,7 +416,13 @@ func lowerReshape(r *Reshape) Node {
 	case ReshapeTail:
 		return &Call{Fn: FnListTail, Args: []Node{list, arg(0)}}
 	case ReshapeSlice:
-		return &Call{Fn: FnListSlice, Args: []Node{list, arg(0), arg(1)}}
+		// A negative length is the frame's "to the end", which list.slice spells as
+		// the longest length.
+		length := arg(1)
+		if r.Args[1] < 0 {
+			length = &Lit{Value: int64(math.MaxInt64), DT: dtype.Int64}
+		}
+		return &Call{Fn: FnListSlice, Args: []Node{list, arg(0), length}}
 	case ReshapeReverse:
 		return &Call{Fn: FnListReverse, Args: []Node{list}}
 	case ReshapeUnique:

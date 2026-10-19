@@ -313,15 +313,11 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 	case expr.ReshapeTail:
 		out = p.lf.Tail(int(arg[0]))
 	case expr.ReshapeSlice:
-		// A negative offset counts from the end, as Polars' slice does.
-		if off := int(arg[0]); off < 0 {
-			out = p.lf.Tail(-off)
-			if arg[1] >= 0 {
-				out = out.Head(int(arg[1]))
-			}
-		} else {
-			out = p.lf.Slice(off, int(arg[1]))
-		}
+		// A negative offset counts from the end, as Polars' slice does, the window
+		// clipped to the rows: Slice's own rule since step 291. It was Tail(-offset)
+		// and then Head, which kept a row too many where the window began before the
+		// first.
+		out = p.lf.Slice(int(arg[0]), int(arg[1]))
 	case expr.ReshapeReverse:
 		out = p.lf.Reverse()
 	case expr.ReshapeUnique:

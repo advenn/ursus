@@ -135,15 +135,19 @@ func (lf *LazyFrame) DropNulls(subset ...string) *LazyFrame {
 // Slice keeps length rows starting at offset. A negative length means "to the end",
 // which is how you drop a prefix without knowing the height.
 //
-// Streaming: it counts rows past and stops, so it never holds more than one batch.
+// A negative offset counts from the end, as Polars' does (step 291): the rows
+// [height+offset, height+offset+length), clipped to the frame. Slice(-3, 2) of six
+// rows is rows 3 and 4; Slice(-7, 2) is row 0 alone, the window starting a row before
+// the frame; Slice(-10, 2) is no row.
+//
+// Streaming: from the start it counts rows past and stops, so it never holds more
+// than one batch; from the end it holds the last -offset rows, as Tail does.
 func (lf *LazyFrame) Slice(offset, length int) *LazyFrame {
 	if lf.err != nil {
 		return lf
 	}
 	if offset < 0 {
-		return &LazyFrame{err: uerr.New(uerr.KindValue, "slice",
-			"offset must not be negative, got %d", offset).
-			Hint("use Tail(n) to take rows from the end")}
+		return lf.derive(&plan.Tail{Input: lf.node, N: -offset, Limited: length >= 0, Len: length})
 	}
 	return lf.derive(&plan.Slice{Input: lf.node, Offset: offset, Len: length})
 }

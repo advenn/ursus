@@ -200,9 +200,10 @@ func (l ListExpr) Tail(n int) Expr { return l.call(expr.FnListTail, int64(n)) }
 
 // Slice takes length elements from offset.
 //
-// A negative OFFSET counts from the end, matching Get and `.str.slice`; the
-// clamping is `.str.slice`'s too, so an offset past either edge lands in range and
-// a length running off the end stops there. A negative length is refused.
+// A negative OFFSET counts from the end, matching Get and `.str.slice`, and the window
+// is clipped to the list as Polars clips it: a start before the first element cuts
+// the length by as much, so (-7, 2) of six elements is the first alone. A length
+// running off the end stops there. A negative length is refused.
 func (l ListExpr) Slice(offset, length int) Expr {
 	return l.call(expr.FnListSlice, int64(offset), int64(length))
 }
