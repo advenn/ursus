@@ -15,11 +15,41 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.6.6
+## v0.6.6 — 2026-10-19
 
-Everything since `v0.6.5` (2026-10-15): steps 262–286, so far.
+Everything since `v0.6.5` (2026-10-15): steps 262–287.
 [`v0.6.6-scope.md`](./context_files/v0.6.6-scope.md) set the scope: **feature
-completeness, part 2 — namespaces and generators.**
+completeness, part 2 — namespaces and generators.** Frame operations are 0.6.7 and
+I/O 0.6.8; [`feature-gaps.md`](./context_files/feature-gaps.md) lists what is
+missing. Step 287 checked the whole.
+
+### Where it ends
+
+- **Polars' namespaces and generators:**
+  - generators, temporal ranges and values from their components; folds; selection by
+    position; `List().Eval`;
+  - the `.list`, `.str` and `.dt` methods that were missing, `.cat` on an Enum,
+    `.bin`, and struct fields of several names;
+  - the statistics, integers as bits, search, hashing and counts of values, run
+    lengths and sequences, and rounding modes;
+  - rolling skew, kurtosis, rank, cov and corr, `ewm_sum` and the ewms by time,
+    `hist` and `cumulative_eval`.
+- **Each answers as Polars 1.44.1 does,** checked against its answers on the same
+  inputs.
+  - Many hold to the bit, the rounding, the moments, the ewms and `hist` ported from
+    Polars' own source.
+  - The exceptions: `Hash`, `Sample` and `ApproxNUnique`, which cannot, and the
+    differences `feature-gaps.md` §9 records.
+- **Each spills or streams where its pieces do.** A per-row function streams a batch
+  at a time, a reshape in a `Select` spills through the frame operator it is written
+  in, and an aggregate spills with the group-by. The rolling and ewm functions stream
+  over one partition. What refuses under a limit is listed below.
+- **Nothing the benchmarks run changed:**
+  - the optimized plans of the 22 PDS-H and 15 h2o queries are byte-identical to
+    v0.6.5's, once step 287 named `Len()` without the Alias node that showed in
+    gb9's plan. So no timing ran, and 0.6.4's figures stand.
+  - Every PDS-H answer at SF=0.1, at every step, and every h2o answer at 10,000,000
+    rows over Parquet match DuckDB's.
 
 ### Breaks
 
@@ -122,9 +152,36 @@ completeness, part 2 — namespaces and generators.**
 - **A list's eval over an aggregate in a `Select`,**
   `Col("a").Implode().List().Eval(...)`, failed as an internal error (271).
 - **`Len()` is named `len`,** as Polars' `pl.len()` is; in most plans it was named
-  `literal` (273). `Alias` of an alias now replaces the name, so `Len().Alias("n")` is
-  unchanged.
+  `literal` (273). `Alias` of an alias now replaces the name. Since step 287 the
+  name is `OutputName`'s, not an Alias node's, so every plan that holds `Len()`
+  renders as at v0.6.5.
 - **`Unnest().Suffix(...)` keeps its suffix** (275); each field's name undid it.
+
+### Known limitations
+
+As v0.6.5's, except:
+
+- **Refused under a memory limit,** each by name:
+  - `CorrSpearman` and `Mode` in a group-by past the limit: their per-group pairs and
+    values do not spill;
+  - `RleID` and `Rle` over a partition larger than the limit;
+  - `SampleN`, `SampleFraction`, `Shuffle` and `Hist` in a `Select`, which implode
+    the column, as implode refuses;
+  - `CumulativeEval` over a partition larger than the limit;
+  - a generator whose argument is an aggregate of the frame, beside a string column,
+    such as `WithColumns(IntRange(0, Len(), 1))`. `WithRowIndex` streams.
+- **Last bits:**
+  - a rolling var, std, skew, kurtosis, cov or corr streamed under a limit can differ
+    from the answer in memory;
+  - a float aggregate's depend on the thread count, `Sum`'s and `Var`'s as the new
+    moments'; a spilled run is the one-thread run's.
+- **Refused where Polars answers:**
+  - a window inside a window, `Col("a").Shift(1).CumSum()`;
+  - an aggregate inside an aggregate's input;
+  - `CumulativeEval` in `GroupBy(...).Agg`, as every window is.
+- **`.arr` waits for an Array type,** in a release of types after I/O.
+- **A count reads every column:** `Select(Len())` over Parquet projects them all;
+  Polars reads none.
 
 ---
 

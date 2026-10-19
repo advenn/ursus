@@ -53,6 +53,8 @@ Fix these before anything new. **Step 249 fixed every row** (see its record).
 
 | what | where | |
 | --- | --- | --- |
+| **A generator whose argument is an aggregate of the frame refuses under a memory limit beside a string column.** `WithColumns(IntRange(0, Len(), 1))` stacks the frame beside the generator's branch, a keyless aggregate that reads all its input before it answers, so the frame's side is held meanwhile; at the limit the aggregate, with nothing to spill, refuses, rather than the stack spilling what it holds. An int-only frame's rows are the scan's own buffers, uncharged, so it never showed. A literal end streams, and so does `WithRowIndex` (found at step 287). | internal/physical, the stack and the budget | **refusal** |
+| **A float aggregate's last bits depend on the thread count.** Its partial states merge in an order the threads set: of eight probed by key, `Sum`, `Mean`, `Var`, `Std`, `Skew`, `Kurtosis` and `Entropy` differ between one thread and eight, and `Corr` does not. A spilled run equals the one-thread run to the bit. Row order is deterministic, as §10 says (found at step 287). | the accumulators' Merge | **not bit-exact** |
 | **A streamed rolling var or std differs from the answer in memory in its last bits.** Over the whole frame under a memory limit, a window's state is rebuilt from each batch's history rows, so its periodic recompute falls at other rows: 35–52% of rows over `sin(i)·1000`. Step 284's skew, kurtosis, cov and corr do too. The streaming test's floats are quarters, whose sums are exact, so it never showed. The fix is to carry the kernel's state across batches, as an ewm's is (found at step 284). | internal/physical/winstream.go, internal/kernel/rolling.go | **not bit-exact** |
 | **`Rank` ranks a null, as the smallest value;** Polars leaves a null's rank null and ranks the rest among themselves. `[5, null, 4]` ranks `[3, 1, 2]` here and `[2, None, 1]` there, in a window and in `List().Eval` alike (found at step 268). | internal/kernel/window.go `winRank`, and the streamed rank (`RankNext`) | **wrong answer** |
 
@@ -190,6 +192,7 @@ differs from their input's, or scalars outside a group-by.
 | **Statistics:** built: `hist` in step 286; `skew`, `kurtosis` and `approx_n_unique` in step 276; `entropy`, `mode` and Spearman `corr` in step 277 | P1 |
 | **Search and hashing:** built: `dot` in step 276; `search_sorted`, `index_of`, `hash`, `peak_min` and `peak_max` in step 279, a search's value a Go value only; `unique_counts` and `value_counts` on an expression in step 280 | — |
 | **A window inside a window:** `Col("a").Shift(1).CumSum()` is refused, "compute the inner window into a column with WithColumns first"; Polars nests them (found at step 281) | P1 |
+| **Holistic aggregates that do not spill:** `CorrSpearman`'s pairs and `Mode`'s values, a group's, refuse in a group-by past the limit, where `Median`, `Quantile` and `NUnique` spill theirs (found at step 287) | P1 |
 | **An aggregate inside an aggregate's input:** `Col("a").Sub(Col("a").Mean()).Abs().Sum()` is refused, in a `Select` or an `Agg`, as "not an aggregate"; Polars takes it (found at step 279) | P1 |
 | **Integers as bits:** built: `& \| ^ ~` of integers in step 278, the `bitwise_and/or/xor` aggregates in step 276. Polars has no shifts | — |
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
@@ -240,6 +243,7 @@ These belong to a performance release more than to features.
 | --- | --- |
 | **`profile()` / EXPLAIN ANALYZE:** each operator's time and rows; a physical-plan explain; `Explain` honouring `OptFlags` | P1 |
 | **Slice pushdown** past projections, unions and joins, and of an offset slice | P1 |
+| **A count reads every column:** `Select(Len())` over a Parquet scan projects all of them, where Polars reads none (found at step 287) | P1 |
 | **Predicate pushdown through group-by keys and window partition keys** | P1 |
 | **Expression-level CSE;** clustering of `with_columns`; dropping a computed column nothing reads | P1 |
 | **Multi-join reordering** on statistics; sortedness propagation and a merge join | P2 |
@@ -336,6 +340,7 @@ A completeness release should keep these intact:
 - spilling for every blocking operator, with bit-exact answers but a streamed rolling
   var, std, skew, kurtosis, cov or corr (§1);
 - a memory budget on by default;
-- order-deterministic output at any thread count;
+- order-deterministic output at any thread count, but a float aggregate's last bits
+  (§1);
 - `ursustest` with golden plans;
 - validation of every benchmark answer against DuckDB.

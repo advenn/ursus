@@ -563,8 +563,10 @@ func (e Expr) aggP(op expr.AggOp, p expr.AggParams) Expr {
 // It aggregates over a literal rather than a column, because counting rows must
 // not depend on any column existing: `GroupBy(k).Agg(Len())` has to work on a frame
 // whose only column is the key. It is named "len", as Polars' pl.len() is; the
-// literal's name, "literal", showed through in some plans until step 273.
-func Len() Expr { return Lit(int64(1)).Len().Alias("len") }
+// literal's name, "literal", showed through in some plans until step 273. The name is
+// OutputName's (step 287): an Alias node here rendered inside a cast, so h2o's gb9
+// planned other than at v0.6.5.
+func Len() Expr { return Lit(int64(1)).Len() }
 
 // --- sort keys ----------------------------------------------------------------
 

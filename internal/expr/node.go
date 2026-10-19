@@ -146,6 +146,13 @@ func OutputName(n Node) string {
 		if t.Fn == FnStructField && len(t.Args) > 0 {
 			return CallOutputName(t, OutputName(t.Args[0]))
 		}
+	case *Agg:
+		// A count of rows, len() of a literal, is "len", as Polars' pl.len() is
+		// (steps 273 and 287): named here, not by an Alias node, so a plan that wraps
+		// Len() in a cast renders as it did before it was named.
+		if _, ok := t.Child.(*Lit); ok && t.Op == AggLen {
+			return "len"
+		}
 	case *Cond:
 		// Named after the VALUE, not the test. Leftmost-column-wins would otherwise
 		// pick the condition's column, so
