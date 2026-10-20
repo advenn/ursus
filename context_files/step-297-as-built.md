@@ -87,7 +87,22 @@ first looked as though the output schema depended on whether a column held a nul
 It did not: `Values` builds columns the schema says cannot hold one, and those are
 left alone.
 
-## 4. Tests and teeth
+## 5. The 0.6.6 version
+
+The eight chapters of steps 296 and 297 went to the `docs-0.6.6` branch as step 295's
+four did (`a5bf069`).
+
+- **Names:** every name they put in code type exists at v0.6.6. The check found none
+  missing, once it counted struct fields and `iota` constants.
+- **The examples pass against `git archive v0.6.6`,** but for the two that print
+  "Zoë": v0.6.6 pads a cell by bytes, step 296's bug.
+  - Their outputs on the branch are v0.6.6's, a column short, refilled from its own
+    printer.
+  - The strings page says so in a note: 0.6.7 aligns it.
+- **Published:** a manual run published 0.6.6 as `latest` from the branch. Both
+  versions' guides are live.
+
+## 6. Tests and teeth
 
 **The width test caught three lines** in this step's examples before a page was built:
 `TestTheExamplesFitThePage` in the gate, as step 296 meant.
