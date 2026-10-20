@@ -136,5 +136,6 @@ published.
    - the repository's description, topics and homepage;
    - Pages switched on;
    - v0.6.6 and `dev` published.
-2. **the user guide,** a few chapters a step.
+2. **the user guide,** a few chapters a step: steps 295 to 297 wrote its twelve
+   chapters.
 3. **0.6.7's frame operations** go on between them, as the maintainer directs.

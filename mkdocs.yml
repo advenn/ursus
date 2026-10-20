@@ -143,6 +143,10 @@ nav:
       - Strings: guide/strings.md
       - Lists and structs: guide/lists-and-structs.md
       - Dates and times: guide/dates-and-times.md
+      - Missing data: guide/missing-data.md
+      - Go values in and out: guide/go-values.md
+      - Go functions: guide/go-functions.md
+      - CSV, Parquet and Arrow: guide/io.md
   - Benchmarks: benchmarks.md
   - Reference:
       - API reference: reference/api.md

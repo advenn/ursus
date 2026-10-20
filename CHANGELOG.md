@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–296, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–297, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -44,8 +44,9 @@ completeness, part 3 — frame operations.**
   a quick start, the concepts, a page for Polars users and the benchmarks, versioned
   by release from 0.6.6 on. Every code block on it is an example in `docs/examples`
   that `go test` runs. Its user guide has chapters on selecting and filtering,
-  aggregation, window functions and joins (295), and on reshaping, strings, lists and
-  structs, and dates and times (296).
+  aggregation, window functions and joins (295); reshaping, strings, lists and
+  structs, and dates and times (296); and missing data, Go values in and out, Go
+  functions, and CSV, Parquet and Arrow (297).
 - **Row shortcuts** (293): a frame's `Shift`, `ShiftFill`, `GatherEvery`, `Clear`,
   `First` and `Last`; `DataFrame.IsEmpty` and `Equals(other, nullEqual)`.
 - **A frame's sample** (292): `SampleN`, `SampleFraction` and `Shuffle` on both frames,

@@ -70,4 +70,32 @@ orders, its dates read as dates, unless a chapter says otherwise:
     Parsing, calendar arithmetic, time zones, ranges, and groups by day, week or a
     rolling period.
 
+-   :material-help-rhombus-outline:{ .lg .middle } **[Missing data](missing-data.md)**
+
+    ---
+
+    Counting nulls, filling them from a value or the neighbours, coalescing,
+    interpolating, and dropping.
+
+-   :material-language-go:{ .lg .middle } **[Go values in and out](go-values.md)**
+
+    ---
+
+    Frames from Go slices, typed columns as Series, rows into structs, and streaming
+    an answer a batch at a time.
+
+-   :material-function:{ .lg .middle } **[Go functions](go-functions.md)**
+
+    ---
+
+    Go functions inside a query, a value or a batch at a time, with nulls, errors and
+    concurrency.
+
+-   :material-file-table:{ .lg .middle } **[CSV, Parquet and Arrow](io.md)**
+
+    ---
+
+    Scans and their options, globs, object storage, pushdown into Parquet, sinks, and
+    Arrow in and out.
+
 </div>

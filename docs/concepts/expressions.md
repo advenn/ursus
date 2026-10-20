@@ -82,8 +82,8 @@ and a float constant a `Float64`, so `Col("a").Add(3)` of an `Int32` column is a
 `Int64` column, and `Col("f").Mul(2.5)` of a `Float32` one a `Float64`. Write
 `Add(int32(3))` to stay at `Int32`. Polars' literals take the column's type instead.
 The fills are the exception: `FillNullWith`, `FillNan` and their kin meet the column,
-so `FillNullWith(0)` of an `Int32` column stays `Int32`, and only a float fill
-widens an integer column.
+so `FillNullWith(0)` of an `Int32` column stays `Int32`, and only a fill with a
+fraction widens an integer column.
 
 ## Names
 
