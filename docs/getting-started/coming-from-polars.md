@@ -122,6 +122,12 @@ These are deliberate, and each is documented beside the method:
 - **`Div` and `Pow` always give a float.**
 - **An expression is named after its leftmost column.** `Col("a").Alias("x").Add(1)`
   is `x` in Polars and `a` here: put the alias last.
+- **`Remove` drops a row whose condition is null,** as `Filter` does; Polars'
+  `remove` keeps it.
+- **`GroupByDynamic` keeps empty windows,** a row of `Len` 0 for a period with no
+  rows; Polars leaves them out.
+- **`ToInteger`, `ToDate` and `ToDatetime` give null for what does not parse;**
+  Polars' fail by default.
 - **`Cut` and `Hist` give text,** where Polars gives a Categorical, which ursus does not
   have yet.
 - **A `Time` takes a unit,** where Polars' is nanoseconds.

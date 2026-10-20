@@ -260,11 +260,37 @@ func mainProgram(code string, paths []string) (string, error) {
 func fragment(lang, code, output string) string {
 	var b strings.Builder
 	b.WriteString("```" + lang + "\n" + code + "\n```\n")
-	if output != "" {
+	switch {
+	case output == "":
+	case wraps(output):
+		b.WriteString("\n```{.text .wrap title=\"Output\"}\n" + output + "\n```\n")
+	default:
 		b.WriteString("\n```text title=\"Output\"\n" + output + "\n```\n")
 	}
 	return b.String()
 }
+
+// pageWidth is how many columns a code block shows at the site's width.
+const pageWidth = 84
+
+// wraps reports whether an output is prose wider than the page, an error message or
+// a schema, which the site wraps rather than scrolls. A printed frame never wraps: a
+// table broken across lines is no table, so it scrolls instead.
+func wraps(output string) bool {
+	if strings.Contains(output, "│") {
+		return false
+	}
+	for _, l := range strings.Split(output, "\n") {
+		if displayWidth(l) > pageWidth {
+			return true
+		}
+	}
+	return false
+}
+
+// displayWidth is a line's width in runes, as the site's monospace font draws the
+// examples' output.
+func displayWidth(s string) int { return len([]rune(s)) }
 
 // repoLink is a Markdown link into the repository, relative to its root.
 var repoLink = regexp.MustCompile(`\]\(\./([^)\s]*)\)`)
