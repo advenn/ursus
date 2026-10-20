@@ -15,6 +15,10 @@ coverage.txt
 cpu.prof
 mem.prof
 
+# The documentation site's generated fragments and its build (make docs-build)
+docs/.snippets/
+site/
+
 # macOS
 .DS_Store
 

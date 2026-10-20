@@ -1,7 +1,18 @@
 # ursus
 
-A (experimental) dataframe library for Go 1.27, modelled on Polars — lazy execution with a query optimizer, Arrow memory layout, SIMD
-kernels, and streaming execution that spills to disk rather than falling over. Sort, group-by, join, unique, every
+[![Go Reference](https://pkg.go.dev/badge/github.com/advenn/ursus.svg)](https://pkg.go.dev/github.com/advenn/ursus)
+[![CI](https://github.com/advenn/ursus/actions/workflows/ci.yml/badge.svg)](https://github.com/advenn/ursus/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-advenn.github.io%2Fursus-1f2d3d)](https://advenn.github.io/ursus/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
+**ursus is a dataframe library for Go (Golang), modelled on Polars** — lazy execution with a query optimizer, Apache
+Arrow memory, SIMD kernels, and streaming execution that spills to disk rather than falling over. Pure Go, no cgo;
+experimental, at 0.6.
+
+**Documentation: [advenn.github.io/ursus](https://advenn.github.io/ursus/)** — a quick start, the concepts, a guide for
+Polars users, versioned by release, with every example run by the test suite.
+
+Sort, group-by, join, unique, every
 window function and the temporal groups spill or stream — by default once a query holds half the memory its container or
 machine allows, on Linux, macOS and Windows — and an
 operator that cannot spill fails with an error naming itself. Under that default budget ursus also sets the Go runtime's
@@ -56,6 +67,10 @@ slower is more useful than none — for the sizes most services actually handle.
 ---
 
 ## Docs
+
+The guide is at **[advenn.github.io/ursus](https://advenn.github.io/ursus/)**: a quick start, the concepts, a page for
+Polars users, and benchmarks, versioned by release. Every code block on it is a Go example in
+[`docs/examples`](./docs/examples/) that `go test` runs, its output the one shown.
 
 The API reference is on **[pkg.go.dev](https://pkg.go.dev/github.com/advenn/ursus)**, generated from the source —
 nothing to host and nothing to keep in sync.

@@ -276,6 +276,10 @@ decide whether to keep or switch each one.
 - A float bound of `Clip` on an integer column promotes the column, as a fill value
   does; Polars casts the bound to the column's type, so `clip(2.5)` of an Int64 is 2
   there and 2.5 here (step 283).
+- A literal has its Go value's type: `Col("a").Add(3)` of an Int32 column is Int64,
+  and `Mul(2.5)` of a Float32 one Float64, where Polars' literal takes the column's
+  type. A fill meets the column, as Polars' does (`fill.go`'s weak literals).
+  Found writing the site's expressions page (step 294).
 - `Div` and `Pow` always return a float.
 - `Cut` returns String, not Categorical.
 - An expression's `TopK` and `BottomK` return a List.

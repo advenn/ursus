@@ -1,0 +1,111 @@
+name: docs
+
+# The documentation site (context_files/docs-site-scope.md §2), published with mike to
+# the gh-pages branch and served at https://advenn.github.io/ursus/:
+#
+#   - a push to master publishes `dev`, which search engines are asked not to index;
+#   - a v* tag publishes its version, 0.6.7 for v0.6.7, and moves `latest` to it;
+#   - a manual run publishes a version from any commit, as v0.6.6's was, built from
+#     the first site's pages.
+#
+# The site's examples run and the site builds strictly first, so a version whose
+# examples fail or whose links break is not published.
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'The version to publish, as the selector shows it: 0.6.6'
+        required: true
+      ref:
+        description: 'The commit or branch whose pages to build'
+        required: true
+        default: master
+      tag:
+        description: 'The tag its API reference and changelog links point at: v0.6.6'
+        required: true
+      latest:
+        description: 'Move latest to this version'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+# One publication at a time: each commits to gh-pages.
+concurrency:
+  group: docs
+  cancel-in-progress: false
+
+env:
+  GOEXPERIMENT: simd
+  GOAMD64: v3
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          check-latest: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install -r docs/requirements.txt
+
+      - name: which version
+        id: v
+        env:
+          EVENT: ${{ github.event_name }}
+          IN_VERSION: ${{ inputs.version }}
+          IN_TAG: ${{ inputs.tag }}
+          IN_LATEST: ${{ inputs.latest }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            version=$IN_VERSION ref=$IN_TAG latest=$IN_LATEST noindex=
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            version=${GITHUB_REF_NAME#v} ref=$GITHUB_REF_NAME latest=true noindex=
+          else
+            version=dev ref=master latest=false noindex=true
+          fi
+          case "$version" in
+            dev|[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "not a version: $version" >&2; exit 1 ;;
+          esac
+          { echo "version=$version"; echo "ref=$ref"; echo "latest=$latest"; echo "noindex=$noindex"; } >> "$GITHUB_OUTPUT"
+
+      - name: the examples
+        run: go test ./docs/examples/
+
+      - name: the fragments
+        env:
+          REF: ${{ steps.v.outputs.ref }}
+        run: go run ./internal/gen/docsite -ref "$REF"
+
+      - name: a strict build
+        env:
+          DOCS_NOINDEX: ${{ steps.v.outputs.noindex }}
+        run: mkdocs build --strict --site-dir "$RUNNER_TEMP/site"
+
+      - name: publish
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          LATEST: ${{ steps.v.outputs.latest }}
+          DOCS_NOINDEX: ${{ steps.v.outputs.noindex }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "$LATEST" = true ]; then
+            mike deploy --push --update-aliases --alias-type=copy "$VERSION" latest
+            mike set-default --push latest
+          else
+            mike deploy --push "$VERSION"
+          fi

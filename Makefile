@@ -90,6 +90,26 @@ riskgate:
 levels:
 	$(GO) run ./internal/gen/levels
 
+# The documentation site (context_files/docs-site-scope.md). `docs` writes the
+# fragments the pages include from docs/examples; `docs-serve` previews the site at
+# http://127.0.0.1:8000, and `docs-build` builds it into site/, refusing a broken
+# link or a missing fragment. Both need docs/requirements.txt's tools:
+# pip install -r docs/requirements.txt.
+DOCS_REF ?= master
+MKDOCS   ?= mkdocs
+
+.PHONY: docs
+docs:
+	$(GO) run ./internal/gen/docsite -ref $(DOCS_REF)
+
+.PHONY: docs-serve
+docs-serve: docs
+	$(MKDOCS) serve
+
+.PHONY: docs-build
+docs-build: docs
+	$(MKDOCS) build --strict
+
 # Use `go fmt`, never bare `gofmt`.
 #
 # `go fmt` shells out to the gofmt belonging to the toolchain go.mod selects.

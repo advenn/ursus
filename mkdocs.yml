@@ -1,0 +1,139 @@
+# The documentation site (context_files/docs-site-scope.md). Build it with
+# `make docs-serve`; .github/workflows/docs.yml publishes it with mike, a version a
+# release, at https://advenn.github.io/ursus/.
+
+site_name: ursus
+site_description: >-
+  ursus is a dataframe library for Go (Golang) modelled on Polars: lazy queries with a
+  query optimizer, Apache Arrow memory, SIMD kernels and out-of-core execution that
+  spills to disk, in pure Go with no cgo.
+site_url: https://advenn.github.io/ursus/
+repo_url: https://github.com/advenn/ursus
+repo_name: advenn/ursus
+edit_uri: edit/master/docs/
+copyright: Copyright &copy; 2026 advenn · MIT licence
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  language: en
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
+  icon:
+    repo: fontawesome/brands/github
+  font:
+    text: Inter
+    code: JetBrains Mono
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+
+plugins:
+  - search
+  - mike:
+      # Every version's canonical URL is its page in latest, so a search engine
+      # ranks one copy. The theme draws the version selector, which it does only
+      # while mike's version_selector is on; mike has none of its own for Material.
+      canonical_version: latest/
+
+extra:
+  version:
+    provider: mike
+    default: latest
+    alias: true
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/advenn/ursus
+    - icon: fontawesome/brands/golang
+      link: https://pkg.go.dev/github.com/advenn/ursus
+  # Whether search engines may index this build: the workflow sets it for dev.
+  noindex: !ENV [DOCS_NOINDEX, false]
+  # Google Search Console's token, when the maintainer has one.
+  google_site_verification: !ENV [DOCS_GOOGLE_VERIFICATION, ""]
+
+# The examples' Go, the theme's templates and the tools' pins live beside the pages,
+# not among them.
+exclude_docs: |
+  examples/
+  overrides/
+  requirements.txt
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      # internal/gen/docsite writes each example's code and output here.
+      base_path: [docs/.snippets]
+      check_paths: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+validation:
+  links:
+    absolute_links: info
+    unrecognized_links: warn
+    anchors: warn
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Quick start: getting-started/quickstart.md
+      - Coming from Polars: getting-started/coming-from-polars.md
+  - Concepts:
+      - Lazy and eager: concepts/lazy-and-eager.md
+      - Expressions: concepts/expressions.md
+      - Types and nulls: concepts/types-and-nulls.md
+      - Memory and spilling: concepts/memory.md
+  - Benchmarks: benchmarks.md
+  - Reference:
+      - API reference: reference/api.md
+      - Changelog: reference/changelog.md

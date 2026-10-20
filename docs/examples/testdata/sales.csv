@@ -1,0 +1,9 @@
+order_id,date,region,product,qty,price
+1,2026-01-03,north,apple,10,1.50
+2,2026-01-03,south,apple,4,1.50
+3,2026-01-04,north,pear,7,2.25
+4,2026-01-05,east,pear,2,2.25
+5,2026-01-05,south,fig,9,3.00
+6,2026-01-06,east,apple,12,1.50
+7,2026-01-07,north,fig,3,3.00
+8,2026-01-07,south,pear,6,2.25

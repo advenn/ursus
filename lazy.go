@@ -499,12 +499,13 @@ type MemoryStats struct {
 //
 // A query with no WithMemoryLimit is budgeted at half the memory it can have: the
 // smaller of its cgroup's limit — a container's, or a systemd slice's — and the
-// machine's RAM, on Linux. Half, because ursus's buffers are on the Go heap, which
+// machine's RAM on Linux, and the machine's RAM on macOS and Windows. Half, because ursus's buffers are on the Go heap, which
 // with GOGC=100 grows to about twice what is live before it collects. So a query
 // spills by default rather than growing until the kernel kills it, and an operator
 // that cannot spill fails at that point with an error naming itself. Collect also
 // refuses a result too large to hold: see Collect. WithMemoryLimit(0) turns the
-// budget off; elsewhere than Linux there is no default and it is off already.
+// budget off; on another system, where no memory can be read, there is no default
+// and it is off already.
 //
 // The heap's slack is the Go runtime's to bound, not the budget's. Under the default
 // budget ursus sets the Go soft memory limit too, to nine tenths of the same ceiling,

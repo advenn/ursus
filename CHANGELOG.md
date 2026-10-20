@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–293, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–294, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -30,12 +30,18 @@ completeness, part 3 — frame operations.**
 
 ### Fixes
 
+- **`WithMemoryLimit`'s doc** said the default budget is Linux's alone; it has been
+  macOS's and Windows's too since step 181 (294).
 - **The expression `Slice` in a `Select`** kept a row too many where its window began
   before the first row, `Slice(-7, 2)` of six rows two (291); and in an aggregation, a
   negative length, "to the end", failed.
 
 ### Features
 
+- **A documentation site** (294), [advenn.github.io/ursus](https://advenn.github.io/ursus/):
+  a quick start, the concepts, a page for Polars users and the benchmarks, versioned
+  by release from 0.6.6 on. Every code block on it is an example in `docs/examples`
+  that `go test` runs.
 - **Row shortcuts** (293): a frame's `Shift`, `ShiftFill`, `GatherEvery`, `Clear`,
   `First` and `Last`; `DataFrame.IsEmpty` and `Equals(other, nullEqual)`.
 - **A frame's sample** (292): `SampleN`, `SampleFraction` and `Shuffle` on both frames,

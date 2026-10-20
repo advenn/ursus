@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{#- The words people search for are in every title: "Joins - ursus: DataFrames for Go". -#}
+{% block htmltitle %}
+  {% if page.is_homepage %}
+    <title>ursus: a DataFrame library for Go (Golang), modelled on Polars</title>
+  {% elif page.meta and page.meta.title %}
+    <title>{{ page.meta.title }} - ursus: DataFrames for Go</title>
+  {% elif page.title %}
+    <title>{{ page.title | striptags }} - ursus: DataFrames for Go</title>
+  {% else %}
+    <title>{{ config.site_name }}</title>
+  {% endif %}
+{% endblock %}
+
+{% block extrahead %}
+  {% if config.extra.noindex %}
+    <meta name="robots" content="noindex">
+  {% endif %}
+  {% if config.extra.google_site_verification %}
+    <meta name="google-site-verification" content="{{ config.extra.google_site_verification }}">
+  {% endif %}
+  {% set description = page.meta.description if page.meta and page.meta.description else config.site_description %}
+  {% set title = "ursus: a DataFrame library for Go" if page.is_homepage else (page.title | striptags) ~ " - ursus" %}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="ursus">
+  <meta property="og:title" content="{{ title }}">
+  <meta property="og:description" content="{{ description }}">
+  {% if page.canonical_url %}
+    <meta property="og:url" content="{{ page.canonical_url }}">
+  {% endif %}
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ title }}">
+  <meta name="twitter:description" content="{{ description }}">
+  {% if page.is_homepage %}
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareSourceCode",
+        "name": "ursus",
+        "description": {{ config.site_description | tojson }},
+        "url": "https://advenn.github.io/ursus/",
+        "codeRepository": "https://github.com/advenn/ursus",
+        "programmingLanguage": {"@type": "ComputerLanguage", "name": "Go"},
+        "license": "https://opensource.org/licenses/MIT",
+        "keywords": ["go", "golang", "dataframe", "polars", "apache arrow", "parquet", "data analysis"]
+      }
+    </script>
+  {% endif %}
+{% endblock %}
+
+{#- dev is built with noindex, and is ahead of the latest release rather than behind it. -#}
+{% block outdated %}
+  {% if config.extra.noindex %}
+    This is the development version's documentation, ahead of the latest release.
+  {% else %}
+    This is an older release's documentation.
+  {% endif %}
+  <a href="{{ '../' ~ base_url }}"><strong>Read the latest release's.</strong></a>
+{% endblock %}
