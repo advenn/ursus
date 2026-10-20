@@ -84,7 +84,10 @@ func Example_exprContexts() {
 	ctx := context.Background()
 	revenue := ursus.Col("qty").Mul(ursus.Col("price"))
 
-	perRow, err := sales().Select(ursus.Col("order_id"), revenue.Alias("revenue")).Head(3).Collect(ctx)
+	perRow, err := sales().
+		Select(ursus.Col("order_id"), revenue.Alias("revenue")).
+		Head(3).
+		Collect(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -138,7 +141,8 @@ func Example_exprOver() {
 			ursus.Col("region"),
 			ursus.Col("qty"),
 			ursus.Col("qty").Sum().Over(ursus.Col("region")).Alias("region_qty"),
-			ursus.Col("qty").Rank(ursus.RankDense, true).Over(ursus.Col("region")).Alias("rank"),
+			ursus.Col("qty").Rank(ursus.RankDense, true).
+				Over(ursus.Col("region")).Alias("rank"),
 		).
 		Sort(ursus.Asc(ursus.Col("region")), ursus.Asc(ursus.Col("rank"))).
 		Collect(context.Background())
@@ -165,7 +169,10 @@ func Example_exprOver() {
 
 func Example_exprMany() {
 	df, err := sales().
-		Select(ursus.Col("product"), ursus.Col("qty", "price").Mul(int64(2)).Suffix("_x2")).
+		Select(
+			ursus.Col("product"),
+			ursus.Col("qty", "price").Mul(int64(2)).Suffix("_x2"),
+		).
 		Head(3).
 		Collect(context.Background())
 	if err != nil {
@@ -247,7 +254,9 @@ func Example_typesNulls() {
 
 func Example_typesNaN() {
 	df, err := ursus.Frame(
-		ursus.ValuesNullable("x", []float64{1, math.NaN(), 0}, []bool{true, true, false}),
+		ursus.ValuesNullable("x",
+			[]float64{1, math.NaN(), 0},
+			[]bool{true, true, false}),
 	).Select(
 		ursus.Col("x"),
 		ursus.Col("x").IsNull().Alias("is_null"),
@@ -331,7 +340,9 @@ func Example_memoryRefusal() {
 	keys := make([]int64, 100_000)
 	_, err := ursus.Frame(ursus.Values("k", keys)).
 		Select(ursus.Col("k").Implode()).
-		Collect(context.Background(), ursus.WithMemoryLimit(64<<10), ursus.WithSpillDir(os.TempDir()))
+		Collect(context.Background(),
+			ursus.WithMemoryLimit(64<<10),
+			ursus.WithSpillDir(os.TempDir()))
 	fmt.Println(err)
 	// Output:
 	// ursus: group_by: memory limit of 64.0KiB exceeded: the query is holding 105.2KiB, 105.2KiB of it in this operator

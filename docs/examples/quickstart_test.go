@@ -107,7 +107,10 @@ func Example_quickstartWithColumns() {
 	df, err := ursus.ScanCSV("testdata/sales.csv").
 		WithColumns(
 			ursus.Col("qty").Mul(ursus.Col("price")).Alias("revenue"),
-			ursus.When(ursus.Col("qty").Ge(int64(8))).Then("bulk").Otherwise("single").Alias("kind"),
+			ursus.When(ursus.Col("qty").Ge(int64(8))).
+				Then("bulk").
+				Otherwise("single").
+				Alias("kind"),
 		).
 		Select(ursus.Col("order_id"), ursus.Col("revenue"), ursus.Col("kind")).
 		Head(4).
@@ -161,7 +164,9 @@ func Example_quickstartJoin() {
 		ursus.Values("manager", []string{"Ada", "Grace"}),
 	)
 	df, err := ursus.ScanCSV("testdata/sales.csv").
-		Join(managers, ursus.JoinOn(ursus.Col("region")), ursus.JoinHow(ursus.JoinLeft)).
+		Join(managers,
+			ursus.JoinOn(ursus.Col("region")),
+			ursus.JoinHow(ursus.JoinLeft)).
 		Select(ursus.Col("order_id"), ursus.Col("region"), ursus.Col("manager")).
 		Collect(context.Background())
 	if err != nil {

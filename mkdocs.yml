@@ -133,6 +133,12 @@ nav:
       - Expressions: concepts/expressions.md
       - Types and nulls: concepts/types-and-nulls.md
       - Memory and spilling: concepts/memory.md
+  - User guide:
+      - guide/index.md
+      - Selecting and filtering: guide/selecting.md
+      - Aggregation and group-by: guide/aggregation.md
+      - Window functions: guide/windows.md
+      - Joins: guide/joins.md
   - Benchmarks: benchmarks.md
   - Reference:
       - API reference: reference/api.md

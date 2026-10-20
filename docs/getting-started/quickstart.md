@@ -108,3 +108,5 @@ columns, and the `Select` is gone, because the scan already gives just those two
 - [Expressions](../concepts/expressions.md): the same expression per row, per group and
   over a window.
 - [Memory and spilling](../concepts/memory.md): running a query bigger than memory.
+- [The user guide](../guide/index.md): selecting, aggregating, windows and joins, a
+  chapter each.

@@ -113,3 +113,22 @@ func TestThePagesIncludeExamplesThatExist(t *testing.T) {
 		t.Fatal("no pages found")
 	}
 }
+
+// TestHelpersAreTheirDeclarations holds a shared function's fragment to its whole
+// declaration, so a page that shows the data its examples read shows the code.
+func TestHelpersAreTheirDeclarations(t *testing.T) {
+	frags, err := fragments(filepath.Join("..", "..", "..", "docs", "examples"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, ok := frags["func.sales"]
+	if !ok || !f.helper {
+		t.Fatalf("no helper fragment for sales: %+v", f)
+	}
+	if !strings.HasPrefix(f.code, "func sales() *ursus.LazyFrame {") || !strings.HasSuffix(f.code, "\n}") {
+		t.Errorf("sales's fragment is not its declaration:\n%s", f.code)
+	}
+	if _, ok := frags["func.Example_home"]; ok {
+		t.Error("an Example was written as a helper")
+	}
+}
