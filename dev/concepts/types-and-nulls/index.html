@@ -845,6 +845,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Casts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-frames-casts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A frame's casts
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1552,6 +1569,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Casts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-frames-casts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A frame's casts
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1770,7 +1804,53 @@ it. <code>CastLossy</code> turns such values into nulls instead:</p>
 </span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>└───────┘
 </span></code></pre></div>
 <p>A cast never loses a value silently: an integer that does not fit a narrower type is
-refused by <code>Cast</code>, and a float rounds only when the target is a float.</p>
+refused by <code>Cast</code>, and a float rounds only when the target is a float. A float with a
+fraction is refused as an integer, where Polars truncates it; <code>Truncate(0)</code> first says
+that is what you want.</p>
+<h3 id="a-frames-casts">A frame's casts<a class="headerlink" href="#a-frames-casts" title="Permanent link">&para;</a></h3>
+<p><em>New in 0.6.7.</em> <code>Cast</code> casts columns by name, <code>CastTypes</code> every column of a type, and
+<code>CastAll</code> every column, the rest left as they are, in their places, as Polars' frame
+<code>cast</code> does. <code>CastStrict(false)</code> turns what does not convert into nulls, as
+<code>CastLossy</code> does.</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nx">lines</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sales</span><span class="p">().</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="nx">Select</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"order_id"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"qty"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"price"</span><span class="p">)).</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="nx">Head</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="nx">show</span><span class="p">(</span><span class="nx">lines</span><span class="p">.</span><span class="nx">Cast</span><span class="p">(</span><span class="kt">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">DataType</span><span class="p">{</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="s">"qty"</span><span class="p">:</span><span class="w">   </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Int32</span><span class="p">,</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">    </span><span class="s">"price"</span><span class="p">:</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Float32</span><span class="p">,</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="p">}))</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="nx">show</span><span class="p">(</span><span class="nx">lines</span><span class="p">.</span><span class="nx">CastTypes</span><span class="p">(</span><span class="kt">map</span><span class="p">[</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">DataType</span><span class="p">]</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">DataType</span><span class="p">{</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Int64</span><span class="p">:</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Int16</span><span class="p">}))</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="nx">show</span><span class="p">(</span><span class="nx">lines</span><span class="p">.</span><span class="nx">Select</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"price"</span><span class="p">).</span><span class="nx">Truncate</span><span class="p">(</span><span class="mi">0</span><span class="p">).</span><span class="nx">Cast</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Int64</span><span class="p">)))</span>
+</span></code></pre></div>
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>shape: (2, 3)
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>┌──────────┬───────┬─────────┐
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>│ order_id │ qty   │ price   │
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>│ Int64    │ Int32 │ Float32 │
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>├──────────┼───────┼─────────┤
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>│ 1        │ 10    │ 1.5     │
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>│ 2        │ 4     │ 1.5     │
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>└──────────┴───────┴─────────┘
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>shape: (2, 3)
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>┌──────────┬───────┬─────────┐
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>│ order_id │ qty   │ price   │
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>│ Int16    │ Int16 │ Float64 │
+</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>├──────────┼───────┼─────────┤
+</span><span id="__span-9-15"><a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>│ 1        │ 10    │ 1.5     │
+</span><span id="__span-9-16"><a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>│ 2        │ 4     │ 1.5     │
+</span><span id="__span-9-17"><a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>└──────────┴───────┴─────────┘
+</span><span id="__span-9-18"><a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>
+</span><span id="__span-9-19"><a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>shape: (2, 1)
+</span><span id="__span-9-20"><a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>┌───────┐
+</span><span id="__span-9-21"><a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a>│ price │
+</span><span id="__span-9-22"><a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a>│ Int64 │
+</span><span id="__span-9-23"><a id="__codelineno-9-23" name="__codelineno-9-23" href="#__codelineno-9-23"></a>├───────┤
+</span><span id="__span-9-24"><a id="__codelineno-9-24" name="__codelineno-9-24" href="#__codelineno-9-24"></a>│ 1     │
+</span><span id="__span-9-25"><a id="__codelineno-9-25" name="__codelineno-9-25" href="#__codelineno-9-25"></a>│ 1     │
+</span><span id="__span-9-26"><a id="__codelineno-9-26" name="__codelineno-9-26" href="#__codelineno-9-26"></a>└───────┘
+</span></code></pre></div>
+<p>A <code>Datetime</code> key matches its unit and zone exactly, so a frame of two units needs a key
+for each, where Polars' <code>pl.Datetime</code> matches both.</p>
 <h2 id="values-from-go">Values from Go<a class="headerlink" href="#values-from-go" title="Permanent link">&para;</a></h2>
 <p><code>ursus.Values</code> makes a column from a slice of a Go type, <code>[]time.Time</code> a
 <code>Datetime(ns, "UTC")</code> one, and <code>ursus.ValuesNullable</code> one with nulls, from the values

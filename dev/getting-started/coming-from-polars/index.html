@@ -1659,6 +1659,10 @@ changes is what Go asks for.</p>
 <td><code>.Cast(ursus.Int64)</code>, strict; <code>.CastLossy(ursus.Int64)</code> turns failures into nulls</td>
 </tr>
 <tr>
+<td><code>df.cast({"a": pl.Int32})</code>, <code>df.cast(pl.String)</code></td>
+<td><code>lf.Cast(map[string]ursus.DataType{"a": ursus.Int32})</code>, <code>lf.CastAll(ursus.String)</code>; <code>CastTypes</code> by type (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.filter(p)</code>, <code>.select(...)</code>, <code>.with_columns(...)</code></td>
 <td><code>.Filter(p)</code>, <code>.Select(...)</code>, <code>.WithColumns(...)</code></td>
 </tr>
@@ -1774,6 +1778,9 @@ changes is what Go asks for.</p>
 <li><strong>A literal has its Go value's type:</strong> <code>Col("a").Add(3)</code> of an <code>Int32</code> column is an
   <code>Int64</code>, since a Go integer constant is an <code>int</code>; write <code>int32(3)</code> to keep <code>Int32</code>.
   Polars' literals take the column's type, as a fill value's does here.</li>
+<li><strong>A cast is exact or refused:</strong> a float with a fraction cast to an integer is an
+  error, or null when lossy, where Polars truncates it toward zero. <code>Truncate(0)</code> first
+  for Polars' answer.</li>
 <li><strong><code>Div</code> and <code>Pow</code> always give a float.</strong></li>
 <li><strong>An expression is named after its leftmost column.</strong> <code>Col("a").Alias("x").Add(1)</code>
   is <code>x</code> in Polars and <code>a</code> here: put the alias last.</li>
