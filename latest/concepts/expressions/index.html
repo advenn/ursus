@@ -943,6 +943,22 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1096,6 +1112,230 @@
     
   
     Joins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/reshaping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reshaping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/strings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/lists-and-structs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lists and structs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/dates-and-times/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dates and times
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/missing-data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Missing data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/go-values/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Go values in and out
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/go-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Go functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CSV, Parquet and Arrow
   
 
     
@@ -1604,8 +1844,8 @@ and a float constant a <code>Float64</code>, so <code>Col("a").Add(3)</code> of 
 <code>Int64</code> column, and <code>Col("f").Mul(2.5)</code> of a <code>Float32</code> one a <code>Float64</code>. Write
 <code>Add(int32(3))</code> to stay at <code>Int32</code>. Polars' literals take the column's type instead.
 The fills are the exception: <code>FillNullWith</code>, <code>FillNan</code> and their kin meet the column,
-so <code>FillNullWith(0)</code> of an <code>Int32</code> column stays <code>Int32</code>, and only a float fill
-widens an integer column.</p>
+so <code>FillNullWith(0)</code> of an <code>Int32</code> column stays <code>Int32</code>, and only a fill with a
+fraction widens an integer column.</p>
 <h2 id="names">Names<a class="headerlink" href="#names" title="Permanent link">&para;</a></h2>
 <p>An expression is named after the leftmost column it reads: <code>Col("qty").Mul(Col("price"))</code>
 is named <code>qty</code>. <code>Alias</code> names it, and goes last, since an alias inside an expression
