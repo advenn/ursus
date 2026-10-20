@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–291, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–292, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -36,6 +36,8 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A frame's sample** (292): `SampleN`, `SampleFraction` and `Shuffle` on both frames,
+  every column's values of the same rows, seeded.
 - **`Slice` with a negative offset** (291), counted from the end as Polars counts it:
   `Slice(-3, 2)` is the last three rows' first two. It holds the rows `Tail` holds.
 

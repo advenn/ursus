@@ -211,7 +211,7 @@ differs from their input's, or scalars outside a group-by.
 | **A frame `fill_null` strategy's `limit`** (the strategies were built at step 249); frame `null_count`, `sum`, `mean`, `median`, `min`, `max`, `std`, `var`, `quantile`, `product`, `shift`, `first`, `last` shortcuts | P0/P1 |
 | built: `slice` with a negative offset, in step 291 | — |
 | **`cast` of a frame** (a map of columns, or by dtype); `match_to_schema` | P1 |
-| **`sample`, `shuffle`** (fraction or n, seed) | P1 |
+| built: a frame's `sample` and `shuffle` (fraction or n, seed), in step 292 | — |
 | **`partition_by`** into frames | P1 |
 | **`upsample`**; `interpolate` and `drop_nans` on frames | P1 |
 | built: `is_duplicated`, `is_unique` and `n_unique` over several columns, in step 290 | — |
@@ -254,6 +254,7 @@ These belong to a performance release more than to features.
 | `collect_all` and several sinks from one plan; `cache()`; plan serialization | P2 |
 | Display settings (rows, width, `glimpse`) | P1 |
 | Spill-file compression; approximate aggregates | P2 |
+| **A heap bound that trips:** `TestTemporalMediansSpillTheirValues` holds the live heap's growth under 10 MB, a measure of when the collector runs; under test-all's load it read 11 MB once (step 292) and passed fifteen reruns | P2 |
 | **SQL** (`SQLContext`, `.sql()`, `sql_expr`) | out by decision |
 | GPU, plugins, Python bindings, distributed execution | P3 |
 
