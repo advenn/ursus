@@ -208,7 +208,7 @@ differs from their input's, or scalars outside a group-by.
 | missing or partial | prio |
 | --- | --- |
 | built: `unique(keep=)` with `maintain_order=True`, as `UniqueKeep`, in step 289 | — |
-| **A frame `fill_null` strategy's `limit`** (the strategies were built at step 249); frame `null_count`, `sum`, `mean`, `median`, `min`, `max`, `std`, `var`, `quantile`, `product`, `shift`, `first`, `last` shortcuts | P0/P1 |
+| **A frame `fill_null` strategy's `limit`** (the strategies were built at step 249); frame `null_count`, `sum`, `mean`, `median`, `min`, `max`, `std`, `var`, `quantile`, `product` shortcuts. A frame's `shift`, `first` and `last` built in step 293 | P0/P1 |
 | built: `slice` with a negative offset, in step 291 | — |
 | **`cast` of a frame** (a map of columns, or by dtype); `match_to_schema` | P1 |
 | built: a frame's `sample` and `shuffle` (fraction or n, seed), in step 292 | — |
@@ -219,7 +219,7 @@ differs from their input's, or scalars outside a group-by.
 | `concat`'s relaxed, horizontal and align modes; `ConcatStrict` meets Int32 and Int64 at Int64, where Polars' vertical refuses them, and refuses Int64 beside Float64, which `vertical_relaxed` meets; `DataFrame.Concat` modes | P1 |
 | join: emit a computed key column; `maintain_order` right, left-right and right-left; asof `tolerance` on numeric keys; asof `coalesce`; `JoinWhere` suffix | P1 |
 | group-by: `head`, `tail`, `having`, `map_groups`, iterating over groups; an integer index for `GroupByDynamic` and `Rolling`; `.over(order_by)` of an aggregate; mapping `explode` and `join` | P1/P2 |
-| `to_dummies`, `unstack`, `gather`, `gather_every`, `insert_column`, `extend`, `update`, `clear`, `is_empty`, `equals`, `glimpse`, `estimated_size`, `hash_rows`, `interpolate_by`, `with_columns_seq` | P2 |
+| `to_dummies`, `unstack`, `gather`, `insert_column`, `extend`, `update`, `glimpse`, `estimated_size`, `hash_rows`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293 | P2 |
 | `unpivot` without `On` (every non-index column); `transpose` of mixed String and number, with names from a column | P2 |
 | **An eager `Series` with operations:** it is a read-only view (`Get`, `Values`, `Map`, `Fold`); sort, unique, head, fill and aggregates go through a frame | P1 |
 | Build a frame from Go structs (`FromRows[T]`); a lazy row iterator, `to_dicts`, `rows_by_key` | P1 |
@@ -319,6 +319,9 @@ decide whether to keep or switch each one.
   (step 286).
 - `CumulativeEval` is refused in `GroupBy(...).Agg`, as every window is, where Polars
   gives a list a group; and inside `List().Eval` (step 286).
+- A frame's `ShiftFill` with a text fill refuses a number column, which Polars makes
+  text; `Equals` finds a Date unequal to its day count, which Polars finds equal
+  (step 293).
 - `EwmMeanBy` and `EwmSumBy` take rows of one instant in the window's order, where
   Polars' unstable sort takes them as it finds them; they take an Int8 or an Int16
   value, which Polars refuses (step 285).
