@@ -74,6 +74,7 @@ changes is what Go asks for.
 | `pl.when(p).then(a).otherwise(b)` | `ursus.When(p).Then(a).Otherwise(b)` |
 | `.alias("x")` | `.Alias("x")` |
 | `.cast(pl.Int64)` | `.Cast(ursus.Int64)`, strict; `.CastLossy(ursus.Int64)` turns failures into nulls |
+| `df.cast({"a": pl.Int32})`, `df.cast(pl.String)` | `lf.Cast(map[string]ursus.DataType{"a": ursus.Int32})`, `lf.CastAll(ursus.String)`; `CastTypes` by type (new in 0.6.7) |
 | `.filter(p)`, `.select(...)`, `.with_columns(...)` | `.Filter(p)`, `.Select(...)`, `.WithColumns(...)` |
 | `.sort("a", descending=True)` | `.Sort(ursus.Desc(ursus.Col("a")))` |
 | `.group_by("k").agg(...)` | `.GroupBy(ursus.Col("k")).Agg(...)` |
@@ -119,6 +120,9 @@ These are deliberate, and each is documented beside the method:
 - **A literal has its Go value's type:** `Col("a").Add(3)` of an `Int32` column is an
   `Int64`, since a Go integer constant is an `int`; write `int32(3)` to keep `Int32`.
   Polars' literals take the column's type, as a fill value's does here.
+- **A cast is exact or refused:** a float with a fraction cast to an integer is an
+  error, or null when lossy, where Polars truncates it toward zero. `Truncate(0)` first
+  for Polars' answer.
 - **`Div` and `Pow` always give a float.**
 - **An expression is named after its leftmost column.** `Col("a").Alias("x").Add(1)`
   is `x` in Polars and `a` here: put the alias last.

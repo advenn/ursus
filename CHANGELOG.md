@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–297, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–298, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -40,6 +40,10 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A frame's cast** (298), as Polars' frame `cast`: `Cast` by column name,
+  `CastTypes` by type, `CastAll` every column, on both frames; `CastStrict(false)`
+  turns what does not convert into nulls. A column of its own type is left out of the
+  plan, and the plan is the frame's order whatever the map's.
 - **A documentation site** (294), [advenn.github.io/ursus](https://advenn.github.io/ursus/):
   a quick start, the concepts, a page for Polars users and the benchmarks, versioned
   by release from 0.6.6 on. Every code block on it is an example in `docs/examples`

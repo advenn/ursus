@@ -59,7 +59,7 @@ Fix these before anything new. **Step 249 fixed every row** (see its record).
 | **`Rank` ranks a null, as the smallest value;** Polars leaves a null's rank null and ranks the rest among themselves. `[5, null, 4]` ranks `[3, 1, 2]` here and `[2, None, 1]` there, in a window and in `List().Eval` alike (found at step 268). | internal/kernel/window.go `winRank`, and the streamed rank (`RankNext`) | **wrong answer** |
 | **A printed frame padded its cells by bytes,** so a row holding a letter outside ASCII came out a column short: "Zoë" is three columns and four bytes. Found writing the user guide's strings chapter; fixed at step 296, cells padded by their width on a terminal | frame.go | fixed |
 | **A typed view of a `Date` or a `Datetime` is its integer.** `df.Column[time.Time]` and `df.At[time.Time]` refuse one, "no typed view for time.Time"; `Column[int32]` gives a Date's days and `Column[int64]` a Datetime's ticks. `Rows[T]` decodes either into a `time.Time`. Polars' `to_list` gives dates and datetimes. For 0.6.7's V3, the eager Series (step 297) | series.go, internal/data | open |
-| **A naive `Datetime` is written with a `Z`,** as though it were UTC: `Datetime(s)` prints `2026-03-08T06:30:00Z`, and the CSV writer, which shares `FormatTemporal`, writes it so, which another reader takes as UTC. Polars writes a naive instant with no offset. A change of the CSV format, for 0.6.8's I/O (step 296) | dtype/temporal.go:212 | open |
+| **A naive `Datetime` is written with a `Z`,** as though it were UTC: `Datetime(s)` prints `2026-03-08T06:30:00Z`, and the CSV writer, which shares `FormatTemporal`, writes it so, which another reader takes as UTC; so does a cast to String (step 298). Polars writes a naive instant with no offset. A change of the CSV format, for 0.6.8's I/O (step 296) | dtype/temporal.go:212 | open |
 
 ## 2. The expression model
 
@@ -213,7 +213,7 @@ differs from their input's, or scalars outside a group-by.
 | built: `unique(keep=)` with `maintain_order=True`, as `UniqueKeep`, in step 289 | — |
 | **A frame `fill_null` strategy's `limit`** (the strategies were built at step 249); frame `null_count`, `sum`, `mean`, `median`, `min`, `max`, `std`, `var`, `quantile`, `product` shortcuts. A frame's `shift`, `first` and `last` built in step 293 | P0/P1 |
 | built: `slice` with a negative offset, in step 291 | — |
-| **`cast` of a frame** (a map of columns, or by dtype); `match_to_schema` | P1 |
+| **`match_to_schema`.** A frame's `cast`, by name, by type and for every column, built in step 298 | P1 |
 | built: a frame's `sample` and `shuffle` (fraction or n, seed), in step 292 | — |
 | **`partition_by`** into frames | P1 |
 | **`upsample`**; `interpolate` and `drop_nans` on frames | P1 |
@@ -305,6 +305,13 @@ decide whether to keep or switch each one.
 - A fill of a whole-number float keeps an integer column's type: `FillNullWith(2.0)`
   and a frame's `FillNull(0.0)` of an Int64 column give Int64, and only a fraction,
   `0.5`, widens it to Float64. Polars widens it for any float (step 297).
+- A cast of a float with a fraction to an integer is refused, "not representable",
+  and is null when lossy; Polars truncates it toward zero, strict or not: 1.5 is 1,
+  −1.7 is −1. ursus's casts are exact or refused; `Truncate(0)` first for Polars'
+  answer. Listed by step 298, where a frame's cast inherits it.
+- A cast of an instant to text is ISO 8601's, `2026-01-01T00:00:00.000000`, where
+  Polars writes a space for the `T`. A naive one gains a `Z`, §1's open row (step
+  298).
 - `Div` and `Pow` always return a float.
 - `Cut` returns String, not Categorical.
 - An expression's `TopK` and `BottomK` return a List.

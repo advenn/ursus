@@ -304,6 +304,45 @@ func Example_typesCast() {
 	// └───────┘
 }
 
+func Example_typesFrameCast() {
+	lines := sales().
+		Select(ursus.Col("order_id"), ursus.Col("qty"), ursus.Col("price")).
+		Head(2)
+	show(lines.Cast(map[string]ursus.DataType{
+		"qty":   ursus.Int32,
+		"price": ursus.Float32,
+	}))
+	show(lines.CastTypes(map[ursus.DataType]ursus.DataType{ursus.Int64: ursus.Int16}))
+	show(lines.Select(ursus.Col("price").Truncate(0).Cast(ursus.Int64)))
+	// Output:
+	// shape: (2, 3)
+	// ┌──────────┬───────┬─────────┐
+	// │ order_id │ qty   │ price   │
+	// │ Int64    │ Int32 │ Float32 │
+	// ├──────────┼───────┼─────────┤
+	// │ 1        │ 10    │ 1.5     │
+	// │ 2        │ 4     │ 1.5     │
+	// └──────────┴───────┴─────────┘
+	//
+	// shape: (2, 3)
+	// ┌──────────┬───────┬─────────┐
+	// │ order_id │ qty   │ price   │
+	// │ Int16    │ Int16 │ Float64 │
+	// ├──────────┼───────┼─────────┤
+	// │ 1        │ 10    │ 1.5     │
+	// │ 2        │ 4     │ 1.5     │
+	// └──────────┴───────┴─────────┘
+	//
+	// shape: (2, 1)
+	// ┌───────┐
+	// │ price │
+	// │ Int64 │
+	// ├───────┤
+	// │ 1     │
+	// │ 1     │
+	// └───────┘
+}
+
 // --- memory ----------------------------------------------------------------------------
 
 func Example_memorySpill() {
