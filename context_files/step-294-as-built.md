@@ -154,3 +154,28 @@ and their examples, copied into `git archive v0.6.6`, pass against its code.
 **Gate:** test-all 125 ok, race 25 ok, levels, vet ×3 and the bench engine tests
 clean; the 22 PDS-H answers match DuckDB. The new packages add ten to test-all and
 two to the race run.
+
+## 7. After the push
+
+- **The docs workflow ran twice, both green:**
+  - the push published `dev`;
+  - a manual run from the step's commit, `1070c25`, with the tag v0.6.6, published
+    0.6.6 as `latest`.
+- **Pages** was switched on from `gh-pages` through the API. The site answers at
+  https://advenn.github.io/ursus/:
+  - the root goes to `latest`;
+  - the selector shows "0.6.6 latest" and `dev`;
+  - `latest`'s canonical URL and title are the ones built.
+- **The repository:**
+  - its description: "A dataframe library for Go (Golang), modelled on Polars: lazy
+    queries with a query optimizer, Apache Arrow memory, SIMD kernels and out-of-core
+    execution that spills to disk. Pure Go, no cgo.";
+  - its homepage: the site;
+  - 20 topics: the six it had, and polars, apache-arrow, parquet, csv, data-analysis,
+    data-science, data-engineering, query-engine, query-optimizer, simd,
+    lazy-evaluation, analytics, etl, golang-library.
+- **pkg.go.dev:** the module proxy serves v0.6.6 now. pkg.go.dev's own fetch timed
+  out, and it indexes from the proxy.
+
+What only the maintainer can do is in `docs-site-scope.md` §4: Search Console, the
+social preview image, awesome-go, and the announcements.
