@@ -2585,13 +2585,12 @@
 
 
 <h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
-<p>ursus follows Go's rule for v0: <strong>nothing is promised</strong>, and a minor version may
-change behaviour. Each release below therefore says what a user of the previous one
-can trip on, not only what is new.</p>
-<p><strong>ursus will stay 0.x; there will be no 1.0.</strong> So no API is frozen and none is
-deprecated first: a minor version renames, removes or reshapes an API whenever the
-result is better. From 0.6 on, each release lists its breaks, each with its
-replacement.</p>
+<p>ursus is on <a href="https://0ver.org">ZeroVer</a>: 0.x, and a stable 1.0 is not expected yet.
+Go's rule for v0 applies, so a minor version may change behaviour, and an API may be
+renamed, removed or reshaped when the result is better, without being deprecated
+first. Each release below therefore says what a user of the previous one can trip
+on, not only what is new; from 0.6 on, each lists its breaks with their
+replacements.</p>
 <p>Every step of construction has an as-built record in
 <a href="https://github.com/advenn/ursus/tree/master/context_files/"><code>context_files/</code></a>, with the measurements behind each change.
 Step numbers below point at those records.</p>
@@ -3704,9 +3703,9 @@ than v0.5.0 on it. Both are met. Measured on 2026-10-11, at <code>c6aa77d</code>
 <li><strong>The record:</strong> v0.5.0's PDS-H SF=0.1 figure, below, read DuckDB-Go's column (166).</li>
 </ul>
 <h3 id="breaks_3">Breaks<a class="headerlink" href="#breaks_3" title="Permanent link">&para;</a></h3>
-<p>ursus stays 0.x, and these break code written against v0.5.0, each for a better API
-(186). Each took or returned a type in an internal package, which no caller outside
-the module could name or build:</p>
+<p>These break code written against v0.5.0, each for a better API (186). Each took or
+returned a type in an internal package, which no caller outside the module could
+name or build:</p>
 <ul>
 <li><strong><code>Scan(plan.Source)</code></strong> is gone. Scan a file or frame with <code>ScanParquet</code>,
   <code>ScanCSV</code>, <code>ScanParquetFrom</code>, <code>ScanCSVFrom</code>, <code>Frame</code> or <code>FromArrow</code>.</li>
