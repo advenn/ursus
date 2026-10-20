@@ -65,7 +65,9 @@ it. `CastLossy` turns such values into nulls instead:
 --8<-- "Example_typesCast.md"
 
 A cast never loses a value silently: an integer that does not fit a narrower type is
-refused by `Cast`, and a float rounds only when the target is a float.
+refused by `Cast`, and a float rounds only when the target is a float. A float with a
+fraction is refused as an integer, where Polars truncates it; `Truncate(0)` first says
+that is what you want.
 
 ## Values from Go
 

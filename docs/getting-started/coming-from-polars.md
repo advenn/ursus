@@ -119,6 +119,9 @@ These are deliberate, and each is documented beside the method:
 - **A literal has its Go value's type:** `Col("a").Add(3)` of an `Int32` column is an
   `Int64`, since a Go integer constant is an `int`; write `int32(3)` to keep `Int32`.
   Polars' literals take the column's type, as a fill value's does here.
+- **A cast is exact or refused:** a float with a fraction cast to an integer is an
+  error, or null when lossy, where Polars truncates it toward zero. `Truncate(0)` first
+  for Polars' answer.
 - **`Div` and `Pow` always give a float.**
 - **An expression is named after its leftmost column.** `Col("a").Alias("x").Add(1)`
   is `x` in Polars and `a` here: put the alias last.
