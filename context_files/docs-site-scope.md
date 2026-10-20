@@ -46,9 +46,10 @@ a CNAME later.
 - an older version's pages say so in a banner;
 - the API reference link of each version is pkg.go.dev at that tag.
 
-v0.6.6 has no docs of its own in its tree. Its version is built from the first
-site's pages, whose examples run against v0.6.6's code (`git archive`) before it is
-published.
+v0.6.6 has no docs of its own in its tree. Its version is built from the
+`docs-0.6.6` branch, whose examples run against v0.6.6's code (`git archive`) before
+it is published. A released version's pages are fixed on its `docs-X.Y.Z` branch
+from then on, and published by a manual run.
 
 **Every code block is a Go example that `go test` runs.**
 

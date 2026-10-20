@@ -116,6 +116,27 @@ It now says, in the README and on the home page:
 - larger data runs too, spilling past the memory limit, but the same ratio is
   seconds or minutes there, and a spilled query pays for its disk too.
 
+## 6. The 0.6.6 version too
+
+`dev` is kept out of search engines, so chapters on `dev` alone would not be found
+until v0.6.7. So the released version has them too, from a branch:
+
+- **`docs-0.6.6`,** from `3a1a9ee`, the last commit whose pages are 0.6.6's alone. It
+  has two commits on top:
+  - the home page's fit reworded;
+  - the four chapters as on master at `4df6250`, without what 0.6.7 added:
+    `UniqueKeep` and a negative slice.
+- **Checked against v0.6.6:**
+  - every name the chapters put in code type exists at v0.6.6; only `UniqueKeep`
+    and its `Keep*` constants did not;
+  - the branch's examples pass against `git archive v0.6.6`;
+  - its site builds strictly.
+- **Published:** a manual run from the branch published 0.6.6 as `latest`. Its guide
+  is live, without `UniqueKeep`.
+
+A released version's pages are fixed this way from now on: on its `docs-X.Y.Z`
+branch, their examples run against the tag's code.
+
 ## 5. Tests and teeth
 
 **`TestHelpersAreTheirDeclarations`:** a helper's fragment is its declaration, and an
