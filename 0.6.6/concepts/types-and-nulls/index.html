@@ -1768,7 +1768,9 @@ it. <code>CastLossy</code> turns such values into nulls instead:</p>
 </span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>└───────┘
 </span></code></pre></div>
 <p>A cast never loses a value silently: an integer that does not fit a narrower type is
-refused by <code>Cast</code>, and a float rounds only when the target is a float.</p>
+refused by <code>Cast</code>, and a float rounds only when the target is a float. A float with a
+fraction is refused as an integer, where Polars truncates it; <code>Truncate(0)</code> first says
+that is what you want.</p>
 <h2 id="values-from-go">Values from Go<a class="headerlink" href="#values-from-go" title="Permanent link">&para;</a></h2>
 <p><code>ursus.Values</code> makes a column from a slice of a Go type, <code>[]time.Time</code> a
 <code>Datetime(ns, "UTC")</code> one, and <code>ursus.ValuesNullable</code> one with nulls, from the values
