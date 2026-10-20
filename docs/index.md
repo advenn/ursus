@@ -101,8 +101,10 @@ benchmark at ten million rows it takes about 1.3 times Polars' time over Parquet
 
 **A good fit:**
 
-- data that fits comfortably in memory, up to tens of millions of rows, where the
-  difference is half a second against a tenth of one;
+- data where the speed difference is small in absolute terms: up to tens of millions
+  of rows, it is half a second against a tenth of one. Larger data still runs,
+  spilling to disk past the memory limit, but there the same ratio is seconds or
+  minutes, and a spilled query pays for its disk too;
 - a Go service that needs real dataframe work, joins, group-bys and window functions,
   and cannot take on cgo, a Python sidecar or a large C++ dependency to get it;
 - anywhere the deployment story is worth more than the last multiple of speed.
