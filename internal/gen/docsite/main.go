@@ -10,7 +10,9 @@
 //
 // and an example that stops being true fails the build before it reaches the site.
 // <out>/<Name>.main.md is the same example as a whole program, package main and its
-// imports, for a page that shows one.
+// imports, for a page that shows one. Each other function in docs/examples, the
+// helpers the examples share, is <out>/func.<name>.md, its whole declaration, so a
+// page shows the data its examples read as the code that builds it.
 //
 // It also writes, for the version of the site being built, which -ref names (a tag,
 // or master for dev):
@@ -69,6 +71,9 @@ func run(examples, out, changelog, ref string) error {
 		if err := os.WriteFile(filepath.Join(out, name+".md"), []byte(fragment("go", f.code, f.output)), 0o644); err != nil {
 			return err
 		}
+		if f.helper {
+			continue
+		}
 		if err := os.WriteFile(filepath.Join(out, name+".main.md"),
 			[]byte(fragment(`go title="main.go"`, f.program, f.output)), 0o644); err != nil {
 			return err
@@ -94,9 +99,10 @@ func apiLink(ref string) string {
 
 // example is an Example function as the site shows it.
 type example struct {
-	code    string // the body, one tab of indentation removed
+	code    string // the body, one tab of indentation removed; a helper's declaration
 	program string // the body as a whole program
 	output  string
+	helper  bool // a function the examples share, not an Example
 }
 
 // fragments is each Example function by its name.
@@ -130,7 +136,16 @@ func fragments(dir string) (map[string]example, error) {
 		}
 		for _, d := range f.Decls {
 			fn, ok := d.(*ast.FuncDecl)
-			if !ok || fn.Recv != nil || !strings.HasPrefix(fn.Name.Name, "Example") || fn.Body == nil {
+			if !ok || fn.Recv != nil || fn.Body == nil {
+				continue
+			}
+			if !strings.HasPrefix(fn.Name.Name, "Example") {
+				name := "func." + fn.Name.Name
+				if _, dup := frags[name]; dup {
+					return nil, fmt.Errorf("%s: %s is defined twice", path, fn.Name.Name)
+				}
+				decl := src[fset.Position(fn.Pos()).Offset:fset.Position(fn.End()).Offset]
+				frags[name] = example{code: string(decl), helper: true}
 				continue
 			}
 			name := fn.Name.Name

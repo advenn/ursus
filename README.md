@@ -48,8 +48,9 @@ to.
 
 **Where that trade is a good one**
 
-- Data that fits comfortably in memory — up to tens of millions of rows, where the difference is half a second against a
-  tenth of a second and nobody is waiting.
+- Data where the speed difference is small in absolute terms — up to tens of millions of rows, where it is half a
+  second against a tenth of one and nobody is waiting. Larger data still runs, spilling to disk past the memory limit,
+  but there the same ratio is seconds or minutes, and a spilled query pays for its disk too.
 - A Go service that needs real dataframe work — joins, group-bys, window functions — and cannot take on cgo, a Python
   sidecar, or a large C++ dependency to get it.
 - Anywhere the deployment story is worth more than the last multiple of speed.

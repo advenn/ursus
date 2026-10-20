@@ -280,6 +280,14 @@ decide whether to keep or switch each one.
   and `Mul(2.5)` of a Float32 one Float64, where Polars' literal takes the column's
   type. A fill meets the column, as Polars' does (`fill.go`'s weak literals).
   Found writing the site's expressions page (step 294).
+- `Remove` drops a row whose predicate is null, as `Filter` does; Polars' `remove`
+  keeps it (found writing the user guide, step 295).
+- A right join keeps the left frame's row order, its unmatched right rows after them,
+  and the key where the left frame has it; Polars gives the right frame's order, the
+  left's other columns first and the key among the right's (step 295).
+- A join on keys of different names keeps both key columns, `JoinLeftOn(a)` and
+  `JoinRightOn(b)` giving `a` and `b`; Polars drops the right one.
+  `JoinCoalesce(true)` drops it here (step 295).
 - `Div` and `Pow` always return a float.
 - `Cut` returns String, not Categorical.
 - An expression's `TopK` and `BottomK` return a List.
