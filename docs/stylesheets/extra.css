@@ -27,3 +27,9 @@
   font-size: 1.25em;
   line-height: 1.5;
 }
+
+/* An error message or a schema wider than the page wraps; a printed frame scrolls. */
+.md-typeset .wrap pre > code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

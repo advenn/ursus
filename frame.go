@@ -3,6 +3,9 @@ package ursus
 import (
 	"strconv"
 	"strings"
+	"unicode"
+
+	"golang.org/x/text/width"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
@@ -106,9 +109,9 @@ func (df *DataFrame) String() string {
 
 	widths := make([]int, nCols)
 	for c := range nCols {
-		widths[c] = max(len(header[c]), len(types[c]))
+		widths[c] = max(displayWidth(header[c]), displayWidth(types[c]))
 		for r := range shown {
-			widths[c] = max(widths[c], len(cells[r][c]))
+			widths[c] = max(widths[c], displayWidth(cells[r][c]))
 		}
 	}
 
@@ -149,10 +152,31 @@ func (df *DataFrame) String() string {
 }
 
 func pad(s string, w int) string {
-	if len(s) >= w {
+	n := displayWidth(s)
+	if n >= w {
 		return s
 	}
-	return s + strings.Repeat(" ", w-len(s))
+	return s + strings.Repeat(" ", w-n)
+}
+
+// displayWidth is how many columns of a terminal s takes, which the table pads to:
+// one a rune, two for an East Asian wide or full-width one, none for a combining
+// mark or a zero-width format character, as Polars' table measures a cell. It was
+// the string's length in bytes until step 296, which shifted every row holding a
+// letter outside ASCII: "Zoë" is three columns and four bytes.
+func displayWidth(s string) int {
+	n := 0
+	for _, r := range s {
+		switch {
+		case unicode.In(r, unicode.Mn, unicode.Me, unicode.Cf):
+		case width.LookupRune(r).Kind() == width.EastAsianWide,
+			width.LookupRune(r).Kind() == width.EastAsianFullwidth:
+			n += 2
+		default:
+			n++
+		}
+	}
+	return n
 }
 
 // renderCell formats one value. Null renders as "null" rather than as an empty

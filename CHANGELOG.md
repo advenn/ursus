@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–295, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–296, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -28,6 +28,10 @@ completeness, part 3 — frame operations.**
 
 ### Fixes
 
+- **A printed frame aligns text outside ASCII** (296). It padded each cell by its
+  bytes, so a row holding "Zoë" came out a column short; it pads by the columns a
+  terminal draws, two for a wide East Asian character and none for a combining mark,
+  as Polars measures them.
 - **`WithMemoryLimit`'s doc** said the default budget is Linux's alone; it has been
   macOS's and Windows's too since step 181 (294).
 - **The expression `Slice` in a `Select`** kept a row too many where its window began
@@ -40,7 +44,8 @@ completeness, part 3 — frame operations.**
   a quick start, the concepts, a page for Polars users and the benchmarks, versioned
   by release from 0.6.6 on. Every code block on it is an example in `docs/examples`
   that `go test` runs. Its user guide has chapters on selecting and filtering,
-  aggregation, window functions and joins (295).
+  aggregation, window functions and joins (295), and on reshaping, strings, lists and
+  structs, and dates and times (296).
 - **Row shortcuts** (293): a frame's `Shift`, `ShiftFill`, `GatherEvery`, `Clear`,
   `First` and `Last`; `DataFrame.IsEmpty` and `Equals(other, nullEqual)`.
 - **A frame's sample** (292): `SampleN`, `SampleFraction` and `Shuffle` on both frames,

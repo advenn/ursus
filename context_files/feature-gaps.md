@@ -57,6 +57,8 @@ Fix these before anything new. **Step 249 fixed every row** (see its record).
 | **A float aggregate's last bits depend on the thread count.** Its partial states merge in an order the threads set: of eight probed by key, `Sum`, `Mean`, `Var`, `Std`, `Skew`, `Kurtosis` and `Entropy` differ between one thread and eight, and `Corr` does not. A spilled run equals the one-thread run to the bit. Row order is deterministic, as §10 says (found at step 287). | the accumulators' Merge | **not bit-exact** |
 | **A streamed rolling var or std differs from the answer in memory in its last bits.** Over the whole frame under a memory limit, a window's state is rebuilt from each batch's history rows, so its periodic recompute falls at other rows: 35–52% of rows over `sin(i)·1000`. Step 284's skew, kurtosis, cov and corr do too. The streaming test's floats are quarters, whose sums are exact, so it never showed. The fix is to carry the kernel's state across batches, as an ewm's is (found at step 284). | internal/physical/winstream.go, internal/kernel/rolling.go | **not bit-exact** |
 | **`Rank` ranks a null, as the smallest value;** Polars leaves a null's rank null and ranks the rest among themselves. `[5, null, 4]` ranks `[3, 1, 2]` here and `[2, None, 1]` there, in a window and in `List().Eval` alike (found at step 268). | internal/kernel/window.go `winRank`, and the streamed rank (`RankNext`) | **wrong answer** |
+| **A printed frame padded its cells by bytes,** so a row holding a letter outside ASCII came out a column short: "Zoë" is three columns and four bytes. Found writing the user guide's strings chapter; fixed at step 296, cells padded by their width on a terminal | frame.go | fixed |
+| **A naive `Datetime` is written with a `Z`,** as though it were UTC: `Datetime(s)` prints `2026-03-08T06:30:00Z`, and the CSV writer, which shares `FormatTemporal`, writes it so, which another reader takes as UTC. Polars writes a naive instant with no offset. A change of the CSV format, for 0.6.8's I/O (step 296) | dtype/temporal.go:212 | open |
 
 ## 2. The expression model
 
@@ -288,6 +290,17 @@ decide whether to keep or switch each one.
 - A join on keys of different names keeps both key columns, `JoinLeftOn(a)` and
   `JoinRightOn(b)` giving `a` and `b`; Polars drops the right one.
   `JoinCoalesce(true)` drops it here (step 295).
+- `Unpivot` gives each row's columns together, then the next row's; Polars gives
+  every row's first column, then every row's second. Its doc chose it: ursus unpivots
+  a batch at a time, and Polars' order would depend on the batches (step 296 lists
+  it).
+- `GroupByDynamic` makes every window of the grid, so a period with no rows is a row
+  of `Len` 0; Polars leaves empty windows out. Its doc chose it (step 296 lists it).
+- `ToInteger`, `ToDate` and `ToDatetime` turn what does not parse into null; Polars'
+  `to_integer` and `to_date` fail by default, `strict=True`. `Strptime` and
+  `ToIntegerWith` take strict (step 296).
+- A pivot's cell with no value is null under `Sum`, as any empty sum is; Polars' is 0
+  (step 296).
 - `Div` and `Pow` always return a float.
 - `Cut` returns String, not Categorical.
 - An expression's `TopK` and `BottomK` return a List.

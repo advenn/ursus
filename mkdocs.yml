@@ -139,6 +139,10 @@ nav:
       - Aggregation and group-by: guide/aggregation.md
       - Window functions: guide/windows.md
       - Joins: guide/joins.md
+      - Reshaping: guide/reshaping.md
+      - Strings: guide/strings.md
+      - Lists and structs: guide/lists-and-structs.md
+      - Dates and times: guide/dates-and-times.md
   - Benchmarks: benchmarks.md
   - Reference:
       - API reference: reference/api.md

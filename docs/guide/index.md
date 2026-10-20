@@ -43,4 +43,31 @@ orders, its dates read as dates, unless a chapter says otherwise:
     Every join kind, keys, suffixes and validation, as-of joins, joins on a condition,
     and filters by another frame.
 
+-   :material-table-pivot:{ .lg .middle } **[Reshaping](reshaping.md)**
+
+    ---
+
+    Pivot and unpivot, explode and unnest, concatenating frames, and transpose.
+
+-   :material-format-text:{ .lg .middle } **[Strings](strings.md)**
+
+    ---
+
+    Cleaning, matching with regular expressions, extracting, replacing, splitting,
+    and parsing numbers and dates.
+
+-   :material-code-brackets:{ .lg .middle } **[Lists and structs](lists-and-structs.md)**
+
+    ---
+
+    List columns and the questions to ask of them, expressions over their elements,
+    sets, and struct fields.
+
+-   :material-calendar-clock:{ .lg .middle } **[Dates and times](dates-and-times.md)**
+
+    ---
+
+    Parsing, calendar arithmetic, time zones, ranges, and groups by day, week or a
+    rolling period.
+
 </div>

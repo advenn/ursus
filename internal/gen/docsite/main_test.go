@@ -132,3 +132,43 @@ func TestHelpersAreTheirDeclarations(t *testing.T) {
 		t.Error("an Example was written as a helper")
 	}
 }
+
+// TestFragmentWrapsProseNotTables wraps an output wider than the page when it is
+// prose, an error or a schema, and never a printed frame, which a wrap would break.
+func TestFragmentWrapsProseNotTables(t *testing.T) {
+	long := strings.Repeat("x", pageWidth+1)
+	if got := fragment("go", "f()", long); !strings.Contains(got, "```{.text .wrap") {
+		t.Errorf("long prose not wrapped:\n%s", got)
+	}
+	if got := fragment("go", "f()", "│ "+long+" │"); strings.Contains(got, ".wrap") {
+		t.Errorf("a wide table wrapped:\n%s", got)
+	}
+	if got := fragment("go", "f()", "short"); strings.Contains(got, ".wrap") {
+		t.Errorf("short prose wrapped:\n%s", got)
+	}
+}
+
+// TestTheExamplesFitThePage holds every fragment's code, and every printed frame in
+// its output, to the page's width: a wider line scrolls sideways, and 31 did before
+// step 295 noticed. Prose wider than the page wraps, and is not held.
+func TestTheExamplesFitThePage(t *testing.T) {
+	frags, err := fragments(filepath.Join("..", "..", "..", "docs", "examples"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, f := range frags {
+		for _, l := range strings.Split(f.code, "\n") {
+			if w := displayWidth(strings.ReplaceAll(l, "\t", "    ")); w > pageWidth {
+				t.Errorf("%s: a line of code %d wide: %s", name, w, l)
+			}
+		}
+		if wraps(f.output) {
+			continue
+		}
+		for _, l := range strings.Split(f.output, "\n") {
+			if w := displayWidth(l); w > pageWidth {
+				t.Errorf("%s: an output line %d wide: %s", name, w, l)
+			}
+		}
+	}
+}
