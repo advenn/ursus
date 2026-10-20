@@ -62,9 +62,10 @@ macOS and Windows.
 
 ## Versions
 
-ursus is at 0.6 and will stay at 0.x. Go's rule for v0 applies: a release may rename,
-remove or reshape an API, and the [changelog](../reference/changelog.md) lists each
-release's breaks with their replacements. Pin a version in your `go.mod`, and read the
+ursus is on [ZeroVer](https://0ver.org), at 0.6, and a stable 1.0 is not expected
+yet. Go's rule for v0 applies: a release may rename, remove or reshape an API, and the
+[changelog](../reference/changelog.md) lists each release's breaks with their
+replacements. Pin a version in your `go.mod`, and read the
 changelog before you move.
 
 These docs are versioned too: the selector at the top of the page switches between

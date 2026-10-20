@@ -181,9 +181,9 @@ Arrow IPC files and NDJSON. [`v0.6-scope.md`](./context_files/v0.6-scope.md) say
 [`feature-gaps.md`](./context_files/feature-gaps.md) lists everything Polars, pandas and DuckDB have that ursus does
 not, which the rest of 0.6 works through.
 
-**ursus stays 0.x; there will be no 1.0.** Version numbers follow Go's rule for v0, **nothing is promised**, and that
-is permanent rather than a phase: a minor version renames, removes or reshapes an API whenever the result is better,
-with no deprecation period. The changelog lists each release's breaks with their replacements.
+**ursus is on [ZeroVer](https://0ver.org): 0.x, and a stable 1.0 is not expected yet.** Version numbers follow Go's
+rule for v0, so a minor version may rename, remove or reshape an API when the result is better, with no deprecation
+period. The changelog lists each release's breaks with their replacements.
 
 ---
 

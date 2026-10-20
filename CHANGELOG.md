@@ -1,13 +1,11 @@
 # Changelog
 
-ursus follows Go's rule for v0: **nothing is promised**, and a minor version may
-change behaviour. Each release below therefore says what a user of the previous one
-can trip on, not only what is new.
-
-**ursus will stay 0.x; there will be no 1.0.** So no API is frozen and none is
-deprecated first: a minor version renames, removes or reshapes an API whenever the
-result is better. From 0.6 on, each release lists its breaks, each with its
-replacement.
+ursus is on [ZeroVer](https://0ver.org): 0.x, and a stable 1.0 is not expected yet.
+Go's rule for v0 applies, so a minor version may change behaviour, and an API may be
+renamed, removed or reshaped when the result is better, without being deprecated
+first. Each release below therefore says what a user of the previous one can trip
+on, not only what is new; from 0.6 on, each lists its breaks with their
+replacements.
 
 Every step of construction has an as-built record in
 [`context_files/`](./context_files/), with the measurements behind each change.
@@ -968,9 +966,9 @@ than v0.5.0 on it. Both are met. Measured on 2026-10-11, at `c6aa77d` (step 189)
 
 ### Breaks
 
-ursus stays 0.x, and these break code written against v0.5.0, each for a better API
-(186). Each took or returned a type in an internal package, which no caller outside
-the module could name or build:
+These break code written against v0.5.0, each for a better API (186). Each took or
+returned a type in an internal package, which no caller outside the module could
+name or build:
 
 - **`Scan(plan.Source)`** is gone. Scan a file or frame with `ScanParquet`,
   `ScanCSV`, `ScanParquetFrom`, `ScanCSVFrom`, `Frame` or `FromArrow`.
