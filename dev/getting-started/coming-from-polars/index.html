@@ -901,6 +901,14 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1054,6 +1062,118 @@
     
   
     Joins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/reshaping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reshaping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/strings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/lists-and-structs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lists and structs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/dates-and-times/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dates and times
   
 
     
@@ -1537,6 +1657,12 @@ changes is what Go asks for.</p>
 <li><strong><code>Div</code> and <code>Pow</code> always give a float.</strong></li>
 <li><strong>An expression is named after its leftmost column.</strong> <code>Col("a").Alias("x").Add(1)</code>
   is <code>x</code> in Polars and <code>a</code> here: put the alias last.</li>
+<li><strong><code>Remove</code> drops a row whose condition is null,</strong> as <code>Filter</code> does; Polars'
+  <code>remove</code> keeps it.</li>
+<li><strong><code>GroupByDynamic</code> keeps empty windows,</strong> a row of <code>Len</code> 0 for a period with no
+  rows; Polars leaves them out.</li>
+<li><strong><code>ToInteger</code>, <code>ToDate</code> and <code>ToDatetime</code> give null for what does not parse;</strong>
+  Polars' fail by default.</li>
 <li><strong><code>Cut</code> and <code>Hist</code> give text,</strong> where Polars gives a Categorical, which ursus does not
   have yet.</li>
 <li><strong>A <code>Time</code> takes a unit,</strong> where Polars' is nanoseconds.</li>
