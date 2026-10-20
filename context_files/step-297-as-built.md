@@ -87,7 +87,7 @@ first looked as though the output schema depended on whether a column held a nul
 It did not: `Values` builds columns the schema says cannot hold one, and those are
 left alone.
 
-## 5. The 0.6.6 version
+## 4. The 0.6.6 version
 
 The eight chapters of steps 296 and 297 went to the `docs-0.6.6` branch as step 295's
 four did (`a5bf069`).
@@ -102,7 +102,7 @@ four did (`a5bf069`).
 - **Published:** a manual run published 0.6.6 as `latest` from the branch. Both
   versions' guides are live.
 
-## 6. Tests and teeth
+## 5. Tests and teeth
 
 **The width test caught three lines** in this step's examples before a page was built:
 `TestTheExamplesFitThePage` in the gate, as step 296 meant.
