@@ -43,17 +43,24 @@ const (
 // node, so the input would be SCANNED K TIMES. Twelve month columns would read the
 // file twelve times.
 //
-// # Index defaults to the rest, and Unnest's rule does not apply
+// # Index defaults to the rest, and so, before it reaches here, does On
 //
 // Unnest refuses to default its column list because "naming them keeps the frame's
 // width a property of the query rather than of whatever the file happens to
 // contain". The same argument would apply to defaulting On — an added source column
 // would silently start being melted. It does not apply to Index: an added column is
-// KEPT, which is what anyone would want. So On is required and Index is not.
+// KEPT, which is what anyone would want. So On was required and Index was not.
+//
+// Polars' on=None melts every column not in the index, and since step 304 the root
+// package's Unpivot does too, writing On out against the schema when it is called:
+// the node still names what it melts, which projection pushdown keeps in full. On
+// may be empty when Index names every column: nothing is melted, no row comes out,
+// and the value column is of the Null type, as Polars answers.
 type Unpivot struct {
 	Input Node
 
-	// On is the value columns, melted into the variable/value pair. Required.
+	// On is the value columns, melted into the variable/value pair. Empty melts
+	// nothing.
 	On []string
 
 	// Index is the columns carried through unchanged. Empty means every column
@@ -126,12 +133,6 @@ func (u *Unpivot) Schema() (*dtype.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(u.On) == 0 {
-		return nil, uerr.New(uerr.KindValue, "unpivot",
-			"unpivot needs at least one column to melt").
-			Hint("On names the columns that become variable/value pairs")
-	}
-
 	fields := make([]dtype.Field, 0, len(u.Index)+2)
 	seen := map[string]struct{}{}
 	for _, name := range u.IndexColumns(in) {
@@ -143,8 +144,8 @@ func (u *Unpivot) Schema() (*dtype.Schema, error) {
 		seen[name] = struct{}{}
 	}
 
-	var valType dtype.DataType
-	nullable := false
+	// Nothing melted is a value column of the Null type, as Polars' is.
+	valType, nullable := dtype.Null, len(u.On) == 0
 	for i, name := range u.On {
 		j := in.IndexOf(name)
 		if j < 0 {
@@ -193,6 +194,9 @@ func unknownUnpivotColumn(role, name string, in *dtype.Schema) error {
 func (u *Unpivot) Label() string {
 	var b strings.Builder
 	b.WriteString("UNPIVOT ")
+	if len(u.On) == 0 {
+		b.WriteString("nothing")
+	}
 	b.WriteString(strings.Join(u.On, ", "))
 	if len(u.Index) > 0 {
 		b.WriteString(" index ")

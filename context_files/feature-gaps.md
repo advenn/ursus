@@ -62,6 +62,7 @@ Fix these before anything new. **Step 249 fixed every row** (see its record).
 | **A fold in a list's body was never built.** `List().Eval(Fold(...))` and a fold in `CumulativeEval`'s body failed, "fold reached typing unexpanded", since step 266: a body is lowered when it is written, and the fold waited for an expansion that never reaches it. Found when step 302's variadic functions failed the same way in a body, which its gate caught; fixed at step 302, a body building both over its expressions as written | internal/expr/listeval.go | fixed |
 | **`Format` names its column when it is written,** after its first argument, which a selection cannot name yet. `Format("<{}>", All())` is refused, its columns all named "literal", where Polars formats each column, named after it; `Format("<{}>", SumHorizontal(All()))` is named "literal" where Polars' is "a". A name taken at expansion would fix both. Found at step 302 | fold.go | open |
 | **A float cast to String is Go's shortest text,** `2`, `-0`, `1e-07` and `+Inf`, where Polars writes `2.0`, `-0.0`, `1e-7` and `inf`; the CSV writer already writes a whole float with its `.0` (`appendFloatText`). A pivot names a column by this text, so pivoting on 2.0 makes a column `2`. Found at step 303 | internal/kernel/unary.go:1287 | open |
+| **`TestTemporalMediansSpillTheirValues` fails under CPU contention.** Its live-heap bound, 10 MB of the 16 MB of values, is read from heap object bytes sampled each millisecond, garbage the collector has not reached among them; at a load of 18 to 24, `GODEBUG=simd=0` under test-all measured 12 and 14 MB, where alone it passes. A bound on the heap after each collection, or a wider margin, would hold. Found at step 304's gate | rollingmem_test.go | open |
 | **A typed view of a `Date` or a `Datetime` is its integer.** `df.Column[time.Time]` and `df.At[time.Time]` refuse one, "no typed view for time.Time"; `Column[int32]` gives a Date's days and `Column[int64]` a Datetime's ticks. `Rows[T]` decodes either into a `time.Time`. Polars' `to_list` gives dates and datetimes. For 0.6.7's V3, the eager Series (step 297) | series.go, internal/data | open |
 | **A naive `Datetime` is written with a `Z`,** as though it were UTC: `Datetime(s)` prints `2026-03-08T06:30:00Z`, and the CSV writer, which shares `FormatTemporal`, writes it so, which another reader takes as UTC; so does a cast to String (step 298). Polars writes a naive instant with no offset. A change of the CSV format, for 0.6.8's I/O (step 296) | dtype/temporal.go:212 | open |
 
@@ -227,7 +228,7 @@ differs from their input's, or scalars outside a group-by.
 | join: emit a computed key column; `maintain_order` right, left-right and right-left; asof `tolerance` on numeric keys; asof `coalesce`; `JoinWhere` suffix | P1 |
 | group-by: `head`, `tail`, `having`, `map_groups`, iterating over groups; an integer index for `GroupByDynamic` and `Rolling`; `.over(order_by)` of an aggregate; mapping `explode` and `join` | P1/P2 |
 | `to_dummies`, `unstack`, `gather`, `extend`, `update`, `glimpse`, `estimated_size`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293; `insert_column` and `hash_rows` in step 302 | P2 |
-| `unpivot` without `On` (every non-index column); `transpose` of mixed String and number, with names from a column | P2 |
+| `transpose` of mixed String and number, with names from a column. `unpivot` without `On` built in step 304 | P2 |
 | **An eager `Series` with operations:** it is a read-only view (`Get`, `Values`, `Map`, `Fold`); sort, unique, head, fill and aggregates go through a frame | P1 |
 | Build a frame from Go structs (`FromRows[T]`); a lazy row iterator, `to_dicts`, `rows_by_key` | P1 |
 
@@ -295,6 +296,11 @@ decide whether to keep or switch each one.
 - A join on keys of different names keeps both key columns, `JoinLeftOn(a)` and
   `JoinRightOn(b)` giving `a` and `b`; Polars drops the right one.
   `JoinCoalesce(true)` drops it here (step 295).
+- `Unpivot` with `Index` left out keeps every column it does not melt; Polars' keeps
+  none. Its doc chose it, so a column added to the source is kept (step 304).
+- `Unpivot` meets the melted columns' types exactly, as `ConcatStrict` does: an Int64
+  beside a Float64, a Boolean beside a number and text beside a number are refused,
+  where Polars' supertype makes a Float64, a number and text. Cast first (step 304).
 - `Unpivot` gives each row's columns together, then the next row's; Polars gives
   every row's first column, then every row's second. Its doc chose it: ursus unpivots
   a batch at a time, and Polars' order would depend on the batches (step 296 lists

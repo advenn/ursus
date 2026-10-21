@@ -227,14 +227,16 @@ func (lf *LazyFrame) Unnest(names ...string) *LazyFrame {
 
 // UnpivotOptions configures Unpivot.
 //
-// On is required; everything else has a working default, so the common call is
-// UnpivotOptions{On: []string{...}}.
+// Every field has a working default, so the common calls are
+// UnpivotOptions{On: []string{...}} and UnpivotOptions{Index: []string{...}}.
 type UnpivotOptions struct {
-	// On names the value columns to melt into the variable/value pair.
+	// On names the value columns to melt into the variable/value pair. Empty means
+	// every column that is not in Index, as Polars' on=None: every column, when
+	// Index is empty too.
 	On []string
 
 	// Index names the columns carried through unchanged. Empty means every column
-	// that is not in On.
+	// that is not in On, where Polars' keeps none.
 	Index []string
 
 	// VariableName and ValueName name the two invented columns. Empty means
@@ -267,24 +269,41 @@ type UnpivotOptions struct {
 // order would depend on how the query ran rather than on what it asked for. Sort
 // afterwards if a particular order matters.
 //
-// # Index defaults; On does not
+// # Each of On and Index defaults to the other's rest
 //
-// Leaving Index empty keeps every column that is not melted, so adding a column to
-// the source keeps it. Unnest refuses the equivalent default for the opposite
-// reason: there, a new column would silently start being CONSUMED.
+// Leaving On empty melts every column that is not in Index, as Polars' on=None does
+// (step 304): with Index empty too, every column. Leaving Index empty keeps every
+// column that is not melted, so adding a column to the source keeps it, where
+// Polars keeps none. Index naming every column melts nothing: no rows, and a value
+// column of the Null type, as Polars answers.
+//
+// On is written out when Unpivot is called, against the frame's schema then, so the
+// plan names what it melts. Which columns those are is then the source's rather than
+// the query's, the reason Unnest, which consumes its columns, still refuses to
+// default them.
 func (lf *LazyFrame) Unpivot(opts UnpivotOptions) *LazyFrame {
 	if lf.err != nil {
 		return lf
 	}
-	if len(opts.On) == 0 {
-		return &LazyFrame{err: uerr.New(uerr.KindValue, "unpivot",
-			"unpivot needs at least one column to melt").
-			Hint("On names the columns that become variable/value pairs").
-			Hint("Index may be left empty; it defaults to everything else")}
+	on := opts.On
+	if len(on) == 0 {
+		s, err := lf.schemaNow()
+		if err != nil {
+			return &LazyFrame{err: err}
+		}
+		kept := make(map[string]bool, len(opts.Index))
+		for _, name := range opts.Index {
+			kept[name] = true
+		}
+		for _, name := range s.Names() {
+			if !kept[name] {
+				on = append(on, name)
+			}
+		}
 	}
 	return lf.derive(&plan.Unpivot{
 		Input:        lf.node,
-		On:           opts.On,
+		On:           on,
 		Index:        opts.Index,
 		VariableName: opts.VariableName,
 		ValueName:    opts.ValueName,

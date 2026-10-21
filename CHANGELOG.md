@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–303, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–304, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -59,6 +59,9 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`Unpivot` without `On`** (304), as Polars' `on=None`: every column not in `Index`
+  melted, every column with no `Index` either, and nothing, no rows, when `Index`
+  names every column.
 - **A lazy `Pivot`** (303), as Polars' `LazyFrame.pivot`: its new columns given in
   `OnColumns`, so the plan knows them before it runs. A group-by of the index and the
   On values reduces the rows, streaming them and spilling past a memory limit. A

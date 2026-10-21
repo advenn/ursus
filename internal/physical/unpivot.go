@@ -110,6 +110,14 @@ func (u *unpivotOp) build(in *data.Batch, idxSel, valSel []int32, out int) (*dat
 		parts[i] = c
 	}
 	valName := u.schema.Field(len(u.idx) + 1).Name
+	if len(parts) == 0 {
+		// Nothing melted: no row, and a value column of the Null type.
+		val, err := kernel.NullColumn(valName, u.valDT, 0)
+		if err != nil {
+			return nil, err
+		}
+		return data.NewBatchRows(u.schema, append(cols, val), out), nil
+	}
 	val, err := kernel.ConcatColumns(valName, parts)
 	if err != nil {
 		return nil, err

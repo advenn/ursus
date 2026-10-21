@@ -117,6 +117,29 @@ func Example_reshapeUnpivot() {
 	// └─────────┴─────────┴───────┘
 }
 
+func Example_reshapeUnpivotRest() {
+	quarters := ursus.Frame(
+		ursus.Values("region", []string{"north", "south"}),
+		ursus.Values("q1", []int64{120, 80}),
+		ursus.Values("q2", []int64{135, 95}),
+		ursus.Values("q3", []int32{150, 90}),
+	)
+	show(quarters.Unpivot(ursus.UnpivotOptions{Index: []string{"region"}}))
+	// Output:
+	// shape: (6, 3)
+	// ┌─────────┬──────────┬───────┐
+	// │ region  │ variable │ value │
+	// │ String  │ String   │ Int64 │
+	// ├─────────┼──────────┼───────┤
+	// │ "north" │ "q1"     │ 120   │
+	// │ "north" │ "q2"     │ 135   │
+	// │ "north" │ "q3"     │ 150   │
+	// │ "south" │ "q1"     │ 80    │
+	// │ "south" │ "q2"     │ 95    │
+	// │ "south" │ "q3"     │ 90    │
+	// └─────────┴──────────┴───────┘
+}
+
 func Example_reshapeExplode() {
 	posts := ursus.Frame(
 		ursus.Values("post", []int64{1, 2, 3}),

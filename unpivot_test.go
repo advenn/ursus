@@ -250,20 +250,91 @@ func TestUnpivotKeepsItsColumnsAliveThroughPushdown(t *testing.T) {
 		t.Errorf("first value is %d, want 10", v)
 	}
 
-	// Projection pushdown does NOT prune `region`, and that is the fail-safe
-	// default rather than a bug: "An unrecognised node type requires ALL of its
-	// input's columns ... New node types are therefore correct-but-unoptimized the
-	// day they are added, rather than silently pruning columns they needed."
-	//
-	// Asserted so the day someone adds a pushdown arm, this test says so rather
-	// than passing silently either way.
+	// Projection pushdown prunes `region`: Unpivot has its arm, pushdownUnpivot,
+	// which keeps On and an explicit Index whole and nothing else. This asserted the
+	// opposite once, as a log, until step 304 found it logging.
 	s, err := lf.Explain(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(s, "region") {
-		t.Log("projection pushdown now prunes through Unpivot; update this test " +
-			"and the open list in step-47-as-built.md")
+	if strings.Contains(s, "region") {
+		t.Errorf("projection pushdown no longer prunes through Unpivot:\n%s", s)
+	}
+}
+
+// TestUnpivotWithoutOn is P2 of v0.6.7-scope.md (step 304): On left empty melts
+// every column not in Index, as Polars' on=None; with Index empty too, every column;
+// and with Index naming every column, nothing, no rows and a value column of the
+// Null type. Each answer is Polars 1.44.1's, its rows in ursus's order: each row's
+// columns together, where Polars gives every row's first column first (§9).
+func TestUnpivotWithoutOn(t *testing.T) {
+	ctx := t.Context()
+	lf := ursus.Frame(ursus.Values("id", []int64{1, 2}), ursus.Values("a", []int64{3, 4}), ursus.Values("b", []int64{5, 6}))
+	for _, tc := range []struct {
+		name string
+		opts ursus.UnpivotOptions
+		want []*ursus.Column
+	}{
+		{"every column not in Index", ursus.UnpivotOptions{Index: []string{"id"}}, []*ursus.Column{
+			ursus.Values("id", []int64{1, 1, 2, 2}), ursus.Values("variable", []string{"a", "b", "a", "b"}),
+			ursus.Values("value", []int64{3, 5, 4, 6})}},
+		{"every column", ursus.UnpivotOptions{}, []*ursus.Column{
+			ursus.Values("variable", []string{"id", "a", "b", "id", "a", "b"}),
+			ursus.Values("value", []int64{1, 3, 5, 2, 4, 6})}},
+		{"named", ursus.UnpivotOptions{Index: []string{"id"}, VariableName: "col", ValueName: "val"}, []*ursus.Column{
+			ursus.Values("id", []int64{1, 1, 2, 2}), ursus.Values("col", []string{"a", "b", "a", "b"}),
+			ursus.Values("val", []int64{3, 5, 4, 6})}},
+	} {
+		got, err := lf.Unpivot(tc.opts).Collect(ctx)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		want, err := ursus.Frame(tc.want...).Collect(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Run(tc.name, func(t *testing.T) { ursustest.AssertFrameEqual(t, got, want) })
+	}
+
+	// The plan names what it melts, written out when Unpivot was called.
+	plan, err := lf.Unpivot(ursus.UnpivotOptions{Index: []string{"id"}}).Explain(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(plan, "UNPIVOT a, b index id") {
+		t.Errorf("the plan:\n%s", plan)
+	}
+
+	// Index naming every column melts nothing, and so does a frame of no columns.
+	for name, q := range map[string]*ursus.LazyFrame{
+		"every column an index": lf.Unpivot(ursus.UnpivotOptions{Index: []string{"id", "a", "b"}}),
+		"no columns":            ursus.Frame().Unpivot(ursus.UnpivotOptions{}),
+		"eager":                 nil,
+	} {
+		var got *ursus.DataFrame
+		if q == nil {
+			df, err := lf.Collect(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err = df.Unpivot(ctx, ursus.UnpivotOptions{Index: []string{"id", "a", "b"}})
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+		} else if got, err = q.Collect(ctx); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		var fields []string
+		for _, f := range got.Schema().All() {
+			fields = append(fields, f.Name+":"+f.Type.String())
+		}
+		want := "id:Int64 a:Int64 b:Int64 variable:String value:Null"
+		if name == "no columns" {
+			want = "variable:String value:Null"
+		}
+		if g := strings.Join(fields, " "); g != want || got.Height() != 0 {
+			t.Errorf("%s: %s, %d rows; want %s and none", name, g, got.Height(), want)
+		}
 	}
 }
 
@@ -275,9 +346,11 @@ func TestUnpivotRefusals(t *testing.T) {
 		opts ursus.UnpivotOptions
 		want string
 	}{
-		{"no columns to melt",
+		// Nothing named melts every column since step 304, and region is text
+		// beside numbers, which Polars casts to String (feature-gaps.md §9).
+		{"every column, text among them",
 			ursus.UnpivotOptions{},
-			"at least one column"},
+			"no common type for Int64 and String"},
 		{"unknown melted column",
 			ursus.UnpivotOptions{On: []string{"nope"}},
 			"nope"},

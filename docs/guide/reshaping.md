@@ -44,6 +44,14 @@ Polars writes them, text quoted:
 
 --8<-- "Example_reshapeUnpivot.md"
 
+*New in 0.6.7.* `On` may be left out instead: it is then every column not in `Index`,
+as Polars' `on=None`, and every column when `Index` is left out too. The melted
+columns share one value column, so their types must meet in one that holds each of
+them exactly: an Int32 beside an Int64 melts into an Int64, but text beside a number
+is refused, where Polars writes the numbers as text. Cast first.
+
+--8<-- "Example_reshapeUnpivotRest.md"
+
 !!! note "The row order is not Polars'"
 
     Polars gives every row's first column, then every row's second. ursus gives each
