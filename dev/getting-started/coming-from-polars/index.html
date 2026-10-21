@@ -1727,6 +1727,10 @@ changes is what Go asks for.</p>
 <td><code>.WithRowIndex("index", 0)</code></td>
 </tr>
 <tr>
+<td><code>df.insert_column(1, s)</code>, <code>df.hash_rows()</code></td>
+<td><code>lf.InsertColumn(1, s)</code>, <code>df.HashRows(ctx, 0)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.explode("a")</code>, <code>.unnest("s")</code></td>
 <td><code>.Explode("a")</code>, <code>.Unnest("s")</code></td>
 </tr>
