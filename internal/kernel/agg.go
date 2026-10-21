@@ -181,7 +181,12 @@ func NewAccumulator(op expr.AggOp, in dtype.DataType, bind expr.AggBinding,
 		}
 		return q, nil
 	case expr.AggQuantile:
-		return &quantileAcc{q: params.Q, interp: params.Interp}, nil
+		// An instant's or a duration's quantile is one, as its median is (step 300).
+		q := &quantileAcc{q: params.Q, interp: params.Interp, out: bind.Out}
+		if in.ID() == dtype.TypeDate {
+			q.scale = microsPerDay
+		}
+		return q, nil
 
 	case expr.AggCorr:
 		return &coMomentAcc{corr: true}, nil

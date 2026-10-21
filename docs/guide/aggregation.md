@@ -94,6 +94,14 @@ aggregates is one row. `GroupBy()` with no keys is the same, written as a group-
 
 --8<-- "Example_aggWholeFrame.md"
 
+*New in 0.6.7.* A frame's own `Sum`, `Mean`, `Median`, `Min`, `Max`, `Std(ddof)`,
+`Var(ddof)`, `Quantile(q, interpolation)`, `Product` and `NullCount` aggregate every
+column at once, one row, as Polars' frame methods do. A column the aggregate does not
+take is kept, as a null: the mean of text is null, and a Boolean's mean is the share of
+its trues.
+
+--8<-- "Example_aggFrame.md"
+
 `ValueCounts(exprs...)` counts the rows of each distinct value, most frequent first,
 ties in the order their values first appear:
 

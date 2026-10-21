@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–299, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–300, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -40,6 +40,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A frame's aggregates** (300), as Polars': `Sum`, `Mean`, `Median`, `Min`, `Max`,
+  `Std`, `Var`, `Quantile`, `Product` and `NullCount` on both frames, one row, every
+  column kept, a null where the aggregate does not take the column, as Polars
+  answers: a Boolean's mean is the share of its trues, a text column's sum is null.
+- **`Quantile` of instants, durations and times** (300), one of them as their median
+  is, a Date's a Datetime(us), as Polars'. It was refused.
 - **`MatchToSchema`** (299), as Polars' `match_to_schema`: a frame made to a schema's
   columns, order and types, its missing columns inserted or refused, its extra ones
   dropped or refused, a narrower number widened where nothing can be lost, a struct's

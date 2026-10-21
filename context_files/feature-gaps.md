@@ -211,7 +211,7 @@ differs from their input's, or scalars outside a group-by.
 | missing or partial | prio |
 | --- | --- |
 | built: `unique(keep=)` with `maintain_order=True`, as `UniqueKeep`, in step 289 | — |
-| **A frame `fill_null` strategy's `limit`** (the strategies were built at step 249); frame `null_count`, `sum`, `mean`, `median`, `min`, `max`, `std`, `var`, `quantile`, `product` shortcuts. A frame's `shift`, `first` and `last` built in step 293 | P0/P1 |
+| **A frame `fill_null` strategy's `limit`** (the strategies were built at step 249). A frame's `shift`, `first` and `last` built in step 293; its `null_count`, `sum`, `mean`, `median`, `min`, `max`, `std`, `var`, `quantile` and `product` in step 300. `approx_n_unique` is deprecated on a frame in Polars 1.44.1, and is `Select(All().ApproxNUnique())` | P0/P1 |
 | built: `slice` with a negative offset, in step 291 | — |
 | built: a frame's `cast`, by name, by type and for every column, in step 298; `match_to_schema` in step 299 | — |
 | built: a frame's `sample` and `shuffle` (fraction or n, seed), in step 292 | — |
@@ -317,6 +317,17 @@ decide whether to keep or switch each one.
   expression's own type, so `missing_columns={"c": pl.col("b")}` of an Int32 `b`
   gives an Int32 `c` under an Int64 schema, and of a String one a String `c` (step
   299).
+- `Product` is a Float64 for every number, an integer's too, where Polars keeps an
+  integer's type: an Int64 product wraps after about twenty factors, and i128 has no
+  multiplication (`agg.go`). A count, `Len`, `Count`, `NullCount`, `NUnique`, is a
+  Uint64, where Polars' is a UInt32. Listed by step 300, where a frame's aggregates
+  answer so.
+- A float `Var` or `Std` is Welford's one pass, shifted by the first value, where
+  Polars takes two passes, so they can be an ulp apart on one thread too:
+  var([1.5, 2.5, 4.0]) is 1.5833333333333335 here and 1.5833333333333333 there.
+  var([1, 2, 4], ddof 0) agrees, 1.5555555555555554 in both (step 300).
+- A frame's `Median` of a Decimal answers, as `Expr.Median` does; Polars 1.44.1's
+  `DataFrame.median` gives null for one, though its `quantile` answers (step 300).
 - `Div` and `Pow` always return a float.
 - `Cut` returns String, not Categorical.
 - An expression's `TopK` and `BottomK` return a List.

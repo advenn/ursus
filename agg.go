@@ -492,8 +492,9 @@ func (e Expr) Dot(other Expr) Expr { return e.Mul(other).Sum() }
 // Values are ordered by ursus's TOTAL order, so NaN sorts above everything and a
 // high quantile of a column containing NaN is NaN, exactly as Sort would place it.
 //
-// A temporal column, a Duration included, is refused for now; Cast(Int64) gives
-// its ticks.
+// A quantile of instants or durations is one of them, truncated toward zero, as its
+// median is and as Polars' is: a Date's a Datetime(us), keeping a fraction of a day
+// (step 300; refused before).
 func (e Expr) Quantile(q float64, interp Interpolation) Expr {
 	if !(q >= 0 && q <= 1) { // written this way so NaN is rejected too
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "quantile",

@@ -497,8 +497,9 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 	case AggVar, AggStd, AggMedian, AggQuantile:
 		// A median of instants or durations is one of them, truncated toward zero,
 		// as Polars' (step 173): its type kept, but a Date's, which is a
-		// Datetime(us) to keep a fraction of a day, as the mean's.
-		if op == AggMedian && in.IsTemporal() {
+		// Datetime(us) to keep a fraction of a day, as the mean's. A quantile is the
+		// same, the median being its 0.5 (step 300).
+		if (op == AggMedian || op == AggQuantile) && in.IsTemporal() {
 			if in.ID() == dtype.TypeDate {
 				return AggBinding{Acc: dtype.Float64, Out: dtype.Datetime(dtype.Micro, "")}, nil
 			}

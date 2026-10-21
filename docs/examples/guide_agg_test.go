@@ -277,3 +277,25 @@ func Example_aggDescribe() {
 	// │ "max"        │ 12                │ 3                  │
 	// └──────────────┴───────────────────┴────────────────────┘
 }
+
+func Example_aggFrame() {
+	lines := sales().Select(ursus.Col("region"), ursus.Col("qty"), ursus.Col("price"))
+	show(lines.Mean())
+	show(lines.Max())
+	// Output:
+	// shape: (1, 3)
+	// ┌────────┬─────────┬─────────┐
+	// │ region │ qty     │ price   │
+	// │ String │ Float64 │ Float64 │
+	// ├────────┼─────────┼─────────┤
+	// │ null   │ 6.625   │ 2.15625 │
+	// └────────┴─────────┴─────────┘
+	//
+	// shape: (1, 3)
+	// ┌─────────┬───────┬─────────┐
+	// │ region  │ qty   │ price   │
+	// │ String  │ Int64 │ Float64 │
+	// ├─────────┼───────┼─────────┤
+	// │ "south" │ 12    │ 3       │
+	// └─────────┴───────┴─────────┘
+}

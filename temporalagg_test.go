@@ -7,6 +7,7 @@ package ursus_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,11 +104,14 @@ func TestTemporalMeanAndMedianAnswerAsPolars(t *testing.T) {
 	}
 }
 
-func TestTemporalVarStdAndQuantileStillRefuse(t *testing.T) {
+// TestTemporalVarAndStdStillRefuse: a spread of instants is not implemented, as
+// Polars' frame std and var answer null for one. A quantile answers since step 300,
+// TestTemporalQuantile.
+func TestTemporalVarAndStdStillRefuse(t *testing.T) {
 	c := ursus.Col
 	lf := ursus.Frame(ursus.Values("t", []time.Time{time.Unix(0, 0), time.Unix(60, 0)}))
 	for name, e := range map[string]ursus.Expr{
-		"var": c("t").Var(1), "std": c("t").Std(1), "quantile": c("t").Quantile(0.9, ursus.InterpLinear),
+		"var": c("t").Var(1), "std": c("t").Std(1),
 	} {
 		if _, err := lf.GroupBy().Agg(e).Collect(t.Context()); err == nil {
 			t.Errorf("%s of a Datetime answered; it is not implemented", name)
@@ -177,5 +181,52 @@ func TestParquetUUIDAndJSONRead(t *testing.T) {
 	}
 	if df.Height() != 2 {
 		t.Fatalf("%d rows, want 2", df.Height())
+	}
+}
+
+// TestTemporalQuantile (step 300): a quantile of a Date, a Datetime, a Duration or a
+// Time is one of them, as its median is, truncated toward zero, a Date's a
+// Datetime(us). Every answer is Polars 1.44.1's.
+func TestTemporalQuantile(t *testing.T) {
+	c := ursus.Col
+	at := func(d, h, m int) time.Time { return time.Date(2026, 1, d, h, m, 0, 0, time.UTC) }
+	ok := []bool{true, true, false, true}
+	lf := ursus.Frame(
+		ursus.ValuesNullable("d", []time.Time{at(1, 0, 0), at(4, 0, 0), {}, at(8, 0, 0)}, ok),
+		ursus.ValuesNullable("t", []time.Time{at(1, 6, 0), at(1, 7, 30), {}, at(3, 6, 0)}, ok),
+		ursus.ValuesNullable("u", []time.Duration{time.Hour, 2 * time.Hour, 0, 250 * time.Minute}, ok),
+		ursus.ValuesNullable("tm", []time.Time{at(1, 1, 0), at(1, 2, 30), {}, at(1, 9, 0)}, ok),
+	).Select(c("d").Cast(ursus.Date), c("t").Cast(ursus.Datetime(ursus.Micro, "")), c("u"),
+		c("tm").Dt().Time())
+	for _, tc := range []struct {
+		q      float64
+		interp ursus.Interpolation
+		want   string
+	}{
+		{0.5, ursus.InterpLinear, "2026-01-04T00:00:00.000000Z 2026-01-01T07:30:00.000000Z 2h0m0s 02:30:00.000000000"},
+		{0.25, ursus.InterpLinear, "2026-01-02T12:00:00.000000Z 2026-01-01T06:45:00.000000Z 1h30m0s 01:45:00.000000000"},
+		{0.5, ursus.InterpNearest, "2026-01-04T00:00:00.000000Z 2026-01-01T07:30:00.000000Z 2h0m0s 02:30:00.000000000"},
+		{0.9, ursus.InterpLower, "2026-01-04T00:00:00.000000Z 2026-01-01T07:30:00.000000Z 2h0m0s 02:30:00.000000000"},
+		{0.9, ursus.InterpHigher, "2026-01-08T00:00:00.000000Z 2026-01-03T06:00:00.000000Z 4h10m0s 09:00:00.000000000"},
+		{0.3, ursus.InterpMidpoint, "2026-01-02T12:00:00.000000Z 2026-01-01T06:45:00.000000Z 1h30m0s 01:45:00.000000000"},
+	} {
+		df, err := lf.Select(ursus.All().Quantile(tc.q, tc.interp)).Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, name := range []string{"d", "t", "u", "tm"} {
+			got = append(got, strings.TrimSpace(rendered172(t, df, name)))
+		}
+		if g := strings.Join(got, " "); g != tc.want {
+			t.Errorf("%v %v: got %s, want %s", tc.q, tc.interp, g, tc.want)
+		}
+	}
+	s, err := lf.Select(ursus.All().Quantile(0.5, ursus.InterpLinear)).CollectSchema(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.String(); !strings.Contains(got, "d: Datetime(us)") || !strings.Contains(got, "u: Duration(ns)") {
+		t.Errorf("types %s", got)
 	}
 }
