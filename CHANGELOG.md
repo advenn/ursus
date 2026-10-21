@@ -15,12 +15,19 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–301, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–302, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **A selection among a variadic function's operands is now its operands,** as in
+  Polars (302). `SumHorizontal(All())` is each row's sum across every column, one
+  column. Before, the function was repeated a column at a time, so
+  `MaxHorizontal(All())` gave each column itself. This holds for the six horizontal
+  reductions, `ConcatStr`, `ConcatStrIgnoreNulls`, `Struct`, `ConcatList`,
+  `List().Concat` and `Coalesce`. `Format` still formats a column at a time, as
+  Polars' does.
 - **`FillStrategy` is a `uint64`,** where it was a `uint8` (301): its bits above the
   rule carry a limit. A conversion to `uint8` no longer compiles, and a strategy with a
   limit is not `==` the bare one, `FillForward.Limit(1) != FillForward`.
@@ -31,6 +38,10 @@ completeness, part 3 — frame operations.**
 
 ### Fixes
 
+- **A fold in a list's body** (302): `List().Eval(Fold(...))` and a `Fold` in
+  `CumulativeEval`'s body failed, "fold reached typing unexpanded", since folds came
+  in (266). A body is lowered when it is written, before any schema, so a fold or a
+  function across columns in it is now built over its expressions as written.
 - **A printed frame aligns text outside ASCII** (296). It padded each cell by its
   bytes, so a row holding "Zoë" came out a column short; it pads by the columns a
   terminal draws, two for a wide East Asian character and none for a combining mark,
@@ -43,6 +54,9 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`InsertColumn` and `HashRows`** (302), as Polars' `insert_column` and `hash_rows`:
+  a column, an expression or Go values, put at a place counted from either end; and
+  each row's hash over its columns, an expression, and a `Series` of a frame.
 - **A fill strategy's limit** (301), Polars' `fill_null(strategy="forward",
   limit=1)`: `FillForward.Limit(1)` and `FillBackward.Limit(n)`, for an expression or
   every column of a frame at once.

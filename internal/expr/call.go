@@ -339,6 +339,11 @@ const (
 	// elements met as Append's mode says (step 282), which Append in an aggregation
 	// lowers to.
 	FnListAppend
+
+	// hash_rows(operands..., seed): each row's hash over its operands, the row's
+	// group-by key hashed as hash hashes one value's, the seed an Int64 literal last
+	// (step 302).
+	FnHashRows
 	fnHorizontalEnd
 )
 
@@ -551,7 +556,7 @@ var callNames = map[CallFn]string{
 	FnBinContains: "bin.contains", FnBinStartsWith: "bin.starts_with", FnBinEndsWith: "bin.ends_with",
 	FnBinGet: "bin.get", FnBinSlice: "bin.slice", FnBinEncode: "bin.encode", FnBinDecode: "bin.decode",
 	FnBinSize: "bin.size", FnBinReinterpret: "bin.reinterpret",
-	FnOrderCmp: "order_cmp", FnHash: "hash", FnOrderSign: "order_sign",
+	FnOrderCmp: "order_cmp", FnHash: "hash", FnOrderSign: "order_sign", FnHashRows: "hash_rows",
 	FnListAppend: "list.append",
 
 	FnIsIn: "is_in",
@@ -807,6 +812,24 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 		return dtype.Null, uerr.Internalf("expr: %s has no operands", fn)
 	}
 	switch fn {
+	case FnHashRows:
+		// Every operand but the seed is a value a group-by keys on, as hash's is.
+		if ops[len(ops)-1].Type != dtype.Int64 {
+			return dtype.Null, uerr.Internalf("expr: hash_rows has no seed")
+		}
+		if len(ops) < 2 {
+			return dtype.Null, uerr.New(uerr.KindSchema, "hash_rows", "hash_rows has no column to hash").
+				Hint("the frame has no columns, or the selection matched none")
+		}
+		for _, f := range ops[:len(ops)-1] {
+			if !f.Type.IsHashable() && !f.Type.IsNull() {
+				return dtype.Null, uerr.New(uerr.KindType, "hash_rows",
+					"hash_rows reads values a group-by can key on, and %q is %s", f.Name, f.Type).
+					Hint("a List or a Struct is not a key here yet; drop the column, or hash its fields")
+			}
+		}
+		return dtype.Uint64, nil
+
 	case FnConcatStr:
 		// Any operand that formats as text is formatted, as Polars' concat_str
 		// formats it: the kernel casts it to String, the cast every type here has.

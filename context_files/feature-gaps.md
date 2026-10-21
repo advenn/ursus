@@ -58,6 +58,9 @@ Fix these before anything new. **Step 249 fixed every row** (see its record).
 | **A streamed rolling var or std differs from the answer in memory in its last bits.** Over the whole frame under a memory limit, a window's state is rebuilt from each batch's history rows, so its periodic recompute falls at other rows: 35–52% of rows over `sin(i)·1000`. Step 284's skew, kurtosis, cov and corr do too. The streaming test's floats are quarters, whose sums are exact, so it never showed. The fix is to carry the kernel's state across batches, as an ewm's is (found at step 284). | internal/physical/winstream.go, internal/kernel/rolling.go | **not bit-exact** |
 | **`Rank` ranks a null, as the smallest value;** Polars leaves a null's rank null and ranks the rest among themselves. `[5, null, 4]` ranks `[3, 1, 2]` here and `[2, None, 1]` there, in a window and in `List().Eval` alike (found at step 268). | internal/kernel/window.go `winRank`, and the streamed rank (`RankNext`) | **wrong answer** |
 | **A printed frame padded its cells by bytes,** so a row holding a letter outside ASCII came out a column short: "Zoë" is three columns and four bytes. Found writing the user guide's strings chapter; fixed at step 296, cells padded by their width on a terminal | frame.go | fixed |
+| **A selection among a variadic function's operands expanded the whole function once per column.** `MaxHorizontal(All())` gave each column itself, `SumHorizontal(All()).Alias("s")` was refused as two columns named "s", `ConcatStr`, `Struct`, `ConcatList` and `Coalesce` of a selection answered a column each, where Polars writes a selection out as the function's operands and answers one column. Found writing `HashRows` over every column; fixed at step 302 by `expr.Variadic`, built when the plan is resolved, as a fold is | horizontal.go, cond.go, internal/expr/variadic.go | fixed |
+| **A fold in a list's body was never built.** `List().Eval(Fold(...))` and a fold in `CumulativeEval`'s body failed, "fold reached typing unexpanded", since step 266: a body is lowered when it is written, and the fold waited for an expansion that never reaches it. Found when step 302's variadic functions failed the same way in a body, which its gate caught; fixed at step 302, a body building both over its expressions as written | internal/expr/listeval.go | fixed |
+| **`Format` names its column when it is written,** after its first argument, which a selection cannot name yet. `Format("<{}>", All())` is refused, its columns all named "literal", where Polars formats each column, named after it; `Format("<{}>", SumHorizontal(All()))` is named "literal" where Polars' is "a". A name taken at expansion would fix both. Found at step 302 | fold.go | open |
 | **A typed view of a `Date` or a `Datetime` is its integer.** `df.Column[time.Time]` and `df.At[time.Time]` refuse one, "no typed view for time.Time"; `Column[int32]` gives a Date's days and `Column[int64]` a Datetime's ticks. `Rows[T]` decodes either into a `time.Time`. Polars' `to_list` gives dates and datetimes. For 0.6.7's V3, the eager Series (step 297) | series.go, internal/data | open |
 | **A naive `Datetime` is written with a `Z`,** as though it were UTC: `Datetime(s)` prints `2026-03-08T06:30:00Z`, and the CSV writer, which shares `FormatTemporal`, writes it so, which another reader takes as UTC; so does a cast to String (step 298). Polars writes a naive instant with no offset. A change of the CSV format, for 0.6.8's I/O (step 296) | dtype/temporal.go:212 | open |
 
@@ -88,7 +91,7 @@ differs from their input's, or scalars outside a group-by.
 | **UInt128, Float16, Object, Unknown** | Float16 is widened to Float32 on import | P2 |
 | **Dictionary, run-end, union, ListView** in memory | decoded or refused on import | P2 |
 | `Expr.ToPhysical`, `Reinterpret`, `ShrinkDtype` | `Cast(dt.Physical())` works for temporal types only | P2 |
-| **A List or a Struct column as a key** | `Unique`, `UniqueKeep`, `GroupBy`, `Over` and `Join` each refuse one ("cannot use a List(Int64) column as a key"), as `RleID`, `Rle` and `Mode` do (§9); Polars compares them (found at step 289) | P1 |
+| **A List or a Struct column as a key** | `Unique`, `UniqueKeep`, `GroupBy`, `Over` and `Join` each refuse one ("cannot use a List(Int64) column as a key"), as `RleID`, `Rle`, `Mode` and, since step 302, `HashRows` do (§9); Polars compares them (found at step 289) | P1 |
 
 ## 4. Expression namespaces
 
@@ -222,7 +225,7 @@ differs from their input's, or scalars outside a group-by.
 | `concat`'s relaxed, horizontal and align modes; `ConcatStrict` meets Int32 and Int64 at Int64, where Polars' vertical refuses them, and refuses Int64 beside Float64, which `vertical_relaxed` meets; `DataFrame.Concat` modes | P1 |
 | join: emit a computed key column; `maintain_order` right, left-right and right-left; asof `tolerance` on numeric keys; asof `coalesce`; `JoinWhere` suffix | P1 |
 | group-by: `head`, `tail`, `having`, `map_groups`, iterating over groups; an integer index for `GroupByDynamic` and `Rolling`; `.over(order_by)` of an aggregate; mapping `explode` and `join` | P1/P2 |
-| `to_dummies`, `unstack`, `gather`, `insert_column`, `extend`, `update`, `glimpse`, `estimated_size`, `hash_rows`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293 | P2 |
+| `to_dummies`, `unstack`, `gather`, `extend`, `update`, `glimpse`, `estimated_size`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293; `insert_column` and `hash_rows` in step 302 | P2 |
 | `unpivot` without `On` (every non-index column); `transpose` of mixed String and number, with names from a column | P2 |
 | **An eager `Series` with operations:** it is a read-only view (`Get`, `Values`, `Map`, `Fold`); sort, unique, head, fill and aggregates go through a frame | P1 |
 | Build a frame from Go structs (`FromRows[T]`); a lazy row iterator, `to_dicts`, `rows_by_key` | P1 |
@@ -334,6 +337,12 @@ decide whether to keep or switch each one.
   answers by filling nothing, is refused rather than meaning either (step 301).
 - `Interpolate` of a Decimal answers a Float64, where Polars' frame `interpolate`
   keeps the Decimal (step 301).
+- A fold in `CumulativeEval`'s body answers, built ahead into a value a prefix, where
+  Polars refuses one, "not allowed with non-scalar output", its function opaque to it
+  (step 302).
+- `HashRows` refuses a List or a Struct column, being no group-by key here (§3);
+  Polars' `hash_rows` hashes one. It takes one seed, where Polars' takes four, and its
+  numbers are ursus's own, as `Hash`'s are (step 302).
 - `Div` and `Pow` always return a float.
 - `Cut` returns String, not Categorical.
 - An expression's `TopK` and `BottomK` return a List.

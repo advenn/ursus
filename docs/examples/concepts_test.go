@@ -216,6 +216,29 @@ func Example_exprNamespaces() {
 	// └─────────┴─────────┴───────┘
 }
 
+func Example_exprHorizontal() {
+	scores := ursus.Frame(
+		ursus.Values("name", []string{"ada", "ben"}),
+		ursus.Values("maths", []int64{90, 60}),
+		ursus.Values("art", []int64{70, 85}),
+		ursus.Values("music", []int64{80, 75}),
+	)
+	show(scores.Select(
+		ursus.Col("name"),
+		ursus.SumHorizontal(ursus.ColDType(ursus.Int64)).Alias("total"),
+		ursus.MaxHorizontal(ursus.ColDType(ursus.Int64)).Alias("best"),
+	))
+	// Output:
+	// shape: (2, 3)
+	// ┌────────┬────────┬───────┐
+	// │ name   │ total  │ best  │
+	// │ String │ Int128 │ Int64 │
+	// ├────────┼────────┼───────┤
+	// │ "ada"  │ 240    │ 90    │
+	// │ "ben"  │ 220    │ 85    │
+	// └────────┴────────┴───────┘
+}
+
 // --- types and nulls --------------------------------------------------------------
 
 func Example_typesSchema() {

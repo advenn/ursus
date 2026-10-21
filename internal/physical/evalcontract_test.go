@@ -493,8 +493,10 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 	// Step 279: hash's seed; order_cmp's second operand.
 	expr.FnHash: {{args: []any{int64(7)}}},
 	// Step 282: list.append's second list, then its mode, upcast and cast.
-	expr.FnListAppend:    {{label: ",upcast", args: []any{[]int64{1}, int64(1)}}, {label: ",cast", args: []any{[]int64{1}, int64(2)}}},
-	expr.FnOrderCmp:      {{label: ",1", args: []any{int64(1)}}, {label: ",x", args: []any{"x"}}},
+	expr.FnListAppend: {{label: ",upcast", args: []any{[]int64{1}, int64(1)}}, {label: ",cast", args: []any{[]int64{1}, int64(2)}}},
+	expr.FnOrderCmp:   {{label: ",1", args: []any{int64(1)}}, {label: ",x", args: []any{"x"}}},
+	// Step 302: the operands, then the seed.
+	expr.FnHashRows:      {{label: ",seed", args: []any{int64(7)}}, {label: ",two", args: []any{"x", int64(7)}}},
 	expr.FnBinDecode:     {{label: ",hex", args: []any{"hex", false}}},
 	expr.FnBinSize:       {{label: ",b", args: []any{int64(1)}}, {label: ",kb", args: []any{int64(1024)}}},
 	expr.FnBinContains:   {{args: []any{"a"}}},

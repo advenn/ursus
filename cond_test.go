@@ -182,20 +182,23 @@ func TestCoalesceThroughMatch(t *testing.T) {
 		ursus.ValuesNullable("a", []int64{1, 0}, []bool{true, false}),
 		ursus.ValuesNullable("b", []int64{0, 2}, []bool{false, true}),
 	)
+	// All() is the call's operands, as Polars' coalesce(pl.all(), pl.lit(-1)) is:
+	// one column, named after the first, each row's first value across a, b and -1
+	// (step 302; before, each column was coalesced with -1 on its own).
 	df, err := f.Select(ursus.Coalesce(ursus.All(), ursus.Lit(int64(-1)))).
 		Collect(t.Context(), ursus.WithVerify())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if df.Width() != 2 {
-		t.Fatalf("width = %d, want 2 — All() should expand to both columns", df.Width())
+	if df.Width() != 1 {
+		t.Fatalf("width = %d, want one column", df.Width())
 	}
 	a, err := df.Column[int64]("a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, ok := a.Get(1); !ok || v != -1 {
-		t.Errorf("a[1] = %v (valid %v), want -1", v, ok)
+	if got := a.Values(); len(got) != 2 || got[0] != 1 || got[1] != 2 {
+		t.Errorf("a = %v, want [1 2]", got)
 	}
 }
 

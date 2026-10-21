@@ -153,6 +153,11 @@ func OutputName(n Node) string {
 		if _, ok := t.Child.(*Lit); ok && t.Op == AggLen {
 			return "len"
 		}
+	case *Variadic:
+		// Named as the function it builds is, after its first operand (step 302).
+		if len(t.Exprs) > 0 {
+			return OutputName(t.Exprs[0])
+		}
 	case *Cond:
 		// Named after the VALUE, not the test. Leftmost-column-wins would otherwise
 		// pick the condition's column, so

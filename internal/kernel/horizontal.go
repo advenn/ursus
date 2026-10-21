@@ -126,6 +126,8 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return horizontalKleene(fn == expr.FnAllHorizontal, name, ops, n)
 	case expr.FnDtCombine:
 		return dtCombine(name, out, ops[0], ops[1], n)
+	case expr.FnHashRows:
+		return hashRows(name, ops, n)
 	}
 	return nil, uerr.Internalf("kernel: no horizontal kernel for %s", fn)
 }

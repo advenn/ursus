@@ -49,9 +49,13 @@ func expand(n Node, in *dtype.Schema) ([]Node, error) {
 	if err := FirstErr(n); err != nil {
 		return nil, err
 	}
-	// A fold is built once its expressions are written out (step 266).
+	// A fold is built once its expressions are written out (step 266), and so is a
+	// variadic function (step 302).
 	n, err := buildFolds(n, in)
 	if err != nil {
+		return nil, err
+	}
+	if n, err = buildVariadics(n, in); err != nil {
 		return nil, err
 	}
 	if us := unnests(n); len(us) > 0 {

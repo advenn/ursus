@@ -23,11 +23,9 @@ func ConcatStrIgnoreNulls(sep string, exprs ...Expr) Expr {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindSchema, "concat_str",
 			"ConcatStrIgnoreNulls requires at least one expression")})
 	}
-	args := make([]expr.Node, 0, len(exprs)+1)
-	for _, e := range exprs {
-		args = append(args, e.node())
-	}
-	return wrap(&expr.Call{Fn: expr.FnConcatStrIgnoreNulls, Args: append(args, litNode(sep))})
+	return variadic("concat_str", exprs, func(ns []expr.Node) (expr.Node, error) {
+		return &expr.Call{Fn: expr.FnConcatStrIgnoreNulls, Args: append(ns, litNode(sep))}, nil
+	})
 }
 
 func ConcatStr(sep string, exprs ...Expr) Expr {
@@ -35,14 +33,16 @@ func ConcatStr(sep string, exprs ...Expr) Expr {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindSchema, "concat_str",
 			"ConcatStr requires at least one expression")})
 	}
-	args := make([]expr.Node, 0, 2*len(exprs))
-	for i, e := range exprs {
-		if i > 0 && sep != "" {
-			args = append(args, litNode(sep))
+	return variadic("concat_str", exprs, func(ns []expr.Node) (expr.Node, error) {
+		args := make([]expr.Node, 0, 2*len(ns))
+		for i, n := range ns {
+			if i > 0 && sep != "" {
+				args = append(args, litNode(sep))
+			}
+			args = append(args, n)
 		}
-		args = append(args, e.node())
-	}
-	return wrap(&expr.Call{Fn: expr.FnConcatStr, Args: args})
+		return &expr.Call{Fn: expr.FnConcatStr, Args: args}, nil
+	})
 }
 
 // Struct builds a Struct column whose fields are its expressions, each named as its
@@ -59,11 +59,9 @@ func Struct(exprs ...Expr) Expr {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindSchema, "struct",
 			"Struct requires at least one expression")})
 	}
-	args := make([]expr.Node, len(exprs))
-	for i, e := range exprs {
-		args[i] = e.node()
-	}
-	return wrap(&expr.Call{Fn: expr.FnStructOf, Args: args})
+	return variadic("struct", exprs, func(ns []expr.Node) (expr.Node, error) {
+		return &expr.Call{Fn: expr.FnStructOf, Args: ns}, nil
+	})
 }
 
 // horizontalOf is fn over exprs, at least one.
@@ -72,11 +70,22 @@ func horizontalOf(fn expr.CallFn, api string, exprs []Expr) Expr {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindSchema, fn.String(),
 			"%s requires at least one expression", api)})
 	}
-	args := make([]expr.Node, len(exprs))
+	return variadic(fn.String(), exprs, func(ns []expr.Node) (expr.Node, error) {
+		return &expr.Call{Fn: fn, Args: ns}, nil
+	})
+}
+
+// variadic is op over exprs, built when the plan is resolved and the frame's schema
+// has written each of them out: a selection among them is its columns, one operand
+// each, as Polars writes out sum_horizontal(pl.all()) or concat_str(pl.all()) (step
+// 302). Built at once, a selection expanded the whole function once per column, so
+// MaxHorizontal(All()) gave each column itself.
+func variadic(op string, exprs []Expr, build func([]expr.Node) (expr.Node, error)) Expr {
+	nodes := make([]expr.Node, len(exprs))
 	for i, e := range exprs {
-		args[i] = e.node()
+		nodes[i] = e.node()
 	}
-	return wrap(&expr.Call{Fn: fn, Args: args})
+	return wrap(&expr.Variadic{Op: op, Exprs: nodes, Build: build})
 }
 
 // MaxHorizontal and MinHorizontal are each row's largest and smallest value across

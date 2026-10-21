@@ -1077,6 +1077,8 @@ func Rebuild(n Node, kids []Node) Node {
 		return &Unnest{Child: kids[0], Fields: t.Fields}
 	case *Fold:
 		return t.rebuild(kids)
+	case *Variadic:
+		return t.rebuild(kids)
 	case *Element, *OuterRef:
 		return n // leaves of a list's body
 	case *ListMap:

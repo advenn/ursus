@@ -82,9 +82,6 @@ func buildFolds(n Node, in *dtype.Schema) (Node, error) {
 	if !ok {
 		return n, nil
 	}
-	if f.Fn == nil {
-		return nil, uerr.New(uerr.KindValue, f.Op, "%s has no function", f.Op)
-	}
 	exprs, err := ExpandAll(f.Exprs, in)
 	if err != nil {
 		return nil, err
@@ -99,7 +96,18 @@ func buildFolds(n Node, in *dtype.Schema) (Node, error) {
 			return nil, uerr.New(uerr.KindValue, f.Op, "%s's accumulator %s is %d columns, not one", f.Op, acc, len(accs))
 		}
 		acc = accs[0]
-	} else {
+	}
+	return f.write(acc, exprs, in)
+}
+
+// write is f over its accumulator and expressions, written out. in types the running
+// values Promote casts; a list's body has no schema yet, and passes nil, refusing
+// Promote.
+func (f *Fold) write(acc Node, exprs []Node, in *dtype.Schema) (Node, error) {
+	if f.Fn == nil {
+		return nil, uerr.New(uerr.KindValue, f.Op, "%s has no function", f.Op)
+	}
+	if acc == nil {
 		if len(exprs) == 0 {
 			return nil, uerr.New(uerr.KindValue, f.Op, "%s of no expression", f.Op).
 				Hint("a selection that matched no column leaves nothing to reduce")
@@ -125,6 +133,11 @@ func buildFolds(n Node, in *dtype.Schema) (Node, error) {
 		return nil, uerr.New(uerr.KindValue, f.Op, "%s of no expression", f.Op)
 	}
 	if f.Promote {
+		if in == nil {
+			return nil, uerr.New(uerr.KindUnsupported, f.Op,
+				"%s inside a list's body is not supported", f.Op).
+				Hint("its fields are of one type, which a list's body cannot know when it is written; use CumFold")
+		}
 		last, err := fields[len(fields)-1].Field(in)
 		if err != nil {
 			return nil, err

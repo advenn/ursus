@@ -138,6 +138,10 @@ func LowerListEval(list, body Node, agg bool) Node {
 	if agg {
 		op = "list.agg"
 	}
+	body, err := buildAsWritten(body)
+	if err != nil {
+		return &Err{E: err}
+	}
 	b, kind, err := lowerEvalNode(op, list, LowerReshapes(body, true))
 	if err != nil {
 		return &Err{E: err}
@@ -167,6 +171,10 @@ const CumulativeName = "\x00cumulative"
 // that is not one value a prefix is refused, as Polars refuses it, and so is one
 // reading another column.
 func LowerCumulativeEval(body Node) (Node, error) {
+	body, err := buildAsWritten(body)
+	if err != nil {
+		return nil, err
+	}
 	b, kind, err := lowerEvalNode("cumulative_eval", &Col{Name: CumulativeName}, LowerReshapes(body, true))
 	if err != nil {
 		return nil, err
@@ -177,6 +185,44 @@ func LowerCumulativeEval(body Node) (Node, error) {
 			Hint("an aggregate of Element(), e.g. Element().Sum() or Element().First().Sub(Element().Last())")
 	}
 	return b, nil
+}
+
+// buildAsWritten builds every Fold and Variadic in a list's body over its
+// expressions as written (step 302). The body is lowered when it is written, and no
+// expansion reaches it after, so they cannot wait for a schema as elsewhere. A body
+// reads nothing but Element, so a selection among their expressions is refused as
+// any other is, and Polars refuses one too.
+func buildAsWritten(n Node) (Node, error) {
+	kids := n.Children()
+	if len(kids) > 0 {
+		out := make([]Node, len(kids))
+		changed := false
+		for i, c := range kids {
+			b, err := buildAsWritten(c)
+			if err != nil {
+				return nil, err
+			}
+			out[i], changed = b, changed || b != c
+		}
+		if changed {
+			n = Rebuild(n, out)
+		}
+	}
+	switch t := n.(type) {
+	case *Fold:
+		w, err := t.write(t.Acc, t.Exprs, nil)
+		if err != nil {
+			return nil, err
+		}
+		// What the function built may hold a selection's Variadic.
+		return buildAsWritten(w)
+	case *Variadic:
+		if len(t.Exprs) == 0 {
+			return nil, uerr.New(uerr.KindSchema, t.Op, "%s of no expression", t.Op)
+		}
+		return t.Build(t.Exprs)
+	}
+	return n, nil
 }
 
 // listValued are the list functions lowering produces whose answer is a list, not a

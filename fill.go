@@ -364,11 +364,11 @@ func (e Expr) FillNull(s FillStrategy) Expr {
 	case FillBackward:
 		return e.BackwardFill(n)
 	case FillMin:
-		return sugared(Coalesce(e, inheritedOver(e.Min())), "fill_null")
+		return sugared(coalesceNow(e, inheritedOver(e.Min())), "fill_null")
 	case FillMax:
-		return sugared(Coalesce(e, inheritedOver(e.Max())), "fill_null")
+		return sugared(coalesceNow(e, inheritedOver(e.Max())), "fill_null")
 	case FillMean:
-		return sugared(Coalesce(e, inheritedOver(e.Mean())), "fill_null")
+		return sugared(coalesceNow(e, inheritedOver(e.Mean())), "fill_null")
 	default:
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "fill_null",
 			"unknown fill strategy %s", s)})

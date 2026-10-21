@@ -19,11 +19,9 @@ func ConcatList(exprs ...Expr) Expr {
 	if len(exprs) == 0 {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "concat_list", "ConcatList needs an expression")})
 	}
-	args := make([]expr.Node, len(exprs))
-	for i, e := range exprs {
-		args[i] = e.node()
-	}
-	return wrap(&expr.Call{Fn: expr.FnConcatList, Args: args})
+	return variadic("concat_list", exprs, func(ns []expr.Node) (expr.Node, error) {
+		return &expr.Call{Fn: expr.FnConcatList, Args: ns}, nil
+	})
 }
 
 // foldOf is a Fold of fn, its accumulator acc or nil.
@@ -120,5 +118,12 @@ func Format(f string, args ...Expr) Expr {
 	if len(args) > 0 {
 		name = expr.OutputName(args[0].node())
 	}
-	return ConcatStr("", parts...).Alias(name)
+	// Built at once, not as ConcatStr: a selection among the arguments formats each
+	// of its columns, as Polars' format expands per column where its concat_str
+	// takes them all as operands (step 302).
+	nodes := make([]expr.Node, len(parts))
+	for i, p := range parts {
+		nodes[i] = p.node()
+	}
+	return wrap(&expr.Call{Fn: expr.FnConcatStr, Args: nodes}).Alias(name)
 }

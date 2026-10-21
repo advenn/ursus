@@ -113,15 +113,21 @@ func TestConcatStr(t *testing.T) {
 	})
 
 	t.Run("over a selection of several columns", func(t *testing.T) {
-		// One call per column, each named after its column.
+		// The selection is the call's operands, one column, named after the first,
+		// as Polars' concat_str(pl.col("first", "last"), pl.lit("!")) is (step 302;
+		// before, it was one call per column). A null first makes its row null.
 		df := collect(t, people().Select(ursus.ConcatStr("", c("first", "last"), ursus.Lit("!"))))
-		if got := texts(t, df, "last"); !slices.Equal(got, []string{"Lovelace!", "Turing!", "Hopper!"}) {
-			t.Errorf("last: %q", got)
+		if df.Width() != 1 {
+			t.Fatalf("width %d, want one column", df.Width())
 		}
-		// With a literal first, every expansion is named "literal", and the
-		// expansion says so (expr.OutputName).
-		assertUserError(t, people().Select(ursus.ConcatStr("", ursus.Lit("!"), c("first", "last"))),
-			`expands to 2 columns that would all be named "literal"`)
+		if got := texts(t, df, "first"); !slices.Equal(got, []string{"AdaLovelace!", "AlanTuring!", "null"}) {
+			t.Errorf("first: %q", got)
+		}
+		// With a literal first, it is named "literal", as Polars names it.
+		df = collect(t, people().Select(ursus.ConcatStr("", ursus.Lit("!"), c("first", "last"))))
+		if got := texts(t, df, "literal"); !slices.Equal(got, []string{"!AdaLovelace", "!AlanTuring", "null"}) {
+			t.Errorf("literal: %q", got)
+		}
 	})
 
 	t.Run("filtered on, through a projection", func(t *testing.T) {

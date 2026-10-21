@@ -23,6 +23,12 @@ adapts when the schema grows:
 
 --8<-- "Example_selectDropRename.md"
 
+*New in 0.6.7.* `InsertColumn(i, column)` puts a column at a place, an expression or
+Go values, as Polars' `insert_column` does; a negative place counts from the end, −1
+before the last column:
+
+--8<-- "Example_selectInsertColumn.md"
+
 `Select` can also compute columns, as `WithColumns` does: see
 [Expressions](../concepts/expressions.md). A pattern is explicit: ursus does not read
 `Col("^qty$")` as a regular expression, as Polars does, so a column named with a `^`
@@ -101,6 +107,12 @@ counts from the end, as Polars counts it (*new in 0.6.7*), and `Reverse` turns t
 frame around:
 
 --8<-- "Example_slices.md"
+
+*New in 0.6.7.* `HashRows(seed, columns...)` is each row's hash over its columns, every
+column when none is named, as Polars' `hash_rows`: rows equal as a group-by sees them
+hash alike. The numbers are ursus's own, not Polars'.
+
+--8<-- "Example_selectHashRows.md"
 
 `WithRowIndex(name, offset)` numbers the rows, from offset:
 

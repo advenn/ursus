@@ -94,20 +94,32 @@ func (t ThenBuilder) Otherwise[T Operand](v T) Expr {
 // is deliberately not built yet: the desugaring needs no new IR node, no new kernel
 // and no new arms in the five type switches a node type must reach.
 func Coalesce(exprs ...Expr) Expr {
-	switch len(exprs) {
-	case 0:
+	if len(exprs) == 0 {
 		return wrap(&expr.Err{E: errNoCoalesceArgs()})
-	case 1:
-		return exprs[0]
 	}
-	out := exprs[len(exprs)-1].node()
-	for i := len(exprs) - 2; i >= 0; i-- {
-		a := exprs[i].node()
-		out = &expr.Cond{
-			Pred: &expr.Unary{Op: expr.OpIsNotNull, Child: a},
-			Then: a,
-			Else: out,
+	// Built once a selection among exprs is its columns, as Polars' coalesce(pl.all())
+	// takes each row's first value across every column (step 302).
+	return variadic("coalesce", exprs, func(ns []expr.Node) (expr.Node, error) {
+		out := ns[len(ns)-1]
+		for i := len(ns) - 2; i >= 0; i-- {
+			a := ns[i]
+			out = &expr.Cond{
+				Pred: &expr.Unary{Op: expr.OpIsNotNull, Child: a},
+				Then: a,
+				Else: out,
+			}
 		}
-	}
-	return wrap(out)
+		return out, nil
+	})
+}
+
+// coalesceNow is Coalesce of a and b built at once, for a caller with two fixed
+// operands and no selection among them: a fill by a statistic, whose conditional
+// sugared names fill_null.
+func coalesceNow(a, b Expr) Expr {
+	return wrap(&expr.Cond{
+		Pred: &expr.Unary{Op: expr.OpIsNotNull, Child: a.node()},
+		Then: a.node(),
+		Else: b.node(),
+	})
 }

@@ -91,6 +91,7 @@ changes is what Go asks for.
 | `.head(n)`, `.tail(n)`, `.slice(o, n)` | `.Head(n)`, `.Tail(n)`, `.Slice(o, n)` |
 | `.drop("a")`, `.rename({"a": "b"})` | `.Drop("a")`, `.Rename(map[string]string{"a": "b"})` |
 | `.with_row_index()` | `.WithRowIndex("index", 0)` |
+| `df.insert_column(1, s)`, `df.hash_rows()` | `lf.InsertColumn(1, s)`, `df.HashRows(ctx, 0)` (new in 0.6.7) |
 | `.explode("a")`, `.unnest("s")` | `.Explode("a")`, `.Unnest("s")` |
 | `.unpivot(...)`, `df.pivot(...)` | `.Unpivot(ursus.UnpivotOptions{...})`, `df.Pivot(ctx, ursus.PivotOptions{...})` |
 | `pl.concat([a, b])` | `ursus.Concat([]*ursus.LazyFrame{a, b})` |

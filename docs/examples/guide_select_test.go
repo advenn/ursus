@@ -352,3 +352,50 @@ func Example_withRowIndex() {
 	// │ 3      │ 8        │ "pear"  │
 	// └────────┴──────────┴─────────┘
 }
+
+func Example_selectInsertColumn() {
+	lines := sales().
+		Select(ursus.Col("order_id"), ursus.Col("qty"), ursus.Col("price")).
+		Head(3)
+	revenue := ursus.Col("qty").Mul(ursus.Col("price")).Alias("revenue")
+	show(lines.InsertColumn(1, revenue))
+	show(lines.InsertColumn(-1, ursus.Values("note", []string{"gift", "", "rush"})))
+	// Output:
+	// shape: (3, 4)
+	// ┌──────────┬─────────┬───────┬─────────┐
+	// │ order_id │ revenue │ qty   │ price   │
+	// │ Int64    │ Float64 │ Int64 │ Float64 │
+	// ├──────────┼─────────┼───────┼─────────┤
+	// │ 1        │ 15      │ 10    │ 1.5     │
+	// │ 2        │ 6       │ 4     │ 1.5     │
+	// │ 3        │ 15.75   │ 7     │ 2.25    │
+	// └──────────┴─────────┴───────┴─────────┘
+	//
+	// shape: (3, 4)
+	// ┌──────────┬───────┬────────┬─────────┐
+	// │ order_id │ qty   │ note   │ price   │
+	// │ Int64    │ Int64 │ String │ Float64 │
+	// ├──────────┼───────┼────────┼─────────┤
+	// │ 1        │ 10    │ "gift" │ 1.5     │
+	// │ 2        │ 4     │ ""     │ 1.5     │
+	// │ 3        │ 7     │ "rush" │ 2.25    │
+	// └──────────┴───────┴────────┴─────────┘
+}
+
+func Example_selectHashRows() {
+	visits := ursus.Frame(
+		ursus.Values("user", []string{"ada", "ben", "ada"}),
+		ursus.Values("page", []string{"/home", "/home", "/home"}),
+	)
+	show(visits.WithColumns(ursus.HashRows(0).Alias("hash")))
+	// Output:
+	// shape: (3, 3)
+	// ┌────────┬─────────┬──────────────────────┐
+	// │ user   │ page    │ hash                 │
+	// │ String │ String  │ Uint64               │
+	// ├────────┼─────────┼──────────────────────┤
+	// │ "ada"  │ "/home" │ 15332602214641343754 │
+	// │ "ben"  │ "/home" │ 17635480945181825081 │
+	// │ "ada"  │ "/home" │ 15332602214641343754 │
+	// └────────┴─────────┴──────────────────────┘
+}

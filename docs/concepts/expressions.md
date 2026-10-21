@@ -42,6 +42,13 @@ or `Prefix` names them:
 
 --8<-- "Example_exprMany.md"
 
+A selection inside a function across columns is that function's operands, as in
+Polars: `SumHorizontal`, `MaxHorizontal` and their kin, `ConcatStr`, `Struct`,
+`ConcatList`, `Coalesce` and `HashRows` answer one column over every column selected
+(since 0.6.7; before, the whole function was repeated a column at a time):
+
+--8<-- "Example_exprHorizontal.md"
+
 ## Namespaces
 
 Methods for one kind of column sit behind a namespace:

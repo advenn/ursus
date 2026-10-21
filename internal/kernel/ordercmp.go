@@ -176,7 +176,41 @@ func Hash(name string, c *data.Column, seed uint64) (*data.Column, error) {
 	if err != nil {
 		return nil, err
 	}
-	n := c.Len()
+	return hashKeys(name, enc, c.Len(), seed), nil
+}
+
+// hashRows is each row's hash over every operand but the last, the seed: the row's
+// group-by key, hashed as Hash hashes one value's (step 302). Rows a group-by takes
+// as one hash alike, and a row of nulls has a hash of its own. A literal operand is
+// a row, met to the batch's.
+func hashRows(name string, ops []*data.Column, n int) (*data.Column, error) {
+	last := len(ops) - 1
+	seed, _ := int64At(ops[last], 0)
+	cols := make([]*data.Column, last)
+	for i, c := range ops[:last] {
+		var err error
+		if c.DType().IsNull() {
+			if c, err = NullColumn(c.Name(), dtype.Int64, c.Len()); err != nil {
+				return nil, err
+			}
+		}
+		if c.Len() != n {
+			if c, err = Take(c, make([]int32, n)); err != nil {
+				return nil, err
+			}
+		}
+		cols[i] = c
+	}
+	enc, err := NewGroupKeyEncoder("hash_rows", cols)
+	if err != nil {
+		return nil, err
+	}
+	return hashKeys(name, enc, n, uint64(seed)), nil
+}
+
+// hashKeys is each of n rows' key, as enc encodes it, hashed: FNV-1a over its bytes,
+// seeded, then mixed by splitmix64's finalizer.
+func hashKeys(name string, enc *GroupKeyEncoder, n int, seed uint64) *data.Column {
 	res := make([]uint64, n)
 	for i := range n {
 		h := uint64(14695981039346656037) ^ seed
@@ -191,5 +225,5 @@ func Hash(name string, c *data.Column, seed uint64) (*data.Column, error) {
 		h ^= h >> 31
 		res[i] = h
 	}
-	return data.NewFixed(name, dtype.Uint64, res, bitmap.AllSet(n)), nil
+	return data.NewFixed(name, dtype.Uint64, res, bitmap.AllSet(n))
 }
