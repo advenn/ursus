@@ -95,6 +95,7 @@ changes is what Go asks for.
 | `.explode("a")`, `.unnest("s")` | `.Explode("a")`, `.Unnest("s")` |
 | `.unpivot(...)`, `df.pivot(...)` | `.Unpivot(ursus.UnpivotOptions{...})`, `df.Pivot(ctx, ursus.PivotOptions{...})` |
 | `lf.pivot(on, on_columns=[...])` | `lf.Pivot(ursus.PivotOptions{On: ..., OnColumns: ...})` (new in 0.6.7) |
+| `df.partition_by("k", include_key=False)` | `df.PartitionBy(ctx, ursus.PartitionOptions{By: []string{"k"}, DropKey: true})` (new in 0.6.7) |
 | `pl.concat([a, b])` | `ursus.Concat([]*ursus.LazyFrame{a, b})` |
 | `.group_by_dynamic(...)`, `.rolling(...)` | `.GroupByDynamic(index, ursus.DynamicOptions{...})`, `.Rolling(index, ursus.RollingOptions{...})` |
 | `.str.contains(p)`, `.dt.year()`, `.list.len()` | `.Str().Contains(p, false)`, `.Dt().Year()`, `.List().Len()` |

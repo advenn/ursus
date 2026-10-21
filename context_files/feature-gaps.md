@@ -93,7 +93,7 @@ differs from their input's, or scalars outside a group-by.
 | **UInt128, Float16, Object, Unknown** | Float16 is widened to Float32 on import | P2 |
 | **Dictionary, run-end, union, ListView** in memory | decoded or refused on import | P2 |
 | `Expr.ToPhysical`, `Reinterpret`, `ShrinkDtype` | `Cast(dt.Physical())` works for temporal types only | P2 |
-| **A List or a Struct column as a key** | `Unique`, `UniqueKeep`, `GroupBy`, `Over` and `Join` each refuse one ("cannot use a List(Int64) column as a key"), as `RleID`, `Rle`, `Mode` and, since step 302, `HashRows` do (§9); Polars compares them (found at step 289) | P1 |
+| **A List or a Struct column as a key** | `Unique`, `UniqueKeep`, `GroupBy`, `Over` and `Join` each refuse one ("cannot use a List(Int64) column as a key"), as `RleID`, `Rle`, `Mode` and, since steps 302 and 305, `HashRows` and `PartitionBy` do (§9); Polars compares them (found at step 289) | P1 |
 
 ## 4. Expression namespaces
 
@@ -220,7 +220,7 @@ differs from their input's, or scalars outside a group-by.
 | built: `slice` with a negative offset, in step 291 | — |
 | built: a frame's `cast`, by name, by type and for every column, in step 298; `match_to_schema` in step 299 | — |
 | built: a frame's `sample` and `shuffle` (fraction or n, seed), in step 292 | — |
-| **`partition_by`** into frames | P1 |
+| built: `partition_by` into frames, in step 305 | — |
 | **`upsample`**. A frame's `interpolate` and `drop_nans` built in step 301 | P1 |
 | built: `is_duplicated`, `is_unique` and `n_unique` over several columns, in step 290 | — |
 | built: `pivot` of several `On` columns, and a lazy pivot with its columns given, in step 303 | — |
@@ -296,6 +296,10 @@ decide whether to keep or switch each one.
 - A join on keys of different names keeps both key columns, `JoinLeftOn(a)` and
   `JoinRightOn(b)` giving `a` and `b`; Polars drops the right one.
   `JoinCoalesce(true)` drops it here (step 295).
+- `PartitionBy` gives each part's key as a one-row frame beside the part, where
+  Polars' `as_dict` keys a dict by tuples; Go has no map by a tuple. Its parts keep
+  the order the keys first appear, as Polars' `maintain_order=True`, which is its
+  default; there is no other order to ask for (step 305).
 - `Unpivot` with `Index` left out keeps every column it does not melt; Polars' keeps
   none. Its doc chose it, so a column added to the source is kept (step 304).
 - `Unpivot` meets the melted columns' types exactly, as `ConcatStrict` does: an Int64

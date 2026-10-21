@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–304, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–305, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -59,6 +59,9 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`PartitionBy`** (305), as Polars' `partition_by`: a frame split into a part for
+  each distinct key, in the order the keys first appear, each part's typed `Key`
+  beside its `Frame`, with or without the key columns.
 - **`Unpivot` without `On`** (304), as Polars' `on=None`: every column not in `Index`
   melted, every column with no `Index` either, and nothing, no rows, when `Index`
   names every column.

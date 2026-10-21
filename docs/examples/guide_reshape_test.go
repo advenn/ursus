@@ -92,6 +92,39 @@ func Example_reshapePivotSeveral() {
 	// └────────┴──────────────┴──────────────┴────────────────┘
 }
 
+func Example_reshapePartitionBy() {
+	ctx := context.Background()
+	df, err := sales().Collect(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	parts, err := df.PartitionBy(ctx, ursus.PartitionOptions{
+		By:      []string{"region"},
+		DropKey: true,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, p := range parts {
+		region, _, _ := p.Key.At[string](0, "region")
+		fmt.Println(region, p.Frame.Height())
+	}
+	fmt.Println(parts[0].Frame)
+	// Output:
+	// north 3
+	// south 3
+	// east 2
+	// shape: (3, 5)
+	// ┌──────────┬────────────┬─────────┬───────┬─────────┐
+	// │ order_id │ date       │ product │ qty   │ price   │
+	// │ Int64    │ Date       │ String  │ Int64 │ Float64 │
+	// ├──────────┼────────────┼─────────┼───────┼─────────┤
+	// │ 1        │ 2026-01-03 │ "apple" │ 10    │ 1.5     │
+	// │ 3        │ 2026-01-04 │ "pear"  │ 7     │ 2.25    │
+	// │ 7        │ 2026-01-07 │ "fig"   │ 3     │ 3       │
+	// └──────────┴────────────┴─────────┴───────┴─────────┘
+}
+
 func Example_reshapeUnpivot() {
 	quarters := ursus.Frame(
 		ursus.Values("region", []string{"north", "south"}),

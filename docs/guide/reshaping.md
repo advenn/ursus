@@ -106,4 +106,18 @@ column, and `ColumnNames` names the new ones:
 
 Every column of the answer has the type its values meet at, so integers beside floats
 become floats; text beside numbers is refused, where Polars casts everything to text.
-Like `Pivot`, it is a `DataFrame`'s.
+It is a `DataFrame`'s only: its columns are the frame's rows, so its schema waits for
+the data.
+
+## Split by key: partition
+
+*New in 0.6.7.* `PartitionBy` splits a frame into a part for each distinct key, in
+the order the keys first appear, as Polars' `partition_by`. Each part has its `Key`, a
+one-row frame of the key's values, typed as the columns are, beside its `Frame`, the
+rows holding that key. Go has no map keyed by a tuple, so the parts are a slice where
+Polars' `as_dict` gives a dict. `DropKey` leaves the key columns out of each frame:
+
+--8<-- "Example_reshapePartitionBy.md"
+
+Keys group as a group-by groups them: a null key is a part of its own, and -0 and 0
+are one key. It is a `DataFrame`'s, and its parts together hold what the frame did.
