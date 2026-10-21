@@ -1220,6 +1220,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#upsampling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upsampling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynamic-groups" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1621,6 +1632,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#upsampling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upsampling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#dynamic-groups" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1868,30 +1890,59 @@ makes a list a row from columns:</p>
 </span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>│ 2026-02-02 │
 </span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>└────────────┘
 </span></code></pre></div>
+<h2 id="upsampling">Upsampling<a class="headerlink" href="#upsampling" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7.</em> <code>Upsample(time, every, groupBy...)</code> puts a row at every step from each
+group's first instant to its last, as Polars' <code>upsample</code>. A row the frame has at a
+step is kept; where it has none, the new row is null but for the time and the group's
+keys, which a fill forward completes: the weekend below. A row that falls between two
+steps is left out, as Polars leaves it.</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">prices</span><span class="p">().</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">    </span><span class="nx">Filter</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"ticker"</span><span class="p">).</span><span class="nx">Eq</span><span class="p">(</span><span class="s">"ACME"</span><span class="p">)).</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">    </span><span class="nx">Upsample</span><span class="p">(</span><span class="s">"date"</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Every</span><span class="p">(</span><span class="s">"1d"</span><span class="p">),</span><span class="w"> </span><span class="s">"ticker"</span><span class="p">).</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">    </span><span class="nx">WithColumns</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"close"</span><span class="p">).</span><span class="nx">FillNull</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">FillForward</span><span class="p">).</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"filled"</span><span class="p">)))</span>
+</span></code></pre></div>
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>shape: (8, 4)
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>┌────────────┬────────┬─────────┬─────────┐
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>│ date       │ ticker │ close   │ filled  │
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>│ Date       │ String │ Float64 │ Float64 │
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>├────────────┼────────┼─────────┼─────────┤
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>│ 2026-01-05 │ "ACME" │ 10      │ 10      │
+</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>│ 2026-01-06 │ "ACME" │ 11      │ 11      │
+</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>│ 2026-01-07 │ "ACME" │ 10.5    │ 10.5    │
+</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>│ 2026-01-08 │ "ACME" │ 12      │ 12      │
+</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>│ 2026-01-09 │ "ACME" │ 12      │ 12      │
+</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>│ 2026-01-10 │ "ACME" │ null    │ 12      │
+</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>│ 2026-01-11 │ "ACME" │ null    │ 12      │
+</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>│ 2026-01-12 │ "ACME" │ 13.5    │ 13.5    │
+</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>└────────────┴────────┴─────────┴─────────┘
+</span></code></pre></div>
+<p>It is a <code>LazyFrame</code>'s too. The groups keep the order each first appears, and their
+rows the grid's, with or without a memory limit, so a fill after it reads the rows it
+should. Unlike Polars', the frame need not be sorted.</p>
 <h2 id="dynamic-groups">Dynamic groups<a class="headerlink" href="#dynamic-groups" title="Permanent link">&para;</a></h2>
 <p><code>GroupByDynamic(index, options)</code> groups rows into windows of time cut from a sorted
 index: per day, per week, per hour. <code>Every</code> is how far apart windows start, and
 <code>Period</code> how long each is, <code>Every</code> when not given, so the windows tile the time.</p>
-<div class="language-go highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">prices</span><span class="p">().</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">    </span><span class="nx">Filter</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"ticker"</span><span class="p">).</span><span class="nx">Eq</span><span class="p">(</span><span class="s">"ACME"</span><span class="p">)).</span>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">    </span><span class="nx">GroupByDynamic</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"date"</span><span class="p">),</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">DynamicOptions</span><span class="p">{</span><span class="nx">Every</span><span class="p">:</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Every</span><span class="p">(</span><span class="s">"1d"</span><span class="p">)}).</span>
-</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="nx">Agg</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Len</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"rows"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"close"</span><span class="p">).</span><span class="nx">Mean</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"close"</span><span class="p">)))</span>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">prices</span><span class="p">().</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">    </span><span class="nx">Filter</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"ticker"</span><span class="p">).</span><span class="nx">Eq</span><span class="p">(</span><span class="s">"ACME"</span><span class="p">)).</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="nx">GroupByDynamic</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"date"</span><span class="p">),</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">DynamicOptions</span><span class="p">{</span><span class="nx">Every</span><span class="p">:</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Every</span><span class="p">(</span><span class="s">"1d"</span><span class="p">)}).</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">    </span><span class="nx">Agg</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Len</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"rows"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"close"</span><span class="p">).</span><span class="nx">Mean</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"close"</span><span class="p">)))</span>
 </span></code></pre></div>
-<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>shape: (8, 3)
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>┌────────────┬────────┬─────────┐
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>│ date       │ rows   │ close   │
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>│ Date       │ Uint64 │ Float64 │
-</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>├────────────┼────────┼─────────┤
-</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>│ 2026-01-05 │ 1      │ 10      │
-</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>│ 2026-01-06 │ 1      │ 11      │
-</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>│ 2026-01-07 │ 1      │ 10.5    │
-</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>│ 2026-01-08 │ 1      │ 12      │
-</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>│ 2026-01-09 │ 1      │ 12      │
-</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>│ 2026-01-10 │ 0      │ null    │
-</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>│ 2026-01-11 │ 0      │ null    │
-</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>│ 2026-01-12 │ 1      │ 13.5    │
-</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>└────────────┴────────┴─────────┘
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>shape: (8, 3)
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>┌────────────┬────────┬─────────┐
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>│ date       │ rows   │ close   │
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>│ Date       │ Uint64 │ Float64 │
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>├────────────┼────────┼─────────┤
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>│ 2026-01-05 │ 1      │ 10      │
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>│ 2026-01-06 │ 1      │ 11      │
+</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>│ 2026-01-07 │ 1      │ 10.5    │
+</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>│ 2026-01-08 │ 1      │ 12      │
+</span><span id="__span-16-10"><a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a>│ 2026-01-09 │ 1      │ 12      │
+</span><span id="__span-16-11"><a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>│ 2026-01-10 │ 0      │ null    │
+</span><span id="__span-16-12"><a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a>│ 2026-01-11 │ 0      │ null    │
+</span><span id="__span-16-13"><a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a>│ 2026-01-12 │ 1      │ 13.5    │
+</span><span id="__span-16-14"><a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a>└────────────┴────────┴─────────┘
 </span></code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Empty windows are rows, which Polars leaves out</p>
@@ -1901,25 +1952,25 @@ with no rows is a row with a count of 0: the weekend above. Polars'
 </div>
 <p><code>GroupBy</code> cuts windows within each key; the index column comes first, then the keys,
 where Polars puts the keys first:</p>
-<div class="language-go highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">sales</span><span class="p">().</span>
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">    </span><span class="nx">GroupByDynamic</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"date"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">DynamicOptions</span><span class="p">{</span>
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">        </span><span class="nx">Every</span><span class="p">:</span><span class="w">   </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Every</span><span class="p">(</span><span class="s">"1w"</span><span class="p">),</span>
-</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">        </span><span class="nx">GroupBy</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Expr</span><span class="p">{</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"region"</span><span class="p">)},</span>
-</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">    </span><span class="p">}).</span>
-</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="nx">Agg</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"qty"</span><span class="p">).</span><span class="nx">Sum</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"qty"</span><span class="p">)).</span>
-</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">    </span><span class="nx">Sort</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Asc</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"region"</span><span class="p">)),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Asc</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"date"</span><span class="p">))))</span>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">sales</span><span class="p">().</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">    </span><span class="nx">GroupByDynamic</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"date"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">DynamicOptions</span><span class="p">{</span>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">        </span><span class="nx">Every</span><span class="p">:</span><span class="w">   </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Every</span><span class="p">(</span><span class="s">"1w"</span><span class="p">),</span>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">        </span><span class="nx">GroupBy</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Expr</span><span class="p">{</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"region"</span><span class="p">)},</span>
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="w">    </span><span class="p">}).</span>
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="w">    </span><span class="nx">Agg</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"qty"</span><span class="p">).</span><span class="nx">Sum</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"qty"</span><span class="p">)).</span>
+</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="w">    </span><span class="nx">Sort</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Asc</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"region"</span><span class="p">)),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Asc</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"date"</span><span class="p">))))</span>
 </span></code></pre></div>
-<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>shape: (5, 3)
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>┌────────────┬─────────┬────────┐
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>│ date       │ region  │ qty    │
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>│ Date       │ String  │ Int128 │
-</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>├────────────┼─────────┼────────┤
-</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>│ 2026-01-05 │ "east"  │ 14     │
-</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>│ 2025-12-29 │ "north" │ 17     │
-</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>│ 2026-01-05 │ "north" │ 3      │
-</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>│ 2025-12-29 │ "south" │ 4      │
-</span><span id="__span-16-10"><a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a>│ 2026-01-05 │ "south" │ 15     │
-</span><span id="__span-16-11"><a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>└────────────┴─────────┴────────┘
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>shape: (5, 3)
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>┌────────────┬─────────┬────────┐
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>│ date       │ region  │ qty    │
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>│ Date       │ String  │ Int128 │
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>├────────────┼─────────┼────────┤
+</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>│ 2026-01-05 │ "east"  │ 14     │
+</span><span id="__span-18-7"><a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>│ 2025-12-29 │ "north" │ 17     │
+</span><span id="__span-18-8"><a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>│ 2026-01-05 │ "north" │ 3      │
+</span><span id="__span-18-9"><a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a>│ 2025-12-29 │ "south" │ 4      │
+</span><span id="__span-18-10"><a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a>│ 2026-01-05 │ "south" │ 15     │
+</span><span id="__span-18-11"><a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a>└────────────┴─────────┴────────┘
 </span></code></pre></div>
 <p><code>Offset</code> shifts the grid, <code>Closed</code> says which end of a window holds its instant,
 <code>Label</code> what the index column shows, <code>StartBy</code> where the grid begins, and
@@ -1928,23 +1979,23 @@ where Polars puts the keys first:</p>
 <p><code>Rolling(index, options)</code> gives every row its own window, reaching back <code>Period</code> from
 its instant, and aggregates it: the rows and the high of the three days up to each
 close.</p>
-<div class="language-go highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">prices</span><span class="p">().</span>
-</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">    </span><span class="nx">Filter</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"ticker"</span><span class="p">).</span><span class="nx">Eq</span><span class="p">(</span><span class="s">"ACME"</span><span class="p">)).</span>
-</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">    </span><span class="nx">Rolling</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"date"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">RollingOptions</span><span class="p">{</span><span class="nx">Period</span><span class="p">:</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Every</span><span class="p">(</span><span class="s">"3d"</span><span class="p">)}).</span>
-</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">    </span><span class="nx">Agg</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Len</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"rows"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"close"</span><span class="p">).</span><span class="nx">Max</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"high_3d"</span><span class="p">)))</span>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">prices</span><span class="p">().</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">    </span><span class="nx">Filter</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"ticker"</span><span class="p">).</span><span class="nx">Eq</span><span class="p">(</span><span class="s">"ACME"</span><span class="p">)).</span>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">    </span><span class="nx">Rolling</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"date"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">RollingOptions</span><span class="p">{</span><span class="nx">Period</span><span class="p">:</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Every</span><span class="p">(</span><span class="s">"3d"</span><span class="p">)}).</span>
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="w">    </span><span class="nx">Agg</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Len</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"rows"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"close"</span><span class="p">).</span><span class="nx">Max</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"high_3d"</span><span class="p">)))</span>
 </span></code></pre></div>
-<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>shape: (6, 3)
-</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>┌────────────┬────────┬─────────┐
-</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>│ date       │ rows   │ high_3d │
-</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>│ Date       │ Uint64 │ Float64 │
-</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>├────────────┼────────┼─────────┤
-</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>│ 2026-01-05 │ 1      │ 10      │
-</span><span id="__span-18-7"><a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>│ 2026-01-06 │ 2      │ 11      │
-</span><span id="__span-18-8"><a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>│ 2026-01-07 │ 3      │ 11      │
-</span><span id="__span-18-9"><a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a>│ 2026-01-08 │ 3      │ 12      │
-</span><span id="__span-18-10"><a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a>│ 2026-01-09 │ 3      │ 12      │
-</span><span id="__span-18-11"><a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a>│ 2026-01-12 │ 1      │ 13.5    │
-</span><span id="__span-18-12"><a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a>└────────────┴────────┴─────────┘
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>shape: (6, 3)
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>┌────────────┬────────┬─────────┐
+</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>│ date       │ rows   │ high_3d │
+</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>│ Date       │ Uint64 │ Float64 │
+</span><span id="__span-20-5"><a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>├────────────┼────────┼─────────┤
+</span><span id="__span-20-6"><a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>│ 2026-01-05 │ 1      │ 10      │
+</span><span id="__span-20-7"><a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>│ 2026-01-06 │ 2      │ 11      │
+</span><span id="__span-20-8"><a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>│ 2026-01-07 │ 3      │ 11      │
+</span><span id="__span-20-9"><a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>│ 2026-01-08 │ 3      │ 12      │
+</span><span id="__span-20-10"><a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a>│ 2026-01-09 │ 3      │ 12      │
+</span><span id="__span-20-11"><a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a>│ 2026-01-12 │ 1      │ 13.5    │
+</span><span id="__span-20-12"><a id="__codelineno-20-12" name="__codelineno-20-12" href="#__codelineno-20-12"></a>└────────────┴────────┴─────────┘
 </span></code></pre></div>
 <p>A rolling group is a group-by with one row for each input row. The rolling windows by
 time in <a href="../windows/#rolling-windows-by-time">Window functions</a> answer the same

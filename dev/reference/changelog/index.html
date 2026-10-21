@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–305, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–306, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3095,6 +3095,9 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>Upsample</code></strong> (306), as Polars' <code>upsample</code>, and lazy: a row at every step from each
+  group's first instant to its last, nulls where the frame has none, its rows in the
+  grid's order with or without a memory limit.</li>
 <li><strong><code>PartitionBy</code></strong> (305), as Polars' <code>partition_by</code>: a frame split into a part for
   each distinct key, in the order the keys first appear, each part's typed <code>Key</code>
   beside its <code>Frame</code>, with or without the key columns.</li>
