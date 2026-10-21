@@ -74,6 +74,7 @@ changes is what Go asks for.
 | `pl.when(p).then(a).otherwise(b)` | `ursus.When(p).Then(a).Otherwise(b)` |
 | `.alias("x")` | `.Alias("x")` |
 | `.cast(pl.Int64)` | `.Cast(ursus.Int64)`, strict; `.CastLossy(ursus.Int64)` turns failures into nulls |
+| `df.match_to_schema(schema, ...)` | `lf.MatchToSchema(schema, ursus.MatchOptions{...})` (new in 0.6.7) |
 | `df.cast({"a": pl.Int32})`, `df.cast(pl.String)` | `lf.Cast(map[string]ursus.DataType{"a": ursus.Int32})`, `lf.CastAll(ursus.String)`; `CastTypes` by type (new in 0.6.7) |
 | `.filter(p)`, `.select(...)`, `.with_columns(...)` | `.Filter(p)`, `.Select(...)`, `.WithColumns(...)` |
 | `.sort("a", descending=True)` | `.Sort(ursus.Desc(ursus.Col("a")))` |

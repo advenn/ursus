@@ -81,6 +81,32 @@ that is what you want.
 A `Datetime` key matches its unit and zone exactly, so a frame of two units needs a key
 for each, where Polars' `pl.Datetime` matches both.
 
+### A frame made to a schema
+
+*New in 0.6.7.* `MatchToSchema(schema, options)` makes a frame's columns a schema's: its
+columns, in its order, of its types, as Polars' `match_to_schema` does. By default
+every difference is refused, the first type that does not meet first; the options
+say what to do instead:
+
+--8<-- "Example_typesMatchToSchema.md"
+
+| Option | `MatchRaise` / `MatchForbid`, the default | or |
+|---|---|---|
+| `MissingColumns` | refuse a schema column the frame lacks | `MatchInsert`, as nulls |
+| `ExtraColumns` | refuse a frame column the schema lacks | `MatchIgnore`, dropped |
+| `MissingStructFields`, `ExtraStructFields` | the same, for a struct's fields | `MatchInsert`, `MatchIgnore` |
+| `IntegerCast`, `FloatCast` | refuse a narrower number | `MatchUpcast`, widened |
+
+`MatchUpcast` widens only where nothing can be lost: an `Int32` to an `Int64`, a `UInt32`
+to an `Int64`, a `Float32` to a `Float64`; never an integer to a float, an `Int64` to an
+`Int32`, or a `UInt64` to an `Int64`. A struct's fields are matched by name, at any
+depth, and a list's element widens as a column does.
+
+`Columns` sets any option for one column, and `ColumnMatch.Fill` computes a missing
+column from the others. A fill's answer meets the schema's type as a column of the
+frame would; Polars keeps the expression's own type, so its answer can be of a type the
+schema did not ask for.
+
 ## Values from Go
 
 `ursus.Values` makes a column from a slice of a Go type, `[]time.Time` a

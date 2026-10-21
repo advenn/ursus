@@ -343,6 +343,38 @@ func Example_typesFrameCast() {
 	// └───────┘
 }
 
+func Example_typesMatchToSchema() {
+	want := ursus.MustSchema(
+		ursus.Of("order_id", ursus.Int64),
+		ursus.Of("qty", ursus.Int64),
+		ursus.Of("discount", ursus.Float64),
+	)
+	drifted := sales().Head(2).Select(
+		ursus.Col("qty").Cast(ursus.Int32), ursus.Col("order_id"), ursus.Col("product"))
+
+	_, err := drifted.
+		MatchToSchema(want, ursus.MatchOptions{}).
+		Collect(context.Background())
+	fmt.Println(err)
+
+	show(drifted.MatchToSchema(want, ursus.MatchOptions{
+		MissingColumns: ursus.MatchInsert,
+		ExtraColumns:   ursus.MatchIgnore,
+		IntegerCast:    ursus.MatchUpcast,
+	}))
+	// Output:
+	// ursus: match_to_schema: qty is Int32, and the schema's is Int64
+	//   MatchOptions{IntegerCast: ursus.MatchUpcast} widens it
+	// shape: (2, 3)
+	// ┌──────────┬───────┬──────────┐
+	// │ order_id │ qty   │ discount │
+	// │ Int64    │ Int64 │ Float64  │
+	// ├──────────┼───────┼──────────┤
+	// │ 1        │ 10    │ null     │
+	// │ 2        │ 4     │ null     │
+	// └──────────┴───────┴──────────┘
+}
+
 // --- memory ----------------------------------------------------------------------------
 
 func Example_memorySpill() {

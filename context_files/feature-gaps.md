@@ -213,7 +213,7 @@ differs from their input's, or scalars outside a group-by.
 | built: `unique(keep=)` with `maintain_order=True`, as `UniqueKeep`, in step 289 | — |
 | **A frame `fill_null` strategy's `limit`** (the strategies were built at step 249); frame `null_count`, `sum`, `mean`, `median`, `min`, `max`, `std`, `var`, `quantile`, `product` shortcuts. A frame's `shift`, `first` and `last` built in step 293 | P0/P1 |
 | built: `slice` with a negative offset, in step 291 | — |
-| **`match_to_schema`.** A frame's `cast`, by name, by type and for every column, built in step 298 | P1 |
+| built: a frame's `cast`, by name, by type and for every column, in step 298; `match_to_schema` in step 299 | — |
 | built: a frame's `sample` and `shuffle` (fraction or n, seed), in step 292 | — |
 | **`partition_by`** into frames | P1 |
 | **`upsample`**; `interpolate` and `drop_nans` on frames | P1 |
@@ -312,6 +312,11 @@ decide whether to keep or switch each one.
 - A cast of an instant to text is ISO 8601's, `2026-01-01T00:00:00.000000`, where
   Polars writes a space for the `T`. A naive one gains a `Z`, §1's open row (step
   298).
+- `MatchToSchema`'s computed fill meets the schema's type as a column of the frame
+  would, widened only as its casts allow, or is refused; Polars 1.44.1 keeps the
+  expression's own type, so `missing_columns={"c": pl.col("b")}` of an Int32 `b`
+  gives an Int32 `c` under an Int64 schema, and of a String one a String `c` (step
+  299).
 - `Div` and `Pow` always return a float.
 - `Cut` returns String, not Categorical.
 - An expression's `TopK` and `BottomK` return a List.

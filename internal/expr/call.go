@@ -196,6 +196,7 @@ const (
 	FnStructField        CallFn = iota + 500
 	FnStructRenameFields        // every field renamed, in order (step 224)
 	FnStructJSONEncode          // each struct as a JSON object (step 231)
+	FnStructSelectFields        // the named fields, in that order, the struct's validity kept (step 299)
 	fnStructEnd
 )
 
@@ -582,8 +583,8 @@ var callNames = map[CallFn]string{
 	FnDtCombine: "dt.combine",
 
 	FnStructField: "struct.field", FnStructRenameFields: "struct.rename_fields",
-	FnStructJSONEncode: "struct.json_encode",
-	FnReplace:          "replace", FnReplaceStrict: "replace_strict", FnReplaceOr: "replace_or",
+	FnStructJSONEncode: "struct.json_encode", FnStructSelectFields: "struct.select_fields",
+	FnReplace: "replace", FnReplaceStrict: "replace_strict", FnReplaceOr: "replace_or",
 	FnListToStruct: "list.to_struct",
 	FnListMedian:   "list.median", FnListStd: "list.std", FnListVar: "list.var",
 	FnListQuantile: "list.quantile", FnListDropNans: "list.drop_nans",
@@ -2303,6 +2304,32 @@ func structCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		fields := make([]dtype.Field, len(old))
 		for i, f := range old {
 			fields[i] = dtype.Field{Name: names[i], Type: f.Type, Nullable: true}
+		}
+		return dtype.Struct(fields...), nil
+
+	case FnStructSelectFields:
+		// MatchToSchema's: a struct of the fields named, in their order, the others
+		// dropped. A null struct stays null, as a cast keeps it. No method of Polars'
+		// answers so; with_fields keeps every field, and field gives columns.
+		names, err := callFieldNames(c, "struct")
+		if err != nil {
+			return dtype.Null, err
+		}
+		if len(names) == 0 {
+			// A struct of no fields has no length of its own to keep.
+			return dtype.Null, uerr.New(uerr.KindSchema, "struct", "%s names no field", c.Fn)
+		}
+		have := make(map[string]dtype.DataType, len(in.Fields()))
+		for _, f := range in.Fields() {
+			have[f.Name] = f.Type
+		}
+		fields := make([]dtype.Field, len(names))
+		for i, name := range names {
+			t, ok := have[name]
+			if !ok {
+				return dtype.Null, uerr.New(uerr.KindSchema, "struct", "no field %q in %s", name, in)
+			}
+			fields[i] = dtype.Field{Name: name, Type: t, Nullable: true}
 		}
 		return dtype.Struct(fields...), nil
 

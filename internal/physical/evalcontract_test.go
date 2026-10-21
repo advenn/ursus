@@ -523,6 +523,14 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 		{label: ",one", args: []any{"p"}},
 		{label: ",twice", args: []any{"p", "p"}},
 	},
+	// Both fields reordered, one, one that is not there, and two of one name (step
+	// 299).
+	expr.FnStructSelectFields: {
+		{label: ",g,f", args: []any{"g", "f"}},
+		{label: ",f", args: []any{"f"}},
+		{label: ",absent", args: []any{"nope"}},
+		{label: ",twice", args: []any{"f", "f"}},
+	},
 	expr.FnListToStruct: {{args: []any{"x", "y"}}},
 	// The count of old values, the old values, the new ones, and ReplaceOr's
 	// default (step 226).

@@ -70,6 +70,23 @@ func StructCall(fn expr.CallFn, name string, c *data.Column, args []any) (*data.
 		}
 		return data.NewStruct(name, fields, c.Validity()), nil
 
+	case expr.FnStructSelectFields:
+		// The fields named, in their order, the struct's validity kept: a null struct
+		// stays null (step 299).
+		fields := make([]*data.Column, len(args))
+		for i := range args {
+			want, ok := argString(args, i)
+			if !ok {
+				return nil, uerr.Internalf("kernel: struct.select_fields argument %d", i)
+			}
+			f, ok := c.Field(want)
+			if !ok {
+				return nil, uerr.Internalf("kernel: no field %q in %s", want, c.DType())
+			}
+			fields[i] = f
+		}
+		return data.NewStruct(name, fields, c.Validity()), nil
+
 	case expr.FnStructJSONEncode:
 		return JSONEncode(name, c)
 	}
