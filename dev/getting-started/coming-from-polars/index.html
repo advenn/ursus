@@ -1659,6 +1659,10 @@ changes is what Go asks for.</p>
 <td><code>.Cast(ursus.Int64)</code>, strict; <code>.CastLossy(ursus.Int64)</code> turns failures into nulls</td>
 </tr>
 <tr>
+<td><code>df.match_to_schema(schema, ...)</code></td>
+<td><code>lf.MatchToSchema(schema, ursus.MatchOptions{...})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>df.cast({"a": pl.Int32})</code>, <code>df.cast(pl.String)</code></td>
 <td><code>lf.Cast(map[string]ursus.DataType{"a": ursus.Int32})</code>, <code>lf.CastAll(ursus.String)</code>; <code>CastTypes</code> by type (new in 0.6.7)</td>
 </tr>

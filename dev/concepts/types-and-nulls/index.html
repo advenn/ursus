@@ -859,6 +859,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#a-frame-made-to-a-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A frame made to a schema
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1583,6 +1594,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#a-frame-made-to-a-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A frame made to a schema
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1851,6 +1873,80 @@ that is what you want.</p>
 </span></code></pre></div>
 <p>A <code>Datetime</code> key matches its unit and zone exactly, so a frame of two units needs a key
 for each, where Polars' <code>pl.Datetime</code> matches both.</p>
+<h3 id="a-frame-made-to-a-schema">A frame made to a schema<a class="headerlink" href="#a-frame-made-to-a-schema" title="Permanent link">&para;</a></h3>
+<p><em>New in 0.6.7.</em> <code>MatchToSchema(schema, options)</code> makes a frame's columns a schema's: its
+columns, in its order, of its types, as Polars' <code>match_to_schema</code> does. By default
+every difference is refused, the first type that does not meet first; the options
+say what to do instead:</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nx">want</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">MustSchema</span><span class="p">(</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Of</span><span class="p">(</span><span class="s">"order_id"</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Int64</span><span class="p">),</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Of</span><span class="p">(</span><span class="s">"qty"</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Int64</span><span class="p">),</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Of</span><span class="p">(</span><span class="s">"discount"</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Float64</span><span class="p">),</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="p">)</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="nx">drifted</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sales</span><span class="p">().</span><span class="nx">Head</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="nx">Select</span><span class="p">(</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"qty"</span><span class="p">).</span><span class="nx">Cast</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Int32</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"order_id"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"product"</span><span class="p">))</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">drifted</span><span class="p">.</span>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="w">    </span><span class="nx">MatchToSchema</span><span class="p">(</span><span class="nx">want</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">MatchOptions</span><span class="p">{}).</span>
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="w">    </span><span class="nx">Collect</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">())</span>
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>
+</span><span id="__span-10-14"><a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="nx">show</span><span class="p">(</span><span class="nx">drifted</span><span class="p">.</span><span class="nx">MatchToSchema</span><span class="p">(</span><span class="nx">want</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">MatchOptions</span><span class="p">{</span>
+</span><span id="__span-10-15"><a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a><span class="w">    </span><span class="nx">MissingColumns</span><span class="p">:</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">MatchInsert</span><span class="p">,</span>
+</span><span id="__span-10-16"><a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a><span class="w">    </span><span class="nx">ExtraColumns</span><span class="p">:</span><span class="w">   </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">MatchIgnore</span><span class="p">,</span>
+</span><span id="__span-10-17"><a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a><span class="w">    </span><span class="nx">IntegerCast</span><span class="p">:</span><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">MatchUpcast</span><span class="p">,</span>
+</span><span id="__span-10-18"><a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a><span class="p">}))</span>
+</span></code></pre></div>
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>ursus: match_to_schema: qty is Int32, and the schema's is Int64
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>  MatchOptions{IntegerCast: ursus.MatchUpcast} widens it
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>shape: (2, 3)
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>┌──────────┬───────┬──────────┐
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>│ order_id │ qty   │ discount │
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>│ Int64    │ Int64 │ Float64  │
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>├──────────┼───────┼──────────┤
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>│ 1        │ 10    │ null     │
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>│ 2        │ 4     │ null     │
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>└──────────┴───────┴──────────┘
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th><code>MatchRaise</code> / <code>MatchForbid</code>, the default</th>
+<th>or</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MissingColumns</code></td>
+<td>refuse a schema column the frame lacks</td>
+<td><code>MatchInsert</code>, as nulls</td>
+</tr>
+<tr>
+<td><code>ExtraColumns</code></td>
+<td>refuse a frame column the schema lacks</td>
+<td><code>MatchIgnore</code>, dropped</td>
+</tr>
+<tr>
+<td><code>MissingStructFields</code>, <code>ExtraStructFields</code></td>
+<td>the same, for a struct's fields</td>
+<td><code>MatchInsert</code>, <code>MatchIgnore</code></td>
+</tr>
+<tr>
+<td><code>IntegerCast</code>, <code>FloatCast</code></td>
+<td>refuse a narrower number</td>
+<td><code>MatchUpcast</code>, widened</td>
+</tr>
+</tbody>
+</table>
+<p><code>MatchUpcast</code> widens only where nothing can be lost: an <code>Int32</code> to an <code>Int64</code>, a <code>UInt32</code>
+to an <code>Int64</code>, a <code>Float32</code> to a <code>Float64</code>; never an integer to a float, an <code>Int64</code> to an
+<code>Int32</code>, or a <code>UInt64</code> to an <code>Int64</code>. A struct's fields are matched by name, at any
+depth, and a list's element widens as a column does.</p>
+<p><code>Columns</code> sets any option for one column, and <code>ColumnMatch.Fill</code> computes a missing
+column from the others. A fill's answer meets the schema's type as a column of the
+frame would; Polars keeps the expression's own type, so its answer can be of a type the
+schema did not ask for.</p>
 <h2 id="values-from-go">Values from Go<a class="headerlink" href="#values-from-go" title="Permanent link">&para;</a></h2>
 <p><code>ursus.Values</code> makes a column from a slice of a Go type, <code>[]time.Time</code> a
 <code>Datetime(ns, "UTC")</code> one, and <code>ursus.ValuesNullable</code> one with nulls, from the values
