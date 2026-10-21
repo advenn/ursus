@@ -1707,6 +1707,14 @@ changes is what Go asks for.</p>
 <td><code>.FillNullWith(0)</code>, <code>.FillNull(strategy)</code></td>
 </tr>
 <tr>
+<td><code>.fill_null(strategy="forward", limit=1)</code></td>
+<td><code>.FillNull(ursus.FillForward.Limit(1))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.drop_nans()</code>, <code>df.interpolate()</code></td>
+<td><code>lf.DropNans()</code>, <code>lf.Interpolate()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.head(n)</code>, <code>.tail(n)</code>, <code>.slice(o, n)</code></td>
 <td><code>.Head(n)</code>, <code>.Tail(n)</code>, <code>.Slice(o, n)</code></td>
 </tr>

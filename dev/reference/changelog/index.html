@@ -3052,11 +3052,14 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–300, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–301, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>FillStrategy</code> is a <code>uint64</code>,</strong> where it was a <code>uint8</code> (301): its bits above the
+  rule carry a limit. A conversion to <code>uint8</code> no longer compiles, and a strategy with a
+  limit is not <code>==</code> the bare one, <code>FillForward.Limit(1) != FillForward</code>.</li>
 <li><strong>A slice whose window starts before the first element is cut by as much,</strong> as
   every Polars slice is (291): <code>Str().Slice(-7, 2)</code> of <code>"012345"</code> is <code>"0"</code>, and
   <code>List().Slice(-99, 2)</code> of three elements is none. Both clamped the start to the
@@ -3076,6 +3079,15 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A fill strategy's limit</strong> (301), Polars' <code>fill_null(strategy="forward",
+  limit=1)</code>: <code>FillForward.Limit(1)</code> and <code>FillBackward.Limit(n)</code>, for an expression or
+  every column of a frame at once.</li>
+<li><strong>A frame's <code>DropNans</code> and <code>Interpolate</code></strong> (301), as Polars': the rows with a NaN
+  in the named or every float column dropped, a null kept; every column a line can
+  fill interpolated, numbers and instants, text and Booleans left as they are.</li>
+<li><strong><code>Interpolate</code> of instants, durations and times</strong> (301), on their ticks in
+  integers, keeping their type, as Polars': halfway from January 1 to January 4 is
+  January 2. It was refused.</li>
 <li><strong>A frame's aggregates</strong> (300), as Polars': <code>Sum</code>, <code>Mean</code>, <code>Median</code>, <code>Min</code>, <code>Max</code>,
   <code>Std</code>, <code>Var</code>, <code>Quantile</code>, <code>Product</code> and <code>NullCount</code> on both frames, one row, every
   column kept, a null where the aggregate does not take the column, as Polars
