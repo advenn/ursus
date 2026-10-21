@@ -149,6 +149,28 @@ func Example_timeRanges() {
 	// └────────────┘
 }
 
+func Example_timeUpsample() {
+	show(prices().
+		Filter(ursus.Col("ticker").Eq("ACME")).
+		Upsample("date", ursus.Every("1d"), "ticker").
+		WithColumns(ursus.Col("close").FillNull(ursus.FillForward).Alias("filled")))
+	// Output:
+	// shape: (8, 4)
+	// ┌────────────┬────────┬─────────┬─────────┐
+	// │ date       │ ticker │ close   │ filled  │
+	// │ Date       │ String │ Float64 │ Float64 │
+	// ├────────────┼────────┼─────────┼─────────┤
+	// │ 2026-01-05 │ "ACME" │ 10      │ 10      │
+	// │ 2026-01-06 │ "ACME" │ 11      │ 11      │
+	// │ 2026-01-07 │ "ACME" │ 10.5    │ 10.5    │
+	// │ 2026-01-08 │ "ACME" │ 12      │ 12      │
+	// │ 2026-01-09 │ "ACME" │ 12      │ 12      │
+	// │ 2026-01-10 │ "ACME" │ null    │ 12      │
+	// │ 2026-01-11 │ "ACME" │ null    │ 12      │
+	// │ 2026-01-12 │ "ACME" │ 13.5    │ 13.5    │
+	// └────────────┴────────┴─────────┴─────────┘
+}
+
 func Example_timeDynamic() {
 	show(prices().
 		Filter(ursus.Col("ticker").Eq("ACME")).

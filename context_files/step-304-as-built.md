@@ -105,4 +105,5 @@ second time. Other work held the machine at a load of 18 to 24.
   the collector has not reached counts.
 - Run alone in the same configuration, it passed at a load of 17. So did the whole
   test-all, run again at a load of 3 to 9.
-- Nothing in this step touches it. It is a flake under contention, in §1.
+- Nothing in this step touches it. It is a flake under contention, in §8's row,
+  which step 292 opened; step 306 folded a duplicate §1 row into it.

@@ -81,6 +81,20 @@ makes a list a row from columns:
 
 --8<-- "Example_timeRanges.md"
 
+## Upsampling
+
+*New in 0.6.7.* `Upsample(time, every, groupBy...)` puts a row at every step from each
+group's first instant to its last, as Polars' `upsample`. A row the frame has at a
+step is kept; where it has none, the new row is null but for the time and the group's
+keys, which a fill forward completes: the weekend below. A row that falls between two
+steps is left out, as Polars leaves it.
+
+--8<-- "Example_timeUpsample.md"
+
+It is a `LazyFrame`'s too. The groups keep the order each first appears, and their
+rows the grid's, with or without a memory limit, so a fill after it reads the rows it
+should. Unlike Polars', the frame need not be sorted.
+
 ## Dynamic groups
 
 `GroupByDynamic(index, options)` groups rows into windows of time cut from a sorted
