@@ -348,8 +348,11 @@ func (lf *LazyFrame) WithRowIndex(name string, offset uint32) *LazyFrame {
 // every column of an ordered type; FillZero, FillOne and FillMean every numeric one,
 // as the value 0 would. Polars applies each to every column, filling a String with ""
 // and a Bool with false for FillZero, and refusing a String for FillOne and FillMean;
-// here they leave those columns alone, as `lf.FillNull(0)` does. A limit on a forward
-// or backward fill is Expr.ForwardFill(n) or BackwardFill(n), per column.
+// here they leave those columns alone, as `lf.FillNull(0)` does.
+//
+// A forward or backward fill takes a limit, Polars' fill_null(strategy="forward",
+// limit=1): `lf.FillNull(ursus.FillForward.Limit(1))` fills at most one null after
+// each value, in every column (step 301).
 //
 // Until step 249 a strategy was taken for its value: FillStrategy is a uint8, so it
 // satisfies Operand, and `lf.FillNull(ursus.FillForward)` filled every null with 2.
@@ -384,7 +387,7 @@ func (lf *LazyFrame) FillNan[T Operand](v T, subset ...string) *LazyFrame {
 // frameColumns is the columns a strategy fills when no subset is named: see
 // LazyFrame.FillNull.
 func (s FillStrategy) frameColumns() expr.Matcher {
-	switch s {
+	switch s.kind() {
 	case FillForward, FillBackward:
 		return &expr.AllMatcher{}
 	case FillMin, FillMax:

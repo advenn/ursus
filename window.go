@@ -588,7 +588,9 @@ func (e Expr) ewm(fn expr.WinFnOp, decay EwmDecay, opts []WindowOption) Expr {
 // straight line between them, by position in the window's order: Polars'
 // interpolate. [1, null, null, 7] is [1, 3, 5, 7]. A run before the first value or
 // after the last stays null. An integer or a Decimal answers a Float64; a float keeps
-// its width. InterpolateNearest() fills it with the nearer value instead:
+// its width. An instant, a duration or a time keeps its type, interpolated on its
+// ticks in integers as Polars' is: a + step·(b−a)/span, the quotient truncated
+// toward zero, so halfway from January 1 to January 4 is January 2 (step 301). InterpolateNearest() fills it with the nearer value instead:
 // [1, 1, 7, 7].
 func (e Expr) Interpolate(opts ...WindowOption) Expr {
 	var p expr.WinParams

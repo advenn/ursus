@@ -47,6 +47,15 @@ is:
 They run in the rows' order; under `Over(keys...)`, within each partition, so a
 sensor's gap is never filled from another sensor's readings.
 
+*New in 0.6.7.* A strategy takes a limit too, `FillForward.Limit(n)` and
+`FillBackward.Limit(n)`, as Polars' `fill_null(strategy=..., limit=n)`, for a column or
+for every column of a frame at once:
+
+--8<-- "Example_missingLimit.md"
+
+A limit is at least 1; leave it off for none. A limit on another strategy is refused,
+as Polars refuses it.
+
 ## Dropping
 
 `DropNulls(names...)` drops the rows with a null in any of those columns, or in any
@@ -54,7 +63,18 @@ column at all:
 
 --8<-- "Example_missingDrop.md"
 
+*New in 0.6.7.* `DropNans(names...)` drops the rows with a NaN in any of those
+columns, or in any float column. A null is not a NaN, and its row stays:
+
+--8<-- "Example_missingDropNans.md"
+
 ## The whole frame
+
+*New in 0.6.7.* A frame's `Interpolate()` interpolates every column it can: numbers,
+an integer becoming a `Float64`, and dates and times, which keep their type, as
+Polars' `interpolate` does. Text and Booleans are left as they are:
+
+--8<-- "Example_missingInterpolateFrame.md"
 
 A frame's `FillNull(v)` fills every column that can hold a null and that `v` can
 fill, chosen from the schema before any data is read. `hour`, built by `Values`, cannot

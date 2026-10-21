@@ -57,6 +57,31 @@ func InterpolateFrom(nearest bool, name string, out dtype.DataType, rows int64,
 		}
 		return c.Rename(name), nil
 	}
+	if out.IsTemporal() {
+		// Ticks, in integers, as winInterpolateTicks interpolates them (step 301).
+		a, err := ticksOf(prevVal)
+		if err != nil {
+			return nil, err
+		}
+		b, err := ticksOf(nextVal)
+		if err != nil {
+			return nil, err
+		}
+		res := make([]int64, n)
+		ok := make([]bool, n)
+		for i := range res {
+			q, last, p, has := spans(i)
+			if !has {
+				continue
+			}
+			if last == q {
+				res[i], ok[i] = a[i], true
+				continue
+			}
+			res[i], ok[i] = interpTick(a[i], b[i], q-last, p-last), true
+		}
+		return ticksAs(name, out, res, seenBitmap(ok, n)), nil
+	}
 	a, err := floatsOf(prevVal)
 	if err != nil {
 		return nil, err

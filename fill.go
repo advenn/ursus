@@ -1,6 +1,8 @@
 package ursus
 
 import (
+	"strconv"
+
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -58,8 +60,8 @@ func weaken(n expr.Node) expr.Node {
 // This desugars to a conditional, so the receiver is MENTIONED twice and, with no
 // common-subexpression pass, EVALUATED twice — exactly as Coalesce is.
 func (e Expr) FillNullWith[T Operand](v T) Expr {
-	// A FillStrategy is a uint8, so it is an Operand too; taken for its value it
-	// filled with its number (step 249).
+	// A FillStrategy is an unsigned integer, so it is an Operand too; taken for its
+	// value it filled with its number (step 249).
 	if s, ok := any(v).(FillStrategy); ok {
 		return e.FillNull(s)
 	}
@@ -226,7 +228,11 @@ func (e Expr) Filter(preds ...Expr) Expr {
 //
 // It is a root-package enum and never reaches the IR, so it is not a dedup key and
 // carries none of the collision hazard the expression enums do.
-type FillStrategy uint8
+//
+// Its low byte is the rule; the bits above carry a limit, which Limit sets (step
+// 301). So compare a strategy through kind, never with ==: FillForward.Limit(1) is
+// not FillForward.
+type FillStrategy uint64
 
 const (
 	// FillZero and FillOne fill with a constant. The literal is WEAK, so the
@@ -261,11 +267,71 @@ var fillStrategyNames = [fillStrategyCount]string{
 	FillMin: "min", FillMax: "max", FillMean: "mean",
 }
 
+// A strategy's bits above its rule: whether Limit was called, whether it was given
+// what it cannot take, and the limit.
+const (
+	fillKindMask   FillStrategy = 0xff
+	fillLimited    FillStrategy = 1 << 8
+	fillLimitNoFwd FillStrategy = 1 << 9  // Limit of a rule that is not forward or backward
+	fillLimitBelow FillStrategy = 1 << 10 // Limit of less than 1, or a second Limit
+	fillLimitShift              = 11
+)
+
 func (s FillStrategy) String() string {
-	if int(s) < len(fillStrategyNames) && fillStrategyNames[s] != "" {
-		return fillStrategyNames[s]
+	k := s.kind()
+	name := "?"
+	if int(k) < len(fillStrategyNames) && fillStrategyNames[k] != "" {
+		name = fillStrategyNames[k]
 	}
-	return "?"
+	if n, ok := s.limit(); ok {
+		return name + "(limit=" + strconv.FormatUint(uint64(n), 10) + ")"
+	}
+	return name
+}
+
+// Limit caps how many consecutive nulls one value fills: FillForward.Limit(1) fills
+// the null after a value and no more, as Polars' fill_null(strategy="forward",
+// limit=1). It is for FillForward and FillBackward, as Polars' limit is; another
+// strategy's is refused when the fill is used, as Polars refuses it.
+//
+// n is at least 1. Polars' limit=0 fills nothing; here it is refused, because
+// ForwardFill(0) and BackwardFill(0) mean no limit at all, and a strategy whose 0
+// meant the opposite would be a trap. Leave the limit off for none.
+func (s FillStrategy) Limit(n int) FillStrategy {
+	k := s.kind()
+	switch {
+	case s&fillLimited != 0 || n < 1:
+		return k | fillLimited | fillLimitBelow
+	case k != FillForward && k != FillBackward:
+		return k | fillLimited | fillLimitNoFwd
+	}
+	return k | fillLimited | FillStrategy(n)<<fillLimitShift
+}
+
+// kind is the strategy's rule, its limit set aside.
+func (s FillStrategy) kind() FillStrategy { return s & fillKindMask }
+
+// limit is the strategy's limit, and whether it has one.
+func (s FillStrategy) limit() (int, bool) {
+	if s&fillLimited == 0 || s&(fillLimitNoFwd|fillLimitBelow) != 0 {
+		return 0, false
+	}
+	return int(s >> fillLimitShift), true
+}
+
+// limitErr is the error of a Limit a strategy cannot take, or nil.
+func (s FillStrategy) limitErr() *uerr.Error {
+	switch {
+	case s&fillLimitNoFwd != 0:
+		return uerr.New(uerr.KindValue, "fill_null",
+			"a limit is for FillForward and FillBackward, not %s", s.kind()).
+			Hint("as Polars' fill_null takes limit only with strategy forward or backward")
+	case s&fillLimitBelow != 0:
+		return uerr.New(uerr.KindValue, "fill_null",
+			"a strategy's limit is at least 1, and is set once").
+			Hint("leave the limit off for no limit; Polars' limit=0 fills nothing, which is no fill")
+	}
+	return nil
 }
 
 // FillNull replaces nulls according to a named strategy.
@@ -273,8 +339,8 @@ func (s FillStrategy) String() string {
 //	Col("temp").FillNull(ursus.FillForward)
 //	Col("qty").FillNull(ursus.FillZero)
 //
-// For a forward or backward fill with a limit, use ForwardFill(n) or
-// BackwardFill(n) directly — the strategy form is unlimited.
+// A forward or backward fill takes a limit, FillForward.Limit(1), as ForwardFill(1)
+// does.
 //
 // # Three of these buffer the whole frame
 //
@@ -284,15 +350,19 @@ func (s FillStrategy) String() string {
 // FillForward and FillBackward are ordered windows and buffer for the same reason.
 // Only FillZero and FillOne stream.
 func (e Expr) FillNull(s FillStrategy) Expr {
-	switch s {
+	if err := s.limitErr(); err != nil {
+		return wrap(&expr.Err{E: err})
+	}
+	n, _ := s.limit() // 0 is no limit, as ForwardFill(0) takes it
+	switch s.kind() {
 	case FillZero:
 		return e.FillNullWith(int64(0))
 	case FillOne:
 		return e.FillNullWith(int64(1))
 	case FillForward:
-		return e.ForwardFill(0)
+		return e.ForwardFill(n)
 	case FillBackward:
-		return e.BackwardFill(0)
+		return e.BackwardFill(n)
 	case FillMin:
 		return sugared(Coalesce(e, inheritedOver(e.Min())), "fill_null")
 	case FillMax:

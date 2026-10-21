@@ -769,6 +769,10 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 			return in, nil
 		case in.IsNumeric() && in.ID() != dtype.TypeInt128:
 			return dtype.Float64, nil
+		case fn == WinInterpolate && in.IsTemporal():
+			// An instant, a duration or a time is interpolated on its ticks, in
+			// integers, and keeps its type, as Polars' is (step 301).
+			return in, nil
 		}
 		return dtype.Null, uerr.New(uerr.KindType, fn.String(),
 			"%s() is not defined for %s", fn, in).

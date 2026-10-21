@@ -211,12 +211,12 @@ differs from their input's, or scalars outside a group-by.
 | missing or partial | prio |
 | --- | --- |
 | built: `unique(keep=)` with `maintain_order=True`, as `UniqueKeep`, in step 289 | — |
-| **A frame `fill_null` strategy's `limit`** (the strategies were built at step 249). A frame's `shift`, `first` and `last` built in step 293; its `null_count`, `sum`, `mean`, `median`, `min`, `max`, `std`, `var`, `quantile` and `product` in step 300. `approx_n_unique` is deprecated on a frame in Polars 1.44.1, and is `Select(All().ApproxNUnique())` | P0/P1 |
+| built: a frame `fill_null` strategy's `limit`, as `FillForward.Limit(n)`, in step 301 (the strategies at step 249). A frame's `shift`, `first` and `last` built in step 293; its `null_count`, `sum`, `mean`, `median`, `min`, `max`, `std`, `var`, `quantile` and `product` in step 300. `approx_n_unique` is deprecated on a frame in Polars 1.44.1, and is `Select(All().ApproxNUnique())` | — |
 | built: `slice` with a negative offset, in step 291 | — |
 | built: a frame's `cast`, by name, by type and for every column, in step 298; `match_to_schema` in step 299 | — |
 | built: a frame's `sample` and `shuffle` (fraction or n, seed), in step 292 | — |
 | **`partition_by`** into frames | P1 |
-| **`upsample`**; `interpolate` and `drop_nans` on frames | P1 |
+| **`upsample`**. A frame's `interpolate` and `drop_nans` built in step 301 | P1 |
 | built: `is_duplicated`, `is_unique` and `n_unique` over several columns, in step 290 | — |
 | **`pivot` of several `On` columns, and a lazy pivot** with its columns given | P1 |
 | `concat`'s relaxed, horizontal and align modes; `ConcatStrict` meets Int32 and Int64 at Int64, where Polars' vertical refuses them, and refuses Int64 beside Float64, which `vertical_relaxed` meets; `DataFrame.Concat` modes | P1 |
@@ -328,6 +328,12 @@ decide whether to keep or switch each one.
   var([1, 2, 4], ddof 0) agrees, 1.5555555555555554 in both (step 300).
 - A frame's `Median` of a Decimal answers, as `Expr.Median` does; Polars 1.44.1's
   `DataFrame.median` gives null for one, though its `quantile` answers (step 300).
+- `ForwardFill(0)` and `BackwardFill(0)` mean no limit, where Polars'
+  `forward_fill(limit=0)` and `backward_fill(limit=0)` fill nothing. So a strategy's
+  limit is at least 1: `FillForward.Limit(0)`, which Polars' `fill_null(limit=0)`
+  answers by filling nothing, is refused rather than meaning either (step 301).
+- `Interpolate` of a Decimal answers a Float64, where Polars' frame `interpolate`
+  keeps the Decimal (step 301).
 - `Div` and `Pow` always return a float.
 - `Cut` returns String, not Categorical.
 - An expression's `TopK` and `BottomK` return a List.

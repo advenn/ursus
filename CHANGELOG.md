@@ -15,12 +15,15 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–300, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–301, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **`FillStrategy` is a `uint64`,** where it was a `uint8` (301): its bits above the
+  rule carry a limit. A conversion to `uint8` no longer compiles, and a strategy with a
+  limit is not `==` the bare one, `FillForward.Limit(1) != FillForward`.
 - **A slice whose window starts before the first element is cut by as much,** as
   every Polars slice is (291): `Str().Slice(-7, 2)` of `"012345"` is `"0"`, and
   `List().Slice(-99, 2)` of three elements is none. Both clamped the start to the
@@ -40,6 +43,15 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A fill strategy's limit** (301), Polars' `fill_null(strategy="forward",
+  limit=1)`: `FillForward.Limit(1)` and `FillBackward.Limit(n)`, for an expression or
+  every column of a frame at once.
+- **A frame's `DropNans` and `Interpolate`** (301), as Polars': the rows with a NaN
+  in the named or every float column dropped, a null kept; every column a line can
+  fill interpolated, numbers and instants, text and Booleans left as they are.
+- **`Interpolate` of instants, durations and times** (301), on their ticks in
+  integers, keeping their type, as Polars': halfway from January 1 to January 4 is
+  January 2. It was refused.
 - **A frame's aggregates** (300), as Polars': `Sum`, `Mean`, `Median`, `Min`, `Max`,
   `Std`, `Var`, `Quantile`, `Product` and `NullCount` on both frames, one row, every
   column kept, a null where the aggregate does not take the column, as Polars

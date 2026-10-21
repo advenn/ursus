@@ -228,6 +228,9 @@ func winInterpolate(name string, out dtype.DataType, col *data.Column, seg Segme
 	if err != nil {
 		return nil, err
 	}
+	if out.IsTemporal() {
+		return winInterpolateTicks(name, out, col, seg)
+	}
 	vals, err := toFloat64(col)
 	if err != nil {
 		return nil, err

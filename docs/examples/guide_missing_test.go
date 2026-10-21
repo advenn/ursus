@@ -1,6 +1,9 @@
 package examples_test
 
 import (
+	"math"
+	"time"
+
 	"github.com/advenn/ursus"
 )
 
@@ -117,4 +120,63 @@ func Example_missingFrameFill() {
 	// │ 4     │ 12      │ 0       │
 	// │ 5     │ 0       │ 14      │
 	// └───────┴─────────┴─────────┘
+}
+
+func Example_missingLimit() {
+	show(readings().FillNull(ursus.FillForward.Limit(1)))
+	// Output:
+	// shape: (6, 3)
+	// ┌───────┬─────────┬─────────┐
+	// │ hour  │ temp    │ backup  │
+	// │ Int64 │ Float64 │ Float64 │
+	// ├───────┼─────────┼─────────┤
+	// │ 0     │ 10      │ 9       │
+	// │ 1     │ 10      │ 11      │
+	// │ 2     │ null    │ 11      │
+	// │ 3     │ 13      │ null    │
+	// │ 4     │ 12      │ null    │
+	// │ 5     │ 12      │ 14      │
+	// └───────┴─────────┴─────────┘
+}
+
+func Example_missingDropNans() {
+	nan := math.NaN()
+	present := []bool{true, true, false, true} // the third is null
+	ratios := ursus.Frame(
+		ursus.Values("id", []int64{1, 2, 3, 4}),
+		ursus.ValuesNullable("ratio", []float64{0.5, nan, 0, 2}, present),
+	)
+	show(ratios.DropNans())
+	// Output:
+	// shape: (3, 2)
+	// ┌───────┬─────────┐
+	// │ id    │ ratio   │
+	// │ Int64 │ Float64 │
+	// ├───────┼─────────┤
+	// │ 1     │ 0.5     │
+	// │ 3     │ null    │
+	// │ 4     │ 2       │
+	// └───────┴─────────┘
+}
+
+func Example_missingInterpolateFrame() {
+	day := func(d int) time.Time { return time.Date(2026, 1, d, 0, 0, 0, 0, time.UTC) }
+	ends := []bool{true, false, false, true} // two rows missing between
+	gappy := ursus.Frame(
+		ursus.ValuesNullable("day", []time.Time{day(1), {}, {}, day(7)}, ends),
+		ursus.ValuesNullable("level", []int64{10, 0, 0, 40}, ends),
+		ursus.ValuesNullable("note", []string{"start", "", "", "end"}, ends),
+	).WithColumns(ursus.Col("day").Cast(ursus.Date))
+	show(gappy.Interpolate())
+	// Output:
+	// shape: (4, 3)
+	// ┌────────────┬─────────┬─────────┐
+	// │ day        │ level   │ note    │
+	// │ Date       │ Float64 │ String  │
+	// ├────────────┼─────────┼─────────┤
+	// │ 2026-01-01 │ 10      │ "start" │
+	// │ 2026-01-03 │ 20      │ null    │
+	// │ 2026-01-05 │ 30      │ null    │
+	// │ 2026-01-07 │ 40      │ "end"   │
+	// └────────────┴─────────┴─────────┘
 }
