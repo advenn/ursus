@@ -1739,6 +1739,10 @@ changes is what Go asks for.</p>
 <td><code>.Unpivot(ursus.UnpivotOptions{...})</code>, <code>df.Pivot(ctx, ursus.PivotOptions{...})</code></td>
 </tr>
 <tr>
+<td><code>lf.pivot(on, on_columns=[...])</code></td>
+<td><code>lf.Pivot(ursus.PivotOptions{On: ..., OnColumns: ...})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>pl.concat([a, b])</code></td>
 <td><code>ursus.Concat([]*ursus.LazyFrame{a, b})</code></td>
 </tr>
