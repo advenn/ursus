@@ -1659,6 +1659,10 @@ changes is what Go asks for.</p>
 <td><code>.Cast(ursus.Int64)</code>, strict; <code>.CastLossy(ursus.Int64)</code> turns failures into nulls</td>
 </tr>
 <tr>
+<td><code>df.sum()</code>, <code>df.mean()</code>, <code>df.null_count()</code> and the other frame aggregates</td>
+<td><code>lf.Sum()</code>, <code>lf.Mean()</code>, <code>lf.NullCount()</code> (new in 0.6.7); <code>df.Sum(ctx)</code> eagerly</td>
+</tr>
+<tr>
 <td><code>df.match_to_schema(schema, ...)</code></td>
 <td><code>lf.MatchToSchema(schema, ursus.MatchOptions{...})</code> (new in 0.6.7)</td>
 </tr>
