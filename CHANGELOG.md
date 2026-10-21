@@ -15,12 +15,14 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–302, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–303, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **`PivotOptions.On` is a `[]string`** (303), for several columns whose values
+  together name a new column: `On: "quarter"` is `On: []string{"quarter"}`.
 - **A selection among a variadic function's operands is now its operands,** as in
   Polars (302). `SumHorizontal(All())` is each row's sum across every column, one
   column. Before, the function was repeated a column at a time, so
@@ -38,6 +40,9 @@ completeness, part 3 — frame operations.**
 
 ### Fixes
 
+- **A pivot's cell that no value falls in** is `Agg` of none (303), as Polars' is: a
+  count's 0, where every such cell was null. A sum of none stays null, as ursus's
+  every empty sum is.
 - **A fold in a list's body** (302): `List().Eval(Fold(...))` and a `Fold` in
   `CumulativeEval`'s body failed, "fold reached typing unexpanded", since folds came
   in (266). A body is lowered when it is written, before any schema, so a fold or a
@@ -54,6 +59,11 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A lazy `Pivot`** (303), as Polars' `LazyFrame.pivot`: its new columns given in
+  `OnColumns`, so the plan knows them before it runs. A group-by of the index and the
+  On values reduces the rows, streaming them and spilling past a memory limit. A
+  `DataFrame`'s pivot takes `OnColumns` too, or finds them; and **several `On`
+  columns**, whose values together name a new column, `{"q1","web"}`.
 - **`InsertColumn` and `HashRows`** (302), as Polars' `insert_column` and `hash_rows`:
   a column, an expression or Go values, put at a place counted from either end; and
   each row's hash over its columns, an expression, and a `Series` of a frame.

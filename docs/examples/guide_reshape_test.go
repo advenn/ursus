@@ -17,7 +17,7 @@ func Example_reshapePivot() {
 		log.Fatal(err)
 	}
 	wide, err := df.Pivot(ctx, ursus.PivotOptions{
-		On:          "product",
+		On:          []string{"product"},
 		Index:       []string{"region"},
 		Values:      []string{"qty"},
 		Agg:         ursus.Expr.Sum,
@@ -37,6 +37,59 @@ func Example_reshapePivot() {
 	// │ "south" │ 4      │ 9      │ 6      │
 	// │ "east"  │ 12     │ null   │ 2      │
 	// └─────────┴────────┴────────┴────────┘
+}
+
+func Example_reshapePivotLazy() {
+	products := ursus.Values("product", []string{"apple", "pear", "plum"})
+	wide := sales().Pivot(ursus.PivotOptions{
+		On:        []string{"product"},
+		OnColumns: []*ursus.Column{products},
+		Index:     []string{"region"},
+		Values:    []string{"qty"},
+		Agg:       ursus.Expr.Sum,
+	})
+	show(wide)
+	// Output:
+	// shape: (3, 4)
+	// ┌─────────┬────────┬────────┬────────┐
+	// │ region  │ apple  │ pear   │ plum   │
+	// │ String  │ Int128 │ Int128 │ Int128 │
+	// ├─────────┼────────┼────────┼────────┤
+	// │ "north" │ 10     │ 7      │ null   │
+	// │ "south" │ 4      │ 6      │ null   │
+	// │ "east"  │ 12     │ 2      │ null   │
+	// └─────────┴────────┴────────┴────────┘
+}
+
+func Example_reshapePivotSeveral() {
+	ctx := context.Background()
+	df, err := ursus.Frame(
+		ursus.Values("shop", []string{"a", "a", "b", "b"}),
+		ursus.Values("quarter", []string{"q1", "q2", "q1", "q1"}),
+		ursus.Values("channel", []string{"web", "web", "store", "web"}),
+		ursus.Values("sales", []int64{10, 12, 7, 3}),
+	).Collect(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	wide, err := df.Pivot(ctx, ursus.PivotOptions{
+		On:     []string{"quarter", "channel"},
+		Index:  []string{"shop"},
+		Values: []string{"sales"},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(wide)
+	// Output:
+	// shape: (2, 4)
+	// ┌────────┬──────────────┬──────────────┬────────────────┐
+	// │ shop   │ {"q1","web"} │ {"q2","web"} │ {"q1","store"} │
+	// │ String │ Int64        │ Int64        │ Int64          │
+	// ├────────┼──────────────┼──────────────┼────────────────┤
+	// │ "a"    │ 10           │ 12           │ null           │
+	// │ "b"    │ 3            │ null         │ 7              │
+	// └────────┴──────────────┴──────────────┴────────────────┘
 }
 
 func Example_reshapeUnpivot() {

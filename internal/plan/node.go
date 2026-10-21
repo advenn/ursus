@@ -348,6 +348,19 @@ func Expressions(n Node) []expr.Node {
 			out = append(out, &expr.Col{Name: name})
 		}
 		return out
+	case *Pivot:
+		// Every column of its input, named in string form: the index, the On columns
+		// and the cells, which the aggregate beneath computes for nothing else. The
+		// On columns are OnColumns' too, by the same names.
+		in, err := t.Input.Schema()
+		if err != nil {
+			return nil
+		}
+		out := make([]expr.Node, in.Len())
+		for i, name := range in.Names() {
+			out[i] = &expr.Col{Name: name}
+		}
+		return out
 	case *Window:
 		// The arm that was missing, and its absence made a SAFETY TEST VACUOUS:
 		// plan_test walks the tree asserting no scan prunes a column read above it,

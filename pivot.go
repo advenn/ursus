@@ -4,190 +4,189 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/kernel"
+	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/uerr"
 )
 
-// Pivot and Transpose (step 229) are eager only: each makes columns of the frame's
-// VALUES, so its schema is known only once the data is, which a lazy plan cannot
-// allow. Each reads the frame it is given, and builds its answer with the kernels.
+// Pivot (steps 229 and 303) and Transpose (step 229). Pivot is lazy since step 303,
+// its new columns given, as Polars' LazyFrame.pivot takes on_columns, and a
+// DataFrame's finds them. Transpose makes columns of the frame's rows, so its schema
+// is known only once the data is: it is eager only.
 
 // PivotOptions says how Pivot spreads a frame.
 type PivotOptions struct {
-	// On is the column whose values name the new columns.
-	On string
+	// On is the columns whose values name the new columns: one, or several, whose
+	// values together name one, {"x","p"}, as Polars names it.
+	On []string
+	// OnColumns are the new columns' On values: a column for each of On, named as
+	// it, and a new column for each row, in their order. A row the frame never holds
+	// is a column of cells over no values; a value the frame holds and OnColumns
+	// does not is left out, its index still a row. LazyFrame.Pivot needs them, its
+	// columns known before it runs, as Polars' LazyFrame.pivot needs on_columns;
+	// DataFrame.Pivot finds them when nil: every combination the frame holds, in the
+	// order each first appears, or sorted with SortColumns.
+	OnColumns []*Column
 	// Index is the columns whose values make the rows, and Values those spread into
 	// the new columns. Either may be left empty: it is then every column that is
 	// neither On nor in the other. Both empty is refused.
 	Index, Values []string
-	// Agg reduces the values that fall in one cell, e.g. Expr.Sum or Expr.First.
-	// Without it, a cell of two values or more is refused.
+	// Agg reduces the values that fall in one cell, e.g. Expr.Sum or Expr.First, and
+	// reads nothing else, as Polars' reads only pl.element(). A cell none fall in is
+	// Agg of none: a count's 0, a sum's null, as every empty sum is here, where
+	// Polars' is 0. Without Agg, a cell of two values or more is refused, and one of
+	// none is null, as Polars' item has it.
 	Agg func(Expr) Expr
-	// Separator joins a value column's name and an On value, when Values is more
-	// than one column: "v_x". "_" when empty.
+	// Separator joins a value column's name and the On values' name, when Values is
+	// more than one column: "v_x". "_" when empty.
 	Separator string
-	// SortColumns orders the new columns by their On values, rather than by where
-	// each first appears.
+	// SortColumns orders the columns DataFrame.Pivot finds by their On values,
+	// rather than by where each first appears. Given OnColumns keep their order.
 	SortColumns bool
 }
 
-// Pivot spreads a frame wide, as Polars' DataFrame.pivot does: a row for each
+// Pivot spreads a frame wide, as Polars' LazyFrame.pivot does: a row for each
 // distinct Index, in the order each first appears, a null among them; and, for each
-// Values column, a column for each distinct On value, in the order each first
-// appears, holding that value column's value where the row's Index and On meet,
-// null where they never do. A column is named after its On value, "null" for a
-// null, or the value column's name, Separator and the On value when Values is
-// several. A cell holding two values or more needs Agg.
+// Values column, a column for each row of OnColumns, holding Agg of that column's
+// values where the row's Index and the On values meet. A new column is named after
+// its On value, "null" for a null; after several, {"x","p"}, text quoted; and, when
+// Values is several, after the value column, Separator and that.
 //
-//	wide, err := df.Pivot(ctx, ursus.PivotOptions{On: "quarter", Index: []string{"region"},
-//		Values: []string{"sales"}, Agg: ursus.Expr.Sum})
-func (df *DataFrame) Pivot(ctx context.Context, o PivotOptions) (*DataFrame, error) {
-	index, values, err := pivotColumns(df.Columns(), o)
-	if err != nil {
-		return nil, err
+//	wide := lf.Pivot(ursus.PivotOptions{On: []string{"quarter"}, Index: []string{"region"},
+//		Values: []string{"sales"}, Agg: ursus.Expr.Sum,
+//		OnColumns: []*ursus.Column{ursus.Values("quarter", []string{"Q1", "Q2"})}})
+//
+// The new columns are given, as Polars' on_columns are: a plan's schema is known
+// before it runs. DataFrame.Pivot finds them. A group-by of Index and On reduces the
+// rows, streaming the input and spilling past a memory limit; the pivot then holds
+// a row for each index and On values that meet.
+func (lf *LazyFrame) Pivot(o PivotOptions) *LazyFrame {
+	if lf.err != nil {
+		return lf
 	}
-	// One row for each Index and On pair, each value column reduced over it, in the
-	// order the pairs first appear, which is the order each On value first appears
-	// too: the pair holding a value's first row comes first among the pairs holding
-	// it.
-	keys := make([]Expr, 0, len(index)+1)
+	s, err := lf.schemaNow()
+	if err != nil {
+		return &LazyFrame{err: err}
+	}
+	index, values, err := pivotColumns(s.Names(), o)
+	if err != nil {
+		return &LazyFrame{err: err}
+	}
+	if len(o.OnColumns) == 0 {
+		return &LazyFrame{err: uerr.New(uerr.KindValue, "pivot",
+			"a lazy pivot needs OnColumns: its columns are known before it runs").
+			Hint("give the On values of the new columns, as Polars' on_columns; DataFrame.Pivot finds them")}
+	}
+	combos, err := pivotCombos(s, o.On, o.OnColumns)
+	if err != nil {
+		return &LazyFrame{err: err}
+	}
+	names, err := pivotNames(combos, index, values, o.Separator)
+	if err != nil {
+		return &LazyFrame{err: err}
+	}
+
+	// A row for each index and On values that meet, in the order each pair first
+	// appears, each value's cell reduced over its rows. Then, with Agg, each value's
+	// cell over no values, a filter keeping nothing; without, each pair's count.
+	keys := make([]Expr, 0, len(index)+len(o.On))
 	for _, k := range index {
 		keys = append(keys, Col(k))
 	}
-	keys = append(keys, Col(o.On))
-	count := freshName(df.Columns(), "n")
-	aggs := make([]Expr, 0, len(values)+1)
+	for _, k := range o.On {
+		keys = append(keys, Col(k))
+	}
+	all := s.Names()
+	aggs := make([]Expr, 0, 2*len(values))
 	for _, v := range values {
-		if o.Agg != nil {
-			aggs = append(aggs, o.Agg(Col(v)).Alias(v))
-		} else {
+		if o.Agg == nil {
 			aggs = append(aggs, Col(v).First().Alias(v))
+			continue
 		}
-	}
-	aggs = append(aggs, Len().Alias(count))
-	long, err := df.Lazy().GroupBy(keys...).MaintainOrder().Agg(aggs...).Collect(ctx)
-	if err != nil {
-		return nil, err
-	}
-	b := long.batch
-	n := b.Rows()
-	if o.Agg == nil {
-		counts := data.MustValues[uint64](b.Column(b.NumCols() - 1))
-		for r, c := range counts {
-			if c > 1 {
-				return nil, uerr.New(uerr.KindValue, "pivot",
-					"%d rows fall where row %d's index and %s meet, and Agg is not set", c, r, o.On).
-					Hint("give an Agg to reduce them, e.g. ursus.Expr.Sum or ursus.Expr.First")
-			}
+		cell := o.Agg(Col(v))
+		if err := pivotReadsOnly(cell, v); err != nil {
+			return &LazyFrame{err: err}
 		}
+		aggs = append(aggs, cell.Alias(v))
 	}
-
-	// Each pair row's Index group, numbered in the order the groups first appear.
-	group, first, err := groupsOf(b.Columns()[:len(index)], n)
-	if err != nil {
-		return nil, err
-	}
-	// Each pair row's On value, numbered likewise.
-	onCol := b.Column(len(index))
-	onID, onFirst, err := groupsOf([]*data.Column{onCol}, n)
-	if err != nil {
-		return nil, err
-	}
-	order := make([]int, len(onFirst))
-	for i := range order {
-		order[i] = i
-	}
-	if o.SortColumns {
-		distinct, err := kernel.Take(onCol, onFirst)
-		if err != nil {
-			return nil, err
+	if o.Agg != nil {
+		for _, v := range values {
+			aggs = append(aggs, o.Agg(Col(v).Filter(Lit(false))).Alias(freshName(all, "none_"+v)))
 		}
-		sel, err := kernel.ArgSortColumns([]*data.Column{distinct}, []kernel.SortSpec{{}}, len(onFirst))
-		if err != nil {
-			return nil, err
-		}
-		for i, s := range sel {
-			order[i] = int(s)
-		}
+	} else {
+		aggs = append(aggs, Len().Alias(freshName(all, "n")))
 	}
-	names, err := kernel.Cast(o.On, dtype.String, false, onCol)
-	if err != nil {
-		return nil, err
+	long := lf.GroupBy(keys...).MaintainOrder().Agg(aggs...)
+	if long.err != nil {
+		return long
 	}
-
-	// pick[u][g] is the pair row where Index group g meets On value u.
-	pick := make([][]int32, len(onFirst))
-	for u := range pick {
-		pick[u] = make([]int32, len(first))
-		for g := range pick[u] {
-			pick[u][g] = kernel.NullIndex
-		}
+	on := Frame(combos...)
+	if on.err != nil {
+		return on
 	}
-	for r := range n {
-		pick[onID[r]][group[r]] = int32(r)
-	}
-
-	cols := make([]*data.Column, 0, len(index)+len(values)*len(onFirst))
-	seen := make(map[string]bool)
-	for i, k := range index {
-		c, err := kernel.Take(b.Column(i), first)
-		if err != nil {
-			return nil, err
-		}
-		cols, seen[k] = append(cols, c.Rename(k)), true
-	}
-	sep := o.Separator
-	if sep == "" {
-		sep = "_"
-	}
-	for j, v := range values {
-		src := b.Column(len(index) + 1 + j)
-		for _, u := range order {
-			name := "null"
-			if row := int(onFirst[u]); names.IsValid(row) {
-				name = names.Strings().Get(row)
-			}
-			if len(values) > 1 {
-				name = v + sep + name
-			}
-			if seen[name] {
-				return nil, uerr.New(uerr.KindSchema, "pivot",
-					"two columns of the pivot would be named %q", name).
-					Hint("rename the index column, or set Separator")
-			}
-			seen[name] = true
-			c, err := kernel.Take(src, pick[u])
-			if err != nil {
-				return nil, err
-			}
-			cols = append(cols, c.Rename(name))
-		}
-	}
-	return frameOfColumns(cols, len(first))
+	return long.derive(&plan.Pivot{
+		Input: long.node, OnColumns: on.node,
+		Index: index, On: o.On, Values: values, Names: names, Empty: o.Agg != nil,
+	})
 }
 
-// pivotColumns resolves Index and Values against the frame's columns.
+// Pivot spreads a frame wide, as Polars' DataFrame.pivot does: LazyFrame's, with
+// OnColumns, when nil, every combination of On's values the frame holds, in the
+// order each first appears, or sorted with SortColumns, a null first.
+//
+//	wide, err := df.Pivot(ctx, ursus.PivotOptions{On: []string{"quarter"}, Index: []string{"region"},
+//		Values: []string{"sales"}, Agg: ursus.Expr.Sum})
+func (df *DataFrame) Pivot(ctx context.Context, o PivotOptions) (*DataFrame, error) {
+	if len(o.OnColumns) == 0 {
+		if _, _, err := pivotColumns(df.Columns(), o); err != nil {
+			return nil, err
+		}
+		keys := make([]Expr, len(o.On))
+		sorted := make([]SortKey, len(o.On))
+		for i, name := range o.On {
+			keys[i], sorted[i] = Col(name), Asc(Col(name))
+		}
+		q := df.Lazy().GroupBy(keys...).MaintainOrder().Agg()
+		if o.SortColumns {
+			q = q.Sort(sorted...)
+		}
+		found, err := q.Collect(ctx)
+		if err != nil {
+			return nil, err
+		}
+		o.OnColumns = found.batch.Columns()
+	}
+	return df.Lazy().Pivot(o).Collect(ctx)
+}
+
+// pivotColumns resolves On, Index and Values against the frame's columns.
 func pivotColumns(all []string, o PivotOptions) (index, values []string, err error) {
 	has := make(map[string]bool, len(all))
 	for _, c := range all {
 		has[c] = true
 	}
-	if !has[o.On] {
-		return nil, nil, uerr.New(uerr.KindSchema, "pivot", "no column %q to pivot on", o.On).
-			Hint("On names the column whose values become the new columns")
+	if len(o.On) == 0 {
+		return nil, nil, uerr.New(uerr.KindSchema, "pivot", "pivot needs On").
+			Hint("On names the columns whose values become the new columns")
 	}
 	if len(o.Index) == 0 && len(o.Values) == 0 {
 		return nil, nil, uerr.New(uerr.KindSchema, "pivot", "pivot needs Index or Values").
 			Hint("name the row keys, the columns to spread, or both")
 	}
-	used := map[string]bool{o.On: true}
-	for _, list := range [][]string{o.Index, o.Values} {
+	used := make(map[string]bool)
+	for i, list := range [][]string{o.On, o.Index, o.Values} {
 		for _, c := range list {
 			if !has[c] {
+				if i == 0 {
+					return nil, nil, uerr.New(uerr.KindSchema, "pivot", "no column %q to pivot on", c).
+						Hint("On names the columns whose values become the new columns")
+				}
 				return nil, nil, uerr.New(uerr.KindSchema, "pivot", "no column %q", c)
 			}
 			if used[c] {
@@ -219,34 +218,128 @@ func pivotColumns(all []string, o PivotOptions) (index, values []string, err err
 	return index, values, nil
 }
 
-// groupsOf numbers each of n rows by its values in cols, as group_by groups them, a
-// null among them, in the order each group first appears; and gives each group's
-// first row. No columns is one group.
-func groupsOf(cols []*data.Column, n int) ([]int32, []int32, error) {
-	ids := make([]int32, n)
-	if len(cols) == 0 {
-		if n == 0 {
-			return ids, nil, nil
+// pivotCombos are OnColumns in On's order, each cast to its On column's type. A
+// text column beside one of another kind is refused, as Polars refuses comparing
+// them, rather than parsed.
+func pivotCombos(s *dtype.Schema, on []string, given []*Column) ([]*Column, error) {
+	byName := make(map[string]*Column, len(given))
+	for _, c := range given {
+		if c == nil {
+			return nil, uerr.New(uerr.KindValue, "pivot", "OnColumns holds a nil column")
 		}
-		return ids, []int32{0}, nil
-	}
-	enc, err := kernel.NewGroupKeyEncoder("pivot", cols)
-	if err != nil {
-		return nil, nil, err
-	}
-	seen := make(map[string]int32)
-	var first []int32
-	for r := range n {
-		k := string(enc.Encode(r))
-		id, ok := seen[k]
-		if !ok {
-			id = int32(len(first))
-			seen[k] = id
-			first = append(first, int32(r))
+		if !slices.Contains(on, c.Name()) {
+			return nil, uerr.New(uerr.KindSchema, "pivot",
+				"OnColumns has a column %q, which is not among On", c.Name()).
+				Hint("name each of OnColumns after the On column whose values it holds")
 		}
-		ids[r] = id
+		if byName[c.Name()] != nil {
+			return nil, uerr.New(uerr.KindSchema, "pivot", "OnColumns has %q twice", c.Name())
+		}
+		byName[c.Name()] = c
 	}
-	return ids, first, nil
+	out := make([]*Column, len(on))
+	for i, name := range on {
+		c := byName[name]
+		if c == nil {
+			return nil, uerr.New(uerr.KindSchema, "pivot", "OnColumns has no column %q", name).
+				Hint("give a column of values for each of On, named after it")
+		}
+		if i > 0 && c.Len() != out[0].Len() {
+			return nil, uerr.New(uerr.KindValue, "pivot",
+				"OnColumns' %q is %d long and %q %d: a row for each new column", out[0].Name(), out[0].Len(), name, c.Len())
+		}
+		t := s.Field(s.IndexOf(name)).Type
+		if c.DType() != t {
+			if !c.DType().IsNull() && c.DType().IsString() != t.IsString() {
+				return nil, uerr.New(uerr.KindType, "pivot",
+					"OnColumns' %q is %s, and the frame's is %s, which cannot be compared", name, c.DType(), t).
+					Hint("give the values as the On column holds them, or cast it")
+			}
+			cast, err := kernel.Cast(name, t, true, c)
+			if err != nil {
+				return nil, uerr.Wrap(err, uerr.KindType, "pivot", "OnColumns' %q as the frame's %s", name, t)
+			}
+			c = cast
+		}
+		out[i] = c
+	}
+	return out, nil
+}
+
+// pivotNames are the new columns' names, value by value, a row of combos at a time.
+// One On column names a column by its value, "null" for a null; several by all of
+// them as Polars writes them, {"x",1}, text quoted. Two names alike are refused.
+func pivotNames(combos []*Column, index, values []string, sep string) ([]string, error) {
+	k := combos[0].Len()
+	texts := make([]*data.Column, len(combos))
+	for i, c := range combos {
+		t, err := kernel.Cast(c.Name(), dtype.String, false, c)
+		if err != nil {
+			return nil, uerr.Wrap(err, uerr.KindType, "pivot", "naming the columns by %q, %s", c.Name(), c.DType())
+		}
+		texts[i] = t
+	}
+	text := func(i, u int) string {
+		if !texts[i].IsValid(u) {
+			return "null"
+		}
+		s := texts[i].Strings().Get(u)
+		if len(combos) > 1 && combos[i].DType().IsString() {
+			return `"` + s + `"`
+		}
+		return s
+	}
+	one := make([]string, k)
+	for u := range k {
+		if len(combos) == 1 {
+			one[u] = text(0, u)
+			continue
+		}
+		parts := make([]string, len(combos))
+		for i := range combos {
+			parts[i] = text(i, u)
+		}
+		one[u] = "{" + strings.Join(parts, ",") + "}"
+	}
+	if sep == "" {
+		sep = "_"
+	}
+	seen := make(map[string]bool, len(index)+len(values)*k)
+	for _, name := range index {
+		seen[name] = true
+	}
+	names := make([]string, 0, len(values)*k)
+	for _, v := range values {
+		for u := range k {
+			name := one[u]
+			if len(values) > 1 {
+				name = v + sep + name
+			}
+			if seen[name] {
+				return nil, uerr.New(uerr.KindSchema, "pivot",
+					"two columns of the pivot would be named %q", name).
+					Hint("rename the index column, set Separator, or give each On value once")
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	return names, nil
+}
+
+// pivotReadsOnly refuses an Agg that reads a column other than the value v it is
+// given: a cell is the values that fall in it, as Polars' aggregate reads only
+// pl.element(), and a cell over none could not be one value for every row.
+func pivotReadsOnly(cell Expr, v string) error {
+	for _, name := range expr.RootNames(cell.node()) {
+		if name != v {
+			return uerr.New(uerr.KindValue, "pivot",
+				"Agg reads %q, where it reads only the values it is given, here %q", name, v).
+				Hint("reduce e alone, as func(e ursus.Expr) ursus.Expr { return e.Sum() }; " +
+					"a cell is the values of one column that fall in it")
+		}
+	}
+	return nil
 }
 
 // freshName is a column name not among names, from base.

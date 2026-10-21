@@ -470,6 +470,12 @@ func holdsHint(op string) string {
 			"VALUE as its answer — which partitioning to disk cannot divide, because " +
 			"it divides across keys (quantile, median and n_unique spill their " +
 			"values); raise the limit with WithMemoryLimit"
+	case "pivot":
+		// pivot holds its pairs since step 303; the group-by beneath it, which
+		// streams the input and spills, is where the input went.
+		return "pivot holds a row for each index and On values that meet, from the " +
+			"group_by beneath it, which spills; it does not, so raise the limit with " +
+			"WithMemoryLimit, or pivot fewer index values at a time"
 	case "unique":
 		// unique spills since step 82, so reaching Check means the freeze could not
 		// help: the limit was gone before the first key, or four levels of

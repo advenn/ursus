@@ -353,6 +353,10 @@ var planCoverage = []struct {
 	{"union", "", func(t *testing.T) *ursus.LazyFrame {
 		return ursus.Concat([]*ursus.LazyFrame{frame(), frame()})
 	}},
+	{"pivot", "", func(t *testing.T) *ursus.LazyFrame {
+		return frame().Pivot(ursus.PivotOptions{On: []string{"region"}, Index: []string{"id"}, Values: []string{"qty"},
+			Agg: ursus.Expr.Sum, OnColumns: []*ursus.Column{ursus.Values("region", []string{"eu", "us"})}})
+	}},
 	{"unpivot", "", func(t *testing.T) *ursus.LazyFrame {
 		return frame().Unpivot(ursus.UnpivotOptions{On: []string{"qty", "price"}})
 	}},

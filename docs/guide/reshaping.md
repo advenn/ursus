@@ -15,13 +15,27 @@ values that fall in one cell; without it, a cell of two values is refused.
 
 --8<-- "Example_reshapePivot.md"
 
-East sold no figs, so its cell is null. Polars' sum gives 0 there; here, as for every
-sum of nothing, it is null (see [Coming from Polars](../getting-started/coming-from-polars.md#where-ursus-answers-differently)).
-
-`Pivot` is a `DataFrame`'s, not a `LazyFrame`'s: its columns are the data's values, so
-the frame's schema is not known until the data is read, and a lazy plan needs it
-first. New columns come in the order their values first appear, or sorted with
+A cell is `Agg` of the values that fall in it. East sold no figs, so its cell is the
+sum of nothing: Polars' sum gives 0 there; here, as for every sum of nothing, it is
+null (see [Coming from Polars](../getting-started/coming-from-polars.md#where-ursus-answers-differently)).
+A count of nothing is 0, as Polars' is (*fixed in 0.6.7*; before, every such cell was
+null). New columns come in the order their values first appear, or sorted with
 `SortColumns`.
+
+*New in 0.6.7.* `Pivot` is a `LazyFrame`'s too, as Polars' `LazyFrame.pivot` is, its
+new columns given in `OnColumns`, since a lazy plan knows its columns before it reads
+the data. A value given that the data never holds is a column of empty cells, plum
+here; one the data holds and `OnColumns` leaves out is left out, fig here. A
+`DataFrame`'s pivot finds them itself. Either way a group-by of the index and the
+`On` values reduces the rows first, and spills past a memory limit as any group-by
+does.
+
+--8<-- "Example_reshapePivotLazy.md"
+
+*New in 0.6.7.* Several `On` columns name a new column by their values together, as
+Polars writes them, text quoted:
+
+--8<-- "Example_reshapePivotSeveral.md"
 
 ## Long: unpivot
 
