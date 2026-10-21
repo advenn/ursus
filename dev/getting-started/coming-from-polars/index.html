@@ -1743,6 +1743,10 @@ changes is what Go asks for.</p>
 <td><code>lf.Pivot(ursus.PivotOptions{On: ..., OnColumns: ...})</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>df.partition_by("k", include_key=False)</code></td>
+<td><code>df.PartitionBy(ctx, ursus.PartitionOptions{By: []string{"k"}, DropKey: true})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>pl.concat([a, b])</code></td>
 <td><code>ursus.Concat([]*ursus.LazyFrame{a, b})</code></td>
 </tr>

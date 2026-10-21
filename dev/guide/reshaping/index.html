@@ -1146,6 +1146,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#split-by-key-partition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Split by key: partition
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1609,6 +1620,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#split-by-key-partition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Split by key: partition
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1955,7 +1977,47 @@ column, and <code>ColumnNames</code> names the new ones:</p>
 </span></code></pre></div>
 <p>Every column of the answer has the type its values meet at, so integers beside floats
 become floats; text beside numbers is refused, where Polars casts everything to text.
-Like <code>Pivot</code>, it is a <code>DataFrame</code>'s.</p>
+It is a <code>DataFrame</code>'s only: its columns are the frame's rows, so its schema waits for
+the data.</p>
+<h2 id="split-by-key-partition">Split by key: partition<a class="headerlink" href="#split-by-key-partition" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7.</em> <code>PartitionBy</code> splits a frame into a part for each distinct key, in
+the order the keys first appear, as Polars' <code>partition_by</code>. Each part has its <code>Key</code>, a
+one-row frame of the key's values, typed as the columns are, beside its <code>Frame</code>, the
+rows holding that key. Go has no map keyed by a tuple, so the parts are a slice where
+Polars' <code>as_dict</code> gives a dict. <code>DropKey</code> leaves the key columns out of each frame:</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="nx">ctx</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">()</span>
+</span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="nx">df</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sales</span><span class="p">().</span><span class="nx">Collect</span><span class="p">(</span><span class="nx">ctx</span><span class="p">)</span>
+</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="w">    </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span id="__span-22-5"><a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a><span class="p">}</span>
+</span><span id="__span-22-6"><a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a><span class="nx">parts</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">df</span><span class="p">.</span><span class="nx">PartitionBy</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">PartitionOptions</span><span class="p">{</span>
+</span><span id="__span-22-7"><a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a><span class="w">    </span><span class="nx">By</span><span class="p">:</span><span class="w">      </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"region"</span><span class="p">},</span>
+</span><span id="__span-22-8"><a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a><span class="w">    </span><span class="nx">DropKey</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+</span><span id="__span-22-9"><a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a><span class="p">})</span>
+</span><span id="__span-22-10"><a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-22-11"><a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a><span class="w">    </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span id="__span-22-12"><a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a><span class="p">}</span>
+</span><span id="__span-22-13"><a id="__codelineno-22-13" name="__codelineno-22-13" href="#__codelineno-22-13"></a><span class="k">for</span><span class="w"> </span><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">p</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">range</span><span class="w"> </span><span class="nx">parts</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-22-14"><a id="__codelineno-22-14" name="__codelineno-22-14" href="#__codelineno-22-14"></a><span class="w">    </span><span class="nx">region</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">p</span><span class="p">.</span><span class="nx">Key</span><span class="p">.</span><span class="nx">At</span><span class="p">[</span><span class="kt">string</span><span class="p">](</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="s">"region"</span><span class="p">)</span>
+</span><span id="__span-22-15"><a id="__codelineno-22-15" name="__codelineno-22-15" href="#__codelineno-22-15"></a><span class="w">    </span><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">region</span><span class="p">,</span><span class="w"> </span><span class="nx">p</span><span class="p">.</span><span class="nx">Frame</span><span class="p">.</span><span class="nx">Height</span><span class="p">())</span>
+</span><span id="__span-22-16"><a id="__codelineno-22-16" name="__codelineno-22-16" href="#__codelineno-22-16"></a><span class="p">}</span>
+</span><span id="__span-22-17"><a id="__codelineno-22-17" name="__codelineno-22-17" href="#__codelineno-22-17"></a><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">Frame</span><span class="p">)</span>
+</span></code></pre></div>
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>north 3
+</span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>south 3
+</span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>east 2
+</span><span id="__span-23-4"><a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a>shape: (3, 5)
+</span><span id="__span-23-5"><a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a>┌──────────┬────────────┬─────────┬───────┬─────────┐
+</span><span id="__span-23-6"><a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a>│ order_id │ date       │ product │ qty   │ price   │
+</span><span id="__span-23-7"><a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a>│ Int64    │ Date       │ String  │ Int64 │ Float64 │
+</span><span id="__span-23-8"><a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a>├──────────┼────────────┼─────────┼───────┼─────────┤
+</span><span id="__span-23-9"><a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a>│ 1        │ 2026-01-03 │ "apple" │ 10    │ 1.5     │
+</span><span id="__span-23-10"><a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a>│ 3        │ 2026-01-04 │ "pear"  │ 7     │ 2.25    │
+</span><span id="__span-23-11"><a id="__codelineno-23-11" name="__codelineno-23-11" href="#__codelineno-23-11"></a>│ 7        │ 2026-01-07 │ "fig"   │ 3     │ 3       │
+</span><span id="__span-23-12"><a id="__codelineno-23-12" name="__codelineno-23-12" href="#__codelineno-23-12"></a>└──────────┴────────────┴─────────┴───────┴─────────┘
+</span></code></pre></div>
+<p>Keys group as a group-by groups them: a null key is a part of its own, and -0 and 0
+are one key. It is a <code>DataFrame</code>'s, and its parts together hold what the frame did.</p>
 
 
 

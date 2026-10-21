@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–304, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–305, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3095,6 +3095,9 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>PartitionBy</code></strong> (305), as Polars' <code>partition_by</code>: a frame split into a part for
+  each distinct key, in the order the keys first appear, each part's typed <code>Key</code>
+  beside its <code>Frame</code>, with or without the key columns.</li>
 <li><strong><code>Unpivot</code> without <code>On</code></strong> (304), as Polars' <code>on=None</code>: every column not in <code>Index</code>
   melted, every column with no <code>Index</code> either, and nothing, no rows, when <code>Index</code>
   names every column.</li>
