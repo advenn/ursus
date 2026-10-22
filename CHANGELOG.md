@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–309, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–310, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -43,6 +43,9 @@ completeness, part 3 — frame operations.**
 
 ### Fixes
 
+- **A conditional of Lists or Structs** (310): `When(...).Then(list).Otherwise(...)`, and
+  `Coalesce` of Lists, were refused, "a conditional is not implemented for
+  List(String)"; each row is now its branch's, as Polars' when/then gives.
 - **An expression that reads no column is named as its first input is** (309), as
   Polars names it: `Len().Cast(Int64)` and `Len().Add(1)` are "len", where they were
   "literal".
@@ -65,6 +68,9 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`FirstNonNull` and `LastNonNull`** (310), Polars' `first(ignore_nulls=True)` and
+  `last(ignore_nulls=True)`, of an expression and as group-by shorthands, and a
+  group-by's **`All()`**, each column a List a group, as Polars' `group_by().all()`.
 - **`Having`** (309), as Polars' `GroupBy.having` and SQL's `HAVING`: the groups whose
   predicates, aggregates of their own, all hold, for `Agg`, the shorthands, `Head`,
   `Tail`, and dynamic and rolling groups.

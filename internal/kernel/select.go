@@ -351,9 +351,32 @@ func selectFixed(name string, takeA []bool, a, b *data.Column, n int, valid bitm
 		if a.DType().IsNull() {
 			return data.NewNull(name, a.DType(), n), nil
 		}
-		return nil, uerr.New(uerr.KindUnsupported, "",
-			"a conditional is not implemented for %s", a.DType())
+		// A List, a Struct: a row of either branch, by Take, as Polars' when/then
+		// takes one (step 310, where this refused).
+		return selectByTake(name, takeA, a, b, n, valid)
 	}
+}
+
+// selectByTake is a conditional of any type: each row a's or b's, the two laid end to
+// end and taken from, a row whose mask is null null. Each branch's own nulls are
+// kept, as Take keeps them.
+func selectByTake(name string, takeA []bool, a, b *data.Column, n int, valid bitmap.View) (*data.Column, error) {
+	both, err := ConcatColumns(name, []*data.Column{a, b})
+	if err != nil {
+		return nil, err
+	}
+	sel := make([]int32, n)
+	for i := range n {
+		switch {
+		case !valid.Get(i):
+			sel[i] = NullIndex
+		case takeA[i]:
+			sel[i] = int32(broadcastIdx(a, i))
+		default:
+			sel[i] = int32(a.Len() + broadcastIdx(b, i))
+		}
+	}
+	return Take(both, sel)
 }
 
 func selectT[T data.Fixed](name string, takeA []bool, a, b *data.Column, n int, valid bitmap.View,

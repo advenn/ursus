@@ -305,3 +305,38 @@ func TestCondBatchSizeAndThreadsAreIndependent(t *testing.T) {
 		}
 	}
 }
+
+// TestConditionalOfNestedTypes (step 310): a conditional of Lists or Structs, each
+// row a branch's, where it refused, "a conditional is not implemented for
+// List(String)": Polars' when/then of them, and a Coalesce of Lists. A row whose
+// condition is null is null here, where Polars takes Otherwise (feature-gaps.md §1).
+func TestConditionalOfNestedTypes(t *testing.T) {
+	c := ursus.Col
+	lf := ursus.Frame(ursus.ValuesNullable("b", []bool{true, false, false}, []bool{true, true, false}),
+		ursus.ValuesNullable("s", []string{"1", "2,3", ""}, []bool{true, true, false}),
+		ursus.Values("x", []int64{1, 2, 3})).
+		WithColumns(c("s").Str().Split(",").List().Eval(ursus.Element().Cast(ursus.Int64)).Alias("l"),
+			ursus.Struct(c("x")).Alias("st"))
+	text := func(e ursus.Expr) ursus.Expr {
+		return e.List().Eval(ursus.Element().Cast(ursus.String)).List().Join(",")
+	}
+	for _, tc := range []struct {
+		name string
+		q    *ursus.LazyFrame
+		want string
+	}{
+		// Polars: [[1], [9], [9]].
+		{"a List", lf.Select(text(ursus.When(c("b")).Then(c("l")).Otherwise(ursus.Lit([]int64{9}))).Alias("w")),
+			"w\n1\n9\n\n"},
+		// Polars: [{x: 1}, {x: 0}, {x: 0}].
+		{"a Struct", lf.Select(ursus.When(c("b")).Then(c("st")).Otherwise(ursus.Struct(ursus.Lit(int64(0)).Alias("x"))).
+			Struct().Field("x").Alias("w")), "w\n1\n0\n\n"},
+		// Polars: [[1], [2, 3], [7]].
+		{"a Coalesce of Lists", lf.Select(text(ursus.Coalesce(c("l"), ursus.Lit([]int64{7}))).Alias("c")),
+			"c\n1\n\"2,3\"\n7\n"},
+	} {
+		if got := csvOf(t, tc.q); got != tc.want {
+			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
+}

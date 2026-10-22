@@ -36,6 +36,14 @@ Counting has several forms, each one value per group:
 - `NUnique()` counts its distinct values, a null not among them;
 - `First()` and `Last()` are its first and last value in the rows' order.
 
+*New in 0.6.7.* `First` and `Last` take a value that may be null, so that `First(a)` and
+`First(b)` come from one row. `FirstNonNull()` and `LastNonNull()` skip the nulls, as
+Polars' `first(ignore_nulls=True)`, so two of them may come from different rows. A
+group-by has each as a shorthand over every column, and `All()` gathers each column's
+values a group into a list, as Polars' `group_by().all()`:
+
+--8<-- "Example_aggFirstNonNull.md"
+
 ## Keys
 
 A key is any expression, not only a column. Alias a computed key to name it:

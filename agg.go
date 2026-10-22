@@ -116,6 +116,16 @@ func (e Expr) NUnique() Expr { return e.agg(expr.AggNUnique) }
 func (e Expr) First() Expr { return e.agg(expr.AggFirst) }
 func (e Expr) Last() Expr  { return e.agg(expr.AggLast) }
 
+// FirstNonNull and LastNonNull are the first and last value that is not null, null
+// when there is none: Polars' first(ignore_nulls=True) and last(ignore_nulls=True)
+// (step 310). NaN is a value. Unlike First and Last, two of them may come from
+// different rows.
+//
+// Each is First or Last of the values a filter keeps, a conditional aggregate, so it
+// streams in a group-by, a window and a temporal group as First does.
+func (e Expr) FirstNonNull() Expr { return e.Filter(e.IsNotNull()).First() }
+func (e Expr) LastNonNull() Expr  { return e.Filter(e.IsNotNull()).Last() }
+
 // NullCount counts the NULLS in each group — the complement of Count, and like the
 // other counters it is never itself null.
 func (e Expr) NullCount() Expr { return e.agg(expr.AggNullCount) }
@@ -875,6 +885,18 @@ func (g *GroupBy) Max() *LazyFrame     { return g.each(false, Expr.Max) }
 func (g *GroupBy) NUnique() *LazyFrame { return g.each(false, Expr.NUnique) }
 func (g *GroupBy) First() *LazyFrame   { return g.each(false, Expr.First) }
 func (g *GroupBy) Last() *LazyFrame    { return g.each(false, Expr.Last) }
+
+// FirstNonNull and LastNonNull are each non-key column's first or last value that is
+// not null: Polars' first(ignore_nulls=True) and last(ignore_nulls=True) (step 310).
+func (g *GroupBy) FirstNonNull() *LazyFrame { return g.each(false, Expr.FirstNonNull) }
+func (g *GroupBy) LastNonNull() *LazyFrame  { return g.each(false, Expr.LastNonNull) }
+
+// All is each non-key column's values a group, a List in the frame's order, nulls
+// among them: Polars' group_by().all() (step 310). It is Implode of each, and its
+// memory is the data, as Implode's is: under WithMemoryLimit the values of the groups
+// held must fit, since partitioning sends new keys to disk but not the values of
+// those it already holds.
+func (g *GroupBy) All() *LazyFrame { return g.each(false, Expr.Implode) }
 
 // Quantile applies one quantile to every numeric non-key column.
 func (g *GroupBy) Quantile(q float64, interp Interpolation) *LazyFrame {

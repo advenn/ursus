@@ -166,6 +166,39 @@ func Example_aggLists() {
 	// └─────────┴─────────────┴──────────────────────────┘
 }
 
+func Example_aggFirstNonNull() {
+	temps, read := []float64{0, 21.5, 22.0, 0}, []bool{false, true, true, false}
+	readings := ursus.Frame(
+		ursus.Values("sensor", []string{"a", "a", "a", "b"}),
+		ursus.ValuesNullable("temp", temps, read),
+	)
+	g := readings.GroupBy(ursus.Col("sensor")).MaintainOrder()
+	show(g.Agg(
+		ursus.Col("temp").First().Alias("first"),
+		ursus.Col("temp").FirstNonNull().Alias("first_seen"),
+		ursus.Col("temp").LastNonNull().Alias("last_seen"),
+	))
+	show(g.All())
+	// Output:
+	// shape: (2, 4)
+	// ┌────────┬─────────┬────────────┬───────────┐
+	// │ sensor │ first   │ first_seen │ last_seen │
+	// │ String │ Float64 │ Float64    │ Float64   │
+	// ├────────┼─────────┼────────────┼───────────┤
+	// │ "a"    │ null    │ 21.5       │ 22        │
+	// │ "b"    │ null    │ null       │ null      │
+	// └────────┴─────────┴────────────┴───────────┘
+	//
+	// shape: (2, 2)
+	// ┌────────┬──────────────────┐
+	// │ sensor │ temp             │
+	// │ String │ List(Float64)    │
+	// ├────────┼──────────────────┤
+	// │ "a"    │ [null, 21.5, 22] │
+	// │ "b"    │ [null]           │
+	// └────────┴──────────────────┘
+}
+
 func Example_aggHaving() {
 	show(sales().
 		GroupBy(ursus.Col("region")).

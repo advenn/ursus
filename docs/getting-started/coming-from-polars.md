@@ -96,6 +96,7 @@ changes is what Go asks for.
 | `.unpivot(...)`, `df.pivot(...)` | `.Unpivot(ursus.UnpivotOptions{...})`, `df.Pivot(ctx, ursus.PivotOptions{...})` |
 | `lf.pivot(on, on_columns=[...])` | `lf.Pivot(ursus.PivotOptions{On: ..., OnColumns: ...})` (new in 0.6.7) |
 | `pl.concat(frames, how="vertical_relaxed")`, `"diagonal_relaxed"`, `"horizontal_extend"`, `"align"` | `ursus.Concat(frames, ursus.WithConcatMode(ursus.ConcatRelaxed))`, `ConcatDiagonalRelaxed`, `ConcatHorizontalExtend`, `ConcatAlign` (new in 0.6.7); `ursus.ConcatFrames` for `DataFrame`s |
+| `pl.col("x").first(ignore_nulls=True)`, `.last(...)`; `df.group_by("k").all()` | `ursus.Col("x").FirstNonNull()`, `LastNonNull()`; `lf.GroupBy(ursus.Col("k")).All()` (new in 0.6.7) |
 | `df.group_by("k").having(pl.len() > 1).agg(...)` | `lf.GroupBy(ursus.Col("k")).Having(ursus.Len().Gt(1)).Agg(...)` (new in 0.6.7) |
 | `df.group_by("k", maintain_order=True).head(2)`, `.tail(2)` | `lf.GroupBy(ursus.Col("k")).Head(2)`, `.Tail(2)` (new in 0.6.7) |
 | `df.upsample("t", every="1d", group_by="g")` | `lf.Upsample("t", ursus.Every("1d"), "g")` (new in 0.6.7) |
