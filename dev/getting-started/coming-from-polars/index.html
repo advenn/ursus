@@ -1695,6 +1695,10 @@ changes is what Go asks for.</p>
 <td><code>.JoinAsOf(...)</code>, <code>.JoinWhere(...)</code></td>
 </tr>
 <tr>
+<td><code>.join(other, on="k", maintain_order="right")</code></td>
+<td><code>.Join(other, ursus.JoinOn(ursus.Col("k")), ursus.JoinMaintainOrder(ursus.JoinOrderRight))</code> (changed in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.over("k")</code></td>
 <td><code>.Over(ursus.Col("k"))</code></td>
 </tr>

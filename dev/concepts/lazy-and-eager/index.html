@@ -1731,7 +1731,8 @@ that promises one:</p>
 <li><strong>a group-by's groups:</strong> <code>MaintainOrder()</code> gives them in the order their keys first
   appear;</li>
 <li><strong>an inner join's rows,</strong> which follow whichever input ursus did not hash:
-  <code>JoinMaintainOrder(true)</code> keeps the left frame's order.</li>
+  <code>JoinMaintainOrder(ursus.JoinOrderLeft)</code> keeps the left frame's order, and
+  <code>JoinOrderRight</code> the right's, for a join of any kind.</li>
 </ul>
 
 
