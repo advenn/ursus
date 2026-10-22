@@ -3052,11 +3052,16 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–310, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–311, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A null condition takes <code>Otherwise</code></strong> (311), as Polars' <code>when</code> and SQL's
+  <code>CASE WHEN</code> do: <code>When(c).Then(a).Otherwise(b)</code> of a null <code>c</code> is <code>b</code>, or the next
+  <code>When</code>'s, where it was null. A conditional's result is nullable only where a branch
+  is. <code>Clip</code> with a null bound now leaves that side unclipped, as Polars' does, where
+  it gave null; <code>FillNan</code> still leaves a null alone.</li>
 <li><strong><code>ConcatMode</code> is ursus's own type</strong> (307), no longer the plan's, its <code>String</code> the
   name of Polars' mode: <code>ConcatStrict</code> prints "vertical", where it printed "strict".
   Code that names the constants is unchanged.</li>

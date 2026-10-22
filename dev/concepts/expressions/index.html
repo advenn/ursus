@@ -1861,7 +1861,10 @@ Polars: <code>SumHorizontal</code>, <code>MaxHorizontal</code> and their kin, <c
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nx">Otherwise</span><span class="p">(</span><span class="s">"small"</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Comparisons give a <code>Bool</code> column, combined with <code>And</code>, <code>Or</code> and <code>Not</code> under SQL's
-three-valued logic: <code>null.And(false)</code> is false, and <code>null.And(true)</code> is null.</p>
+three-valued logic: <code>null.And(false)</code> is false, and <code>null.And(true)</code> is null. A
+condition that is null counts as false, so its row falls to the next <code>When</code>, or to
+<code>Otherwise</code>, as in Polars and SQL's <code>CASE WHEN</code> (since 0.6.7; before, the row was
+null). Write <code>Otherwise(ursus.Null(...))</code> where a null is wanted.</p>
 <h2 id="literals">Literals<a class="headerlink" href="#literals" title="Permanent link">&para;</a></h2>
 <p>A Go value is a literal wherever an expression goes: <code>Col("qty").Gt(3)</code>,
 <code>Then("bulk")</code>, <code>FillNullWith(0.0)</code>. <code>Lit(v)</code> makes a literal expression of its own,
