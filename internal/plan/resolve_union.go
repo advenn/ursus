@@ -74,6 +74,10 @@ func resolveUnion(u *Union) (Node, error) {
 				// the claim was false for exactly the pair it most needed to cover.
 				// A temporal unit is the one range question left: a Datetime(ms)
 				// past the nanosecond range is refused here, by the strict cast.
+				// A relaxed mode's supertype, which may round, casts strictly too: an
+				// Int64 rounds into a Float64 and a number becomes text without
+				// failing, as Polars' do, and a value its type cannot hold at all, a
+				// date past a Datetime(ns)'s range, is refused rather than nulled.
 				e = &expr.Cast{Child: e, To: f.Type, Strict: true}
 				e = &expr.Alias{Child: e, Name: f.Name}
 			}

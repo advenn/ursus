@@ -280,6 +280,47 @@ func Example_reshapeConcatDiagonal() {
 	// └───────┴────────┴───────────────────┘
 }
 
+func Example_reshapeConcatRelaxed() {
+	counted := ursus.Frame(ursus.Values("qty", []int64{4, 6}))
+	weighed := ursus.Frame(ursus.Values("qty", []float64{2.5}))
+	show(ursus.Concat([]*ursus.LazyFrame{counted, weighed},
+		ursus.WithConcatMode(ursus.ConcatRelaxed)))
+	// Output:
+	// shape: (3, 1)
+	// ┌─────────┐
+	// │ qty     │
+	// │ Float64 │
+	// ├─────────┤
+	// │ 4       │
+	// │ 6       │
+	// │ 2.5     │
+	// └─────────┘
+}
+
+func Example_reshapeConcatAlign() {
+	prices := ursus.Frame(
+		ursus.Values("day", []int64{3, 1, 2}),
+		ursus.Values("close", []float64{10.5, 10.0, 11.0}),
+	)
+	volumes := ursus.Frame(
+		ursus.Values("day", []int64{2, 4, 1}),
+		ursus.Values("volume", []int64{700, 900, 500}),
+	)
+	show(ursus.Concat([]*ursus.LazyFrame{prices, volumes},
+		ursus.WithConcatMode(ursus.ConcatAlign)))
+	// Output:
+	// shape: (4, 3)
+	// ┌───────┬─────────┬────────┐
+	// │ day   │ close   │ volume │
+	// │ Int64 │ Float64 │ Int64  │
+	// ├───────┼─────────┼────────┤
+	// │ 1     │ 10      │ 500    │
+	// │ 2     │ 11      │ 700    │
+	// │ 3     │ 10.5    │ null   │
+	// │ 4     │ null    │ 900    │
+	// └───────┴─────────┴────────┘
+}
+
 func Example_reshapeHStack() {
 	names := ursus.Frame(ursus.Values("name", []string{"Ada", "Ben"}))
 	scores := ursus.Frame(ursus.Values("score", []int64{90, 75}))

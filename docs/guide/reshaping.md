@@ -86,14 +86,36 @@ missing ones null:
 
 --8<-- "Example_reshapeConcatDiagonal.md"
 
+*New in 0.6.7.* `ConcatRelaxed` and `ConcatDiagonalRelaxed` meet a column's types where
+the default refuses them, at Polars' supertype: an `Int64` beside a `Float64` at
+`Float64`, which may round; a number beside text at text. The default meets types only
+where every value comes out as it went in.
+
+--8<-- "Example_reshapeConcatRelaxed.md"
+
 `lf.Concat(others...)` and `VStack` are the same for one frame. Concatenation streams:
 the frames are read one after another.
 
+## Aligned by key
+
+*New in 0.6.7.* `ConcatAlign` puts frames side by side by key, as Polars'
+`concat(how="align")`: it joins them on the columns every frame has, a full join, and
+sorts by those columns. `ConcatAlignInner`, `ConcatAlignLeft` and `ConcatAlignRight`
+join so instead. A column in some frames but not every one would be two columns of
+one name, and is refused; Polars keeps the first frame's.
+
+--8<-- "Example_reshapeConcatAlign.md"
+
+The joins spill past a memory limit, and the rows come out in the same order with one
+or without, ties in each frame's order.
+
 ## Side by side
 
-`HStack` places frames side by side, row i of each together. The frames must be the
-same height and their column names distinct. It holds its inputs in memory, since
-pairing rows means having each in hand; a join by a key is the streaming way.
+`HStack` places frames side by side, row i of each together, as
+`Concat` with `ConcatHorizontal` does. The frames must be the same height and their
+column names distinct. *New in 0.6.7:* `ConcatHorizontalExtend` pads a shorter frame's
+columns with nulls instead, as Polars' `horizontal_extend`. Either reads its frames in
+step, holding a batch of each.
 
 --8<-- "Example_reshapeHStack.md"
 

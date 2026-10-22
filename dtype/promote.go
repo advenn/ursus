@@ -215,6 +215,31 @@ func PromoteExact(a, b DataType) (DataType, bool) {
 	return Promote(a, b)
 }
 
+// Supertype is the type a relaxed concat meets two columns at, Polars' supertype
+// (step 307). It is Promote's, which may round, an Int64 beside a Float64 a Float64;
+// and past Promote, text beside a number, a Boolean or an instant is text, a Boolean
+// beside a number the number, and a Date beside a Datetime the Datetime. A List or a
+// Struct meets only its own type.
+func Supertype(a, b DataType) (DataType, bool) {
+	if t, ok := Promote(a, b); ok {
+		return t, true
+	}
+	scalar := func(t DataType) bool { return t.IsNumeric() || t.IsBool() || t.IsTemporal() }
+	switch {
+	case a.id == TypeString && scalar(b), b.id == TypeString && scalar(a):
+		return String, true
+	case a.IsBool() && b.IsNumeric():
+		return b, true
+	case b.IsBool() && a.IsNumeric():
+		return a, true
+	case a.id == TypeDate && b.id == TypeDatetime:
+		return b, true
+	case b.id == TypeDate && a.id == TypeDatetime:
+		return a, true
+	}
+	return Null, false
+}
+
 // ExactMismatch reports whether a and b promote, but only to a type that rounds one
 // of them: an integer wider than 32 bits with a float.
 func ExactMismatch(a, b DataType) bool {

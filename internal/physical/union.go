@@ -8,6 +8,7 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/execopt"
+	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -127,6 +128,7 @@ type hstackOp struct {
 	off     []int         // the next row of it
 	rows    []int         // rows each child has delivered
 	ended   []bool
+	extend  bool // pad a frame that ends first with nulls (step 307)
 	emitted bool // whether a batch has been given out
 	done    bool
 	mem     *execopt.Account // the batches in hand
@@ -174,12 +176,23 @@ func (h *hstackOp) Next(ctx context.Context) (*data.Batch, error) {
 			return data.NewBatch(h.schema, emptyColumns(h.schema))
 		}
 		return nil, io.EOF
-	case anyEnded:
+	case anyEnded && !h.extend:
 		h.done = true
 		return nil, h.mismatch(ctx)
 	}
 	cols := make([]*data.Column, 0, h.schema.Len())
 	for i, b := range h.cur {
+		if b == nil {
+			// Extended: a frame that has ended is nulls beside the others' rows.
+			for _, f := range h.children[i].Schema().All() {
+				c, err := kernel.NullColumn(f.Name, f.Type, n)
+				if err != nil {
+					return nil, err
+				}
+				cols = append(cols, c)
+			}
+			continue
+		}
 		for _, c := range b.Columns() {
 			cols = append(cols, c.Slice(h.off[i], n))
 		}
@@ -263,5 +276,6 @@ func planHStack(ctx context.Context, h *plan.HStack, opts Options) (Operator, er
 		}
 		kids[i] = op
 	}
-	return &hstackOp{children: kids, schema: out, labels: h.Labels, mem: opts.Budget.Account("hstack")}, nil
+	return &hstackOp{children: kids, schema: out, labels: h.Labels, extend: h.Extend,
+		mem: opts.Budget.Account("hstack")}, nil
 }

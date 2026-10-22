@@ -15,12 +15,15 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–306, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–307, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **`ConcatMode` is ursus's own type** (307), no longer the plan's, its `String` the
+  name of Polars' mode: `ConcatStrict` prints "vertical", where it printed "strict".
+  Code that names the constants is unchanged.
 - **`PivotOptions.On` is a `[]string`** (303), for several columns whose values
   together name a new column: `On: "quarter"` is `On: []string{"quarter"}`.
 - **A selection among a variadic function's operands is now its operands,** as in
@@ -59,6 +62,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`Concat`'s modes** (307), Polars' eleven: `ConcatRelaxed` and
+  `ConcatDiagonalRelaxed`, meeting a column's types at Polars' supertype;
+  `ConcatHorizontal` and `ConcatHorizontalExtend`, side by side, a shorter frame
+  padded with nulls; and `ConcatAlign`, `ConcatAlignInner`, `ConcatAlignLeft` and
+  `ConcatAlignRight`, frames joined on the columns every frame has and sorted by them.
+  `ConcatFrames` concatenates `DataFrame`s in any mode.
 - **`Upsample`** (306), as Polars' `upsample`, and lazy: a row at every step from each
   group's first instant to its last, nulls where the frame has none, its rows in the
   grid's order with or without a memory limit.

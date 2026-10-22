@@ -62,6 +62,7 @@ Fix these before anything new. **Step 249 fixed every row** (see its record).
 | **A fold in a list's body was never built.** `List().Eval(Fold(...))` and a fold in `CumulativeEval`'s body failed, "fold reached typing unexpanded", since step 266: a body is lowered when it is written, and the fold waited for an expansion that never reaches it. Found when step 302's variadic functions failed the same way in a body, which its gate caught; fixed at step 302, a body building both over its expressions as written | internal/expr/listeval.go | fixed |
 | **`Format` names its column when it is written,** after its first argument, which a selection cannot name yet. `Format("<{}>", All())` is refused, its columns all named "literal", where Polars formats each column, named after it; `Format("<{}>", SumHorizontal(All()))` is named "literal" where Polars' is "a". A name taken at expansion would fix both. Found at step 302 | fold.go | open |
 | **A float cast to String is Go's shortest text,** `2`, `-0`, `1e-07` and `+Inf`, where Polars writes `2.0`, `-0.0`, `1e-7` and `inf`; the CSV writer already writes a whole float with its `.0` (`appendFloatText`). A pivot names a column by this text, so pivoting on 2.0 makes a column `2`. Found at step 303 | internal/kernel/unary.go:1287 | open |
+| **A join under a limit too small for the whole query blames one key.** Three frames aligned under 64 KiB, every key but a few held once, were refused "a single join key has more build rows than the limit": `oneKeyOver` reads the query's total through the account's `Check`, and the memory was the other join's. Its message should say what holds the memory. Found at step 307; at 256 KiB the query spills and answers | internal/physical/extjoin.go | open |
 | **A typed view of a `Date` or a `Datetime` is its integer.** `df.Column[time.Time]` and `df.At[time.Time]` refuse one, "no typed view for time.Time"; `Column[int32]` gives a Date's days and `Column[int64]` a Datetime's ticks. `Rows[T]` decodes either into a `time.Time`. Polars' `to_list` gives dates and datetimes. For 0.6.7's V3, the eager Series (step 297) | series.go, internal/data | open |
 | **A naive `Datetime` is written with a `Z`,** as though it were UTC: `Datetime(s)` prints `2026-03-08T06:30:00Z`, and the CSV writer, which shares `FormatTemporal`, writes it so, which another reader takes as UTC; so does a cast to String (step 298). Polars writes a naive instant with no offset. A change of the CSV format, for 0.6.8's I/O (step 296) | dtype/temporal.go:212 | open |
 
@@ -223,7 +224,7 @@ differs from their input's, or scalars outside a group-by.
 | built: `upsample`, in step 306; a frame's `interpolate` and `drop_nans` in step 301 | — |
 | built: `is_duplicated`, `is_unique` and `n_unique` over several columns, in step 290 | — |
 | built: `pivot` of several `On` columns, and a lazy pivot with its columns given, in step 303 | — |
-| `concat`'s relaxed, horizontal and align modes; `ConcatStrict` meets Int32 and Int64 at Int64, where Polars' vertical refuses them, and refuses Int64 beside Float64, which `vertical_relaxed` meets; `DataFrame.Concat` modes | P1 |
+| built: `concat`'s relaxed, horizontal and align modes, and `ConcatFrames` for `DataFrame`s, in step 307 | — |
 | join: emit a computed key column; `maintain_order` right, left-right and right-left; asof `tolerance` on numeric keys; asof `coalesce`; `JoinWhere` suffix | P1 |
 | group-by: `head`, `tail`, `having`, `map_groups`, iterating over groups; an integer index for `GroupByDynamic` and `Rolling`; `.over(order_by)` of an aggregate; mapping `explode` and `join` | P1/P2 |
 | `to_dummies`, `unstack`, `gather`, `extend`, `update`, `glimpse`, `estimated_size`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293; `insert_column` and `hash_rows` in step 302 | P2 |
@@ -296,6 +297,15 @@ decide whether to keep or switch each one.
 - A join on keys of different names keeps both key columns, `JoinLeftOn(a)` and
   `JoinRightOn(b)` giving `a` and `b`; Polars drops the right one.
   `JoinCoalesce(true)` drops it here (step 295).
+- `Concat`'s strict mode meets an Int32 and an Int64 at Int64, where Polars'
+  vertical refuses them; a relaxed mode meets an Int64 and a UInt64 at Int128, where
+  Polars' supertype is a Float64, and a Decimal and an integer at the Decimal wide
+  enough, where Polars' is a Decimal(38). `ConcatHorizontal` refuses frames of two
+  heights, which Polars 1.44.1 pads, deprecated since 1.42.1 for `horizontal_extend`.
+  `ConcatAlign` refuses a column in some frames but not every one, where Polars 1.44.1
+  keeps the first frame's and drops the others' (its docs say it raises); its ties,
+  rows of one key, are in each frame's order, frame by frame, where Polars' are its
+  joins' "right_left" (step 307).
 - `Upsample` takes a frame unsorted, which Polars refuses; leaves out a row of a null
   instant and answers a frame of no rows with none, where Polars refuses both; and
   keeps its groups in the order each first appears, Polars' `maintain_order=True`. It

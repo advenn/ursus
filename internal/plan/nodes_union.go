@@ -20,12 +20,23 @@ const (
 	// with nulls.
 	ConcatDiagonal
 
+	// ConcatRelaxed and ConcatDiagonalRelaxed are ConcatStrict and ConcatDiagonal
+	// meeting a column's types at dtype.Supertype, which may round or make text, as
+	// Polars' vertical_relaxed and diagonal_relaxed do, where the others meet them
+	// exactly (step 307).
+	ConcatRelaxed
+	ConcatDiagonalRelaxed
+
 	concatModeCount
 )
 
 var concatModeNames = [concatModeCount]string{
 	ConcatStrict: "strict", ConcatDiagonal: "diagonal",
+	ConcatRelaxed: "relaxed", ConcatDiagonalRelaxed: "diagonal relaxed",
 }
+
+// Relaxed reports whether m meets types at their supertype rather than exactly.
+func (m ConcatMode) Relaxed() bool { return m == ConcatRelaxed || m == ConcatDiagonalRelaxed }
 
 func (m ConcatMode) String() string {
 	// The `!= ""` half is the load-bearing one. concatModeNames is sized by the enum's
@@ -134,7 +145,7 @@ func reconcileSchemas(schemas []*dtype.Schema, mode ConcatMode) (*dtype.Schema, 
 		}
 	}
 
-	if mode == ConcatStrict {
+	if mode == ConcatStrict || mode == ConcatRelaxed {
 		for i, s := range schemas {
 			if err := strictMatch(schemas[0], s, i); err != nil {
 				return nil, err
@@ -161,8 +172,18 @@ func reconcileSchemas(schemas []*dtype.Schema, mode ConcatMode) (*dtype.Schema, 
 				continue
 			}
 			// EXACTLY: stacking a column means every value comes out as it went in,
-			// so a type that rounds one frame's values is no common type at all.
-			t, ok := dtype.PromoteExact(acc.Type, f.Type)
+			// so a type that rounds one frame's values is no common type at all. A
+			// relaxed mode asks for Polars' supertype instead.
+			meet := dtype.PromoteExact
+			if mode.Relaxed() {
+				meet = dtype.Supertype
+			}
+			t, ok := meet(acc.Type, f.Type)
+			if !ok && mode.Relaxed() {
+				return nil, uerr.New(uerr.KindType, "concat",
+					"cannot stack column %q: no supertype for %s and %s", name, acc.Type, f.Type).
+					Hint("frame 0 has it as %s, frame %d as %s", acc.Type, fi, f.Type)
+			}
 			if !ok {
 				why := "no common type for"
 				if dtype.ExactMismatch(acc.Type, f.Type) {
@@ -227,6 +248,9 @@ func strictMatch(want, s *dtype.Schema, idx int) error {
 type HStack struct {
 	Inputs []Node
 	Labels []string
+	// Extend pads a frame shorter than the others with nulls, as Polars'
+	// concat(how="horizontal_extend") does, where HStack refuses it (step 307).
+	Extend bool
 }
 
 func (h *HStack) planNode()        {}
@@ -236,7 +260,7 @@ func (h *HStack) WithChildren(kids []Node) Node {
 	if len(kids) == 0 {
 		panic("plan: HStack takes at least one child")
 	}
-	return &HStack{Inputs: append([]Node(nil), kids...), Labels: h.Labels}
+	return &HStack{Inputs: append([]Node(nil), kids...), Labels: h.Labels, Extend: h.Extend}
 }
 
 func (h *HStack) Schema() (*dtype.Schema, error) {
@@ -255,6 +279,10 @@ func (h *HStack) Schema() (*dtype.Schema, error) {
 						"its inputs are peers and there is no side to name a suffix after")
 			}
 			at[f.Name] = i
+			if h.Extend {
+				// Any frame may be the shorter, and its columns padded.
+				f = f.AsNullable()
+			}
 			fields = append(fields, f)
 		}
 	}
@@ -262,5 +290,8 @@ func (h *HStack) Schema() (*dtype.Schema, error) {
 }
 
 func (h *HStack) Label() string {
+	if h.Extend {
+		return "HSTACK extend (" + strconv.Itoa(len(h.Inputs)) + " inputs)"
+	}
 	return "HSTACK (" + strconv.Itoa(len(h.Inputs)) + " inputs)"
 }
