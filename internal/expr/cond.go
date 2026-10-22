@@ -85,8 +85,8 @@ func (c *Cond) field(in *dtype.Schema) (dtype.Field, error) {
 		return dtype.Field{}, err
 	}
 	// A Null-typed predicate is an untyped null literal, which is legal and means
-	// every row takes neither branch. Anything else non-Boolean is a mistake worth
-	// naming at plan time.
+	// every row takes the Else branch, as a null condition does. Anything else
+	// non-Boolean is a mistake worth naming at plan time.
 	if !pf.Type.IsBool() && !pf.Type.IsNull() {
 		return dtype.Field{}, uerr.New(uerr.KindType, "when",
 			"a condition must be Boolean, got %s", pf.Type).
@@ -107,11 +107,11 @@ func (c *Cond) field(in *dtype.Schema) (dtype.Field, error) {
 		return dtype.Field{}, err
 	}
 
-	// Nullable if EITHER branch is, or if the predicate is — a null condition takes
-	// neither branch and yields null, so a nullable predicate manufactures nulls
-	// that neither branch contains. This is the same reasoning that makes a
-	// non-strict Cast always nullable.
-	nullable := pf.Nullable || tf.Nullable || ef.Nullable
+	// Nullable if EITHER branch is. A null condition takes the Else branch, as
+	// Polars' when does and SQL's CASE WHEN, so it makes no null of its own (step
+	// 311; until then it yielded null, and a nullable predicate made the result
+	// nullable).
+	nullable := tf.Nullable || ef.Nullable
 	return dtype.Field{Name: OutputName(c), Type: out, Nullable: nullable}, nil
 }
 

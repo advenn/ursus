@@ -76,7 +76,10 @@ ursus.When(ursus.Col("qty").Ge(10)).Then("large").
 ```
 
 Comparisons give a `Bool` column, combined with `And`, `Or` and `Not` under SQL's
-three-valued logic: `null.And(false)` is false, and `null.And(true)` is null.
+three-valued logic: `null.And(false)` is false, and `null.And(true)` is null. A
+condition that is null counts as false, so its row falls to the next `When`, or to
+`Otherwise`, as in Polars and SQL's `CASE WHEN` (since 0.6.7; before, the row was
+null). Write `Otherwise(ursus.Null(...))` where a null is wanted.
 
 ## Literals
 

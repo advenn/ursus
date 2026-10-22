@@ -50,13 +50,14 @@ func TestSelectMerges(t *testing.T) {
 	}
 }
 
-// TestSelectNullMaskTakesNeitherBranch is the decision most likely to be got
-// backwards. A null predicate is not false: it must not fall through to Otherwise.
+// TestSelectNullMaskTakesTheElseBranch: a null mask is false, as Polars' when and
+// SQL's CASE WHEN read a null condition (step 311). Until then it took neither
+// branch and gave null.
 //
-// This is SelectionFromMask's rule — "a row survives iff its predicate is VALID AND
-// TRUE" — applied to a merge instead of a filter, so Filter and When agree about
-// what a missing predicate means.
-func TestSelectNullMaskTakesNeitherBranch(t *testing.T) {
+// It is SelectionFromMask's rule — "a row survives iff its predicate is VALID AND
+// TRUE" — applied to a merge: a row whose mask is not valid and true takes the else
+// branch, so Filter and When still agree about what a missing predicate means.
+func TestSelectNullMaskTakesTheElseBranch(t *testing.T) {
 	out, err := kernel.Select("out",
 		mask([]bool{true, false, false}, []bool{true, true, false}),
 		i64("a", []int64{1, 1, 1}, nil),
@@ -69,9 +70,8 @@ func TestSelectNullMaskTakesNeitherBranch(t *testing.T) {
 	if v, ok := s.Get(1); !ok || v != 9 {
 		t.Errorf("a FALSE mask must take the else branch: got %v (valid %v)", v, ok)
 	}
-	if v, ok := s.Get(2); ok {
-		t.Errorf("a NULL mask must produce null, got %v — treating null as false "+
-			"would make Otherwise silently absorb missing data", v)
+	if v, ok := s.Get(2); !ok || v != 9 {
+		t.Errorf("a NULL mask must take the else branch, as Polars' when does: got %v (valid %v)", v, ok)
 	}
 }
 
@@ -94,9 +94,9 @@ func TestSelectIgnoresMaskPayloadUnderANull(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, _ := data.TypedColumn[int64](out)
-	if v, ok := s.Get(1); ok {
-		t.Errorf("row 1 = %v, want null: the mask lane is null and its payload bit "+
-			"must not be trusted", v)
+	if v, ok := s.Get(1); !ok || v != 9 {
+		t.Errorf("row 1 = %v (valid %v), want 9: the mask lane is null, so the else "+
+			"branch, and its payload bit, which says true, must not be trusted", v, ok)
 	}
 }
 
@@ -225,8 +225,8 @@ func TestSelectOverStringsAndBools(t *testing.T) {
 	if acc.Get(0) != "aa" || acc.Get(1) != "YY" {
 		t.Errorf("strings = %q, %q; want \"aa\", \"YY\"", acc.Get(0), acc.Get(1))
 	}
-	if sOut.IsValid(2) {
-		t.Error("the null-mask row must be null for strings too")
+	if !sOut.IsValid(2) || acc.Get(2) != "ZZ" {
+		t.Error("the null-mask row must take the else branch for strings too")
 	}
 
 	tt := bitmap.NewBuilder(3)
@@ -245,8 +245,8 @@ func TestSelectOverStringsAndBools(t *testing.T) {
 	if !bits.Get(0) || bits.Get(1) {
 		t.Errorf("bools = %v, %v; want true, false", bits.Get(0), bits.Get(1))
 	}
-	if bOut.IsValid(2) {
-		t.Error("the null-mask row must be null for bools too")
+	if !bOut.IsValid(2) || bits.Get(2) {
+		t.Error("the null-mask row must take the else branch for bools too")
 	}
 }
 

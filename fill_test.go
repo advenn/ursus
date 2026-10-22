@@ -439,7 +439,8 @@ func TestClipSemantics(t *testing.T) {
 		}
 	}
 
-	// A null value clips to null: the comparisons are null, so neither branch runs.
+	// A null value clips to null: the comparisons are null, so it falls to Otherwise,
+	// the value itself.
 	g := ursus.Frame(nullable("v", []float64{0}, []bool{false}))
 	d2, err := g.Select(ursus.Col("v").Clip(0.0, 10.0).Alias("c")).
 		Collect(t.Context(), ursus.WithVerify())

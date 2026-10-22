@@ -86,10 +86,12 @@ func TestFieldResolution(t *testing.T) {
 			&expr.Cond{Pred: bin(expr.OpGt, col("id"), lit(int64(0), dtype.Int64)),
 				Then: col("id"), Else: lit(int64(0), dtype.Int64)},
 			"id", dtype.Int64, false},
-		{"cond is nullable when the condition is",
+		// A null condition takes Else (step 311), so a nullable one makes no null of
+		// its own: neither branch here is nullable, and neither is the result.
+		{"cond is not nullable for a nullable condition",
 			&expr.Cond{Pred: bin(expr.OpGt, col("price"), lit(0.0, dtype.Float64)),
 				Then: lit(int64(1), dtype.Int64), Else: lit(int64(0), dtype.Int64)},
-			"literal", dtype.Int64, true},
+			"literal", dtype.Int64, false},
 		// Named after the THEN branch, not the condition: leftmost-column-wins would
 		// pick "id", a column that does not appear in the result.
 		{"cond names after then",

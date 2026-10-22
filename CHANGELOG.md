@@ -15,12 +15,17 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–310, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–311, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **A null condition takes `Otherwise`** (311), as Polars' `when` and SQL's
+  `CASE WHEN` do: `When(c).Then(a).Otherwise(b)` of a null `c` is `b`, or the next
+  `When`'s, where it was null. A conditional's result is nullable only where a branch
+  is. `Clip` with a null bound now leaves that side unclipped, as Polars' does, where
+  it gave null; `FillNan` still leaves a null alone.
 - **`ConcatMode` is ursus's own type** (307), no longer the plan's, its `String` the
   name of Polars' mode: `ConcatStrict` prints "vertical", where it printed "strict".
   Code that names the constants is unchanged.

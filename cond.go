@@ -25,6 +25,12 @@ import (
 // to compile rather than silently defaulting. Where a null default IS wanted, say
 // so: Otherwise(ursus.Null(ursus.NullT)).
 //
+// # A null condition is false
+//
+// A row whose condition is null takes the next branch, the next When or Otherwise,
+// as Polars' when does and SQL's CASE WHEN: When(Col("b")).Then(1).Otherwise(0) of a
+// null b is 0. Until step 311 it was null.
+//
 // # Both branches are evaluated
 //
 // This is a columnar engine, so Then and Otherwise are each computed for every row

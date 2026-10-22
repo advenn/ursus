@@ -37,15 +37,13 @@ func TestWhenThenOtherwiseChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"A", "B", "F"}
+	// Row 3's score is null, so no condition holds and it falls to Otherwise, as
+	// Polars' when does (step 311; it was null).
+	want := []string{"A", "B", "F", "F"}
 	for i, w := range want {
 		if v, ok := g.Get(i); !ok || v != w {
 			t.Errorf("row %d grade = %q (valid %v), want %q", i, v, ok, w)
 		}
-	}
-	// Row 3's score is null, so no branch of the chain applies.
-	if v, ok := g.Get(3); ok {
-		t.Errorf("row 3 grade = %q, want null: the score is null so no condition holds", v)
 	}
 }
 
@@ -66,10 +64,12 @@ func TestCondNamesAfterThen(t *testing.T) {
 	}
 }
 
-// TestCondNullPredicateTakesNeitherBranch is the single most likely silent wrong
-// answer in the conditional: treating a null condition as false would make
-// Otherwise absorb missing data.
-func TestCondNullPredicateTakesNeitherBranch(t *testing.T) {
+// TestCondNullPredicateTakesOtherwise: a null condition is false, as Polars' when and
+// SQL's CASE WHEN have it (step 311). Until then it took neither branch and gave
+// null, on the argument that Otherwise would absorb missing data; Polars' answer
+// was the user's choice, and a null branch is still written Otherwise(Null(...)).
+// Polars: [10, 20, -3, -4].
+func TestCondNullPredicateTakesOtherwise(t *testing.T) {
 	df, err := cf().Select(
 		ursus.Col("id"),
 		ursus.When(ursus.Col("score").Gt(50)).Then(ursus.Col("a")).
@@ -83,14 +83,15 @@ func TestCondNullPredicateTakesNeitherBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 95 > 50 → a; 85 > 50 → a; 40 > 50 is false → b; null > 50 is NULL → neither.
-	for i, want := range []int64{10, 20, -3} {
+	// 95 > 50 → a; 85 > 50 → a; 40 > 50 is false → b; null > 50 is NULL → b.
+	for i, want := range []int64{10, 20, -3, -4} {
 		if got, ok := v.Get(i); !ok || got != want {
 			t.Errorf("row %d = %v (valid %v), want %d", i, got, ok, want)
 		}
 	}
-	if got, ok := v.Get(3); ok {
-		t.Errorf("row 3 = %v, want null — a null condition must not fall through to Otherwise", got)
+	// The result is no longer nullable for a nullable condition: neither branch is.
+	if f, _ := df.Schema().ByName("v"); f.Nullable {
+		t.Error("a conditional of non-null branches is nullable")
 	}
 }
 
@@ -309,7 +310,7 @@ func TestCondBatchSizeAndThreadsAreIndependent(t *testing.T) {
 // TestConditionalOfNestedTypes (step 310): a conditional of Lists or Structs, each
 // row a branch's, where it refused, "a conditional is not implemented for
 // List(String)": Polars' when/then of them, and a Coalesce of Lists. A row whose
-// condition is null is null here, where Polars takes Otherwise (feature-gaps.md §1).
+// condition is null takes Otherwise, as Polars' does since step 311.
 func TestConditionalOfNestedTypes(t *testing.T) {
 	c := ursus.Col
 	lf := ursus.Frame(ursus.ValuesNullable("b", []bool{true, false, false}, []bool{true, true, false}),
@@ -327,15 +328,44 @@ func TestConditionalOfNestedTypes(t *testing.T) {
 	}{
 		// Polars: [[1], [9], [9]].
 		{"a List", lf.Select(text(ursus.When(c("b")).Then(c("l")).Otherwise(ursus.Lit([]int64{9}))).Alias("w")),
-			"w\n1\n9\n\n"},
+			"w\n1\n9\n9\n"},
 		// Polars: [{x: 1}, {x: 0}, {x: 0}].
 		{"a Struct", lf.Select(ursus.When(c("b")).Then(c("st")).Otherwise(ursus.Struct(ursus.Lit(int64(0)).Alias("x"))).
-			Struct().Field("x").Alias("w")), "w\n1\n0\n\n"},
+			Struct().Field("x").Alias("w")), "w\n1\n0\n0\n"},
 		// Polars: [[1], [2, 3], [7]].
 		{"a Coalesce of Lists", lf.Select(text(ursus.Coalesce(c("l"), ursus.Lit([]int64{7}))).Alias("c")),
 			"c\n1\n\"2,3\"\n7\n"},
 	} {
 		if got := csvOf(t, tc.q); got != tc.want {
+			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestWhenNullConditionAsPolars (step 311): a null condition is false, so a row falls
+// to the next When or to Otherwise, as Polars' when does. Every answer is Polars
+// 1.44.1's but the null literal's, which Polars refuses as no Boolean.
+func TestWhenNullConditionAsPolars(t *testing.T) {
+	c := ursus.Col
+	lf := ursus.Frame(ursus.ValuesNullable("b", []bool{false, false, true}, []bool{false, false, true}),
+		ursus.ValuesNullable("c", []bool{true, false, false}, []bool{true, false, true}),
+		ursus.Values("x", []int64{1, 2, 3}),
+		ursus.ValuesNullable("v", []int64{5, 50, 0}, []bool{true, true, false}),
+		ursus.ValuesNullable("lo", []int64{10, 0, 1}, []bool{true, false, true}),
+		ursus.ValuesNullable("hi", []int64{0, 20, 3}, []bool{false, true, true}))
+	for _, tc := range []struct {
+		name string
+		e    ursus.Expr
+		want string
+	}{
+		// b null, c true: 2; both null: 3; b true: 1.
+		{"a chain", ursus.When(c("b")).Then(int64(1)).When(c("c")).Then(int64(2)).Otherwise(int64(3)), "w\n2\n3\n1\n"},
+		// Polars refuses a condition that is no Boolean; here it is null every row.
+		{"a null literal", ursus.When(ursus.Null(ursus.NullT)).Then(c("x")).Otherwise(int64(0)), "w\n0\n0\n0\n"},
+		// A null bound clips nothing, its comparison null: Polars' [10, 20, null].
+		{"Clip of null bounds", c("v").Clip(c("lo"), c("hi")), "w\n10\n20\n\n"},
+	} {
+		if got := csvOf(t, lf.Select(tc.e.Alias("w"))); got != tc.want {
 			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)
 		}
 	}

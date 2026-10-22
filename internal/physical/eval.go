@@ -225,7 +225,7 @@ func evalCond(ctx context.Context, c *expr.Cond, b *data.Batch) (*data.Column, e
 	}
 
 	// An untyped null literal as the condition: Field admits it, meaning every row
-	// takes neither branch, so it must reach the kernel as an all-null Bool rather
+	// takes the Else branch, so it must reach the kernel as an all-null Bool rather
 	// than as a Null column the mask check would reject.
 	//
 	// This used to call kernel.NullColumn directly, under a comment asserting that

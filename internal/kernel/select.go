@@ -67,19 +67,16 @@ func Select(name string, mask, a, b *data.Column) (*data.Column, error) {
 	mv, mb := mask.Validity(), mask.Bools()
 	av, bv := a.Validity(), b.Validity()
 
-	// takeA[i] reports whether row i reads from a. Rows where the mask is null read
-	// from neither and are recorded as invalid up front.
+	// takeA[i] reports whether row i reads from a. A row whose mask is null reads
+	// from b, as one whose mask is false: Polars' when and SQL's CASE WHEN take
+	// their otherwise there (step 311; until then it was null).
 	takeA := make([]bool, n)
 	valid := bitmap.NewBuilder(n)
 	anyNull := false
 	for i := range n {
 		mi := broadcastIdx(mask, i)
 		switch {
-		case !mv.Get(mi):
-			takeA[i] = false // arbitrary; the row is null either way
-			valid.Append(false)
-			anyNull = true
-		case mb.Get(mi):
+		case mv.Get(mi) && mb.Get(mi):
 			takeA[i] = true
 			ok := av.Get(broadcastIdx(a, i))
 			valid.Append(ok)
@@ -97,7 +94,7 @@ func Select(name string, mask, a, b *data.Column) (*data.Column, error) {
 		outValid = bitmap.AllSet(n)
 	}
 
-	// A row that reads from neither branch still needs SOME payload byte written,
+	// A null row still needs SOME payload byte written,
 	// because a null slot's value is unspecified but must exist. Reading a's row is
 	// the cheapest choice and is never observed.
 	switch {

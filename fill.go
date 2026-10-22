@@ -78,10 +78,11 @@ func (e Expr) FillNullWith[T Operand](v T) Expr {
 // # Nulls survive, and the reason is worth knowing
 //
 // `e.IsNotNan()` on a null row is NULL, not true — null and NaN are different
-// things all the way down — and kernel.Select makes a null mask take NEITHER
-// branch. So a null row keeps its null and the fill value never lands on it. That
-// is exactly right, and it looks accidental, which is why TestFillNanLeavesNullsAlone
-// exists.
+// things all the way down — and since step 311 a null condition takes Otherwise, as
+// Polars' when does. So the condition is IsNotNan or IsNull, true on a null row,
+// which then keeps its null; the fill value never lands on it. Until step 311 a null
+// condition took neither branch, and IsNotNan alone did this, which is why
+// TestFillNanLeavesNullsAlone exists.
 //
 // # Why the predicate is IsNotNan rather than IsNan
 //
@@ -92,7 +93,8 @@ func (e Expr) FillNullWith[T Operand](v T) Expr {
 // instead of a replaced one.
 func (e Expr) FillNan[T Operand](v T) Expr {
 	return wrap(&expr.Cond{
-		Pred:  &expr.Unary{Op: expr.OpIsNotNan, Child: e.node()},
+		Pred: &expr.Binary{Op: expr.OpOr, L: &expr.Unary{Op: expr.OpIsNotNan, Child: e.node()},
+			R: &expr.Unary{Op: expr.OpIsNull, Child: e.node()}},
 		Then:  e.node(),
 		Else:  liftWeak(v),
 		Sugar: "fill_nan",
