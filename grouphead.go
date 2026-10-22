@@ -41,11 +41,15 @@ func (g *GroupBy) slice(op string, n int, fromEnd bool) *LazyFrame {
 		return &LazyFrame{err: uerr.New(uerr.KindValue, op, "%s takes a count of rows, and %d is negative", op, n)}
 	}
 	if len(g.keys) == 0 {
-		// One group, the frame.
-		if fromEnd {
-			return g.lf.Tail(n)
+		// One group, the frame, if Having keeps it.
+		lf := g.lf
+		if len(g.having) > 0 {
+			lf = lf.Filter(g.havingRows(nil)...)
 		}
-		return g.lf.Head(n)
+		if fromEnd {
+			return lf.Tail(n)
+		}
+		return lf.Head(n)
 	}
 	s, err := g.lf.schemaNow()
 	if err != nil {
@@ -72,7 +76,12 @@ func (g *GroupBy) slice(op string, n int, fromEnd bool) *LazyFrame {
 	for i, name := range keys {
 		parts[i], isKey[name] = Col(name), true
 	}
-	lf := g.lf.WithColumns(keyExprs...).WithRowIndex(row, 0).
+	lf := g.lf.WithColumns(keyExprs...)
+	if len(g.having) > 0 {
+		// The groups Having keeps: its predicates, each row its group's.
+		lf = lf.Filter(g.havingRows(parts)...)
+	}
+	lf = lf.WithRowIndex(row, 0).
 		WithColumns(Col(row).CumCount(fromEnd).Over(parts...).Alias(rank), Col(row).Min().Over(parts...).Alias(first)).
 		Filter(Col(rank).Le(n)).
 		Sort(Asc(Col(first)), Asc(Col(row)))

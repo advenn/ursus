@@ -169,6 +169,11 @@ func OutputName(n Node) string {
 	for _, c := range RootNames(n) {
 		return c
 	}
+	// No column: named as its first input is, as Polars names it, so Len() cast or
+	// doubled is "len" (step 309); a literal's is "literal".
+	if kids := n.Children(); len(kids) > 0 {
+		return OutputName(kids[0])
+	}
 	return "literal"
 }
 

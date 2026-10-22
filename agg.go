@@ -706,6 +706,10 @@ type GroupBy struct {
 	// below work on a temporal group with no second implementation of any of them.
 	temporal    *plan.TemporalGroup
 	temporalErr error
+
+	// having is Having's predicates, each an aggregate of a group, all of which must
+	// hold (step 309).
+	having []expr.Node
 }
 
 // MaintainOrder emits groups in first-appearance order.
@@ -744,6 +748,14 @@ func (g *GroupBy) MaintainOrder() *GroupBy {
 // `Col("a").Sum().Add(Col("b"))` is not, because b is still a per-row value and
 // there is no defined way to combine the two shapes.
 func (g *GroupBy) Agg(exprs ...Expr) *LazyFrame {
+	if len(g.having) > 0 {
+		return g.aggHaving(exprs)
+	}
+	return g.agg(exprs)
+}
+
+// agg is Agg with no Having.
+func (g *GroupBy) agg(exprs []Expr) *LazyFrame {
 	if g.lf.err != nil {
 		return g.lf
 	}

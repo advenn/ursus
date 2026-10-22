@@ -75,6 +75,18 @@ other expressions that give several values give a list per group too:
 
 A list column can be exploded back into rows, or asked questions with `List()`.
 
+## Filtering groups: having
+
+*New in 0.6.7.* `Having(predicates...)` keeps the groups whose predicates all hold, each
+an aggregate of its group, as Polars' `having` and SQL's `HAVING`: the regions with more
+than two orders, here. It filters what `Agg` gives, the shorthands, and `Head` and
+`Tail`; a group whose predicate is null is left out.
+
+--8<-- "Example_aggHaving.md"
+
+A predicate must be an aggregate and Boolean. Polars casts a number to a Boolean, so
+that a sum keeps every group not 0; here it is refused.
+
 ## Each group's first and last rows
 
 *New in 0.6.7.* `GroupBy(keys).Head(n)` keeps each group's first n rows as rows rather

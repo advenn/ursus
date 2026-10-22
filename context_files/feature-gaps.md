@@ -63,6 +63,7 @@ Fix these before anything new. **Step 249 fixed every row** (see its record).
 | **`Format` names its column when it is written,** after its first argument, which a selection cannot name yet. `Format("<{}>", All())` is refused, its columns all named "literal", where Polars formats each column, named after it; `Format("<{}>", SumHorizontal(All()))` is named "literal" where Polars' is "a". A name taken at expansion would fix both. Found at step 302 | fold.go | open |
 | **A float cast to String is Go's shortest text,** `2`, `-0`, `1e-07` and `+Inf`, where Polars writes `2.0`, `-0.0`, `1e-7` and `inf`; the CSV writer already writes a whole float with its `.0` (`appendFloatText`). A pivot names a column by this text, so pivoting on 2.0 makes a column `2`. Found at step 303 | internal/kernel/unary.go:1287 | open |
 | **A join under a limit too small for the whole query blames one key.** Three frames aligned under 64 KiB, every key but a few held once, were refused "a single join key has more build rows than the limit": `oneKeyOver` reads the query's total through the account's `Check`, and the memory was the other join's. Its message should say what holds the memory. Found at step 307; at 256 KiB the query spills and answers | internal/physical/extjoin.go | open |
+| **A column-free expression was named "literal" past one wrapper.** `Len().Cast(Int64)`, `Len().Add(1)` and their kind fell to `OutputName`'s fallback, which named an expression with no root column "literal"; Polars names it after its first input, "len". Found by `Having`'s tests; fixed at step 309, the fallback recursing into the first input | internal/expr/node.go | fixed |
 | **A typed view of a `Date` or a `Datetime` is its integer.** `df.Column[time.Time]` and `df.At[time.Time]` refuse one, "no typed view for time.Time"; `Column[int32]` gives a Date's days and `Column[int64]` a Datetime's ticks. `Rows[T]` decodes either into a `time.Time`. Polars' `to_list` gives dates and datetimes. For 0.6.7's V3, the eager Series (step 297) | series.go, internal/data | open |
 | **A naive `Datetime` is written with a `Z`,** as though it were UTC: `Datetime(s)` prints `2026-03-08T06:30:00Z`, and the CSV writer, which shares `FormatTemporal`, writes it so, which another reader takes as UTC; so does a cast to String (step 298). Polars writes a naive instant with no offset. A change of the CSV format, for 0.6.8's I/O (step 296) | dtype/temporal.go:212 | open |
 
@@ -226,7 +227,7 @@ differs from their input's, or scalars outside a group-by.
 | built: `pivot` of several `On` columns, and a lazy pivot with its columns given, in step 303 | — |
 | built: `concat`'s relaxed, horizontal and align modes, and `ConcatFrames` for `DataFrame`s, in step 307 | — |
 | join: emit a computed key column; `maintain_order` right, left-right and right-left; asof `tolerance` on numeric keys; asof `coalesce`; `JoinWhere` suffix | P1 |
-| group-by: `having`, `map_groups`, iterating over groups; an integer index for `GroupByDynamic` and `Rolling`; `.over(order_by)` of an aggregate; mapping `explode` and `join`. `head` and `tail` built in step 308 | P1/P2 |
+| group-by: `map_groups`, iterating over groups; an integer index for `GroupByDynamic` and `Rolling`; `.over(order_by)` of an aggregate; mapping `explode` and `join`. `head` and `tail` built in step 308, `having` in 309 | P1/P2 |
 | `to_dummies`, `unstack`, `gather`, `extend`, `update`, `glimpse`, `estimated_size`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293; `insert_column` and `hash_rows` in step 302 | P2 |
 | `transpose` of mixed String and number, with names from a column. `unpivot` without `On` built in step 304 | P2 |
 | **An eager `Series` with operations:** it is a read-only view (`Get`, `Values`, `Map`, `Fold`); sort, unique, head, fill and aggregates go through a frame | P1 |
@@ -297,6 +298,8 @@ decide whether to keep or switch each one.
 - A join on keys of different names keeps both key columns, `JoinLeftOn(a)` and
   `JoinRightOn(b)` giving `a` and `b`; Polars drops the right one.
   `JoinCoalesce(true)` drops it here (step 295).
+- `Having` refuses a predicate that is not Boolean, where Polars casts one, so that a
+  sum keeps every group whose sum is not 0 (step 309).
 - A group's `Head(0)` and `Tail(0)` are no rows; Polars' are a row of nulls for each
   group, of its building them as an aggregation exploded. Their groups always come in
   the order each first appears, Polars' `maintain_order=True`, which is not its

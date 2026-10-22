@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–308, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–309, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -43,6 +43,9 @@ completeness, part 3 — frame operations.**
 
 ### Fixes
 
+- **An expression that reads no column is named as its first input is** (309), as
+  Polars names it: `Len().Cast(Int64)` and `Len().Add(1)` are "len", where they were
+  "literal".
 - **A pivot's cell that no value falls in** is `Agg` of none (303), as Polars' is: a
   count's 0, where every such cell was null. A sum of none stays null, as ursus's
   every empty sum is.
@@ -62,6 +65,9 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`Having`** (309), as Polars' `GroupBy.having` and SQL's `HAVING`: the groups whose
+  predicates, aggregates of their own, all hold, for `Agg`, the shorthands, `Head`,
+  `Tail`, and dynamic and rolling groups.
 - **A group's `Head(n)` and `Tail(n)`** (308), as Polars' `group_by().head()` and
   `tail()`: each group's first or last rows as rows, the keys first, the groups in the
   order each first appears, spilling past a memory limit with the order kept.

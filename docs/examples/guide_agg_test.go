@@ -166,6 +166,23 @@ func Example_aggLists() {
 	// └─────────┴─────────────┴──────────────────────────┘
 }
 
+func Example_aggHaving() {
+	show(sales().
+		GroupBy(ursus.Col("region")).
+		MaintainOrder().
+		Having(ursus.Len().Gt(2)).
+		Agg(ursus.Col("qty").Sum().Alias("qty")))
+	// Output:
+	// shape: (2, 2)
+	// ┌─────────┬────────┐
+	// │ region  │ qty    │
+	// │ String  │ Int128 │
+	// ├─────────┼────────┤
+	// │ "north" │ 20     │
+	// │ "south" │ 19     │
+	// └─────────┴────────┘
+}
+
 func Example_aggHeadTail() {
 	show(sales().
 		Select(ursus.Col("region"), ursus.Col("product"), ursus.Col("qty")).
