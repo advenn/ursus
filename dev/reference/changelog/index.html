@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–309, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–310, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3079,6 +3079,9 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="fixes">Fixes<a class="headerlink" href="#fixes" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A conditional of Lists or Structs</strong> (310): <code>When(...).Then(list).Otherwise(...)</code>, and
+  <code>Coalesce</code> of Lists, were refused, "a conditional is not implemented for
+  List(String)"; each row is now its branch's, as Polars' when/then gives.</li>
 <li><strong>An expression that reads no column is named as its first input is</strong> (309), as
   Polars names it: <code>Len().Cast(Int64)</code> and <code>Len().Add(1)</code> are "len", where they were
   "literal".</li>
@@ -3101,6 +3104,9 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>FirstNonNull</code> and <code>LastNonNull</code></strong> (310), Polars' <code>first(ignore_nulls=True)</code> and
+  <code>last(ignore_nulls=True)</code>, of an expression and as group-by shorthands, and a
+  group-by's <strong><code>All()</code></strong>, each column a List a group, as Polars' <code>group_by().all()</code>.</li>
 <li><strong><code>Having</code></strong> (309), as Polars' <code>GroupBy.having</code> and SQL's <code>HAVING</code>: the groups whose
   predicates, aggregates of their own, all hold, for <code>Agg</code>, the shorthands, <code>Head</code>,
   <code>Tail</code>, and dynamic and rolling groups.</li>

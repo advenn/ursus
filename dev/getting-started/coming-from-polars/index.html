@@ -1747,6 +1747,10 @@ changes is what Go asks for.</p>
 <td><code>ursus.Concat(frames, ursus.WithConcatMode(ursus.ConcatRelaxed))</code>, <code>ConcatDiagonalRelaxed</code>, <code>ConcatHorizontalExtend</code>, <code>ConcatAlign</code> (new in 0.6.7); <code>ursus.ConcatFrames</code> for <code>DataFrame</code>s</td>
 </tr>
 <tr>
+<td><code>pl.col("x").first(ignore_nulls=True)</code>, <code>.last(...)</code>; <code>df.group_by("k").all()</code></td>
+<td><code>ursus.Col("x").FirstNonNull()</code>, <code>LastNonNull()</code>; <code>lf.GroupBy(ursus.Col("k")).All()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>df.group_by("k").having(pl.len() &gt; 1).agg(...)</code></td>
 <td><code>lf.GroupBy(ursus.Col("k")).Having(ursus.Len().Gt(1)).Agg(...)</code> (new in 0.6.7)</td>
 </tr>
