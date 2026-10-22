@@ -1074,6 +1074,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-groups-rows-as-a-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A group's rows as a frame
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#under-a-memory-limit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1643,6 +1654,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-groups-rows-as-a-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A group's rows as a frame
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#under-a-memory-limit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2088,6 +2110,15 @@ ties in the order their values first appear:</p>
 </span><span id="__span-29-14"><a id="__codelineno-29-14" name="__codelineno-29-14" href="#__codelineno-29-14"></a>│ "max"        │ 12                │ 3                  │
 </span><span id="__span-29-15"><a id="__codelineno-29-15" name="__codelineno-29-15" href="#__codelineno-29-15"></a>└──────────────┴───────────────────┴────────────────────┘
 </span></code></pre></div>
+<h2 id="a-groups-rows-as-a-frame">A group's rows as a frame<a class="headerlink" href="#a-groups-rows-as-a-frame" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7.</em> <code>Groups(ctx)</code> gives each group's rows as a frame beside its key, a Go
+iterator, as Polars' <code>for key, df in df.group_by(...)</code>: the groups in the order each
+first appears, each frame the rows as the frame holds them, and the key a one-row
+frame named as the key expressions are, so a key computed from a column is the key's
+and never changes the rows. <code>MapGroups(ctx, fn)</code> runs a Go function over each group's
+frame and stacks the answers, which must agree in their columns and types, as Polars'
+<code>map_groups</code>, for what an aggregation cannot say. Both run the query and hold its
+answer, a frame a group, as <code>PartitionBy</code> does.</p>
 <h2 id="under-a-memory-limit">Under a memory limit<a class="headerlink" href="#under-a-memory-limit" title="Permanent link">&para;</a></h2>
 <p>A group-by spills to disk when its groups outgrow the query's memory budget, a
 median's, a quantile's and an <code>NUnique</code>'s values included, and gives the answer it

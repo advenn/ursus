@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–320, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–321, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3097,6 +3097,9 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="fixes">Fixes<a class="headerlink" href="#fixes" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A frame collected from several batches says its columns hold no null</strong> (321),
+  where they hold none: concatenating the batches built each column a bitmap with
+  every bit set, and every kernel after read it a bit a row.</li>
 <li><strong>A null instant decodes as the zero <code>time.Time</code></strong> (317), in <code>Rows</code> and
   <code>CollectInto</code>, as a null decodes as every other field type's zero: it was the epoch,
   1970-01-01, a plausible instant no row held. <code>IsZero</code> now tells it.</li>
@@ -3125,6 +3128,12 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A group-by's groups as frames</strong> (321): <code>Groups</code>, an iterator of each group's key
+  and rows, and <code>MapGroups</code>, a Go function over each, as Polars' iteration and
+  <code>map_groups</code>; and a frame's <code>Extend</code>, <code>Glimpse</code> and <code>EstimatedSize</code>, and
+  <code>WithColumnsSeq</code> and <code>SelectSeq</code>, as Polars'. <strong><code>PartitionBy</code></strong>, which they are
+  built on, is three and a half times as fast: its parts numbered with a group-by's
+  tables and gathered in parallel.</li>
 <li><strong><code>ToDummies</code></strong> (320), as Polars' <code>to_dummies</code>, on a frame and on a <code>Series</code>: a
   <code>Uint8</code> column for each distinct value, named by the value as Polars displays it and
   ordered by name, as Polars orders them. <strong><code>Unstack</code></strong>, as Polars' <code>unstack</code>,
