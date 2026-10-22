@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–307, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–308, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3098,6 +3098,9 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A group's <code>Head(n)</code> and <code>Tail(n)</code></strong> (308), as Polars' <code>group_by().head()</code> and
+  <code>tail()</code>: each group's first or last rows as rows, the keys first, the groups in the
+  order each first appears, spilling past a memory limit with the order kept.</li>
 <li><strong><code>Concat</code>'s modes</strong> (307), Polars' eleven: <code>ConcatRelaxed</code> and
   <code>ConcatDiagonalRelaxed</code>, meeting a column's types at Polars' supertype;
   <code>ConcatHorizontal</code> and <code>ConcatHorizontalExtend</code>, side by side, a shorter frame
