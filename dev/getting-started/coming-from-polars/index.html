@@ -1743,6 +1743,10 @@ changes is what Go asks for.</p>
 <td><code>lf.Pivot(ursus.PivotOptions{On: ..., OnColumns: ...})</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>pl.concat(frames, how="vertical_relaxed")</code>, <code>"diagonal_relaxed"</code>, <code>"horizontal_extend"</code>, <code>"align"</code></td>
+<td><code>ursus.Concat(frames, ursus.WithConcatMode(ursus.ConcatRelaxed))</code>, <code>ConcatDiagonalRelaxed</code>, <code>ConcatHorizontalExtend</code>, <code>ConcatAlign</code> (new in 0.6.7); <code>ursus.ConcatFrames</code> for <code>DataFrame</code>s</td>
+</tr>
+<tr>
 <td><code>df.upsample("t", every="1d", group_by="g")</code></td>
 <td><code>lf.Upsample("t", ursus.Every("1d"), "g")</code> (new in 0.6.7)</td>
 </tr>
