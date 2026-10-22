@@ -194,6 +194,28 @@ func Example_joinKeysByName() {
 	// └───────┴─────────────┴─────────┴───────┴────────┘
 }
 
+func Example_joinUpdate() {
+	prices := ursus.Frame(
+		ursus.Values("sku", []string{"a", "b", "c"}),
+		ursus.ValuesNullable("price", []float64{9.5, 3, 0}, []bool{true, true, false}),
+	)
+	fixes := ursus.Frame(
+		ursus.Values("sku", []string{"c", "a"}),
+		ursus.Values("price", []float64{4.25, 9.75}),
+	)
+	show(prices.Update(fixes, ursus.UpdateOptions{On: []string{"sku"}}))
+	// Output:
+	// shape: (3, 2)
+	// ┌────────┬─────────┐
+	// │ sku    │ price   │
+	// │ String │ Float64 │
+	// ├────────┼─────────┤
+	// │ "a"    │ 9.75    │
+	// │ "b"    │ 3       │
+	// │ "c"    │ 4.25    │
+	// └────────┴─────────┘
+}
+
 func Example_joinSuffix() {
 	shipped := ursus.Frame(
 		ursus.Values("order", []int64{10, 11, 12}),

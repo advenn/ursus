@@ -161,6 +161,20 @@ another suffix, which the predicates use.
 
 --8<-- "Example_joinWhere.md"
 
+## Updating from another frame
+
+*New in 0.6.7.* `Update(other, options)` writes another frame's values over this
+one's, in the columns both have, matched by keys, as Polars' `update`: a null in
+`other` leaves the value unless `IncludeNulls`, and the frame keeps its rows, its
+columns and their order.
+
+--8<-- "Example_joinUpdate.md"
+
+`How` keeps the frame's every row, `UpdateLeft`, the default; only those `other`
+matches, `UpdateInner`; or also `other`'s unmatched ones, as new rows, `UpdateFull`.
+Without keys, rows are matched by their places. A column whose types differ takes the
+type that holds both. It is a join, so it spills as one does and keeps its order.
+
 ## Filtering by another frame
 
 `WhereExists(other, predicates...)` keeps this frame's rows that have at least one row

@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–315, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–316, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -86,6 +86,10 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`Update`** (316), as Polars' `DataFrame.update`: another frame's values written
+  over this one's, matched by keys or by place, a null leaving the value unless
+  `IncludeNulls`, keeping the frame's rows, all of them, the matched ones or other's
+  new ones too, in an order, under a memory limit as well.
 - **An as-of join's numeric tolerance and its coalesce** (315), as Polars':
   `AsOfTolerance(5)` on an integer key, `AsOfTolerance(0.5)` on a float one, and
   `AsOfCoalesce(false)` keeping the right frame's key; and **`JoinWhereSuffix`**,
