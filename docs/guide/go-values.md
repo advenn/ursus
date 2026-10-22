@@ -15,6 +15,12 @@ structs becomes a frame a field at a time:
 
 --8<-- "Example_goIn.md"
 
+*New in 0.6.7:* `FromRows(rows)` does that in one call, as Polars builds a frame from
+dataclasses, a column a field named as `Rows` reads it, its `ursus` tag or its own
+name. A pointer field is nullable, a slice a `List`, and a struct a `Struct`:
+
+--8<-- "Example_goFromRows.md"
+
 | Go slice | Column |
 |---|---|
 | `[]bool` | `Bool` |

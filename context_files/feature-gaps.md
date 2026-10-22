@@ -234,7 +234,7 @@ differs from their input's, or scalars outside a group-by.
 | `to_dummies`, `unstack`, `gather`, `extend`, `glimpse`, `estimated_size`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293; `insert_column` and `hash_rows` in step 302; `update` in 316 | P2 |
 | `transpose` of mixed String and number, with names from a column. `unpivot` without `On` built in step 304 | P2 |
 | **An eager `Series` with operations:** it is a read-only view (`Get`, `Values`, `Map`, `Fold`); sort, unique, head, fill and aggregates go through a frame | P1 |
-| Build a frame from Go structs (`FromRows[T]`); a lazy row iterator, `to_dicts`, `rows_by_key` | P1 |
+| A lazy row iterator, `to_dicts`, `rows_by_key`. `FromRows`, a frame from Go structs, built in step 317 | P1 |
 
 ## 7. I/O
 

@@ -29,7 +29,7 @@ what we are lacking".
 | ~~Rolling's offset~~ | built in step 313: `RollingOptions.Offset` placed as Polars' `offset`, and `NoOffset()`. A break |
 | ~~J1~~ | built: `maintain_order`, every order, in step 314; an as-of tolerance on a numeric key, as-of `coalesce` and `JoinWhere`'s suffix in 315 |
 | ~~J2~~ | built in step 316: `Update` |
-| V1 | `FromRows[T]`, a frame from Go structs |
+| ~~V1~~ | built in step 317: `FromRows` |
 | V2 | `RowsByKey`, `ToMaps` (`to_dicts`), a lazy row iterator |
 | V3 | an eager `Series` with operations: sort, unique, head, tail, slice, reverse, fills, casts, aggregates |
 | tier 2 | `ToDummies`, `Unstack`, `Transpose` named from a column; `MapGroups` and iterating a group-by's groups; `Extend`, `WithColumnsSeq`, `SelectSeq`, `EstimatedSize`, `Glimpse` |

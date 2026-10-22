@@ -50,6 +50,29 @@ func Example_goIn() {
 	// └───────┴────────────────────────────────┴─────────┴─────────────┘
 }
 
+func Example_goFromRows() {
+	type order struct {
+		ID     int64     `ursus:"id"`
+		Placed time.Time `ursus:"placed"`
+		Total  float64   `ursus:"total"`
+		Note   *string   `ursus:"note"` // nil: no note
+	}
+	note := "gift wrap"
+	show(ursus.FromRows([]order{
+		{1, time.Date(2026, 1, 3, 9, 0, 0, 0, time.UTC), 15, nil},
+		{2, time.Date(2026, 1, 4, 14, 30, 0, 0, time.UTC), 27, &note},
+	}))
+	// Output:
+	// shape: (2, 4)
+	// ┌───────┬────────────────────────────────┬─────────┬─────────────┐
+	// │ id    │ placed                         │ total   │ note        │
+	// │ Int64 │ Datetime(ns, UTC)              │ Float64 │ String      │
+	// ├───────┼────────────────────────────────┼─────────┼─────────────┤
+	// │ 1     │ 2026-01-03T09:00:00.000000000Z │ 15      │ null        │
+	// │ 2     │ 2026-01-04T14:30:00.000000000Z │ 27      │ "gift wrap" │
+	// └───────┴────────────────────────────────┴─────────┴─────────────┘
+}
+
 func Example_goColumn() {
 	df, err := sales().Collect(context.Background())
 	if err != nil {

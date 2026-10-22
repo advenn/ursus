@@ -168,6 +168,9 @@ func makeSetter(ft reflect.Type, c *data.Column) (func(reflect.Value, int), erro
 		if ft == reflect.TypeOf(time.Time{}) {
 			return timeSetter(c)
 		}
+		if c.DType().ID() == dtype.TypeStruct {
+			return structSetter(ft, c)
+		}
 
 	case reflect.Slice:
 		return sliceSetter(ft, c)
@@ -175,6 +178,54 @@ func makeSetter(ft reflect.Type, c *data.Column) (func(reflect.Value, int), erro
 
 	return nil, uerr.New(uerr.KindType, "", "no decoder for Go type %s from column %s",
 		ft, c.DType())
+}
+
+// structSetter decodes a Struct into a struct, each field from the struct's field
+// of its name, as a frame's columns are matched to a row's fields (step 317,
+// FromRows' inverse). A null struct is the zero value.
+func structSetter(ft reflect.Type, c *data.Column) (func(reflect.Value, int), error) {
+	type field struct {
+		index int
+		set   func(reflect.Value, int)
+	}
+	var fields []field
+	for i := range ft.NumField() {
+		f := ft.Field(i)
+		if !f.IsExported() {
+			continue
+		}
+		name, skip := columnName(f)
+		if skip {
+			continue
+		}
+		fc, ok := c.Field(name)
+		if !ok {
+			for _, sf := range c.Fields() {
+				if strings.EqualFold(sf.Name(), name) {
+					fc, ok = sf, true
+					break
+				}
+			}
+		}
+		if !ok {
+			return nil, uerr.New(uerr.KindType, "", "the struct %s has no field %q for %s.%s", c.DType(), name,
+				ft.Name(), f.Name)
+		}
+		set, err := makeSetter(f.Type, fc)
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, field{index: i, set: set})
+	}
+	return func(dst reflect.Value, row int) {
+		if !c.IsValid(row) {
+			dst.SetZero()
+			return
+		}
+		for _, f := range fields {
+			f.set(dst.Field(f.index), row)
+		}
+	}, nil
 }
 
 // sliceSetter decodes a List into a slice, each element through its type's own
@@ -295,13 +346,19 @@ func timeSetter(c *data.Column) (func(reflect.Value, int), error) {
 		}
 	}
 
+	// A null is time.Time's zero, as a null is every other field type's zero; it was
+	// the epoch, 1970-01-01, a plausible instant that no row held (step 317).
 	if dt.ID() == dtype.TypeDate {
 		s, err := data.TypedColumn[int32](c)
 		if err != nil {
 			return nil, err
 		}
 		return func(dst reflect.Value, row int) {
-			v, _ := s.Get(row)
+			v, ok := s.Get(row)
+			if !ok {
+				dst.SetZero()
+				return
+			}
 			dst.Set(reflect.ValueOf(time.Unix(0, int64(v)*toNanos).In(loc)))
 		}, nil
 	}
@@ -311,7 +368,11 @@ func timeSetter(c *data.Column) (func(reflect.Value, int), error) {
 		return nil, err
 	}
 	return func(dst reflect.Value, row int) {
-		v, _ := s.Get(row)
+		v, ok := s.Get(row)
+		if !ok {
+			dst.SetZero()
+			return
+		}
 		dst.Set(reflect.ValueOf(time.Unix(0, v*toNanos).In(loc)))
 	}, nil
 }
