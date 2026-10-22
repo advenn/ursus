@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–317, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–318, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -89,6 +89,9 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **Rows out** (318): `RowsByKey`, as Polars' `rows_by_key`; `ToMaps`, as its
+  `to_dicts`; and `IterRows`, a query's rows as structs streamed a batch at a time, as
+  its `iter_rows`.
 - **`FromRows`** (317), a frame from Go structs, as Polars builds one from dataclasses:
   a column a field, named as `Rows` reads it, pointers nullable, slices Lists and
   structs Structs; and **`Rows` decodes a Struct column into a struct field**, so the

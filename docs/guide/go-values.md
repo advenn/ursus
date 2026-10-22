@@ -72,6 +72,13 @@ a wrong number in a report. A pointer field is how a struct sees a null, `nil`:
 The mapping of fields to columns is worked out once, so decoding costs a setter call a
 field a row, not a reflection lookup.
 
+*New in 0.6.7:* `RowsByKey[K, T](key)` groups the rows by a column, as Polars'
+`rows_by_key`, a key's rows in the frame's order, and `ToMaps()` is each row a
+`map[string]any`, as Polars' `to_dicts`: an `int64` for an `Int64`, a `time.Time` for an
+instant, a `[]any` for a `List`, `nil` for a null. `IterRows[T]` streams a query's rows
+as structs, a batch at a time, as Polars' `iter_rows`, so an answer larger than memory
+can be read row by row.
+
 ## A large answer, a batch at a time
 
 `CollectBatches` streams an answer as frames of `WithBatchSize` rows, a Go iterator, so

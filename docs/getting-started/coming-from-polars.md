@@ -86,6 +86,7 @@ changes is what Go asks for.
 | `.join_asof(other, on="k", tolerance=5, coalesce=False)` | `.JoinAsOf(other, ursus.AsOfOn(ursus.Col("k")), ursus.AsOfTolerance(5), ursus.AsOfCoalesce(false))` (new in 0.6.7) |
 | `.join_where(other, *preds, suffix="_r")` | `.JoinWhereSuffix(other, "_r", preds...)` (new in 0.6.7) |
 | `df.update(other, on="k", how="full")` | `lf.Update(other, ursus.UpdateOptions{On: []string{"k"}, How: ursus.UpdateFull})` (new in 0.6.7) |
+| `df.rows_by_key("k", named=True)`, `df.to_dicts()`, `df.iter_rows(named=True)` | `df.RowsByKey[K, T]("k")`, `df.ToMaps()`, `lf.IterRows[T](ctx)` (new in 0.6.7) |
 | `pl.DataFrame(list_of_dataclasses)` | `ursus.FromRows(structs)` (new in 0.6.7) |
 | `.join(other, on="k", maintain_order="right")` | `.Join(other, ursus.JoinOn(ursus.Col("k")), ursus.JoinMaintainOrder(ursus.JoinOrderRight))` (changed in 0.6.7) |
 | `.over("k")` | `.Over(ursus.Col("k"))` |
