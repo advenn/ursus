@@ -21,7 +21,10 @@ import (
 //     others. Each answer equals the one without a limit.
 //   - **equal to one thread:** the float moments spill too, but a float aggregate's
 //     last bits depend on how many threads merged its partial states, as Sum's, Mean's
-//     and Var's already did, and a spilled run is the one-thread run's to the bit.
+//     and Var's already did, and a spilled run is the one-thread run's to the bit. They
+//     run under 96 KiB: under 64 their states sat at its edge, past it two runs in a
+//     hundred under the race detector (steps 309 and 319); under 96 none in a hundred
+//     was, and each still spilled at least sixteen times.
 //   - **refused:** what needs more than its pieces can spill, each named in
 //     feature-gaps.md. If one of these starts answering, move it up.
 func TestV066UnderAMemoryLimit(t *testing.T) {
@@ -92,9 +95,9 @@ func TestV066UnderAMemoryLimit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, st, err := limited(t, q, groups)
+		got, st, err := limited(t, q, 96<<10)
 		if err != nil {
-			t.Fatalf("under 64 KiB: %v", err)
+			t.Fatalf("under 96 KiB: %v", err)
 		}
 		if st.Spills == 0 {
 			t.Fatal("answered without spilling, so it proves nothing")

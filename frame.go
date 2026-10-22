@@ -49,7 +49,7 @@ func (df *DataFrame) Column[T any](name string) (*Series[T], error) {
 	if !ok {
 		return nil, uerr.UnknownColumn("column", name, df.Columns())
 	}
-	return data.TypedColumn[T](c)
+	return seriesOf[T](c)
 }
 
 // At returns one value and whether it is non-null.

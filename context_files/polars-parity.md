@@ -31,7 +31,7 @@ what we are lacking".
 | ~~J2~~ | built in step 316: `Update` |
 | ~~V1~~ | built in step 317: `FromRows` |
 | ~~V2~~ | built in step 318: `RowsByKey`, `ToMaps`, `IterRows` |
-| V3 | an eager `Series` with operations: sort, unique, head, tail, slice, reverse, fills, casts, aggregates |
+| ~~V3~~ | built in step 319: a `Series` with operations |
 | tier 2 | `ToDummies`, `Unstack`, `Transpose` named from a column; `MapGroups` and iterating a group-by's groups; `Extend`, `WithColumnsSeq`, `SelectSeq`, `EstimatedSize`, `Glimpse` |
 
 ## 2. Expressions

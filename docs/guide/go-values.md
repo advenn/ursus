@@ -47,6 +47,12 @@ assertion is needed at the call site. A `Series` answers in Go:
 - `Fold(init, fn)` reduces the values left to right;
 - `Name`, `DType`, `Len` and `NullCount`.
 
+*New in 0.6.7:* a `Series` has Polars' operations on one column: `Sort`, `SortDesc`,
+`Unique`, `Reverse`, `DropNulls`, `FillNull`, `Cast[U]`, and the aggregates `Min`,
+`Max`, `Sum`, `Mean`, `Median`, `Std` and `Var` with their degrees of freedom, `Count`
+and `NUnique`, each run through the engine as a one-column frame; `Head`, `Tail`,
+`Slice` and `Rename` share the column.
+
 A null is never a zero mistaken for a value. `All()` iterates each value with whether
 it is there, and `Get(i)` and `df.At[T](row, name)` answer one:
 

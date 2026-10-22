@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–318, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–319, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -89,6 +89,10 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A `Series` with operations** (319), as Polars': `Sort`, `Unique`, `Reverse`,
+  `DropNulls`, `FillNull`, `Cast[U]`, `Head`, `Tail`, `Slice`, `Rename`, and the
+  aggregates. `Series` is ursus's own type now, the view it was embedded, so every
+  method it had is there still.
 - **Rows out** (318): `RowsByKey`, as Polars' `rows_by_key`; `ToMaps`, as its
   `to_dicts`; and `IterRows`, a query's rows as structs streamed a batch at a time, as
   its `iter_rows`.

@@ -263,7 +263,14 @@ func TestUnkeyedTemporalGroupsHandOutTheirWindows(t *testing.T) {
 	}
 
 	big := minuteSeries(200_000)
-	small := minuteSeries(3_000)
+	smallRows := 3_000
+	if raceDetector {
+		// A third of the rows still ends segments everywhere at batches of 1, 7 and
+		// 64; at 3,000, this was 116 of the root package's 716 seconds under the race
+		// detector (step 319).
+		smallRows = 1_000
+	}
+	small := minuteSeries(smallRows)
 	for _, tc := range cases {
 		// The large half measures the budget, not a race, and under the race
 		// detector it made the root package's run pass its ten minutes (step 210).

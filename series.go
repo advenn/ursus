@@ -13,11 +13,8 @@ import (
 // Column is a named, typed, nullable run of values.
 type Column = data.Column
 
-// Series is a typed view over a Column.
-type Series[T any] = data.Series[T]
-
 // TypedColumn returns a typed view over a column.
-func TypedColumn[T any](c *Column) (*Series[T], error) { return data.TypedColumn[T](c) }
+func TypedColumn[T any](c *Column) (*Series[T], error) { return seriesOf[T](c) }
 
 // Values builds a column from Go values, with no nulls.
 //
