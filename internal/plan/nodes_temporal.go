@@ -282,7 +282,7 @@ func (t *TemporalGroup) Label() string {
 	}
 	b.WriteString("period=")
 	b.WriteString(t.Period.String())
-	if !t.Offset.IsZero() {
+	if t.Offset.Given() {
 		b.WriteString(" offset=")
 		b.WriteString(t.Offset.String())
 	}

@@ -56,7 +56,21 @@ type Interval struct {
 	// which a temporal group or a window by an Int32 or Int64 column reads as ticks
 	// of a Datetime(ns) (step 312). It is never mixed with a time unit.
 	index bool
+
+	// given: a zero interval asked for, GivenZero's, where an option's zero value
+	// is its default: a rolling offset of none, where unset it is minus the period,
+	// as Polars' (step 313). It spans nothing, and IsZero says so.
+	given bool
 }
+
+// GivenZero is an interval of nothing that an option reads as given rather than
+// unset: see Given.
+func GivenZero() Interval { return Interval{given: true} }
+
+// Given reports whether the interval was set: any interval that spans something,
+// and GivenZero's. A rolling group's offset of none is GivenZero, where its zero
+// value is Polars' default, minus the period.
+func (i Interval) Given() bool { return i.given || !i.IsZero() }
 
 // Months, Days and Nanos are the three components. Exported as accessors rather than
 // fields so the zero value stays meaningful and nobody constructs a half-valid
@@ -92,7 +106,8 @@ func (i Interval) Negative() bool {
 // FromDuration refuse the minimum outright. A guard here could not fire, and this
 // codebase treats an unreachable guard as protection that is not there.
 func (i Interval) Neg() Interval {
-	return Interval{months: -i.months, days: -i.days, nanos: -i.nanos, err: i.err, weekly: i.weekly, index: i.index}
+	return Interval{months: -i.months, days: -i.days, nanos: -i.nanos, err: i.err, weekly: i.weekly, index: i.index,
+		given: i.given}
 }
 
 // Weekly reports whether the interval was written in weeks alone, so that a grid of

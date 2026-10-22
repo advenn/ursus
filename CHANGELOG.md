@@ -15,12 +15,18 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–312, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–313, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **`RollingOptions.Offset` is where a window starts** (313), as Polars' `offset`:
+  `(t + Offset, t + Offset + Period]`, minus the period when unset, as before. It
+  moved the window's end, so an offset of `e` is now `e` less the period: `Every("15m")`
+  at a period of `2h` is `Every("-1h45m")`. `NoOffset()` is Polars' `offset="0d"`, a
+  window after its row. A window whose offset is as long as its period, behind its row,
+  ends at the row, as Polars', a month counted as 28 days.
 - **A null condition takes `Otherwise`** (311), as Polars' `when` and SQL's
   `CASE WHEN` do: `When(c).Then(a).Otherwise(b)` of a null `c` is `b`, or the next
   `When`'s, where it was null. A conditional's result is nullable only where a branch

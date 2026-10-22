@@ -85,6 +85,24 @@ func TestEveryIntegerUnit(t *testing.T) {
 	}
 }
 
+// TestGivenZero (step 313): an interval of nothing asked for, a rolling offset of
+// none, is zero to everything but Given; the zero value is not given.
+func TestGivenZero(t *testing.T) {
+	z := dtype.GivenZero()
+	if !z.IsZero() || !z.Given() || z.String() != "0s" || z.Err() != nil {
+		t.Errorf("GivenZero: zero %v, given %v, %q, %v", z.IsZero(), z.Given(), z, z.Err())
+	}
+	if !z.Neg().Given() {
+		t.Error("GivenZero's negation is not given")
+	}
+	if (dtype.Interval{}).Given() {
+		t.Error("the zero value is given")
+	}
+	if !dtype.Every("1d").Given() || !dtype.Every("-3i").Given() {
+		t.Error("an interval that spans something is not given")
+	}
+}
+
 func TestEveryRefuses(t *testing.T) {
 	for _, in := range []string{
 		"", "-", "banana", "1", "h", "1x", "1h30", "1hm", " 1h", "1.5h", "--1h", "0s",

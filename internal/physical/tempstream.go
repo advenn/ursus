@@ -31,11 +31,12 @@ import (
 //
 // # Rolling: the rows in reach
 //
-// A row's window ends at its own instant (plus offset) and reaches back a period, so
-// it holds rows that came before it. Each bucket keeps the rows a window yet to come
-// may reach, those not below the current window's lower end, about one period of
-// them; the new window takes them, then its own row, and stays open for the rows
-// after it that it reaches, ties and a forward offset.
+// A row's window starts at its own instant plus the offset, minus the period by
+// default, and is a period long, so it holds rows before it, after it, or both
+// (rollRow). Both ends rise from one row's window to the next. Each bucket keeps the
+// rows a window yet to come may reach, those not below the current window's lower
+// end, about one period of them; the new window takes them, then its own row, and
+// stays open for the rows after it that it reaches, ties and a forward offset.
 //
 // # What it holds, and the order
 //
@@ -282,20 +283,27 @@ func (s *temporalSink) firstGrid(t int64) (time.Time, error) {
 // and the row itself, gives the row to the bucket's open windows, and keeps it for
 // the windows still to come.
 func (s *temporalSink) rollRow(b *tgBucket, ref rowRef, t int64) error {
-	end, err := s.toTime(t)
+	at, err := s.toTime(t)
 	if err != nil {
 		return err
 	}
-	if !s.offset.IsZero() {
-		end = s.offset.AddTo(end)
+	// Polars' window (step 313): it starts at the row's instant plus the offset,
+	// minus the period unless one is given, and ends a period later, or at the row
+	// itself when the offset is as long as the period behind it.
+	off := s.offset
+	if !off.Given() {
+		off = s.period.Neg()
 	}
-	hi, err := s.fromTime(end)
+	start := off.AddTo(at)
+	lo, err := s.fromTime(start)
 	if err != nil {
 		return err
 	}
-	lo, err := s.fromTime(s.period.Neg().AddTo(end))
-	if err != nil {
-		return err
+	hi := t
+	if !s.behind {
+		if hi, err = s.fromTime(s.period.AddTo(start)); err != nil {
+			return err
+		}
 	}
 	// A later row's window starts no earlier than this one's, so the rows below
 	// this one's lower end are in none of them.

@@ -105,10 +105,16 @@ func TestTemporalGroupsAnswerAsTheBufferedSinkDid(t *testing.T) {
 			frame.GroupByDynamic(ursus.Col("t"), o).Agg(aggs...))
 	}
 	for i := range 40 {
-		o := ursus.RollingOptions{Period: ursus.Every(pick("10m", "30m", "2h")), Closed: closed[rng.IntN(4)]}
+		period := pick("10m", "30m", "2h")
+		o := ursus.RollingOptions{Period: ursus.Every(period), Closed: closed[rng.IntN(4)]}
 		desc := []string{"period " + o.Period.String()}
 		if off := pick("", "", "-10m", "15m", "-3h"); off != "" {
-			o.Offset = ursus.Every(off)
+			// The offsets were drawn as the window's end, before step 313; given as
+			// its start now, Polars' way, the end less the period, the windows and
+			// the buffered sink's answers are the same.
+			end, _ := time.ParseDuration(off)
+			width, _ := time.ParseDuration(period)
+			o.Offset = ursus.FromDuration(end - width)
 			desc = append(desc, "offset "+off)
 		}
 		if rng.IntN(2) == 0 {

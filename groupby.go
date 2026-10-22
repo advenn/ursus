@@ -61,10 +61,18 @@ type DynamicOptions struct {
 
 // RollingOptions configures Rolling.
 type RollingOptions struct {
-	// Period is how far back each row's window reaches from its own instant.
+	// Period is each row's window's length.
 	Period Interval
 
-	// Offset shifts the window's end away from the row's own instant.
+	// Offset is where a row's window starts, from the row's own instant: the window
+	// is (t + Offset, t + Offset + Period], as Polars' rolling offset places it. The
+	// zero value is Polars' default, minus Period, (t − Period, t]; NoOffset() is an
+	// offset of none, a window wholly after its row, (t, t + Period].
+	//
+	// A window whose Offset is as long as Period, behind its row, ends at the row
+	// itself, as Polars' does, measuring a month as 28 days: so a period of "1mo"
+	// with an offset of "-1mo" ends at March 31 for March 31, where February 29 plus
+	// a month is March 29. Before step 313, Offset moved the window's end.
 	Offset Interval
 
 	// Closed says which end belongs to the window. The zero value is ClosedRight —
@@ -116,7 +124,8 @@ func (lf *LazyFrame) GroupByDynamic(index Expr, o DynamicOptions) *GroupBy {
 // instant. The output has one row per input row.
 //
 // Where GroupByDynamic answers "how many per hour", Rolling answers "how many in the
-// hour before each event". The index must be sorted, and is checked. An integer index
+// hour before each event"; with an Offset, the hour after it, or any span the
+// options place. The index must be sorted, and is checked. An integer index
 // counts by "i", as GroupByDynamic's does, and may be a UInt32 or a UInt64 too, as
 // Polars' may.
 func (lf *LazyFrame) Rolling(index Expr, o RollingOptions) *GroupBy {

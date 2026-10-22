@@ -130,6 +130,11 @@ A rolling group is a group-by with one row for each input row. The rolling windo
 time in [Window functions](windows.md#rolling-windows-by-time) answer the same
 question as a column beside the rows.
 
+`Offset` places each window as Polars' `offset` does: from the row's instant plus the
+offset, a period long, `(t + Offset, t + Offset + Period]`. Unset, it is minus the
+period, the window up to the row; `NoOffset()` is a window wholly after it, Polars'
+`offset="0d"`. *Changed in 0.6.7:* `Offset` moved the window's end before.
+
 ## An integer index
 
 *New in 0.6.7.* An index can be a count rather than an instant: a step, a sequence

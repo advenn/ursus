@@ -30,6 +30,11 @@ type Interval = dtype.Interval
 // is minutes and "mo" is months.
 func Every(s string) Interval { return dtype.Every(s) }
 
+// NoOffset is a rolling group's offset of none, Polars' offset of "0d": a window
+// that starts at its row's own instant, (t, t + Period]. RollingOptions' zero Offset
+// is Polars' default instead, minus the period (step 313).
+func NoOffset() Interval { return dtype.GivenZero() }
+
 // timeOnly refuses an integer interval, "3i", where op moves a date or an instant
 // (step 312). Polars takes it in some of them and moves nothing, or panics.
 func timeOnly(op string, iv Interval) error {

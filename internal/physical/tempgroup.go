@@ -3,6 +3,7 @@ package physical
 import (
 	"context"
 	"errors"
+	"math/big"
 	"os"
 	"time"
 
@@ -71,6 +72,11 @@ type temporalSink struct {
 	period  dtype.Interval
 	offset  dtype.Interval
 	closed  expr.Closed
+
+	// behind: a rolling window ends at its own row, its offset unset or as long as
+	// its period behind it, as Polars' rule is (step 313); else it ends a period
+	// after its start.
+	behind bool
 
 	// A dynamic group's label, start and boundaries (step 187); see
 	// plan.TemporalGroup.
@@ -291,7 +297,19 @@ func (s *temporalSink) gridAtTheEdge(at time.Time) error {
 			"a tick count of the type")
 }
 
-// rollingWindows gives every row a window ending at its own instant.
+// sameLength reports whether two intervals are as long as Polars measures them to
+// tell a rolling window that ends at its row: a month 28 days, a day 24 hours. It is
+// asked once a group, so it counts in big integers rather than guard each product.
+func sameLength(a, b dtype.Interval) bool {
+	length := func(iv dtype.Interval) *big.Int {
+		days := big.NewInt(int64(iv.Months())*28 + int64(iv.Days()))
+		n := days.Mul(days, big.NewInt(int64(24*time.Hour)))
+		return n.Add(n, big.NewInt(iv.Nanos()))
+	}
+	return length(a).Cmp(length(b)) == 0
+}
+
+// toTime reads a tick of the index as an instant, in the index's zone.
 func (s *temporalSink) toTime(tick int64) (time.Time, error) {
 	v, ok := s.idxType.ToTime(tick)
 	if !ok {
@@ -458,6 +476,7 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 		bktName: bktName, winName: winName,
 		rolling: t.Rolling,
 		every:   t.Every, period: t.Period, offset: t.Offset,
+		behind: !t.Offset.Given() || t.Offset.Negative() && sameLength(t.Offset.Neg(), t.Period),
 		closed: t.Closed.Or(def),
 		label:  t.WindowLabel, startBy: t.StartBy, boundaries: t.Boundaries,
 		idxType: idxField.Type,
