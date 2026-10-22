@@ -1253,6 +1253,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#an-integer-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An integer index
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#under-a-memory-limit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1665,6 +1676,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#an-integer-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An integer index
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#under-a-memory-limit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2000,6 +2022,34 @@ close.</p>
 <p>A rolling group is a group-by with one row for each input row. The rolling windows by
 time in <a href="../windows/#rolling-windows-by-time">Window functions</a> answer the same
 question as a column beside the rows.</p>
+<h2 id="an-integer-index">An integer index<a class="headerlink" href="#an-integer-index" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7.</em> An index can be a count rather than an instant: a step, a sequence
+number. An <code>Int32</code> or <code>Int64</code> index counts by Polars' integer unit, so <code>Every("5i")</code>
+is five of it, and its windows are cut from its values, as from time's:</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nx">readings</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span>
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"step"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">int64</span><span class="p">{</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="mi">7</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p">,</span><span class="w"> </span><span class="mi">12</span><span class="p">}),</span>
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"load"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">float64</span><span class="p">{</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="mi">7</span><span class="p">}),</span>
+</span><span id="__span-21-4"><a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="p">)</span>
+</span><span id="__span-21-5"><a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="nx">fives</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">DynamicOptions</span><span class="p">{</span><span class="nx">Every</span><span class="p">:</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Every</span><span class="p">(</span><span class="s">"5i"</span><span class="p">)}</span>
+</span><span id="__span-21-6"><a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="nx">show</span><span class="p">(</span><span class="nx">readings</span><span class="p">.</span><span class="nx">GroupByDynamic</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"step"</span><span class="p">),</span><span class="w"> </span><span class="nx">fives</span><span class="p">).</span>
+</span><span id="__span-21-7"><a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="w">    </span><span class="nx">Agg</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Len</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"rows"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"load"</span><span class="p">).</span><span class="nx">Sum</span><span class="p">()))</span>
+</span></code></pre></div>
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>shape: (3, 3)
+</span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>┌───────┬────────┬─────────┐
+</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>│ step  │ rows   │ load    │
+</span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a>│ Int64 │ Uint64 │ Float64 │
+</span><span id="__span-22-5"><a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a>├───────┼────────┼─────────┤
+</span><span id="__span-22-6"><a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a>│ 0     │ 3      │ 10      │
+</span><span id="__span-22-7"><a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a>│ 5     │ 2      │ 10      │
+</span><span id="__span-22-8"><a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a>│ 10    │ 1      │ 7       │
+</span><span id="__span-22-9"><a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a>└───────┴────────┴─────────┘
+</span></code></pre></div>
+<p>Dynamic and rolling groups take one, as do <code>Upsample</code> and the rolling windows and
+ewms by a column, and the index keeps its type. All but <code>GroupByDynamic</code> take a
+<code>UInt32</code> or a <code>UInt64</code> too, as Polars' do. An interval of time on an integer index is
+refused, and so is <code>"i"</code> where a date is moved: in <code>Truncate</code>, <code>Round</code>, <code>OffsetBy</code>, a
+range or an as-of tolerance, where Polars moves nothing, panics, or reads it as
+nanoseconds.</p>
 <h2 id="under-a-memory-limit">Under a memory limit<a class="headerlink" href="#under-a-memory-limit" title="Permanent link">&para;</a></h2>
 <p>Dynamic and rolling groups stream their input and hand out each window when it
 closes, keyed ones too, so a long series runs under a memory budget.</p>

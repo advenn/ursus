@@ -1932,7 +1932,10 @@ Wednesday, and its three days only to Saturday.</p>
 belong to it.</p>
 <p>The <code>By</code> forms take a <code>Date</code>, <code>Datetime</code> or <code>Time</code> column, which need not be sorted:
 a window is found by value, and rows tied with a row's instant are in its window.
-Unlike the windows by rows they answer from one value by default.</p>
+Unlike the windows by rows they answer from one value by default. <em>New in 0.6.7:</em> <code>by</code>
+can be an integer of 32 or 64 bits, a step rather than an instant, whose period counts
+it in Polars' integer unit: <code>Every("3i")</code> is three steps, as in
+<a href="../dates-and-times/#an-integer-index">Dates and times</a>.</p>
 <h2 id="exponentially-weighted">Exponentially weighted<a class="headerlink" href="#exponentially-weighted" title="Permanent link">&para;</a></h2>
 <p><code>EwmMean</code>, <code>EwmStd</code>, <code>EwmVar</code> and <code>EwmSum</code> weight recent rows more. The decay is
 <code>EwmAlpha</code>, <code>EwmSpan</code>, <code>EwmCom</code> or <code>EwmHalfLife</code>, as Polars' parameters are, and
@@ -1965,7 +1968,8 @@ Unlike the windows by rows they answer from one value by default.</p>
 </span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>│ 2026-01-12 │ 13.5    │ 12.6032 │ 12.5625        │
 </span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>└────────────┴─────────┴─────────┴────────────────┘
 </span></code></pre></div>
-<p><code>EwmMeanBy(by, halfLife)</code> decays by time between rows rather than by rows.</p>
+<p><code>EwmMeanBy(by, halfLife)</code> decays by time between rows rather than by rows, or by the
+steps of an integer <code>by</code>, its half-life such as <code>Every("2i")</code>.</p>
 <h2 id="without-over">Without Over<a class="headerlink" href="#without-over" title="Permanent link">&para;</a></h2>
 <p>A window function with no <code>Over</code> runs over the whole frame in the rows' order:
 <code>Col("close").CumSum(false)</code> is a running total from the first row to the last.</p>

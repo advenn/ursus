@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–311, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–312, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3109,6 +3109,12 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>An integer index</strong> (312), Polars' <code>"3i"</code>: <code>GroupByDynamic</code> and <code>Rolling</code> over an
+  <code>Int32</code> or <code>Int64</code> index, its windows cut from its values and its type kept, and
+  <code>Upsample</code> and the rolling windows and ewms by a column over one. All but
+  <code>GroupByDynamic</code> take a <code>UInt32</code> or a <code>UInt64</code> too, as Polars' do. <code>"i"</code> mixes with
+  no unit of time, and <code>Truncate</code>, <code>Round</code>, <code>OffsetBy</code>, a range or an as-of tolerance
+  refuses it, where Polars moves nothing, panics, or reads it as nanoseconds.</li>
 <li><strong><code>FirstNonNull</code> and <code>LastNonNull</code></strong> (310), Polars' <code>first(ignore_nulls=True)</code> and
   <code>last(ignore_nulls=True)</code>, of an expression and as group-by shorthands, and a
   group-by's <strong><code>All()</code></strong>, each column a List a group, as Polars' <code>group_by().all()</code>.</li>
