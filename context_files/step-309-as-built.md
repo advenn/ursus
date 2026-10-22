@@ -103,3 +103,11 @@ alone c too.
 
 **Gate:** test-all 125 ok, race 25 ok, levels, vet ×3 and the bench engine tests
 clean; the 22 PDS-H answers match DuckDB.
+
+**CI's race job failed once** on `TestV066UnderAMemoryLimit`, the moments under 64
+KiB: "the query is holding 64.3KiB, 1.3KiB of it in this operator".
+
+- Nothing of this step is in that query: no `Having`, no `Head`, every aggregate
+  aliased.
+- Three local race runs passed, and so did the job rerun, every job green.
+- A flake at the limit's edge, in §8 beside the heap bound's.

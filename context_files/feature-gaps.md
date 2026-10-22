@@ -264,6 +264,7 @@ These belong to a performance release more than to features.
 | Display settings (rows, width, `glimpse`) | P1 |
 | Spill-file compression; approximate aggregates | P2 |
 | **A heap bound that trips:** `TestTemporalMediansSpillTheirValues` holds the live heap's growth under 10 MB, a measure of when the collector runs; under test-all's load it read 11 MB once (step 292) and passed fifteen reruns. With other work holding the machine at a load of 18 to 24, `GODEBUG=simd=0` read 12 and 14 MB in two test-alls (step 304); alone there it passed at 17. A bound on the heap after each collection would hold | P2 |
+| **A memory limit at its edge:** `TestV066UnderAMemoryLimit`'s moments case runs a group-by of 2,000 keys under 64 KiB, its states at the edge by design; CI's race job read 64.3 KiB once, the query's whole, 1.3 KiB of it the group-by's, and refused (step 309). A rerun passed, and so did three local race runs. A margin, or a limit read from the group-by's own state, would hold | P2 |
 | **`Upsample` is a join and a sort:** 355 ms for a million rows of 100 groups, where Polars, walking a frame it requires sorted, takes 24 ms; the sort, which keeps the order under a limit, is 95 ms of it (step 306) | P1 |
 | **SQL** (`SQLContext`, `.sql()`, `sql_expr`) | out by decision |
 | GPU, plugins, Python bindings, distributed execution | P3 |
