@@ -2022,6 +2022,10 @@ close.</p>
 <p>A rolling group is a group-by with one row for each input row. The rolling windows by
 time in <a href="../windows/#rolling-windows-by-time">Window functions</a> answer the same
 question as a column beside the rows.</p>
+<p><code>Offset</code> places each window as Polars' <code>offset</code> does: from the row's instant plus the
+offset, a period long, <code>(t + Offset, t + Offset + Period]</code>. Unset, it is minus the
+period, the window up to the row; <code>NoOffset()</code> is a window wholly after it, Polars'
+<code>offset="0d"</code>. <em>Changed in 0.6.7:</em> <code>Offset</code> moved the window's end before.</p>
 <h2 id="an-integer-index">An integer index<a class="headerlink" href="#an-integer-index" title="Permanent link">&para;</a></h2>
 <p><em>New in 0.6.7.</em> An index can be a count rather than an instant: a step, a sequence
 number. An <code>Int32</code> or <code>Int64</code> index counts by Polars' integer unit, so <code>Every("5i")</code>
