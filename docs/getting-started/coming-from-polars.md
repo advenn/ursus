@@ -83,6 +83,7 @@ changes is what Go asks for.
 | `.group_by("k", maintain_order=True)` | `.GroupBy(ursus.Col("k")).MaintainOrder()` |
 | `.join(other, on="k", how="left")` | `.Join(other, ursus.JoinOn(ursus.Col("k")), ursus.JoinHow(ursus.JoinLeft))` |
 | `.join_asof(...)`, `.join_where(...)` | `.JoinAsOf(...)`, `.JoinWhere(...)` |
+| `.join(other, on="k", maintain_order="right")` | `.Join(other, ursus.JoinOn(ursus.Col("k")), ursus.JoinMaintainOrder(ursus.JoinOrderRight))` (changed in 0.6.7) |
 | `.over("k")` | `.Over(ursus.Col("k"))` |
 | `.unique(subset)`, `.drop_nulls()` | `.Unique(names...)`, `.DropNulls(names...)` |
 | `.fill_null(0)`, `.fill_null(strategy="forward")` | `.FillNullWith(0)`, `.FillNull(strategy)` |

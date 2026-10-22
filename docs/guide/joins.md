@@ -67,18 +67,21 @@ and `show` collects a query and prints it:
     --8<-- "Example_joinCross.md"
 
 **Row order.** An inner join's order is not promised, as in Polars: ursus hashes the
-smaller input and the rows follow the other. `JoinMaintainOrder(true)` keeps the left
-frame's order, as the inner example does. Left, semi, anti and full joins keep the
-left frame's order.
+smaller input and the rows follow the other. `JoinMaintainOrder` keeps an order, as
+Polars' `maintain_order` does, for every kind: `JoinOrderLeft` the left frame's, each
+row's matches in the right frame's order, as the inner example does, and
+`JoinOrderRight` the right frame's. *Changed in 0.6.7:* it took a Boolean, and kept
+an inner join's left order alone. Left, semi, anti and full joins keep the left
+frame's order without it while they fit in memory; `JoinMaintainOrder` keeps it when
+they spill too.
 
 !!! note "A right join's order and columns are not Polars'"
 
     A right join here keeps the left frame's row order, with the right rows that
     matched nothing after them, and keeps the key where the left frame has it. Polars
     gives a right join's rows in the right frame's order, and its key among the right
-    frame's columns. For Polars' rows, swap the frames and join left,
-    `customers.Join(orders, ..., JoinHow(JoinLeft))`, and `Select` the columns in the
-    order you want them.
+    frame's columns. `JoinMaintainOrder(ursus.JoinOrderRight)` gives Polars' rows;
+    `Select` the columns in the order you want them.
 
 ## Keys
 
@@ -166,5 +169,6 @@ A semi or anti join asks the same question when the condition is equal keys alon
 ## Under a memory limit
 
 Equi-joins spill both sides to disk under a memory budget, and give the answer they
-give in memory; under a limit no join's row order is promised. A backward as-of join
+give in memory; under a limit a join's row order is promised only with
+`JoinMaintainOrder`. A backward as-of join
 streams both sides. See [Memory and spilling](../concepts/memory.md).

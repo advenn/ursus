@@ -149,7 +149,7 @@ func TestBuildSideFiresOnlyWhereItShould(t *testing.T) {
 		// differently: a merged key would fail the mapping first, and hide that.
 		{"a semi join is not an inner join", frame(10).Join(frame(100), ursus.JoinLeftOn(c("k")), ursus.JoinRightOn(c("v100")), ursus.JoinHow(ursus.JoinSemi)), false},
 		{"an anti join is not either", frame(10).Join(frame(100), ursus.JoinLeftOn(c("k")), ursus.JoinRightOn(c("v100")), ursus.JoinHow(ursus.JoinAnti)), false},
-		{"JoinMaintainOrder", frame(10).Join(frame(100), ursus.JoinOn(c("k")), ursus.JoinMaintainOrder(true)), false},
+		{"JoinMaintainOrder", frame(10).Join(frame(100), ursus.JoinOn(c("k")), ursus.JoinMaintainOrder(ursus.JoinOrderLeft)), false},
 		{"a validated join", frame(10).Join(frame(100), ursus.JoinOn(c("k")), ursus.JoinValidate(ursus.ValidateManyToMany)), false},
 		{"through a filter, still an upper bound", frame(10).Join(frame(100).Filter(c("k").Gt(int64(3))), ursus.JoinOn(c("k"))), true},
 	}
@@ -176,7 +176,7 @@ func TestJoinMaintainOrderKeepsTheLeftOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := left.Join(right, ursus.JoinOn(c("k")), ursus.JoinMaintainOrder(true)).Collect(t.Context())
+	got, err := left.Join(right, ursus.JoinOn(c("k")), ursus.JoinMaintainOrder(ursus.JoinOrderLeft)).Collect(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestBuildSideMarksWhatItCouldSwap(t *testing.T) {
 		{"inner, kept", frame(10).Join(frame(20), ursus.JoinOn(c("k"))), true},
 		{"a left join", frame(10).Join(frame(100), ursus.JoinOn(c("k")), ursus.JoinHow(ursus.JoinLeft)), false},
 		{"a semi join", frame(10).Join(frame(100), ursus.JoinLeftOn(c("k")), ursus.JoinRightOn(c("v100")), ursus.JoinHow(ursus.JoinSemi)), false},
-		{"JoinMaintainOrder", frame(10).Join(frame(100), ursus.JoinOn(c("k")), ursus.JoinMaintainOrder(true)), false},
+		{"JoinMaintainOrder", frame(10).Join(frame(100), ursus.JoinOn(c("k")), ursus.JoinMaintainOrder(ursus.JoinOrderLeft)), false},
 		{"a validated join", frame(10).Join(frame(100), ursus.JoinOn(c("k")), ursus.JoinValidate(ursus.ValidateManyToMany)), false},
 		{"a sorted left input", frame(10).Sort(ursus.Asc(c("v10"))).Join(frame(20), ursus.JoinOn(c("k"))), false},
 		{"a float key", floats.Join(floats, ursus.JoinOn(c("k"))), false},

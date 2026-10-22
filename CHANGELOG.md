@@ -15,12 +15,14 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–313, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–314, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **`JoinMaintainOrder` takes a `JoinOrder`** (314), Polars' `maintain_order`, where it
+  took a Boolean: `JoinMaintainOrder(true)` is `JoinMaintainOrder(ursus.JoinOrderLeft)`.
 - **`RollingOptions.Offset` is where a window starts** (313), as Polars' `offset`:
   `(t + Offset, t + Offset + Period]`, minus the period when unset, as before. It
   moved the window's end, so an offset of `e` is now `e` less the period: `Every("15m")`
@@ -79,6 +81,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A join's order, Polars' `maintain_order`** (314): `JoinOrderLeft` and
+  `JoinOrderRight`, and Polars' `left_right` and `right_left`, for every kind of join:
+  the left or the right frame's rows in their order, each row's matches in the other's,
+  and the unmatched rows of the other after them. The order holds under a memory
+  limit, where a join's never did: a join whose table spills sorts its rows back. A
+  join that fits pays nothing for the left order; the right one hashes the left frame.
 - **An integer index** (312), Polars' `"3i"`: `GroupByDynamic` and `Rolling` over an
   `Int32` or `Int64` index, its windows cut from its values and its type kept, and
   `Upsample` and the rolling windows and ewms by a column over one. All but

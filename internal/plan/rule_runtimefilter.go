@@ -81,7 +81,7 @@ func (runtimeFilters) Apply(n Node, _ Flags) (Node, bool, error) {
 // the probe key's name and type.
 func filterableJoin(j *Join) (string, dtype.DataType, bool) {
 	if (j.Kind != JoinInner && j.Kind != JoinSemi) || len(j.LeftOn) != 1 || j.NullsEqual ||
-		j.Validate != ValidateNone || j.Publish != nil {
+		j.Validate != ValidateNone || j.Publish != nil || j.Order.Rightward() && !j.Kind.filtersLeft() {
 		return "", dtype.DataType{}, false
 	}
 	col, ok := j.LeftOn[0].(*expr.Col)

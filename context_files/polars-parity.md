@@ -27,7 +27,7 @@ what we are lacking".
 | item | what |
 | --- | --- |
 | ~~Rolling's offset~~ | built in step 313: `RollingOptions.Offset` placed as Polars' `offset`, and `NoOffset()`. A break |
-| J1 | `maintain_order` of `right`, `left_right`, `right_left`; an as-of tolerance on a numeric key; as-of `coalesce`; `JoinWhere`'s suffix |
+| J1 | an as-of tolerance on a numeric key; as-of `coalesce`; `JoinWhere`'s suffix. `maintain_order`, every order, built in step 314 |
 | J2 | `Update(other, on, how, includeNulls)` |
 | V1 | `FromRows[T]`, a frame from Go structs |
 | V2 | `RowsByKey`, `ToMaps` (`to_dicts`), a lazy row iterator |

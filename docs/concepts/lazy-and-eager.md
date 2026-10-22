@@ -85,4 +85,5 @@ that promises one:
 - **a group-by's groups:** `MaintainOrder()` gives them in the order their keys first
   appear;
 - **an inner join's rows,** which follow whichever input ursus did not hash:
-  `JoinMaintainOrder(true)` keeps the left frame's order.
+  `JoinMaintainOrder(ursus.JoinOrderLeft)` keeps the left frame's order, and
+  `JoinOrderRight` the right's, for a join of any kind.

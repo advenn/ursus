@@ -39,7 +39,7 @@ func show(lf *ursus.LazyFrame) {
 
 func Example_joinInner() {
 	on := ursus.JoinOn(ursus.Col("customer_id"))
-	show(orders().Join(customers(), on, ursus.JoinMaintainOrder(true)))
+	show(orders().Join(customers(), on, ursus.JoinMaintainOrder(ursus.JoinOrderLeft)))
 	// Output:
 	// shape: (4, 4)
 	// ┌───────┬─────────────┬─────────┬────────┐
@@ -203,7 +203,7 @@ func Example_joinSuffix() {
 		Join(shipped,
 			ursus.JoinOn(ursus.Col("order")),
 			ursus.JoinSuffix("_shipped"),
-			ursus.JoinMaintainOrder(true)).
+			ursus.JoinMaintainOrder(ursus.JoinOrderLeft)).
 		Select(ursus.Col("order"), ursus.Col("amount"), ursus.Col("amount_shipped")))
 	// Output:
 	// shape: (3, 3)
@@ -240,7 +240,8 @@ func Example_joinNulls() {
 	key := ursus.ValuesNullable("k", []int64{1, 0}, []bool{true, false}) // 1 and null
 	left := ursus.Frame(key, ursus.Values("l", []string{"a", "b"}))
 	right := ursus.Frame(key, ursus.Values("r", []string{"x", "y"}))
-	on, ordered := ursus.JoinOn(ursus.Col("k")), ursus.JoinMaintainOrder(true)
+	on := ursus.JoinOn(ursus.Col("k"))
+	ordered := ursus.JoinMaintainOrder(ursus.JoinOrderLeft)
 	show(left.Join(right, on, ordered))
 	show(left.Join(right, on, ordered, ursus.JoinNullsEqual(true)))
 	// Output:

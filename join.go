@@ -45,6 +45,27 @@ const (
 	ValidateManyToMany = plan.ValidateManyToMany
 )
 
+// JoinOrder is the row order a join promises, Polars' maintain_order: see
+// JoinMaintainOrder.
+type JoinOrder = plan.JoinOrder
+
+const (
+	// JoinOrderNone promises no order, Polars' default.
+	JoinOrderNone = plan.JoinOrderNone
+	// JoinOrderLeft keeps the left frame's order: each left row's matches, in the
+	// right frame's order, and then a right or full join's unmatched right rows, in
+	// theirs.
+	JoinOrderLeft = plan.JoinOrderLeft
+	// JoinOrderRight keeps the right frame's order: each right row's matches, in the
+	// left frame's order, and then a left or full join's unmatched left rows.
+	JoinOrderRight = plan.JoinOrderRight
+	// JoinOrderLeftRight is JoinOrderLeft. Polars' left promises less, the order of
+	// a row's matches; here both keep it.
+	JoinOrderLeftRight = plan.JoinOrderLeftRight
+	// JoinOrderRightLeft is JoinOrderRight, as JoinOrderLeftRight is JoinOrderLeft.
+	JoinOrderRightLeft = plan.JoinOrderRightLeft
+)
+
 // JoinOption configures a join.
 type JoinOption func(*joinCfg)
 
@@ -57,7 +78,7 @@ type joinCfg struct {
 	coalesce                 plan.CoalesceMode
 	nullsEqual               bool
 	validate                 JoinValidation
-	maintainOrder            bool
+	order                    JoinOrder
 }
 
 // JoinOn names key columns present under the same name on both sides.
@@ -113,14 +134,28 @@ func JoinCoalesce(b bool) JoinOption {
 // same entity?", and a missing identifier is not evidence of sameness.
 func JoinNullsEqual(b bool) JoinOption { return func(c *joinCfg) { c.nullsEqual = b } }
 
-// JoinMaintainOrder keeps an inner join's rows in the left frame's order.
+// JoinMaintainOrder keeps a join's rows in an order, as Polars' maintain_order does
+// (step 314):
 //
-// Without it an inner join's row order is not promised, as in Polars. ursus hashes
-// the smaller input, estimated from the sources' row counts, and the rows come out
-// in the order of the other one: the left frame's when the right is smaller, the
-// right frame's when it is much larger. Left, right, semi, anti and full joins keep
-// their order regardless; under a memory limit no join's order is promised.
-func JoinMaintainOrder(b bool) JoinOption { return func(c *joinCfg) { c.maintainOrder = b } }
+//	orders.Join(customers, ursus.JoinOn(ursus.Col("cid")), ursus.JoinHow(ursus.JoinLeft),
+//		ursus.JoinMaintainOrder(ursus.JoinOrderLeft))
+//
+// JoinOrderLeft is the left frame's rows in their order, each row's matches in the
+// right frame's, and then a right or full join's unmatched right rows, in theirs.
+// JoinOrderRight is its mirror: the right frame's rows, each row's matches in the
+// left frame's, then a left or full join's unmatched left rows. A semi or anti join
+// keeps the left frame's order, either way, and a cross join is the left's rows
+// each beside every right row, or the right's beside every left.
+//
+// The order holds under a memory limit too: a join that spills sorts its rows back
+// into it, by their places in the inputs, which a join that fits never does. A
+// right order hashes the left frame rather than the right.
+//
+// Without it, as in Polars, the order is not promised: ursus may hash either input
+// of an inner join, the smaller estimated from the sources' row counts, and the rows
+// come in the other's order; and a join that spills gives its rows in no order. The
+// other kinds keep the left frame's order while they fit.
+func JoinMaintainOrder(o JoinOrder) JoinOption { return func(c *joinCfg) { c.order = o } }
 
 // JoinValidate asserts a key cardinality, failing the query when the data
 // violates it.
@@ -143,8 +178,8 @@ func JoinValidate(v JoinValidation) JoinOption { return func(c *joinCfg) { c.val
 // appears once unless the kind is a full join. See JoinCoalesce and JoinSuffix.
 //
 // An inner join's row order is not promised: ursus hashes whichever input it
-// estimates is smaller, and the rows follow the other. JoinMaintainOrder keeps the
-// left frame's order.
+// estimates is smaller, and the rows follow the other. JoinMaintainOrder keeps an
+// order, Polars' maintain_order.
 func (lf *LazyFrame) Join(other *LazyFrame, opts ...JoinOption) *LazyFrame {
 	if lf.err != nil {
 		return lf
@@ -198,7 +233,7 @@ func (lf *LazyFrame) Join(other *LazyFrame, opts ...JoinOption) *LazyFrame {
 		NullsEqual: cfg.nullsEqual,
 		Validate:   cfg.validate,
 
-		MaintainOrder: cfg.maintainOrder,
+		Order: cfg.order,
 	})
 }
 
@@ -384,6 +419,10 @@ func (c *joinCfg) validateOpts() error {
 		// distinguished from an unset one — and it would not disambiguate anything
 		// anyway.
 		return uerr.New(uerr.KindValue, "join", "the join suffix must not be empty")
+
+	case !c.order.Valid():
+		return uerr.New(uerr.KindValue, "join", "the join order %s is not one of the five", c.order).
+			Hint("JoinOrderNone, JoinOrderLeft, JoinOrderRight, JoinOrderLeftRight or JoinOrderRightLeft")
 	}
 	return nil
 }

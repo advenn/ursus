@@ -229,7 +229,7 @@ differs from their input's, or scalars outside a group-by.
 | built: `is_duplicated`, `is_unique` and `n_unique` over several columns, in step 290 | — |
 | built: `pivot` of several `On` columns, and a lazy pivot with its columns given, in step 303 | — |
 | built: `concat`'s relaxed, horizontal and align modes, and `ConcatFrames` for `DataFrame`s, in step 307 | — |
-| join: emit a computed key column; `maintain_order` right, left-right and right-left; asof `tolerance` on numeric keys; asof `coalesce`; `JoinWhere` suffix | P1 |
+| join: emit a computed key column; asof `tolerance` on numeric keys; asof `coalesce`; `JoinWhere` suffix. `maintain_order` of every order and kind built in step 314 | P1 |
 | group-by: `map_groups`, iterating over groups; `.over(order_by)` of an aggregate; mapping `explode` and `join`. `head` and `tail` built in step 308, `having` in 309, `all` in 310, an integer index for `GroupByDynamic`, `Rolling` and `upsample` in 312 | P1/P2 |
 | `to_dummies`, `unstack`, `gather`, `extend`, `update`, `glimpse`, `estimated_size`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293; `insert_column` and `hash_rows` in step 302 | P2 |
 | `transpose` of mixed String and number, with names from a column. `unpivot` without `On` built in step 304 | P2 |
@@ -269,6 +269,7 @@ These belong to a performance release more than to features.
 | **A heap bound that trips:** `TestTemporalMediansSpillTheirValues` holds the live heap's growth under 10 MB, a measure of when the collector runs; under test-all's load it read 11 MB once (step 292) and passed fifteen reruns. With other work holding the machine at a load of 18 to 24, `GODEBUG=simd=0` read 12 and 14 MB in two test-alls (step 304); alone there it passed at 17. A bound on the heap after each collection would hold | P2 |
 | **A memory limit at its edge:** `TestV066UnderAMemoryLimit`'s moments case runs a group-by of 2,000 keys under 64 KiB, its states at the edge by design; CI's race job read 64.3 KiB once, the query's whole, 1.3 KiB of it the group-by's, and refused (step 309). A rerun passed, and so did three local race runs. A margin, or a limit read from the group-by's own state, would hold | P2 |
 | **`Upsample` is a join and a sort:** 355 ms for a million rows of 100 groups, where Polars, walking a frame it requires sorted, takes 24 ms; the sort, which keeps the order under a limit, is 95 ms of it (step 306) | P1 |
+| **A join's right order hashes the left frame:** a million left rows against 100,000 right, in memory, takes 57 ms inner and 75 ms left, where Polars' takes 33 and 37; ursus's left order takes 16, Polars' 12. The hash of the larger side is most of it, as a plain join that hashes a million rows takes 47 ms. A probe of the left frame and a counting sort by the right row would hash the smaller side. An ordered right or full join numbers its table's rows always, about a tenth of its time, where only a spilled one needs them (step 314) | P2 |
 | **SQL** (`SQLContext`, `.sql()`, `sql_expr`) | out by decision |
 | GPU, plugins, Python bindings, distributed execution | P3 |
 

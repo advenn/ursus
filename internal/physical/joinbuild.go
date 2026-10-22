@@ -453,7 +453,7 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 			}
 		}
 		if first >= 0 {
-			return builtKeys{}, duplicateKeyErr(s.spec.validate, "right", s.right, s.keys, first)
+			return builtKeys{}, duplicateKeyErr(s.spec, true, s.keys, first)
 		}
 	}
 
@@ -564,7 +564,7 @@ func (s *joinBuildSink) buildDense(batches []*data.Batch, keyInts [][]int64, inP
 			}
 		}
 		if first >= 0 {
-			return builtKeys{}, duplicateKeyErr(s.spec.validate, "right", s.right, s.keys, first)
+			return builtKeys{}, duplicateKeyErr(s.spec, true, s.keys, first)
 		}
 	}
 

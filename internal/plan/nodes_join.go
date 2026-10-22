@@ -119,6 +119,45 @@ func (v JoinValidation) RequiresRightUnique() bool {
 	return v == ValidateOneToOne || v == ValidateManyToOne
 }
 
+// JoinOrder is the row order a join promises: Polars' maintain_order (step 314).
+//
+// Left and LeftRight are one order here: the left input's rows in their order, each
+// row's matches in the right's, and then a Right or Full join's unmatched right rows
+// in theirs. Right and RightLeft are its mirror. Polars' Left promises less than its
+// LeftRight, the order of a row's matches; ursus keeps both.
+type JoinOrder uint8
+
+const (
+	JoinOrderNone JoinOrder = iota
+	JoinOrderLeft
+	JoinOrderRight
+	JoinOrderLeftRight
+	JoinOrderRightLeft
+)
+
+func (o JoinOrder) String() string {
+	switch o {
+	case JoinOrderNone:
+		return "none"
+	case JoinOrderLeft:
+		return "left"
+	case JoinOrderRight:
+		return "right"
+	case JoinOrderLeftRight:
+		return "left_right"
+	case JoinOrderRightLeft:
+		return "right_left"
+	default:
+		return "JoinOrder(" + strconv.Itoa(int(o)) + ")"
+	}
+}
+
+// Valid reports whether o is one of the five orders.
+func (o JoinOrder) Valid() bool { return o <= JoinOrderRightLeft }
+
+// Rightward reports whether the order follows the right input first.
+func (o JoinOrder) Rightward() bool { return o == JoinOrderRight || o == JoinOrderRightLeft }
+
 // DefaultJoinSuffix is appended to a right-side column whose name collides.
 const DefaultJoinSuffix = "_right"
 
@@ -161,10 +200,11 @@ type Join struct {
 	NullsEqual bool // zero value false: a null key matches nothing, as in SQL
 	Validate   JoinValidation
 
-	// MaintainOrder keeps an inner join's rows in the left input's order, by
-	// keeping the build_side rule from exchanging its inputs. Every other kind
-	// keeps its order regardless.
-	MaintainOrder bool
+	// Order is the row order the join promises, Polars' maintain_order (step 314).
+	// The zero value promises none. Any other keeps the build_side rule from
+	// exchanging the inputs; a Rightward one has the physical join build its left
+	// input and probe with its right, and a join that spills sorts its rows back.
+	Order JoinOrder
 
 	// SwapAtRuntime is set by the build_side rule on a join whose inputs it could
 	// exchange, whether or not its estimates made it: the physical join may then
@@ -319,6 +359,9 @@ func (j *Join) Label() string {
 	}
 	if j.Suffix != "" && j.Suffix != DefaultJoinSuffix {
 		b.WriteString(" suffix " + strconv.Quote(j.Suffix))
+	}
+	if j.Order != JoinOrderNone {
+		b.WriteString(" maintain_order " + j.Order.String())
 	}
 	// Rendered because it says the planner proved the join's order free: the rows
 	// may come in either input's order (step 162).

@@ -65,6 +65,12 @@ type joinBreaker struct {
 	// options to plan the exchanged join under (joinswap.go); nil otherwise.
 	swap     *plan.Join
 	swapOpts Options
+
+	// ordered: the join keeps an order, Polars' maintain_order (step 314). One that
+	// fits keeps it as it goes; one whose table spilled sorts its rows back into it
+	// (orderedProbe), and opts is what that sort is planned under.
+	ordered bool
+	opts    Options
 }
 
 func (j *joinBreaker) Schema() *dtype.Schema { return j.builder.Schema() }
@@ -104,6 +110,14 @@ func (j *joinBreaker) drain(ctx context.Context) error {
 			j.out = out
 			return nil
 		}
+	}
+	if s, ok := j.builder.(*joinBuildSink); ok && j.ordered && s.wroteBuild() && s.crossW == nil {
+		out, err := s.orderedProbe(ctx, j.probe, j.opts)
+		if err != nil {
+			return err
+		}
+		j.out = out
+		return nil
 	}
 	out, err := j.builder.Probe(ctx, j.probe)
 	if err != nil {
@@ -215,6 +229,12 @@ type joinSpec struct {
 	validate   plan.JoinValidation
 	batchSize  int
 
+	// swapped: the join runs with its inputs exchanged, its right input probing a
+	// table of its left, for a right order (step 314). kind and validate are the
+	// exchanged join's; a merged key is still read from the side the plan's join
+	// reads it from, and an error names the plan's sides.
+	swapped bool
+
 	emitProbeUnmatched bool // Left, Full, Anti
 	emitBuildUnmatched bool // Right, Full
 	needBuildRows      bool // false for Semi/Anti, UNLESS they carry a residual
@@ -285,6 +305,12 @@ type joinBuildSink struct {
 	// spill replay serial without anyone having to remember to zero it — a replay is
 	// one bucket at a time anyway, and its probe side is a spill file read serially.
 	threads int
+
+	// buildOrd names the build side's last column, its rows numbered as they arrive,
+	// on an ordered Right or Full join (step 314); empty otherwise. orderedProbe
+	// sorts a spilled join's unmatched build rows back by it. A sub-sink needs it
+	// not: newSub leaves it out.
+	buildOrd string
 
 	// deferred is set by planJoin when the build may run partitioned: Consume only
 	// retains the batches, and freeze inserts their keys, one table per partition,
@@ -493,7 +519,7 @@ func (s *joinBuildSink) Merge(other Sink) error {
 		if !inserted && s.spec.validate.RequiresRightUnique() {
 			// A key unique within each partial sink can still be duplicated across
 			// them. Omitting this makes Validate silently weaker under parallelism.
-			return duplicateKeyErr(s.spec.validate, "right", s.right, s.keys, -1)
+			return duplicateKeyErr(s.spec, true, s.keys, -1)
 		}
 		remap[oid] = id
 	}
@@ -1173,7 +1199,7 @@ func (p *joinProbeOp) checkSeen(k []byte) error {
 		return nil
 	}
 	if _, dup := p.seen[string(k)]; dup {
-		return duplicateKeyErr(p.spec.validate, "left", nil, nil, p.row)
+		return duplicateKeyErr(p.spec, false, nil, p.row)
 	}
 	p.seen[string(k)] = struct{}{}
 	return nil
@@ -1574,6 +1600,9 @@ func gatherOut(schema *dtype.Schema, layout *plan.JoinLayout, left, right *data.
 		case jc.CoalesceWith >= 0 && from == keyFromEither:
 			c, err = eitherKey(schema.Field(i).Type, left.Column(jc.Index), lsel,
 				right.Column(jc.CoalesceWith), rsel)
+		case jc.CoalesceWith >= 0 && from == keyFromEitherRight:
+			c, err = eitherKey(schema.Field(i).Type, right.Column(jc.CoalesceWith), rsel,
+				left.Column(jc.Index), lsel)
 		case run:
 			c = left.Column(jc.Index).Slice(start, n)
 		default:
@@ -1632,7 +1661,15 @@ func (p *joinProbeOp) keyFrom() keyFrom {
 	case plan.JoinRight:
 		return keyFromRight
 	case plan.JoinFull:
+		if p.spec.swapped {
+			return keyFromEitherRight
+		}
 		return keyFromEither
+	case plan.JoinInner:
+		if p.spec.swapped {
+			// The plan's inner join reads its left key, which is the table's here.
+			return keyFromRight
+		}
 	}
 	return keyFromLeft
 }
@@ -1648,6 +1685,9 @@ const (
 	// keyFromEither: a full join can lack either side, so the key is the left's
 	// where there is one and the right's where there is not — coalesce(l, r).
 	keyFromEither
+	// keyFromEitherRight is keyFromEither preferring the right: a full join run with
+	// its inputs exchanged, whose plan's left is the table (step 314).
+	keyFromEitherRight
 )
 
 // eitherKey is a full join's merged key: the left value where the row has one, the
@@ -1767,7 +1807,16 @@ func keyValidity(cols []*data.Column) bitmap.View {
 	return bitmap.AndMulti(vs...)
 }
 
-func duplicateKeyErr(v plan.JoinValidation, side string, s *dtype.Schema, keys []expr.Node, row int) error {
+func duplicateKeyErr(spec joinSpec, build bool, keys []expr.Node, row int) error {
+	v, side := spec.validate, "left"
+	if build {
+		side = "right"
+	}
+	if spec.swapped {
+		// The table is the plan's left input (step 314).
+		v = swappedValidation(v)
+		side = map[string]string{"left": "right", "right": "left"}[side]
+	}
 	e := uerr.New(uerr.KindValue, "join",
 		"validate=%s requires unique keys on the %s side, but a key is duplicated",
 		v, side)
@@ -1827,29 +1876,58 @@ func planJoin(ctx context.Context, j *plan.Join, opts Options) (Operator, error)
 		}
 	}
 
+	// A right order (step 314): the right input probes a table of the left, so the
+	// rows come in its order, each one's matches in the left's, and a left or full
+	// join's unmatched left rows after them, from the table's flush.
+	run, probe, build := j, left, right
+	if j.Order.Rightward() && j.Kind != plan.JoinSemi && j.Kind != plan.JoinAnti {
+		c := *j
+		c.Left, c.Right, c.LeftOn, c.RightOn = j.Right, j.Left, j.RightOn, j.LeftOn
+		c.Kind, c.Validate = swappedKind(j.Kind), swappedValidation(j.Validate)
+		run, probe, build = &c, right, left
+		ls, rs = rs, ls
+		layout = swappedLayout(layout)
+	}
+	spec := newJoinSpec(run, batchSize)
+	spec.swapped = run != j
+
+	// An ordered join that flushes its table's unmatched rows numbers them, so that
+	// one whose table spills can flush them in their order (orderedProbe).
+	var buildOrd string
+	if j.Order != plan.JoinOrderNone && spec.emitBuildUnmatched {
+		build, rs, buildOrd, err = withOrdinal(build, rs, append(ls.Names(), layout.Schema.Names()...), "build")
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	sink := &joinBuildSink{
 		out:        layout.Schema,
 		layout:     layout,
 		left:       ls,
 		right:      rs,
-		keys:       j.RightOn,
-		leftKeys:   j.LeftOn,
-		spec:       newJoinSpec(j, batchSize),
+		keys:       run.RightOn,
+		leftKeys:   run.LeftOn,
+		spec:       spec,
 		threads:    opts.Threads,
-		deferred:   deferBuild(j, opts),
+		deferred:   deferBuild(run, opts),
 		pairLayout: pairLayout,
 		publish:    j.Publish,
 		ids:        kernel.NewKeyTable(),
 		mem:        opts.Budget.Account("join"),
 
-		budget: opts.Budget,
-		bparts: make([]*partWriter, nBuckets),
-		bfiles: make([]string, nBuckets),
-		pend:   make([][]int32, nBuckets),
+		budget:   opts.Budget,
+		bparts:   make([]*partWriter, nBuckets),
+		bfiles:   make([]string, nBuckets),
+		pend:     make([][]int32, nBuckets),
+		buildOrd: buildOrd,
 	}
-	br := &joinBreaker{build: right, probe: left, builder: sink}
+	br := &joinBreaker{build: build, probe: probe, builder: sink}
 	if j.SwapAtRuntime && sink.deferred {
 		br.swap, br.swapOpts = j, opts
+	}
+	if j.Order != plan.JoinOrderNone {
+		br.ordered, br.opts = true, opts
 	}
 	return br, nil
 }

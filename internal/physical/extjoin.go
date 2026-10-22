@@ -361,7 +361,7 @@ func (s *joinBuildSink) admitKeys(keyCols []*data.Column, n, rowBase int) error 
 				if rowBase >= 0 {
 					row = rowBase + int(ch.rows[j])
 				}
-				return duplicateKeyErr(s.spec.validate, "right", s.right, s.keys, row)
+				return duplicateKeyErr(s.spec, true, s.keys, row)
 			}
 			if track {
 				s.counts[id]++

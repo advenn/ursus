@@ -32,7 +32,7 @@ import (
 // The output's ROW ORDER. A join emits rows in the order of the side streamed past
 // the table, so a swapped join follows the right input's order. That is why only an
 // inner join swaps — the one kind whose answer is symmetric — and why
-// Join.MaintainOrder turns it off, as Polars' maintain_order does. It also skips:
+// Join.Order turns it off, as Polars' maintain_order does. It also skips:
 //
 //   - a residual, which belongs to a semi or anti join;
 //   - a Validate, which names one side's keys as the unique ones;
@@ -211,7 +211,7 @@ func SwapJoin(j *Join) Node { return swapJoin(j) }
 // swappable reports whether j's inputs can be exchanged without changing its
 // answer, as a multiset of rows.
 func swappable(j *Join) bool {
-	return j.Kind == JoinInner && !j.HasResidual() && j.Validate == ValidateNone && !j.MaintainOrder
+	return j.Kind == JoinInner && !j.HasResidual() && j.Validate == ValidateNone && j.Order == JoinOrderNone
 }
 
 // swapJoin returns Join(R, L) under a Project that restores j's output exactly, or

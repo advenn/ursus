@@ -68,6 +68,12 @@ type sortSink struct {
 	// limit because of others' state spills no run smaller than this. The sorted
 	// window pass sets it; a plain sort spills whenever the query is over.
 	minRun int64
+
+	// maxHeld, when set, is the most a sink holds before it spills, whatever the rest
+	// of the query holds: an ordered join's sort leaves the rest of the limit to the
+	// join below it, whose spilled buckets build their tables while the sort waits
+	// with what it has taken (step 314).
+	maxHeld int64
 }
 
 // sortFanIn is how many runs of one level a sort merges into one of the next.
@@ -139,7 +145,7 @@ func (s *sortSink) Consume(ctx context.Context, in *data.Batch) error {
 	s.mem.Retain(in)
 	s.mem.Retain(kb)
 
-	if !s.mem.Over() || s.mem.Used() < s.minRun {
+	if (!s.mem.Over() || s.mem.Used() < s.minRun) && (s.maxHeld == 0 || s.mem.Used() < s.maxHeld) {
 		return nil
 	}
 	if s.limit > 0 {
