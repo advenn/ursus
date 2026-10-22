@@ -52,7 +52,7 @@ func newEwmByRun(fn expr.WinFnOp, params expr.WinParams, out dtype.DataType, pai
 	if err != nil {
 		return nil, err
 	}
-	times, err := readTicks(by)
+	times, err := byTicks(by)
 	if err != nil {
 		return nil, err
 	}
@@ -70,6 +70,9 @@ func newEwmByRun(fn expr.WinFnOp, params expr.WinParams, out dtype.DataType, pai
 	case dtype.TypeDatetime:
 		npt, _ := by.DType().NanosPerTick()
 		half = nanos / npt
+	case dtype.TypeInt32, dtype.TypeInt64, dtype.TypeUint32, dtype.TypeUint64:
+		// An integer by counts its own ticks, and its half-life is "Ni" (step 312).
+		half = nanos
 	default:
 		return nil, uerr.Internalf("kernel: %s_by over %s", fn, by.DType())
 	}

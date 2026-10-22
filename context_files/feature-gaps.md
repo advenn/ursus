@@ -68,6 +68,7 @@ Fix these before anything new. **Step 249 fixed every row** (see its record).
 | **A null condition yielded null, where Polars and SQL take Otherwise.** `When(c).Then(a).Otherwise(b)` of a null c was null, by design (internal/expr/cond.go: "a null condition takes neither branch"); Polars' `when` gives b, and SQL's `CASE WHEN NULL` its ELSE. Found at step 310, in none of the docs; the maintainer chose Polars', and step 311 made a null mask take the Else branch, a break. `Clip` of a null bound follows Polars now too; `FillNan`, which leaned on the old rule, was rewritten to keep its nulls | internal/kernel/select.go, internal/expr/cond.go | fixed |
 | **A typed view of a `Date` or a `Datetime` is its integer.** `df.Column[time.Time]` and `df.At[time.Time]` refuse one, "no typed view for time.Time"; `Column[int32]` gives a Date's days and `Column[int64]` a Datetime's ticks. `Rows[T]` decodes either into a `time.Time`. Polars' `to_list` gives dates and datetimes. For 0.6.7's V3, the eager Series (step 297) | series.go, internal/data | open |
 | **A naive `Datetime` is written with a `Z`,** as though it were UTC: `Datetime(s)` prints `2026-03-08T06:30:00Z`, and the CSV writer, which shares `FormatTemporal`, writes it so, which another reader takes as UTC; so does a cast to String (step 298). Polars writes a naive instant with no offset. A change of the CSV format, for 0.6.8's I/O (step 296) | dtype/temporal.go:212 | open |
+| **`RollingOptions.Offset` is not Polars' `offset`.** ursus's moves a window's end from its row's instant, `(t + offset − period, t + offset]`; Polars' places its start, `(t + offset, t + offset + period]`, by default `−period`. They agree with neither given, and otherwise differ by a period: Polars' `rolling(period="2i", offset="-3i")` over `[1, 3, 5, 6]` sums `[0, 1, 2, 3]`, ursus's `Offset: Every("-3i")` `[null, null, 1, 2]`, and its `Every("-1i")` Polars' windows. No doc or difference list says so. Found at step 312, for the maintainer to decide | groupby.go `RollingOptions`, internal/physical/tempstream.go `rollRow` | open |
 
 ## 2. The expression model
 
@@ -208,8 +209,8 @@ differs from their input's, or scalars outside a group-by.
 | **An aggregate inside an aggregate's input:** `Col("a").Sub(Col("a").Mean()).Abs().Sum()` is refused, in a `Select` or an `Agg`, as "not an aggregate"; Polars takes it (found at step 279) | P1 |
 | **Integers as bits:** built: `& \| ^ ~` of integers in step 278, the `bitwise_and/or/xor` aggregates in step 276. Polars has no shifts | — |
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
-| **Rolling:** `map`; weights; an integer index (`"2i"` periods) for `_by`; `rolling_rank_by` and Polars' `random` rank; the generic `Expr.rolling(index_column)`. `skew`, `kurtosis`, `rank`, `rolling_cov` and `rolling_corr` built at step 284 | P1 |
-| **EWM:** an integer by with a `"2i"` half-life for `ewm_mean_by` and `ewm_sum_by`. `ewm_sum`, `ewm_mean_by` and `ewm_sum_by` built at step 285 | P2 |
+| **Rolling:** `map`; weights; `rolling_rank_by` and Polars' `random` rank; the generic `Expr.rolling(index_column)`. `skew`, `kurtosis`, `rank`, `rolling_cov` and `rolling_corr` built at step 284; an integer by, `"2i"` periods, at step 312 | P1 |
+| **EWM:** built: `ewm_sum`, `ewm_mean_by` and `ewm_sum_by` at step 285; an integer by, a `"2i"` half-life, at step 312 | — |
 | **Other:** `cut`/`qcut` returning Categorical with `include_breaks`. `cumulative_eval` built at step 286. `round_sig_figs`, `cot`, numeric `truncate`, the half-to-even mode and a one-sided `clip` were built at step 283 | P1/P2 |
 
 ## 6. Frame operations
@@ -229,7 +230,7 @@ differs from their input's, or scalars outside a group-by.
 | built: `pivot` of several `On` columns, and a lazy pivot with its columns given, in step 303 | — |
 | built: `concat`'s relaxed, horizontal and align modes, and `ConcatFrames` for `DataFrame`s, in step 307 | — |
 | join: emit a computed key column; `maintain_order` right, left-right and right-left; asof `tolerance` on numeric keys; asof `coalesce`; `JoinWhere` suffix | P1 |
-| group-by: `map_groups`, iterating over groups; an integer index for `GroupByDynamic` and `Rolling`; `.over(order_by)` of an aggregate; mapping `explode` and `join`. `head` and `tail` built in step 308, `having` in 309 | P1/P2 |
+| group-by: `map_groups`, iterating over groups; `.over(order_by)` of an aggregate; mapping `explode` and `join`. `head` and `tail` built in step 308, `having` in 309, `all` in 310, an integer index for `GroupByDynamic`, `Rolling` and `upsample` in 312 | P1/P2 |
 | `to_dummies`, `unstack`, `gather`, `extend`, `update`, `glimpse`, `estimated_size`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293; `insert_column` and `hash_rows` in step 302 | P2 |
 | `transpose` of mixed String and number, with names from a column. `unpivot` without `On` built in step 304 | P2 |
 | **An eager `Series` with operations:** it is a read-only view (`Get`, `Values`, `Map`, `Fold`); sort, unique, head, fill and aggregates go through a frame | P1 |
@@ -319,8 +320,8 @@ decide whether to keep or switch each one.
 - `Upsample` takes a frame unsorted, which Polars refuses; leaves out a row of a null
   instant and answers a frame of no rows with none, where Polars refuses both; and
   keeps its groups in the order each first appears, Polars' `maintain_order=True`. It
-  refuses an integer index, Polars' every "1i", and a Date stepped by less than a
-  day, which Polars steps into each date twice (step 306).
+  refuses a Date stepped by less than a day, which Polars steps into each date twice
+  (step 306). An integer index, Polars' every "1i", it steps since step 312.
 - `PartitionBy` gives each part's key as a one-row frame beside the part, where
   Polars' `as_dict` keys a dict by tuples; Go has no map by a tuple. Its parts keep
   the order the keys first appear, as Polars' `maintain_order=True`, which is its
@@ -396,6 +397,12 @@ decide whether to keep or switch each one.
 - `Time` takes a unit; Polars' is nanoseconds.
 - `GroupByDynamic` with keys puts the index column first and the keys after it;
   Polars puts the keys first (found at step 251).
+- `"3i"`, an integer interval, is refused where a date is moved: by `Truncate`,
+  `Round`, `OffsetBy`, a range and an as-of tolerance. Polars' `truncate` and
+  `offset_by` take it and move nothing, its `round` panics, dividing by zero, and its
+  as-of tolerance reads it as nanoseconds on an instant and panics on an integer key.
+  A weekday `StartBy` on an integer index is refused, as on any grid not in weeks,
+  where Polars ignores it (step 312).
 - `List().Get` is null out of range, with a constant or an expression index; Polars'
   `list.get` errs unless `null_on_oob`. A float index is refused; Polars takes it
   (step 254).

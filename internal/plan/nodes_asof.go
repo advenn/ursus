@@ -222,6 +222,12 @@ func resolveAsOfJoin(a *AsOfJoin) (Node, error) {
 				"measure in").
 			Hint("drop the tolerance, or cast the key to a temporal type")
 	}
+	if c.Tolerance.Index() {
+		// Polars reads "2i" on an instant as nanoseconds, and panics on an integer key
+		// (step 312).
+		return nil, uerr.New(uerr.KindValue, "join_asof",
+			"tolerance takes an interval of time, and %s counts an integer index", c.Tolerance)
+	}
 	// A CALENDAR tolerance needs more than a temporal key: it needs an INSTANT.
 	// "One month after a five-second span" is not a question, and neither is "one
 	// month after 14:30" — a Time is a wall clock with no date to carry a month.

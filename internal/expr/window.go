@@ -794,10 +794,14 @@ func ewmByOut(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, error
 	}
 	value, by := fs[0].Type, fs[1].Type
 	name := fn.String() + "_by"
-	if by.ID() != dtype.TypeDate && by.ID() != dtype.TypeDatetime {
+	switch by.ID() {
+	case dtype.TypeDate, dtype.TypeDatetime, dtype.TypeInt32, dtype.TypeInt64, dtype.TypeUint32, dtype.TypeUint64:
+	default:
 		return dtype.Null, uerr.New(uerr.KindType, name,
-			"%s orders its rows by a Date or a Datetime, got %s", name, by).
-			Hint("Polars also takes an integer by with a half-life such as \"2i\"; ursus does not yet")
+			"%s orders its rows by a Date, a Datetime or an integer of 32 or 64 bits, got %s", name, by)
+	}
+	if err := IndexInterval(name, "half-life", p.Period, by); err != nil {
+		return dtype.Null, err
 	}
 	hl := p.Period
 	switch {
@@ -906,11 +910,14 @@ func rollingByOut(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 	value, by := fs[0].Type, fs[1].Type
 	name := fn.String() + "_by"
 	switch by.ID() {
-	case dtype.TypeDate, dtype.TypeDatetime, dtype.TypeTime:
+	case dtype.TypeDate, dtype.TypeDatetime, dtype.TypeTime, dtype.TypeInt32, dtype.TypeInt64, dtype.TypeUint32,
+		dtype.TypeUint64:
 	default:
 		return dtype.Null, uerr.New(uerr.KindType, name,
-			"%s orders its windows by a Date, Datetime or Time, got %s", name, by).
-			Hint("Polars also takes an integer by with a period such as \"2i\"; ursus does not yet")
+			"%s orders its windows by a Date, a Datetime, a Time or an integer of 32 or 64 bits, got %s", name, by)
+	}
+	if err := IndexInterval(name, "period", p.Period, by); err != nil {
+		return dtype.Null, err
 	}
 	switch {
 	case p.Period.Err() != nil:
@@ -944,6 +951,29 @@ func rollingByOut(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 			Hint("use a period of whole ticks, or cast by to a finer unit first")
 	}
 	return rollingValueOut(fn, value)
+}
+
+// IndexInterval refuses an interval of the wrong kind for its column (step 312): an
+// integer column counts by Polars' integer intervals, "3i", and nothing else; a
+// temporal one takes time, and no "i". Polars refuses both, the first "must be a
+// parsed integer", the second "may not be a parsed integer". A zero interval, which
+// some options leave unset, passes either.
+func IndexInterval(op, name string, iv dtype.Interval, column dtype.DataType) error {
+	if iv.IsZero() || iv.Err() != nil {
+		return nil
+	}
+	integer := column.IsInteger()
+	switch {
+	case integer && !iv.Index():
+		return uerr.New(uerr.KindValue, op,
+			"%s=%s is an interval of time, and the column is %s, which counts by an integer interval", name, iv, column).
+			Hint("write it in the integer unit i, e.g. Every(\"3i\")")
+	case !integer && iv.Index():
+		return uerr.New(uerr.KindValue, op,
+			"%s=%s counts an integer index, and the column is %s", name, iv, column).
+			Hint("write it in time, e.g. Every(\"3d\"), or cast the column to an integer")
+	}
+	return nil
 }
 
 // rollingValueOut types a rolling function's value.

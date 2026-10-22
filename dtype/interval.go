@@ -51,6 +51,11 @@ type Interval struct {
 	// starts on a Monday, as Polars' does; "7d" counts days from the epoch, a
 	// Thursday (step 184, found by the Polars oracle). See floorWall.
 	weekly bool
+
+	// index: the interval counts an integer index, Polars' "3i", one a nanosecond,
+	// which a temporal group or a window by an Int32 or Int64 column reads as ticks
+	// of a Datetime(ns) (step 312). It is never mixed with a time unit.
+	index bool
 }
 
 // Months, Days and Nanos are the three components. Exported as accessors rather than
@@ -87,12 +92,16 @@ func (i Interval) Negative() bool {
 // FromDuration refuse the minimum outright. A guard here could not fire, and this
 // codebase treats an unreachable guard as protection that is not there.
 func (i Interval) Neg() Interval {
-	return Interval{months: -i.months, days: -i.days, nanos: -i.nanos, err: i.err, weekly: i.weekly}
+	return Interval{months: -i.months, days: -i.days, nanos: -i.nanos, err: i.err, weekly: i.weekly, index: i.index}
 }
 
 // Weekly reports whether the interval was written in weeks alone, so that a grid of
 // it starts on a Monday.
 func (i Interval) Weekly() bool { return i.weekly }
+
+// Index reports whether the interval counts an integer index, Polars' "3i": its
+// Nanos are the count.
+func (i Interval) Index() bool { return i.index }
 
 // AsWeekly is i, written in weeks: the kernel's way back to a weekly interval, which
 // crosses into it as three numbers. It is i unchanged unless i is whole weeks alone.
@@ -170,6 +179,7 @@ var intervalUnits = []struct {
 	nanos  int64
 }{
 	{"ns", 0, 0, 1},
+	{"i", 0, 0, 1}, // an integer index's count: Every marks the interval index
 	{"us", 0, 0, int64(time.Microsecond)},
 	{"ms", 0, 0, int64(time.Millisecond)},
 	{"mo", 1, 0, 0},
@@ -188,12 +198,14 @@ var intervalUnits = []struct {
 //
 // Units: ns, us, ms, s, m, h, d, w, mo, q, y. Note "m" is MINUTES and "mo" is months,
 // which is the one ambiguity in the notation and the reason the unit table is ordered
-// longest-first.
+// longest-first. "i" counts an integer index, as Polars' "3i" does, and mixes with no
+// other unit (step 312).
 func Every(s string) Interval {
 	raw := s
 	var out Interval
 	neg := false
 	onlyWeeks := true
+	var index, timed bool
 	if rest, ok := strings.CutPrefix(s, "-"); ok {
 		neg, s = true, rest
 	}
@@ -227,6 +239,15 @@ func Every(s string) Interval {
 		}
 		s = s[len(u.suffix):]
 		onlyWeeks = onlyWeeks && u.suffix == "w"
+		if u.suffix == "i" {
+			index = true
+		} else {
+			timed = true
+		}
+		if index && timed {
+			// Polars: cannot mix month, week, day, and sub-daily units.
+			return Interval{err: everyErr(raw, "the integer unit i mixes with no unit of time")}
+		}
 
 		months, ok := addMul(int64(out.months), v, int64(u.months), math.MaxInt32)
 		if !ok {
@@ -257,7 +278,7 @@ func Every(s string) Interval {
 	if out.IsZero() {
 		return Interval{err: everyErr(raw, "it spans no time")}
 	}
-	out.weekly = onlyWeeks
+	out.weekly, out.index = onlyWeeks, index
 	return out
 }
 
@@ -303,7 +324,7 @@ func everyErr(raw, format string, args ...any) error {
 	return uerr.New(uerr.KindValue, "every",
 		"cannot parse interval %q: "+format, append([]any{raw}, args...)...).
 		Hint(`an interval is a count and a unit, e.g. "1h", "15m", "3mo", "1y"`).
-		Hint(`units are ns, us, ms, s, m (minutes), h, d, w, mo (months), q, y`)
+		Hint(`units are ns, us, ms, s, m (minutes), h, d, w, mo (months), q, y, and i, an integer index's count`)
 }
 
 // String renders the interval in Every's own notation, so String and Every round-trip
@@ -321,6 +342,9 @@ func (i Interval) String() string {
 	}
 	if i.IsZero() {
 		return "0s"
+	}
+	if i.index {
+		return strconv.FormatInt(i.nanos, 10) + "i"
 	}
 	months, days, nanos := i.months, i.days, i.nanos
 	var b strings.Builder

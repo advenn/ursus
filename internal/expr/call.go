@@ -2158,6 +2158,10 @@ func OffsetRefusal(iv dtype.Interval, in dtype.DataType) error {
 	if err := iv.Err(); err != nil {
 		return err
 	}
+	if iv.Index() {
+		// A row's "3i", which Polars reads as no offset at all (step 312).
+		return uerr.New(uerr.KindValue, "dt", "offset_by takes an interval of time, and %s counts an integer index", iv)
+	}
 	npt, ok := in.NanosPerTick()
 	if !ok {
 		return uerr.Internalf("dt: offset_by on %s", in)

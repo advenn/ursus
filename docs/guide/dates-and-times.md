@@ -130,6 +130,21 @@ A rolling group is a group-by with one row for each input row. The rolling windo
 time in [Window functions](windows.md#rolling-windows-by-time) answer the same
 question as a column beside the rows.
 
+## An integer index
+
+*New in 0.6.7.* An index can be a count rather than an instant: a step, a sequence
+number. An `Int32` or `Int64` index counts by Polars' integer unit, so `Every("5i")`
+is five of it, and its windows are cut from its values, as from time's:
+
+--8<-- "Example_timeIntegerIndex.md"
+
+Dynamic and rolling groups take one, as do `Upsample` and the rolling windows and
+ewms by a column, and the index keeps its type. All but `GroupByDynamic` take a
+`UInt32` or a `UInt64` too, as Polars' do. An interval of time on an integer index is
+refused, and so is `"i"` where a date is moved: in `Truncate`, `Round`, `OffsetBy`, a
+range or an as-of tolerance, where Polars moves nothing, panics, or reads it as
+nanoseconds.
+
 ## Under a memory limit
 
 Dynamic and rolling groups stream their input and hand out each window when it

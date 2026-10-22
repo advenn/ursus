@@ -31,7 +31,7 @@ func rollingBy(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Da
 	if err != nil {
 		return nil, err
 	}
-	ticks, err := readTicks(by)
+	ticks, err := byTicks(by)
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +78,38 @@ func rollingBy(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Da
 	return rollingOver(fn, params, name, out, value, sorted, win, minN)
 }
 
+// byTicks is a window's by as ticks: a temporal column's own, or an integer's values
+// (step 312). A UInt64 past an Int64 is refused, as no tick holds it.
+func byTicks(by *data.Column) ([]int64, error) {
+	switch by.DType().ID() {
+	case dtype.TypeUint32:
+		v, err := data.Values[uint32](by)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]int64, len(v))
+		for i, x := range v {
+			out[i] = int64(x)
+		}
+		return out, nil
+	case dtype.TypeUint64:
+		v, err := data.Values[uint64](by)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]int64, len(v))
+		for i, x := range v {
+			if x > math.MaxInt64 && by.IsValid(i) {
+				return nil, uerr.New(uerr.KindValue, "window",
+					"a window's by holds %d, past the largest Int64, which an integer by counts in", x)
+			}
+			out[i] = int64(x)
+		}
+		return out, nil
+	}
+	return readTicks(by)
+}
+
 // windowStarts gives each row's window start, its by value less the period, as a
 // tick of by's type. A start before the first tick by's type holds is that tick, as
 // every value is after it.
@@ -86,6 +118,10 @@ func rollingBy(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Da
 // moved on the wall clock of by's zone, through dtype.Interval.AddTo, row by row.
 func windowStarts(dt dtype.DataType, period dtype.Interval, ticks []int64) ([]int64, error) {
 	npt, ok := dt.NanosPerTick()
+	if !ok && dt.IsInteger() {
+		// An integer by counts its own ticks, its period "Ni", N of them (step 312).
+		npt, ok = 1, true
+	}
 	if !ok {
 		return nil, uerr.Internalf("kernel: a window by %s", dt)
 	}

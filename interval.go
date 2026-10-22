@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Interval is a calendar-aware span: months, days and nanoseconds, kept apart because
@@ -18,10 +19,26 @@ type Interval = dtype.Interval
 // GroupByDynamic every "1w" give Mondays, where "7d" counts days from the epoch, a
 // Thursday. Weeks mixed with any other unit count from the epoch too.
 //
+// "3i" is Polars' integer interval, three steps of an integer index: a
+// GroupByDynamic, a Rolling or an Upsample over an Int32 or an Int64 index steps by
+// it, as do the windows by such a column. It mixes with no unit of time, and is
+// refused where a date is moved: by Truncate, Round, OffsetBy, a range or an as-of
+// tolerance.
+//
 // A parse failure is carried in the value rather than returned, and surfaces when the
 // query is built — the deferred-error rule the rest of the library follows. Note "m"
 // is minutes and "mo" is months.
 func Every(s string) Interval { return dtype.Every(s) }
+
+// timeOnly refuses an integer interval, "3i", where op moves a date or an instant
+// (step 312). Polars takes it in some of them and moves nothing, or panics.
+func timeOnly(op string, iv Interval) error {
+	if !iv.Index() {
+		return nil
+	}
+	return uerr.New(uerr.KindValue, op, "%s takes an interval of time, and %s counts an integer index", op, iv).
+		Hint(`"i" is for a temporal group, an upsample or a window by an integer column`)
+}
 
 // FromDuration builds an ABSOLUTE interval. Deliberately not the same as the calendar
 // spelling: FromDuration(24*time.Hour) is twenty-four hours, Every("1d") is one day,

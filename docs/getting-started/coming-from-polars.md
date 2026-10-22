@@ -103,6 +103,7 @@ changes is what Go asks for.
 | `df.partition_by("k", include_key=False)` | `df.PartitionBy(ctx, ursus.PartitionOptions{By: []string{"k"}, DropKey: true})` (new in 0.6.7) |
 | `pl.concat([a, b])` | `ursus.Concat([]*ursus.LazyFrame{a, b})` |
 | `.group_by_dynamic(...)`, `.rolling(...)` | `.GroupByDynamic(index, ursus.DynamicOptions{...})`, `.Rolling(index, ursus.RollingOptions{...})` |
+| `.group_by_dynamic("step", every="5i")`, `.rolling_sum_by("step", "3i")` | `ursus.DynamicOptions{Every: ursus.Every("5i")}`, `.RollingSumBy(ursus.Col("step"), ursus.Every("3i"))`, over an integer index (new in 0.6.7) |
 | `.str.contains(p)`, `.dt.year()`, `.list.len()` | `.Str().Contains(p, false)`, `.Dt().Year()`, `.List().Len()` |
 | `.struct.field("f")` | `.Struct().Field("f")` |
 | `.map_elements(f)`, `.map_batches(f)` | `.MapElements(name, type, f)`, `.MapBatches(name, type, f)`, with a Go function |

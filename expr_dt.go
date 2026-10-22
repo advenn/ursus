@@ -102,6 +102,9 @@ func (d DtExpr) Truncate[T Span](every T) Expr {
 	if err := iv.Err(); err != nil {
 		return wrap(&expr.Err{E: err})
 	}
+	if err := timeOnly("truncate", iv); err != nil {
+		return wrap(&expr.Err{E: err})
+	}
 	// The fourth argument says which spelling it was: an Interval floors the wall
 	// clock and a Duration the instant, and both arrive as the same three numbers.
 	wall := int64(0)
@@ -250,6 +253,9 @@ func (d DtExpr) OffsetBy[T Span | Expr](by T) Expr {
 	if err := iv.Err(); err != nil {
 		return wrap(&expr.Err{E: err})
 	}
+	if err := timeOnly("offset_by", iv); err != nil {
+		return wrap(&expr.Err{E: err})
+	}
 	return d.call(expr.FnDtOffsetBy, int64(iv.Months()), int64(iv.Days()), iv.Nanos())
 }
 
@@ -266,6 +272,9 @@ func (d DtExpr) OffsetBy[T Span | Expr](by T) Expr {
 func (d DtExpr) Round[T Span](every T) Expr {
 	iv := span(every)
 	if err := iv.Err(); err != nil {
+		return wrap(&expr.Err{E: err})
+	}
+	if err := timeOnly("round", iv); err != nil {
 		return wrap(&expr.Err{E: err})
 	}
 	wall := int64(0)

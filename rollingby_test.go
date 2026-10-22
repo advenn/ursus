@@ -162,8 +162,9 @@ func TestRollingByRefuses(t *testing.T) {
 		e    ursus.Expr
 		want string
 	}{
-		{"by a string", c("v").RollingSumBy(c("s"), ursus.Every("1h")), "by a Date, Datetime or Time"},
-		{"by an integer", c("v").RollingSumBy(c("i"), ursus.Every("1h")), "by a Date, Datetime or Time"},
+		{"by a string", c("v").RollingSumBy(c("s"), ursus.Every("1h")), "by a Date, a Datetime, a Time or an integer"},
+		// An integer by counts by "i" (step 312); Polars: must be a parsed integer.
+		{"an integer by, a period of time", c("v").RollingSumBy(c("i"), ursus.Every("1h")), "period=1h is an interval of time"},
 		{"a zero period", c("v").RollingSumBy(c("t"), ursus.FromDuration(0)), "must be positive"},
 		{"a negative period", c("v").RollingSumBy(c("t"), ursus.Every("-1h")), "must be positive"},
 		{"an unparseable period", c("v").RollingSumBy(c("t"), ursus.Every("1x")), "not a unit"},

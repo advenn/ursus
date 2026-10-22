@@ -390,15 +390,15 @@ func (e Expr) rolling(fn expr.WinFnOp, size int, ddof int64, opts []WindowOption
 // Polars' min_samples=1; MinSamples asks for more. WindowClosed chooses which ends of
 // the window are in it.
 //
-// by is a Date, Datetime or Time. A calendar period counts months and days on the
-// wall clock of by's zone, so Every("1d") across a change of offset is a calendar
-// day, and FromDuration(24*time.Hour) twenty-four hours. The answers' types are the
-// rolling functions' of the same names.
+// by is a Date, Datetime or Time, or an integer of 32 or 64 bits, whose period counts
+// it in Polars' integer unit, Every("3i") (step 312). A calendar period counts months
+// and days on the wall clock of by's zone, so Every("1d") across a change of offset
+// is a calendar day, and FromDuration(24*time.Hour) twenty-four hours. The answers'
+// types are the rolling functions' of the same names.
 //
-// Where Polars differs: it also takes an integer by, with a period such as "2i";
-// and it answers the sum of a window
-// holding no value, one empty under closed="left" or "none" or one whose rows are
-// all null, as 0.0, although min_samples is 1. Here that window is null.
+// Where Polars differs: it answers the sum of a window holding no value, one empty
+// under closed="left" or "none" or one whose rows are all null, as 0.0, although
+// min_samples is 1. Here that window is null.
 func (e Expr) RollingSumBy(by Expr, period Interval, opts ...WindowOption) Expr {
 	return e.rollingBy(expr.WinRollingSum, by, period, 0, opts)
 }
@@ -553,8 +553,9 @@ func (e Expr) EwmSum(decay EwmDecay, opts ...WindowOption) Expr {
 //	mean: d·last + (1−d)·x
 //	sum:  d·last + x
 //
-// The first such row is its value. by is a Date or a Datetime and need not be sorted;
-// the answers go back to the rows' order. A row whose value or by is null is null and
+// The first such row is its value. by is a Date or a Datetime, or an integer of 32 or
+// 64 bits whose half-life is in Polars' integer unit, Every("2i") (step 312); it need
+// not be sorted, and the answers go back to the rows' order. A row whose value or by is null is null and
 // skipped. halfLife is a constant duration: no months, and no days over a zoned by,
 // as Polars requires. A Float32 answers a Float32 and any other number a Float64.
 // Rows of one instant are taken in the window's order, where Polars' unstable sort

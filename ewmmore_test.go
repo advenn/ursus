@@ -147,11 +147,14 @@ func TestEwmMeanAndSumBy(t *testing.T) {
 		want string
 	}{
 		// Polars: "expected `half_life` to be a constant duration ..., got 1mo".
-		"a month":       {lf.Select(x.EwmMeanBy(tt, ursus.Every("1mo"))), "not a constant duration"},
-		"a day, zoned":  {lf.Select(x.EwmMeanBy(tt.Dt().ReplaceTimeZone("Europe/Dublin"), ursus.Every("1d"))), "not a constant duration"},
-		"negative":      {lf.Select(x.EwmMeanBy(tt, ursus.Every("-1d"))), "must not be negative"},
-		"by a Time":     {lf.Select(x.EwmMeanBy(tt.Dt().Time(), ursus.Every("1h"))), "a Date or a Datetime"},
-		"by an integer": {lf.Select(x.EwmMeanBy(c("g"), ursus.Every("1h"))), "a Date or a Datetime"},
+		"a month":      {lf.Select(x.EwmMeanBy(tt, ursus.Every("1mo"))), "not a constant duration"},
+		"a day, zoned": {lf.Select(x.EwmMeanBy(tt.Dt().ReplaceTimeZone("Europe/Dublin"), ursus.Every("1d"))), "not a constant duration"},
+		"negative":     {lf.Select(x.EwmMeanBy(tt, ursus.Every("-1d"))), "must not be negative"},
+		"by a Time": {lf.Select(x.EwmMeanBy(tt.Dt().Time(), ursus.Every("1h"))),
+			"by a Date, a Datetime or an integer of 32 or 64 bits, got Time"},
+		// An integer by counts by "i" (step 312); Polars: must be a parsed integer.
+		"an integer by, a half-life of time": {lf.Select(x.EwmMeanBy(c("g"), ursus.Every("1h"))),
+			"half-life=1h is an interval of time"},
 		"a value that is text": {ursus.Frame(ursus.Values("x", []string{"a"}), ursus.Values("t", days(0))).WithColumns(naive("t")).
 			Select(x.EwmSumBy(tt, ursus.Every("1d"))), "not defined"},
 	} {

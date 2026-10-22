@@ -111,7 +111,8 @@ func TestUpsample(t *testing.T) {
 			// Polars: `interval` must be positive.
 			{"a negative step", three.Upsample("t", ursus.Every("-1d")), "upsample steps by a positive interval, and -1d is not one"},
 			{"no step", three.Upsample("t", time.Duration(0)), "positive interval"},
-			{"an integer index", ursus.Frame(i64s("t", 1, 4)).Upsample("t", day), `upsample's time column is a Date or a Datetime, and "t" is Int64`},
+			// An integer index steps by "i" (step 312); Polars: must be a parsed integer.
+			{"an integer index by a day", ursus.Frame(i64s("t", 1, 4)).Upsample("t", day), "every=1d is an interval of time"},
 			// Polars steps a Date by 12h into each date twice.
 			{"a Date by 12h", asDate(three).Upsample("t", ursus.Every("12h")), "upsample steps a Date by whole days, and 12h is not"},
 			{"an unknown time column", three.Upsample("u", day), `"u"`},

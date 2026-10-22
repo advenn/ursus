@@ -235,3 +235,23 @@ func Example_timeRolling() {
 	// │ 2026-01-12 │ 1      │ 13.5    │
 	// └────────────┴────────┴─────────┘
 }
+
+func Example_timeIntegerIndex() {
+	readings := ursus.Frame(
+		ursus.Values("step", []int64{1, 2, 4, 7, 8, 12}),
+		ursus.Values("load", []float64{3, 5, 2, 6, 4, 7}),
+	)
+	fives := ursus.DynamicOptions{Every: ursus.Every("5i")}
+	show(readings.GroupByDynamic(ursus.Col("step"), fives).
+		Agg(ursus.Len().Alias("rows"), ursus.Col("load").Sum()))
+	// Output:
+	// shape: (3, 3)
+	// ┌───────┬────────┬─────────┐
+	// │ step  │ rows   │ load    │
+	// │ Int64 │ Uint64 │ Float64 │
+	// ├───────┼────────┼─────────┤
+	// │ 0     │ 3      │ 10      │
+	// │ 5     │ 2      │ 10      │
+	// │ 10    │ 1      │ 7       │
+	// └───────┴────────┴─────────┘
+}

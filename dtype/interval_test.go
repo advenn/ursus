@@ -67,9 +67,29 @@ func TestEveryDistinguishesMonthsFromMinutes(t *testing.T) {
 	}
 }
 
+// TestEveryIntegerUnit (step 312): "3i" is Polars' integer interval, a count of an
+// integer index, kept apart from three nanoseconds so that a date refuses it.
+func TestEveryIntegerUnit(t *testing.T) {
+	three := dtype.Every("3i")
+	if three.Err() != nil || !three.Index() || three.Nanos() != 3 || three.IsCalendar() || three.Weekly() {
+		t.Errorf(`Every("3i") = %v, index %v, %d ns; want an index of 3`, three, three.Index(), three.Nanos())
+	}
+	if n := three.Neg(); !n.Index() || n.String() != "-3i" {
+		t.Errorf(`Every("3i").Neg() = %v, index %v; want -3i`, n, n.Index())
+	}
+	if five := dtype.Every("2i3i"); !five.Index() || five.Nanos() != 5 {
+		t.Errorf(`Every("2i3i") = %v, want 5i, as Polars sums it`, five)
+	}
+	if ns := dtype.Every("3ns"); ns.Index() || ns == three {
+		t.Errorf(`Every("3ns") counts an index, or equals "3i"`)
+	}
+}
+
 func TestEveryRefuses(t *testing.T) {
 	for _, in := range []string{
 		"", "-", "banana", "1", "h", "1x", "1h30", "1hm", " 1h", "1.5h", "--1h", "0s",
+		// The integer unit mixes with no unit of time, as Polars refuses it.
+		"1d1i", "1i1d", "1i1ns", "0i",
 	} {
 		t.Run(in, func(t *testing.T) {
 			got := dtype.Every(in)
@@ -86,7 +106,7 @@ func TestEveryRefuses(t *testing.T) {
 func TestIntervalStringRoundTrips(t *testing.T) {
 	for _, in := range []string{
 		"1ns", "5us", "250ms", "30s", "15m", "6h", "2d", "1w", "3mo", "1y",
-		"1h30m", "1y6mo", "-1d", "-1h30m",
+		"1h30m", "1y6mo", "-1d", "-1h30m", "3i", "-1i",
 	} {
 		iv := dtype.Every(in)
 		if iv.Err() != nil {

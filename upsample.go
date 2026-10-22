@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/uerr"
 )
 
@@ -14,7 +15,8 @@ import (
 // kept, and where there is none, a row of nulls but the time and the group's keys.
 // The time column is a Date or a Datetime, and every an interval as Every counts it:
 // "1mo" steps by months from the first instant, Jan 31, Feb 29, Mar 31, as Polars
-// does; a day in a zone is a day of its wall clock.
+// does; a day in a zone is a day of its wall clock. An integer index, an Int32, an
+// Int64, a UInt32 or a UInt64, steps by Polars' integer interval, "2i".
 //
 //	daily := lf.Upsample("time", ursus.Every("1d"), "station").
 //		WithColumns(ursus.Col("reading").FillNull(ursus.FillForward))
@@ -51,8 +53,18 @@ func (lf *LazyFrame) Upsample[T Span](time string, every T, groupBy ...string) *
 		return &LazyFrame{err: uerr.UnknownColumn("upsample", time, s.Names())}
 	}
 	t := Col(time)
+	typ := s.Field(i).Type
+	switch typ.ID() {
+	case dtype.TypeDate, dtype.TypeDatetime, dtype.TypeInt32, dtype.TypeInt64, dtype.TypeUint32, dtype.TypeUint64:
+	default:
+		return &LazyFrame{err: uerr.New(uerr.KindType, "upsample",
+			"upsample's time column is a Date, a Datetime or an integer of 32 or 64 bits, and %q is %s", time, typ)}
+	}
+	if err := expr.IndexInterval("upsample", "every", iv, typ); err != nil {
+		return &LazyFrame{err: err}
+	}
 	var steps Expr
-	switch typ := s.Field(i).Type; typ.ID() {
+	switch typ.ID() {
 	case dtype.TypeDate:
 		if iv.Nanos()%nanosPerDay != 0 {
 			// Polars steps a Date by 12h into each date twice, the second unmatched.
@@ -64,9 +76,12 @@ func (lf *LazyFrame) Upsample[T Span](time string, every T, groupBy ...string) *
 	case dtype.TypeDatetime:
 		steps = DatetimeRanges(t.Min(), t.Max(), iv)
 	default:
-		return &LazyFrame{err: uerr.New(uerr.KindType, "upsample",
-			"upsample's time column is a Date or a Datetime, and %q is %s", time, typ).
-			Hint(`an integer index, Polars' every "1i", is not upsampled here`)}
+		// An integer index, by Polars' "Ni" (step 312): a range of the ticks of a
+		// Datetime(ns), cast back to the integers once exploded. A UInt64 past an
+		// Int64 fails the cast.
+		ns := Datetime(Nano, "")
+		steps = DatetimeRanges(t.Min().Cast(Int64).Cast(ns), t.Max().Cast(Int64).Cast(ns),
+			dtype.IntervalOf(0, 0, iv.Nanos()))
 	}
 	keys := make([]Expr, 0, len(groupBy)+1)
 	named := map[string]bool{time: true}
@@ -87,8 +102,11 @@ func (lf *LazyFrame) Upsample[T Span](time string, every T, groupBy ...string) *
 	// row of a null instant, and is dropped.
 	names := s.Names()
 	step, row := freshName(names, "step"), freshName(names, "row")
-	grid := lf.GroupBy(keys...).MaintainOrder().Agg(steps.Alias(time)).Explode(time).
-		Filter(t.IsNotNull()).WithRowIndex(step, 0)
+	grid := lf.GroupBy(keys...).MaintainOrder().Agg(steps.Alias(time)).Explode(time).Filter(t.IsNotNull())
+	if typ.IsInteger() {
+		grid = grid.WithColumns(t.Cast(Int64).Cast(typ))
+	}
+	grid = grid.WithRowIndex(step, 0)
 	joined := grid.Join(lf.WithRowIndex(row, 0), JoinOn(append(keys, t)...), JoinHow(JoinLeft),
 		JoinNullsEqual(true))
 	cols := make([]Expr, len(names))

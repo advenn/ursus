@@ -135,6 +135,9 @@ func temporalRange(fn expr.CallFn, start, end expr.Node, iv Interval, closed []C
 	if err := iv.Err(); err != nil {
 		return wrap(&expr.Err{E: err})
 	}
+	if err := timeOnly(op, iv); err != nil {
+		return wrap(&expr.Err{E: err})
+	}
 	if iv.IsZero() {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, op, "%s steps by an interval of zero", op)})
 	}
@@ -153,6 +156,9 @@ func temporalRange(fn expr.CallFn, start, end expr.Node, iv Interval, closed []C
 // dateInterval is iv in whole days, which a Date steps by: Polars refuses a finer
 // one.
 func dateInterval(op string, iv Interval) (Interval, error) {
+	if err := timeOnly(op, iv); err != nil {
+		return iv, err
+	}
 	if iv.Nanos()%nanosPerDay != 0 {
 		return iv, uerr.New(uerr.KindValue, op, "%s steps by whole days, and %s is not", op, iv).
 			Hint("a finer interval is DatetimeRange's")

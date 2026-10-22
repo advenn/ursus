@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–311, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–312, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -73,6 +73,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **An integer index** (312), Polars' `"3i"`: `GroupByDynamic` and `Rolling` over an
+  `Int32` or `Int64` index, its windows cut from its values and its type kept, and
+  `Upsample` and the rolling windows and ewms by a column over one. All but
+  `GroupByDynamic` take a `UInt32` or a `UInt64` too, as Polars' do. `"i"` mixes with
+  no unit of time, and `Truncate`, `Round`, `OffsetBy`, a range or an as-of tolerance
+  refuses it, where Polars moves nothing, panics, or reads it as nanoseconds.
 - **`FirstNonNull` and `LastNonNull`** (310), Polars' `first(ignore_nulls=True)` and
   `last(ignore_nulls=True)`, of an expression and as group-by shorthands, and a
   group-by's **`All()`**, each column a List a group, as Polars' `group_by().all()`.

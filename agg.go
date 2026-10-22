@@ -720,6 +720,12 @@ type GroupBy struct {
 	// having is Having's predicates, each an aggregate of a group, all of which must
 	// hold (step 309).
 	having []expr.Node
+
+	// intIndex is a temporal group's integer index type, the index read as a
+	// Datetime(ns) and cast back to it after, under its name, indexAs (step 312);
+	// indexAs is empty for a Date or a Datetime.
+	intIndex dtype.DataType
+	indexAs  string
 }
 
 // MaintainOrder emits groups in first-appearance order.
@@ -783,7 +789,22 @@ func (g *GroupBy) agg(exprs []Expr) *LazyFrame {
 	if g.temporal != nil {
 		t := *g.temporal
 		t.Input, t.Aggs = g.lf.node, ns
-		return g.lf.derive(&t)
+		out := g.lf.derive(&t)
+		if g.indexAs != "" {
+			// The index, and its window's bounds, back to the integers it counted.
+			names := []string{g.indexAs}
+			if t.Boundaries {
+				names = append(names, "_lower_boundary", "_upper_boundary")
+			}
+			back := make([]Expr, len(names))
+			for i, name := range names {
+				if back[i] = Col(name).Cast(Int64); g.intIndex.ID() != dtype.TypeInt64 {
+					back[i] = back[i].Cast(g.intIndex)
+				}
+			}
+			out = out.WithColumns(back...)
+		}
+		return out
 	}
 	return g.lf.derive(&plan.Aggregate{
 		Input:         g.lf.node,

@@ -93,7 +93,10 @@ belong to it.
 
 The `By` forms take a `Date`, `Datetime` or `Time` column, which need not be sorted:
 a window is found by value, and rows tied with a row's instant are in its window.
-Unlike the windows by rows they answer from one value by default.
+Unlike the windows by rows they answer from one value by default. *New in 0.6.7:* `by`
+can be an integer of 32 or 64 bits, a step rather than an instant, whose period counts
+it in Polars' integer unit: `Every("3i")` is three steps, as in
+[Dates and times](dates-and-times.md#an-integer-index).
 
 ## Exponentially weighted
 
@@ -103,7 +106,8 @@ Unlike the windows by rows they answer from one value by default.
 
 --8<-- "Example_windowEwm.md"
 
-`EwmMeanBy(by, halfLife)` decays by time between rows rather than by rows.
+`EwmMeanBy(by, halfLife)` decays by time between rows rather than by rows, or by the
+steps of an integer `by`, its half-life such as `Every("2i")`.
 
 ## Without Over
 

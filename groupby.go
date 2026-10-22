@@ -3,8 +3,10 @@ package ursus
 import (
 	"strings"
 
+	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/plan"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // DynamicOptions configures GroupByDynamic.
@@ -95,6 +97,13 @@ type RollingOptions struct {
 // wrong groups. ursus verifies rather than trusting an assertion: an unchecked
 // SetSorted-style hint is a user claim that deletes a correctness check, and its
 // failure mode is wrong rows with no error. Sort first if the check refuses.
+//
+// # An integer index counts by "i"
+//
+// The index is a Date or a Datetime, or an Int32 or an Int64 whose Every, Period and
+// Offset count it in Polars' integer unit: Every("3i") cuts windows of three index
+// values, 0, 3, 6, and the index keeps its type (step 312). An interval of time on
+// an integer, or "i" on a date, is refused, as Polars refuses both.
 func (lf *LazyFrame) GroupByDynamic(index Expr, o DynamicOptions) *GroupBy {
 	g := lf.temporalGroup(index, false, o.Every, o.Period, o.Offset, o.Closed, o.GroupBy, nil)
 	g.temporal.WindowLabel = strings.ToLower(o.Label)
@@ -107,7 +116,9 @@ func (lf *LazyFrame) GroupByDynamic(index Expr, o DynamicOptions) *GroupBy {
 // instant. The output has one row per input row.
 //
 // Where GroupByDynamic answers "how many per hour", Rolling answers "how many in the
-// hour before each event". The index must be sorted, and is checked.
+// hour before each event". The index must be sorted, and is checked. An integer index
+// counts by "i", as GroupByDynamic's does, and may be a UInt32 or a UInt64 too, as
+// Polars' may.
 func (lf *LazyFrame) Rolling(index Expr, o RollingOptions) *GroupBy {
 	return lf.temporalGroup(index, true, Interval{}, o.Period, o.Offset, o.Closed,
 		o.GroupBy, nil)
@@ -121,7 +132,7 @@ func (lf *LazyFrame) temporalGroup(index Expr, rolling bool,
 	for i, k := range groupBy {
 		keys[i] = k.node()
 	}
-	return &GroupBy{
+	g := &GroupBy{
 		lf:   lf,
 		keys: keys,
 		temporal: &plan.TemporalGroup{
@@ -130,4 +141,45 @@ func (lf *LazyFrame) temporalGroup(index Expr, rolling bool,
 		},
 		temporalErr: refused,
 	}
+	if refused != nil || lf.err != nil {
+		return g
+	}
+	// The index's type decides its intervals (step 312): an integer counts by Polars'
+	// "3i", read as the ticks of a Datetime(ns), whose grid arithmetic then serves it
+	// unchanged; a Date or a Datetime by time. A dynamic group's integer is an Int32
+	// or an Int64, and a rolling one's a UInt32 or a UInt64 too, as Polars' are.
+	s, err := lf.Select(index).schemaNow()
+	if err != nil {
+		g.temporalErr = err
+		return g
+	}
+	f := s.Field(0)
+	op, kinds := "group_by_dynamic", "a Date, a Datetime, an Int32 or an Int64"
+	if rolling {
+		op, kinds = "rolling", "a Date, a Datetime, an Int32, an Int64, a UInt32 or a UInt64"
+	}
+	switch id := f.Type.ID(); {
+	case id == dtype.TypeInt32 || id == dtype.TypeInt64 || rolling && (id == dtype.TypeUint32 || id == dtype.TypeUint64):
+		// A UInt64 past an Int64 fails the cast.
+		g.intIndex, g.indexAs = f.Type, f.Name
+		ticks := index
+		if id != dtype.TypeInt64 {
+			ticks = ticks.Cast(Int64)
+		}
+		g.temporal.Index = ticks.Cast(Datetime(Nano, "")).Alias(f.Name).node()
+	case !f.Type.IsTemporal():
+		// Polars: expected any of the following dtypes: { Date, Datetime, Int32, Int64 }.
+		g.temporalErr = uerr.New(uerr.KindType, op, "the index column %q is %s, where an index is %s", f.Name, f.Type, kinds)
+		return g
+	}
+	for _, iv := range []struct {
+		name string
+		v    Interval
+	}{{"every", every}, {"period", period}, {"offset", offset}} {
+		if err := expr.IndexInterval(op, iv.name, iv.v, f.Type); err != nil {
+			g.temporalErr = err
+			return g
+		}
+	}
+	return g
 }
