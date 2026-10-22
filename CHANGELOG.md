@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–320, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–321, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -61,6 +61,9 @@ completeness, part 3 — frame operations.**
 
 ### Fixes
 
+- **A frame collected from several batches says its columns hold no null** (321),
+  where they hold none: concatenating the batches built each column a bitmap with
+  every bit set, and every kernel after read it a bit a row.
 - **A null instant decodes as the zero `time.Time`** (317), in `Rows` and
   `CollectInto`, as a null decodes as every other field type's zero: it was the epoch,
   1970-01-01, a plausible instant no row held. `IsZero` now tells it.
@@ -89,6 +92,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A group-by's groups as frames** (321): `Groups`, an iterator of each group's key
+  and rows, and `MapGroups`, a Go function over each, as Polars' iteration and
+  `map_groups`; and a frame's `Extend`, `Glimpse` and `EstimatedSize`, and
+  `WithColumnsSeq` and `SelectSeq`, as Polars'. **`PartitionBy`**, which they are
+  built on, is three and a half times as fast: its parts numbered with a group-by's
+  tables and gathered in parallel.
 - **`ToDummies`** (320), as Polars' `to_dummies`, on a frame and on a `Series`: a
   `Uint8` column for each distinct value, named by the value as Polars displays it and
   ordered by name, as Polars orders them. **`Unstack`**, as Polars' `unstack`,

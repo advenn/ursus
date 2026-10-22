@@ -28,15 +28,22 @@ const firstSeenPart = 1 << 16
 // by the row it first appears at in its part, so a value's number is where it first
 // appears in the whole column; and each part's ids are renumbered, in parallel.
 func FirstSeenIDs(op string, c *data.Column) (ids, firsts []int32, _ error) {
-	n := c.Len()
+	return FirstSeenKeys(op, []*data.Column{c})
+}
+
+// FirstSeenKeys is FirstSeenIDs of the keys columns make together, a row's values in
+// each, as a group-by keys by several columns: encoded, so that they are equal as
+// one column's values are (step 321, for PartitionBy). One column is FirstSeenIDs'.
+func FirstSeenKeys(op string, cols []*data.Column) (ids, firsts []int32, _ error) {
+	n := cols[0].Len()
 	ids = make([]int32, n)
 	if n == 0 {
 		return ids, nil, nil
 	}
-	if c.DType().IsNull() || c.IsPayloadFree() {
+	if c := cols[0]; len(cols) == 1 && (c.DType().IsNull() || c.IsPayloadFree()) {
 		return ids, []int32{0}, nil // all null: one value, first at row 0
 	}
-	k, err := newSeenKeys(op, c)
+	k, err := newSeenKeys(op, cols)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -90,9 +97,17 @@ type seenKeys struct {
 	nulls bool // the column holds a null: a bitmap with every bit set need not say so
 }
 
-func newSeenKeys(op string, c *data.Column) (*seenKeys, error) {
+func newSeenKeys(op string, cols []*data.Column) (*seenKeys, error) {
+	c := cols[0]
 	k := &seenKeys{valid: c.Validity(), nulls: c.NullCount() > 0}
 	switch dt := c.DType(); {
+	case len(cols) > 1:
+		// Several columns' keys are encoded, a null in any a key's part of its own.
+		enc, err := NewGroupKeyEncoder(op, cols)
+		if err != nil {
+			return nil, err
+		}
+		k.enc, k.nulls = enc, false
 	case dt.IsFloat():
 		k.ints = floatKeys(c)
 	case IsIntKey(dt):

@@ -495,11 +495,18 @@ func ConcatColumns(name string, parts []*data.Column) (*data.Column, error) {
 func concatColumn(parts []*data.Column, total int) (*data.Column, error) {
 	first := parts[0]
 
-	valid := bitmap.NewBuilder(total)
-	for _, p := range parts {
-		valid.AppendView(p.Validity())
+	// Parts with every row valid make a column that says so, with no bitmap: a
+	// built one had every bit set and did not say it, so each kernel after a
+	// Collect of several batches read a bit a row where it could have read none
+	// (step 321).
+	outValid := bitmap.AllSet(total)
+	if slices.ContainsFunc(parts, func(p *data.Column) bool { return !p.Validity().IsAllSet() }) {
+		valid := bitmap.NewBuilder(total)
+		for _, p := range parts {
+			valid.AppendView(p.Validity())
+		}
+		outValid = valid.Finish()
 	}
-	outValid := valid.Finish()
 
 	switch {
 	case first.DType().IsNull():

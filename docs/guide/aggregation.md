@@ -144,6 +144,17 @@ and `Describe` summarizes each column, as Polars' `describe` does:
 
 --8<-- "Example_aggDescribe.md"
 
+## A group's rows as a frame
+
+*New in 0.6.7.* `Groups(ctx)` gives each group's rows as a frame beside its key, a Go
+iterator, as Polars' `for key, df in df.group_by(...)`: the groups in the order each
+first appears, each frame the rows as the frame holds them, and the key a one-row
+frame named as the key expressions are, so a key computed from a column is the key's
+and never changes the rows. `MapGroups(ctx, fn)` runs a Go function over each group's
+frame and stacks the answers, which must agree in their columns and types, as Polars'
+`map_groups`, for what an aggregation cannot say. Both run the query and hold its
+answer, a frame a group, as `PartitionBy` does.
+
 ## Under a memory limit
 
 A group-by spills to disk when its groups outgrow the query's memory budget, a

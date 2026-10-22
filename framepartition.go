@@ -2,6 +2,10 @@ package ursus
 
 import (
 	"context"
+	"runtime"
+	"slices"
+	"sync"
+	"sync/atomic"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
@@ -64,34 +68,25 @@ func (df *DataFrame) PartitionBy(ctx context.Context, o PartitionOptions) ([]Par
 		}
 		keys[i], keyFields[i], isKey[name] = b.Column(j), b.Schema().Field(j), true
 	}
-	enc, err := kernel.NewGroupKeyEncoder("partition_by", keys)
+	// Each row's part, numbered in the order each key first appears, as a group-by
+	// numbers its groups; then the rows by part, a counting sort, each part's in the
+	// frame's order and a slice of one array (step 321).
+	ids, firsts, err := kernel.FirstSeenKeys("partition_by", keys)
 	if err != nil {
 		return nil, err
 	}
-
-	// Each row's part, numbered in the order each key first appears, then each part's
-	// rows, in the frame's order.
 	n := b.Rows()
-	part := make([]int32, n)
-	seen := make(map[string]int32)
-	var sizes []int
-	for r := range n {
-		k := enc.Encode(r)
-		p, ok := seen[string(k)]
-		if !ok {
-			p = int32(len(sizes))
-			seen[string(k)] = p
-			sizes = append(sizes, 0)
-		}
-		part[r] = p
-		sizes[p]++
+	start := make([]int32, len(firsts)+1)
+	for _, id := range ids {
+		start[id+1]++
 	}
-	rows := make([][]int32, len(sizes))
-	for p, size := range sizes {
-		rows[p] = make([]int32, 0, size)
+	for p := range firsts {
+		start[p+1] += start[p]
 	}
-	for r, p := range part {
-		rows[p] = append(rows[p], int32(r))
+	order, next := make([]int32, n), slices.Clone(start[:len(firsts)])
+	for r, id := range ids {
+		order[next[id]] = int32(r)
+		next[id]++
 	}
 
 	var kept []int
@@ -113,29 +108,57 @@ func (df *DataFrame) PartitionBy(ctx context.Context, o PartitionOptions) ([]Par
 		return nil, err
 	}
 
-	parts := make([]Partition, len(rows))
-	for p, sel := range rows {
-		if p%256 == 0 {
-			if err := ctx.Err(); err != nil {
-				return nil, err
+	// Each part's rows gathered from each column, the parts in parallel: each part a
+	// frame of its own, so that one kept does not keep the others.
+	parts := make([]Partition, len(firsts))
+	var (
+		wg    sync.WaitGroup
+		took  atomic.Int64
+		fail  error
+		once  sync.Once
+		abort atomic.Bool
+	)
+	for range min(runtime.GOMAXPROCS(0), len(parts)) {
+		wg.Go(func() {
+			for p := int(took.Add(1)) - 1; p < len(parts) && !abort.Load(); p = int(took.Add(1)) - 1 {
+				sel := order[start[p]:start[p+1]]
+				if err := partOf(ctx, &parts[p], b, keys, kept, keySchema, frameSchema, sel); err != nil {
+					once.Do(func() { fail = err })
+					abort.Store(true)
+				}
 			}
-		}
-		key := make([]*data.Column, len(keys))
-		for i, c := range keys {
-			if key[i], err = kernel.Take(c, sel[:1]); err != nil {
-				return nil, err
-			}
-		}
-		cols := make([]*data.Column, len(kept))
-		for i, j := range kept {
-			if cols[i], err = kernel.Take(b.Column(j), sel); err != nil {
-				return nil, err
-			}
-		}
-		parts[p] = Partition{
-			Key:   &DataFrame{batch: data.NewBatchRows(keySchema, key, 1)},
-			Frame: &DataFrame{batch: data.NewBatchRows(frameSchema, cols, len(sel))},
-		}
+		})
+	}
+	wg.Wait()
+	if fail != nil {
+		return nil, fail
 	}
 	return parts, nil
+}
+
+// partOf makes one part of PartitionBy: its key, from its first row, and its rows.
+func partOf(ctx context.Context, part *Partition, b *data.Batch, keys []*data.Column, kept []int,
+	keySchema, frameSchema *dtype.Schema, sel []int32) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	key := make([]*data.Column, len(keys))
+	for i, c := range keys {
+		var err error
+		if key[i], err = kernel.Take(c, sel[:1]); err != nil {
+			return err
+		}
+	}
+	cols := make([]*data.Column, len(kept))
+	for i, j := range kept {
+		var err error
+		if cols[i], err = kernel.Take(b.Column(j), sel); err != nil {
+			return err
+		}
+	}
+	*part = Partition{
+		Key:   &DataFrame{batch: data.NewBatchRows(keySchema, key, 1)},
+		Frame: &DataFrame{batch: data.NewBatchRows(frameSchema, cols, len(sel))},
+	}
+	return nil
 }
