@@ -166,6 +166,23 @@ func Example_aggLists() {
 	// └─────────┴─────────────┴──────────────────────────┘
 }
 
+func Example_aggHeadTail() {
+	show(sales().
+		Select(ursus.Col("region"), ursus.Col("product"), ursus.Col("qty")).
+		GroupBy(ursus.Col("region")).
+		Tail(1))
+	// Output:
+	// shape: (3, 3)
+	// ┌─────────┬─────────┬───────┐
+	// │ region  │ product │ qty   │
+	// │ String  │ String  │ Int64 │
+	// ├─────────┼─────────┼───────┤
+	// │ "north" │ "fig"   │ 3     │
+	// │ "south" │ "pear"  │ 6     │
+	// │ "east"  │ "apple" │ 12    │
+	// └─────────┴─────────┴───────┘
+}
+
 func Example_aggShortcut() {
 	df, err := sales().
 		Select(ursus.Col("region"), ursus.Col("qty"), ursus.Col("price")).

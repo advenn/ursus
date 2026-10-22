@@ -75,6 +75,19 @@ other expressions that give several values give a list per group too:
 
 A list column can be exploded back into rows, or asked questions with `List()`.
 
+## Each group's first and last rows
+
+*New in 0.6.7.* `GroupBy(keys).Head(n)` keeps each group's first n rows as rows rather
+than lists, as Polars' `group_by().head(n)`, and `Tail(n)` its last n. The key columns
+come first, the groups in the order each first appears, and each group's rows in the
+frame's order:
+
+--8<-- "Example_aggHeadTail.md"
+
+They are a window over the keys and a sort, so they spill past a memory limit and keep
+their order there. `Head(0)` is no rows, where Polars gives a row of nulls for each
+group.
+
 ## Every column at once
 
 `GroupBy(...)` has shortcuts that aggregate every column but the keys:

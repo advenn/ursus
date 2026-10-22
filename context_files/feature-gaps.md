@@ -226,7 +226,7 @@ differs from their input's, or scalars outside a group-by.
 | built: `pivot` of several `On` columns, and a lazy pivot with its columns given, in step 303 | — |
 | built: `concat`'s relaxed, horizontal and align modes, and `ConcatFrames` for `DataFrame`s, in step 307 | — |
 | join: emit a computed key column; `maintain_order` right, left-right and right-left; asof `tolerance` on numeric keys; asof `coalesce`; `JoinWhere` suffix | P1 |
-| group-by: `head`, `tail`, `having`, `map_groups`, iterating over groups; an integer index for `GroupByDynamic` and `Rolling`; `.over(order_by)` of an aggregate; mapping `explode` and `join` | P1/P2 |
+| group-by: `having`, `map_groups`, iterating over groups; an integer index for `GroupByDynamic` and `Rolling`; `.over(order_by)` of an aggregate; mapping `explode` and `join`. `head` and `tail` built in step 308 | P1/P2 |
 | `to_dummies`, `unstack`, `gather`, `extend`, `update`, `glimpse`, `estimated_size`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293; `insert_column` and `hash_rows` in step 302 | P2 |
 | `transpose` of mixed String and number, with names from a column. `unpivot` without `On` built in step 304 | P2 |
 | **An eager `Series` with operations:** it is a read-only view (`Get`, `Values`, `Map`, `Fold`); sort, unique, head, fill and aggregates go through a frame | P1 |
@@ -297,6 +297,10 @@ decide whether to keep or switch each one.
 - A join on keys of different names keeps both key columns, `JoinLeftOn(a)` and
   `JoinRightOn(b)` giving `a` and `b`; Polars drops the right one.
   `JoinCoalesce(true)` drops it here (step 295).
+- A group's `Head(0)` and `Tail(0)` are no rows; Polars' are a row of nulls for each
+  group, of its building them as an aggregation exploded. Their groups always come in
+  the order each first appears, Polars' `maintain_order=True`, which is not its
+  default (step 308).
 - `Concat`'s strict mode meets an Int32 and an Int64 at Int64, where Polars'
   vertical refuses them; a relaxed mode meets an Int64 and a UInt64 at Int128, where
   Polars' supertype is a Float64, and a Decimal and an integer at the Decimal wide

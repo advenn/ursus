@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–307, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–308, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -62,6 +62,9 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A group's `Head(n)` and `Tail(n)`** (308), as Polars' `group_by().head()` and
+  `tail()`: each group's first or last rows as rows, the keys first, the groups in the
+  order each first appears, spilling past a memory limit with the order kept.
 - **`Concat`'s modes** (307), Polars' eleven: `ConcatRelaxed` and
   `ConcatDiagonalRelaxed`, meeting a column's types at Polars' supertype;
   `ConcatHorizontal` and `ConcatHorizontalExtend`, side by side, a shorter frame
