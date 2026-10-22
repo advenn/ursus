@@ -1793,6 +1793,12 @@ a wrong number in a report. A pointer field is how a struct sees a null, <code>n
 </span></code></pre></div>
 <p>The mapping of fields to columns is worked out once, so decoding costs a setter call a
 field a row, not a reflection lookup.</p>
+<p><em>New in 0.6.7:</em> <code>RowsByKey[K, T](key)</code> groups the rows by a column, as Polars'
+<code>rows_by_key</code>, a key's rows in the frame's order, and <code>ToMaps()</code> is each row a
+<code>map[string]any</code>, as Polars' <code>to_dicts</code>: an <code>int64</code> for an <code>Int64</code>, a <code>time.Time</code> for an
+instant, a <code>[]any</code> for a <code>List</code>, <code>nil</code> for a null. <code>IterRows[T]</code> streams a query's rows
+as structs, a batch at a time, as Polars' <code>iter_rows</code>, so an answer larger than memory
+can be read row by row.</p>
 <h2 id="a-large-answer-a-batch-at-a-time">A large answer, a batch at a time<a class="headerlink" href="#a-large-answer-a-batch-at-a-time" title="Permanent link">&para;</a></h2>
 <p><code>CollectBatches</code> streams an answer as frames of <code>WithBatchSize</code> rows, a Go iterator, so
 an answer larger than memory reaches Go without being held at once:</p>

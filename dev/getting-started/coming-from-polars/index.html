@@ -1707,6 +1707,10 @@ changes is what Go asks for.</p>
 <td><code>lf.Update(other, ursus.UpdateOptions{On: []string{"k"}, How: ursus.UpdateFull})</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>df.rows_by_key("k", named=True)</code>, <code>df.to_dicts()</code>, <code>df.iter_rows(named=True)</code></td>
+<td><code>df.RowsByKey[K, T]("k")</code>, <code>df.ToMaps()</code>, <code>lf.IterRows[T](ctx)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>pl.DataFrame(list_of_dataclasses)</code></td>
 <td><code>ursus.FromRows(structs)</code> (new in 0.6.7)</td>
 </tr>
