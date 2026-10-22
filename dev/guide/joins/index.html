@@ -2071,11 +2071,17 @@ tolerance, so its bid is null.</p>
   nearest either way.</li>
 <li>Both frames must be sorted by the as-of key, and ursus checks that they are rather
   than trusting it: an unsorted side fails with an error.</li>
+<li><em>New in 0.6.7:</em> a numeric key's tolerance is a number, <code>AsOfTolerance(5)</code>, and a
+  tolerance of zero admits only an exact match, as Polars'. <code>AsOfCoalesce(false)</code>
+  keeps the right frame's key too, <code>ts_right</code>; a key named apart on the two sides is
+  kept on both, as in Polars.</li>
 </ul>
 <h2 id="joins-on-a-condition">Joins on a condition<a class="headerlink" href="#joins-on-a-condition" title="Permanent link">&para;</a></h2>
 <p><code>JoinWhere(other, predicates...)</code> pairs the rows that satisfy every predicate, such as
 an interval: each order with the promotion running on its date. An equality among the
-predicates becomes a hash join's key; without one, every pair is tested.</p>
+predicates becomes a hash join's key; without one, every pair is tested.
+<code>JoinWhereSuffix(other, suffix, predicates...)</code> names a colliding right column with
+another suffix, which the predicates use.</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="nx">promotions</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span>
 </span><span id="__span-29-2"><a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"promotion"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"new year"</span><span class="p">,</span><span class="w"> </span><span class="s">"mid week"</span><span class="p">}),</span>
 </span><span id="__span-29-3"><a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"from"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"2026-01-01"</span><span class="p">,</span><span class="w"> </span><span class="s">"2026-01-06"</span><span class="p">}),</span>
@@ -2124,8 +2130,8 @@ SQL's <code>EXISTS</code>. <code>WhereNotExists</code> keeps those that have non
 <h2 id="under-a-memory-limit">Under a memory limit<a class="headerlink" href="#under-a-memory-limit" title="Permanent link">&para;</a></h2>
 <p>Equi-joins spill both sides to disk under a memory budget, and give the answer they
 give in memory; under a limit a join's row order is promised only with
-<code>JoinMaintainOrder</code>. A backward as-of join
-streams both sides. See <a href="../../concepts/memory/">Memory and spilling</a>.</p>
+<code>JoinMaintainOrder</code>. An as-of join streams both sides, whatever its strategy. See
+<a href="../../concepts/memory/">Memory and spilling</a>.</p>
 
 
 

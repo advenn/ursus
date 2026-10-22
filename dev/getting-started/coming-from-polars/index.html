@@ -1695,6 +1695,14 @@ changes is what Go asks for.</p>
 <td><code>.JoinAsOf(...)</code>, <code>.JoinWhere(...)</code></td>
 </tr>
 <tr>
+<td><code>.join_asof(other, on="k", tolerance=5, coalesce=False)</code></td>
+<td><code>.JoinAsOf(other, ursus.AsOfOn(ursus.Col("k")), ursus.AsOfTolerance(5), ursus.AsOfCoalesce(false))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.join_where(other, *preds, suffix="_r")</code></td>
+<td><code>.JoinWhereSuffix(other, "_r", preds...)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.join(other, on="k", maintain_order="right")</code></td>
 <td><code>.Join(other, ursus.JoinOn(ursus.Col("k")), ursus.JoinMaintainOrder(ursus.JoinOrderRight))</code> (changed in 0.6.7)</td>
 </tr>
