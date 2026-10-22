@@ -1147,6 +1147,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#updating-from-another-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating from another frame
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#filtering-by-another-frame" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1688,6 +1699,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#updating-from-another-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating from another frame
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#filtering-by-another-frame" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2108,23 +2130,52 @@ another suffix, which the predicates use.</p>
 </span><span id="__span-30-11"><a id="__codelineno-30-11" name="__codelineno-30-11" href="#__codelineno-30-11"></a>│ 8        │ 2026-01-07 │ "mid week" │
 </span><span id="__span-30-12"><a id="__codelineno-30-12" name="__codelineno-30-12" href="#__codelineno-30-12"></a>└──────────┴────────────┴────────────┘
 </span></code></pre></div>
+<h2 id="updating-from-another-frame">Updating from another frame<a class="headerlink" href="#updating-from-another-frame" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7.</em> <code>Update(other, options)</code> writes another frame's values over this
+one's, in the columns both have, matched by keys, as Polars' <code>update</code>: a null in
+<code>other</code> leaves the value unless <code>IncludeNulls</code>, and the frame keeps its rows, its
+columns and their order.</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="nx">prices</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span>
+</span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"sku"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"a"</span><span class="p">,</span><span class="w"> </span><span class="s">"b"</span><span class="p">,</span><span class="w"> </span><span class="s">"c"</span><span class="p">}),</span>
+</span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">ValuesNullable</span><span class="p">(</span><span class="s">"price"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">float64</span><span class="p">{</span><span class="mf">9.5</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">},</span><span class="w"> </span><span class="p">[]</span><span class="kt">bool</span><span class="p">{</span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="kc">false</span><span class="p">}),</span>
+</span><span id="__span-31-4"><a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a><span class="p">)</span>
+</span><span id="__span-31-5"><a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a><span class="nx">fixes</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span>
+</span><span id="__span-31-6"><a id="__codelineno-31-6" name="__codelineno-31-6" href="#__codelineno-31-6"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"sku"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"c"</span><span class="p">,</span><span class="w"> </span><span class="s">"a"</span><span class="p">}),</span>
+</span><span id="__span-31-7"><a id="__codelineno-31-7" name="__codelineno-31-7" href="#__codelineno-31-7"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"price"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">float64</span><span class="p">{</span><span class="mf">4.25</span><span class="p">,</span><span class="w"> </span><span class="mf">9.75</span><span class="p">}),</span>
+</span><span id="__span-31-8"><a id="__codelineno-31-8" name="__codelineno-31-8" href="#__codelineno-31-8"></a><span class="p">)</span>
+</span><span id="__span-31-9"><a id="__codelineno-31-9" name="__codelineno-31-9" href="#__codelineno-31-9"></a><span class="nx">show</span><span class="p">(</span><span class="nx">prices</span><span class="p">.</span><span class="nx">Update</span><span class="p">(</span><span class="nx">fixes</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">UpdateOptions</span><span class="p">{</span><span class="nx">On</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"sku"</span><span class="p">}}))</span>
+</span></code></pre></div>
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-32-1"><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a>shape: (3, 2)
+</span><span id="__span-32-2"><a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a>┌────────┬─────────┐
+</span><span id="__span-32-3"><a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a>│ sku    │ price   │
+</span><span id="__span-32-4"><a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a>│ String │ Float64 │
+</span><span id="__span-32-5"><a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a>├────────┼─────────┤
+</span><span id="__span-32-6"><a id="__codelineno-32-6" name="__codelineno-32-6" href="#__codelineno-32-6"></a>│ "a"    │ 9.75    │
+</span><span id="__span-32-7"><a id="__codelineno-32-7" name="__codelineno-32-7" href="#__codelineno-32-7"></a>│ "b"    │ 3       │
+</span><span id="__span-32-8"><a id="__codelineno-32-8" name="__codelineno-32-8" href="#__codelineno-32-8"></a>│ "c"    │ 4.25    │
+</span><span id="__span-32-9"><a id="__codelineno-32-9" name="__codelineno-32-9" href="#__codelineno-32-9"></a>└────────┴─────────┘
+</span></code></pre></div>
+<p><code>How</code> keeps the frame's every row, <code>UpdateLeft</code>, the default; only those <code>other</code>
+matches, <code>UpdateInner</code>; or also <code>other</code>'s unmatched ones, as new rows, <code>UpdateFull</code>.
+Without keys, rows are matched by their places. A column whose types differ takes the
+type that holds both. It is a join, so it spills as one does and keeps its order.</p>
 <h2 id="filtering-by-another-frame">Filtering by another frame<a class="headerlink" href="#filtering-by-another-frame" title="Permanent link">&para;</a></h2>
 <p><code>WhereExists(other, predicates...)</code> keeps this frame's rows that have at least one row
 in <code>other</code> satisfying every predicate, once each, with only this frame's columns:
 SQL's <code>EXISTS</code>. <code>WhereNotExists</code> keeps those that have none. The predicates name
 <code>other</code>'s columns as a join would, with the suffix where a name collides:</p>
-<div class="language-go highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">customers</span><span class="p">().</span><span class="nx">WhereExists</span><span class="p">(</span><span class="nx">orders</span><span class="p">(),</span>
-</span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"customer_id"</span><span class="p">).</span><span class="nx">Eq</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"customer_id_right"</span><span class="p">)),</span>
-</span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"amount"</span><span class="p">).</span><span class="nx">Gt</span><span class="p">(</span><span class="mf">20.0</span><span class="p">)))</span>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-33-1"><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">customers</span><span class="p">().</span><span class="nx">WhereExists</span><span class="p">(</span><span class="nx">orders</span><span class="p">(),</span>
+</span><span id="__span-33-2"><a id="__codelineno-33-2" name="__codelineno-33-2" href="#__codelineno-33-2"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"customer_id"</span><span class="p">).</span><span class="nx">Eq</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"customer_id_right"</span><span class="p">)),</span>
+</span><span id="__span-33-3"><a id="__codelineno-33-3" name="__codelineno-33-3" href="#__codelineno-33-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"amount"</span><span class="p">).</span><span class="nx">Gt</span><span class="p">(</span><span class="mf">20.0</span><span class="p">)))</span>
 </span></code></pre></div>
-<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-32-1"><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a>shape: (2, 2)
-</span><span id="__span-32-2"><a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a>┌─────────────┬────────┐
-</span><span id="__span-32-3"><a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a>│ customer_id │ name   │
-</span><span id="__span-32-4"><a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a>│ Int64       │ String │
-</span><span id="__span-32-5"><a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a>├─────────────┼────────┤
-</span><span id="__span-32-6"><a id="__codelineno-32-6" name="__codelineno-32-6" href="#__codelineno-32-6"></a>│ 1           │ "Ada"  │
-</span><span id="__span-32-7"><a id="__codelineno-32-7" name="__codelineno-32-7" href="#__codelineno-32-7"></a>│ 3           │ "Cai"  │
-</span><span id="__span-32-8"><a id="__codelineno-32-8" name="__codelineno-32-8" href="#__codelineno-32-8"></a>└─────────────┴────────┘
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-34-1"><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a>shape: (2, 2)
+</span><span id="__span-34-2"><a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>┌─────────────┬────────┐
+</span><span id="__span-34-3"><a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a>│ customer_id │ name   │
+</span><span id="__span-34-4"><a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a>│ Int64       │ String │
+</span><span id="__span-34-5"><a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a>├─────────────┼────────┤
+</span><span id="__span-34-6"><a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a>│ 1           │ "Ada"  │
+</span><span id="__span-34-7"><a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a>│ 3           │ "Cai"  │
+</span><span id="__span-34-8"><a id="__codelineno-34-8" name="__codelineno-34-8" href="#__codelineno-34-8"></a>└─────────────┴────────┘
 </span></code></pre></div>
 <p>A semi or anti join asks the same question when the condition is equal keys alone.</p>
 <h2 id="under-a-memory-limit">Under a memory limit<a class="headerlink" href="#under-a-memory-limit" title="Permanent link">&para;</a></h2>

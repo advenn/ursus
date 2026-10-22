@@ -1703,6 +1703,10 @@ changes is what Go asks for.</p>
 <td><code>.JoinWhereSuffix(other, "_r", preds...)</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>df.update(other, on="k", how="full")</code></td>
+<td><code>lf.Update(other, ursus.UpdateOptions{On: []string{"k"}, How: ursus.UpdateFull})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.join(other, on="k", maintain_order="right")</code></td>
 <td><code>.Join(other, ursus.JoinOn(ursus.Col("k")), ursus.JoinMaintainOrder(ursus.JoinOrderRight))</code> (changed in 0.6.7)</td>
 </tr>

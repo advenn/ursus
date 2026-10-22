@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–315, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–316, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3122,6 +3122,10 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>Update</code></strong> (316), as Polars' <code>DataFrame.update</code>: another frame's values written
+  over this one's, matched by keys or by place, a null leaving the value unless
+  <code>IncludeNulls</code>, keeping the frame's rows, all of them, the matched ones or other's
+  new ones too, in an order, under a memory limit as well.</li>
 <li><strong>An as-of join's numeric tolerance and its coalesce</strong> (315), as Polars':
   <code>AsOfTolerance(5)</code> on an integer key, <code>AsOfTolerance(0.5)</code> on a float one, and
   <code>AsOfCoalesce(false)</code> keeping the right frame's key; and <strong><code>JoinWhereSuffix</code></strong>,
