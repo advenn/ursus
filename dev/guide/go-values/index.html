@@ -1715,7 +1715,8 @@ assertion is needed at the call site. A <code>Series</code> answers in Go:</p>
 <code>Unique</code>, <code>Reverse</code>, <code>DropNulls</code>, <code>FillNull</code>, <code>Cast[U]</code>, and the aggregates <code>Min</code>,
 <code>Max</code>, <code>Sum</code>, <code>Mean</code>, <code>Median</code>, <code>Std</code> and <code>Var</code> with their degrees of freedom, <code>Count</code>
 and <code>NUnique</code>, each run through the engine as a one-column frame; <code>Head</code>, <code>Tail</code>,
-<code>Slice</code> and <code>Rename</code> share the column.</p>
+<code>Slice</code> and <code>Rename</code> share the column; and <code>ToDummies</code> makes its dummy columns, as a
+frame's (see <a href="../reshaping/#dummies">Reshaping</a>).</p>
 <p>A null is never a zero mistaken for a value. <code>All()</code> iterates each value with whether
 it is there, and <code>Get(i)</code> and <code>df.At[T](row, name)</code> answer one:</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nx">df</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span>

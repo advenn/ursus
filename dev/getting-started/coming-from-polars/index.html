@@ -1791,6 +1791,14 @@ changes is what Go asks for.</p>
 <td><code>lf.Upsample("t", ursus.Every("1d"), "g")</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>df.to_dummies(["c"], drop_first=True)</code>, <code>df.unstack(step=3)</code></td>
+<td><code>df.ToDummies(ctx, ursus.DummiesOptions{Columns: []string{"c"}, DropFirst: true})</code>, <code>df.Unstack(ctx, ursus.UnstackOptions{Step: 3})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.transpose(column_names="id")</code></td>
+<td><code>df.Transpose(ctx, ursus.TransposeOptions{ColumnNamesFrom: "id"})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>df.partition_by("k", include_key=False)</code></td>
 <td><code>df.PartitionBy(ctx, ursus.PartitionOptions{By: []string{"k"}, DropKey: true})</code> (new in 0.6.7)</td>
 </tr>
