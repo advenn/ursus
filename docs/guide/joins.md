@@ -146,12 +146,18 @@ tolerance, so its bid is null.
   nearest either way.
 - Both frames must be sorted by the as-of key, and ursus checks that they are rather
   than trusting it: an unsorted side fails with an error.
+- *New in 0.6.7:* a numeric key's tolerance is a number, `AsOfTolerance(5)`, and a
+  tolerance of zero admits only an exact match, as Polars'. `AsOfCoalesce(false)`
+  keeps the right frame's key too, `ts_right`; a key named apart on the two sides is
+  kept on both, as in Polars.
 
 ## Joins on a condition
 
 `JoinWhere(other, predicates...)` pairs the rows that satisfy every predicate, such as
 an interval: each order with the promotion running on its date. An equality among the
 predicates becomes a hash join's key; without one, every pair is tested.
+`JoinWhereSuffix(other, suffix, predicates...)` names a colliding right column with
+another suffix, which the predicates use.
 
 --8<-- "Example_joinWhere.md"
 
@@ -170,5 +176,5 @@ A semi or anti join asks the same question when the condition is equal keys alon
 
 Equi-joins spill both sides to disk under a memory budget, and give the answer they
 give in memory; under a limit a join's row order is promised only with
-`JoinMaintainOrder`. A backward as-of join
-streams both sides. See [Memory and spilling](../concepts/memory.md).
+`JoinMaintainOrder`. An as-of join streams both sides, whatever its strategy. See
+[Memory and spilling](../concepts/memory.md).

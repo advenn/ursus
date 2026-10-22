@@ -1,6 +1,8 @@
 package ursus
 
 import (
+	"time"
+
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/uerr"
@@ -37,6 +39,9 @@ type asOfCfg struct {
 
 	strategy   AsOfStrategy
 	tolerance  Interval
+	tolGiven   bool
+	tolNum     plan.AsOfNumber
+	coalesce   plan.CoalesceMode
 	allowExact bool
 	suffix     string
 }
@@ -82,14 +87,54 @@ func AsOfStrategyOpt(s AsOfStrategy) AsOfOption {
 	return func(c *asOfCfg) { c.strategy = s }
 }
 
+// AsOfToleranceValue is what AsOfTolerance takes: an Interval or a time.Duration for
+// a temporal key, a number for a numeric one.
+type AsOfToleranceValue interface {
+	Interval | time.Duration | int | int64 | float64
+}
+
 // AsOfTolerance bounds how far the search may reach. A candidate further than this
 // from the left key does not match, and the left row comes back null-padded.
+//
+// A temporal key takes an interval or a time.Duration, and a numeric key a number,
+// its distance, as Polars' tolerance: AsOfTolerance(5) on an integer key admits a key
+// five away, AsOfTolerance(0.5) on a float key half a unit (step 315). A tolerance of
+// zero admits only an exact match, as Polars' does; before step 315 an interval of
+// zero admitted any distance.
 //
 // The bound is recomputed per row for a CALENDAR interval, so Every("1mo") is a
 // different distance in February than in March — which is the whole reason Interval
 // is not a duration.
-func AsOfTolerance(i Interval) AsOfOption {
-	return func(c *asOfCfg) { c.tolerance = i }
+func AsOfTolerance[T AsOfToleranceValue](v T) AsOfOption {
+	return func(c *asOfCfg) {
+		c.tolerance, c.tolGiven, c.tolNum = Interval{}, false, plan.AsOfNumber{}
+		switch x := any(v).(type) {
+		case Interval:
+			c.tolerance, c.tolGiven = x, true
+		case time.Duration:
+			c.tolerance, c.tolGiven = FromDuration(x), true
+		case int:
+			c.tolNum = plan.AsOfNumber{Set: true, IsInt: true, Int: int64(x)}
+		case int64:
+			c.tolNum = plan.AsOfNumber{Set: true, IsInt: true, Int: x}
+		case float64:
+			c.tolNum = plan.AsOfNumber{Set: true, Float: x}
+		}
+	}
+}
+
+// AsOfCoalesce says whether the ordering key is merged into one column, as Polars'
+// coalesce: true, the default, merges it where both sides name it alike; false
+// keeps the right one too, suffixed where the names collide, `ts` and `ts_right`.
+// Keys named apart are both kept either way, and the by-keys are always merged, as
+// in Polars (step 315).
+func AsOfCoalesce(b bool) AsOfOption {
+	return func(c *asOfCfg) {
+		c.coalesce = plan.CoalesceAuto
+		if !b {
+			c.coalesce = plan.CoalesceOff
+		}
+	}
 }
 
 // AsOfAllowExactMatches decides whether a right key EQUAL to the left key may match.
@@ -126,9 +171,11 @@ func AsOfSuffix(s string) AsOfOption {
 //
 // # Memory
 //
-// The default, backward, streams both sides: it holds a row a by-key and a few right
-// batches, however long the right side is (step 183). Forward and nearest hold the
-// right side, since a row at or after a left key may lie anywhere ahead.
+// Every strategy streams both sides. The default, backward, holds a row a by-key and
+// a few right batches, however long the right side is (step 183). Forward and nearest
+// hold the right rows read ahead to each left key's next candidate (step 194): the
+// gap to a by-key's next row, or the whole right side for a left by-key it never
+// holds.
 func (lf *LazyFrame) JoinAsOf(other *LazyFrame, opts ...AsOfOption) *LazyFrame {
 	if lf.err != nil {
 		return lf
@@ -168,6 +215,9 @@ func (lf *LazyFrame) JoinAsOf(other *LazyFrame, opts ...AsOfOption) *LazyFrame {
 		LeftBy: nodesOf(leftBy), RightBy: nodesOf(rightBy),
 		Strategy:          cfg.strategy,
 		Tolerance:         cfg.tolerance,
+		ToleranceGiven:    cfg.tolGiven,
+		NumTolerance:      cfg.tolNum,
+		Coalesce:          cfg.coalesce,
 		AllowExactMatches: cfg.allowExact,
 		Suffix:            cfg.suffix,
 	})

@@ -229,7 +229,7 @@ differs from their input's, or scalars outside a group-by.
 | built: `is_duplicated`, `is_unique` and `n_unique` over several columns, in step 290 | — |
 | built: `pivot` of several `On` columns, and a lazy pivot with its columns given, in step 303 | — |
 | built: `concat`'s relaxed, horizontal and align modes, and `ConcatFrames` for `DataFrame`s, in step 307 | — |
-| join: emit a computed key column; asof `tolerance` on numeric keys; asof `coalesce`; `JoinWhere` suffix. `maintain_order` of every order and kind built in step 314 | P1 |
+| join: emit a computed key column. `maintain_order` of every order and kind built in step 314; an as-of `tolerance` on numeric keys, as-of `coalesce` and `JoinWhere`'s suffix in 315 | P1 |
 | group-by: `map_groups`, iterating over groups; `.over(order_by)` of an aggregate; mapping `explode` and `join`. `head` and `tail` built in step 308, `having` in 309, `all` in 310, an integer index for `GroupByDynamic`, `Rolling` and `upsample` in 312 | P1/P2 |
 | `to_dummies`, `unstack`, `gather`, `extend`, `update`, `glimpse`, `estimated_size`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293; `insert_column` and `hash_rows` in step 302 | P2 |
 | `transpose` of mixed String and number, with names from a column. `unpivot` without `On` built in step 304 | P2 |
@@ -318,6 +318,9 @@ decide whether to keep or switch each one.
   keeps the first frame's and drops the others' (its docs say it raises); its ties,
   rows of one key, are in each frame's order, frame by frame, where Polars' are its
   joins' "right_left" (step 307).
+- An as-of join refuses a negative tolerance, which Polars takes and searches as
+  though it were positive; and a number on a temporal key, which Polars reads as its
+  ticks (step 315).
 - `Upsample` takes a frame unsorted, which Polars refuses; leaves out a row of a null
   instant and answers a frame of no rows with none, where Polars refuses both; and
   keeps its groups in the order each first appears, Polars' `maintain_order=True`. It

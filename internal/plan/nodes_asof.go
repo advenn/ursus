@@ -1,6 +1,8 @@
 package plan
 
 import (
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/advenn/ursus/dtype"
@@ -73,8 +75,19 @@ type AsOfJoin struct {
 
 	Strategy AsOfStrategy
 
-	// Tolerance bounds how far the search may reach. Zero means unbounded.
-	Tolerance dtype.Interval
+	// Tolerance bounds how far the search may reach, for a temporal key. Zero means
+	// unbounded unless ToleranceGiven, when it admits only an exact match, as a
+	// Polars tolerance of zero does (step 315).
+	Tolerance      dtype.Interval
+	ToleranceGiven bool
+
+	// NumTolerance bounds it for a numeric key, when set (step 315).
+	NumTolerance AsOfNumber
+
+	// Coalesce says whether the ordering key is merged, as Polars' coalesce: by
+	// default when both sides name it alike, never with CoalesceOff, where the right
+	// one is kept, suffixed on a collision (step 315). The by-keys are always merged.
+	Coalesce CoalesceMode
 
 	// AllowExactMatches lets a right key EQUAL to the left key match. Default true,
 	// so the zero value of the option struct is the ordinary behaviour; the physical
@@ -94,6 +107,30 @@ func (a *AsOfJoin) WithChildren(kids []Node) Node {
 	c := *a
 	c.Left, c.Right = kids[0], kids[1]
 	return &c
+}
+
+// AsOfNumber is a numeric key's tolerance (step 315): an integer, exact, or a
+// float.
+type AsOfNumber struct {
+	Set   bool
+	IsInt bool
+	Int   int64
+	Float float64
+}
+
+func (n AsOfNumber) String() string {
+	if n.IsInt {
+		return strconv.FormatInt(n.Int, 10)
+	}
+	return strconv.FormatFloat(n.Float, 'g', -1, 64)
+}
+
+// AsFloat is the tolerance as a float.
+func (n AsOfNumber) AsFloat() float64 {
+	if n.IsInt {
+		return float64(n.Int)
+	}
+	return n.Float
 }
 
 // asJoin is the equi-join whose output shape an as-of join borrows.
@@ -116,7 +153,46 @@ func (a *AsOfJoin) asJoin() *Join {
 }
 
 // Layout delegates, so there is exactly one implementation of a join's output shape.
-func (a *AsOfJoin) Layout() (*JoinLayout, error) { return a.asJoin().Layout() }
+//
+// An ordering key that is not merged (step 315) is left out of the key pairs, so
+// both sides' keep their columns, the right's suffixed on a collision; the key types
+// are still the whole join's, the ordering key's first.
+func (a *AsOfJoin) Layout() (*JoinLayout, error) {
+	full, err := a.asJoin().Layout()
+	if err != nil {
+		return nil, err
+	}
+	merged, err := a.mergesOn()
+	if err != nil || merged {
+		return full, err
+	}
+	j := a.asJoin()
+	j.LeftOn, j.RightOn = a.LeftBy, a.RightBy
+	l, err := j.Layout()
+	if err != nil {
+		return nil, err
+	}
+	l.KeyTypes = full.KeyTypes
+	return l, nil
+}
+
+// mergesOn reports whether the ordering key is merged: by default when both sides
+// name it alike, as Polars' coalesce; never with CoalesceOff.
+func (a *AsOfJoin) mergesOn() (bool, error) {
+	if a.Coalesce == CoalesceOff {
+		return false, nil
+	}
+	ls, err := a.Left.Schema()
+	if err != nil {
+		return false, err
+	}
+	rs, err := a.Right.Schema()
+	if err != nil {
+		return false, err
+	}
+	l, r := bareColumn(a.LeftOn, ls), bareColumn(a.RightOn, rs)
+	return l < 0 || r < 0 || ls.Field(l).Name == rs.Field(r).Name, nil
+}
 
 func (a *AsOfJoin) Schema() (*dtype.Schema, error) {
 	l, err := a.Layout()
@@ -137,9 +213,16 @@ func (a *AsOfJoin) Label() string {
 		b.WriteString(expr.StringAll(a.LeftBy))
 		b.WriteString("]")
 	}
-	if !a.Tolerance.IsZero() {
+	switch {
+	case a.NumTolerance.Set:
+		b.WriteString(" tolerance=")
+		b.WriteString(a.NumTolerance.String())
+	case a.ToleranceGiven || !a.Tolerance.IsZero():
 		b.WriteString(" tolerance=")
 		b.WriteString(a.Tolerance.String())
+	}
+	if a.Coalesce == CoalesceOff {
+		b.WriteString(" no coalesce")
 	}
 	if !a.AllowExactMatches {
 		b.WriteString(" strict")
@@ -165,6 +248,12 @@ func resolveAsOfJoin(a *AsOfJoin) (Node, error) {
 	if a.Tolerance.Negative() {
 		return nil, uerr.New(uerr.KindValue, "join_asof",
 			"tolerance must not be negative, got %s", a.Tolerance).
+			Hint("tolerance is a distance; the strategy decides the direction")
+	}
+	if n := a.NumTolerance; n.Set && (n.AsFloat() < 0 || math.IsNaN(n.AsFloat())) {
+		// Polars takes a negative one and searches as though it were not.
+		return nil, uerr.New(uerr.KindValue, "join_asof",
+			"tolerance must not be negative, got %s", n).
 			Hint("tolerance is a distance; the strategy decides the direction")
 	}
 
@@ -215,12 +304,19 @@ func resolveAsOfJoin(a *AsOfJoin) (Node, error) {
 	// Tolerance is a calendar-aware Interval, which only means something against an
 	// instant. Refusing beats reinterpreting nanoseconds as a count of whatever the
 	// key happens to be.
-	if !c.Tolerance.IsZero() && !lf.Type.IsTemporal() {
+	if (c.ToleranceGiven || !c.Tolerance.IsZero()) && !lf.Type.IsTemporal() {
 		return nil, uerr.New(uerr.KindUnsupported, "join_asof",
 			"tolerance is not supported on a %s key", lf.Type).
 			Hint("an Interval measures time; on a numeric key there is no unit to " +
 				"measure in").
 			Hint("drop the tolerance, or cast the key to a temporal type")
+	}
+	if c.NumTolerance.Set && !lf.Type.IsNumeric() {
+		// Polars reads a number on an instant as its ticks (step 315).
+		return nil, uerr.New(uerr.KindType, "join_asof",
+			"tolerance=%s is a number, and the as-of key is %s, whose tolerance is an interval of time",
+			c.NumTolerance, lf.Type).
+			Hint(`use an interval, e.g. ursus.AsOfTolerance(ursus.Every("5s"))`)
 	}
 	if c.Tolerance.Index() {
 		// Polars reads "2i" on an instant as nanoseconds, and panics on an integer key

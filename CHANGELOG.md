@@ -15,12 +15,17 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–314, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–315, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **An as-of tolerance of zero admits only an exact match** (315), as Polars' does:
+  `AsOfTolerance(ursus.FromDuration(0))` admitted any distance.
+- **An as-of join keeps both ordering keys when they are named apart** (315), as
+  Polars' does: `AsOfLeftOn(ts)` with `AsOfRightOn(quote_ts)` gives `ts` and
+  `quote_ts`, where `quote_ts` was merged into `ts`.
 - **`JoinMaintainOrder` takes a `JoinOrder`** (314), Polars' `maintain_order`, where it
   took a Boolean: `JoinMaintainOrder(true)` is `JoinMaintainOrder(ursus.JoinOrderLeft)`.
 - **`RollingOptions.Offset` is where a window starts** (313), as Polars' `offset`:
@@ -81,6 +86,10 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **An as-of join's numeric tolerance and its coalesce** (315), as Polars':
+  `AsOfTolerance(5)` on an integer key, `AsOfTolerance(0.5)` on a float one, and
+  `AsOfCoalesce(false)` keeping the right frame's key; and **`JoinWhereSuffix`**,
+  Polars' `join_where(suffix=)`.
 - **A join's order, Polars' `maintain_order`** (314): `JoinOrderLeft` and
   `JoinOrderRight`, and Polars' `left_right` and `right_left`, for every kind of join:
   the left or the right frame's rows in their order, each row's matches in the other's,

@@ -39,8 +39,17 @@ type asOfBuildSink struct {
 	tolerance  dtype.Interval
 	tolTicks   uint64 // a fixed tolerance in the KEY's own ticks; see prepareTolerance
 	allowExact bool
-	keyType    dtype.DataType
-	loc        *time.Location
+
+	// tolGiven: a tolerance was given, so one of zero admits only an exact match, as
+	// Polars' does (step 315); unset, the search is unbounded.
+	tolGiven bool
+	// tolNum: the tolerance is a number, a numeric key's (step 315): tolFloat a float
+	// key's, tolTicks an integer key's, floored, as a distance of integers is whole.
+	tolNum   bool
+	tolFloat float64
+
+	keyType dtype.DataType
+	loc     *time.Location
 
 	mem *execopt.Account
 }
@@ -154,8 +163,8 @@ func absDiffU64(a, b int64) uint64 {
 // a negative tolerance three files away, and if that check ever moved, a negative T
 // would make Go's truncating division stop being a floor and the identity would fail.
 func (s *asOfBuildSink) prepareTolerance() error {
-	if s.tolerance.IsZero() || s.tolerance.IsCalendar() {
-		return nil // nothing fixed to convert
+	if s.tolNum || s.tolerance.IsZero() || s.tolerance.IsCalendar() {
+		return nil // nothing fixed to convert; a given zero leaves tolTicks 0, exact
 	}
 	nanos := s.tolerance.Nanos()
 	if nanos < 0 {
@@ -178,10 +187,13 @@ func (s *asOfBuildSink) prepareTolerance() error {
 // three fields. So the bound is recomputed per row, which is what makes
 // Every("1mo") differ from Every("30d") on a February.
 func (s *asOfBuildSink) withinTolerance(left, right int64) (bool, error) {
-	if s.tolerance.IsZero() {
+	if !s.tolGiven && !s.tolNum && s.tolerance.IsZero() {
 		return true, nil
 	}
-	if !s.tolerance.IsCalendar() {
+	if s.tolNum && s.keyType.IsFloat() {
+		return floatDistance(left, right) <= s.tolFloat, nil
+	}
+	if s.tolNum || !s.tolerance.IsCalendar() {
 		// Both sides in the key's own ticks: a comparison, and nothing else.
 		return absDiffU64(left, right) <= s.tolTicks, nil
 	}
@@ -250,6 +262,18 @@ func planAsOfJoin(ctx context.Context, a *plan.AsOfJoin, opts Options) (Operator
 		mem:     opts.Budget.Account("join_asof"),
 	}
 	sink.loc = temporalLocation(sink.keyType)
+	sink.tolGiven = a.ToleranceGiven
+	if n := a.NumTolerance; n.Set {
+		sink.tolNum, sink.tolFloat = true, n.AsFloat()
+		switch {
+		case n.IsInt:
+			sink.tolTicks = uint64(n.Int) // not negative: resolveAsOfJoin refuses it
+		case n.Float >= 1<<64:
+			sink.tolTicks = math.MaxUint64
+		default:
+			sink.tolTicks = uint64(math.Floor(n.Float))
+		}
+	}
 	if err := sink.prepareTolerance(); err != nil {
 		return nil, err
 	}

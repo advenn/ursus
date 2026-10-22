@@ -253,10 +253,7 @@ func (lf *LazyFrame) Join(other *LazyFrame, opts ...JoinOption) *LazyFrame {
 // The join's OUTPUT names, which is to say left columns by their own name and a
 // colliding right column with the suffix — `k` and `k_right`. There is no separate
 // left/right namespace to qualify with, and the same rule applies here as to a Filter
-// written after any other join. JoinWhere takes no options; for another suffix write
-// what it is, a cross join and a filter, which the optimizer plans the same way:
-//
-//	lf.Join(other, ursus.JoinHow(ursus.JoinCross), ursus.JoinSuffix("_r")).Filter(preds...)
+// written after any other join. JoinWhereSuffix takes another suffix.
 //
 // # What it costs
 //
@@ -271,6 +268,19 @@ func (lf *LazyFrame) Join(other *LazyFrame, opts ...JoinOption) *LazyFrame {
 // |L|x|R| — so it is an error rather than a silent cross join, for the same reason a
 // keyless equi-join is.
 func (lf *LazyFrame) JoinWhere(other *LazyFrame, preds ...Expr) *LazyFrame {
+	return lf.joinWhere(other, nil, preds)
+}
+
+// JoinWhereSuffix is JoinWhere with suffix appended to a right column whose name the
+// left frame has, where JoinWhere appends "_right": Polars' join_where(suffix=)
+// (step 315). The predicates name such a column by it.
+//
+//	a.JoinWhereSuffix(b, "_b", ursus.Col("x").Lt(ursus.Col("x_b")))
+func (lf *LazyFrame) JoinWhereSuffix(other *LazyFrame, suffix string, preds ...Expr) *LazyFrame {
+	return lf.joinWhere(other, []JoinOption{JoinSuffix(suffix)}, preds)
+}
+
+func (lf *LazyFrame) joinWhere(other *LazyFrame, opts []JoinOption, preds []Expr) *LazyFrame {
 	if lf.err != nil {
 		return lf
 	}
@@ -284,7 +294,7 @@ func (lf *LazyFrame) JoinWhere(other *LazyFrame, preds ...Expr) *LazyFrame {
 	// into hash keys. Building the cross join and the filter separately is what
 	// lets every other rule — predicate pushdown into the inputs, projection
 	// pushdown, simplification — apply without knowing this method exists.
-	return lf.Join(other, JoinHow(JoinCross)).Filter(preds...)
+	return lf.Join(other, append(opts, JoinHow(JoinCross))...).Filter(preds...)
 }
 
 // WhereExists keeps the rows of this frame that have at least one row in other
