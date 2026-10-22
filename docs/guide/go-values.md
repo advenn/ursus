@@ -51,7 +51,8 @@ assertion is needed at the call site. A `Series` answers in Go:
 `Unique`, `Reverse`, `DropNulls`, `FillNull`, `Cast[U]`, and the aggregates `Min`,
 `Max`, `Sum`, `Mean`, `Median`, `Std` and `Var` with their degrees of freedom, `Count`
 and `NUnique`, each run through the engine as a one-column frame; `Head`, `Tail`,
-`Slice` and `Rename` share the column.
+`Slice` and `Rename` share the column; and `ToDummies` makes its dummy columns, as a
+frame's (see [Reshaping](reshaping.md#dummies)).
 
 A null is never a zero mistaken for a value. `All()` iterates each value with whether
 it is there, and `Get(i)` and `df.At[T](row, name)` answer one:

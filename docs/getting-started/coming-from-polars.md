@@ -107,6 +107,8 @@ changes is what Go asks for.
 | `df.group_by("k").having(pl.len() > 1).agg(...)` | `lf.GroupBy(ursus.Col("k")).Having(ursus.Len().Gt(1)).Agg(...)` (new in 0.6.7) |
 | `df.group_by("k", maintain_order=True).head(2)`, `.tail(2)` | `lf.GroupBy(ursus.Col("k")).Head(2)`, `.Tail(2)` (new in 0.6.7) |
 | `df.upsample("t", every="1d", group_by="g")` | `lf.Upsample("t", ursus.Every("1d"), "g")` (new in 0.6.7) |
+| `df.to_dummies(["c"], drop_first=True)`, `df.unstack(step=3)` | `df.ToDummies(ctx, ursus.DummiesOptions{Columns: []string{"c"}, DropFirst: true})`, `df.Unstack(ctx, ursus.UnstackOptions{Step: 3})` (new in 0.6.7) |
+| `df.transpose(column_names="id")` | `df.Transpose(ctx, ursus.TransposeOptions{ColumnNamesFrom: "id"})` (new in 0.6.7) |
 | `df.partition_by("k", include_key=False)` | `df.PartitionBy(ctx, ursus.PartitionOptions{By: []string{"k"}, DropKey: true})` (new in 0.6.7) |
 | `pl.concat([a, b])` | `ursus.Concat([]*ursus.LazyFrame{a, b})` |
 | `.group_by_dynamic(...)`, `.rolling(...)` | `.GroupByDynamic(index, ursus.DynamicOptions{...})`, `.Rolling(index, ursus.RollingOptions{...})` |

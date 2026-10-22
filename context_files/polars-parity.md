@@ -32,7 +32,7 @@ what we are lacking".
 | ~~V1~~ | built in step 317: `FromRows` |
 | ~~V2~~ | built in step 318: `RowsByKey`, `ToMaps`, `IterRows` |
 | ~~V3~~ | built in step 319: a `Series` with operations |
-| tier 2 | `ToDummies`, `Unstack`, `Transpose` named from a column; `MapGroups` and iterating a group-by's groups; `Extend`, `WithColumnsSeq`, `SelectSeq`, `EstimatedSize`, `Glimpse` |
+| tier 2 | built in step 320: `ToDummies`, `Unstack`, `Transpose` named from a column. Next: `MapGroups` and iterating a group-by's groups; `Extend`, `WithColumnsSeq`, `SelectSeq`, `EstimatedSize`, `Glimpse` |
 
 ## 2. Expressions
 

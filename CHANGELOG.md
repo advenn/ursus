@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–319, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–320, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -89,6 +89,13 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`ToDummies`** (320), as Polars' `to_dummies`, on a frame and on a `Series`: a
+  `Uint8` column for each distinct value, named by the value as Polars displays it and
+  ordered by name, as Polars orders them. **`Unstack`**, as Polars' `unstack`,
+  vertical or horizontal, with its fill values.
+- **`Transpose` names its columns from a column,** `ColumnNamesFrom`, as Polars'
+  `column_names`, and meets text beside numbers at text, as Polars does, where it
+  refused them (320).
 - **A `Series` with operations** (319), as Polars': `Sort`, `Unique`, `Reverse`,
   `DropNulls`, `FillNull`, `Cast[U]`, `Head`, `Tail`, `Slice`, `Rename`, and the
   aggregates. `Series` is ursus's own type now, the view it was embedded, so every

@@ -122,14 +122,47 @@ step, holding a batch of each.
 ## Transpose
 
 `Transpose` turns rows into columns. `IncludeHeader` keeps the old column names as a
-column, and `ColumnNames` names the new ones:
+column, and `ColumnNames` names the new ones. *New in 0.6.7:* `ColumnNamesFrom` takes
+their names from a text column instead, which is left out, as Polars' `column_names`
+given a column's name:
 
 --8<-- "Example_reshapeTranspose.md"
 
-Every column of the answer has the type its values meet at, so integers beside floats
-become floats; text beside numbers is refused, where Polars casts everything to text.
-It is a `DataFrame`'s only: its columns are the frame's rows, so its schema waits for
-the data.
+Every column of the answer has the type its values meet at, Polars' supertype, so
+integers beside floats become floats and, *new in 0.6.7*, text beside numbers text,
+where it was refused. It is a `DataFrame`'s only: its columns are the frame's rows, so
+its schema waits for the data.
+
+## Dummies
+
+*New in 0.6.7.* `ToDummies` replaces a column with a `Uint8` column for each of its
+distinct values, 1 where a row holds the value and 0 where it does not, as Polars'
+`to_dummies`. A null is a value of its own. Each dummy is named the column, a
+separator, `_` by default, and the value as Polars displays it, so `1.0` is `1.0` and
+an instant `2024-01-02 03:04:05`. A column's dummies stand in its place, ordered by
+name as Polars orders them, so `10` comes before `2`:
+
+--8<-- "Example_reshapeDummies.md"
+
+`DropFirst` leaves out the first value to appear that is not null, which the others
+imply, and `DropNulls` the null. `Columns` names the columns to encode, every column
+when empty, and a `Series` has its own `ToDummies`. The values are numbered in one
+pass, as a group-by numbers its groups, so a column of many distinct values costs no
+more than one of few, beside the dummies it makes.
+
+## Unstack
+
+*New in 0.6.7.* `Unstack` lays each column out as a grid without keys, as Polars'
+`unstack`. Vertically, a column `x`'s values go `Step` at a time down new columns
+`x_0`, `x_1` and on, `Step` rows high; with `UnstackHorizontal`, `Step` at a time
+across `Step` new columns:
+
+--8<-- "Example_reshapeUnstack.md"
+
+The slots after the last value are null, or `Fill`, one value for every column or
+one for each, cast to the column's type as `ExtendConstant` casts it. Each suffix is
+zero-padded to the digits of the count of new columns, `x_00` to `x_12` for 13, as
+Polars pads it. A vertical column shares the old one's values, a slice of them.
 
 ## Split by key: partition
 

@@ -346,14 +346,10 @@ func Example_reshapeTranspose() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	t, err := df.Drop(ctx, "metric")
-	if err != nil {
-		log.Fatal(err)
-	}
-	t, err = t.Transpose(ctx, ursus.TransposeOptions{
-		IncludeHeader: true,
-		HeaderName:    "region",
-		ColumnNames:   []string{"orders", "revenue"},
+	t, err := df.Transpose(ctx, ursus.TransposeOptions{
+		IncludeHeader:   true,
+		HeaderName:      "region",
+		ColumnNamesFrom: "metric",
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -368,4 +364,57 @@ func Example_reshapeTranspose() {
 	// │ "north" │ 3       │ 39.75   │
 	// │ "south" │ 3       │ 46.5    │
 	// └─────────┴─────────┴─────────┘
+}
+
+func Example_reshapeDummies() {
+	ctx := context.Background()
+	df, err := ursus.Frame(
+		ursus.Values("id", []int64{1, 2, 3, 4}),
+		ursus.ValuesNullable("size", []int64{10, 2, 0, 10},
+			[]bool{true, true, false, true}),
+	).Collect(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	d, err := df.ToDummies(ctx, ursus.DummiesOptions{Columns: []string{"size"}})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(d)
+	// Output:
+	// shape: (4, 4)
+	// ┌───────┬─────────┬────────┬───────────┐
+	// │ id    │ size_10 │ size_2 │ size_null │
+	// │ Int64 │ Uint8   │ Uint8  │ Uint8     │
+	// ├───────┼─────────┼────────┼───────────┤
+	// │ 1     │ 1       │ 0      │ 0         │
+	// │ 2     │ 0       │ 1      │ 0         │
+	// │ 3     │ 0       │ 0      │ 1         │
+	// │ 4     │ 1       │ 0      │ 0         │
+	// └───────┴─────────┴────────┴───────────┘
+}
+
+func Example_reshapeUnstack() {
+	ctx := context.Background()
+	df, err := ursus.Frame(
+		ursus.Values("reading", []float64{1.5, 2, 2.5, 3, 3.5, 4, 4.5}),
+	).Collect(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	g, err := df.Unstack(ctx, ursus.UnstackOptions{Step: 3})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(g)
+	// Output:
+	// shape: (3, 3)
+	// ┌───────────┬───────────┬───────────┐
+	// │ reading_0 │ reading_1 │ reading_2 │
+	// │ Float64   │ Float64   │ Float64   │
+	// ├───────────┼───────────┼───────────┤
+	// │ 1.5       │ 3         │ 4.5       │
+	// │ 2         │ 3.5       │ null      │
+	// │ 2.5       │ 4         │ null      │
+	// └───────────┴───────────┴───────────┘
 }

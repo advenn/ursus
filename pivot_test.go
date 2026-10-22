@@ -444,9 +444,9 @@ func TestPivotUnderAMemoryLimit(t *testing.T) {
 }
 
 // TestTransposeAnswersAsPolars: DataFrame.Transpose (step 229) against Polars
-// 1.44.1: column j holds row j, every column cast to the type they meet at; a header
-// column of the names; given column names; and a String beside a number refused,
-// where Polars casts both to String.
+// 1.44.1: column j holds row j, every column cast to the type they meet at, text
+// beside a number text since step 320; a header column of the names; given column
+// names, and names from a column (step 320).
 func TestTransposeAnswersAsPolars(t *testing.T) {
 	ctx := t.Context()
 	df, err := ursus.Frame(ursus.Values("a", []int64{1, 2}), ursus.Values("b", []float64{3.5, 4.5}),
@@ -477,11 +477,75 @@ func TestTransposeAnswersAsPolars(t *testing.T) {
 		t.Errorf("one name for two rows should be refused: %v", err)
 	}
 
-	mixed, err := ursus.Frame(ursus.Values("a", []int64{1}), ursus.Values("s", []string{"x"})).Collect(ctx)
+	// Text beside a number or a Boolean is text, as Polars casts them; a Boolean
+	// beside a number is the number; a List beside one meets nothing.
+	mixed, err := ursus.Frame(ursus.Values("a", []int64{1, 3}), ursus.Values("s", []string{"x", "y"}),
+		ursus.Values("b", []bool{true, false})).Collect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := mixed.Transpose(ctx, ursus.TransposeOptions{}); !errors.Is(err, uerr.ErrType) {
-		t.Errorf("a String beside an Int64 should be refused: %v", err)
+	got, err = mixed.Transpose(ctx, ursus.TransposeOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err = ursus.Frame(ursus.Values("column_0", []string{"1", "x", "true"}),
+		ursus.Values("column_1", []string{"3", "y", "false"})).Collect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, got, want)
+	got, err = mixed.Lazy().Select(ursus.Col("b"), ursus.Col("a")).Head(1).Collect(ctx)
+	if err == nil {
+		got, err = got.Transpose(ctx, ursus.TransposeOptions{})
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err = ursus.Frame(ursus.Values("column_0", []int64{1, 1})).Collect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, got, want)
+	listed, err := ursus.Frame(ursus.Values("a", []int64{1})).
+		WithColumns(ursus.ConcatList(ursus.Col("a")).Alias("l")).Collect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := listed.Transpose(ctx, ursus.TransposeOptions{}); !errors.Is(err, uerr.ErrType) {
+		t.Errorf("a List beside an Int64 should be refused: %v", err)
+	}
+
+	// Names from a column, which is left out.
+	named, err := ursus.Frame(ursus.Values("id", []string{"a", "b", "c"}), ursus.Values("col1", []int64{1, 3, 2}),
+		ursus.Values("col2", []int64{3, 4, 6})).Collect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err = named.Transpose(ctx, ursus.TransposeOptions{IncludeHeader: true, ColumnNamesFrom: "id"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err = ursus.Frame(ursus.Values("column", []string{"col1", "col2"}), ursus.Values("a", []int64{1, 3}),
+		ursus.Values("b", []int64{3, 4}), ursus.Values("c", []int64{2, 6})).Collect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, got, want)
+	for name, tc := range map[string]struct {
+		df   *ursus.DataFrame
+		o    ursus.TransposeOptions
+		want string
+	}{
+		"both namings":   {named, ursus.TransposeOptions{ColumnNamesFrom: "id", ColumnNames: []string{"p", "q", "r"}}, "give one"},
+		"an unknown one": {named, ursus.TransposeOptions{ColumnNamesFrom: "nope"}, "nope"},
+		"numbers":        {named, ursus.TransposeOptions{ColumnNamesFrom: "col1"}, "text is needed"},
+		"a null": {collect(t, ursus.Frame(ursus.ValuesNullable("id", []string{"a", ""}, []bool{true, false}),
+			ursus.Values("v", []int64{1, 2}))), ursus.TransposeOptions{ColumnNamesFrom: "id"}, "null at row 1"},
+		"a name twice": {collect(t, ursus.Frame(ursus.Values("id", []string{"a", "a"}), ursus.Values("v", []int64{1, 2}))),
+			ursus.TransposeOptions{ColumnNamesFrom: "id"}, `"a"`},
+	} {
+		if _, err := tc.df.Transpose(ctx, tc.o); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: %v, want an error saying %s", name, err, tc.want)
+		}
 	}
 }

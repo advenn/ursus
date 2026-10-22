@@ -364,6 +364,47 @@ func frameOfColumns(cols []*data.Column, rows int) (*DataFrame, error) {
 	return &DataFrame{batch: data.NewBatchRows(sch, cols, rows)}, nil
 }
 
+// transposeNamed is Transpose with the new columns named by o.ColumnNamesFrom's
+// values, the rest of the frame transposed.
+func (df *DataFrame) transposeNamed(ctx context.Context, o TransposeOptions) (*DataFrame, error) {
+	from := o.ColumnNamesFrom
+	if len(o.ColumnNames) > 0 {
+		return nil, uerr.New(uerr.KindValue, "transpose",
+			"ColumnNames and ColumnNamesFrom both name the columns; give one")
+	}
+	c, ok := df.batch.ByName(from)
+	if !ok {
+		return nil, uerr.UnknownColumn("transpose", from, df.Columns())
+	}
+	if !c.DType().IsString() {
+		return nil, uerr.New(uerr.KindType, "transpose",
+			"the column names come from %q, a %s column, where text is needed", from, c.DType()).
+			Hint("cast it: .Cast(ursus.String)")
+	}
+	names, err := Frame(c).Select(Col(from).Cast(String)).Collect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s, err := names.Column[string](from)
+	if err != nil {
+		return nil, err
+	}
+	o.ColumnNames, o.ColumnNamesFrom = make([]string, s.Len()), ""
+	for i := range o.ColumnNames {
+		v, ok := s.Get(i)
+		if !ok {
+			return nil, uerr.New(uerr.KindValue, "transpose",
+				"the column names come from %q, which is null at row %d", from, i)
+		}
+		o.ColumnNames[i] = v
+	}
+	rest, err := df.Lazy().Drop(from).Collect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return rest.Transpose(ctx, o)
+}
+
 // TransposeOptions says how Transpose names what it makes.
 type TransposeOptions struct {
 	// IncludeHeader adds a first column of the frame's column names, named
@@ -373,17 +414,24 @@ type TransposeOptions struct {
 	// ColumnNames names the new columns, one for each row; "column_0" and on when
 	// empty.
 	ColumnNames []string
+
+	// ColumnNamesFrom names the new columns by a text column's values, which must
+	// not be null, and leaves that column out: Polars' column_names given a
+	// column's name (step 320). It is not given with ColumnNames.
+	ColumnNamesFrom string
 }
 
 // Transpose turns rows into columns, as Polars' DataFrame.transpose does: column j
 // of the answer holds row j of the frame, a value for each of its columns, in their
-// order. Every column is cast to the type all of them meet at, as a conditional's
-// branches meet, so an Int64 and a Float64 make Float64 columns; columns that meet
-// at none, a String and a number, are refused, where Polars casts them all to
-// String.
+// order. Every column is cast to the type all of them meet at, Polars' supertype, so
+// an Int64 and a Float64 make Float64 columns and text beside a number makes text
+// (step 320; it was refused). A List or a Struct meets only its own type.
 func (df *DataFrame) Transpose(ctx context.Context, o TransposeOptions) (*DataFrame, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if o.ColumnNamesFrom != "" {
+		return df.transposeNamed(ctx, o)
 	}
 	b := df.batch
 	rows, width := b.Rows(), b.NumCols()
@@ -394,7 +442,7 @@ func (df *DataFrame) Transpose(ctx context.Context, o TransposeOptions) (*DataFr
 	}
 	common := dtype.Null
 	for _, f := range b.Schema().All() {
-		t, ok := dtype.Promote(common, f.Type)
+		t, ok := dtype.Supertype(common, f.Type)
 		if !ok {
 			return nil, uerr.New(uerr.KindType, "transpose",
 				"transpose puts every column in one, and %s and %s (%s) have no common type",

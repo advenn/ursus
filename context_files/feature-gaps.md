@@ -231,8 +231,8 @@ differs from their input's, or scalars outside a group-by.
 | built: `concat`'s relaxed, horizontal and align modes, and `ConcatFrames` for `DataFrame`s, in step 307 | — |
 | join: emit a computed key column. `maintain_order` of every order and kind built in step 314; an as-of `tolerance` on numeric keys, as-of `coalesce` and `JoinWhere`'s suffix in 315 | P1 |
 | group-by: `map_groups`, iterating over groups; `.over(order_by)` of an aggregate; mapping `explode` and `join`. `head` and `tail` built in step 308, `having` in 309, `all` in 310, an integer index for `GroupByDynamic`, `Rolling` and `upsample` in 312 | P1/P2 |
-| `to_dummies`, `unstack`, `gather`, `extend`, `glimpse`, `estimated_size`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293; `insert_column` and `hash_rows` in step 302; `update` in 316 | P2 |
-| `transpose` of mixed String and number, with names from a column. `unpivot` without `On` built in step 304 | P2 |
+| `gather`, `extend`, `glimpse`, `estimated_size`, `interpolate_by`, `with_columns_seq`. `gather_every`, `clear`, `is_empty` and `equals` built in step 293; `insert_column` and `hash_rows` in step 302; `update` in 316; `to_dummies` and `unstack` in 320 | P2 |
+| built: `unpivot` without `On`, in step 304; `transpose` of mixed text and numbers, and named from a column, in 320 | — |
 | built: an eager `Series` with operations, in step 319: sort, unique, reverse, fills, casts, slices and the aggregates; Polars' Series mirrors every Expr method, which here a frame's expressions answer | — |
 | built: `FromRows`, a frame from Go structs, in step 317; `RowsByKey`, `ToMaps` and `IterRows` in 318 | — |
 
