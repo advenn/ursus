@@ -1711,6 +1711,10 @@ changes is what Go asks for.</p>
 <td><code>df.RowsByKey[K, T]("k")</code>, <code>df.ToMaps()</code>, <code>lf.IterRows[T](ctx)</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>s.sort()</code>, <code>s.unique()</code>, <code>s.mean()</code>, <code>s.cast(pl.Float64)</code></td>
+<td><code>s.Sort(ctx)</code>, <code>s.Unique(ctx)</code>, <code>s.Mean(ctx)</code>, <code>s.Cast[float64](ctx, ursus.Float64)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>pl.DataFrame(list_of_dataclasses)</code></td>
 <td><code>ursus.FromRows(structs)</code> (new in 0.6.7)</td>
 </tr>
