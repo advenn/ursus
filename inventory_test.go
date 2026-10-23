@@ -392,7 +392,7 @@ func TestEveryPlanNodeIsCovered(t *testing.T) {
 			}
 
 			// Marked as compile marks it, or a Cache could never appear here.
-			n, err := plan.Resolve(t.Context(), plan.MarkShared(lf.Plan()))
+			n, err := plan.Resolve(t.Context(), plan.MarkShared(lf.Plan(), true))
 			if err != nil {
 				t.Fatal(err)
 			}

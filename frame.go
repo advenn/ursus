@@ -78,16 +78,18 @@ func (df *DataFrame) Rows[T any]() (rows []T, err error) {
 // Display quality is not cosmetic: this is what people look at all day, and a
 // column of unaligned numbers with no visible types is the difference between a
 // library that feels finished and one that does not.
-func (df *DataFrame) String() string {
-	const maxRows = 10
+func (df *DataFrame) String() string { return df.table(min(df.Height(), 10), df.Height()) }
 
+// table draws the frame's first rows rows under the shape of a frame of height rows,
+// and says how many more there are: String's ten of every row, Show's all of its own.
+func (df *DataFrame) table(rows, height int) string {
 	schema := df.batch.Schema()
 	nCols := schema.Len()
 	if nCols == 0 {
-		return "shape: (" + strconv.Itoa(df.Height()) + ", 0)\n"
+		return "shape: (" + strconv.Itoa(height) + ", 0)\n"
 	}
 
-	shown := min(df.Height(), maxRows)
+	shown := rows
 
 	// Header is two lines per column: name, then dtype. Seeing the dtype without
 	// asking prevents a whole category of confusion about why a comparison failed.
@@ -116,7 +118,7 @@ func (df *DataFrame) String() string {
 	}
 
 	var b strings.Builder
-	b.WriteString("shape: (" + strconv.Itoa(df.Height()) + ", " + strconv.Itoa(nCols) + ")\n")
+	b.WriteString("shape: (" + strconv.Itoa(height) + ", " + strconv.Itoa(nCols) + ")\n")
 
 	writeRow := func(vals []string) {
 		b.WriteString("│")
@@ -145,8 +147,8 @@ func (df *DataFrame) String() string {
 	}
 	writeRule("└", "┴", "┘")
 
-	if df.Height() > shown {
-		b.WriteString("… " + strconv.Itoa(df.Height()-shown) + " more rows\n")
+	if height > shown {
+		b.WriteString("… " + strconv.Itoa(height-shown) + " more rows\n")
 	}
 	return b.String()
 }

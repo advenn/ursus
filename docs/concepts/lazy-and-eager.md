@@ -42,6 +42,11 @@ The optimizer rewrites the plan into one that gives the same answer for less wor
 - **constant folding and simplification;**
 - **common subplans:** a subtree used twice runs once.
 
+A subtree used twice runs once when it joins, aggregates or sorts, which is worth the
+fence it puts around it: a filter above one use stops there. *New in 0.6.7:*
+`Cache()` asks it of any query, as Polars' `cache` does, a scan read twice or a Go
+function's answer; a query used once is not cached.
+
 `Explain` shows the plan. `Optimized(false)` shows it as written:
 
 --8<-- "Example_lazyExplainUnoptimized.md"
@@ -69,6 +74,9 @@ takes a context, which can cancel it:
 
 `df.Lazy()` turns a frame back into a query, for a chain of several steps optimized
 together.
+
+Printed, a frame draws its first ten rows. *New in 0.6.7:* `Show(n)` draws its first
+n, every one, as Polars' `show`, and a query's `Show(ctx, n)` computes only those.
 
 ## Streaming the answer
 

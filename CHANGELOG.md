@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–327, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–328, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -96,6 +96,10 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`MapRows`, `MapColumns`, `Show` and `Cache`** (328), as Polars' `map_rows`,
+  `map_columns`, `show` and `cache`: a Go function of each row, typed by its struct
+  or a `[]any`, or of each named column; the first n rows drawn, every one; and a
+  query run once where it is used twice, whatever it holds.
 - **A frame's conveniences** (327), as Polars' frame methods: `Corr`, NumPy's
   correlation of every pair of columns; `Gather`, `Row`, `RowNamed`, `RowWhere`, `Item`
   and `ItemAt`; `GetColumnIndex`, `ReplaceColumn`, `DropInPlace`, `ToSeries` and

@@ -36,6 +36,20 @@ something that works on many values at once.
 
 --8<-- "Example_udfBatches.md"
 
+## A row at a time: MapRows
+
+*New in 0.6.7.* A frame's `MapRows(ctx, fn)` calls `fn` on each row, as Polars'
+`map_rows`. A row is a struct, read as `Rows` reads one, or a `[]any` of its values in
+the columns' order; a struct answer is a column a field, and any other answer one
+column named `map`. The rows are decoded and `fn` called once each, in order, on one
+goroutine, so an expression or `MapBatches` is the faster way where one can say it.
+
+## A whole column: MapColumns
+
+*New in 0.6.7.* A frame's `MapColumns(ctx, names, fn)` replaces each named column with
+`fn` of it, as Polars' `map_columns`: the answer keeps the column's name and place,
+and is as long as the frame, or one value, which every row takes.
+
 ## Errors
 
 An error `fn` returns fails the query, naming the function, the value and the row of

@@ -653,6 +653,8 @@ func TestEveryEntryPointRecovers(t *testing.T) {
 			return reflect.ValueOf(io.Writer(&bytes.Buffer{}))
 		case reflect.TypeFor[string]():
 			return reflect.ValueOf(filepath.Join(t.TempDir(), "out"))
+		case reflect.TypeFor[int]():
+			return reflect.ValueOf(2) // Show's limit
 		}
 		t.Fatalf("no argument for a %s", in)
 		return reflect.Value{}

@@ -130,6 +130,8 @@ changes is what Go asks for.
 | `.to_physical()`, `.reinterpret(signed=True)` | `.ToPhysical()`, `.Reinterpret(true)` (new in 0.6.7) |
 | `.name.keep()`, `.name.to_uppercase()`, `.name.replace(p, v)`, `.name.prefix_fields("p_")`; `.struct.drop(["f"])` | `.Name().Keep()`, `.Name().ToUpper()`, `.Name().Replace(p, v, false)`, `.Name().PrefixFields("p_")`; `.Struct().Drop("f")` (new in 0.6.7) |
 | `.map_elements(f)`, `.map_batches(f)` | `.MapElements(name, type, f)`, `.MapBatches(name, type, f)`, with a Go function |
+| `df.map_rows(f)`, `df.map_columns(["a"], f)` | `df.MapRows(ctx, f)`, `df.MapColumns(ctx, []string{"a"}, f)` (new in 0.6.7) |
+| `df.show(20)`, `lf.cache()` | `df.Show(20)`, `lf.Cache()` (new in 0.6.7) |
 | `df.write_parquet(f)`, `df.write_csv(f)` | `lf.WriteParquet(ctx, w)`, `lf.WriteCSV(ctx, w)`, to any `io.Writer` |
 | `df.to_arrow()` | `df.Record()`, zero-copy |
 | `df["a"].to_list()` | `df.Column[int64]("a")`, then `.Values()` |

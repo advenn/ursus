@@ -32,6 +32,8 @@ import (
 // subtree, and every site sees every column the subtree produces. MarkShared caches
 // only subtrees with a join, an aggregate or a sort in them, where computing once
 // is worth more than that (step 143).
+//
+// A Cache with ID 0 is one LazyFrame.Cache asked for, before MarkShared numbers it.
 type Cache struct {
 	ID    int
 	Input Node
@@ -48,16 +50,26 @@ func (c *Cache) WithChildren(kids []Node) Node {
 }
 
 func (c *Cache) Schema() (*dtype.Schema, error) { return c.Input.Schema() }
-func (c *Cache) Label() string                  { return "CACHE #" + strconv.Itoa(c.ID) }
+func (c *Cache) Label() string {
+	if c.ID == 0 {
+		return "CACHE" // asked for, not yet numbered
+	}
+	return "CACHE #" + strconv.Itoa(c.ID)
+}
 
 // MarkShared wraps every subtree of root that has more than one parent, and holds
-// a join, an aggregate or a sort, in a Cache. Sharing is by pointer: the nodes a
-// LazyFrame reused. It returns root unchanged when nothing is shared.
+// a join, an aggregate or a sort, in a Cache, when auto is set. Sharing is by
+// pointer: the nodes a LazyFrame reused. It returns root unchanged when nothing is
+// shared.
+//
+// A Cache that LazyFrame.Cache asked for, ID 0, is numbered when it has more than
+// one parent, whatever it holds and whether or not auto is set, and dropped when it
+// has one: run once, it would only fence the rules out.
 //
 // A node is shared when it has more than one PARENT, not when it is reached by more
 // than one path: the nodes below a shared subtree are reached twice through it, and
 // are not themselves shared unless something else also points at them.
-func MarkShared(root Node) Node {
+func MarkShared(root Node, auto bool) Node {
 	parents := map[Node]int{}
 	seen := map[Node]bool{}
 	var count func(Node)
@@ -74,12 +86,20 @@ func MarkShared(root Node) Node {
 	count(root)
 
 	worth := map[Node]bool{}
+	asked := false
 	for n, p := range parents {
-		if p > 1 && worthSharing(n) {
+		if c, ok := n.(*Cache); ok && c.ID == 0 {
+			asked = true
+			continue
+		}
+		if auto && p > 1 && worthSharing(n) {
 			worth[n] = true
 		}
 	}
-	if len(worth) == 0 {
+	if c, ok := root.(*Cache); ok && c.ID == 0 {
+		asked = true
+	}
+	if len(worth) == 0 && !asked {
 		return root
 	}
 
@@ -89,6 +109,15 @@ func MarkShared(root Node) Node {
 	rebuild = func(n Node) Node {
 		if r, ok := memo[n]; ok {
 			return r
+		}
+		if c, ok := n.(*Cache); ok && c.ID == 0 {
+			out := rebuild(c.Input)
+			if parents[n] > 1 {
+				out = &Cache{ID: next, Input: out}
+				next++
+			}
+			memo[n] = out
+			return out
 		}
 		out := n
 		if kids := n.Children(); len(kids) > 0 {
