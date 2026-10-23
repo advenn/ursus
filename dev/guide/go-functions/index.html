@@ -1260,6 +1260,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-row-at-a-time-maprows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A row at a time: MapRows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-whole-column-mapcolumns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A whole column: MapColumns
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#errors" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1533,6 +1555,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-row-at-a-time-maprows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A row at a time: MapRows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-whole-column-mapcolumns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A whole column: MapColumns
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#errors" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1696,6 +1740,16 @@ something that works on many values at once.</p>
 </span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>│ null    │ 0       │
 </span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>└─────────┴─────────┘
 </span></code></pre></div>
+<h2 id="a-row-at-a-time-maprows">A row at a time: MapRows<a class="headerlink" href="#a-row-at-a-time-maprows" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7.</em> A frame's <code>MapRows(ctx, fn)</code> calls <code>fn</code> on each row, as Polars'
+<code>map_rows</code>. A row is a struct, read as <code>Rows</code> reads one, or a <code>[]any</code> of its values in
+the columns' order; a struct answer is a column a field, and any other answer one
+column named <code>map</code>. The rows are decoded and <code>fn</code> called once each, in order, on one
+goroutine, so an expression or <code>MapBatches</code> is the faster way where one can say it.</p>
+<h2 id="a-whole-column-mapcolumns">A whole column: MapColumns<a class="headerlink" href="#a-whole-column-mapcolumns" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7.</em> A frame's <code>MapColumns(ctx, names, fn)</code> replaces each named column with
+<code>fn</code> of it, as Polars' <code>map_columns</code>: the answer keeps the column's name and place,
+and is as long as the frame, or one value, which every row takes.</p>
 <h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
 <p>An error <code>fn</code> returns fails the query, naming the function, the value and the row of
 its batch. A panic in <code>fn</code> is reported the same way, rather than ending the program.</p>

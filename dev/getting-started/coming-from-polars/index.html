@@ -1883,6 +1883,14 @@ changes is what Go asks for.</p>
 <td><code>.MapElements(name, type, f)</code>, <code>.MapBatches(name, type, f)</code>, with a Go function</td>
 </tr>
 <tr>
+<td><code>df.map_rows(f)</code>, <code>df.map_columns(["a"], f)</code></td>
+<td><code>df.MapRows(ctx, f)</code>, <code>df.MapColumns(ctx, []string{"a"}, f)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.show(20)</code>, <code>lf.cache()</code></td>
+<td><code>df.Show(20)</code>, <code>lf.Cache()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>df.write_parquet(f)</code>, <code>df.write_csv(f)</code></td>
 <td><code>lf.WriteParquet(ctx, w)</code>, <code>lf.WriteCSV(ctx, w)</code>, to any <code>io.Writer</code></td>
 </tr>

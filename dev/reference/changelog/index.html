@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–327, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–328, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3132,6 +3132,10 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>MapRows</code>, <code>MapColumns</code>, <code>Show</code> and <code>Cache</code></strong> (328), as Polars' <code>map_rows</code>,
+  <code>map_columns</code>, <code>show</code> and <code>cache</code>: a Go function of each row, typed by its struct
+  or a <code>[]any</code>, or of each named column; the first n rows drawn, every one; and a
+  query run once where it is used twice, whatever it holds.</li>
 <li><strong>A frame's conveniences</strong> (327), as Polars' frame methods: <code>Corr</code>, NumPy's
   correlation of every pair of columns; <code>Gather</code>, <code>Row</code>, <code>RowNamed</code>, <code>RowWhere</code>, <code>Item</code>
   and <code>ItemAt</code>; <code>GetColumnIndex</code>, <code>ReplaceColumn</code>, <code>DropInPlace</code>, <code>ToSeries</code> and

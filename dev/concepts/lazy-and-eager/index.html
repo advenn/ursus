@@ -1653,6 +1653,10 @@ chain has one <code>if err != nil</code>, at the end.</p>
 <li><strong>constant folding and simplification;</strong></li>
 <li><strong>common subplans:</strong> a subtree used twice runs once.</li>
 </ul>
+<p>A subtree used twice runs once when it joins, aggregates or sorts, which is worth the
+fence it puts around it: a filter above one use stops there. <em>New in 0.6.7:</em>
+<code>Cache()</code> asks it of any query, as Polars' <code>cache</code> does, a scan read twice or a Go
+function's answer; a query used once is not cached.</p>
 <p><code>Explain</code> shows the plan. <code>Optimized(false)</code> shows it as written:</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nx">q</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sales</span><span class="p">().</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="nx">Filter</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"qty"</span><span class="p">).</span><span class="nx">Gt</span><span class="p">(</span><span class="kt">int64</span><span class="p">(</span><span class="mi">3</span><span class="p">))).</span>
@@ -1709,6 +1713,8 @@ takes a context, which can cancel it:</p>
 </span></code></pre></div>
 <p><code>df.Lazy()</code> turns a frame back into a query, for a chain of several steps optimized
 together.</p>
+<p>Printed, a frame draws its first ten rows. <em>New in 0.6.7:</em> <code>Show(n)</code> draws its first
+n, every one, as Polars' <code>show</code>, and a query's <code>Show(ctx, n)</code> computes only those.</p>
 <h2 id="streaming-the-answer">Streaming the answer<a class="headerlink" href="#streaming-the-answer" title="Permanent link">&para;</a></h2>
 <p><code>CollectBatches</code> is a Go iterator over the answer's batches, so an answer larger than
 memory never has to be held at once:</p>
