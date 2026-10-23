@@ -1879,6 +1879,10 @@ changes is what Go asks for.</p>
 <td><code>ursus.Array(ursus.Float64, 3)</code>, <code>.List().ToArray(3)</code>, <code>.Arr().ToList()</code>; a Go <code>[3]float64</code> in rows (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>.arr.sum()</code>, <code>.arr.sort()</code>, <code>.arr.eval(pl.element() * 2)</code>, <code>.arr.to_struct()</code>, <code>.arr.dot(b)</code></td>
+<td><code>.Arr().Sum()</code>, <code>.Arr().Sort()</code>, <code>.Arr().Eval(ursus.Element().Mul(2), false)</code>, <code>.Arr().ToStruct()</code>, <code>.Arr().Dot(b)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>pl.arctan2(y, x)</code>, <code>.truediv(v)</code>, <code>.limit(n)</code>, <code>.pipe(f)</code></td>
 <td><code>ursus.Arctan2(y, x)</code>, <code>.TrueDiv(v)</code>, <code>.Limit(n)</code>, <code>.Pipe(f)</code> (new in 0.6.7)</td>
 </tr>
