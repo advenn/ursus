@@ -61,6 +61,7 @@ var levels = map[string]int{
 	"internal/execopt": 30,
 
 	"internal/plan":            40, // + expr, source, dtype
+	"internal/source/hive":     42, // + kernel: a dataset's partition keys, from its files' paths
 	"internal/source/memsrc":   45, // concrete sources sit above the contract
 	"internal/source/parquet":  45,
 	"internal/source/csv":      45,

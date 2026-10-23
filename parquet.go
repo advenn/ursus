@@ -5,15 +5,18 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 
 	arrowpq "github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/compress"
 
 	"github.com/advenn/ursus/internal/exec"
+	"github.com/advenn/ursus/internal/source/hive"
 	"github.com/advenn/ursus/internal/source/parquet"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -27,6 +30,35 @@ type ParquetOption func(*parquet.Options)
 // Parquet reader that can change which rows come back, so a wrong answer must be
 // bisectable to it — the same reason plan.Flags can disable each optimizer rule.
 func WithPruning(b bool) ParquetOption { return func(o *parquet.Options) { o.Prune = b } }
+
+// WithHivePartitioning reads a hive dataset's partition columns from its files'
+// paths, as Polars' hive_partitioning: each directory named key=value gives the rows
+// of the files beneath it a column key of value, its type inferred from every file's
+// value, as Polars infers it. On by default for a directory, where the directories
+// below it count, and off otherwise; on for a file, a list or a glob, every directory
+// of each path counts, as in Polars. New in 0.6.7.
+func WithHivePartitioning(b bool) ParquetOption {
+	return func(o *parquet.Options) { o.Hive.Partitioning = &b }
+}
+
+// WithHiveSchema gives the types of the partition keys it names, as Polars'
+// hive_schema; the others are inferred, where Polars refuses a key it does not
+// name. New in 0.6.7.
+func WithHiveSchema(s *Schema) ParquetOption {
+	return func(o *parquet.Options) { o.Hive.Schema = s }
+}
+
+// WithHiveDates reads a partition key of dates or of instants as a Date or a
+// Datetime, as Polars' try_parse_hive_dates; on by default. New in 0.6.7.
+func WithHiveDates(b bool) ParquetOption {
+	return func(o *parquet.Options) { o.Hive.NoDates = !b }
+}
+
+// WithIncludeFilePaths adds a column named name of each row's file path, last, as
+// Polars' include_file_paths. New in 0.6.7.
+func WithIncludeFilePaths(name string) ParquetOption {
+	return func(o *parquet.Options) { o.Hive.PathColumn = name }
+}
 
 func parquetOptions(opts []ParquetOption) parquet.Options {
 	o := parquet.DefaultOptions()
@@ -60,8 +92,95 @@ func fileOpener(path string) parquet.Opener {
 // Lists and structs are read; a column ursus cannot read — an encrypted one, a map,
 // a list of lists — is refused with an error naming it when a query reads it,
 // rather than dropped.
+//
+// A directory is read whole, every file below it in the order of their paths, as
+// Polars reads one, and as a hive dataset: each directory below it named key=value
+// gives its files' rows a column key, after the files' own columns, of the type the
+// values infer; a filter on the keys skips the files it rules out before any is
+// opened. A name beginning '.' or '_' is passed over. See WithHivePartitioning,
+// WithHiveSchema, WithHiveDates and WithIncludeFilePaths. New in 0.6.7.
 func ScanParquet(path string, opts ...ParquetOption) *LazyFrame {
-	return scan(parquet.New([]parquet.Opener{fileOpener(path)}, path, parquetOptions(opts)))
+	o := parquetOptions(opts)
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		paths, err := datasetFiles(path)
+		if err != nil {
+			return &LazyFrame{err: err}
+		}
+		return scanParquetPaths(paths, path, path, o)
+	}
+	return scanParquetPaths([]string{path}, path, "", o)
+}
+
+// datasetFiles is every file below dir, as Polars reads a directory, sorted by path:
+// a name beginning '.' or '_', a file's or a directory's, is passed over, as Spark and
+// Hive name what they keep beside the data: _SUCCESS, _temporary, .crc files.
+func datasetFiles(dir string) ([]string, error) {
+	var paths []string
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			return err
+		case p != dir && (strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "_")):
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+		case !d.IsDir():
+			paths = append(paths, p)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "listing %s", dir)
+	}
+	if len(paths) == 0 {
+		return nil, uerr.New(uerr.KindIO, "scan_parquet", "no files in %s", dir)
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+// scanParquetPaths reads paths as one frame, described as desc: their partition keys
+// read below root, a directory scanned, or from the whole of each where root is "",
+// where hive partitioning is on, and their paths where asked for.
+func scanParquetPaths(paths []string, desc, root string, o parquet.Options) *LazyFrame {
+	opens := make([]parquet.Opener, len(paths))
+	for i, p := range paths {
+		opens[i] = fileOpener(p)
+	}
+	if err := partition(&o, paths, root); err != nil {
+		return &LazyFrame{err: err}
+	}
+	return scan(parquet.NewNamed(opens, paths, desc, o))
+}
+
+// partition sets o's partition columns from paths, as o.Hive asks: hive partitioning
+// is on by default where a directory is scanned, root.
+func partition(o *parquet.Options, paths []string, root string) error {
+	on := root != ""
+	if o.Hive.Partitioning != nil {
+		on = *o.Hive.Partitioning
+	}
+	if !on && o.Hive.PathColumn == "" {
+		return nil
+	}
+	pt := &parquet.Partitioned{Dates: !o.Hive.NoDates, PathColumn: o.Hive.PathColumn, Paths: paths}
+	if on {
+		parts, err := hive.Parse(root, paths)
+		if err != nil {
+			return err
+		}
+		if len(parts.Keys) > 0 {
+			pt.Parts = parts
+		}
+		if s := o.Hive.Schema; s != nil {
+			pt.Types = make(map[string]DataType, s.Len())
+			for _, f := range s.FieldSlice() {
+				pt.Types[f.Name] = f.Type
+			}
+		}
+	}
+	o.Partitioned = pt
+	return nil
 }
 
 // ScanParquetGlob reads every file matching a shell pattern as one frame, sorted by
@@ -91,15 +210,11 @@ func ScanParquetFiles(paths []string, opts ...ParquetOption) *LazyFrame {
 	if len(paths) == 0 {
 		return &LazyFrame{err: uerr.New(uerr.KindValue, "scan_parquet", "no files given")}
 	}
-	opens := make([]parquet.Opener, len(paths))
-	for i, p := range paths {
-		opens[i] = fileOpener(p)
-	}
 	desc := paths[0]
 	if len(paths) > 1 {
 		desc += " and " + strconv.Itoa(len(paths)-1) + " more"
 	}
-	return scan(parquet.NewNamed(opens, paths, desc, parquetOptions(opts)))
+	return scanParquetPaths(paths, desc, "", parquetOptions(opts))
 }
 
 // ScanParquetBytes reads a Parquet file from memory.
@@ -165,7 +280,11 @@ func ScanParquetFrom(files []ParquetFile, opts ...ParquetOption) *LazyFrame {
 	if len(names) > 1 {
 		desc += " and " + strconv.Itoa(len(names)-1) + " more"
 	}
-	return scan(parquet.NewNamed(opens, names, desc, parquetOptions(opts)))
+	o := parquetOptions(opts)
+	if err := partition(&o, names, ""); err != nil {
+		return &LazyFrame{err: err}
+	}
+	return scan(parquet.NewNamed(opens, names, desc, o))
 }
 
 // readerAtOpener adapts a ParquetFile's Open to the reader's Opener: a section of

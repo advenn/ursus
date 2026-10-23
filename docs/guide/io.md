@@ -58,6 +58,17 @@ a match.
 - `WriteParquet(ctx, w)` and `SinkParquet(ctx, path)` write, with `WithCompression`,
   Snappy by default, `WithRowGroupRows` and `WithStatistics`.
 
+*New in 0.6.7:* `ScanParquet(dir)` reads every file below a directory as one frame,
+as Polars' `scan_parquet` does, and reads a hive dataset's partitions: each directory
+named `key=value` gives the rows of the files beneath it a column `key`, after the
+files' own, its type inferred from every file's value as Polars infers it, an integer,
+a float, a Boolean, a date or an instant, or text. `__HIVE_DEFAULT_PARTITION__` is a
+null. A filter on the keys skips the files it rules out before any is opened.
+`WithHiveSchema(s)` gives keys their types, `WithHiveDates(false)` reads dates as
+text, and `WithHivePartitioning(true)` reads the keys of a file's, a list's or a
+glob's whole paths, where by default only a directory's are read.
+`WithIncludeFilePaths(name)` adds a column of each row's file path.
+
 ## From object storage
 
 ursus has no S3 or GCS client of its own: each store wants its vendor's SDK, and ursus

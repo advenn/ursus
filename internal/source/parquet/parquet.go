@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ import (
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/source"
+	"github.com/advenn/ursus/internal/source/hive"
 	"github.com/advenn/ursus/internal/uerr"
 )
 
@@ -34,6 +36,37 @@ type Options struct {
 	// On by default; the switch exists so a wrong answer can be bisected to them,
 	// the parts of this package that can change which rows come back.
 	Prune bool
+
+	// Hive is a scan's choices about its files' paths, which the scan makes
+	// Partitioned from (step 347).
+	Hive HiveOptions
+
+	// Partitioned adds a hive dataset's partition columns and a column of each
+	// file's path to the files' own (step 347); nil for neither.
+	Partitioned *Partitioned
+}
+
+// HiveOptions are a scan's choices about its files' paths: whether their key=value
+// directories are partition columns, nil for the default, on for a directory only;
+// given types of some keys; whether a key of dates or instants is text; and the name
+// of a column of each file's path, "" for none.
+type HiveOptions struct {
+	Partitioning *bool
+	Schema       *dtype.Schema
+	NoDates      bool
+	PathColumn   string
+}
+
+// Partitioned is what a scan adds to its files' columns: a hive dataset's partition
+// keys, each file's values of them read from its path, and a column naming each file,
+// Polars' include_file_paths.
+type Partitioned struct {
+	Parts *hive.Partitions          // nil for no partition column
+	Types map[string]dtype.DataType // given types of some keys, Polars' hive_schema
+	Dates bool                      // a key of dates or instants is one, Polars' try_parse_hive_dates
+
+	PathColumn string   // the column of each file's path, "" for none
+	Paths      []string // each file's path, for it
 }
 
 // DefaultOptions enables pruning.
@@ -74,6 +107,14 @@ type Source struct {
 	// return if a query asks for it. Non-nil entries are the nested columns.
 	unread map[int]error
 
+	// files is the files' own columns, reconciled, where schema adds partition
+	// columns and a path column to them (step 347). consts holds, by file and then
+	// by field of schema, the one-row column of a field every row of the file
+	// shares, a partition value or the file's path; nil for a field the file holds.
+	files  *dtype.Schema
+	consts [][]*data.Column
+	fixed  []bool // by field of schema: a field consts give
+
 	// Row groups read and skipped, across every reader this source has opened.
 	//
 	// Without a counter, "the pruner works" is untestable: an inexact pushdown
@@ -83,6 +124,9 @@ type Source struct {
 	statsMu sync.Mutex
 	read    int
 	skipped int
+
+	// Files read and skipped by their partition values (step 347).
+	filesRead, filesSkipped int
 
 	// rows is every file's footer row count, summed when Schema reads them; -1
 	// until it has.
@@ -95,6 +139,14 @@ func (s *Source) RowGroupStats() (read, skipped int) {
 	s.statsMu.Lock()
 	defer s.statsMu.Unlock()
 	return s.read, s.skipped
+}
+
+// FileStats reports how many files were read and how many their partition values
+// ruled out, across every reader opened from this source.
+func (s *Source) FileStats() (read, skipped int) {
+	s.statsMu.Lock()
+	defer s.statsMu.Unlock()
+	return s.filesRead, s.filesSkipped
 }
 
 func (s *Source) countGroup(skipped bool) {
@@ -169,7 +221,9 @@ func (s *Source) ClassifyPredicates(preds []expr.Node) []plan.Pushdown {
 		return out
 	}
 	for i, p := range preds {
-		if prunable(p, full) {
+		if prunable(p, full) || s.onFixed(p, full) {
+			// A conjunct of partition columns, or of the path, rules out whole
+			// files, judged on their values before any is opened (keepFile).
 			out[i] = plan.Inexact
 		} else if anyDictable(p, full) {
 			// Evaluated on a dictionary in the reader, which drops only rows that
@@ -265,12 +319,149 @@ func (s *Source) readSchemas(ctx context.Context) (*dtype.Schema, map[int]error,
 			}
 		}
 	}
-	out, err := dtype.NewSchema(fields...)
+	files, err := dtype.NewSchema(fields...)
 	if err != nil {
 		return nil, nil, err
 	}
+	s.files = files
+	out, err := s.partitioned(files)
+	if err != nil {
+		return nil, nil, err
+	}
+	for i := range s.fixed {
+		delete(unread, i) // a partition value read where the file's column is not
+	}
 	s.rows.Store(rows)
 	return out, unread, nil
+}
+
+// partitioned is files' schema with the partition columns and the path column, and
+// sets each file's values of them (step 347). A partition key that names a file
+// column keeps the column's place and its type, and its values replace the file's,
+// as Polars reads them; the others follow the files' columns in path order, and the
+// path column comes last.
+func (s *Source) partitioned(files *dtype.Schema) (*dtype.Schema, error) {
+	pt := s.opts.Partitioned
+	if pt == nil {
+		return files, nil
+	}
+	fields := files.FieldSlice()
+	s.consts = make([][]*data.Column, len(s.opens))
+	place := func(f dtype.Field, vals func(k int) *data.Column) {
+		i := slices.IndexFunc(fields, func(g dtype.Field) bool { return g.Name == f.Name })
+		if i < 0 {
+			i = len(fields)
+			fields = append(fields, f)
+		} else {
+			fields[i].Nullable = f.Nullable // the file's values of it are not read
+		}
+		for k := range s.consts {
+			s.consts[k] = append(s.consts[k], make([]*data.Column, len(fields)-len(s.consts[k]))...)
+			s.consts[k][i] = vals(k)
+		}
+	}
+	if pt.Parts != nil {
+		types := pt.Parts.Types(pt.Types, files, pt.Dates)
+		vals, err := pt.Parts.Values(types)
+		if err != nil {
+			return nil, uerr.Annotate(err, "scan_parquet", s.desc)
+		}
+		for j, key := range pt.Parts.Keys {
+			null := false
+			for k := range pt.Parts.Null {
+				null = null || pt.Parts.Null[k][j]
+			}
+			place(dtype.Field{Name: key, Type: types[j], Nullable: null}, func(k int) *data.Column { return vals[k][j] })
+		}
+	}
+	if pt.PathColumn != "" {
+		if files.IndexOf(pt.PathColumn) >= 0 || pt.Parts != nil && slices.Contains(pt.Parts.Keys, pt.PathColumn) {
+			// Polars: "column name for file paths "a" conflicts with column name from file".
+			return nil, uerr.New(uerr.KindSchema, "scan_parquet",
+				"the file paths' column %q is a column of the files already", pt.PathColumn)
+		}
+		place(dtype.Field{Name: pt.PathColumn, Type: dtype.String}, func(k int) *data.Column {
+			return data.NewString(pt.PathColumn, []string{pt.Paths[k]}, bitmap.AllSet(1))
+		})
+	}
+	s.fixed = make([]bool, len(fields))
+	for k := range s.consts {
+		s.consts[k] = append(s.consts[k], make([]*data.Column, len(fields)-len(s.consts[k]))...)
+		for i, c := range s.consts[k] {
+			s.fixed[i] = s.fixed[i] || c != nil
+		}
+	}
+	return dtype.NewSchema(fields...)
+}
+
+// onFixed reports whether p reads partition columns or the path column alone, which
+// every row of a file shares.
+func (s *Source) onFixed(p expr.Node, full *dtype.Schema) bool {
+	names := expr.RootNames(p)
+	for _, n := range names {
+		if i := full.IndexOf(n); i < 0 || i >= len(s.fixed) || !s.fixed[i] {
+			return false
+		}
+	}
+	return len(names) > 0
+}
+
+// nextKept is the first file from k that keepFile keeps, len(opens) for none.
+func (s *Source) nextKept(ctx context.Context, k int, full *dtype.Schema, preds []expr.Node,
+	eval func(context.Context, expr.Node, *data.Batch) (*data.Column, error)) (int, error) {
+	for ; k < len(s.opens); k++ {
+		keep, err := s.keepFile(ctx, k, full, preds, eval)
+		if err != nil || keep {
+			return k, err
+		}
+	}
+	return k, nil
+}
+
+// keepFile reports whether file k may hold a row every conjunct of preds that reads
+// partition columns or the path alone keeps, judged on the file's values of them by
+// eval: one that keeps no row of them rules the file out before it is opened.
+func (s *Source) keepFile(ctx context.Context, k int, full *dtype.Schema, preds []expr.Node,
+	eval func(context.Context, expr.Node, *data.Batch) (*data.Column, error)) (bool, error) {
+	if s.consts == nil || eval == nil || !s.opts.Prune {
+		return true, nil
+	}
+	keep := true
+	for _, p := range conjuncts(preds) {
+		if !s.onFixed(p, full) {
+			continue
+		}
+		var fs []dtype.Field
+		var cols []*data.Column
+		for _, n := range expr.RootNames(p) {
+			i := full.IndexOf(n)
+			fs, cols = append(fs, full.Field(i)), append(cols, s.consts[k][i].Rename(n))
+		}
+		sch, err := dtype.NewSchema(fs...)
+		if err != nil {
+			return false, err
+		}
+		b, err := data.NewBatch(sch, cols)
+		if err != nil {
+			return false, err
+		}
+		got, err := eval(ctx, p, b)
+		if err != nil {
+			return false, err
+		}
+		if got.Len() != 1 || !got.IsValid(0) || !got.Bools().Get(0) {
+			keep = false
+			break
+		}
+	}
+	s.statsMu.Lock()
+	if keep {
+		s.filesRead++
+	} else {
+		s.filesSkipped++
+	}
+	s.statsMu.Unlock()
+	return keep, nil
 }
 
 // sameColumns refuses got unless it has exactly want's columns, by NAME, each of
@@ -348,12 +539,15 @@ func (s *Source) layoutFor(full *dtype.Schema, md *metadata.FileMetaData, k int)
 	if err != nil {
 		return fileLayout{}, uerr.Annotate(err, "scan_parquet", s.partName(k))
 	}
-	if err := sameColumns(full, fs, "the planned schema", s.partName(k)); err != nil {
+	if err := sameColumns(s.files, fs, "the planned schema", s.partName(k)); err != nil {
 		return fileLayout{}, err
 	}
 	lay := fileLayout{leaves: make([][]int, full.Len()), optional: make([]bool, full.Len()),
 		fullStats: knownWriter(md.GetCreatedBy())}
 	for i := range full.Len() {
+		if i < len(s.fixed) && s.fixed[i] {
+			continue // the file's values of it are given, not read (step 347)
+		}
 		f := full.Field(i)
 		j := fs.IndexOf(f.Name)
 		g := fs.Field(j)
@@ -518,6 +712,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 			cols:      cols,
 			batchSize: batchSize,
 			preds:     spec.Predicate,
+			eval:      spec.Eval,
 			df:        df,
 			threads:   spec.Threads,
 			stop:      make(chan struct{}),
@@ -548,6 +743,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		batchSize: batchSize,
 		remaining: spec.MaxRows,
 		preds:     spec.Predicate,
+		eval:      spec.Eval,
 		df:        df,
 		wide:      batchSize,
 		rgIndex:   -1,
@@ -580,6 +776,7 @@ type reader struct {
 	batchSize int
 	remaining int // rows left to produce; 0 means unlimited
 	preds     []expr.Node
+	eval      func(context.Context, expr.Node, *data.Batch) (*data.Column, error)
 	df        *dictFilter
 	wide      int // under df, the rows the next read takes; see widen
 
@@ -635,7 +832,11 @@ func (r *reader) closeChunks() {
 func (r *reader) openNext(ctx context.Context) error {
 	for {
 		if r.pf == nil {
-			if r.fileIdx >= len(r.src.opens) {
+			k, err := r.src.nextKept(ctx, r.fileIdx, r.full, r.preds, r.eval)
+			if err != nil {
+				return err
+			}
+			if r.fileIdx = k; r.fileIdx >= len(r.src.opens) {
 				return io.EOF
 			}
 			r.name = r.src.partName(r.fileIdx)
@@ -709,15 +910,25 @@ type colPlan struct {
 // fileView is one open file as the readers need it: its name for errors, its
 // footer, and how it stores the reconciled schema.
 type fileView struct {
-	name string
-	pf   *file.Reader
-	lay  fileLayout
+	name   string
+	pf     *file.Reader
+	lay    fileLayout
+	consts []*data.Column // by field, the file's partition values and path; nil for none
 }
 
 // openColumn opens the chunk readers for one output column of the current file.
 func (r *reader) openColumn(rg *file.RowGroupReader,
 	rgMeta *metadata.RowGroupMetaData, p colPlan) (colReader, error) {
-	return openColumnIn(r.full, fileView{name: r.name, pf: r.pf, lay: r.lay}, rg, rgMeta, p)
+	return openColumnIn(r.full, fileView{name: r.name, pf: r.pf, lay: r.lay, consts: r.src.constsOf(r.fileIdx - 1)},
+		rg, rgMeta, p)
+}
+
+// constsOf is file k's partition values and path, by field; nil for none.
+func (s *Source) constsOf(k int) []*data.Column {
+	if s.consts == nil {
+		return nil
+	}
+	return s.consts[k]
 }
 
 // openColumnIn opens the chunk readers for one output column of file fv.
@@ -729,6 +940,9 @@ func openColumnIn(full *dtype.Schema, fv fileView, rg *file.RowGroupReader,
 	rgMeta *metadata.RowGroupMetaData, p colPlan) (colReader, error) {
 
 	f := full.Field(p.field)
+	if p.field < len(fv.consts) && fv.consts[p.field] != nil {
+		return &constReader{v: fv.consts[p.field]}, nil
+	}
 
 	// dt is passed in rather than read off f, because a struct's fields each have
 	// their own type and the leaf reader is what decodes them.

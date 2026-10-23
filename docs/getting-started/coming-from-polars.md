@@ -142,6 +142,7 @@ changes is what Go asks for.
 | `df.show(20)`, `lf.cache()` | `df.Show(20)`, `lf.Cache()` (new in 0.6.7) |
 | `df.write_parquet(f)`, `df.write_csv(f)` | `lf.WriteParquet(ctx, w)`, `lf.WriteCSV(ctx, w)`, to any `io.Writer` |
 | `pl.read_ndjson(p)`, `pl.scan_ndjson([p, q], infer_schema_length=n, ignore_errors=True)` | `ursus.ScanNDJSON(p)`, `ursus.ScanNDJSONFiles([]string{p, q}, ursus.WithInferSchemaLines(n), ursus.WithNDJSONIgnoreErrors(true))` (new in 0.6.7) |
+| `pl.scan_parquet("ds/", hive_schema={"g": pl.Int8}, include_file_paths="path")` | `ursus.ScanParquet("ds", ursus.WithHiveSchema(s), ursus.WithIncludeFilePaths("path"))`, a hive dataset's keys read from its directories (new in 0.6.7) |
 | `pl.read_csv("sales.csv.gz")`, a zlib or Zstandard file too | `ursus.ScanCSV("sales.csv.gz")`, known by its first bytes (new in 0.6.7) |
 | `pl.read_json(p, schema_overrides={"a": pl.Float32})` | `ursus.ScanJSON(p, ursus.WithNDJSONSchemaOverrides(map[string]dtype.DataType{"a": ursus.Float32}))` (new in 0.6.7) |
 | `df.write_ndjson(f)`, `df.write_json(f)`, `lf.sink_ndjson(p)` | `lf.WriteNDJSON(ctx, w)`, `lf.WriteJSON(ctx, w)`, `lf.SinkNDJSON(ctx, p)` (new in 0.6.7) |

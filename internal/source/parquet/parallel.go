@@ -61,6 +61,7 @@ type parallelReader struct {
 	cols      []colPlan
 	batchSize int
 	preds     []expr.Node
+	eval      func(context.Context, expr.Node, *data.Batch) (*data.Column, error)
 	df        *dictFilter
 	threads   int
 
@@ -196,9 +197,12 @@ func (r *parallelReader) Schema() *dtype.Schema { return r.out }
 // that cannot be opened or read is refused while the query is being planned. No
 // goroutine starts until the first Next.
 func (r *parallelReader) openFirst(ctx context.Context) error {
-	if len(r.src.opens) == 0 {
-		return nil
+	k, err := r.src.nextKept(ctx, r.fileIdx, r.full, r.preds, r.eval)
+	if err != nil || k == len(r.src.opens) {
+		r.fileIdx = k
+		return err
 	}
+	r.fileIdx = k
 	return r.openFile(ctx)
 }
 
@@ -222,7 +226,7 @@ func (r *parallelReader) openFile(ctx context.Context) error {
 		closeFn()
 		return err
 	}
-	f := &sharedFile{fileView: fileView{name: name, pf: pf, lay: lay}, closeFn: closeFn}
+	f := &sharedFile{fileView: fileView{name: name, pf: pf, lay: lay, consts: r.src.constsOf(r.fileIdx)}, closeFn: closeFn}
 	f.refs.Store(1) // the issuer's own, dropped when it moves past the last row group
 	r.cur, r.rgIndex = f, -1
 	r.fileIdx++
@@ -234,7 +238,11 @@ func (r *parallelReader) openFile(ctx context.Context) error {
 func (r *parallelReader) issue(ctx context.Context) (bool, error) {
 	for {
 		if r.cur == nil {
-			if r.fileIdx >= len(r.src.opens) {
+			k, err := r.src.nextKept(ctx, r.fileIdx, r.full, r.preds, r.eval)
+			if err != nil {
+				return false, err
+			}
+			if r.fileIdx = k; r.fileIdx >= len(r.src.opens) {
 				return false, nil
 			}
 			if err := r.openFile(ctx); err != nil {

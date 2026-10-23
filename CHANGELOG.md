@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–346, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–347, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,13 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A Parquet directory and its hive partitions** (347): `ScanParquet(dir)` reads every
+  file below a directory as one frame, as Polars' `scan_parquet` does, each directory
+  named `key=value` a column of the files beneath it, typed as Polars types it; a
+  filter on the keys skips the files it rules out before any is opened.
+  `WithHivePartitioning`, `WithHiveSchema`, `WithHiveDates` and
+  `WithIncludeFilePaths`, Polars' `hive_partitioning`, `hive_schema`,
+  `try_parse_hive_dates` and `include_file_paths`.
 - **Compressed input** (346): a CSV, NDJSON or JSON file compressed by gzip, zlib or
   Zstandard is read as itself, known by its first bytes whatever its name, as Polars
   reads one, decompressed as it is read and parsed in parallel as a plain file is.

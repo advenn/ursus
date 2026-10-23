@@ -245,7 +245,7 @@ differs from their input's, or scalars outside a group-by.
 | --- | --- |
 | built: **JSON read,** in step 345: `ScanJSON` and `ScanJSONBytes`, Polars' `read_json`, each object made a line of NDJSON in place and read as step 334's NDJSON is, faster than Polars; schema overrides for both. NDJSON read and scanned in step 334; JSON and NDJSON written and sunk in step 333, each value in Polars' text | — |
 | built: **Arrow IPC,** in step 332: a file or a stream scanned, written and sunk, uncompressed, LZ4 or Zstandard, and a file's schema read; and a Parquet file's schema. Over arrow-go's IPC readers and writers | — |
-| **Hive partitioning** on read (keys, types, dates); **partitioned writes** by key | P1 |
+| **Hive partitioning:** built on read for Parquet in step 347, a directory read whole, its `key=value` directories typed columns, a filter on them skipping files, `include_file_paths`. Left: an IPC directory's, `include_file_paths` for CSV, NDJSON and IPC, and **partitioned writes** by key | P1 |
 | **Multi-file schema evolution:** `missing_columns`, `extra_columns`, union by name; `include_file_paths`; `**` globs | P1 |
 | **Schema overrides on Parquet and Arrow scans;** CSV date inference; CSV writer quote style and date and float formats. Compressed input built in step 346: a CSV, NDJSON or JSON file of gzip, zlib or Zstandard, by its first bytes | P1 |
 | **Cloud object stores** by URI (`s3://`, `gs://`, `https://`), with listing, credentials and retries. Today you bring a `ReaderAt` | P2 |
@@ -284,6 +284,7 @@ These belong to a performance release more than to features.
 | **A reshape copies its column three times:** `Reshape` in a `Select` implodes the column, reshapes the one list and explodes it again: a million values by four take 28 ms, and an Array of three a row flattened 98, where Polars' reshape is a view, 0.03 ms. `ConcatArr` of two Arrays of three takes 50 ms against Polars' 24 (step 343) | P2 |
 | **A join's right order hashes the left frame:** a million left rows against 100,000 right, in memory, takes 57 ms inner and 75 ms left, where Polars' takes 33 and 37; ursus's left order takes 16, Polars' 12. The hash of the larger side is most of it, as a plain join that hashes a million rows takes 47 ms. A probe of the left frame and a counting sort by the right row would hash the smaller side. An ordered right or full join numbers its table's rows always, about a tenth of its time, where only a spilled one needs them (step 314) | P2 |
 | **A compressed CSV is read in about twice Polars' time:** a million rows of four columns, 34 MB, by gzip in 191–207 ms where Polars takes 83–93, by Zstandard 129–152 against 77–86. The inflate is the read's serial part, Go's (klauspost's, 315 MB/s, the fastest pure-Go one) slower than the one Polars links, and the CSV parse's own gap stands beside it: the plain file in 84–97 ms against 29–44 (step 346) | P2 |
+| **A Parquet dataset is read in about twice Polars' time:** two million rows in forty Zstandard files, 42–61 ms against 19–28, its column chunks decompressed and decoded; the keys of a hive dataset cost nothing over it (step 347) | P2 |
 | **SQL** (`SQLContext`, `.sql()`, `sql_expr`) | out by decision |
 | GPU, plugins, Python bindings, distributed execution | P3 |
 
@@ -500,6 +501,13 @@ decide whether to keep or switch each one.
   read as text, where Polars reads it as zlib and finds no rows; a stream past a zlib
   header that does not decompress is text, where Polars refuses it as "corrupt
   deflate stream"; bytes after a zlib stream are refused (step 346).
+- Hive datasets: a directory's names beginning '.' or '_' are passed over, files and
+  directories, where Polars reads a hidden directory and refuses a `_metadata` or
+  `.crc` file beside the data, of another extension; `WithHiveSchema` may name some
+  keys, the rest inferred, where Polars refuses a key its `hive_schema` does not
+  name; a date of a two-digit year, `24-01-02`, is text, where Polars reads the year
+  2; every file's footer is read when the query is planned, where Polars reads the
+  first's (step 347).
 - An aggregate whose answer depends on the order, `First` or `Last`, inside a window
   with an `OrderBy`, `(x - x.First()).CumSum(false)` over g ordered by t, is refused as
   an ordering over an aggregate is; Polars takes the first in the order (step 336).
