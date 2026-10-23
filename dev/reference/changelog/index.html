@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–330, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–331, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3132,6 +3132,12 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A list a group, and a window a group at a time</strong> (331): a non-aggregate in <code>Agg</code> is
+  each group's values as a list, as Polars answers it, <code>Agg(Col("x"))</code> and
+  <code>Agg(Col("x").Mul(2))</code>; and a window anywhere in <code>Agg</code> runs a group at a time,
+  <code>Agg(Col("x").CumSum(false))</code> a list and <code>Agg(Col("x").CumSum(false).Max())</code> one
+  value. They were refused, "expression is not an aggregate" and a hint to move the
+  window into a <code>WithColumns</code>.</li>
 <li><strong><code>TopKBy</code> and <code>BottomKBy</code></strong> (330), Polars' <code>top_k_by</code> and <code>bottom_k_by</code>: the k
   values where another column is greatest or least, a List a group as <code>TopK</code>'s,
   bounded, and parallel in a group-by: rows that tie are ordered by their values.</li>

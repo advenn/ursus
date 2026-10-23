@@ -1953,6 +1953,12 @@ other expressions that give several values give a list per group too:</p>
 </span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>│ "south" │ [2, 5, 8]   │ ["apple", "fig", "pear"] │
 </span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>└─────────┴─────────────┴──────────────────────────┘
 </span></code></pre></div>
+<p><em>New in 0.6.7:</em> any expression that is not an aggregate is each group's values as a
+list, as Polars answers it: <code>Agg(Col("qty"))</code> is each group's quantities,
+<code>Agg(Col("qty").Mul(2))</code> doubled, and a window runs a group at a time,
+<code>Agg(Col("qty").CumSum(false))</code> each group's running total, and
+<code>Agg(Col("qty").CumSum(false).Max())</code> its greatest. An expression that mixes an
+aggregate with a row's value, <code>Col("qty").Sub(Col("qty").Mean())</code>, is still refused.</p>
 <p>A list column can be exploded back into rows, or asked questions with <code>List()</code>.</p>
 <h2 id="filtering-groups-having">Filtering groups: having<a class="headerlink" href="#filtering-groups-having" title="Permanent link">&para;</a></h2>
 <p><em>New in 0.6.7.</em> <code>Having(predicates...)</code> keeps the groups whose predicates all hold, each

@@ -1683,6 +1683,10 @@ changes is what Go asks for.</p>
 <td><code>.GroupBy(ursus.Col("k")).Agg(...)</code></td>
 </tr>
 <tr>
+<td><code>.group_by("k").agg(pl.col("x"), pl.col("x").cum_sum())</code>, a list a group</td>
+<td><code>.GroupBy(ursus.Col("k")).Agg(ursus.Col("x"), ursus.Col("x").CumSum(false))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.group_by("k", maintain_order=True)</code></td>
 <td><code>.GroupBy(ursus.Col("k")).MaintainOrder()</code></td>
 </tr>
