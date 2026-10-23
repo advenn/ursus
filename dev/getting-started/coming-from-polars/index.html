@@ -1883,6 +1883,10 @@ changes is what Go asks for.</p>
 <td><code>.Arr().Sum()</code>, <code>.Arr().Sort()</code>, <code>.Arr().Eval(ursus.Element().Mul(2), false)</code>, <code>.Arr().ToStruct()</code>, <code>.Arr().Dot(b)</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>.reshape((-1, 3))</code>, <code>pl.concat_arr(a, b)</code></td>
+<td><code>.Reshape(-1, 3)</code>, <code>ursus.ConcatArr(a, b)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>pl.arctan2(y, x)</code>, <code>.truediv(v)</code>, <code>.limit(n)</code>, <code>.pipe(f)</code></td>
 <td><code>ursus.Arctan2(y, x)</code>, <code>.TrueDiv(v)</code>, <code>.Limit(n)</code>, <code>.Pipe(f)</code> (new in 0.6.7)</td>
 </tr>

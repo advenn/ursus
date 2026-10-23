@@ -1841,6 +1841,9 @@ answer as <code>List()</code>'s do, a value or a list a row; <code>Reverse</code
 <code>Eval</code> of an element's value keep each array's length and so its Array; <code>ToStruct</code>
 makes a field of each element, <code>field_0</code> on unless named, and <code>Dot</code> sums two arrays'
 products.</p>
+<p><code>Reshape(-1, 3)</code> makes Arrays of three of a column's values, as Polars' <code>reshape</code>,
+<code>-1</code> the rows inferred, more dimensions an Array of Arrays and <code>Reshape(-1)</code> the
+values flattened; <code>ConcatArr</code> makes one Array of each row's Arrays and values.</p>
 <p>An Array is read and written as Polars writes it: an Arrow <code>FixedSizeList</code> in IPC, and
 in Parquet a list whose size the file's Arrow schema keeps; as JSON, a list.</p>
 <h2 id="structs">Structs<a class="headerlink" href="#structs" title="Permanent link">&para;</a></h2>
@@ -1904,8 +1907,7 @@ its expression:</p>
 <p>A struct is also how ursus gives several values a row: <code>SplitExact</code>, <code>ExtractGroups</code>,
 <code>ValueCounts</code> of an expression, and <code>Rle</code>.</p>
 <h2 id="what-is-not-here-yet">What is not here yet<a class="headerlink" href="#what-is-not-here-yet" title="Permanent link">&para;</a></h2>
-<p>Polars' <code>reshape</code> and <code>concat_arr</code>, which make Arrays of columns, are not, and neither
-are lists of lists or of structs, which are refused by name. A List or a Struct cannot be a group-by, join or
+<p>Lists of lists or of structs are refused by name. A List or a Struct cannot be a group-by, join or
 <code>Unique</code> key. The scope records each in <code>feature-gaps.md</code>.</p>
 
 
