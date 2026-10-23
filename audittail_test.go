@@ -54,26 +54,23 @@ func TestTheWindowHintMovesTheWindow(t *testing.T) {
 	c := ursus.Col
 	f := ursus.Frame(ursus.Values("k", []int64{1, 1, 2}), ursus.Values("x", []int64{1, 2, 4}))
 
+	// A window in Agg was refused, a hint moving it into a WithColumns; since step 331
+	// it is computed a group at a time, as Polars computes it, and answers as the
+	// recipe the hint gave.
 	t.Run("a reduced window in Agg", func(t *testing.T) {
-		// It was refused as "not an aggregate … every column must be reduced", and it
-		// is reduced.
-		refusedSaying(t, f.GroupBy(c("k")).Agg(c("x").Sum().Over(c("k")).Max().Alias("m")), ursus.ErrUnsupported,
-			[]string{`.WithColumns(col("x").sum().over(col("k")).Alias("w"))`, `Col("w") in its place`},
-			[]string{"must be reduced", `.max().Alias("w")`})
-		got := runs(t, f.WithColumns(c("x").Sum().Over(c("k")).Alias("w")).
+		got := runs(t, f.GroupBy(c("k")).Agg(c("x").Sum().Over(c("k")).Max().Alias("m")).Sort(ursus.Asc(c("k"))), "m")
+		want := runs(t, f.WithColumns(c("x").Sum().Over(c("k")).Alias("w")).
 			GroupBy(c("k")).Agg(c("w").Max().Alias("m")).Sort(ursus.Asc(c("k"))), "m")
-		if !slices.Equal(got, []string{"3", "4"}) {
-			t.Errorf("%v", got)
+		if !slices.Equal(got, []string{"3", "4"}) || !slices.Equal(got, want) {
+			t.Errorf("%v, want %v", got, want)
 		}
 	})
 	t.Run("a bare window function in Agg", func(t *testing.T) {
-		refusedSaying(t, f.GroupBy(c("k")).Agg(c("x").CumSum(false).Max().Alias("m")), ursus.ErrUnsupported,
-			[]string{`.WithColumns(col("x").cum_sum().Alias("w"))`, ".Over(the group-by keys)"},
-			[]string{`.max().Alias("w")`})
-		got := runs(t, f.WithColumns(c("x").CumSum(false).Over(c("k")).Alias("w")).
+		got := runs(t, f.GroupBy(c("k")).Agg(c("x").CumSum(false).Max().Alias("m")).Sort(ursus.Asc(c("k"))), "m")
+		want := runs(t, f.WithColumns(c("x").CumSum(false).Over(c("k")).Alias("w")).
 			GroupBy(c("k")).Agg(c("w").Max().Alias("m")).Sort(ursus.Asc(c("k"))), "m")
-		if !slices.Equal(got, []string{"3", "4"}) {
-			t.Errorf("%v", got)
+		if !slices.Equal(got, []string{"3", "4"}) || !slices.Equal(got, want) {
+			t.Errorf("%v, want %v", got, want)
 		}
 	})
 	t.Run("a window in a filter", func(t *testing.T) {

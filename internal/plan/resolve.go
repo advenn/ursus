@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"slices"
 	"strings"
 
 	"context"
@@ -502,6 +503,16 @@ func resolveAggregate(a *Aggregate) (Node, error) {
 		seen[f.Name] = len(seen)
 	}
 
+	input, aggs, err := listsPerGroup(a.Input, keys, aggs)
+	if err != nil {
+		return nil, err
+	}
+	if input != a.Input {
+		if in, err = input.Schema(); err != nil {
+			return nil, err
+		}
+	}
+
 	for _, e := range aggs {
 		// Every path from the root to a column must pass through an aggregate.
 		// `Sum(a) + 1` is fine; `Sum(a) + b` is not, because b is still per-row and
@@ -544,9 +555,92 @@ func resolveAggregate(a *Aggregate) (Node, error) {
 	}
 
 	c := *a
+	c.Input = input
 	c.Keys = keys
 	c.Aggs = aggs
 	return &c, nil
+}
+
+// listsPerGroup answers an aggregation as Polars does (step 331): a non-aggregate is
+// each group's values as a list, the expression's Implode, under its own name, and a
+// window anywhere in an expression is computed a group at a time, the group-by's keys
+// added to its partition, beneath the aggregation, which reads it as a column. A
+// window a group at a time sees the group's rows in their order, as Implode keeps
+// them. An expression mixing an aggregate with a row's value is neither, and is
+// refused below, as it was.
+func listsPerGroup(input Node, keys, aggs []expr.Node) (Node, []expr.Node, error) {
+	var lifted []int
+	out := slices.Clone(aggs)
+	for i, e := range aggs {
+		agg := expr.IsAggregation(e)
+		if !agg && expr.HasUnboundAgg(e) {
+			continue // a mix
+		}
+		if expr.HasWindow(e) {
+			e = perGroup(e, keys)
+			lifted = append(lifted, i)
+		}
+		if !agg {
+			e = imploded(e)
+		}
+		out[i] = e
+	}
+	if len(lifted) == 0 {
+		return input, out, nil
+	}
+	ws := make([]expr.Node, len(lifted))
+	for j, i := range lifted {
+		ws[j] = out[i]
+	}
+	input, ws, _, err := extractWindows(input, ws, "agg")
+	if err != nil {
+		return nil, nil, err
+	}
+	for j, i := range lifted {
+		out[i] = ws[j]
+	}
+	return input, out, nil
+}
+
+// perGroup is e with every window in it partitioned by keys first: a window function
+// over the group, and an Over's partition within it.
+func perGroup(e expr.Node, keys []expr.Node) expr.Node {
+	switch t := e.(type) {
+	case *expr.Window:
+		w := *t
+		w.PartitionBy = append(slices.Clone(keys), t.PartitionBy...)
+		return &w
+	case *expr.WinFn:
+		return &expr.Window{Child: t, PartitionBy: slices.Clone(keys)}
+	}
+	kids := e.Children()
+	if len(kids) == 0 {
+		return e
+	}
+	out := make([]expr.Node, len(kids))
+	for i, k := range kids {
+		out[i] = perGroup(k, keys)
+	}
+	return expr.Rebuild(e, out)
+}
+
+// imploded is Implode of e under e's own name: the names at its top kept above it,
+// where they name it, and an alias where an aggregate's naming would not give it,
+// a conditional's, which is its first branch's, not its predicate's.
+func imploded(e expr.Node) expr.Node {
+	switch t := e.(type) {
+	case *expr.Alias:
+		return &expr.Alias{Child: imploded(t.Child), Name: t.Name}
+	case *expr.Rename:
+		r := *t
+		r.Child = imploded(t.Child)
+		return &r
+	}
+	out := expr.Node(&expr.Agg{Op: expr.AggImplode, Child: e})
+	if want := expr.OutputName(e); expr.OutputName(out) != want {
+		out = &expr.Alias{Child: out, Name: want}
+	}
+	return out
 }
 
 func groupable(d dtype.DataType) bool { return d.IsHashable() }

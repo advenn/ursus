@@ -1,7 +1,6 @@
 package ursus_test
 
 import (
-	"errors"
 	"math"
 	"math/rand/v2"
 	"slices"
@@ -9,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/internal/uerr"
 	"github.com/advenn/ursus/ursustest"
 )
 
@@ -77,19 +75,21 @@ func TestWindowAcceptedWhereAggregateIsNot(t *testing.T) {
 	}
 }
 
-// TestWindowRejectedInsideGroupByAgg: a window preserves height, so it is not an
-// aggregate and cannot be one of GroupBy's outputs.
-func TestWindowRejectedInsideGroupByAgg(t *testing.T) {
-	_, err := wf().
-		GroupBy(ursus.Col("g")).
-		Agg(ursus.Col("v").Sum().Over(ursus.Col("g"))).
-		Collect(t.Context())
-	if err == nil {
-		t.Fatal("a window inside GroupBy().Agg() must be refused")
+// TestWindowInsideGroupByAggIsAListAGroup: a window preserves height, so it is not an
+// aggregate; it was refused as one of GroupBy's outputs until step 331, which answers
+// it as Polars does, each group's values as a list, the window a group at a time.
+func TestWindowInsideGroupByAggIsAListAGroup(t *testing.T) {
+	c := ursus.Col
+	got, err := wf().GroupBy(c("g")).Agg(c("v").Sum().Over(c("g"))).Sort(ursus.Asc(c("g"))).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !errors.Is(err, uerr.ErrType) {
-		t.Errorf("kind should be Type: %v", err)
+	want, err := wf().WithColumns(c("v").Sum().Over(c("g")).Alias("w")).
+		GroupBy(c("g")).Agg(c("w").Implode().Alias("v")).Sort(ursus.Asc(c("g"))).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
 	}
+	ursustest.AssertFrameEqual(t, got, want)
 }
 
 // TestWindowNamesAfterItsValue pins the OutputName case.

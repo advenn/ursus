@@ -428,30 +428,27 @@ func TestImplodeRefusesPastTheBudget(t *testing.T) {
 	}
 }
 
-// TestWindowInsideAggIsRefused. Until step 46 this resolved cleanly, printed a plan
-// in Explain, and died at Collect with a message announcing itself as an ursus bug —
-// while hashAggSink's own comment claimed the check existed.
-func TestWindowInsideAggIsRefused(t *testing.T) {
-	lf := implodeFrame().
-		GroupBy(ursus.Col("k")).
-		Agg(ursus.Col("v").CumSum(false).Sum().Alias("bad"))
-
-	// Explain must fail too, or the refusal is one only Collect notices.
-	if _, err := lf.Explain(t.Context()); err == nil {
-		t.Error("Explain should not print a plan that cannot run")
+// TestWindowInsideAggRunsAGroupAtATime. Until step 46 this resolved cleanly, printed
+// a plan in Explain, and died at Collect with a message announcing itself as an ursus
+// bug; from step 46 it was refused. Since step 331 the window runs a group at a time,
+// as Polars runs it, beneath the aggregation: Explain prints a plan that runs, and
+// the answer is the recipe the refusal's hint gave, the window computed first.
+func TestWindowInsideAggRunsAGroupAtATime(t *testing.T) {
+	c := ursus.Col
+	lf := implodeFrame().GroupBy(c("k")).Agg(c("v").CumSum(false).Sum().Alias("s")).Sort(ursus.Asc(c("k")))
+	if _, err := lf.Explain(t.Context()); err != nil {
+		t.Errorf("Explain: %v", err)
 	}
-
-	_, err := lf.Collect(t.Context())
-	if err == nil {
-		t.Fatal("a window inside Agg() should be refused")
+	got, err := lf.Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(strings.ToLower(err.Error()), "ursus bug") ||
-		strings.Contains(err.Error(), "should have been extracted") {
-		t.Errorf("a user mistake must not be reported as an internal error: %v", err)
+	want, err := implodeFrame().WithColumns(c("v").CumSum(false).Over(c("k")).Alias("w")).
+		GroupBy(c("k")).Agg(c("w").Sum().Alias("s")).Sort(ursus.Asc(c("k"))).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "window") {
-		t.Errorf("the error should name what is wrong: %v", err)
-	}
+	ursustest.AssertFrameEqual(t, got, want)
 }
 
 // TestOverWithOrderByOverAnAggregateIsRefused. The first OverWith coverage in the

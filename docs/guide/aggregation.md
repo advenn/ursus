@@ -93,6 +93,13 @@ other expressions that give several values give a list per group too:
 
 --8<-- "Example_aggLists.md"
 
+*New in 0.6.7:* any expression that is not an aggregate is each group's values as a
+list, as Polars answers it: `Agg(Col("qty"))` is each group's quantities,
+`Agg(Col("qty").Mul(2))` doubled, and a window runs a group at a time,
+`Agg(Col("qty").CumSum(false))` each group's running total, and
+`Agg(Col("qty").CumSum(false).Max())` its greatest. An expression that mixes an
+aggregate with a row's value, `Col("qty").Sub(Col("qty").Mean())`, is still refused.
+
 A list column can be exploded back into rows, or asked questions with `List()`.
 
 ## Filtering groups: having

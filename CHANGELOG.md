@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–330, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–331, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -96,6 +96,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A list a group, and a window a group at a time** (331): a non-aggregate in `Agg` is
+  each group's values as a list, as Polars answers it, `Agg(Col("x"))` and
+  `Agg(Col("x").Mul(2))`; and a window anywhere in `Agg` runs a group at a time,
+  `Agg(Col("x").CumSum(false))` a list and `Agg(Col("x").CumSum(false).Max())` one
+  value. They were refused, "expression is not an aggregate" and a hint to move the
+  window into a `WithColumns`.
 - **`TopKBy` and `BottomKBy`** (330), Polars' `top_k_by` and `bottom_k_by`: the k
   values where another column is greatest or least, a List a group as `TopK`'s,
   bounded, and parallel in a group-by: rows that tie are ordered by their values.
