@@ -1691,6 +1691,10 @@ changes is what Go asks for.</p>
 <td><code>.Join(other, ursus.JoinOn(ursus.Col("k")), ursus.JoinHow(ursus.JoinLeft))</code></td>
 </tr>
 <tr>
+<td><code>import polars.selectors as cs</code>; <code>cs.numeric() - cs.by_name("id")</code>; <code>~cs.string()</code></td>
+<td><code>import "github.com/advenn/ursus/selector"</code>; <code>selector.Numeric().Difference(selector.ByName("id")).Expr()</code>; <code>selector.String().Complement()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.join_asof(...)</code>, <code>.join_where(...)</code></td>
 <td><code>.JoinAsOf(...)</code>, <code>.JoinWhere(...)</code></td>
 </tr>
