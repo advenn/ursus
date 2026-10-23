@@ -1855,6 +1855,10 @@ changes is what Go asks for.</p>
 <td><code>.Rolling(ursus.Col("t"), ursus.RollingOptions{Period: ursus.Every("7d"), Offset: ursus.NoOffset()})</code>, the next seven days (changed in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>.rolling_rank_by("t", "3d")</code>, <code>.rolling_map(f, 5)</code></td>
+<td><code>.RollingRankBy(ursus.Col("t"), ursus.Every("3d"), ursus.RankAverage)</code>, <code>.RollingMap[float64, float64]("f", ursus.Float64, 5, f)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>pl.col("x").sum().rolling("t", period="2d")</code>, <code>....over("g")</code></td>
 <td><code>ursus.Col("x").Sum().Rolling(ursus.Col("t"), ursus.RollingOptions{Period: ursus.Every("2d")})</code>, <code>....Over(ursus.Col("g"))</code> (new in 0.6.7)</td>
 </tr>

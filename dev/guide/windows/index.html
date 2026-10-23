@@ -1918,6 +1918,8 @@ value before, and took a position.</p>
   <code>MinSamples(k)</code> answers from k;</li>
 <li><code>RollingCenter()</code> centres the window on its row.</li>
 </ul>
+<p><em>New in 0.6.7:</em> <code>RollingMap(name, type, n, fn)</code> calls a Go function on each row's
+window, as Polars' <code>rolling_map</code>; see <a href="../go-functions/">Go functions</a>.</p>
 <h2 id="rolling-windows-by-time">Rolling windows by time<a class="headerlink" href="#rolling-windows-by-time" title="Permanent link">&para;</a></h2>
 <p>A window by rows counts rows; a window by time counts time. <code>RollingSumBy(by,
 period)</code> sums the rows whose <code>by</code> lies in the period up to each row's, <code>(t − period,
@@ -1956,7 +1958,10 @@ Wednesday, and its three days only to Saturday.</p>
 belong to it.</p>
 <p>The <code>By</code> forms take a <code>Date</code>, <code>Datetime</code> or <code>Time</code> column, which need not be sorted:
 a window is found by value, and rows tied with a row's instant are in its window.
-Unlike the windows by rows they answer from one value by default. <em>New in 0.6.7:</em> <code>by</code>
+Unlike the windows by rows they answer from one value by default. <em>New in 0.6.7:</em>
+<code>RollingRankBy(by, period, method)</code> ranks each row's value among its window's, as
+Polars' <code>rolling_rank_by</code>; over one partition past a memory limit it is refused, as
+its window's values are not yet walked. <em>New in 0.6.7:</em> <code>by</code>
 can be an integer of 32 or 64 bits, a step rather than an instant, whose period counts
 it in Polars' integer unit: <code>Every("3i")</code> is three steps, as in
 <a href="../dates-and-times/#an-integer-index">Dates and times</a>.</p>

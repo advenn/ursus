@@ -1260,6 +1260,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-window-at-a-time-rollingmap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A window at a time: RollingMap
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#a-row-at-a-time-maprows" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1555,6 +1566,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-window-at-a-time-rollingmap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A window at a time: RollingMap
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#a-row-at-a-time-maprows" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1740,6 +1762,13 @@ something that works on many values at once.</p>
 </span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>│ null    │ 0       │
 </span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>└─────────┴─────────┘
 </span></code></pre></div>
+<h2 id="a-window-at-a-time-rollingmap">A window at a time: RollingMap<a class="headerlink" href="#a-window-at-a-time-rollingmap" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7.</em> <code>RollingMap(name, type, size, fn)</code> calls <code>fn</code> on each row's window of
+<code>size</code> rows, as Polars' <code>rolling_map</code>: the window's values in its order and whether
+each is there, as <code>MapBatches</code> gives a batch, and the answer is the row's. A window of
+fewer values than <code>MinSamples(k)</code>, <code>size</code> unless set, is null; <code>RollingCenter()</code>
+centres it on its row. It runs within each partition under <code>Over</code>, and streams past a
+memory limit as the rolling functions do.</p>
 <h2 id="a-row-at-a-time-maprows">A row at a time: MapRows<a class="headerlink" href="#a-row-at-a-time-maprows" title="Permanent link">&para;</a></h2>
 <p><em>New in 0.6.7.</em> A frame's <code>MapRows(ctx, fn)</code> calls <code>fn</code> on each row, as Polars'
 <code>map_rows</code>. A row is a struct, read as <code>Rows</code> reads one, or a <code>[]any</code> of its values in
