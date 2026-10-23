@@ -185,8 +185,8 @@ These are deliberate, and each is documented beside the method:
   rows; Polars leaves them out.
 - **`ToInteger`, `ToDate` and `ToDatetime` give null for what does not parse;**
   Polars' fail by default.
-- **`Cut` and `Hist` give text,** where Polars gives a Categorical, which ursus does not
-  have yet.
+- **`QCut` and `Hist` give text,** where Polars gives a Categorical, which ursus does not
+  have yet. `Cut` gives an Enum of its labels, as Polars' does (new in 0.6.7).
 - **A `Time` takes a unit,** where Polars' is nanoseconds.
 
 The full list, with the step that made each choice, is in

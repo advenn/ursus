@@ -15,12 +15,16 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–349, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–350, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **`Cut` answers an Enum** (350) of its bins' labels, in their order, as Polars'
+  `cut` does, where it answered a String: `.Cast(ursus.String)` gives the text. Its
+  labels must differ, as an Enum's categories do, and a break is written in decimal,
+  `(-inf, 0.0000001]`, as Polars writes it, where it was `(-inf, 1e-07]`.
 - **A null's rank is null** (335), as Polars': `Rank` ranked a null as the least
   value and gave it a position, so `[5, null, 4]` ranked `[3, 1, 2]`; it ranks
   `[2, null, 1]` now, the values among themselves, by every method, in a window and

@@ -333,7 +333,7 @@ func cut(name string, leftClosed bool, ops []*data.Column, n int) (*data.Column,
 			continue
 		}
 		if intervals == nil || !slices.Equal(at, seen) {
-			intervals = cutIntervals(at, leftClosed)
+			intervals = CutIntervals(at, leftClosed)
 			copy(seen, at)
 		}
 		out[row] = intervals[bin]
@@ -341,9 +341,9 @@ func cut(name string, leftClosed bool, ops []*data.Column, n int) (*data.Column,
 	return data.NewString(name, out, valid.Finish()), nil
 }
 
-// cutIntervals names the k+1 bins of k breaks by their intervals, each break
-// formatted as a cast to String formats a Float64.
-func cutIntervals(breaks []float64, leftClosed bool) []string {
+// CutIntervals names the k+1 bins of k breaks by their intervals, each break in
+// decimal, as Polars writes one: 0.0000001, not 1e-07 (step 350).
+func CutIntervals(breaks []float64, leftClosed bool) []string {
 	open, close := "(", "]"
 	if leftClosed {
 		open, close = "[", ")"
@@ -355,7 +355,7 @@ func cutIntervals(breaks []float64, leftClosed bool) []string {
 		case j == len(breaks):
 			return "inf"
 		}
-		return strconv.FormatFloat(breaks[j], 'g', -1, 64)
+		return strconv.FormatFloat(breaks[j], 'f', -1, 64)
 	}
 	out := make([]string, len(breaks)+1)
 	for j := range out {

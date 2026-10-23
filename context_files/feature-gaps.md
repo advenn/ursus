@@ -214,7 +214,7 @@ differs from their input's, or scalars outside a group-by.
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
 | **Rolling:** weights; Polars' `random` rank; a rank by time over one partition past a memory limit, refused, as its walk keeps a window's values as floats. `map` and `rolling_rank_by` built at step 338, `RollingMap` and `RollingRankBy`. `skew`, `kurtosis`, `rank`, `rolling_cov` and `rolling_corr` built at step 284; an integer by, `"2i"` periods, at step 312; the generic `Expr.rolling(index_column)` at step 337, `Expr.Rolling`, in an aggregation not yet | P1 |
 | **EWM:** built: `ewm_sum`, `ewm_mean_by` and `ewm_sum_by` at step 285; an integer by, a `"2i"` half-life, at step 312 | — |
-| **Other:** `cut`/`qcut` returning Categorical with `include_breaks`. `cumulative_eval` built at step 286. `round_sig_figs`, `cot`, numeric `truncate`, the half-to-even mode and a one-sided `clip` were built at step 283 | P1/P2 |
+| **Other:** `qcut` returning Categorical, and `include_breaks`; `cut` answers an Enum, as Polars', since step 350. `cumulative_eval` built at step 286. `round_sig_figs`, `cot`, numeric `truncate`, the half-to-even mode and a one-sided `clip` were built at step 283 | P1/P2 |
 
 ## 6. Frame operations
 
@@ -411,7 +411,8 @@ decide whether to keep or switch each one.
   as `Hash`'s are (step 302); a List or a Struct column is hashed as a key since step
   344.
 - `Div` and `Pow` always return a float.
-- `Cut` returns String, not Categorical.
+- `QCut` returns String, where Polars' `qcut` answers a Categorical; `Cut` answers an
+  Enum, as Polars' `cut` does, since step 350.
 - An expression's `TopK`, `BottomK`, `TopKBy` and `BottomKBy` return a List. `TopKBy`
   and `BottomKBy` order rows that tie on by by their values, the greater first for
   `TopKBy`, where Polars' sort orders ties as it finds them (step 330).
@@ -457,7 +458,7 @@ decide whether to keep or switch each one.
   its m2^1.5 is rounded once, where glibc's pow, Polars', errs by up to 0.52 ulp
   (step 284). `RollingCov` and `RollingCorr` keep Polars' formula on ursus's rolling
   means, so their last bits are not Polars'.
-- `Hist`'s category is text, where Polars' is a Categorical, as `Cut`'s labels are
+- `Hist`'s category is text, where Polars' is a Categorical, as `QCut`'s labels are
   (step 286).
 - `CumulativeEval` is refused in `GroupBy(...).Agg`, as every window is, where Polars
   gives a list a group; and inside `List().Eval` (step 286).

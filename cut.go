@@ -2,8 +2,10 @@ package ursus
 
 import (
 	"math"
+	"slices"
 
 	"github.com/advenn/ursus/internal/expr"
+	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/uerr"
 )
 
@@ -27,16 +29,15 @@ func CutLeftClosed() CutOption {
 	return func(o *cutOptions) { o.leftClosed = true }
 }
 
-// Cut puts each value in a bin between breaks, and answers the bin's label, a
-// String: Polars' cut.
+// Cut puts each value in a bin between breaks, and answers the bin's label, an Enum
+// of the labels in their order, as Polars' cut does (step 350; a String before).
 //
 //	Col("age").Cut([]float64{18, 65})                                 // "(-inf, 18]", "(18, 65]", "(65, inf]"
 //	Col("age").Cut([]float64{18, 65}, CutLabels("minor", "adult", "senior"))
 //
-// The breaks must be finite and increase. A value is compared as a Float64; a null
-// or a NaN has no bin and is null. The answer is named after the value. Polars
-// answers a Categorical, which ursus does not have; ursus a String, which
-// .Cast(ursus.Enum(labels...)) makes an Enum of the bins in their order.
+// The breaks must be finite and increase, and the labels, the Enum's categories, must
+// differ, as Polars refuses them otherwise. A value is compared as a Float64; a null or
+// a NaN has no bin and is null. The answer is named after the value.
 func (e Expr) Cut(breaks []float64, opts ...CutOption) Expr {
 	for i, b := range breaks {
 		if math.IsNaN(b) || math.IsInf(b, 0) {
@@ -53,7 +54,24 @@ func (e Expr) Cut(breaks []float64, opts ...CutOption) Expr {
 	for _, b := range breaks {
 		args = append(args, litNode(b))
 	}
-	return cutOf(args, len(breaks), opts)
+	o := cutOptionsOf(opts)
+	cats := o.labels
+	if cats == nil {
+		cats = kernel.CutIntervals(breaks, o.leftClosed)
+	}
+	for i, l := range cats {
+		if slices.Contains(cats[:i], l) {
+			// Polars: "FrozenCategories must contain unique strings; found
+			// duplicate 'a'".
+			return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "cut",
+				"the label %q names two bins; an Enum's categories differ", l)})
+		}
+	}
+	out := cutOf(args, len(breaks), opts)
+	if _, bad := out.node().(*expr.Err); bad {
+		return out
+	}
+	return out.Cast(Enum(cats...))
 }
 
 // QCut puts each value in a bin between quantiles of its column, and answers the
@@ -98,12 +116,17 @@ func (e Expr) QCutN(n int, opts ...CutOption) Expr {
 	return e.QCut(qs, opts...)
 }
 
-// cutOf finishes a cut over args, the value and its k breaks.
-func cutOf(args []expr.Node, k int, opts []CutOption) Expr {
+func cutOptionsOf(opts []CutOption) cutOptions {
 	var o cutOptions
 	for _, opt := range opts {
 		opt(&o)
 	}
+	return o
+}
+
+// cutOf finishes a cut over args, the value and its k breaks.
+func cutOf(args []expr.Node, k int, opts []CutOption) Expr {
+	o := cutOptionsOf(opts)
 	if o.labels != nil && len(o.labels) != k+1 {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "cut",
 			"%d breaks make %d bins, and %d labels were given", k, k+1, len(o.labels))})
