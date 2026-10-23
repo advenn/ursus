@@ -1829,6 +1829,12 @@ it. <code>CastLossy</code> turns such values into nulls instead:</p>
 refused by <code>Cast</code>, and a float rounds only when the target is a float. A float with a
 fraction is refused as an integer, where Polars truncates it; <code>Truncate(0)</code> first says
 that is what you want.</p>
+<p><em>New in 0.6.7.</em> <code>ToPhysical</code> is a column as it is stored, as Polars' <code>to_physical</code>: a
+<code>Date</code>'s days as an <code>Int32</code>, a <code>Datetime</code>'s, a <code>Duration</code>'s and a <code>Time</code>'s ticks as an
+<code>Int64</code>, a <code>Decimal</code>'s unscaled units as an <code>Int128</code>, an <code>Enum</code>'s category as the
+smallest unsigned integer that holds them. <code>Reinterpret(signed)</code> reads an integer's
+bits as the integer of its width and the other sign, so a <code>UInt64</code>'s maximum is an
+<code>Int64</code>'s -1.</p>
 <h3 id="a-frames-casts">A frame's casts<a class="headerlink" href="#a-frames-casts" title="Permanent link">&para;</a></h3>
 <p><em>New in 0.6.7.</em> <code>Cast</code> casts columns by name, <code>CastTypes</code> every column of a type, and
 <code>CastAll</code> every column, the rest left as they are, in their places, as Polars' frame

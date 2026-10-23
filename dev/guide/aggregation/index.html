@@ -1775,6 +1775,12 @@ overflow: cast it to <code>Int64</code> if you want Polars' type.</p>
 <li><code>NUnique()</code> counts its distinct values, a null not among them;</li>
 <li><code>First()</code> and <code>Last()</code> are its first and last value in the rows' order.</li>
 </ul>
+<p><em>New in 0.6.7:</em> <code>Item(allowEmpty)</code> is a group's one value, as Polars' <code>item</code>, and
+refuses a group of several, or of none unless <code>allowEmpty</code>, which makes it null.
+<code>LowerBound()</code> and <code>UpperBound()</code> are the least and greatest value of the column's
+type. <code>IsSorted(descending, nullsLast)</code> says whether a group's values come in order,
+NaN the greatest and the nulls all first, or all last; it reads the rows in their
+order, so a group-by holding it runs on one worker.</p>
 <p><em>New in 0.6.7.</em> <code>First</code> and <code>Last</code> take a value that may be null, so that <code>First(a)</code> and
 <code>First(b)</code> come from one row. <code>FirstNonNull()</code> and <code>LastNonNull()</code> skip the nulls, as
 Polars' <code>first(ignore_nulls=True)</code>, so two of them may come from different rows. A
