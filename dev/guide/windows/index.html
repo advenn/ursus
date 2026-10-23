@@ -1856,7 +1856,9 @@ here two 9s and two 7s:</p>
 </tbody>
 </table>
 <p>Under <code>Over</code>, a rank is within its partition: the <a href="../../concepts/expressions/">expressions</a>
-page ranks each order in its region.</p>
+page ranks each order in its region. A null's rank is null, and the values are ranked
+among themselves, as Polars ranks them. <em>Changed in 0.6.7:</em> a null ranked as the least
+value before, and took a position.</p>
 <h2 id="rolling-windows-by-rows">Rolling windows by rows<a class="headerlink" href="#rolling-windows-by-rows" title="Permanent link">&para;</a></h2>
 <p><code>RollingMean(n)</code> is the mean of each row and the n − 1 before it, and so on for
 <code>RollingSum</code>, <code>RollingMin</code>, <code>RollingMax</code>, <code>RollingStd</code>, <code>RollingVar</code>, <code>RollingMedian</code>,
