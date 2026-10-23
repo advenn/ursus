@@ -77,7 +77,7 @@ func (e *Explode) Schema() (*dtype.Schema, error) {
 				"unknown column %q", name).
 				Hint("available: %s", strings.Join(in.Names(), ", "))
 		}
-		if fields[i].Type.ID() != dtype.TypeList {
+		if !fields[i].Type.IsListLike() {
 			return nil, uerr.New(uerr.KindType, "explode",
 				"column %q is %s, not a List", name, fields[i].Type).
 				Hint("explode turns a list into one row per element")

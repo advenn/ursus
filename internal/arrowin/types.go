@@ -215,6 +215,10 @@ func typeOf(at arrow.DataType) (dtype.DataType, error) {
 		if err != nil {
 			return dtype.Null, err
 		}
+		if fs, ok := at.(*arrow.FixedSizeListType); ok {
+			// An Array, as Polars reads one (step 341); a null row keeps no element.
+			return dtype.Array(inner, int(fs.Len())), nil
+		}
 		return dtype.List(inner), nil
 
 	case arrow.MAP:

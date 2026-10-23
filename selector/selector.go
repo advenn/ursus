@@ -139,8 +139,10 @@ func Binary() Selector  { return byType("binary", is(dtype.TypeBinary)) }
 func Boolean() Selector { return byType("boolean", is(dtype.TypeBool)) }
 func Enum() Selector    { return byType("enum", is(dtype.TypeEnum)) }
 
-// List is the List columns, Struct the Struct ones, and Nested either.
+// List is the List columns, Array the Array ones, Struct the Struct ones, and Nested
+// any of them. Array is new in 0.6.7.
 func List() Selector   { return byType("list", is(dtype.TypeList)) }
+func Array() Selector  { return byType("array", is(dtype.TypeArray)) }
 func Struct() Selector { return byType("struct", is(dtype.TypeStruct)) }
 func Nested() Selector { return byType("nested", dtype.DataType.IsNested) }
 

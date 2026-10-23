@@ -192,10 +192,9 @@ func (w *Writer) putSchema(s *dtype.Schema) error {
 
 // putDType writes a type, and a List's element type or a Struct's fields after it.
 func (w *Writer) putDType(d dtype.DataType) error {
-	switch d.ID() {
-	case dtype.TypeArray, dtype.TypeCategorical:
-		// Neither has a data.Column representation, so no column of either can
-		// reach a spill.
+	if d.ID() == dtype.TypeCategorical {
+		// It has no data.Column representation, so no column of it can reach a
+		// spill.
 		return uerr.New(uerr.KindUnsupported, "spill",
 			"cannot spill a %s column", d).
 			Hint("ursus has no column representation for %s", d)
@@ -212,6 +211,10 @@ func (w *Writer) putDType(d dtype.DataType) error {
 	}
 	switch d.ID() {
 	case dtype.TypeList:
+		return w.putDType(d.Inner())
+	case dtype.TypeArray:
+		// Its size, then its element type (step 341).
+		w.putUint(uint64(d.Size()))
 		return w.putDType(d.Inner())
 	case dtype.TypeStruct:
 		w.putUint(uint64(len(d.Fields())))
@@ -256,7 +259,7 @@ func (w *Writer) putColumn(c *data.Column) error {
 		}
 		w.putBytes(c.RawChars()[lo:hi])
 
-	case dt.ID() == dtype.TypeList && !c.IsPayloadFree():
+	case dt.IsListLike() && !c.IsPayloadFree():
 		// Offsets are rebased and the element column sliced to the range they
 		// address, for the reason a String's are: a sliced List keeps its parent's
 		// whole element column.
@@ -567,6 +570,16 @@ func (r *Reader) getDType() (dtype.DataType, error) {
 			return dtype.Null, err
 		}
 		return dtype.List(inner), nil
+	case dtype.TypeArray:
+		size, err := r.getUint()
+		if err != nil {
+			return dtype.Null, err
+		}
+		inner, err := r.getDType()
+		if err != nil {
+			return dtype.Null, err
+		}
+		return dtype.Array(inner, int(size)), nil
 	case dtype.TypeStruct:
 		nf, err := r.getUint()
 		if err != nil {

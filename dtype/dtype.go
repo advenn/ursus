@@ -218,6 +218,14 @@ func (d DataType) IsNested() bool {
 	return d.id == TypeList || d.id == TypeArray || d.id == TypeStruct
 }
 
+// IsListLike reports whether values are stored as a List's are, offsets over a child
+// column: a List, or an Array, each of whose valid rows has its Size of elements and
+// each null row none (step 341). This is the storage question; a List's kernels read
+// an Array so, and its type says where it is fixed.
+func (d DataType) IsListLike() bool {
+	return d.id == TypeList || d.id == TypeArray
+}
+
 // IsString reports whether the type's logical values are strings, including Enum.
 //
 // Careful: an Enum is logically a string but is stored as a Uint32 index, so a

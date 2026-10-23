@@ -772,7 +772,9 @@ type listCol struct {
 	elems  listElems
 	maxDef int16 // element present
 	maxRep int16
-	dt     dtype.DataType // the LIST type; the child gets its element
+	dt     dtype.DataType // the LIST type, or an Array's; the child gets its element
+
+	present bool // the open row is a list, not a null one
 
 	// emptyDef is the level at which the list is present and EMPTY, and nullElem
 	// the level of a null element, or -1 when elements cannot be null. Both depend
@@ -841,7 +843,9 @@ func (c *listCol) read(n int) (int, error) {
 				// the caller has all it asked for, leaving the cursor on this level
 				// so the next call resumes exactly here.
 				if c.open {
-					c.offs = append(c.offs, int32(c.elems.count()))
+					if err := c.closeRow(); err != nil {
+						return 0, err
+					}
 					rows++
 					if rows == n {
 						c.open = false
@@ -849,7 +853,8 @@ func (c *listCol) read(n int) (int, error) {
 					}
 				}
 				c.open = true
-				c.valid.Append(def >= c.emptyDef) // shallower is a null list
+				c.present = def >= c.emptyDef
+				c.valid.Append(c.present) // shallower is a null list
 			}
 			if def == c.maxDef {
 				c.elems.appendVal()
@@ -864,7 +869,9 @@ func (c *listCol) read(n int) (int, error) {
 	}
 	// End of chunk closes whatever row is still open.
 	if c.eof && c.open {
-		c.offs = append(c.offs, int32(c.elems.count()))
+		if err := c.closeRow(); err != nil {
+			return 0, err
+		}
 		c.open = false
 		rows++
 	}
@@ -872,9 +879,24 @@ done:
 	return rows, nil
 }
 
+// closeRow ends the open row at the elements read so far. An Array's present row has
+// its size of them, or the file is not the Array its Arrow schema says it is.
+func (c *listCol) closeRow() error {
+	end := int32(c.elems.count())
+	if c.dt.ID() == dtype.TypeArray && c.present {
+		if k := end - c.offs[len(c.offs)-1]; k != int32(c.dt.Size()) {
+			return uerr.New(uerr.KindValue, "scan_parquet",
+				"a column of %s, as the file's Arrow schema has it, holds a row of %d elements", c.dt, k).
+				Hint("cast it to a List, or rewrite the file: every row of an Array has its size")
+		}
+	}
+	c.offs = append(c.offs, end)
+	return nil
+}
+
 func (c *listCol) finish(name string) *data.Column {
 	child := c.elems.finish("item", c.dt.Inner())
-	col := data.NewList(name, c.offs, child, c.valid.Finish())
+	col := data.NewList(name, c.offs, child, c.valid.Finish()).WithDType(c.dt)
 	// Fresh buffers per batch, for the reason fixedCol gives: the constructors
 	// wrap without copying, so reusing them would rewrite a batch the consumer is
 	// still holding.

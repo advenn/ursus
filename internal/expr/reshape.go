@@ -318,7 +318,7 @@ func (r *Reshape) Field(in *dtype.Schema) (dtype.Field, error) {
 	default:
 		return f, nil
 	}
-	if f.Type.ID() != dtype.TypeList {
+	if !f.Type.IsListLike() {
 		return dtype.Field{}, uerr.New(uerr.KindType, "explode",
 			"explode requires a List column, got %s", f.Type).
 			Hint("a column that is not a List has nothing to explode")

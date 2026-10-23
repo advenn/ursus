@@ -316,7 +316,7 @@ func jsonValueText(c *data.Column) (jsonAppender, error) {
 		perSec := map[dtype.TimeUnit]int64{dtype.Nano: 1_000_000_000, dtype.Micro: 1_000_000,
 			dtype.Milli: 1_000, dtype.Second: 1}[dt.TimeUnit()]
 		return jsonOf(c, func(dst []byte, v int64) []byte { return appendISODuration(dst, v, perSec) })
-	case dtype.TypeList:
+	case dtype.TypeList, dtype.TypeArray:
 		acc := c.Lists()
 		elem, err := jsonValues(acc.Child())
 		if err != nil {

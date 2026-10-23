@@ -388,6 +388,7 @@ const (
 	// list.hist, the bin count or -1, include_category, include_breakpoint and the
 	// edges (step 286), which Hist in an aggregation lowers to.
 	FnListHist
+	FnListToArray // list.to_array, the width: an Array of it (step 341)
 	fnListMoreEnd
 )
 
@@ -483,6 +484,13 @@ const (
 	fnBinEnd
 )
 
+// The array family (step 341): to_list, an Array's rows as a List's, which holds them
+// as an Array does. A block of its own at 1400.
+const (
+	FnArrToList CallFn = iota + 1400
+	fnArrEnd
+)
+
 // IsString, IsTemporal and IsGeneral classify a function by family.
 //
 // These are range comparisons over declaration order, which is why the enum is
@@ -505,6 +513,7 @@ func (f CallFn) IsList() bool {
 }
 func (f CallFn) IsStruct() bool { return f >= FnStructField && f < fnStructEnd }
 func (f CallFn) IsBinary() bool { return f >= FnBinEncode && f < fnBinEnd }
+func (f CallFn) IsArr() bool    { return f >= FnArrToList && f < fnArrEnd }
 func (f CallFn) IsHorizontal() bool {
 	return f >= FnConcatStr && f < fnHorizontalEnd
 }
@@ -616,8 +625,9 @@ var callNames = map[CallFn]string{
 	FnListShift: "list.shift", FnListCountMatches: "list.count_matches",
 	FnListAny: "list.any", FnListAll: "list.all", FnListItem: "list.item", FnListSample: "list.sample",
 	FnListMode: "list.mode", FnListUniqueCounts: "list.unique_counts", FnListValueCounts: "list.value_counts",
-	FnListHist: "list.hist",
-	FnListRle:  "list.rle",
+	FnListHist: "list.hist", FnListToArray: "list.to_array",
+	FnArrToList: "arr.to_list",
+	FnListRle:   "list.rle",
 }
 
 func (f CallFn) String() string {
@@ -785,6 +795,9 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 
 	case fn.IsBinary():
 		return binCallOut(c, in)
+
+	case fn.IsArr():
+		return arrCallOut(c, in)
 
 	case fn.IsHorizontal():
 		// Typed from every operand, which a receiver's type is not: Field and the
@@ -2491,6 +2504,21 @@ func callLitString(c *Call, i int) (string, bool) {
 	return s, ok
 }
 
+// arrCallOut gives the output type of an `.arr` call (step 341): an Array is a List
+// each of whose rows has its size, so its functions are a List's, read as one.
+func arrCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
+	if in.ID() != dtype.TypeArray {
+		return dtype.Null, uerr.New(uerr.KindType, "arr",
+			"%s requires an Array operand, got %s", c.Fn, in).
+			Hint("a List becomes an Array of a width by List().ToArray(width)")
+	}
+	switch c.Fn {
+	case FnArrToList:
+		return dtype.List(in.Inner()), nil
+	}
+	return dtype.Null, uerr.Internalf("expr: no type for %s", c.Fn)
+}
+
 // listCallOut gives the output type of a `.list` call.
 //
 // The namespace has two halves and the output type is what tells them apart. One
@@ -2570,6 +2598,17 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 
 	case FnListSample:
 		return in, nil
+
+	case FnListToArray:
+		// An Array of the width, which every row is checked to have, as Polars
+		// checks it (step 341).
+		w, ok := callLitInt64(c, 1)
+		if !ok || w < 0 {
+			return dtype.Null, uerr.New(uerr.KindValue, "list",
+				"%s takes a constant width of at least 0", fn).
+				Hint("an Array's width is the elements in each of its rows")
+		}
+		return dtype.Array(elem, int(w)), nil
 
 	case FnListHist:
 		args, err := CallArgs(c)

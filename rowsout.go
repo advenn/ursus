@@ -170,7 +170,7 @@ func valueReader(c *data.Column) (func(int) any, error) {
 			return nil, err
 		}
 		return typedReader[string](text)
-	case dtype.TypeList:
+	case dtype.TypeList, dtype.TypeArray:
 		lists := c.Lists()
 		elem, err := cellReader(lists.Child())
 		if err != nil {

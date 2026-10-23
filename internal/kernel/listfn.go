@@ -64,6 +64,14 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 	n := c.Len()
 
 	switch fn {
+	case expr.FnListToArray:
+		// The same column under the Array's type, once every row is checked to have
+		// its width (step 341): an Array is held as a List is.
+		if err := checkWidths(c, out); err != nil {
+			return nil, err
+		}
+		return c.WithDType(out).Rename(name), nil
+
 	case expr.FnListLen:
 		vals := make([]uint32, n)
 		valid := bitmap.NewBuilder(n)

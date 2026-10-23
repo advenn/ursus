@@ -358,6 +358,14 @@ func (l ListExpr) Gather(indices Expr, nullOnOOB bool) Expr {
 	return l.operand(expr.FnListGather, indices)
 }
 
+// ToArray is each list as an Array of width elements, Polars' list.to_array: every
+// list but a null one must hold width elements, or the query is refused, as Polars
+// refuses it ("not all elements have the specified width"). A null list is a null
+// Array. Arr().ToList() is the way back.
+//
+// New in 0.6.7.
+func (l ListExpr) ToArray(width int) Expr { return l.call(expr.FnListToArray, int64(width)) }
+
 // ToStruct makes each list a Struct whose fields are its first elements, named by
 // names: field i is element i, null where the list is shorter, and the elements past
 // the last field are dropped. A null list is a null struct, where Polars gives a

@@ -359,8 +359,13 @@ func CanCast(from, to DataType) bool {
 		return true
 	case from.id == TypeList && to.id == TypeList:
 		return CanCast(from.Inner(), to.Inner())
-	case from.id == TypeArray && to.id == TypeList:
+	// An Array is a List each of whose rows has its size (step 341): a List becomes
+	// one where every row has, as Polars refuses one that has not, and an Array
+	// becomes another of its own size only.
+	case from.id == TypeArray && to.id == TypeList, from.id == TypeList && to.id == TypeArray:
 		return CanCast(from.Inner(), to.Inner())
+	case from.id == TypeArray && to.id == TypeArray:
+		return from.Size() == to.Size() && CanCast(from.Inner(), to.Inner())
 	default:
 		return false
 	}

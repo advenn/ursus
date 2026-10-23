@@ -67,7 +67,7 @@ func Take(c *data.Column, sel []int32) (*data.Column, error) {
 		}
 		return data.NewBool(c.Name(), out.Finish(), outValid), nil
 
-	case c.DType().ID() == dtype.TypeList:
+	case c.DType().IsListLike():
 		return takeList(c, sel, outValid)
 
 	case c.DType().ID() == dtype.TypeStruct:
@@ -129,7 +129,7 @@ func takeValidity(c *data.Column, sel []int32) bitmap.View {
 func TakeChunked(c *data.Column, sel []int32, chunk int, run func(n int, fn func(k int) error) error) (*data.Column, error) {
 	dt := c.DType()
 	switch {
-	case dt.IsNull(), dt.ID() == dtype.TypeBool, dt.ID() == dtype.TypeList, dt.ID() == dtype.TypeStruct:
+	case dt.IsNull(), dt.ID() == dtype.TypeBool, dt.IsListLike(), dt.ID() == dtype.TypeStruct:
 		return Take(c, sel)
 	case dt.HasStringStorage():
 		return data.TakeStringsChunked(c, sel, takeValidity(c, sel), chunk, run)
@@ -269,7 +269,7 @@ func NullColumn(name string, dt dtype.DataType, n int) (*data.Column, error) {
 		// StringAccessor.Get needs in order to return "" rather than panic.
 		return data.NewString(name, make([]string, n), valid).WithDType(dt), nil
 
-	case dt.ID() == dtype.TypeList:
+	case dt.IsListLike():
 		// n+1 zero offsets over an EMPTY child, which is the list shape of the
 		// String arm above and is what ListAccessor needs to report a zero-length
 		// range rather than index past the end.
@@ -283,7 +283,8 @@ func NullColumn(name string, dt dtype.DataType, n int) (*data.Column, error) {
 		if err != nil {
 			return nil, err
 		}
-		return data.NewList(name, make([]int32, n+1), child, valid), nil
+		// An Array's null rows hold no element, as a List's (dtype.IsListLike).
+		return data.NewList(name, make([]int32, n+1), child, valid).WithDType(dt), nil
 
 	case dt.ID() == dtype.TypeStruct:
 		// Every field a null column of the same height, under an all-zero validity
@@ -597,7 +598,7 @@ func concatColumn(parts []*data.Column, total int) (*data.Column, error) {
 		}
 		return data.NewBool(first.Name(), bits.Finish(), outValid), nil
 
-	case first.DType().ID() == dtype.TypeList:
+	case first.DType().IsListLike():
 		return concatList(parts, total, outValid)
 
 	case first.DType().ID() == dtype.TypeStruct:
@@ -685,7 +686,7 @@ func takeList(c *data.Column, sel []int32, outValid bitmap.View) (*data.Column, 
 	if err != nil {
 		return nil, err
 	}
-	return data.NewList(c.Name(), offs, child, outValid), nil
+	return data.NewList(c.Name(), offs, child, outValid).WithDType(c.DType()), nil
 }
 
 // concatList concatenates List columns.
@@ -730,7 +731,7 @@ func concatList(parts []*data.Column, total int, outValid bitmap.View) (*data.Co
 	if err != nil {
 		return nil, err
 	}
-	return data.NewList(parts[0].Name(), offs, child, outValid), nil
+	return data.NewList(parts[0].Name(), offs, child, outValid).WithDType(parts[0].DType()), nil
 }
 
 // concatChild concatenates the element columns, reusing concatColumn so the

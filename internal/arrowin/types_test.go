@@ -103,7 +103,8 @@ func sampleArrowType(id arrow.Type) (typeCase, bool) {
 	case arrow.EXTENSION:
 		return to(extensions.NewUUIDType(), dtype.Binary)
 	case arrow.FIXED_SIZE_LIST:
-		return to(arrow.FixedSizeListOf(2, i64), dtype.List(dtype.Int64))
+		// An Array, as Polars reads one (step 341).
+		return to(arrow.FixedSizeListOf(2, i64), dtype.Array(dtype.Int64, 2))
 	case arrow.DURATION:
 		return to(arrow.FixedWidthTypes.Duration_s, dtype.Duration(dtype.Second))
 	case arrow.LARGE_STRING:

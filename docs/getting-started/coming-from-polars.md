@@ -128,6 +128,7 @@ changes is what Go asks for.
 | `.group_by_dynamic("step", every="5i")`, `.rolling_sum_by("step", "3i")` | `ursus.DynamicOptions{Every: ursus.Every("5i")}`, `.RollingSumBy(ursus.Col("step"), ursus.Every("3i"))`, over an integer index (new in 0.6.7) |
 | `.str.contains(p)`, `.dt.year()`, `.list.len()` | `.Str().Contains(p, false)`, `.Dt().Year()`, `.List().Len()` |
 | `.struct.field("f")` | `.Struct().Field("f")` |
+| `pl.Array(pl.Float64, 3)`, `.list.to_array(3)`, `.arr.to_list()` | `ursus.Array(ursus.Float64, 3)`, `.List().ToArray(3)`, `.Arr().ToList()`; a Go `[3]float64` in rows (new in 0.6.7) |
 | `pl.arctan2(y, x)`, `.truediv(v)`, `.limit(n)`, `.pipe(f)` | `ursus.Arctan2(y, x)`, `.TrueDiv(v)`, `.Limit(n)`, `.Pipe(f)` (new in 0.6.7) |
 | `.item()`, `.lower_bound()`, `.upper_bound()`, `.is_sorted()` | `.Item(false)`, `.LowerBound()`, `.UpperBound()`, `.IsSorted(false, false)` (new in 0.6.7) |
 | `.str.to_time("%H:%M")`, `.str.to_decimal(scale=2)`, `.dt.cast_time_unit("ms")` | `.Str().ToTime("%H:%M", true)`, `.Str().ToDecimal(2)`, `.Dt().CastTimeUnit(ursus.Milli)` (new in 0.6.7) |

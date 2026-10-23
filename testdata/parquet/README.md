@@ -40,3 +40,15 @@ use_dictionary=['dict'], write_batch_size=50`: 3,000 rows of two String columns,
 (RLE_DICTIONARY) and `plain`, each holding "v%04d" of i*7 mod 1000, and null where i is
 a multiple of 13. Its 256-byte pages put dozens in every batch the reader reads.
 `readerroundtrip_test.go` reads it (step 124).
+
+`polars_array.parquet` — Polars 1.44.1, `df.write_parquet(path, compression='uncompressed')`,
+four rows: `k` Int64 1 to 4; `a`, an `Array(Int64, 3)`: [1, 2, 3], [4, null, 6], a null
+row and [7, 8, 9]; `f`, an `Array(Float64, 2)`: [0.5, 1.0], a null row, [2.0, 3.0] and
+[4.0, -0.0]. Polars writes each as a LIST and keeps its size in the footer's
+`ARROW:schema`. `array_test.go` reads it (step 341); `testdata/ipc/polars_array.arrow`
+is the same frame from `write_ipc(path, compression='uncompressed')`.
+
+`pyarrow_bad_array.parquet` — pyarrow 25, a LIST column `a` of [1, 2, 3] and [4, 5],
+written with `store_schema=False`, then an `ARROW:schema` added by hand that calls `a`
+a fixed-size list of 3. PyArrow refuses it ("Expected all lists to be of size=3") and
+Polars 1.44.1 panics; `array_test.go` checks ursus refuses it by name (step 341).

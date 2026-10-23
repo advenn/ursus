@@ -146,6 +146,32 @@ func Example_listExplode() {
 	// └───────┴─────────┴─────────┘
 }
 
+// point is a row of Example_arrays: a name and a position, three coordinates.
+type point struct {
+	Name string
+	XYZ  [3]float64
+}
+
+func Example_arrays() {
+	points := ursus.FromRows([]point{
+		{"a", [3]float64{1, 2, 2}},
+		{"b", [3]float64{0, 3, 4}},
+	})
+	show(points.WithColumns(
+		ursus.Col("XYZ").Arr().ToList().List().Sum().Alias("sum"),
+		ursus.Col("XYZ").Arr().ToList().List().Head(2).List().ToArray(2).Alias("xy"),
+	))
+	// Output:
+	// shape: (2, 4)
+	// ┌────────┬───────────────────┬─────────┬───────────────────┐
+	// │ Name   │ XYZ               │ sum     │ xy                │
+	// │ String │ Array(Float64, 3) │ Float64 │ Array(Float64, 2) │
+	// ├────────┼───────────────────┼─────────┼───────────────────┤
+	// │ "a"    │ [1, 2, 2]         │ 5       │ [1, 2]            │
+	// │ "b"    │ [0, 3, 4]         │ 7       │ [0, 3]            │
+	// └────────┴───────────────────┴─────────┴───────────────────┘
+}
+
 func Example_structBuild() {
 	show(sales().Head(3).Select(
 		ursus.Col("order_id"),

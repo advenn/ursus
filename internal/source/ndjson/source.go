@@ -154,7 +154,8 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 // a Date, a Datetime, a Time, a Decimal, an Enum.
 func natural(t dtype.DataType) dtype.DataType {
 	switch {
-	case t.ID() == dtype.TypeList:
+	case t.IsListLike():
+		// An Array is read as a List, and the cast checks each row's width (step 341).
 		return dtype.List(natural(t.Inner()))
 	case t.ID() == dtype.TypeStruct:
 		fs := make([]dtype.Field, len(t.Fields()))

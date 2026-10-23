@@ -98,7 +98,6 @@ func sampleType(id dtype.TypeID) (dtype.DataType, bool) {
 // as an unexpected refusal and fails, rather than quietly joining the set of things
 // that do not work.
 var notExportable = map[dtype.TypeID]bool{
-	dtype.TypeArray:       true,
 	dtype.TypeEnum:        true,
 	dtype.TypeCategorical: true,
 	dtype.TypeUint128:     true,

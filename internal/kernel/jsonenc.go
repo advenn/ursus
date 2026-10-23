@@ -88,7 +88,7 @@ func newJSONCol(c *data.Column) (*jsonCol, error) {
 			j.fields = append(j.fields, fj)
 			j.keys = append(j.keys, string(appendJSONString(nil, f.Name())))
 		}
-	case dt.ID() == dtype.TypeList:
+	case dt.IsListLike():
 		j.kind = jsonList
 		elem, err := newJSONCol(c.Lists().Child())
 		if err != nil {

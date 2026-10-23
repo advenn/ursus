@@ -7,6 +7,7 @@ import (
 	"github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/compress"
 	"github.com/apache/arrow-go/v18/parquet/file"
+	"github.com/apache/arrow-go/v18/parquet/metadata"
 	"github.com/apache/arrow-go/v18/parquet/schema"
 
 	"github.com/advenn/ursus/dtype"
@@ -100,7 +101,20 @@ func NewWriter(w io.Writer, s *dtype.Schema, o WriteOptions) (*Writer, error) {
 	// io.Closer and closes it. That would close a caller's os.Stdout, and it makes
 	// an outer `defer f.Close()` fail with "file already closed" — which is how this
 	// was found. Hiding every method but Write keeps the close where it belongs.
-	pw, err := file.NewParquetWriterWithError(writeOnly{w}, root, file.WithWriterProps(props))
+	opts := []file.WriteOption{file.WithWriterProps(props)}
+	if hasArray(s) {
+		// An Array's size, in the footer, as Arrow's writers keep it (arrowschema.go).
+		v, err := arrowSchemaValue(s)
+		if err != nil {
+			return nil, err
+		}
+		meta := make(metadata.KeyValueMetadata, 0, 1)
+		if err := meta.Append(arrowSchemaKey, v); err != nil {
+			return nil, uerr.Wrap(err, uerr.KindInternal, "sink_parquet", "writing the Arrow schema")
+		}
+		opts = append(opts, file.WithWriteMetadata(meta))
+	}
+	pw, err := file.NewParquetWriterWithError(writeOnly{w}, root, opts...)
 	if err != nil {
 		return nil, uerr.Wrap(err, uerr.KindIO, "sink_parquet", "starting the file")
 	}
@@ -222,7 +236,7 @@ func shred(c *data.Column) []leafData {
 		}
 		return out
 
-	case dtype.TypeList:
+	case dtype.TypeList, dtype.TypeArray:
 		acc := c.Lists()
 		child := acc.Child()
 		l := leafData{col: child, defs: make([]int16, 0, n), reps: make([]int16, 0, n)}

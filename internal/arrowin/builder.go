@@ -97,12 +97,12 @@ func newBuilder(dt dtype.DataType) (builder, error) {
 	case dtype.TypeString, dtype.TypeBinary:
 		return &bytesBuilder{dt: dt, offs: []int32{0}}, nil
 
-	case dtype.TypeList:
+	case dtype.TypeList, dtype.TypeArray:
 		child, err := newBuilder(dt.Inner())
 		if err != nil {
 			return nil, err
 		}
-		return &listBuilder{child: child, offs: []int32{0}}, nil
+		return &listBuilder{dt: dt, child: child, offs: []int32{0}}, nil
 
 	case dtype.TypeStruct:
 		fs := dt.Fields()
@@ -856,6 +856,7 @@ func (b *bytesBuilder) finish(name string) (*data.Column, error) {
 // --- list --------------------------------------------------------------------------
 
 type listBuilder struct {
+	dt    dtype.DataType // a List, or an Array, whose null rows hold no element as a List's
 	offs  []int32
 	child builder
 	valid validity
@@ -958,7 +959,7 @@ func (b *listBuilder) finish(name string) (*data.Column, error) {
 		return nil, err
 	}
 	n := len(b.offs) - 1
-	return data.NewList(name, b.offs, child, b.valid.finish(n)), nil
+	return data.NewList(name, b.offs, child, b.valid.finish(n)).WithDType(b.dt), nil
 }
 
 // --- struct ------------------------------------------------------------------------

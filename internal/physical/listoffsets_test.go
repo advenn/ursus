@@ -139,8 +139,9 @@ func TestEveryListFunctionHonoursASlicedList(t *testing.T) {
 			recv = "lb"
 		case expr.FnListExplode:
 			recv = "ll"
-		case expr.FnListItem:
-			// It refuses a list of other than one element, which most rows here are.
+		case expr.FnListItem, expr.FnListToArray:
+			// Each refuses a list of other than one length, one element or the width
+			// (step 341), which most rows here are not.
 			continue
 		}
 		for _, set := range contractArgSets(fn) {

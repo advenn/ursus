@@ -241,7 +241,7 @@ func (s *Source) readSchemas(ctx context.Context) (*dtype.Schema, map[int]error,
 			return nil, nil, err
 		}
 		rows += r.NumRows()
-		fs, _, un, err := fileSchema(r.MetaData().Schema)
+		fs, _, un, err := fileSchema(r.MetaData())
 		closer()
 		if err != nil {
 			return nil, nil, uerr.Annotate(err, "scan_parquet", s.partName(k))
@@ -344,7 +344,7 @@ type fileLayout struct {
 // refused if it now allows nulls in a column the plan treats as non-null, because
 // the engine would be handed nulls it has promised cannot occur.
 func (s *Source) layoutFor(full *dtype.Schema, md *metadata.FileMetaData, k int) (fileLayout, error) {
-	fs, leaves, un, err := fileSchema(md.Schema)
+	fs, leaves, un, err := fileSchema(md)
 	if err != nil {
 		return fileLayout{}, uerr.Annotate(err, "scan_parquet", s.partName(k))
 	}
@@ -428,9 +428,11 @@ func (s *Source) openFile(ctx context.Context, i int) (_ *file.Reader, _ func(),
 // it fails in Open with the message it always produced. Nothing is dropped
 // silently; a file with twenty flat columns and one struct is simply no longer
 // unopenable, which it was.
-func fileSchema(sc *schema.Schema) (*dtype.Schema, [][]int, map[int]error, error) {
+func fileSchema(md *metadata.FileMetaData) (*dtype.Schema, [][]int, map[int]error, error) {
+	sc := md.Schema
 	root := sc.Root()
 	n := root.NumFields()
+	arrays := arraysOf(md.KeyValueMetadata())
 
 	fields := make([]dtype.Field, n)
 	leaves := make([][]int, n)
@@ -439,6 +441,9 @@ func fileSchema(sc *schema.Schema) (*dtype.Schema, [][]int, map[int]error, error
 	for i := range n {
 		f := root.Field(i)
 		dt, leaf, err := fieldType(sc, f)
+		if size, ok := arrays[f.Name()]; ok && dt.ID() == dtype.TypeList {
+			dt = dtype.Array(dt.Inner(), size)
+		}
 		leaves[i] = leaf
 		if err != nil {
 			if unread == nil {
@@ -1180,7 +1185,7 @@ func newColReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataT
 	// A List is read by listCol, which owns the level machine; the element type
 	// decides which instantiation. desc is the ELEMENT's leaf descriptor, so its
 	// levels are the ones the machine needs.
-	if dt.ID() == dtype.TypeList {
+	if dt.IsListLike() {
 		return newListReader(cr, desc, dt)
 	}
 	if dt.ID() == dtype.TypeNull {

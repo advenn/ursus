@@ -287,9 +287,11 @@ func (m *schemaMatch) meet(e Expr, from, to DataType, c columnSettings, at strin
 		return e.Cast(to), nil
 	case from.ID() == dtype.TypeStruct && to.ID() == dtype.TypeStruct:
 		return m.meetStruct(e, from, to, c, at)
-	case from.ID() == dtype.TypeList && to.ID() == dtype.TypeList:
-		// A List's element widens as a column does. A List of structs whose fields
-		// differ would need its elements rebuilt, which a cast does not do.
+	case from.ID() == dtype.TypeList && to.ID() == dtype.TypeList,
+		from.ID() == dtype.TypeArray && to.ID() == dtype.TypeArray && from.Size() == to.Size():
+		// A List's element widens as a column does, and an Array's of one size.
+		// A List of structs whose fields differ would need its elements rebuilt,
+		// which a cast does not do.
 		if from.Inner().ID() == dtype.TypeStruct || to.Inner().ID() == dtype.TypeStruct {
 			return Expr{}, mismatch(at, from, to).
 				Hint("a List of Structs whose fields differ is not matched yet")

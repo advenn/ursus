@@ -174,10 +174,39 @@ func makeSetter(ft reflect.Type, c *data.Column) (func(reflect.Value, int), erro
 
 	case reflect.Slice:
 		return sliceSetter(ft, c)
+
+	case reflect.Array:
+		return arraySetter(ft, c)
 	}
 
 	return nil, uerr.New(uerr.KindType, "", "no decoder for Go type %s from column %s",
 		ft, c.DType())
+}
+
+// arraySetter decodes an Array into a Go array of its size, each element through its
+// type's own setter (step 341). A null is the zero array, which a *[N]T field tells
+// apart.
+func arraySetter(ft reflect.Type, c *data.Column) (func(reflect.Value, int), error) {
+	if c.DType().ID() != dtype.TypeArray || c.DType().Size() != ft.Len() {
+		return nil, uerr.New(uerr.KindType, "", "no decoder for Go type %s from column %s",
+			ft, c.DType()).Hint("a Go array decodes an Array of its own size; a slice decodes either")
+	}
+	lists := c.Lists()
+	elem, err := makeSetter(ft.Elem(), lists.Child())
+	if err != nil {
+		return nil, uerr.New(uerr.KindType, "", "no decoder for Go type %s from column %s: "+
+			"its elements: %v", ft, c.DType(), err)
+	}
+	return func(dst reflect.Value, row int) {
+		lo, _, ok := lists.Get(row)
+		if !ok {
+			dst.SetZero()
+			return
+		}
+		for j := range ft.Len() {
+			elem(dst.Index(j), int(lo)+j)
+		}
+	}, nil
 }
 
 // structSetter decodes a Struct into a struct, each field from the struct's field
@@ -243,9 +272,9 @@ func sliceSetter(ft reflect.Type, c *data.Column) (func(reflect.Value, int), err
 			dst.SetBytes([]byte(acc.Get(row)))
 		}, nil
 	}
-	if c.DType().ID() != dtype.TypeList {
+	if !c.DType().IsListLike() {
 		return nil, uerr.New(uerr.KindType, "", "no decoder for Go type %s from column %s",
-			ft, c.DType()).Hint("a slice field decodes a List column, or a []byte a Binary one")
+			ft, c.DType()).Hint("a slice field decodes a List or an Array column, or a []byte a Binary one")
 	}
 	lists := c.Lists()
 	elem, err := makeSetter(ft.Elem(), lists.Child())

@@ -169,6 +169,14 @@ func Type(d dtype.DataType) (arrow.DataType, error) {
 		}
 		return arrow.ListOfField(elem), nil
 
+	case dtype.TypeArray:
+		// A FixedSizeList, as Polars writes an Array (step 341).
+		elem, err := Field("item", d.Inner(), true)
+		if err != nil {
+			return nil, err
+		}
+		return arrow.FixedSizeListOfField(int32(d.Size()), elem), nil
+
 	case dtype.TypeStruct:
 		fields := make([]arrow.Field, 0, len(d.Fields()))
 		for _, f := range d.Fields() {
@@ -265,6 +273,70 @@ func Record(b *data.Batch) (arrow.Record, error) {
 	return rec, nil
 }
 
+// arrayChild is an Array column's elements as a FixedSizeList holds them, its size of
+// them a row from the first: its own child where every row has its size, shared, and
+// where a null row holds none, as an ursus Array's does, the rows' elements with a
+// null's size of nulls between them.
+func arrayChild(c *data.Column) (arrow.ArrayData, error) {
+	size, n := int32(c.DType().Size()), c.Len()
+	lists := c.Lists()
+	child, err := columnData(lists.Child())
+	if err != nil {
+		return nil, err
+	}
+	lo, _ := lists.Window()
+	whole := true
+	for i := range n {
+		if s, e, _ := lists.Get(i); e-s != size {
+			whole = false
+			break
+		}
+	}
+	if whole {
+		d := array.NewSliceData(child, int64(lo), int64(lo)+int64(n)*int64(size))
+		child.Release()
+		return d, nil
+	}
+	defer child.Release()
+	values := array.MakeFromData(child)
+	defer values.Release()
+	var parts []arrow.Array
+	defer func() {
+		for _, p := range parts {
+			p.Release()
+		}
+	}()
+	for i := 0; i < n; {
+		s, e, _ := lists.Get(i)
+		if e-s != size {
+			parts = append(parts, array.MakeArrayOfNull(memory.DefaultAllocator, values.DataType(), int(size)))
+			i++
+			continue
+		}
+		// A run of whole rows, one slice.
+		j := i + 1
+		for j < n {
+			if s2, e2, _ := lists.Get(j); e2-s2 != size || s2 != s+int32(j-i)*size {
+				break
+			}
+			j++
+		}
+		parts = append(parts, array.NewSlice(values, int64(s), int64(s)+int64(j-i)*int64(size)))
+		i = j
+	}
+	if len(parts) == 0 {
+		return array.NewSliceData(child, 0, 0), nil
+	}
+	all, err := array.Concatenate(parts, memory.DefaultAllocator)
+	if err != nil {
+		return nil, uerr.Wrap(err, uerr.KindInternal, "arrow", "padding an Array's null rows")
+	}
+	d := all.Data()
+	d.Retain()
+	all.Release()
+	return d, nil
+}
+
 // Column exports one column as an Arrow array.
 func Column(c *data.Column) (arrow.Array, error) {
 	d, err := columnData(c)
@@ -310,6 +382,15 @@ func columnData(c *data.Column) (arrow.ArrayData, error) {
 		d := array.NewData(at, n,
 			[]*memory.Buffer{valid, shareBytes(c.RawOffsets())},
 			[]arrow.ArrayData{child}, nulls, 0)
+		child.Release()
+		return d, nil
+
+	case dtype.TypeArray:
+		child, err := arrayChild(c)
+		if err != nil {
+			return nil, err
+		}
+		d := array.NewData(at, n, []*memory.Buffer{valid}, []arrow.ArrayData{child}, nulls, 0)
 		child.Release()
 		return d, nil
 

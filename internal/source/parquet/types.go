@@ -245,7 +245,7 @@ func toNode(f dtype.Field) (schema.Node, error) {
 	// the standard three-level encoding, and a Struct of primitive fields. Each was
 	// refused until step 81, so a file ursus read it could not write back.
 	switch f.Type.ID() {
-	case dtype.TypeList, dtype.TypeStruct:
+	case dtype.TypeList, dtype.TypeArray, dtype.TypeStruct:
 		return nestedNode(f)
 	}
 
@@ -370,11 +370,13 @@ func nestedNode(f dtype.Field) (schema.Node, error) {
 		if err != nil {
 			return nil, uerr.New(uerr.KindUnsupported, "sink_parquet",
 				"cannot write column %q of type %s to Parquet", f.Name, f.Type).
-				Hint("its %s %q: %v", map[bool]string{true: "element", false: "field"}[f.Type.ID() == dtype.TypeList], fd.Name, err)
+				Hint("its %s %q: %v", map[bool]string{true: "element", false: "field"}[f.Type.IsListLike()], fd.Name, err)
 		}
 		return n, nil
 	}
-	if f.Type.ID() == dtype.TypeList {
+	// An Array is written as a List is, as Polars writes one, its size in the
+	// footer's Arrow schema (step 341).
+	if f.Type.IsListLike() {
 		el, err := inner(dtype.Field{Name: "element", Type: f.Type.Inner(), Nullable: true})
 		if err != nil {
 			return nil, err

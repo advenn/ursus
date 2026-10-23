@@ -43,7 +43,7 @@ func contextFor(t testing.TB) context.Context {
 // renderer that cannot tell values apart has to say so.
 func renderValue(c *data.Column, row int) (string, error) {
 	switch c.DType().ID() {
-	case dtype.TypeList:
+	case dtype.TypeList, dtype.TypeArray:
 		return renderList(c, row)
 	case dtype.TypeStruct:
 		return renderStruct(c, row)

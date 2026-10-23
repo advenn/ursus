@@ -193,7 +193,7 @@ func renderCell(c *data.Column, row int) string {
 	//
 	// An empty list renders "[]" and a null list "null", which is the distinction
 	// the whole type has to keep — and the cheapest place to see it broken.
-	if c.DType().ID() == dtype.TypeList {
+	if c.DType().IsListLike() {
 		acc := c.Lists()
 		start, end, _ := acc.Get(row)
 		var b strings.Builder

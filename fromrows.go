@@ -139,7 +139,8 @@ func encodeField(name string, t reflect.Type, l loc) (*Column, error) {
 				p = *(*unsafe.Pointer)(p)
 			}
 			valid.Append(p != nil)
-			if p == nil {
+			if p == nil && t.Elem().Kind() != reflect.Array {
+				// An array's null row holds no element, so its pointer stays nil.
 				p = zero
 			}
 			ptrs[i] = p
@@ -183,6 +184,27 @@ func encodeField(name string, t reflect.Type, l loc) (*Column, error) {
 		}
 		return data.NewList(name, offs, child, valid.Finish()), nil
 
+	case reflect.Array:
+		// An Array of the Go array's size (step 341): each row's elements in place, a
+		// null row's, behind a nil pointer, none.
+		n, size := t.Len(), t.Elem().Size()
+		offs := make([]int32, l.rows+1)
+		valid := bitmap.NewBuilder(l.rows)
+		elems := make([]unsafe.Pointer, 0, l.rows*n)
+		for i := range l.rows {
+			p := l.value(i)
+			valid.Append(p != nil)
+			for j := 0; p != nil && j < n; j++ {
+				elems = append(elems, unsafe.Add(p, uintptr(j)*size))
+			}
+			offs[i+1] = int32(len(elems))
+		}
+		child, err := encodeField("item", t.Elem(), loc{rows: len(elems), ptrs: elems})
+		if err != nil {
+			return nil, err
+		}
+		return data.NewList(name, offs, child, valid.Finish()).WithDType(dtype.Array(child.DType(), n)), nil
+
 	case reflect.Struct:
 		fields, err := structColumns(t, l)
 		if err != nil {
@@ -191,8 +213,8 @@ func encodeField(name string, t reflect.Type, l loc) (*Column, error) {
 		return data.NewStruct(name, fields, bitmap.AllSet(l.rows)), nil
 	}
 	return nil, uerr.New(uerr.KindType, "from_rows", "a %s has no column type", t).
-		Hint("a field is a number, a bool, a string, []byte, time.Time, time.Duration, a pointer to one, a slice " +
-			"or a struct of them")
+		Hint("a field is a number, a bool, a string, []byte, time.Time, time.Duration, a pointer to one, a slice, " +
+			"an array or a struct of them")
 }
 
 // isScalar reports whether a value of t is one column value: a number, a bool, a

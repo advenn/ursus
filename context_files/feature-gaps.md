@@ -93,7 +93,7 @@ differs from their input's, or scalars outside a group-by.
 | missing | note | prio |
 | --- | --- | --- |
 | **Categorical** | only Enum exists; `TypeCategorical` is reserved | P1 |
-| **Array** (fixed-size list) | the type constructor exists; no storage, kernels or Arrow export | P1 |
+| **Array** (fixed-size list) | built in step 341: held as a List each of whose rows has its size, a null row none; casts to and from a List, `List().ToArray`, `Arr().ToList`, a Go `[n]T`, Arrow `FixedSizeList` in and out, Parquet by the footer's Arrow schema, NDJSON by a schema, JSON. Left: the rest of the `arr` namespace, `reshape`, `concat_arr`; as a key it is refused, as a List is | P1 |
 | **Large strings and binary** (64-bit offsets, `BinaryOffset`) | a String column holds at most 2 GiB of characters | P1 |
 | **String view layout** | Arrow's view types are converted on import | P2 |
 | **UInt128, Float16, Object, Unknown** | Float16 is widened to Float32 on import | P2 |
@@ -280,6 +280,7 @@ These belong to a performance release more than to features.
 | **An eager frame's `Head` and `Tail` plan and run a query,** about 20 µs a call, where a slice of its batch would cost nothing: `MapGroups` calling `Head` on each of 1,000 groups spent 20 ms of 48 there (step 321) | P2 |
 | **A sort, a unique and a mean of a million integers are 8 to 13 times Polars':** one Int64 column of a million distinct values, in memory: a frame's sort 154 ms, its unique 457 ms, its mean 4.8 ms, where Polars' Series takes 12, 35 and 0.47. The sort is a single thread's (see parallel sort above); the unique encodes each key, where the join's integer keys have skipped the encoding since step 159; and the mean of integers is slower than its sum ought to be. A Series' operations, which run these, measured them (step 319) | P1 |
 | **A group's `Mode` runs on one worker:** it depends on its rows' order, the first appearance of each value and a float's first bits, so its group-by is serial, as `Implode`'s is: over a million rows by 1000 groups 38 ms, where Polars, a group to a thread, takes 19, and over the frame 18 against 5. Without `maintainOrder`, a mode of anything but a float could run on every worker and merge (step 340) | P2 |
+| **A List column pays to pass through a query:** selecting a list of three integers a row, a million rows, held in memory, takes 11.6 ms where Polars takes 0.6: the frame is cut into batches and its lists concatenated again at the end. `List().ToArray(3)` adds 0.4 ms to it, a check of each row's width and a relabel; a cast to `Array(Float64, 3)` takes 20 ms against Polars' 3.8, its elements gathered and cast (step 341) | P2 |
 | **A join's right order hashes the left frame:** a million left rows against 100,000 right, in memory, takes 57 ms inner and 75 ms left, where Polars' takes 33 and 37; ursus's left order takes 16, Polars' 12. The hash of the larger side is most of it, as a plain join that hashes a million rows takes 47 ms. A probe of the left frame and a counting sort by the right row would hash the smaller side. An ordered right or full join numbers its table's rows always, about a tenth of its time, where only a spilled one needs them (step 314) | P2 |
 | **SQL** (`SQLContext`, `.sql()`, `sql_expr`) | out by decision |
 | GPU, plugins, Python bindings, distributed execution | P3 |

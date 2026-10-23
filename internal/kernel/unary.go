@@ -704,7 +704,16 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 	// hold. Casting in place therefore rejects a slice because of a row outside it.
 	// Measured: a strict cast of [[999],[1,2,3]] sliced to its second row refuses
 	// with "value 999 at row 0 is not representable as Int8".
-	if from.ID() == dtype.TypeList && to.ID() == dtype.TypeList {
+	//
+	// An Array is a List each of whose rows has its size (step 341), so the same
+	// gather casts between them, and a List becomes an Array only where every row
+	// has the size, as Polars refuses it otherwise; an Array changes no size.
+	if from.IsListLike() && to.IsListLike() {
+		if to.ID() == dtype.TypeArray {
+			if err := checkWidths(c, to); err != nil {
+				return nil, err
+			}
+		}
 		offs, elems, err := listGather(c, listElements)
 		if err != nil {
 			return nil, err
@@ -713,7 +722,7 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 		if err != nil {
 			return nil, err
 		}
-		return data.NewList(name, offs, child, c.Validity()), nil
+		return data.NewList(name, offs, child, c.Validity()).WithDType(to), nil
 	}
 
 	fp, tp := from.Physical(), to.Physical()
@@ -747,6 +756,28 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 		return nil, err
 	}
 	return floatsToInt(name, to, src, c.Validity(), strict)
+}
+
+// checkWidths refuses a List whose valid rows are not all of to's size, to an
+// Array's, as Polars refuses it: "not all elements have the specified width". An
+// Array keeps its size, which the planner checks first (dtype.CanCast).
+func checkWidths(c *data.Column, to dtype.DataType) error {
+	from := c.DType()
+	if from.ID() == dtype.TypeArray {
+		if from.Size() != to.Size() {
+			return uerr.New(uerr.KindType, "cast", "cannot cast %s to %s: an Array keeps its size", from, to)
+		}
+		return nil
+	}
+	lists, w := c.Lists(), int32(to.Size())
+	for i := range c.Len() {
+		if s, e, ok := lists.Get(i); ok && e-s != w {
+			return uerr.New(uerr.KindValue, "cast",
+				"not all elements have the specified width %d: row %d has %d", w, i, e-s).
+				Hint("an Array's every row has its size; a List of other lengths stays a List")
+		}
+	}
+	return nil
 }
 
 // boolToNumeric renders false as 0 and true as 1, which is what every other

@@ -62,6 +62,19 @@ lists a row, in the order elements first appear:
 
 --8<-- "Example_listExplode.md"
 
+## Arrays
+
+*New in 0.6.7.* An `Array(T, n)` is a fixed-size list: each row holds `n` values of
+`T`, or is null. A Go array is one, `[3]float64` an `Array(Float64, 3)`, in `FromRows`
+and back in `Rows`; `List().ToArray(n)` makes one of a list whose every row holds `n`,
+as a cast to the type does, and refuses one that does not, as Polars does;
+`Arr().ToList()` is the list again:
+
+--8<-- "Example_arrays.md"
+
+An Array is read and written as Polars writes it: an Arrow `FixedSizeList` in IPC, and
+in Parquet a list whose size the file's Arrow schema keeps; as JSON, a list.
+
 ## Structs
 
 `Struct(exprs...)` packs columns into one struct column, a field for each, named as
@@ -89,6 +102,6 @@ A struct is also how ursus gives several values a row: `SplitExact`, `ExtractGro
 
 ## What is not here yet
 
-An `Array` type, a fixed-size list, is not, and neither are lists of lists or of
-structs, which are refused by name. A List or a Struct cannot be a group-by, join or
+An Array's own namespace, beyond `ToList`, is not, and neither are lists of lists or
+of structs, which are refused by name. A List or a Struct cannot be a group-by, join or
 `Unique` key. The scope records each in `feature-gaps.md`.

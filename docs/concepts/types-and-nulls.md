@@ -27,10 +27,11 @@ before a query runs:
 | `TimeOf(unit)` | | a time of day |
 | `Enum(...)` | `string` | fixed categories, sorted in their order |
 | `List(T)` | a slice | a list of values a row |
+| `Array(T, n)` | an array, `[n]T` | `n` values a row (*new in 0.6.7*) |
 | `StructOf(fields...)` | a struct | named fields a row |
 
 `ursus.Int64`, `ursus.Date` and the rest name the types, and `Datetime`, `Duration`,
-`TimeOf`, `Decimal`, `List`, `Enum` and `StructOf` make one. A type is a comparable
+`TimeOf`, `Decimal`, `List`, `Array`, `Enum` and `StructOf` make one. A type is a comparable
 value, so it can key a map.
 
 ## Null is not NaN

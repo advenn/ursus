@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–340, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–341, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,15 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **The `Array` type** (341), Polars' fixed-size list: `Array(T, n)` holds `n` values of
+  `T` a row, or a null. `List().ToArray(n)` and a cast make one of a list whose every
+  row holds `n`, and refuse one that does not, as Polars does; `Arr().ToList()` and a
+  cast give the list back; an Array casts to another of its size. A Go `[n]T` is one in
+  `FromRows` and `Rows`. It is read and written as Polars writes it: an Arrow
+  `FixedSizeList` in IPC and `Record`, and in Parquet a list whose size the footer's
+  Arrow schema keeps, so a file of either reads back an Array; NDJSON reads one by a
+  schema and writes it, as JSON does, as a list. It explodes, filters, sorts, joins,
+  stacks and spills; as a key it is refused, as a List is. `selector.Array` selects it.
 - **`Mode` in an aggregation is an aggregate of its own, and spills** (340): a group's
   mode counted the group's values imploded, held every one of them, and failed past
   the memory limit; it numbers each distinct value as it comes, counts each group's

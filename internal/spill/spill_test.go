@@ -88,7 +88,7 @@ func value(t *testing.T, c *data.Column, i int) string {
 	if dt.HasStringStorage() && !c.IsPayloadFree() {
 		return "s:" + c.Strings().Get(i)
 	}
-	if dt.ID() == dtype.TypeList && !c.IsPayloadFree() {
+	if dt.IsListLike() && !c.IsPayloadFree() {
 		offs := data.Reinterpret[int32](c.RawOffsets())
 		elems := render(t, c.Child())
 		return fmt.Sprint(elems[offs[i]:offs[i+1]])
@@ -370,13 +370,17 @@ func TestSpillRoundTripsNestedTypes(t *testing.T) {
 	sliced := b.Slice(1, 3)
 	assertSame(t, []*data.Batch{sliced}, roundTrip(t, sch, []*data.Batch{sliced}))
 
-	arr, err := dtype.NewSchema(dtype.Of("a", dtype.Array(dtype.Int64, 2)))
+	// An Array is a List each of whose rows holds its size, a null one none, and
+	// round-trips with its type (step 341); it was refused.
+	at := dtype.Array(dtype.Int64, 2)
+	ac := data.NewList("a", []int32{0, 2, 2, 4}, data.NewFixed("item", dtype.Int64, []int64{1, 2, 3, 4},
+		valid(true, false, true, true)), valid(true, false, true)).WithDType(at)
+	ab, err := data.NewBatch(dtype.MustSchema(dtype.Of("a", at)), []*data.Column{ac})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := spill.Create(filepath.Join(t.TempDir(), "x"), arr); err == nil {
-		t.Fatal("an Array column was accepted")
-	}
+	assertSame(t, []*data.Batch{ab}, roundTrip(t, ab.Schema(), []*data.Batch{ab}))
+	assertSame(t, []*data.Batch{ab.Slice(1, 2)}, roundTrip(t, ab.Schema(), []*data.Batch{ab.Slice(1, 2)}))
 }
 
 // TestSpillRebasesSlicedLists: a slice of a List keeps its parent's whole element
