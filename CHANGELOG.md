@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–331, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–332, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -96,6 +96,10 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **Arrow IPC** (332), as Polars reads and writes it: `ScanIPC`, `ScanIPCStream`,
+  `WriteIPC`, `WriteIPCStream`, `SinkIPC`, uncompressed, LZ4 or Zstandard, and
+  `ReadIPCSchema`; and `ReadParquetSchema`. Polars' own files read, string views and
+  large lists in them, and Polars reads ursus's.
 - **A list a group, and a window a group at a time** (331): a non-aggregate in `Agg` is
   each group's values as a list, as Polars answers it, `Agg(Col("x"))` and
   `Agg(Col("x").Mul(2))`; and a window anywhere in `Agg` runs a group at a time,

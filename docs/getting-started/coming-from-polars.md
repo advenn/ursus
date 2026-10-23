@@ -136,6 +136,7 @@ changes is what Go asks for.
 | `df.map_rows(f)`, `df.map_columns(["a"], f)` | `df.MapRows(ctx, f)`, `df.MapColumns(ctx, []string{"a"}, f)` (new in 0.6.7) |
 | `df.show(20)`, `lf.cache()` | `df.Show(20)`, `lf.Cache()` (new in 0.6.7) |
 | `df.write_parquet(f)`, `df.write_csv(f)` | `lf.WriteParquet(ctx, w)`, `lf.WriteCSV(ctx, w)`, to any `io.Writer` |
+| `pl.scan_ipc(p)`, `pl.read_ipc_stream(p)`, `df.write_ipc(f, compression="zstd")`, `lf.sink_ipc(p)`, `pl.read_ipc_schema(p)` | `ursus.ScanIPC(p)`, `ursus.ScanIPCStream(p)`, `lf.WriteIPC(ctx, w, ursus.WithIPCCompression(ursus.IPCZstd))`, `lf.SinkIPC(ctx, p)`, `ursus.ReadIPCSchema(p)` (new in 0.6.7) |
 | `df.to_arrow()` | `df.Record()`, zero-copy |
 | `df["a"].to_list()` | `df.Column[int64]("a")`, then `.Values()` |
 | `df.rows(named=True)` | `df.Rows[T]()`, into Go structs |
