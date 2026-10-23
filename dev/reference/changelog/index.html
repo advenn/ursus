@@ -3052,11 +3052,15 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–349, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–350, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>Cut</code> answers an Enum</strong> (350) of its bins' labels, in their order, as Polars'
+  <code>cut</code> does, where it answered a String: <code>.Cast(ursus.String)</code> gives the text. Its
+  labels must differ, as an Enum's categories do, and a break is written in decimal,
+  <code>(-inf, 0.0000001]</code>, as Polars writes it, where it was <code>(-inf, 1e-07]</code>.</li>
 <li><strong>A null's rank is null</strong> (335), as Polars': <code>Rank</code> ranked a null as the least
   value and gave it a position, so <code>[5, null, 4]</code> ranked <code>[3, 1, 2]</code>; it ranks
   <code>[2, null, 1]</code> now, the values among themselves, by every method, in a window and

@@ -2002,8 +2002,8 @@ changes is what Go asks for.</p>
   rows; Polars leaves them out.</li>
 <li><strong><code>ToInteger</code>, <code>ToDate</code> and <code>ToDatetime</code> give null for what does not parse;</strong>
   Polars' fail by default.</li>
-<li><strong><code>Cut</code> and <code>Hist</code> give text,</strong> where Polars gives a Categorical, which ursus does not
-  have yet.</li>
+<li><strong><code>QCut</code> and <code>Hist</code> give text,</strong> where Polars gives a Categorical, which ursus does not
+  have yet. <code>Cut</code> gives an Enum of its labels, as Polars' does (new in 0.6.7).</li>
 <li><strong>A <code>Time</code> takes a unit,</strong> where Polars' is nanoseconds.</li>
 </ul>
 <p>The full list, with the step that made each choice, is in
