@@ -212,7 +212,7 @@ differs from their input's, or scalars outside a group-by.
 | built: **an aggregate inside an aggregate's input,** in step 336: `Col("a").Sub(Col("a").Mean()).Abs().Sum()` in a `Select`, an `Agg` and a window, the inner aggregate computed over the group and broadcast beneath the outer; in `Agg` a mix, `a - a.Mean()`, a list a group, and `a.Sum().Mean()` the sum; `SortBy` and `Gather` take an aggregate in their keys (found at step 279) | — |
 | **Integers as bits:** built: `& \| ^ ~` of integers in step 278, the `bitwise_and/or/xor` aggregates in step 276. Polars has no shifts | — |
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
-| **Rolling:** `map`; weights; `rolling_rank_by` and Polars' `random` rank; the generic `Expr.rolling(index_column)`. `skew`, `kurtosis`, `rank`, `rolling_cov` and `rolling_corr` built at step 284; an integer by, `"2i"` periods, at step 312 | P1 |
+| **Rolling:** `map`; weights; `rolling_rank_by` and Polars' `random` rank. `skew`, `kurtosis`, `rank`, `rolling_cov` and `rolling_corr` built at step 284; an integer by, `"2i"` periods, at step 312; the generic `Expr.rolling(index_column)` at step 337, `Expr.Rolling`, in an aggregation not yet | P1 |
 | **EWM:** built: `ewm_sum`, `ewm_mean_by` and `ewm_sum_by` at step 285; an integer by, a `"2i"` half-life, at step 312 | — |
 | **Other:** `cut`/`qcut` returning Categorical with `include_breaks`. `cumulative_eval` built at step 286. `round_sig_figs`, `cot`, numeric `truncate`, the half-to-even mode and a one-sided `clip` were built at step 283 | P1/P2 |
 
@@ -274,6 +274,7 @@ These belong to a performance release more than to features.
 | **`Upsample` is a join and a sort:** 355 ms for a million rows of 100 groups, where Polars, walking a frame it requires sorted, takes 24 ms; the sort, which keeps the order under a limit, is 95 ms of it (step 306) | P1 |
 | **A frame-wide aggregate pays a group-by's machinery, and reads on after its answer is known:** of a million Int64s, `Len` 0.95 ms, `Min` 1.6, `First` 2.6 and `IsSorted` 2.2 to 2.9, where Polars answers `is_sorted` in 0.03 ms from the first pair out of order, or 0.8 from a sorted column. Each batch builds its group ids, all zero, and the scan runs to the end (step 324) | P2 |
 | **A window keeps its whole input and joins it, every column, before it computes:** `InterpolateBy` of a million rows, by sorted, 15.5 ms where Polars takes 7.1, and `Interpolate` 12.3 where Polars takes 5.8, after step 329 took a third off each; `Over`'s partition keys are hashed a row at a time, a quarter of a window's time over 100 groups (step 329). One integer key is numbered by the group-by's integer table since step 336, which halved a window over a million rows of 1000 groups: `Sum().Over(g)` 15.5 ms where it took 38 and Polars takes 8.1, `CumSum` 23 (46, 14.9), `Shift(1)` 24 (48, 16.2). A window inside a window is a window beneath: `Shift(1).CumSum(false).Over(g)` 45 ms against Polars' 23, `(x - x.Mean()).Abs().Sum()` by g 32 against 17 and over the frame 21 against 4.2, the mean broadcast as a column where Polars keeps it one value | P1 |
+| **An expression's rolling is a rolling window by time, or the frame's rolling group:** over a million rows and a window of 100, `Col("x").Sum().Rolling(t)` 49 ms where Polars takes 10, by `RollingSumBy`'s sliding state, its sums compensated (42 ms, Polars 18.2 for its own); `Max().Sub(Min())` 65 ms against 14.6; under `Over(g)` of 1000 groups 60 against 48. An aggregate with no window of its own goes by the rolling group, each row given to each of its windows: a window of 100 rows, a hundred times a row (step 337) | P1 |
 | **A window a group at a time in `Agg` is a window beneath a group-by:** `Agg(Col("x").CumSum(false))` over a million rows of 1000 groups takes 113 ms where Polars, computing it in the group-by's own groups, takes 13.5; `Over`'s keys are hashed by the generic key table, where the group-by uses its integer one, and an Int64's `CumSum` is computed in Int128 (step 331). Over Float64 values it took 76 ms and takes 51 since step 336's integer key table, Polars 10.6. A list a group, `Agg(Col("x"))`, is `Implode`'s 26.7 ms against Polars' 10.1 | P1 |
 | **An Arrow IPC file is read a batch at a time and copied:** a million rows of three columns in 20.4 ms, and Polars' own file, its strings views, in 29.7, where Polars takes 16.2. Its batches can be read in any order, so a reader of its own could convert them in parallel (step 332). Writing is faster than Polars', 14.3 ms against 20.0 | P2 |
 | **An eager frame's `Head` and `Tail` plan and run a query,** about 20 µs a call, where a slice of its batch would cost nothing: `MapGroups` calling `Head` on each of 1,000 groups spent 20 ms of 48 there (step 321) | P2 |
@@ -479,6 +480,13 @@ decide whether to keep or switch each one.
 - An aggregate whose answer depends on the order, `First` or `Last`, inside a window
   with an `OrderBy`, `(x - x.First()).CumSum(false)` over g ordered by t, is refused as
   an ordering over an aggregate is; Polars takes the first in the order (step 336).
+- `Expr.Rolling` of aggregates with windows of their own finds each window by value,
+  so an index out of order is answered, which Polars refuses. Rolled by the frame's
+  rolling group instead, under `Over`, it holds every window until the input ends, as a
+  partition's rows may come after another's later ones, and it refuses an index not
+  sorted within a partition, where Polars answers from the rows as they come. A frame's
+  keyed `Rolling` and `GroupByDynamic` want the index sorted across the frame, where
+  Polars' want it sorted within each group (step 337).
 - `BaseUtcOffset` and `DstOffset` read the system's zone database, so where it is in
   the rearguard form, as Ubuntu's is, Dublin's and Casablanca's daylight-saving time
   is positive. Polars bundles the main form, where it is negative. Other zones agree

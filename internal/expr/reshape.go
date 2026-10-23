@@ -53,6 +53,7 @@ const (
 	ReshapeAppend                        // By: the values appended; Args: their meeting, AppendStrict, AppendUpcast or AppendCast (step 282)
 	ReshapeSample                        // Args: n, or -1 for a fraction; the fraction's bits; with_replacement; shuffle; the seed (step 282)
 	ReshapeHist                          // Args: the bin count, or -1 for edges; include_category; include_breakpoint; the edges' bits (step 286)
+	ReshapeRolling                       // By: the index; Roll: the window; Child aggregated over each row's (step 337)
 )
 
 var reshapeNames = map[ReshapeOp]string{
@@ -63,7 +64,15 @@ var reshapeNames = map[ReshapeOp]string{
 	ReshapeArgSort: "arg_sort", ReshapeArgTrue: "arg_true", ReshapeArgUnique: "arg_unique",
 	ReshapeArgSortBy: "arg_sort_by", ReshapeMode: "mode",
 	ReshapeUniqueCounts: "unique_counts", ReshapeValueCounts: "value_counts", ReshapeRle: "rle",
-	ReshapeAppend: "append", ReshapeSample: "sample", ReshapeHist: "hist",
+	ReshapeAppend: "append", ReshapeSample: "sample", ReshapeHist: "hist", ReshapeRolling: "rolling",
+}
+
+// RollSpec is a rolling reshape's window (step 337): a row's window is its index's
+// instant plus Offset, Period long, Closed at the ends it says, as a frame's rolling
+// group's.
+type RollSpec struct {
+	Period, Offset dtype.Interval
+	Closed         Closed
 }
 
 // How Append meets its two sides' types (step 282): the same type, as Polars'
@@ -84,7 +93,8 @@ type Reshape struct {
 	Child Node
 	Args  []int64
 	By    Node
-	Label string // ValueCounts: its count's field name
+	Label string    // ValueCounts: its count's field name
+	Roll  *RollSpec // Rolling: its window
 }
 
 func (r *Reshape) node() {}
@@ -102,6 +112,12 @@ func (r *Reshape) String() string {
 	}
 	args := ""
 	switch r.Op {
+	case ReshapeRolling:
+		args = r.By.String() + ", period=" + r.Roll.Period.String()
+		if r.Roll.Offset.Given() {
+			args += ", offset=" + r.Roll.Offset.String()
+		}
+		args += ", closed=" + r.Roll.Closed.Or(ClosedRight).String()
 	case ReshapeSort, ReshapeSortBy, ReshapeGather, ReshapeAppend:
 		if r.Op == ReshapeAppend {
 			args = r.By.String() + ", " + itoa(int(r.Args[0]))
@@ -264,6 +280,14 @@ func (r *Reshape) Field(in *dtype.Schema) (dtype.Field, error) {
 		return f, nil
 	case ReshapeSample:
 		return f, nil
+	case ReshapeRolling:
+		// Each row's window's aggregate, of a row's values a list of the window's,
+		// as a rolling group's Agg makes them; a window may hold no row.
+		if !IsAggregation(r.Child) {
+			f.Type = dtype.List(f.Type)
+		}
+		f.Nullable = true
+		return f, nil
 	case ReshapeHist:
 		t, err := HistType(f.Type, r.Args[1] != 0, r.Args[2] != 0)
 		if err != nil {
@@ -376,6 +400,12 @@ func LowerReshapes(n Node, agg bool) Node {
 // lowerReshape is a reshape as a list a group: its child imploded, or reshaped
 // first, then the list kernel.
 func lowerReshape(r *Reshape) Node {
+	if r.Op == ReshapeRolling {
+		// Polars gives each group a list of its rows' windows' answers.
+		return &Err{E: uerr.New(uerr.KindUnsupported, "rolling",
+			"%s in an aggregation is not there yet", r.String()).
+			Hint("roll over the group-by's keys first, WithColumns(e.Rolling(index, o).Over(keys)), then aggregate the column")}
+	}
 	if r.Op == ReshapeArgSortBy {
 		// One key's order is its arg_sort's. Of several, Polars 1.44.1 answers with
 		// indices past the group's end; this refuses them.

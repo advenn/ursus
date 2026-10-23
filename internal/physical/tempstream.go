@@ -58,6 +58,8 @@ type tgBucket struct {
 	next    time.Time // a dynamic group's next grid start, not yet a window
 	active  []tgWin   // windows a later row may still fall in, oldest first
 	recent  []tgRow   // a rolling group's rows that a window yet to come may reach
+	lastT   int64     // under perBucket, its last row's index (step 337)
+	hasT    bool      // and whether it has one
 }
 
 // tgWin is an open window: its number and its membership, [lo, hi] under closed.
@@ -116,14 +118,25 @@ func (s *temporalSink) Consume(ctx context.Context, in *data.Batch) error {
 	cur := int32(len(s.parts) - 1)
 	for i := range n {
 		t := ticks[i]
-		if s.nRows+i > 0 && t < s.lastT {
-			s.sorted, s.badRow = false, s.nRows+i
-			break
-		}
-		s.lastT = t
 		b, err := s.bucketOf(enc, keyCols, i)
 		if err != nil {
 			return err
+		}
+		if s.perBucket {
+			// Sorted within each bucket is enough, as Polars' rolling over a
+			// partition takes it (step 337).
+			if b.hasT && t < b.lastT {
+				s.sorted, s.badRow = false, s.nRows+i
+				break
+			}
+			b.lastT, b.hasT = t, true
+			s.lastT = max(s.lastT, t) // the greatest index yet, which closes nothing here
+		} else {
+			if s.nRows+i > 0 && t < s.lastT {
+				s.sorted, s.badRow = false, s.nRows+i
+				break
+			}
+			s.lastT = t
 		}
 		ref := rowRef{src: cur, row: int32(i)}
 		if s.rolling {

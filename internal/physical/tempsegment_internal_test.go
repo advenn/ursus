@@ -80,3 +80,65 @@ func TestAnUnkeyedRollingGroupHoldsABatchsWorth(t *testing.T) {
 		t.Fatalf("%d windows, want %d", got, rows*batches)
 	}
 }
+
+// TestARollingGroupInRowOrderSortsByItsWindows: a keyed rolling group answering in
+// its rows' order (step 337), an expression's rolling over a partition, sorts what
+// it spills by its windows' numbers alone, which are their rows' places, and not a
+// bucket at a time: two buckets' windows, interleaved, come out of runs on disk in
+// number order.
+func TestARollingGroupInRowOrderSortsByItsWindows(t *testing.T) {
+	ctx := t.Context()
+	sch := dtype.MustSchema(dtype.Of("v", dtype.Int64), dtype.NotNull("__bkt", dtype.Int32), dtype.NotNull("__win", dtype.Int32))
+	sink := &temporalSink{schema: sch, bktName: "__bkt", winName: "__win", rolling: true}
+	order, err := bucketOrder(sink, Options{BatchSize: 64, Budget: execopt.NewBudget(4<<10, t.TempDir())}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer order.Close()
+	const n, per = 2000, 100
+	for lo := 0; lo < n; lo += per {
+		vs, bs, ws := make([]int64, per), make([]int32, per), make([]int32, per)
+		for i := range per {
+			w := lo + i
+			vs[i], bs[i], ws[i] = int64(w), int32(w%2), int32(w)
+		}
+		b, err := data.NewBatch(sch, []*data.Column{
+			data.NewFixed("v", dtype.Int64, vs, bitmap.View{}),
+			data.NewFixed("__bkt", dtype.Int32, bs, bitmap.View{}),
+			data.NewFixed("__win", dtype.Int32, ws, bitmap.View{}),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := order.Consume(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(order.sort.runs) == 0 {
+		t.Fatal("nothing spilled: the test reads no run")
+	}
+	op, err := order.Finish(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer op.Close()
+	next := int64(0)
+	for {
+		b, err := op.Next(ctx)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range data.MustValues[int64](b.Column(0)) {
+			if v != next {
+				t.Fatalf("window %d where %d was next", v, next)
+			}
+			next++
+		}
+	}
+	if next != n {
+		t.Fatalf("%d windows, want %d", next, n)
+	}
+}

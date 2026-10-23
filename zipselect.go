@@ -193,6 +193,11 @@ func (z *zipper) lift(n expr.Node) (zipPart, error) {
 	case *expr.Filter:
 		return z.filter(t)
 	case *expr.Window:
+		// An expression's rolling under Over rolls within each partition.
+		if r, ok := unalias(t.Child).(*expr.Reshape); ok && r.Op == expr.ReshapeRolling &&
+			len(t.OrderBy) == 0 && t.Mapping == expr.MapGroupsToRows {
+			return z.rolling(r, t.PartitionBy)
+		}
 		// Polars maps a partition's column of another length back onto its rows; a
 		// window here answers a value a row of its partition, or one for it.
 		return zipPart{}, uerr.New(uerr.KindUnsupported, "over",
@@ -263,6 +268,24 @@ func (z *zipper) zip(parts []zipPart) (*LazyFrame, []expr.Node) {
 	return frame, refs
 }
 
+// rolling lifts an expression's rolling (step 337): the frame's rolling group over
+// its index, the expression aggregated over each row's window, under Over its
+// partition's keys, the answer in the frame's rows' order.
+func (z *zipper) rolling(r *expr.Reshape, keys []expr.Node) (zipPart, error) {
+	col := z.tmp()
+	o := RollingOptions{Period: r.Roll.Period, Offset: r.Roll.Offset, Closed: r.Roll.Closed}
+	for _, k := range keys {
+		o.GroupBy = append(o.GroupBy, wrap(k))
+	}
+	g := z.in.Rolling(wrap(r.By), o)
+	g.temporal.RowOrder = true
+	e := r.Child
+	if !expr.IsAggregation(e) {
+		e = &expr.Agg{Op: expr.AggImplode, Child: e} // a row's values: the window's list
+	}
+	return zipPart{lf: g.Agg(wrap(e).Alias(col)).Select(Col(col)), col: col}, nil
+}
+
 // oneRow is a frame of one row that reads nothing of the input: what a constant's
 // plan stands on.
 func oneRow() *LazyFrame { return Frame(Values("__one", []bool{true})) }
@@ -271,6 +294,8 @@ func oneRow() *LazyFrame { return Frame(Values("__one", []bool{true})) }
 // operation of the same effect.
 func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 	switch r.Op {
+	case expr.ReshapeRolling:
+		return z.rolling(r, nil)
 	case expr.ReshapeGet:
 		// One value: the list form an aggregation takes, Get past the end null.
 		return z.lift(expr.LowerReshapes(r, true))

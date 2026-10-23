@@ -108,6 +108,11 @@ type temporalSink struct {
 	badRow int
 	lastT  int64
 
+	// perBucket: an index sorted within each bucket is enough, and no window is
+	// handed out before the input ends, as a later row of a bucket may still reach
+	// it (step 337). An expression's rolling over a partition, RowOrder's.
+	perBucket bool
+
 	keyOnly *dtype.Schema // the key columns of keySchema
 	bIDs    map[string]int32
 	bkts    []*tgBucket
@@ -486,6 +491,9 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 		limit:   opts.Budget.Limit(),
 		batch:   opts.batchSize(),
 		sorted:  true,
+		// An expression's rolling over a partition, its rows in theirs: sorted
+		// within each, held to the end (step 337).
+		perBucket: t.RowOrder && len(t.Keys) > 0,
 	}
 	if sink.keyOnly, err = keyOnlySchema(keySchema); err != nil {
 		return nil, err
@@ -493,7 +501,7 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 
 	op := Operator(&tempStreamOp{child: child, sink: sink})
 	if len(t.Keys) > 0 {
-		order, err := bucketOrder(sink, opts)
+		order, err := bucketOrder(sink, opts, t.RowOrder)
 		if err != nil {
 			return nil, err
 		}
@@ -514,10 +522,14 @@ func planTemporalGroup(ctx context.Context, t *plan.TemporalGroup, opts Options)
 }
 
 // bucketOrder is the sink after a keyed group that puts its windows in bucket order
-// (tempsegment.go). Its sort's runs are at least a sixteenth of the limit, as a
-// window's sorted pass's are: the group's own state can keep the query over.
-func bucketOrder(s *temporalSink, opts Options) (*bucketOrderSink, error) {
+// (tempsegment.go), or, rowOrder, a rolling group's in their rows' order. Its sort's
+// runs are at least a sixteenth of the limit, as a window's sorted pass's are: the
+// group's own state can keep the query over.
+func bucketOrder(s *temporalSink, opts Options, rowOrder bool) (*bucketOrderSink, error) {
 	keys := []plan.SortKey{{Expr: &expr.Col{Name: s.bktName}}, {Expr: &expr.Col{Name: s.winName}}}
+	if rowOrder {
+		keys = keys[1:]
+	}
 	kSch, err := keySchema(keys, s.schema)
 	if err != nil {
 		return nil, err
@@ -526,7 +538,7 @@ func bucketOrder(s *temporalSink, opts Options) (*bucketOrderSink, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &bucketOrderSink{out: out, bkt: s.schema.IndexOf(s.bktName), sort: &sortSink{schema: s.schema,
+	return &bucketOrderSink{out: out, bkt: s.schema.IndexOf(s.bktName), rowOrder: rowOrder, sort: &sortSink{schema: s.schema,
 		keys: keys, kSch: kSch, budget: opts.Budget, mem: opts.Budget.Account(s.op()),
 		batch: opts.batchSize(), minRun: opts.Budget.Limit() / 16}}, nil
 }

@@ -100,6 +100,18 @@ can be an integer of 32 or 64 bits, a step rather than an instant, whose period 
 it in Polars' integer unit: `Every("3i")` is three steps, as in
 [Dates and times](dates-and-times.md#an-integer-index).
 
+*New in 0.6.7:* `e.Rolling(index, o)` is any aggregate expression over each row's
+window, as Polars' `Expr.rolling`: `Col("x").Max().Sub(Col("x").Min()).Rolling(Col("t"),
+ursus.RollingOptions{Period: ursus.Every("2d")})` is each row's range over the two days
+ending at it, the window placed as the frame's `Rolling` places it, and `Over(keys)`
+rolls within each partition. Where every aggregate in it is a sum, a mean, a minimum,
+a maximum, a variance, a standard deviation, a median or a quantile, and no offset is
+given, each is rolled by its own window above, found by value, so the index need not
+be sorted, and in an aggregation it is a list a group. Anything else, a row's value,
+which is the list of its window's, or a first, is rolled by the frame's rolling group,
+whose index is checked sorted, within each partition under `Over`, and is refused in
+an aggregation; under `Over` it holds its windows until the input ends.
+
 ## Exponentially weighted
 
 `EwmMean`, `EwmStd`, `EwmVar` and `EwmSum` weight recent rows more. The decay is

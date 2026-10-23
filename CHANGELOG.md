@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–336, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–337, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,13 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **The rolling of an expression** (337), Polars' `Expr.rolling`: `e.Rolling(index, o)`
+  is any aggregate expression over each row's window, placed as the frame's `Rolling`
+  places it, and the list of the window's values for a row's; under `Over` within each
+  partition, its index sorted within it, the answer in the frame's rows' order. A sum,
+  a mean, a minimum, a maximum, a variance, a deviation, a median and a quantile are
+  rolled by their own windows by time, thirty times as fast as by the rolling group,
+  and a rolling window by an index already sorted skips its sort.
 - **A window inside a window, and an aggregate inside an aggregate** (336), as Polars
   computes them: `Col("x").Shift(1).CumSum(false).Over(g)` shifts and then sums within
   each g, `Col("x").Sum().Over(g).CumSum(false).Over(h)` sums g within each h, and

@@ -78,6 +78,11 @@ func (s *temporalSink) openSeg(w int32, hi int64) error {
 // window's rows are in, not at the end of the batch that closed it: by then the
 // next segment's windows were held too.
 func (s *temporalSink) handOut(ctx context.Context, final bool) error {
+	if s.perBucket && !final {
+		// A bucket's rows may come after another's later ones, so no window is
+		// known closed before the input ends.
+		return nil
+	}
 	for len(s.segs) > 0 {
 		g := s.segs[0]
 		last := len(s.segs) == 1
@@ -220,6 +225,12 @@ func (s *temporalSink) finishStream(ctx context.Context) ([]*data.Batch, error) 
 
 // unsorted is the refusal of an index that went backwards.
 func (s *temporalSink) unsorted() error {
+	if s.perBucket {
+		return uerr.New(uerr.KindValue, s.op(),
+			"the index column is not sorted within its partition: row %d goes backwards", s.badRow).
+			Hint("a rolling over a partition cuts its windows from an index sorted within each partition").
+			Hint("sort first, e.g. .Sort(ursus.Asc(ursus.Col(...))) before this call")
+	}
 	return uerr.New(uerr.KindValue, s.op(),
 		"the index column is not sorted: row %d goes backwards", s.badRow).
 		Hint("a temporal group-by cuts windows from a sorted index, so the rows " +
@@ -289,6 +300,10 @@ type bucketOrderSink struct {
 	sort *sortSink
 	out  *dtype.Schema // the sort's, without the hidden columns
 	bkt  int           // the bucket column
+	// rowOrder keeps the windows in their numbers' order, which is a rolling
+	// group's rows' (step 337): sorted by the number alone past the limit, and
+	// under it as they came.
+	rowOrder bool
 }
 
 func (s *bucketOrderSink) Schema() *dtype.Schema { return s.out }
@@ -313,6 +328,19 @@ func (s *bucketOrderSink) Finish(ctx context.Context) (Operator, error) {
 	all, err := kernel.Concat(s.sort.schema, s.sort.rows)
 	if err != nil {
 		return nil, err
+	}
+	if s.rowOrder {
+		out, err := data.NewBatch(s.out, all.Columns()[:s.out.Len()])
+		if err != nil {
+			return nil, err
+		}
+		s.sort.rows, s.sort.keyB = nil, nil
+		s.sort.mem.Release()
+		s.sort.mem.Retain(out)
+		if out.Rows() <= s.sort.chunk() {
+			return newBatchOperator(s.out, out), nil
+		}
+		return &runOperator{schema: s.out, src: &batchRun{b: out, n: s.sort.chunk()}}, nil
 	}
 	bkts, err := data.Values[int32](all.Column(s.bkt))
 	if err != nil {

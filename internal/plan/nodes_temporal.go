@@ -70,6 +70,12 @@ type TemporalGroup struct {
 	WindowLabel string
 	StartBy     string
 	Boundaries  bool
+
+	// RowOrder answers a keyed rolling group's windows in their rows' order, not a
+	// bucket at a time: an expression's rolling over a partition, mapped back onto
+	// the frame's rows (step 337). A rolling window is made as its row arrives, so
+	// its number is its row's place.
+	RowOrder bool
 }
 
 // StartByWeekday is the weekday a StartBy names, and whether it names one.
@@ -296,6 +302,9 @@ func (t *TemporalGroup) Label() string {
 	}
 	if t.Boundaries {
 		b.WriteString(" include_boundaries")
+	}
+	if t.RowOrder {
+		b.WriteString(" row_order")
 	}
 	b.WriteString(" -> [")
 	b.WriteString(expr.StringAll(t.Aggs))

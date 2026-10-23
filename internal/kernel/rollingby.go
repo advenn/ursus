@@ -44,7 +44,15 @@ func rollingBy(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Da
 				sorted.Perm = append(sorted.Perm, r)
 			}
 		}
-		slices.SortStableFunc(sorted.Perm[start:], func(a, b int32) int { return cmp.Compare(ticks[a], ticks[b]) })
+		// A by already in order, as a rolling of an expression's index is, is left
+		// as it is: a stable sort would leave it so (step 337).
+		part := sorted.Perm[start:]
+		for j := 1; j < len(part); j++ {
+			if ticks[part[j]] < ticks[part[j-1]] {
+				slices.SortStableFunc(part, func(a, b int32) int { return cmp.Compare(ticks[a], ticks[b]) })
+				break
+			}
+		}
 		sorted.Bounds = append(sorted.Bounds, int32(len(sorted.Perm)))
 	}
 
