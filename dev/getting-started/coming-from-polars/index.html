@@ -1875,6 +1875,10 @@ changes is what Go asks for.</p>
 <td><code>.Struct().Field("f")</code></td>
 </tr>
 <tr>
+<td><code>pl.Array(pl.Float64, 3)</code>, <code>.list.to_array(3)</code>, <code>.arr.to_list()</code></td>
+<td><code>ursus.Array(ursus.Float64, 3)</code>, <code>.List().ToArray(3)</code>, <code>.Arr().ToList()</code>; a Go <code>[3]float64</code> in rows (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>pl.arctan2(y, x)</code>, <code>.truediv(v)</code>, <code>.limit(n)</code>, <code>.pipe(f)</code></td>
 <td><code>ursus.Arctan2(y, x)</code>, <code>.TrueDiv(v)</code>, <code>.Limit(n)</code>, <code>.Pipe(f)</code> (new in 0.6.7)</td>
 </tr>

@@ -1728,6 +1728,11 @@ before a query runs:</p>
 <td>a list of values a row</td>
 </tr>
 <tr>
+<td><code>Array(T, n)</code></td>
+<td>an array, <code>[n]T</code></td>
+<td><code>n</code> values a row (<em>new in 0.6.7</em>)</td>
+</tr>
+<tr>
 <td><code>StructOf(fields...)</code></td>
 <td>a struct</td>
 <td>named fields a row</td>
@@ -1735,7 +1740,7 @@ before a query runs:</p>
 </tbody>
 </table>
 <p><code>ursus.Int64</code>, <code>ursus.Date</code> and the rest name the types, and <code>Datetime</code>, <code>Duration</code>,
-<code>TimeOf</code>, <code>Decimal</code>, <code>List</code>, <code>Enum</code> and <code>StructOf</code> make one. A type is a comparable
+<code>TimeOf</code>, <code>Decimal</code>, <code>List</code>, <code>Array</code>, <code>Enum</code> and <code>StructOf</code> make one. A type is a comparable
 value, so it can key a map.</p>
 <h2 id="null-is-not-nan">Null is not NaN<a class="headerlink" href="#null-is-not-nan" title="Permanent link">&para;</a></h2>
 <p><strong>Null</strong> is a missing value, and any type can hold one. <strong>NaN</strong> is a float that is not

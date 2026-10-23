@@ -1181,6 +1181,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#arrays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arrays
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#structs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1588,6 +1599,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#arrays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arrays
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#structs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1789,51 +1811,77 @@ lists a row, in the order elements first appear:</p>
 </span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>│ 3     │ "pear"  │ 2.25    │
 </span><span id="__span-12-12"><a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a>└───────┴─────────┴─────────┘
 </span></code></pre></div>
+<h2 id="arrays">Arrays<a class="headerlink" href="#arrays" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7.</em> An <code>Array(T, n)</code> is a fixed-size list: each row holds <code>n</code> values of
+<code>T</code>, or is null. A Go array is one, <code>[3]float64</code> an <code>Array(Float64, 3)</code>, in <code>FromRows</code>
+and back in <code>Rows</code>; <code>List().ToArray(n)</code> makes one of a list whose every row holds <code>n</code>,
+as a cast to the type does, and refuses one that does not, as Polars does;
+<code>Arr().ToList()</code> is the list again:</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nx">points</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">FromRows</span><span class="p">([]</span><span class="nx">point</span><span class="p">{</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">    </span><span class="p">{</span><span class="s">"a"</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="kt">float64</span><span class="p">{</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">}},</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">    </span><span class="p">{</span><span class="s">"b"</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="kt">float64</span><span class="p">{</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">}},</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="p">})</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="nx">show</span><span class="p">(</span><span class="nx">points</span><span class="p">.</span><span class="nx">WithColumns</span><span class="p">(</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"XYZ"</span><span class="p">).</span><span class="nx">Arr</span><span class="p">().</span><span class="nx">ToList</span><span class="p">().</span><span class="nx">List</span><span class="p">().</span><span class="nx">Sum</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"sum"</span><span class="p">),</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"XYZ"</span><span class="p">).</span><span class="nx">Arr</span><span class="p">().</span><span class="nx">ToList</span><span class="p">().</span><span class="nx">List</span><span class="p">().</span><span class="nx">Head</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="nx">List</span><span class="p">().</span><span class="nx">ToArray</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"xy"</span><span class="p">),</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="p">))</span>
+</span></code></pre></div>
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>shape: (2, 4)
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>┌────────┬───────────────────┬─────────┬───────────────────┐
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>│ Name   │ XYZ               │ sum     │ xy                │
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>│ String │ Array(Float64, 3) │ Float64 │ Array(Float64, 2) │
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>├────────┼───────────────────┼─────────┼───────────────────┤
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>│ "a"    │ [1, 2, 2]         │ 5       │ [1, 2]            │
+</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>│ "b"    │ [0, 3, 4]         │ 7       │ [0, 3]            │
+</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>└────────┴───────────────────┴─────────┴───────────────────┘
+</span></code></pre></div>
+<p>An Array is read and written as Polars writes it: an Arrow <code>FixedSizeList</code> in IPC, and
+in Parquet a list whose size the file's Arrow schema keeps; as JSON, a list.</p>
 <h2 id="structs">Structs<a class="headerlink" href="#structs" title="Permanent link">&para;</a></h2>
 <p><code>Struct(exprs...)</code> packs columns into one struct column, a field for each, named as
 its expression:</p>
-<div class="language-go highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">sales</span><span class="p">().</span><span class="nx">Head</span><span class="p">(</span><span class="mi">3</span><span class="p">).</span><span class="nx">Select</span><span class="p">(</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"order_id"</span><span class="p">),</span>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Struct</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"product"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"qty"</span><span class="p">)).</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"line"</span><span class="p">),</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="p">))</span>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">sales</span><span class="p">().</span><span class="nx">Head</span><span class="p">(</span><span class="mi">3</span><span class="p">).</span><span class="nx">Select</span><span class="p">(</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"order_id"</span><span class="p">),</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Struct</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"product"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"qty"</span><span class="p">)).</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"line"</span><span class="p">),</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="p">))</span>
 </span></code></pre></div>
-<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>shape: (3, 2)
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>┌──────────┬─────────────────────────────────────┐
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>│ order_id │ line                                │
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>│ Int64    │ Struct(product: String, qty: Int64) │
-</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>├──────────┼─────────────────────────────────────┤
-</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>│ 1        │ {product: "apple", qty: 10}         │
-</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>│ 2        │ {product: "apple", qty: 4}          │
-</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>│ 3        │ {product: "pear", qty: 7}           │
-</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>└──────────┴─────────────────────────────────────┘
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>shape: (3, 2)
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>┌──────────┬─────────────────────────────────────┐
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>│ order_id │ line                                │
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>│ Int64    │ Struct(product: String, qty: Int64) │
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>├──────────┼─────────────────────────────────────┤
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>│ 1        │ {product: "apple", qty: 10}         │
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>│ 2        │ {product: "apple", qty: 4}          │
+</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>│ 3        │ {product: "pear", qty: 7}           │
+</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>└──────────┴─────────────────────────────────────┘
 </span></code></pre></div>
 <p>Methods for structs sit behind <code>Struct()</code>:</p>
-<div class="language-go highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="nx">line</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Struct</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"product"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"qty"</span><span class="p">)).</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"line"</span><span class="p">)</span>
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="nx">l</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"line"</span><span class="p">).</span><span class="nx">Struct</span><span class="p">()</span>
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="nx">lines</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sales</span><span class="p">().</span><span class="nx">Head</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="nx">Select</span><span class="p">(</span><span class="nx">line</span><span class="p">)</span>
-</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="nx">show</span><span class="p">(</span><span class="nx">lines</span><span class="p">.</span><span class="nx">Select</span><span class="p">(</span>
-</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">    </span><span class="nx">l</span><span class="p">.</span><span class="nx">Field</span><span class="p">(</span><span class="s">"product"</span><span class="p">).</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"product"</span><span class="p">),</span>
-</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="nx">l</span><span class="p">.</span><span class="nx">WithFields</span><span class="p">(</span><span class="nx">l</span><span class="p">.</span><span class="nx">Field</span><span class="p">(</span><span class="s">"qty"</span><span class="p">).</span><span class="nx">Mul</span><span class="p">(</span><span class="mi">10</span><span class="p">).</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"qty"</span><span class="p">)).</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"scaled"</span><span class="p">),</span>
-</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="p">))</span>
-</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="nx">show</span><span class="p">(</span><span class="nx">lines</span><span class="p">.</span><span class="nx">Select</span><span class="p">(</span><span class="nx">l</span><span class="p">.</span><span class="nx">JsonEncode</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"json"</span><span class="p">)))</span>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nx">line</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Struct</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"product"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"qty"</span><span class="p">)).</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"line"</span><span class="p">)</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="nx">l</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"line"</span><span class="p">).</span><span class="nx">Struct</span><span class="p">()</span>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="nx">lines</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sales</span><span class="p">().</span><span class="nx">Head</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="nx">Select</span><span class="p">(</span><span class="nx">line</span><span class="p">)</span>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="nx">show</span><span class="p">(</span><span class="nx">lines</span><span class="p">.</span><span class="nx">Select</span><span class="p">(</span>
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="w">    </span><span class="nx">l</span><span class="p">.</span><span class="nx">Field</span><span class="p">(</span><span class="s">"product"</span><span class="p">).</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"product"</span><span class="p">),</span>
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="w">    </span><span class="nx">l</span><span class="p">.</span><span class="nx">WithFields</span><span class="p">(</span><span class="nx">l</span><span class="p">.</span><span class="nx">Field</span><span class="p">(</span><span class="s">"qty"</span><span class="p">).</span><span class="nx">Mul</span><span class="p">(</span><span class="mi">10</span><span class="p">).</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"qty"</span><span class="p">)).</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"scaled"</span><span class="p">),</span>
+</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="p">))</span>
+</span><span id="__span-17-8"><a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="nx">show</span><span class="p">(</span><span class="nx">lines</span><span class="p">.</span><span class="nx">Select</span><span class="p">(</span><span class="nx">l</span><span class="p">.</span><span class="nx">JsonEncode</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"json"</span><span class="p">)))</span>
 </span></code></pre></div>
-<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>shape: (2, 2)
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>┌─────────┬─────────────────────────────────────┐
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>│ product │ scaled                              │
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>│ String  │ Struct(product: String, qty: Int64) │
-</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>├─────────┼─────────────────────────────────────┤
-</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>│ "apple" │ {product: "apple", qty: 100}        │
-</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>│ "apple" │ {product: "apple", qty: 40}         │
-</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>└─────────┴─────────────────────────────────────┘
-</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>
-</span><span id="__span-16-10"><a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a>shape: (2, 1)
-</span><span id="__span-16-11"><a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>┌──────────────────────────────────────┐
-</span><span id="__span-16-12"><a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a>│ json                                 │
-</span><span id="__span-16-13"><a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a>│ String                               │
-</span><span id="__span-16-14"><a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a>├──────────────────────────────────────┤
-</span><span id="__span-16-15"><a id="__codelineno-16-15" name="__codelineno-16-15" href="#__codelineno-16-15"></a>│ "{\"product\":\"apple\",\"qty\":10}" │
-</span><span id="__span-16-16"><a id="__codelineno-16-16" name="__codelineno-16-16" href="#__codelineno-16-16"></a>│ "{\"product\":\"apple\",\"qty\":4}"  │
-</span><span id="__span-16-17"><a id="__codelineno-16-17" name="__codelineno-16-17" href="#__codelineno-16-17"></a>└──────────────────────────────────────┘
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>shape: (2, 2)
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>┌─────────┬─────────────────────────────────────┐
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>│ product │ scaled                              │
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>│ String  │ Struct(product: String, qty: Int64) │
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>├─────────┼─────────────────────────────────────┤
+</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>│ "apple" │ {product: "apple", qty: 100}        │
+</span><span id="__span-18-7"><a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>│ "apple" │ {product: "apple", qty: 40}         │
+</span><span id="__span-18-8"><a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>└─────────┴─────────────────────────────────────┘
+</span><span id="__span-18-9"><a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a>
+</span><span id="__span-18-10"><a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a>shape: (2, 1)
+</span><span id="__span-18-11"><a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a>┌──────────────────────────────────────┐
+</span><span id="__span-18-12"><a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a>│ json                                 │
+</span><span id="__span-18-13"><a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a>│ String                               │
+</span><span id="__span-18-14"><a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a>├──────────────────────────────────────┤
+</span><span id="__span-18-15"><a id="__codelineno-18-15" name="__codelineno-18-15" href="#__codelineno-18-15"></a>│ "{\"product\":\"apple\",\"qty\":10}" │
+</span><span id="__span-18-16"><a id="__codelineno-18-16" name="__codelineno-18-16" href="#__codelineno-18-16"></a>│ "{\"product\":\"apple\",\"qty\":4}"  │
+</span><span id="__span-18-17"><a id="__codelineno-18-17" name="__codelineno-18-17" href="#__codelineno-18-17"></a>└──────────────────────────────────────┘
 </span></code></pre></div>
 <ul>
 <li><code>Field(name)</code> reads one field, and <code>Field</code> of several names reads each as a column;</li>
@@ -1850,8 +1898,8 @@ its expression:</p>
 <p>A struct is also how ursus gives several values a row: <code>SplitExact</code>, <code>ExtractGroups</code>,
 <code>ValueCounts</code> of an expression, and <code>Rle</code>.</p>
 <h2 id="what-is-not-here-yet">What is not here yet<a class="headerlink" href="#what-is-not-here-yet" title="Permanent link">&para;</a></h2>
-<p>An <code>Array</code> type, a fixed-size list, is not, and neither are lists of lists or of
-structs, which are refused by name. A List or a Struct cannot be a group-by, join or
+<p>An Array's own namespace, beyond <code>ToList</code>, is not, and neither are lists of lists or
+of structs, which are refused by name. A List or a Struct cannot be a group-by, join or
 <code>Unique</code> key. The scope records each in <code>feature-gaps.md</code>.</p>
 
 
