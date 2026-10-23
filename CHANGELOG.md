@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–325, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–326, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -96,6 +96,9 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **The meta namespace** (326), `Expr.Meta()`, as Polars' `meta`: `RootNames`,
+  `OutputName`, `HasMultipleOutputs`, `IsColumn`, `IsColumnSelection`, `IsLiteral`,
+  `IsRegexProjection`, `UndoAliases`, `Eq`, `Pop` and `TreeFormat`.
 - **`Str().ToTime`, `Str().ToDecimal` and `Dt().CastTimeUnit`** (325), as Polars'
   `str.to_time`, `str.to_decimal` and `dt.cast_time_unit`.
 - **Polars' odds** (324): `Item`, `LowerBound`, `UpperBound` and `IsSorted`, as

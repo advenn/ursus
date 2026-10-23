@@ -100,3 +100,9 @@ fraction widens an integer column.
 An expression is named after the leftmost column it reads: `Col("qty").Mul(Col("price"))`
 is named `qty`. `Alias` names it, and goes last, since an alias inside an expression
 does not name the whole.
+
+*New in 0.6.7:* `Meta()` asks an expression about itself, as Polars' `meta` does:
+`RootNames` the columns it reads by name, `OutputName` its name, `HasMultipleOutputs`,
+`IsColumn`, `IsColumnSelection`, `IsLiteral` and `IsRegexProjection`; `UndoAliases`
+the expression without its names, `Eq` whether two are one computation, `Pop` the
+outermost operation's inputs, and `TreeFormat` a drawing of it.

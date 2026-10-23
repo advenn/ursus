@@ -50,7 +50,7 @@ what we are lacking".
 | ~~`dt.cast_time_unit`~~ | built in step 325: `Dt().CastTimeUnit` |
 | ~~`struct.drop`~~ | built in step 323: `Struct().Drop` |
 | ~~`pl.arctan2`~~ | built in step 324: `Arctan2` |
-| `meta.*`: `root_names`, `output_name`, `is_column`, `has_multiple_outputs`, `undo_aliases`, `tree_format` | `String()` |
+| ~~`meta.*`~~ | built in step 326: `Expr.Meta()`; `serialize`, `as_selector` and `show_graph` not |
 | a window inside a window; an aggregate inside an aggregate's input | refused (§5 of `feature-gaps.md`) |
 | `Mode` and Spearman `Corr` spilling in a group-by | refused past a limit |
 

@@ -84,7 +84,7 @@ differs from their input's, or scalars outside a group-by.
 | **List and Series literals:** `Lit([]int64{...})`. **List literals built at step 257;** Series literals missing | `pl.lit([..])`, `pl.Series` | P1 |
 | built: **selectors**, package `selector`, in step 322: the type families, the name patterns, `by_name`, `by_index`, `first`, `last`, the set algebra, named, and `expand_selector` as `Expand`. Not built: `categorical` and `array`, whose types ursus lacks, and `object` | `polars.selectors` | — |
 | built: **`name.*`**, `Expr.Name()`, in step 323: `keep`, `map`, `prefix`, `suffix`, `to_lowercase`, `to_uppercase`, `replace`, `prefix_fields`, `suffix_fields`, `map_fields`; and `struct.drop` | `Expr.name` | — |
-| **`meta.*` and serialization:** `root_names`, `output_name`, `is_column`, `is_literal`, `has_multiple_outputs`, `tree_format`; expressions and plans to and from bytes | `Expr.meta`, `serialize` | P2 |
+| **Serialization:** expressions and plans to and from bytes. `meta.*` built in step 326, `Expr.Meta()`: `root_names`, `output_name`, `is_column`, `is_column_selection`, `is_literal`, `is_regex_projection`, `has_multiple_outputs`, `undo_aliases`, `eq`, `pop`, `tree_format` (ursus's drawing) | `Expr.meta.serialize`, `LazyFrame.serialize` | P2 |
 | **`Expr.Pipe`, `Expr.Where`, `Expr.Inspect`** | | P2 |
 
 ## 3. Types

@@ -122,6 +122,7 @@ changes is what Go asks for.
 | `pl.arctan2(y, x)`, `.truediv(v)`, `.limit(n)`, `.pipe(f)` | `ursus.Arctan2(y, x)`, `.TrueDiv(v)`, `.Limit(n)`, `.Pipe(f)` (new in 0.6.7) |
 | `.item()`, `.lower_bound()`, `.upper_bound()`, `.is_sorted()` | `.Item(false)`, `.LowerBound()`, `.UpperBound()`, `.IsSorted(false, false)` (new in 0.6.7) |
 | `.str.to_time("%H:%M")`, `.str.to_decimal(scale=2)`, `.dt.cast_time_unit("ms")` | `.Str().ToTime("%H:%M", true)`, `.Str().ToDecimal(2)`, `.Dt().CastTimeUnit(ursus.Milli)` (new in 0.6.7) |
+| `.meta.root_names()`, `.meta.output_name()`, `.meta.undo_aliases()`, `.meta.tree_format()` | `.Meta().RootNames()`, `.Meta().OutputName()`, `.Meta().UndoAliases()`, `.Meta().TreeFormat()` (new in 0.6.7) |
 | `.to_physical()`, `.reinterpret(signed=True)` | `.ToPhysical()`, `.Reinterpret(true)` (new in 0.6.7) |
 | `.name.keep()`, `.name.to_uppercase()`, `.name.replace(p, v)`, `.name.prefix_fields("p_")`; `.struct.drop(["f"])` | `.Name().Keep()`, `.Name().ToUpper()`, `.Name().Replace(p, v, false)`, `.Name().PrefixFields("p_")`; `.Struct().Drop("f")` (new in 0.6.7) |
 | `.map_elements(f)`, `.map_batches(f)` | `.MapElements(name, type, f)`, `.MapBatches(name, type, f)`, with a Go function |
