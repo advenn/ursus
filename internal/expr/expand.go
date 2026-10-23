@@ -198,20 +198,80 @@ func checkDistinctNames(ns []Node, m Matcher) error {
 // This is the expansion-safe counterpart to Alias: where Alias imposes one fixed
 // name (and so cannot be applied to a multi-column expression), Rename derives a
 // name per output, which is what Name().Prefix / .Suffix / .Map need.
+//
+// It carries the name namespace's other functions too (step 323): Keep names the
+// output after the first column the child reads, Polars' name.keep, and Fields
+// renames a struct's fields, its prefix_fields, suffix_fields and map_fields. A
+// Rename with Fields changes the value's type, so it is a computation, not only a
+// name, and stripNaming keeps it.
 type Rename struct {
 	Child Node
-	Fn    func(string) string
-	Label string // rendering only, e.g. `name.prefix("avg_")`
+	// Fn derives the output name from the child's; nil leaves it.
+	Fn func(string) string
+	// Keep names the output after the first column the child reads; Fn is unread.
+	Keep bool
+	// Fields renames each field of the struct the child answers; nil leaves them.
+	Fields func(string) string
+	Label  string // rendering only, e.g. `name.prefix("avg_")`
+
+	// id tells two renames of one rendering apart whose functions differ, as a
+	// UDF's does: MapName's and MapFields', which render as "...". Zero for one its
+	// label renders in full.
+	id uint64
+}
+
+// NewRename is r given an id of its own, for a function its label cannot render:
+// two of them over one child are two computations to Identity.
+func NewRename(r Rename) *Rename {
+	r.id = udfSeq.Add(1)
+	return &r
 }
 
 func (r *Rename) node()            {}
 func (r *Rename) Children() []Node { return []Node{r.Child} }
 func (r *Rename) String() string   { return r.Child.String() + "." + r.Label }
 
+// Name is the output name, the child's being child.
+func (r *Rename) Name(child string) string {
+	switch {
+	case r.Keep:
+		if roots := RootNames(r.Child); len(roots) > 0 {
+			return roots[0]
+		}
+	case r.Fn != nil:
+		return r.Fn(child)
+	}
+	return child
+}
+
 func (r *Rename) Field(in *dtype.Schema) (dtype.Field, error) {
 	f, err := r.Child.Field(in)
 	if err != nil {
 		return dtype.Field{}, err
 	}
-	return f.Rename(r.Fn(f.Name)), nil
+	if r.Keep && len(RootNames(r.Child)) == 0 {
+		return dtype.Field{}, uerr.New(uerr.KindValue, "name.keep",
+			"%s reads no column, whose name name.keep could keep", r.Child).
+			Hint("alias it instead")
+	}
+	if r.Fields != nil {
+		if f.Type.ID() != dtype.TypeStruct {
+			return dtype.Field{}, uerr.New(uerr.KindType, "name",
+				"%s renames a struct's fields, and %s is %s", r.Label, r.Child, f.Type).
+				Hint("rename a column with Name().Prefix, Suffix or Map")
+		}
+		old := f.Type.Fields()
+		fields := make([]dtype.Field, len(old))
+		seen := make(map[string]bool, len(old))
+		for i, x := range old {
+			x.Name = r.Fields(x.Name)
+			if seen[x.Name] {
+				return dtype.Field{}, uerr.New(uerr.KindSchema, "name",
+					"%s names two fields %q", r.Label, x.Name)
+			}
+			seen[x.Name], fields[i] = true, x
+		}
+		f.Type = dtype.Struct(fields...)
+	}
+	return f.Rename(r.Name(f.Name)), nil
 }

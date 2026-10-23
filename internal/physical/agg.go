@@ -1358,7 +1358,7 @@ func extractAggs(n expr.Node, in *dtype.Schema, specs *[]aggSpec, byKey map[stri
 		if err != nil {
 			return nil, err
 		}
-		return &expr.Rename{Child: c, Fn: t.Fn, Label: t.Label}, nil
+		return expr.Rebuild(t, []expr.Node{c}), nil
 
 	case *expr.Cast:
 		c, err := extractAggs(t.Child, in, specs, byKey)

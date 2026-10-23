@@ -98,6 +98,32 @@ func Example_selectDropRename() {
 	// └─────────┴─────────┴──────────┴────────────┘
 }
 
+func Example_selectNames() {
+	c := ursus.Col
+	df, err := sales().
+		Select(
+			c("qty", "price").Name().Suffix("_x"),
+			c("region").Name().ToUpper(),
+			c("qty").Mul(c("price")).Alias("total").Name().Keep(),
+		).
+		Head(3).
+		Collect(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(df)
+	// Output:
+	// shape: (3, 4)
+	// ┌───────┬─────────┬─────────┬─────────┐
+	// │ qty_x │ price_x │ REGION  │ qty     │
+	// │ Int64 │ Float64 │ String  │ Float64 │
+	// ├───────┼─────────┼─────────┼─────────┤
+	// │ 10    │ 1.5     │ "north" │ 15      │
+	// │ 4     │ 1.5     │ "south" │ 6       │
+	// │ 7     │ 2.25    │ "north" │ 15.75   │
+	// └───────┴─────────┴─────────┴─────────┘
+}
+
 func Example_filterPredicates() {
 	df, err := sales().
 		Filter(

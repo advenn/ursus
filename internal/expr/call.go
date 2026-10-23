@@ -197,6 +197,7 @@ const (
 	FnStructRenameFields        // every field renamed, in order (step 224)
 	FnStructJSONEncode          // each struct as a JSON object (step 231)
 	FnStructSelectFields        // the named fields, in that order, the struct's validity kept (step 299)
+	FnStructDropFields          // the fields not named, Polars' struct.drop (step 323)
 	fnStructEnd
 )
 
@@ -589,7 +590,8 @@ var callNames = map[CallFn]string{
 
 	FnStructField: "struct.field", FnStructRenameFields: "struct.rename_fields",
 	FnStructJSONEncode: "struct.json_encode", FnStructSelectFields: "struct.select_fields",
-	FnReplace: "replace", FnReplaceStrict: "replace_strict", FnReplaceOr: "replace_or",
+	FnStructDropFields: "struct.drop",
+	FnReplace:          "replace", FnReplaceStrict: "replace_strict", FnReplaceOr: "replace_or",
 	FnListToStruct: "list.to_struct",
 	FnListMedian:   "list.median", FnListStd: "list.std", FnListVar: "list.var",
 	FnListQuantile: "list.quantile", FnListDropNans: "list.drop_nans",
@@ -2357,6 +2359,51 @@ func structCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 				return dtype.Null, uerr.New(uerr.KindSchema, "struct", "no field %q in %s", name, in)
 			}
 			fields[i] = dtype.Field{Name: name, Type: t, Nullable: true}
+		}
+		return dtype.Struct(fields...), nil
+
+	case FnStructDropFields:
+		// Polars' struct.drop: the fields not named, in their order; strict, the
+		// argument after the struct, refuses a name that is no field. A struct of no
+		// fields has no length of its own, so dropping every one is refused, where
+		// Polars makes one.
+		if len(c.Args) < 2 {
+			return dtype.Null, uerr.Internalf("expr: struct.drop has no strict argument")
+		}
+		var strict bool
+		lit, ok := c.Args[1].(*Lit)
+		if ok {
+			strict, ok = lit.Value.(bool)
+		}
+		if !ok {
+			return dtype.Null, uerr.Internalf("expr: struct.drop has no strict argument")
+		}
+		have := make(map[string]bool, len(in.Fields()))
+		for _, f := range in.Fields() {
+			have[f.Name] = true
+		}
+		drop := make(map[string]bool, len(c.Args)-2)
+		for i := 2; i < len(c.Args); i++ {
+			name, ok := callLitString(c, i)
+			if !ok {
+				return dtype.Null, uerr.Internalf("expr: struct.drop argument %d is not a name", i)
+			}
+			if strict && !have[name] {
+				return dtype.Null, uerr.New(uerr.KindSchema, "struct", "no field %q in %s", name, in).
+					Hint("drop with strict false to pass over a name that is not there")
+			}
+			drop[name] = true
+		}
+		var fields []dtype.Field
+		for _, f := range in.Fields() {
+			if !drop[f.Name] {
+				fields = append(fields, dtype.Field{Name: f.Name, Type: f.Type, Nullable: true})
+			}
+		}
+		if len(fields) == 0 {
+			return dtype.Null, uerr.New(uerr.KindSchema, "struct",
+				"struct.drop drops every field of %s, and a struct of no fields has no length", in).
+				Hint("drop the column itself")
 		}
 		return dtype.Struct(fields...), nil
 

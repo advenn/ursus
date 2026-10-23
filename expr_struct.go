@@ -101,6 +101,19 @@ func (s StructExpr) WithFields(exprs ...Expr) Expr {
 	return wrap(&expr.Call{Fn: expr.FnStructWithFields, Args: args})
 }
 
+// Drop is the struct without the named fields, the others in their order, as
+// Polars' struct.drop (step 323): a name that is no field is refused, as Polars'
+// default, strict, refuses it. A null struct stays null. Dropping every field is
+// refused, as a struct of no fields has no length of its own; Polars makes one.
+func (s StructExpr) Drop(names ...string) Expr {
+	args := make([]expr.Node, 0, len(names)+2)
+	args = append(args, s.e.node(), litNode(true))
+	for _, n := range names {
+		args = append(args, litNode(n))
+	}
+	return wrap(&expr.Call{Fn: expr.FnStructDropFields, Args: args})
+}
+
 // Unnest is the struct's fields, a column each: Expr.Unnest, spelled as Polars spells
 // it, struct.unnest() (step 260).
 func (s StructExpr) Unnest() Expr { return s.e.Unnest() }

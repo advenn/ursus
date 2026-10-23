@@ -426,7 +426,7 @@ func substitutable(p expr.Node, defs map[string]expr.Node, opaque map[string]boo
 		case *expr.Alias:
 			return &expr.Alias{Child: walk(t.Child), Name: t.Name}
 		case *expr.Rename:
-			return &expr.Rename{Child: walk(t.Child), Fn: t.Fn, Label: t.Label}
+			return expr.Rebuild(t, []expr.Node{walk(t.Child)})
 
 		// Cond and Call are ELEMENTWISE — one output row per input row, computed
 		// from that row alone — so rewriting through them is exactly as safe as it
@@ -461,13 +461,17 @@ func substitutable(p expr.Node, defs map[string]expr.Node, opaque map[string]boo
 
 // stripNaming removes Alias/Rename wrappers, which carry a name rather than a
 // computation. Substituting `col("a").alias("x")` into a predicate would leave a
-// stray alias inside an expression where it means nothing.
+// stray alias inside an expression where it means nothing. A Rename of a struct's
+// fields is a computation, its type, and stays (step 323).
 func stripNaming(e expr.Node) expr.Node {
 	for {
 		switch t := e.(type) {
 		case *expr.Alias:
 			e = t.Child
 		case *expr.Rename:
+			if t.Fields != nil {
+				return e
+			}
 			e = t.Child
 		default:
 			return e
@@ -849,7 +853,7 @@ func rewriteForSide(p expr.Node, want JoinSide, layout *JoinLayout, ls, rs *dtyp
 		case *expr.Alias:
 			return &expr.Alias{Child: walk(t.Child), Name: t.Name}
 		case *expr.Rename:
-			return &expr.Rename{Child: walk(t.Child), Fn: t.Fn, Label: t.Label}
+			return expr.Rebuild(t, []expr.Node{walk(t.Child)})
 
 		// Cond and Call are ELEMENTWISE — one output row per input row, computed
 		// from that row alone — so rewriting through them is exactly as safe as it

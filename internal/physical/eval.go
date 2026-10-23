@@ -86,7 +86,17 @@ func Eval(ctx context.Context, n expr.Node, b *data.Batch) (*data.Column, error)
 		if err != nil {
 			return nil, err
 		}
-		return c.Rename(t.Fn(c.Name())), nil
+		if t.Fields != nil {
+			// The struct's fields under their new names, its validity kept: a null
+			// struct stays null (step 323).
+			old := c.Fields()
+			fields := make([]*data.Column, len(old))
+			for i, f := range old {
+				fields[i] = f.Rename(t.Fields(f.Name()))
+			}
+			c = data.NewStruct(c.Name(), fields, c.Validity())
+		}
+		return c.Rename(t.Name(c.Name())), nil
 
 	case *expr.Cast:
 		c, err := Eval(ctx, t.Child, b)

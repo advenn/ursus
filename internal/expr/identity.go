@@ -60,6 +60,14 @@ func Identity(n Node) string {
 		case *UDF:
 			part("udf")
 			part(strconv.FormatUint(t.id, 10))
+		case *Rename:
+			// A rename whose function its label cannot render, MapName's and
+			// MapFields' (step 323): a struct's fields renamed by one function and by
+			// another are two types.
+			if t.id != 0 {
+				part("rename")
+				part(strconv.FormatUint(t.id, 10))
+			}
 		}
 		return true
 	})

@@ -121,7 +121,7 @@ func OutputName(n Node) string {
 		return t.Name
 	case *Rename:
 		// Renames compose, so a prefix over a suffix over a column works.
-		return t.Fn(OutputName(t.Child))
+		return t.Name(OutputName(t.Child))
 	case *Window:
 		// Named after what is being computed, not what it is partitioned by. The
 		// generic fallback below takes the first name from RootNames, and Children

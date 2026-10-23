@@ -533,6 +533,14 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 		{label: ",absent", args: []any{"nope"}},
 		{label: ",twice", args: []any{"f", "f"}},
 	},
+	// A field, one that is not there strict and not, and both, which leaves none
+	// and is refused (step 323).
+	expr.FnStructDropFields: {
+		{label: ",f", args: []any{true, "f"}},
+		{label: ",absent", args: []any{true, "nope"}},
+		{label: ",absent,lax", args: []any{false, "nope"}},
+		{label: ",both", args: []any{true, "f", "g"}},
+	},
 	expr.FnListToStruct: {{args: []any{"x", "y"}}},
 	// The count of old values, the old values, the new ones, and ReplaceOr's
 	// default (step 226).

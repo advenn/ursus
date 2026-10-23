@@ -34,6 +34,17 @@ names it selects in a schema:
 
 --8<-- "Example_selectDropRename.md"
 
+An expression is named after the first column it reads, and `Alias` gives it one
+name. *New in 0.6.7:* `Name()` has Polars' name functions, which name each column a
+multi-column expression makes: `Prefix`, `Suffix` and `Map`; `ToLower` and
+`ToUpper`; `Replace`, of a regular expression or of the text; and `Keep`, the first
+column's name through any alias:
+
+--8<-- "Example_selectNames.md"
+
+For a struct, `PrefixFields`, `SuffixFields` and `MapFields` rename its fields and
+leave the column's name, as Polars' `name.prefix_fields` and the rest do.
+
 *New in 0.6.7.* `InsertColumn(i, column)` puts a column at a place, an expression or
 Go values, as Polars' `insert_column` does; a negative place counts from the end, −1
 before the last column:

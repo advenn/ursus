@@ -217,20 +217,27 @@ func (e Expr) Suffix(s string) Expr {
 // MapName derives the output name from the input name.
 //
 // fn is called while the query is planned. A panic in it is the caller's error, of
-// kind ErrValue, naming the input name it panicked on.
+// kind ErrValue, naming the input name it panicked on. Two MapNames over one
+// expression are two computations, whatever their functions (step 323).
 func (e Expr) MapName(fn func(string) string) Expr {
-	guarded := func(name string) string {
-		// The planner calls Fn where nothing returns an error, so the failure is
-		// raised; Collect's recover returns it as it is, not as ursus's bug.
+	return wrap(expr.NewRename(expr.Rename{Child: e.node(), Fn: guardName("name.map", "MapName", fn),
+		Label: "name.map(...)"}))
+}
+
+// guardName is fn, a panic in it the caller's error, of kind ErrValue, naming the
+// name it panicked on. The planner and the evaluator call a name function where
+// nothing returns an error, so the failure is raised; Collect's recover returns it
+// as it is, not as ursus's bug.
+func guardName(op, method string, fn func(string) string) func(string) string {
+	return func(name string) string {
 		defer func() {
 			if v := recover(); v != nil {
-				uerr.Raise(uerr.Attributed(v, uerr.KindValue, "name.map",
-					"the function passed to MapName panicked on %q", name))
+				uerr.Raise(uerr.Attributed(v, uerr.KindValue, op,
+					"the function passed to %s panicked on %q", method, name))
 			}
 		}()
 		return fn(name)
 	}
-	return wrap(&expr.Rename{Child: e.node(), Fn: guarded, Label: "name.map(...)"})
 }
 
 // --- casting -----------------------------------------------------------------

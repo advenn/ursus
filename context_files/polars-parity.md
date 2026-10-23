@@ -39,7 +39,7 @@ what we are lacking".
 | Polars | ursus today |
 | --- | --- |
 | ~~`polars.selectors`~~ | built in step 322: package `selector` |
-| `name.keep`, `name.to_lowercase`, `name.to_uppercase`, `name.prefix_fields`, `name.suffix_fields`, `name.map_fields` | `Prefix`, `Suffix`, `MapName` |
+| ~~the `name` namespace~~ | built in step 323: `Expr.Name()` |
 | `top_k_by`, `bottom_k_by` | missing |
 | `interpolate_by` | missing |
 | `rolling` of an expression, `rolling_map`, `rolling_rank_by` | the frame's `Rolling`; the `_by` windows |
@@ -48,7 +48,7 @@ what we are lacking".
 | `pipe`, `inspect` | `LazyFrame.Pipe` only |
 | `str.to_time`, `str.to_decimal` | `Strptime(Time…)`; `CastLossy(Decimal)` |
 | `dt.cast_time_unit` | `Cast(Datetime(unit))` |
-| `struct` field drop | missing |
+| ~~`struct.drop`~~ | built in step 323: `Struct().Drop` |
 | `pl.arctan2` | missing |
 | `meta.*`: `root_names`, `output_name`, `is_column`, `has_multiple_outputs`, `undo_aliases`, `tree_format` | `String()` |
 | a window inside a window; an aggregate inside an aggregate's input | refused (§5 of `feature-gaps.md`) |

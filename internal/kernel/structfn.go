@@ -87,6 +87,26 @@ func StructCall(fn expr.CallFn, name string, c *data.Column, args []any) (*data.
 		}
 		return data.NewStruct(name, fields, c.Validity()), nil
 
+	case expr.FnStructDropFields:
+		// The fields not named, in their order, the struct's validity kept: a null
+		// struct stays null (step 323). The first argument is strict, which the
+		// planner has read.
+		drop := make(map[string]bool, len(args))
+		for i := 1; i < len(args); i++ {
+			want, ok := argString(args, i)
+			if !ok {
+				return nil, uerr.Internalf("kernel: struct.drop argument %d", i)
+			}
+			drop[want] = true
+		}
+		var fields []*data.Column
+		for _, f := range c.Fields() {
+			if !drop[f.Name()] {
+				fields = append(fields, f)
+			}
+		}
+		return data.NewStruct(name, fields, c.Validity()), nil
+
 	case expr.FnStructJSONEncode:
 		return JSONEncode(name, c)
 	}

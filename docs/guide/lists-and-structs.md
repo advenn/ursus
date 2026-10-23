@@ -76,7 +76,10 @@ Methods for structs sit behind `Struct()`:
 - `Field(name)` reads one field, and `Field` of several names reads each as a column;
 - `WithFields(exprs...)` replaces fields of the same names and adds new ones; read a
   field inside it through `Field`, as anywhere;
-- `RenameFields(names...)` renames them in order;
+- `RenameFields(names...)` renames them in order, and *new in 0.6.7*,
+  `Name().PrefixFields`, `SuffixFields` and `MapFields` rename each from its name;
+- *new in 0.6.7*, `Drop(names...)` leaves fields out, as Polars' `struct.drop`, and
+  refuses a name that is no field;
 - `JsonEncode` writes each struct as JSON text, and `Str().JsonDecode(type)` reads it
   back;
 - `Unnest` turns the fields into columns, as the frame's `Unnest` does.

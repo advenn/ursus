@@ -119,6 +119,7 @@ changes is what Go asks for.
 | `.group_by_dynamic("step", every="5i")`, `.rolling_sum_by("step", "3i")` | `ursus.DynamicOptions{Every: ursus.Every("5i")}`, `.RollingSumBy(ursus.Col("step"), ursus.Every("3i"))`, over an integer index (new in 0.6.7) |
 | `.str.contains(p)`, `.dt.year()`, `.list.len()` | `.Str().Contains(p, false)`, `.Dt().Year()`, `.List().Len()` |
 | `.struct.field("f")` | `.Struct().Field("f")` |
+| `.name.keep()`, `.name.to_uppercase()`, `.name.replace(p, v)`, `.name.prefix_fields("p_")`; `.struct.drop(["f"])` | `.Name().Keep()`, `.Name().ToUpper()`, `.Name().Replace(p, v, false)`, `.Name().PrefixFields("p_")`; `.Struct().Drop("f")` (new in 0.6.7) |
 | `.map_elements(f)`, `.map_batches(f)` | `.MapElements(name, type, f)`, `.MapBatches(name, type, f)`, with a Go function |
 | `df.write_parquet(f)`, `df.write_csv(f)` | `lf.WriteParquet(ctx, w)`, `lf.WriteCSV(ctx, w)`, to any `io.Writer` |
 | `df.to_arrow()` | `df.Record()`, zero-copy |
