@@ -66,6 +66,7 @@ var levels = map[string]int{
 	"internal/source/csv":      45,
 	"internal/source/testsrc":  45, // the deliberately-misbehaving source
 	"internal/source/arrowsrc": 45, // + arrowin: an Arrow stream, copied a window at a time
+	"internal/source/ndjson":   45, // newline-delimited JSON, parsed a part a thread
 
 	"internal/physical": 50, // + plan, kernel, data, source
 	"internal/exec":     60, // + physical, plan

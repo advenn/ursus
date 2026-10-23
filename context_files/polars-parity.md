@@ -78,7 +78,7 @@ what we are lacking".
 
 | Polars | ursus today |
 | --- | --- |
-| JSON and NDJSON: read and scan | missing; written and sunk in step 333: `WriteNDJSON`, `WriteJSON`, `SinkNDJSON` |
+| JSON: `read_json`, a file of one array of objects | missing; NDJSON read and scanned in step 334: `ScanNDJSON`, `ScanNDJSONFiles`, `ScanNDJSONGlob`, `ScanNDJSONFrom`, `ScanNDJSONBytes`; JSON and NDJSON written and sunk in step 333: `WriteNDJSON`, `WriteJSON`, `SinkNDJSON` |
 | ~~Arrow IPC: read, scan, write, sink; `read_ipc_schema`, `read_parquet_schema`~~ | built in step 332: `ScanIPC`, `ScanIPCStream`, `WriteIPC`, `WriteIPCStream`, `SinkIPC`, `ReadIPCSchema`, `ReadParquetSchema` |
 | hive partitions; multi-file schema evolution; compressed CSV | missing |
 | Excel, Avro, databases, Delta, Iceberg | missing (P2/P3) |

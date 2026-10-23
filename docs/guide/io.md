@@ -87,6 +87,22 @@ and `SinkIPC(ctx, path)` write them, uncompressed as Polars' are by default, or 
 
 ## JSON
 
+*New in 0.6.7:* `ScanNDJSON(path)` reads newline-delimited JSON, an object a line, as
+Polars' `scan_ndjson` and `read_ndjson`. `ScanNDJSONFiles(paths)` and
+`ScanNDJSONGlob(pattern)` read several files as one frame, the schema the first's;
+`ScanNDJSONFrom(files)` reads files you open, from an object store, say; and
+`ScanNDJSONBytes(b, name)` reads NDJSON in memory. A key is a column, in the order the
+keys are first seen, and its type is inferred from the first 100 lines as Polars infers
+it: an integer is an Int64, or an Int128 past it; a number with a fraction or an
+exponent a Float64; an array a List, and an object a Struct. A key holding text and
+anything else is a String, the other value as Polars writes it: `1.5` for `1.50`, and
+an array as JSON. `WithInferSchemaLines(n)` infers from more lines, 0 from all of them;
+`WithNDJSONSchema(s)` reads the lines as a schema you give, of any type, a Date from
+its text; and `WithNDJSONIgnoreErrors(true)` reads a value its column cannot take as a
+null, as Polars' `ignore_errors`. An error names the line and the key. A file is read
+in blocks, each cut into a part a thread and the parts parsed at once, and only the
+columns a query uses are built.
+
 *New in 0.6.7:* `WriteNDJSON(ctx, w)` writes each row as a JSON object on a line of its
 own, as Polars' `write_ndjson`, and `WriteJSON(ctx, w)` one array of them, as
 `write_json`; `SinkNDJSON(ctx, path)` streams to a file, whole or not at all. Each

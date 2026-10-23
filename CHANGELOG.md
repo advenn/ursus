@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–333, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–334, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -96,6 +96,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **NDJSON read** (334): `ScanNDJSON`, `ScanNDJSONFiles`, `ScanNDJSONGlob`,
+  `ScanNDJSONFrom` and `ScanNDJSONBytes`, as Polars' `read_ndjson` and `scan_ndjson`,
+  types inferred as Polars infers them; `WithNDJSONSchema` of any type,
+  `WithInferSchemaLines` and `WithNDJSONIgnoreErrors`. Each block of lines is parsed by
+  every thread at once, faster than Polars: a million lines of four keys in 70 ms to
+  its 79, nested ones 2.3 times as fast.
 - **JSON written** (333): `WriteNDJSON`, `WriteJSON` and `SinkNDJSON`, as Polars'
   `write_ndjson`, `write_json` and `sink_ndjson`, each value in Polars' own text, to
   the byte.

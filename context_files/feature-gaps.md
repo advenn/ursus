@@ -242,7 +242,7 @@ differs from their input's, or scalars outside a group-by.
 
 | missing or partial | prio |
 | --- | --- |
-| **JSON and NDJSON read:** read and scan. Written and sunk in step 333, `WriteNDJSON`, `WriteJSON` and `SinkNDJSON`, each value in Polars' text | P1 |
+| **JSON read:** `read_json`, a file of one array of objects. NDJSON read and scanned in step 334, `ScanNDJSON` and its several-file and in-memory forms, faster than Polars; JSON and NDJSON written and sunk in step 333, each value in Polars' text | P2 |
 | built: **Arrow IPC,** in step 332: a file or a stream scanned, written and sunk, uncompressed, LZ4 or Zstandard, and a file's schema read; and a Parquet file's schema. Over arrow-go's IPC readers and writers | — |
 | **Hive partitioning** on read (keys, types, dates); **partitioned writes** by key | P1 |
 | **Multi-file schema evolution:** `missing_columns`, `extra_columns`, union by name; `include_file_paths`; `**` globs | P1 |
@@ -470,6 +470,11 @@ decide whether to keep or switch each one.
   `Mode` without `maintainOrder` is sorted, where Polars' order is its hash table's,
   and refuses a Struct or a List, which Polars counts. `CorrSpearman` takes numbers;
   Polars ranks text too (step 277).
+- NDJSON: a lone surrogate's escape reads as U+FFFD, where Polars reads a high one as
+  NUL and refuses a low one; a number past a float's range, `1e400`, is ±Inf, which
+  Polars refuses; a given schema of an Int8, an Int16, a UInt8, a UInt16, a Time, a
+  Duration, a Decimal or a Binary reads, where Polars panics or refuses; an error
+  names its line and its key, where Polars' names neither (step 334).
 - `BaseUtcOffset` and `DstOffset` read the system's zone database, so where it is in
   the rearguard form, as Ubuntu's is, Dublin's and Casablanca's daylight-saving time
   is positive. Polars bundles the main form, where it is negative. Other zones agree
