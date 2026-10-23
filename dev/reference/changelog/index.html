@@ -3052,11 +3052,15 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–324, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–325, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A float cast to text is Polars' text</strong> (325): <code>2.0</code> is <code>"2.0"</code>, <code>-0.0</code> <code>"-0.0"</code>,
+  <code>1e-7</code> <code>"1e-7"</code>, <code>1e16</code> <code>"1e+16"</code> and <code>+Inf</code> <code>"inf"</code>, where they were Go's <code>"2"</code>,
+  <code>"-0"</code>, <code>"1e-07"</code>, <code>"1e+16"</code> and <code>"+Inf"</code>. A pivot named by a float's text names its
+  column so too, <code>2.0</code> where it was <code>2</code>.</li>
 <li><strong>An as-of tolerance of zero admits only an exact match</strong> (315), as Polars' does:
   <code>AsOfTolerance(ursus.FromDuration(0))</code> admitted any distance.</li>
 <li><strong>An as-of join keeps both ordering keys when they are named apart</strong> (315), as
@@ -3128,6 +3132,8 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>Str().ToTime</code>, <code>Str().ToDecimal</code> and <code>Dt().CastTimeUnit</code></strong> (325), as Polars'
+  <code>str.to_time</code>, <code>str.to_decimal</code> and <code>dt.cast_time_unit</code>.</li>
 <li><strong>Polars' odds</strong> (324): <code>Item</code>, <code>LowerBound</code>, <code>UpperBound</code> and <code>IsSorted</code>, as
   aggregates; <code>ToPhysical</code> and <code>Reinterpret</code>; <code>Arctan2</code>, <code>TrueDiv</code>, <code>Limit</code> and
   <code>Pipe</code>.</li>

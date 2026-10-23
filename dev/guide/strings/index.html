@@ -1847,6 +1847,9 @@ fields, null where there are fewer parts, which <code>Unnest</code> turns into c
 <p><code>ToInteger</code>, <code>ToDate</code> and <code>ToDatetime</code> turn what does not parse into a null. Polars'
 <code>to_integer</code> and <code>to_date</code> fail the query by default instead. For that, ask for
 strictness: <code>Strptime(..., true)</code>, or <code>ToIntegerWith(base, type, true)</code>.</p>
+<p><em>New in 0.6.7:</em> <code>ToTime(format, strict)</code> parses a time of day, by a format or, with
+none, each value as it comes, and <code>ToDecimal(scale)</code> a number into a <code>Decimal(38,
+scale)</code>, rounded half away from zero, as Polars' <code>to_time</code> and <code>to_decimal</code>.</p>
 <p><code>JsonDecode(type)</code> parses JSON into a value of a type, a struct or a list, and
 <code>Encode</code> and <code>Decode</code> convert to and from hex or base64.</p>
 <h2 id="joining">Joining<a class="headerlink" href="#joining" title="Permanent link">&para;</a></h2>
