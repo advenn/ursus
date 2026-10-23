@@ -1958,7 +1958,13 @@ list, as Polars answers it: <code>Agg(Col("qty"))</code> is each group's quantit
 <code>Agg(Col("qty").Mul(2))</code> doubled, and a window runs a group at a time,
 <code>Agg(Col("qty").CumSum(false))</code> each group's running total, and
 <code>Agg(Col("qty").CumSum(false).Max())</code> its greatest. An expression that mixes an
-aggregate with a row's value, <code>Col("qty").Sub(Col("qty").Mean())</code>, is still refused.</p>
+aggregate with a row's value, <code>Col("qty").Sub(Col("qty").Mean())</code>, is each row's value
+less its group's mean, a list a group.</p>
+<p><em>New in 0.6.7:</em> an aggregate's input may hold another aggregate, computed over the
+group first, as Polars computes it: <code>Col("qty").Sub(Col("qty").Mean()).Abs().Sum()</code> is
+each group's sum of distances from its mean, and in a <code>Select</code> the frame's.
+<code>Col("t").SortBy(Col("qty").Sub(Col("qty").Mean())).First()</code> sorts by the same
+distances.</p>
 <p>A list column can be exploded back into rows, or asked questions with <code>List()</code>.</p>
 <h2 id="filtering-groups-having">Filtering groups: having<a class="headerlink" href="#filtering-groups-having" title="Permanent link">&para;</a></h2>
 <p><em>New in 0.6.7.</em> <code>Having(predicates...)</code> keeps the groups whose predicates all hold, each

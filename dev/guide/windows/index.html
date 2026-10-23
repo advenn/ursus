@@ -1102,6 +1102,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-window-inside-a-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A window inside a window
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#under-a-memory-limit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1643,6 +1654,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-window-inside-a-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A window inside a window
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#under-a-memory-limit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1975,6 +1997,16 @@ steps of an integer <code>by</code>, its half-life such as <code>Every("2i")</co
 <h2 id="without-over">Without Over<a class="headerlink" href="#without-over" title="Permanent link">&para;</a></h2>
 <p>A window function with no <code>Over</code> runs over the whole frame in the rows' order:
 <code>Col("close").CumSum(false)</code> is a running total from the first row to the last.</p>
+<h2 id="a-window-inside-a-window">A window inside a window<a class="headerlink" href="#a-window-inside-a-window" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7:</em> a window function's input may hold another, and an aggregate, each
+computed first in the outer window's partitions and order, as Polars computes them:
+<code>Col("x").Shift(1).CumSum(false).Over(Col("g"))</code> shifts within each g and then sums
+within each g, and <code>Col("x").Sub(Col("x").Mean()).CumSum(false).Over(Col("g"))</code> sums
+each row's distance from its group's mean. A window with an <code>Over</code> of its own inside
+another is computed within the outer one's partitions, so
+<code>Col("x").Sum().Over(Col("g")).CumSum(false).Over(Col("h"))</code> sums g's values within
+each h. An aggregate whose answer depends on the order, <code>First</code>, under an <code>OrderBy</code> is
+refused, as an ordering over an aggregate is.</p>
 <h2 id="under-a-memory-limit">Under a memory limit<a class="headerlink" href="#under-a-memory-limit" title="Permanent link">&para;</a></h2>
 <p>Windows spill to disk under a memory budget, over many partitions or one huge one,
 and give the answer they give in memory. A rolling window by time whose period holds

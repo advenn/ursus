@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–335, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–336, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3137,6 +3137,17 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A window inside a window, and an aggregate inside an aggregate</strong> (336), as Polars
+  computes them: <code>Col("x").Shift(1).CumSum(false).Over(g)</code> shifts and then sums within
+  each g, <code>Col("x").Sum().Over(g).CumSum(false).Over(h)</code> sums g within each h, and
+  <code>(x - x.Mean()).Abs().Sum()</code> is each group's, or the frame's, sum of distances from
+  its mean. In <code>Agg</code> a mix, <code>x - x.Mean()</code>, is a list a group, <code>x.Sum().Mean()</code> the
+  group's sum, and <code>SortBy</code> takes an aggregate in its keys. Each inner one is computed
+  beneath the outer in its partitions and order; an aggregate the order does not
+  change takes none of it. <code>(x - x.Mean()).CumSum(false).Over(g)</code>, which failed with an
+  internal error, answers. A window over one integer key numbers its partitions as the
+  group-by does, twice as fast: <code>Sum().Over(g)</code> over a million rows of 1000 groups in
+  15.5 ms, where it took 38.</li>
 <li><strong>NDJSON read</strong> (334): <code>ScanNDJSON</code>, <code>ScanNDJSONFiles</code>, <code>ScanNDJSONGlob</code>,
   <code>ScanNDJSONFrom</code> and <code>ScanNDJSONBytes</code>, as Polars' <code>read_ndjson</code> and <code>scan_ndjson</code>,
   types inferred as Polars infers them; <code>WithNDJSONSchema</code> of any type,
