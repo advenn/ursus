@@ -44,6 +44,47 @@ type Options struct {
 	// Partitioned adds a hive dataset's partition columns and a column of each
 	// file's path to the files' own (step 347); nil for neither.
 	Partitioned *Partitioned
+
+	// Evolve is how files whose columns differ are read as one (step 348).
+	Evolve Evolution
+}
+
+// Evolution is how files whose columns differ are read as one, as Polars'
+// scan_parquet reads them by its schema, missing_columns, extra_columns and
+// cast_options: as Schema, or as the first file's columns where it is nil; a column a
+// file lacks a null in its rows, where InsertMissing, and refused otherwise; a column
+// a file has beyond them passed over, where IgnoreExtra, and refused otherwise; and an
+// integer or a float of a narrower type than the schema's widened to it, where
+// UpcastInts or UpcastFloats, and refused otherwise. With none set, every file has the
+// same columns of the same types, as it had before step 348.
+type Evolution struct {
+	Schema        *dtype.Schema
+	InsertMissing bool
+	IgnoreExtra   bool
+	UpcastInts    bool
+	UpcastFloats  bool
+}
+
+func (e Evolution) set() bool {
+	return e.Schema != nil || e.InsertMissing || e.IgnoreExtra || e.UpcastInts || e.UpcastFloats
+}
+
+// upcasts reports whether a column of from is read as to: an integer to one that holds
+// every value of it, a Float32 to a Float64.
+func (e Evolution) upcasts(from, to dtype.DataType) bool {
+	switch {
+	case e.UpcastInts && from.IsInteger() && to.IsInteger():
+		switch {
+		case from.IsSignedInteger() && to.IsUnsignedInteger():
+			return false
+		case from.IsUnsignedInteger() && to.IsSignedInteger():
+			return to.BitWidth() > from.BitWidth()
+		}
+		return to.BitWidth() > from.BitWidth()
+	case e.UpcastFloats:
+		return from == dtype.Float32 && to == dtype.Float64
+	}
+	return false
 }
 
 // HiveOptions are a scan's choices about its files' paths: whether their key=value
@@ -300,16 +341,26 @@ func (s *Source) readSchemas(ctx context.Context) (*dtype.Schema, map[int]error,
 		if err != nil {
 			return nil, nil, uerr.Annotate(err, "scan_parquet", s.partName(k))
 		}
-		if k == 0 {
+		if k == 0 && s.opts.Evolve.Schema == nil {
 			first, fields = fs, fs.FieldSlice()
 			unread = un
 			continue
 		}
-		if err := sameColumns(first, fs, s.partName(0), s.partName(k)); err != nil {
+		wantName := s.partName(0)
+		if k == 0 {
+			// The given schema is the files' columns, each nullable where a file
+			// lacks it or holds it so, as any is below (step 348).
+			first, fields, wantName = s.opts.Evolve.Schema, s.opts.Evolve.Schema.FieldSlice(), "the given schema"
+		}
+		if err := s.fits(first, fs, wantName, s.partName(k)); err != nil {
 			return nil, nil, err
 		}
 		for i := range fields {
 			j := fs.IndexOf(fields[i].Name)
+			if j < 0 {
+				fields[i].Nullable = true // the file lacks it: nulls in its rows
+				continue
+			}
 			fields[i].Nullable = fields[i].Nullable || fs.Field(j).Nullable
 			if e := un[j]; e != nil && unread[i] == nil {
 				if unread == nil {
@@ -464,6 +515,49 @@ func (s *Source) keepFile(ctx context.Context, k int, full *dtype.Schema, preds 
 	return keep, nil
 }
 
+// fits refuses got, a file's columns, unless it can be read as want's under the scan's
+// Evolution: every column of want, or InsertMissing; no other, or IgnoreExtra; and
+// each of want's type, or one it upcasts to it (step 348). With no Evolution set, it is
+// sameColumns.
+func (s *Source) fits(want, got *dtype.Schema, wantName, gotName string) error {
+	ev := s.opts.Evolve
+	if !ev.set() {
+		return sameColumns(want, got, wantName, gotName)
+	}
+	for _, f := range want.FieldSlice() {
+		j := got.IndexOf(f.Name)
+		if j < 0 {
+			if !ev.InsertMissing {
+				return uerr.New(uerr.KindSchema, "scan_parquet", "column %q of %s is missing from %s", f.Name, wantName, gotName).
+					Hint("WithInsertMissingColumns(true) reads it as nulls there, as Polars' missing_columns=\"insert\"")
+			}
+			continue
+		}
+		if g := got.Field(j).Type; !g.Equal(f.Type) && !ev.upcasts(g, f.Type) {
+			// Polars: "data type mismatch for column a: incoming: Int32 != target:
+			// Int64".
+			e := uerr.New(uerr.KindSchema, "scan_parquet", "column %q is %s in %s, but %s in %s", f.Name, f.Type, wantName, g, gotName)
+			switch {
+			case (Evolution{UpcastInts: true}).upcasts(g, f.Type):
+				e = e.Hint("WithUpcastIntegers(true) widens it, as Polars' integer_cast=\"upcast\"")
+			case (Evolution{UpcastFloats: true}).upcasts(g, f.Type):
+				e = e.Hint("WithUpcastFloats(true) widens it, as Polars' float_cast=\"upcast\"")
+			}
+			return e
+		}
+	}
+	if !ev.IgnoreExtra {
+		for _, g := range got.FieldSlice() {
+			if want.IndexOf(g.Name) < 0 {
+				// Polars: "extra column in file outside of expected schema: c".
+				return uerr.New(uerr.KindSchema, "scan_parquet", "%s has a column %q that %s has not", gotName, g.Name, wantName).
+					Hint("WithIgnoreExtraColumns(true) passes it over, as Polars' extra_columns=\"ignore\", or name it in WithParquetSchema")
+			}
+		}
+	}
+	return nil
+}
+
 // sameColumns refuses got unless it has exactly want's columns, by NAME, each of
 // the same type. Order may differ. Nullability may differ too — it is reconciled,
 // not compared — which is why this compares Field.Type and not Field.
@@ -522,6 +616,12 @@ type fileLayout struct {
 	optional []bool
 	unread   map[int]error
 
+	// missing marks, by field, a column the file lacks, whose rows are null; from is,
+	// by field, the type the file holds a column in where it is narrower than the
+	// schema's, and is read in and widened; nil where it is the schema's (step 348).
+	missing []bool
+	from    []*dtype.DataType
+
 	// fullStats: the file's writer is one whose statistics always carry a null
 	// count and both bounds (knownWriter), so the pruner may read their absence
 	// as nothing to say rather than as a zero (step 179, audit row I23).
@@ -539,7 +639,7 @@ func (s *Source) layoutFor(full *dtype.Schema, md *metadata.FileMetaData, k int)
 	if err != nil {
 		return fileLayout{}, uerr.Annotate(err, "scan_parquet", s.partName(k))
 	}
-	if err := sameColumns(s.files, fs, "the planned schema", s.partName(k)); err != nil {
+	if err := s.fits(s.files, fs, "the planned schema", s.partName(k)); err != nil {
 		return fileLayout{}, err
 	}
 	lay := fileLayout{leaves: make([][]int, full.Len()), optional: make([]bool, full.Len()),
@@ -550,6 +650,20 @@ func (s *Source) layoutFor(full *dtype.Schema, md *metadata.FileMetaData, k int)
 		}
 		f := full.Field(i)
 		j := fs.IndexOf(f.Name)
+		if j < 0 {
+			// fits let the file lack it: its rows are null (step 348).
+			if lay.missing == nil {
+				lay.missing = make([]bool, full.Len())
+			}
+			lay.missing[i], lay.optional[i] = true, true
+			continue
+		}
+		if t := fs.Field(j).Type; !t.Equal(f.Type) {
+			if lay.from == nil {
+				lay.from = make([]*dtype.DataType, full.Len())
+			}
+			lay.from[i] = &t
+		}
 		g := fs.Field(j)
 		if g.Nullable && !f.Nullable {
 			return fileLayout{}, uerr.New(uerr.KindSchema, "scan_parquet",
@@ -943,6 +1057,9 @@ func openColumnIn(full *dtype.Schema, fv fileView, rg *file.RowGroupReader,
 	if p.field < len(fv.consts) && fv.consts[p.field] != nil {
 		return &constReader{v: fv.consts[p.field]}, nil
 	}
+	if fv.lay.missing != nil && fv.lay.missing[p.field] {
+		return &constReader{v: data.NewNull(f.Name, f.Type, 1)}, nil
+	}
 
 	// dt is passed in rather than read off f, because a struct's fields each have
 	// their own type and the leaf reader is what decodes them.
@@ -967,6 +1084,14 @@ func openColumnIn(full *dtype.Schema, fv fileView, rg *file.RowGroupReader,
 	}
 
 	leaves := fv.lay.leaves[p.field]
+	if fv.lay.from != nil && fv.lay.from[p.field] != nil {
+		// Read as the file holds it, and widened (step 348).
+		c, err := leafReader(leaves[0], *fv.lay.from[p.field])
+		if err != nil {
+			return nil, err
+		}
+		return &castReader{inner: c, to: f.Type}, nil
+	}
 	if f.Type.ID() != dtype.TypeStruct {
 		return leafReader(leaves[0], f.Type)
 	}

@@ -81,7 +81,7 @@ what we are lacking".
 | ~~JSON: `read_json`, a file of one array of objects~~ | built in step 345: `ScanJSON`, `ScanJSONBytes`, and `WithNDJSONSchemaOverrides`, Polars' `schema_overrides`; NDJSON read and scanned in step 334: `ScanNDJSON`, `ScanNDJSONFiles`, `ScanNDJSONGlob`, `ScanNDJSONFrom`, `ScanNDJSONBytes`; JSON and NDJSON written and sunk in step 333: `WriteNDJSON`, `WriteJSON`, `SinkNDJSON` |
 | ~~Arrow IPC: read, scan, write, sink; `read_ipc_schema`, `read_parquet_schema`~~ | built in step 332: `ScanIPC`, `ScanIPCStream`, `WriteIPC`, `WriteIPCStream`, `SinkIPC`, `ReadIPCSchema`, `ReadParquetSchema` |
 | ~~hive partitions~~ | built in step 347 for Parquet: `ScanParquet(dir)`, `WithHivePartitioning`, `WithHiveSchema`, `WithHiveDates`, `WithIncludeFilePaths`; an IPC directory's, and `include_file_paths` for CSV, NDJSON and IPC, left |
-| multi-file schema evolution | missing |
+| ~~multi-file schema evolution~~ | built for Parquet in step 348: `WithParquetSchema`, `WithInsertMissingColumns`, `WithIgnoreExtraColumns`, `WithUpcastIntegers`, `WithUpcastFloats`; `cast_options`' datetime casts and struct fields left |
 | ~~compressed CSV~~ | built in step 346: a CSV, NDJSON or JSON file of gzip, zlib or Zstandard, by its first bytes, streamed |
 | Excel, Avro, databases, Delta, Iceberg | missing (P2/P3) |
 

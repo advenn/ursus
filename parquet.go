@@ -60,6 +60,41 @@ func WithIncludeFilePaths(name string) ParquetOption {
 	return func(o *parquet.Options) { o.Hive.PathColumn = name }
 }
 
+// WithParquetSchema reads the files as schema's columns, by name, as Polars'
+// scan_parquet schema: a file's other columns refused unless WithIgnoreExtraColumns,
+// one it lacks refused unless WithInsertMissingColumns, and one of a narrower type
+// refused unless widened. Without it, the files are read as the first file's columns.
+// New in 0.6.7.
+func WithParquetSchema(s *Schema) ParquetOption {
+	return func(o *parquet.Options) { o.Evolve.Schema = s }
+}
+
+// WithInsertMissingColumns reads a column a file lacks as nulls in its rows, as
+// Polars' missing_columns="insert", where it is refused by default. New in 0.6.7.
+func WithInsertMissingColumns(b bool) ParquetOption {
+	return func(o *parquet.Options) { o.Evolve.InsertMissing = b }
+}
+
+// WithIgnoreExtraColumns passes over a column a file has beyond the schema's, as
+// Polars' extra_columns="ignore", where it is refused by default. New in 0.6.7.
+func WithIgnoreExtraColumns(b bool) ParquetOption {
+	return func(o *parquet.Options) { o.Evolve.IgnoreExtra = b }
+}
+
+// WithUpcastIntegers reads an integer column a file holds in a narrower type than the
+// schema's as the schema's, an Int32 as an Int64, as Polars'
+// ScanCastOptions(integer_cast="upcast"), where it is refused by default. New in
+// 0.6.7.
+func WithUpcastIntegers(b bool) ParquetOption {
+	return func(o *parquet.Options) { o.Evolve.UpcastInts = b }
+}
+
+// WithUpcastFloats reads a Float32 column as the schema's Float64, as Polars'
+// ScanCastOptions(float_cast="upcast"), where it is refused by default. New in 0.6.7.
+func WithUpcastFloats(b bool) ParquetOption {
+	return func(o *parquet.Options) { o.Evolve.UpcastFloats = b }
+}
+
 func parquetOptions(opts []ParquetOption) parquet.Options {
 	o := parquet.DefaultOptions()
 	for _, f := range opts {

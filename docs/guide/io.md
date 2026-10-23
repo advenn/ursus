@@ -69,6 +69,14 @@ text, and `WithHivePartitioning(true)` reads the keys of a file's, a list's or a
 glob's whole paths, where by default only a directory's are read.
 `WithIncludeFilePaths(name)` adds a column of each row's file path.
 
+*New in 0.6.7:* files whose columns differ are read as one, as Polars' schema
+evolution reads them: as the first file's columns, or `WithParquetSchema(s)`'s; a
+column a file lacks as nulls with `WithInsertMissingColumns(true)`; a column a file has
+beyond them passed over with `WithIgnoreExtraColumns(true)`; and an Int32 where the
+schema's is an Int64, or a Float32 where it is a Float64, widened with
+`WithUpcastIntegers(true)` or `WithUpcastFloats(true)`. Each is refused otherwise, as
+Polars refuses it, naming the file and the column.
+
 ## From object storage
 
 ursus has no S3 or GCS client of its own: each store wants its vendor's SDK, and ursus

@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–347, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–348, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **Parquet files whose columns differ** (348), as Polars' schema evolution reads them:
+  `WithParquetSchema`, `WithInsertMissingColumns`, `WithIgnoreExtraColumns`,
+  `WithUpcastIntegers` and `WithUpcastFloats`, Polars' `schema`, `missing_columns`,
+  `extra_columns` and `cast_options`: a column a file lacks read as nulls, one it
+  has beyond the schema passed over, a narrower integer or float widened. Each is
+  refused otherwise, as before and as Polars refuses it.
 - **A Parquet directory and its hive partitions** (347): `ScanParquet(dir)` reads every
   file below a directory as one frame, as Polars' `scan_parquet` does, each directory
   named `key=value` a column of the files beneath it, typed as Polars types it; a
