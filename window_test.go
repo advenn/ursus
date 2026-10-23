@@ -588,10 +588,6 @@ func TestWindowRefusals(t *testing.T) {
 		{"window in a sort key", func() *ursus.LazyFrame {
 			return wf().Sort(ursus.Desc(ursus.Col("v").Sum().Over(ursus.Col("g"))))
 		}, "not supported in sort"},
-		{"nested windows", func() *ursus.LazyFrame {
-			return wf().Select(
-				ursus.Col("v").Sum().Over(ursus.Col("g")).Sum().Over(ursus.Col("g")))
-		}, "may not contain another window"},
 		{"non-window body", func() *ursus.LazyFrame {
 			return wf().Select(ursus.Col("v").Over(ursus.Col("g")))
 		}, "is not a window function"},

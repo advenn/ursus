@@ -51,7 +51,7 @@ what we are lacking".
 | ~~`struct.drop`~~ | built in step 323: `Struct().Drop` |
 | ~~`pl.arctan2`~~ | built in step 324: `Arctan2` |
 | ~~`meta.*`~~ | built in step 326: `Expr.Meta()`; `serialize`, `as_selector` and `show_graph` not |
-| a window inside a window; an aggregate inside an aggregate's input | refused (§5 of `feature-gaps.md`) |
+| ~~a window inside a window; an aggregate inside an aggregate's input~~ | built in step 336: each computed beneath in the outer's scope; an order-dependent aggregate under an order refused |
 | ~~a non-aggregate in an aggregation; a window in one~~ | built in step 331: a list a group, a window a group at a time |
 | `Mode` and Spearman `Corr` spilling in a group-by | refused past a limit |
 

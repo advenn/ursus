@@ -119,18 +119,44 @@ func TestWindowsTheUserScopedStayRefused(t *testing.T) {
 		e    ursus.Expr
 		want string
 	}{
-		// The inner Over is the user's, and its scope is theirs.
-		{"a user's window inside another", c("x").Mean().Over(c("t")).Sub(c("x")).Over(g),
-			"may not contain another window"},
-		// The CumSum would need the Shift computed below it.
-		{"a window in an ordered function's operand", c("x").Diff(1).CumSum(false).Over(g),
-			"may not contain another window"},
 		{"nothing windowed", c("x").Add(1).Over(g), "is not a window function"},
-		// An ordered window over an aggregate is refused, handed down or not.
-		{"an order over an aggregate", c("x").Sub(c("x").Mean()).OverWith(ursus.WindowSpec{
-			PartitionBy: []ursus.Expr{g}, OrderBy: []ursus.SortKey{ursus.Asc(c("t"))}}), "mean"},
+		// An ordered window over an aggregate whose answer depends on the order is
+		// refused, handed down or not.
+		{"an order over a first", c("x").Sub(c("x").First()).OverWith(ursus.WindowSpec{
+			PartitionBy: []ursus.Expr{g}, OrderBy: []ursus.SortKey{ursus.Asc(c("t"))}}), "first"},
 	} {
 		t.Run(tc.name, func(t *testing.T) { assertUserError(t, a8Frame().Select(tc.e), tc.want) })
+	}
+}
+
+// TestWindowsInsideWindowsAnswer: what was refused here before step 336, a window
+// inside a window and an order over an aggregate it does not change, answered as
+// Polars answers each.
+func TestWindowsInsideWindowsAnswer(t *testing.T) {
+	c := ursus.Col
+	g := c("g")
+	for _, tc := range []struct {
+		name string
+		e    ursus.Expr
+		want []string
+	}{
+		// The inner Over within the outer's partitions, by g and t: one row each.
+		{"a user's window inside another", c("x").Mean().Over(c("t")).Sub(c("x")).Over(g),
+			[]string{"0", "0", "0", "0", "0"}},
+		// The Shift a Diff holds, computed beneath the CumSum within each g.
+		{"a window in an ordered function's operand", c("x").Diff(1).CumSum(false).Over(g),
+			[]string{"null", "3", "null", "8", "5"}},
+		// The mean takes none of the order: its answer does not depend on it.
+		{"an order over a mean", c("x").Sub(c("x").Mean()).OverWith(ursus.WindowSpec{
+			PartitionBy: []ursus.Expr{g}, OrderBy: []ursus.SortKey{ursus.Asc(c("t"))}}),
+			[]string{"-3.667", "-0.6667", "-2.5", "4.333", "2.5"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			df := collect(t, a8Frame().Select(tc.e.Alias("r")))
+			if got := numbers(t, df, "r"); !slices.Equal(got, tc.want) {
+				t.Errorf("got  %v\nwant %v", got, tc.want)
+			}
+		})
 	}
 }
 

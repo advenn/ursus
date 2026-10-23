@@ -491,7 +491,9 @@ func lowerReshape(r *Reshape) Node {
 				"%s sorts a reshaped column by keys of the group's length", r.String()).
 				Hint("sort_by first, then reshape: %s", "Col(\"a\").SortBy(Col(\"b\")).Head(2)")}
 		}
-		if HasAgg(r.By) || LooseReshape(r.By) != nil || LooseFilter(r.By) != nil {
+		// An aggregate in the keys is a value a row too, broadcast: its implode holds
+		// an aggregate, which is computed beneath it (step 336).
+		if LooseReshape(r.By) != nil || LooseFilter(r.By) != nil {
 			return &Err{E: uerr.New(uerr.KindType, "sort_by",
 				"%s sorts by keys that are not a value a row", r.String())}
 		}
@@ -512,7 +514,7 @@ func lowerReshape(r *Reshape) Node {
 				"%s gathers by one index, and takes a List of them", r.String()).
 				Hint("for one element, Get(i); for several, Gather(Lit([]int64{0, 2}))")}
 		}
-		if HasAgg(r.By) || LooseReshape(r.By) != nil || LooseFilter(r.By) != nil {
+		if LooseReshape(r.By) != nil || LooseFilter(r.By) != nil {
 			return &Err{E: uerr.New(uerr.KindType, "gather",
 				"%s gathers by indices that are not a value a row", r.String())}
 		}

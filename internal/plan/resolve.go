@@ -566,22 +566,20 @@ func resolveAggregate(a *Aggregate) (Node, error) {
 // window anywhere in an expression is computed a group at a time, the group-by's keys
 // added to its partition, beneath the aggregation, which reads it as a column. A
 // window a group at a time sees the group's rows in their order, as Implode keeps
-// them. An expression mixing an aggregate with a row's value is neither, and is
-// refused below, as it was.
+// them. An aggregate inside another's input is such a window (step 336), so an
+// expression mixing an aggregate with a row's value, x - x.Mean(), is the list of
+// each row's value less its group's mean.
 func listsPerGroup(input Node, keys, aggs []expr.Node) (Node, []expr.Node, error) {
 	var lifted []int
 	out := slices.Clone(aggs)
 	for i, e := range aggs {
-		agg := expr.IsAggregation(e)
-		if !agg && expr.HasUnboundAgg(e) {
-			continue // a mix
+		e = innerAggsWindowed(e)
+		if !expr.IsAggregation(e) {
+			e = innerAggsWindowed(imploded(e))
 		}
 		if expr.HasWindow(e) {
 			e = perGroup(e, keys)
 			lifted = append(lifted, i)
-		}
-		if !agg {
-			e = imploded(e)
 		}
 		out[i] = e
 	}
@@ -600,6 +598,36 @@ func listsPerGroup(input Node, keys, aggs []expr.Node) (Node, []expr.Node, error
 		out[i] = ws[j]
 	}
 	return input, out, nil
+}
+
+// innerAggsWindowed is e with each aggregate inside another aggregate's input made a
+// window over the frame (step 335), which listsPerGroup then partitions by the
+// group-by's keys and computes beneath the aggregation: (x - x.Mean()).Abs().Sum()
+// is each group's sum of its rows' distances from the group's mean, and
+// x.Sum().Mean() the group's sum, as Polars answers them.
+func innerAggsWindowed(e expr.Node) expr.Node {
+	var walk func(n expr.Node, inAgg bool) expr.Node
+	walk = func(n expr.Node, inAgg bool) expr.Node {
+		if _, ok := n.(*expr.Window); ok {
+			return n // a window and what it holds are lifted by extractWindows
+		}
+		_, isAgg := n.(*expr.Agg)
+		kids := n.Children()
+		out := make([]expr.Node, len(kids))
+		changed := false
+		for i, k := range kids {
+			out[i] = walk(k, inAgg || isAgg)
+			changed = changed || out[i] != k
+		}
+		if changed {
+			n = expr.Rebuild(n, out) // a tree with nothing nested is left as it was
+		}
+		if isAgg && inAgg {
+			return &expr.Window{Child: n}
+		}
+		return n
+	}
+	return walk(e, false)
 }
 
 // perGroup is e with every window in it partitioned by keys first: a window function

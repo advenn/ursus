@@ -94,9 +94,49 @@ type windowSink struct {
 // winPartition is one distinct PARTITION BY, with its group table and the group id
 // of every row seen so far.
 type winPartition struct {
-	keys   []expr.Node
-	ids    *kernel.KeyTable
-	perRow []int32 // one entry per input row, in input order
+	keys []expr.Node
+	ids  *kernel.KeyTable
+	// ints numbers the partitions of one integer key in a sink at level 0, as the
+	// group-by's table does, without encoding each row's key (step 336); ids is
+	// then unused. A sink a level down keeps the encoded keys its skew reads.
+	ints    *kernel.IntKeyTable
+	scratch []int64
+	perRow  []int32 // one entry per input row, in input order
+}
+
+// groups is how many partitions p has so far.
+func (p *winPartition) groups() int {
+	if p.ints != nil {
+		return p.ints.Len()
+	}
+	return p.ids.Len()
+}
+
+// idBytes is what p's partition table holds.
+func (p *winPartition) idBytes() int64 {
+	if p.ints != nil {
+		return p.ints.NBytes()
+	}
+	return p.ids.NBytes()
+}
+
+// intIDs numbers c's rows into gids, c the partition's one integer key.
+func (p *winPartition) intIDs(c *data.Column, gids []int32) {
+	if p.ints == nil {
+		p.ints = kernel.NewIntKeyTable()
+	}
+	keys := kernel.IntKeys(c, &p.scratch)
+	valid := c.Validity()
+	var inserted [kernel.ManyChunk]bool
+	for base := 0; base < len(keys); base += kernel.ManyChunk {
+		m := min(kernel.ManyChunk, len(keys)-base)
+		if valid.IsAllSet() {
+			p.ints.GetOrInsertMany(keys[base:base+m], gids[base:base+m], inserted[:m])
+			continue
+		}
+		p.ints.GetOrInsertNullable(keys[base:base+m], func(j int) bool { return !valid.Get(base + j) },
+			gids[base:base+m], inserted[:m])
+	}
 }
 
 // winSpec is one window to compute.
@@ -178,12 +218,17 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 				}
 				cols[i] = c
 			}
-			enc, err := kernel.NewGroupKeyEncoder("over", cols)
-			if err != nil {
-				return err
-			}
-			for i := range n {
-				gids[i], _ = p.ids.GetOrInsert(enc.Encode(i))
+			if s.level == 0 && len(cols) == 1 && kernel.IsIntKey(cols[0].DType()) &&
+				(p.ints != nil || p.ids.Len() == 0) {
+				p.intIDs(cols[0], gids)
+			} else {
+				enc, err := kernel.NewGroupKeyEncoder("over", cols)
+				if err != nil {
+					return err
+				}
+				for i := range n {
+					gids[i], _ = p.ids.GetOrInsert(enc.Encode(i))
+				}
 			}
 		}
 		batchIDs[pi] = gids
@@ -199,7 +244,7 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 		if err != nil {
 			return err
 		}
-		sp.acc.Reserve(s.parts[sp.part].ids.Len())
+		sp.acc.Reserve(s.parts[sp.part].groups())
 		if err := sp.acc.AddBatch(gids, col); err != nil {
 			return err
 		}
@@ -207,7 +252,7 @@ func (s *windowSink) Consume(ctx context.Context, in *data.Batch) error {
 
 	st := s.copy.Total()
 	for _, p := range s.parts {
-		st += int64(cap(p.perRow))*4 + p.ids.NBytes()
+		st += int64(cap(p.perRow))*4 + p.idBytes()
 	}
 	for i := range s.specs {
 		if s.specs[i].acc != nil {
@@ -298,7 +343,7 @@ func (s *windowSink) Finish(ctx context.Context) (Operator, error) {
 // construction.
 func (s *windowSink) finishAggregate(sp *winSpec) (*data.Column, error) {
 	p := s.parts[sp.part]
-	nGroups := p.ids.Len()
+	nGroups := p.groups()
 	sp.acc.Reserve(nGroups)
 	res, err := sp.acc.Finish(sp.name, nGroups)
 	if err != nil {
@@ -379,7 +424,7 @@ func (s *windowSink) segments(ctx context.Context, sp *winSpec, all *data.Batch,
 		// order, which a stable sort by the id alone gives and a counting sort gives in
 		// two passes. The sort was a third of an interpolation's time over a million
 		// rows in one partition (step 329).
-		return segmentsByID(p.perRow[:nRows], max(1, p.ids.Len())), nil
+		return segmentsByID(p.perRow[:nRows], max(1, p.groups())), nil
 	}
 	gid := data.NewFixed("__gid", dtype.Int32, p.perRow[:nRows], bitmap.AllSet(nRows))
 
@@ -411,7 +456,7 @@ func (s *windowSink) segments(ctx context.Context, sp *winSpec, all *data.Batch,
 	}
 
 	// Partitions are contiguous in perm, so a boundary is wherever the id changes.
-	bounds := make([]int32, 0, p.ids.Len()+1)
+	bounds := make([]int32, 0, p.groups()+1)
 	bounds = append(bounds, 0)
 	for j := 1; j < nRows; j++ {
 		if p.perRow[perm[j]] != p.perRow[perm[j-1]] {

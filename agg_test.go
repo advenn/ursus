@@ -1,7 +1,7 @@
 package ursus_test
 
 import (
-	"strings"
+	"fmt"
 	"testing"
 
 	"github.com/advenn/ursus"
@@ -424,26 +424,37 @@ func TestAnAggregateInSelectIsAScalar(t *testing.T) {
 	ursustest.AssertFrameEqual(t, got, want)
 }
 
-func TestNestedAggregateRejected(t *testing.T) {
-	_, err := sales().
+// TestNestedAggregateIsTheGroups: an aggregate of an aggregate is over the inner one
+// computed for the group and broadcast, as Polars answers it (step 336; refused
+// before): the mean of a group's sum is its sum, Polars' apac 11, eu 10, us 7.
+func TestNestedAggregateIsTheGroups(t *testing.T) {
+	got, err := sales().
 		GroupBy(ursus.Col("region")).
 		Agg(ursus.Col("qty").Sum().Mean()).
+		Sort(ursus.Asc(ursus.Col("region"))).
 		Collect(t.Context())
-	if err == nil {
-		t.Fatal("an aggregate of an aggregate must be rejected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows, _ := got.ToMaps(); fmt.Sprint(rows) != "[map[qty:11 region:apac] map[qty:10 region:eu] map[qty:7 region:us]]" {
+		t.Errorf("the mean of a sum: %v", rows)
 	}
 }
 
-func TestNonAggregateInAggRejected(t *testing.T) {
-	_, err := sales().
+// TestAMixInAggIsAListAGroup: an aggregate beside a row's value is each row's value
+// with its group's aggregate, a list a group, as Polars answers it (step 336; refused
+// before).
+func TestAMixInAggIsAListAGroup(t *testing.T) {
+	got, err := sales().
 		GroupBy(ursus.Col("region")).
 		Agg(ursus.Col("qty").Sum().Add(ursus.Col("qty"))).
+		Sort(ursus.Asc(ursus.Col("region"))).
 		Collect(t.Context())
-	if err == nil {
-		t.Fatal("mixing an aggregate with a bare column must be rejected")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "outside any aggregate") {
-		t.Errorf("message should name the offending column:\n%s", err)
+	if rows, _ := got.ToMaps(); fmt.Sprint(rows) != "[map[qty:[15 18] region:apac] map[qty:[11 13 16] region:eu] map[qty:[9 12] region:us]]" {
+		t.Errorf("a sum beside a row's value: %v", rows)
 	}
 }
 

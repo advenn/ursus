@@ -90,9 +90,13 @@ func TestAggregationLists(t *testing.T) {
 		t.Errorf("a window inside an aggregate: %v", rows)
 	}
 
-	// A mix of an aggregate and a row's value is still refused.
-	if _, err := lf.GroupBy(c("g")).Agg(c("x").Sub(c("x").Mean())).Collect(ctx); err == nil ||
-		!strings.Contains(err.Error(), "outside any aggregate") {
-		t.Errorf("a mix: %v", err)
+	// A mix of an aggregate and a row's value, each row's value less its group's
+	// mean, a list a group: Polars' [-0.5, 0.5] and [-1.0, None, 1.0] (step 336).
+	got, err = lf.GroupBy(c("g")).Agg(c("x").Sub(c("x").Mean())).Sort(ursus.Asc(c("g"))).Collect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows, _ := got.ToMaps(); len(rows) != 2 || fmt.Sprint(rows[0]["x"], rows[1]["x"]) != "[-0.5 0.5] [-1 <nil> 1]" {
+		t.Errorf("a mix: %v", rows)
 	}
 }

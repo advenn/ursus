@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–335, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–336, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,17 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A window inside a window, and an aggregate inside an aggregate** (336), as Polars
+  computes them: `Col("x").Shift(1).CumSum(false).Over(g)` shifts and then sums within
+  each g, `Col("x").Sum().Over(g).CumSum(false).Over(h)` sums g within each h, and
+  `(x - x.Mean()).Abs().Sum()` is each group's, or the frame's, sum of distances from
+  its mean. In `Agg` a mix, `x - x.Mean()`, is a list a group, `x.Sum().Mean()` the
+  group's sum, and `SortBy` takes an aggregate in its keys. Each inner one is computed
+  beneath the outer in its partitions and order; an aggregate the order does not
+  change takes none of it. `(x - x.Mean()).CumSum(false).Over(g)`, which failed with an
+  internal error, answers. A window over one integer key numbers its partitions as the
+  group-by does, twice as fast: `Sum().Over(g)` over a million rows of 1000 groups in
+  15.5 ms, where it took 38.
 - **NDJSON read** (334): `ScanNDJSON`, `ScanNDJSONFiles`, `ScanNDJSONGlob`,
   `ScanNDJSONFrom` and `ScanNDJSONBytes`, as Polars' `read_ndjson` and `scan_ndjson`,
   types inferred as Polars infers them; `WithNDJSONSchema` of any type,

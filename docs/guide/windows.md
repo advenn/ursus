@@ -116,6 +116,18 @@ steps of an integer `by`, its half-life such as `Every("2i")`.
 A window function with no `Over` runs over the whole frame in the rows' order:
 `Col("close").CumSum(false)` is a running total from the first row to the last.
 
+## A window inside a window
+
+*New in 0.6.7:* a window function's input may hold another, and an aggregate, each
+computed first in the outer window's partitions and order, as Polars computes them:
+`Col("x").Shift(1).CumSum(false).Over(Col("g"))` shifts within each g and then sums
+within each g, and `Col("x").Sub(Col("x").Mean()).CumSum(false).Over(Col("g"))` sums
+each row's distance from its group's mean. A window with an `Over` of its own inside
+another is computed within the outer one's partitions, so
+`Col("x").Sum().Over(Col("g")).CumSum(false).Over(Col("h"))` sums g's values within
+each h. An aggregate whose answer depends on the order, `First`, under an `OrderBy` is
+refused, as an ordering over an aggregate is.
+
 ## Under a memory limit
 
 Windows spill to disk under a memory budget, over many partitions or one huge one,

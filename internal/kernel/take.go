@@ -94,15 +94,25 @@ func Take(c *data.Column, sel []int32) (*data.Column, error) {
 func takeValidity(c *data.Column, sel []int32) bitmap.View {
 	n := len(sel)
 	srcValid := c.Validity()
-	if srcValid.IsAllSet() && !slices.Contains(sel, NullIndex) {
+	// A bitmap with no null in it is as good as none: an aggregate's answer, a
+	// row a group, carries one, and a broadcast of it was built a bit a row.
+	allSet := srcValid.IsAllSet() || srcValid.CountUnset() == 0
+	if allSet && !slices.Contains(sel, NullIndex) {
 		return bitmap.AllSet(n)
 	}
+	// A word of 64 rows at a time, a shift's nulls and its column's both.
 	valid := bitmap.NewBuilder(n)
 	anyNull := false
-	for _, i := range sel {
-		ok := i != NullIndex && srcValid.Get(int(i))
-		valid.Append(ok)
-		anyNull = anyNull || !ok
+	for lo := 0; lo < n; lo += 64 {
+		hi := min(n, lo+64)
+		var w uint64
+		for j, i := range sel[lo:hi] {
+			if i != NullIndex && (allSet || srcValid.Get(int(i))) {
+				w |= 1 << uint(j)
+			}
+		}
+		anyNull = anyNull || w != ^uint64(0)>>uint(64-(hi-lo))
+		valid.AppendBits(w, hi-lo)
 	}
 	if !anyNull {
 		// The buffer is dropped: Arrow permits omitting the validity bitmap, and the

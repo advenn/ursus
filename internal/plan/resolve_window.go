@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"slices"
 	"strconv"
 
 	"github.com/advenn/ursus/internal/expr"
@@ -31,6 +32,13 @@ const winTempPrefix = "__win"
 // subtree rather than sharing it, so afterwards the second udf is not in the tree to
 // be found.
 //
+// A window inside a window is computed beneath it, in its scope (step 335): each
+// ordered function, aggregate and window in the outer window's operands is a window
+// of its own, partitioned and ordered as the outer one, and the outer one reads its
+// temporary. The windows are computed in layers, one Window node a layer, each over
+// the temporaries of the layers beneath it, so x.Shift(1).CumSum().Over(g) shifts
+// within each g and then sums within each g, as Polars computes it.
+//
 // It returns input unchanged and exprs unchanged when there is no window, so the
 // ordinary path pays one HasWindow walk and nothing else.
 func extractWindows(input Node, exprs []expr.Node, op string) (Node, []expr.Node, []string, error) {
@@ -45,9 +53,37 @@ func extractWindows(input Node, exprs []expr.Node, op string) (Node, []expr.Node
 		return input, exprs, nil, nil
 	}
 
-	var specs []expr.Node
+	var specs [][]expr.Node // a layer's windows, the innermost first
 	var names []string
 	byKey := map[string]string{}
+	layerOf := map[string]int{}
+
+	// register adds w as a temporary, computed one layer past the deepest temporary
+	// it reads, and is a reference to it. Identical windows share one.
+	register := func(w *expr.Window) expr.Node {
+		key := expr.Identity(w)
+		name, seen := byKey[key]
+		if !seen {
+			layer := 0
+			expr.Walk(w, func(x expr.Node) bool {
+				if c, ok := x.(*expr.Col); ok {
+					if l, ok := layerOf[c.Name]; ok {
+						layer = max(layer, l+1)
+					}
+				}
+				return true
+			})
+			name = winTempPrefix + strconv.Itoa(len(names))
+			byKey[key] = name
+			layerOf[name] = layer
+			for len(specs) <= layer {
+				specs = append(specs, nil)
+			}
+			specs[layer] = append(specs[layer], &expr.Alias{Child: w, Name: name})
+			names = append(names, name)
+		}
+		return &expr.Col{Name: name}
+	}
 
 	var rewrite func(expr.Node) (expr.Node, error)
 	rewrite = func(n expr.Node) (expr.Node, error) {
@@ -62,33 +98,25 @@ func extractWindows(input Node, exprs []expr.Node, op string) (Node, []expr.Node
 			if ok {
 				return rewrite(d)
 			}
-			// A window inside a window has no defined meaning: the inner one has
-			// already written one value per row, so partitioning it again would
-			// aggregate values that are themselves per-partition constants.
-			//
-			// The BODY is exempt from the top level, because that is where the
-			// windowed thing lives: `x.CumSum().Over(g)` is a WinFn under a Window
-			// by construction. What is checked is everything below that one layer,
-			// plus the keys, which must be per-row values.
-			nested := func(n expr.Node) bool { return expr.HasWindow(n) }
+			// A key must be a value of its row's, not a window's.
 			bad := false
 			for _, k := range t.PartitionBy {
-				bad = bad || nested(k)
+				bad = bad || expr.HasWindow(k)
 			}
 			for _, k := range t.OrderBy {
-				bad = bad || nested(k.Expr)
-			}
-			if fn, isFn := t.Child.(*expr.WinFn); isFn {
-				for _, c := range fn.Children() {
-					bad = bad || nested(c)
-				}
-			} else {
-				bad = bad || nested(t.Child)
+				bad = bad || expr.HasWindow(k.Expr)
 			}
 			if bad {
 				return nil, uerr.New(uerr.KindUnsupported, op,
-					"a window may not contain another window: %s", t.String()).
+					"a window's keys may not hold a window: %s", t.String()).
 					Hint("compute the inner window into a column with WithColumns first")
+			}
+			// An ordering over an aggregate, refused here, while the query is
+			// resolved, as Window.Field refuses one: a window inside another takes
+			// its order, and built later it would first be typed inside an optimizer
+			// rule, and read as ursus's own failure.
+			if a, ok := t.Child.(*expr.Agg); ok && len(t.OrderBy) > 0 {
+				return nil, expr.OrderedAggRefusal(a.Op)
 			}
 			// Nothing in the body to window. The physical planner refused this alone,
 			// so Explain printed a plan Collect would not run.
@@ -102,15 +130,14 @@ func extractWindows(input Node, exprs []expr.Node, op string) (Node, []expr.Node
 							"an ordered function such as .Rank(...) or .CumSum(...)")
 				}
 			}
-			key := expr.Identity(t)
-			name, seen := byKey[key]
-			if !seen {
-				name = winTempPrefix + strconv.Itoa(len(specs))
-				byKey[key] = name
-				specs = append(specs, &expr.Alias{Child: t, Name: name})
-				names = append(names, name)
+			// What its operands window is computed first, beneath it.
+			body, err := liftOperands(t, rewrite)
+			if err != nil {
+				return nil, err
 			}
-			return &expr.Col{Name: name}, nil
+			w := *t
+			w.Child = body
+			return register(&w), nil
 
 		case *expr.WinFn:
 			// A bare ordered function with no .Over() is a window over the whole
@@ -151,7 +178,102 @@ func extractWindows(input Node, exprs []expr.Node, op string) (Node, []expr.Node
 		out[i] = r
 	}
 
-	return &Window{Input: input, Exprs: specs}, out, names, nil
+	for _, layer := range specs {
+		input = &Window{Input: input, Exprs: layer}
+	}
+	return input, out, names, nil
+}
+
+// orderFor is the order a window of body takes from the window it is inside, whose
+// order is order: none for an aggregate whose answer does not depend on it, where an
+// order written over one is refused, and else order.
+func orderFor(body expr.Node, order []expr.OrderKey) []expr.OrderKey {
+	if a, ok := body.(*expr.Agg); ok && !a.Op.IsOrderDependent() {
+		return nil
+	}
+	return order
+}
+
+// liftOperands is the body of window t with each ordered function, aggregate and
+// window in its operands made a window of t's scope and rewritten, by rewrite, into
+// a reference to its temporary, as Polars computes a window inside a window, the
+// inner one within the outer one's partitions and in its order:
+//   - an ordered function, x.Shift(1) in x.Shift(1).CumSum().Over(g), is windowed by
+//     t's partition and order;
+//   - an aggregate, x.Mean() in (x - x.Mean()).CumSum().Over(g), by t's partition,
+//     and by its order too only where the answer depends on it, which is refused
+//     as an ordering over an aggregate always is;
+//   - a window a sugar built takes t's keys in place of its own, as distribute
+//     hands them down; one the user wrote, x.Sum().Over(g) in
+//     x.Sum().Over(g).CumSum().Over(h), is partitioned within t's partitions, by h
+//     then g, and ordered by its own order or else by t's.
+//
+// Under a mapping but the default, which does not give a row its own value, a
+// window inside is refused.
+func liftOperands(t *expr.Window, rewrite func(expr.Node) (expr.Node, error)) (expr.Node, error) {
+	nested := false
+	for _, c := range t.Child.Children() {
+		nested = nested || expr.HasWindow(c) || expr.HasAgg(c)
+	}
+	if !nested {
+		return t.Child, nil
+	}
+	if t.Mapping != expr.MapGroupsToRows {
+		return nil, uerr.New(uerr.KindUnsupported, "over",
+			"a window mapped %s may not contain another window or an aggregate: %s", t.Mapping, t.String()).
+			Hint("compute the inner one into a column with WithColumns first")
+	}
+	var lift func(expr.Node) (expr.Node, error)
+	lift = func(n expr.Node) (expr.Node, error) {
+		switch u := n.(type) {
+		case *expr.WinFn:
+			return rewrite(&expr.Window{Child: u, PartitionBy: t.PartitionBy, OrderBy: t.OrderBy})
+		case *expr.Agg:
+			if len(t.OrderBy) > 0 && u.Op.IsOrderDependent() {
+				return nil, expr.OrderedAggRefusal(u.Op)
+			}
+			return rewrite(&expr.Window{Child: u, PartitionBy: t.PartitionBy})
+		case *expr.Window:
+			w := *u
+			switch {
+			case u.Inherits:
+				w.PartitionBy, w.OrderBy, w.Mapping, w.Inherits = t.PartitionBy, t.OrderBy, t.Mapping, false
+			case u.Mapping != expr.MapGroupsToRows:
+				return nil, uerr.New(uerr.KindUnsupported, "over",
+					"a window mapped %s may not be inside another window: %s", u.Mapping, u.String()).
+					Hint("compute it into a column with WithColumns first")
+			default:
+				w.PartitionBy = append(slices.Clone(t.PartitionBy), u.PartitionBy...)
+				if len(u.OrderBy) == 0 {
+					w.OrderBy = orderFor(u.Child, t.OrderBy)
+				}
+			}
+			return rewrite(&w)
+		}
+		kids := n.Children()
+		if len(kids) == 0 {
+			return n, nil
+		}
+		out := make([]expr.Node, len(kids))
+		for i, c := range kids {
+			r, err := lift(c)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = r
+		}
+		return expr.Rebuild(n, out), nil
+	}
+	kids := t.Child.Children()
+	out := make([]expr.Node, len(kids))
+	for i, c := range kids {
+		r, err := lift(c)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = r
+	}
+	return expr.Rebuild(t.Child, out), nil
 }
 
 // distribute hands a window's partition, order and mapping down into a body that is
@@ -199,21 +321,35 @@ func distribute(w *expr.Window) (expr.Node, bool, error) {
 	down = func(n expr.Node) (expr.Node, bool) {
 		switch t := n.(type) {
 		case *expr.Window:
-			if !t.Inherits {
+			if t.Inherits {
+				scoped++
+				return scope(t.Child), true
+			}
+			// One the user wrote is computed within the outer window's partitions,
+			// as Polars computes it, in its own order or else the outer one's.
+			if t.Mapping != expr.MapGroupsToRows {
 				return nil, false
 			}
+			inner := *t
+			inner.PartitionBy = append(slices.Clone(w.PartitionBy), t.PartitionBy...)
+			if len(t.OrderBy) == 0 {
+				inner.OrderBy = orderFor(t.Child, w.OrderBy)
+			}
 			scoped++
-			return scope(t.Child), true
+			return &inner, true
 		case *expr.Agg:
 			// Refused here, while the query is resolved, as Window.Field refuses the
 			// same window written by hand: built later, it would first be typed
-			// inside an optimizer rule, and read as ursus's own failure.
-			if len(w.OrderBy) > 0 {
+			// inside an optimizer rule, and read as ursus's own failure. An
+			// aggregate whose answer does not depend on the order takes none.
+			if len(w.OrderBy) > 0 && t.Op.IsOrderDependent() {
 				refused = expr.OrderedAggRefusal(t.Op)
 				return nil, false
 			}
 			scoped++
-			return scope(t), true
+			s := scope(t).(*expr.Window)
+			s.OrderBy = orderFor(t, w.OrderBy)
+			return s, true
 		case *expr.WinFn:
 			scoped++
 			return scope(t), true
