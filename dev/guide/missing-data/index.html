@@ -1700,6 +1700,10 @@ is:</p>
 </span></code></pre></div>
 <p>They run in the rows' order; under <code>Over(keys...)</code>, within each partition, so a
 sensor's gap is never filled from another sensor's readings.</p>
+<p><em>New in 0.6.7.</em> <code>InterpolateBy(by)</code> draws the line at each row's <code>by</code>, a time or a
+number, where <code>Interpolate</code> steps by rows, as Polars' <code>interpolate_by</code>: readings at
+hours 0, 1 and 4, the middle one missing, fill it a quarter of the way along. <code>by</code>
+need not be sorted, and a null in it is refused, as Polars refuses it.</p>
 <p><em>New in 0.6.7.</em> A strategy takes a limit too, <code>FillForward.Limit(n)</code> and
 <code>FillBackward.Limit(n)</code>, as Polars' <code>fill_null(strategy=..., limit=n)</code>, for a column or
 for every column of a frame at once:</p>
