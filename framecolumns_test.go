@@ -193,11 +193,16 @@ func TestHashRows(t *testing.T) {
 		}
 	})
 
-	t.Run("refused", func(t *testing.T) {
+	t.Run("a List", func(t *testing.T) {
+		// A List is hashed as a key is since step 344, element by element: rows 0 and
+		// 2 are alike, a List among them.
 		lists := lf.WithColumns(c("b").Str().Split(",").Alias("l"))
-		_, err := lists.Select(ursus.HashRows(0)).Collect(t.Context())
-		if err == nil || !strings.Contains(err.Error(), `"l" is List(String)`) {
-			t.Errorf("a List: got %v", err)
+		ld, err := lists.Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if h := hashes(t, ld, 0); h[0] != h[2] || h[0] == h[1] {
+			t.Errorf("a List's rows hashed %v", h)
 		}
 		none, err := ursus.Frame().Collect(t.Context())
 		if err != nil {

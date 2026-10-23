@@ -271,10 +271,25 @@ func (d DataType) IsOrdered() bool {
 
 // IsHashable reports whether values can be group-by keys or deduplicated.
 //
-// Currently identical to IsOrdered, and deliberately a separate name: they are
-// different questions and will diverge (a Struct could be hashable field-by-field
-// long before anyone defines a total order over it).
-func (d DataType) IsHashable() bool { return d.IsOrdered() }
+// IsOrdered's types, and since step 344 the nested ones of them, field by field and
+// element by element, which have no order: the two questions were kept apart for
+// this, "a Struct could be hashable field-by-field long before anyone defines a total
+// order over it".
+func (d DataType) IsHashable() bool {
+	switch d.id {
+	case TypeList, TypeArray:
+		// A list of keys is one (step 344): its elements', in order.
+		return d.Inner().IsHashable() || d.Inner().IsNull()
+	case TypeStruct:
+		for _, f := range d.Fields() {
+			if !f.Type.IsHashable() && !f.Type.IsNull() {
+				return false
+			}
+		}
+		return len(d.Fields()) > 0
+	}
+	return d.IsOrdered()
+}
 
 // BitWidth returns the storage width in bits, or 0 if the type is not fixed width.
 func (d DataType) BitWidth() int {

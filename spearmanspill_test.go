@@ -36,7 +36,12 @@ func TestAHotGroupsSpearmanSpillsItsPairs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, threads := range []int{1, 4} {
+		threads := []int{1, 4}
+		if raceDetector {
+			// The root package's race run is near its limit: one thread there.
+			threads = threads[:1]
+		}
+		for _, threads := range threads {
 			var stats ursus.MemoryStats
 			dir := t.TempDir()
 			got, err := q().Collect(t.Context(), ursus.WithBatchSize(512),

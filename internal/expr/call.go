@@ -859,7 +859,7 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			if !f.Type.IsHashable() && !f.Type.IsNull() {
 				return dtype.Null, uerr.New(uerr.KindType, "hash_rows",
 					"hash_rows reads values a group-by can key on, and %q is %s", f.Name, f.Type).
-					Hint("a List or a Struct is not a key here yet; drop the column, or hash its fields")
+					Hint("a key's leaves are numbers, text, Booleans or instants; drop the column, or hash its fields")
 			}
 		}
 		return dtype.Uint64, nil

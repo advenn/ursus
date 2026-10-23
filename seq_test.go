@@ -54,10 +54,9 @@ func TestRle(t *testing.T) {
 	if err != nil || got.Schema().Field(0).Type != ursus.Uint32 {
 		t.Errorf("rle_id's type: %v, %v", got, err)
 	}
-	// Polars runs a Struct; it cannot be a key here.
-	if _, err := lf.Select(ursus.Struct(c("a"), c("s")).RleID()).Collect(t.Context()); err == nil ||
-		!strings.Contains(err.Error(), "cannot be a key") {
-		t.Errorf("a Struct's rle_id: %v", err)
+	// A Struct's runs, field by field, as Polars runs them (step 344).
+	if got := csvOf(t, lf.Select(ursus.Struct(c("a"), c("s")).RleID())); got != "a\n0\n0\n1\n2\n3\n4\n" {
+		t.Errorf("a Struct's rle_id: %q", got)
 	}
 }
 

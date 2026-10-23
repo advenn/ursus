@@ -391,19 +391,15 @@ func TestStrNullsPropagateThroughTheNewFunctions(t *testing.T) {
 	}
 }
 
-// TestGroupByAListRefusesReadably. A List column cannot be a group key —
-// GroupKeyEncoder has no arm for one — and Split is the first way a user could
-// arrive at that. It must be an error naming the problem, not a panic.
-func TestGroupByAListRefusesReadably(t *testing.T) {
-	_, err := splitFrame().
+// TestGroupByAList: a List column is a group key since step 344, element by element,
+// as Polars groups it; it was refused, GroupKeyEncoder having no arm for one, and
+// Split is the first way a user could arrive at one. Polars 1.44.1's groups.
+func TestGroupByAList(t *testing.T) {
+	q := splitFrame().
 		WithColumns(ursus.Col("s").Str().Split(",").Alias("parts")).
-		GroupBy(ursus.Col("parts")).
-		Agg(ursus.Len().Alias("n")).
-		Collect(t.Context())
-	if err == nil {
-		t.Fatal("grouping by a List column should be refused")
-	}
-	if !strings.Contains(err.Error(), "List") {
-		t.Errorf("the error should name the type: %v", err)
+		GroupBy(ursus.Col("parts")).MaintainOrder().
+		Agg(ursus.Len().Alias("n"))
+	if got := cells(t, q, "parts"); got != "[a b] [] [x] [p  q] [é ü] <nil> List(String)" {
+		t.Errorf("the groups: %s", got)
 	}
 }

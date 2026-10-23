@@ -442,13 +442,16 @@ func (a *modeAcc) Finish(name string, nGroups int) (*data.Column, error) {
 // without. firsts, where given, are their first rows, which order them; else they
 // are in that order already.
 func (a *modeAcc) list(name string, offs []int32, child *data.Column, firsts []int64) (*data.Column, error) {
-	if !a.maintain || firsts != nil {
+	// A List's or a Struct's values have no order: they come as they first appear
+	// with maintainOrder or not (step 344).
+	sorted := !a.maintain && child.DType().IsOrdered()
+	if sorted || firsts != nil {
 		perm := make([]int32, child.Len())
 		for i := range perm {
 			perm[i] = int32(i)
 		}
 		var by func(x, y int32) int
-		if a.maintain {
+		if !sorted {
 			by = func(x, y int32) int { return compareInt64(firsts[x], firsts[y]) }
 		} else {
 			cmp, err := NewComparator([]*data.Column{child}, []SortSpec{{}})

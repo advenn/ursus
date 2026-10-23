@@ -41,13 +41,14 @@ func minuteSeries(n int) *ursus.LazyFrame {
 }
 
 // peakHeapGrowth is the most the live heap grew, above where it started, while f
-// ran. It collects often while measuring, so what it sees is held rather than
-// merely not yet collected.
+// ran: the heap each collection found held, collecting often while measuring. The
+// heap's objects, which count garbage not yet swept, grew past it on a loaded
+// machine, whose collector lagged.
 func peakHeapGrowth(t *testing.T, f func()) int64 {
 	t.Helper()
 	defer debug.SetGCPercent(debug.SetGCPercent(10))
 	runtime.GC()
-	sample := []metrics.Sample{{Name: "/memory/classes/heap/objects:bytes"}}
+	sample := []metrics.Sample{{Name: "/gc/heap/live:bytes"}}
 	read := func() int64 { metrics.Read(sample); return int64(sample[0].Value.Uint64()) }
 	base := read()
 	stop, done := make(chan struct{}), make(chan int64)

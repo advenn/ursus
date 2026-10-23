@@ -21,6 +21,9 @@ func listMode(name string, c *data.Column, maintain bool) (*data.Column, error) 
 		return nil, err
 	}
 	var cmp Comparator
+	// A List's or a Struct's elements have no order: they come as they first appear
+	// (step 344).
+	maintain = maintain || !child.DType().IsOrdered()
 	if !maintain {
 		if cmp, err = NewComparator([]*data.Column{child}, []SortSpec{{}}); err != nil {
 			return nil, err

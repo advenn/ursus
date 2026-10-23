@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–343, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–344, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A List, an Array or a Struct is a key** (344), as Polars keys one: of `GroupBy`,
+  `Unique`, `Join`, `Over`, `PartitionBy`, `Mode`, `Rle` and `HashRows`, element by
+  element and field by field, an empty list apart from a null one, NaN equal to NaN and
+  `-0.0` to `0.0`, and a group-by of them spills. Each was refused. A mode of them
+  without `maintainOrder` comes in the order its values first appear, having no
+  order to sort by.
 - **`Reshape` and `ConcatArr`** (343), Polars' `reshape` and `concat_arr`:
   `Reshape(-1, 3)` makes Arrays of three of a column's values, the rows inferred,
   more dimensions an Array of Arrays and `Reshape(-1)` the values flattened, an

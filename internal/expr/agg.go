@@ -416,8 +416,8 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		return AggBinding{Acc: in, Out: dtype.List(in)}, nil
 
 	case AggMode:
-		// A List of the input's own type, as list.mode's: a Struct or a List cannot
-		// be a key, so its mode is refused, where Polars counts them.
+		// A List of the input's own type, as list.mode's; a List or a Struct is a key
+		// since step 344, counted element by element and field by field.
 		if !in.IsHashable() && !in.IsNull() {
 			return AggBinding{}, uerr.New(uerr.KindType, "mode", "mode counts values, and %s cannot be a key", in)
 		}

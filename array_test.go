@@ -68,6 +68,8 @@ func TestArrayType(t *testing.T) {
 		{"joined", lf.Join(ursus.Frame(i64s("k", 4, 1)), ursus.JoinOn(c("k"))).Sort(ursus.Asc(c("k"))), "a",
 			"[1 2 3] [7 8 9] Array(Int64, 3)"},
 		{"selected by type", lf.Select(selector.Array().Expr()), "a", "[1 2 3] [4 <nil> 6] <nil> [7 8 9] Array(Int64, 3)"},
+		// A key since step 344, as Polars groups by one.
+		{"a key", lf.GroupBy(c("a")).MaintainOrder().Agg(c("k").Sum()), "a", "[1 2 3] [4 <nil> 6] <nil> [7 8 9] Array(Int64, 3)"},
 	} {
 		if got := cells(t, tc.q, tc.col); got != tc.want {
 			t.Errorf("%s: %s, want %s", tc.name, got, tc.want)
@@ -86,7 +88,6 @@ func TestArrayType(t *testing.T) {
 		{"an Array of another size", lf.Select(c("a").Cast(ursus.Array(ursus.Int64, 2))), "cannot cast"},
 		{"an Array to text", lf.Select(c("a").Cast(ursus.String)), "cannot cast"},
 		{"a List as an Array", lf.Select(c("a").Arr().ToList().Arr().ToList()), "requires an Array"},
-		{"an Array as a key", lf.GroupBy(c("a")).Agg(c("k").Sum()), "group"},
 		{"an Array sorted", lf.Sort(ursus.Asc(c("a"))), "sort"},
 	} {
 		if _, err := tc.q.Collect(ctx); err == nil || !strings.Contains(err.Error(), tc.want) {

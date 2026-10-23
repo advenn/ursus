@@ -87,9 +87,13 @@ func TestModeInAnAggregation(t *testing.T) {
 			t.Errorf("first-seen order on %d threads: %s", threads, s)
 		}
 	}
-	if _, err := lf.GroupBy(c("g")).Agg(ursus.Struct(c("x")).Mode(true)).Collect(t.Context()); err == nil ||
-		!strings.Contains(err.Error(), "cannot be a key") {
-		t.Errorf("a mode of structs: %v", err)
+	// A Struct's modes, field by field, as Polars counts them (step 344); without
+	// maintainOrder too, a Struct having no order.
+	for _, maintain := range []bool{true, false} {
+		q := lf.GroupBy(c("g")).Agg(ursus.Struct(c("x")).Mode(maintain).Alias("m")).Sort(ursus.Asc(c("g")))
+		if got := cells(t, q, "m"); got != "[map[x:3] map[x:<nil>]] [map[x:-0]] [map[x:NaN] map[x:1]] List(Struct(x: Float64))" {
+			t.Errorf("a mode of structs, maintaining order %v: %s", maintain, got)
+		}
 	}
 }
 
@@ -124,7 +128,12 @@ func TestAHotGroupsModeSpillsItsCounts(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, threads := range []int{1, 4} {
+		threads := []int{1, 4}
+		if raceDetector {
+			// The root package's race run is near its limit: one thread there.
+			threads = threads[:1]
+		}
+		for _, threads := range threads {
 			var stats ursus.MemoryStats
 			dir := t.TempDir()
 			got, err := q().Collect(t.Context(), ursus.WithBatchSize(512),

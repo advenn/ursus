@@ -112,6 +112,12 @@ func StringMembers(set map[string]struct{}) ([]string, map[string]struct{}, bool
 }
 
 func keyWriter(op string, c *data.Column) (func([]byte, int) []byte, error) {
+	switch c.DType().ID() {
+	case dtype.TypeList, dtype.TypeArray:
+		return listKey(op, c)
+	case dtype.TypeStruct:
+		return structKey(op, c)
+	}
 	if c.DType().ID() == dtype.TypeBool {
 		bits := c.Bools()
 		return func(dst []byte, row int) []byte {
@@ -184,6 +190,57 @@ func keyWriter(op string, c *data.Column) (func([]byte, int) []byte, error) {
 			"cannot use a %s column as a key", c.DType()).
 			Hint("keys must be hashable: numeric, temporal, string or boolean")
 	}
+}
+
+// listKey writes a List's or an Array's key (step 344): its length, then each element
+// tagged as a key's field is, 0x00 a null and 0x01 before a value, so two lists are
+// equal bytes exactly where their elements are equal keys — NaN NaN, -0.0 +0.0, a
+// null a null — and no two lists' bytes run together. An empty list is its length
+// alone, apart from a null one, whose tag is the field's.
+func listKey(op string, c *data.Column) (func([]byte, int) []byte, error) {
+	acc := c.Lists()
+	child := acc.Child()
+	elem, err := keyWriter(op, child)
+	if err != nil {
+		return nil, err
+	}
+	return func(dst []byte, row int) []byte {
+		s, e, _ := acc.Get(row)
+		dst = binary.BigEndian.AppendUint32(dst, uint32(e-s))
+		for j := s; j < e; j++ {
+			if !child.IsValid(int(j)) {
+				dst = append(dst, 0x00)
+				continue
+			}
+			dst = elem(append(dst, 0x01), int(j))
+		}
+		return dst
+	}, nil
+}
+
+// structKey writes a Struct's key (step 344): each field tagged and written in turn,
+// as a key of several columns is, so two structs are equal bytes where their fields
+// are equal keys.
+func structKey(op string, c *data.Column) (func([]byte, int) []byte, error) {
+	fields := c.Fields()
+	ws := make([]func([]byte, int) []byte, len(fields))
+	for i, f := range fields {
+		w, err := keyWriter(op, f)
+		if err != nil {
+			return nil, err
+		}
+		ws[i] = w
+	}
+	return func(dst []byte, row int) []byte {
+		for i, f := range fields {
+			if !f.IsValid(row) {
+				dst = append(dst, 0x00)
+				continue
+			}
+			dst = ws[i](append(dst, 0x01), row)
+		}
+		return dst
+	}, nil
 }
 
 // intKey writes an integer key.

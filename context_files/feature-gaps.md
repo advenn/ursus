@@ -93,13 +93,13 @@ differs from their input's, or scalars outside a group-by.
 | missing | note | prio |
 | --- | --- | --- |
 | **Categorical** | only Enum exists; `TypeCategorical` is reserved | P1 |
-| **Array** (fixed-size list) | built in step 341: held as a List each of whose rows has its size, a null row none; casts to and from a List, `List().ToArray`, `Arr().ToList`, a Go `[n]T`, Arrow `FixedSizeList` in and out, Parquet by the footer's Arrow schema, NDJSON by a schema, JSON; its `arr` namespace in step 342, a List's functions of the same elements, `Reverse`, `Sort`, `Shift` and an elementwise `Eval` keeping the Array, `ToStruct` and `Dot` of its own; `Reshape` and `ConcatArr` in step 343. As a key it is refused, as a List is | — |
+| **Array** (fixed-size list) | built in step 341: held as a List each of whose rows has its size, a null row none; casts to and from a List, `List().ToArray`, `Arr().ToList`, a Go `[n]T`, Arrow `FixedSizeList` in and out, Parquet by the footer's Arrow schema, NDJSON by a schema, JSON; its `arr` namespace in step 342, a List's functions of the same elements, `Reverse`, `Sort`, `Shift` and an elementwise `Eval` keeping the Array, `ToStruct` and `Dot` of its own; `Reshape` and `ConcatArr` in step 343, and a key in step 344 | — |
 | **Large strings and binary** (64-bit offsets, `BinaryOffset`) | a String column holds at most 2 GiB of characters | P1 |
 | **String view layout** | Arrow's view types are converted on import | P2 |
 | **UInt128, Float16, Object, Unknown** | Float16 is widened to Float32 on import | P2 |
 | **Dictionary, run-end, union, ListView** in memory | decoded or refused on import | P2 |
 | `Expr.ToPhysical`, `Reinterpret`, `ShrinkDtype` | `Cast(dt.Physical())` works for temporal types only | P2 |
-| **A List or a Struct column as a key** | `Unique`, `UniqueKeep`, `GroupBy`, `Over` and `Join` each refuse one ("cannot use a List(Int64) column as a key"), as `RleID`, `Rle`, `Mode` and, since steps 302 and 305, `HashRows` and `PartitionBy` do (§9); Polars compares them (found at step 289) | P1 |
+| built: **a List, an Array or a Struct column as a key,** in step 344: the group-key encoder writes a list's length and each element tagged, and a struct's fields tagged, so `Unique`, `UniqueKeep`, `GroupBy`, `Over`, `Join`, `PartitionBy`, `RleID`, `Rle`, `Mode` and `HashRows` key them as Polars does, and a group-by of them spills; a mode of them without `maintainOrder` comes as its values first appear, having no order (found at step 289) | — |
 
 ## 4. Expression namespaces
 
@@ -405,9 +405,9 @@ decide whether to keep or switch each one.
 - A fold in `CumulativeEval`'s body answers, built ahead into a value a prefix, where
   Polars refuses one, "not allowed with non-scalar output", its function opaque to it
   (step 302).
-- `HashRows` refuses a List or a Struct column, being no group-by key here (§3);
-  Polars' `hash_rows` hashes one. It takes one seed, where Polars' takes four, and its
-  numbers are ursus's own, as `Hash`'s are (step 302).
+- `HashRows` takes one seed, where Polars' takes four, and its numbers are ursus's own,
+  as `Hash`'s are (step 302); a List or a Struct column is hashed as a key since step
+  344.
 - `Div` and `Pow` always return a float.
 - `Cut` returns String, not Categorical.
 - An expression's `TopK`, `BottomK`, `TopKBy` and `BottomKBy` return a List. `TopKBy`
@@ -473,7 +473,8 @@ decide whether to keep or switch each one.
   Polars' order is its hash table's (step 280).
 - `Entropy` of a group of no value is null, as `Sum`'s is, where Polars' is −0.0.
   `Mode` without `maintainOrder` is sorted, where Polars' order is its hash table's,
-  and refuses a Struct or a List, which Polars counts. `CorrSpearman` takes numbers;
+  and a List's or a Struct's, which have no order, come as they first appear (step
+  344). `CorrSpearman` takes numbers;
   Polars ranks text too (step 277). Its sums are exact since step 339, its answer
   within an ulp of the true one, where Polars' float sums are a few ulps off.
 - `Arr()`'s functions answer as `List()`'s (step 342): an integer `Sum` is an Int128

@@ -11,8 +11,7 @@ import (
 // is null, and casts to and from a List of its elements, a List's only where each of
 // its rows holds that many (List().ToArray, Cast). It is read from and written to
 // Arrow IPC as a FixedSizeList, and to Parquet as a list whose size the footer's
-// Arrow schema keeps, as Polars writes it. As a key, an Array is refused, as a List
-// is.
+// Arrow schema keeps, as Polars writes it. It is a key, as a List is (step 344).
 //
 // Its functions are a List's of the same elements, and answer as List()'s do, nulls
 // and all: a function of each array's values gives a value, and one that reshapes it

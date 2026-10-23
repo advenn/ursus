@@ -111,7 +111,15 @@ Methods for structs sit behind `Struct()`:
 A struct is also how ursus gives several values a row: `SplitExact`, `ExtractGroups`,
 `ValueCounts` of an expression, and `Rle`.
 
+## Lists and structs as keys
+
+*New in 0.6.7.* A List, an Array or a Struct is a key, of `GroupBy`, `Unique`, `Join`,
+`Over`, `PartitionBy`, `Mode`, `Rle` and `HashRows`, as Polars keys one: element by
+element and field by field, an empty list apart from a null one, a null element equal
+to a null, NaN to NaN and `-0.0` to `0.0`. A list still has no order, so it is no
+sort key.
+
 ## What is not here yet
 
-Lists of lists or of structs are refused by name. A List or a Struct cannot be a group-by, join or
-`Unique` key. The scope records each in `feature-gaps.md`.
+Lists of lists or of structs are refused by name. The scope records each in
+`feature-gaps.md`.

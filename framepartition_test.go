@@ -121,12 +121,18 @@ func TestPartitionBy(t *testing.T) {
 		t.Errorf("no rows: %d parts, %v", len(got), err)
 	}
 
+	// A List key since step 344, as Polars partitions by one: a part a list.
+	lists, err := ursus.Frame(strs("s", "a,b", "a")).WithColumns(ursus.Col("s").Str().Split(",").Alias("l")).
+		Collect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parts, err := lists.PartitionBy(ctx, ursus.PartitionOptions{By: []string{"l"}}); err != nil || len(parts) != 2 ||
+		cells(t, parts[0].Frame.Lazy(), "l") != "[a b] List(String)" || cells(t, parts[1].Frame.Lazy(), "l") != "[a] List(String)" {
+		t.Errorf("a List key: %v, %v", parts, err)
+	}
+
 	t.Run("refused", func(t *testing.T) {
-		lists, err := ursus.Frame(strs("s", "a,b", "a")).WithColumns(ursus.Col("s").Str().Split(",").Alias("l")).
-			Collect(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
 		for _, tc := range []struct {
 			name string
 			df   *ursus.DataFrame
@@ -138,8 +144,6 @@ func TestPartitionBy(t *testing.T) {
 			// Polars: "nope" not found.
 			{"an unknown column", df, ursus.PartitionOptions{By: []string{"nope"}}, `"nope"`},
 			{"a column twice", df, ursus.PartitionOptions{By: []string{"k", "k"}}, `"k" is in By twice`},
-			// Polars partitions by a List; a List is no key here (feature-gaps.md §3).
-			{"a List key", lists, ursus.PartitionOptions{By: []string{"l"}}, "List(String)"},
 		} {
 			_, err := tc.df.PartitionBy(ctx, tc.o)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
