@@ -1781,6 +1781,13 @@ Data Interface. Import copies, so nothing released afterwards reaches a frame.</
 </span></code></pre></div>
 <p>38 of Arrow's 45 types map to ursus's; Decimal256, intervals, unions and run-end
 encoding are refused by name.</p>
+<p><em>New in 0.6.7:</em> Arrow IPC, as Polars reads and writes it. <code>ScanIPC(path)</code> reads an IPC
+file, Feather version 2, the format of Polars' <code>write_ipc</code>, and <code>ScanIPCStream(path)</code>
+an IPC stream, <code>write_ipc_stream</code>'s; both read string views, large lists and
+compressed buffers, which Polars writes. <code>WriteIPC(ctx, w)</code>, <code>WriteIPCStream(ctx, w)</code>
+and <code>SinkIPC(ctx, path)</code> write them, uncompressed as Polars' are by default, or with
+<code>WithIPCCompression(ursus.IPCLZ4)</code> or <code>IPCZstd</code>. <code>ReadIPCSchema(path)</code> and
+<code>ReadParquetSchema(ctx, path)</code> read a file's schema from its footer alone.</p>
 <h2 id="larger-than-memory">Larger than memory<a class="headerlink" href="#larger-than-memory" title="Permanent link">&para;</a></h2>
 <p>A sink streams: a query whose answer is larger than memory writes it with
 <code>SinkParquet</code> or <code>SinkCSV</code>, the spilling operators under a memory limit, as

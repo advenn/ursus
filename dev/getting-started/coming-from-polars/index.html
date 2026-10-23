@@ -1907,6 +1907,10 @@ changes is what Go asks for.</p>
 <td><code>lf.WriteParquet(ctx, w)</code>, <code>lf.WriteCSV(ctx, w)</code>, to any <code>io.Writer</code></td>
 </tr>
 <tr>
+<td><code>pl.scan_ipc(p)</code>, <code>pl.read_ipc_stream(p)</code>, <code>df.write_ipc(f, compression="zstd")</code>, <code>lf.sink_ipc(p)</code>, <code>pl.read_ipc_schema(p)</code></td>
+<td><code>ursus.ScanIPC(p)</code>, <code>ursus.ScanIPCStream(p)</code>, <code>lf.WriteIPC(ctx, w, ursus.WithIPCCompression(ursus.IPCZstd))</code>, <code>lf.SinkIPC(ctx, p)</code>, <code>ursus.ReadIPCSchema(p)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>df.to_arrow()</code></td>
 <td><code>df.Record()</code>, zero-copy</td>
 </tr>
