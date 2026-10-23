@@ -26,7 +26,13 @@ func TestARankStreamedInPiecesIsWinRank(t *testing.T) {
 	for i := range n {
 		fv[i] = pool[rng.IntN(len(pool))]
 		sv[i] = []string{"a", "b", "b", "c"}[rng.IntN(4)]
-		ok.Append(rng.IntN(7) != 0)
+		valid := rng.IntN(7) != 0
+		if !valid {
+			// A null's slot holds the least value, so a peer test against a null
+			// where the nulls meet the values would find them tied.
+			fv[i], sv[i] = -1, "a"
+		}
+		ok.Append(valid)
 	}
 	valid := ok.Finish()
 	for _, raw := range []*data.Column{
@@ -56,6 +62,9 @@ func TestARankStreamedInPiecesIsWinRank(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			// A null's rank is null, and takes no position (step 335): a group's last
+			// position is counted among the values.
+			values := uint32(valid.CountSet())
 			stream := func(c *data.Column, m expr.RankMethod) []uint32 {
 				var st RankState
 				var out []uint32
@@ -64,6 +73,12 @@ func TestARankStreamedInPiecesIsWinRank(t *testing.T) {
 					r, err := RankNext(m, "r", c.Slice(lo, hi-lo), &st)
 					if err != nil {
 						t.Fatal(err)
+					}
+					for i := range r.Len() {
+						if r.IsValid(i) != c.IsValid(lo+i) {
+							t.Fatalf("%s %v: row %d's rank is valid %v, its value %v", c.Name(), m, lo+i,
+								r.IsValid(i), c.IsValid(lo+i))
+						}
 					}
 					out = append(out, data.MustValues[uint32](r)...)
 					lo = hi
@@ -86,7 +101,14 @@ func TestARankStreamedInPiecesIsWinRank(t *testing.T) {
 					got = stream(sorted, m)
 				}
 				for i := range n {
-					last := uint32(n) + 1 - minRev[n-1-i] // the group's last, from the end
+					if want.IsValid(i) != sorted.IsValid(i) {
+						t.Fatalf("%s desc=%v %v: row %d's rank is valid %v, its value %v", raw.Name(), desc, m, i,
+							want.IsValid(i), sorted.IsValid(i))
+					}
+					if !sorted.IsValid(i) {
+						continue
+					}
+					last := values + 1 - minRev[n-1-i] // the group's last, from the end
 					switch m {
 					case expr.RankAverage:
 						if g, w := float64(first[i]+last)/2, data.MustValues[float64](want)[i]; g != w {

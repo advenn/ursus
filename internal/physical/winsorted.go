@@ -112,6 +112,9 @@ type passStep struct {
 type passPlan struct {
 	steps   []passStep
 	combine func(rows int64, cols []*data.Column) (*data.Column, error)
+	// values: combine is given the count of the spec's child's values, its nulls
+	// left out, and not of the rows: a rank's, which numbers values only.
+	values bool
 }
 
 // sortedPlan is how a spec is answered in a sorted pass, and false when it is not:
@@ -166,10 +169,10 @@ func sortedPlan(sp *winSpec) (passPlan, bool) {
 		case expr.RankOrdinal, expr.RankDense, expr.RankMin:
 			return passPlan{steps: []passStep{step(m, false)}}, true
 		case expr.RankMax:
-			return passPlan{steps: []passStep{step(expr.RankMin, true)}, combine: rankMax}, true
+			return passPlan{steps: []passStep{step(expr.RankMin, true)}, combine: rankMax, values: true}, true
 		case expr.RankAverage:
 			return passPlan{steps: []passStep{step(expr.RankMin, false), step(expr.RankMin, true)},
-				combine: rankAverage}, true
+				combine: rankAverage, values: true}, true
 		}
 		return passPlan{}, false
 	}
@@ -277,26 +280,31 @@ func onto(e, child expr.Node, c string) expr.Node {
 }
 
 // rankMax is a rank's max from min over its order reversed: the group's last
-// position is its first counted from the end.
-func rankMax(rows int64, cols []*data.Column) (*data.Column, error) {
-	rev := data.MustValues[uint32](cols[0])
+// position is its first counted from the end, values the count of the values
+// ranked. A null's rank is null.
+func rankMax(values int64, cols []*data.Column) (*data.Column, error) {
+	rev, valid := data.MustValues[uint32](cols[0]), cols[0].Validity()
 	out := make([]uint32, len(rev))
 	for i, r := range rev {
-		out[i] = uint32(rows) + 1 - r
+		if valid.Get(i) {
+			out[i] = uint32(values) + 1 - r
+		}
 	}
-	return data.NewFixed("rank", dtype.Uint32, out, bitmap.AllSet(len(out))), nil
+	return data.NewFixed("rank", dtype.Uint32, out, valid), nil
 }
 
 // rankAverage is a rank's average from its min and min over the order reversed, as
 // winRank computes it: the sum of the two, then halved as a float.
-func rankAverage(rows int64, cols []*data.Column) (*data.Column, error) {
-	first, rev := data.MustValues[uint32](cols[0]), data.MustValues[uint32](cols[1])
+func rankAverage(values int64, cols []*data.Column) (*data.Column, error) {
+	first, rev, valid := data.MustValues[uint32](cols[0]), data.MustValues[uint32](cols[1]), cols[0].Validity()
 	out := make([]float64, len(first))
 	for i := range out {
-		last := uint32(rows) + 1 - rev[i]
-		out[i] = float64(first[i]+last) / 2
+		if valid.Get(i) {
+			last := uint32(values) + 1 - rev[i]
+			out[i] = float64(first[i]+last) / 2
+		}
 	}
-	return data.NewFixed("rank", dtype.Float64, out, bitmap.AllSet(len(out))), nil
+	return data.NewFixed("rank", dtype.Float64, out, valid), nil
 }
 
 // sortedNeed reports whether a spec is answered in a sorted pass.
@@ -403,7 +411,7 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 
 	// The stream in the order.
 	var stream Operator
-	proj := &projOp{s: s, group: group, order: order, narrow: narrow}
+	proj := &projOp{s: s, group: group, order: order, narrow: narrow, nulls: make([]int64, len(group))}
 	if len(order) == 0 {
 		stream = proj
 	} else {
@@ -484,8 +492,12 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 			}
 			c := in[0]
 			if pl.combine != nil {
+				n := rows
+				if pl.values {
+					n -= proj.nulls[j]
+				}
 				var err error
-				if c, err = pl.combine(rows, in); err != nil {
+				if c, err = pl.combine(n, in); err != nil {
 					return err
 				}
 			}
@@ -583,9 +595,10 @@ type projOp struct {
 	order  []plan.SortKey
 	narrow *dtype.Schema
 
-	r   *spill.Reader
-	pos int64
-	eof bool
+	r     *spill.Reader
+	pos   int64
+	eof   bool
+	nulls []int64 // by spec, its child's nulls read so far
 }
 
 func (p *projOp) Schema() *dtype.Schema { return p.narrow }
@@ -644,11 +657,12 @@ func (p *projOp) project(ctx context.Context, b *data.Batch) (*data.Batch, error
 		}
 		cols = append(cols, c)
 	}
-	for _, sp := range p.group {
+	for j, sp := range p.group {
 		c, err := evalColumn(ctx, sp.fn.Child, b)
 		if err != nil {
 			return nil, err
 		}
+		p.nulls[j] += int64(c.Validity().CountUnset())
 		if sp.fillOf != nil {
 			f, err := evalColumn(ctx, sp.fillOf, b)
 			if err != nil {

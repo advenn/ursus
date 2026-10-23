@@ -64,7 +64,9 @@ here two 9s and two 7s:
 | `RankAverage` | the mean of the tie's ranks, as a `Float64` |
 
 Under `Over`, a rank is within its partition: the [expressions](../concepts/expressions.md)
-page ranks each order in its region.
+page ranks each order in its region. A null's rank is null, and the values are ranked
+among themselves, as Polars ranks them. *Changed in 0.6.7:* a null ranked as the least
+value before, and took a position.
 
 ## Rolling windows by rows
 

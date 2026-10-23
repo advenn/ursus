@@ -109,8 +109,9 @@ func (e Expr) OverWith(spec WindowSpec) Expr {
 
 // Rank numbers rows by value within the window, smallest first unless descending.
 //
-// Ties are resolved by method; see RankMethod. Rank is never null — a null value
-// still occupies a position — and returns Uint32, or Float64 for RankAverage.
+// Ties are resolved by method; see RankMethod. A null's rank is null, and the values
+// are ranked among themselves, as Polars ranks them. It returns Uint32, or Float64
+// for RankAverage.
 func (e Expr) Rank(method RankMethod, descending bool) Expr {
 	return e.winFn(expr.WinRank, expr.WinParams{Method: method, Descending: descending})
 }

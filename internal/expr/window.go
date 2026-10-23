@@ -615,12 +615,13 @@ func (f *WinFn) Field(in *dtype.Schema) (dtype.Field, error) {
 		return dtype.Field{}, err
 	}
 
-	// Rank and cum_count number rows, so they are never null. Everything else can
-	// be: a shift past the partition edge produces nulls even over a non-null
-	// column, and a running total inherits its input's nullability.
+	// cum_count numbers rows, so it is never null, nor is an rle id. Everything else
+	// can be: a rank of a null is null (step 335), a shift past the partition edge
+	// produces nulls even over a non-null column, and a running total inherits its
+	// input's nullability.
 	nullable := cf.Nullable
 	switch {
-	case f.Fn == WinRank || f.Fn == WinCumCount || f.Fn == WinRleID:
+	case f.Fn == WinCumCount || f.Fn == WinRleID:
 		nullable = false
 	case f.Fn == WinShift || f.Fn.IsRolling() || f.Fn.IsEwm() || f.Fn == WinCumulativeEval:
 		// A rolling window's first rows hold fewer values than it needs, and so can

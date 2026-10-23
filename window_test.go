@@ -346,10 +346,11 @@ func TestWindowAggregateMatchesGroupBy(t *testing.T) {
 	}
 }
 
-// TestRankMethods pins all five, over a partition with a tie and a null.
+// TestRankMethods pins all five, over a partition with a tie and a null: a null's
+// rank is null, and the values are ranked among themselves, as Polars ranks them
+// (step 335; a null ranked first before it).
 func TestRankMethods(t *testing.T) {
-	// One partition, values [10, 20, 20, null]. Ascending, nulls first by default,
-	// so the sorted order is null, 10, 20, 20.
+	// One partition, values [10, 20, 20, null].
 	f := ursus.Frame(
 		ursus.Values("g", []string{"a", "a", "a", "a"}),
 		ursus.ValuesNullable("v", []int64{10, 20, 20, 0},
@@ -357,12 +358,12 @@ func TestRankMethods(t *testing.T) {
 	)
 	cases := []struct {
 		method ursus.RankMethod
-		want   []uint32 // in input order: 10, 20, 20, null
+		want   []uint32 // in input order: 10, 20, 20, and the null's 0
 	}{
-		{ursus.RankOrdinal, []uint32{2, 3, 4, 1}},
-		{ursus.RankDense, []uint32{2, 3, 3, 1}},
-		{ursus.RankMin, []uint32{2, 3, 3, 1}},
-		{ursus.RankMax, []uint32{2, 4, 4, 1}},
+		{ursus.RankOrdinal, []uint32{1, 2, 3, 0}},
+		{ursus.RankDense, []uint32{1, 2, 2, 0}},
+		{ursus.RankMin, []uint32{1, 2, 2, 0}},
+		{ursus.RankMax, []uint32{1, 3, 3, 0}},
 	}
 	for _, c := range cases {
 		t.Run(c.method.String(), func(t *testing.T) {
@@ -375,11 +376,16 @@ func TestRankMethods(t *testing.T) {
 			if got := u32(t, df, "r"); !slices.Equal(got, c.want) {
 				t.Errorf("rank(%s) = %v, want %v", c.method, got, c.want)
 			}
+			if r, err := df.Column[uint32]("r"); err != nil {
+				t.Fatal(err)
+			} else if _, ok := r.Get(3); ok {
+				t.Errorf("rank(%s) of a null is not null", c.method)
+			}
 		})
 	}
 
 	// Average returns Float64, which is the whole reason it is a separate method:
-	// the mean of positions 3 and 4 is 3.5 and truncating it would make average
+	// the mean of positions 2 and 3 is 2.5 and truncating it would make average
 	// indistinguishable from min.
 	df, err := f.Select(
 		ursus.Col("v").Rank(ursus.RankAverage, false).Over(ursus.Col("g")).Alias("r"),
@@ -391,8 +397,8 @@ func TestRankMethods(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RankAverage must be Float64: %v", err)
 	}
-	if v, _ := r.Get(1); v != 3.5 {
-		t.Errorf("average rank of a tie at positions 3 and 4 = %v, want 3.5", v)
+	if v, _ := r.Get(1); v != 2.5 {
+		t.Errorf("average rank of a tie at positions 2 and 3 = %v, want 2.5", v)
 	}
 }
 

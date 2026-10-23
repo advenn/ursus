@@ -146,7 +146,8 @@ func winRank(params expr.WinParams, name string, out dtype.DataType,
 
 	// peers reports whether two ORIGINAL row indices tie. Two nulls tie with each
 	// other and with nothing else — the grouping equality the rest of the engine
-	// uses, rather than IEEE's, so rank agrees with sort about what is equal.
+	// uses, rather than IEEE's, so rank agrees with sort about what is equal. A run
+	// of nulls is then passed over: a null has no rank.
 	peers := func(a, b int32) bool {
 		av, bv := valid.Get(int(a)), valid.Get(int(b))
 		if !av || !bv {
@@ -165,7 +166,7 @@ func winRank(params expr.WinParams, name string, out dtype.DataType,
 
 	for p := 0; p+1 < len(seg.Bounds); p++ {
 		lo, hi := int(seg.Bounds[p]), int(seg.Bounds[p+1])
-		dense := uint32(0)
+		dense, pos := uint32(0), uint32(0) // peer groups begun, and values ranked
 		j := lo
 		for j < hi {
 			// Extend the peer group.
@@ -173,15 +174,19 @@ func winRank(params expr.WinParams, name string, out dtype.DataType,
 			for k < hi && peers(seg.Perm[k], seg.Perm[j]) {
 				k++
 			}
+			if !valid.Get(int(seg.Perm[j])) {
+				j = k // the nulls: no rank, and no position among the values
+				continue
+			}
 			dense++
-			first := uint32(j - lo + 1) // 1-based position of the group's first row
-			last := uint32(k - lo)      // 1-based position of its last row
+			first := pos + 1          // 1-based position of the group's first row
+			last := pos + uint32(k-j) // 1-based position of its last row
 
 			for t := j; t < k; t++ {
 				row := seg.Perm[t]
 				switch params.Method {
 				case expr.RankOrdinal:
-					iv[row] = uint32(t - lo + 1)
+					iv[row] = pos + uint32(t-j) + 1
 				case expr.RankDense:
 					iv[row] = dense
 				case expr.RankMin:
@@ -196,15 +201,17 @@ func winRank(params expr.WinParams, name string, out dtype.DataType,
 					return nil, uerr.Internalf("kernel: rank method %d reached the kernel", uint8(params.Method))
 				}
 			}
+			pos += uint32(k - j)
 			j = k
 		}
 	}
 
-	// Never null: a null value still has a rank, because it still has a position.
+	// A null's rank is null, the values ranked among themselves, as Polars ranks
+	// them (step 335): it ranked a null as the least value until then.
 	if out.ID() == dtype.TypeFloat64 {
-		return data.NewFixed(name, dtype.Float64, fv, bitmap.AllSet(n)), nil
+		return data.NewFixed(name, dtype.Float64, fv, valid), nil
 	}
-	return data.NewFixed(name, dtype.Uint32, iv, bitmap.AllSet(n)), nil
+	return data.NewFixed(name, dtype.Uint32, iv, valid), nil
 }
 
 // winShift moves values within each partition, filling from outside with null.

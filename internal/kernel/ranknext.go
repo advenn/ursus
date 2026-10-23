@@ -2,7 +2,6 @@ package kernel
 
 import (
 	"github.com/advenn/ursus/dtype"
-	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/uerr"
@@ -20,10 +19,10 @@ type RankState struct {
 
 // RankNext ranks col, the next rows of a partition in rank's order, continuing st:
 // by position, by peer group, or by the group's first position, as winRank's
-// ordinal, dense and min. Peers are winRank's: two nulls tie with each other and
-// with nothing else, and two values tie when their order does. A group's last
-// position, which max and average need, is not known until the group ends; the
-// caller has it from min over the order reversed.
+// ordinal, dense and min. Two values tie when their order does; a null has no rank
+// and takes no position, as winRank's. A group's last position, which max and
+// average need, is not known until the group ends; the caller has it from min over
+// the order reversed.
 func RankNext(method expr.RankMethod, name string, col *data.Column, st *RankState) (*data.Column, error) {
 	switch method {
 	case expr.RankOrdinal, expr.RankDense, expr.RankMin:
@@ -44,20 +43,18 @@ func RankNext(method expr.RankMethod, name string, col *data.Column, st *RankSta
 		return nil, err
 	}
 	valid := all.Validity()
-	peers := func(a, b int) bool {
-		av, bv := valid.Get(a), valid.Get(b)
-		if !av || !bv {
-			return av == bv
-		}
-		return cmp(a, b) == 0
-	}
 	out := make([]uint32, n)
+	last := lead - 1 // the last value ranked, st.prev's row when there is one
 	for i := range n {
 		r := lead + i
-		if r == 0 || !peers(r-1, r) {
+		if !valid.Get(r) {
+			continue
+		}
+		if last < 0 || cmp(last, r) != 0 {
 			st.dense++
 			st.first = st.pos + 1
 		}
+		last = r
 		st.pos++
 		switch method {
 		case expr.RankOrdinal:
@@ -68,8 +65,8 @@ func RankNext(method expr.RankMethod, name string, col *data.Column, st *RankSta
 			out[i] = st.first
 		}
 	}
-	if n > 0 {
-		st.prev = col.Slice(n-1, 1)
+	if last >= lead {
+		st.prev = col.Slice(last-lead, 1)
 	}
-	return data.NewFixed(name, dtype.Uint32, out, bitmap.AllSet(n)), nil
+	return data.NewFixed(name, dtype.Uint32, out, col.Validity()), nil
 }

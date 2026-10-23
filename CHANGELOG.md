@@ -15,12 +15,17 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–334, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–335, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **A null's rank is null** (335), as Polars': `Rank` ranked a null as the least
+  value and gave it a position, so `[5, null, 4]` ranked `[3, 1, 2]`; it ranks
+  `[2, null, 1]` now, the values among themselves, by every method, in a window and
+  over the frame, streamed past a memory limit and in `List().Eval`. A rank's column
+  is nullable where its input is.
 - **A float cast to text is Polars' text** (325): `2.0` is `"2.0"`, `-0.0` `"-0.0"`,
   `1e-7` `"1e-7"`, `1e16` `"1e+16"` and `+Inf` `"inf"`, where they were Go's `"2"`,
   `"-0"`, `"1e-07"`, `"1e+16"` and `"+Inf"`. A pivot named by a float's text names its
