@@ -1670,7 +1670,10 @@ known by its first bytes whatever its name, as Polars reads one:
 <code>ScanCSV("sales.csv.gz")</code>. It is decompressed as it is read, never held whole, and
 parsed in parallel as a plain file is. NDJSON and JSON files are read so too.</p>
 <p><code>ScanCSVGlob(pattern)</code> reads every file a pattern matches as one frame, in their
-names' order, and <code>ScanCSVFiles(paths)</code> a list:</p>
+names' order, and <code>ScanCSVFiles(paths)</code> a list. <em>New in 0.6.7:</em> a pattern's <code>**</code>
+matches any number of directories, <code>logs/**/*.csv</code>, in every scan's glob, and
+<code>ScanCSV(dir)</code> reads every file below a directory, as <code>ScanNDJSON(dir)</code> and
+<code>ScanParquet(dir)</code> do:</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">ScanCSVGlob</span><span class="p">(</span><span class="s">"testdata/parts/revenue-*.csv"</span><span class="p">).</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="nx">GroupBy</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"month"</span><span class="p">)).</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nx">Agg</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"revenue"</span><span class="p">).</span><span class="nx">Sum</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"revenue"</span><span class="p">)).</span>
