@@ -1743,6 +1743,16 @@ a match.</p>
 <li><code>WriteParquet(ctx, w)</code> and <code>SinkParquet(ctx, path)</code> write, with <code>WithCompression</code>,
   Snappy by default, <code>WithRowGroupRows</code> and <code>WithStatistics</code>.</li>
 </ul>
+<p><em>New in 0.6.7:</em> <code>ScanParquet(dir)</code> reads every file below a directory as one frame,
+as Polars' <code>scan_parquet</code> does, and reads a hive dataset's partitions: each directory
+named <code>key=value</code> gives the rows of the files beneath it a column <code>key</code>, after the
+files' own, its type inferred from every file's value as Polars infers it, an integer,
+a float, a Boolean, a date or an instant, or text. <code>__HIVE_DEFAULT_PARTITION__</code> is a
+null. A filter on the keys skips the files it rules out before any is opened.
+<code>WithHiveSchema(s)</code> gives keys their types, <code>WithHiveDates(false)</code> reads dates as
+text, and <code>WithHivePartitioning(true)</code> reads the keys of a file's, a list's or a
+glob's whole paths, where by default only a directory's are read.
+<code>WithIncludeFilePaths(name)</code> adds a column of each row's file path.</p>
 <h2 id="from-object-storage">From object storage<a class="headerlink" href="#from-object-storage" title="Permanent link">&para;</a></h2>
 <p>ursus has no S3 or GCS client of its own: each store wants its vendor's SDK, and ursus
 takes on none. <code>ScanParquetFrom</code> reads through any <code>io.ReaderAt</code>

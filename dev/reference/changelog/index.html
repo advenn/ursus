@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–346, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–347, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3137,6 +3137,13 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A Parquet directory and its hive partitions</strong> (347): <code>ScanParquet(dir)</code> reads every
+  file below a directory as one frame, as Polars' <code>scan_parquet</code> does, each directory
+  named <code>key=value</code> a column of the files beneath it, typed as Polars types it; a
+  filter on the keys skips the files it rules out before any is opened.
+  <code>WithHivePartitioning</code>, <code>WithHiveSchema</code>, <code>WithHiveDates</code> and
+  <code>WithIncludeFilePaths</code>, Polars' <code>hive_partitioning</code>, <code>hive_schema</code>,
+  <code>try_parse_hive_dates</code> and <code>include_file_paths</code>.</li>
 <li><strong>Compressed input</strong> (346): a CSV, NDJSON or JSON file compressed by gzip, zlib or
   Zstandard is read as itself, known by its first bytes whatever its name, as Polars
   reads one, decompressed as it is read and parsed in parallel as a plain file is.

@@ -1931,6 +1931,10 @@ changes is what Go asks for.</p>
 <td><code>ursus.ScanNDJSON(p)</code>, <code>ursus.ScanNDJSONFiles([]string{p, q}, ursus.WithInferSchemaLines(n), ursus.WithNDJSONIgnoreErrors(true))</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>pl.scan_parquet("ds/", hive_schema={"g": pl.Int8}, include_file_paths="path")</code></td>
+<td><code>ursus.ScanParquet("ds", ursus.WithHiveSchema(s), ursus.WithIncludeFilePaths("path"))</code>, a hive dataset's keys read from its directories (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>pl.read_csv("sales.csv.gz")</code>, a zlib or Zstandard file too</td>
 <td><code>ursus.ScanCSV("sales.csv.gz")</code>, known by its first bytes (new in 0.6.7)</td>
 </tr>
