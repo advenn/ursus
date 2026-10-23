@@ -85,6 +85,17 @@ and `SinkIPC(ctx, path)` write them, uncompressed as Polars' are by default, or 
 `WithIPCCompression(ursus.IPCLZ4)` or `IPCZstd`. `ReadIPCSchema(path)` and
 `ReadParquetSchema(ctx, path)` read a file's schema from its footer alone.
 
+## JSON
+
+*New in 0.6.7:* `WriteNDJSON(ctx, w)` writes each row as a JSON object on a line of its
+own, as Polars' `write_ndjson`, and `WriteJSON(ctx, w)` one array of them, as
+`write_json`; `SinkNDJSON(ctx, path)` streams to a file, whole or not at all. Each
+value is written as Polars writes it: a float in Polars' text, NaN and the infinities
+`null`; a Decimal, a date and an instant quoted, `"2024-01-02 03:04:05.123456"`, a
+zoned instant with its offset, `"2024-01-02T03:04:05+05:00"`; a duration in ISO 8601's
+seconds, `"PT90S"`; a List an array and a Struct an object. A Binary column is refused,
+as Polars refuses it.
+
 ## Larger than memory
 
 A sink streams: a query whose answer is larger than memory writes it with

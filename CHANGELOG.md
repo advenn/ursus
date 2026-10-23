@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–332, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–333, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -96,6 +96,9 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **JSON written** (333): `WriteNDJSON`, `WriteJSON` and `SinkNDJSON`, as Polars'
+  `write_ndjson`, `write_json` and `sink_ndjson`, each value in Polars' own text, to
+  the byte.
 - **Arrow IPC** (332), as Polars reads and writes it: `ScanIPC`, `ScanIPCStream`,
   `WriteIPC`, `WriteIPCStream`, `SinkIPC`, uncompressed, LZ4 or Zstandard, and
   `ReadIPCSchema`; and `ReadParquetSchema`. Polars' own files read, string views and

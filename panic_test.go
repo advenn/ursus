@@ -737,6 +737,8 @@ var goroutineSites = map[string]string{
 	"internal/physical/parallelsink.go drain 1":   "TestParallelSinkWorkerPanicStopsConsuming",
 	"internal/source/csv/csv.go convertAll 1":     "TestConvertAllRecoversAPanic",
 	"internal/source/parquet/parallel.go issue 1": "TestParallelRowGroupPanicIsAnError",
+	"jsonwrite.go writeJSON 1":                    "TestJSONWriterPanicIsAnError",
+	"jsonwrite.go writeJSON 2":                    "TestJSONEncoderPanicIsAnError",
 }
 
 func TestEveryGoroutineIsCovered(t *testing.T) {

@@ -242,7 +242,7 @@ differs from their input's, or scalars outside a group-by.
 
 | missing or partial | prio |
 | --- | --- |
-| **JSON and NDJSON:** read, scan, write, sink | P1 |
+| **JSON and NDJSON read:** read and scan. Written and sunk in step 333, `WriteNDJSON`, `WriteJSON` and `SinkNDJSON`, each value in Polars' text | P1 |
 | built: **Arrow IPC,** in step 332: a file or a stream scanned, written and sunk, uncompressed, LZ4 or Zstandard, and a file's schema read; and a Parquet file's schema. Over arrow-go's IPC readers and writers | — |
 | **Hive partitioning** on read (keys, types, dates); **partitioned writes** by key | P1 |
 | **Multi-file schema evolution:** `missing_columns`, `extra_columns`, union by name; `include_file_paths`; `**` globs | P1 |
