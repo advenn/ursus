@@ -112,6 +112,15 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return listAppend(name, out, ops, n)
 	case expr.FnListShift:
 		return listShift(name, ops[0], ops[1], n)
+	case expr.FnArrShift:
+		// An Array's list.shift, its Array kept (step 342).
+		r, err := listShift(name, ops[0], ops[1], n)
+		if err != nil {
+			return nil, err
+		}
+		return r.WithDType(out), nil
+	case expr.FnArrDot:
+		return arrDot(name, out, ops[0], ops[1], n)
 	case expr.FnListCountMatches:
 		return listCountMatches(name, ops[0], ops[1], n)
 	case expr.FnIsInExpr:

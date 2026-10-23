@@ -68,7 +68,8 @@ func evalListMap(ctx context.Context, m *expr.ListMap, b *data.Batch) (*data.Col
 	if want := f.Type.Inner(); out.DType() != want {
 		return nil, uerr.Internalf("physical: list.eval's body gave %s, typed %s", out.DType(), want)
 	}
-	return data.NewList(f.Name, offs, out.Rename(f.Name), lc.Validity()), nil
+	// An Array's map is one of its size (step 342).
+	return data.NewList(f.Name, offs, out.Rename(f.Name), lc.Validity()).WithDType(f.Type), nil
 }
 
 // bodyWindows computes each window function of a list's body, innermost first, a

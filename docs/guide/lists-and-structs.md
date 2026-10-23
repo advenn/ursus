@@ -72,6 +72,13 @@ as a cast to the type does, and refuses one that does not, as Polars does;
 
 --8<-- "Example_arrays.md"
 
+`Arr()` is Polars' `arr` namespace, a list's functions of the same elements: `Sum`,
+`Mean`, `Max`, `ArgMin`, `Get`, `Contains`, `Join`, `Unique`, `Head` and the rest
+answer as `List()`'s do, a value or a list a row; `Reverse`, `Sort`, `Shift` and
+`Eval` of an element's value keep each array's length and so its Array; `ToStruct`
+makes a field of each element, `field_0` on unless named, and `Dot` sums two arrays'
+products.
+
 An Array is read and written as Polars writes it: an Arrow `FixedSizeList` in IPC, and
 in Parquet a list whose size the file's Arrow schema keeps; as JSON, a list.
 
@@ -102,6 +109,6 @@ A struct is also how ursus gives several values a row: `SplitExact`, `ExtractGro
 
 ## What is not here yet
 
-An Array's own namespace, beyond `ToList`, is not, and neither are lists of lists or
-of structs, which are refused by name. A List or a Struct cannot be a group-by, join or
+Polars' `reshape` and `concat_arr`, which make Arrays of columns, are not, and neither
+are lists of lists or of structs, which are refused by name. A List or a Struct cannot be a group-by, join or
 `Unique` key. The scope records each in `feature-gaps.md`.

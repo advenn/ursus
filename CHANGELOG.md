@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–341, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–342, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,15 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **The `Arr()` namespace** (342), Polars' `arr`: `Sum`, `Min`, `Max`, `Mean`,
+  `Median`, `Std`, `Var`, `NUnique`, `ArgMin`, `ArgMax`, `First`, `Last`, `Get`,
+  `Contains`, `CountMatches`, `Any`, `All`, `Len`, `Head`, `Tail`, `Slice`, `Unique`,
+  `Join`, `Explode` and `Agg` answer as `List()`'s of the same elements; `Reverse`,
+  `Sort`, `SortWith`, `Shift` and `Eval` of an element's value keep each array's
+  length and its Array, as Polars does, `Eval(body, true)` a List of any body's;
+  `ToStruct` names its fields `field_0` on, as Polars, unless named; `Dot` sums two
+  arrays' products. As `List()`'s, an integer sum is an Int128 and `NUnique` passes a
+  null over, where Polars' sum is an Int64 and its `n_unique` counts the null.
 - **The `Array` type** (341), Polars' fixed-size list: `Array(T, n)` holds `n` values of
   `T` a row, or a null. `List().ToArray(n)` and a cast make one of a list whose every
   row holds `n`, and refuse one that does not, as Polars does; `Arr().ToList()` and a

@@ -345,6 +345,11 @@ const (
 	// group-by key hashed as hash hashes one value's, the seed an Int64 literal last
 	// (step 302).
 	FnHashRows
+
+	// arr.shift(n) and arr.dot(other), n and other a value a row (step 342): an
+	// Array's list.shift, the Array kept, and the sum of two Arrays' products.
+	FnArrShift
+	FnArrDot
 	fnHorizontalEnd
 )
 
@@ -485,9 +490,14 @@ const (
 )
 
 // The array family (step 341): to_list, an Array's rows as a List's, which holds them
-// as an Array does. A block of its own at 1400.
+// as an Array does. A block of its own at 1400. Step 342's reverse and sort, a List's
+// kept an Array, sort with list.sort's arguments; and to_struct, the fields' names,
+// field_0 on unless given.
 const (
 	FnArrToList CallFn = iota + 1400
+	FnArrReverse
+	FnArrSort
+	FnArrToStruct
 	fnArrEnd
 )
 
@@ -626,8 +636,9 @@ var callNames = map[CallFn]string{
 	FnListAny: "list.any", FnListAll: "list.all", FnListItem: "list.item", FnListSample: "list.sample",
 	FnListMode: "list.mode", FnListUniqueCounts: "list.unique_counts", FnListValueCounts: "list.value_counts",
 	FnListHist: "list.hist", FnListToArray: "list.to_array",
-	FnArrToList: "arr.to_list",
-	FnListRle:   "list.rle",
+	FnArrToList: "arr.to_list", FnArrReverse: "arr.reverse", FnArrSort: "arr.sort",
+	FnArrToStruct: "arr.to_struct", FnArrShift: "arr.shift", FnArrDot: "arr.dot",
+	FnListRle: "list.rle",
 }
 
 func (f CallFn) String() string {
@@ -1050,6 +1061,26 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			}
 		}
 		return dtype.String, nil
+
+	case FnArrShift:
+		// list.shift of an Array, which keeps each row's length, so its Array.
+		if len(ops) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		if ops[0].Type.ID() != dtype.TypeArray {
+			return dtype.Null, uerr.New(uerr.KindType, "arr", "%s requires an Array operand, got %s", fn, ops[0].Type)
+		}
+		if v := ops[1].Type; !v.IsInteger() && !v.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "arr.shift", "arr.shift takes an integer count, got %s", v)
+		}
+		return ops[0].Type, nil
+
+	case FnArrDot:
+		// The sum of each row's products, as list.sum sums them (step 342).
+		if len(ops) != 2 {
+			return dtype.Null, uerr.Internalf("expr: %s with %d operands", fn, len(ops))
+		}
+		return ArrDotType(ops[0].Type, ops[1].Type)
 
 	case FnListShift, FnListCountMatches:
 		if len(ops) != 2 {
@@ -2515,8 +2546,49 @@ func arrCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 	switch c.Fn {
 	case FnArrToList:
 		return dtype.List(in.Inner()), nil
+	case FnArrReverse, FnArrSort:
+		// A List's reverse and sort, which keep each row's length, so its Array.
+		if _, err := listCallOut(&Call{Fn: map[CallFn]CallFn{FnArrReverse: FnListReverse,
+			FnArrSort: FnListSort}[c.Fn], Args: c.Args}, dtype.List(in.Inner())); err != nil {
+			return dtype.Null, err
+		}
+		return in, nil
+	case FnArrToStruct:
+		names, err := arrFieldNames(c, in)
+		if err != nil {
+			return dtype.Null, err
+		}
+		fs := make([]dtype.Field, len(names))
+		for i, n := range names {
+			fs[i] = dtype.Field{Name: n, Type: in.Inner(), Nullable: true}
+		}
+		return dtype.Struct(fs...), nil
 	}
 	return dtype.Null, uerr.Internalf("expr: no type for %s", c.Fn)
+}
+
+// ArrFieldNames is arr.to_struct's fields' names over an Array of in: those given, as
+// many as its size, or field_0 on, as Polars names them.
+func ArrFieldNames(c *Call, in dtype.DataType) ([]string, error) { return arrFieldNames(c, in) }
+
+func arrFieldNames(c *Call, in dtype.DataType) ([]string, error) {
+	if len(c.Args) == 1 {
+		names := make([]string, in.Size())
+		for i := range names {
+			names[i] = "field_" + strconv.Itoa(i)
+		}
+		return names, nil
+	}
+	names, err := callFieldNames(c, "arr.to_struct")
+	if err != nil {
+		return nil, err
+	}
+	if len(names) != in.Size() {
+		return nil, uerr.New(uerr.KindValue, "arr.to_struct",
+			"%s names %d fields of an Array of %d", c.Fn, len(names), in.Size()).
+			Hint("a field an element: name each, or none for field_0 on")
+	}
+	return names, nil
 }
 
 // listCallOut gives the output type of a `.list` call.

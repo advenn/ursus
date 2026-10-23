@@ -648,7 +648,7 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 	case c.Fn.IsBinary():
 		return kernel.BinCall(c.Fn, name, out, recv, cc.args)
 	case c.Fn.IsArr():
-		return kernel.ArrCall(c.Fn, name, out, recv)
+		return kernel.ArrCall(c.Fn, name, out, recv, cc.args)
 	default:
 		return nil, uerr.Internalf("physical: no kernel for %s", c.Fn)
 	}

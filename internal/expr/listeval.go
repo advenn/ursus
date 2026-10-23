@@ -91,7 +91,7 @@ func (m *ListMap) Scope(in *dtype.Schema) (*dtype.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	if lf.Type.ID() != dtype.TypeList {
+	if !lf.Type.IsListLike() {
 		return nil, uerr.New(uerr.KindType, "list.eval", "list.eval requires a List column, got %s", lf.Type)
 	}
 	fields := []dtype.Field{{Name: ElementName, Type: lf.Type.Inner(), Nullable: true}}
@@ -117,6 +117,10 @@ func (m *ListMap) Field(in *dtype.Schema) (dtype.Field, error) {
 	bf, err := m.Body.Field(scope)
 	if err != nil {
 		return dtype.Field{}, err
+	}
+	if lf.Type.ID() == dtype.TypeArray {
+		// An element's value an element keeps each array's length: arr.eval (step 342).
+		return dtype.Field{Name: lf.Name, Type: dtype.Array(bf.Type, lf.Type.Size()), Nullable: true}, nil
 	}
 	return dtype.Field{Name: lf.Name, Type: dtype.List(bf.Type), Nullable: true}, nil
 }

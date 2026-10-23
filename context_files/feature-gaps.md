@@ -93,7 +93,7 @@ differs from their input's, or scalars outside a group-by.
 | missing | note | prio |
 | --- | --- | --- |
 | **Categorical** | only Enum exists; `TypeCategorical` is reserved | P1 |
-| **Array** (fixed-size list) | built in step 341: held as a List each of whose rows has its size, a null row none; casts to and from a List, `List().ToArray`, `Arr().ToList`, a Go `[n]T`, Arrow `FixedSizeList` in and out, Parquet by the footer's Arrow schema, NDJSON by a schema, JSON. Left: the rest of the `arr` namespace, `reshape`, `concat_arr`; as a key it is refused, as a List is | P1 |
+| **Array** (fixed-size list) | built in step 341: held as a List each of whose rows has its size, a null row none; casts to and from a List, `List().ToArray`, `Arr().ToList`, a Go `[n]T`, Arrow `FixedSizeList` in and out, Parquet by the footer's Arrow schema, NDJSON by a schema, JSON; its `arr` namespace in step 342, a List's functions of the same elements, `Reverse`, `Sort`, `Shift` and an elementwise `Eval` keeping the Array, `ToStruct` and `Dot` of its own. Left: `reshape`, `concat_arr`; as a key it is refused, as a List is | P1 |
 | **Large strings and binary** (64-bit offsets, `BinaryOffset`) | a String column holds at most 2 GiB of characters | P1 |
 | **String view layout** | Arrow's view types are converted on import | P2 |
 | **UInt128, Float16, Object, Unknown** | Float16 is widened to Float32 on import | P2 |
@@ -475,6 +475,11 @@ decide whether to keep or switch each one.
   and refuses a Struct or a List, which Polars counts. `CorrSpearman` takes numbers;
   Polars ranks text too (step 277). Its sums are exact since step 339, its answer
   within an ulp of the true one, where Polars' float sums are a few ulps off.
+- `Arr()`'s functions answer as `List()`'s (step 342): an integer `Sum` is an Int128
+  where Polars' `arr.sum` is an Int64, `NUnique` passes a null over where Polars
+  counts it, and `ToStruct` of a null array is a null struct where Polars gives a
+  struct of nulls. `Head`, `Tail` and `Slice` give a List, Polars' default; its
+  `as_array`, which panics on a null row in Polars 1.44.1, is `List().ToArray(n)`.
 - NDJSON: a lone surrogate's escape reads as U+FFFD, where Polars reads a high one as
   NUL and refuses a low one; a number past a float's range, `1e400`, is ±Inf, which
   Polars refuses; a given schema of an Int8, an Int16, a UInt8, a UInt16, a Time, a
