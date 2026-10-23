@@ -1839,7 +1839,10 @@ its expression:</p>
 <li><code>Field(name)</code> reads one field, and <code>Field</code> of several names reads each as a column;</li>
 <li><code>WithFields(exprs...)</code> replaces fields of the same names and adds new ones; read a
   field inside it through <code>Field</code>, as anywhere;</li>
-<li><code>RenameFields(names...)</code> renames them in order;</li>
+<li><code>RenameFields(names...)</code> renames them in order, and <em>new in 0.6.7</em>,
+  <code>Name().PrefixFields</code>, <code>SuffixFields</code> and <code>MapFields</code> rename each from its name;</li>
+<li><em>new in 0.6.7</em>, <code>Drop(names...)</code> leaves fields out, as Polars' <code>struct.drop</code>, and
+  refuses a name that is no field;</li>
 <li><code>JsonEncode</code> writes each struct as JSON text, and <code>Str().JsonDecode(type)</code> reads it
   back;</li>
 <li><code>Unnest</code> turns the fields into columns, as the frame's <code>Unnest</code> does.</li>

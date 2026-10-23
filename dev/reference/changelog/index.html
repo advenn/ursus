@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–322, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–323, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3128,6 +3128,9 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>The name namespace</strong> (323), <code>Expr.Name()</code>, as Polars' <code>name</code>: <code>Keep</code>, <code>Map</code>,
+  <code>Prefix</code>, <code>Suffix</code>, <code>ToLower</code>, <code>ToUpper</code>, <code>Replace</code>, and a struct's <code>PrefixFields</code>,
+  <code>SuffixFields</code> and <code>MapFields</code>; and <strong><code>Struct().Drop</code></strong>, as <code>struct.drop</code>.</li>
 <li><strong>Selectors</strong> (322), package <code>ursus/selector</code>, as Polars' <code>polars.selectors</code>:
   columns by their types, <code>Numeric</code>, <code>Integer</code>, <code>Float</code>, <code>Temporal</code>, <code>String</code> and the
   rest; by name, <code>StartsWith</code>, <code>EndsWith</code>, <code>Contains</code>, <code>Matches</code>, <code>ByName</code>; by place,

@@ -1839,6 +1839,10 @@ changes is what Go asks for.</p>
 <td><code>.Struct().Field("f")</code></td>
 </tr>
 <tr>
+<td><code>.name.keep()</code>, <code>.name.to_uppercase()</code>, <code>.name.replace(p, v)</code>, <code>.name.prefix_fields("p_")</code>; <code>.struct.drop(["f"])</code></td>
+<td><code>.Name().Keep()</code>, <code>.Name().ToUpper()</code>, <code>.Name().Replace(p, v, false)</code>, <code>.Name().PrefixFields("p_")</code>; <code>.Struct().Drop("f")</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.map_elements(f)</code>, <code>.map_batches(f)</code></td>
 <td><code>.MapElements(name, type, f)</code>, <code>.MapBatches(name, type, f)</code>, with a Go function</td>
 </tr>
