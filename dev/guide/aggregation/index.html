@@ -2073,6 +2073,13 @@ its trues.</p>
 </span><span id="__span-25-14"><a id="__codelineno-25-14" name="__codelineno-25-14" href="#__codelineno-25-14"></a>│ "south" │ 12    │ 3       │
 </span><span id="__span-25-15"><a id="__codelineno-25-15" name="__codelineno-25-15" href="#__codelineno-25-15"></a>└─────────┴───────┴─────────┘
 </span></code></pre></div>
+<p><em>New in 0.6.7.</em> <code>Corr(ctx)</code> is each pair of columns' Pearson correlation, a Float64
+column a column, as Polars' frame <code>corr</code>, which NumPy computes: a column holding a
+null is NaN throughout, where <code>Corr</code> of two expressions skips the rows holding one.
+<code>SumHorizontal(ctx, ignoreNulls)</code>, <code>MeanHorizontal(ctx, ignoreNulls)</code>, <code>MinHorizontal</code>
+and <code>MaxHorizontal</code> are each row's reduction across every column, named <code>sum</code>, <code>mean</code>,
+<code>min</code> and <code>max</code>, and <code>Fold(ctx, fn)</code> folds a function across the columns from the
+first, as Polars' frame methods do.</p>
 <p><code>ValueCounts(exprs...)</code> counts the rows of each distinct value, most frequent first,
 ties in the order their values first appear:</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="nx">df</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sales</span><span class="p">().</span><span class="nx">ValueCounts</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"product"</span><span class="p">)).</span><span class="nx">Collect</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">())</span>

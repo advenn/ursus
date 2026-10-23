@@ -1801,6 +1801,11 @@ before the last column:</p>
 </span><span id="__span-11-18"><a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a>│ 3        │ 7     │ "rush" │ 2.25    │
 </span><span id="__span-11-19"><a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a>└──────────┴───────┴────────┴─────────┘
 </span></code></pre></div>
+<p><em>New in 0.6.7.</em> <code>ReplaceColumn(i, column)</code> puts a column in place of the one at a
+place, and <code>DropInPlace(name)</code> gives a column and the frame without it, as Polars'
+<code>replace_column</code> and <code>drop_in_place</code>, each a new frame where Polars changes its own.
+<code>GetColumnIndex(name)</code> is a column's place, <code>ToSeries(i)</code> the column at one, and
+<code>ToStruct(name)</code> the whole frame as one Struct column.</p>
 <p><code>Select</code> can also compute columns, as <code>WithColumns</code> does: see
 <a href="../../concepts/expressions/">Expressions</a>. A pattern is explicit: ursus does not read
 <code>Col("^qty$")</code> as a regular expression, as Polars does, so a column named with a <code>^</code>
@@ -2075,6 +2080,12 @@ frame around:</p>
 </span><span id="__span-31-4"><a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a>slice -3, 2: [6 7]
 </span><span id="__span-31-5"><a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a>reverse:     [8 7 6 5 4 3 2 1]
 </span></code></pre></div>
+<p><em>New in 0.6.7.</em> <code>Gather(ctx, indices, nullOnOOB)</code> takes the rows at positions, in
+their order, as Polars' <code>gather</code>; a negative position counts from the end, and one
+past the end is refused, or with <code>nullOnOOB</code> is a row of nulls. <code>Row(i)</code> is a row's
+values as Go values, <code>RowNamed(i)</code> the same by name, and <code>RowWhere(ctx, predicate)</code>
+the one row a predicate holds of. <code>Item()</code> is a one-value frame's value and
+<code>ItemAt(row, column)</code> any one, as Polars' <code>row</code> and <code>item</code>.</p>
 <p><em>New in 0.6.7.</em> <code>HashRows(seed, columns...)</code> is each row's hash over its columns, every
 column when none is named, as Polars' <code>hash_rows</code>: rows equal as a group-by sees them
 hash alike. The numbers are ursus's own, not Polars'.</p>

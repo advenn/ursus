@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–326, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–327, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3132,6 +3132,11 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A frame's conveniences</strong> (327), as Polars' frame methods: <code>Corr</code>, NumPy's
+  correlation of every pair of columns; <code>Gather</code>, <code>Row</code>, <code>RowNamed</code>, <code>RowWhere</code>, <code>Item</code>
+  and <code>ItemAt</code>; <code>GetColumnIndex</code>, <code>ReplaceColumn</code>, <code>DropInPlace</code>, <code>ToSeries</code> and
+  <code>ToStruct</code>; <code>SumHorizontal</code>, <code>MeanHorizontal</code>, <code>MinHorizontal</code>, <code>MaxHorizontal</code> and
+  <code>Fold</code> across the columns; and a lazy frame's <code>Columns</code>, <code>DTypes</code> and <code>Width</code>.</li>
 <li><strong>The meta namespace</strong> (326), <code>Expr.Meta()</code>, as Polars' <code>meta</code>: <code>RootNames</code>,
   <code>OutputName</code>, <code>HasMultipleOutputs</code>, <code>IsColumn</code>, <code>IsColumnSelection</code>, <code>IsLiteral</code>,
   <code>IsRegexProjection</code>, <code>UndoAliases</code>, <code>Eq</code>, <code>Pop</code> and <code>TreeFormat</code>.</li>
