@@ -1203,6 +1203,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#lists-and-structs-as-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lists and structs as keys
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-is-not-here-yet" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1621,6 +1632,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#lists-and-structs-as-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lists and structs as keys
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-is-not-here-yet" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1906,9 +1928,15 @@ its expression:</p>
 </ul>
 <p>A struct is also how ursus gives several values a row: <code>SplitExact</code>, <code>ExtractGroups</code>,
 <code>ValueCounts</code> of an expression, and <code>Rle</code>.</p>
+<h2 id="lists-and-structs-as-keys">Lists and structs as keys<a class="headerlink" href="#lists-and-structs-as-keys" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7.</em> A List, an Array or a Struct is a key, of <code>GroupBy</code>, <code>Unique</code>, <code>Join</code>,
+<code>Over</code>, <code>PartitionBy</code>, <code>Mode</code>, <code>Rle</code> and <code>HashRows</code>, as Polars keys one: element by
+element and field by field, an empty list apart from a null one, a null element equal
+to a null, NaN to NaN and <code>-0.0</code> to <code>0.0</code>. A list still has no order, so it is no
+sort key.</p>
 <h2 id="what-is-not-here-yet">What is not here yet<a class="headerlink" href="#what-is-not-here-yet" title="Permanent link">&para;</a></h2>
-<p>Lists of lists or of structs are refused by name. A List or a Struct cannot be a group-by, join or
-<code>Unique</code> key. The scope records each in <code>feature-gaps.md</code>.</p>
+<p>Lists of lists or of structs are refused by name. The scope records each in
+<code>feature-gaps.md</code>.</p>
 
 
 
