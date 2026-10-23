@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–332, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–333, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3132,6 +3132,9 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>JSON written</strong> (333): <code>WriteNDJSON</code>, <code>WriteJSON</code> and <code>SinkNDJSON</code>, as Polars'
+  <code>write_ndjson</code>, <code>write_json</code> and <code>sink_ndjson</code>, each value in Polars' own text, to
+  the byte.</li>
 <li><strong>Arrow IPC</strong> (332), as Polars reads and writes it: <code>ScanIPC</code>, <code>ScanIPCStream</code>,
   <code>WriteIPC</code>, <code>WriteIPCStream</code>, <code>SinkIPC</code>, uncompressed, LZ4 or Zstandard, and
   <code>ReadIPCSchema</code>; and <code>ReadParquetSchema</code>. Polars' own files read, string views and

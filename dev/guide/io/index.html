@@ -1310,6 +1310,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JSON
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#larger-than-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1555,6 +1566,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JSON
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#larger-than-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1788,6 +1810,15 @@ compressed buffers, which Polars writes. <code>WriteIPC(ctx, w)</code>, <code>Wr
 and <code>SinkIPC(ctx, path)</code> write them, uncompressed as Polars' are by default, or with
 <code>WithIPCCompression(ursus.IPCLZ4)</code> or <code>IPCZstd</code>. <code>ReadIPCSchema(path)</code> and
 <code>ReadParquetSchema(ctx, path)</code> read a file's schema from its footer alone.</p>
+<h2 id="json">JSON<a class="headerlink" href="#json" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7:</em> <code>WriteNDJSON(ctx, w)</code> writes each row as a JSON object on a line of its
+own, as Polars' <code>write_ndjson</code>, and <code>WriteJSON(ctx, w)</code> one array of them, as
+<code>write_json</code>; <code>SinkNDJSON(ctx, path)</code> streams to a file, whole or not at all. Each
+value is written as Polars writes it: a float in Polars' text, NaN and the infinities
+<code>null</code>; a Decimal, a date and an instant quoted, <code>"2024-01-02 03:04:05.123456"</code>, a
+zoned instant with its offset, <code>"2024-01-02T03:04:05+05:00"</code>; a duration in ISO 8601's
+seconds, <code>"PT90S"</code>; a List an array and a Struct an object. A Binary column is refused,
+as Polars refuses it.</p>
 <h2 id="larger-than-memory">Larger than memory<a class="headerlink" href="#larger-than-memory" title="Permanent link">&para;</a></h2>
 <p>A sink streams: a query whose answer is larger than memory writes it with
 <code>SinkParquet</code> or <code>SinkCSV</code>, the spilling operators under a memory limit, as
