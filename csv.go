@@ -83,7 +83,9 @@ func csvOptions(opts []CSVOption) csv.Options {
 	return o
 }
 
-// ScanCSV reads a CSV file lazily.
+// ScanCSV reads a CSV file lazily, or every file below a directory, as Polars reads
+// one: as ScanCSVFiles of them, sorted by path, a name beginning '.' or '_' passed over
+// and files of two extensions refused (the directory new in 0.6.7).
 //
 // Nothing is read until Collect, except the sample inference needs — and not even
 // that if WithSchema is given. Projection reaches the reader, so selecting two
@@ -98,6 +100,13 @@ func csvOptions(opts []CSVOption) csv.Options {
 //	    Select(ursus.Col("region"), ursus.Col("qty")).
 //	    Collect(ctx)
 func ScanCSV(path string, opts ...CSVOption) *LazyFrame {
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		paths, err := datasetFiles("scan_csv", path)
+		if err != nil {
+			return &LazyFrame{err: err}
+		}
+		return ScanCSVFiles(paths, opts...)
+	}
 	return scan(csv.FromFile(path, csvOptions(opts)))
 }
 
@@ -108,9 +117,10 @@ func ScanCSV(path string, opts ...CSVOption) *LazyFrame {
 // ScanCSVFiles. Matches are sorted, so `part-*.csv` reads in the order the names imply rather than whatever
 // the filesystem returns — row order is a property of the data here, and leaving
 // it to readdir would make the same query return different orders on different
-// machines.
+// machines. An element of ** matches any number of directories, none among them, as
+// Polars' globs do: `logs/**/*.csv`. New in 0.6.7.
 func ScanCSVGlob(pattern string, opts ...CSVOption) *LazyFrame {
-	paths, err := filepath.Glob(pattern)
+	paths, err := globFiles(pattern)
 	if err != nil {
 		return &LazyFrame{err: uerr.Wrap(err, uerr.KindValue, "scan_csv",
 			"bad glob pattern %q", pattern)}

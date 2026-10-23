@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–348, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–349, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,11 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`**` in globs, and CSV and NDJSON directories** (349): a glob's `**` matches any
+  number of directories, none among them, as Polars' do, in `ScanCSVGlob`,
+  `ScanNDJSONGlob` and `ScanParquetGlob`; `ScanCSV` and `ScanNDJSON` of a directory
+  read every file below it, as Polars does; a directory of files of two extensions
+  is refused, as Polars refuses it, Parquet's too.
 - **Parquet files whose columns differ** (348), as Polars' schema evolution reads them:
   `WithParquetSchema`, `WithInsertMissingColumns`, `WithIgnoreExtraColumns`,
   `WithUpcastIntegers` and `WithUpcastFloats`, Polars' `schema`, `missing_columns`,

@@ -246,7 +246,7 @@ differs from their input's, or scalars outside a group-by.
 | built: **JSON read,** in step 345: `ScanJSON` and `ScanJSONBytes`, Polars' `read_json`, each object made a line of NDJSON in place and read as step 334's NDJSON is, faster than Polars; schema overrides for both. NDJSON read and scanned in step 334; JSON and NDJSON written and sunk in step 333, each value in Polars' text | — |
 | built: **Arrow IPC,** in step 332: a file or a stream scanned, written and sunk, uncompressed, LZ4 or Zstandard, and a file's schema read; and a Parquet file's schema. Over arrow-go's IPC readers and writers | — |
 | **Hive partitioning:** built on read for Parquet in step 347, a directory read whole, its `key=value` directories typed columns, a filter on them skipping files, `include_file_paths`. Left: an IPC directory's, `include_file_paths` for CSV, NDJSON and IPC, and **partitioned writes** by key | P1 |
-| **Multi-file schema evolution:** built for Parquet in step 348, `schema`, `missing_columns`, `extra_columns` and `cast_options`' integer and float upcasts; `include_file_paths` for Parquet in step 347. Left: `cast_options`' datetime casts and struct fields, `include_file_paths` for CSV, NDJSON and IPC, `**` globs | P1 |
+| **Multi-file schema evolution:** built for Parquet in step 348, `schema`, `missing_columns`, `extra_columns` and `cast_options`' integer and float upcasts; `include_file_paths` for Parquet in step 347. `**` globs, and CSV and NDJSON directories, in step 349. Left: `cast_options`' datetime casts and struct fields, `include_file_paths` for CSV, NDJSON and IPC | P1 |
 | **Schema overrides on Parquet and Arrow scans;** CSV date inference; CSV writer quote style and date and float formats. Compressed input built in step 346: a CSV, NDJSON or JSON file of gzip, zlib or Zstandard, by its first bytes | P1 |
 | **Cloud object stores** by URI (`s3://`, `gs://`, `https://`), with listing, credentials and retries. Today you bring a `ReaderAt` | P2 |
 | **Parquet:** page index and bloom filters (read and write), compression level, per-column options, a metadata cache | P2 |
@@ -508,6 +508,8 @@ decide whether to keep or switch each one.
   name; a date of a two-digit year, `24-01-02`, is text, where Polars reads the year
   2; every file's footer is read when the query is planned, where Polars reads the
   first's (step 347).
+- Globs: an element of `**` last matches every file below it, `logs/**`, where
+  Polars' matches none (step 349).
 - An aggregate whose answer depends on the order, `First` or `Last`, inside a window
   with an `OrderBy`, `(x - x.First()).CumSum(false)` over g ordered by t, is refused as
   an ordering over an aggregate is; Polars takes the first in the order (step 336).

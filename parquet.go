@@ -5,12 +5,10 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 
 	arrowpq "github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/compress"
@@ -132,46 +130,19 @@ func fileOpener(path string) parquet.Opener {
 // Polars reads one, and as a hive dataset: each directory below it named key=value
 // gives its files' rows a column key, after the files' own columns, of the type the
 // values infer; a filter on the keys skips the files it rules out before any is
-// opened. A name beginning '.' or '_' is passed over. See WithHivePartitioning,
+// opened. A name beginning '.' or '_' is passed over, and files of two extensions are
+// refused, as Polars refuses them. See WithHivePartitioning,
 // WithHiveSchema, WithHiveDates and WithIncludeFilePaths. New in 0.6.7.
 func ScanParquet(path string, opts ...ParquetOption) *LazyFrame {
 	o := parquetOptions(opts)
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		paths, err := datasetFiles(path)
+		paths, err := datasetFiles("scan_parquet", path)
 		if err != nil {
 			return &LazyFrame{err: err}
 		}
 		return scanParquetPaths(paths, path, path, o)
 	}
 	return scanParquetPaths([]string{path}, path, "", o)
-}
-
-// datasetFiles is every file below dir, as Polars reads a directory, sorted by path:
-// a name beginning '.' or '_', a file's or a directory's, is passed over, as Spark and
-// Hive name what they keep beside the data: _SUCCESS, _temporary, .crc files.
-func datasetFiles(dir string) ([]string, error) {
-	var paths []string
-	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		switch {
-		case err != nil:
-			return err
-		case p != dir && (strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "_")):
-			if d.IsDir() {
-				return filepath.SkipDir
-			}
-		case !d.IsDir():
-			paths = append(paths, p)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "listing %s", dir)
-	}
-	if len(paths) == 0 {
-		return nil, uerr.New(uerr.KindIO, "scan_parquet", "no files in %s", dir)
-	}
-	sort.Strings(paths)
-	return paths, nil
 }
 
 // scanParquetPaths reads paths as one frame, described as desc: their partition keys
@@ -219,9 +190,11 @@ func partition(o *parquet.Options, paths []string, root string) error {
 }
 
 // ScanParquetGlob reads every file matching a shell pattern as one frame, sorted by
-// name so `part-*.parquet` reads in the order the names imply.
+// name so `part-*.parquet` reads in the order the names imply. An element of **
+// matches any number of directories, none among them, as Polars' globs do. New in
+// 0.6.7.
 func ScanParquetGlob(pattern string, opts ...ParquetOption) *LazyFrame {
-	paths, err := filepath.Glob(pattern)
+	paths, err := globFiles(pattern)
 	if err != nil {
 		return &LazyFrame{err: uerr.Wrap(err, uerr.KindValue, "scan_parquet",
 			"bad glob pattern %q", pattern)}

@@ -31,7 +31,10 @@ known by its first bytes whatever its name, as Polars reads one:
 parsed in parallel as a plain file is. NDJSON and JSON files are read so too.
 
 `ScanCSVGlob(pattern)` reads every file a pattern matches as one frame, in their
-names' order, and `ScanCSVFiles(paths)` a list:
+names' order, and `ScanCSVFiles(paths)` a list. *New in 0.6.7:* a pattern's `**`
+matches any number of directories, `logs/**/*.csv`, in every scan's glob, and
+`ScanCSV(dir)` reads every file below a directory, as `ScanNDJSON(dir)` and
+`ScanParquet(dir)` do:
 
 --8<-- "Example_ioCSVGlob.md"
 

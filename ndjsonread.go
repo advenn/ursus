@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 
@@ -97,8 +96,18 @@ func ndjsonFile(path string) ndjson.File {
 //
 // The file is read in blocks, each cut at its lines into a part a thread, the parts
 // parsed at once; only the columns the query uses are built, and a query that wants
-// only the first rows reads little more than them.
+// only the first rows reads little more than them. A directory is read as
+// ScanNDJSONFiles of every file below it, as Polars reads one, sorted by path, a
+// name beginning '.' or '_' passed over and files of two extensions refused (new in
+// 0.6.7).
 func ScanNDJSON(path string, opts ...NDJSONOption) *LazyFrame {
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		paths, err := datasetFiles("scan_ndjson", path)
+		if err != nil {
+			return &LazyFrame{err: err}
+		}
+		return ScanNDJSONFiles(paths, opts...)
+	}
 	return scanNDJSON(path, []ndjson.File{ndjsonFile(path)}, opts)
 }
 
@@ -121,9 +130,10 @@ func ScanNDJSONFiles(paths []string, opts ...NDJSONOption) *LazyFrame {
 }
 
 // ScanNDJSONGlob reads every file matching a shell pattern as one frame, as
-// ScanNDJSONFiles of the matches sorted by name.
+// ScanNDJSONFiles of the matches sorted by name. An element of ** matches any number
+// of directories, none among them, as Polars' globs do. New in 0.6.7.
 func ScanNDJSONGlob(pattern string, opts ...NDJSONOption) *LazyFrame {
-	paths, err := filepath.Glob(pattern)
+	paths, err := globFiles(pattern)
 	if err != nil {
 		return &LazyFrame{err: uerr.Wrap(err, uerr.KindValue, "scan_ndjson", "bad glob pattern %q", pattern)}
 	}
