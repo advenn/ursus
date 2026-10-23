@@ -1880,6 +1880,11 @@ fraction widens an integer column.</p>
 <p>An expression is named after the leftmost column it reads: <code>Col("qty").Mul(Col("price"))</code>
 is named <code>qty</code>. <code>Alias</code> names it, and goes last, since an alias inside an expression
 does not name the whole.</p>
+<p><em>New in 0.6.7:</em> <code>Meta()</code> asks an expression about itself, as Polars' <code>meta</code> does:
+<code>RootNames</code> the columns it reads by name, <code>OutputName</code> its name, <code>HasMultipleOutputs</code>,
+<code>IsColumn</code>, <code>IsColumnSelection</code>, <code>IsLiteral</code> and <code>IsRegexProjection</code>; <code>UndoAliases</code>
+the expression without its names, <code>Eq</code> whether two are one computation, <code>Pop</code> the
+outermost operation's inputs, and <code>TreeFormat</code> a drawing of it.</p>
 
 
 
