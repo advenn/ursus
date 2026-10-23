@@ -1921,6 +1921,11 @@ with <code>MaintainOrder()</code>:</p>
 <li>a <code>Bool</code> sums as 0 and 1, so the sum of a condition counts the rows that meet it;</li>
 <li><code>MaxBy(other)</code> and <code>MinBy(other)</code> take a column's value where another column is
   largest or smallest: each region's biggest order's product.</li>
+<li><em>New in 0.6.7:</em> <code>TopKBy(other, k)</code> and <code>BottomKBy(other, k)</code> take k of them, a
+  list a group, as Polars' <code>top_k_by</code> and <code>bottom_k_by</code>: each region's three
+  biggest orders' products. A null in <code>other</code> comes last, and rows that tie on it
+  are ordered by their values, the greater first for <code>TopKBy</code>, where Polars' sort
+  orders them as it finds them.</li>
 </ul>
 <h2 id="lists-per-group">Lists per group<a class="headerlink" href="#lists-per-group" title="Permanent link">&para;</a></h2>
 <p><code>Implode</code> gathers a group's values into a list. <code>Unique</code>, <code>Sort</code>, <code>Head</code> and the

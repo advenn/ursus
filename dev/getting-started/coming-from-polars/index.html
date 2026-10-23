@@ -1751,6 +1751,10 @@ changes is what Go asks for.</p>
 <td><code>ursus.Col("x").InterpolateBy(ursus.Col("t"))</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>pl.col("p").top_k_by("sales", 3)</code>, <code>.bottom_k_by(...)</code></td>
+<td><code>ursus.Col("p").TopKBy(ursus.Col("sales"), 3)</code>, <code>.BottomKBy(...)</code>, a List (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.head(n)</code>, <code>.tail(n)</code>, <code>.slice(o, n)</code></td>
 <td><code>.Head(n)</code>, <code>.Tail(n)</code>, <code>.Slice(o, n)</code></td>
 </tr>
