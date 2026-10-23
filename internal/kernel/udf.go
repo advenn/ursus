@@ -27,3 +27,14 @@ type ColumnUDF func(ctx context.Context, in *data.Column, name string) (*data.Co
 // UDFKernel marks this as an expr.UDFImpl. Exported because the marker cannot be
 // sealed: expr may not import data, so the implementation has to live out here.
 func (ColumnUDF) UDFKernel() {}
+
+// WindowMap is rolling_map's Go function with its type parameters erased (step 338):
+// it answers each row of col from its window. parts yields each partition's rows in
+// the window's order and each row's window, rows[lo[i]:hi[i]] for rows[i]; a window
+// of fewer than minN values is null. The answer is a column of col's length, named
+// name. As a ColumnUDF it may be called from several goroutines at once.
+type WindowMap func(ctx context.Context, col *data.Column, name string,
+	parts func(yield func(rows, lo, hi []int32) bool), minN int) (*data.Column, error)
+
+// UDFKernel marks this as an expr.UDFImpl, as ColumnUDF's does.
+func (WindowMap) UDFKernel() {}

@@ -70,8 +70,8 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 			"to disk cannot divide, and this one computes a function that needs all of it",
 			"every window function streams past the limit, in an order_by too, a rolling "+
 				"window by time holding its period's rows, but cumulative_eval, each of whose "+
-				"rows reads its whole prefix. Give the window a partition_by, or raise the "+
-				"limit with WithMemoryLimit")
+				"rows reads its whole prefix, and a rank by time. Give the window a "+
+				"partition_by, or raise the limit with WithMemoryLimit")
 	}
 	if s.skewable() && s.budget.Limit() > 0 {
 		// One partition alone, and every function bounded: its rows to one file, the
@@ -84,7 +84,8 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 			"needs all of it at once",
 			"every window function streams a partition past the limit, in an order_by "+
 				"too, a rolling window by time holding its period's rows, but cumulative_eval, "+
-				"each of whose rows reads its whole prefix. Raise the limit with WithMemoryLimit")
+				"each of whose rows reads its whole prefix, and a rank by time. Raise the "+
+				"limit with WithMemoryLimit")
 	}
 	return s.startSpill(ctx)
 }

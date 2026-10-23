@@ -80,6 +80,9 @@ value before, and took a position.
   `MinSamples(k)` answers from k;
 - `RollingCenter()` centres the window on its row.
 
+*New in 0.6.7:* `RollingMap(name, type, n, fn)` calls a Go function on each row's
+window, as Polars' `rolling_map`; see [Go functions](go-functions.md).
+
 ## Rolling windows by time
 
 A window by rows counts rows; a window by time counts time. `RollingSumBy(by,
@@ -95,7 +98,10 @@ belong to it.
 
 The `By` forms take a `Date`, `Datetime` or `Time` column, which need not be sorted:
 a window is found by value, and rows tied with a row's instant are in its window.
-Unlike the windows by rows they answer from one value by default. *New in 0.6.7:* `by`
+Unlike the windows by rows they answer from one value by default. *New in 0.6.7:*
+`RollingRankBy(by, period, method)` ranks each row's value among its window's, as
+Polars' `rolling_rank_by`; over one partition past a memory limit it is refused, as
+its window's values are not yet walked. *New in 0.6.7:* `by`
 can be an integer of 32 or 64 bits, a step rather than an instant, whose period counts
 it in Polars' integer unit: `Every("3i")` is three steps, as in
 [Dates and times](dates-and-times.md#an-integer-index).

@@ -42,7 +42,7 @@ what we are lacking".
 | ~~the `name` namespace~~ | built in step 323: `Expr.Name()` |
 | ~~`top_k_by`, `bottom_k_by`~~ | built in step 330: `TopKBy`, `BottomKBy`, a List as `TopK`'s; ties by the value |
 | ~~`interpolate_by`~~ | built in step 329: `InterpolateBy`, over one huge partition too, in a sorted pass by its by |
-| `rolling_map`, `rolling_rank_by` | the `_by` windows; `rolling` of an expression built in step 337, `Expr.Rolling` |
+| ~~`rolling` of an expression, `rolling_map`, `rolling_rank_by`~~ | built in steps 337 and 338: `Expr.Rolling`, `RollingMap`, `RollingRankBy`; `rolling_map`'s weights not |
 | ~~`item`, `lower_bound`, `upper_bound`, `is_sorted`, `limit`, `truediv`~~ | built in step 324 |
 | `reinterpret`, `to_physical`; `shrink_dtype` | built in step 324; `shrink_dtype` not, a no-op on an expression in Polars 1.44, its Series' only |
 | `pipe`; `inspect` | `Expr.Pipe` built in step 324; `inspect`, a print, not |

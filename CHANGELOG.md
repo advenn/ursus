@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–337, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–338, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,10 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`RollingRankBy` and `RollingMap`** (338), Polars' `rolling_rank_by` and
+  `rolling_map`: each row's value ranked among its window's by time, and a Go function
+  over each row's window of rows, given its values and whether each is there, centred
+  or not, within each partition under `Over`.
 - **The rolling of an expression** (337), Polars' `Expr.rolling`: `e.Rolling(index, o)`
   is any aggregate expression over each row's window, placed as the frame's `Rolling`
   places it, and the list of the window's values for a row's; under `Over` within each

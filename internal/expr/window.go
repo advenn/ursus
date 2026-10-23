@@ -332,6 +332,11 @@ const (
 	// window evaluates it, as no kernel can evaluate an expression.
 	WinCumulativeEval
 
+	// WinRollingMap is Polars' rolling_map (step 338): Params.Map's Go function over
+	// each row's window of Params.N rows, as the rolling functions' are, appended so
+	// no op moves; IsRolling takes it.
+	WinRollingMap
+
 	winFnCount
 )
 
@@ -348,7 +353,7 @@ var winFnNames = [winFnCount]string{
 	WinInterpolate: "interpolate", WinRleID: "rle_id",
 	WinRollingSkew: "rolling_skew", WinRollingKurtosis: "rolling_kurtosis", WinRollingRank: "rolling_rank",
 	WinRollingCov: "rolling_cov", WinRollingCorr: "rolling_corr", WinEwmSum: "ewm_sum",
-	WinCumulativeEval: "cumulative_eval",
+	WinCumulativeEval: "cumulative_eval", WinRollingMap: "rolling_map",
 }
 
 func (o WinFnOp) String() string {
@@ -369,7 +374,8 @@ func (o WinFnOp) IsCumulative() bool { return o >= WinCumSum && o <= WinCumMax }
 
 // IsRolling reports whether the op is over a fixed number of rows up to each.
 func (o WinFnOp) IsRolling() bool {
-	return o >= WinRollingSum && o <= WinRollingQuantile || o >= WinRollingSkew && o <= WinRollingCorr
+	return o >= WinRollingSum && o <= WinRollingQuantile || o >= WinRollingSkew && o <= WinRollingCorr ||
+		o == WinRollingMap
 }
 
 // IsPaired reports whether the op is of two series, its child PairOf(a, b): rolling_cov
@@ -461,6 +467,9 @@ type WinParams struct {
 	// Body is cumulative_eval's, lowered over CumulativeName (step 286).
 	Body Node
 
+	// Map is rolling_map's function (step 338), WinRollingMap's.
+	Map *RollingMapFn
+
 	// A rolling function by time (step 177), Polars' rolling_*_by: each row's window
 	// is the rows whose by value lies within Period of its own, closed as Closed says,
 	// ClosedRight by default. The function's child is then PairOf(value, by), and N is
@@ -506,6 +515,15 @@ func (p WinParams) args(op WinFnOp) string {
 			strconv.FormatInt(p.MinSamples, 10) + centered(p)
 	case WinCumulativeEval:
 		return p.Body.String() + ", min_samples " + strconv.FormatInt(p.MinSamples, 10)
+	case WinRollingMap:
+		// The name stands for the function, as a UDF's does; CheckUDFNames keeps
+		// two of one name from being two functions.
+		name := ""
+		if p.Map != nil {
+			name = p.Map.Name
+		}
+		return strconv.Quote(name) + ", " + window(p) + ", min_samples " +
+			strconv.FormatInt(p.MinSamples, 10) + centered(p)
 	case WinRollingCov, WinRollingCorr:
 		s := window(p) + ", min_samples " + strconv.FormatInt(p.MinSamples, 10)
 		if op == WinRollingCov {
@@ -727,6 +745,11 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 		}
 		return rollingOut(fn, p, in)
 
+	case WinRollingMap:
+		if p.Map == nil {
+			return dtype.Null, uerr.Internalf("expr: rolling_map has no function")
+		}
+		return p.Map.Out, nil
 	case WinCumulativeEval:
 		// The body's type over a list of the values, as List().Eval types it.
 		if p.Body == nil || p.MinSamples < 0 {
@@ -895,21 +918,7 @@ func rollingOut(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, err
 		}
 		return dtype.Float64, nil
 	case WinRollingRank:
-		// Any value with an order but text and a Decimal, which Polars refuses.
-		if in.HasStringStorage() || in.ID() == dtype.TypeDecimal || !in.IsOrdered() {
-			return dtype.Null, uerr.New(uerr.KindType, fn.String(),
-				"%s() is not defined for %s", fn, in).
-				Hint("it ranks numbers, instants and Booleans")
-		}
-		switch p.Method {
-		case RankAverage:
-			return dtype.Float64, nil
-		case RankMin, RankMax, RankDense:
-			return dtype.Uint32, nil
-		}
-		return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
-			"%s ranks by min, max, average or dense, got %s", fn, p.Method).
-			Hint("Polars' rolling_rank has no ordinal; its random is not here")
+		return rollingRankOut(fn, p, in)
 	case WinRollingCov, WinRollingCorr:
 		// Two numbers, in their float type as Polars casts them: a Float32 for two
 		// Float32s, and a Float64 otherwise.
@@ -983,7 +992,30 @@ func rollingByOut(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 			"the period %s is finer than by's %s ticks", p.Period, by).
 			Hint("use a period of whole ticks, or cast by to a finer unit first")
 	}
+	if fn == WinRollingRank {
+		return rollingRankOut(fn, p, value) // rolling_rank_by's, as rolling_rank's (step 338)
+	}
 	return rollingValueOut(fn, value)
+}
+
+// rollingRankOut is a rolling rank's type, of a value of type in: a Float64 by
+// average, Polars' default, and a UInt32 by min, max or dense.
+func rollingRankOut(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, error) {
+	// Any value with an order but text and a Decimal, which Polars refuses.
+	if in.HasStringStorage() || in.ID() == dtype.TypeDecimal || !in.IsOrdered() {
+		return dtype.Null, uerr.New(uerr.KindType, fn.String(),
+			"%s() is not defined for %s", fn, in).
+			Hint("it ranks numbers, instants and Booleans")
+	}
+	switch p.Method {
+	case RankAverage:
+		return dtype.Float64, nil
+	case RankMin, RankMax, RankDense:
+		return dtype.Uint32, nil
+	}
+	return dtype.Null, uerr.New(uerr.KindValue, fn.String(),
+		"%s ranks by min, max, average or dense, got %s", fn, p.Method).
+		Hint("Polars' rolling_rank has no ordinal; its random is not here")
 }
 
 // IndexInterval refuses an interval of the wrong kind for its column (step 312): an

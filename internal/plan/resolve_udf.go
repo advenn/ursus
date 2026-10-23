@@ -57,7 +57,7 @@ import (
 // expr.HasUDF, which guards predicate pushdown today.
 func CheckUDFNames(n Node) error {
 	type sighting struct {
-		udf       *expr.UDF
+		id        uint64
 		enclosing expr.Node
 	}
 	var seen map[string]sighting // allocated only if a udf is found
@@ -73,36 +73,47 @@ func CheckUDFNames(n Node) error {
 				if bad != nil {
 					return false
 				}
-				u, ok := y.(*expr.UDF)
-				if !ok {
+				// A udf, or a rolling_map's function, which is one by another name
+				// (step 338): the two share the names and the identities.
+				var name, kind string
+				var id uint64
+				switch u := y.(type) {
+				case *expr.UDF:
+					name, kind, id = u.Name, u.Kind, u.ID()
+				case *expr.WinFn:
+					if u.Params.Map == nil {
+						return true
+					}
+					name, kind, id = u.Params.Map.Name, "rolling_map", u.Params.Map.ID()
+				default:
 					return true
 				}
-				if u.ID() == 0 {
+				if id == 0 {
 					// Only reachable from a UDF built by a bare composite literal
 					// instead of expr.NewUDF, which is an ursus bug. Loud, because
 					// the alternative is this check quietly treating two
 					// unidentified udfs as the same one.
 					bad = uerr.Internalf(
 						"plan: udf %q carries no identity; build it with expr.NewUDF",
-						u.Name)
+						name)
 					return false
 				}
-				prev, dup := seen[u.Name]
+				prev, dup := seen[name]
 				if !dup {
 					if seen == nil {
 						seen = make(map[string]sighting, 4)
 					}
-					seen[u.Name] = sighting{udf: u, enclosing: enclosing}
+					seen[name] = sighting{id: id, enclosing: enclosing}
 					return true
 				}
-				if prev.udf.ID() == u.ID() {
+				if prev.id == id {
 					// The same node, copied: multi-column expansion, expr.Rebuild,
 					// extractAggs, or one Expr variable used twice. Every one of
 					// those is a single udf and merging them is correct.
 					return true
 				}
-				bad = uerr.New(uerr.KindValue, u.Kind,
-					"two different udfs are both named %q", u.Name).
+				bad = uerr.New(uerr.KindValue, kind,
+					"two different udfs are both named %q", name).
 					Hint("first: %s", prev.enclosing.String()).
 					Hint("second: %s", enclosing.String()).
 					Hint("a Go closure has no printable form, so the name is all " +

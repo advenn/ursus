@@ -86,7 +86,9 @@ func timeByOf(sp *winSpec) (expr.Node, bool) {
 
 // rollingByOf is a rolling window by time's by, and false for any other spec.
 func rollingByOf(sp *winSpec) (expr.Node, bool) {
-	if sp.fn == nil || !sp.fn.Fn.IsRolling() || !sp.fn.Params.By {
+	// A rank by time is not walked (step 338): the walk keeps a window's values as
+	// floats, which would tie integers and instants a float cannot tell apart.
+	if sp.fn == nil || !sp.fn.Fn.IsRolling() || !sp.fn.Params.By || sp.fn.Fn == expr.WinRollingRank {
 		return nil, false
 	}
 	_, by, ok := expr.PairArgs(sp.fn.Child)

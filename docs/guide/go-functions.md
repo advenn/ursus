@@ -36,6 +36,15 @@ something that works on many values at once.
 
 --8<-- "Example_udfBatches.md"
 
+## A window at a time: RollingMap
+
+*New in 0.6.7.* `RollingMap(name, type, size, fn)` calls `fn` on each row's window of
+`size` rows, as Polars' `rolling_map`: the window's values in its order and whether
+each is there, as `MapBatches` gives a batch, and the answer is the row's. A window of
+fewer values than `MinSamples(k)`, `size` unless set, is null; `RollingCenter()`
+centres it on its row. It runs within each partition under `Over`, and streams past a
+memory limit as the rolling functions do.
+
 ## A row at a time: MapRows
 
 *New in 0.6.7.* A frame's `MapRows(ctx, fn)` calls `fn` on each row, as Polars'

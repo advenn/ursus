@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"context"
 	"math"
 
 	"github.com/advenn/ursus/dtype"
@@ -46,6 +47,21 @@ func winRolling(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.D
 	}
 	if size < 1 || minN < 1 || minN > size {
 		return nil, uerr.Internalf("kernel: %s over %d rows needing %d", fn, size, minN)
+	}
+	if fn == expr.WinRollingMap {
+		// The function is given each row's own window, centred on it or ending at
+		// it, as a rank's is.
+		win := centeredWindows(size)
+		if !params.Center {
+			win = func(rows []int32) (lo, hi []int32) {
+				lo, hi = make([]int32, len(rows)), make([]int32, len(rows))
+				for i := range rows {
+					lo[i], hi[i] = int32(max(0, i-size+1)), int32(i+1)
+				}
+				return lo, hi
+			}
+		}
+		return rollingMap(params, name, col, seg, win, minN)
 	}
 	if params.Center {
 		if fn == expr.WinRollingRank {
@@ -399,4 +415,27 @@ func rollingAnswer(fn expr.WinFnOp, ddof int, s *rollingState) (float64, bool) {
 		v = math.Sqrt(v)
 	}
 	return v, true
+}
+
+// rollingMap runs rolling_map's Go function over each partition's windows (step 338).
+func rollingMap(params expr.WinParams, name string, col *data.Column, seg Segments,
+	win windowsOf, minN int) (*data.Column, error) {
+
+	if params.Map == nil {
+		return nil, uerr.Internalf("kernel: rolling_map has no function")
+	}
+	m, ok := params.Map.Impl.(WindowMap)
+	if !ok {
+		return nil, uerr.Internalf("kernel: rolling_map %q holds a %T", params.Map.Name, params.Map.Impl)
+	}
+	parts := func(yield func(rows, lo, hi []int32) bool) {
+		for p := 0; p+1 < len(seg.Bounds); p++ {
+			rows := seg.Perm[seg.Bounds[p]:seg.Bounds[p+1]]
+			lo, hi := win(rows)
+			if !yield(rows, lo, hi) {
+				return
+			}
+		}
+	}
+	return m(context.Background(), col, name, parts, minN)
 }

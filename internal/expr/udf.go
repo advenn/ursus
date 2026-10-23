@@ -133,6 +133,26 @@ func NewUDF(child Node, out dtype.DataType, name, kind string, impl UDFImpl) *UD
 // EQUAL for every copy of one. Zero means the node did not come from NewUDF.
 func (u *UDF) ID() uint64 { return u.id }
 
+// RollingMapFn is rolling_map's Go function (step 338), held by a window function's
+// parameters: named, its answers declared Out, and Impl the kernel's, which expr
+// cannot name, as a UDF's. Its identity is minted as a UDF's, by NewRollingMap, so
+// CheckUDFNames refuses two of one name as it refuses two UDFs.
+type RollingMapFn struct {
+	Name string
+	Out  dtype.DataType
+	Impl UDFImpl
+	id   uint64
+}
+
+// NewRollingMap builds a rolling_map's function with a fresh identity.
+func NewRollingMap(name string, out dtype.DataType, impl UDFImpl) *RollingMapFn {
+	return &RollingMapFn{Name: name, Out: out, Impl: impl, id: udfSeq.Add(1)}
+}
+
+// ID is the function's identity, a UDF's: distinct for every one built, shared by
+// every copy of the window that holds it.
+func (m *RollingMapFn) ID() uint64 { return m.id }
+
 func (u *UDF) node()            {}
 func (u *UDF) Children() []Node { return []Node{u.Child} }
 

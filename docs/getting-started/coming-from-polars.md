@@ -123,6 +123,7 @@ changes is what Go asks for.
 | `pl.concat([a, b])` | `ursus.Concat([]*ursus.LazyFrame{a, b})` |
 | `.group_by_dynamic(...)`, `.rolling(...)` | `.GroupByDynamic(index, ursus.DynamicOptions{...})`, `.Rolling(index, ursus.RollingOptions{...})` |
 | `.rolling("t", period="7d", offset="0d")` | `.Rolling(ursus.Col("t"), ursus.RollingOptions{Period: ursus.Every("7d"), Offset: ursus.NoOffset()})`, the next seven days (changed in 0.6.7) |
+| `.rolling_rank_by("t", "3d")`, `.rolling_map(f, 5)` | `.RollingRankBy(ursus.Col("t"), ursus.Every("3d"), ursus.RankAverage)`, `.RollingMap[float64, float64]("f", ursus.Float64, 5, f)` (new in 0.6.7) |
 | `pl.col("x").sum().rolling("t", period="2d")`, `....over("g")` | `ursus.Col("x").Sum().Rolling(ursus.Col("t"), ursus.RollingOptions{Period: ursus.Every("2d")})`, `....Over(ursus.Col("g"))` (new in 0.6.7) |
 | `.group_by_dynamic("step", every="5i")`, `.rolling_sum_by("step", "3i")` | `ursus.DynamicOptions{Every: ursus.Every("5i")}`, `.RollingSumBy(ursus.Col("step"), ursus.Every("3i"))`, over an integer index (new in 0.6.7) |
 | `.str.contains(p)`, `.dt.year()`, `.list.len()` | `.Str().Contains(p, false)`, `.Dt().Year()`, `.List().Len()` |

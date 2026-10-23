@@ -424,6 +424,17 @@ func (e Expr) RollingStdBy(by Expr, period Interval, opts ...WindowOption) Expr 
 	return e.rollingBy(expr.WinRollingStd, by, period, 1, opts)
 }
 
+// RollingRankBy is RollingRank over the windows of RollingSumBy and its kin, each
+// row's own value ranked among its window's values: Polars' rolling_rank_by (step
+// 338). RankMin, RankMax and RankDense are a UInt32 and RankAverage a Float64;
+// RankOrdinal is refused, as Polars has none, and Polars' random is not here. A row
+// whose value is null is null, and a window answers from one value unless
+// MinSamples asks for more.
+func (e Expr) RollingRankBy(by Expr, period Interval, method RankMethod, opts ...WindowOption) Expr {
+	return e.rollingBy(expr.WinRollingRank, by, period, 0,
+		append([]WindowOption{func(p *expr.WinParams) { p.Method = method }}, opts...))
+}
+
 // RollingMedianBy and RollingQuantileBy are RollingMedian and RollingQuantile over
 // the windows of RollingSumBy and its kin (step 227): Polars' rolling_median_by and
 // rolling_quantile_by.

@@ -336,3 +336,100 @@ func udfArg[In any](src []In, i int) string {
 	}
 	return fmt.Sprint(src[i])
 }
+
+// RollingMap applies a Go function to each row's window of size rows: Polars'
+// rolling_map (step 338). fn is given the window's values in the window's order and
+// whether each holds one, a null's value the zero value and not to be read, as
+// MapBatches gives a batch; its answer is the row's. The window is the row and the
+// size-1 rows before it, fewer at a partition's start, or with RollingCenter the size
+// rows centred on it. One holding fewer values than MinSamples, size unless
+// set, as Polars', is null, and fn is not called for it.
+//
+//	Col("price").RollingMap[float64, float64]("range", ursus.Float64, 5,
+//	    func(w []float64, ok []bool) (float64, error) { ... })
+//
+// It is a rolling function: it runs within each partition under Over, in an order
+// under OverWith, and streams past a memory limit as they do. name, goroutine safety
+// and out are as MapElements has them, two functions of one name refused, and a panic
+// or an error in fn fails the query, naming the row. Polars' weights are not taken:
+// fn weighs its window itself.
+func (e Expr) RollingMap[In, Out Literal](name string, out DataType, size int,
+	fn func(window []In, ok []bool) (Out, error), opts ...WindowOption) Expr {
+
+	if err := checkUDF(name, fn == nil, "rolling_map"); err != nil {
+		return wrap(&expr.Err{E: err})
+	}
+	if size < 1 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "rolling_map",
+			"rolling_map %q over %d rows; a window holds one at least", name, size)})
+	}
+	impl := kernel.WindowMap(func(ctx context.Context, col *data.Column, outName string,
+		parts func(yield func(rows, lo, hi []int32) bool), minN int) (_ *data.Column, err error) {
+
+		row, inFn := -1, false
+		var src []In
+		defer func() {
+			if v := recover(); v != nil {
+				if !inFn {
+					err = uerr.FromPanic(v, "rolling_map")
+					return
+				}
+				err = uerr.Attributed(v, uerr.KindValue, "rolling_map",
+					"udf %q panicked on the window of %v, row %d of column %q",
+					name, udfArg(src, row), row, col.Name())
+			}
+		}()
+		src, err = udfInput[In](col, "rolling_map", name)
+		if err != nil {
+			return nil, err
+		}
+		mask := col.Validity()
+		n := col.Len()
+		vals, held := make([]Out, n), make([]bool, n)
+		window, ok := make([]In, 0, size), make([]bool, 0, size)
+		parts(func(rows, lo, hi []int32) bool {
+			for i, r := range rows {
+				window, ok = window[:0], ok[:0]
+				values := 0
+				for _, m := range rows[lo[i]:hi[i]] {
+					v := mask.Get(int(m))
+					window, ok = append(window, src[m]), append(ok, v)
+					if v {
+						values++
+					}
+				}
+				if values < minN {
+					continue
+				}
+				if err = ctx.Err(); err != nil {
+					return false
+				}
+				row, inFn = int(r), true
+				var v Out
+				v, err = fn(window, ok)
+				inFn = false
+				if err != nil {
+					err = uerr.Wrap(err, uerr.KindValue, "rolling_map",
+						"udf %q failed on the window of %v, row %d of column %q",
+						name, udfArg(src, int(r)), r, col.Name())
+					return false
+				}
+				vals[r], held[r] = v, true
+			}
+			return true
+		})
+		if err != nil {
+			return nil, err
+		}
+		valid := bitmap.NewBuilder(n)
+		for _, h := range held {
+			valid.Append(h)
+		}
+		return buildTyped(name, "rolling_map", outName, out, vals, valid.Finish())
+	})
+	p := expr.WinParams{N: int64(size), Map: expr.NewRollingMap(name, out, impl)}
+	for _, o := range opts {
+		o(&p)
+	}
+	return e.winFn(expr.WinRollingMap, p)
+}
