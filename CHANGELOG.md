@@ -15,12 +15,16 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–324, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–325, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **A float cast to text is Polars' text** (325): `2.0` is `"2.0"`, `-0.0` `"-0.0"`,
+  `1e-7` `"1e-7"`, `1e16` `"1e+16"` and `+Inf` `"inf"`, where they were Go's `"2"`,
+  `"-0"`, `"1e-07"`, `"1e+16"` and `"+Inf"`. A pivot named by a float's text names its
+  column so too, `2.0` where it was `2`.
 - **An as-of tolerance of zero admits only an exact match** (315), as Polars' does:
   `AsOfTolerance(ursus.FromDuration(0))` admitted any distance.
 - **An as-of join keeps both ordering keys when they are named apart** (315), as
@@ -92,6 +96,8 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`Str().ToTime`, `Str().ToDecimal` and `Dt().CastTimeUnit`** (325), as Polars'
+  `str.to_time`, `str.to_decimal` and `dt.cast_time_unit`.
 - **Polars' odds** (324): `Item`, `LowerBound`, `UpperBound` and `IsSorted`, as
   aggregates; `ToPhysical` and `Reinterpret`; `Arctan2`, `TrueDiv`, `Limit` and
   `Pipe`.

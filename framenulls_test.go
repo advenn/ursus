@@ -175,7 +175,7 @@ func TestInterpolateTemporal(t *testing.T) {
 		"neg":  "1969-12-30 1969-12-30 1969-12-31 ∅",
 		"u":    "1h0m0s 1h20m0s 1h40m0s 2h0m0s",
 		"b":    "true ∅ ∅ false",
-		"i128": "1 2 3 4",
+		"i128": "1.0 2.0 3.0 4.0",
 	}
 	types := "tm:Time(ns) t:Datetime(us) d:Date neg:Date u:Duration(ns) b:Bool i128:Float64"
 	check := func(t *testing.T, df *ursus.DataFrame) {

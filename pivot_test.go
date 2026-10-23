@@ -261,18 +261,18 @@ func TestPivotOnColumns(t *testing.T) {
 	assertPivot(t, "none given", got, err, k)
 
 	// NaN matches NaN and 0 matches -0, as Polars' ==v does; a column is named by
-	// the value given, here as ursus writes a float, 0 where Polars writes 0.0 (§1).
+	// the value given, as Polars writes a float, 0.0 (since step 325).
 	floats := ursus.Frame(i64s("k", 1, 1, 1, 1, 1, 1), f64s("f", 1.5, 2.0, 1.5, math.NaN(), math.Copysign(0, -1), 1.5),
 		i64s("v", 1, 2, 3, 4, 5, 6))
 	got, err = floats.Pivot(ursus.PivotOptions{On: []string{"f"}, Index: []string{"k"}, Values: []string{"v"},
 		Agg: ursus.Expr.First, OnColumns: []*ursus.Column{f64s("f", math.NaN(), 0.0, 1.5)}}).Collect(ctx)
-	assertPivot(t, "NaN and the zeros", got, err, i64s("k", 1), i64s("NaN", 4), i64s("0", 5), i64s("1.5", 1))
+	assertPivot(t, "NaN and the zeros", got, err, i64s("k", 1), i64s("NaN", 4), i64s("0.0", 5), i64s("1.5", 1))
 	// Both zeros given: each a column, each of both zeros' rows, as Polars' are.
 	got, err = ursus.Frame(i64s("k", 1, 1, 2), f64s("f", 0.0, math.Copysign(0, -1), 0.0), i64s("v", 1, 2, 3)).
 		Pivot(ursus.PivotOptions{On: []string{"f"}, Index: []string{"k"}, Values: []string{"v"},
 			Agg:       func(e ursus.Expr) ursus.Expr { return e.Sum().Cast(ursus.Int64) },
 			OnColumns: []*ursus.Column{f64s("f", 0.0, math.Copysign(0, -1))}}).Collect(ctx)
-	assertPivot(t, "0 and -0 both given", got, err, i64s("k", 1, 2), i64s("0", 3, 3), i64s("-0", 3, 3))
+	assertPivot(t, "0 and -0 both given", got, err, i64s("k", 1, 2), i64s("0.0", 3, 3), i64s("-0.0", 3, 3))
 
 	// OnColumns of another integer width are cast to the On column's.
 	got, err = pivotFrame().WithColumns(ursus.Col("v").Cast(ursus.Int32).Alias("n")).

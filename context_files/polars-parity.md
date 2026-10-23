@@ -46,8 +46,8 @@ what we are lacking".
 | ~~`item`, `lower_bound`, `upper_bound`, `is_sorted`, `limit`, `truediv`~~ | built in step 324 |
 | `reinterpret`, `to_physical`; `shrink_dtype` | built in step 324; `shrink_dtype` not, a no-op on an expression in Polars 1.44, its Series' only |
 | `pipe`; `inspect` | `Expr.Pipe` built in step 324; `inspect`, a print, not |
-| `str.to_time`, `str.to_decimal` | `Strptime(Time…)`; `CastLossy(Decimal)` |
-| `dt.cast_time_unit` | `Cast(Datetime(unit))` |
+| ~~`str.to_time`, `str.to_decimal`~~ | built in step 325: `Str().ToTime`, `Str().ToDecimal` |
+| ~~`dt.cast_time_unit`~~ | built in step 325: `Dt().CastTimeUnit` |
 | ~~`struct.drop`~~ | built in step 323: `Struct().Drop` |
 | ~~`pl.arctan2`~~ | built in step 324: `Arctan2` |
 | `meta.*`: `root_names`, `output_name`, `is_column`, `has_multiple_outputs`, `undo_aliases`, `tree_format` | `String()` |

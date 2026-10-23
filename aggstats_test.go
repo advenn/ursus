@@ -298,7 +298,7 @@ func TestEntropyModeSpearman(t *testing.T) {
 			Sort(ursus.Asc(c("g"))).Select(c("i")), "i\n6|3|5|null\n12|10\n7\n"},
 		// Without it Polars' order is its hash table's, [1.0, 4.0, None, 2.0]; sorted here.
 		{"by g, sorted", lf.GroupBy(c("g")).Agg(x.Mode(false).List().Eval(text(ursus.Element())).List().Join("|")).
-			Sort(ursus.Asc(c("g"))).Select(c("x")), "x\nnull|1|2|4\n3\n5\n"}, // a float cast to text drops ".0"
+			Sort(ursus.Asc(c("g"))).Select(c("x")), "x\nnull|1.0|2.0|4.0\n3.0\n5.0\n"},
 	} {
 		if got := csvOf(t, tc.q); got != tc.want {
 			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)

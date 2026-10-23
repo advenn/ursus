@@ -40,18 +40,18 @@ func TestRollingByAnswersAsPolars(t *testing.T) {
 		e    ursus.Expr
 		want string
 	}{
-		{"sum", c("v").RollingSumBy(c("t"), two), "1 3 2 4 9 6 "},
-		{"mean", c("v").RollingMeanBy(c("t"), two), "1 1.5 2 4 4.5 6 "},
-		{"min", c("v").RollingMinBy(c("t"), two), "1 1 2 4 4 6 "},
-		{"max", c("v").RollingMaxBy(c("t"), two), "1 2 2 4 5 6 "},
+		{"sum", c("v").RollingSumBy(c("t"), two), "1.0 3.0 2.0 4.0 9.0 6.0 "},
+		{"mean", c("v").RollingMeanBy(c("t"), two), "1.0 1.5 2.0 4.0 4.5 6.0 "},
+		{"min", c("v").RollingMinBy(c("t"), two), "1.0 1.0 2.0 4.0 4.0 6.0 "},
+		{"max", c("v").RollingMaxBy(c("t"), two), "1.0 2.0 2.0 4.0 5.0 6.0 "},
 		{"var", c("v").RollingVarBy(c("t"), two), "∅ 0.5 ∅ ∅ 0.5 ∅ "},
 		{"std", c("v").RollingStdBy(c("t"), ursus.Every("3h")), "∅ 0.7071067811865476 0.7071067811865476 ∅ 0.7071067811865476 ∅ "},
-		{"min_samples 2", c("v").RollingSumBy(c("t"), two, ursus.MinSamples(2)), "∅ 3 ∅ ∅ 9 ∅ "},
-		{"closed right", c("v").RollingSumBy(c("t"), two, ursus.WindowClosed(ursus.ClosedRight)), "1 3 2 4 9 6 "},
+		{"min_samples 2", c("v").RollingSumBy(c("t"), two, ursus.MinSamples(2)), "∅ 3.0 ∅ ∅ 9.0 ∅ "},
+		{"closed right", c("v").RollingSumBy(c("t"), two, ursus.WindowClosed(ursus.ClosedRight)), "1.0 3.0 2.0 4.0 9.0 6.0 "},
 		// Polars answers an empty window 0 here, under min_samples=1: [0, 1, 3, 0, 4, 0].
-		{"closed left", c("v").RollingSumBy(c("t"), two, ursus.WindowClosed(ursus.ClosedLeft)), "∅ 1 3 ∅ 4 ∅ "},
-		{"closed both", c("v").RollingSumBy(c("t"), two, ursus.WindowClosed(ursus.ClosedBoth)), "1 3 3 4 9 6 "},
-		{"closed none", c("v").RollingSumBy(c("t"), two, ursus.WindowClosed(ursus.ClosedNone)), "∅ 1 2 ∅ 4 ∅ "},
+		{"closed left", c("v").RollingSumBy(c("t"), two, ursus.WindowClosed(ursus.ClosedLeft)), "∅ 1.0 3.0 ∅ 4.0 ∅ "},
+		{"closed both", c("v").RollingSumBy(c("t"), two, ursus.WindowClosed(ursus.ClosedBoth)), "1.0 3.0 3.0 4.0 9.0 6.0 "},
+		{"closed none", c("v").RollingSumBy(c("t"), two, ursus.WindowClosed(ursus.ClosedNone)), "∅ 1.0 2.0 ∅ 4.0 ∅ "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			df, err := frame.Select(tc.e).Collect(t.Context())
@@ -72,15 +72,15 @@ func TestRollingByAnswersAsPolars(t *testing.T) {
 	}{
 		{"integers: an exact sum, a float mean",
 			hoursFrame([]int{0, 1, 2, 4, 5, 9}, []float64{1, 2, 3, 4, 5, 6}, nil).Select(c("t"), c("v").Cast(ursus.Int64)),
-			c("v").RollingMeanBy(c("t"), two), "1 1.5 2.5 4 4.5 6 "},
+			c("v").RollingMeanBy(c("t"), two), "1.0 1.5 2.5 4.0 4.5 6.0 "},
 		{"by unsorted", hoursFrame([]int{2, 0, 1, 5}, []float64{1, 2, 3, 4}, nil),
-			c("v").RollingSumBy(c("t"), two), "4 2 5 4 "},
+			c("v").RollingSumBy(c("t"), two), "4.0 2.0 5.0 4.0 "},
 		{"ties share a window, the later rows too", hoursFrame([]int{0, 0, 1}, []float64{1, 2, 3}, nil),
-			c("v").RollingSumBy(c("t"), ursus.Every("1h")), "3 3 3 "},
+			c("v").RollingSumBy(c("t"), ursus.Every("1h")), "3.0 3.0 3.0 "},
 		{"a null by is in no window",
 			ursus.Frame(ursus.ValuesNullable("t", []time.Time{time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), {},
 				time.Date(2024, 1, 1, 1, 0, 0, 0, time.UTC)}, []bool{true, false, true}), ursus.Values("v", []float64{1, 2, 3})),
-			c("v").RollingSumBy(c("t"), two), "1 ∅ 4 "},
+			c("v").RollingSumBy(c("t"), two), "1.0 ∅ 4.0 "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			df, err := tc.frame.Select(tc.e).Collect(t.Context())
@@ -102,7 +102,7 @@ func TestRollingByAnswersAsPolars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := rendered172(t, df, "v"); got != "1 3 10 30 " {
+	if got := rendered172(t, df, "v"); got != "1.0 3.0 10.0 30.0 " {
 		t.Errorf("over g: %q", got)
 	}
 
@@ -116,7 +116,7 @@ func TestRollingByAnswersAsPolars(t *testing.T) {
 	}
 	dated := ursus.Frame(ursus.Values("t", days(1, 2, 3, 5)), ursus.Values("v", []float64{1, 2, 3, 4})).
 		Select(c("t").Cast(dtype.Date), c("v"))
-	for period, want := range map[string]string{"2d": "1 3 5 4 ", "1mo": "1 3 6 10 "} {
+	for period, want := range map[string]string{"2d": "1.0 3.0 5.0 4.0 ", "1mo": "1.0 3.0 6.0 10.0 "} {
 		df, err := dated.Select(c("v").RollingSumBy(c("t"), ursus.Every(period))).Collect(t.Context())
 		if err != nil {
 			t.Fatal(err)
@@ -139,8 +139,8 @@ func TestRollingByAnswersAsPolars(t *testing.T) {
 		period ursus.Interval
 		want   string
 	}{
-		{"1d", ursus.Every("1d"), "1 2 "},
-		{"24h", ursus.FromDuration(24 * time.Hour), "1 3 "},
+		{"1d", ursus.Every("1d"), "1.0 2.0 "},
+		{"24h", ursus.FromDuration(24 * time.Hour), "1.0 3.0 "},
 	} {
 		df, err := zoned.Select(c("v").RollingSumBy(c("t"), tc.period)).Collect(t.Context())
 		if err != nil {
@@ -197,7 +197,7 @@ func TestRollingByNamesAndRenders(t *testing.T) {
 	if got := strings.Join(df.Schema().Names(), ","); got != "one,two,both,v" {
 		t.Fatalf("named %s", got)
 	}
-	for name, want := range map[string]string{"one": "1 2 3 ", "two": "1 3 5 ", "both": "1 3 6 "} {
+	for name, want := range map[string]string{"one": "1.0 2.0 3.0 ", "two": "1.0 3.0 5.0 ", "both": "1.0 3.0 6.0 "} {
 		if got := rendered172(t, df, name); got != want {
 			t.Errorf("%s: %q, want %q", name, got, want)
 		}

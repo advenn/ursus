@@ -101,9 +101,9 @@ func TestRollingCenterAnswersAsPolars(t *testing.T) {
 		w             int
 		want, partial string
 	}{
-		{2, "∅ 3 5 7 9 11 ", "1 3 5 7 9 11 "},
-		{3, "∅ 6 9 12 15 ∅ ", "3 6 9 12 15 11 "},
-		{4, "∅ ∅ 10 14 18 ∅ ", "3 6 10 14 18 15 "},
+		{2, "∅ 3.0 5.0 7.0 9.0 11.0 ", "1.0 3.0 5.0 7.0 9.0 11.0 "},
+		{3, "∅ 6.0 9.0 12.0 15.0 ∅ ", "3.0 6.0 9.0 12.0 15.0 11.0 "},
+		{4, "∅ ∅ 10.0 14.0 18.0 ∅ ", "3.0 6.0 10.0 14.0 18.0 15.0 "},
 	} {
 		df, err := frame.Select(
 			c("v").RollingSum(tc.w, ursus.RollingCenter()).Alias("full"),
@@ -138,8 +138,8 @@ func TestRollingCenterIsPerPartition(t *testing.T) {
 	}
 	// a: 1 2 3 4 → centered 2 3 4 4, trailing 1 2 3 4; b: 10 20 30 → 20 30 30, 10 20 30.
 	want := map[string]string{
-		"centered": "2 20 3 30 4 30 4 ",
-		"trailing": "1 10 2 20 3 30 4 ",
+		"centered": "2.0 20.0 3.0 30.0 4.0 30.0 4.0 ",
+		"trailing": "1.0 10.0 2.0 20.0 3.0 30.0 4.0 ",
 	}
 	for name, w := range want {
 		if got := rendered172(t, df, name); got != w {
@@ -158,7 +158,7 @@ func TestLinearAndNearestAreTwoAnswers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if l, n := rendered172(t, df, "linear"), rendered172(t, df, "nearest"); l != "1 3 5 7 " || n != "1 1 7 7 " {
+	if l, n := rendered172(t, df, "linear"), rendered172(t, df, "nearest"); l != "1.0 3.0 5.0 7.0 " || n != "1 1 7 7 " {
 		t.Fatalf("linear %q, nearest %q", l, n)
 	}
 }

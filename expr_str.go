@@ -400,6 +400,32 @@ func (s StrExpr) EscapeRegex() Expr {
 func (s StrExpr) ToInteger() Expr { return s.e.CastLossy(dtype.Int64) }
 func (s StrExpr) ToDate() Expr    { return s.e.CastLossy(dtype.Date) }
 
+// ToTime parses a time of day, a Time of nanoseconds, as Polars' str.to_time (step
+// 325): by format, as Strptime reads one, or, with none, each value as a cast reads
+// it, "10:30", "10:30:15" and "10:30:15.123456789" alike, where Polars infers one
+// format from the first value. Strict, a value that does not parse is an error;
+// otherwise it is null.
+func (s StrExpr) ToTime(format string, strict bool) Expr {
+	if format != "" {
+		return s.Strptime(dtype.Time(dtype.Nano), format, strict)
+	}
+	if strict {
+		return s.e.Cast(dtype.Time(dtype.Nano))
+	}
+	return s.e.CastLossy(dtype.Time(dtype.Nano))
+}
+
+// ToDecimal parses a number into a Decimal(38, scale), as Polars' str.to_decimal
+// (step 325): rounded half away from zero to the scale, an exponent read, 1e3 a
+// thousand; text that is no number, or past 38 digits, is null.
+func (s StrExpr) ToDecimal(scale int) Expr {
+	if scale < 0 || scale > dtype.MaxDecimalPrecision {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "str.to_decimal",
+			"a Decimal's scale is 0 to %d, not %d", dtype.MaxDecimalPrecision, scale)})
+	}
+	return s.e.CastLossy(dtype.Decimal(dtype.MaxDecimalPrecision, uint8(scale)))
+}
+
 func (s StrExpr) ToDatetime(unit dtype.TimeUnit, tz string) Expr {
 	return s.e.CastLossy(dtype.Datetime(unit, tz))
 }

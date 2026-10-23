@@ -32,6 +32,11 @@ func dtMore(fn expr.CallFn, name string, out dtype.DataType, c *data.Column, arg
 		// The same integers, read in another unit, as Polars reinterprets them.
 		return c.WithDType(out).Rename(name), nil
 	}
+	if fn == expr.FnDtCastTimeUnit {
+		// The same instants or lengths in another unit, as a cast gives them: an
+		// instant floored, a length truncated toward zero, as Polars' are (step 325).
+		return Cast(name, out, true, c)
+	}
 	ticks, err := readTicks(c)
 	if err != nil {
 		return nil, err

@@ -78,6 +78,10 @@ fields, null where there are fewer parts, which `Unnest` turns into columns:
 `to_integer` and `to_date` fail the query by default instead. For that, ask for
 strictness: `Strptime(..., true)`, or `ToIntegerWith(base, type, true)`.
 
+*New in 0.6.7:* `ToTime(format, strict)` parses a time of day, by a format or, with
+none, each value as it comes, and `ToDecimal(scale)` a number into a `Decimal(38,
+scale)`, rounded half away from zero, as Polars' `to_time` and `to_decimal`.
+
 `JsonDecode(type)` parses JSON into a value of a type, a struct or a list, and
 `Encode` and `Decode` convert to and from hex or base64.
 

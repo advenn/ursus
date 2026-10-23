@@ -207,7 +207,7 @@ func TestJsonDecode(t *testing.T) {
 		{"Int8", `[300, -128]`, ursus.List(ursus.Int8), "|-128"},
 		{"UInt8", `[-1, 255, 256]`, ursus.List(ursus.Uint8), "|255|"},
 		{"UInt64", `[18446744073709551615, 1.5, -1.5, -0.5, false]`, ursus.List(ursus.Uint64), "18446744073709551615|1||0|0"},
-		{"Float32", `[1e300, true, 2]`, ursus.List(ursus.Float32), "+Inf|1|2"},
+		{"Float32", `[1e300, true, 2]`, ursus.List(ursus.Float32), "inf|1.0|2.0"},
 		{"String", `[true, 1.50, 1e16, -0, -0.0, 1.5e-7, 12345678901234567890123, "x"]`, ursus.List(ursus.String),
 			"true|1.5|10000000000000000|0|-0|0.00000015|12345678901234567890123|x"},
 		{"a scalar as a List", `5`, ursus.List(ursus.Int64), "5"},

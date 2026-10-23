@@ -1282,9 +1282,11 @@ func formatToString(name string, c *data.Column) (*data.Column, error) {
 		if dt == dtype.Float32 {
 			bits = 32
 		}
+		var text []byte // one buffer for every value, a string's allocation each
 		for i := range n {
 			if valid.Get(i) {
-				out[i] = strconv.FormatFloat(f[i], 'g', -1, bits)
+				text = AppendFloatText(text[:0], f[i], bits)
+				out[i] = string(text)
 			}
 		}
 		return data.NewString(name, out, valid), nil
@@ -1504,4 +1506,39 @@ func EnumPhysical(name string, out dtype.DataType, c *data.Column) (*data.Column
 		return data.NewFixed(name, out, res, valid), nil
 	}
 	return nil, uerr.Internalf("kernel: cat.physical to %s", out)
+}
+
+// FloatText is a float as Polars casts one to text (step 325; it was Go's shortest
+// text, 2 and -0 and 1e-07): the shortest digits that read back as it at its width,
+// plain from 1e-5 to below 1e16, a whole number with ".0", and otherwise in
+// scientific notation with a signed exponent of no padding, "1e+16" and "1.5e-7";
+// NaN, inf and -inf.
+func FloatText(v float64, bits int) string { return string(AppendFloatText(nil, v, bits)) }
+
+// AppendFloatText appends FloatText's text of v to dst, one allocation a value at
+// most where FloatText adds one for its string.
+func AppendFloatText(dst []byte, v float64, bits int) []byte {
+	switch {
+	case math.IsNaN(v):
+		return append(dst, "NaN"...)
+	case math.IsInf(v, 1):
+		return append(dst, "inf"...)
+	case math.IsInf(v, -1):
+		return append(dst, "-inf"...)
+	}
+	start := len(dst)
+	if a := math.Abs(v); a == 0 || a >= 1e-5 && a < 1e16 {
+		dst = strconv.AppendFloat(dst, v, 'f', -1, bits)
+		if slices.Index(dst[start:], '.') < 0 {
+			dst = append(dst, ".0"...)
+		}
+		return dst
+	}
+	dst = strconv.AppendFloat(dst, v, 'e', -1, bits)
+	// Go writes an exponent of two digits at least, "1e-07"; Polars of no padding.
+	at := start + slices.Index(dst[start:], 'e') + 2 // past e and its sign
+	for at < len(dst)-1 && dst[at] == '0' {
+		dst = append(dst[:at], dst[at+1:]...)
+	}
+	return dst
 }

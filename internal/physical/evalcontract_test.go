@@ -480,6 +480,8 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 	// on its value.
 	expr.FnDtWithTimeUnit: {{label: ",ms", args: []any{int64(dtype.Milli)}},
 		{label: ",ns", args: []any{int64(dtype.Nano)}}},
+	expr.FnDtCastTimeUnit: {{label: ",ms", args: []any{int64(dtype.Milli)}},
+		{label: ",ns", args: []any{int64(dtype.Nano)}}},
 	expr.FnDtTotalFractional: {{label: ",s", args: []any{int64(time.Second)}},
 		{label: ",d", args: []any{int64(24 * time.Hour)}}},
 	expr.FnDtEpochIn: {{label: ",ms", args: []any{int64(time.Millisecond)}},

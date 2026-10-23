@@ -437,6 +437,7 @@ const (
 	FnDtTotalFractional
 	FnDtSecondFractional
 	FnDtEpochIn
+	FnDtCastTimeUnit // a Datetime's or a Duration's values in another unit, Polars' cast_time_unit (step 325)
 	fnDtMoreEnd
 )
 
@@ -549,7 +550,7 @@ var callNames = map[CallFn]string{
 	FnDtDate: "dt.date", FnDtTime: "dt.time",
 	FnDtIsoYear: "dt.iso_year", FnDtCentury: "dt.century", FnDtMillennium: "dt.millennium",
 	FnDtBaseUtcOffset: "dt.base_utc_offset", FnDtDstOffset: "dt.dst_offset",
-	FnDtWithTimeUnit: "dt.with_time_unit", FnDtTotalMilliseconds: "dt.total_milliseconds",
+	FnDtWithTimeUnit: "dt.with_time_unit", FnDtCastTimeUnit: "dt.cast_time_unit", FnDtTotalMilliseconds: "dt.total_milliseconds",
 	FnDtTotalMicroseconds: "dt.total_microseconds", FnDtTotalNanoseconds: "dt.total_nanoseconds",
 	FnDtTotalFractional: "dt.total_fractional", FnDtSecondFractional: "dt.second_fractional",
 	FnDtEpochIn:       "dt.epoch_in",
@@ -1929,7 +1930,7 @@ func dtCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		// Milliseconds whatever the value's unit, as Polars answers.
 		return dtype.Duration(dtype.Milli), nil
 
-	case FnDtWithTimeUnit:
+	case FnDtWithTimeUnit, FnDtCastTimeUnit:
 		args, err := CallArgs(c)
 		if err != nil {
 			return dtype.Null, err

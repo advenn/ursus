@@ -40,7 +40,7 @@ func TestTopKValues(t *testing.T) {
 	}{
 		{"the two largest ints, nulls skipped", c("i").TopK(2), []string{"a 9", "a 5", "b 7", "c ∅"}},
 		{"the two smallest ints", c("i").BottomK(2), []string{"a 1", "a 5", "b 7", "c ∅"}},
-		{"NaN is the largest float", c("f").TopK(2), []string{"a NaN", "a 3", "b 0.5", "b 0.25", "c 2", "c 1"}},
+		{"NaN is the largest float", c("f").TopK(2), []string{"a NaN", "a 3.0", "b 0.5", "b 0.25", "c 2.0", "c 1.0"}},
 		{"strings", c("s").TopK(3), []string{"a pear", "a kiwi", "a fig", "b plum", "b date", "c yuzu", "c lime"}},
 		{"dates", c("d").BottomK(1), []string{"a 2024-01-01", "b 2024-01-02", "c 2024-01-05"}},
 		{"decimals", c("dec").TopK(5), []string{"a 9.00", "a 5.00", "a 1.00", "b 7.00", "c ∅"}},

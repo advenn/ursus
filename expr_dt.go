@@ -195,6 +195,17 @@ func (d DtExpr) WithTimeUnit(unit TimeUnit) Expr {
 	return d.call(expr.FnDtWithTimeUnit, int64(unit))
 }
 
+// CastTimeUnit is a Datetime's or a Duration's values in another unit, as Polars'
+// cast_time_unit (step 325): an instant floored to the coarser unit, a length
+// truncated toward zero, as a Cast gives them. A Datetime keeps its zone; any other
+// type is refused. WithTimeUnit keeps the integers instead.
+func (d DtExpr) CastTimeUnit(unit TimeUnit) Expr {
+	if unit > Nano {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "dt.cast_time_unit", "%s is not a time unit", unit)})
+	}
+	return d.call(expr.FnDtCastTimeUnit, int64(unit))
+}
+
 // BaseUtcOffset is a zoned Datetime's zone's offset from UTC without daylight-saving
 // time, and DstOffset that time's own offset, the two summing to the offset in force,
 // each a Duration(ms): Polars' base_utc_offset and dst_offset.

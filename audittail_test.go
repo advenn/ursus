@@ -149,8 +149,8 @@ func TestTemporalStatisticsAreRefusedWithACast(t *testing.T) {
 	t.Run("the cast reaches the ticks", func(t *testing.T) {
 		// 2024-02-09 is day 19762, and the other row is two days on.
 		got := runs(t, f.GroupBy().Agg(c("day").Cast(ursus.Int64).Median().Alias("y")), "y")
-		if !slices.Equal(got, []string{"19763"}) {
-			t.Errorf("%v, want the median day 19763", got)
+		if !slices.Equal(got, []string{"19763.0"}) {
+			t.Errorf("%v, want the median day 19763.0", got)
 		}
 	})
 	t.Run("a Duration's mean is a Duration", func(t *testing.T) {

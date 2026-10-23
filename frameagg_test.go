@@ -41,15 +41,15 @@ func TestFrameAggregates(t *testing.T) {
 		want  string // every column but l, which is null for each but null_count
 	}{
 		{"sum", lf.Sum(), "Int128 Int128 Float64 Int128 String Date Datetime(us) Duration(ns) List(String)",
-			"7 10 8 2 ∅ ∅ ∅ 7h0m0s"},
+			"7 10 8.0 2 ∅ ∅ ∅ 7h0m0s"},
 		{"mean", lf.Mean(), "Float64 Float64 Float64 Float64 String Datetime(us) Datetime(us) Duration(ns) List(String)",
 			"2.3333333333333335 2.5 2.6666666666666665 0.6666666666666666 ∅ 2026-01-04T00:00:00.000000Z " + jan2 + " 2h20m0s"},
 		{"median", lf.Median(), "Float64 Float64 Float64 Float64 String Datetime(us) Datetime(us) Duration(ns) List(String)",
-			"2 2.5 2.5 1 ∅ " + jan3 + " " + jan2 + " 2h0m0s"},
+			"2.0 2.5 2.5 1.0 ∅ " + jan3 + " " + jan2 + " 2h0m0s"},
 		{"min", lf.Min(), "Int64 Int8 Float64 Bool String Date Datetime(us) Duration(ns) List(String)",
 			"1 1 1.5 false p 2026-01-01 2026-01-01T06:00:00.000000Z 1h0m0s"},
 		{"max", lf.Max(), "Int64 Int8 Float64 Bool String Date Datetime(us) Duration(ns) List(String)",
-			"4 4 4 true r 2026-01-08 2026-01-03T06:00:00.000000Z 4h0m0s"},
+			"4 4 4.0 true r 2026-01-08 2026-01-03T06:00:00.000000Z 4h0m0s"},
 		// Polars' f is 1.2583057392117916 and 1.5833333333333333: §9's ulp.
 		{"std", lf.Std(1), "Float64 Float64 Float64 Float64 String Date Datetime(us) Duration(ns) List(String)",
 			"1.5275252316519465 1.2909944487358056 1.2583057392117918 0.5773502691896258 ∅ ∅ ∅ ∅"},
@@ -57,11 +57,11 @@ func TestFrameAggregates(t *testing.T) {
 			"2.333333333333333 1.6666666666666667 1.5833333333333335 0.33333333333333337 ∅ ∅ ∅ ∅"},
 		{"var, ddof 0", lf.Var(0).Select(ursus.Col("i")), "Float64", "1.5555555555555554"},
 		// Polars: a column a product does not take is of the Null type.
-		{"product", lf.Product(), "Float64 Float64 Float64 Float64 Null Null Null Null Null", "8 24 15 0 ∅ ∅ ∅ ∅"},
+		{"product", lf.Product(), "Float64 Float64 Float64 Float64 Null Null Null Null Null", "8.0 24.0 15.0 0.0 ∅ ∅ ∅ ∅"},
 		// Polars: a Boolean's quantile is null, a Date's a Datetime.
 		{"quantile", lf.Quantile(0.5, ursus.InterpNearest),
 			"Float64 Float64 Float64 Bool String Datetime(us) Datetime(us) Duration(ns) List(String)",
-			"2 3 2.5 ∅ ∅ " + jan3 + " " + jan2 + " 2h0m0s"},
+			"2.0 3.0 2.5 ∅ ∅ " + jan3 + " " + jan2 + " 2h0m0s"},
 		{"null count", lf.NullCount(), "Uint64 Uint64 Uint64 Uint64 Uint64 Uint64 Uint64 Uint64 Uint64",
 			"1 0 1 1 1 1 1 1"},
 	} {

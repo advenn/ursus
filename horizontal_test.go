@@ -72,7 +72,7 @@ func TestConcatStr(t *testing.T) {
 		{"full", []string{"Ada Lovelace", "Alan Turing", "null"}},
 		{"tag", []string{"Lovelace#7", "Turing#12", "Hopper#3"}},
 		// Every operand is formatted as its Cast to String formats it.
-		{"mixed", []string{"7|1.5|true|2024-02-29", "12|2|false|2024-03-01", "3|-0.25|true|2024-03-02"}},
+		{"mixed", []string{"7|1.5|true|2024-02-29", "12|2.0|false|2024-03-01", "3|-0.25|true|2024-03-02"}},
 		{"alone", []string{"Lovelace", "Turing", "Hopper"}},
 		{"lit_first", []string{"a-Lovelace", "a-Turing", "a-Hopper"}},
 	} {
