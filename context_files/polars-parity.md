@@ -38,7 +38,7 @@ what we are lacking".
 
 | Polars | ursus today |
 | --- | --- |
-| `polars.selectors`: `by_dtype`, `numeric`, `integer`, `float`, `temporal`, `string`, `starts_with`, `ends_with`, `contains`, `matches`, `by_index`, `first`, `last`, `exclude`, set algebra (`|`, `&`, `-`, `~`) | `Col`, `ColRegex`, `ColDType` of exact types, `All`, `Exclude` |
+| ~~`polars.selectors`~~ | built in step 322: package `selector` |
 | `name.keep`, `name.to_lowercase`, `name.to_uppercase`, `name.prefix_fields`, `name.suffix_fields`, `name.map_fields` | `Prefix`, `Suffix`, `MapName` |
 | `top_k_by`, `bottom_k_by` | missing |
 | `interpolate_by` | missing |

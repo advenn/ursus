@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–321, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–322, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -92,6 +92,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **Selectors** (322), package `ursus/selector`, as Polars' `polars.selectors`:
+  columns by their types, `Numeric`, `Integer`, `Float`, `Temporal`, `String` and the
+  rest; by name, `StartsWith`, `EndsWith`, `Contains`, `Matches`, `ByName`; by place,
+  `ByIndex`, `First`, `Last`; and their `Union`, `Intersect`, `Difference`,
+  `SymmetricDifference`, `Complement` and `Exclude`, each an expression by `Expr`, its
+  names by `Expand`.
 - **A group-by's groups as frames** (321): `Groups`, an iterator of each group's key
   and rows, and `MapGroups`, a Go function over each, as Polars' iteration and
   `map_groups`; and a frame's `Extend`, `Glimpse` and `EstimatedSize`, and

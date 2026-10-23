@@ -51,6 +51,10 @@ var levels = map[string]int{
 	// shared field-metadata key lives in arrowx so neither imports the other.
 	"internal/arrowin": 25, // + data, dtype, bitmap, arrowx, i128 — Arrow import
 
+	// The root's wrap, which it sets when it initialises, for package selector to build
+	// the root's expressions with (step 322).
+	"internal/exprbridge": 25, // + expr
+
 	"internal/kernel":  30, // + data, bitmap
 	"internal/source":  30, // + dtype, data, expr, uerr
 	"internal/scanopt": 30,

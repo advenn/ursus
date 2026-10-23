@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/selector"
 )
 
 // --- the user guide: selecting and filtering ----------------------------------------
@@ -54,6 +55,25 @@ func Example_selectExclude() {
 	// │ "south" │ "apple" │ 4     │ 1.5     │
 	// │ "north" │ "pear"  │ 7     │ 2.25    │
 	// └─────────┴─────────┴───────┴─────────┘
+}
+
+func Example_selectSelectors() {
+	every := selector.Numeric().Difference(selector.ByName("order_id"))
+	df, err := sales().Select(every.Expr()).Head(3).Collect(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(df)
+	// Output:
+	// shape: (3, 2)
+	// ┌───────┬─────────┐
+	// │ qty   │ price   │
+	// │ Int64 │ Float64 │
+	// ├───────┼─────────┤
+	// │ 10    │ 1.5     │
+	// │ 4     │ 1.5     │
+	// │ 7     │ 2.25    │
+	// └───────┴─────────┘
 }
 
 func Example_selectDropRename() {

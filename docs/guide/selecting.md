@@ -19,6 +19,17 @@ adapts when the schema grows:
 
 --8<-- "Example_selectExclude.md"
 
+*New in 0.6.7:* package `selector` picks columns by what they are, as Polars'
+selectors do: `Numeric`, `Integer`, `Float`, `Temporal`, `String` and the other
+types; `StartsWith`, `EndsWith`, `Contains` and `Matches` by name; `ByName`,
+`ByIndex`, `First` and `Last`; and their `Union`, `Intersect`, `Difference`,
+`SymmetricDifference` and `Complement`, Polars' `|`, `&`, `-`, `^` and `~`, named
+so that a selector's complement is never taken for an expression's negation, and
+`Exclude`. A selector's `Expr` is the expression of its columns, and `Expand` the
+names it selects in a schema:
+
+--8<-- "Example_selectSelectors.md"
+
 `Drop` removes columns and `Rename` renames them, from a map of old names to new:
 
 --8<-- "Example_selectDropRename.md"

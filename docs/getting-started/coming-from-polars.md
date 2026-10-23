@@ -82,6 +82,7 @@ changes is what Go asks for.
 | `.group_by("k").agg(...)` | `.GroupBy(ursus.Col("k")).Agg(...)` |
 | `.group_by("k", maintain_order=True)` | `.GroupBy(ursus.Col("k")).MaintainOrder()` |
 | `.join(other, on="k", how="left")` | `.Join(other, ursus.JoinOn(ursus.Col("k")), ursus.JoinHow(ursus.JoinLeft))` |
+| `import polars.selectors as cs`; `cs.numeric() - cs.by_name("id")`; `~cs.string()` | `import "github.com/advenn/ursus/selector"`; `selector.Numeric().Difference(selector.ByName("id")).Expr()`; `selector.String().Complement()` (new in 0.6.7) |
 | `.join_asof(...)`, `.join_where(...)` | `.JoinAsOf(...)`, `.JoinWhere(...)` |
 | `.join_asof(other, on="k", tolerance=5, coalesce=False)` | `.JoinAsOf(other, ursus.AsOfOn(ursus.Col("k")), ursus.AsOfTolerance(5), ursus.AsOfCoalesce(false))` (new in 0.6.7) |
 | `.join_where(other, *preds, suffix="_r")` | `.JoinWhereSuffix(other, "_r", preds...)` (new in 0.6.7) |

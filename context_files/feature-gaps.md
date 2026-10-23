@@ -81,7 +81,7 @@ differs from their input's, or scalars outside a group-by.
 | **Aggregates in `Select` and `WithColumns`:** `Select(Col("x").Sum())` for a frame-wide reduction, and `x - x.mean()` broadcast without `.Over()`. **Built at step 250.** | the default context rules | P0/P1 |
 | **Expression-valued arguments:** `IsIn(expr or list column)`; `List().Get(expr)`, `List().Contains(expr)`; `Str().Contains/Replace/Split` with an expression pattern; `Dt().OffsetBy(expr)`. **Built at steps 254–256,** but `IsIn(Col("b").Implode())`, 0.7's scalar subqueries | most namespace methods | P1 |
 | **List and Series literals:** `Lit([]int64{...})`. **List literals built at step 257;** Series literals missing | `pl.lit([..])`, `pl.Series` | P1 |
-| **Selectors** with set algebra (union, difference, complement), dtype families (temporal, numeric, any Datetime or Decimal or List), name patterns (`starts_with`, `contains`), `first`, `last`, `by_index`. Today: `Col`, `ColRegex`, `ColDType` (exact types), `All`, `Exclude` | `polars.selectors` | P1 |
+| built: **selectors**, package `selector`, in step 322: the type families, the name patterns, `by_name`, `by_index`, `first`, `last`, the set algebra, named, and `expand_selector` as `Expand`. Not built: `categorical` and `array`, whose types ursus lacks, and `object` | `polars.selectors` | — |
 | **`name.*`:** `keep`, `to_lowercase`, `to_uppercase`, `replace`, `prefix_fields`, `suffix_fields`, `map_fields`. Today: `Prefix`, `Suffix`, `MapName` | `Expr.name` | P2 |
 | **`meta.*` and serialization:** `root_names`, `output_name`, `is_column`, `is_literal`, `has_multiple_outputs`, `tree_format`; expressions and plans to and from bytes | `Expr.meta`, `serialize` | P2 |
 | **`Expr.Pipe`, `Expr.Where`, `Expr.Inspect`** | | P2 |
