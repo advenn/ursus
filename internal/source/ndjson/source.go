@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"slices"
 	"strconv"
 	"sync"
@@ -31,13 +32,22 @@ type File struct {
 	Open func(ctx context.Context) (io.ReadCloser, error)
 }
 
-// Options are a scan's: its schema, or how many lines to infer one from, and whether
-// a value its column cannot take is a null rather than an error, Polars'
-// ignore_errors.
+// Options are a scan's: its schema, or how many lines to infer one from, the types
+// of some of its columns, and whether a value its column cannot take is a null
+// rather than an error, Polars' ignore_errors.
 type Options struct {
 	Schema       *dtype.Schema // nil to infer one
 	InferLines   int           // lines to infer from; 0 every line
 	IgnoreErrors bool
+
+	// Overrides are some columns' types, the schema's others given or inferred,
+	// Polars' schema_overrides (step 345).
+	Overrides map[string]dtype.DataType
+
+	// JSON reads each stream as a JSON document, an array of objects or one object,
+	// an object a row, as Polars' read_json (step 345). A key an inferred schema
+	// has not is refused, as Polars refuses it, where NDJSON's is skipped.
+	JSON bool
 }
 
 // Source is NDJSON streams as one scan, read in order: of the given schema, or of the
@@ -64,12 +74,75 @@ func New(desc string, files []File, o Options) *Source {
 		for i := range fields {
 			fields[i].Nullable = true
 		}
-		s.given, s.bad = dtype.NewSchema(fields...)
+		if s.given, s.bad = dtype.NewSchema(fields...); s.bad == nil {
+			s.given, s.bad = s.overridden(s.given)
+		}
+		s.bad = s.named(s.bad)
 	}
 	return s
 }
 
-func (s *Source) Name() string     { return "ndjson" }
+// overridden is schema with the overrides' columns of their types, as Polars'
+// schema_overrides: each one of schema's, or refused.
+func (s *Source) overridden(schema *dtype.Schema) (*dtype.Schema, error) {
+	if len(s.opts.Overrides) == 0 {
+		return schema, nil
+	}
+	fields := schema.FieldSlice()
+	for _, name := range slices.Sorted(maps.Keys(s.opts.Overrides)) {
+		i := schema.IndexOf(name)
+		if i < 0 {
+			return nil, uerr.UnknownColumn("read_ndjson", name, schema.Names()).
+				Hint("a schema override names a column of the schema, given or inferred")
+		}
+		fields[i].Type = s.opts.Overrides[name]
+	}
+	return dtype.NewSchema(fields...)
+}
+
+// named is err with the operation the files' format names: read_json for a JSON
+// document's, whose reading is NDJSON's.
+func (s *Source) named(err error) error {
+	if e, ok := errors.AsType[*uerr.Error](err); ok && s.opts.JSON && e.Op == "read_ndjson" {
+		e.Op = "read_json"
+	}
+	return err
+}
+
+// unit is what a row is read from, for an error's place: a line, or a JSON
+// document's object.
+func (s *Source) unit() string {
+	if s.opts.JSON {
+		return "object "
+	}
+	return "line "
+}
+
+// open opens f, a JSON document's as NDJSON.
+func (s *Source) open(ctx context.Context, f File) (io.ReadCloser, error) {
+	rc, err := f.Open(ctx)
+	if err != nil || !s.opts.JSON {
+		return rc, err
+	}
+	return &documentReader{objectLines: objectLines{r: rc}, c: rc}, nil
+}
+
+// readError is err, met reading the stream named name: one of ursus's as it is, a JSON
+// document's shape refused, and another wrapped.
+func readError(err error, name string) error {
+	if _, ok := errors.AsType[*uerr.Error](err); ok {
+		return err
+	}
+	return uerr.Wrap(err, uerr.KindIO, "read_ndjson", "reading %s", name)
+}
+
+func (s *Source) Name() string {
+	if s.opts.JSON {
+		return "json"
+	}
+	return "ndjson"
+}
+
 func (s *Source) Describe() string { return s.desc }
 func (s *Source) Caps() plan.Caps  { return plan.Caps{Projection: true} }
 
@@ -86,7 +159,10 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 				s.schema, s.err = nil, uerr.FromPanic(p, "read_ndjson")
 			}
 		}()
-		s.schema, s.err = s.inferred(ctx)
+		if s.schema, s.err = s.inferred(ctx); s.err == nil {
+			s.schema, s.err = s.overridden(s.schema)
+		}
+		s.err = s.named(s.err)
 	})
 	return s.schema, s.err
 }
@@ -96,7 +172,7 @@ func (s *Source) inferred(ctx context.Context) (*dtype.Schema, error) {
 		return nil, uerr.New(uerr.KindValue, "read_ndjson", "no files given")
 	}
 	f := s.files[0]
-	rc, err := f.Open(ctx)
+	rc, err := s.open(ctx, f)
 	if err != nil {
 		return nil, uerr.Wrap(err, uerr.KindIO, "read_ndjson", "opening %s", f.Name)
 	}
@@ -110,7 +186,7 @@ func (s *Source) inferred(ctx context.Context) (*dtype.Schema, error) {
 		}
 		line, ok, err := lr.next()
 		if err != nil {
-			return nil, uerr.Wrap(err, uerr.KindIO, "read_ndjson", "reading %s", f.Name)
+			return nil, readError(err, f.Name)
 		}
 		if !ok {
 			break
@@ -121,7 +197,7 @@ func (s *Source) inferred(ctx context.Context) (*dtype.Schema, error) {
 	if len(s.files) > 1 {
 		of = f.Name
 	}
-	return inferSchema(lines, at, of)
+	return inferSchema(lines, at, s.unit(), of)
 }
 
 // Open reads the streams a batch at a time, the projection's columns only.
@@ -144,8 +220,17 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 	if size <= 0 {
 		size = defaultBatchSize
 	}
-	return &reader{src: s, out: out, read: dtype.Struct(read...), size: size, max: spec.MaxRows,
-		threads: max(1, spec.Threads)}, nil
+	r := &reader{src: s, out: out, read: dtype.Struct(read...), size: size, max: spec.MaxRows,
+		threads: max(1, spec.Threads)}
+	if s.opts.JSON && s.given == nil {
+		// A key the inferred schema has not is refused, at any depth; at the top,
+		// one the projection has not is the schema's still.
+		r.known = make(map[string]bool, full.Len())
+		for _, name := range full.Names() {
+			r.known[name] = true
+		}
+	}
+	return r, nil
 }
 
 // natural is the type a column of t is read in, which a cast then makes t: each type
@@ -184,6 +269,7 @@ type reader struct {
 	read      dtype.DataType // the out columns as a Struct
 	size, max int
 	threads   int
+	known     map[string]bool // the schema's keys, when one it has not is refused
 
 	mu      sync.Mutex
 	file    int // the stream read, of the source's
@@ -217,7 +303,7 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 		}
 		if err := r.fill(ctx); err != nil {
 			r.done = true
-			return nil, err
+			return nil, r.src.named(err)
 		}
 	}
 	b := r.queue[0]
@@ -237,7 +323,7 @@ func (r *reader) fill(ctx context.Context) error {
 			return nil
 		}
 		f := r.src.files[r.file]
-		rc, err := f.Open(ctx)
+		rc, err := r.src.open(ctx, f)
 		if err != nil {
 			return uerr.Wrap(err, uerr.KindIO, "read_ndjson", "opening %s", f.Name)
 		}
@@ -253,7 +339,7 @@ func (r *reader) fill(ctx context.Context) error {
 		block, err = r.blocks.next()
 	}
 	if err != nil {
-		return uerr.Wrap(err, uerr.KindIO, "read_ndjson", "reading %s", name)
+		return readError(err, name)
 	}
 	if block == nil {
 		err := r.rc.Close()
@@ -323,9 +409,10 @@ type lineError struct {
 func (e lineError) Error() string { return e.err.Error() }
 
 // placed is err, an error on line of the stream read, saying where: "at line 7, key
-// o.x", and the stream's name when there are several, "at line 7 of b.ndjson".
+// o.x", and the stream's name when there are several, "at line 7 of b.ndjson"; a JSON
+// document's line is its object, "at object 7".
 func (r *reader) placed(err error, line int) error {
-	where := "line " + strconv.Itoa(line)
+	where := r.src.unit() + strconv.Itoa(line)
 	if len(r.src.files) > 1 {
 		where += " of " + r.src.files[r.file].Name
 	}
@@ -345,6 +432,9 @@ func (r *reader) parse(part []byte) (*data.Batch, int, error) {
 		return nil, 0, err
 	}
 	rows := b.(*structBuilder)
+	if r.known != nil {
+		strictKeys(rows, r.known)
+	}
 	rows.size(bytes.Count(part, []byte{'\n'}) + 1) // a row a line at most
 	p := parser{ignore: r.src.opts.IgnoreErrors, given: r.src.given != nil}
 	n, line, whole := 0, 0, part

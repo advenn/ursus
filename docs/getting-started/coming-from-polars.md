@@ -142,6 +142,7 @@ changes is what Go asks for.
 | `df.show(20)`, `lf.cache()` | `df.Show(20)`, `lf.Cache()` (new in 0.6.7) |
 | `df.write_parquet(f)`, `df.write_csv(f)` | `lf.WriteParquet(ctx, w)`, `lf.WriteCSV(ctx, w)`, to any `io.Writer` |
 | `pl.read_ndjson(p)`, `pl.scan_ndjson([p, q], infer_schema_length=n, ignore_errors=True)` | `ursus.ScanNDJSON(p)`, `ursus.ScanNDJSONFiles([]string{p, q}, ursus.WithInferSchemaLines(n), ursus.WithNDJSONIgnoreErrors(true))` (new in 0.6.7) |
+| `pl.read_json(p, schema_overrides={"a": pl.Float32})` | `ursus.ScanJSON(p, ursus.WithNDJSONSchemaOverrides(map[string]dtype.DataType{"a": ursus.Float32}))` (new in 0.6.7) |
 | `df.write_ndjson(f)`, `df.write_json(f)`, `lf.sink_ndjson(p)` | `lf.WriteNDJSON(ctx, w)`, `lf.WriteJSON(ctx, w)`, `lf.SinkNDJSON(ctx, p)` (new in 0.6.7) |
 | `pl.scan_ipc(p)`, `pl.read_ipc_stream(p)`, `df.write_ipc(f, compression="zstd")`, `lf.sink_ipc(p)`, `pl.read_ipc_schema(p)` | `ursus.ScanIPC(p)`, `ursus.ScanIPCStream(p)`, `lf.WriteIPC(ctx, w, ursus.WithIPCCompression(ursus.IPCZstd))`, `lf.SinkIPC(ctx, p)`, `ursus.ReadIPCSchema(p)` (new in 0.6.7) |
 | `df.to_arrow()` | `df.Record()`, zero-copy |

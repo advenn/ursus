@@ -396,6 +396,33 @@ type structBuilder struct {
 	lastKey   []string
 	lastAt    []int
 	lastPlain []bool
+	// strict refuses a key the type has not, as Polars' read_json refuses one its
+	// inferred schema has not (step 345); known are the keys of a top level whose
+	// fields are a projection's, nil for a struct's own.
+	strict bool
+	known  map[string]bool
+}
+
+// extraKey is the field of a key a strict struct refuses.
+const extraKey = -2
+
+// strictKeys makes rows, a top level whose keys are known, and every struct within it
+// refuse a key their types have not.
+func strictKeys(rows *structBuilder, known map[string]bool) {
+	var walk func(b builder)
+	walk = func(b builder) {
+		switch b := b.(type) {
+		case *structBuilder:
+			b.strict = true
+			for _, f := range b.fields {
+				walk(f)
+			}
+		case *listBuilder:
+			walk(b.elem)
+		}
+	}
+	walk(rows)
+	rows.known = known
 }
 
 func (b *structBuilder) decode(p *parser) error {
@@ -444,6 +471,11 @@ func (b *structBuilder) decodeFields(p *parser) error {
 					return err
 				}
 				j = b.field(k, key)
+				if j == extraKey {
+					return extraKeyError(string(key))
+				}
+			} else if j == extraKey {
+				return extraKeyError(b.lastKey[k])
 			}
 			p.space()
 			if p.pos >= len(p.s) || p.s[p.pos] != ':' {
@@ -526,7 +558,11 @@ func (b *structBuilder) field(k int, key []byte) int {
 		return b.lastAt[k]
 	}
 	j, ok := b.at[string(key)]
-	if !ok {
+	switch {
+	case ok:
+	case b.strict && !b.known[string(key)]:
+		j = extraKey
+	default:
 		j = -1
 	}
 	isPlain := true
@@ -541,6 +577,13 @@ func (b *structBuilder) field(k int, key []byte) int {
 		b.lastPlain = append(b.lastPlain, isPlain)
 	}
 	return j
+}
+
+// extraKeyError is the error for key, which a strict struct's type has not, Polars'
+// "extra field in struct data".
+func extraKeyError(key string) error {
+	return uerr.New(uerr.KindSchema, "read_json", "key %q is not in the schema, which was inferred from the first objects", key).
+		Hint("raise WithInferSchemaLines, 0 for every object, or give a schema, whose reading skips a key it has not")
 }
 
 func (b *structBuilder) addNull() {

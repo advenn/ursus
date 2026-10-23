@@ -103,6 +103,17 @@ null, as Polars' `ignore_errors`. An error names the line and the key. A file is
 in blocks, each cut into a part a thread and the parts parsed at once, and only the
 columns a query uses are built.
 
+*New in 0.6.7:* `ScanJSON(path)` reads a JSON file of an array of objects, a row an
+object, or of one object, one row, as Polars' `read_json`, and `ScanJSONBytes(b, name)`
+one in memory. Each object is read as a line of NDJSON is, under the same options, its
+schema inferred from the first 100 objects. As Polars, it refuses a key those objects
+have not, which NDJSON's reading skips, as a given schema's does here; an element that
+is not an object, or is null; and text after the array. An error names the object, and
+the file is streamed: each object is made a line where it is read, and the lines are
+parsed in parallel, so the document is never held whole. For both,
+`WithNDJSONSchemaOverrides(m)` gives some columns' types and infers the rest, as
+Polars' `schema_overrides`.
+
 *New in 0.6.7:* `WriteNDJSON(ctx, w)` writes each row as a JSON object on a line of its
 own, as Polars' `write_ndjson`, and `WriteJSON(ctx, w)` one array of them, as
 `write_json`; `SinkNDJSON(ctx, path)` streams to a file, whole or not at all. Each

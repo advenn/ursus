@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/source/ndjson"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -30,8 +31,16 @@ func WithNDJSONSchema(s *Schema) NDJSONOption {
 	return func(c *ndjsonCfg) { c.opts.Schema = s }
 }
 
+// WithNDJSONSchemaOverrides reads the named columns as these types, the others'
+// inferred or given, as Polars' schema_overrides: a column of numbers read as text,
+// or of text as dates. Each name must be one of the schema's. New in 0.6.7.
+func WithNDJSONSchemaOverrides(m map[string]dtype.DataType) NDJSONOption {
+	return func(c *ndjsonCfg) { c.opts.Overrides = m }
+}
+
 // WithInferSchemaLines infers the schema from the first n lines, 100 unless set, as
-// Polars' infer_schema_length; 0 reads every line first.
+// Polars' infer_schema_length; 0 reads every line first. A JSON document's are its
+// objects.
 func WithInferSchemaLines(n int) NDJSONOption {
 	return func(c *ndjsonCfg) {
 		if n < 0 {
@@ -166,4 +175,32 @@ func ScanNDJSONFrom(files []NDJSONFile, opts ...NDJSONOption) *LazyFrame {
 		desc += " and " + strconv.Itoa(len(fs)-1) + " more"
 	}
 	return scanNDJSON(desc, fs, opts)
+}
+
+// JSON read (step 345): Polars' read_json.
+
+// ScanJSON reads a JSON file of an array of objects, a row an object, or of one
+// object, one row, as Polars' read_json: each object is read as ScanNDJSON reads a
+// line, under its options and rules, the schema inferred from the first 100 objects
+// unless given. As Polars, it refuses an element that is not an object, a null among
+// them, a comma before the array's end, text after it, and a key the inferred schema
+// has not, which a given schema's reading skips. An error names its object, counted
+// from 1. New in 0.6.7.
+//
+// The file is read as a stream, each object made a line of NDJSON in the buffer it is
+// read into and parsed as one, in blocks a part a thread: the document is never held
+// whole, nor parsed into a tree.
+func ScanJSON(path string, opts ...NDJSONOption) *LazyFrame {
+	return scanJSON(path, ndjsonFile(path), opts)
+}
+
+// ScanJSONBytes is ScanJSON of a JSON document in memory, named name in Explain. New
+// in 0.6.7.
+func ScanJSONBytes(b []byte, name string, opts ...NDJSONOption) *LazyFrame {
+	open := func(context.Context) (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(b)), nil }
+	return scanJSON(name, ndjson.File{Name: name, Open: open}, opts)
+}
+
+func scanJSON(desc string, f ndjson.File, opts []NDJSONOption) *LazyFrame {
+	return scanNDJSON(desc, []ndjson.File{f}, append(opts[:len(opts):len(opts)], func(c *ndjsonCfg) { c.opts.JSON = true }))
 }

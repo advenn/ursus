@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–344, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–345, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,13 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **JSON read** (345): `ScanJSON` and `ScanJSONBytes`, Polars' `read_json`, a file of
+  an array of objects, a row an object, or of one object, one row. Each object is
+  made a line of NDJSON where it is read, in place, and read as NDJSON is, its
+  blocks parsed by every thread at once, under the same options; what Polars
+  refuses is refused, a key past the inferred schema among it, and an error names
+  its object. `WithNDJSONSchemaOverrides`, Polars' `schema_overrides`, for both.
+  Half a million objects of five keys in 66.9 ms, where Polars takes 321.8.
 - **A List, an Array or a Struct is a key** (344), as Polars keys one: of `GroupBy`,
   `Unique`, `Join`, `Over`, `PartitionBy`, `Mode`, `Rle` and `HashRows`, element by
   element and field by field, an empty list apart from a null one, NaN equal to NaN and

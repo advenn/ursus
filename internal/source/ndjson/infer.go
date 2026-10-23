@@ -204,11 +204,11 @@ func distinct(a, b dtype.DataType) []dtype.DataType {
 }
 
 // inferSchema is the schema of lines, the first lines of a file, as Polars infers it:
-// at is each line's number in the file, and of the file's name for an error, "" for
-// none.
-func inferSchema(lines [][]byte, at []int, of string) (*dtype.Schema, error) {
+// at is each line's number in the file, unit what a line is, "line " or a JSON
+// document's "object ", and of the file's name for an error, "" for none.
+func inferSchema(lines [][]byte, at []int, unit, of string) (*dtype.Schema, error) {
 	where := func(n int) string {
-		w := "line " + strconv.Itoa(at[n])
+		w := unit + strconv.Itoa(at[n])
 		if of != "" {
 			w += " of " + of
 		}

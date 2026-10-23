@@ -243,7 +243,7 @@ differs from their input's, or scalars outside a group-by.
 
 | missing or partial | prio |
 | --- | --- |
-| **JSON read:** `read_json`, a file of one array of objects. NDJSON read and scanned in step 334, `ScanNDJSON` and its several-file and in-memory forms, faster than Polars; JSON and NDJSON written and sunk in step 333, each value in Polars' text | P2 |
+| built: **JSON read,** in step 345: `ScanJSON` and `ScanJSONBytes`, Polars' `read_json`, each object made a line of NDJSON in place and read as step 334's NDJSON is, faster than Polars; schema overrides for both. NDJSON read and scanned in step 334; JSON and NDJSON written and sunk in step 333, each value in Polars' text | — |
 | built: **Arrow IPC,** in step 332: a file or a stream scanned, written and sunk, uncompressed, LZ4 or Zstandard, and a file's schema read; and a Parquet file's schema. Over arrow-go's IPC readers and writers | — |
 | **Hive partitioning** on read (keys, types, dates); **partitioned writes** by key | P1 |
 | **Multi-file schema evolution:** `missing_columns`, `extra_columns`, union by name; `include_file_paths`; `**` globs | P1 |
@@ -487,6 +487,12 @@ decide whether to keep or switch each one.
   Polars refuses; a given schema of an Int8, an Int16, a UInt8, a UInt16, a Time, a
   Duration, a Decimal or a Binary reads, where Polars panics or refuses; an error
   names its line and its key, where Polars' names neither (step 334).
+- JSON: a document of one object of no key, `{}` or `[{}]`, is a row of no column,
+  where Polars' `read_json` reads no row (and reads `[{}, {}]` as two). A later value
+  its column cannot take is refused, `true` or `1.5` in an Int64 column, as both
+  refuse it in NDJSON, where Polars' `read_json` reads it as 1. Schema overrides
+  set a given schema's types in NDJSON too, where Polars' `read_ndjson` keeps the
+  schema's (step 345).
 - An aggregate whose answer depends on the order, `First` or `Last`, inside a window
   with an `OrderBy`, `(x - x.First()).CumSum(false)` over g ordered by t, is refused as
   an ordering over an aggregate is; Polars takes the first in the order (step 336).
