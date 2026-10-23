@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–336, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–337, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3137,6 +3137,13 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>The rolling of an expression</strong> (337), Polars' <code>Expr.rolling</code>: <code>e.Rolling(index, o)</code>
+  is any aggregate expression over each row's window, placed as the frame's <code>Rolling</code>
+  places it, and the list of the window's values for a row's; under <code>Over</code> within each
+  partition, its index sorted within it, the answer in the frame's rows' order. A sum,
+  a mean, a minimum, a maximum, a variance, a deviation, a median and a quantile are
+  rolled by their own windows by time, thirty times as fast as by the rolling group,
+  and a rolling window by an index already sorted skips its sort.</li>
 <li><strong>A window inside a window, and an aggregate inside an aggregate</strong> (336), as Polars
   computes them: <code>Col("x").Shift(1).CumSum(false).Over(g)</code> shifts and then sums within
   each g, <code>Col("x").Sum().Over(g).CumSum(false).Over(h)</code> sums g within each h, and

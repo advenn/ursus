@@ -1960,6 +1960,17 @@ Unlike the windows by rows they answer from one value by default. <em>New in 0.6
 can be an integer of 32 or 64 bits, a step rather than an instant, whose period counts
 it in Polars' integer unit: <code>Every("3i")</code> is three steps, as in
 <a href="../dates-and-times/#an-integer-index">Dates and times</a>.</p>
+<p><em>New in 0.6.7:</em> <code>e.Rolling(index, o)</code> is any aggregate expression over each row's
+window, as Polars' <code>Expr.rolling</code>: <code>Col("x").Max().Sub(Col("x").Min()).Rolling(Col("t"),
+ursus.RollingOptions{Period: ursus.Every("2d")})</code> is each row's range over the two days
+ending at it, the window placed as the frame's <code>Rolling</code> places it, and <code>Over(keys)</code>
+rolls within each partition. Where every aggregate in it is a sum, a mean, a minimum,
+a maximum, a variance, a standard deviation, a median or a quantile, and no offset is
+given, each is rolled by its own window above, found by value, so the index need not
+be sorted, and in an aggregation it is a list a group. Anything else, a row's value,
+which is the list of its window's, or a first, is rolled by the frame's rolling group,
+whose index is checked sorted, within each partition under <code>Over</code>, and is refused in
+an aggregation; under <code>Over</code> it holds its windows until the input ends.</p>
 <h2 id="exponentially-weighted">Exponentially weighted<a class="headerlink" href="#exponentially-weighted" title="Permanent link">&para;</a></h2>
 <p><code>EwmMean</code>, <code>EwmStd</code>, <code>EwmVar</code> and <code>EwmSum</code> weight recent rows more. The decay is
 <code>EwmAlpha</code>, <code>EwmSpan</code>, <code>EwmCom</code> or <code>EwmHalfLife</code>, as Polars' parameters are, and

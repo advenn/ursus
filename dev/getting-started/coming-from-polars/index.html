@@ -1855,6 +1855,10 @@ changes is what Go asks for.</p>
 <td><code>.Rolling(ursus.Col("t"), ursus.RollingOptions{Period: ursus.Every("7d"), Offset: ursus.NoOffset()})</code>, the next seven days (changed in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>pl.col("x").sum().rolling("t", period="2d")</code>, <code>....over("g")</code></td>
+<td><code>ursus.Col("x").Sum().Rolling(ursus.Col("t"), ursus.RollingOptions{Period: ursus.Every("2d")})</code>, <code>....Over(ursus.Col("g"))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.group_by_dynamic("step", every="5i")</code>, <code>.rolling_sum_by("step", "3i")</code></td>
 <td><code>ursus.DynamicOptions{Every: ursus.Every("5i")}</code>, <code>.RollingSumBy(ursus.Col("step"), ursus.Every("3i"))</code>, over an integer index (new in 0.6.7)</td>
 </tr>
