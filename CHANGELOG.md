@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–328, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–329, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -96,6 +96,8 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`InterpolateBy`** (329), Polars' `interpolate_by`: a gap filled on the line at each
+  row's `by`, a time or a number, sorted or not, to Polars' last bit.
 - **`MapRows`, `MapColumns`, `Show` and `Cache`** (328), as Polars' `map_rows`,
   `map_columns`, `show` and `cache`: a Go function of each row, typed by its struct
   or a `[]any`, or of each named column; the first n rows drawn, every one; and a

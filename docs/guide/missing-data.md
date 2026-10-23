@@ -47,6 +47,11 @@ is:
 They run in the rows' order; under `Over(keys...)`, within each partition, so a
 sensor's gap is never filled from another sensor's readings.
 
+*New in 0.6.7.* `InterpolateBy(by)` draws the line at each row's `by`, a time or a
+number, where `Interpolate` steps by rows, as Polars' `interpolate_by`: readings at
+hours 0, 1 and 4, the middle one missing, fill it a quarter of the way along. `by`
+need not be sorted, and a null in it is refused, as Polars refuses it.
+
 *New in 0.6.7.* A strategy takes a limit too, `FillForward.Limit(n)` and
 `FillBackward.Limit(n)`, as Polars' `fill_null(strategy=..., limit=n)`, for a column or
 for every column of a frame at once:

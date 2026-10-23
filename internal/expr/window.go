@@ -513,8 +513,11 @@ func (p WinParams) args(op WinFnOp) string {
 		}
 		return s + centered(p)
 	case WinInterpolate:
-		if p.Nearest {
+		switch {
+		case p.Nearest:
 			return "nearest"
+		case p.By:
+			return "by"
 		}
 		return ""
 	case WinEwmMean, WinEwmSum, WinEwmStd, WinEwmVar:
@@ -740,6 +743,9 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 		return f.Type, nil
 
 	case WinEwmMean, WinEwmSum, WinEwmStd, WinEwmVar, WinInterpolate:
+		if p.By && fn == WinInterpolate {
+			return interpolateByOut(in)
+		}
 		if p.By {
 			return ewmByOut(fn, p, in)
 		}
@@ -781,6 +787,32 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 	default:
 		return dtype.Null, uerr.Internalf("expr: unknown window function %d", fn)
 	}
+}
+
+// interpolateByOut types interpolate_by (step 329): a by of a Date, a Datetime, an
+// integer of 32 or 64 bits or a float, as Polars takes, and a value that is a number,
+// a float keeping its width, as interpolate's does.
+func interpolateByOut(in dtype.DataType) (dtype.DataType, error) {
+	fs := in.Fields()
+	if in.ID() != dtype.TypeStruct || len(fs) != 2 {
+		return dtype.Null, uerr.Internalf("expr: interpolate_by over %s", in)
+	}
+	value, by := fs[0].Type, fs[1].Type
+	switch by.ID() {
+	case dtype.TypeDate, dtype.TypeDatetime, dtype.TypeInt32, dtype.TypeInt64, dtype.TypeUint32, dtype.TypeUint64,
+		dtype.TypeFloat32, dtype.TypeFloat64:
+	default:
+		return dtype.Null, uerr.New(uerr.KindType, "interpolate_by",
+			"interpolate_by's by is a Date, a Datetime, an integer of 32 or 64 bits, or a float, not %s", by)
+	}
+	switch {
+	case value.IsFloat():
+		return value, nil
+	case value.IsNumeric() && value.ID() != dtype.TypeInt128:
+		return dtype.Float64, nil
+	}
+	return dtype.Null, uerr.New(uerr.KindType, "interpolate_by", "interpolate_by is not defined for %s", value).
+		Hint("cast it to a number first, e.g. .Cast(ursus.Float64)")
 }
 
 // ewmByOut types ewm_mean_by and ewm_sum_by (step 285): a by of a Date or a

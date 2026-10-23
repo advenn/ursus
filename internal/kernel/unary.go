@@ -799,6 +799,9 @@ func toFloat64(c *data.Column) ([]float64, error) {
 	if c.DType().ID() == dtype.TypeDecimal {
 		return decimalFloats(c)
 	}
+	if c.DType().Physical().ID() == dtype.TypeFloat64 {
+		return data.Values[float64](c) // the column's own: a caller must not write it
+	}
 	n := c.Len()
 	out := make([]float64, n)
 	switch c.DType().Physical().ID() {
@@ -820,8 +823,6 @@ func toFloat64(c *data.Column) ([]float64, error) {
 		return conv[uint64](c, out)
 	case dtype.TypeFloat32:
 		return conv[float32](c, out)
-	case dtype.TypeFloat64:
-		return data.Values[float64](c)
 	case dtype.TypeInt128:
 		// The nearest float64, in one rounding since step 73 — above 2^53 it cannot
 		// be exact, and this path feeds sqrt, log and exp, none of which has an exact

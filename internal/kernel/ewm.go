@@ -300,14 +300,16 @@ func winInterpolateNearest(name string, col *data.Column, seg Segments) (*data.C
 	return out.Rename(name), nil
 }
 
-// floatsAs stores float64 answers as out, a Float32 or a Float64.
+// floatsAs stores float64 answers as out, a Float32 or a Float64. res is the
+// caller's to hand over, and every caller's is made for the one answer, so it is
+// wrapped, not copied.
 func floatsAs(name string, out dtype.DataType, res []float64, valid bitmap.View) *data.Column {
 	if out == dtype.Float32 {
 		f32 := make([]float32, len(res))
 		for i, v := range res {
 			f32[i] = float32(v)
 		}
-		return data.NewFixed(name, out, f32, valid)
+		return data.NewFixedOwned(name, out, f32, valid)
 	}
-	return data.NewFixed(name, out, res, valid)
+	return data.NewFixedOwned(name, out, res, valid)
 }

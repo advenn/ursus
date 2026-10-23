@@ -63,6 +63,8 @@ func WinCall(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Data
 		return winRolling(fn, params, name, out, col, seg)
 	case fn.IsEwm():
 		return winEwm(fn, params, name, out, col, seg)
+	case fn == expr.WinInterpolate && params.By:
+		return winInterpolateBy(name, out, col, seg)
 	case fn == expr.WinInterpolate && params.Nearest:
 		return winInterpolateNearest(name, col, seg)
 	case fn == expr.WinInterpolate:

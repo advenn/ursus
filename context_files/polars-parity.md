@@ -41,7 +41,7 @@ what we are lacking".
 | ~~`polars.selectors`~~ | built in step 322: package `selector` |
 | ~~the `name` namespace~~ | built in step 323: `Expr.Name()` |
 | `top_k_by`, `bottom_k_by` | missing |
-| `interpolate_by` | missing |
+| ~~`interpolate_by`~~ | built in step 329: `InterpolateBy`, over one huge partition too, in a sorted pass by its by |
 | `rolling` of an expression, `rolling_map`, `rolling_rank_by` | the frame's `Rolling`; the `_by` windows |
 | ~~`item`, `lower_bound`, `upper_bound`, `is_sorted`, `limit`, `truediv`~~ | built in step 324 |
 | `reinterpret`, `to_physical`; `shrink_dtype` | built in step 324; `shrink_dtype` not, a no-op on an expression in Polars 1.44, its Series' only |

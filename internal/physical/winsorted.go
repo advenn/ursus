@@ -52,10 +52,23 @@ func passOrder(sp *winSpec) []plan.SortKey {
 	if sp.fn != nil && sp.fn.Fn == expr.WinRank {
 		return []plan.SortKey{{Expr: sp.fn.Child, Descending: sp.fn.Params.Descending}}
 	}
-	if by, ok := timeByOf(sp); ok {
+	if by, ok := byOrderOf(sp); ok {
 		return append([]plan.SortKey{{Expr: by, NullsLast: true}}, sp.order...)
 	}
 	return sp.order
+}
+
+// byOrderOf is the by whose order a function walks: a function by time's
+// (timeByOf), or interpolate_by's (step 329).
+func byOrderOf(sp *winSpec) (expr.Node, bool) {
+	if by, ok := timeByOf(sp); ok {
+		return by, true
+	}
+	if sp.fn == nil || sp.fn.Fn != expr.WinInterpolate || !sp.fn.Params.By {
+		return nil, false
+	}
+	_, by, ok := expr.PairArgs(sp.fn.Child)
+	return by, ok
 }
 
 // timeByOf is a function by time's by, a rolling window's or an ewm's (step 285), and
@@ -89,6 +102,9 @@ type passStep struct {
 	typ  dtype.DataType
 	// childTyp makes the column the child's type, which sortedPass knows: a fill's.
 	childTyp bool
+	// typOf makes the column a type of the child's, which sortedPass knows: a field's,
+	// interpolate_by's (step 329).
+	typOf func(child dtype.DataType) dtype.DataType
 }
 
 // passPlan is how a spec is answered in a sorted pass: its steps, and how their
@@ -116,7 +132,10 @@ type passPlan struct {
 //   - a rolling window by time (step 246), in its by order: kernel.RollingByNext
 //     walks it as rollingBy does, holding the rows in reach of a window, over batches
 //     cut between runs of equal by values;
-//   - an ewm by time (step 285), in its by order, carrying its running state.
+//   - an ewm by time (step 285), in its by order, carrying its running state;
+//   - interpolate_by (step 329), in its by order: interpolation's five steps over the
+//     pair's value, and the by of the last value, of the next and of each row, by a
+//     fill of by where the value is. kernel.InterpolateByFrom answers from the eight.
 func sortedPlan(sp *winSpec) (passPlan, bool) {
 	if sp.acc != nil {
 		return passPlan{}, false
@@ -132,6 +151,9 @@ func sortedPlan(sp *winSpec) (passPlan, bool) {
 		return passPlan{steps: []passStep{{walk: walk, need: winNeed{ewm: true}, typ: sp.out}}}, true
 	}
 	fn := *sp.fn
+	if fn.Fn == expr.WinInterpolate && fn.Params.By {
+		return interpolateByPlan(walk, fn, sp.out), true
+	}
 	if fn.Fn == expr.WinRank {
 		step := func(m expr.RankMethod, back bool) passStep {
 			f := fn
@@ -151,7 +173,7 @@ func sortedPlan(sp *winSpec) (passPlan, bool) {
 		}
 		return passPlan{}, false
 	}
-	if fn.Fn == expr.WinInterpolate {
+	if fn.Fn == expr.WinInterpolate && !fn.Params.By {
 		fill := func(back bool) passStep {
 			f := fn
 			f.Fn, f.Params = expr.WinForwardFill, expr.WinParams{}
@@ -191,6 +213,67 @@ func sortedPlan(sp *winSpec) (passPlan, bool) {
 	walk.fn = &fn
 	need, ok := streamNeed(&walk)
 	return passPlan{steps: []passStep{{walk: walk, need: need, back: back, typ: sp.out}}}, ok
+}
+
+// interpolateByPlan is interpolate_by's sorted pass (step 329): its steps read the
+// pair's fields, which the pass puts in place of the pair (onto).
+func interpolateByPlan(walk winSpec, fn expr.WinFn, out dtype.DataType) passPlan {
+	field := func(i string) expr.Node {
+		return &expr.Call{Fn: expr.FnStructField, Args: []expr.Node{fn.Child, &expr.Lit{Value: i, DT: dtype.String}}}
+	}
+	value, by := field(expr.PairFirst), field(expr.PairSecond)
+	valueTyp := func(pair dtype.DataType) dtype.DataType { return pair.Fields()[0].Type }
+	byTyp := func(pair dtype.DataType) dtype.DataType { return pair.Fields()[1].Type }
+	// by where the value is: filled forward, the last value's by, and backward the
+	// next one's.
+	held := &expr.Cond{Pred: &expr.Unary{Op: expr.OpIsNotNull, Child: value}, Then: by, Else: &expr.Lit{DT: dtype.Null}}
+	fill := func(of expr.Node, typ func(dtype.DataType) dtype.DataType, back bool) passStep {
+		f := fn
+		f.Fn, f.Params, f.Child = expr.WinForwardFill, expr.WinParams{}, of
+		w := walk
+		w.fn = &f
+		need, _ := streamNeed(&w)
+		return passStep{walk: w, need: need, back: back, typOf: typ}
+	}
+	at := func(back bool) passStep {
+		f := fn
+		f.Child = value
+		w := walk
+		w.fn = &f
+		return passStep{walk: w, need: winNeed{lastPos: true}, back: back, typ: dtype.Int64}
+	}
+	f := fn
+	f.Fn, f.Params = expr.WinCumCount, expr.WinParams{}
+	own := walk
+	own.fn = &f
+	return passPlan{
+		steps: []passStep{fill(value, valueTyp, false), at(false),
+			{walk: own, need: winNeed{count: true}, typ: dtype.Uint32},
+			fill(value, valueTyp, true), at(true),
+			fill(held, byTyp, false), fill(held, byTyp, true), fill(by, byTyp, false)},
+		combine: func(rows int64, c []*data.Column) (*data.Column, error) {
+			return kernel.InterpolateByFrom("interpolate_by", out, rows, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7])
+		},
+	}
+}
+
+// onto is e reading the projected column c wherever it reads child, the spec's own
+// child: a step reads the child, or an expression of it.
+func onto(e, child expr.Node, c string) expr.Node {
+	if e == child {
+		return &expr.Col{Name: c}
+	}
+	kids := e.Children()
+	out := make([]expr.Node, len(kids))
+	changed := false
+	for i, k := range kids {
+		out[i] = onto(k, child, c)
+		changed = changed || out[i] != k
+	}
+	if !changed {
+		return e
+	}
+	return expr.Rebuild(e, out)
 }
 
 // rankMax is a rank's max from min over its order reversed: the group's last
@@ -295,7 +378,7 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 		}
 		for _, st := range pl.steps {
 			fn := *st.walk.fn
-			fn.Child = &expr.Col{Name: c}
+			fn.Child = onto(fn.Child, sp.fn.Child, c)
 			st.walk.fn = &fn
 			if sp.fillOf != nil {
 				st.walk.fillOf = &expr.Col{Name: fl}
@@ -303,6 +386,10 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 			st.walk.name = "__s" + itoa(len(steps))
 			if st.childTyp {
 				st.typ, st.walk.out = ct, ct
+			}
+			if st.typOf != nil {
+				st.typ = st.typOf(ct)
+				st.walk.out = st.typ
 			}
 			stepsOf[j] = append(stepsOf[j], len(steps))
 			steps = append(steps, st)

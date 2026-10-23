@@ -601,6 +601,19 @@ func (e Expr) Interpolate(opts ...WindowOption) Expr {
 	return e.winFn(expr.WinInterpolate, p)
 }
 
+// InterpolateBy fills each run of nulls between two values on the straight line
+// between them, at each row's by: Polars' interpolate_by (step 329). A null at x
+// between (x0, y0) and (x1, y1) is y0 + (y1−y0)/(x1−x0)·(x−x0), Polars' arithmetic to
+// the bit. In by's order: it need not be sorted, and the answers go back to the rows'
+// order, rows of one by taken in the window's order. A run before the first value or
+// after the last stays null, and a null in by is refused, as Polars refuses it. The
+// value is a number, a Float32 answering a Float32 and any other a Float64; by is a
+// Date, counted in days, a Datetime, an integer of 32 or 64 bits, or a float.
+func (e Expr) InterpolateBy(by Expr) Expr {
+	return wrap(&expr.WinFn{Fn: expr.WinInterpolate, Child: expr.PairOf(e.node(), by.node()),
+		Params: expr.WinParams{By: true}})
+}
+
 // Diff is the difference from the value n rows earlier.
 //
 // # It costs ONE shift, not two

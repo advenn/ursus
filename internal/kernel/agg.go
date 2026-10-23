@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"slices"
 	"strings"
 
 	"github.com/advenn/ursus/dtype"
@@ -1616,16 +1617,25 @@ func (a *positionAcc) Finish(name string, nGroups int) (*data.Column, error) {
 // --- helpers -----------------------------------------------------------------
 
 // seenBitmap turns per-group presence flags into a validity bitmap, dropping the
-// buffer entirely when every group saw a value.
+// buffer entirely when every group saw a value. The flags go in a word at a time,
+// where a bit at a time was a fifth of an interpolation over a million rows (step
+// 329).
 func seenBitmap(seen []bool, n int) bitmap.View {
-	all := true
-	vb := bitmap.NewBuilder(n)
-	for i := range n {
-		vb.Append(seen[i])
-		all = all && seen[i]
-	}
-	if all {
+	seen = seen[:n]
+	if !slices.Contains(seen, false) {
 		return bitmap.AllSet(n)
+	}
+	vb := bitmap.NewBuilder(n)
+	for len(seen) > 0 {
+		k := min(len(seen), 64)
+		var w uint64
+		for i, s := range seen[:k] {
+			if s {
+				w |= 1 << uint(i)
+			}
+		}
+		vb.AppendBits(w, k)
+		seen = seen[k:]
 	}
 	return vb.Finish()
 }

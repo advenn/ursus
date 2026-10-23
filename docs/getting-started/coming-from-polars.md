@@ -96,6 +96,7 @@ changes is what Go asks for.
 | `.fill_null(0)`, `.fill_null(strategy="forward")` | `.FillNullWith(0)`, `.FillNull(strategy)` |
 | `.fill_null(strategy="forward", limit=1)` | `.FillNull(ursus.FillForward.Limit(1))` (new in 0.6.7) |
 | `df.drop_nans()`, `df.interpolate()` | `lf.DropNans()`, `lf.Interpolate()` (new in 0.6.7) |
+| `pl.col("x").interpolate_by("t")` | `ursus.Col("x").InterpolateBy(ursus.Col("t"))` (new in 0.6.7) |
 | `.head(n)`, `.tail(n)`, `.slice(o, n)` | `.Head(n)`, `.Tail(n)`, `.Slice(o, n)` |
 | `.drop("a")`, `.rename({"a": "b"})` | `.Drop("a")`, `.Rename(map[string]string{"a": "b"})` |
 | `.with_row_index()` | `.WithRowIndex("index", 0)` |

@@ -3,6 +3,7 @@ package physical
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
@@ -373,6 +374,13 @@ func (s *windowSink) segments(ctx context.Context, sp *winSpec, all *data.Batch,
 	child *data.Column, nRows int) (kernel.Segments, error) {
 
 	p := s.parts[sp.part]
+	if sp.fn.Fn != expr.WinRank && len(sp.order) == 0 {
+		// No order of its own: the rows a partition at a time, each in the rows'
+		// order, which a stable sort by the id alone gives and a counting sort gives in
+		// two passes. The sort was a third of an interpolation's time over a million
+		// rows in one partition (step 329).
+		return segmentsByID(p.perRow[:nRows], max(1, p.ids.Len())), nil
+	}
 	gid := data.NewFixed("__gid", dtype.Int32, p.perRow[:nRows], bitmap.AllSet(nRows))
 
 	keyCols := []*data.Column{gid}
@@ -412,6 +420,43 @@ func (s *windowSink) segments(ctx context.Context, sp *winSpec, all *data.Batch,
 	}
 	bounds = append(bounds, int32(nRows))
 	return kernel.Segments{Perm: perm, Bounds: bounds}, nil
+}
+
+// segmentsByID is the rows a partition at a time, the partitions in id order and each
+// one's rows in theirs, as ArgSortColumns of the ids alone orders them: a counting
+// sort over ids, which are dense below parts. An id no row holds makes no segment.
+func segmentsByID(ids []int32, parts int) kernel.Segments {
+	if parts == 1 {
+		perm := make([]int32, len(ids))
+		for i := range perm {
+			perm[i] = int32(i)
+		}
+		return kernel.Segments{Perm: perm, Bounds: []int32{0, int32(len(ids))}}
+	}
+	start := make([]int32, parts+1)
+	for _, id := range ids {
+		start[id+1]++
+	}
+	for p := range parts {
+		start[p+1] += start[p]
+	}
+	next := slices.Clone(start[:parts])
+	perm := make([]int32, len(ids))
+	for i, id := range ids {
+		perm[next[id]] = int32(i)
+		next[id]++
+	}
+	bounds := make([]int32, 0, parts+1)
+	bounds = append(bounds, 0)
+	for p := range parts {
+		if start[p+1] > start[p] {
+			bounds = append(bounds, start[p+1])
+		}
+	}
+	if len(ids) == 0 {
+		bounds = append(bounds, 0)
+	}
+	return kernel.Segments{Perm: perm, Bounds: bounds}
 }
 
 // --- planning -------------------------------------------------------------------
