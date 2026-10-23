@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–338, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–339, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3137,6 +3137,13 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>CorrSpearman</code> spills its pairs</strong> (339): over a group larger than the memory
+  limit, in a group-by, a window or a dynamic or rolling group, where it failed; its
+  pairs go to disk sorted by one variable, are ranked as they come back, and sorted
+  again by the other. Its sums are exact integers now, so its answer no longer
+  depends on the order its pairs came in, spilled, merged from several threads or
+  neither; and it is faster, 89 ms where it was 332 by a thousand groups of a
+  million rows (Polars 123), and 98 where it was 909 over the frame (Polars 82).</li>
 <li><strong><code>RollingRankBy</code> and <code>RollingMap</code></strong> (338), Polars' <code>rolling_rank_by</code> and
   <code>rolling_map</code>: each row's value ranked among its window's by time, and a Go function
   over each row's window of rows, given its values and whether each is there, centred

@@ -1641,7 +1641,8 @@ loop over <code>CollectBatches</code> breaks early. <code>WithMemoryLimit(0)</co
 <h2 id="what-spills">What spills<a class="headerlink" href="#what-spills" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>sort,</strong> and a top-k with any k;</li>
-<li><strong>group-by,</strong> including the values a median, a quantile or an <code>NUnique</code> holds;</li>
+<li><strong>group-by,</strong> including the values a median, a quantile or an <code>NUnique</code> holds,
+  and the pairs of a <code>CorrSpearman</code>;</li>
 <li><strong>join,</strong> both sides partitioned;</li>
 <li><strong>unique;</strong></li>
 <li><strong>window functions,</strong> over many partitions or one huge one;</li>
@@ -1649,7 +1650,9 @@ loop over <code>CollectBatches</code> breaks early. <code>WithMemoryLimit(0)</co
 <li><strong>tail and reverse.</strong></li>
 </ul>
 <p><code>JoinAsOf</code>, <code>MergeSorted</code> and <code>HStack</code> stream their input, as <code>Rolling</code> and
-<code>GroupByDynamic</code> do, so they hold little to begin with.</p>
+<code>GroupByDynamic</code> do, so they hold little to begin with. <em>Changed in 0.6.7:</em> a
+<code>CorrSpearman</code> over a group larger than the limit spills its pairs, in a group-by, a
+window or a temporal group, where it failed.</p>
 <h2 id="what-does-not">What does not<a class="headerlink" href="#what-does-not" title="Permanent link">&para;</a></h2>
 <p>A few answers are as large as their input, and cannot be divided across files:
 <code>Implode</code> holds every value of a group as its answer, for one. Each such operator
@@ -1664,7 +1667,7 @@ the alternatives are:</p>
 </span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
 </span></code></pre></div>
 <div class="language-text wrap highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>ursus: group_by: memory limit of 64.0KiB exceeded: the query is holding 105.2KiB, 105.2KiB of it in this operator
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>  group_by holds one entry per distinct key, and implode holds every VALUE as its answer — which partitioning to disk cannot divide, because it divides across keys (quantile, median and n_unique spill their values); raise the limit with WithMemoryLimit
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>  group_by holds one entry per distinct key, and implode holds every VALUE as its answer — which partitioning to disk cannot divide, because it divides across keys (quantile, median, n_unique and corr_spearman spill their values); raise the limit with WithMemoryLimit
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>  sort, group_by, join, unique, over, reverse and tail spill to disk; join_asof, merge_sorted, hstack, rolling and group_by_dynamic stream their input; an over computing a rolling window by time one of whose periods holds more than the limit fails rather than exceed it, and so does implode over one group larger than it
 </span></code></pre></div>
 <p><code>Collect</code> itself holds its whole answer, by definition. An answer larger than memory
