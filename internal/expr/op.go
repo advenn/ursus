@@ -43,6 +43,10 @@ const (
 	// constant for no gain.
 	OpPow
 
+	// Polars' arctan2(y, x), y the left (step 324): the angle of (x, y), a float, as
+	// OpPow's binding casts both sides to one.
+	OpArctan2
+
 	binaryOpCount
 )
 
@@ -51,7 +55,7 @@ var binaryOpNames = [binaryOpCount]string{
 	OpEq: "==", OpNe: "!=", OpLt: "<", OpLe: "<=", OpGt: ">", OpGe: ">=",
 	OpEqMissing: "<=>", OpNeMissing: "<!>",
 	OpAnd: "&", OpOr: "|", OpXor: "^",
-	OpPow: "**",
+	OpPow: "**", OpArctan2: "arctan2",
 }
 
 func (o BinaryOp) String() string {

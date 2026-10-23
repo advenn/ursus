@@ -71,6 +71,14 @@ func powScalar[T ~float32 | ~float64](dst, a, b []T) {
 	}
 }
 
+// atan2Scalar is the angle of (b, a), a the y, as math.Atan2 and Polars' arctan2 give
+// it (step 324).
+func atan2Scalar[T ~float32 | ~float64](dst, a, b []T) {
+	for i := range a {
+		dst[i] = T(math.Atan2(float64(a[i]), float64(b[i])))
+	}
+}
+
 // modFloatScalar is total for the same reason divFloatScalar is: math.Mod returns
 // NaN rather than faulting, so x % 0 is a value.
 //

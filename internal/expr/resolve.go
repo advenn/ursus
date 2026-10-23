@@ -192,6 +192,14 @@ func enumOrdering(op BinaryOp, l, r dtype.DataType) (Binding, bool, error) {
 //
 // With a float, the arithmetic is the float's, at Float64.
 func resolveDecimal(op BinaryOp, l, r dtype.DataType) (Binding, error) {
+	if op == OpArctan2 {
+		// An angle is no decimal: both sides at their nearest Float64, as Polars
+		// answers (step 324), when both are numbers.
+		if !l.IsNumeric() || !r.IsNumeric() {
+			return Binding{}, mismatch(op, l, r)
+		}
+		return Binding{CastL: dtype.Float64, CastR: dtype.Float64, Out: dtype.Float64}, nil
+	}
 	// With a float, the arithmetic is the float's: the Decimal converts to its
 	// nearest Float64 (step 73) and the answer is approximate, as the float already
 	// was — DuckDB's and Polars' type too.
@@ -301,7 +309,7 @@ func resolveArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 	// has: every arithmetic operator, with / and ** cast to floats below.
 	if common.ID() == dtype.TypeInt128 {
 		switch op {
-		case OpAdd, OpSub, OpMul, OpFloorDiv, OpMod, OpDiv, OpPow:
+		case OpAdd, OpSub, OpMul, OpFloorDiv, OpMod, OpDiv, OpPow, OpArctan2:
 		default:
 			return Binding{}, uerr.New(uerr.KindType, "",
 				"operator %s is not implemented for %s", op, common).
@@ -310,7 +318,7 @@ func resolveArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 	}
 
 	switch op {
-	case OpDiv, OpPow:
+	case OpDiv, OpPow, OpArctan2:
 		// True division always produces a float, even for two integers. 7/2 == 3.5.
 		// Integer division is spelled FloorDiv, so the surprising behaviour has to
 		// be asked for by name.

@@ -165,6 +165,12 @@ func TestEveryAggregateMergeIsCovered(t *testing.T) {
 	for i := range n {
 		groups[i] = int32((i * 7) % nGroups) // every group spans every partition
 	}
+	// A group of one value each, for item, which refuses any other as Polars' does
+	// (step 324): each group's row is in one partition, the others its empty ones.
+	ones := make([]int32, n)
+	for i := range n {
+		ones[i] = int32(i)
+	}
 	fams := aggFamilies(t, n)
 
 	var ops, pairs int
@@ -196,6 +202,10 @@ func TestEveryAggregateMergeIsCovered(t *testing.T) {
 			pairs++
 
 			key := op.String() + "/" + famName
+			groups, nGroups := groups, nGroups
+			if op == expr.AggItem {
+				groups, nGroups = ones, n
+			}
 			t.Run(key, func(t *testing.T) {
 				single := accumulate(t, op, params, fam.dt, bind, fam.col, groups,
 					nGroups, [][2]int{{0, n}})

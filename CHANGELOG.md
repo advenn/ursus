@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–323, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–324, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -92,6 +92,9 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **Polars' odds** (324): `Item`, `LowerBound`, `UpperBound` and `IsSorted`, as
+  aggregates; `ToPhysical` and `Reinterpret`; `Arctan2`, `TrueDiv`, `Limit` and
+  `Pipe`.
 - **The name namespace** (323), `Expr.Name()`, as Polars' `name`: `Keep`, `Map`,
   `Prefix`, `Suffix`, `ToLower`, `ToUpper`, `Replace`, and a struct's `PrefixFields`,
   `SuffixFields` and `MapFields`; and **`Struct().Drop`**, as `struct.drop`.

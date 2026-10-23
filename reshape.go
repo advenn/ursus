@@ -39,6 +39,9 @@ func (e Expr) SortDesc() Expr { return e.reshape(expr.ReshapeSort, 1) }
 // Head is the first n values.
 func (e Expr) Head(n int) Expr { return e.reshape(expr.ReshapeHead, int64(n)) }
 
+// Limit is Head, as Polars' limit is (step 324).
+func (e Expr) Limit(n int) Expr { return e.Head(n) }
+
 // Tail is the last n values.
 func (e Expr) Tail(n int) Expr { return e.reshape(expr.ReshapeTail, int64(n)) }
 

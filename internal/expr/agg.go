@@ -58,6 +58,13 @@ const (
 	// correlation of a pair, PairOf's, as AggCorr.
 	AggEntropy
 	AggSpearman
+	// Step 324: item, the group's one value, with Params.AllowEmpty; lower_bound and
+	// upper_bound, its type's least and greatest; and is_sorted, with
+	// Params.Descending and Params.NullsLast.
+	AggItem
+	AggLowerBound
+	AggUpperBound
+	AggIsSorted
 
 	aggOpCount
 )
@@ -76,6 +83,7 @@ var aggOpNames = [aggOpCount]string{
 	AggSkew: "skew", AggKurtosis: "kurtosis",
 	AggBitAnd: "bitwise_and", AggBitOr: "bitwise_or", AggBitXor: "bitwise_xor",
 	AggNanMin: "nan_min", AggEntropy: "entropy", AggSpearman: "corr_spearman",
+	AggItem: "item", AggLowerBound: "lower_bound", AggUpperBound: "upper_bound", AggIsSorted: "is_sorted",
 }
 
 func (o AggOp) String() string {
@@ -125,7 +133,7 @@ func (o AggOp) IsCounting() bool {
 // are expensive, but they sort in Finish and are perfectly order-insensitive.
 func (o AggOp) IsOrderDependent() bool {
 	return o == AggFirst || o == AggLast || o == AggArgMin || o == AggArgMax ||
-		o == AggImplode || o.IsBy()
+		o == AggImplode || o.IsBy() || o == AggIsSorted
 }
 
 // IsPaired reports whether the aggregate reads two inputs, as PairOf's struct.
@@ -193,6 +201,10 @@ type AggParams struct {
 
 	Base      float64 // Entropy: the logarithm's base
 	Normalize bool    // Entropy: of the values as a distribution, each over their sum
+
+	AllowEmpty bool // Item: a group of no value is null, not refused
+	Descending bool // IsSorted: in descending order
+	NullsLast  bool // IsSorted: its nulls after its values
 }
 
 // args renders the parameters op actually reads. See Agg.String for why this is
@@ -211,6 +223,10 @@ func (p AggParams) args(op AggOp) string {
 		return "fisher=" + strconv.FormatBool(p.Fisher) + ", bias=" + strconv.FormatBool(p.Bias)
 	case AggEntropy:
 		return "base=" + strconv.FormatFloat(p.Base, 'g', -1, 64) + ", normalize=" + strconv.FormatBool(p.Normalize)
+	case AggItem:
+		return "allow_empty=" + strconv.FormatBool(p.AllowEmpty)
+	case AggIsSorted:
+		return "descending=" + strconv.FormatBool(p.Descending) + ", nulls_last=" + strconv.FormatBool(p.NullsLast)
 	default:
 		return ""
 	}
@@ -576,6 +592,35 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		// input's type. Uint64 for the same reason count is: an index that wraps at
 		// 4.29e9 rows is the bug the 128-bit sum was widened to avoid.
 		return AggBinding{Acc: dtype.Uint64, Out: dtype.Uint64}, nil
+
+	case AggItem:
+		// The group's one value, of any type, as Polars' item.
+		return AggBinding{Acc: in, Out: in}, nil
+
+	case AggLowerBound, AggUpperBound:
+		// The type's least or greatest value, as Polars gives it: a number's own type,
+		// and a type stored as integers its storage's, a Date's Int32, a Decimal's
+		// Int128, an Enum's index. A Boolean, text and nested types have none.
+		var out dtype.DataType
+		switch {
+		case in.IsInteger(), in.IsFloat():
+			out = in
+		case in.ID() == dtype.TypeEnum:
+			out = EnumPhysical(in)
+		case in.IsTemporal(), in.ID() == dtype.TypeDecimal:
+			out = in.Physical()
+		default:
+			return AggBinding{}, uerr.New(uerr.KindType, "", "cannot determine %s for dtype %s", op, in)
+		}
+		return AggBinding{Acc: out, Out: out}, nil
+
+	case AggIsSorted:
+		if !in.IsOrdered() {
+			return AggBinding{}, uerr.New(uerr.KindType, "",
+				"%s() is not defined for %s", op, in).
+				Hint("only numeric, temporal, string and boolean types have an ordering")
+		}
+		return AggBinding{Acc: dtype.Bool, Out: dtype.Bool}, nil
 
 	default:
 		return AggBinding{}, uerr.Internalf("ResolveAggBinding: unhandled op %d", op)

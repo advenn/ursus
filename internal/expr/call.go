@@ -460,6 +460,8 @@ const (
 const (
 	FnHash CallFn = iota + 1200
 	FnOrderSign
+	FnToPhysical  // the values as stored, Polars' to_physical (step 324)
+	FnReinterpret // an integer's bits at the other signedness; Args[1] signed
 	fnGenMoreEnd
 )
 
@@ -557,7 +559,7 @@ var callNames = map[CallFn]string{
 	FnBinContains: "bin.contains", FnBinStartsWith: "bin.starts_with", FnBinEndsWith: "bin.ends_with",
 	FnBinGet: "bin.get", FnBinSlice: "bin.slice", FnBinEncode: "bin.encode", FnBinDecode: "bin.decode",
 	FnBinSize: "bin.size", FnBinReinterpret: "bin.reinterpret",
-	FnOrderCmp: "order_cmp", FnHash: "hash", FnOrderSign: "order_sign", FnHashRows: "hash_rows",
+	FnOrderCmp: "order_cmp", FnHash: "hash", FnOrderSign: "order_sign", FnToPhysical: "to_physical", FnReinterpret: "reinterpret", FnHashRows: "hash_rows",
 	FnListAppend: "list.append",
 
 	FnIsIn: "is_in",
@@ -1463,6 +1465,23 @@ func genCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 			return dtype.Null, uerr.New(uerr.KindType, "hash", "hash reads values a group-by can key on, not %s", in)
 		}
 		return dtype.Uint64, nil
+
+	case FnToPhysical:
+		return PhysicalOf(in)
+
+	case FnReinterpret:
+		if len(c.Args) < 2 {
+			return dtype.Null, uerr.Internalf("expr: reinterpret has no signed argument")
+		}
+		var signed bool
+		lit, ok := c.Args[1].(*Lit)
+		if ok {
+			signed, ok = lit.Value.(bool)
+		}
+		if !ok {
+			return dtype.Null, uerr.Internalf("expr: reinterpret has no signed argument")
+		}
+		return ReinterpretOf(in, signed)
 
 	case FnOrderSign:
 		// Numbers, instants and Booleans have a zero; text has none, and Polars'
@@ -2714,4 +2733,43 @@ func withFieldsOut(ops []dtype.Field) (dtype.DataType, error) {
 		}
 	}
 	return dtype.Struct(append(fields, added...)...), nil
+}
+
+// PhysicalOf is the type to_physical answers in, Polars' (step 324): a Date's Int32 of
+// days, a Datetime's, a Duration's and a Time's Int64 of ticks, a Decimal's Int128 of
+// unscaled units, an Enum's smallest unsigned integer that holds its categories, as
+// cat.physical's; any other scalar type itself. A nested type is refused.
+func PhysicalOf(in dtype.DataType) (dtype.DataType, error) {
+	switch {
+	case in.IsNested():
+		return dtype.Null, uerr.New(uerr.KindUnsupported, "to_physical",
+			"to_physical of a %s is not implemented", in).
+			Hint("take its fields or elements first")
+	case in.ID() == dtype.TypeEnum:
+		return EnumPhysical(in), nil
+	case in.IsTemporal(), in.ID() == dtype.TypeDecimal:
+		return in.Physical(), nil
+	}
+	return in, nil
+}
+
+// ReinterpretOf is the type reinterpret answers in: the integer of in's width, signed
+// or not, its bits unchanged (step 324). Polars' reinterpret, of integers only.
+func ReinterpretOf(in dtype.DataType, signed bool) (dtype.DataType, error) {
+	types := map[dtype.TypeID][2]dtype.DataType{
+		dtype.TypeInt8: {dtype.Uint8, dtype.Int8}, dtype.TypeUint8: {dtype.Uint8, dtype.Int8},
+		dtype.TypeInt16: {dtype.Uint16, dtype.Int16}, dtype.TypeUint16: {dtype.Uint16, dtype.Int16},
+		dtype.TypeInt32: {dtype.Uint32, dtype.Int32}, dtype.TypeUint32: {dtype.Uint32, dtype.Int32},
+		dtype.TypeInt64: {dtype.Uint64, dtype.Int64}, dtype.TypeUint64: {dtype.Uint64, dtype.Int64},
+	}
+	pair, ok := types[in.ID()]
+	if !ok {
+		return dtype.Null, uerr.New(uerr.KindType, "reinterpret",
+			"reinterpret reads an integer's bits, and %s is no integer of 8 to 64 bits", in).
+			Hint("cast it instead")
+	}
+	if signed {
+		return pair[1], nil
+	}
+	return pair[0], nil
 }

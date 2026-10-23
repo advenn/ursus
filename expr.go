@@ -265,6 +265,26 @@ func (e Expr) CastLossy(to dtype.DataType) Expr {
 	return wrap(&expr.Cast{Child: e.node(), To: to, Strict: false})
 }
 
+// ToPhysical is the values as they are stored, as Polars' to_physical (step 324): a
+// Date's days as an Int32, a Datetime's, a Duration's and a Time's ticks as an Int64,
+// a Decimal's unscaled units as an Int128, and an Enum's category as the smallest
+// unsigned integer that holds every one; any other type as it is. Only an Enum's are
+// copied. A nested type is refused.
+func (e Expr) ToPhysical() Expr {
+	return wrap(&expr.Call{Fn: expr.FnToPhysical, Args: []expr.Node{e.node()}})
+}
+
+// Reinterpret is an integer's bits as the integer of its width and the other
+// signedness, as Polars' reinterpret (step 324): signed, a UInt64's maximum is an
+// Int64's -1, and unsigned the reverse. Any other type is refused.
+func (e Expr) Reinterpret(signed bool) Expr {
+	return wrap(&expr.Call{Fn: expr.FnReinterpret, Args: []expr.Node{e.node(), litNode(signed)}})
+}
+
+// Pipe is fn of the expression, as Polars' pipe: a function of an expression applied
+// in a chain of methods (step 324).
+func (e Expr) Pipe(fn func(Expr) Expr) Expr { return fn(e) }
+
 // --- arithmetic --------------------------------------------------------------
 //
 // Every binary operator takes an Operand, so both `a.Add(b)` and `a.Add(1)` work.
@@ -300,6 +320,15 @@ func (e Expr) Mod[T Operand](v T) Expr      { return e.bin(expr.OpMod, lift(v)) 
 // version that truncated negative powers to zero would be surprising in the
 // direction that loses data silently. Cast the result if an integer is wanted.
 func (e Expr) Pow[T Operand](v T) Expr { return e.bin(expr.OpPow, lift(v)) }
+
+// TrueDiv is Div, Polars' truediv: true division, a float, as Div always is (step
+// 324).
+func (e Expr) TrueDiv[T Operand](v T) Expr { return e.Div(v) }
+
+// Arctan2 is the angle of the point (x, y) from the positive x axis, in radians from
+// -π to π, as Polars' arctan2(y, x), y first (step 324). Integers and Decimals give
+// a Float64, two Float32s a Float32; a null either side is null.
+func Arctan2(y, x Expr) Expr { return wrap(&expr.Binary{Op: expr.OpArctan2, L: y.node(), R: x.node()}) }
 
 // Neg negates. Abs takes the absolute value.
 //

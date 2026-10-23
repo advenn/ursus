@@ -36,6 +36,13 @@ Counting has several forms, each one value per group:
 - `NUnique()` counts its distinct values, a null not among them;
 - `First()` and `Last()` are its first and last value in the rows' order.
 
+*New in 0.6.7:* `Item(allowEmpty)` is a group's one value, as Polars' `item`, and
+refuses a group of several, or of none unless `allowEmpty`, which makes it null.
+`LowerBound()` and `UpperBound()` are the least and greatest value of the column's
+type. `IsSorted(descending, nullsLast)` says whether a group's values come in order,
+NaN the greatest and the nulls all first, or all last; it reads the rows in their
+order, so a group-by holding it runs on one worker.
+
 *New in 0.6.7.* `First` and `Last` take a value that may be null, so that `First(a)` and
 `First(b)` come from one row. `FirstNonNull()` and `LastNonNull()` skip the nulls, as
 Polars' `first(ignore_nulls=True)`, so two of them may come from different rows. A

@@ -69,6 +69,13 @@ refused by `Cast`, and a float rounds only when the target is a float. A float w
 fraction is refused as an integer, where Polars truncates it; `Truncate(0)` first says
 that is what you want.
 
+*New in 0.6.7.* `ToPhysical` is a column as it is stored, as Polars' `to_physical`: a
+`Date`'s days as an `Int32`, a `Datetime`'s, a `Duration`'s and a `Time`'s ticks as an
+`Int64`, a `Decimal`'s unscaled units as an `Int128`, an `Enum`'s category as the
+smallest unsigned integer that holds them. `Reinterpret(signed)` reads an integer's
+bits as the integer of its width and the other sign, so a `UInt64`'s maximum is an
+`Int64`'s -1.
+
 ### A frame's casts
 
 *New in 0.6.7.* `Cast` casts columns by name, `CastTypes` every column of a type, and

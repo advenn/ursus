@@ -541,6 +541,8 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 		{label: ",absent,lax", args: []any{false, "nope"}},
 		{label: ",both", args: []any{true, "f", "g"}},
 	},
+	// Signed and not (step 324).
+	expr.FnReinterpret:  {{label: ",signed", args: []any{true}}, {label: ",unsigned", args: []any{false}}},
 	expr.FnListToStruct: {{args: []any{"x", "y"}}},
 	// The count of old values, the old values, the new ones, and ReplaceOr's
 	// default (step 226).

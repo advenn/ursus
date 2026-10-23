@@ -561,6 +561,30 @@ func (e Expr) TopK(k int) Expr { return e.aggP(expr.AggTopK, expr.AggParams{K: k
 // TopK, whose rules it follows.
 func (e Expr) BottomK(k int) Expr { return e.aggP(expr.AggBottomK, expr.AggParams{K: k}) }
 
+// Item is the one value, as Polars' item (step 324): a group's in an aggregation, and
+// in a Select the column's, beside the other columns. Several values are refused, and
+// none too unless allowEmpty, which makes it null.
+func (e Expr) Item(allowEmpty bool) Expr {
+	return e.aggP(expr.AggItem, expr.AggParams{AllowEmpty: allowEmpty})
+}
+
+// LowerBound and UpperBound are the least and the greatest value of the expression's
+// type, as Polars' lower_bound and upper_bound (step 324): a number's own, -Inf and
+// +Inf for a float; and a type stored as integers its storage's, as Polars gives
+// them, so a Date's are an Int32's and a Decimal's an Int128's. A Boolean, text and
+// nested types have none.
+func (e Expr) LowerBound() Expr { return e.agg(expr.AggLowerBound) }
+
+func (e Expr) UpperBound() Expr { return e.agg(expr.AggUpperBound) }
+
+// IsSorted reports whether the values come in order, as Polars' is_sorted (step 324):
+// ascending, or descending, equal values allowed, NaN the greatest; and every null
+// before the values, or after them with nullsLast. A group's in an aggregation, where
+// it reads the rows in their order, so a group-by holding it runs on one worker.
+func (e Expr) IsSorted(descending, nullsLast bool) Expr {
+	return e.aggP(expr.AggIsSorted, expr.AggParams{Descending: descending, NullsLast: nullsLast})
+}
+
 func (e Expr) agg(op expr.AggOp) Expr {
 	return wrap(&expr.Agg{Op: op, Child: e.node()})
 }

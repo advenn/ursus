@@ -62,6 +62,11 @@ func TestEveryAggregateOverADecimalHasItsStatedType(t *testing.T) {
 		// Step 277.
 		"entropy":       "Float64",
 		"corr_spearman": "refused: a pair of inputs",
+		// Step 324: the bounds are the storage's, as Polars gives them.
+		"item":        "Decimal(10, 2)",
+		"lower_bound": "Int128",
+		"upper_bound": "Int128",
+		"is_sorted":   "Bool",
 	}
 
 	for i := range int(aggOpCount) {

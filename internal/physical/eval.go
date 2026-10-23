@@ -623,6 +623,11 @@ func evalCall(ctx context.Context, c *expr.Call, b *data.Batch) (*data.Column, e
 		return kernel.EnumPhysical(name, out, recv)
 	case c.Fn == expr.FnOrderSign:
 		return kernel.OrderSign(name, recv)
+	case c.Fn == expr.FnToPhysical:
+		return kernel.ToPhysical(name, out, recv)
+	case c.Fn == expr.FnReinterpret:
+		// The same bits under the other integer type: a relabel, as typing chose.
+		return recv.WithDType(out).Rename(name), nil
 	case c.Fn == expr.FnHash:
 		var seed int64
 		if len(cc.args) > 0 {

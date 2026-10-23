@@ -43,13 +43,13 @@ what we are lacking".
 | `top_k_by`, `bottom_k_by` | missing |
 | `interpolate_by` | missing |
 | `rolling` of an expression, `rolling_map`, `rolling_rank_by` | the frame's `Rolling`; the `_by` windows |
-| `item`, `lower_bound`, `upper_bound`, `is_sorted`, `limit`, `truediv` | missing (`Head` for `limit`, `Div` for `truediv`) |
-| `reinterpret`, `shrink_dtype`, `to_physical` | missing |
-| `pipe`, `inspect` | `LazyFrame.Pipe` only |
+| ~~`item`, `lower_bound`, `upper_bound`, `is_sorted`, `limit`, `truediv`~~ | built in step 324 |
+| `reinterpret`, `to_physical`; `shrink_dtype` | built in step 324; `shrink_dtype` not, a no-op on an expression in Polars 1.44, its Series' only |
+| `pipe`; `inspect` | `Expr.Pipe` built in step 324; `inspect`, a print, not |
 | `str.to_time`, `str.to_decimal` | `Strptime(Time…)`; `CastLossy(Decimal)` |
 | `dt.cast_time_unit` | `Cast(Datetime(unit))` |
 | ~~`struct.drop`~~ | built in step 323: `Struct().Drop` |
-| `pl.arctan2` | missing |
+| ~~`pl.arctan2`~~ | built in step 324: `Arctan2` |
 | `meta.*`: `root_names`, `output_name`, `is_column`, `has_multiple_outputs`, `undo_aliases`, `tree_format` | `String()` |
 | a window inside a window; an aggregate inside an aggregate's input | refused (§5 of `feature-gaps.md`) |
 | `Mode` and Spearman `Corr` spilling in a group-by | refused past a limit |

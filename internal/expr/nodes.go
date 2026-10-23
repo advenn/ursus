@@ -163,6 +163,10 @@ func (b *Binary) node()            {}
 func (b *Binary) Children() []Node { return []Node{b.L, b.R} }
 
 func (b *Binary) String() string {
+	if b.Op == OpArctan2 {
+		// A function, written as one, as Polars writes it.
+		return "arctan2(" + b.L.String() + ", " + b.R.String() + ")"
+	}
 	return "(" + b.L.String() + " " + b.Op.String() + " " + b.R.String() + ")"
 }
 

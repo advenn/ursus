@@ -208,6 +208,15 @@ func NewAccumulator(op expr.AggOp, in dtype.DataType, bind expr.AggBinding,
 	case expr.AggBottomK:
 		return newTopK(in, params.K, false)
 
+	case expr.AggItem:
+		return &itemAcc{pos: positionAcc{out: bind.Out}, allowEmpty: params.AllowEmpty}, nil
+	case expr.AggLowerBound:
+		return &boundAcc{out: bind.Out}, nil
+	case expr.AggUpperBound:
+		return &boundAcc{out: bind.Out, upper: true}, nil
+	case expr.AggIsSorted:
+		return newIsSorted(in, params.Descending, params.NullsLast)
+
 	default:
 		return nil, uerr.New(uerr.KindUnsupported, "agg",
 			"aggregate %s is not implemented", op)

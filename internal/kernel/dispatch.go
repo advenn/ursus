@@ -732,6 +732,9 @@ func arithFloat[T ~float32 | ~float64](op expr.BinaryOp, name string, out dtype.
 		// both operands are cast to a float before the dispatcher runs. math.Pow is
 		// total, like math.Mod and IEEE division above — NaN or ±Inf, never a fault.
 		powScalar(dst, lv, rv)
+	case expr.OpArctan2:
+		// Arctan2 arrives here as Pow does, both sides floats (step 324).
+		atan2Scalar(dst, lv, rv)
 	case expr.OpMod:
 		// resolveArithmetic has always accepted % on floats, and this arm has always
 		// been missing — so Col("f64").Mod(Col("f64")) type-checked, planned, and

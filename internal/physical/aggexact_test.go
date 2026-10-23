@@ -69,6 +69,8 @@ const (
 	classCounting                    // a count, independent of the value
 	classIndex                       // a row position
 	classApproximate                 // declared Float64: var, std, median, quantile, product
+	classTypeBound                   // the type's least or greatest, whatever the rows (step 324)
+	classOrder                       // whether the rows are in order: one row always is
 )
 
 // classify must account for every declared AggOp. The default is a failure, not a
@@ -94,6 +96,13 @@ func classify(op expr.AggOp) (aggClass, bool) {
 		// One row's value, chosen by another input. Paired, so every operand here,
 		// a single column, is refused; aggpair_test.go asks them their questions.
 		return classIdentity, true
+	case expr.AggItem:
+		// A one-row group's one value (step 324).
+		return classIdentity, true
+	case expr.AggLowerBound, expr.AggUpperBound:
+		return classTypeBound, true
+	case expr.AggIsSorted:
+		return classOrder, true
 	}
 	return 0, false
 }
@@ -254,12 +263,15 @@ func TestAggregatesAreExactOnAOneRowGroup(t *testing.T) {
 			// A group whose only row is null has no value to report, so the answer
 			// is null — for everything that READS the rows.
 			//
-			// Two classes are excluded, and neither is an exception to the rule: a
+			// Four classes are excluded, and none is an exception to the rule: a
 			// counting aggregate counts rather than reads, and implode COLLECTS, so
 			// a group holding one null row imploded is a one-element list holding a
 			// null, which is a perfectly valid list. That distinction is the same
-			// one NewList's doc draws between an empty list and a null list.
-			if class != classCounting && class != classImplode {
+			// one NewList's doc draws between an empty list and a null list. A type's
+			// bound reads no row at all, and a group of one row, a null one too, is
+			// in order, as Polars' is_sorted answers (step 324).
+			if class != classCounting && class != classImplode && class != classTypeBound &&
+				class != classOrder {
 				nullGroups++
 				if got.IsValid(1) {
 					t.Errorf("%s: the all-null group came back valid", key)

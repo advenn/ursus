@@ -1468,6 +1468,16 @@ func encodeEnum(name string, to dtype.DataType, strict bool, c *data.Column) (*d
 
 // EnumPhysical is an Enum's indices at out's width, Polars' cat.physical: each index
 // is below the category count, which out holds (step 273).
+// ToPhysical is c as stored, under its physical type out, Polars' to_physical (step
+// 324): a relabel of the values, but for an Enum, whose categories are narrowed to
+// out as cat.physical narrows them.
+func ToPhysical(name string, out dtype.DataType, c *data.Column) (*data.Column, error) {
+	if c.DType().ID() == dtype.TypeEnum {
+		return EnumPhysical(name, out, c)
+	}
+	return c.WithDType(out).Rename(name), nil
+}
+
 func EnumPhysical(name string, out dtype.DataType, c *data.Column) (*data.Column, error) {
 	if c.DType().ID() != dtype.TypeEnum {
 		return nil, uerr.Internalf("kernel: cat.physical of %s", c.DType())
