@@ -454,6 +454,7 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 	expr.FnListVar:         {{args: []any{int64(1)}}},
 	expr.FnListQuantile:    {{args: []any{0.5, int64(0)}}},
 	expr.FnListGatherEvery: {{args: []any{int64(2), int64(0)}}},
+	expr.FnListReshape:     {{args: []any{int64(-1)}}}, // each list's values flattened
 	expr.FnListArgSort:     {{args: []any{false, false}}},
 	expr.FnListAny:         {{args: []any{true}}},
 	expr.FnListAll:         {{args: []any{true}}},

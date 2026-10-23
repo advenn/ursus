@@ -155,3 +155,40 @@ func (a ArrExpr) ToStruct(names ...string) Expr {
 func (a ArrExpr) Dot(other Expr) Expr {
 	return wrap(&expr.Call{Fn: expr.FnArrDot, Args: []expr.Node{a.e.node(), other.node()}})
 }
+
+// Reshape is the values in Arrays of shape, Polars' reshape: shape's first dimension
+// is the rows, -1 to infer them, and each one after it an Array of the next, the
+// last innermost, so Reshape(-1, 3) of six values is two rows of an Array(T, 3), and
+// Reshape(-1, 1, 3) two of an Array(Array(T, 3), 1). Of one dimension, Reshape(-1),
+// it is the values themselves, a List's or an Array's elements flattened. The values
+// are an expression's leaves: a List's or an Array's elements, an Array's null row
+// its size of nulls, as Polars lays one out, and a List's null or empty one none.
+//
+// It is a column of its own length, as Explode is; in an aggregation, a list of the
+// Arrays a group makes. Values the shape does not divide are refused, as Polars
+// refuses them.
+//
+// New in 0.6.7.
+func (e Expr) Reshape(shape ...int) Expr {
+	dims := make([]int64, len(shape))
+	for i, d := range shape {
+		dims[i] = int64(d)
+	}
+	return e.reshape(expr.ReshapeArr, dims...)
+}
+
+// ConcatArr is each row's operands in one Array, Polars' concat_arr: an Array
+// operand's elements and another's value, in order, so two Arrays of 2 and of 3 and
+// a value make an Array of 6. The operands are of one element type, as Polars wants
+// them: cast one first. A null Array makes the row null, and a null value is a null
+// element.
+//
+// New in 0.6.7.
+func ConcatArr(exprs ...Expr) Expr {
+	if len(exprs) == 0 {
+		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "concat_arr", "ConcatArr needs an expression")})
+	}
+	return variadic("concat_arr", exprs, func(ns []expr.Node) (expr.Node, error) {
+		return &expr.Call{Fn: expr.FnConcatArr, Args: ns}, nil
+	})
+}

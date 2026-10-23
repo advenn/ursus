@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–342, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–343, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,13 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`Reshape` and `ConcatArr`** (343), Polars' `reshape` and `concat_arr`:
+  `Reshape(-1, 3)` makes Arrays of three of a column's values, the rows inferred,
+  more dimensions an Array of Arrays and `Reshape(-1)` the values flattened, an
+  Array's null row its size of nulls, as Polars lays it out; in an aggregation, a
+  list of the Arrays a group makes. `ConcatArr` makes one Array of each row's Arrays
+  and values, of one element type. Values a shape does not divide are refused, as
+  Polars refuses them.
 - **The `Arr()` namespace** (342), Polars' `arr`: `Sum`, `Min`, `Max`, `Mean`,
   `Median`, `Std`, `Var`, `NUnique`, `ArgMin`, `ArgMax`, `First`, `Last`, `Get`,
   `Contains`, `CountMatches`, `Any`, `All`, `Len`, `Head`, `Tail`, `Slice`, `Unique`,

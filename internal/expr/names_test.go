@@ -235,7 +235,7 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 			}
 		}
 	}
-	// 221 since step 342's arr.reverse, arr.sort, arr.to_struct, arr.shift and arr.dot; 216 after step 341's list.to_array and arr.to_list; 214 after step 325's dt.cast_time_unit; 213 after step 324's to_physical and reinterpret; 211 after step 323's struct.drop; 210 after step 302's hash_rows; 209 after step 299's struct.select_fields; 208 after step 286's list.hist; 207 after step 283's round_sig_figs and truncate; 205 after step 282's list.append; 204 after step 281's list.rle; 203 after step 280's list.unique_counts and list.value_counts; 201 after step 279's order_cmp, hash and order_sign; 198 after step 277's list.mode; 197 after step 274's four binary functions and five of a row's operands; 188
+	// 223 since step 343's list.reshape and concat_arr; 221 after step 342's arr.reverse, arr.sort, arr.to_struct, arr.shift and arr.dot; 216 after step 341's list.to_array and arr.to_list; 214 after step 325's dt.cast_time_unit; 213 after step 324's to_physical and reinterpret; 211 after step 323's struct.drop; 210 after step 302's hash_rows; 209 after step 299's struct.select_fields; 208 after step 286's list.hist; 207 after step 283's round_sig_figs and truncate; 205 after step 282's list.append; 204 after step 281's list.rle; 203 after step 280's list.unique_counts and list.value_counts; 201 after step 279's order_cmp, hash and order_sign; 198 after step 277's list.mode; 197 after step 274's four binary functions and five of a row's operands; 188
 	// after step 273's cat.get_categories and cat.physical; 186 after step 272's twelve temporal functions at 900, and is_business_day,
 	// add_business_days and dt.replace; 171 after step 271's encode, decode, json_path_match, json_decode, the two
 	// to_integers and concat_str past nulls; 164 after step 270's nine string functions; 155 after step 269's six list functions; 149 after step 267's list.arg_sort, list.arg_true and list.arg_unique; 146 after
@@ -251,8 +251,8 @@ func TestCallFnFamiliesDoNotOverlap(t *testing.T) {
 	// list.arg_min and list.arg_max, step 174's dt.replace_time_zone, step 171's
 	// struct.with_fields, step 147's cut and cut_left_closed, and step 146's
 	// list.join, six bit counts, concat_str and struct.
-	if classified != 221 {
-		t.Errorf("%d call functions are classified, want 221 — the families and the "+
+	if classified != 223 {
+		t.Errorf("%d call functions are classified, want 223 — the families and the "+
 			"name table disagree about what exists", classified)
 	}
 }

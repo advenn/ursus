@@ -404,6 +404,15 @@ func (z *zipper) reshape(r *expr.Reshape) (zipPart, error) {
 			sampled = l.SampleN(int(arg[0]), arg[2] != 0, arg[3] != 0, uint64(arg[4]))
 		}
 		out = p.lf.Select(sampled.Alias(p.col)).Filter(Col(p.col).List().Len().Gt(0)).Explode(p.col)
+	case expr.ReshapeArr:
+		// The values imploded, in Arrays of the shape, and exploded again: an Array
+		// a row, or a value a row of one dimension; none, no row (step 343).
+		args := []expr.Node{Col(p.col).Implode().node()}
+		for _, d := range arg {
+			args = append(args, &expr.Lit{Value: d, DT: Int64})
+		}
+		shaped := wrap(&expr.Call{Fn: expr.FnListReshape, Args: args})
+		out = p.lf.Select(shaped.Alias(p.col)).Filter(Col(p.col).List().Len().Gt(0)).Explode(p.col)
 	case expr.ReshapeHist:
 		// The values imploded, counted a bin a row, and exploded again; no bin is no
 		// row (step 286).

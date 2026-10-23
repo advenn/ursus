@@ -79,6 +79,10 @@ answer as `List()`'s do, a value or a list a row; `Reverse`, `Sort`, `Shift` and
 makes a field of each element, `field_0` on unless named, and `Dot` sums two arrays'
 products.
 
+`Reshape(-1, 3)` makes Arrays of three of a column's values, as Polars' `reshape`,
+`-1` the rows inferred, more dimensions an Array of Arrays and `Reshape(-1)` the
+values flattened; `ConcatArr` makes one Array of each row's Arrays and values.
+
 An Array is read and written as Polars writes it: an Arrow `FixedSizeList` in IPC, and
 in Parquet a list whose size the file's Arrow schema keeps; as JSON, a list.
 
@@ -109,6 +113,5 @@ A struct is also how ursus gives several values a row: `SplitExact`, `ExtractGro
 
 ## What is not here yet
 
-Polars' `reshape` and `concat_arr`, which make Arrays of columns, are not, and neither
-are lists of lists or of structs, which are refused by name. A List or a Struct cannot be a group-by, join or
+Lists of lists or of structs are refused by name. A List or a Struct cannot be a group-by, join or
 `Unique` key. The scope records each in `feature-gaps.md`.

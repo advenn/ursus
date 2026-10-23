@@ -350,6 +350,9 @@ const (
 	// Array's list.shift, the Array kept, and the sum of two Arrays' products.
 	FnArrShift
 	FnArrDot
+	// concat_arr(exprs...): each row's operands in one Array, an Array operand's
+	// elements and another's value, of one element type (step 343).
+	FnConcatArr
 	fnHorizontalEnd
 )
 
@@ -394,6 +397,7 @@ const (
 	// edges (step 286), which Hist in an aggregation lowers to.
 	FnListHist
 	FnListToArray // list.to_array, the width: an Array of it (step 341)
+	FnListReshape // list.reshape, the shape: each list's values in Arrays of it, as a list (step 343)
 	fnListMoreEnd
 )
 
@@ -635,7 +639,8 @@ var callNames = map[CallFn]string{
 	FnListShift: "list.shift", FnListCountMatches: "list.count_matches",
 	FnListAny: "list.any", FnListAll: "list.all", FnListItem: "list.item", FnListSample: "list.sample",
 	FnListMode: "list.mode", FnListUniqueCounts: "list.unique_counts", FnListValueCounts: "list.value_counts",
-	FnListHist: "list.hist", FnListToArray: "list.to_array",
+	FnListHist: "list.hist", FnListToArray: "list.to_array", FnListReshape: "list.reshape",
+	FnConcatArr: "concat_arr",
 	FnArrToList: "arr.to_list", FnArrReverse: "arr.reverse", FnArrSort: "arr.sort",
 	FnArrToStruct: "arr.to_struct", FnArrShift: "arr.shift", FnArrDot: "arr.dot",
 	FnListRle: "list.rle",
@@ -1074,6 +1079,9 @@ func ResolveHorizontal(fn CallFn, ops []dtype.Field) (dtype.DataType, error) {
 			return dtype.Null, uerr.New(uerr.KindType, "arr.shift", "arr.shift takes an integer count, got %s", v)
 		}
 		return ops[0].Type, nil
+
+	case FnConcatArr:
+		return ConcatArrType(ops)
 
 	case FnArrDot:
 		// The sum of each row's products, as list.sum sums them (step 342).
@@ -2670,6 +2678,26 @@ func listCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 
 	case FnListSample:
 		return in, nil
+
+	case FnListReshape:
+		// Each list's values in Arrays of the shape, as a list (step 343).
+		args, err := CallArgs(c)
+		if err != nil {
+			return dtype.Null, err
+		}
+		shape := make([]int64, 0, len(args))
+		for _, a := range args {
+			d, ok := a.(int64)
+			if !ok {
+				return dtype.Null, uerr.Internalf("expr: %s with a shape of %v", fn, args)
+			}
+			shape = append(shape, d)
+		}
+		t, err := ReshapeType(elem, shape)
+		if err != nil {
+			return dtype.Null, err
+		}
+		return dtype.List(t), nil
 
 	case FnListToArray:
 		// An Array of the width, which every row is checked to have, as Polars

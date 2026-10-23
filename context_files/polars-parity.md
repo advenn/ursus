@@ -59,7 +59,7 @@ what we are lacking".
 
 | Polars | ursus today |
 | --- | --- |
-| `Array`, fixed-size lists, and the whole `.arr` namespace (32 methods), `list.to_array`, `reshape`, `concat_arr` | the type built in step 341: casts, `List().ToArray`, `Arr().ToList`, Go arrays, IPC, Parquet and JSON; the `.arr` namespace in step 342, `as_array` of `head`, `tail` and `slice` left to `List().ToArray`; `reshape` and `concat_arr` not |
+| ~~`Array`, fixed-size lists, and the whole `.arr` namespace (32 methods), `list.to_array`, `reshape`, `concat_arr`~~ | the type built in step 341: casts, `List().ToArray`, `Arr().ToList`, Go arrays, IPC, Parquet and JSON; the `.arr` namespace in step 342, `as_array` of `head`, `tail` and `slice` left to `List().ToArray`; `reshape` and `concat_arr` in step 343 |
 | `Categorical`, and `cut`/`qcut` returning one | Enum, and text from `cut` |
 | a List or a Struct as a key: group-by, unique, join, over | refused |
 | large strings, over 2 GiB a column | refused |

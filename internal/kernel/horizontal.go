@@ -90,6 +90,8 @@ func HorizontalCall(fn expr.CallFn, name string, out dtype.DataType,
 		return businessDayCount(name, ops, n)
 	case expr.FnConcatList:
 		return listsOf(name, out, ops, n)
+	case expr.FnConcatArr:
+		return concatArr(name, out, ops, n)
 	case expr.FnStrParseInt, expr.FnStrParseUint:
 		return strParseInt(fn, name, ops, n)
 	case expr.FnConcatStrIgnoreNulls:

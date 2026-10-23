@@ -64,6 +64,17 @@ func ListCall(fn expr.CallFn, name string, out dtype.DataType,
 	n := c.Len()
 
 	switch fn {
+	case expr.FnListReshape:
+		shape := make([]int64, len(args))
+		for i, a := range args {
+			d, ok := a.(int64)
+			if !ok {
+				return nil, uerr.Internalf("kernel: %s with a shape of %v", fn, args)
+			}
+			shape[i] = d
+		}
+		return listReshape(name, out, c, shape)
+
 	case expr.FnListToArray:
 		// The same column under the Array's type, once every row is checked to have
 		// its width (step 341): an Array is held as a List is.

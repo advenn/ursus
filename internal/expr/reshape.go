@@ -54,6 +54,7 @@ const (
 	ReshapeSample                        // Args: n, or -1 for a fraction; the fraction's bits; with_replacement; shuffle; the seed (step 282)
 	ReshapeHist                          // Args: the bin count, or -1 for edges; include_category; include_breakpoint; the edges' bits (step 286)
 	ReshapeRolling                       // By: the index; Roll: the window; Child aggregated over each row's (step 337)
+	ReshapeArr                           // Args: the shape, -1 first to infer it: the values in Arrays of it (step 343)
 )
 
 var reshapeNames = map[ReshapeOp]string{
@@ -65,6 +66,7 @@ var reshapeNames = map[ReshapeOp]string{
 	ReshapeArgSortBy: "arg_sort_by", ReshapeMode: "mode",
 	ReshapeUniqueCounts: "unique_counts", ReshapeValueCounts: "value_counts", ReshapeRle: "rle",
 	ReshapeAppend: "append", ReshapeSample: "sample", ReshapeHist: "hist", ReshapeRolling: "rolling",
+	ReshapeArr: "reshape",
 }
 
 // RollSpec is a rolling reshape's window (step 337): a row's window is its index's
@@ -295,6 +297,13 @@ func (r *Reshape) Field(in *dtype.Schema) (dtype.Field, error) {
 		}
 		f.Type, f.Nullable = t, false
 		return f, nil
+	case ReshapeArr:
+		t, err := ReshapeType(f.Type, r.Args)
+		if err != nil {
+			return dtype.Field{}, err
+		}
+		f.Type, f.Nullable = t, true
+		return f, nil
 	case ReshapeRle:
 		// Runs of equal keys, as the group-by's keys are equal.
 		if !f.Type.IsHashable() && !f.Type.IsNull() {
@@ -482,6 +491,13 @@ func lowerReshape(r *Reshape) Node {
 		return &Call{Fn: FnListRle, Args: []Node{list}}
 	case ReshapeHist:
 		return HistCall(list, r.Args)
+	case ReshapeArr:
+		// A group's values in Arrays of the shape, as a list (step 343).
+		args := []Node{list}
+		for i := range r.Args {
+			args = append(args, arg(i))
+		}
+		return &Call{Fn: FnListReshape, Args: args}
 	case ReshapeSample:
 		frac := math.Float64frombits(uint64(r.Args[1]))
 		return &Call{Fn: FnListSample, Args: []Node{list, arg(0), &Lit{Value: frac, DT: dtype.Float64},
