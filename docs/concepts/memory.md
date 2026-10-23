@@ -38,7 +38,8 @@ loop over `CollectBatches` breaks early. `WithMemoryLimit(0)` turns the budget o
 ## What spills
 
 - **sort,** and a top-k with any k;
-- **group-by,** including the values a median, a quantile or an `NUnique` holds;
+- **group-by,** including the values a median, a quantile or an `NUnique` holds,
+  and the pairs of a `CorrSpearman`;
 - **join,** both sides partitioned;
 - **unique;**
 - **window functions,** over many partitions or one huge one;
@@ -46,7 +47,9 @@ loop over `CollectBatches` breaks early. `WithMemoryLimit(0)` turns the budget o
 - **tail and reverse.**
 
 `JoinAsOf`, `MergeSorted` and `HStack` stream their input, as `Rolling` and
-`GroupByDynamic` do, so they hold little to begin with.
+`GroupByDynamic` do, so they hold little to begin with. *Changed in 0.6.7:* a
+`CorrSpearman` over a group larger than the limit spills its pairs, in a group-by, a
+window or a temporal group, where it failed.
 
 ## What does not
 

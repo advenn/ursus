@@ -319,14 +319,21 @@ func (r *radixSorter) sortPass(idx []int32, keys []uint64, c *data.Column, nulls
 // overwritten — worth saying out loud, because it is the one thing here that
 // would surprise a reader.
 func (r *radixSorter) radixByKey(src, dst []int32, keys []uint64) []int32 {
-	n := len(src)
-	if n < 2 {
-		return src
-	}
+	idx, _ := r.radixSorted(src, dst, keys)
+	return idx
+}
 
+// radixSorted is radixByKey, and gives back the keys too, in the order it sorted
+// them: a caller walking runs of equal keys reads them in turn, where reading them
+// through the permutation would be the random read the gather saves (step 339).
+func (r *radixSorter) radixSorted(src, dst []int32, keys []uint64) ([]int32, []uint64) {
+	n := len(src)
 	ka, kb := r.keyBuf(n), keys[:n]
 	for i, row := range src {
 		ka[i] = keys[row]
+	}
+	if n < 2 {
+		return src, ka
 	}
 
 	// All eight histograms in ONE pass over the data. Eight separate passes would
@@ -368,5 +375,5 @@ func (r *radixSorter) radixByKey(src, dst []int32, keys []uint64) []int32 {
 		src, dst = dst, src
 		ka, kb = kb, ka
 	}
-	return src
+	return src, ka
 }

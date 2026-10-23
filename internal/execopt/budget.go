@@ -468,8 +468,8 @@ func holdsHint(op string) string {
 		// key space, so the second kind cannot be partitioned away at any depth.
 		return "group_by holds one entry per distinct key, and implode holds every " +
 			"VALUE as its answer — which partitioning to disk cannot divide, because " +
-			"it divides across keys (quantile, median and n_unique spill their " +
-			"values); raise the limit with WithMemoryLimit"
+			"it divides across keys (quantile, median, n_unique and corr_spearman " +
+			"spill their values); raise the limit with WithMemoryLimit"
 	case "pivot":
 		// pivot holds its pairs since step 303; the group-by beneath it, which
 		// streams the input and spills, is where the input went.
@@ -488,8 +488,8 @@ func holdsHint(op string) string {
 		return "over holds its whole input, and partitions it to disk by its " +
 			"partition_by when it does not fit; a window with none, or one partition " +
 			"larger than the limit, goes to one file and is read back, its functions " +
-			"in an order of their own sorted on disk and its quantiles and n_unique " +
-			"spilling their values; a rolling window by time holds the rows of its " +
+			"in an order of their own sorted on disk and its quantiles, n_unique and " +
+			"corr_spearman spilling their values; a rolling window by time holds the rows of its " +
 			"period, and an implode every value of the partition, its answer; raise " +
 			"the limit with WithMemoryLimit"
 	case "join_asof":
@@ -511,7 +511,7 @@ func holdsHint(op string) string {
 		return op + " holds its open windows and the rows they cover, handing each " +
 			"out as the index passes its end; a gap in the index makes one window per " +
 			"every= across it at once, and an implode keeps every value of its " +
-			"windows (a median, a quantile and n_unique spill theirs); a coarser " +
+			"windows (a median, a quantile, n_unique and corr_spearman spill theirs); a coarser " +
 			"every=, a smaller offset= or a narrower index range is what makes it smaller"
 	default:
 		return op + " buffers its whole input; raise the limit with WithMemoryLimit"

@@ -50,7 +50,7 @@ func TestV066UnderAMemoryLimit(t *testing.T) {
 	}
 	small, groups := int64(16<<10), int64(64<<10)
 	// A group-by over the 2,000 keys: its states sit at 16 KiB's edge.
-	byKey := map[string]bool{"M1, the bits and odds": true, "M3, unique_counts": true}
+	byKey := map[string]bool{"M1, the bits and odds": true, "M3, unique_counts": true, "M1, spearman by k": true}
 	for name, q := range map[string]*ursus.LazyFrame{
 		"G1, a literal range": frame.WithColumns(ursus.IntRange(ursus.Lit(int64(0)), ursus.Lit(int64(n)), 1).Alias("i")),
 		"G2, a date range a row": frame.WithColumns(ursus.DateRanges(c("d"), c("d").Dt().OffsetBy(ursus.Every("3d")),
@@ -63,6 +63,8 @@ func TestV066UnderAMemoryLimit(t *testing.T) {
 		"D, iso_year":     frame.WithColumns(c("d").Dt().IsoYear().Alias("y")),
 		"M1, the bits and odds": byK(c("v").BitwiseXor().Alias("bx"), c("f").NanMin().Alias("nm"),
 			c("v").HasNulls().Alias("hn"), c("v").ApproxNUnique().Alias("au")),
+		// A Spearman's pairs spill since step 339.
+		"M1, spearman by k":  byK(ursus.CorrSpearman(c("f"), c("v")).Alias("sp")),
 		"M2, bits":           frame.WithColumns(c("v").Xor(c("k")).Alias("x")),
 		"M3, value_counts":   frame.Select(c("s").ValueCounts(true, false)),
 		"M3, unique_counts":  frame.Select(c("k").UniqueCounts().Alias("u")),
@@ -108,9 +110,8 @@ func TestV066UnderAMemoryLimit(t *testing.T) {
 		q    *ursus.LazyFrame
 		want string
 	}{
-		// A spearman holds its pairs and a mode its values, a group's, unspilled.
-		"M1, spearman by k": {byK(ursus.CorrSpearman(c("f"), c("v")).Alias("sp")), "per-group state"},
-		"M1, mode by k":     {byK(c("v").Mode(true).First().Alias("mo")), "per-group state"},
+		// A mode holds its values, a group's, unspilled.
+		"M1, mode by k": {byK(c("v").Mode(true).First().Alias("mo")), "per-group state"},
 		// A run's number needs the partition, as rank's did before it streamed.
 		"M4, rle_id": {frame.WithColumns(c("s").RleID().Alias("r")), "one partition"},
 		"M4, rle":    {frame.Select(c("s").Rle().Alias("r")), "one partition"},

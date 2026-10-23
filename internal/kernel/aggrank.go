@@ -1,8 +1,11 @@
 package kernel
 
 import (
+	"cmp"
 	"math"
+	"runtime"
 	"slices"
+	"sync"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
@@ -102,10 +105,15 @@ func (a *entropyAcc) NBytes() int64 { return int64(cap(a.n))*8 + int64(cap(a.s))
 // spearmanAcc is Spearman's correlation of each group's pairs where both are
 // non-null: Pearson's of their ranks, a tie the mean of its ranks and NaN above every
 // number, as Polars ranks them. It keeps every such pair, as a median keeps its
-// values, so its state grows with its input. Fewer than two pairs, or values all
-// alike, are NaN, as Polars answers.
+// values, and past its sink's budget hands them to disk (pairspill.go). Fewer than
+// two pairs, or values all alike, are NaN, as Polars answers.
 type spearmanAcc struct {
 	xs, ys [][]float64
+
+	// Past its sink's budget its pairs go to sp, cnt of them a group, and every
+	// answer is read back from there at Finish (pairspill.go, step 339).
+	cnt []int
+	sp  PairSpill
 }
 
 func (a *spearmanAcc) Reserve(n int) {
@@ -141,6 +149,10 @@ func (a *spearmanAcc) Merge(other Accumulator, remap []int32) error {
 	if !ok {
 		return uerr.Internalf("kernel: cannot merge %T into spearmanAcc", other)
 	}
+	if a.sp != nil || o.sp != nil {
+		// Only a serial sink spills its pairs: parallel workers go serial first.
+		return uerr.Internalf("kernel: cannot merge a spearman whose pairs spilled")
+	}
 	a.Reserve(mergeCap(remap, len(o.xs)))
 	mergeEach(remap, len(o.xs), func(dst, src int) {
 		a.xs[dst] = append(a.xs[dst], o.xs[src]...)
@@ -152,44 +164,103 @@ func (a *spearmanAcc) Merge(other Accumulator, remap []int32) error {
 func (a *spearmanAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
 	out := make([]float64, nGroups)
+	if a.sp != nil {
+		if err := a.finishSpilled(out); err != nil {
+			return nil, err
+		}
+		return data.NewFixed(name, dtype.Float64, out, bitmap.AllSet(nGroups)), nil
+	}
+	var rk ranker
 	for g := range nGroups {
-		out[g] = pearson(averageRanks(a.xs[g]), averageRanks(a.ys[g]))
+		out[g] = rk.spearman(a.xs[g], a.ys[g])
 	}
 	return data.NewFixed(name, dtype.Float64, out, bitmap.AllSet(nGroups)), nil
 }
 
 func (a *spearmanAcc) NBytes() int64 {
-	var b int64
+	b := int64(cap(a.cnt)) * 8
 	for g := range a.xs {
 		b += int64(cap(a.xs[g])+cap(a.ys[g]))*8 + 48
 	}
 	return b
 }
 
-// averageRanks are v's ranks from 1, a tie the mean of the ranks it spans, in the
-// total order, NaN above every number.
-func averageRanks(v []float64) []float64 {
-	idx := make([]int, len(v))
-	for i := range idx {
-		idx[i] = i
+// ranker ranks a group's pairs, its buffers kept from one group to the next.
+type ranker struct {
+	sorter radixSorter
+	keys   []uint64
+	idx    []int32
+	rx, ry []int64
+	other  *ranker // a large group's y, ranked beside its x
+}
+
+// parallelRanks is the fewest pairs whose two variables are ranked side by side.
+const parallelRanks = 1 << 16
+
+// spearman is Spearman's correlation of the pairs (x[i], y[i]), NaN below two, its
+// sums exact as a spilled group's are (pairspill.go).
+func (k *ranker) spearman(x, y []float64) float64 {
+	n := len(x)
+	if n < 2 {
+		return math.NaN()
 	}
-	slices.SortStableFunc(idx, func(i, j int) int {
-		ki, kj := OrderKeyF64(v[i]), OrderKeyF64(v[j])
-		switch {
-		case ki < kj:
-			return -1
-		case ki > kj:
-			return 1
+	if n >= parallelRanks && runtime.GOMAXPROCS(0) > 1 {
+		if k.other == nil {
+			k.other = &ranker{}
 		}
-		return 0
-	})
-	ranks := make([]float64, len(v))
-	for lo := 0; lo < len(idx); {
+		var wg sync.WaitGroup
+		wg.Go(func() { k.other.ry = k.other.doubled(y, k.other.ry) })
+		k.rx = k.doubled(x, k.rx)
+		wg.Wait()
+		k.ry, k.other.ry = k.other.ry, k.ry
+	} else {
+		k.rx = k.doubled(x, k.rx)
+		k.ry = k.doubled(y, k.ry)
+	}
+	mean := int64(n) + 1 // doubled, as the ranks are
+	var sxy, sxx, syy wide
+	for i := range n {
+		dx, dy := k.rx[i]-mean, k.ry[i]-mean
+		sxy.addMul(dx, dy)
+		sxx.addMul(dx, dx)
+		syy.addMul(dy, dy)
+	}
+	return correlation(sxy, sxx, syy)
+}
+
+// doubled are twice v's ranks from 1, into ranks: a tie the mean of the ranks it
+// spans, in the total order, NaN above every number; integers, 2·lo + t + 1 for a tie
+// of t from lo. The order is OrderKeyF64's, sorted by radix where there are enough
+// values to repay its passes.
+func (k *ranker) doubled(v []float64, ranks []int64) []int64 {
+	n := len(v)
+	keys := Extend(k.keys[:0], n, 0)
+	for i, x := range v {
+		keys[i] = OrderKeyF64(x)
+	}
+	idx := Extend(k.idx[:0], n, 0)
+	for i := range idx {
+		idx[i] = int32(i)
+	}
+	k.keys, k.idx = keys, idx
+	if n >= radixRanks {
+		k.sorter.scratch = Extend(k.sorter.scratch[:0], n, 0)
+		idx, keys = k.sorter.radixSorted(idx, k.sorter.scratch, keys)
+	} else {
+		slices.SortFunc(idx, func(a, b int32) int { return cmp.Compare(keys[a], keys[b]) })
+		sorted := k.sorter.keyBuf(n)
+		for i, j := range idx {
+			sorted[i] = keys[j]
+		}
+		keys = sorted
+	}
+	ranks = Extend(ranks[:0], n, 0)
+	for lo := 0; lo < n; {
 		hi := lo + 1
-		for hi < len(idx) && OrderKeyF64(v[idx[hi]]) == OrderKeyF64(v[idx[lo]]) {
+		for hi < n && keys[hi] == keys[lo] {
 			hi++
 		}
-		r := float64(lo+1+hi) / 2 // the mean of lo+1 .. hi
+		r := int64(lo + 1 + hi)
 		for _, i := range idx[lo:hi] {
 			ranks[i] = r
 		}
@@ -198,25 +269,5 @@ func averageRanks(v []float64) []float64 {
 	return ranks
 }
 
-// pearson is the correlation of x and y, NaN below two values.
-func pearson(x, y []float64) float64 {
-	n := len(x)
-	if n < 2 {
-		return math.NaN()
-	}
-	var mx, my float64
-	for i := range n {
-		mx += x[i]
-		my += y[i]
-	}
-	mx /= float64(n)
-	my /= float64(n)
-	var sxy, sxx, syy float64
-	for i := range n {
-		dx, dy := x[i]-mx, y[i]-my
-		sxy += dx * dy
-		sxx += dx * dx
-		syy += dy * dy
-	}
-	return sxy / math.Sqrt(sxx*syy)
-}
+// radixRanks is the fewest values doubled sorts by radix.
+const radixRanks = 256

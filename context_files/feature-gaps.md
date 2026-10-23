@@ -207,7 +207,7 @@ differs from their input's, or scalars outside a group-by.
 | **Statistics:** built: `hist` in step 286; `skew`, `kurtosis` and `approx_n_unique` in step 276; `entropy`, `mode` and Spearman `corr` in step 277 | P1 |
 | **Search and hashing:** built: `dot` in step 276; `search_sorted`, `index_of`, `hash`, `peak_min` and `peak_max` in step 279, a search's value a Go value only; `unique_counts` and `value_counts` on an expression in step 280 | — |
 | built: **a window inside a window,** in step 336: an ordered function, an aggregate or a window in a window's input, computed beneath it in its partitions and order, a Window node a layer, as Polars computes them; a window the user wrote inside another partitioned within the outer one's partitions. An aggregate whose answer depends on the order, under an order, stays refused (found at step 281) | — |
-| **Holistic aggregates that do not spill:** `CorrSpearman`'s pairs and `Mode`'s values, a group's, refuse in a group-by past the limit, where `Median`, `Quantile` and `NUnique` spill theirs (found at step 287) | P1 |
+| **Holistic aggregates that do not spill:** `Mode`'s values, a group's, refuse in a group-by past the limit, where `Median`, `Quantile` and `NUnique` spill theirs, and `CorrSpearman` its pairs since step 339 (found at step 287) | P1 |
 | built: **a non-aggregate in an aggregation,** in step 331: `Agg(Col("x"))`, `Agg(Col("x").Mul(2))` and a window in `Agg`, each group's values as a list, as Polars answers them; and a window inside an aggregate, `CumSum(false).Max()`, a group at a time. A mix of an aggregate and a row's value too, since step 336, the row below (found at step 329) | — |
 | built: **an aggregate inside an aggregate's input,** in step 336: `Col("a").Sub(Col("a").Mean()).Abs().Sum()` in a `Select`, an `Agg` and a window, the inner aggregate computed over the group and broadcast beneath the outer; in `Agg` a mix, `a - a.Mean()`, a list a group, and `a.Sum().Mean()` the sum; `SortBy` and `Gather` take an aggregate in their keys (found at step 279) | — |
 | **Integers as bits:** built: `& \| ^ ~` of integers in step 278, the `bitwise_and/or/xor` aggregates in step 276. Polars has no shifts | — |
@@ -471,7 +471,8 @@ decide whether to keep or switch each one.
 - `Entropy` of a group of no value is null, as `Sum`'s is, where Polars' is −0.0.
   `Mode` without `maintainOrder` is sorted, where Polars' order is its hash table's,
   and refuses a Struct or a List, which Polars counts. `CorrSpearman` takes numbers;
-  Polars ranks text too (step 277).
+  Polars ranks text too (step 277). Its sums are exact since step 339, its answer
+  within an ulp of the true one, where Polars' float sums are a few ulps off.
 - NDJSON: a lone surrogate's escape reads as U+FFFD, where Polars reads a high one as
   NUL and refuses a low one; a number past a float's range, `1e400`, is ±Inf, which
   Polars refuses; a given schema of an Int8, an Int16, a UInt8, a UInt16, a Time, a

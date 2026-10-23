@@ -483,9 +483,11 @@ type MemoryStats struct {
 // # What a group-by's limit does NOT bound
 //
 // Partitioning divides the KEY SPACE, so it bounds a group-by whose problem is
-// cardinality. It cannot divide a single key, and quantile, median and n_unique
-// hold state per VALUE rather than per group — so a group-by over a few very large
-// groups still fails, with an error that says which of the two situations it is in.
+// cardinality. It cannot divide a single key. What a key holds per VALUE rather than
+// per group, a quantile's, a median's, n_unique's or a Spearman's, goes to disk of
+// its own (steps 220, 241 and 339); implode, whose answer is every value, does not —
+// so a group-by imploding a few very large groups still fails, with an error that
+// says which of the two situations it is in.
 //
 // The join has the same wall in two places: a join with no key and a residual, a
 // WhereExists of a predicate alone, has nothing to divide, and one join key with

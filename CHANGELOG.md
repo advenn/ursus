@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–338, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–339, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,13 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`CorrSpearman` spills its pairs** (339): over a group larger than the memory
+  limit, in a group-by, a window or a dynamic or rolling group, where it failed; its
+  pairs go to disk sorted by one variable, are ranked as they come back, and sorted
+  again by the other. Its sums are exact integers now, so its answer no longer
+  depends on the order its pairs came in, spilled, merged from several threads or
+  neither; and it is faster, 89 ms where it was 332 by a thousand groups of a
+  million rows (Polars 123), and 98 where it was 909 over the frame (Polars 82).
 - **`RollingRankBy` and `RollingMap`** (338), Polars' `rolling_rank_by` and
   `rolling_map`: each row's value ranked among its window's by time, and a Go function
   over each row's window of rows, given its values and whether each is there, centred
