@@ -80,6 +80,11 @@ An aggregate's input is an expression, so it can be narrowed or computed first:
 - a `Bool` sums as 0 and 1, so the sum of a condition counts the rows that meet it;
 - `MaxBy(other)` and `MinBy(other)` take a column's value where another column is
   largest or smallest: each region's biggest order's product.
+- *New in 0.6.7:* `TopKBy(other, k)` and `BottomKBy(other, k)` take k of them, a
+  list a group, as Polars' `top_k_by` and `bottom_k_by`: each region's three
+  biggest orders' products. A null in `other` comes last, and rows that tie on it
+  are ordered by their values, the greater first for `TopKBy`, where Polars' sort
+  orders them as it finds them.
 
 ## Lists per group
 

@@ -85,6 +85,10 @@ func classify(op expr.AggOp) (aggClass, bool) {
 	case expr.AggImplode, expr.AggTopK, expr.AggBottomK:
 		// A one-row group's top k, or bottom k, is the one value, in a list.
 		return classImplode, true
+	case expr.AggTopKBy, expr.AggBottomKBy:
+		// So is its top k by another input (step 330). Paired, so every operand here
+		// is refused, as min_by's is; topkby_test.go asks them their questions.
+		return classImplode, true
 	case expr.AggCount, expr.AggLen, expr.AggNUnique, expr.AggNullCount:
 		return classCounting, true
 	case expr.AggArgMin, expr.AggArgMax:

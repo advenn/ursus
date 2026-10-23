@@ -208,6 +208,12 @@ func NewAccumulator(op expr.AggOp, in dtype.DataType, bind expr.AggBinding,
 		return newTopK(in, params.K, true)
 	case expr.AggBottomK:
 		return newTopK(in, params.K, false)
+	case expr.AggTopKBy, expr.AggBottomKBy:
+		fs := in.Fields()
+		if len(fs) != 2 {
+			return nil, uerr.Internalf("kernel: %s over %s, not a pair", op, in)
+		}
+		return newTopKBy(fs[0].Type, fs[1].Type, params.K, op == expr.AggTopKBy)
 
 	case expr.AggItem:
 		return &itemAcc{pos: positionAcc{out: bind.Out}, allowEmpty: params.AllowEmpty}, nil

@@ -403,7 +403,9 @@ decide whether to keep or switch each one.
   numbers are ursus's own, as `Hash`'s are (step 302).
 - `Div` and `Pow` always return a float.
 - `Cut` returns String, not Categorical.
-- An expression's `TopK` and `BottomK` return a List.
+- An expression's `TopK`, `BottomK`, `TopKBy` and `BottomKBy` return a List. `TopKBy`
+  and `BottomKBy` order rows that tie on by by their values, the greater first for
+  `TopKBy`, where Polars' sort orders ties as it finds them (step 330).
 - `Time` takes a unit; Polars' is nanoseconds.
 - `GroupByDynamic` with keys puts the index column first and the keys after it;
   Polars puts the keys first (found at step 251).

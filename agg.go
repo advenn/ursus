@@ -561,6 +561,28 @@ func (e Expr) TopK(k int) Expr { return e.aggP(expr.AggTopK, expr.AggParams{K: k
 // TopK, whose rules it follows.
 func (e Expr) BottomK(k int) Expr { return e.aggP(expr.AggBottomK, expr.AggParams{K: k}) }
 
+// TopKBy is the k values whose by is the greatest, greatest first, as a List:
+// Polars' top_k_by (step 330). by is any ordered type, NaN the greatest float, and a
+// null by comes after every value. A value's null is kept, as Polars keeps it, so a
+// group's list is min(k, its rows) long.
+//
+//	GroupBy(Col("region")).Agg(Col("product").TopKBy(Col("sales"), 3))
+//
+// Rows of one by are ordered by their values, the greater first, a null last, where
+// Polars' sort orders ties as it finds them: so the answer depends on no row order,
+// and a group-by keeps its workers, as with TopK. Like TopK, it holds only k rows a
+// group. The value is numeric, temporal, decimal, string or Boolean; k is at least 1.
+func (e Expr) TopKBy(by Expr, k int) Expr {
+	return pairAgg(expr.AggTopKBy, e, by, expr.AggParams{K: k})
+}
+
+// BottomKBy is the k values whose by is the least, least first, as a List: Polars'
+// bottom_k_by. A null by still comes last, and rows of one by are ordered by their
+// values, the lesser first. See TopKBy, whose rules it follows.
+func (e Expr) BottomKBy(by Expr, k int) Expr {
+	return pairAgg(expr.AggBottomKBy, e, by, expr.AggParams{K: k})
+}
+
 // Item is the one value, as Polars' item (step 324): a group's in an aggregation, and
 // in a Select the column's, beside the other columns. Several values are refused, and
 // none too unless allowEmpty, which makes it null.

@@ -65,6 +65,9 @@ const (
 	AggLowerBound
 	AggUpperBound
 	AggIsSorted
+	// Step 330: top_k_by and bottom_k_by, a pair, PairOf's, as AggMaxBy, with Params.K.
+	AggTopKBy
+	AggBottomKBy
 
 	aggOpCount
 )
@@ -84,6 +87,7 @@ var aggOpNames = [aggOpCount]string{
 	AggBitAnd: "bitwise_and", AggBitOr: "bitwise_or", AggBitXor: "bitwise_xor",
 	AggNanMin: "nan_min", AggEntropy: "entropy", AggSpearman: "corr_spearman",
 	AggItem: "item", AggLowerBound: "lower_bound", AggUpperBound: "upper_bound", AggIsSorted: "is_sorted",
+	AggTopKBy: "top_k_by", AggBottomKBy: "bottom_k_by",
 }
 
 func (o AggOp) String() string {
@@ -137,7 +141,13 @@ func (o AggOp) IsOrderDependent() bool {
 }
 
 // IsPaired reports whether the aggregate reads two inputs, as PairOf's struct.
-func (o AggOp) IsPaired() bool { return o >= AggCorr && o <= AggMaxBy || o == AggSpearman }
+func (o AggOp) IsPaired() bool {
+	return o >= AggCorr && o <= AggMaxBy || o == AggSpearman || o.IsTopKBy()
+}
+
+// IsTopKBy reports whether the aggregate is TopKBy or BottomKBy. Unlike MinBy and
+// MaxBy they are not order-dependent: rows of one by are ordered by their values.
+func (o AggOp) IsTopKBy() bool { return o == AggTopKBy || o == AggBottomKBy }
 
 // IsBy reports whether the aggregate is MinBy or MaxBy. They are order-dependent as
 // ArgMin and ArgMax are: a tie goes to the earliest row, which a worker holding
@@ -215,7 +225,7 @@ func (p AggParams) args(op AggOp) string {
 		return strconv.FormatUint(uint64(p.DDof), 10)
 	case AggQuantile:
 		return strconv.FormatFloat(p.Q, 'g', -1, 64) + ", " + p.Interp.String()
-	case AggTopK, AggBottomK:
+	case AggTopK, AggBottomK, AggTopKBy, AggBottomKBy:
 		return strconv.Itoa(p.K)
 	case AggSkew:
 		return "bias=" + strconv.FormatBool(p.Bias)
@@ -281,7 +291,7 @@ func (a *Agg) Field(in *dtype.Schema) (dtype.Field, error) {
 	if err != nil {
 		return dtype.Field{}, err
 	}
-	if (a.Op == AggTopK || a.Op == AggBottomK) && a.Params.K < 1 {
+	if (a.Op == AggTopK || a.Op == AggBottomK || a.Op.IsTopKBy()) && a.Params.K < 1 {
 		return dtype.Field{}, uerr.New(uerr.KindValue, a.Op.String(),
 			"k must be at least 1, got %d", a.Params.K)
 	}
@@ -316,6 +326,19 @@ func pairedBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		return AggBinding{}, uerr.Internalf("expr: %s over %s, not a pair", op, in)
 	}
 	a, b := fs[0].Type, fs[1].Type
+	if op.IsTopKBy() {
+		// A List of the value's own type, as TopK's, by any ordered type.
+		if !b.IsOrdered() {
+			return AggBinding{}, uerr.New(uerr.KindType, "",
+				"%s() orders by a %s, which has no order", op, b).
+				Hint("only numeric, temporal, string and boolean types have an ordering")
+		}
+		if !a.IsOrdered() {
+			return AggBinding{}, uerr.New(uerr.KindType, "", "%s() is not defined for %s", op, a).
+				Hint("it keeps numeric, temporal, decimal, string and boolean values")
+		}
+		return AggBinding{Acc: a, Out: dtype.List(a)}, nil
+	}
 	if op.IsBy() {
 		if !b.IsOrdered() {
 			return AggBinding{}, uerr.New(uerr.KindType, "",
@@ -555,7 +578,7 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		// on inputs a Float64 still describes approximately.
 		return AggBinding{Acc: dtype.Float64, Out: dtype.Float64}, nil
 
-	case AggCorr, AggCov, AggMinBy, AggMaxBy, AggSpearman:
+	case AggCorr, AggCov, AggMinBy, AggMaxBy, AggSpearman, AggTopKBy, AggBottomKBy:
 		return pairedBinding(op, in)
 
 	case AggEntropy:

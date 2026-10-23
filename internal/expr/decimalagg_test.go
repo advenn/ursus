@@ -67,6 +67,9 @@ func TestEveryAggregateOverADecimalHasItsStatedType(t *testing.T) {
 		"lower_bound": "Int128",
 		"upper_bound": "Int128",
 		"is_sorted":   "Bool",
+		// Step 330: a pair, as min_by's.
+		"top_k_by":    "refused: a pair of inputs",
+		"bottom_k_by": "refused: a pair of inputs",
 	}
 
 	for i := range int(aggOpCount) {
