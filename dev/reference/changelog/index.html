@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–347, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–348, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3137,6 +3137,12 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>Parquet files whose columns differ</strong> (348), as Polars' schema evolution reads them:
+  <code>WithParquetSchema</code>, <code>WithInsertMissingColumns</code>, <code>WithIgnoreExtraColumns</code>,
+  <code>WithUpcastIntegers</code> and <code>WithUpcastFloats</code>, Polars' <code>schema</code>, <code>missing_columns</code>,
+  <code>extra_columns</code> and <code>cast_options</code>: a column a file lacks read as nulls, one it
+  has beyond the schema passed over, a narrower integer or float widened. Each is
+  refused otherwise, as before and as Polars refuses it.</li>
 <li><strong>A Parquet directory and its hive partitions</strong> (347): <code>ScanParquet(dir)</code> reads every
   file below a directory as one frame, as Polars' <code>scan_parquet</code> does, each directory
   named <code>key=value</code> a column of the files beneath it, typed as Polars types it; a
