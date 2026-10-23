@@ -25,6 +25,11 @@ in memory. The types are inferred from the first rows, and the options say the r
 | `WithNullValues(vals...)` | the text that means null |
 | `WithTruncateRaggedLines(b)`, `WithMaxRecordSize(n)` | malformed input |
 
+*New in 0.6.7:* a file compressed by gzip, zlib or Zstandard is read as itself,
+known by its first bytes whatever its name, as Polars reads one:
+`ScanCSV("sales.csv.gz")`. It is decompressed as it is read, never held whole, and
+parsed in parallel as a plain file is. NDJSON and JSON files are read so too.
+
 `ScanCSVGlob(pattern)` reads every file a pattern matches as one frame, in their
 names' order, and `ScanCSVFiles(paths)` a list:
 

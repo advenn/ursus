@@ -89,6 +89,10 @@ func csvOptions(opts []CSVOption) csv.Options {
 // that if WithSchema is given. Projection reaches the reader, so selecting two
 // columns of a hundred parses two.
 //
+// A file compressed by gzip, zlib or Zstandard is read as itself, known by its
+// first bytes whatever its name, as Polars reads one, and decompressed as it is
+// read; so is every CSV, NDJSON and JSON scan's stream. New in 0.6.7.
+//
 //	df, err := ursus.ScanCSV("sales.csv").
 //	    Filter(ursus.Col("qty").Gt(10)).
 //	    Select(ursus.Col("region"), ursus.Col("qty")).

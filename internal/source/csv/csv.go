@@ -91,6 +91,16 @@ func NewNamed(opens []Opener, names []string, desc string, o Options) *Source {
 	return s
 }
 
+// open opens stream i, decompressed where it is gzip's, zlib's or Zstandard's, as
+// Polars reads a compressed CSV (step 346).
+func (s *Source) open(ctx context.Context, i int) (io.ReadCloser, error) {
+	rc, err := s.opens[i](ctx)
+	if err != nil {
+		return nil, err
+	}
+	return source.Decompressed(rc)
+}
+
 // FileOpener returns an Opener for a path.
 func FileOpener(path string) Opener {
 	return func(context.Context) (io.ReadCloser, error) { return os.Open(path) }
@@ -151,7 +161,7 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 		// Inference reads the FIRST stream only. Reading them all would make opening
 		// a thousand-part dataset cost a thousand file opens before the query starts,
 		// and the parts of a partitioned dataset share a schema by construction.
-		r, err := s.opens[0](ctx)
+		r, err := s.open(ctx, 0)
 		if err != nil {
 			s.err = uerr.Wrap(err, uerr.KindIO, "scan_csv", "opening %s", s.partName(0))
 			return
@@ -349,7 +359,7 @@ func (r *reader) openNext(ctx context.Context) error {
 	if r.next >= len(r.src.opens) {
 		return io.EOF
 	}
-	rc, err := r.src.opens[r.next](ctx)
+	rc, err := r.src.open(ctx, r.next)
 	if err != nil {
 		return uerr.Wrap(err, uerr.KindIO, "scan_csv", "opening %s", r.src.partName(r.next))
 	}

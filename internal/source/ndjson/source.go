@@ -118,10 +118,14 @@ func (s *Source) unit() string {
 	return "line "
 }
 
-// open opens f, a JSON document's as NDJSON.
+// open opens f, decompressed where it is gzip's, zlib's or Zstandard's, as Polars
+// reads a compressed file (step 346), and a JSON document's as NDJSON.
 func (s *Source) open(ctx context.Context, f File) (io.ReadCloser, error) {
 	rc, err := f.Open(ctx)
-	if err != nil || !s.opts.JSON {
+	if err != nil {
+		return nil, err
+	}
+	if rc, err = source.Decompressed(rc); err != nil || !s.opts.JSON {
 		return rc, err
 	}
 	return &documentReader{objectLines: objectLines{r: rc}, c: rc}, nil

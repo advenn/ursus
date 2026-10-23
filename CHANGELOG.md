@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–345, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–346, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **Compressed input** (346): a CSV, NDJSON or JSON file compressed by gzip, zlib or
+  Zstandard is read as itself, known by its first bytes whatever its name, as Polars
+  reads one, decompressed as it is read and parsed in parallel as a plain file is.
+  A text a zlib header could begin, a CSV header of `x^`, is read as text, where
+  Polars finds no rows. A million rows by gzip in about 200 ms, twice Polars' time, as
+  a plain file's read is.
 - **JSON read** (345): `ScanJSON` and `ScanJSONBytes`, Polars' `read_json`, a file of
   an array of objects, a row an object, or of one object, one row. Each object is
   made a line of NDJSON where it is read, in place, and read as NDJSON is, its
