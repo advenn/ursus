@@ -55,6 +55,10 @@ two of six columns:
 query that still gives the right answer while reading forty columns instead of two
 fails a test.
 
+*New in 0.6.7.* `Columns(ctx)`, `DTypes(ctx)` and `Width(ctx)` are a query's column
+names, their types and how many there are, as Polars' lazy `columns`, `dtypes` and
+`width`: read from `CollectSchema`, which types the plan without running it.
+
 ## Eager: a DataFrame
 
 A `DataFrame` is an answer in memory, Arrow arrays underneath. Its methods mirror

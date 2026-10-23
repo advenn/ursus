@@ -107,6 +107,10 @@ changes is what Go asks for.
 | `pl.col("x").first(ignore_nulls=True)`, `.last(...)`; `df.group_by("k").all()` | `ursus.Col("x").FirstNonNull()`, `LastNonNull()`; `lf.GroupBy(ursus.Col("k")).All()` (new in 0.6.7) |
 | `for key, g in df.group_by("k")`, `.map_groups(fn)` | `for p, err := range lf.GroupBy(ursus.Col("k")).Groups(ctx)`, `.MapGroups(ctx, fn)` (new in 0.6.7) |
 | `df.extend(other)`, `df.glimpse()`, `df.estimated_size()` | `df.Extend(ctx, other)`, `df.Glimpse()`, `df.EstimatedSize()` (new in 0.6.7) |
+| `df.gather([2, 0])`, `df.row(1)`, `df.row(by_predicate=p)`, `df.item()`, `df.item(1, "b")` | `df.Gather(ctx, []int{2, 0}, false)`, `df.Row(1)`, `df.RowWhere(ctx, p)`, `df.Item()`, `df.ItemAt(1, "b")` (new in 0.6.7) |
+| `df.replace_column(0, s)`, `df.drop_in_place("b")`, `df.get_column_index("b")`, `df.to_series(0)`, `df.to_struct()` | `df.ReplaceColumn(0, s)`, `df.DropInPlace("b")`, `df.GetColumnIndex("b")`, `df.ToSeries(0)`, `df.ToStruct("")` (new in 0.6.7) |
+| `df.corr()`, `df.sum_horizontal()`, `df.fold(lambda a, b: a + b)` | `df.Corr(ctx)`, `df.SumHorizontal(ctx, true)`, `df.Fold(ctx, func(a, b ursus.Expr) ursus.Expr { return a.Add(b) })` (new in 0.6.7) |
+| `lf.collect_schema().names()`, `.dtypes()`, `.len()` | `lf.Columns(ctx)`, `lf.DTypes(ctx)`, `lf.Width(ctx)` (new in 0.6.7) |
 | `df.group_by("k").having(pl.len() > 1).agg(...)` | `lf.GroupBy(ursus.Col("k")).Having(ursus.Len().Gt(1)).Agg(...)` (new in 0.6.7) |
 | `df.group_by("k", maintain_order=True).head(2)`, `.tail(2)` | `lf.GroupBy(ursus.Col("k")).Head(2)`, `.Tail(2)` (new in 0.6.7) |
 | `df.upsample("t", every="1d", group_by="g")` | `lf.Upsample("t", ursus.Every("1d"), "g")` (new in 0.6.7) |

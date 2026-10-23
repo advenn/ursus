@@ -67,11 +67,11 @@ what we are lacking".
 
 | Polars | ursus today |
 | --- | --- |
-| a frame's `corr` | missing |
-| `gather`, `row`, `item`, `get_column_index`, `replace_column`, `drop_in_place` | `Column[T]`, `At[T]`, `Schema().IndexOf`, `WithColumns` |
-| a frame's `sum_horizontal`, `mean_horizontal`, `min_horizontal`, `max_horizontal`, `fold` | the expressions |
-| `map_rows`, `map_columns`, `to_series`, `to_struct` | missing |
-| `cache`, `serialize`, `show`, lazy `columns`/`dtypes`/`width` | `CollectSchema` |
+| ~~a frame's `corr`~~ | built in step 327: `DataFrame.Corr`, NumPy's, as Polars' |
+| ~~`gather`, `row`, `item`, `get_column_index`, `replace_column`, `drop_in_place`~~ | built in step 327 |
+| ~~a frame's `sum_horizontal`, `mean_horizontal`, `min_horizontal`, `max_horizontal`, `fold`~~ | built in step 327 |
+| `map_rows`, `map_columns` | missing; `to_series` and `to_struct` built in step 327 |
+| `cache`, `serialize`, `show` | `CollectSchema`; lazy `columns`, `dtypes` and `width` built in step 327 |
 
 ## 5. I/O
 

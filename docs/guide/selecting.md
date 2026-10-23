@@ -51,6 +51,12 @@ before the last column:
 
 --8<-- "Example_selectInsertColumn.md"
 
+*New in 0.6.7.* `ReplaceColumn(i, column)` puts a column in place of the one at a
+place, and `DropInPlace(name)` gives a column and the frame without it, as Polars'
+`replace_column` and `drop_in_place`, each a new frame where Polars changes its own.
+`GetColumnIndex(name)` is a column's place, `ToSeries(i)` the column at one, and
+`ToStruct(name)` the whole frame as one Struct column.
+
 `Select` can also compute columns, as `WithColumns` does: see
 [Expressions](../concepts/expressions.md). A pattern is explicit: ursus does not read
 `Col("^qty$")` as a regular expression, as Polars does, so a column named with a `^`
@@ -129,6 +135,13 @@ counts from the end, as Polars counts it (*new in 0.6.7*), and `Reverse` turns t
 frame around:
 
 --8<-- "Example_slices.md"
+
+*New in 0.6.7.* `Gather(ctx, indices, nullOnOOB)` takes the rows at positions, in
+their order, as Polars' `gather`; a negative position counts from the end, and one
+past the end is refused, or with `nullOnOOB` is a row of nulls. `Row(i)` is a row's
+values as Go values, `RowNamed(i)` the same by name, and `RowWhere(ctx, predicate)`
+the one row a predicate holds of. `Item()` is a one-value frame's value and
+`ItemAt(row, column)` any one, as Polars' `row` and `item`.
 
 *New in 0.6.7.* `HashRows(seed, columns...)` is each row's hash over its columns, every
 column when none is named, as Polars' `hash_rows`: rows equal as a group-by sees them

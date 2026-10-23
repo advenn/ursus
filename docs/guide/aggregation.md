@@ -142,6 +142,14 @@ its trues.
 
 --8<-- "Example_aggFrame.md"
 
+*New in 0.6.7.* `Corr(ctx)` is each pair of columns' Pearson correlation, a Float64
+column a column, as Polars' frame `corr`, which NumPy computes: a column holding a
+null is NaN throughout, where `Corr` of two expressions skips the rows holding one.
+`SumHorizontal(ctx, ignoreNulls)`, `MeanHorizontal(ctx, ignoreNulls)`, `MinHorizontal`
+and `MaxHorizontal` are each row's reduction across every column, named `sum`, `mean`,
+`min` and `max`, and `Fold(ctx, fn)` folds a function across the columns from the
+first, as Polars' frame methods do.
+
 `ValueCounts(exprs...)` counts the rows of each distinct value, most frequent first,
 ties in the order their values first appear:
 

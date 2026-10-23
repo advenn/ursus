@@ -413,6 +413,68 @@ func TakeStrings(c *Column, sel []int32, valid bitmap.View) *Column {
 	return &Column{name: c.name, dt: c.dt, len: n, valid: valid, offs: ob, chars: cb}
 }
 
+// TakeStringsChunked is TakeStrings of a long selection, a chunk of rows at a time,
+// the chunks run by run, which may run them at once: each chunk's bytes are counted
+// first, which places every chunk's in the one answer, and then each chunk writes
+// its own offsets and bytes.
+func TakeStringsChunked(c *Column, sel []int32, valid bitmap.View, chunk int,
+	run func(n int, fn func(k int) error) error) (*Column, error) {
+	n := len(sel)
+	chunks := (n + chunk - 1) / chunk
+	var (
+		o   []int32
+		src []byte
+	)
+	start := make([]int64, chunks+1)
+	if c.offs != nil {
+		o = unsafeData[int32](c.offs.Bytes())
+		src = c.chars.Bytes()
+		err := run(chunks, func(k int) error {
+			chars := int64(0)
+			for _, i := range sel[k*chunk : min(n, (k+1)*chunk)] {
+				if i >= 0 {
+					chars += int64(o[i+1] - o[i])
+				}
+			}
+			start[k+1] = chars
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	for k := range chunks {
+		start[k+1] += start[k]
+	}
+	if start[chunks] > MaxStringBytes {
+		tooManyChars(c.name, start[chunks])
+	}
+	ob := arrowx.NewBuffer((n + 1) * 4)
+	cb := arrowx.NewBuffer(int(start[chunks]))
+	offs := unsafeData[int32](ob.Bytes())
+	out := cb.Bytes()
+	err := run(chunks, func(k int) error {
+		pos := int32(start[k])
+		for j := k * chunk; j < min(n, (k+1)*chunk); j++ {
+			offs[j] = pos
+			if i := sel[j]; i >= 0 && o != nil {
+				lo, hi := o[i], o[i+1]
+				copy(out[pos:], src[lo:hi])
+				pos += hi - lo
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	offs[n] = int32(start[chunks])
+	if valid.Len() == 0 && n > 0 {
+		valid = bitmap.AllSet(n)
+	}
+	return &Column{name: c.name, dt: c.dt, len: n, valid: valid, offs: ob, chars: cb}, nil
+}
+
 // NewStringParts builds a String column from an offsets slice and a character
 // slice that a reader has already accumulated.
 //

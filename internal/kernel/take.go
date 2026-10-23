@@ -43,28 +43,7 @@ func SelectionFromMask(mask *data.Column) ([]int32, error) {
 // gathers need.
 func Take(c *data.Column, sel []int32) (*data.Column, error) {
 	n := len(sel)
-	srcValid := c.Validity()
-
-	// Output validity: null if the index is null, or if the source row was null.
-	// Neither can happen when the source has no nulls and the selection no
-	// NullIndex, which is every filter of a column without nulls: a bit was
-	// appended per row there, and then thrown away.
-	outValid := bitmap.AllSet(n)
-	if !srcValid.IsAllSet() || slices.Contains(sel, NullIndex) {
-		valid := bitmap.NewBuilder(n)
-		anyNull := false
-		for _, i := range sel {
-			ok := i != NullIndex && srcValid.Get(int(i))
-			valid.Append(ok)
-			anyNull = anyNull || !ok
-		}
-		if anyNull {
-			// Otherwise the buffer is dropped: Arrow permits omitting the validity
-			// bitmap, and the no-storage form makes downstream kernels take their
-			// fast path.
-			outValid = valid.Finish()
-		}
-	}
+	outValid := takeValidity(c, sel)
 
 	switch {
 	// Gathering from a column whose TYPE says there are no values. Every output row
@@ -106,6 +85,94 @@ func Take(c *data.Column, sel []int32) (*data.Column, error) {
 	default:
 		return takeFixed(c, sel, outValid)
 	}
+}
+
+// takeValidity is a gather's validity: null if the index is null, or if the source
+// row was null. Neither can happen when the source has no nulls and the selection no
+// NullIndex, which is every filter of a column without nulls: a bit was appended per
+// row there, and then thrown away.
+func takeValidity(c *data.Column, sel []int32) bitmap.View {
+	n := len(sel)
+	srcValid := c.Validity()
+	if srcValid.IsAllSet() && !slices.Contains(sel, NullIndex) {
+		return bitmap.AllSet(n)
+	}
+	valid := bitmap.NewBuilder(n)
+	anyNull := false
+	for _, i := range sel {
+		ok := i != NullIndex && srcValid.Get(int(i))
+		valid.Append(ok)
+		anyNull = anyNull || !ok
+	}
+	if !anyNull {
+		// The buffer is dropped: Arrow permits omitting the validity bitmap, and the
+		// no-storage form makes downstream kernels take their fast path.
+		return bitmap.AllSet(n)
+	}
+	return valid.Finish()
+}
+
+// TakeChunked is Take of a long selection, a chunk of rows at a time, the chunks run
+// by run, which may run them at once: a fixed-width or a string column's chunks each
+// write their own rows of one answer, so no part is joined after, and the answer is
+// Take's. Any other column is taken whole, by Take.
+func TakeChunked(c *data.Column, sel []int32, chunk int, run func(n int, fn func(k int) error) error) (*data.Column, error) {
+	dt := c.DType()
+	switch {
+	case dt.IsNull(), dt.ID() == dtype.TypeBool, dt.ID() == dtype.TypeList, dt.ID() == dtype.TypeStruct:
+		return Take(c, sel)
+	case dt.HasStringStorage():
+		return data.TakeStringsChunked(c, sel, takeValidity(c, sel), chunk, run)
+	}
+	valid := takeValidity(c, sel)
+	switch dt.Physical().ID() {
+	case dtype.TypeInt8:
+		return takeChunkedT[int8](c, sel, valid, chunk, run)
+	case dtype.TypeInt16:
+		return takeChunkedT[int16](c, sel, valid, chunk, run)
+	case dtype.TypeInt32:
+		return takeChunkedT[int32](c, sel, valid, chunk, run)
+	case dtype.TypeInt64:
+		return takeChunkedT[int64](c, sel, valid, chunk, run)
+	case dtype.TypeUint8:
+		return takeChunkedT[uint8](c, sel, valid, chunk, run)
+	case dtype.TypeUint16:
+		return takeChunkedT[uint16](c, sel, valid, chunk, run)
+	case dtype.TypeUint32:
+		return takeChunkedT[uint32](c, sel, valid, chunk, run)
+	case dtype.TypeUint64:
+		return takeChunkedT[uint64](c, sel, valid, chunk, run)
+	case dtype.TypeFloat32:
+		return takeChunkedT[float32](c, sel, valid, chunk, run)
+	case dtype.TypeFloat64:
+		return takeChunkedT[float64](c, sel, valid, chunk, run)
+	case dtype.TypeInt128:
+		return takeChunkedT[i128.Int128](c, sel, valid, chunk, run)
+	}
+	return Take(c, sel)
+}
+
+func takeChunkedT[T data.Fixed](c *data.Column, sel []int32, valid bitmap.View, chunk int,
+	run func(n int, fn func(k int) error) error) (*data.Column, error) {
+	src, err := data.Values[T](c)
+	if err != nil {
+		return nil, err
+	}
+	buf, dst := newValuesBuffer[T](len(sel))
+	err = run((len(sel)+chunk-1)/chunk, func(k int) error {
+		lo, hi := k*chunk, min(len(sel), (k+1)*chunk)
+		out := dst[lo:hi]
+		for j, i := range sel[lo:hi] {
+			if i != NullIndex {
+				out[j] = src[i]
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return data.NewFixedBuffer(c.Name(), c.DType(), buf, len(sel), valid), nil
 }
 
 // takeStruct gathers a Struct column: every field gathered by the SAME selection.

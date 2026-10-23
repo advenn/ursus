@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–326, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–327, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -96,6 +96,11 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A frame's conveniences** (327), as Polars' frame methods: `Corr`, NumPy's
+  correlation of every pair of columns; `Gather`, `Row`, `RowNamed`, `RowWhere`, `Item`
+  and `ItemAt`; `GetColumnIndex`, `ReplaceColumn`, `DropInPlace`, `ToSeries` and
+  `ToStruct`; `SumHorizontal`, `MeanHorizontal`, `MinHorizontal`, `MaxHorizontal` and
+  `Fold` across the columns; and a lazy frame's `Columns`, `DTypes` and `Width`.
 - **The meta namespace** (326), `Expr.Meta()`, as Polars' `meta`: `RootNames`,
   `OutputName`, `HasMultipleOutputs`, `IsColumn`, `IsColumnSelection`, `IsLiteral`,
   `IsRegexProjection`, `UndoAliases`, `Eq`, `Pop` and `TreeFormat`.
