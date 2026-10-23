@@ -440,7 +440,7 @@ func Example_memoryRefusal() {
 	fmt.Println(err)
 	// Output:
 	// ursus: group_by: memory limit of 64.0KiB exceeded: the query is holding 105.2KiB, 105.2KiB of it in this operator
-	//   group_by holds one entry per distinct key, and implode holds every VALUE as its answer — which partitioning to disk cannot divide, because it divides across keys (quantile, median, n_unique and corr_spearman spill their values); raise the limit with WithMemoryLimit
+	//   group_by holds one entry per distinct key, and implode holds every VALUE as its answer — which partitioning to disk cannot divide, because it divides across keys (quantile, median, n_unique, mode and corr_spearman spill their values); raise the limit with WithMemoryLimit
 	//   sort, group_by, join, unique, over, reverse and tail spill to disk; join_asof, merge_sorted, hstack, rolling and group_by_dynamic stream their input; an over computing a rolling window by time one of whose periods holds more than the limit fails rather than exceed it, and so does implode over one group larger than it
 }
 

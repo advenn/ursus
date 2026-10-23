@@ -68,6 +68,10 @@ const (
 	// Step 330: top_k_by and bottom_k_by, a pair, PairOf's, as AggMaxBy, with Params.K.
 	AggTopKBy
 	AggBottomKBy
+	// Step 340: mode, the group's most frequent values, a List, with
+	// Params.MaintainOrder: Polars' mode in an aggregation, where it was the list
+	// kernel over the values imploded.
+	AggMode
 
 	aggOpCount
 )
@@ -88,6 +92,7 @@ var aggOpNames = [aggOpCount]string{
 	AggNanMin: "nan_min", AggEntropy: "entropy", AggSpearman: "corr_spearman",
 	AggItem: "item", AggLowerBound: "lower_bound", AggUpperBound: "upper_bound", AggIsSorted: "is_sorted",
 	AggTopKBy: "top_k_by", AggBottomKBy: "bottom_k_by",
+	AggMode: "mode",
 }
 
 func (o AggOp) String() string {
@@ -127,6 +132,9 @@ func (o AggOp) IsCounting() bool {
 //	                portion
 //	Implode         a list's element ORDER is its data, so a shuffled input is a
 //	                different answer rather than the same one computed differently
+//	Mode            its values come in the order they first appear, with
+//	                maintain_order; and without, each is its first row's value, so
+//	                a −0 is −0 where it came before a +0, as Polars answers
 //
 // The parallel aggregation driver dispatches round-robin, so no worker holds a
 // contiguous portion and none of those four can be honoured. It declines the whole
@@ -137,7 +145,7 @@ func (o AggOp) IsCounting() bool {
 // are expensive, but they sort in Finish and are perfectly order-insensitive.
 func (o AggOp) IsOrderDependent() bool {
 	return o == AggFirst || o == AggLast || o == AggArgMin || o == AggArgMax ||
-		o == AggImplode || o.IsBy() || o == AggIsSorted
+		o == AggImplode || o.IsBy() || o == AggIsSorted || o == AggMode
 }
 
 // IsPaired reports whether the aggregate reads two inputs, as PairOf's struct.
@@ -215,6 +223,8 @@ type AggParams struct {
 	AllowEmpty bool // Item: a group of no value is null, not refused
 	Descending bool // IsSorted: in descending order
 	NullsLast  bool // IsSorted: its nulls after its values
+
+	MaintainOrder bool // Mode: its values in the order they first appear
 }
 
 // args renders the parameters op actually reads. See Agg.String for why this is
@@ -237,6 +247,8 @@ func (p AggParams) args(op AggOp) string {
 		return "allow_empty=" + strconv.FormatBool(p.AllowEmpty)
 	case AggIsSorted:
 		return "descending=" + strconv.FormatBool(p.Descending) + ", nulls_last=" + strconv.FormatBool(p.NullsLast)
+	case AggMode:
+		return "maintain_order=" + strconv.FormatBool(p.MaintainOrder)
 	default:
 		return ""
 	}
@@ -401,6 +413,14 @@ func ResolveAggBinding(op AggOp, in dtype.DataType) (AggBinding, error) {
 		//
 		// Acc is the input type because nothing is widened — the accumulator retains
 		// the values it was handed. Only sum and mean read Acc at all.
+		return AggBinding{Acc: in, Out: dtype.List(in)}, nil
+
+	case AggMode:
+		// A List of the input's own type, as list.mode's: a Struct or a List cannot
+		// be a key, so its mode is refused, where Polars counts them.
+		if !in.IsHashable() && !in.IsNull() {
+			return AggBinding{}, uerr.New(uerr.KindType, "mode", "mode counts values, and %s cannot be a key", in)
+		}
 		return AggBinding{Acc: in, Out: dtype.List(in)}, nil
 
 	case AggTopK, AggBottomK:

@@ -53,7 +53,7 @@ what we are lacking".
 | ~~`meta.*`~~ | built in step 326: `Expr.Meta()`; `serialize`, `as_selector` and `show_graph` not |
 | ~~a window inside a window; an aggregate inside an aggregate's input~~ | built in step 336: each computed beneath in the outer's scope; an order-dependent aggregate under an order refused |
 | ~~a non-aggregate in an aggregation; a window in one~~ | built in step 331: a list a group, a window a group at a time |
-| `Mode` and Spearman `Corr` spilling in a group-by | Spearman built in step 339: its pairs spill, ranked as they are read back; `Mode` refused past a limit |
+| ~~`Mode` and Spearman `Corr` spilling in a group-by~~ | built in steps 339 and 340: Spearman's pairs spill, ranked as they are read back; `Mode` an aggregate of its own, its counts spilling |
 
 ## 3. Types
 

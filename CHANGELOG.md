@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–339, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–340, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -101,6 +101,14 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **`Mode` in an aggregation is an aggregate of its own, and spills** (340): a group's
+  mode counted the group's values imploded, held every one of them, and failed past
+  the memory limit; it numbers each distinct value as it comes, counts each group's
+  in an array, and past the limit hands its counts to disk, in a group-by or a
+  dynamic or rolling group. It is 3 to 5 times as fast: by a thousand groups of a
+  million rows 38 ms where it took 174 (Polars 19), over the frame 18 where it took
+  91 (Polars 5). A float's mode is its first row's, `-0.0` where it came before
+  `0.0`, as Polars answers.
 - **`CorrSpearman` spills its pairs** (339): over a group larger than the memory
   limit, in a group-by, a window or a dynamic or rolling group, where it failed; its
   pairs go to disk sorted by one variable, are ranked as they come back, and sorted

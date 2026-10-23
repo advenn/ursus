@@ -204,6 +204,8 @@ func NewAccumulator(op expr.AggOp, in dtype.DataType, bind expr.AggBinding,
 
 	case expr.AggImplode:
 		return &implodeAcc{elem: in}, nil
+	case expr.AggMode:
+		return newModeAcc(in, params.MaintainOrder), nil
 	case expr.AggTopK:
 		return newTopK(in, params.K, true)
 	case expr.AggBottomK:

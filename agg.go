@@ -308,7 +308,11 @@ func (e Expr) Entropy(base float64, normalize bool) Expr {
 // Mode is the most frequent values, each once, a null among them where nulls are:
 // Polars' mode, a column of its own length in a Select and a list a group in an
 // aggregation. With maintainOrder they come in the order they first appear; without,
-// ascending, nulls first, where Polars' order is its hash table's.
+// ascending, nulls first, where Polars' order is its hash table's. Each value is its
+// first row's, so a −0 is −0 where it came before a +0, as Polars answers.
+//
+// In an aggregation it counts each distinct value of a group, and past a memory
+// limit its counts spill to disk (step 340).
 func (e Expr) Mode(maintainOrder bool) Expr {
 	m := int64(0)
 	if maintainOrder {

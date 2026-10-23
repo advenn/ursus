@@ -145,11 +145,12 @@ func allScalar(ns []expr.Node) bool {
 }
 
 // lowerReshapes rewrites length-changing expressions into implodes and list kernels:
-// see expr.LowerReshapes. agg is whether the context aggregates.
+// see expr.LowerReshapes. agg is whether the context aggregates. A mode of a group's
+// values is then its own aggregate, which spills (expr.ModeAggs, step 340).
 func lowerReshapes(ns []expr.Node, agg bool) []expr.Node {
 	out := make([]expr.Node, len(ns))
 	for i, n := range ns {
-		out[i] = expr.LowerReshapes(n, agg)
+		out[i] = expr.ModeAggs(expr.LowerReshapes(n, agg))
 	}
 	return out
 }

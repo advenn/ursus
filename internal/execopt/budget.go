@@ -468,8 +468,8 @@ func holdsHint(op string) string {
 		// key space, so the second kind cannot be partitioned away at any depth.
 		return "group_by holds one entry per distinct key, and implode holds every " +
 			"VALUE as its answer — which partitioning to disk cannot divide, because " +
-			"it divides across keys (quantile, median, n_unique and corr_spearman " +
-			"spill their values); raise the limit with WithMemoryLimit"
+			"it divides across keys (quantile, median, n_unique, mode and " +
+			"corr_spearman spill their values); raise the limit with WithMemoryLimit"
 	case "pivot":
 		// pivot holds its pairs since step 303; the group-by beneath it, which
 		// streams the input and spills, is where the input went.
@@ -511,7 +511,7 @@ func holdsHint(op string) string {
 		return op + " holds its open windows and the rows they cover, handing each " +
 			"out as the index passes its end; a gap in the index makes one window per " +
 			"every= across it at once, and an implode keeps every value of its " +
-			"windows (a median, a quantile, n_unique and corr_spearman spill theirs); a coarser " +
+			"windows (a median, a quantile, n_unique, a mode and corr_spearman spill theirs); a coarser " +
 			"every=, a smaller offset= or a narrower index range is what makes it smaller"
 	default:
 		return op + " buffers its whole input; raise the limit with WithMemoryLimit"

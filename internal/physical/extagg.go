@@ -257,8 +257,9 @@ func (s *hashAggSink) ordinalOf(in *data.Batch, i int) int64 {
 //
 // A quantile's values can go to disk instead (step 220): its answer is two order
 // statistics a group, which values sorted by group read back in one pass; and so can
-// n_unique's (step 241), whose answer is a count of the distinct ones, and a
-// Spearman's pairs (step 339), ranked as they are read back. So before
+// n_unique's (step 241), whose answer is a count of the distinct ones, a Spearman's
+// pairs (step 339), ranked as they are read back, and a mode's counts (step 340). So
+// before
 // refusing, either way, the sink spills the values of every accumulator that keeps
 // them, is charged again, and refuses only if it is still over. What remains is
 // implode, whose state per value is its answer.
@@ -287,15 +288,15 @@ func (s *hashAggSink) budgetErr() error {
 		execopt.Bytes(limit), execopt.Bytes(s.accBytes), s.ids.Len()).
 		Hint("radix partitioning divides work across KEYS, never within one — " +
 			"implode keeps every value of a group as its answer, so a single hot " +
-			"key's cannot be spilled; quantile, median, n_unique and corr_spearman " +
-			"spill their values").
+			"key's cannot be spilled; quantile, median, n_unique, mode and " +
+			"corr_spearman spill their values").
 		Hint("raise the limit with WithMemoryLimit, or use a bounded aggregate")
 }
 
 // spillValues hands the state of every accumulator that keeps it a value at a time
 // to its spill: a quantile's values (step 220), n_unique's keys (step 241), a
-// Spearman's pairs (step 339). Then it charges the sink again for what it still
-// holds.
+// Spearman's pairs (step 339), a mode's counts (step 340). Then it charges the sink
+// again for what it still holds.
 func (s *hashAggSink) spillValues(ctx context.Context) error {
 	err := spillState(ctx, s.accs, &s.spills, s.budget, s.batch, func(i int) (string, error) {
 		if err := s.ensureDir(); err != nil {

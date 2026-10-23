@@ -21,8 +21,9 @@ import (
 
 // groupRuns is where a group-by's accumulator puts its state past the budget, in
 // sorted runs of a group a row: a quantile's values (v0.6.3 step 220, valueSpill),
-// n_unique's keys (v0.6.4 step 241, keySpill) and a Spearman's pairs (step 339,
-// pairSpill), over run files in the group-by's spill directory.
+// n_unique's keys (v0.6.4 step 241, keySpill), a Spearman's pairs (step 339,
+// pairSpill) and a mode's entries (step 340, modeSpill), over run files in the
+// group-by's spill directory.
 //
 // The kernel puts each run already in order, a group at a time, so a run is written
 // as it comes, and read back through the external sort's merge on (gid, the second
@@ -68,10 +69,11 @@ type groupSpill interface {
 }
 
 // spillable reports whether acc keeps its state a value at a time, so a groupSpill
-// can take it: a quantile's values, n_unique's keys or a Spearman's pairs.
+// can take it: a quantile's values, n_unique's keys, a Spearman's pairs or a mode's
+// entries.
 func spillable(acc kernel.Accumulator) bool {
 	switch acc.(type) {
-	case kernel.ValueSpiller, kernel.KeySpiller, kernel.PairSpiller:
+	case kernel.ValueSpiller, kernel.KeySpiller, kernel.PairSpiller, kernel.ModeSpiller:
 		return true
 	}
 	return false
@@ -101,6 +103,8 @@ func spillState(ctx context.Context, accs []kernel.Accumulator, spills *[]groupS
 				sp = newKeySpill(ctx, budget, batch, p)
 			case kernel.PairSpiller:
 				sp = newPairSpill(ctx, budget, batch, p)
+			case kernel.ModeSpiller:
+				sp = newModeSpill(ctx, budget, batch, p)
 			default:
 				sp = newValueSpill(ctx, budget, batch, p)
 			}
@@ -209,6 +213,19 @@ func (s *groupRuns) add(level int, path string) error {
 		return errors.Join(err, removeAll([]string{out}))
 	}
 	return s.add(level+1, out)
+}
+
+// kept ends the open run and gives fn every row put, merged across the runs, a batch
+// at a time, and keeps the runs for another read: close removes them.
+func (s *groupRuns) kept(fn func(*data.Batch) error) error {
+	if err := s.EndRun(); err != nil {
+		return err
+	}
+	var runs []string
+	for _, l := range s.levels {
+		runs = append(runs, l...)
+	}
+	return s.merged(runs, fn)
 }
 
 // each ends the open run and gives fn every row put, merged across the runs, a batch
@@ -494,6 +511,69 @@ func (s *pairSpill) close() error {
 		err = errors.Join(err, s.next.close())
 	}
 	return err
+}
+
+// modeSpill is kernel.ModeSpill: a mode's entries, a key, its rows, its first row
+// and its value a row, merged by key (step 340). Its runs are read twice, and let go
+// after the second. Its schema waits for the first entries: the value's type is
+// theirs.
+type modeSpill struct{ groupRuns }
+
+func newModeSpill(ctx context.Context, budget *execopt.Budget, batch int, prefix string) *modeSpill {
+	return &modeSpill{groupRuns{ctx: ctx, budget: budget, batch: batch, prefix: prefix}}
+}
+
+func (s *modeSpill) take(acc kernel.Accumulator) error {
+	_, err := acc.(kernel.ModeSpiller).SpillModes(s)
+	return err
+}
+
+func (s *modeSpill) Put(gids []int32, keys [][]byte, rows, first []int64, vals *data.Column) error {
+	if s.schema == nil {
+		r := newGroupRuns(s.ctx, s.budget, s.batch, s.prefix,
+			dtype.NotNull("k", dtype.Binary), dtype.NotNull("n", dtype.Int64),
+			dtype.NotNull("f", dtype.Int64), dtype.Of("v", vals.DType()))
+		s.schema, s.keys, s.types = r.schema, r.keys, r.types
+	}
+	offs := make([]int32, len(keys)+1)
+	n := 0
+	for _, k := range keys {
+		n += len(k)
+	}
+	chars := make([]byte, 0, n)
+	for i, k := range keys {
+		chars = append(chars, k...)
+		offs[i+1] = int32(len(chars))
+	}
+	return s.write(data.NewBatchRows(s.schema, []*data.Column{
+		data.NewFixed("gid", dtype.Int32, gids, bitmap.View{}),
+		data.NewStringParts("k", offs, chars, bitmap.View{}).WithDType(dtype.Binary),
+		data.NewFixed("n", dtype.Int64, rows, bitmap.View{}),
+		data.NewFixed("f", dtype.Int64, first, bitmap.View{}),
+		vals.Rename("v"),
+	}, len(gids)))
+}
+
+func (s *modeSpill) Scan(fn func(gids []int32, keys data.StringAccessor, rows, first []int64, vals *data.Column) error) error {
+	if s.schema == nil {
+		return nil
+	}
+	return s.kept(modeBatch(fn))
+}
+
+func (s *modeSpill) Ordered(fn func(gids []int32, keys data.StringAccessor, rows, first []int64, vals *data.Column) error) error {
+	if s.schema == nil {
+		return nil
+	}
+	return s.each(modeBatch(fn))
+}
+
+// modeBatch reads a batch of a mode's spill for fn.
+func modeBatch(fn func(gids []int32, keys data.StringAccessor, rows, first []int64, vals *data.Column) error) func(*data.Batch) error {
+	return func(b *data.Batch) error {
+		return fn(data.MustValues[int32](b.Column(0)), b.Column(1).Strings(),
+			data.MustValues[int64](b.Column(2)), data.MustValues[int64](b.Column(3)), b.Column(4))
+	}
 }
 
 // removeAll removes spill files.
