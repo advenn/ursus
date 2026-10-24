@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan options, globs, readers from memory or object storage, projection and predicate pushdown into Parquet, streaming sinks, and Arrow in and out.">
+        <meta name="description" content="Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan options, globs, readers from memory or object storage, projection and predicate pushdown into Parquet, streaming sinks, Arrow in and out, JSON, and databases through database/sql.">
       
       
       
@@ -70,13 +70,13 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ursus">
   <meta property="og:title" content="CSV, Parquet and Arrow - ursus">
-  <meta property="og:description" content="Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan options, globs, readers from memory or object storage, projection and predicate pushdown into Parquet, streaming sinks, and Arrow in and out.">
+  <meta property="og:description" content="Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan options, globs, readers from memory or object storage, projection and predicate pushdown into Parquet, streaming sinks, Arrow in and out, JSON, and databases through database/sql.">
   
     <meta property="og:url" content="https://advenn.github.io/ursus/latest/guide/io/">
   
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="CSV, Parquet and Arrow - ursus">
-  <meta name="twitter:description" content="Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan options, globs, readers from memory or object storage, projection and predicate pushdown into Parquet, streaming sinks, and Arrow in and out.">
+  <meta name="twitter:description" content="Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan options, globs, readers from memory or object storage, projection and predicate pushdown into Parquet, streaming sinks, Arrow in and out, JSON, and databases through database/sql.">
   
 
   </head>
@@ -1321,6 +1321,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#databases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Databases
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#larger-than-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1570,6 +1581,17 @@
     <span class="md-ellipsis">
       
         JSON
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#databases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Databases
       
     </span>
   </a>
@@ -1868,6 +1890,22 @@ value is written as Polars writes it: a float in Polars' text, NaN and the infin
 zoned instant with its offset, <code>"2024-01-02T03:04:05+05:00"</code>; a duration in ISO 8601's
 seconds, <code>"PT90S"</code>; a List an array and a Struct an object. A Binary column is refused,
 as Polars refuses it.</p>
+<h2 id="databases">Databases<a class="headerlink" href="#databases" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7:</em> <code>ReadDatabase(ctx, db, query, args...)</code> runs a query on a <code>*sql.DB</code>, a
+<code>*sql.Tx</code> or a <code>*sql.Conn</code> and reads its rows as a frame, as Polars' <code>read_database</code>;
+<code>ReadDatabaseRows(rows)</code> reads a result you have, a prepared statement's, say, and
+closes it. Any <code>database/sql</code> driver serves. A column's type is its values', met as
+Polars meets them: integers an Int64, floats a Float64, text a String, bytes a Binary,
+and instants a Datetime in microseconds, of no zone where each is in UTC, as a driver
+gives a timestamp without one, and in UTC where one is in a zone; an integer beside a
+float is a Float64, text beside a number text, and bytes beside an integer an error.
+Every row is read for it, where Polars reads 100. Then a column is of the type its
+driver names, where every value fits it: an <code>INT4</code> an Int32, a <code>NUMERIC(10, 2)</code> a
+Decimal(10, 2), a <code>DATE</code> a Date, a <code>TIME</code> a Time, a <code>TIMESTAMPTZ</code> a Datetime in UTC,
+and the bytes a driver gives for a <code>VARCHAR</code> or a <code>UUID</code> text. A result of no rows has
+its driver's types, and a column the driver calls <code>NOT NULL</code> is not nullable.
+<code>ReadDatabaseRows(rows, ursus.WithDatabaseSchemaOverrides(m))</code> gives some columns'
+types, as Polars' <code>schema_overrides</code>. The frame is read whole, as Polars' is.</p>
 <h2 id="larger-than-memory">Larger than memory<a class="headerlink" href="#larger-than-memory" title="Permanent link">&para;</a></h2>
 <p>A sink streams: a query whose answer is larger than memory writes it with
 <code>SinkParquet</code> or <code>SinkCSV</code>, the spilling operators under a memory limit, as

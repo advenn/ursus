@@ -1955,6 +1955,10 @@ changes is what Go asks for.</p>
 <td><code>ursus.ScanIPC(p)</code>, <code>ursus.ScanIPCStream(p)</code>, <code>lf.WriteIPC(ctx, w, ursus.WithIPCCompression(ursus.IPCZstd))</code>, <code>lf.SinkIPC(ctx, p)</code>, <code>ursus.ReadIPCSchema(p)</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>pl.read_database("SELECT * FROM t WHERE a &gt; ?", conn, execute_options={"parameters": [5]}, schema_overrides={"a": pl.Int32})</code></td>
+<td><code>ursus.ReadDatabase(ctx, db, "SELECT * FROM t WHERE a &gt; ?", 5)</code>, any <code>database/sql</code> driver; <code>ursus.ReadDatabaseRows(rows, ursus.WithDatabaseSchemaOverrides(m))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>df.to_arrow()</code></td>
 <td><code>df.Record()</code>, zero-copy</td>
 </tr>
