@@ -191,7 +191,7 @@ func (r *reader) parseBlock(blk block) (*data.Batch, error) {
 // blk: what a row of the column held in the last block parsed, or before that an
 // average field of blk's, with a sixteenth more either way.
 func (r *reader) textHint(i int, blk block) int {
-	if r.out.Field(i).Type.ID() != dtype.TypeString || blk.rows == 0 {
+	if id := r.out.Field(i).Type.ID(); id != dtype.TypeString && id != dtype.TypeCategorical || blk.rows == 0 {
 		return 0
 	}
 	n := len(blk.data) / max(blk.width, 1)

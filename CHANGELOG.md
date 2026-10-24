@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–350, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–351, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -105,6 +105,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **The `Categorical` type** (351), Polars' Categorical: text with a type of its own,
+  made by a cast from a String or an Enum and read from CSV and NDJSON by a schema;
+  sorted, compared, grouped and joined as its text, as Polars has since 1.32; its
+  codes, `Cat().Physical()` and `ToPhysical()`, the order its values first appear in
+  over the frame. `Cat()`'s text functions take it, and `selector.Categorical`
+  selects it. It is stored as its text, and costs what a String does.
 - **`**` in globs, and CSV and NDJSON directories** (349): a glob's `**` matches any
   number of directories, none among them, as Polars' do, in `ScanCSVGlob`,
   `ScanNDJSONGlob` and `ScanParquetGlob`; `ScanCSV` and `ScanNDJSON` of a directory

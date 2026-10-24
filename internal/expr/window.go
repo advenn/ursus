@@ -337,6 +337,12 @@ const (
 	// no op moves; IsRolling takes it.
 	WinRollingMap
 
+	// WinCatCodes is each row's value's code (step 351): the order, from 0, its
+	// value first appears in among the window's non-null values, by the group-by's
+	// keys; a null's null. Over the frame it is a Categorical's codes, as Polars
+	// numbers them in a fresh process, which the root writes ToPhysical out as.
+	WinCatCodes
+
 	winFnCount
 )
 
@@ -353,7 +359,7 @@ var winFnNames = [winFnCount]string{
 	WinInterpolate: "interpolate", WinRleID: "rle_id",
 	WinRollingSkew: "rolling_skew", WinRollingKurtosis: "rolling_kurtosis", WinRollingRank: "rolling_rank",
 	WinRollingCov: "rolling_cov", WinRollingCorr: "rolling_corr", WinEwmSum: "ewm_sum",
-	WinCumulativeEval: "cumulative_eval", WinRollingMap: "rolling_map",
+	WinCumulativeEval: "cumulative_eval", WinRollingMap: "rolling_map", WinCatCodes: "cat.physical",
 }
 
 func (o WinFnOp) String() string {
@@ -703,6 +709,12 @@ func ResolveWinFn(fn WinFnOp, p WinParams, in dtype.DataType) (dtype.DataType, e
 		// A run is of values a group-by keys alike: NaN with NaN, -0 with 0.
 		if !in.IsHashable() && !in.IsNull() {
 			return dtype.Null, uerr.New(uerr.KindType, "rle_id", "rle_id compares values, and %s cannot be a key", in)
+		}
+		return dtype.Uint32, nil
+
+	case WinCatCodes:
+		if !in.IsHashable() && !in.IsNull() {
+			return dtype.Null, uerr.New(uerr.KindType, "cat.physical", "codes number values, and %s cannot be a key", in)
 		}
 		return dtype.Uint32, nil
 

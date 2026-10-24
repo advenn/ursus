@@ -53,6 +53,8 @@ func WinCall(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Data
 		return winCumCount(params, name, seg, col.Len())
 	case fn == expr.WinRleID:
 		return winRleID(name, col, seg)
+	case fn == expr.WinCatCodes:
+		return winCatCodes(name, col, seg)
 	case fn == expr.WinShift:
 		return winShift(params, name, col, fill, seg)
 	case fn == expr.WinForwardFill || fn == expr.WinBackwardFill:
@@ -123,6 +125,34 @@ func winRleID(name string, col *data.Column, seg Segments) (*data.Column, error)
 		}
 	}
 	return data.NewFixed(name, dtype.Uint32, ids, bitmap.AllSet(n)), nil
+}
+
+// winCatCodes numbers each row by the order its value first appears in among its
+// partition's non-null values, in the window's order, from 0, by the group-by's keys;
+// a null is null (step 351). Over the frame these are a Categorical's codes.
+func winCatCodes(name string, col *data.Column, seg Segments) (*data.Column, error) {
+	n := col.Len()
+	codes := make([]uint32, n)
+	valid := col.Validity()
+	if col.DType().IsNull() {
+		return data.NewFixed(name, dtype.Uint32, codes, bitmap.Zeros(n)), nil
+	}
+	enc, err := NewGroupKeyEncoder("cat.physical", []*data.Column{col})
+	if err != nil {
+		return nil, err
+	}
+	for p := 0; p+1 < len(seg.Bounds); p++ {
+		seen := NewKeyTable()
+		for j := seg.Bounds[p]; j < seg.Bounds[p+1]; j++ {
+			row := int(seg.Perm[j])
+			if !valid.Get(row) {
+				continue
+			}
+			code, _ := seen.GetOrInsert(enc.Encode(row))
+			codes[row] = uint32(code)
+		}
+	}
+	return data.NewFixed(name, dtype.Uint32, codes, valid), nil
 }
 
 // winRank numbers rows by VALUE within each partition.

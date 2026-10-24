@@ -192,13 +192,7 @@ func (w *Writer) putSchema(s *dtype.Schema) error {
 
 // putDType writes a type, and a List's element type or a Struct's fields after it.
 func (w *Writer) putDType(d dtype.DataType) error {
-	if d.ID() == dtype.TypeCategorical {
-		// It has no data.Column representation, so no column of it can reach a
-		// spill.
-		return uerr.New(uerr.KindUnsupported, "spill",
-			"cannot spill a %s column", d).
-			Hint("ursus has no column representation for %s", d)
-	}
+	// A Categorical is stored as its text since step 351, and spills as a String.
 	w.putByte(uint8(d.ID()))
 	w.putByte(uint8(d.TimeUnit()))
 	w.putByte(d.Precision())
@@ -640,6 +634,8 @@ var simpleTypes = map[dtype.TypeID]dtype.DataType{
 	dtype.TypeString:  dtype.String,
 	dtype.TypeBinary:  dtype.Binary,
 	dtype.TypeDate:    dtype.Date,
+
+	dtype.TypeCategorical: dtype.Categorical,
 }
 
 func (r *Reader) getColumn(f dtype.Field, n int) (*data.Column, error) {

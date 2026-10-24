@@ -81,6 +81,12 @@ func buildCategories(n Node, in *dtype.Schema) (Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	if f.Type.ID() == dtype.TypeCategorical {
+		// Polars: "cat.get_categories() is deprecated. To get the distinct values
+		// present in a Categorical column, use Expr.unique()" (step 351).
+		return nil, uerr.New(uerr.KindType, "cat", "%s is an Enum's; a Categorical has no fixed categories", c.Fn).
+			Hint("its distinct values are .Unique(), as Polars' deprecation of get_categories says")
+	}
 	if f.Type.ID() != dtype.TypeEnum {
 		return nil, uerr.New(uerr.KindType, "cat", "%s requires an Enum operand, got %s", c.Fn, f.Type)
 	}

@@ -611,6 +611,12 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 		return c.Rename(name).WithDType(to), nil
 	}
 
+	// A Categorical first, ahead of an Enum's routing: it is stored as its text
+	// (step 351), and castCategorical relabels it or casts the text.
+	if from.ID() == dtype.TypeCategorical || to.ID() == dtype.TypeCategorical {
+		return castCategorical(name, to, strict, c)
+	}
+
 	// An Enum first, ahead of Decimal's routing too: its payload is indices, and
 	// IsString had routed it into parseFromString, which read them as offsets and
 	// panicked (v0.3-scope.md §2.3). castEnum decodes it to its text.
@@ -1442,6 +1448,29 @@ func castEnum(name string, to dtype.DataType, strict bool, c *data.Column) (*dat
 		Hint("an Enum is built from text: cast to ursus.String first, then to the Enum")
 }
 
+// castCategorical casts to or from a Categorical, which is stored as its text (step
+// 351): to a String and from one it is a relabel; to an Enum, its text encoded; from
+// one, the Enum's text relabelled. Anything else is refused, as dtype.CanCast refuses
+// it: Polars reads a number as a category's code, the order of a process's strings.
+func castCategorical(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
+	from := c.DType()
+	switch {
+	case from.ID() == dtype.TypeCategorical && to.ID() == dtype.TypeString,
+		from.ID() == dtype.TypeString && to.ID() == dtype.TypeCategorical:
+		return c.Rename(name).WithDType(to), nil
+	case from.ID() == dtype.TypeCategorical && to.ID() == dtype.TypeEnum:
+		return castEnum(name, to, strict, c.WithDType(dtype.String))
+	case from.ID() == dtype.TypeEnum && to.ID() == dtype.TypeCategorical:
+		text, err := castEnum(name, dtype.String, strict, c)
+		if err != nil {
+			return nil, err
+		}
+		return text.WithDType(to), nil
+	}
+	return nil, uerr.New(uerr.KindType, "cast", "cannot cast %s to %s", from, to).
+		Hint("a Categorical's codes are Cat().Physical(), and its text .Cast(ursus.String)")
+}
+
 // decodeEnum is an Enum column as its category text.
 func decodeEnum(name string, c *data.Column) (*data.Column, error) {
 	idx, err := data.Values[uint32](c)
@@ -1508,6 +1537,11 @@ func encodeEnum(name string, to dtype.DataType, strict bool, c *data.Column) (*d
 func ToPhysical(name string, out dtype.DataType, c *data.Column) (*data.Column, error) {
 	if c.DType().ID() == dtype.TypeEnum {
 		return EnumPhysical(name, out, c)
+	}
+	if c.DType().ID() == dtype.TypeCategorical {
+		// Its codes are the frame's, a window the plan writes out (step 351): a
+		// batch's own would number its values apart from the next's.
+		return nil, uerr.Internalf("kernel: to_physical of a Categorical reached a batch")
 	}
 	return c.WithDType(out).Rename(name), nil
 }

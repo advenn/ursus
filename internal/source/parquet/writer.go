@@ -341,7 +341,7 @@ func writeColumn(cw file.ColumnChunkWriter, l leafData) error {
 		// whose STRING is not (audit.md I20). A String column can hold any bytes —
 		// a CSV field, a Go string — so it is checked here, where the promise is
 		// made; a Binary column is the way to write bytes as they are.
-		if c.DType().ID() == dtype.TypeString {
+		if id := c.DType().ID(); id == dtype.TypeString || id == dtype.TypeCategorical {
 			for _, row := range l.rows {
 				if v, _ := s.Get(row); !utf8.ValidString(v) {
 					return uerr.New(uerr.KindValue, "sink_parquet",

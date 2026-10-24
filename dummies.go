@@ -192,7 +192,7 @@ func polarsText(c *data.Column) (func(row int) string, error) {
 	case dtype.TypeBool:
 		bits := c.Bools()
 		return func(i int) string { return strconv.FormatBool(bits.Get(i)) }, nil
-	case dtype.TypeString:
+	case dtype.TypeString, dtype.TypeCategorical:
 		return c.Strings().Get, nil
 	case dtype.TypeBinary:
 		strs := c.Strings()

@@ -131,6 +131,11 @@ var (
 	Enum     = dtype.Enum
 )
 
+// Categorical is text with a type of its own, Polars' Categorical: ordered as its
+// text, its codes the order its values first appear in (ToPhysical, Cat().Physical()).
+// New in 0.6.7.
+var Categorical = dtype.Categorical
+
 // StructOf builds a struct type. Named StructOf rather than Struct to leave the
 // bare name available and to match DateOf / TimeOf.
 func StructOf(fields ...Field) DataType { return dtype.Struct(fields...) }

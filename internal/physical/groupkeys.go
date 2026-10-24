@@ -41,7 +41,7 @@ func newGroupKeys(keys *dtype.Schema) groupKeys {
 
 // isRawKey reports whether a group key of this one type is kept as its own bytes.
 func isRawKey(t dtype.DataType) bool {
-	return t.ID() == dtype.TypeString || t.ID() == dtype.TypeBinary
+	return t.HasStringStorage() // a String, a Binary, a Categorical (step 351)
 }
 
 // empty is a new table of the same form.

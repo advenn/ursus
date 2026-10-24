@@ -160,6 +160,7 @@ type stringBuilder struct {
 	offs  []int32
 	chars []byte
 	valid *bitmap.Builder
+	cat   bool // the column is a Categorical, stored as its text (step 351)
 }
 
 func (b *stringBuilder) appendField(f []byte) error {
@@ -187,6 +188,9 @@ func (b *stringBuilder) len() int { return len(b.offs) - 1 }
 
 func (b *stringBuilder) finish(name string) *data.Column {
 	c := data.NewStringParts(name, b.offs, b.chars, b.valid.Finish())
+	if b.cat {
+		c = c.WithDType(dtype.Categorical)
+	}
 	// Both buffers are reused with their capacity intact, which is safe because
 	// NewStringParts COPIES into fresh arrow buffers, so the column we just produced
 	// does not alias what the next batch overwrites. NewFixed copies too, and
@@ -216,7 +220,11 @@ func (b *stringBuilder) take(name string) *data.Column {
 	if wasteful(len(chars), cap(chars)) {
 		chars = append(make([]byte, 0, len(chars)), chars...)
 	}
-	return data.NewStringOwned(name, offs, chars, b.valid.Finish())
+	c := data.NewStringOwned(name, offs, chars, b.valid.Finish())
+	if b.cat {
+		c = c.WithDType(dtype.Categorical)
+	}
+	return c
 }
 
 // newBuilder returns a builder for dt, or an error naming the type if CSV cannot
@@ -283,10 +291,11 @@ func newBuilder(dt dtype.DataType) (colBuilder, error) {
 	case dtype.TypeFloat64:
 		return &fixedBuilder[float64]{dt: dt, valid: bitmap.NewBuilder(0),
 			parse: func(b []byte) (float64, error) { return dtype.ParseFloat(str(b), 64) }}, nil
-	case dtype.TypeString:
+	case dtype.TypeString, dtype.TypeCategorical:
 		// offs is seeded with its leading zero here rather than branched on per
 		// append; finish preserves it, so the hot path never tests for it.
-		return &stringBuilder{offs: make([]int32, 1), valid: bitmap.NewBuilder(0)}, nil
+		return &stringBuilder{offs: make([]int32, 1), valid: bitmap.NewBuilder(0),
+			cat: dt.ID() == dtype.TypeCategorical}, nil
 
 	case dtype.TypeDate, dtype.TypeTime, dtype.TypeDatetime, dtype.TypeDuration:
 		// Parsing goes through dtype.ParseTemporal, the same function the frame
@@ -314,7 +323,7 @@ func newBuilder(dt dtype.DataType) (colBuilder, error) {
 		return nil, uerr.New(uerr.KindUnsupported, "scan_csv",
 			"cannot read %s from a CSV file", dt).
 			Hint("CSV supports Bool, the integer and float types, Int128, Decimal, " +
-				"the temporal types, String and Enum").
+				"the temporal types, String, Enum and Categorical").
 			Hint("read it as String and cast, if a conversion exists")
 	}
 }

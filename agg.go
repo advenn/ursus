@@ -832,7 +832,7 @@ func (g *GroupBy) agg(exprs []Expr) *LazyFrame {
 	if err != nil {
 		return &LazyFrame{err: err}
 	}
-	if ns, err = g.lf.writeCategories(ns); err != nil {
+	if ns, err = g.lf.writeCategoriesIn(ns, true); err != nil {
 		return &LazyFrame{err: err}
 	}
 	ns = lowerReshapes(ns, true)

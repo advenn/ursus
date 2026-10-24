@@ -134,7 +134,8 @@ func FitsExactly(v any, to dtype.DataType) bool {
 		// A string is exact in an Enum when it is one of the categories, which is
 		// what String -> Enum refuses otherwise: FillNullWith("lo") keeps the Enum,
 		// and FillNullWith("zzz") falls back to the String both meet at.
-		return to.ID() == dtype.TypeEnum && slices.Contains(to.Categories(), x)
+		// Any string is exact in a Categorical (step 351).
+		return to.ID() == dtype.TypeEnum && slices.Contains(to.Categories(), x) || to.ID() == dtype.TypeCategorical
 	default:
 		// Strings, bools, temporals, Int128 literals. All unreachable — Promote
 		// refuses their pairs before weakTarget asks — and failing closed is the

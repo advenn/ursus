@@ -668,7 +668,8 @@ func (r *reader) emptyIn(sc *scanner, i, pos int, f []byte) bool {
 	if len(f) != 0 {
 		return false
 	}
-	return r.out.Field(pos).Type.ID() != dtype.TypeString || !sc.Quoted(i)
+	id := r.out.Field(pos).Type.ID()
+	return id != dtype.TypeString && id != dtype.TypeCategorical || !sc.Quoted(i)
 }
 
 // stageRecord copies the current record's wanted fields into the per-column

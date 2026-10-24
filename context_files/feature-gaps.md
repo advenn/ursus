@@ -92,7 +92,7 @@ differs from their input's, or scalars outside a group-by.
 
 | missing | note | prio |
 | --- | --- | --- |
-| **Categorical** | only Enum exists; `TypeCategorical` is reserved | P1 |
+| **Categorical:** built in step 351, stored as its text: casts, order, keys, codes over the frame (`WinCatCodes`), `Cat()`, CSV and NDJSON by a schema, spilling. Left: Arrow's dictionary and Parquet's Categorical in and out, `qcut` and `hist` answering one | P1 |
 | **Array** (fixed-size list) | built in step 341: held as a List each of whose rows has its size, a null row none; casts to and from a List, `List().ToArray`, `Arr().ToList`, a Go `[n]T`, Arrow `FixedSizeList` in and out, Parquet by the footer's Arrow schema, NDJSON by a schema, JSON; its `arr` namespace in step 342, a List's functions of the same elements, `Reverse`, `Sort`, `Shift` and an elementwise `Eval` keeping the Array, `ToStruct` and `Dot` of its own; `Reshape` and `ConcatArr` in step 343, and a key in step 344 | — |
 | **Large strings and binary** (64-bit offsets, `BinaryOffset`) | a String column holds at most 2 GiB of characters | P1 |
 | **String view layout** | Arrow's view types are converted on import | P2 |
@@ -285,6 +285,7 @@ These belong to a performance release more than to features.
 | **A join's right order hashes the left frame:** a million left rows against 100,000 right, in memory, takes 57 ms inner and 75 ms left, where Polars' takes 33 and 37; ursus's left order takes 16, Polars' 12. The hash of the larger side is most of it, as a plain join that hashes a million rows takes 47 ms. A probe of the left frame and a counting sort by the right row would hash the smaller side. An ordered right or full join numbers its table's rows always, about a tenth of its time, where only a spilled one needs them (step 314) | P2 |
 | **A compressed CSV is read in about twice Polars' time:** a million rows of four columns, 34 MB, by gzip in 191–207 ms where Polars takes 83–93, by Zstandard 129–152 against 77–86. The inflate is the read's serial part, Go's (klauspost's, 315 MB/s, the fastest pure-Go one) slower than the one Polars links, and the CSV parse's own gap stands beside it: the plain file in 84–97 ms against 29–44 (step 346) | P2 |
 | **A Parquet dataset is read in about twice Polars' time:** two million rows in forty Zstandard files, 42–61 ms against 19–28, its column chunks decompressed and decoded; the keys of a hive dataset cost nothing over it (step 347) | P2 |
+| **A Categorical is a String's cost:** stored as its text, it groups in 7.6 ms over a million rows of 1000 values where Polars, grouping its codes, takes 2.6; its codes are computed, 41 ms, where Polars' are stored; and it sorts as a String does, 616 ms against Polars' 40, the String sort's own gap (step 351) | P2 |
 | **SQL** (`SQLContext`, `.sql()`, `sql_expr`) | out by decision |
 | GPU, plugins, Python bindings, distributed execution | P3 |
 
@@ -511,6 +512,12 @@ decide whether to keep or switch each one.
   first's (step 347).
 - Globs: an element of `**` last matches every file below it, `logs/**`, where
   Polars' matches none (step 349).
+- Categorical: its codes number its values in the order they first appear over the
+  frame, where Polars' are its process's string cache's, the same in a fresh process;
+  a group-by's aggregation and a window refuse them. A String's functions read it as
+  its text, as an Enum's, and a join or a comparison with a String meets at the
+  text, where Polars refuses the functions and the join; a cast of a number to it is
+  refused, where Polars reads the number as a code (step 351).
 - An aggregate whose answer depends on the order, `First` or `Last`, inside a window
   with an `OrderBy`, `(x - x.First()).CumSum(false)` over g ordered by t, is refused as
   an ordering over an aggregate is; Polars takes the first in the order (step 336).

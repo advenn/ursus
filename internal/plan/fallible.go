@@ -81,6 +81,8 @@ func totalCast(from, to dtype.DataType) bool {
 		return true
 	case to.ID() == dtype.TypeString:
 		return from.IsNumeric() || from.IsTemporal() || from.IsBool() || from.HasStringStorage()
+	case to.ID() == dtype.TypeCategorical:
+		return from.ID() == dtype.TypeString // a relabel (step 351)
 	case from.IsInteger() && to.IsInteger():
 		p, ok := dtype.PromoteExact(from, to)
 		return ok && p == to

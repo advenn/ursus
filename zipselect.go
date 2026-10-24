@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/uerr"
@@ -41,7 +42,13 @@ func changesLength(n expr.Node) bool {
 // changes a column's length before they are planned, and a get_categories does. One
 // over a selection is left to Expand.
 func (lf *LazyFrame) writeCategories(ns []expr.Node) ([]expr.Node, error) {
-	if !slices.ContainsFunc(ns, expr.HasCategories) {
+	return lf.writeCategoriesIn(ns, false)
+}
+
+// writeCategoriesIn is writeCategories, in a group-by's aggregation where agg; it
+// writes a Categorical's codes out too (categoryCodes).
+func (lf *LazyFrame) writeCategoriesIn(ns []expr.Node, agg bool) ([]expr.Node, error) {
+	if !slices.ContainsFunc(ns, expr.HasCategories) && !slices.ContainsFunc(ns, hasPhysical) {
 		return ns, nil
 	}
 	resolved, err := plan.Resolve(context.Background(), lf.node)
@@ -54,13 +61,73 @@ func (lf *LazyFrame) writeCategories(ns []expr.Node) ([]expr.Node, error) {
 	}
 	out := slices.Clone(ns)
 	for i, n := range out {
-		if expr.HasCategories(n) && !hasMatch(n) {
+		if hasMatch(n) {
+			continue
+		}
+		if expr.HasCategories(n) {
 			if out[i], err = expr.BuildCategories(n, s); err != nil {
+				return nil, err
+			}
+		}
+		if hasPhysical(out[i]) {
+			if out[i], err = categoryCodes(out[i], s, agg, false); err != nil {
 				return nil, err
 			}
 		}
 	}
 	return out, nil
+}
+
+// hasPhysical reports whether n holds a to_physical or a cat.physical, whose codes a
+// Categorical's must be written out for.
+func hasPhysical(n expr.Node) bool {
+	if c, ok := n.(*expr.Call); ok && (c.Fn == expr.FnToPhysical || c.Fn == expr.FnCatPhysical) {
+		return true
+	}
+	return slices.ContainsFunc(n.Children(), hasPhysical)
+}
+
+// categoryCodes writes each ToPhysical and Cat().Physical() of a Categorical in n out
+// as its codes, the order its values first appear in over the frame, as Polars numbers
+// a Categorical's values in a fresh process; a null's is null (step 351). They are a
+// window over the whole frame, WinCatCodes', as QCut's quantiles are, since a code
+// depends on every row before the value's first; a group-by's aggregation and a window
+// over partitions, inWindow, where they would be a group's or a partition's, refuse
+// them.
+func categoryCodes(n expr.Node, s *Schema, agg, inWindow bool) (expr.Node, error) {
+	kids := n.Children()
+	if len(kids) > 0 {
+		out := make([]expr.Node, len(kids))
+		changed := false
+		_, isWindow := n.(*expr.Window)
+		for i, k := range kids {
+			b, err := categoryCodes(k, s, agg, inWindow || isWindow)
+			if err != nil {
+				return nil, err
+			}
+			out[i], changed = b, changed || b != k
+		}
+		if changed {
+			n = expr.Rebuild(n, out)
+		}
+	}
+	c, ok := n.(*expr.Call)
+	if !ok || (c.Fn != expr.FnToPhysical && c.Fn != expr.FnCatPhysical) || len(c.Args) != 1 {
+		return n, nil
+	}
+	f, err := c.Args[0].Field(s)
+	if err != nil {
+		return nil, err
+	}
+	if f.Type.ID() != dtype.TypeCategorical {
+		return n, nil
+	}
+	if agg || inWindow {
+		return nil, uerr.New(uerr.KindUnsupported, c.Fn.String(),
+			"a Categorical's codes are its frame's, and a group-by's aggregation or a window would number a group's").
+			Hint("take them before the group-by or the window: .WithColumns(Col(%q).Cat().Physical().Alias(...))", f.Name)
+	}
+	return wrap(c.Args[0]).winFn(expr.WinCatCodes, expr.WinParams{}).Alias(f.Name).node(), nil
 }
 
 // hasMatch reports whether n selects columns by a pattern or a list, which only the

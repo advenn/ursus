@@ -253,7 +253,7 @@ func jsonValueText(c *data.Column) (jsonAppender, error) {
 	case dtype.TypeBool:
 		bits := c.Bools()
 		return func(dst []byte, i int) []byte { return strconv.AppendBool(dst, bits.Get(i)) }, nil
-	case dtype.TypeString:
+	case dtype.TypeString, dtype.TypeCategorical:
 		strs := c.Strings()
 		return func(dst []byte, i int) []byte { return appendJSONString(dst, strs.Get(i)) }, nil
 	case dtype.TypeEnum:

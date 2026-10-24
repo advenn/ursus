@@ -122,7 +122,7 @@ func valueReader(c *data.Column) (func(int) any, error) {
 		return func(int) any { return nil }, nil
 	case dtype.TypeBool:
 		return typedReader[bool](c)
-	case dtype.TypeString, dtype.TypeEnum:
+	case dtype.TypeString, dtype.TypeEnum, dtype.TypeCategorical:
 		return typedReader[string](c)
 	case dtype.TypeBinary:
 		acc := c.Strings()

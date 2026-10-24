@@ -26,6 +26,7 @@ before a query runs:
 | `Duration(unit)` | `time.Duration` | |
 | `TimeOf(unit)` | | a time of day |
 | `Enum(...)` | `string` | fixed categories, sorted in their order |
+| `Categorical` | `string` | text with a type of its own, sorted as its text (*new in 0.6.7*) |
 | `List(T)` | a slice | a list of values a row |
 | `Array(T, n)` | an array, `[n]T` | `n` values a row (*new in 0.6.7*) |
 | `StructOf(fields...)` | a struct | named fields a row |
@@ -58,6 +59,18 @@ number cannot become a null again:
 - the `Sum` of a group with no values is null, not 0;
 - the `Mean` of a group with no values is null, not NaN.
 
+## Categoricals
+
+*New in 0.6.7:* a `Categorical` is Polars' Categorical: text with a type of its own, made
+by `Cast(ursus.Categorical)` from a String or an Enum, and read from a CSV or NDJSON
+file by a schema. It sorts, compares and groups as its text, and meets a String at
+String. Its codes, `Cat().Physical()` or `ToPhysical()`, number its values in the order
+they first appear over the frame, as Polars numbers them in a fresh process; a
+group-by's aggregation and a window refuse them, where they would number a group's.
+`Cat()` has its text functions, and a String's functions read it as its text. It is
+stored as its text, so it costs what a String does; casting a number to it is refused,
+where Polars reads one as a code.
+
 ## Casts
 
 `Cast` converts a column to another type and refuses a value it cannot convert, naming
@@ -73,7 +86,8 @@ that is what you want.
 *New in 0.6.7.* `ToPhysical` is a column as it is stored, as Polars' `to_physical`: a
 `Date`'s days as an `Int32`, a `Datetime`'s, a `Duration`'s and a `Time`'s ticks as an
 `Int64`, a `Decimal`'s unscaled units as an `Int128`, an `Enum`'s category as the
-smallest unsigned integer that holds them. `Reinterpret(signed)` reads an integer's
+smallest unsigned integer that holds them, and a `Categorical`'s code, the order its
+value first appears in over the frame, as a `UInt32`. `Reinterpret(signed)` reads an integer's
 bits as the integer of its width and the other sign, so a `UInt64`'s maximum is an
 `Int64`'s -1.
 

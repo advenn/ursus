@@ -764,11 +764,12 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		// built from the public API.
 		//
 		// An Enum is read as its text, which the string kernels decode it to first
-		// (step 273).
+		// (step 273), and a Categorical too, which they relabel a String (step 351),
+		// where Polars refuses both.
 		//
 		// A Binary is refused, as Polars refuses it (step 274): its bytes are
 		// Bin()'s, and a text function such as slice would split them as runes.
-		if in.ID() != dtype.TypeString && in.ID() != dtype.TypeNull && in.ID() != dtype.TypeEnum {
+		if in.ID() != dtype.TypeString && in.ID() != dtype.TypeNull && in.ID() != dtype.TypeEnum && in.ID() != dtype.TypeCategorical {
 			e := uerr.New(uerr.KindType, "str", "%s requires a String operand, got %s", fn, in)
 			if in.ID() == dtype.TypeBinary {
 				return dtype.Null, e.Hint("a Binary column's functions are Bin()'s, e.g. .Bin().Slice(0, 4)")
@@ -2887,6 +2888,10 @@ func PhysicalOf(in dtype.DataType) (dtype.DataType, error) {
 			Hint("take its fields or elements first")
 	case in.ID() == dtype.TypeEnum:
 		return EnumPhysical(in), nil
+	case in.ID() == dtype.TypeCategorical:
+		// Its codes, which the frame's window writes out before the plan is typed
+		// (the root's categoryCodes, step 351).
+		return dtype.Uint32, nil
 	case in.IsTemporal(), in.ID() == dtype.TypeDecimal:
 		return in.Physical(), nil
 	}

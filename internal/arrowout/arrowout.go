@@ -111,7 +111,8 @@ func Type(d dtype.DataType) (arrow.DataType, error) {
 	case dtype.TypeFloat64:
 		return arrow.PrimitiveTypes.Float64, nil
 
-	case dtype.TypeString:
+	case dtype.TypeString, dtype.TypeCategorical:
+		// A Categorical as its text, for now (step 351).
 		return arrow.BinaryTypes.String, nil
 	case dtype.TypeBinary:
 		return arrow.BinaryTypes.Binary, nil
@@ -366,7 +367,7 @@ func columnData(c *data.Column) (arrow.ArrayData, error) {
 		return array.NewData(at, n,
 			[]*memory.Buffer{valid, share(c.Bools().Buffer())}, nil, nulls, 0), nil
 
-	case dtype.TypeString, dtype.TypeBinary:
+	case dtype.TypeString, dtype.TypeBinary, dtype.TypeCategorical:
 		// Offsets are NOT rebased by Column.Slice — they stay absolute into the whole
 		// character buffer, which is exactly what Arrow reads. Arrow requires the
 		// offsets to be monotonic, not to start at zero.

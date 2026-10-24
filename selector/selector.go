@@ -139,6 +139,10 @@ func Binary() Selector  { return byType("binary", is(dtype.TypeBinary)) }
 func Boolean() Selector { return byType("boolean", is(dtype.TypeBool)) }
 func Enum() Selector    { return byType("enum", is(dtype.TypeEnum)) }
 
+// Categorical selects the Categorical columns, Polars' cs.categorical(), which String
+// does not, as Polars' cs.string() does not by default. New in 0.6.7.
+func Categorical() Selector { return byType("categorical", is(dtype.TypeCategorical)) }
+
 // List is the List columns, Array the Array ones, Struct the Struct ones, and Nested
 // any of them. Array is new in 0.6.7.
 func List() Selector   { return byType("list", is(dtype.TypeList)) }

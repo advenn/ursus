@@ -214,7 +214,7 @@ func (w *Writer) formatter(c *data.Column) (func([]byte, int) []byte, error) {
 	case dtype.TypeNull:
 		// Every row is null, written as the null value (audit.md I18).
 		return func(dst []byte, _ int) []byte { return append(dst, null...) }, nil
-	case dtype.TypeString:
+	case dtype.TypeString, dtype.TypeCategorical:
 		s, err := data.TypedColumn[string](c)
 		if err != nil {
 			return nil, err
@@ -305,7 +305,7 @@ func (w *Writer) formatter(c *data.Column) (func([]byte, int) []byte, error) {
 		return nil, uerr.New(uerr.KindUnsupported, "sink_csv",
 			"cannot write column %q of type %s to CSV", c.Name(), dt).
 			Hint("CSV supports Bool, the integer and float types, Decimal, the " +
-				"temporal types and String").
+				"temporal types, String and Categorical").
 			Hint("cast or format the column before writing")
 	}
 }

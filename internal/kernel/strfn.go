@@ -42,13 +42,17 @@ import (
 func StrCall(fn expr.CallFn, name string, out dtype.DataType,
 	c *data.Column, args []any, re *regexp.Regexp) (*data.Column, error) {
 
-	// An Enum is read as its text (step 273).
-	if c.DType().ID() == dtype.TypeEnum {
+	// An Enum is read as its text (step 273), and a Categorical, stored as it,
+	// relabelled (step 351).
+	switch c.DType().ID() {
+	case dtype.TypeEnum:
 		text, err := decodeEnum(c.Name(), c)
 		if err != nil {
 			return nil, err
 		}
 		c = text
+	case dtype.TypeCategorical:
+		c = c.WithDType(dtype.String)
 	}
 	switch fn {
 	case expr.FnStrToDateFmt, expr.FnStrToDatetimeFmt, expr.FnStrToTimeFmt:

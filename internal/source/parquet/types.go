@@ -261,7 +261,8 @@ func toNode(f dtype.Field) (schema.Node, error) {
 		return schema.NewPrimitiveNode(name, rep, parquet.Types.Float, -1, -1)
 	case dtype.TypeFloat64:
 		return schema.NewPrimitiveNode(name, rep, parquet.Types.Double, -1, -1)
-	case dtype.TypeString:
+	case dtype.TypeString, dtype.TypeCategorical:
+		// A Categorical as its text, for now (step 351).
 		return schema.NewPrimitiveNodeLogical(name, rep,
 			schema.StringLogicalType{}, parquet.Types.ByteArray, -1, -1)
 	case dtype.TypeBinary:
@@ -560,7 +561,7 @@ func structFieldLeaves(sc *schema.Schema, n schema.Node) ([]int, bool) {
 // column gets a leaf, and that one decides whether the leaf can be decoded.
 func readableElem(elem dtype.DataType) bool {
 	switch elem.ID() {
-	case dtype.TypeString, dtype.TypeBinary, dtype.TypeNull:
+	case dtype.TypeString, dtype.TypeBinary, dtype.TypeNull, dtype.TypeCategorical:
 		return true
 	}
 	return elem.IsFixedWidth()

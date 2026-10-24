@@ -83,6 +83,12 @@ func Promote(a, b DataType) (DataType, bool) {
 		(b.id == TypeEnum && a.id == TypeString) {
 		return String, true
 	}
+	// A Categorical is text too, and meets a String or an Enum at String, as Polars'
+	// does in a fill and a relaxed concatenation (step 351).
+	if (a.id == TypeCategorical && (b.id == TypeString || b.id == TypeEnum)) ||
+		(b.id == TypeCategorical && (a.id == TypeString || a.id == TypeEnum)) {
+		return String, true
+	}
 
 	// Other string types promote only to themselves.
 	if !a.IsNumeric() || !b.IsNumeric() {
@@ -301,6 +307,13 @@ func CanCast(from, to DataType) bool {
 	// Enum's — and becomes anything its text becomes, so Enum("1", "2") -> Int64
 	// is 1 and 2, not the indices 0 and 1. Nothing else becomes an Enum: a number
 	// has no category until it is text, and the cast should say which text.
+	// A CATEGORICAL (step 351) is made from text, a String's, an Enum's, and
+	// becomes text or an Enum. A number is refused both ways: Polars reads one as a
+	// category's code, which is the order of a process's strings, and deprecates it.
+	case to.ID() == TypeCategorical:
+		return from.ID() == TypeString || from.ID() == TypeEnum
+	case from.ID() == TypeCategorical:
+		return to.ID() == TypeString || to.ID() == TypeEnum
 	case to.ID() == TypeEnum:
 		return from.ID() == TypeString || from.ID() == TypeEnum
 	case from.ID() == TypeEnum:

@@ -42,6 +42,13 @@ var (
 	String  = DataType{id: TypeString}
 	Binary  = DataType{id: TypeBinary}
 	Date    = DataType{id: TypeDate}
+
+	// Categorical is text with a type of its own, Polars' Categorical (step 351):
+	// ordered as its text, as Polars' has been since 1.32, and stored as a String
+	// is, so every kernel that reads a String's storage reads it. Its codes, the
+	// order its values first appear in, are ToPhysical's; a String's functions are
+	// refused it, as Polars refuses them, and Cat() has its own.
+	Categorical = DataType{id: TypeCategorical}
 )
 
 // --- Parameterised constructors ----------------------------------------------
@@ -105,9 +112,9 @@ func Struct(fields ...Field) DataType {
 // Enum is a string type whose category set is frozen and part of the type.
 // Physically it is a Uint32 index into cats.
 //
-// Enum is internable precisely because its categories never change. Categorical —
-// whose mapping grows as data arrives — is not, which is why it is deferred until
-// there is a per-context string cache to own the mapping.
+// Enum is internable precisely because its categories never change. Categorical's
+// grow as data arrives, so it carries none in its type, and its values are stored
+// as text (step 351).
 func Enum(cats ...string) DataType {
 	cs := make([]string, len(cats))
 	copy(cs, cats)
@@ -233,14 +240,14 @@ func (d DataType) IsListLike() bool {
 // string accessor and find nothing there. Use it for semantic questions ("can this
 // be compared to a string literal?") and Physical() for storage questions.
 func (d DataType) IsString() bool {
-	return d.id == TypeString || d.id == TypeEnum
+	return d.id == TypeString || d.id == TypeEnum || d.id == TypeCategorical
 }
 
 // HasStringStorage reports whether values are stored as offsets + character data,
 // i.e. whether Column.Strings() is the right accessor. This is the storage
 // question, and it deliberately excludes Enum.
 func (d DataType) HasStringStorage() bool {
-	return d.id == TypeString || d.id == TypeBinary
+	return d.id == TypeString || d.id == TypeBinary || d.id == TypeCategorical
 }
 
 // IsOrdered reports whether ursus can compute a total order over this type.
@@ -263,8 +270,11 @@ func (d DataType) IsOrdered() bool {
 		return true
 	case d.id == TypeString, d.id == TypeBinary, d.id == TypeBool, d.id == TypeEnum:
 		return true
+	case d.id == TypeCategorical:
+		// As its text, as Polars orders one since 1.32 (step 351).
+		return true
 	default:
-		// Null, List, Array, Struct, Object, Categorical.
+		// Null, List, Array, Struct, Object.
 		return false
 	}
 }
@@ -316,6 +326,8 @@ func (d DataType) Physical() DataType {
 		return Int64
 	case TypeEnum:
 		return Uint32
+	case TypeCategorical:
+		return String // stored as its text (step 351)
 	case TypeDecimal:
 		// A Decimal is an integer of unscaled units: Decimal(10,2) value 12.34 is
 		// stored as 1234. 128 bits because that is what Parquet's DECIMAL allows
