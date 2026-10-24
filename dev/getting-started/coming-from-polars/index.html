@@ -2002,8 +2002,8 @@ changes is what Go asks for.</p>
   rows; Polars leaves them out.</li>
 <li><strong><code>ToInteger</code>, <code>ToDate</code> and <code>ToDatetime</code> give null for what does not parse;</strong>
   Polars' fail by default.</li>
-<li><strong><code>QCut</code> and <code>Hist</code> give text,</strong> where Polars gives a Categorical. <code>Cut</code> gives an Enum
-  of its labels, as Polars' does (new in 0.6.7).</li>
+<li><strong><code>Cut</code> gives an Enum of its labels,</strong> and <code>QCut</code> and <code>Hist</code>'s category a Categorical,
+  as Polars' do (new in 0.6.7).</li>
 <li><strong>A <code>Categorical</code> is stored as its text</strong> (new in 0.6.7): it costs what a String does,
   and its codes, <code>Cat().Physical()</code>, are computed over the frame, the order its values
   first appear in, where Polars' are a process's string cache.</li>

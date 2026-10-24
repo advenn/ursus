@@ -3052,11 +3052,16 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–351, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–352, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>An Arrow dictionary of text is read as a Categorical</strong> (352), as Polars reads one,
+  where it was read as a String: an IPC file's, a Parquet file's that its footer says
+  is one, a pandas categorical's. <code>.Cast(ursus.String)</code> gives the text.</li>
+<li><strong><code>QCut</code> and <code>Hist</code>'s category answer a Categorical</strong> (352), as Polars' do, where they
+  answered a String.</li>
 <li><strong><code>Cut</code> answers an Enum</strong> (350) of its bins' labels, in their order, as Polars'
   <code>cut</code> does, where it answered a String: <code>.Cast(ursus.String)</code> gives the text. Its
   labels must differ, as an Enum's categories do, and a break is written in decimal,
@@ -3141,6 +3146,9 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A Categorical in and out of Arrow, IPC and Parquet</strong> (352), as Polars writes one: a
+  dictionary of its values, which Polars and PyArrow read back as one, and Polars' own
+  files read as one.</li>
 <li><strong>The <code>Categorical</code> type</strong> (351), Polars' Categorical: text with a type of its own,
   made by a cast from a String or an Enum and read from CSV and NDJSON by a schema;
   sorted, compared, grouped and joined as its text, as Polars has since 1.32; its
