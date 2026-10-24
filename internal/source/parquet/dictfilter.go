@@ -67,7 +67,7 @@ func dictable(e expr.Node, s *dtype.Schema) (string, bool) {
 		return "", false
 	}
 	switch s.Field(i).Type.ID() {
-	case dtype.TypeString, dtype.TypeBinary:
+	case dtype.TypeString, dtype.TypeBinary, dtype.TypeCategorical:
 		return name, true
 	}
 	return "", false

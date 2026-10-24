@@ -94,7 +94,7 @@ func newBuilder(dt dtype.DataType) (builder, error) {
 	case dtype.TypeDecimal, dtype.TypeInt128:
 		return newFixed(dt, decimals), nil
 
-	case dtype.TypeString, dtype.TypeBinary:
+	case dtype.TypeString, dtype.TypeBinary, dtype.TypeCategorical:
 		return &bytesBuilder{dt: dt, offs: []int32{0}}, nil
 
 	case dtype.TypeList, dtype.TypeArray:
@@ -680,7 +680,7 @@ func (b *bytesBuilder) appendNulls(n int) {
 }
 
 func (b *bytesBuilder) appendRange(arr arrow.Array, lo, hi int) error {
-	isString := b.dt.ID() == dtype.TypeString
+	isString := b.dt.ID() == dtype.TypeString || b.dt.ID() == dtype.TypeCategorical
 	switch a := arr.(type) {
 	case *array.String:
 		if isString {
@@ -847,8 +847,8 @@ func appendFixedBinary(b *bytesBuilder, a *array.FixedSizeBinary, lo, hi int) er
 func (b *bytesBuilder) finish(name string) (*data.Column, error) {
 	n := len(b.offs) - 1
 	c := data.NewStringParts(name, b.offs, b.chars, b.valid.finish(n))
-	if b.dt.ID() == dtype.TypeBinary {
-		c = c.WithDType(dtype.Binary)
+	if b.dt.ID() != dtype.TypeString {
+		c = c.WithDType(b.dt) // a Binary, or a Categorical (step 352)
 	}
 	return c, nil
 }

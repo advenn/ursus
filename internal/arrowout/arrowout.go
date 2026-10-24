@@ -111,9 +111,12 @@ func Type(d dtype.DataType) (arrow.DataType, error) {
 	case dtype.TypeFloat64:
 		return arrow.PrimitiveTypes.Float64, nil
 
-	case dtype.TypeString, dtype.TypeCategorical:
-		// A Categorical as its text, for now (step 351).
+	case dtype.TypeString:
 		return arrow.BinaryTypes.String, nil
+	case dtype.TypeCategorical:
+		// A dictionary of its values and their codes, as Polars exports one, which
+		// Polars and PyArrow read back as a Categorical (step 352).
+		return &arrow.DictionaryType{IndexType: arrow.PrimitiveTypes.Uint32, ValueType: arrow.BinaryTypes.String}, nil
 	case dtype.TypeBinary:
 		return arrow.BinaryTypes.Binary, nil
 
@@ -338,6 +341,37 @@ func arrayChild(c *data.Column) (arrow.ArrayData, error) {
 	return d, nil
 }
 
+// categoricalData is a Categorical column as an Arrow dictionary array: each row's code,
+// the order its value first appears in in the column, into a String dictionary of the
+// values in that order (step 352).
+func categoricalData(c *data.Column, at arrow.DataType, valid *memory.Buffer, nulls int) (arrow.ArrayData, error) {
+	n := c.Len()
+	strs := c.Strings()
+	codes := make([]uint32, n)
+	seen := make(map[string]uint32)
+	offs := []int32{0}
+	var chars []byte
+	for i := range n {
+		if !c.IsValid(i) {
+			continue
+		}
+		s := strs.Get(i)
+		code, ok := seen[s]
+		if !ok {
+			code = uint32(len(offs) - 1)
+			seen[s] = code
+			chars = append(chars, s...)
+			offs = append(offs, int32(len(chars)))
+		}
+		codes[i] = code
+	}
+	dict := array.NewData(arrow.BinaryTypes.String, len(offs)-1,
+		[]*memory.Buffer{nil, memory.NewBufferBytes(arrow.Int32Traits.CastToBytes(offs)), memory.NewBufferBytes(chars)}, nil, 0, 0)
+	defer dict.Release()
+	idx := memory.NewBufferBytes(arrow.Uint32Traits.CastToBytes(codes))
+	return array.NewDataWithDictionary(at, n, []*memory.Buffer{valid, idx}, nulls, 0, dict), nil
+}
+
 // Column exports one column as an Arrow array.
 func Column(c *data.Column) (arrow.Array, error) {
 	d, err := columnData(c)
@@ -367,7 +401,10 @@ func columnData(c *data.Column) (arrow.ArrayData, error) {
 		return array.NewData(at, n,
 			[]*memory.Buffer{valid, share(c.Bools().Buffer())}, nil, nulls, 0), nil
 
-	case dtype.TypeString, dtype.TypeBinary, dtype.TypeCategorical:
+	case dtype.TypeCategorical:
+		return categoricalData(c, at, valid, nulls)
+
+	case dtype.TypeString, dtype.TypeBinary:
 		// Offsets are NOT rebased by Column.Slice — they stay absolute into the whole
 		// character buffer, which is exactly what Arrow reads. Arrow requires the
 		// offsets to be monotonic, not to start at zero.

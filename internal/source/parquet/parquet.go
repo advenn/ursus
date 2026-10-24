@@ -749,7 +749,10 @@ func fileSchema(md *metadata.FileMetaData) (*dtype.Schema, [][]int, map[int]erro
 	for i := range n {
 		f := root.Field(i)
 		dt, leaf, err := fieldType(sc, f)
-		if size, ok := arrays[f.Name()]; ok && dt.ID() == dtype.TypeList {
+		switch size, ok := arrays[f.Name()]; {
+		case ok && size == categorical && dt.ID() == dtype.TypeString:
+			dt = dtype.Categorical
+		case ok && size > 0 && dt.ID() == dtype.TypeList:
 			dt = dtype.Array(dt.Inner(), size)
 		}
 		leaves[i] = leaf

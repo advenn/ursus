@@ -109,7 +109,7 @@ func listHist(name string, c *data.Column, args []any) (*data.Column, error) {
 			fields = append(fields, data.NewFixed("breakpoint", dtype.Float64, bps, all))
 		}
 		if category {
-			fields = append(fields, data.NewString("category", cats, all))
+			fields = append(fields, data.NewString("category", cats, all).WithDType(dtype.Categorical))
 		}
 		child = data.NewStruct(name, append(fields, child), all)
 	}

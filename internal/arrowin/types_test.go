@@ -93,8 +93,9 @@ func sampleArrowType(id arrow.Type) (typeCase, bool) {
 	case arrow.DENSE_UNION:
 		return no(arrow.DenseUnionOf([]arrow.Field{{Name: "a", Type: i64}}, []arrow.UnionTypeCode{0}))
 	case arrow.DICTIONARY:
+		// A dictionary of text is a Categorical, as Polars reads one (step 352).
 		return to(&arrow.DictionaryType{IndexType: arrow.PrimitiveTypes.Int8,
-			ValueType: arrow.BinaryTypes.String}, dtype.String)
+			ValueType: arrow.BinaryTypes.String}, dtype.Categorical)
 	case arrow.MAP:
 		return to(arrow.MapOf(arrow.BinaryTypes.String, i64), dtype.List(dtype.Struct(
 			dtype.Field{Name: "key", Type: dtype.String, Nullable: true},

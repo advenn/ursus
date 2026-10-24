@@ -83,7 +83,7 @@ func ownType(t parquet.Type, id dtype.TypeID) bool {
 	case parquet.Types.Double:
 		return id == dtype.TypeFloat64
 	case parquet.Types.ByteArray:
-		return id == dtype.TypeString || id == dtype.TypeBinary
+		return id == dtype.TypeString || id == dtype.TypeBinary || id == dtype.TypeCategorical
 	}
 	return false
 }

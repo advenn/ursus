@@ -92,7 +92,7 @@ differs from their input's, or scalars outside a group-by.
 
 | missing | note | prio |
 | --- | --- | --- |
-| **Categorical:** built in step 351, stored as its text: casts, order, keys, codes over the frame (`WinCatCodes`), `Cat()`, CSV and NDJSON by a schema, spilling. Left: Arrow's dictionary and Parquet's Categorical in and out, `qcut` and `hist` answering one | P1 |
+| **Categorical:** built in step 351, stored as its text: casts, order, keys, codes over the frame (`WinCatCodes`), `Cat()`, CSV and NDJSON by a schema, spilling. Arrow's dictionary and Parquet's Categorical in and out, and `qcut` and `hist` answering one, in step 352 | — |
 | **Array** (fixed-size list) | built in step 341: held as a List each of whose rows has its size, a null row none; casts to and from a List, `List().ToArray`, `Arr().ToList`, a Go `[n]T`, Arrow `FixedSizeList` in and out, Parquet by the footer's Arrow schema, NDJSON by a schema, JSON; its `arr` namespace in step 342, a List's functions of the same elements, `Reverse`, `Sort`, `Shift` and an elementwise `Eval` keeping the Array, `ToStruct` and `Dot` of its own; `Reshape` and `ConcatArr` in step 343, and a key in step 344 | — |
 | **Large strings and binary** (64-bit offsets, `BinaryOffset`) | a String column holds at most 2 GiB of characters | P1 |
 | **String view layout** | Arrow's view types are converted on import | P2 |
@@ -214,7 +214,7 @@ differs from their input's, or scalars outside a group-by.
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
 | **Rolling:** weights; Polars' `random` rank; a rank by time over one partition past a memory limit, refused, as its walk keeps a window's values as floats. `map` and `rolling_rank_by` built at step 338, `RollingMap` and `RollingRankBy`. `skew`, `kurtosis`, `rank`, `rolling_cov` and `rolling_corr` built at step 284; an integer by, `"2i"` periods, at step 312; the generic `Expr.rolling(index_column)` at step 337, `Expr.Rolling`, in an aggregation not yet | P1 |
 | **EWM:** built: `ewm_sum`, `ewm_mean_by` and `ewm_sum_by` at step 285; an integer by, a `"2i"` half-life, at step 312 | — |
-| **Other:** `qcut` returning Categorical, and `include_breaks`; `cut` answers an Enum, as Polars', since step 350. `cumulative_eval` built at step 286. `round_sig_figs`, `cot`, numeric `truncate`, the half-to-even mode and a one-sided `clip` were built at step 283 | P1/P2 |
+| **Other:** `include_breaks`; `cut` answers an Enum and `qcut` a Categorical, as Polars', since steps 350 and 352. `cumulative_eval` built at step 286. `round_sig_figs`, `cot`, numeric `truncate`, the half-to-even mode and a one-sided `clip` were built at step 283 | P1/P2 |
 
 ## 6. Frame operations
 
@@ -412,8 +412,8 @@ decide whether to keep or switch each one.
   as `Hash`'s are (step 302); a List or a Struct column is hashed as a key since step
   344.
 - `Div` and `Pow` always return a float.
-- `QCut` returns String, where Polars' `qcut` answers a Categorical; `Cut` answers an
-  Enum, as Polars' `cut` does, since step 350.
+- `Cut` answers an Enum and `QCut` a Categorical, as Polars' do, since steps 350 and
+  352.
 - An expression's `TopK`, `BottomK`, `TopKBy` and `BottomKBy` return a List. `TopKBy`
   and `BottomKBy` order rows that tie on by by their values, the greater first for
   `TopKBy`, where Polars' sort orders ties as it finds them (step 330).
@@ -459,8 +459,7 @@ decide whether to keep or switch each one.
   its m2^1.5 is rounded once, where glibc's pow, Polars', errs by up to 0.52 ulp
   (step 284). `RollingCov` and `RollingCorr` keep Polars' formula on ursus's rolling
   means, so their last bits are not Polars'.
-- `Hist`'s category is text, where Polars' is a Categorical, as `QCut`'s labels are
-  (step 286).
+- `Hist`'s category is a Categorical, as Polars' is, since step 352 (text from step 286).
 - `CumulativeEval` is refused in `GroupBy(...).Agg`, as every window is, where Polars
   gives a list a group; and inside `List().Eval` (step 286).
 - A frame's `ShiftFill` with a text fill refuses a number column, which Polars makes

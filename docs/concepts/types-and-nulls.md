@@ -69,7 +69,10 @@ they first appear over the frame, as Polars numbers them in a fresh process; a
 group-by's aggregation and a window refuse them, where they would number a group's.
 `Cat()` has its text functions, and a String's functions read it as its text. It is
 stored as its text, so it costs what a String does; casting a number to it is refused,
-where Polars reads one as a code.
+where Polars reads one as a code. It goes to Arrow, IPC and Parquet as Polars writes
+one, a dictionary of its values, and is read back so, as Polars' own files are; an
+Arrow dictionary of text, a pandas categorical's among them, is read as one. `QCut`'s
+labels and `Hist`'s category are one, as Polars' are.
 
 ## Casts
 

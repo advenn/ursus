@@ -100,7 +100,13 @@ func (e Expr) QCut(quantiles []float64, opts ...CutOption) Expr {
 	for _, q := range quantiles {
 		args = append(args, e.Quantile(q, InterpLinear).Over().node())
 	}
-	return cutOf(args, len(quantiles), opts)
+	out := cutOf(args, len(quantiles), opts)
+	if _, bad := out.node().(*expr.Err); bad {
+		return out
+	}
+	// Its labels come from the data, so a Categorical, as Polars' qcut answers
+	// (step 352), where Cut's are an Enum's.
+	return out.Cast(Categorical)
 }
 
 // QCutN is QCut into n bins of equal count: QCutN(4) is QCut at 0.25, 0.5 and 0.75.

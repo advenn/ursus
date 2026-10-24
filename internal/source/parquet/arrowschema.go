@@ -31,7 +31,8 @@ import (
 const arrowSchemaKey = "ARROW:schema"
 
 // arraysOf is the size of each top-level column the footer's Arrow schema calls a
-// FixedSizeList, by name; nil without one. A schema that does not decode is passed
+// FixedSizeList, by name, and -1 for each it calls a dictionary of text, a
+// Categorical (step 352); nil without one. A schema that does not decode is passed
 // over: the Parquet types stand.
 func arraysOf(kv metadata.KeyValueMetadata) map[string]int {
 	v := kv.FindValue(arrowSchemaKey)
@@ -51,20 +52,34 @@ func arraysOf(kv metadata.KeyValueMetadata) map[string]int {
 	defer r.Release()
 	var out map[string]int
 	for _, f := range r.Schema().Fields() {
-		if fs, ok := f.Type.(*arrow.FixedSizeListType); ok {
+		size := 0
+		switch t := f.Type.(type) {
+		case *arrow.FixedSizeListType:
+			size = int(t.Len())
+		case *arrow.DictionaryType:
+			switch t.ValueType.ID() {
+			case arrow.STRING, arrow.LARGE_STRING, arrow.STRING_VIEW:
+				size = categorical
+			}
+		}
+		if size != 0 {
 			if out == nil {
 				out = make(map[string]int)
 			}
-			out[f.Name] = int(fs.Len())
+			out[f.Name] = size
 		}
 	}
 	return out
 }
 
-// hasArray reports whether s holds an Array at its top level.
+// categorical marks, in arraysOf, a column the footer calls a dictionary of text.
+const categorical = -1
+
+// hasArray reports whether s holds an Array or a Categorical at its top level, which
+// the footer's Arrow schema names.
 func hasArray(s *dtype.Schema) bool {
 	for _, f := range s.All() {
-		if f.Type.ID() == dtype.TypeArray {
+		if f.Type.ID() == dtype.TypeArray || f.Type.ID() == dtype.TypeCategorical {
 			return true
 		}
 	}

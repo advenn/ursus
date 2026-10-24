@@ -15,12 +15,17 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–351, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–352, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **An Arrow dictionary of text is read as a Categorical** (352), as Polars reads one,
+  where it was read as a String: an IPC file's, a Parquet file's that its footer says
+  is one, a pandas categorical's. `.Cast(ursus.String)` gives the text.
+- **`QCut` and `Hist`'s category answer a Categorical** (352), as Polars' do, where they
+  answered a String.
 - **`Cut` answers an Enum** (350) of its bins' labels, in their order, as Polars'
   `cut` does, where it answered a String: `.Cast(ursus.String)` gives the text. Its
   labels must differ, as an Enum's categories do, and a break is written in decimal,
@@ -105,6 +110,9 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A Categorical in and out of Arrow, IPC and Parquet** (352), as Polars writes one: a
+  dictionary of its values, which Polars and PyArrow read back as one, and Polars' own
+  files read as one.
 - **The `Categorical` type** (351), Polars' Categorical: text with a type of its own,
   made by a cast from a String or an Enum and read from CSV and NDJSON by a schema;
   sorted, compared, grouped and joined as its text, as Polars has since 1.32; its

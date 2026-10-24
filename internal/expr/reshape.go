@@ -187,7 +187,7 @@ func HistType(in dtype.DataType, category, breakpoint bool) (dtype.DataType, err
 		fs = append(fs, dtype.Field{Name: "breakpoint", Type: dtype.Float64, Nullable: true})
 	}
 	if category {
-		fs = append(fs, dtype.Field{Name: "category", Type: dtype.String, Nullable: true})
+		fs = append(fs, dtype.Field{Name: "category", Type: dtype.Categorical, Nullable: true}) // Polars' (step 352)
 	}
 	return dtype.Struct(append(fs, dtype.Field{Name: "count", Type: dtype.Uint32, Nullable: true})...), nil
 }

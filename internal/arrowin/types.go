@@ -242,11 +242,17 @@ func typeOf(at arrow.DataType) (dtype.DataType, error) {
 
 	case arrow.DICTIONARY:
 		// A dictionary is an encoding, not a type: the values are what a query reads.
+		// A dictionary of text is a Categorical, as Polars reads one: pandas' and
+		// Polars' own categoricals are (step 352).
 		t, ok := at.(*arrow.DictionaryType)
 		if !ok {
 			return dtype.Null, unexpected(at)
 		}
-		return typeOf(t.ValueType)
+		vt, err := typeOf(t.ValueType)
+		if err == nil && vt.ID() == dtype.TypeString {
+			return dtype.Categorical, nil
+		}
+		return vt, err
 
 	case arrow.EXTENSION:
 		t, ok := at.(arrow.ExtensionType)

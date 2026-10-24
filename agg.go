@@ -409,8 +409,8 @@ func HistBinCount(n int) HistOption {
 
 // HistBreakpoint and HistCategory make each bin a Struct of its right edge, a
 // Float64, and its interval as text, "[1.0, 3.333333]" then "(3.333333, 5.666667]",
-// beside its count: Polars' include_breakpoint and include_category. Polars' category
-// is a Categorical; here it is text, as Cut's labels are.
+// beside its count: Polars' include_breakpoint and include_category, the category a
+// Categorical, as Polars' is (step 352).
 func HistBreakpoint() HistOption { return func(o *histOptions) { o.breakpoint = true } }
 func HistCategory() HistOption   { return func(o *histOptions) { o.category = true } }
 

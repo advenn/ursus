@@ -47,9 +47,9 @@ func TestCutIsAnEnum(t *testing.T) {
 		t.Errorf("a label twice: %v", err)
 	}
 
-	// QCut's labels come from the data, and are text still, where Polars' are a
-	// Categorical (feature-gaps §9).
-	if got := cells(t, x.Select(c("x").QCut([]float64{0.5})), "x"); !strings.HasSuffix(got, " String") {
+	// QCut's labels come from the data, and are a Categorical, as Polars' are, since
+	// step 352.
+	if got := cells(t, x.Select(c("x").QCut([]float64{0.5})), "x"); !strings.HasSuffix(got, " Categorical") {
 		t.Errorf("QCut: %s", got)
 	}
 }
