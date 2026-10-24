@@ -837,6 +837,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#categoricals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Categoricals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#casts" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1572,6 +1583,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#categoricals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Categoricals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#casts" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1723,6 +1745,11 @@ before a query runs:</p>
 <td>fixed categories, sorted in their order</td>
 </tr>
 <tr>
+<td><code>Categorical</code></td>
+<td><code>string</code></td>
+<td>text with a type of its own, sorted as its text (<em>new in 0.6.7</em>)</td>
+</tr>
+<tr>
 <td><code>List(T)</code></td>
 <td>a slice</td>
 <td>a list of values a row</td>
@@ -1803,6 +1830,16 @@ number cannot become a null again:</p>
 <li>the <code>Sum</code> of a group with no values is null, not 0;</li>
 <li>the <code>Mean</code> of a group with no values is null, not NaN.</li>
 </ul>
+<h2 id="categoricals">Categoricals<a class="headerlink" href="#categoricals" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7:</em> a <code>Categorical</code> is Polars' Categorical: text with a type of its own, made
+by <code>Cast(ursus.Categorical)</code> from a String or an Enum, and read from a CSV or NDJSON
+file by a schema. It sorts, compares and groups as its text, and meets a String at
+String. Its codes, <code>Cat().Physical()</code> or <code>ToPhysical()</code>, number its values in the order
+they first appear over the frame, as Polars numbers them in a fresh process; a
+group-by's aggregation and a window refuse them, where they would number a group's.
+<code>Cat()</code> has its text functions, and a String's functions read it as its text. It is
+stored as its text, so it costs what a String does; casting a number to it is refused,
+where Polars reads one as a code.</p>
 <h2 id="casts">Casts<a class="headerlink" href="#casts" title="Permanent link">&para;</a></h2>
 <p><code>Cast</code> converts a column to another type and refuses a value it cannot convert, naming
 it. <code>CastLossy</code> turns such values into nulls instead:</p>
@@ -1837,7 +1874,8 @@ that is what you want.</p>
 <p><em>New in 0.6.7.</em> <code>ToPhysical</code> is a column as it is stored, as Polars' <code>to_physical</code>: a
 <code>Date</code>'s days as an <code>Int32</code>, a <code>Datetime</code>'s, a <code>Duration</code>'s and a <code>Time</code>'s ticks as an
 <code>Int64</code>, a <code>Decimal</code>'s unscaled units as an <code>Int128</code>, an <code>Enum</code>'s category as the
-smallest unsigned integer that holds them. <code>Reinterpret(signed)</code> reads an integer's
+smallest unsigned integer that holds them, and a <code>Categorical</code>'s code, the order its
+value first appears in over the frame, as a <code>UInt32</code>. <code>Reinterpret(signed)</code> reads an integer's
 bits as the integer of its width and the other sign, so a <code>UInt64</code>'s maximum is an
 <code>Int64</code>'s -1.</p>
 <h3 id="a-frames-casts">A frame's casts<a class="headerlink" href="#a-frames-casts" title="Permanent link">&para;</a></h3>

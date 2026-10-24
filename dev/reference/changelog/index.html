@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–350, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–351, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3141,6 +3141,12 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>The <code>Categorical</code> type</strong> (351), Polars' Categorical: text with a type of its own,
+  made by a cast from a String or an Enum and read from CSV and NDJSON by a schema;
+  sorted, compared, grouped and joined as its text, as Polars has since 1.32; its
+  codes, <code>Cat().Physical()</code> and <code>ToPhysical()</code>, the order its values first appear in
+  over the frame. <code>Cat()</code>'s text functions take it, and <code>selector.Categorical</code>
+  selects it. It is stored as its text, and costs what a String does.</li>
 <li><strong><code>**</code> in globs, and CSV and NDJSON directories</strong> (349): a glob's <code>**</code> matches any
   number of directories, none among them, as Polars' do, in <code>ScanCSVGlob</code>,
   <code>ScanNDJSONGlob</code> and <code>ScanParquetGlob</code>; <code>ScanCSV</code> and <code>ScanNDJSON</code> of a directory
