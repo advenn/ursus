@@ -148,6 +148,7 @@ changes is what Go asks for.
 | `pl.read_json(p, schema_overrides={"a": pl.Float32})` | `ursus.ScanJSON(p, ursus.WithNDJSONSchemaOverrides(map[string]dtype.DataType{"a": ursus.Float32}))` (new in 0.6.7) |
 | `df.write_ndjson(f)`, `df.write_json(f)`, `lf.sink_ndjson(p)` | `lf.WriteNDJSON(ctx, w)`, `lf.WriteJSON(ctx, w)`, `lf.SinkNDJSON(ctx, p)` (new in 0.6.7) |
 | `pl.scan_ipc(p)`, `pl.read_ipc_stream(p)`, `df.write_ipc(f, compression="zstd")`, `lf.sink_ipc(p)`, `pl.read_ipc_schema(p)` | `ursus.ScanIPC(p)`, `ursus.ScanIPCStream(p)`, `lf.WriteIPC(ctx, w, ursus.WithIPCCompression(ursus.IPCZstd))`, `lf.SinkIPC(ctx, p)`, `ursus.ReadIPCSchema(p)` (new in 0.6.7) |
+| `pl.read_database("SELECT * FROM t WHERE a > ?", conn, execute_options={"parameters": [5]}, schema_overrides={"a": pl.Int32})` | `ursus.ReadDatabase(ctx, db, "SELECT * FROM t WHERE a > ?", 5)`, any `database/sql` driver; `ursus.ReadDatabaseRows(rows, ursus.WithDatabaseSchemaOverrides(m))` (new in 0.6.7) |
 | `df.to_arrow()` | `df.Record()`, zero-copy |
 | `df["a"].to_list()` | `df.Column[int64]("a")`, then `.Values()` |
 | `df.rows(named=True)` | `df.Rows[T]()`, into Go structs |

@@ -2,7 +2,8 @@
 description: >-
   Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan
   options, globs, readers from memory or object storage, projection and predicate
-  pushdown into Parquet, streaming sinks, and Arrow in and out.
+  pushdown into Parquet, streaming sinks, Arrow in and out, JSON, and databases
+  through database/sql.
 ---
 
 # CSV, Parquet and Arrow
@@ -149,6 +150,24 @@ value is written as Polars writes it: a float in Polars' text, NaN and the infin
 zoned instant with its offset, `"2024-01-02T03:04:05+05:00"`; a duration in ISO 8601's
 seconds, `"PT90S"`; a List an array and a Struct an object. A Binary column is refused,
 as Polars refuses it.
+
+## Databases
+
+*New in 0.6.7:* `ReadDatabase(ctx, db, query, args...)` runs a query on a `*sql.DB`, a
+`*sql.Tx` or a `*sql.Conn` and reads its rows as a frame, as Polars' `read_database`;
+`ReadDatabaseRows(rows)` reads a result you have, a prepared statement's, say, and
+closes it. Any `database/sql` driver serves. A column's type is its values', met as
+Polars meets them: integers an Int64, floats a Float64, text a String, bytes a Binary,
+and instants a Datetime in microseconds, of no zone where each is in UTC, as a driver
+gives a timestamp without one, and in UTC where one is in a zone; an integer beside a
+float is a Float64, text beside a number text, and bytes beside an integer an error.
+Every row is read for it, where Polars reads 100. Then a column is of the type its
+driver names, where every value fits it: an `INT4` an Int32, a `NUMERIC(10, 2)` a
+Decimal(10, 2), a `DATE` a Date, a `TIME` a Time, a `TIMESTAMPTZ` a Datetime in UTC,
+and the bytes a driver gives for a `VARCHAR` or a `UUID` text. A result of no rows has
+its driver's types, and a column the driver calls `NOT NULL` is not nullable.
+`ReadDatabaseRows(rows, ursus.WithDatabaseSchemaOverrides(m))` gives some columns'
+types, as Polars' `schema_overrides`. The frame is read whole, as Polars' is.
 
 ## Larger than memory
 

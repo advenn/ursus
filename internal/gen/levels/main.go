@@ -68,6 +68,7 @@ var levels = map[string]int{
 	"internal/source/testsrc":  45, // the deliberately-misbehaving source
 	"internal/source/arrowsrc": 45, // + arrowin: an Arrow stream, copied a window at a time
 	"internal/source/ndjson":   45, // newline-delimited JSON, parsed a part a thread
+	"internal/source/sqlrows":  45, // + kernel: a database/sql result's rows, typed as Polars types them
 
 	"internal/physical": 50, // + plan, kernel, data, source
 	"internal/exec":     60, // + physical, plan

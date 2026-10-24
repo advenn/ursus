@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–352, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–353, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -110,6 +110,14 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **Databases** (353): `ReadDatabase(ctx, db, query, args...)`, Polars'
+  `read_database`, runs a query through `database/sql`, on any driver, and reads its
+  rows as a frame; `ReadDatabaseRows(rows)` reads a result already run, and
+  `WithDatabaseSchemaOverrides` is Polars' `schema_overrides`. A column is typed by its
+  values, every row's, met as Polars meets them, then by the type its driver names
+  where every value fits it: an `INT4` an Int32, a `NUMERIC(10, 2)` a Decimal, a
+  `DATE` a Date, a `TIMESTAMPTZ` a Datetime in UTC. It costs 9% over a hand-written
+  `Scan` loop.
 - **A Categorical in and out of Arrow, IPC and Parquet** (352), as Polars writes one: a
   dictionary of its values, which Polars and PyArrow read back as one, and Polars' own
   files read as one.

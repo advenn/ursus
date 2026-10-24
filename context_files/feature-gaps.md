@@ -250,7 +250,7 @@ differs from their input's, or scalars outside a group-by.
 | **Schema overrides on Parquet and Arrow scans;** CSV date inference; CSV writer quote style and date and float formats. Compressed input built in step 346: a CSV, NDJSON or JSON file of gzip, zlib or Zstandard, by its first bytes | P1 |
 | **Cloud object stores** by URI (`s3://`, `gs://`, `https://`), with listing, credentials and retries. Today you bring a `ReaderAt` | P2 |
 | **Parquet:** page index and bloom filters (read and write), compression level, per-column options, a metadata cache | P2 |
-| Avro write; Excel; Delta Lake; Iceberg; databases through ADBC | P2/P3 |
+| Avro write; Excel; Delta Lake; Iceberg. **Databases** read in step 353, `ReadDatabase` and `ReadDatabaseRows` through `database/sql`, Polars' `read_database`; left: `write_database`, `read_database`'s `iter_batches`, and ADBC's Arrow results | P2/P3 |
 | Predicate pushdown into CSV and Arrow scans | P2 |
 
 ## 8. Engine and tooling
@@ -517,6 +517,15 @@ decide whether to keep or switch each one.
   its text, as an Enum's, and a join or a comparison with a String meets at the
   text, where Polars refuses the functions and the join; a cast of a number to it is
   refused, where Polars reads the number as a code (step 351).
+- Databases: every row's value types a column, where Polars reads 100 and reads a
+  later float in an integer column as its integer part, or refuses a later kind; an
+  instant beside text meets at text, by Polars' supertype, where Polars refuses it; a
+  schema override of a column the result has not is refused, as NDJSON's is, where
+  Polars ignores it, and one of text parses it, a Date or a Decimal, where Polars'
+  builder refuses or nulls it. A Go driver's own types are taken where its values fit
+  them, so SQLite's DATE, TIMESTAMP and BOOLEAN columns, which go-sqlite3 and modernc
+  give as instants and Booleans, are a Date, a Datetime and a Bool, where Python's
+  sqlite3 gives Polars their text and integers (step 353).
 - An aggregate whose answer depends on the order, `First` or `Last`, inside a window
   with an `OrderBy`, `(x - x.First()).CumSum(false)` over g ordered by t, is refused as
   an ordering over an aggregate is; Polars takes the first in the order (step 336).
