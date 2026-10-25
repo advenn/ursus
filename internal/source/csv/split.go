@@ -50,6 +50,7 @@ type splitter struct {
 	eof   bool
 
 	sep, quote byte
+	noQuote    bool // the scanner's
 	comment    []byte
 	maxRec     int
 	width      int // the scanner's: a blank line is a record once it is known
@@ -98,6 +99,7 @@ func newSplitter(sc *scanner, row int) *splitter {
 		eof:     sc.eof,
 		sep:     sc.sep,
 		quote:   sc.quote,
+		noQuote: sc.noQuote,
 		comment: sc.comment,
 		maxRec:  sc.maxRec,
 		width:   sc.width,
@@ -308,7 +310,7 @@ const (
 func (sp *splitter) recordEnd(b []byte, pos int, atEOF bool) (int, recordState) {
 	i := pos // always at the start of a field
 	for {
-		if i < len(b) && b[i] == sp.quote {
+		if !sp.noQuote && i < len(b) && b[i] == sp.quote {
 			// A quoted field: a doubled quote in it is data, and its closing quote is
 			// followed by a separator or a line ending, or the record is the scanner's.
 			j := i + 1
@@ -364,7 +366,10 @@ func (sp *splitter) recordEnd(b []byte, pos int, atEOF bool) (int, recordState) 
 		}
 		j := i
 		for {
-			q := bytes.IndexByte(b[j:lineEnd], sp.quote)
+			q := -1 // with quoting off, no quote starts a field
+			if !sp.noQuote {
+				q = bytes.IndexByte(b[j:lineEnd], sp.quote)
+			}
 			if q < 0 {
 				if nl < 0 {
 					if !atEOF {

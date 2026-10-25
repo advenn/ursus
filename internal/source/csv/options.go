@@ -45,6 +45,19 @@ type Options struct {
 	// telling people to preprocess with sed.
 	SkipRows int
 
+	// SkipLines discards this many lines before anything is read, by their line
+	// ends alone, a quote read as any byte, as Polars' skip_lines (step 358). It and
+	// SkipRows are not both set, as Polars refuses them both.
+	SkipLines int
+
+	// SkipRowsAfterHeader discards this many records after the header, or at the
+	// start where there is none, a blank line one, as Polars' skip_rows_after_header.
+	SkipRowsAfterHeader int
+
+	// NoQuote reads a quote as any byte, as Polars' quote_char=None: no field is
+	// quoted, and a separator or a line end always ends one.
+	NoQuote bool
+
 	// Schema, if set, skips inference entirely. This is the option to reach for
 	// when the file is big: inference costs a read of the sample, and an explicit
 	// schema also removes the risk of a column being inferred from rows that do

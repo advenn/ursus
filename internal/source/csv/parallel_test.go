@@ -227,6 +227,19 @@ func TestParallelReadsAsSerialDoes(t *testing.T) {
 		textOpener("a;b;c\n1;1,5;x\nq;2,5;\xff\n3;3.5;\xe2\x82A\n4\n"),
 	}, read)
 
+	// Step 358: quoting off, where a quote's line end ends a record, and lines and
+	// rows skipped.
+	noQuote := o
+	noQuote.NoQuote = true
+	sameBothWays(t, "quoting off", []Opener{
+		textOpener("a,b,c\n\"x\ny\",2,3\n" + strings.Repeat("\"q,r\",\"\"\n", 50) + "4,5,6\n"),
+	}, noQuote)
+	skip := o
+	skip.SkipLines, skip.SkipRowsAfterHeader = 2, 3
+	sameBothWays(t, "lines and rows skipped", []Opener{
+		textOpener("junk \"\nmore\na,b,c\n" + strings.Repeat("1,\"2\n2\",3\n\n", 30)),
+	}, skip)
+
 	ragged := o
 	ragged.TruncateRaggedLines = true
 	sameBothWays(t, "ragged, truncated", []Opener{
@@ -356,6 +369,41 @@ func TestTheSplitterCutsWellFormedQuotingWithoutStopping(t *testing.T) {
 		if rows != 50 {
 			t.Errorf("blocks of %d: %d rows cut, want 50", size, rows)
 		}
+	}
+}
+
+// TestTheSplitterReadsQuotesAsBytesWithQuotingOff: with quoting off (step 358) the
+// exact splitter, which a speculative cut hands a record past the size limit to,
+// ends a record at every line end, a quote any byte, as the scanner does.
+func TestTheSplitterReadsQuotesAsBytesWithQuotingOff(t *testing.T) {
+	var text strings.Builder
+	for i := range 50 {
+		fmt.Fprintf(&text, "\"a\n\"b,c\"%d\n", i) // two lines, three quotes, each
+	}
+	defer func(size int) { splitBlockSize = size }(splitBlockSize)
+	for _, size := range blockSizes {
+		splitBlockSize = size
+		sp := &splitter{r: strings.NewReader(text.String()), sep: ',', quote: '"', noQuote: true,
+			maxRec: 1 << 20, width: 2}
+		rows := 0
+		for {
+			blk, ok, err := sp.next()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				break
+			}
+			rows += blk.rows
+		}
+		if sp.stopped || rows != 100 {
+			t.Errorf("blocks of %d: %d rows cut, stopped %v; want 100", size, rows, sp.stopped)
+		}
+	}
+	o := DefaultOptions()
+	o.NoQuote = true
+	if sp := newSplitter(newScannerOver(nil, o), 0); !sp.noQuote {
+		t.Error("a splitter quotes where its scanner does not")
 	}
 }
 

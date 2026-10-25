@@ -52,6 +52,7 @@ type scanner struct {
 
 	sep     byte
 	quote   byte
+	noQuote bool // a quote is any byte: none opens a quoted field (step 358)
 	comment []byte
 	maxRec  int
 
@@ -107,7 +108,12 @@ const (
 )
 
 func newScanner(r io.Reader, o Options) *scanner {
-	return newScannerFrom(&bomSkipper{r: r}, o)
+	if o.SkipLines > 0 {
+		r = &lineSkipper{r: r, left: o.SkipLines}
+	}
+	s := newScannerFrom(&bomSkipper{r: r}, o)
+	s.line = max(o.SkipLines, 0) // the lines skipped are the file's, and counted
+	return s
 }
 
 // newScannerFrom is newScanner for input that is not the start of a stream: a block
@@ -124,6 +130,7 @@ func newScannerFrom(r io.Reader, o Options) *scanner {
 		buf:     make([]byte, size),
 		sep:     o.Separator,
 		quote:   o.Quote,
+		noQuote: o.NoQuote,
 		comment: o.Comment,
 		maxRec:  maxRec,
 	}
@@ -146,6 +153,7 @@ func newScannerOver(data []byte, o Options) *scanner {
 		eof:     true,
 		sep:     o.Separator,
 		quote:   o.Quote,
+		noQuote: o.NoQuote,
 		comment: o.Comment,
 		maxRec:  maxRec,
 	}
@@ -267,7 +275,7 @@ func (s *scanner) checkSpan(start int) {
 // verdict a text builder may trust, or nil where a field must be checked by itself:
 // where the separator or the quote is not ASCII. See checkUTF8.
 func (s *scanner) UTF8() *bool {
-	if s.sep >= utf8.RuneSelf || s.quote >= utf8.RuneSelf {
+	if s.sep >= utf8.RuneSelf || !s.noQuote && s.quote >= utf8.RuneSelf {
 		return nil
 	}
 	s.checkUTF8 = true
@@ -360,7 +368,7 @@ func (s *scanner) parse(b []byte, atEOF bool) (n, nl int, ok bool, err error) {
 	i := 0
 	for {
 		// --- one field ---
-		if i < len(b) && b[i] == s.quote {
+		if !s.noQuote && i < len(b) && b[i] == s.quote {
 			consumed, endOfRec, lines, e := s.quotedField(b, i, atEOF, nl)
 			if e != nil {
 				return 0, 0, false, e
@@ -528,6 +536,35 @@ func appendNormalised(dst, src []byte, quote byte) []byte {
 // Col("a") was an unknown column — and, when several files are matched by header,
 // a part with a BOM would not match a part without (audit.md §5, I15). Polars,
 // pandas and DuckDB all drop it.
+// lineSkipper discards the first left lines of r, by their line ends alone, as
+// Polars' skip_lines reads past them: a quote in them is any byte (step 358).
+type lineSkipper struct {
+	r    io.Reader
+	left int
+}
+
+func (l *lineSkipper) Read(p []byte) (int, error) {
+	for l.left > 0 {
+		n, err := l.r.Read(p)
+		b := p[:n]
+		for l.left > 0 {
+			i := bytes.IndexByte(b, '\n')
+			if i < 0 {
+				b = b[:0]
+				break
+			}
+			b, l.left = b[i+1:], l.left-1
+		}
+		if len(b) > 0 {
+			return copy(p, b), err
+		}
+		if err != nil {
+			return 0, err
+		}
+	}
+	return l.r.Read(p)
+}
+
 type bomSkipper struct {
 	r       io.Reader
 	checked bool

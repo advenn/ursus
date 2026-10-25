@@ -153,6 +153,11 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 				s.schema, s.err = nil, uerr.FromPanic(v, "scan_csv")
 			}
 		}()
+		if s.opts.SkipRows > 0 && s.opts.SkipLines > 0 {
+			s.err = uerr.New(uerr.KindValue, "scan_csv", "WithSkipRows and WithSkipLines are both set").
+				Hint("skip records with WithSkipRows, or lines whatever their quotes with WithSkipLines, as Polars takes one")
+			return
+		}
 		if s.opts.Schema != nil {
 			s.schema = s.opts.Schema
 			return
@@ -403,14 +408,20 @@ func (r *reader) openNext(ctx context.Context) error {
 		}
 		if r.header0 == nil {
 			r.header0, r.header0From, r.wanted = hdr, r.next-1, r.wanted0
-			return nil
+		} else {
+			w, err := matchHeader(r.header0, hdr, r.wanted0,
+				r.src.partName(r.header0From), r.src.partName(r.next-1))
+			if err != nil {
+				return err
+			}
+			r.wanted = w
 		}
-		w, err := matchHeader(r.header0, hdr, r.wanted0,
-			r.src.partName(r.header0From), r.src.partName(r.next-1))
-		if err != nil {
-			return err
+	}
+	// Each stream's, as Polars skips them in each file (step 358).
+	for range r.src.opts.SkipRowsAfterHeader {
+		if !r.sc.Next() {
+			return r.sc.Err()
 		}
-		r.wanted = w
 	}
 	return nil
 }

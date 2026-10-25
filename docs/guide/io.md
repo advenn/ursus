@@ -20,8 +20,8 @@ in memory. The types are inferred from the first rows, and the options say the r
 
 | Option | For |
 |---|---|
-| `WithSeparator(c)`, `WithQuote(c)`, `WithComment(prefix)` | the dialect |
-| `WithHasHeader(b)`, `WithColumnNames(names...)`, `WithSkipRows(n)` | the header |
+| `WithSeparator(c)`, `WithQuote(c)`, `WithQuoting(b)`, `WithComment(prefix)` | the dialect |
+| `WithHasHeader(b)`, `WithColumnNames(names...)`, `WithSkipRows(n)`, `WithSkipLines(n)`, `WithSkipRowsAfterHeader(n)` | the header and the rows skipped |
 | `WithSchema(s)`, `WithSchemaOverrides(m)`, `WithInferRows(n)`, `WithInferSchema(b)` | the types |
 | `WithNullValues(vals...)` | the text that means null |
 | `WithTruncateRaggedLines(b)`, `WithMaxRecordSize(n)`, `WithIgnoreErrors(b)`, `WithRaiseIfEmpty(b)` | malformed input |
@@ -52,6 +52,13 @@ fast as Polars reads one.
   UTF-8 sequence as U+FFFD. Without it, text that is not UTF-8 is refused, as Polars
   refuses it. The check reads thirty-two bytes a step and costs a read nothing
   measurable.
+
+*New in 0.6.7:* `WithSkipLines(n)`, as `skip_lines`, skips the first lines by their
+line ends alone, a quote in them any byte, where `WithSkipRows(n)` skips records;
+the two are not both set. `WithSkipRowsAfterHeader(n)`, as `skip_rows_after_header`,
+skips the records after the header, a blank line one. Both skip in each file of
+several. `WithQuoting(false)`, as `quote_char=None`, reads a quote as any byte, so a
+separator or a line end always ends a field.
 
 *Changed in 0.6.7:* a record of too few fields is padded with nulls, and a blank
 line after the header is a record of nulls, as Polars reads them; both were

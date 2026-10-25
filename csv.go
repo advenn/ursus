@@ -24,6 +24,10 @@ func WithSeparator(c byte) CSVOption { return func(o *csv.Options) { o.Separator
 // WithQuote sets the quote character. Default '"'.
 func WithQuote(c byte) CSVOption { return func(o *csv.Options) { o.Quote = c } }
 
+// WithQuoting(false) reads a quote as any byte, as Polars' quote_char=None: no field
+// is quoted, so a separator or a line end always ends one. New in 0.6.7.
+func WithQuoting(b bool) CSVOption { return func(o *csv.Options) { o.NoQuote = !b } }
+
 // WithComment makes lines starting with prefix comments. Multi-byte prefixes such
 // as "//" are supported.
 func WithComment(prefix string) CSVOption {
@@ -40,6 +44,17 @@ func WithColumnNames(names ...string) CSVOption {
 
 // WithSkipRows discards n records before the header.
 func WithSkipRows(n int) CSVOption { return func(o *csv.Options) { o.SkipRows = n } }
+
+// WithSkipLines discards n lines before the header, by their line ends alone, a
+// quote in them any byte, as Polars' skip_lines; WithSkipRows skips records. The two
+// are not both set, as Polars refuses them. New in 0.6.7.
+func WithSkipLines(n int) CSVOption { return func(o *csv.Options) { o.SkipLines = n } }
+
+// WithSkipRowsAfterHeader discards n records after the header, or the first n where
+// there is none, a blank line one, as Polars' skip_rows_after_header. New in 0.6.7.
+func WithSkipRowsAfterHeader(n int) CSVOption {
+	return func(o *csv.Options) { o.SkipRowsAfterHeader = n }
+}
 
 // WithSchema supplies the schema and skips inference entirely. On a large file
 // this is the option that matters: inference costs a read of the sample, and an

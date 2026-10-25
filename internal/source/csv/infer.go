@@ -176,6 +176,7 @@ func inferSchema(sc *scanner, o Options, isNull func([]byte) bool) (*dtype.Schem
 				Hint("pass WithHasHeader(false) if the data starts immediately").
 				Hint("or WithRaiseIfEmpty(false) to read an empty file as a frame of no columns")
 		}
+		sc.SetWidth(sc.NumFields()) // a blank line is a record from here, as the reader's
 		names = make([]string, sc.NumFields())
 		for i := range names {
 			// A name that is not UTF-8 is read with U+FFFD, whatever the encoding,
@@ -185,6 +186,12 @@ func inferSchema(sc *scanner, o Options, isNull func([]byte) bool) (*dtype.Schem
 			} else {
 				names[i] = string(appendLossy(nil, f))
 			}
+		}
+	}
+
+	for range o.SkipRowsAfterHeader {
+		if !sc.Next() {
+			break
 		}
 	}
 

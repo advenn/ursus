@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–357, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–358, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -132,6 +132,10 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **CSV rows and lines skipped, and quoting off** (358): `WithSkipLines`, Polars'
+  `skip_lines`, lines skipped by their line ends alone; `WithSkipRowsAfterHeader`,
+  `skip_rows_after_header`, in each file of several; `WithQuoting(false)`,
+  `quote_char=None`, a quote read as any byte.
 - **The rest of Polars' `read_csv` options** (357): `WithIgnoreErrors`, a value its
   type cannot take read as a null; `WithInferSchema(false)`, every column a String;
   `WithRaiseIfEmpty(false)`, an empty file a frame of no columns; `WithDecimalComma`,
