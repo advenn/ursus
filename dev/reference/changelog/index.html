@@ -3052,11 +3052,19 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–356, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–357, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A CSV record of too few fields is padded with nulls, and a blank line read as a
+  record of nulls</strong> (357), as Polars reads them: the record was refused unless
+  <code>WithTruncateRaggedLines(true)</code>, and the line skipped in a file of more than one
+  column. <code>WithTruncateRaggedLines</code> now concerns a record of too many fields alone.</li>
+<li><strong>A CSV file's text that is not UTF-8 is refused</strong> (357), as Polars refuses it,
+  where a String held its bytes as they were, which no text kernel reads rightly.
+  <code>WithEncoding(ursus.UTF8Lossy)</code> reads each invalid sequence as U+FFFD, and a
+  column's name is read so whatever the encoding.</li>
 <li><strong><code>Str().ToDatetime(unit, tz)</code> reads a text of no offset on <code>tz</code>'s wall clock</strong> (356),
   as Polars' <code>str.to_datetime(time_zone=tz)</code> does: <code>2024-01-02 03:04:05</code> in Tokyo is
   03:04:05 there, where it was a cast's, 03:04:05 UTC, 12:04:05 in Tokyo. A text
@@ -3163,6 +3171,13 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>The rest of Polars' <code>read_csv</code> options</strong> (357): <code>WithIgnoreErrors</code>, a value its
+  type cannot take read as a null; <code>WithInferSchema(false)</code>, every column a String;
+  <code>WithRaiseIfEmpty(false)</code>, an empty file a frame of no columns; <code>WithDecimalComma</code>,
+  <code>1,5</code> read as 1.5, the writer's option renamed <code>WithWriteDecimalComma</code>; and
+  <code>WithEncoding(ursus.UTF8Lossy)</code>. Text is checked as UTF-8 a span of records at a
+  time, by a vector check nine times as fast as Go's on text of a non-ASCII character
+  a word, so a read is as fast as before.</li>
 <li><strong>Text parsed by Polars' patterns</strong> (356): <code>Str().ToDate()</code>, <code>ToDatetime</code> and
   <code>ToTime("", …)</code>, and <code>Strptime</code> of an empty format, read what Polars' <code>to_date</code>,
   <code>to_datetime</code> and <code>to_time</code> of no format read, <code>02/01/2024</code> and <code>2024-01-02
@@ -3176,7 +3191,7 @@ completeness, part 3 — frame operations.</strong></p>
 <li><strong>The CSV writer's options</strong> (354), Polars' <code>write_csv</code>'s: <code>WithQuoteStyle</code>, of
   <code>QuoteNecessary</code>, <code>QuoteAlways</code>, <code>QuoteNever</code> and <code>QuoteNonNumeric</code>, and
   <code>WithWriteQuote</code>; <code>WithDateFormat</code>, <code>WithDatetimeFormat</code> and <code>WithTimeFormat</code>, in
-  strftime; <code>WithFloatPrecision</code>, <code>WithFloatScientific</code> and <code>WithDecimalComma</code>;
+  strftime; <code>WithFloatPrecision</code>, <code>WithFloatScientific</code> and <code>WithWriteDecimalComma</code>;
   <code>WithIncludeBOM</code>; and <code>WithCSVCompression</code>, gzip or Zstandard, at
   <code>WithCSVCompressionLevel</code>, <code>SinkCSV</code> checking its path's extension unless
   <code>WithCSVCheckExtension(false)</code>.</li>
