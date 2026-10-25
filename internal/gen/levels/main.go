@@ -66,6 +66,7 @@ var levels = map[string]int{
 	"internal/source/parquet":  45,
 	"internal/source/csv":      45,
 	"internal/source/testsrc":  45, // the deliberately-misbehaving source
+	"internal/source/files":    45, // + hive, kernel: several files of a format as one scan, with shared columns
 	"internal/source/arrowsrc": 45, // + arrowin: an Arrow stream, copied a window at a time
 	"internal/source/ndjson":   45, // newline-delimited JSON, parsed a part a thread
 	"internal/source/sqlrows":  45, // + kernel: a database/sql result's rows, typed as Polars types them

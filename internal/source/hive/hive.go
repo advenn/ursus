@@ -28,6 +28,7 @@ type Partitions struct {
 	Keys []string
 	Text [][]string // by file, then key
 	Null [][]bool
+	op   string // the scan an error names
 }
 
 // Parse reads the key=value directories of each path below root, or of the whole of
@@ -35,14 +36,19 @@ type Partitions struct {
 // the same keys in the same order, as Polars refuses paths whose keys differ. A
 // directory not of that form is passed over, and so is root's own name.
 func Parse(root string, paths []string) (*Partitions, error) {
-	p := &Partitions{Text: make([][]string, len(paths)), Null: make([][]bool, len(paths))}
+	return ParseFor("scan_parquet", root, paths)
+}
+
+// ParseFor is Parse for the scan op, which its errors and Values' name (step 360).
+func ParseFor(op, root string, paths []string) (*Partitions, error) {
+	p := &Partitions{Text: make([][]string, len(paths)), Null: make([][]bool, len(paths)), op: op}
 	for k, path := range paths {
 		rel := filepath.Dir(path)
 		if root != "" {
 			var err error
 			rel, err = filepath.Rel(root, rel)
 			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				return nil, uerr.New(uerr.KindValue, "scan_parquet", "%s is not below %s", path, root)
+				return nil, uerr.New(uerr.KindValue, op, "%s is not below %s", path, root)
 			}
 		}
 		var keys []string
@@ -65,7 +71,7 @@ func Parse(root string, paths []string) (*Partitions, error) {
 			p.Keys = keys
 		case !equal(keys, p.Keys):
 			// Polars: "path contains column not present in the given Hive schema".
-			return nil, uerr.New(uerr.KindSchema, "scan_parquet",
+			return nil, uerr.New(uerr.KindSchema, op,
 				"%s is partitioned by %s, where %s is by %s", path, show(keys), paths[0], show(p.Keys)).
 				Hint("every file of a hive dataset is partitioned by the same keys, in the same order")
 		}
@@ -134,7 +140,7 @@ func (p *Partitions) Values(types []dtype.DataType) ([][]*data.Column, error) {
 		}
 		col, err := kernel.Cast(key, types[j], true, data.NewString(key, texts, valid.Finish()))
 		if err != nil {
-			return nil, uerr.Annotate(err, "scan_parquet", "partition key "+key)
+			return nil, uerr.Annotate(err, p.op, "partition key "+key)
 		}
 		for k := range out {
 			out[k][j] = col.Slice(k, 1)

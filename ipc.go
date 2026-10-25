@@ -2,6 +2,7 @@ package ursus
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,6 +15,9 @@ import (
 	"github.com/advenn/ursus/internal/arrowin"
 	"github.com/advenn/ursus/internal/arrowout"
 	"github.com/advenn/ursus/internal/exec"
+	"github.com/advenn/ursus/internal/source/arrowsrc"
+	"github.com/advenn/ursus/internal/source/files"
+	"github.com/advenn/ursus/internal/source/hive"
 	"github.com/advenn/ursus/internal/uerr"
 )
 
@@ -24,8 +28,118 @@ import (
 // write_ipc and read_ipc: its record batches a batch at a time, each column as
 // ScanArrow converts one, string views among them, which Polars writes. The file is
 // opened each time the query is planned or run, and closed after.
-func ScanIPC(path string) *LazyFrame {
-	return ScanArrow(func() (array.RecordReader, error) { return openIPCFile("scan_ipc", path) })
+//
+// New in 0.6.7: a directory is read whole, every file below it in the order of their
+// paths, as a hive dataset, each directory below it named key=value giving its files'
+// rows a column key after the files' own, as Polars' scan_ipc reads one; see
+// WithIPCHivePartitioning, WithIPCHiveSchema, WithIPCHiveDates and
+// WithIPCIncludeFilePaths. Several files are read as the first one's columns, by
+// name, as ScanIPCFiles reads them.
+func ScanIPC(path string, opts ...IPCScanOption) *LazyFrame {
+	o := ipcScanOptions(opts)
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		paths, err := datasetFiles("scan_ipc", path)
+		if err != nil {
+			return &LazyFrame{err: err}
+		}
+		return scanIPCPaths(paths, path, path, o)
+	}
+	if o == (ipcScan{}) {
+		return ScanArrow(func() (array.RecordReader, error) { return openIPCFile("scan_ipc", path) })
+	}
+	return scanIPCPaths([]string{path}, path, "", o)
+}
+
+// ScanIPCFiles reads IPC files as one frame, in the order given, as the first one's
+// columns: every other file's are read by name, and one it lacks, one more or one of
+// another type is refused, as Polars refuses them. New in 0.6.7.
+func ScanIPCFiles(paths []string, opts ...IPCScanOption) *LazyFrame {
+	return scanIPCPaths(paths, fmt.Sprintf("%d files", len(paths)), "", ipcScanOptions(opts))
+}
+
+// ScanIPCGlob reads every IPC file a shell pattern matches as one frame, sorted by
+// name, an element of ** matching any number of directories, as ScanIPCFiles reads
+// them. New in 0.6.7.
+func ScanIPCGlob(pattern string, opts ...IPCScanOption) *LazyFrame {
+	paths, err := globFiles(pattern)
+	if err != nil {
+		return &LazyFrame{err: uerr.Wrap(err, uerr.KindValue, "scan_ipc", "bad glob pattern %q", pattern)}
+	}
+	if len(paths) == 0 {
+		return &LazyFrame{err: uerr.New(uerr.KindIO, "scan_ipc", "no files match %q", pattern)}
+	}
+	return scanIPCPaths(paths, pattern, "", ipcScanOptions(opts))
+}
+
+// IPCScanOption configures ScanIPC, ScanIPCFiles and ScanIPCGlob. New in 0.6.7.
+type IPCScanOption func(*ipcScan)
+
+type ipcScan struct {
+	hive       *bool
+	hiveSchema *Schema
+	noDates    bool
+	pathColumn string
+}
+
+func ipcScanOptions(opts []IPCScanOption) ipcScan {
+	var o ipcScan
+	for _, f := range opts {
+		f(&o)
+	}
+	return o
+}
+
+// WithIPCHivePartitioning reads the key=value directories of each file's path as
+// columns, as Polars' hive_partitioning: on by default for a directory, off for a
+// file, a list and a glob. New in 0.6.7.
+func WithIPCHivePartitioning(b bool) IPCScanOption { return func(o *ipcScan) { o.hive = &b } }
+
+// WithIPCHiveSchema gives the types of the partition keys it names, as Polars'
+// hive_schema; the others are inferred. New in 0.6.7.
+func WithIPCHiveSchema(s *Schema) IPCScanOption { return func(o *ipcScan) { o.hiveSchema = s } }
+
+// WithIPCHiveDates reads a partition key of dates or of instants as a Date or a
+// Datetime, as Polars' try_parse_hive_dates; on by default. New in 0.6.7.
+func WithIPCHiveDates(b bool) IPCScanOption { return func(o *ipcScan) { o.noDates = !b } }
+
+// WithIPCIncludeFilePaths adds a String column named name of each row's file path,
+// last, as Polars' include_file_paths. New in 0.6.7.
+func WithIPCIncludeFilePaths(name string) IPCScanOption {
+	return func(o *ipcScan) { o.pathColumn = name }
+}
+
+// scanIPCPaths reads paths as one frame, described as desc, their partition keys read
+// below root, a directory scanned, or from the whole of each where root is "", where
+// hive partitioning is on (step 360).
+func scanIPCPaths(paths []string, desc, root string, o ipcScan) *LazyFrame {
+	if len(paths) == 0 {
+		return &LazyFrame{err: uerr.New(uerr.KindValue, "scan_ipc", "no files to read")}
+	}
+	fs := make([]files.File, len(paths))
+	for i, p := range paths {
+		fs[i] = files.File{Path: p, Src: arrowsrc.New(func() (array.RecordReader, error) {
+			return openIPCFile("scan_ipc", p)
+		})}
+	}
+	with := files.Shared{Dates: !o.noDates, PathColumn: o.pathColumn}
+	on := root != ""
+	if o.hive != nil {
+		on = *o.hive
+	}
+	if on {
+		parts, err := hive.ParseFor("scan_ipc", root, paths)
+		if err != nil {
+			return &LazyFrame{err: err}
+		}
+		with.Parts = parts
+		if s := o.hiveSchema; s != nil {
+			with.Types = make(map[string]DataType, s.Len())
+			for _, f := range s.FieldSlice() {
+				with.Types[f.Name] = f.Type
+			}
+		}
+	}
+	return scan(files.New("scan_ipc", "ipc", desc, fs, with))
 }
 
 // ScanIPCStream reads an Arrow IPC stream, the format of Polars' write_ipc_stream and

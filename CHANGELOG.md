@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–359, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–360, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -132,6 +132,11 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **Several IPC files as one frame, and IPC hive datasets** (360): `ScanIPCFiles`,
+  `ScanIPCGlob`, and `ScanIPC(dir)` a hive dataset, as Polars' `scan_ipc`; a later
+  file read by name, a filter on the keys skipping the files it rules out;
+  `WithIPCHivePartitioning`, `WithIPCHiveSchema`, `WithIPCHiveDates` and
+  `WithIPCIncludeFilePaths`.
 - **A column of each row's file path for CSV and NDJSON** (359):
   `WithCSVIncludeFilePaths` and `WithNDJSONIncludeFilePaths`, Polars'
   `include_file_paths`, the path as it was given; each file's repeated once and

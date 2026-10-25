@@ -174,6 +174,16 @@ and `SinkIPC(ctx, path)` write them, uncompressed as Polars' are by default, or 
 `WithIPCCompression(ursus.IPCLZ4)` or `IPCZstd`. `ReadIPCSchema(path)` and
 `ReadParquetSchema(ctx, path)` read a file's schema from its footer alone.
 
+*New in 0.6.7:* several IPC files as one frame, as Polars' `scan_ipc` reads them.
+`ScanIPCFiles(paths)` reads a list and `ScanIPCGlob(pattern)` a glob's matches, as
+the first file's columns: a later file's are read by name, and one it lacks, one more
+or one of another type is refused, as Polars refuses them. `ScanIPC(dir)` reads every
+file below a directory as a hive dataset, each `key=value` directory a column after
+the files' own, of the type its values infer; a filter on the keys skips the files it
+rules out before any is opened. `WithIPCHivePartitioning`, `WithIPCHiveSchema`,
+`WithIPCHiveDates` and `WithIPCIncludeFilePaths` are Polars' `hive_partitioning`,
+`hive_schema`, `try_parse_hive_dates` and `include_file_paths`.
+
 ## JSON
 
 *New in 0.6.7:* `ScanNDJSON(path)` reads newline-delimited JSON, an object a line, as
