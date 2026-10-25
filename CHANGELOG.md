@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–361, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–362, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -132,6 +132,12 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A unique on several threads, in the group-by's tables** (362): an integer key's
+  values, a string key's bytes, any other key encoded, where each key was a Go map's
+  string; a table a thread, a key in the one its hash names, each table's rows
+  inserted in order, so the rows kept are one thread's, each key's first. A million
+  distinct integers take 54 to 105 ms where they took 430 to 640, and 1,000 keys
+  among a million rows 16 to 25 where they took 40 to 58.
 - **A sort on several threads** (361): the radix passes, the merge sort a String key
   takes, the rows' places in their batches and the gather of the output each split
   across the query's threads, in the one-thread sort's order exactly, ties included.

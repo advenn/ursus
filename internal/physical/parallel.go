@@ -288,8 +288,8 @@ func (p *parallelOp) Close() error {
 // joinBreaker, batchOperator) keep running exactly as they did.
 //
 // That restriction is not a compromise. Those five carry unguarded mutable state —
-// distinctOp's `seen` is a bare map, whose concurrent write is a runtime throw, not
-// a race — and parallelising them needs a per-worker construction path that Sink
+// distinctOp's tables of keys, which it splits across threads itself (step 362),
+// take no lock — and parallelising them needs a per-worker construction path that Sink
 // does not have and a group-id remap that hashAggSink documents as absent.
 func parallelise(op Operator, opts Options) Operator {
 	if opts.Threads <= 1 {

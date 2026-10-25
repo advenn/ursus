@@ -28,8 +28,17 @@ type groupKeys struct {
 // newGroupKeys is the table for a key of these fields: integers for one integer
 // field, a string's own bytes for one String or Binary field, else encoded.
 func newGroupKeys(keys *dtype.Schema) groupKeys {
-	if keys.Len() == 1 {
-		switch t := keys.Field(0).Type; {
+	types := make([]dtype.DataType, keys.Len())
+	for i := range types {
+		types[i] = keys.Field(i).Type
+	}
+	return groupKeysOf(types)
+}
+
+// groupKeysOf is newGroupKeys for a key of fields of these types.
+func groupKeysOf(types []dtype.DataType) groupKeys {
+	if len(types) == 1 {
+		switch t := types[0]; {
 		case kernel.IsIntKey(t):
 			return groupKeys{ints: kernel.NewIntKeyTable()}
 		case isRawKey(t):

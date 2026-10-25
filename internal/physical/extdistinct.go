@@ -53,21 +53,31 @@ func (d *distinctOp) overBudget() error {
 	if d.frozen {
 		return nil
 	}
-	if d.budget.Limit() > 0 && d.mem.Over() && len(d.seen) > 0 && d.level < maxSpillDepth {
+	if d.budget.Limit() > 0 && d.mem.Over() && d.keys.Len() > 0 && d.level < maxSpillDepth {
 		d.frozen = true
 		return nil
 	}
 	return d.mem.Check()
 }
 
-// route sends every row of in whose key is not already held to its partition file.
-func (d *distinctOp) route(in *data.Batch, enc *kernel.GroupKeyEncoder) error {
-	for r := range in.Rows() {
-		k := enc.Encode(r)
-		if _, dup := d.seen[string(k)]; dup {
+// route sends every row of in whose key is not already held to its partition file,
+// by the radix of its encoded key, which only a routed row's key is.
+func (d *distinctOp) route(in *data.Batch, cols []*data.Column) error {
+	held, err := d.keys.held(cols, in.Rows())
+	if err != nil {
+		return err
+	}
+	var enc *kernel.GroupKeyEncoder
+	for r, dup := range held {
+		if dup {
 			continue
 		}
-		p := partitionOf(k, d.level)
+		if enc == nil {
+			if enc, err = kernel.NewGroupKeyEncoder("unique", cols); err != nil {
+				return err
+			}
+		}
+		p := partitionOf(enc.Encode(r), d.level)
 		d.pend[p] = append(d.pend[p], int32(r))
 	}
 	src, err := d.withOrdinal(in)
@@ -161,7 +171,7 @@ func (d *distinctOp) replay(ctx context.Context) error {
 	}
 	// Every key held is now settled: its row was emitted before the freeze, and
 	// every later row with that key was dropped on the way in.
-	d.seen = nil
+	d.keys = d.keys.single()
 	d.mem.Release()
 
 	results := make([]string, 0, len(files))
@@ -194,7 +204,7 @@ func (d *distinctOp) dedupFile(ctx context.Context, in, out string) (err error) 
 	}
 	sub := &distinctOp{
 		child: &runOperator{schema: d.spillSchema, src: &fileRun{r: r}}, schema: d.spillSchema,
-		subset: d.subset, seen: make(map[string]struct{}), mem: d.budget.Account("unique"),
+		subset: d.subset, keys: d.keys.single(), mem: d.budget.Account("unique"),
 
 		budget: d.budget, batch: d.batch, level: d.level + 1,
 		ord: d.ord, spillSchema: d.spillSchema,

@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/advenn/ursus/dtype"
-	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/execopt"
 	"github.com/advenn/ursus/internal/expr"
@@ -115,15 +114,15 @@ type distinctOp struct {
 	child  Operator
 	schema *dtype.Schema
 	subset []int
-	seen   map[string]struct{}
+	keys   *uniqueKeys // the keys seen, in the group-by's tables (step 362)
+	sel    []int32     // a batch's new rows, kept for the next
 
 	// mem accounts the seen-set, which grows with the number of DISTINCT ROWS and
 	// is held across batches — the same shape as hashAggSink.ids, which has been
 	// accounted since step 10 while this was not. Without it Scan(huge).Unique()
 	// under a memory limit neither spilled nor failed; it grew until the operating
 	// system stopped it, which is the outcome the whole budget exists to replace.
-	mem      *execopt.Account
-	seenSize int64
+	mem *execopt.Account
 
 	// The spill state, idle until the query goes over its limit.
 	budget      *execopt.Budget
@@ -164,56 +163,40 @@ func (d *distinctOp) Next(ctx context.Context) (*data.Batch, error) {
 		for i, ci := range d.subset {
 			cols[i] = in.Column(ci)
 		}
-		// The same encoder the hash aggregation uses, for the same reasons: the tag
-		// byte makes a null key structurally incapable of colliding with a real
-		// value, and OrderKey canonicalisation makes NaN equal NaN. A distinct built
-		// on IEEE equality would emit one row per NaN.
-		enc, err := kernel.NewGroupKeyEncoder("unique", cols)
-		if err != nil {
-			return nil, err
-		}
 		if d.frozen {
-			if err := d.route(in, enc); err != nil {
+			if err := d.route(in, cols); err != nil {
 				return nil, err
 			}
 			continue
 		}
 
-		keep := bitmap.NewBuilder(in.Rows())
-		any := false
-		for r := range in.Rows() {
-			k := enc.Encode(r)
-			if _, dup := d.seen[string(k)]; dup {
-				keep.Append(false)
-				continue
-			}
-			d.seen[string(k)] = struct{}{}
-			// The key BYTES plus a per-entry constant for the string header and the
-			// bucket slot, accumulated on insert rather than walked per batch — the
-			// same trade nuniqueAcc's NBytes makes, done exactly here because this is
-			// the one place a new key is known to be new.
-			d.seenSize += int64(len(k)) + 48
-			keep.Append(true)
-			any = true
-		}
-		d.nRows += int64(in.Rows())
-		d.mem.RetainBytes(d.seenSize - d.memHeld())
-		if err := d.overBudget(); err != nil {
-			return nil, err
-		}
-		if !any {
-			continue // a batch of pure duplicates is not end-of-stream
-		}
-
-		mask := data.NewBool("__distinct", keep.Finish(), bitmap.AllSet(in.Rows()))
-		out, err := kernel.FilterBatch(in, mask)
+		// The group-by's tables, for the reasons the encoder served before them: a null
+		// is a key of its own, which no value's can meet, and a float's key is its
+		// OrderKey, so NaN equals NaN. A distinct built on IEEE equality would emit one
+		// row per NaN.
+		isNew, err := d.keys.insert(cols, in.Rows())
 		if err != nil {
 			return nil, err
 		}
-		if out.Rows() == 0 {
-			continue
+		sel := d.sel[:0]
+		for r, ok := range isNew {
+			if ok {
+				sel = append(sel, int32(r))
+			}
 		}
-		return out, nil
+		d.sel = sel
+		d.nRows += int64(in.Rows())
+		d.mem.RetainBytes(d.keys.NBytes() - d.memHeld())
+		if err := d.overBudget(); err != nil {
+			return nil, err
+		}
+		switch len(sel) {
+		case 0:
+			continue // a batch of pure duplicates is not end-of-stream
+		case in.Rows():
+			return in, nil
+		}
+		return takeBatch(d.schema, in, sel)
 	}
 }
 
@@ -255,7 +238,7 @@ func planDistinct(ctx context.Context, d *plan.Distinct, opts Options) (Operator
 	}
 	return &distinctOp{
 		child: child, schema: s, subset: subset,
-		seen: make(map[string]struct{}),
+		keys: newUniqueKeys("unique", s, subset, opts.Threads),
 		mem:  opts.Budget.Account("unique"),
 
 		budget: opts.Budget, batch: opts.batchSize(),
