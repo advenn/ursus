@@ -1685,8 +1685,20 @@ in memory. The types are inferred from the first rows, and the options say the r
 <td><code>WithTruncateRaggedLines(b)</code>, <code>WithMaxRecordSize(n)</code></td>
 <td>malformed input</td>
 </tr>
+<tr>
+<td><code>WithTryParseDates(b)</code></td>
+<td>dates, instants and times of day inferred (new in 0.6.7)</td>
+</tr>
 </tbody>
 </table>
+<p><em>New in 0.6.7:</em> <code>WithTryParseDates(true)</code> infers a column of dates as a Date, of
+instants as a Datetime in microseconds, in UTC where they carry an offset, and of
+times of day as a Time, by the patterns Polars' <code>try_parse_dates</code> reads:
+<code>2024-01-02</code>, <code>2024/1/2</code> and <code>02.01.2024</code>, the year first or the day; <code>2024-01-02
+03:04:05.123</code>, a <code>T</code> or a space between; offsets <code>Z</code>, <code>+09:00</code> and <code>+0900</code>. A month
+first is not one: <code>01/02/2024</code> is the first of February. A Date, Datetime or Time
+column a schema gives is read by the same patterns, scanned by hand, three times as
+fast as Polars reads one.</p>
 <p><em>New in 0.6.7:</em> a file compressed by gzip, zlib or Zstandard is read as itself,
 known by its first bytes whatever its name, as Polars reads one:
 <code>ScanCSV("sales.csv.gz")</code>. It is decompressed as it is read, never held whole, and

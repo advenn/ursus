@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–354, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–355, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3120,9 +3120,16 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="fixes">Fixes<a class="headerlink" href="#fixes" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>A frame collected from several batches says its columns hold no null</strong> (321),
+<li>
+<p><strong>A date before 1677 or after 2262 as a Go value</strong> (355): <code>Rows</code>, <code>ToMaps</code> and <code>At</code>
+  gave a Date or a Datetime of such a year as a wrong instant, its nanosecond count
+  overflowed, 0999-01-02 as 2168-02-10; it is the instant now.</p>
+</li>
+<li>
+<p><strong>A frame collected from several batches says its columns hold no null</strong> (321),
   where they hold none: concatenating the batches built each column a bitmap with
-  every bit set, and every kernel after read it a bit a row.</li>
+  every bit set, and every kernel after read it a bit a row.</p>
+</li>
 <li><strong>A null instant decodes as the zero <code>time.Time</code></strong> (317), in <code>Rows</code> and
   <code>CollectInto</code>, as a null decodes as every other field type's zero: it was the epoch,
   1970-01-01, a plausible instant no row held. <code>IsZero</code> now tells it.</li>
@@ -3151,6 +3158,11 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>CSV dates inferred</strong> (355): <code>WithTryParseDates</code>, Polars' <code>try_parse_dates</code>, infers a
+  column of dates, instants or times of day by Polars' patterns, <code>2024-01-02</code>,
+  <code>02/01/2024</code>, <code>2024-01-02 03:04:05.123+0900</code> and <code>03:04</code>; a Date, Datetime or Time
+  column a schema gives is read by them too, scanned by hand, 7.7 times as fast as
+  before.</li>
 <li><strong>The CSV writer's options</strong> (354), Polars' <code>write_csv</code>'s: <code>WithQuoteStyle</code>, of
   <code>QuoteNecessary</code>, <code>QuoteAlways</code>, <code>QuoteNever</code> and <code>QuoteNonNumeric</code>, and
   <code>WithWriteQuote</code>; <code>WithDateFormat</code>, <code>WithDatetimeFormat</code> and <code>WithTimeFormat</code>, in

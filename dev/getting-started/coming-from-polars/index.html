@@ -1939,6 +1939,10 @@ changes is what Go asks for.</p>
 <td><code>ursus.ScanParquetFiles(files, ursus.WithInsertMissingColumns(true), ursus.WithIgnoreExtraColumns(true), ursus.WithUpcastIntegers(true))</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>pl.read_csv(p, try_parse_dates=True)</code></td>
+<td><code>ursus.ScanCSV(p, ursus.WithTryParseDates(true))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>pl.read_csv("sales.csv.gz")</code>, a zlib or Zstandard file too</td>
 <td><code>ursus.ScanCSV("sales.csv.gz")</code>, known by its first bytes (new in 0.6.7)</td>
 </tr>
