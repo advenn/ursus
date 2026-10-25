@@ -93,4 +93,6 @@ threads. The URLs are `https://example.com/item/N?ref=M`.
   fourth sorts them. The key's read of a row's bytes, in an order no longer the
   rows', is the sort's largest part.
 
-**Gate:** GATE
+**Gate:** the light gate, one package at a time on four procs: the tests at v3, 28
+packages ok; levels, vet ×3 and the bench engine tests clean; the 22 PDS-H answers
+match DuckDB. The other widths, the scalar build and the race detector are CI's.
