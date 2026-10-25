@@ -1947,6 +1947,10 @@ changes is what Go asks for.</p>
 <td><code>ursus.ScanJSON(p, ursus.WithNDJSONSchemaOverrides(map[string]dtype.DataType{"a": ursus.Float32}))</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>df.write_csv(f, quote_style="always", datetime_format="%Y-%m-%d %H:%M", float_precision=2, compression="gzip")</code></td>
+<td><code>lf.WriteCSV(ctx, w, ursus.WithQuoteStyle(ursus.QuoteAlways), ursus.WithDatetimeFormat("%Y-%m-%d %H:%M"), ursus.WithFloatPrecision(2), ursus.WithCSVCompression(ursus.CSVGzip))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>df.write_ndjson(f)</code>, <code>df.write_json(f)</code>, <code>lf.sink_ndjson(p)</code></td>
 <td><code>lf.WriteNDJSON(ctx, w)</code>, <code>lf.WriteJSON(ctx, w)</code>, <code>lf.SinkNDJSON(ctx, p)</code> (new in 0.6.7)</td>
 </tr>

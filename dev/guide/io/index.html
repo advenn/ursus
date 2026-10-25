@@ -1725,6 +1725,47 @@ matches any number of directories, <code>logs/**/*.csv</code>, in every scan's g
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>1,NA,11.0
 </span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>2,NA,NA
 </span></code></pre></div>
+<p><em>New in 0.6.7:</em> the writer takes Polars' <code>write_csv</code> options:</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Polars'</th>
+<th>For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>WithQuoteStyle(ursus.QuoteAlways)</code>, <code>QuoteNever</code>, <code>QuoteNonNumeric</code>; <code>WithWriteQuote(c)</code></td>
+<td><code>quote_style</code>, <code>quote_char</code></td>
+<td>when a field is quoted, and with what</td>
+</tr>
+<tr>
+<td><code>WithDateFormat(f)</code>, <code>WithDatetimeFormat(f)</code>, <code>WithTimeFormat(f)</code></td>
+<td><code>date_format</code>, <code>datetime_format</code>, <code>time_format</code></td>
+<td>a temporal value's strftime format</td>
+</tr>
+<tr>
+<td><code>WithFloatPrecision(n)</code>, <code>WithFloatScientific(b)</code>, <code>WithDecimalComma(b)</code></td>
+<td><code>float_precision</code>, <code>float_scientific</code>, <code>decimal_comma</code></td>
+<td>a float's text</td>
+</tr>
+<tr>
+<td><code>WithIncludeBOM(b)</code></td>
+<td><code>include_bom</code></td>
+<td>a UTF-8 byte-order mark first</td>
+</tr>
+<tr>
+<td><code>WithCSVCompression(ursus.CSVGzip)</code>, <code>CSVZstd</code>; <code>WithCSVCompressionLevel(n)</code>; <code>WithCSVCheckExtension(b)</code></td>
+<td><code>compression</code>, <code>compression_level</code>, <code>check_extension</code></td>
+<td>the file compressed, its path's name checked</td>
+</tr>
+</tbody>
+</table>
+<p>Each value is written as Polars writes it: an instant <code>2024-01-02T03:04:05.123456</code>, to
+its unit, with its offset <code>+0900</code> where it has a zone, a time of day to the
+nanosecond, and a float in Polars' text, <code>123456789.0</code> and <code>1e-7</code>. <code>ScanCSV</code> reads
+each back.</p>
 <h2 id="parquet">Parquet<a class="headerlink" href="#parquet" title="Permanent link">&para;</a></h2>
 <p><code>ScanParquet(path)</code> reads the footer when the query is planned, and at run time only
 the column chunks the query needs. A filter on a column with statistics skips whole

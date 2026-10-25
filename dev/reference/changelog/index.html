@@ -3052,11 +3052,16 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–353, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–354, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A CSV file's instants are written as Polars writes them</strong> (354): a naive one with no
+  <code>Z</code>, <code>2024-01-02T03:04:05.123456</code>, where it had one, as though it were UTC, and a
+  zoned one with its offset as <code>+0900</code>, where it was <code>+09:00</code>, or <code>Z</code> in UTC. A float
+  is written in Polars' text, the cast's since step 325: <code>123456789.0</code> and <code>1e-7</code>, where
+  they were Go's <code>1.23456789e+08</code> and <code>1e-07</code>. <code>ScanCSV</code> reads both forms.</li>
 <li><strong>An Arrow dictionary of text is read as a Categorical</strong> (352), as Polars reads one,
   where it was read as a String: an IPC file's, a Parquet file's that its footer says
   is one, a pandas categorical's. <code>.Cast(ursus.String)</code> gives the text.</li>
@@ -3146,6 +3151,13 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>The CSV writer's options</strong> (354), Polars' <code>write_csv</code>'s: <code>WithQuoteStyle</code>, of
+  <code>QuoteNecessary</code>, <code>QuoteAlways</code>, <code>QuoteNever</code> and <code>QuoteNonNumeric</code>, and
+  <code>WithWriteQuote</code>; <code>WithDateFormat</code>, <code>WithDatetimeFormat</code> and <code>WithTimeFormat</code>, in
+  strftime; <code>WithFloatPrecision</code>, <code>WithFloatScientific</code> and <code>WithDecimalComma</code>;
+  <code>WithIncludeBOM</code>; and <code>WithCSVCompression</code>, gzip or Zstandard, at
+  <code>WithCSVCompressionLevel</code>, <code>SinkCSV</code> checking its path's extension unless
+  <code>WithCSVCheckExtension(false)</code>.</li>
 <li><strong>Databases</strong> (353): <code>ReadDatabase(ctx, db, query, args...)</code>, Polars'
   <code>read_database</code>, runs a query through <code>database/sql</code>, on any driver, and reads its
   rows as a frame; <code>ReadDatabaseRows(rows)</code> reads a result already run, and
