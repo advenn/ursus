@@ -78,6 +78,13 @@ matches any number of directories, `logs/**/*.csv`, in every scan's glob, and
 
 --8<-- "Example_ioCSVGlob.md"
 
+*New in 0.6.7:* `WithCSVIncludeFilePaths(name)`, as Polars' `include_file_paths`,
+adds a String column of each row's file path after the files' columns: the path as
+it was given, or as a glob or a directory found it; `WithNDJSONIncludeFilePaths(name)`
+does so for NDJSON. A column the files have already of the name is refused, as Polars
+refuses it. Each file's path is repeated once and sliced for every batch, so the
+column costs a scan nothing measurable.
+
 `WriteCSV(ctx, w, options...)` writes a query's answer to any `io.Writer`, and
 `SinkCSV(ctx, path)` to a file:
 

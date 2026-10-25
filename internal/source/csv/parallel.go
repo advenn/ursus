@@ -38,7 +38,7 @@ func (r *reader) nextParallel(ctx context.Context) (*data.Batch, error) {
 				r.splitEnd = true
 				break
 			}
-			blk.wanted, blk.part = r.wanted, r.src.partName(r.next-1)
+			blk.wanted, blk.part, blk.stream = r.wanted, r.src.partName(r.next-1), r.next-1
 			r.window = append(r.window, r.parseLater(blk))
 		}
 		if len(r.window) > 0 {
@@ -184,10 +184,7 @@ func (r *reader) parseBlock(blk block) (*data.Batch, error) {
 	if err := r.checkNonNullable(cols, rows, blk.firstRow); err != nil {
 		return nil, err
 	}
-	if len(cols) == 0 {
-		return data.NewBatchRows(r.out, nil, rows), nil
-	}
-	return data.NewBatch(r.out, cols)
+	return r.batch(cols, rows, blk.stream)
 }
 
 // textHint is how many bytes of text to size output column i's builder for in

@@ -58,6 +58,10 @@ type Options struct {
 	// quoted, and a separator or a line end always ends one.
 	NoQuote bool
 
+	// PathColumn, when set, is a String column of each row's file path after the
+	// files' columns, as Polars' include_file_paths (step 359).
+	PathColumn string
+
 	// Schema, if set, skips inference entirely. This is the option to reach for
 	// when the file is big: inference costs a read of the sample, and an explicit
 	// schema also removes the risk of a column being inferred from rows that do

@@ -49,6 +49,13 @@ func WithInferSchemaLines(n int) NDJSONOption {
 	}
 }
 
+// WithNDJSONIncludeFilePaths adds a String column named name of each row's file
+// path, after the files' columns, as Polars' include_file_paths: the path as it was
+// given, or a glob's as it found it; bytes', their name. New in 0.6.7.
+func WithNDJSONIncludeFilePaths(name string) NDJSONOption {
+	return func(c *ndjsonCfg) { c.opts.PathColumn = name }
+}
+
 // WithNDJSONIgnoreErrors reads a value its column cannot take as a null, as Polars'
 // ignore_errors: text in an Int64 column, an element of a list that does not fit its
 // type, a Date column's "not a date". A line that is not JSON is still refused.

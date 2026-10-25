@@ -24,6 +24,13 @@ func WithSeparator(c byte) CSVOption { return func(o *csv.Options) { o.Separator
 // WithQuote sets the quote character. Default '"'.
 func WithQuote(c byte) CSVOption { return func(o *csv.Options) { o.Quote = c } }
 
+// WithCSVIncludeFilePaths adds a String column named name of each row's file path,
+// after the files' columns, as Polars' include_file_paths: the path as it was given,
+// or a glob's or a directory's as it found it; a reader's, its name. New in 0.6.7.
+func WithCSVIncludeFilePaths(name string) CSVOption {
+	return func(o *csv.Options) { o.PathColumn = name }
+}
+
 // WithQuoting(false) reads a quote as any byte, as Polars' quote_char=None: no field
 // is quoted, so a separator or a line end always ends one. New in 0.6.7.
 func WithQuoting(b bool) CSVOption { return func(o *csv.Options) { o.NoQuote = !b } }

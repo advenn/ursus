@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–358, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–359, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -132,6 +132,10 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A column of each row's file path for CSV and NDJSON** (359):
+  `WithCSVIncludeFilePaths` and `WithNDJSONIncludeFilePaths`, Polars'
+  `include_file_paths`, the path as it was given; each file's repeated once and
+  sliced for its batches, so a scan pays nothing measurable for it.
 - **CSV rows and lines skipped, and quoting off** (358): `WithSkipLines`, Polars'
   `skip_lines`, lines skipped by their line ends alone; `WithSkipRowsAfterHeader`,
   `skip_rows_after_header`, in each file of several; `WithQuoting(false)`,

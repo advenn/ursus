@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/plan"
@@ -159,7 +160,7 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 			return
 		}
 		if s.opts.Schema != nil {
-			s.schema = s.opts.Schema
+			s.schema, s.err = s.withPath(s.opts.Schema, nil)
 			return
 		}
 		if err := ctx.Err(); err != nil {
@@ -175,7 +176,7 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 			return
 		}
 		defer r.Close()
-		s.schema, s.err = inferSchema(newScanner(r, s.opts), s.opts, s.nullTest())
+		s.schema, s.err = s.withPath(inferSchema(newScanner(r, s.opts), s.opts, s.nullTest()))
 		if s.err != nil {
 			s.err = uerr.Annotate(s.err, "scan_csv", s.desc)
 		}
@@ -186,6 +187,22 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 		return nil, s.err
 	}
 	return s.schema, nil
+}
+
+// withPath is schema with the path column, where the options ask for one.
+func (s *Source) withPath(schema *dtype.Schema, err error) (*dtype.Schema, error) {
+	if err != nil || s.opts.PathColumn == "" {
+		return schema, err
+	}
+	return source.WithPathColumn("scan_csv", schema, s.opts.PathColumn)
+}
+
+// pathOf is stream k's path, for the path column: its name, or the source's.
+func (s *Source) pathOf(k int) string {
+	if k < len(s.names) {
+		return s.names[k]
+	}
+	return s.desc
 }
 
 // nullTest returns the predicate for "this text means NULL".
@@ -216,6 +233,16 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 	if spec.Projection != nil {
 		if out, err = full.Select(spec.Projection); err != nil {
 			return nil, uerr.Annotate(err, "scan_csv", s.desc)
+		}
+	}
+	// The path column is no file's: the builders make the others, out, and each
+	// batch gains it after, emit (step 359).
+	emit, pathPos := out, -1
+	if s.opts.PathColumn != "" {
+		full = dtype.MustSchema(full.FieldSlice()[:full.Len()-1]...)
+		if pathPos = out.IndexOf(s.opts.PathColumn); pathPos >= 0 {
+			fields := out.FieldSlice()
+			out = dtype.MustSchema(append(fields[:pathPos:pathPos], fields[pathPos+1:]...)...)
 		}
 	}
 
@@ -256,6 +283,14 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		threads:   spec.Threads,
 		textRate:  make([]atomic.Int64, out.Len()),
 		text:      text,
+		emit:      emit,
+		pathPos:   pathPos,
+	}
+	if pathPos >= 0 {
+		r.pathVals = make([]*data.Column, len(s.opens))
+		for k := range r.pathVals {
+			r.pathVals[k] = data.NewString(s.opts.PathColumn, []string{s.pathOf(k)}, bitmap.AllSet(1))
+		}
 	}
 	if err := r.openNext(ctx); err != nil {
 		// openNext may have opened the stream before failing on its header. The
@@ -327,6 +362,13 @@ type reader struct {
 	// text is that a column is a String or a Categorical, whose text is checked as
 	// UTF-8 a span of records at a time (step 357).
 	text bool
+	// emit is what the reader emits: out, and the path column at pathPos where the
+	// projection holds it, else -1 (step 359): each stream's path, pathVals, repeated
+	// for a batch by paths.
+	emit     *dtype.Schema
+	pathPos  int
+	pathVals []*data.Column
+	paths    kernel.Repeater
 
 	mu   sync.Mutex
 	done bool
@@ -337,7 +379,27 @@ type reader struct {
 // as many rows as it is asked for.
 func (r *reader) parallel() bool { return r.threads > 1 && r.remaining == 0 }
 
-func (r *reader) Schema() *dtype.Schema { return r.out }
+func (r *reader) Schema() *dtype.Schema { return r.emit }
+
+// batch is cols, out's columns of rows rows of stream k, as the reader emits them:
+// with the stream's path where the projection holds its column.
+func (r *reader) batch(cols []*data.Column, rows, k int) (*data.Batch, error) {
+	var b *data.Batch
+	var err error
+	if len(cols) == 0 {
+		b = data.NewBatchRows(r.out, nil, rows)
+	} else if b, err = data.NewBatch(r.out, cols); err != nil {
+		return nil, err
+	}
+	if r.pathPos < 0 {
+		return b, nil
+	}
+	col, err := r.paths.Repeat(r.pathVals[k], rows)
+	if err != nil {
+		return nil, err
+	}
+	return source.WithColumn(r.emit, r.pathPos, b, col)
+}
 
 // Close releases the current stream.
 //
@@ -557,6 +619,9 @@ func (r *reader) nextLocked(ctx context.Context) (*data.Batch, error) {
 				// The stream that failed, which openNext has already counted past.
 				return nil, uerr.Annotate(err, "scan_csv", r.src.partName(r.next-1))
 			}
+			if rows > 0 && r.pathPos >= 0 {
+				break // a batch is one stream's, which its path column names
+			}
 			// This stream is exhausted; roll on to the next file, if any.
 			switch err := r.openNext(ctx); {
 			case err == io.EOF:
@@ -611,7 +676,7 @@ func (r *reader) nextLocked(ctx context.Context) (*data.Batch, error) {
 	if err := r.checkNonNullable(cols, rows, r.row-rows); err != nil {
 		return nil, err
 	}
-	return data.NewBatch(r.out, cols)
+	return r.batch(cols, rows, r.next-1)
 }
 
 // checkNonNullable refuses a null in a column the schema declares non-nullable.

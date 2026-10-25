@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/plan"
@@ -48,6 +49,10 @@ type Options struct {
 	// an object a row, as Polars' read_json (step 345). A key an inferred schema
 	// has not is refused, as Polars refuses it, where NDJSON's is skipped.
 	JSON bool
+
+	// PathColumn, when set, is a String column of each row's file path after the
+	// files' columns, as Polars' include_file_paths (step 359).
+	PathColumn string
 }
 
 // Source is NDJSON streams as one scan, read in order: of the given schema, or of the
@@ -76,6 +81,9 @@ func New(desc string, files []File, o Options) *Source {
 		}
 		if s.given, s.bad = dtype.NewSchema(fields...); s.bad == nil {
 			s.given, s.bad = s.overridden(s.given)
+		}
+		if s.bad == nil && o.PathColumn != "" {
+			s.given, s.bad = source.WithPathColumn("read_ndjson", s.given, o.PathColumn)
 		}
 		s.bad = s.named(s.bad)
 	}
@@ -166,6 +174,9 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 		if s.schema, s.err = s.inferred(ctx); s.err == nil {
 			s.schema, s.err = s.overridden(s.schema)
 		}
+		if s.err == nil && s.opts.PathColumn != "" {
+			s.schema, s.err = source.WithPathColumn("read_ndjson", s.schema, s.opts.PathColumn)
+		}
 		s.err = s.named(s.err)
 	})
 	return s.schema, s.err
@@ -216,6 +227,16 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 			return nil, err
 		}
 	}
+	// The path column is no file's: the lines give the others, and each batch gains
+	// it after (step 359).
+	emit, pathPos := out, -1
+	if s.opts.PathColumn != "" {
+		full = dtype.MustSchema(full.FieldSlice()[:full.Len()-1]...)
+		if pathPos = out.IndexOf(s.opts.PathColumn); pathPos >= 0 {
+			fields := out.FieldSlice()
+			out = dtype.MustSchema(append(fields[:pathPos:pathPos], fields[pathPos+1:]...)...)
+		}
+	}
 	read := make([]dtype.Field, out.Len())
 	for i, f := range out.All() {
 		read[i] = dtype.Field{Name: f.Name, Type: f.Type, Nullable: true}
@@ -225,7 +246,13 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		size = defaultBatchSize
 	}
 	r := &reader{src: s, out: out, read: dtype.Struct(read...), size: size, max: spec.MaxRows,
-		threads: max(1, spec.Threads)}
+		threads: max(1, spec.Threads), emit: emit, pathPos: pathPos}
+	if pathPos >= 0 {
+		r.pathVals = make([]*data.Column, len(s.files))
+		for k, f := range s.files {
+			r.pathVals[k] = data.NewString(s.opts.PathColumn, []string{f.Name}, bitmap.AllSet(1))
+		}
+	}
 	if s.opts.JSON && s.given == nil {
 		// A key the inferred schema has not is refused, at any depth; at the top,
 		// one the projection has not is the schema's still.
@@ -275,6 +302,14 @@ type reader struct {
 	threads   int
 	known     map[string]bool // the schema's keys, when one it has not is refused
 
+	// emit is what the reader emits: out, and the path column at pathPos where the
+	// projection holds it, else -1 (step 359): each file's path, pathVals, repeated
+	// for a batch by paths.
+	emit     *dtype.Schema
+	pathPos  int
+	pathVals []*data.Column
+	paths    kernel.Repeater
+
 	mu      sync.Mutex
 	file    int // the stream read, of the source's
 	rc      io.ReadCloser
@@ -292,7 +327,7 @@ type readAhead struct {
 	err   error
 }
 
-func (r *reader) Schema() *dtype.Schema { return r.out }
+func (r *reader) Schema() *dtype.Schema { return r.emit }
 
 func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 	if err := ctx.Err(); err != nil {
@@ -397,6 +432,15 @@ func (r *reader) fill(ctx context.Context) error {
 			return errs[i]
 		}
 		r.line += lines[i]
+		if r.pathPos >= 0 {
+			path, err := r.paths.Repeat(r.pathVals[r.file], b.Rows())
+			if err != nil {
+				return err
+			}
+			if b, err = source.WithColumn(r.emit, r.pathPos, b, path); err != nil {
+				return err
+			}
+		}
 		for at := 0; at < b.Rows(); at += r.size {
 			r.queue = append(r.queue, b.Slice(at, min(r.size, b.Rows()-at)))
 		}

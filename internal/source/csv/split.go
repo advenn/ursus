@@ -77,6 +77,7 @@ type block struct {
 	rows      int // data rows in the block
 	wanted    []int
 	part      string // the stream's name, for errors
+	stream    int    // the stream's index, for its path
 	width     int    // the scanner's width for the stream
 	spec      bool   // cut speculatively: firstLine, firstRow and rows are unknown
 	lines     int    // a speculative block's line endings, counted as it is parsed
