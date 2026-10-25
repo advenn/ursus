@@ -3052,11 +3052,16 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–355, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–356, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>Str().ToDatetime(unit, tz)</code> reads a text of no offset on <code>tz</code>'s wall clock</strong> (356),
+  as Polars' <code>str.to_datetime(time_zone=tz)</code> does: <code>2024-01-02 03:04:05</code> in Tokyo is
+  03:04:05 there, where it was a cast's, 03:04:05 UTC, 12:04:05 in Tokyo. A text
+  with an offset is its instant, as before. <code>.Cast(ursus.Datetime(unit, tz))</code> reads it
+  as UTC's still, as Polars' CSV reader does.</li>
 <li><strong>A CSV file's instants are written as Polars writes them</strong> (354): a naive one with no
   <code>Z</code>, <code>2024-01-02T03:04:05.123456</code>, where it had one, as though it were UTC, and a
   zoned one with its offset as <code>+0900</code>, where it was <code>+09:00</code>, or <code>Z</code> in UTC. A float
@@ -3158,6 +3163,11 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>Text parsed by Polars' patterns</strong> (356): <code>Str().ToDate()</code>, <code>ToDatetime</code> and
+  <code>ToTime("", …)</code>, and <code>Strptime</code> of an empty format, read what Polars' <code>to_date</code>,
+  <code>to_datetime</code> and <code>to_time</code> of no format read, <code>02/01/2024</code> and <code>2024-01-02
+  03:04:05+0900</code> among them, each value by its own pattern; <code>ToDatetime</code> is 13 times as
+  fast as before, and six times Polars'.</li>
 <li><strong>CSV dates inferred</strong> (355): <code>WithTryParseDates</code>, Polars' <code>try_parse_dates</code>, infers a
   column of dates, instants or times of day by Polars' patterns, <code>2024-01-02</code>,
   <code>02/01/2024</code>, <code>2024-01-02 03:04:05.123+0900</code> and <code>03:04</code>; a Date, Datetime or Time

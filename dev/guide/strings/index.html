@@ -1850,6 +1850,13 @@ strictness: <code>Strptime(..., true)</code>, or <code>ToIntegerWith(base, type,
 <p><em>New in 0.6.7:</em> <code>ToTime(format, strict)</code> parses a time of day, by a format or, with
 none, each value as it comes, and <code>ToDecimal(scale)</code> a number into a <code>Decimal(38,
 scale)</code>, rounded half away from zero, as Polars' <code>to_time</code> and <code>to_decimal</code>.</p>
+<p><em>New in 0.6.7:</em> <code>ToDate</code>, <code>ToDatetime</code> and <code>ToTime</code> without a format, and <code>Strptime</code>
+with an empty one, read the patterns Polars' <code>to_date</code> and <code>to_datetime</code> infer:
+<code>2024-01-02</code>, <code>2024/1/2</code>, <code>02.01.2024</code> and <code>02/01/2024</code>, the year first or the day,
+never the month; <code>2024-01-02 03:04:05.123</code>, a <code>T</code> or a space between; and an offset,
+<code>Z</code>, <code>+09:00</code> or <code>+0900</code>, which makes the value its instant. <code>ToDatetime(unit, tz)</code>
+reads a value with no offset on <code>tz</code>'s wall clock, as Polars' does, where it took it
+as UTC's. Each value is read by its own pattern; Polars infers one from the first.</p>
 <p><code>JsonDecode(type)</code> parses JSON into a value of a type, a struct or a list, and
 <code>Encode</code> and <code>Decode</code> convert to and from hex or base64.</p>
 <h2 id="joining">Joining<a class="headerlink" href="#joining" title="Permanent link">&para;</a></h2>
