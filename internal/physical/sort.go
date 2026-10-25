@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math/bits"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
@@ -74,6 +76,11 @@ type sortSink struct {
 	// join below it, whose spilled buckets build their tables while the sort waits
 	// with what it has taken (step 314).
 	maxHeld int64
+
+	// threads is how many goroutines the sort itself runs on (step 361): the radix
+	// passes or the merge sort, the rows' places in their batches, and the gather of
+	// its output, a batch a goroutine ahead. Zero or one is the serial sort.
+	threads int
 }
 
 // sortFanIn is how many runs of one level a sort merges into one of the next.
@@ -213,33 +220,80 @@ func (s *sortSink) order(limit int) ([]rowRef, error) {
 		// is what lets it radix-sort. It falls back to exactly the comparator
 		// above for String and Int128 keys.
 		var err error
-		sel, err = kernel.ArgSortColumns(keys.Columns(), s.specs(), n)
+		sel, err = kernel.ArgSortColumnsN(keys.Columns(), s.specs(), n, s.threads)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// Map global row indices back onto (batch, row).
+	// Map global row indices back onto (batch, row), a piece of sel a goroutine.
 	starts := make([]int32, len(s.rows)+1)
 	for i, b := range s.rows {
 		starts[i+1] = starts[i] + int32(b.Rows())
 	}
 	refs := make([]rowRef, len(sel))
-	for i, g := range sel {
-		// A binary search would be asymptotically better; a linear scan from the
-		// last source is not, because sel is in SORTED order, not input order.
-		lo, hi := 0, len(s.rows)-1
-		for lo < hi {
-			mid := (lo + hi + 1) / 2
-			if starts[mid] <= g {
-				lo = mid
-			} else {
-				hi = mid - 1
+	if shift, ok := uniformShift(s.rows); ok {
+		// Every batch but the last of 1<<shift rows, as a scan's are: a row's batch is
+		// its index shifted, the last batch taking the rest.
+		last := int32(len(s.rows) - 1)
+		eachPiece(len(sel), s.threads, func(lo, hi int) {
+			for i, g := range sel[lo:hi] {
+				src := min(g>>shift, last)
+				refs[lo+i] = rowRef{src: src, row: g - starts[src]}
 			}
-		}
-		refs[i] = rowRef{src: int32(lo), row: g - starts[lo]}
+		})
+		return refs, nil
 	}
+	eachPiece(len(sel), s.threads, func(lo, hi int) {
+		for i, g := range sel[lo:hi] {
+			// A binary search would be asymptotically better; a linear scan from the
+			// last source is not, because sel is in SORTED order, not input order.
+			a, b := 0, len(s.rows)-1
+			for a < b {
+				mid := (a + b + 1) / 2
+				if starts[mid] <= g {
+					a = mid
+				} else {
+					b = mid - 1
+				}
+			}
+			refs[lo+i] = rowRef{src: int32(a), row: g - starts[a]}
+		}
+	})
 	return refs, nil
+}
+
+// uniformShift is the shift whose power of two is the rows of every batch but the
+// last, if they all hold that many.
+func uniformShift(rows []*data.Batch) (uint, bool) {
+	if len(rows) < 2 {
+		return 0, false
+	}
+	b := rows[0].Rows()
+	if b <= 0 || b&(b-1) != 0 {
+		return 0, false
+	}
+	for _, r := range rows[1 : len(rows)-1] {
+		if r.Rows() != b {
+			return 0, false
+		}
+	}
+	return uint(bits.TrailingZeros(uint(b))), true
+}
+
+// eachPiece runs fn on workers contiguous pieces of [0, n), a goroutine apiece, and
+// waits; on one worker, or fewer than 1<<16 items, it runs in the caller.
+func eachPiece(n, workers int, fn func(lo, hi int)) {
+	if workers <= 1 || n < 1<<16 {
+		fn(0, n)
+		return
+	}
+	var wg sync.WaitGroup
+	for w := range workers {
+		lo, hi := w*n/workers, (w+1)*n/workers
+		wg.Go(func() { fn(lo, hi) })
+	}
+	wg.Wait()
 }
 
 // compact reduces a BOUNDED sort's buffer to the best `limit` rows.
@@ -467,7 +521,7 @@ func (s *sortSink) Finish(ctx context.Context) (Operator, error) {
 		if err != nil {
 			return nil, err
 		}
-		tail = &sortedBufferRun{schema: s.schema, srcs: s.rows, pick: refs, n: s.chunk()}
+		tail = &sortedBufferRun{schema: s.schema, srcs: s.rows, pick: refs, n: s.chunk(), threads: s.threads}
 	}
 
 	if len(s.runs) == 0 {
@@ -505,13 +559,14 @@ func planSort(ctx context.Context, sn *plan.Sort, opts Options) (Operator, error
 	}
 
 	sink := &sortSink{
-		schema: in,
-		keys:   sn.Keys,
-		limit:  sn.Limit,
-		kSch:   kSch,
-		budget: opts.Budget,
-		mem:    opts.Budget.Account("sort"),
-		batch:  opts.batchSize(),
+		schema:  in,
+		keys:    sn.Keys,
+		limit:   sn.Limit,
+		kSch:    kSch,
+		budget:  opts.Budget,
+		mem:     opts.Budget.Account("sort"),
+		batch:   opts.batchSize(),
+		threads: opts.Threads,
 	}
 	return &breaker{child: child, sink: sink}, nil
 }

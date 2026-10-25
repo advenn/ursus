@@ -175,6 +175,8 @@ type radixSorter struct {
 	nonNull []int32
 	nulls   []int32
 	out     []int32
+
+	workers int // goroutines a pass of parallelMin rows or more is split across (step 361)
 }
 
 // keyBuf returns the gathered-key buffer, grown as needed and reused across
@@ -210,6 +212,12 @@ func (r *radixSorter) needNullBuffers(n int) {
 // This is what makes the window case work at all: windowSink.segments always
 // sorts on the partition id plus an order key, and it was 60% of ArgSort's time.
 func argSortRadix(cols []*data.Column, specs []SortSpec, n int) ([]int32, error) {
+	r := &radixSorter{scratch: make([]int32, n)}
+	return r.argSort(cols, specs, n)
+}
+
+// argSort is argSortRadix's body, on r's workers.
+func (r *radixSorter) argSort(cols []*data.Column, specs []SortSpec, n int) ([]int32, error) {
 	idx := make([]int32, n)
 	for i := range idx {
 		idx[i] = int32(i)
@@ -217,8 +225,6 @@ func argSortRadix(cols []*data.Column, specs []SortSpec, n int) ([]int32, error)
 	if n < 2 || len(cols) == 0 {
 		return idx, nil
 	}
-
-	r := &radixSorter{scratch: make([]int32, n)}
 
 	for k := len(cols) - 1; k >= 0; k-- {
 		keys, ok, err := orderKey(cols[k])
@@ -327,6 +333,9 @@ func (r *radixSorter) radixByKey(src, dst []int32, keys []uint64) []int32 {
 // them: a caller walking runs of equal keys reads them in turn, where reading them
 // through the permutation would be the random read the gather saves (step 339).
 func (r *radixSorter) radixSorted(src, dst []int32, keys []uint64) ([]int32, []uint64) {
+	if r.workers > 1 && len(src) >= parallelMin {
+		return r.radixSortedN(src, dst, keys)
+	}
 	n := len(src)
 	ka, kb := r.keyBuf(n), keys[:n]
 	for i, row := range src {

@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–360, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–361, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -132,6 +132,11 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A sort on several threads** (361): the radix passes, the merge sort a String key
+  takes, the rows' places in their batches and the gather of the output each split
+  across the query's threads, in the one-thread sort's order exactly, ties included.
+  A million distinct integers sort in 30 ms on eight threads, where they took 100,
+  and in 69 on one.
 - **Several IPC files as one frame, and IPC hive datasets** (360): `ScanIPCFiles`,
   `ScanIPCGlob`, and `ScanIPC(dir)` a hive dataset, as Polars' `scan_ipc`; a later
   file read by name, a filter on the keys skipping the files it rules out;

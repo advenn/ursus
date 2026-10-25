@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
@@ -152,9 +153,25 @@ type sortedBufferRun struct {
 	pick   []rowRef
 	pos    int
 	n      int
+
+	// threads, past one, gathers that many batches ahead, each on a goroutine of its
+	// own, and hands them out in order (step 361): the gather was a quarter of a sort
+	// of a million rows. It holds as many output batches, no more.
+	threads int
+	ahead   []chan gathered
+	wg      sync.WaitGroup
+}
+
+// gathered is a batch gathered ahead, or the error gathering it.
+type gathered struct {
+	b   *data.Batch
+	err error
 }
 
 func (r *sortedBufferRun) Next() (*data.Batch, error) {
+	if r.threads > 1 {
+		return r.nextAhead()
+	}
 	if r.pos >= len(r.pick) {
 		return nil, io.EOF
 	}
@@ -167,8 +184,37 @@ func (r *sortedBufferRun) Next() (*data.Batch, error) {
 	return b, nil
 }
 
+// nextAhead is Next on several goroutines: the window refilled to threads batches,
+// and the first handed out.
+func (r *sortedBufferRun) nextAhead() (*data.Batch, error) {
+	for len(r.ahead) < r.threads && r.pos < len(r.pick) {
+		lo, hi := r.pos, min(r.pos+r.n, len(r.pick))
+		r.pos = hi
+		ch := make(chan gathered, 1)
+		r.ahead = append(r.ahead, ch)
+		r.wg.Go(func() {
+			defer func() {
+				if v := recover(); v != nil {
+					ch <- gathered{err: uerr.FromPanic(v, "sort")}
+				}
+			}()
+			b, err := gatherRows(r.schema, r.srcs, r.pick[lo:hi])
+			ch <- gathered{b: b, err: err}
+		})
+	}
+	if len(r.ahead) == 0 {
+		return nil, io.EOF
+	}
+	g := <-r.ahead[0]
+	r.ahead = r.ahead[1:]
+	return g.b, g.err
+}
+
 func (r *sortedBufferRun) Close() error {
-	r.srcs, r.pick = nil, nil
+	// A gather ahead sends into a channel of one, so none waits on a reader: each
+	// ends on its own.
+	r.wg.Wait()
+	r.srcs, r.pick, r.ahead = nil, nil, nil
 	return nil
 }
 
