@@ -1752,6 +1752,12 @@ matches any number of directories, <code>logs/**/*.csv</code>, in every scan's g
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>│ "2026-02" │ 79.25   │
 </span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>└───────────┴─────────┘
 </span></code></pre></div>
+<p><em>New in 0.6.7:</em> <code>WithCSVIncludeFilePaths(name)</code>, as Polars' <code>include_file_paths</code>,
+adds a String column of each row's file path after the files' columns: the path as
+it was given, or as a glob or a directory found it; <code>WithNDJSONIncludeFilePaths(name)</code>
+does so for NDJSON. A column the files have already of the name is refused, as Polars
+refuses it. Each file's path is repeated once and sliced for every batch, so the
+column costs a scan nothing measurable.</p>
 <p><code>WriteCSV(ctx, w, options...)</code> writes a query's answer to any <code>io.Writer</code>, and
 <code>SinkCSV(ctx, path)</code> to a file:</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kd">var</span><span class="w"> </span><span class="nx">out</span><span class="w"> </span><span class="nx">bytes</span><span class="p">.</span><span class="nx">Buffer</span>
