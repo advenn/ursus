@@ -2,6 +2,7 @@ package csv
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,9 +10,11 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"unicode/utf8"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/source"
 	"github.com/advenn/ursus/internal/uerr"
@@ -220,10 +223,13 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 	}
 
 	builders := make([]colBuilder, out.Len())
+	text := false
 	for i, f := range out.All() {
-		if builders[i], err = newBuilder(f.Type); err != nil {
+		if builders[i], err = newBuilder(f.Type, s.opts); err != nil {
 			return nil, uerr.Annotate(err, "scan_csv", s.desc)
 		}
+		_, ok := builders[i].(*stringBuilder)
+		text = text || ok
 	}
 
 	batchSize := spec.BatchSize
@@ -244,6 +250,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		stage:     make([]colStage, out.Len()),
 		threads:   spec.Threads,
 		textRate:  make([]atomic.Int64, out.Len()),
+		text:      text,
 	}
 	if err := r.openNext(ctx); err != nil {
 		// openNext may have opened the stream before failing on its header. The
@@ -312,6 +319,9 @@ type reader struct {
 	textRate []atomic.Int64
 	// failed is the error the reader has stopped on, delivered after what is ready.
 	failed error
+	// text is that a column is a String or a Categorical, whose text is checked as
+	// UTF-8 a span of records at a time (step 357).
+	text bool
 
 	mu   sync.Mutex
 	done bool
@@ -366,6 +376,11 @@ func (r *reader) openNext(ctx context.Context) error {
 	r.next++
 	r.rc = rc
 	r.sc = newScanner(rc, r.src.opts)
+	if r.text && r.threads <= 1 {
+		// The serial path's records go straight to the builders; a staged batch's
+		// are checked as they are converted.
+		trustUTF8(r.builders, r.sc.UTF8())
+	}
 	if !r.src.opts.HasHeader {
 		r.sc.SetWidth(len(r.wanted0)) // the schema's, inferred or given
 	}
@@ -631,7 +646,7 @@ func (r *reader) appendRecord() error {
 // path's goroutines call it at once, each with a scanner and builders of its own.
 func (r *reader) appendTo(sc *scanner, builders []colBuilder, wanted []int, row int) error {
 	n := sc.NumFields()
-	if n != len(wanted) && !r.src.opts.TruncateRaggedLines {
+	if n > len(wanted) && !r.src.opts.TruncateRaggedLines {
 		return r.raggedErrorAt(row, sc.Line(), n, len(wanted))
 	}
 	for i := range min(n, len(wanted)) {
@@ -646,6 +661,10 @@ func (r *reader) appendTo(sc *scanner, builders []colBuilder, wanted []int, row 
 			continue
 		}
 		if err := b.appendField(f); err != nil {
+			if r.src.opts.IgnoreErrors && !errors.Is(err, errNotUTF8) {
+				b.appendNull()
+				continue
+			}
 			return r.valueErrorAt(row, sc.Line(), len(wanted), i, pos, f, err)
 		}
 	}
@@ -681,7 +700,7 @@ func (r *reader) emptyIn(sc *scanner, i, pos int, f []byte) bool {
 // and it was running on one core while the query above it ran on eight.
 func (r *reader) stageRecord() error {
 	n := r.sc.NumFields()
-	if n != len(r.wanted) && !r.src.opts.TruncateRaggedLines {
+	if n > len(r.wanted) && !r.src.opts.TruncateRaggedLines {
 		return r.raggedError(n)
 	}
 
@@ -694,8 +713,7 @@ func (r *reader) stageRecord() error {
 		isNull := r.isNull(f) || r.emptyIsNull(i, pos, f)
 		r.stage[pos].add(f, isNull)
 	}
-	// A short record pads the missing columns with nulls; only reachable with
-	// TruncateRaggedLines, since the check above rejects it otherwise.
+	// A short record pads the missing columns with nulls, as Polars pads one.
 	for i := n; i < len(r.wanted); i++ {
 		if pos := r.wanted[i]; pos >= 0 {
 			r.stage[pos].add(nil, true)
@@ -715,7 +733,7 @@ func (r *reader) raggedErrorAt(row, line, n, width int) error {
 		"row %d (line %d) has %d fields, but the schema has %d",
 		row, line, n, width).
 		Hint("in %s", r.src.desc).
-		Hint("pass WithTruncateRaggedLines(true) to pad and truncate instead")
+		Hint("pass WithTruncateRaggedLines(true) to drop the extra fields")
 }
 
 // valueError is the error the CSV reader exists to produce well.
@@ -739,12 +757,15 @@ func (r *reader) valueError(fileCol, pos int, f []byte, cause error) error {
 func (r *reader) valueErrorAt(row, line, width, fileCol, pos int, f []byte, cause error) error {
 	name := r.out.Field(pos).Name
 	want := r.out.Field(pos).Type
-	return uerr.Wrap(cause, uerr.KindValue, "scan_csv",
+	e := uerr.Wrap(cause, uerr.KindValue, "scan_csv",
 		"row %d (line %d), column %q: cannot read %s as %s",
 		row, line, name, strconv.Quote(string(f)), want).
 		Hint("in %s", r.src.desc).
-		Hint("field %d of %d in the file", fileCol+1, width).
-		Hint("pass a schema override for %q, or add the text to WithNullValues", name)
+		Hint("field %d of %d in the file", fileCol+1, width)
+	if errors.Is(cause, errNotUTF8) {
+		return e.Hint("the text is not UTF-8: pass WithEncoding(ursus.UTF8Lossy) to read it with U+FFFD for each invalid sequence")
+	}
+	return e.Hint("pass a schema override for %q, or add the text to WithNullValues, or WithIgnoreErrors(true) to read it as a null", name)
 }
 
 // --- staged conversion ----------------------------------------------------------
@@ -766,6 +787,22 @@ type colStage struct {
 	chars []byte
 	offs  []int32 // n+1 entries, the usual leading zero
 	null  []bool  // this field was null or an empty non-string
+	utf8  bool    // every field is UTF-8, as validUTF8 found
+}
+
+// validUTF8 reports whether every field is UTF-8, checked at once: their bytes are,
+// and none begins within a character, which a field cut short would leave the next
+// to do.
+func (c *colStage) validUTF8() bool {
+	if !kernel.ValidUTF8(c.chars) {
+		return false
+	}
+	for _, o := range c.offs[:len(c.offs)-1] {
+		if int(o) < len(c.chars) && !utf8.RuneStart(c.chars[o]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *colStage) reset() {
@@ -793,12 +830,20 @@ func (c *colStage) field(i int) []byte { return c.chars[c.offs[i]:c.offs[i+1]] }
 // reproduce the serial path's choice of WHICH error to report.
 func (r *reader) convert(pos int, st *colStage, fileCol int) (int, error) {
 	b := r.builders[pos]
+	if sb, ok := b.(*stringBuilder); ok {
+		st.utf8 = st.validUTF8()
+		sb.known = &st.utf8
+	}
 	for i := range st.null {
 		if st.null[i] {
 			b.appendNull()
 			continue
 		}
 		if err := b.appendField(st.field(i)); err != nil {
+			if r.src.opts.IgnoreErrors && !errors.Is(err, errNotUTF8) {
+				b.appendNull()
+				continue
+			}
 			return i, r.stagedValueError(fileCol, pos, st.field(i), i, err)
 		}
 	}
@@ -872,12 +917,5 @@ func (r *reader) convertAll() error {
 
 // stagedValueError is valueError for a row that was scanned earlier in the batch.
 func (r *reader) stagedValueError(fileCol, pos int, f []byte, i int, cause error) error {
-	name := r.out.Field(pos).Name
-	want := r.out.Field(pos).Type
-	return uerr.Wrap(cause, uerr.KindValue, "scan_csv",
-		"row %d (line %d), column %q: cannot read %s as %s",
-		r.startRow+i, r.lines[i], name, strconv.Quote(string(f)), want).
-		Hint("in %s", r.src.desc).
-		Hint("field %d of %d in the file", fileCol+1, len(r.wanted)).
-		Hint("pass a schema override for %q, or add the text to WithNullValues", name)
+	return r.valueErrorAt(r.startRow+i, r.lines[i], len(r.wanted), fileCol, pos, f, cause)
 }

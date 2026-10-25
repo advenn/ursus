@@ -185,9 +185,12 @@ func TestIOByHand(t *testing.T) {
 			return ioEqual(t, read("1\n\n3\n", ursus.WithHasHeader(false)),
 				ints("column_1", []int64{1, 0, 3}, true, false, true))
 		}},
-		{"control: a blank line in a two-column CSV is skipped", func(t *testing.T) string {
-			return ioEqual(t, read("a,b\n1,2\n\n3,4\n"),
-				ursus.Frame(ursus.Values("a", []int64{1, 3}), ursus.Values("b", []int64{2, 4})))
+		// A blank line in a two-column CSV was skipped; it is a record of nulls since
+		// step 357, as Polars reads it.
+		{"a blank line in a two-column CSV", func(t *testing.T) string {
+			return ioEqual(t, read("a,b\n1,2\n\n3,4\n"), ursus.Frame(
+				ursus.ValuesNullable("a", []int64{1, 0, 3}, []bool{true, false, true}),
+				ursus.ValuesNullable("b", []int64{2, 0, 4}, []bool{true, false, true})))
 		}},
 
 		// --- I19: Int128 and Decimal, read and parsed exactly ---

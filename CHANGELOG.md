@@ -15,12 +15,20 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–356, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–357, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **A CSV record of too few fields is padded with nulls, and a blank line read as a
+  record of nulls** (357), as Polars reads them: the record was refused unless
+  `WithTruncateRaggedLines(true)`, and the line skipped in a file of more than one
+  column. `WithTruncateRaggedLines` now concerns a record of too many fields alone.
+- **A CSV file's text that is not UTF-8 is refused** (357), as Polars refuses it,
+  where a String held its bytes as they were, which no text kernel reads rightly.
+  `WithEncoding(ursus.UTF8Lossy)` reads each invalid sequence as U+FFFD, and a
+  column's name is read so whatever the encoding.
 - **`Str().ToDatetime(unit, tz)` reads a text of no offset on `tz`'s wall clock** (356),
   as Polars' `str.to_datetime(time_zone=tz)` does: `2024-01-02 03:04:05` in Tokyo is
   03:04:05 there, where it was a cast's, 03:04:05 UTC, 12:04:05 in Tokyo. A text
@@ -124,6 +132,13 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **The rest of Polars' `read_csv` options** (357): `WithIgnoreErrors`, a value its
+  type cannot take read as a null; `WithInferSchema(false)`, every column a String;
+  `WithRaiseIfEmpty(false)`, an empty file a frame of no columns; `WithDecimalComma`,
+  `1,5` read as 1.5, the writer's option renamed `WithWriteDecimalComma`; and
+  `WithEncoding(ursus.UTF8Lossy)`. Text is checked as UTF-8 a span of records at a
+  time, by a vector check nine times as fast as Go's on text of a non-ASCII character
+  a word, so a read is as fast as before.
 - **Text parsed by Polars' patterns** (356): `Str().ToDate()`, `ToDatetime` and
   `ToTime("", …)`, and `Strptime` of an empty format, read what Polars' `to_date`,
   `to_datetime` and `to_time` of no format read, `02/01/2024` and `2024-01-02
@@ -137,7 +152,7 @@ completeness, part 3 — frame operations.**
 - **The CSV writer's options** (354), Polars' `write_csv`'s: `WithQuoteStyle`, of
   `QuoteNecessary`, `QuoteAlways`, `QuoteNever` and `QuoteNonNumeric`, and
   `WithWriteQuote`; `WithDateFormat`, `WithDatetimeFormat` and `WithTimeFormat`, in
-  strftime; `WithFloatPrecision`, `WithFloatScientific` and `WithDecimalComma`;
+  strftime; `WithFloatPrecision`, `WithFloatScientific` and `WithWriteDecimalComma`;
   `WithIncludeBOM`; and `WithCSVCompression`, gzip or Zstandard, at
   `WithCSVCompressionLevel`, `SinkCSV` checking its path's extension unless
   `WithCSVCheckExtension(false)`.

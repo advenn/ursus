@@ -63,11 +63,10 @@ type Options struct {
 	// non-string columns. Case-sensitive.
 	NullValues []string
 
-	// TruncateRaggedLines accepts records with the wrong field count: extra fields
-	// are dropped, missing ones become null. Off by default, because a changed
-	// field count usually means the file is not what the reader thinks it is, and
-	// silently padding with nulls turns that into a data problem discovered much
-	// later.
+	// TruncateRaggedLines accepts a record of too many fields, the extra ones
+	// dropped, as Polars' truncate_ragged_lines. A record of too few is padded with
+	// nulls whatever it says, and a blank line read as a record of nulls, as Polars
+	// reads them (step 357).
 	TruncateRaggedLines bool
 
 	// MaxRecordSize bounds one record. 0 selects the default (16 MiB).
@@ -77,6 +76,28 @@ type Options struct {
 	// Datetime in microseconds, in UTC where its values have offsets, or a Time, by
 	// Polars' patterns, as Polars' try_parse_dates (step 355).
 	TryParseDates bool
+
+	// IgnoreErrors reads a value its column's type cannot take as a null, as Polars'
+	// ignore_errors (step 357). A record of too many fields is refused still, and
+	// text that is not UTF-8, as Polars refuses them.
+	IgnoreErrors bool
+
+	// NoInference reads every column as a String but those a schema or an override
+	// types, as Polars' infer_schema=False.
+	NoInference bool
+
+	// AllowEmpty reads an empty file as a frame of no columns, as Polars'
+	// raise_if_empty=False; otherwise it is refused.
+	AllowEmpty bool
+
+	// DecimalComma reads a float's and a Decimal's point as a comma, 1,5, as Polars'
+	// decimal_comma: a value with a '.' is then no number.
+	DecimalComma bool
+
+	// Lossy reads text that is not UTF-8 with each invalid sequence a U+FFFD, as
+	// Polars' encoding="utf8-lossy"; otherwise a String's such text is refused, as
+	// Polars refuses it.
+	Lossy bool
 }
 
 // DefaultOptions returns RFC 4180 defaults with a header.

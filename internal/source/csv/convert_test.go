@@ -44,7 +44,7 @@ func barrier(inner colBuilder, id int, arrived chan int, release chan struct{}) 
 
 func stringBarrier(t *testing.T, id int, arrived chan int, release chan struct{}) colBuilder {
 	t.Helper()
-	inner, err := newBuilder(dtype.String)
+	inner, err := newBuilder(dtype.String, DefaultOptions())
 	if err != nil {
 		t.Fatal(err)
 	}

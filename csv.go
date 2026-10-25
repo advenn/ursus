@@ -64,9 +64,9 @@ func WithNullValues(vals ...string) CSVOption {
 	return func(o *csv.Options) { o.NullValues = vals }
 }
 
-// WithTruncateRaggedLines accepts records with the wrong field count: extra fields
-// are dropped and missing ones become null. Off by default, because a changed
-// field count usually means the file is not what the reader thinks it is.
+// WithTruncateRaggedLines accepts a record of too many fields, the extra ones
+// dropped, as Polars' truncate_ragged_lines; by default it is refused. A record of
+// too few is padded with nulls either way, as Polars pads one.
 func WithTruncateRaggedLines(b bool) CSVOption {
 	return func(o *csv.Options) { o.TruncateRaggedLines = b }
 }
@@ -84,6 +84,40 @@ func WithMaxRecordSize(n int) CSVOption { return func(o *csv.Options) { o.MaxRec
 // instant in a zone beside one in none, is text. Off by default, as Polars'. A Date,
 // Datetime or Time column a schema gives is read by the same patterns. New in 0.6.7.
 func WithTryParseDates(b bool) CSVOption { return func(o *csv.Options) { o.TryParseDates = b } }
+
+// WithIgnoreErrors reads a value its column's type cannot take as a null, as Polars'
+// ignore_errors. A record of too many fields is refused still, and text that is not
+// UTF-8, as Polars refuses them. New in 0.6.7.
+func WithIgnoreErrors(b bool) CSVOption { return func(o *csv.Options) { o.IgnoreErrors = b } }
+
+// WithInferSchema(false) reads every column as a String, but those a schema or an
+// override types, as Polars' infer_schema=False. New in 0.6.7.
+func WithInferSchema(b bool) CSVOption { return func(o *csv.Options) { o.NoInference = !b } }
+
+// WithRaiseIfEmpty(false) reads an empty file as a frame of no columns and no rows,
+// as Polars' raise_if_empty=False, where by default it is refused. New in 0.6.7.
+func WithRaiseIfEmpty(b bool) CSVOption { return func(o *csv.Options) { o.AllowEmpty = !b } }
+
+// WithDecimalComma reads a float's and a Decimal's point as a comma, 1,5, as Polars'
+// read_csv(decimal_comma=True), inferred so too: a value with a point is then text,
+// and under a comma separator a number with a comma is quoted. New in 0.6.7.
+func WithDecimalComma(b bool) CSVOption { return func(o *csv.Options) { o.DecimalComma = b } }
+
+// CSVEncoding is how a CSV file's text is read, as Polars' read_csv encoding.
+type CSVEncoding int
+
+const (
+	// UTF8 refuses a String's text that is not UTF-8, as Polars does: the default. A
+	// column's name is read as UTF8Lossy reads it either way, as Polars reads one.
+	UTF8 CSVEncoding = iota
+	// UTF8Lossy reads each invalid sequence as U+FFFD, as Polars' "utf8-lossy".
+	UTF8Lossy
+)
+
+// WithEncoding sets how text is read: UTF8, the default, or UTF8Lossy. New in 0.6.7.
+func WithEncoding(e CSVEncoding) CSVOption {
+	return func(o *csv.Options) { o.Lossy = e == UTF8Lossy }
+}
 
 func csvOptions(opts []CSVOption) csv.Options {
 	o := csv.DefaultOptions()
@@ -325,9 +359,10 @@ func WithFloatScientific(b bool) CSVWriteOption {
 	}
 }
 
-// WithDecimalComma writes a float's and a Decimal's point as a comma, 1,5, as Polars'
-// decimal_comma; under a comma separator such a field is quoted. New in 0.6.7.
-func WithDecimalComma(b bool) CSVWriteOption {
+// WithWriteDecimalComma writes a float's and a Decimal's point as a comma, 1,5, as
+// Polars' write_csv(decimal_comma=True); under a comma separator such a field is
+// quoted. New in 0.6.7.
+func WithWriteDecimalComma(b bool) CSVWriteOption {
 	return func(o *csv.WriteOptions) { o.DecimalComma = b }
 }
 

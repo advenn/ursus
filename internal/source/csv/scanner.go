@@ -3,7 +3,9 @@ package csv
 import (
 	"bytes"
 	"io"
+	"unicode/utf8"
 
+	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/internal/uerr"
 )
 
@@ -65,12 +67,22 @@ type scanner struct {
 	skipped bool
 
 	// width is how many fields a record has, once a header, a schema or the first
-	// record has said; 0 until then. In a one-column file a blank line IS a record:
-	// its one field is empty, which is a null, as Polars and DuckDB read it. It was
-	// dropped, so a null written to a one-column CSV vanished with its row. In a
-	// wider file a blank line still is nothing — it cannot be a record of several
-	// fields — and is skipped, as DuckDB skips it.
+	// record has said; 0 until then. Once it is known a blank line IS a record: of
+	// one empty field, which is a null, and the rest padded with nulls, as Polars
+	// reads it (step 357). It was dropped, so a null written to a one-column CSV
+	// vanished with its row; a wider file's was skipped, as DuckDB skips it, until
+	// step 357. Before the header a blank line is skipped, as Polars skips it.
 	width int
+
+	// checkUTF8 has the scanner check its input as UTF-8 a span at a time: from a
+	// record's start to the last line end read, whole records, checked as one when a
+	// record ends past the last span (step 357). spanOK is the verdict on the span
+	// the current record lies in, which a field of it shares when the separator and
+	// the quote are ASCII, since a line end, a separator and a quote then never fall
+	// within a character. spanTo is where the span ends, in buf.
+	checkUTF8 bool
+	spanOK    bool
+	spanTo    int
 }
 
 // SetWidth says how many fields a record has. See width.
@@ -219,7 +231,11 @@ func (s *scanner) readRecord() (bool, error) {
 						s.fields[i].off += s.beg
 					}
 				}
+				start := s.beg
 				s.beg += n
+				if s.checkUTF8 && s.beg > s.spanTo {
+					s.checkSpan(start)
+				}
 				// Line numbers are committed ONLY here, once the record is known to
 				// be complete. parse can run several times over the same record as
 				// the buffer refills, and incrementing s.line inside it counted the
@@ -237,12 +253,34 @@ func (s *scanner) readRecord() (bool, error) {
 	}
 }
 
+// checkSpan checks a new span for the record just read, which began at start and
+// ended past the last span: from start to the last line end read.
+func (s *scanner) checkSpan(start int) {
+	end := s.beg
+	if i := bytes.LastIndexByte(s.buf[s.beg:s.end], '\n'); i >= 0 {
+		end += i + 1
+	}
+	s.spanOK, s.spanTo = kernel.ValidUTF8(s.buf[start:end]), end
+}
+
+// UTF8 has the scanner check its input as UTF-8 a span at a time, and reports the
+// verdict a text builder may trust, or nil where a field must be checked by itself:
+// where the separator or the quote is not ASCII. See checkUTF8.
+func (s *scanner) UTF8() *bool {
+	if s.sep >= utf8.RuneSelf || s.quote >= utf8.RuneSelf {
+		return nil
+	}
+	s.checkUTF8 = true
+	return &s.spanOK
+}
+
 // fill compacts and refills the buffer, growing it if the current record already
 // spans everything held.
 func (s *scanner) fill() error {
 	if s.beg > 0 {
 		copy(s.buf, s.buf[s.beg:s.end])
 		s.end -= s.beg
+		s.spanTo = max(s.spanTo-s.beg, 0)
 		s.beg = 0
 	}
 	if s.end == len(s.buf) {
@@ -301,8 +339,8 @@ func (s *scanner) parse(b []byte, atEOF bool) (n, nl int, ok bool, err error) {
 		s.skipped = true
 		return i + 1, 1, true, nil
 	}
-	// A blank line is consumed and produces no record, matching encoding/csv —
-	// unless the file has one column, where it is that column's empty field.
+	// A blank line is a record of one empty field once the width is known (see
+	// width); before it, it is consumed and produces no record, as encoding/csv.
 	blank := 0
 	switch {
 	case b[0] == '\n':
@@ -311,7 +349,7 @@ func (s *scanner) parse(b []byte, atEOF bool) (n, nl int, ok bool, err error) {
 		blank = 2
 	}
 	if blank > 0 {
-		if s.width == 1 {
+		if s.width > 0 {
 			s.fields = append(s.fields, fieldRef{})
 		} else {
 			s.skipped = true

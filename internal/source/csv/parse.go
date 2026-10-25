@@ -1,7 +1,9 @@
 package csv
 
 import (
+	"errors"
 	"strconv"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/advenn/ursus/dtype"
@@ -161,15 +163,117 @@ type stringBuilder struct {
 	chars []byte
 	valid *bitmap.Builder
 	cat   bool // the column is a Categorical, stored as its text (step 351)
+	lossy bool // text that is not UTF-8 is read with U+FFFD, not refused (step 357)
+
+	// known, when set and true, says the fields appended are UTF-8: a scanner's or a
+	// stage's verdict on a span of whole records, checked at once. A field is
+	// checked by itself where it is unset or false. Checked by itself, every field
+	// was a call, and reading a million rows of two text columns 11% slower.
+	known *bool
+}
+
+// errNotUTF8 is text that is not UTF-8 in a String column, Polars' "invalid utf-8
+// sequence".
+var errNotUTF8 = errors.New("it is not UTF-8")
+
+// trustUTF8 points builders' text columns at the verdict known.
+func trustUTF8(builders []colBuilder, known *bool) {
+	for _, b := range builders {
+		if sb, ok := b.(*stringBuilder); ok {
+			sb.known = known
+		}
+	}
 }
 
 func (b *stringBuilder) appendField(f []byte) error {
+	// Text is UTF-8, as Polars requires: a String's every kernel reads it so.
+	if (b.known == nil || !*b.known) && !utf8.Valid(f) {
+		if !b.lossy {
+			return errNotUTF8
+		}
+		b.chars = appendLossy(b.chars, f)
+		b.offs = append(b.offs, int32(len(b.chars)))
+		b.valid.Append(true)
+		return nil
+	}
 	// The copy is not optional and never was: f aliases the scanner's buffer,
 	// which is valid only until the next call to Next.
 	b.chars = append(b.chars, f...)
 	b.offs = append(b.offs, int32(len(b.chars)))
 	b.valid.Append(true)
 	return nil
+}
+
+// appendLossy appends f with each maximal invalid subsequence a U+FFFD, as Rust's
+// from_utf8_lossy and Polars' utf8-lossy replace it: a lead byte and the
+// continuation bytes its sequence allows before it fails count as one, so
+// "\xe2\x82A" is one replacement and an A, where a byte at a time would be two.
+func appendLossy(dst, f []byte) []byte {
+	for len(f) > 0 {
+		r, n := utf8.DecodeRune(f)
+		if r != utf8.RuneError || n > 1 {
+			dst = append(dst, f[:n]...)
+			f = f[n:]
+			continue
+		}
+		dst = utf8.AppendRune(dst, utf8.RuneError)
+		f = f[maximalSubpart(f):]
+	}
+	return dst
+}
+
+// maximalSubpart is the length of the invalid sequence f begins with: its lead byte,
+// and the continuation bytes that byte's sequence takes before it fails, the second
+// in the range the lead allows.
+func maximalSubpart(f []byte) int {
+	lead := f[0]
+	var need int
+	lo, hi := byte(0x80), byte(0xBF)
+	switch {
+	case lead >= 0xC2 && lead <= 0xDF:
+		need = 1
+	case lead == 0xE0:
+		need, lo = 2, 0xA0
+	case lead == 0xED:
+		need, hi = 2, 0x9F
+	case lead >= 0xE1 && lead <= 0xEF:
+		need = 2
+	case lead == 0xF0:
+		need, lo = 3, 0x90
+	case lead == 0xF4:
+		need, hi = 3, 0x8F
+	case lead >= 0xF1 && lead <= 0xF3:
+		need = 3
+	default:
+		return 1
+	}
+	n := 1
+	for ; n <= need && n < len(f); n++ {
+		c := f[n]
+		if n > 1 {
+			lo, hi = 0x80, 0xBF
+		}
+		if c < lo || c > hi {
+			break
+		}
+	}
+	return n
+}
+
+// commaPoint is b with its decimal comma a point, for a float's or a Decimal's
+// parse, or ok false for text with a point in it, which under a decimal comma is no
+// number, as Polars reads it.
+func commaPoint(dst, b []byte) ([]byte, bool) {
+	for _, c := range b {
+		switch c {
+		case '.':
+			return dst, false
+		case ',':
+			c = '.'
+		}
+		dst = append(dst, c)
+	}
+	return dst, true
 }
 
 // appendNull records an absent value as an empty slice — chars does not advance,
@@ -230,7 +334,7 @@ func (b *stringBuilder) take(name string) *data.Column {
 // newBuilder returns a builder for dt, or an error naming the type if CSV cannot
 // produce it. Refusing here rather than at the first bad value means a schema with
 // an unreadable type fails when the file is opened, not ten minutes in.
-func newBuilder(dt dtype.DataType) (colBuilder, error) {
+func newBuilder(dt dtype.DataType, o Options) (colBuilder, error) {
 	switch dt.ID() {
 	case dtype.TypeBool:
 		return &boolBuilder{vals: bitmap.NewBuilder(0), valid: bitmap.NewBuilder(0)}, nil
@@ -264,8 +368,16 @@ func newBuilder(dt dtype.DataType) (colBuilder, error) {
 		// text with more digits than the scale, rounded half away from zero, as
 		// Polars and DuckDB read it.
 		prec, scale := int(dt.Precision()), int(dt.Scale())
+		var point []byte
 		return &fixedBuilder[i128.Int128]{dt: dt, valid: bitmap.NewBuilder(0),
 			parse: func(b []byte) (i128.Int128, error) {
+				if o.DecimalComma {
+					var ok bool
+					if point, ok = commaPoint(point[:0], b); !ok {
+						return i128.Int128{}, strconv.ErrSyntax
+					}
+					b = point
+				}
 				return i128.ParseDecimal(str(b), prec, scale)
 			}}, nil
 	case dtype.TypeEnum:
@@ -283,19 +395,38 @@ func newBuilder(dt dtype.DataType) (colBuilder, error) {
 				return 0, strconv.ErrSyntax
 			}}, nil
 	case dtype.TypeFloat32:
+		var point []byte
 		return &fixedBuilder[float32]{dt: dt, valid: bitmap.NewBuilder(0),
 			parse: func(b []byte) (float32, error) {
+				if o.DecimalComma {
+					var ok bool
+					if point, ok = commaPoint(point[:0], b); !ok {
+						return 0, strconv.ErrSyntax
+					}
+					b = point
+				}
 				v, err := dtype.ParseFloat(str(b), 32)
 				return float32(v), err
 			}}, nil
 	case dtype.TypeFloat64:
+		if o.DecimalComma {
+			var point []byte
+			return &fixedBuilder[float64]{dt: dt, valid: bitmap.NewBuilder(0),
+				parse: func(b []byte) (float64, error) {
+					var ok bool
+					if point, ok = commaPoint(point[:0], b); !ok {
+						return 0, strconv.ErrSyntax
+					}
+					return dtype.ParseFloat(str(point), 64)
+				}}, nil
+		}
 		return &fixedBuilder[float64]{dt: dt, valid: bitmap.NewBuilder(0),
 			parse: func(b []byte) (float64, error) { return dtype.ParseFloat(str(b), 64) }}, nil
 	case dtype.TypeString, dtype.TypeCategorical:
 		// offs is seeded with its leading zero here rather than branched on per
 		// append; finish preserves it, so the hot path never tests for it.
 		return &stringBuilder{offs: make([]int32, 1), valid: bitmap.NewBuilder(0),
-			cat: dt.ID() == dtype.TypeCategorical}, nil
+			cat: dt.ID() == dtype.TypeCategorical, lossy: o.Lossy}, nil
 
 	case dtype.TypeDate, dtype.TypeTime, dtype.TypeDatetime, dtype.TypeDuration:
 		// Parsing goes through dtype, the function the frame renderer's formatter

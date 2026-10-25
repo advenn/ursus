@@ -64,6 +64,10 @@ func render(t *testing.T, c *data.Column, i int) string {
 		s, _ := data.TypedColumn[int64](c)
 		v, _ := s.Get(i)
 		return fmt.Sprint(v)
+	case dtype.TypeFloat64:
+		s, _ := data.TypedColumn[float64](c)
+		v, _ := s.Get(i)
+		return fmt.Sprint(v)
 	}
 	t.Fatalf("render: %s", c.DType())
 	return ""
@@ -203,6 +207,25 @@ func TestParallelReadsAsSerialDoes(t *testing.T) {
 	sameBothWays(t, "a field that begins with a byte-order mark", []Opener{
 		textOpener("a,b,c\n1,2,3\n" + bom + "x,y,z\n" + bom + "\"q\",r,s\n4,5,6\n"),
 	}, o)
+
+	// Since step 357 a blank line in a wider file is a record of nulls too, and a
+	// short record is padded, as Polars reads them.
+	sameBothWays(t, "three columns, blank lines and short records", []Opener{
+		textOpener("a,b,c\n\n1,2,3\n\n\n4,5\r\n\r\n6\n\"x\n\ny\",7,8\n\n"),
+	}, o)
+	// Quoted line ends have the splitter cut blocks exactly, counting their rows, so
+	// that the bad value's row is the blank lines' count too.
+	ints := o
+	ints.Schema = dtype.MustSchema(dtype.Of("a", dtype.Int64), dtype.Of("b", dtype.String))
+	sameBothWays(t, "a bad value after blank lines, in two columns", []Opener{
+		textOpener("a,b\n1,2\n\n\n3,4\n" + strings.Repeat("5,\"6\n7\"\n\n", 40) + "x,7\n8,9\n"),
+	}, ints)
+	read := o
+	read.Schema = dtype.MustSchema(dtype.Of("a", dtype.Int64), dtype.Of("b", dtype.Float64), dtype.Of("c", dtype.String))
+	read.IgnoreErrors, read.DecimalComma, read.Lossy, read.Separator = true, true, true, ';'
+	sameBothWays(t, "ignore_errors, a decimal comma and lossy text", []Opener{
+		textOpener("a;b;c\n1;1,5;x\nq;2,5;\xff\n3;3.5;\xe2\x82A\n4\n"),
+	}, read)
 
 	ragged := o
 	ragged.TruncateRaggedLines = true

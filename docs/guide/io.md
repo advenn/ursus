@@ -22,10 +22,11 @@ in memory. The types are inferred from the first rows, and the options say the r
 |---|---|
 | `WithSeparator(c)`, `WithQuote(c)`, `WithComment(prefix)` | the dialect |
 | `WithHasHeader(b)`, `WithColumnNames(names...)`, `WithSkipRows(n)` | the header |
-| `WithSchema(s)`, `WithSchemaOverrides(m)`, `WithInferRows(n)` | the types |
+| `WithSchema(s)`, `WithSchemaOverrides(m)`, `WithInferRows(n)`, `WithInferSchema(b)` | the types |
 | `WithNullValues(vals...)` | the text that means null |
-| `WithTruncateRaggedLines(b)`, `WithMaxRecordSize(n)` | malformed input |
+| `WithTruncateRaggedLines(b)`, `WithMaxRecordSize(n)`, `WithIgnoreErrors(b)`, `WithRaiseIfEmpty(b)` | malformed input |
 | `WithTryParseDates(b)` | dates, instants and times of day inferred (new in 0.6.7) |
+| `WithDecimalComma(b)`, `WithEncoding(e)` | a float's comma, and text not UTF-8 (new in 0.6.7) |
 
 *New in 0.6.7:* `WithTryParseDates(true)` infers a column of dates as a Date, of
 instants as a Datetime in microseconds, in UTC where they carry an offset, and of
@@ -35,6 +36,27 @@ times of day as a Time, by the patterns Polars' `try_parse_dates` reads:
 first is not one: `01/02/2024` is the first of February. A Date, Datetime or Time
 column a schema gives is read by the same patterns, scanned by hand, three times as
 fast as Polars reads one.
+
+*New in 0.6.7:* the rest of Polars' reading options.
+
+- `WithIgnoreErrors(true)`, as `ignore_errors`, reads a value its column's type
+  cannot take as a null. A record of too many fields is still refused, as Polars
+  refuses it.
+- `WithInferSchema(false)`, as `infer_schema=False`, reads every column a schema or
+  an override does not type as a String.
+- `WithRaiseIfEmpty(false)`, as `raise_if_empty=False`, reads an empty file as a
+  frame of no columns, where by default it is refused.
+- `WithDecimalComma(true)`, as `decimal_comma`, reads `1,5` as 1.5, a float's or a
+  Decimal's; a value with a point is then no number.
+- `WithEncoding(ursus.UTF8Lossy)`, as `encoding="utf8-lossy"`, reads each invalid
+  UTF-8 sequence as U+FFFD. Without it, text that is not UTF-8 is refused, as Polars
+  refuses it. The check reads thirty-two bytes a step and costs a read nothing
+  measurable.
+
+*Changed in 0.6.7:* a record of too few fields is padded with nulls, and a blank
+line after the header is a record of nulls, as Polars reads them; both were
+refused or skipped. `WithTruncateRaggedLines(true)` now concerns a record of too
+many fields alone, whose extra fields it drops.
 
 *New in 0.6.7:* a file compressed by gzip, zlib or Zstandard is read as itself,
 known by its first bytes whatever its name, as Polars reads one:
@@ -60,7 +82,7 @@ matches any number of directories, `logs/**/*.csv`, in every scan's glob, and
 |---|---|---|
 | `WithQuoteStyle(ursus.QuoteAlways)`, `QuoteNever`, `QuoteNonNumeric`; `WithWriteQuote(c)` | `quote_style`, `quote_char` | when a field is quoted, and with what |
 | `WithDateFormat(f)`, `WithDatetimeFormat(f)`, `WithTimeFormat(f)` | `date_format`, `datetime_format`, `time_format` | a temporal value's strftime format |
-| `WithFloatPrecision(n)`, `WithFloatScientific(b)`, `WithDecimalComma(b)` | `float_precision`, `float_scientific`, `decimal_comma` | a float's text |
+| `WithFloatPrecision(n)`, `WithFloatScientific(b)`, `WithWriteDecimalComma(b)` | `float_precision`, `float_scientific`, `decimal_comma` | a float's text |
 | `WithIncludeBOM(b)` | `include_bom` | a UTF-8 byte-order mark first |
 | `WithCSVCompression(ursus.CSVGzip)`, `CSVZstd`; `WithCSVCompressionLevel(n)`; `WithCSVCheckExtension(b)` | `compression`, `compression_level`, `check_extension` | the file compressed, its path's name checked |
 

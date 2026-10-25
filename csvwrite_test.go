@@ -114,8 +114,8 @@ func TestCSVWriteOptions(t *testing.T) {
 		{"never scientific", []ursus.CSVSinkOption{ursus.WithFloatScientific(false)}, "f\n1.5\n0.1\n100000000000000000000\n"},
 		{"scientific of a precision", []ursus.CSVSinkOption{ursus.WithFloatScientific(true), ursus.WithFloatPrecision(2)}, "f\n1.50e0\n1.00e-1\n1.00e20\n"},
 		// Polars quotes every float under a decimal comma and a comma's separator.
-		{"a decimal comma", []ursus.CSVSinkOption{ursus.WithDecimalComma(true)}, "f\n\"1,5\"\n\"0,1\"\n\"1e+20\"\n"},
-		{"a decimal comma, a semicolon's separator", []ursus.CSVSinkOption{ursus.WithDecimalComma(true), ursus.WithWriteSeparator(';')}, "f\n1,5\n0,1\n1e+20\n"},
+		{"a decimal comma", []ursus.CSVSinkOption{ursus.WithWriteDecimalComma(true)}, "f\n\"1,5\"\n\"0,1\"\n\"1e+20\"\n"},
+		{"a decimal comma, a semicolon's separator", []ursus.CSVSinkOption{ursus.WithWriteDecimalComma(true), ursus.WithWriteSeparator(';')}, "f\n1,5\n0,1\n1e+20\n"},
 	} {
 		if got := csvOut(t, f, tc.opts...); got != tc.want {
 			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
@@ -151,11 +151,11 @@ func TestCSVWriteOptions(t *testing.T) {
 	if got := csvOut(t, dec, ursus.WithFloatPrecision(1)); got != "d,f\n1.50,1.2\n-2.25,2.5\n" {
 		t.Errorf("a Decimal under a precision: %q", got)
 	}
-	if got := csvOut(t, dec.Select(ursus.Col("d")), ursus.WithDecimalComma(true)); got != "d\n\"1,50\"\n\"-2,25\"\n" {
+	if got := csvOut(t, dec.Select(ursus.Col("d")), ursus.WithWriteDecimalComma(true)); got != "d\n\"1,50\"\n\"-2,25\"\n" {
 		t.Errorf("a Decimal's comma: %q", got)
 	}
 	// An integer is not quoted for a comma; a null is not under QuoteNonNumeric.
-	if got := csvOut(t, ursus.Frame(i64s("i", 1), ursus.Values("f", []float64{2.5})), ursus.WithFloatPrecision(1), ursus.WithDecimalComma(true), ursus.WithQuoteStyle(ursus.QuoteNonNumeric)); got != "\"i\",\"f\"\n1,\"2,5\"\n" {
+	if got := csvOut(t, ursus.Frame(i64s("i", 1), ursus.Values("f", []float64{2.5})), ursus.WithFloatPrecision(1), ursus.WithWriteDecimalComma(true), ursus.WithQuoteStyle(ursus.QuoteNonNumeric)); got != "\"i\",\"f\"\n1,\"2,5\"\n" {
 		t.Errorf("an integer beside a comma: %q", got)
 	}
 	nulls := ursus.Frame(i64s("i", nil), ursus.ValuesNullable("b", []bool{false}, []bool{false}), strs("s", nil))

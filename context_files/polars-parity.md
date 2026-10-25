@@ -84,7 +84,8 @@ what we are lacking".
 | ~~multi-file schema evolution~~ | built for Parquet in step 348: `WithParquetSchema`, `WithInsertMissingColumns`, `WithIgnoreExtraColumns`, `WithUpcastIntegers`, `WithUpcastFloats`; `cast_options`' datetime casts and struct fields left |
 | ~~compressed CSV~~ | built in step 346: a CSV, NDJSON or JSON file of gzip, zlib or Zstandard, by its first bytes, streamed |
 | ~~`read_csv(try_parse_dates=True)`~~ | built in step 355: `WithTryParseDates`, Polars' patterns, and a schema's temporal columns read by them; `str.to_date()`, `to_datetime()` and `to_time()` of no format by them in step 356, `ToDate`, `ToDatetime`, `ToTime`, `Strptime(dt, "", strict)` |
-| ~~`write_csv`'s options~~ | built in step 354: `WithQuoteStyle`, `WithWriteQuote`, `WithDateFormat`, `WithDatetimeFormat`, `WithTimeFormat`, `WithFloatPrecision`, `WithFloatScientific`, `WithDecimalComma`, `WithIncludeBOM`, `WithCSVCompression`, `WithCSVCompressionLevel`, `WithCSVCheckExtension`; an instant's and a float's text Polars' |
+| ~~`read_csv`'s options~~ | built in step 357: `WithIgnoreErrors`, `WithInferSchema`, `WithRaiseIfEmpty`, `WithDecimalComma`, `WithEncoding(UTF8Lossy)`; text checked as UTF-8, a short record padded and a blank line a record of nulls, as Polars reads them; `skip_rows_after_header`, `skip_lines`, `quote_char=None` and `eol_char` left |
+| ~~`write_csv`'s options~~ | built in step 354: `WithQuoteStyle`, `WithWriteQuote`, `WithDateFormat`, `WithDatetimeFormat`, `WithTimeFormat`, `WithFloatPrecision`, `WithFloatScientific`, `WithWriteDecimalComma`, `WithIncludeBOM`, `WithCSVCompression`, `WithCSVCompressionLevel`, `WithCSVCheckExtension`; an instant's and a float's text Polars' |
 | ~~databases: `read_database`~~ | built in step 353: `ReadDatabase`, `ReadDatabaseRows`, `WithDatabaseSchemaOverrides`, through `database/sql`; `write_database` and `iter_batches` left |
 | Excel, Avro, Delta, Iceberg | missing (P2/P3) |
 

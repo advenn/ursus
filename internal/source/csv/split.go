@@ -52,7 +52,7 @@ type splitter struct {
 	sep, quote byte
 	comment    []byte
 	maxRec     int
-	width      int // the scanner's: a blank line is a record only in a one-column file
+	width      int // the scanner's: a blank line is a record once it is known
 
 	line int // physical lines before the next block, the scanner's count
 	row  int // data rows before the next block
@@ -265,7 +265,7 @@ func (sp *splitter) boundary(b []byte, atEOF bool, limit int) (cut, rows int, an
 			cut = pos
 			continue
 		}
-		// A blank line: a record only in a one-column file.
+		// A blank line: a record once the width is known, as the scanner's.
 		blank := 0
 		switch {
 		case b[pos] == '\n':
@@ -276,7 +276,7 @@ func (sp *splitter) boundary(b []byte, atEOF bool, limit int) (cut, rows int, an
 		if blank > 0 {
 			pos += blank
 			cut = pos
-			if sp.width == 1 {
+			if sp.width > 0 {
 				rows++
 			}
 			continue

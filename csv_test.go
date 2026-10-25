@@ -192,30 +192,40 @@ func TestScanCSVNoHeader(t *testing.T) {
 	}
 }
 
-// TestScanCSVRaggedLines: a changed field count usually means the file is not what
-// the reader thinks it is, so it is an error unless asked for.
+// TestScanCSVRaggedLines: a record of too many fields is an error unless asked for,
+// and one of too few is padded with nulls, as Polars reads them (step 357; it was an
+// error too).
 func TestScanCSVRaggedLines(t *testing.T) {
-	path := writeFile(t, "r.csv", "a,b,c\n1,2,3\n4,5\n")
-
-	_, err := ursus.ScanCSV(path).Collect(t.Context())
+	long := writeFile(t, "r.csv", "a,b\n1,2\n3,4,5\n")
+	_, err := ursus.ScanCSV(long).Collect(t.Context())
 	if err == nil {
-		t.Fatal("a short record should be an error by default")
+		t.Fatal("a long record should be an error by default")
 	}
-	if !strings.Contains(err.Error(), "3 fields") && !strings.Contains(err.Error(), "2 fields") {
+	if !strings.Contains(err.Error(), "3 fields") || !strings.Contains(err.Error(), "has 2") {
 		t.Errorf("the error should name both counts: %v", err)
 	}
-
-	df, err := ursus.ScanCSV(path, ursus.WithTruncateRaggedLines(true)).Collect(t.Context())
+	df, err := ursus.ScanCSV(long, ursus.WithTruncateRaggedLines(true)).Collect(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if df.Height() != 2 {
-		t.Fatalf("got %d rows, want 2\n%s", df.Height(), df)
+	if v, ok, err := df.At[int64](1, "b"); err != nil || !ok || v != 4 || df.Height() != 2 || df.Width() != 2 {
+		t.Errorf("the extra field should be dropped:\n%s", df)
 	}
-	if _, ok, err := df.At[int64](1, "c"); err != nil {
-		t.Fatal(err)
-	} else if ok {
-		t.Errorf("the missing field should be null:\n%s", df)
+
+	short := writeFile(t, "s.csv", "a,b,c\n1,2,3\n4,5\n")
+	for _, opts := range [][]ursus.CSVOption{nil, {ursus.WithTruncateRaggedLines(true)}} {
+		df, err := ursus.ScanCSV(short, opts...).Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if df.Height() != 2 {
+			t.Fatalf("got %d rows, want 2\n%s", df.Height(), df)
+		}
+		if _, ok, err := df.At[int64](1, "c"); err != nil {
+			t.Fatal(err)
+		} else if ok {
+			t.Errorf("the missing field should be null:\n%s", df)
+		}
 	}
 }
 
@@ -662,12 +672,12 @@ func TestScanCSVThreadCountsProduceIdenticalFrames(t *testing.T) {
 // answer each time they run.
 func TestScanCSVErrorsAreIdenticalAcrossThreads(t *testing.T) {
 	t.Run("ragged", func(t *testing.T) {
-		path := writeFile(t, "ragged.csv", "a,b,c\n1,2,3\n4,5\n")
+		path := writeFile(t, "ragged.csv", "a,b\n1,2\n4,5,6\n")
 		var msgs []string
 		for _, n := range threadCounts {
 			_, err := ursus.ScanCSV(path).Collect(t.Context(), ursus.WithThreads(n))
 			if err == nil {
-				t.Fatalf("%d threads: a short record should be an error", n)
+				t.Fatalf("%d threads: a long record should be an error", n)
 			}
 			msgs = append(msgs, err.Error())
 		}
@@ -682,13 +692,8 @@ func TestScanCSVErrorsAreIdenticalAcrossThreads(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%d threads: %v", n, err)
 			}
-			if df.Height() != 2 {
-				t.Fatalf("%d threads: got %d rows, want 2\n%s", n, df.Height(), df)
-			}
-			if _, ok, err := df.At[int64](1, "c"); err != nil {
-				t.Fatal(err)
-			} else if ok {
-				t.Errorf("%d threads: the missing field should be null:\n%s", n, df)
+			if v, ok, err := df.At[int64](1, "b"); err != nil || !ok || v != 5 || df.Height() != 2 || df.Width() != 2 {
+				t.Errorf("%d threads: the extra field should be dropped:\n%s", n, df)
 			}
 		}
 	})
@@ -789,7 +794,8 @@ func TestScanCSVDegenerateShapesAcrossThreads(t *testing.T) {
 		// before either record path runs, so it is not a case this split can
 		// change — it has its own sub-test below.
 		{"one row, no newline", "a,b\n1,x", 1, 2},
-		{"trailing blank line", "a,b\n1,x\n\n", 1, 2},
+		// A record of nulls since step 357, as Polars reads it.
+		{"trailing blank line", "a,b\n1,x\n\n", 2, 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

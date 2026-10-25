@@ -32,7 +32,7 @@ func TestConvertAllRecoversAPanic(t *testing.T) {
 	for i := range 2 {
 		r.stage[i].reset()
 		r.stage[i].add([]byte("x"), false)
-		inner, err := newBuilder(dtype.String)
+		inner, err := newBuilder(dtype.String, DefaultOptions())
 		if err != nil {
 			t.Fatal(err)
 		}

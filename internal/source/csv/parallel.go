@@ -152,12 +152,15 @@ func (r *reader) parseBlock(blk block) (*data.Batch, error) {
 	// 2M-row CSV on four threads allocated 1,041 MB to produce 251 MB (step 188).
 	builders := make([]colBuilder, r.out.Len())
 	for i, f := range r.out.All() {
-		b, err := newBuilder(f.Type)
+		b, err := newBuilder(f.Type, r.src.opts)
 		if err != nil {
 			return nil, uerr.Annotate(err, "scan_csv", r.src.desc)
 		}
 		b.size(blk.rows, r.textHint(i, blk))
 		builders[i] = b
+	}
+	if r.text {
+		trustUTF8(builders, sc.UTF8())
 	}
 	row := blk.firstRow
 	for sc.Next() {

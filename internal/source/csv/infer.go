@@ -3,6 +3,7 @@ package csv
 import (
 	"errors"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
@@ -89,11 +90,16 @@ func (i inferred) widen(o inferred) inferred {
 }
 
 // classify decides what a single field looks like: with dates, a date, an instant or
-// a time of day by Polars' patterns too.
-func classify(f []byte, isNull func([]byte) bool, dates bool) inferred {
+// a time of day by Polars' patterns too; under a decimal comma, a float's point a
+// comma; and with no inference, text.
+func classify(f []byte, isNull func([]byte) bool, o Options) inferred {
 	if len(f) == 0 || isNull(f) {
 		return infUnknown
 	}
+	if o.NoInference {
+		return infString
+	}
+	dates := o.TryParseDates
 	if _, err := parseBool(f); err == nil {
 		return infBool
 	}
@@ -106,7 +112,14 @@ func classify(f []byte, isNull func([]byte) bool, dates bool) inferred {
 			return infInt128
 		}
 	}
-	if _, err := dtype.ParseFloat(str(f), 64); err == nil {
+	num := f
+	if o.DecimalComma {
+		var ok bool
+		if num, ok = commaPoint(nil, f); !ok {
+			num = nil
+		}
+	}
+	if _, err := dtype.ParseFloat(str(num), 64); num != nil && err == nil {
 		// ParseFloat accepts "inf" and "nan", which in a text column are far more
 		// likely to be words than numbers — unless a number stands beside them.
 		if hasDigit(f) {
@@ -155,13 +168,23 @@ func inferSchema(sc *scanner, o Options, isNull func([]byte) bool) (*dtype.Schem
 			if err := sc.Err(); err != nil {
 				return nil, err
 			}
+			if o.AllowEmpty {
+				return dtype.NewSchema()
+			}
 			return nil, uerr.New(uerr.KindValue, "scan_csv",
 				"the file has no header row").
-				Hint("pass WithHasHeader(false) if the data starts immediately")
+				Hint("pass WithHasHeader(false) if the data starts immediately").
+				Hint("or WithRaiseIfEmpty(false) to read an empty file as a frame of no columns")
 		}
 		names = make([]string, sc.NumFields())
 		for i := range names {
-			names[i] = string(sc.Field(i))
+			// A name that is not UTF-8 is read with U+FFFD, whatever the encoding,
+			// as Polars reads one (step 357).
+			if f := sc.Field(i); utf8.Valid(f) {
+				names[i] = string(f)
+			} else {
+				names[i] = string(appendLossy(nil, f))
+			}
 		}
 	}
 
@@ -176,7 +199,7 @@ func inferSchema(sc *scanner, o Options, isNull func([]byte) bool) (*dtype.Schem
 			types = append(types, infUnknown)
 		}
 		for i := range sc.NumFields() {
-			types[i] = types[i].widen(classify(sc.Field(i), isNull, o.TryParseDates))
+			types[i] = types[i].widen(classify(sc.Field(i), isNull, o))
 		}
 		rows++
 	}
@@ -184,7 +207,11 @@ func inferSchema(sc *scanner, o Options, isNull func([]byte) bool) (*dtype.Schem
 		return nil, err
 	}
 	if len(types) == 0 {
-		return nil, uerr.New(uerr.KindValue, "scan_csv", "the file is empty")
+		if o.AllowEmpty {
+			return dtype.NewSchema()
+		}
+		return nil, uerr.New(uerr.KindValue, "scan_csv", "the file is empty").
+			Hint("pass WithRaiseIfEmpty(false) to read it as a frame of no columns")
 	}
 
 	if len(names) == 0 {
