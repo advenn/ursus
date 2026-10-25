@@ -28,8 +28,8 @@ import (
 //
 // The contract is the same one OrderKeyF64 documents: unsigned ordering of the
 // result equals ursus's total order over the values. ok is false for types with
-// no such encoding — String, Int128 and therefore Decimal — which fall back to
-// the comparator path.
+// no such encoding: Int128 and therefore Decimal, which fall back to the comparator
+// path, and text, which textPass sorts a seven-byte key at a time (step 363).
 //
 // Nulls are NOT encoded here. Their slot is undefined and never read: the caller
 // partitions them out first, because null placement is a question about position
@@ -148,7 +148,7 @@ func radixable(cols []*data.Column) bool {
 			continue
 		}
 		if c.DType().HasStringStorage() {
-			return false
+			continue // seven bytes a round, textPass (step 363)
 		}
 		switch c.DType().Physical().ID() {
 		case dtype.TypeInt8, dtype.TypeInt16, dtype.TypeInt32, dtype.TypeInt64,
@@ -227,6 +227,10 @@ func (r *radixSorter) argSort(cols []*data.Column, specs []SortSpec, n int) ([]i
 	}
 
 	for k := len(cols) - 1; k >= 0; k-- {
+		if cols[k].DType().HasStringStorage() {
+			r.textPass(idx, cols[k], specs[k])
+			continue
+		}
 		keys, ok, err := orderKey(cols[k])
 		if err != nil {
 			return nil, err

@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–362, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–363, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -132,6 +132,11 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **A sort of text by its bytes, seven at a time** (363): a String, Binary or
+  Categorical key is radix-sorted, alone or beside other keys, where it went to the
+  comparator, in the comparator's order exactly, ties included. A million distinct
+  strings sort in 150 ms on one thread and 75 on eight, where they took 853 and 274;
+  a million URLs of one prefix in 240 and 126, where they took 1,128 and 370.
 - **A unique on several threads, in the group-by's tables** (362): an integer key's
   values, a string key's bytes, any other key encoded, where each key was a Go map's
   string; a table a thread, a key in the one its hash names, each table's rows

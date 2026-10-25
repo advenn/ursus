@@ -44,10 +44,11 @@ func ArgSort(n int, cmp Comparator) []int32 {
 // short version is that OrderKeyF64 was already producing exactly the key a radix
 // sort wants, O(n log n) times.
 //
-// Falls back to the comparator for key types with no order-preserving fixed-width
-// encoding — String, Int128 and so Decimal — and for any mixed set containing
-// one. The result is identical either way, including tie order, which is what
-// TestRadixMatchesComparatorSort exists to hold true.
+// Falls back to the comparator for key types with no order-preserving encoding —
+// Int128 and so Decimal — and for any mixed set containing one. Text is sorted seven
+// bytes a round since step 363 (textsort.go). The result is identical either way,
+// including tie order, which is what TestRadixMatchesComparatorSort and
+// TestTextSortMatchesTheComparator exist to hold true.
 func ArgSortColumns(cols []*data.Column, specs []SortSpec, n int) ([]int32, error) {
 	if len(cols) == len(specs) && radixable(cols) {
 		idx, err := argSortRadix(cols, specs, n)

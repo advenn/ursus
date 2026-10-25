@@ -155,8 +155,9 @@ func TestSortingAnAllNullColumnStillRefuses(t *testing.T) {
 }
 
 // TestRadixFallsBackForUnorderableKeys: String and Int128 have no fixed-width
-// order-preserving encoding, so they take the comparator path. The answer must be
-// the same one they gave before the fast path existed.
+// order-preserving encoding, so they took the comparator path. Text is sorted a
+// seven-byte key at a time since step 363, alone and beside a numeric key, and the
+// answer must still be the one it gave before either fast path existed.
 func TestRadixFallsBackForUnorderableKeys(t *testing.T) {
 	const n = 200
 	rng := rand.New(rand.NewPCG(4, 5))
@@ -177,9 +178,8 @@ func TestRadixFallsBackForUnorderableKeys(t *testing.T) {
 	t.Run("string alone", func(t *testing.T) {
 		assertAgrees(t, []*data.Column{strCol}, []kernel.SortSpec{{Descending: true}}, n)
 	})
-	// A MIXED set falls back wholesale: an LSD pass has to be a stable sort of the
-	// whole array by one column, and a comparator pass interleaved with radix
-	// passes would not compose.
+	// A mixed set: an LSD pass has to be a stable sort of the whole array by one
+	// column, which the text's pass is, so the two compose (step 363).
 	t.Run("mixed with a numeric key", func(t *testing.T) {
 		assertAgrees(t, []*data.Column{numCol, strCol},
 			[]kernel.SortSpec{{}, {NullsLast: true}}, n)
