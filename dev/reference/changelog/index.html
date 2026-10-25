@@ -3052,7 +3052,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v067">Unreleased — toward v0.6.7<a class="headerlink" href="#unreleased-toward-v067" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–359, so far.
+<p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–360, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3171,6 +3171,11 @@ completeness, part 3 — frame operations.</strong></p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>Several IPC files as one frame, and IPC hive datasets</strong> (360): <code>ScanIPCFiles</code>,
+  <code>ScanIPCGlob</code>, and <code>ScanIPC(dir)</code> a hive dataset, as Polars' <code>scan_ipc</code>; a later
+  file read by name, a filter on the keys skipping the files it rules out;
+  <code>WithIPCHivePartitioning</code>, <code>WithIPCHiveSchema</code>, <code>WithIPCHiveDates</code> and
+  <code>WithIPCIncludeFilePaths</code>.</li>
 <li><strong>A column of each row's file path for CSV and NDJSON</strong> (359):
   <code>WithCSVIncludeFilePaths</code> and <code>WithNDJSONIncludeFilePaths</code>, Polars'
   <code>include_file_paths</code>, the path as it was given; each file's repeated once and

@@ -1945,6 +1945,15 @@ compressed buffers, which Polars writes. <code>WriteIPC(ctx, w)</code>, <code>Wr
 and <code>SinkIPC(ctx, path)</code> write them, uncompressed as Polars' are by default, or with
 <code>WithIPCCompression(ursus.IPCLZ4)</code> or <code>IPCZstd</code>. <code>ReadIPCSchema(path)</code> and
 <code>ReadParquetSchema(ctx, path)</code> read a file's schema from its footer alone.</p>
+<p><em>New in 0.6.7:</em> several IPC files as one frame, as Polars' <code>scan_ipc</code> reads them.
+<code>ScanIPCFiles(paths)</code> reads a list and <code>ScanIPCGlob(pattern)</code> a glob's matches, as
+the first file's columns: a later file's are read by name, and one it lacks, one more
+or one of another type is refused, as Polars refuses them. <code>ScanIPC(dir)</code> reads every
+file below a directory as a hive dataset, each <code>key=value</code> directory a column after
+the files' own, of the type its values infer; a filter on the keys skips the files it
+rules out before any is opened. <code>WithIPCHivePartitioning</code>, <code>WithIPCHiveSchema</code>,
+<code>WithIPCHiveDates</code> and <code>WithIPCIncludeFilePaths</code> are Polars' <code>hive_partitioning</code>,
+<code>hive_schema</code>, <code>try_parse_hive_dates</code> and <code>include_file_paths</code>.</p>
 <h2 id="json">JSON<a class="headerlink" href="#json" title="Permanent link">&para;</a></h2>
 <p><em>New in 0.6.7:</em> <code>ScanNDJSON(path)</code> reads newline-delimited JSON, an object a line, as
 Polars' <code>scan_ndjson</code> and <code>read_ndjson</code>. <code>ScanNDJSONFiles(paths)</code> and
