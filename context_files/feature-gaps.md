@@ -68,7 +68,7 @@ Fix these before anything new. **Step 249 fixed every row** (see its record).
 | **A conditional of a List or a Struct was refused,** "a conditional is not implemented for List(String)", so `When` with List branches and `Coalesce` of Lists failed, where Polars' when/then takes either. Found writing step 310's test of `FirstNonNull` over lists; fixed at step 310, the kernel taking each row from its branch | internal/kernel/select.go | fixed |
 | **A null condition yielded null, where Polars and SQL take Otherwise.** `When(c).Then(a).Otherwise(b)` of a null c was null, by design (internal/expr/cond.go: "a null condition takes neither branch"); Polars' `when` gives b, and SQL's `CASE WHEN NULL` its ELSE. Found at step 310, in none of the docs; the maintainer chose Polars', and step 311 made a null mask take the Else branch, a break. `Clip` of a null bound follows Polars now too; `FillNan`, which leaned on the old rule, was rewritten to keep its nulls | internal/kernel/select.go, internal/expr/cond.go | fixed |
 | **A typed view of a `Date` or a `Datetime` is its integer.** `df.Column[time.Time]` and `df.At[time.Time]` refuse one, "no typed view for time.Time"; `Column[int32]` gives a Date's days and `Column[int64]` a Datetime's ticks. `Rows[T]` decodes either into a `time.Time`. Polars' `to_list` gives dates and datetimes. For 0.6.7's V3, the eager Series (step 297) | series.go, internal/data | open |
-| **A naive `Datetime` is written with a `Z`,** as though it were UTC: `Datetime(s)` prints `2026-03-08T06:30:00Z`, and the CSV writer, which shares `FormatTemporal`, writes it so, which another reader takes as UTC; so does a cast to String (step 298). Polars writes a naive instant with no offset. A change of the CSV format, for 0.6.8's I/O (step 296) | dtype/temporal.go:212 | open |
+| **A naive `Datetime` is written with a `Z`,** as though it were UTC: `Datetime(s)` prints `2026-03-08T06:30:00Z`, and a cast to String gives it so (step 298). Polars writes a naive instant with no offset. The CSV writer, which shared `FormatTemporal`, writes Polars' text since step 354, a naive instant with none and a zoned one with `+0900`; the print and the cast are left (step 296) | dtype/temporal.go:212 | open |
 | **`RollingOptions.Offset` was not Polars' `offset`.** ursus's moved a window's end from its row's instant, `(t + offset − period, t + offset]`; Polars' places its start, `(t + offset, t + offset + period]`, by default `−period`. Found at step 312; the maintainer's goal of 2026-10-22, Polars' features matched, decided it, and step 313 placed the window as Polars does, a break, with `NoOffset()` for Polars' `"0d"` and Polars' rule for a window that ends at its row | groupby.go `RollingOptions`, internal/physical/tempstream.go `rollRow` | fixed |
 
 ## 2. The expression model
@@ -247,7 +247,7 @@ differs from their input's, or scalars outside a group-by.
 | built: **Arrow IPC,** in step 332: a file or a stream scanned, written and sunk, uncompressed, LZ4 or Zstandard, and a file's schema read; and a Parquet file's schema. Over arrow-go's IPC readers and writers | — |
 | **Hive partitioning:** built on read for Parquet in step 347, a directory read whole, its `key=value` directories typed columns, a filter on them skipping files, `include_file_paths`. Left: an IPC directory's, `include_file_paths` for CSV, NDJSON and IPC, and **partitioned writes** by key | P1 |
 | **Multi-file schema evolution:** built for Parquet in step 348, `schema`, `missing_columns`, `extra_columns` and `cast_options`' integer and float upcasts; `include_file_paths` for Parquet in step 347. `**` globs, and CSV and NDJSON directories, in step 349. Left: `cast_options`' datetime casts and struct fields, `include_file_paths` for CSV, NDJSON and IPC | P1 |
-| **Schema overrides on Parquet and Arrow scans;** CSV date inference; CSV writer quote style and date and float formats. Compressed input built in step 346: a CSV, NDJSON or JSON file of gzip, zlib or Zstandard, by its first bytes | P1 |
+| **Schema overrides on Parquet and Arrow scans;** CSV date inference. The CSV writer's options built in step 354: quote style and character, date, datetime and time formats, float precision, scientific notation and the decimal comma, a BOM, gzip and Zstandard output and the path's extension check. Compressed input built in step 346: a CSV, NDJSON or JSON file of gzip, zlib or Zstandard, by its first bytes | P1 |
 | **Cloud object stores** by URI (`s3://`, `gs://`, `https://`), with listing, credentials and retries. Today you bring a `ReaderAt` | P2 |
 | **Parquet:** page index and bloom filters (read and write), compression level, per-column options, a metadata cache | P2 |
 | Avro write; Excel; Delta Lake; Iceberg. **Databases** read in step 353, `ReadDatabase` and `ReadDatabaseRows` through `database/sql`, Polars' `read_database`; left: `write_database`, `read_database`'s `iter_batches`, and ADBC's Arrow results | P2/P3 |
@@ -266,6 +266,7 @@ These belong to a performance release more than to features.
 | **Expression-level CSE;** clustering of `with_columns`; dropping a computed column nothing reads | P1 |
 | **Multi-join reordering** on statistics; sortedness propagation and a merge join | P2 |
 | **Parallel sort;** a work-stealing morsel scheduler | P1 |
+| **The CSV writer is one thread's:** a million rows of an integer, a float, text and an instant take 397 ms, where Polars, formatting a file's parts in parallel, takes 168; an instant alone 246 against 129 (step 354) | P1 |
 | `collect_all` and several sinks from one plan; plan serialization. `cache()` built in step 328 | P2 |
 | Display settings (rows, width, `glimpse`) | P1 |
 | Spill-file compression; approximate aggregates | P2 |
@@ -517,6 +518,13 @@ decide whether to keep or switch each one.
   its text, as an Enum's, and a join or a comparison with a String meets at the
   text, where Polars refuses the functions and the join; a cast of a number to it is
   refused, where Polars reads the number as a code (step 351).
+- The CSV writer: a field beginning with a space is quoted, which Polars writes bare,
+  and so is a temporal value whose format writes the separator, `%Y-%m-%d,%a`, which
+  Polars writes bare, a record of one field too many; a Duration is written as the
+  frame prints it, which Polars refuses; under a decimal comma, scientific notation is
+  each value's, where Polars 1.44.1 runs a column's values together, `2e01e-7`; a
+  Zstandard level past 22 is refused, which Polars takes, and a gzip level past 9,
+  where Polars panics (step 354).
 - Databases: every row's value types a column, where Polars reads 100 and reads a
   later float in an integer column as its integer part, or refuses a later kind; an
   instant beside text meets at text, by Polars' supertype, where Polars refuses it; a

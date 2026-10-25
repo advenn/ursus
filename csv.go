@@ -252,6 +252,110 @@ func WithLineTerminator(s string) CSVWriteOption {
 // round-trip — as Polars writes and reads them.
 func WithNullValue(s string) CSVWriteOption { return func(o *csv.WriteOptions) { o.NullValue = s } }
 
+// QuoteStyle is when the CSV writer quotes a field, as Polars' quote_style. New in
+// 0.6.7.
+type QuoteStyle = csv.QuoteStyle
+
+const (
+	// QuoteNecessary quotes a field holding the separator, the quote or a line
+	// break, the empty string, and one beginning with a space: the default.
+	QuoteNecessary = csv.QuoteNecessary
+	// QuoteAlways quotes every field, the header's and a null's too.
+	QuoteAlways = csv.QuoteAlways
+	// QuoteNever quotes no field.
+	QuoteNever = csv.QuoteNever
+	// QuoteNonNumeric quotes every field but a number and a null.
+	QuoteNonNumeric = csv.QuoteNonNumeric
+)
+
+// WithQuoteStyle sets when a field is quoted, as Polars' quote_style. New in 0.6.7.
+func WithQuoteStyle(s QuoteStyle) CSVWriteOption {
+	return func(o *csv.WriteOptions) { o.QuoteStyle = s }
+}
+
+// WithWriteQuote sets the quote, as Polars' quote_char. Default '"'. New in 0.6.7.
+func WithWriteQuote(c byte) CSVWriteOption { return func(o *csv.WriteOptions) { o.Quote = c } }
+
+// WithDateFormat writes a Date in a strftime format, "%d/%m/%Y", as Polars'
+// date_format, where the default is 2024-01-02. A format of a time of day is refused.
+// New in 0.6.7.
+func WithDateFormat(f string) CSVWriteOption {
+	return func(o *csv.WriteOptions) { o.DateFormat = f }
+}
+
+// WithDatetimeFormat writes a Datetime in a strftime format, "%Y-%m-%d %H:%M", as
+// Polars' datetime_format, a zoned one on its zone's wall clock. The default is
+// 2024-01-02T03:04:05.123456, to the instant's unit, with its offset, +0900, where it
+// has a zone. A naive instant's format of a zone, %z or %Z, is refused. New in 0.6.7.
+func WithDatetimeFormat(f string) CSVWriteOption {
+	return func(o *csv.WriteOptions) { o.DatetimeFormat = f }
+}
+
+// WithTimeFormat writes a Time in a strftime format, "%H:%M", as Polars'
+// time_format, where the default is 03:04:05.000000000. New in 0.6.7.
+func WithTimeFormat(f string) CSVWriteOption {
+	return func(o *csv.WriteOptions) { o.TimeFormat = f }
+}
+
+// WithFloatPrecision writes every float with n digits after its point, as Polars'
+// float_precision: 2 writes 1.5 as 1.50. New in 0.6.7.
+func WithFloatPrecision(n int) CSVWriteOption {
+	return func(o *csv.WriteOptions) { o.FloatPrecision = n }
+}
+
+// WithFloatScientific writes every float in scientific notation, 1.5e0 and 1e-7, or
+// with false none, 100000000000000000000, as Polars' float_scientific; by default a
+// float is scientific past 1e16 and below 1e-5. New in 0.6.7.
+func WithFloatScientific(b bool) CSVWriteOption {
+	return func(o *csv.WriteOptions) {
+		o.FloatScientific = -1
+		if b {
+			o.FloatScientific = 1
+		}
+	}
+}
+
+// WithDecimalComma writes a float's and a Decimal's point as a comma, 1,5, as Polars'
+// decimal_comma; under a comma separator such a field is quoted. New in 0.6.7.
+func WithDecimalComma(b bool) CSVWriteOption {
+	return func(o *csv.WriteOptions) { o.DecimalComma = b }
+}
+
+// WithIncludeBOM begins the file with a UTF-8 byte-order mark, as Polars'
+// include_bom, which ScanCSV skips. New in 0.6.7.
+func WithIncludeBOM(b bool) CSVWriteOption { return func(o *csv.WriteOptions) { o.BOM = b } }
+
+// CSVCompression is the codec a CSV file is written in, as Polars' write_csv
+// compression. New in 0.6.7.
+type CSVCompression = csv.Compression
+
+const (
+	CSVUncompressed = csv.Uncompressed // the default
+	CSVGzip         = csv.Gzip         // gzip, a path's name ending .gz
+	CSVZstd         = csv.Zstd         // Zstandard, .zst
+)
+
+// WithCSVCompression writes the text compressed, at the codec's default level, as
+// Polars' compression; ScanCSV reads it back by its first bytes. SinkCSV's path must
+// end as the codec's files do, .gz or .zst, and an uncompressed one must not, as
+// Polars checks unless WithCSVCheckExtension(false) says otherwise. New in 0.6.7.
+func WithCSVCompression(c CSVCompression) CSVWriteOption {
+	return func(o *csv.WriteOptions) { o.Compression = c }
+}
+
+// WithCSVCompressionLevel sets the codec's level, as Polars' compression_level:
+// gzip's 0 to 9, where the default is 6, and Zstandard's 1 to 22, where it is 3.
+// New in 0.6.7.
+func WithCSVCompressionLevel(level int) CSVWriteOption {
+	return func(o *csv.WriteOptions) { o.CompressionLevel = level }
+}
+
+// WithCSVCheckExtension says whether SinkCSV checks its path's extension against the
+// compression, as Polars' check_extension. Default true. New in 0.6.7.
+func WithCSVCheckExtension(b bool) CSVWriteOption {
+	return func(o *csv.WriteOptions) { o.SkipExtensionCheck = !b }
+}
+
 // SinkCSV runs the query and writes the result to path, streaming.
 //
 // This is the half that makes "larger than RAM" true end to end. Collect holds the
@@ -261,6 +365,9 @@ func WithNullValue(s string) CSVWriteOption { return func(o *csv.WriteOptions) {
 // The file is written to a temporary name and renamed on success, so a failed
 // query leaves no half-written file where a complete one is expected.
 func (lf *LazyFrame) SinkCSV(ctx context.Context, path string, opts ...CSVSinkOption) error {
+	if err := csv.CheckExtension(path, csvSinkOptions(opts).write); err != nil {
+		return err
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
 	if err != nil {
 		return uerr.Wrap(err, uerr.KindIO, "sink_csv", "creating a temporary file for %s", path)
@@ -298,7 +405,10 @@ func (lf *LazyFrame) WriteCSV(ctx context.Context, w io.Writer, opts ...CSVSinkO
 	}
 	defer root.Close()
 
-	cw := csv.NewWriter(w, cfg.write)
+	cw, err := csv.NewWriter(w, cfg.write)
+	if err != nil {
+		return err
+	}
 	// A result with no rows still has columns, and a file with no header would be
 	// unreadable rather than empty.
 	if err := cw.WriteEmpty(exec.Schema(root)); err != nil {

@@ -139,7 +139,8 @@ func TestIOByHand(t *testing.T) {
 		}},
 		{"control: Amsterdam 2024 keeps its local text", func(t *testing.T) string {
 			text, err := csvText(t, instants(t, "Europe/Amsterdam", dtype.Micro, "2024-01-01T12:00:00"))
-			if err != nil || !strings.Contains(text, "2024-01-01T13:00:00.000000+01:00") {
+			// Polars' offset, +0100, since step 354; it was RFC 3339's +01:00.
+			if err != nil || !strings.Contains(text, "2024-01-01T13:00:00.000000+0100") {
 				return fmt.Sprintf("wrote %q, %v", text, err)
 			}
 			return ""

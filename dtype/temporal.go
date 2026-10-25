@@ -291,12 +291,17 @@ func ParseTemporal(d DataType, s string) (int64, bool) {
 
 // datetimeLayouts is ordered most-specific first, so a string carrying an offset
 // is not silently read as naive UTC.
+//
+// An offset is read as RFC 3339 writes it, +09:00, and as Polars' CSV writer and
+// chrono's %z write it, +0900 (step 354).
 var datetimeLayouts = []string{
 	time.RFC3339Nano,
 	time.RFC3339,
+	"2006-01-02T15:04:05.999999999Z0700",
 	"2006-01-02T15:04:05.999999999",
 	"2006-01-02T15:04:05",
 	"2006-01-02 15:04:05.999999999Z07:00",
+	"2006-01-02 15:04:05.999999999Z0700",
 	"2006-01-02 15:04:05.999999999",
 	"2006-01-02 15:04:05",
 	"2006-01-02",

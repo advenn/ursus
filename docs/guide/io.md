@@ -44,6 +44,21 @@ matches any number of directories, `logs/**/*.csv`, in every scan's glob, and
 
 --8<-- "Example_ioCSVWrite.md"
 
+*New in 0.6.7:* the writer takes Polars' `write_csv` options:
+
+| Option | Polars' | For |
+|---|---|---|
+| `WithQuoteStyle(ursus.QuoteAlways)`, `QuoteNever`, `QuoteNonNumeric`; `WithWriteQuote(c)` | `quote_style`, `quote_char` | when a field is quoted, and with what |
+| `WithDateFormat(f)`, `WithDatetimeFormat(f)`, `WithTimeFormat(f)` | `date_format`, `datetime_format`, `time_format` | a temporal value's strftime format |
+| `WithFloatPrecision(n)`, `WithFloatScientific(b)`, `WithDecimalComma(b)` | `float_precision`, `float_scientific`, `decimal_comma` | a float's text |
+| `WithIncludeBOM(b)` | `include_bom` | a UTF-8 byte-order mark first |
+| `WithCSVCompression(ursus.CSVGzip)`, `CSVZstd`; `WithCSVCompressionLevel(n)`; `WithCSVCheckExtension(b)` | `compression`, `compression_level`, `check_extension` | the file compressed, its path's name checked |
+
+Each value is written as Polars writes it: an instant `2024-01-02T03:04:05.123456`, to
+its unit, with its offset `+0900` where it has a zone, a time of day to the
+nanosecond, and a float in Polars' text, `123456789.0` and `1e-7`. `ScanCSV` reads
+each back.
+
 ## Parquet
 
 `ScanParquet(path)` reads the footer when the query is planned, and at run time only

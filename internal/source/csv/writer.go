@@ -2,15 +2,45 @@ package csv
 
 import (
 	"bufio"
-	"bytes"
 	"io"
 	"math"
 	"strconv"
+	"strings"
+	"time"
+
+	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/compress/zstd"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/kernel"
+	"github.com/advenn/ursus/internal/strftime"
 	"github.com/advenn/ursus/internal/uerr"
+)
+
+// QuoteStyle is when a field is quoted: Polars' quote_style (step 354).
+type QuoteStyle uint8
+
+const (
+	// QuoteNecessary quotes a field holding the separator, the quote or a line
+	// break, the empty string, and one beginning with a space: the default.
+	QuoteNecessary QuoteStyle = iota
+	// QuoteAlways quotes every field, the header's and a null's too.
+	QuoteAlways
+	// QuoteNever quotes no field.
+	QuoteNever
+	// QuoteNonNumeric quotes every field but a number and a null.
+	QuoteNonNumeric
+)
+
+// Compression is the codec the text is written in (step 354).
+type Compression uint8
+
+const (
+	Uncompressed Compression = iota
+	Gzip
+	Zstd
 )
 
 // WriteOptions configures a CSV writer.
@@ -30,11 +60,68 @@ type WriteOptions struct {
 	// Polars writes and reads them. This used to say the format cannot tell them
 	// apart; quoting can.
 	NullValue string
+
+	// QuoteStyle is when a field is quoted, Polars' quote_style.
+	QuoteStyle QuoteStyle
+
+	// DateFormat, DatetimeFormat and TimeFormat are the strftime formats a Date, a
+	// Datetime and a Time are written in, Polars' date_format, datetime_format and
+	// time_format. Empty, each is Polars' own: 2024-01-02; 2024-01-02T03:04:05.123456
+	// to the instant's unit, and its offset where it has a zone, +0900; and
+	// 03:04:05.000000000.
+	DateFormat, DatetimeFormat, TimeFormat string
+
+	// FloatPrecision is the digits after a float's point, Polars' float_precision;
+	// -1 is as many as the float needs.
+	FloatPrecision int
+
+	// FloatScientific is 1 for every float in scientific notation, 1.5e0, and -1 for
+	// none, Polars' float_scientific; 0 is Polars' text, scientific past 1e16 and
+	// below 1e-5.
+	FloatScientific int
+
+	// DecimalComma writes a float's and a Decimal's point as a comma.
+	DecimalComma bool
+
+	// BOM begins the text with a UTF-8 byte-order mark, Polars' include_bom.
+	BOM bool
+
+	// Compression and CompressionLevel are the codec and its level, Polars'
+	// compression and compression_level: gzip's 0 to 9, Zstandard's 1 to 22, and -1
+	// the codec's default, 6 and 3.
+	Compression      Compression
+	CompressionLevel int
+
+	// SkipExtensionCheck lets a file's name end as another codec's files do, which
+	// CheckExtension refuses, as Polars' check_extension=False.
+	SkipExtensionCheck bool
+}
+
+// CheckExtension refuses a path whose name does not end as the codec's files do, .gz
+// for gzip and .zst for Zstandard, or which ends so without the codec, as Polars'
+// check_extension does.
+func CheckExtension(path string, o WriteOptions) error {
+	if o.SkipExtensionCheck {
+		return nil
+	}
+	want := map[Compression]string{Gzip: ".gz", Zstd: ".zst"}[o.Compression]
+	if want != "" && !strings.HasSuffix(path, want) {
+		return uerr.New(uerr.KindValue, "sink_csv",
+			"the path %s does not end %s, as a %s file's does", path, want, map[Compression]string{Gzip: "gzip", Zstd: "Zstandard"}[o.Compression]).
+			Hint("name it so, or pass WithCSVCheckExtension(false)")
+	}
+	if want == "" && (strings.HasSuffix(path, ".gz") || strings.HasSuffix(path, ".zst")) {
+		return uerr.New(uerr.KindValue, "sink_csv",
+			"the path %s ends as a compressed file's does, and the text is not compressed", path).
+			Hint("compress it with WithCSVCompression, or pass WithCSVCheckExtension(false)")
+	}
+	return nil
 }
 
 // DefaultWriteOptions returns RFC 4180 defaults with a header.
 func DefaultWriteOptions() WriteOptions {
-	return WriteOptions{Separator: ',', Quote: '"', Header: true, LineTerminator: "\n"}
+	return WriteOptions{Separator: ',', Quote: '"', Header: true, LineTerminator: "\n",
+		FloatPrecision: -1, CompressionLevel: -1}
 }
 
 func (o WriteOptions) normalise() WriteOptions {
@@ -55,17 +142,76 @@ func (o WriteOptions) normalise() WriteOptions {
 // It is a streaming sink: nothing accumulates, so a query whose result does not
 // fit in memory writes correctly as long as each batch does.
 type Writer struct {
-	w    *bufio.Writer
-	o    WriteOptions
-	line []byte // reused per record
+	w     *bufio.Writer
+	codec io.Closer // a compressor between w and the destination, closed by Close
+	o     WriteOptions
+	line  []byte // reused per record
+
+	dateFmt, datetimeFmt, timeFmt *strftime.Format
+	null, yes, no                 []byte // a null's, true's and false's text, quoted as the style says
 
 	schema *dtype.Schema
 	fmts   []func([]byte, int) []byte // one formatter per column, resolved once
 }
 
-// NewWriter builds a writer over w. Close must be called to flush.
-func NewWriter(w io.Writer, o WriteOptions) *Writer {
-	return &Writer{w: bufio.NewWriter(w), o: o.normalise()}
+// NewWriter builds a writer over w, its formats compiled and its codec begun. Close
+// must be called to flush.
+func NewWriter(w io.Writer, o WriteOptions) (*Writer, error) {
+	o = o.normalise()
+	cw := &Writer{o: o}
+	for _, f := range []struct {
+		src  string
+		to   **strftime.Format
+		kind string
+	}{{o.DateFormat, &cw.dateFmt, "date"}, {o.DatetimeFormat, &cw.datetimeFmt, "datetime"}, {o.TimeFormat, &cw.timeFmt, "time"}} {
+		if f.src == "" {
+			continue
+		}
+		c, err := strftime.Compile(f.src)
+		if err != nil {
+			return nil, uerr.New(uerr.KindValue, "sink_csv", "the %s format %q: %v", f.kind, f.src, err)
+		}
+		*f.to = c
+	}
+	if o.FloatPrecision < -1 {
+		return nil, uerr.New(uerr.KindValue, "sink_csv",
+			"a float precision of %d digits; it is 0 or more", o.FloatPrecision)
+	}
+	switch o.Compression {
+	case Gzip:
+		level := o.CompressionLevel
+		if level == -1 {
+			level = 6
+		}
+		if level < 0 || level > 9 {
+			return nil, uerr.New(uerr.KindValue, "sink_csv", "gzip's level is 0 to 9, not %d", o.CompressionLevel)
+		}
+		gz, err := gzip.NewWriterLevel(w, level)
+		if err != nil {
+			return nil, uerr.Wrap(err, uerr.KindValue, "sink_csv", "starting gzip")
+		}
+		cw.codec, w = gz, gz
+	case Zstd:
+		level := o.CompressionLevel
+		if level == -1 {
+			level = 3
+		}
+		if level < 1 || level > 22 {
+			return nil, uerr.New(uerr.KindValue, "sink_csv", "Zstandard's level is 1 to 22, not %d", o.CompressionLevel)
+		}
+		zw, err := zstd.NewWriter(w, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(level)))
+		if err != nil {
+			return nil, uerr.Wrap(err, uerr.KindValue, "sink_csv", "starting Zstandard")
+		}
+		cw.codec, w = zw, zw
+	}
+	cw.w = bufio.NewWriter(w)
+	cw.null = []byte(o.NullValue)
+	if o.QuoteStyle == QuoteAlways {
+		cw.null = cw.quoted(nil, o.NullValue)
+	}
+	cw.yes, cw.no = cw.text(nil, "true"), cw.text(nil, "false")
+	return cw, nil
 }
 
 // WriteBatch appends a batch. The first call fixes the schema and writes the
@@ -112,15 +258,20 @@ func (w *Writer) WriteBatch(b *data.Batch) error {
 	return nil
 }
 
-// Close flushes. It does not close the underlying writer — whoever opened it
-// closes it, which is the only rule that works when the destination might be
-// os.Stdout.
+// Close flushes, and ends the codec's stream. It does not close the underlying
+// writer — whoever opened it closes it, which is the only rule that works when the
+// destination might be os.Stdout.
 func (w *Writer) Close() error {
-	if w.schema == nil {
+	if w.schema == nil && w.codec == nil {
 		return nil // nothing was ever written; there is no header to emit
 	}
 	if err := w.w.Flush(); err != nil {
 		return uerr.Wrap(err, uerr.KindIO, "sink_csv", "flushing")
+	}
+	if w.codec != nil {
+		if err := w.codec.Close(); err != nil {
+			return uerr.Wrap(err, uerr.KindIO, "sink_csv", "ending the compressed stream")
+		}
 	}
 	return nil
 }
@@ -134,8 +285,16 @@ func (w *Writer) WriteEmpty(s *dtype.Schema) error {
 	return w.begin(s)
 }
 
+// utf8BOM is the byte-order mark Polars' include_bom writes, U+FEFF in UTF-8.
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
 func (w *Writer) begin(s *dtype.Schema) error {
 	w.schema = s
+	if w.o.BOM {
+		if _, err := w.w.Write(utf8BOM); err != nil {
+			return uerr.Wrap(err, uerr.KindIO, "sink_csv", "writing the byte-order mark")
+		}
+	}
 	// No columns, no header: an empty line is not a header naming nothing, and the
 	// reader took it for one column named "". A frame with no columns and no rows
 	// writes an empty file.
@@ -147,13 +306,50 @@ func (w *Writer) begin(s *dtype.Schema) error {
 		if i > 0 {
 			w.line = append(w.line, w.o.Separator)
 		}
-		w.line = w.appendQuoted(w.line, f.Name)
+		w.line = w.text(w.line, f.Name)
 	}
 	w.line = append(w.line, w.o.LineTerminator...)
 	if _, err := w.w.Write(w.line); err != nil {
 		return uerr.Wrap(err, uerr.KindIO, "sink_csv", "writing the header")
 	}
 	return nil
+}
+
+// text appends s, a field that is not a number, quoted as the style says: when it
+// must be, always, or never. A string's own functions are concrete, as a column of
+// text is the writer's hottest loop; textOf is the same for a value formatted into a
+// buffer.
+func (w *Writer) text(dst []byte, s string) []byte {
+	switch w.o.QuoteStyle {
+	case QuoteAlways, QuoteNonNumeric:
+		return w.quoted(dst, s)
+	case QuoteNever:
+		return append(dst, s...)
+	}
+	return w.appendQuoted(dst, s)
+}
+
+func textOf[S ~string | ~[]byte](w *Writer, dst []byte, s S) []byte {
+	switch w.o.QuoteStyle {
+	case QuoteAlways, QuoteNonNumeric:
+		return quotedOf(w, dst, s)
+	case QuoteNever:
+		return append(dst, s...)
+	}
+	return appendQuotedOf(w, dst, s)
+}
+
+// number appends a number's text, s: quoted where every field is, and, as Polars
+// quotes them, a float or a Decimal, pointed, where a decimal comma meets a comma's
+// separator.
+func (w *Writer) number(dst []byte, s []byte, pointed bool) []byte {
+	switch {
+	case w.o.QuoteStyle == QuoteAlways:
+		return quotedOf(w, dst, s)
+	case w.o.QuoteStyle != QuoteNever && pointed && w.o.DecimalComma && w.o.Separator == ',':
+		return quotedOf(w, dst, s)
+	}
+	return append(dst, s...)
 }
 
 // appendQuoted writes s, quoting and escaping only when it must.
@@ -173,6 +369,36 @@ func (w *Writer) appendQuoted(dst []byte, s string) []byte {
 	if !need {
 		return append(dst, s...)
 	}
+	return w.quoted(dst, s)
+}
+
+func appendQuotedOf[S ~string | ~[]byte](w *Writer, dst []byte, s S) []byte {
+	need := len(s) == 0 || s[0] == ' '
+	for i := 0; i < len(s) && !need; i++ {
+		switch s[i] {
+		case w.o.Separator, w.o.Quote, '\n', '\r':
+			need = true
+		}
+	}
+	if !need {
+		return append(dst, s...)
+	}
+	return quotedOf(w, dst, s)
+}
+
+// quoted writes s between quotes, each quote within it doubled.
+func (w *Writer) quoted(dst []byte, s string) []byte {
+	dst = append(dst, w.o.Quote)
+	for i := range len(s) {
+		if s[i] == w.o.Quote {
+			dst = append(dst, w.o.Quote) // double it
+		}
+		dst = append(dst, s[i])
+	}
+	return append(dst, w.o.Quote)
+}
+
+func quotedOf[S ~string | ~[]byte](w *Writer, dst []byte, s S) []byte {
 	dst = append(dst, w.o.Quote)
 	for i := range len(s) {
 		if s[i] == w.o.Quote {
@@ -197,27 +423,54 @@ func (w *Writer) bind(b *data.Batch) error {
 }
 
 func (w *Writer) formatter(c *data.Column) (func([]byte, int) []byte, error) {
-	null := w.o.NullValue
-
 	// wrap adds the null check once, so no individual formatter repeats it.
 	wrap := func(f func([]byte, int) []byte) func([]byte, int) []byte {
 		return func(dst []byte, row int) []byte {
 			if !c.IsValid(row) {
-				return append(dst, null...)
+				return append(dst, w.null...)
 			}
 			return f(dst, row)
 		}
 	}
+	// A number's text is made in scratch, then placed, as the quoting may need it
+	// whole; text-like fields likewise.
+	var scratch []byte
+	place := func(pointed bool) func(func([]byte, int) []byte) func([]byte, int) []byte {
+		return func(f func([]byte, int) []byte) func([]byte, int) []byte {
+			if w.o.QuoteStyle != QuoteAlways && !(pointed && w.o.DecimalComma) {
+				return wrap(f) // the common case, written in place
+			}
+			return wrap(func(dst []byte, row int) []byte {
+				scratch = f(scratch[:0], row)
+				return w.number(dst, scratch, pointed)
+			})
+		}
+	}
+	numeric, pointed := place(false), place(true)
 
 	dt := c.DType()
 	switch dt.ID() {
 	case dtype.TypeNull:
 		// Every row is null, written as the null value (audit.md I18).
-		return func(dst []byte, _ int) []byte { return append(dst, null...) }, nil
+		return func(dst []byte, _ int) []byte { return append(dst, w.null...) }, nil
 	case dtype.TypeString, dtype.TypeCategorical:
 		s, err := data.TypedColumn[string](c)
 		if err != nil {
 			return nil, err
+		}
+		// The style is chosen once, so the default's loop calls appendQuoted itself, as
+		// it did before there were styles.
+		switch w.o.QuoteStyle {
+		case QuoteAlways, QuoteNonNumeric:
+			return wrap(func(dst []byte, row int) []byte {
+				v, _ := s.Get(row)
+				return w.quoted(dst, v)
+			}), nil
+		case QuoteNever:
+			return wrap(func(dst []byte, row int) []byte {
+				v, _ := s.Get(row)
+				return append(dst, v...)
+			}), nil
 		}
 		return wrap(func(dst []byte, row int) []byte {
 			v, _ := s.Get(row)
@@ -230,70 +483,88 @@ func (w *Writer) formatter(c *data.Column) (func([]byte, int) []byte, error) {
 			return nil, err
 		}
 		return wrap(func(dst []byte, row int) []byte {
-			v, _ := s.Get(row)
-			return strconv.AppendBool(dst, v)
+			if v, _ := s.Get(row); v {
+				return append(dst, w.yes...)
+			}
+			return append(dst, w.no...)
 		}), nil
 
 	case dtype.TypeFloat32:
-		return appendFmt[float32](c, wrap, func(dst []byte, v float32) []byte {
-			return appendFloatText(dst, float64(v), 32)
-		})
+		s, err := data.TypedColumn[float32](c)
+		if err != nil {
+			return nil, err
+		}
+		return pointed(func(dst []byte, row int) []byte {
+			v, _ := s.Get(row)
+			return w.floatText(dst, float64(v), 32)
+		}), nil
 	case dtype.TypeFloat64:
-		return appendFmt[float64](c, wrap, func(dst []byte, v float64) []byte {
-			return appendFloatText(dst, v, 64)
-		})
+		s, err := data.TypedColumn[float64](c)
+		if err != nil {
+			return nil, err
+		}
+		return pointed(func(dst []byte, row int) []byte {
+			v, _ := s.Get(row)
+			return w.floatText(dst, v, 64)
+		}), nil
 
 	case dtype.TypeInt8:
-		return appendInt[int8](c, wrap)
+		return appendInt[int8](c, numeric)
 	case dtype.TypeInt16:
-		return appendInt[int16](c, wrap)
+		return appendInt[int16](c, numeric)
 	case dtype.TypeInt32:
-		return appendInt[int32](c, wrap)
+		return appendInt[int32](c, numeric)
 	case dtype.TypeInt64:
-		return appendInt[int64](c, wrap)
+		return appendInt[int64](c, numeric)
 	case dtype.TypeUint8:
-		return appendUint[uint8](c, wrap)
+		return appendUint[uint8](c, numeric)
 	case dtype.TypeUint16:
-		return appendUint[uint16](c, wrap)
+		return appendUint[uint16](c, numeric)
 	case dtype.TypeUint32:
-		return appendUint[uint32](c, wrap)
+		return appendUint[uint32](c, numeric)
 	case dtype.TypeUint64:
-		return appendUint[uint64](c, wrap)
+		return appendUint[uint64](c, numeric)
 
 	case dtype.TypeInt128:
-		return appendFmt[i128.Int128](c, wrap, func(dst []byte, v i128.Int128) []byte {
-			return append(dst, v.String()...)
-		})
-
-	case dtype.TypeDate, dtype.TypeTime, dtype.TypeDatetime, dtype.TypeDuration:
-		// The same formatter the frame renderer uses, so what is printed and what is
-		// written agree — and so this writer's output is readable by its own reader,
-		// which is the property that made temporal a refusal here until now.
-		if dt.Physical().ID() == dtype.TypeInt32 {
-			return appendFmt[int32](c, wrap, func(dst []byte, v int32) []byte {
-				return w.appendQuoted(dst, dtype.FormatTemporal(dt, int64(v)))
-			})
+		s, err := data.TypedColumn[i128.Int128](c)
+		if err != nil {
+			return nil, err
 		}
-		return appendFmt[int64](c, wrap, func(dst []byte, v int64) []byte {
-			return w.appendQuoted(dst, dtype.FormatTemporal(dt, v))
+		return numeric(func(dst []byte, row int) []byte {
+			v, _ := s.Get(row)
+			return append(dst, v.String()...)
+		}), nil
+
+	case dtype.TypeDate, dtype.TypeTime, dtype.TypeDatetime:
+		return w.temporal(c, wrap)
+
+	case dtype.TypeDuration:
+		// Polars refuses a Duration in CSV; it is written as the frame prints it.
+		return appendFixed[int64](c, wrap, func(dst []byte, v int64) []byte {
+			return w.text(dst, dtype.FormatTemporal(dt, v))
 		})
 
 	case dtype.TypeEnum:
 		// The text, which is what the reader reads back under the same Enum schema,
 		// and what Polars writes; the index would be storage, meaningless outside.
 		cats := dt.Categories()
-		return appendFmt[uint32](c, wrap, func(dst []byte, v uint32) []byte {
+		return appendFixed[uint32](c, wrap, func(dst []byte, v uint32) []byte {
 			if int(v) >= len(cats) {
 				return dst // unreachable: a valid Enum index is a category
 			}
-			return w.appendQuoted(dst, cats[v])
+			return w.text(dst, cats[v])
 		})
 
 	case dtype.TypeDecimal:
 		scale := dt.Scale()
-		return appendFmt[i128.Int128](c, wrap, func(dst []byte, v i128.Int128) []byte {
-			return append(dst, dtype.FormatDecimal(v.String(), scale)...)
-		})
+		s, err := data.TypedColumn[i128.Int128](c)
+		if err != nil {
+			return nil, err
+		}
+		return pointed(func(dst []byte, row int) []byte {
+			v, _ := s.Get(row)
+			return w.point(dst, len(dst), dtype.FormatDecimal(v.String(), scale))
+		}), nil
 
 	default:
 		// Binary and the nested types are refused rather than written as their
@@ -310,7 +581,152 @@ func (w *Writer) formatter(c *data.Column) (func([]byte, int) []byte, error) {
 	}
 }
 
-func appendFmt[T data.Fixed](c *data.Column,
+// floatText is a float's text, as the options say: Polars' text, its digits after the
+// point fixed, or scientific notation always or never. NaN and the infinities are
+// NaN, inf and -inf in each.
+func (w *Writer) floatText(dst []byte, v float64, bits int) []byte {
+	start := len(dst)
+	switch p := w.o.FloatPrecision; {
+	case math.IsNaN(v) || math.IsInf(v, 0):
+		return kernel.AppendFloatText(dst, v, bits)
+	case w.o.FloatScientific > 0:
+		dst = appendScientific(dst, v, p, bits)
+	case p >= 0:
+		dst = strconv.AppendFloat(dst, v, 'f', p, bits)
+	case w.o.FloatScientific < 0:
+		dst = strconv.AppendFloat(dst, v, 'f', -1, bits)
+	default:
+		dst = kernel.AppendFloatText(dst, v, bits)
+	}
+	return w.point(dst, start, "")
+}
+
+// point appends s and writes the point of dst's text from start as a comma, where the
+// options say so.
+func (w *Writer) point(dst []byte, start int, s string) []byte {
+	dst = append(dst, s...)
+	if w.o.DecimalComma {
+		for i := start; i < len(dst); i++ {
+			if dst[i] == '.' {
+				dst[i] = ','
+			}
+		}
+	}
+	return dst
+}
+
+// appendScientific is v in scientific notation as Polars writes it, Rust's: its
+// shortest digits, or p after the point, and an exponent of no padding and a sign only
+// when it is negative, 1.5e0, 1e-7, 1.00e20.
+func appendScientific(dst []byte, v float64, p, bits int) []byte {
+	start := len(dst)
+	dst = strconv.AppendFloat(dst, v, 'e', p, bits)
+	at := start
+	for dst[at] != 'e' {
+		at++
+	}
+	var exp [8]byte
+	n := copy(exp[:], dst[at+2:])
+	neg := dst[at+1] == '-'
+	dst = append(dst[:at], 'e')
+	if neg {
+		dst = append(dst, '-')
+	}
+	digits := exp[:n]
+	for len(digits) > 1 && digits[0] == '0' {
+		digits = digits[1:]
+	}
+	return append(dst, digits...)
+}
+
+// temporal is a Date, Time or Datetime column's formatter: in the format given for
+// its type, or Polars' CSV text, an instant's to its unit, its zone's wall clock and
+// offset where it has one. A format that writes what the type has not, a time of day
+// of a Date, a date of a Time, a zone of a naive instant, is refused, as Polars
+// refuses it.
+func (w *Writer) temporal(c *data.Column, wrap func(func([]byte, int) []byte) func([]byte, int) []byte) (func([]byte, int) []byte, error) {
+	dt := c.DType()
+	var (
+		f      *strftime.Format
+		layout string
+		loc    *time.Location
+		zoned  = dt.ID() == dtype.TypeDatetime && dt.TimeZone() != ""
+	)
+	switch dt.ID() {
+	case dtype.TypeDate:
+		f, layout = w.dateFmt, "2006-01-02"
+		if f != nil && (f.HasTime || f.HasZone || f.HasZoneName) {
+			return nil, w.unfit("date", f, dt)
+		}
+	case dtype.TypeTime:
+		f, layout = w.timeFmt, "15:04:05"+fracLayout(dt.TimeUnit())
+		if f != nil && (f.HasDate || f.HasZone || f.HasZoneName) {
+			return nil, w.unfit("time", f, dt)
+		}
+	default:
+		f, layout = w.datetimeFmt, "2006-01-02T15:04:05"+fracLayout(dt.TimeUnit())
+		if zoned {
+			layout += "-0700"
+			loc = time.UTC
+			if tz := dt.TimeZone(); tz != "UTC" {
+				l, err := time.LoadLocation(tz)
+				if err != nil {
+					return nil, uerr.Wrap(err, uerr.KindValue, "sink_csv", "the time zone %q", tz)
+				}
+				loc = l
+			}
+		} else if f != nil && (f.HasZone || f.HasZoneName) {
+			return nil, w.unfit("datetime", f, dt)
+		}
+	}
+	var scratch []byte
+	put := func(dst []byte, ticks int64) []byte {
+		t, ok := dt.ToTime(ticks)
+		if !ok {
+			return strconv.AppendInt(dst, ticks, 10)
+		}
+		if loc != nil {
+			t = t.In(loc)
+			// An offset with a seconds part, a local mean time's, has no +hhmm
+			// spelling, so such an instant is written in UTC, which reads back exactly.
+			if _, off := t.Zone(); off%60 != 0 {
+				t = t.UTC()
+			}
+		}
+		if f != nil {
+			// The checks above leave no format that can fail on an instant.
+			scratch, _ = f.Append(scratch[:0], t, zoned)
+		} else {
+			scratch = t.AppendFormat(scratch[:0], layout)
+		}
+		return textOf(w, dst, scratch)
+	}
+	if dt.Physical().ID() == dtype.TypeInt32 {
+		return appendFixed[int32](c, wrap, func(dst []byte, v int32) []byte { return put(dst, int64(v)) })
+	}
+	return appendFixed[int64](c, wrap, put)
+}
+
+func (w *Writer) unfit(kind string, f *strftime.Format, dt dtype.DataType) error {
+	return uerr.New(uerr.KindValue, "sink_csv",
+		"the %s format %q writes what a %s has not", kind, f.String(), dt).
+		Hint("a Date's format writes a date, a Time's a time of day, and a naive Datetime's no zone")
+}
+
+// fracLayout is the fractional seconds of a unit's layout: three, six or nine digits.
+func fracLayout(u dtype.TimeUnit) string {
+	switch u {
+	case dtype.Milli:
+		return ".000"
+	case dtype.Micro:
+		return ".000000"
+	case dtype.Nano:
+		return ".000000000"
+	}
+	return ""
+}
+
+func appendFixed[T data.Fixed](c *data.Column,
 	wrap func(func([]byte, int) []byte) func([]byte, int) []byte,
 	f func([]byte, T) []byte,
 ) (func([]byte, int) []byte, error) {
@@ -327,45 +743,31 @@ func appendFmt[T data.Fixed](c *data.Column,
 func appendInt[T interface {
 	data.Fixed
 	~int8 | ~int16 | ~int32 | ~int64
-}](c *data.Column, wrap func(func([]byte, int) []byte) func([]byte, int) []byte,
+}](c *data.Column, numeric func(func([]byte, int) []byte) func([]byte, int) []byte,
 ) (func([]byte, int) []byte, error) {
-	return appendFmt[T](c, wrap, func(dst []byte, v T) []byte {
+	s, err := data.TypedColumn[T](c)
+	if err != nil {
+		return nil, err
+	}
+	return numeric(func(dst []byte, row int) []byte {
+		v, _ := s.Get(row)
 		return strconv.AppendInt(dst, int64(v), 10)
-	})
+	}), nil
 }
 
 func appendUint[T interface {
 	data.Fixed
 	~uint8 | ~uint16 | ~uint32 | ~uint64
-}](c *data.Column, wrap func(func([]byte, int) []byte) func([]byte, int) []byte,
+}](c *data.Column, numeric func(func([]byte, int) []byte) func([]byte, int) []byte,
 ) (func([]byte, int) []byte, error) {
-	return appendFmt[T](c, wrap, func(dst []byte, v T) []byte {
+	s, err := data.TypedColumn[T](c)
+	if err != nil {
+		return nil, err
+	}
+	return numeric(func(dst []byte, row int) []byte {
+		v, _ := s.Get(row)
 		return strconv.AppendUint(dst, uint64(v), 10)
-	})
-}
-
-// appendFloatText writes a float so the reader reads it back as a float, and as
-// this value: the shortest text that round-trips at its width, with ".0" when that
-// text is all digits, and inf, -inf and NaN for the three that are not numbers.
-//
-// The shortest text of 1.0 is "1", which inference read as an Int64, and +Inf was
-// Go's "+Inf", which it read as a String, so a float column came back as either.
-// Polars writes these the same way.
-func appendFloatText(dst []byte, v float64, bits int) []byte {
-	switch {
-	case math.IsInf(v, 1):
-		return append(dst, "inf"...)
-	case math.IsInf(v, -1):
-		return append(dst, "-inf"...)
-	case math.IsNaN(v):
-		return append(dst, "NaN"...)
-	}
-	start := len(dst)
-	dst = strconv.AppendFloat(dst, v, 'g', -1, bits)
-	if !bytes.ContainsAny(dst[start:], ".e") {
-		dst = append(dst, ".0"...)
-	}
-	return dst
+	}), nil
 }
 
 // noColumns refuses a batch with rows and no columns. A row with no cells has no
