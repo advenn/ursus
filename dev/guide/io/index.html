@@ -1666,12 +1666,12 @@ in memory. The types are inferred from the first rows, and the options say the r
 </thead>
 <tbody>
 <tr>
-<td><code>WithSeparator(c)</code>, <code>WithQuote(c)</code>, <code>WithComment(prefix)</code></td>
+<td><code>WithSeparator(c)</code>, <code>WithQuote(c)</code>, <code>WithQuoting(b)</code>, <code>WithComment(prefix)</code></td>
 <td>the dialect</td>
 </tr>
 <tr>
-<td><code>WithHasHeader(b)</code>, <code>WithColumnNames(names...)</code>, <code>WithSkipRows(n)</code></td>
-<td>the header</td>
+<td><code>WithHasHeader(b)</code>, <code>WithColumnNames(names...)</code>, <code>WithSkipRows(n)</code>, <code>WithSkipLines(n)</code>, <code>WithSkipRowsAfterHeader(n)</code></td>
+<td>the header and the rows skipped</td>
 </tr>
 <tr>
 <td><code>WithSchema(s)</code>, <code>WithSchemaOverrides(m)</code>, <code>WithInferRows(n)</code>, <code>WithInferSchema(b)</code></td>
@@ -1719,6 +1719,12 @@ fast as Polars reads one.</p>
   refuses it. The check reads thirty-two bytes a step and costs a read nothing
   measurable.</li>
 </ul>
+<p><em>New in 0.6.7:</em> <code>WithSkipLines(n)</code>, as <code>skip_lines</code>, skips the first lines by their
+line ends alone, a quote in them any byte, where <code>WithSkipRows(n)</code> skips records;
+the two are not both set. <code>WithSkipRowsAfterHeader(n)</code>, as <code>skip_rows_after_header</code>,
+skips the records after the header, a blank line one. Both skip in each file of
+several. <code>WithQuoting(false)</code>, as <code>quote_char=None</code>, reads a quote as any byte, so a
+separator or a line end always ends a field.</p>
 <p><em>Changed in 0.6.7:</em> a record of too few fields is padded with nulls, and a blank
 line after the header is a record of nulls, as Polars reads them; both were
 refused or skipped. <code>WithTruncateRaggedLines(true)</code> now concerns a record of too

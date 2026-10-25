@@ -1947,6 +1947,10 @@ changes is what Go asks for.</p>
 <td><code>ursus.ScanCSV(p, ursus.WithIgnoreErrors(true), ursus.WithInferSchema(false), ursus.WithRaiseIfEmpty(false), ursus.WithDecimalComma(true), ursus.WithEncoding(ursus.UTF8Lossy))</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>pl.read_csv(p, skip_lines=2, skip_rows_after_header=1, quote_char=None)</code></td>
+<td><code>ursus.ScanCSV(p, ursus.WithSkipLines(2), ursus.WithSkipRowsAfterHeader(1), ursus.WithQuoting(false))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>pl.read_csv("sales.csv.gz")</code>, a zlib or Zstandard file too</td>
 <td><code>ursus.ScanCSV("sales.csv.gz")</code>, known by its first bytes (new in 0.6.7)</td>
 </tr>
