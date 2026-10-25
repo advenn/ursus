@@ -298,13 +298,19 @@ func newBuilder(dt dtype.DataType) (colBuilder, error) {
 			cat: dt.ID() == dtype.TypeCategorical}, nil
 
 	case dtype.TypeDate, dtype.TypeTime, dtype.TypeDatetime, dtype.TypeDuration:
-		// Parsing goes through dtype.ParseTemporal, the same function the frame
-		// renderer's formatter inverts and the CSV writer emits for. Four copies of
-		// a date parser is exactly the defect shape step 2's audit found.
+		// Parsing goes through dtype, the function the frame renderer's formatter
+		// inverts and the CSV writer emits for. Four copies of a date parser is exactly
+		// the defect shape step 2's audit found. A date, an instant and a time of day are
+		// read by Polars' CSV patterns, dd/mm/yyyy among them, scanned by hand, and else
+		// as ParseTemporal reads them (step 355); a Duration as ParseTemporal does.
+		parse := dtype.ParseTemporalText
+		if dt.ID() == dtype.TypeDuration {
+			parse = dtype.ParseTemporal
+		}
 		if dt.Physical().ID() == dtype.TypeInt32 {
 			return &fixedBuilder[int32]{dt: dt, valid: bitmap.NewBuilder(0),
 				parse: func(b []byte) (int32, error) {
-					v, ok := dtype.ParseTemporal(dt, str(b))
+					v, ok := parse(dt, str(b))
 					if !ok {
 						return 0, strconv.ErrSyntax
 					}
@@ -313,7 +319,7 @@ func newBuilder(dt dtype.DataType) (colBuilder, error) {
 		}
 		return &fixedBuilder[int64]{dt: dt, valid: bitmap.NewBuilder(0),
 			parse: func(b []byte) (int64, error) {
-				v, ok := dtype.ParseTemporal(dt, str(b))
+				v, ok := parse(dt, str(b))
 				if !ok {
 					return 0, strconv.ErrSyntax
 				}

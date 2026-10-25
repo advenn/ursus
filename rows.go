@@ -354,20 +354,6 @@ func timeSetter(c *data.Column) (func(reflect.Value, int), error) {
 		return nil, uerr.New(uerr.KindType, "", "column is %s, not temporal", dt)
 	}
 
-	// The scale factor is resolved once here rather than branched on per row.
-	var toNanos int64 = 1
-	switch dt.TimeUnit() {
-	case dtype.Second:
-		toNanos = int64(time.Second)
-	case dtype.Milli:
-		toNanos = int64(time.Millisecond)
-	case dtype.Micro:
-		toNanos = int64(time.Microsecond)
-	}
-	if dt.ID() == dtype.TypeDate {
-		toNanos = int64(24 * time.Hour)
-	}
-
 	loc := time.UTC
 	if tz := dt.TimeZone(); tz != "" {
 		if l, err := time.LoadLocation(tz); err == nil {
@@ -388,7 +374,7 @@ func timeSetter(c *data.Column) (func(reflect.Value, int), error) {
 				dst.SetZero()
 				return
 			}
-			dst.Set(reflect.ValueOf(time.Unix(0, int64(v)*toNanos).In(loc)))
+			dst.Set(reflect.ValueOf(instantOf(dt, int64(v), loc)))
 		}, nil
 	}
 
@@ -402,6 +388,18 @@ func timeSetter(c *data.Column) (func(reflect.Value, int), error) {
 			dst.SetZero()
 			return
 		}
-		dst.Set(reflect.ValueOf(time.Unix(0, v*toNanos).In(loc)))
+		dst.Set(reflect.ValueOf(instantOf(dt, v, loc)))
 	}, nil
+}
+
+// instantOf is a Date's or a Datetime's ticks as a time.Time in loc, its seconds and
+// nanoseconds taken apart. It was time.Unix(0, ticks*nanosPerTick), whose nanosecond
+// count overflows before 1677 and after 2262, years a Date and a coarser Datetime
+// hold, so 0999-01-02 came out as 2168-02-10 (step 355).
+func instantOf(dt dtype.DataType, ticks int64, loc *time.Location) time.Time {
+	t, ok := dt.ToTime(ticks)
+	if !ok {
+		return time.Time{}
+	}
+	return t.In(loc)
 }

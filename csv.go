@@ -75,6 +75,16 @@ func WithTruncateRaggedLines(b bool) CSVOption {
 // unterminated quote is an error rather than an out-of-memory kill.
 func WithMaxRecordSize(n int) CSVOption { return func(o *csv.Options) { o.MaxRecordSize = n } }
 
+// WithTryParseDates infers a column of dates, instants or times of day as a Date, a
+// Datetime in microseconds, or a Time, as Polars' try_parse_dates: 2024-01-02 and
+// 02/01/2024 dates, the year first or the day, split by '-', '/' or '.';
+// 2024-01-02 03:04:05.123 instants, a 'T' or a space between, and in UTC where they
+// have an offset, Z, +09:00 or +0900; and 03:04:05 times. A month first is not
+// read: 01/02/2024 is the first of February. A date beside an instant, or an
+// instant in a zone beside one in none, is text. Off by default, as Polars'. A Date,
+// Datetime or Time column a schema gives is read by the same patterns. New in 0.6.7.
+func WithTryParseDates(b bool) CSVOption { return func(o *csv.Options) { o.TryParseDates = b } }
+
 func csvOptions(opts []CSVOption) csv.Options {
 	o := csv.DefaultOptions()
 	for _, f := range opts {

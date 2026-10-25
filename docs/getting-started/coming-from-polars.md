@@ -144,6 +144,7 @@ changes is what Go asks for.
 | `pl.read_ndjson(p)`, `pl.scan_ndjson([p, q], infer_schema_length=n, ignore_errors=True)` | `ursus.ScanNDJSON(p)`, `ursus.ScanNDJSONFiles([]string{p, q}, ursus.WithInferSchemaLines(n), ursus.WithNDJSONIgnoreErrors(true))` (new in 0.6.7) |
 | `pl.scan_parquet("ds/", hive_schema={"g": pl.Int8}, include_file_paths="path")` | `ursus.ScanParquet("ds", ursus.WithHiveSchema(s), ursus.WithIncludeFilePaths("path"))`, a hive dataset's keys read from its directories (new in 0.6.7) |
 | `pl.scan_parquet(files, missing_columns="insert", extra_columns="ignore", cast_options=pl.ScanCastOptions(integer_cast="upcast"))` | `ursus.ScanParquetFiles(files, ursus.WithInsertMissingColumns(true), ursus.WithIgnoreExtraColumns(true), ursus.WithUpcastIntegers(true))` (new in 0.6.7) |
+| `pl.read_csv(p, try_parse_dates=True)` | `ursus.ScanCSV(p, ursus.WithTryParseDates(true))` (new in 0.6.7) |
 | `pl.read_csv("sales.csv.gz")`, a zlib or Zstandard file too | `ursus.ScanCSV("sales.csv.gz")`, known by its first bytes (new in 0.6.7) |
 | `pl.read_json(p, schema_overrides={"a": pl.Float32})` | `ursus.ScanJSON(p, ursus.WithNDJSONSchemaOverrides(map[string]dtype.DataType{"a": ursus.Float32}))` (new in 0.6.7) |
 | `df.write_csv(f, quote_style="always", datetime_format="%Y-%m-%d %H:%M", float_precision=2, compression="gzip")` | `lf.WriteCSV(ctx, w, ursus.WithQuoteStyle(ursus.QuoteAlways), ursus.WithDatetimeFormat("%Y-%m-%d %H:%M"), ursus.WithFloatPrecision(2), ursus.WithCSVCompression(ursus.CSVGzip))` (new in 0.6.7) |

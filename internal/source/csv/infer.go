@@ -31,6 +31,13 @@ const (
 	// stays String; one with a number in it is a float column, which is how a float
 	// column with a NaN, written by this package or by Polars, reads back as one.
 	infWord
+	// The temporal kinds, inferred with TryParseDates: each meets only itself, so a
+	// date beside an instant, or an instant in a zone beside one in none, is text, as
+	// Polars infers them.
+	infDate
+	infDatetime
+	infZoned
+	infTime
 	infString
 )
 
@@ -44,6 +51,14 @@ func (i inferred) dtype() dtype.DataType {
 		return dtype.Int128
 	case infFloat:
 		return dtype.Float64
+	case infDate:
+		return dtype.Date
+	case infDatetime:
+		return dtype.Datetime(dtype.Micro, "")
+	case infZoned:
+		return dtype.Datetime(dtype.Micro, "UTC")
+	case infTime:
+		return dtype.Time(dtype.Nano)
 	default:
 		// infUnknown means every sampled value was null. String is the safe answer:
 		// an all-null column read as String accepts whatever appears later, whereas
@@ -73,8 +88,9 @@ func (i inferred) widen(o inferred) inferred {
 	return infString
 }
 
-// classify decides what a single field looks like.
-func classify(f []byte, isNull func([]byte) bool) inferred {
+// classify decides what a single field looks like: with dates, a date, an instant or
+// a time of day by Polars' patterns too.
+func classify(f []byte, isNull func([]byte) bool, dates bool) inferred {
 	if len(f) == 0 || isNull(f) {
 		return infUnknown
 	}
@@ -97,6 +113,18 @@ func classify(f []byte, isNull func([]byte) bool) inferred {
 			return infFloat
 		}
 		return infWord
+	}
+	if dates {
+		switch dtype.ClassifyTemporalText(str(f)) {
+		case dtype.DateText:
+			return infDate
+		case dtype.DatetimeText:
+			return infDatetime
+		case dtype.ZonedDatetimeText:
+			return infZoned
+		case dtype.TimeText:
+			return infTime
+		}
 	}
 	return infString
 }
@@ -148,7 +176,7 @@ func inferSchema(sc *scanner, o Options, isNull func([]byte) bool) (*dtype.Schem
 			types = append(types, infUnknown)
 		}
 		for i := range sc.NumFields() {
-			types[i] = types[i].widen(classify(sc.Field(i), isNull))
+			types[i] = types[i].widen(classify(sc.Field(i), isNull, o.TryParseDates))
 		}
 		rows++
 	}

@@ -72,6 +72,11 @@ type Options struct {
 
 	// MaxRecordSize bounds one record. 0 selects the default (16 MiB).
 	MaxRecordSize int
+
+	// TryParseDates infers a column of dates, instants or times of day as a Date, a
+	// Datetime in microseconds, in UTC where its values have offsets, or a Time, by
+	// Polars' patterns, as Polars' try_parse_dates (step 355).
+	TryParseDates bool
 }
 
 // DefaultOptions returns RFC 4180 defaults with a header.

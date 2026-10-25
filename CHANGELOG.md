@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–354, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–355, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
@@ -84,6 +84,10 @@ completeness, part 3 — frame operations.**
 
 ### Fixes
 
+- **A date before 1677 or after 2262 as a Go value** (355): `Rows`, `ToMaps` and `At`
+  gave a Date or a Datetime of such a year as a wrong instant, its nanosecond count
+  overflowed, 0999-01-02 as 2168-02-10; it is the instant now.
+
 - **A frame collected from several batches says its columns hold no null** (321),
   where they hold none: concatenating the batches built each column a bitmap with
   every bit set, and every kernel after read it a bit a row.
@@ -115,6 +119,11 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **CSV dates inferred** (355): `WithTryParseDates`, Polars' `try_parse_dates`, infers a
+  column of dates, instants or times of day by Polars' patterns, `2024-01-02`,
+  `02/01/2024`, `2024-01-02 03:04:05.123+0900` and `03:04`; a Date, Datetime or Time
+  column a schema gives is read by them too, scanned by hand, 7.7 times as fast as
+  before.
 - **The CSV writer's options** (354), Polars' `write_csv`'s: `WithQuoteStyle`, of
   `QuoteNecessary`, `QuoteAlways`, `QuoteNever` and `QuoteNonNumeric`, and
   `WithWriteQuote`; `WithDateFormat`, `WithDatetimeFormat` and `WithTimeFormat`, in

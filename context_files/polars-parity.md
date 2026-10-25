@@ -83,6 +83,7 @@ what we are lacking".
 | ~~hive partitions~~ | built in step 347 for Parquet: `ScanParquet(dir)`, `WithHivePartitioning`, `WithHiveSchema`, `WithHiveDates`, `WithIncludeFilePaths`; `**` globs and CSV and NDJSON directories in step 349; an IPC directory's, and `include_file_paths` for CSV, NDJSON and IPC, left |
 | ~~multi-file schema evolution~~ | built for Parquet in step 348: `WithParquetSchema`, `WithInsertMissingColumns`, `WithIgnoreExtraColumns`, `WithUpcastIntegers`, `WithUpcastFloats`; `cast_options`' datetime casts and struct fields left |
 | ~~compressed CSV~~ | built in step 346: a CSV, NDJSON or JSON file of gzip, zlib or Zstandard, by its first bytes, streamed |
+| ~~`read_csv(try_parse_dates=True)`~~ | built in step 355: `WithTryParseDates`, Polars' patterns, and a schema's temporal columns read by them; `str.to_date()`'s inferred format left |
 | ~~`write_csv`'s options~~ | built in step 354: `WithQuoteStyle`, `WithWriteQuote`, `WithDateFormat`, `WithDatetimeFormat`, `WithTimeFormat`, `WithFloatPrecision`, `WithFloatScientific`, `WithDecimalComma`, `WithIncludeBOM`, `WithCSVCompression`, `WithCSVCompressionLevel`, `WithCSVCheckExtension`; an instant's and a float's text Polars' |
 | ~~databases: `read_database`~~ | built in step 353: `ReadDatabase`, `ReadDatabaseRows`, `WithDatabaseSchemaOverrides`, through `database/sql`; `write_database` and `iter_batches` left |
 | Excel, Avro, Delta, Iceberg | missing (P2/P3) |
