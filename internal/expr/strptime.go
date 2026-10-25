@@ -43,7 +43,13 @@ func compileFormat(c *Call) (*strftime.Format, error) {
 // strptimeOut types str.to_date, str.to_datetime and str.to_time, refusing a format
 // that cannot produce the type: a Date needs a date in it, a Time needs a time and
 // has no date, and only a Datetime can hold the offset %z reads.
+//
+// An empty format is Polars' format=None: each value is read by Polars' patterns, as
+// a CSV reader reads it (dtype.ScanTemporalText), and every type takes one (step 356).
 func strptimeOut(c *Call) (dtype.DataType, error) {
+	if src, _ := callLitString(c, 1); src == "" {
+		return inferredOut(c)
+	}
 	f, err := compileFormat(c)
 	if err != nil {
 		return dtype.Null, err
@@ -97,6 +103,29 @@ func strptimeOut(c *Call) (dtype.DataType, error) {
 			return dtype.Null, err
 		}
 		return dtype.Time(u), nil
+	}
+	return dtype.Null, uerr.Internalf("expr: %s is not a strptime", c.Fn)
+}
+
+// inferredOut is strptimeOut's type for a format of Polars' patterns.
+func inferredOut(c *Call) (dtype.DataType, error) {
+	u, ok := callLitInt64(c, 3)
+	if c.Fn != FnStrToDateFmt && (!ok || u < int64(dtype.Second) || u > int64(dtype.Nano)) {
+		return dtype.Null, uerr.Internalf("expr: %s has no valid unit argument", c.Fn)
+	}
+	switch c.Fn {
+	case FnStrToDateFmt:
+		return dtype.Date, nil
+	case FnStrToDatetimeFmt:
+		tz, _ := callLitString(c, 4)
+		if tz != "" && tz != "UTC" {
+			if _, err := time.LoadLocation(tz); err != nil {
+				return dtype.Null, uerr.New(uerr.KindValue, c.Fn.String(), "the time zone %q is not known: %v", tz, err)
+			}
+		}
+		return dtype.Datetime(dtype.TimeUnit(u), tz), nil
+	case FnStrToTimeFmt:
+		return dtype.Time(dtype.TimeUnit(u)), nil
 	}
 	return dtype.Null, uerr.Internalf("expr: %s is not a strptime", c.Fn)
 }

@@ -26,6 +26,25 @@ const (
 	TimeText
 )
 
+// TemporalText is a date, a time of day or both, and an offset, as Polars' patterns
+// read them: Year, Month and Day where HasDate; Hour, Minute, Second and Nanos where
+// HasTime; and Offset, seconds east of UTC, where HasZone.
+type TemporalText struct {
+	Year, Month, Day, Hour, Minute, Second, Nanos, Offset int
+	HasDate, HasTime, HasZone                             bool
+}
+
+// ScanTemporalText reads s by Polars' patterns, as str.to_date, str.to_datetime and
+// str.to_time read a value without a format (step 356), or ok false.
+func ScanTemporalText(s string) (TemporalText, bool) {
+	t, ok := scanTemporalText(s)
+	return TemporalText{
+		Year: t.year, Month: t.month, Day: t.day,
+		Hour: t.hour, Minute: t.minute, Second: t.second, Nanos: t.nanos, Offset: t.offset,
+		HasDate: t.date, HasTime: t.clock, HasZone: t.zone,
+	}, ok
+}
+
 // textTime is a date, a time of day or both, and an offset, as read.
 type textTime struct {
 	year, month, day     int

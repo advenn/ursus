@@ -15,12 +15,17 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.7
 
-Everything since `v0.6.6` (2026-10-19): steps 288–355, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–356, so far.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
 completeness, part 3 — frame operations.**
 
 ### Breaks
 
+- **`Str().ToDatetime(unit, tz)` reads a text of no offset on `tz`'s wall clock** (356),
+  as Polars' `str.to_datetime(time_zone=tz)` does: `2024-01-02 03:04:05` in Tokyo is
+  03:04:05 there, where it was a cast's, 03:04:05 UTC, 12:04:05 in Tokyo. A text
+  with an offset is its instant, as before. `.Cast(ursus.Datetime(unit, tz))` reads it
+  as UTC's still, as Polars' CSV reader does.
 - **A CSV file's instants are written as Polars writes them** (354): a naive one with no
   `Z`, `2024-01-02T03:04:05.123456`, where it had one, as though it were UTC, and a
   zoned one with its offset as `+0900`, where it was `+09:00`, or `Z` in UTC. A float
@@ -119,6 +124,11 @@ completeness, part 3 — frame operations.**
 
 ### Features
 
+- **Text parsed by Polars' patterns** (356): `Str().ToDate()`, `ToDatetime` and
+  `ToTime("", …)`, and `Strptime` of an empty format, read what Polars' `to_date`,
+  `to_datetime` and `to_time` of no format read, `02/01/2024` and `2024-01-02
+  03:04:05+0900` among them, each value by its own pattern; `ToDatetime` is 13 times as
+  fast as before, and six times Polars'.
 - **CSV dates inferred** (355): `WithTryParseDates`, Polars' `try_parse_dates`, infers a
   column of dates, instants or times of day by Polars' patterns, `2024-01-02`,
   `02/01/2024`, `2024-01-02 03:04:05.123+0900` and `03:04`; a Date, Datetime or Time

@@ -392,27 +392,25 @@ func (s StrExpr) EscapeRegex() Expr {
 	return s.call(expr.FnStrEscapeRegex)
 }
 
-// ToInteger, ToDate and ToDatetime parse. They are ordinary casts, which is why
-// they are spelled as casts rather than as new kernels — and unparseable values
-// become NULL rather than failing the query, as do integers past Int64's range.
-// ToInteger parses exactly at 64 bits: "9007199254740993" is itself, not the
-// float64 beside it.
+// ToInteger parses an integer, an ordinary cast: a value that does not parse is
+// null, as is an integer past Int64's range. It parses exactly at 64 bits:
+// "9007199254740993" is itself, not the float64 beside it.
 func (s StrExpr) ToInteger() Expr { return s.e.CastLossy(dtype.Int64) }
-func (s StrExpr) ToDate() Expr    { return s.e.CastLossy(dtype.Date) }
+
+// ToDate parses a date as Polars' str.to_date() with no format reads one (step 356):
+// by Polars' patterns, 2024-01-02, 2024/1/2, 02.01.2024 and 02/01/2024, the year
+// first or the day, never the month; a value that does not parse is null. Each value
+// is read by its own pattern, where Polars infers one from the first. Strptime takes
+// a format, and strictness.
+func (s StrExpr) ToDate() Expr { return s.Strptime(dtype.Date, "", false) }
 
 // ToTime parses a time of day, a Time of nanoseconds, as Polars' str.to_time (step
-// 325): by format, as Strptime reads one, or, with none, each value as a cast reads
-// it, "10:30", "10:30:15" and "10:30:15.123456789" alike, where Polars infers one
-// format from the first value. Strict, a value that does not parse is an error;
-// otherwise it is null.
+// 325): by format, as Strptime reads one, or, with none, by Polars' patterns, "10:30",
+// "3:04:05" and "10:30:15.123456789" alike (step 356), each value by its own where
+// Polars infers one format from the first. Strict, a value that does not parse is an
+// error; otherwise it is null.
 func (s StrExpr) ToTime(format string, strict bool) Expr {
-	if format != "" {
-		return s.Strptime(dtype.Time(dtype.Nano), format, strict)
-	}
-	if strict {
-		return s.e.Cast(dtype.Time(dtype.Nano))
-	}
-	return s.e.CastLossy(dtype.Time(dtype.Nano))
+	return s.Strptime(dtype.Time(dtype.Nano), format, strict)
 }
 
 // ToDecimal parses a number into a Decimal(38, scale), as Polars' str.to_decimal
@@ -426,8 +424,15 @@ func (s StrExpr) ToDecimal(scale int) Expr {
 	return s.e.CastLossy(dtype.Decimal(dtype.MaxDecimalPrecision, uint8(scale)))
 }
 
+// ToDatetime parses an instant as Polars' str.to_datetime() with no format reads one
+// (step 356): by Polars' patterns, a date as ToDate's and a time of day after a T or
+// a space, or its midnight. An offset, Z, +09:00 or +0900, makes it the instant; one
+// without is read on tz's wall clock, as Polars reads it, or kept naive where tz is
+// empty. It was a cast, which took such a value as UTC's. A value that does not parse,
+// or a wall clock tz skips or reads twice, is null; Strptime takes a format, and
+// strictness.
 func (s StrExpr) ToDatetime(unit dtype.TimeUnit, tz string) Expr {
-	return s.e.CastLossy(dtype.Datetime(unit, tz))
+	return s.Strptime(dtype.Datetime(unit, tz), "", false)
 }
 
 // Strptime parses each string with a strftime-style format into dt, a Date,
@@ -443,6 +448,9 @@ func (s StrExpr) ToDatetime(unit dtype.TimeUnit, tz string) Expr {
 //
 // Strict, a value that does not match — or names a day that does not exist, such as
 // 30 February — is an error naming it. Otherwise it becomes null, as ToDate's do.
+//
+// An empty format is Polars' format=None: each value is read by Polars' patterns, as
+// ToDate, ToDatetime and ToTime read it (step 356).
 //
 // A Datetime takes its instant from the offset when the format reads one;
 // otherwise the wall clock is read in dt's zone, or kept as it is when dt is naive.

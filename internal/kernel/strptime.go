@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -21,12 +22,20 @@ import (
 // instant from a parsed offset (%z) when the format reads one; otherwise the wall
 // clock is read in the column's zone, or kept as it is for a naive one. Digits
 // finer than the unit are dropped, toward the past.
+//
+// An empty format reads each value by Polars' patterns, as Polars' format=None does
+// (step 356): a date year first or day first, a time of day, an offset, each value by
+// its own pattern, where Polars infers one from a column's first value.
 func strptimeCall(fn expr.CallFn, name string, out dtype.DataType, c *data.Column, args []any) (*data.Column, error) {
 	src, _ := argString(args, 0)
 	strict, _ := argBool(args, 1)
-	f, err := strftime.Compile(src)
-	if err != nil {
-		return nil, uerr.Internalf("kernel: %s: the format %q did not compile: %v", fn, src, err)
+	parse := inferredFields(out.ID())
+	if src != "" {
+		f, err := strftime.Compile(src)
+		if err != nil {
+			return nil, uerr.Internalf("kernel: %s: the format %q did not compile: %v", fn, src, err)
+		}
+		parse = f.Parse
 	}
 	loc := time.UTC
 	if out.ID() == dtype.TypeDatetime {
@@ -54,15 +63,19 @@ func strptimeCall(fn expr.CallFn, name string, out dtype.DataType, c *data.Colum
 			continue
 		}
 		s := acc.Get(i)
-		p, perr := f.Parse(s)
+		p, perr := parse(s)
 		var v int64
 		if perr == nil {
 			v, perr = toTicks(p, out.ID(), loc, perTick)
 		}
 		if perr != nil {
 			if strict {
+				how := fmt.Sprintf("with the format %q", src)
+				if src == "" {
+					how = "by Polars' patterns"
+				}
 				return nil, uerr.New(uerr.KindValue, fn.String(),
-					"%q does not parse with the format %q: %v", s, src, perr).
+					"%q does not parse %s: %v", s, how, perr).
 					Hint("it is row %d of its batch", i).
 					Hint("pass strict=false to get a null for every value that does not parse")
 			}
@@ -81,6 +94,33 @@ func strptimeCall(fn expr.CallFn, name string, out dtype.DataType, c *data.Colum
 	}
 	return data.NewFixed(name, out, ticks, valid.Finish()), nil
 }
+
+// inferredFields reads a value by Polars' patterns as a strftime parse would, for a
+// type of id: a Date's a date alone, a Time's a time of day alone, and a Datetime's a
+// date, a time of day after it or its midnight, and an offset.
+func inferredFields(id dtype.TypeID) func(string) (strftime.Fields, error) {
+	return func(s string) (strftime.Fields, error) {
+		t, ok := dtype.ScanTemporalText(s)
+		switch {
+		case !ok:
+			return strftime.Fields{}, errNoPattern
+		case id == dtype.TypeDate && (!t.HasDate || t.HasTime):
+			return strftime.Fields{}, errNotDate
+		case id == dtype.TypeTime && t.HasDate:
+			return strftime.Fields{}, errNotTime
+		case id == dtype.TypeDatetime && !t.HasDate:
+			return strftime.Fields{}, errNotDate
+		}
+		return strftime.Fields{Year: t.Year, Month: t.Month, Day: t.Day, Hour: t.Hour, Minute: t.Minute,
+			Second: t.Second, Nanos: t.Nanos, Offset: t.Offset, HasZone: t.HasZone}, nil
+	}
+}
+
+var (
+	errNoPattern = errors.New("it is no date, instant or time of day Polars' patterns read")
+	errNotDate   = errors.New("it is not a date")
+	errNotTime   = errors.New("it is not a time of day")
+)
 
 type rangeErr struct{}
 

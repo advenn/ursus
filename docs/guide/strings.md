@@ -82,6 +82,14 @@ strictness: `Strptime(..., true)`, or `ToIntegerWith(base, type, true)`.
 none, each value as it comes, and `ToDecimal(scale)` a number into a `Decimal(38,
 scale)`, rounded half away from zero, as Polars' `to_time` and `to_decimal`.
 
+*New in 0.6.7:* `ToDate`, `ToDatetime` and `ToTime` without a format, and `Strptime`
+with an empty one, read the patterns Polars' `to_date` and `to_datetime` infer:
+`2024-01-02`, `2024/1/2`, `02.01.2024` and `02/01/2024`, the year first or the day,
+never the month; `2024-01-02 03:04:05.123`, a `T` or a space between; and an offset,
+`Z`, `+09:00` or `+0900`, which makes the value its instant. `ToDatetime(unit, tz)`
+reads a value with no offset on `tz`'s wall clock, as Polars' does, where it took it
+as UTC's. Each value is read by its own pattern; Polars infers one from the first.
+
 `JsonDecode(type)` parses JSON into a value of a type, a struct or a list, and
 `Encode` and `Decode` convert to and from hex or base64.
 

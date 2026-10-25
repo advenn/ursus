@@ -248,7 +248,7 @@ differs from their input's, or scalars outside a group-by.
 | built: **Arrow IPC,** in step 332: a file or a stream scanned, written and sunk, uncompressed, LZ4 or Zstandard, and a file's schema read; and a Parquet file's schema. Over arrow-go's IPC readers and writers | — |
 | **Hive partitioning:** built on read for Parquet in step 347, a directory read whole, its `key=value` directories typed columns, a filter on them skipping files, `include_file_paths`. Left: an IPC directory's, `include_file_paths` for CSV, NDJSON and IPC, and **partitioned writes** by key | P1 |
 | **Multi-file schema evolution:** built for Parquet in step 348, `schema`, `missing_columns`, `extra_columns` and `cast_options`' integer and float upcasts; `include_file_paths` for Parquet in step 347. `**` globs, and CSV and NDJSON directories, in step 349. Left: `cast_options`' datetime casts and struct fields, `include_file_paths` for CSV, NDJSON and IPC | P1 |
-| **Schema overrides on Parquet and Arrow scans.** CSV date inference built in step 355, `WithTryParseDates`; `str.to_date()` and `to_datetime()` without a format infer Polars' patterns, and here they are a cast's ISO text, left. The CSV writer's options built in step 354: quote style and character, date, datetime and time formats, float precision, scientific notation and the decimal comma, a BOM, gzip and Zstandard output and the path's extension check. Compressed input built in step 346: a CSV, NDJSON or JSON file of gzip, zlib or Zstandard, by its first bytes | P1 |
+| **Schema overrides on Parquet and Arrow scans.** CSV date inference built in step 355, `WithTryParseDates`, and `str.to_date()`, `to_datetime()` and `to_time()` without a format by the same patterns in step 356. The CSV writer's options built in step 354: quote style and character, date, datetime and time formats, float precision, scientific notation and the decimal comma, a BOM, gzip and Zstandard output and the path's extension check. Compressed input built in step 346: a CSV, NDJSON or JSON file of gzip, zlib or Zstandard, by its first bytes | P1 |
 | **Cloud object stores** by URI (`s3://`, `gs://`, `https://`), with listing, credentials and retries. Today you bring a `ReaderAt` | P2 |
 | **Parquet:** page index and bloom filters (read and write), compression level, per-column options, a metadata cache | P2 |
 | Avro write; Excel; Delta Lake; Iceberg. **Databases** read in step 353, `ReadDatabase` and `ReadDatabaseRows` through `database/sql`, Polars' `read_database`; left: `write_database`, `read_database`'s `iter_batches`, and ADBC's Arrow results | P2/P3 |
@@ -519,6 +519,12 @@ decide whether to keep or switch each one.
   its text, as an Enum's, and a join or a comparison with a String meets at the
   text, where Polars refuses the functions and the join; a cast of a number to it is
   refused, where Polars reads the number as a code (step 351).
+- Text parsed without a format (`ToDate`, `ToDatetime`, `ToTime`, `Strptime` of ""): as
+  CSV dates below, each value by its own pattern; a wall clock a zone skips or reads
+  twice is null when lenient, where Polars raises unless told; and an offset's text is
+  the naive Datetime of its UTC wall clock, or the zone's that is asked for, where
+  Polars' `to_datetime()` of no zone types the column `Datetime(us, UTC)` from the data
+  (step 356).
 - CSV dates (`WithTryParseDates`, and a schema's temporal columns): each value is read
   by its own pattern, so 2024-01-02 beside 02/01/2024, and 10:30 beside 10:30:00.123,
   read, where Polars reads a column by its first value's pattern and refuses the
