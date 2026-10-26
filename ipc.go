@@ -15,6 +15,7 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/arrowin"
 	"github.com/advenn/ursus/internal/arrowout"
+	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/exec"
 	"github.com/advenn/ursus/internal/source/arrowsrc"
 	"github.com/advenn/ursus/internal/source/files"
@@ -347,7 +348,7 @@ func (lf *LazyFrame) SinkIPC(ctx context.Context, path string, opts ...IPCSinkOp
 				if err != nil {
 					return nil, uerr.Wrap(err, uerr.KindIO, "sink_ipc", "starting the file")
 				}
-				return ipcPart{w: fw, op: "sink_ipc"}, nil
+				return ipcPart{w: fw, op: "sink_ipc", schema: schema}, nil
 			})
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
@@ -367,6 +368,30 @@ func (lf *LazyFrame) SinkIPC(ctx context.Context, path string, opts ...IPCSinkOp
 	}
 	if err := os.Rename(tmpName, path); err != nil {
 		return uerr.Wrap(err, uerr.KindIO, "sink_ipc", "renaming to %s", path)
+	}
+	return nil
+}
+
+// writeRecords writes b to w, whose schema is schema, as one record, or, where a
+// column's text passes what 32-bit offsets hold and its record would be the
+// LargeString the schema does not say (step 368), as its halves, each so, down to a
+// row, which w refuses.
+func writeRecords(w interface{ Write(arrow.RecordBatch) error }, schema *arrow.Schema, b *data.Batch, op string) error {
+	rec, err := arrowout.Record(b)
+	if err != nil {
+		return err
+	}
+	if n := b.Rows(); n > 1 && !rec.Schema().Equal(schema) {
+		rec.Release()
+		if err := writeRecords(w, schema, b.Slice(0, n/2), op); err != nil {
+			return err
+		}
+		return writeRecords(w, schema, b.Slice(n/2, n-n/2), op)
+	}
+	err = w.Write(rec)
+	rec.Release()
+	if err != nil {
+		return uerr.Wrap(err, uerr.KindIO, op, "writing a record batch")
 	}
 	return nil
 }
@@ -404,16 +429,9 @@ func (lf *LazyFrame) writeIPC(ctx context.Context, op string, w io.Writer, strea
 			rw.Close()
 			return err
 		}
-		rec, err := arrowout.Record(b)
-		if err != nil {
+		if err := writeRecords(rw, schema, b, op); err != nil {
 			rw.Close()
 			return err
-		}
-		err = rw.Write(rec)
-		rec.Release()
-		if err != nil {
-			rw.Close()
-			return uerr.Wrap(err, uerr.KindIO, op, "writing a record batch")
 		}
 	}
 	// Close writes a file's footer, and a stream's end: without them neither reads.

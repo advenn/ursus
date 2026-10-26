@@ -95,7 +95,7 @@ differs from their input's, or scalars outside a group-by.
 | --- | --- | --- |
 | **Categorical:** built in step 351, stored as its text: casts, order, keys, codes over the frame (`WinCatCodes`), `Cat()`, CSV and NDJSON by a schema, spilling. Arrow's dictionary and Parquet's Categorical in and out, and `qcut` and `hist` answering one, in step 352 | — |
 | **Array** (fixed-size list) | built in step 341: held as a List each of whose rows has its size, a null row none; casts to and from a List, `List().ToArray`, `Arr().ToList`, a Go `[n]T`, Arrow `FixedSizeList` in and out, Parquet by the footer's Arrow schema, NDJSON by a schema, JSON; its `arr` namespace in step 342, a List's functions of the same elements, `Reverse`, `Sort`, `Shift` and an elementwise `Eval` keeping the Array, `ToStruct` and `Dot` of its own; `Reshape` and `ConcatArr` in step 343, and a key in step 344 | — |
-| **Large strings and binary** (64-bit offsets, `BinaryOffset`) | a String column holds at most 2 GiB of characters | P1 |
+| **Large strings and binary:** built in step 368: a String or Binary column of 64-bit offsets past 2 GiB, made by the combiners every Collect, join, sort, window and aggregation ends in, read through the same accessor; Arrow's LargeString and LargeBinary out and in, a spill kind of its own. A batch a source reads keeps 32-bit offsets and refuses past them | — |
 | **String view layout** | Arrow's view types are converted on import | P2 |
 | **UInt128, Float16, Object, Unknown** | Float16 is widened to Float32 on import | P2 |
 | **Dictionary, run-end, union, ListView** in memory | decoded or refused on import | P2 |
@@ -569,6 +569,11 @@ decide whether to keep or switch each one.
   another key. Past 64 keys' files open at once, the least recently written closes, and a
   later row of its key begins its next file, numbered on, where Polars holds a file a
   key open (step 367).
+- Text exports to Arrow as a String, or a Binary, where its rows' characters fit 32-bit
+  offsets, and as a LargeString or a LargeBinary past 2 GiB, where Polars' export is
+  always the large type, or a view. A batch a source reads, a Parquet column chunk's,
+  a CSV block's or one Arrow record's rows, holds at most 2 GiB of text a column and
+  refuses past it; a whole frame past it is held (step 368).
 - An aggregate whose answer depends on the order, `First` or `Last`, inside a window
   with an `OrderBy`, `(x - x.First()).CumSum(false)` over g ordered by t, is refused as
   an ordering over an aggregate is; Polars takes the first in the order (step 336).

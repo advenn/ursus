@@ -59,6 +59,9 @@ func (c *Column) Buffers() iter.Seq2[BufferID, int64] {
 				return
 			}
 		}
+		if !emit(sliceID(c.offs64)) {
+			return
+		}
 		for _, v := range [...]bitmap.View{c.valid, c.bits} {
 			if !emit(viewID(v)) {
 				return

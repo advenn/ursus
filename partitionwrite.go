@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 
 	"github.com/advenn/ursus/dtype"
-	"github.com/advenn/ursus/internal/arrowout"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/exec"
 	"github.com/advenn/ursus/internal/kernel"
@@ -407,21 +407,12 @@ func instantLayout(t dtype.DataType) string {
 
 // ipcPart writes an Arrow IPC file a record batch a batch.
 type ipcPart struct {
-	w  *ipc.FileWriter
-	op string
+	w      *ipc.FileWriter
+	op     string
+	schema *arrow.Schema
 }
 
-func (f ipcPart) WriteBatch(b *data.Batch) error {
-	rec, err := arrowout.Record(b)
-	if err != nil {
-		return err
-	}
-	defer rec.Release()
-	if err := f.w.Write(rec); err != nil {
-		return uerr.Wrap(err, uerr.KindIO, f.op, "writing a record batch")
-	}
-	return nil
-}
+func (f ipcPart) WriteBatch(b *data.Batch) error { return writeRecords(f.w, f.schema, b, f.op) }
 
 func (f ipcPart) Close() error {
 	if err := f.w.Close(); err != nil {

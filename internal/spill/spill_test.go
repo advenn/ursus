@@ -469,3 +469,55 @@ func TestSpillValidityIsNotOversized(t *testing.T) {
 			"rows is %d bytes", keep, total, size, keep, (keep+7)/8)
 	}
 }
+
+// TestSpillRoundTripsSixtyFourBitOffsets: a String or Binary column of 64-bit offsets
+// (step 368), past MaxStringBytes, lowered to 64, spills as 64-bit offsets and reads
+// back as it was, rebased; a slice of it that fits spills as 32-bit ones.
+func TestSpillRoundTripsSixtyFourBitOffsets(t *testing.T) {
+	defer func(old int64) { data.MaxStringBytes = old }(data.MaxStringBytes)
+	data.MaxStringBytes = 64
+
+	vals := make([]string, 30)
+	valid := make([]bool, 30)
+	for i := range vals {
+		vals[i], valid[i] = fmt.Sprintf("row %02d", i), i%5 != 2 // 180 bytes
+		if !valid[i] {
+			vals[i] = ""
+		}
+	}
+	vb := bitmap.NewBuilder(30)
+	for _, v := range valid {
+		vb.Append(v)
+	}
+	wide := data.NewString("s", vals, vb.Finish())
+	sch, err := dtype.NewSchema(dtype.Of("s", dtype.String), dtype.Of("b", dtype.Binary))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := data.NewBatch(sch, []*data.Column{wide, wide.Rename("b").WithDType(dtype.Binary)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		in   *data.Batch
+		wide bool
+	}{
+		{"whole", b, true},
+		{"a slice past the limit, its offsets from 30", b.Slice(5, 20), true},
+		{"a slice that fits", b.Slice(20, 5), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := roundTrip(t, sch, []*data.Batch{tc.in})
+			assertSame(t, []*data.Batch{tc.in}, out)
+			for _, c := range out[0].Columns() {
+				if got := c.RawOffsets64() != nil; got != tc.wide {
+					t.Errorf("%s read back with 64-bit offsets %v, want %v", c.Name(), got, tc.wide)
+				}
+				if o := c.Strings(); o.Len() > 0 && tc.wide && data.Reinterpret[int64](c.RawOffsets64())[0] != 0 {
+					t.Errorf("%s read back from %d, not rebased", c.Name(), data.Reinterpret[int64](c.RawOffsets64())[0])
+				}
+			}
+		})
+	}
+}

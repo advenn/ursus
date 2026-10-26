@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.8
 
-Everything since `v0.6.7` (2026-10-26): steps 365–367, so far.
+Everything since `v0.6.7` (2026-10-26): steps 365–368, so far.
 [`v0.6.8-scope.md`](./context_files/v0.6.8-scope.md) set the scope: **the leftovers
 of feature completeness, and five of 0.7's performance tasks done ahead of it.**
 
@@ -28,6 +28,14 @@ of feature completeness, and five of 0.7's performance tasks done ahead of it.**
   slice's type changed.
 
 ### Features
+
+- **Large strings** (368): a String or Binary column past 2 GiB of characters holds
+  64-bit offsets, where it was refused, so a Collect, a sort, a join, a group-by or a
+  window over more than 2 GiB of text answers. It exports to Arrow as a LargeString or
+  a LargeBinary, a slice of it that fits as a String; `ScanArrowRecords` reads such a
+  record back, the IPC writers split a batch that would be one, and it spills. A batch
+  a source reads keeps 32-bit offsets and refuses past them, saying to read it in
+  smaller batches.
 
 - **Partitioned writes** (367): `WithPartitionBy(keys...)` makes `SinkParquet`,
   `SinkCSV`, `SinkIPC` and `SinkNDJSON` write a hive dataset, Polars'

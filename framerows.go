@@ -6,6 +6,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/arrowout"
 	"github.com/advenn/ursus/internal/expr"
 	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/uerr"
@@ -184,6 +185,18 @@ func (df *DataFrame) Equals(ctx context.Context, other *DataFrame, nullEqual boo
 		return false, err
 	}
 	defer rb.Release()
+	if !ra.Schema().Equal(rb.Schema()) {
+		// A column of text past 2 GiB is a LargeString where the same text in less is a
+		// String (step 368): the two compared as large, alike.
+		if ra, err = arrowout.RecordLarge(left.batch); err != nil {
+			return false, err
+		}
+		defer ra.Release()
+		if rb, err = arrowout.RecordLarge(right.batch); err != nil {
+			return false, err
+		}
+		defer rb.Release()
+	}
 	for i := range int(ra.NumCols()) {
 		x, y := ra.Column(i), rb.Column(i)
 		if !nullEqual && (x.NullN() > 0 || y.NullN() > 0) {

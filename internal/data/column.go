@@ -22,6 +22,7 @@ package data
 
 import (
 	"math"
+	"slices"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
@@ -62,7 +63,8 @@ type Fixed interface {
 //
 //	fixed-width types  → fixed        (a flat values buffer)
 //	Bool               → bits         (a packed bitmap, NOT one byte per value)
-//	String, Binary     → offs + chars (int32 offsets plus a character buffer)
+//	String, Binary     → offs + chars (int32 offsets plus a character buffer),
+//	                     or offs64 + chars past MaxStringBytes (step 368)
 //	List               → offs + child (the same offsets, into a child COLUMN)
 //	Struct             → fields       (N COLUMNS, no payload buffer at all)
 //
@@ -90,6 +92,7 @@ type Column struct {
 	fixed  *memory.Buffer // fixed-width payload
 	bits   bitmap.View    // Bool payload
 	offs   *memory.Buffer // []int32, len+1 entries
+	offs64 []int64        // len+1 entries, in offs' place past MaxStringBytes
 	chars  *memory.Buffer // String/Binary character data
 	child  *Column        // List elements; offs indexes into this
 	fields []*Column      // Struct fields, each of length len
@@ -123,7 +126,7 @@ func (c *Column) IsValid(i int) bool { return c.valid.Get(i) }
 // That rule was previously enforced only by remembering it. A kernel handed a
 // column from an unknown source can now ask.
 func (c *Column) IsPayloadFree() bool {
-	return c.fixed == nil && c.offs == nil && c.bits.Len() == 0 &&
+	return c.fixed == nil && c.offs == nil && c.offs64 == nil && c.bits.Len() == 0 &&
 		c.child == nil && c.fields == nil
 }
 
@@ -247,21 +250,61 @@ func NewBool(name string, bits bitmap.View, valid bitmap.View) *Column {
 	return &Column{name: name, dt: dtype.Bool, len: n, valid: valid, bits: bits}
 }
 
-// MaxStringBytes is the most character data one String column holds. Its offsets
-// are 32-bit, and past this they wrapped silently, reading other rows' bytes or
-// slicing at a negative offset (audit.md S24). A variable only so a test can lower
-// it.
+// MaxStringBytes is the most character data a String column of 32-bit offsets holds.
+// Past it they wrapped silently, reading other rows' bytes or slicing at a negative
+// offset (audit.md S24). Since step 368 a column built whole, by NewString or by the
+// combiners every Collect, join and sort ends in (ConcatStrings, TakeStrings), takes
+// 64-bit offsets past it instead, and a column built from a reader's 32-bit offsets
+// refuses. A variable only so a test can lower it.
 var MaxStringBytes int64 = math.MaxInt32
 
-// tooManyChars is raised by a String constructor asked for more than a column
-// holds. The constructors return no error, and every boundary recovers a panic, so
-// this is how a 3 GiB Collect fails instead of wrapping.
+// tooManyChars is raised by a constructor of 32-bit offsets asked for more than they
+// hold. The constructors return no error, and every boundary recovers a panic, so
+// this is how a batch of more than 2 GiB of text fails instead of wrapping.
 func tooManyChars(name string, n int64) {
 	uerr.Raise(uerr.New(uerr.KindResource, "string",
-		"column %q needs %d bytes of characters, and a String column holds %d", name, n,
+		"column %q needs %d bytes of characters in one batch, and a batch's String column holds %d", name, n,
 		MaxStringBytes).
-		Hint("its offsets are 32-bit; read the result in batches with CollectBatches, or " +
-			"write it with SinkParquet or SinkCSV, which never build one column of all of it"))
+		Hint("its offsets are 32-bit; read it in smaller batches"))
+}
+
+// offsetWidth is an offset's type, 32 or 64 bits.
+type offsetWidth interface{ ~int32 | ~int64 }
+
+// offsets are a String or Binary column's offsets, one of the two widths, or neither
+// where it has no payload.
+func (c *Column) offsets() ([]int32, []int64) {
+	switch {
+	case c.offs != nil:
+		return unsafeData[int32](c.offs.Bytes())[:c.len+1], nil
+	case c.offs64 != nil:
+		return nil, c.offs64
+	}
+	return nil, nil
+}
+
+// charSpan is the range of c's characters its rows cover, and false where it has
+// no payload.
+func (c *Column) charSpan() (lo, hi int64, ok bool) {
+	o32, o64 := c.offsets()
+	switch {
+	case o32 != nil:
+		return int64(o32[0]), int64(o32[c.len]), true
+	case o64 != nil:
+		return o64[0], o64[c.len], true
+	}
+	return 0, 0, false
+}
+
+// stringBuffers allocates a column's offsets of n rows and chars characters: 32-bit
+// up to MaxStringBytes, 64-bit past it.
+func stringBuffers(n int, chars int64) (offs *memory.Buffer, offs64 []int64, cb *memory.Buffer) {
+	if chars > MaxStringBytes {
+		offs64 = make([]int64, n+1)
+	} else {
+		offs = arrowx.NewBuffer((n + 1) * 4)
+	}
+	return offs, offs64, arrowx.NewBuffer(int(chars))
 }
 
 // MaxListElements is the most elements one List column holds. Its offsets are
@@ -285,29 +328,29 @@ func NewString(name string, vals []string, valid bitmap.View) *Column {
 	for _, s := range vals {
 		total += int64(len(s))
 	}
-	if total > MaxStringBytes {
-		tooManyChars(name, total)
+	offs, offs64, chars := stringBuffers(len(vals), total)
+	if offs != nil {
+		fillStrings(unsafeData[int32](offs.Bytes()), chars.Bytes(), vals)
+	} else {
+		fillStrings(offs64, chars.Bytes(), vals)
 	}
-	offs := arrowx.NewBuffer((len(vals) + 1) * 4)
-	chars := arrowx.NewBuffer(int(total))
-
-	o := unsafeData[int32](offs.Bytes())
-	d := chars.Bytes()
-	pos := int32(0)
-	for i, s := range vals {
-		o[i] = pos
-		copy(d[pos:], s)
-		pos += int32(len(s))
-	}
-	o[len(vals)] = pos
-
 	if valid.Len() == 0 && len(vals) > 0 {
 		valid = bitmap.AllSet(len(vals))
 	}
 	return &Column{
 		name: name, dt: dtype.String, len: len(vals),
-		valid: valid, offs: offs, chars: chars,
+		valid: valid, offs: offs, offs64: offs64, chars: chars,
 	}
+}
+
+func fillStrings[O offsetWidth](o []O, d []byte, vals []string) {
+	pos := O(0)
+	for i, s := range vals {
+		o[i] = pos
+		copy(d[pos:], s)
+		pos += O(len(s))
+	}
+	o[len(vals)] = pos
 }
 
 // ConcatStrings builds one String or Binary column of type dt from parts, end to
@@ -321,96 +364,124 @@ func NewString(name string, vals []string, valid bitmap.View) *Column {
 // A part is a derived column as often as not — Column.Slice keeps the whole
 // character buffer and re-windows the offsets — so what it contributes is the range
 // its own offsets cover, not its buffer.
+//
+// Past MaxStringBytes its offsets are 64-bit (step 368), whatever its parts' are.
 func ConcatStrings(name string, dt dtype.DataType, parts []*Column, valid bitmap.View) *Column {
 	n, chars := 0, int64(0)
 	for _, p := range parts {
-		if p.len == 0 || p.offs == nil {
-			n += p.len
-			continue
-		}
-		o := unsafeData[int32](p.offs.Bytes())
-		chars += int64(o[p.len] - o[0])
 		n += p.len
+		if lo, hi, ok := p.charSpan(); ok && p.len > 0 {
+			chars += hi - lo
+		}
 	}
 	// Counted before anything is allocated, as NewString counts.
-	if chars > MaxStringBytes {
-		tooManyChars(name, chars)
+	ob, ob64, cb := stringBuffers(n, chars)
+	if ob != nil {
+		concatInto(unsafeData[int32](ob.Bytes()), cb.Bytes(), parts)
+	} else {
+		concatInto(ob64, cb.Bytes(), parts)
 	}
-	ob := arrowx.NewBuffer((n + 1) * 4)
-	cb := arrowx.NewBuffer(int(chars))
-	offs := unsafeData[int32](ob.Bytes())
-	out := cb.Bytes()
+	if valid.Len() == 0 && n > 0 {
+		valid = bitmap.AllSet(n)
+	}
+	return &Column{name: name, dt: dt, len: n, valid: valid, offs: ob, offs64: ob64, chars: cb}
+}
 
-	row, pos := 0, int32(0)
+// concatInto writes parts' offsets, rebased, into offs, and their characters into out.
+func concatInto[O offsetWidth](offs []O, out []byte, parts []*Column) {
+	row, pos := 0, O(0)
 	for _, p := range parts {
 		if p.len == 0 {
 			continue
 		}
-		if p.offs == nil {
+		switch o32, o64 := p.offsets(); {
+		case o32 != nil:
+			row, pos = appendPart(offs, out, row, pos, o32, p.chars.Bytes())
+		case o64 != nil:
+			row, pos = appendPart(offs, out, row, pos, o64, p.chars.Bytes())
+		default:
 			// A column with no payload — every row null — holds no characters.
 			for range p.len {
 				offs[row] = pos
 				row++
 			}
-			continue
 		}
-		o := unsafeData[int32](p.offs.Bytes())
-		lo, hi := o[0], o[p.len]
-		copy(out[pos:], p.chars.Bytes()[lo:hi])
-		for i := range p.len {
-			offs[row] = pos + (o[i] - lo)
-			row++
-		}
-		pos += hi - lo
 	}
-	offs[n] = pos
+	offs[row] = pos
+}
 
-	if valid.Len() == 0 && n > 0 {
-		valid = bitmap.AllSet(n)
+// appendPart appends one part's rows, its offsets o, at row and pos.
+func appendPart[O, I offsetWidth](offs []O, out []byte, row int, pos O, o []I, chars []byte) (int, O) {
+	n := len(o) - 1
+	lo, hi := o[0], o[n]
+	copy(out[pos:], chars[lo:hi])
+	for i := range n {
+		offs[row] = pos + O(o[i]-lo)
+		row++
 	}
-	return &Column{name: name, dt: dt, len: n, valid: valid, offs: ob, chars: cb}
+	return row, pos + O(hi-lo)
 }
 
 // TakeStrings gathers a String or Binary column by row: row j of the result is row
 // sel[j] of c, and a negative index is an empty row, which valid marks null. Each
 // row's bytes are copied once, into one buffer counted before it is allocated.
+//
+// Past MaxStringBytes its offsets are 64-bit (step 368), whatever c's are.
 func TakeStrings(c *Column, sel []int32, valid bitmap.View) *Column {
 	n := len(sel)
-	var (
-		o   []int32
-		src []byte
-	)
+	o32, o64 := c.offsets()
 	chars := int64(0)
-	if c.offs != nil {
-		o = unsafeData[int32](c.offs.Bytes())
+	switch {
+	case o32 != nil:
+		chars = countChars(o32, sel)
+	case o64 != nil:
+		chars = countChars(o64, sel)
+	}
+	ob, ob64, cb := stringBuffers(n, chars)
+	var src []byte
+	if c.chars != nil {
 		src = c.chars.Bytes()
-		for _, i := range sel {
-			if i >= 0 {
-				chars += int64(o[i+1] - o[i])
-			}
+	}
+	switch {
+	case ob != nil && o64 == nil:
+		takeInto(unsafeData[int32](ob.Bytes()), cb.Bytes(), sel, o32, src)
+	case ob != nil:
+		takeInto(unsafeData[int32](ob.Bytes()), cb.Bytes(), sel, o64, src)
+	case o64 == nil:
+		takeInto(ob64, cb.Bytes(), sel, o32, src)
+	default:
+		takeInto(ob64, cb.Bytes(), sel, o64, src)
+	}
+	if valid.Len() == 0 && n > 0 {
+		valid = bitmap.AllSet(n)
+	}
+	return &Column{name: c.name, dt: c.dt, len: n, valid: valid, offs: ob, offs64: ob64, chars: cb}
+}
+
+// countChars is the characters of rows sel, a negative row none.
+func countChars[I offsetWidth](o []I, sel []int32) int64 {
+	chars := int64(0)
+	for _, i := range sel {
+		if i >= 0 {
+			chars += int64(o[i+1] - o[i])
 		}
 	}
-	if chars > MaxStringBytes {
-		tooManyChars(c.name, chars)
-	}
-	ob := arrowx.NewBuffer((n + 1) * 4)
-	cb := arrowx.NewBuffer(int(chars))
-	offs := unsafeData[int32](ob.Bytes())
-	out := cb.Bytes()
-	pos := int32(0)
+	return chars
+}
+
+// takeInto writes rows sel of o and src into offs and out, from the start of both;
+// o nil is a column of no payload, every row empty.
+func takeInto[O, I offsetWidth](offs []O, out []byte, sel []int32, o []I, src []byte) {
+	pos := O(0)
 	for j, i := range sel {
 		offs[j] = pos
 		if i >= 0 && o != nil {
 			lo, hi := o[i], o[i+1]
 			copy(out[pos:], src[lo:hi])
-			pos += hi - lo
+			pos += O(hi - lo)
 		}
 	}
-	offs[n] = pos
-	if valid.Len() == 0 && n > 0 {
-		valid = bitmap.AllSet(n)
-	}
-	return &Column{name: c.name, dt: c.dt, len: n, valid: valid, offs: ob, chars: cb}
+	offs[len(sel)] = pos
 }
 
 // TakeStringsChunked is TakeStrings of a long selection, a chunk of rows at a time,
@@ -421,22 +492,16 @@ func TakeStringsChunked(c *Column, sel []int32, valid bitmap.View, chunk int,
 	run func(n int, fn func(k int) error) error) (*Column, error) {
 	n := len(sel)
 	chunks := (n + chunk - 1) / chunk
-	var (
-		o   []int32
-		src []byte
-	)
+	o32, o64 := c.offsets()
 	start := make([]int64, chunks+1)
-	if c.offs != nil {
-		o = unsafeData[int32](c.offs.Bytes())
-		src = c.chars.Bytes()
+	if o32 != nil || o64 != nil {
 		err := run(chunks, func(k int) error {
-			chars := int64(0)
-			for _, i := range sel[k*chunk : min(n, (k+1)*chunk)] {
-				if i >= 0 {
-					chars += int64(o[i+1] - o[i])
-				}
+			part := sel[k*chunk : min(n, (k+1)*chunk)]
+			if o32 != nil {
+				start[k+1] = countChars(o32, part)
+			} else {
+				start[k+1] = countChars(o64, part)
 			}
-			start[k+1] = chars
 			return nil
 		})
 		if err != nil {
@@ -446,33 +511,51 @@ func TakeStringsChunked(c *Column, sel []int32, valid bitmap.View, chunk int,
 	for k := range chunks {
 		start[k+1] += start[k]
 	}
-	if start[chunks] > MaxStringBytes {
-		tooManyChars(c.name, start[chunks])
+	ob, ob64, cb := stringBuffers(n, start[chunks])
+	var src []byte
+	if c.chars != nil {
+		src = c.chars.Bytes()
 	}
-	ob := arrowx.NewBuffer((n + 1) * 4)
-	cb := arrowx.NewBuffer(int(start[chunks]))
-	offs := unsafeData[int32](ob.Bytes())
-	out := cb.Bytes()
 	err := run(chunks, func(k int) error {
-		pos := int32(start[k])
-		for j := k * chunk; j < min(n, (k+1)*chunk); j++ {
-			offs[j] = pos
-			if i := sel[j]; i >= 0 && o != nil {
-				lo, hi := o[i], o[i+1]
-				copy(out[pos:], src[lo:hi])
-				pos += hi - lo
-			}
+		lo, hi := k*chunk, min(n, (k+1)*chunk)
+		switch {
+		case ob != nil && o64 == nil:
+			takeChunk(unsafeData[int32](ob.Bytes()), cb.Bytes(), sel, lo, hi, start[k], o32, src)
+		case ob != nil:
+			takeChunk(unsafeData[int32](ob.Bytes()), cb.Bytes(), sel, lo, hi, start[k], o64, src)
+		case o64 == nil:
+			takeChunk(ob64, cb.Bytes(), sel, lo, hi, start[k], o32, src)
+		default:
+			takeChunk(ob64, cb.Bytes(), sel, lo, hi, start[k], o64, src)
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	offs[n] = int32(start[chunks])
+	if ob != nil {
+		unsafeData[int32](ob.Bytes())[n] = int32(start[chunks])
+	} else {
+		ob64[n] = start[chunks]
+	}
 	if valid.Len() == 0 && n > 0 {
 		valid = bitmap.AllSet(n)
 	}
-	return &Column{name: c.name, dt: c.dt, len: n, valid: valid, offs: ob, chars: cb}, nil
+	return &Column{name: c.name, dt: c.dt, len: n, valid: valid, offs: ob, offs64: ob64, chars: cb}, nil
+}
+
+// takeChunk writes rows sel[lo:hi] of o and src into offs and out, from row lo and
+// character at.
+func takeChunk[O, I offsetWidth](offs []O, out []byte, sel []int32, lo, hi int, at int64, o []I, src []byte) {
+	pos := O(at)
+	for j := lo; j < hi; j++ {
+		offs[j] = pos
+		if i := sel[j]; i >= 0 && o != nil {
+			a, b := o[i], o[i+1]
+			copy(out[pos:], src[a:b])
+			pos += O(b - a)
+		}
+	}
 }
 
 // NewStringParts builds a String column from an offsets slice and a character
@@ -533,6 +616,17 @@ func NewStringBuffers(name string, offs, chars *memory.Buffer, n int, valid bitm
 		valid = bitmap.AllSet(n)
 	}
 	return &Column{name: name, dt: dtype.String, len: n, valid: valid, offs: offs, chars: chars}
+}
+
+// NewStringBuffers64 is NewStringBuffers for 64-bit offsets, len(offs)-1 rows, which a
+// column past MaxStringBytes holds (step 368): a spill file's, read back. It takes
+// offs rather than copying them.
+func NewStringBuffers64(name string, offs []int64, chars *memory.Buffer, valid bitmap.View) *Column {
+	n := max(len(offs)-1, 0)
+	if valid.Len() == 0 && n > 0 {
+		valid = bitmap.AllSet(n)
+	}
+	return &Column{name: name, dt: dtype.String, len: n, valid: valid, offs64: offs, chars: chars}
 }
 
 // NewList builds a List column from offsets and a child column holding every
@@ -813,14 +907,17 @@ func MustValues[T Fixed](c *Column) []T {
 func (c *Column) Bools() bitmap.View { return c.bits }
 
 // Strings returns an accessor for a String or Binary column.
-func (c *Column) Strings() StringAccessor {
-	if c.offs == nil {
-		return StringAccessor{}
+func (c *Column) Strings() (a StringAccessor) {
+	switch {
+	case c.offs != nil:
+		a.offsets = entries[int32](c.offs, c.len+1)
+	case c.offs64 != nil:
+		a.offsets64 = c.offs64
+	default:
+		return a
 	}
-	return StringAccessor{
-		offsets: unsafeData[int32](c.offs.Bytes())[: c.len+1 : c.len+1],
-		chars:   c.chars.Bytes(),
-	}
+	a.chars = c.chars.Bytes()
+	return a
 }
 
 // StringAccessor reads a variable-width column.
@@ -828,13 +925,20 @@ func (c *Column) Strings() StringAccessor {
 // It is a struct rather than an interface so that the layout choice is resolved
 // once per batch instead of once per value. When Arrow's StringView layout is
 // added it becomes a tagged union here, and no kernel call site changes.
+//
+// A column past MaxStringBytes has 64-bit offsets (step 368), and Get and Bytes take
+// one branch on which, which the processor predicts for a whole column.
 type StringAccessor struct {
-	offsets []int32
-	chars   []byte
+	offsets   []int32
+	offsets64 []int64 // in offsets' place, past MaxStringBytes
+	chars     []byte
 }
 
 // Get returns row i without copying: the result aliases the character buffer.
 func (a StringAccessor) Get(i int) string {
+	if a.offsets64 != nil {
+		return unsafeString(a.chars[a.offsets64[i]:a.offsets64[i+1]])
+	}
 	lo, hi := a.offsets[i], a.offsets[i+1]
 	return unsafeString(a.chars[lo:hi])
 }
@@ -842,12 +946,19 @@ func (a StringAccessor) Get(i int) string {
 // Bytes returns row i as bytes without copying: the result aliases the character
 // buffer, and must not be written.
 func (a StringAccessor) Bytes(i int) []byte {
+	if a.offsets64 != nil {
+		lo, hi := a.offsets64[i], a.offsets64[i+1]
+		return a.chars[lo:hi:hi]
+	}
 	lo, hi := a.offsets[i], a.offsets[i+1]
 	return a.chars[lo:hi:hi]
 }
 
 // Len returns the number of values.
 func (a StringAccessor) Len() int {
+	if a.offsets64 != nil {
+		return len(a.offsets64) - 1
+	}
 	if len(a.offsets) == 0 {
 		return 0
 	}
@@ -871,12 +982,20 @@ func (c *Column) RawFixed() []byte {
 }
 
 // RawOffsets returns a String or Binary column's offset buffer as bytes.
-// Read it as []int32 with Reinterpret; it holds len+1 entries.
+// Read it as []int32 with Reinterpret; it holds len+1 entries. A column past
+// MaxStringBytes has none, and RawOffsets64 instead.
 func (c *Column) RawOffsets() []byte {
 	if c.offs == nil {
 		return nil
 	}
 	return c.offs.Bytes()
+}
+
+// RawOffsets64 returns a String or Binary column's 64-bit offset buffer as bytes,
+// which a column past MaxStringBytes has in its 32-bit buffer's place (step 368):
+// []int64 with Reinterpret, len+1 entries. Nil where the offsets are 32-bit.
+func (c *Column) RawOffsets64() []byte {
+	return bytesOf(c.offs64)
 }
 
 // RawChars returns a String or Binary column's character buffer.
@@ -947,6 +1066,10 @@ func (c *Column) Slice(offset, length int) *Column {
 		d.offs = nb
 		d.chars = c.chars
 		d.child = c.child
+	case c.offs64 != nil:
+		// A column of 64-bit offsets, sliced as a column of 32-bit ones is.
+		d.offs64 = slices.Clone(c.offs64[offset : offset+length+1])
+		d.chars = c.chars
 	case c.fields != nil:
 		// A struct has no payload buffer of its own, so without this arm it would fall
 		// through every case and produce a column of the right length holding nothing.

@@ -186,13 +186,54 @@ func recordsSource(recs []arrow.RecordBatch) (*memsrc.Source, error) {
 		if err := check.Check(rec); err != nil {
 			return nil, inRecord(err, i)
 		}
-		b, err := arrowin.Batch(rec, schema, cols, 0, int(rec.NumRows()))
-		if err != nil {
-			return nil, inRecord(err, i)
+		for _, r := range recordSpans(rec) {
+			b, err := arrowin.Batch(rec, schema, cols, r[0], r[1])
+			if err != nil {
+				return nil, inRecord(err, i)
+			}
+			batches = append(batches, b)
 		}
-		batches = append(batches, b)
 	}
 	return memsrc.New(schema, batches...)
+}
+
+// recordSpans are the row ranges rec is copied in: the whole record, or, where a
+// column of LargeString or LargeBinary holds more text than a batch's String column
+// does, data.MaxStringBytes, ranges that each fit (step 368), as a frame's Record past
+// 2 GiB exports one. A single row past it is left to the copy, which refuses it.
+func recordSpans(rec arrow.RecordBatch) [][2]int {
+	n := int(rec.NumRows())
+	var large [][]int64
+	for _, c := range rec.Columns() {
+		if n == 0 {
+			break
+		}
+		switch a := c.(type) {
+		case *array.LargeString:
+			if o := a.ValueOffsets(); o[n]-o[0] > data.MaxStringBytes {
+				large = append(large, o)
+			}
+		case *array.LargeBinary:
+			if o := a.ValueOffsets(); o[n]-o[0] > data.MaxStringBytes {
+				large = append(large, o)
+			}
+		}
+	}
+	if large == nil {
+		return [][2]int{{0, n}}
+	}
+	var spans [][2]int
+	lo := 0
+	for r := range n {
+		for _, o := range large {
+			if o[r+1]-o[lo] > data.MaxStringBytes && r > lo {
+				spans = append(spans, [2]int{lo, r})
+				lo = r
+				break
+			}
+		}
+	}
+	return append(spans, [2]int{lo, n})
 }
 
 // inRecord says which record an import error came from, keeping its kind.

@@ -65,6 +65,8 @@
 package arrowout
 
 import (
+	"math"
+
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -252,22 +254,34 @@ func Schema(s *dtype.Schema) (*arrow.Schema, error) {
 //
 // The caller may Release it or not; see the package doc. Nothing here owns anything
 // the frame does not already own.
-func Record(b *data.Batch) (arrow.Record, error) {
+//
+// A column of text past 2 GiB is a LargeString or a LargeBinary, or holds one, where
+// its type says String or Binary (step 368), and the record's schema says so.
+func Record(b *data.Batch) (arrow.Record, error) { return record(b, false) }
+
+// RecordLarge is Record with every column's text, and any text a column holds, a
+// LargeString or a LargeBinary, so that two batches' records have the same types
+// whatever their text's size: DataFrame.Equals compares them so.
+func RecordLarge(b *data.Batch) (arrow.Record, error) { return record(b, true) }
+
+func record(b *data.Batch, large bool) (arrow.Record, error) {
 	sch, err := Schema(b.Schema())
 	if err != nil {
 		return nil, err
 	}
 	cols := make([]arrow.Array, 0, b.NumCols())
 	for _, c := range b.Columns() {
-		a, err := Column(c)
+		d, err := columnData(c, large)
 		if err != nil {
 			for _, done := range cols {
 				done.Release()
 			}
 			return nil, err
 		}
-		cols = append(cols, a)
+		cols = append(cols, array.MakeFromData(d))
+		d.Release()
 	}
+	sch = heldSchema(sch, cols)
 	rec := array.NewRecord(sch, cols, int64(b.Rows()))
 	// NewRecord retains each array; this drops the local reference so the record is
 	// the only owner, which is the idiom every arrow-go caller expects.
@@ -277,14 +291,62 @@ func Record(b *data.Batch) (arrow.Record, error) {
 	return rec, nil
 }
 
+// heldSchema is sch with each field's type as its column holds it: a column of text
+// past 2 GiB is a LargeString or LargeBinary, or holds one, where its type's field
+// says String (step 368). sch itself where every type is as it says.
+func heldSchema(sch *arrow.Schema, cols []arrow.Array) *arrow.Schema {
+	var fields []arrow.Field
+	for i, a := range cols {
+		if f := sch.Field(i); !arrow.TypeEqual(f.Type, a.DataType()) {
+			if fields == nil {
+				fields = sch.Fields()
+			}
+			fields[i].Type = a.DataType()
+		}
+	}
+	if fields == nil {
+		return sch
+	}
+	md := sch.Metadata()
+	return arrow.NewSchema(fields, &md)
+}
+
+// heldType is at, a List's, an Array's or a Struct's type, with its children's types
+// as kids hold them, as heldSchema is for a record.
+func heldType(at arrow.DataType, kids []arrow.ArrayData) arrow.DataType {
+	switch t := at.(type) {
+	case *arrow.ListType:
+		if e := t.ElemField(); !arrow.TypeEqual(e.Type, kids[0].DataType()) {
+			e.Type = kids[0].DataType()
+			return arrow.ListOfField(e)
+		}
+	case *arrow.FixedSizeListType:
+		if e := t.ElemField(); !arrow.TypeEqual(e.Type, kids[0].DataType()) {
+			e.Type = kids[0].DataType()
+			return arrow.FixedSizeListOfField(t.Len(), e)
+		}
+	case *arrow.StructType:
+		fields, changed := t.Fields(), false
+		for i, k := range kids {
+			if !arrow.TypeEqual(fields[i].Type, k.DataType()) {
+				fields[i].Type, changed = k.DataType(), true
+			}
+		}
+		if changed {
+			return arrow.StructOf(fields...)
+		}
+	}
+	return at
+}
+
 // arrayChild is an Array column's elements as a FixedSizeList holds them, its size of
 // them a row from the first: its own child where every row has its size, shared, and
 // where a null row holds none, as an ursus Array's does, the rows' elements with a
 // null's size of nulls between them.
-func arrayChild(c *data.Column) (arrow.ArrayData, error) {
+func arrayChild(c *data.Column, large bool) (arrow.ArrayData, error) {
 	size, n := int32(c.DType().Size()), c.Len()
 	lists := c.Lists()
-	child, err := columnData(lists.Child())
+	child, err := columnData(lists.Child(), large)
 	if err != nil {
 		return nil, err
 	}
@@ -365,6 +427,12 @@ func categoricalData(c *data.Column, at arrow.DataType, valid *memory.Buffer, nu
 		}
 		codes[i] = code
 	}
+	if int64(len(chars)) > math.MaxInt32 {
+		return nil, uerr.New(uerr.KindResource, "arrow",
+			"column %q has %d bytes of distinct values, and an Arrow dictionary of String holds %d",
+			c.Name(), len(chars), math.MaxInt32).
+			Hint("cast it to String, which exports as a LargeString past 2 GiB")
+	}
 	dict := array.NewData(arrow.BinaryTypes.String, len(offs)-1,
 		[]*memory.Buffer{nil, memory.NewBufferBytes(arrow.Int32Traits.CastToBytes(offs)), memory.NewBufferBytes(chars)}, nil, 0, 0)
 	defer dict.Release()
@@ -374,7 +442,7 @@ func categoricalData(c *data.Column, at arrow.DataType, valid *memory.Buffer, nu
 
 // Column exports one column as an Arrow array.
 func Column(c *data.Column) (arrow.Array, error) {
-	d, err := columnData(c)
+	d, err := columnData(c, false)
 	if err != nil {
 		return nil, err
 	}
@@ -383,7 +451,9 @@ func Column(c *data.Column) (arrow.Array, error) {
 	return a, nil
 }
 
-func columnData(c *data.Column) (arrow.ArrayData, error) {
+// columnData is c as Arrow holds it; with large, its text, and any text it holds, as
+// a LargeString or a LargeBinary, whatever its size.
+func columnData(c *data.Column, large bool) (arrow.ArrayData, error) {
 	at, err := Type(c.DType())
 	if err != nil {
 		return nil, err
@@ -405,6 +475,9 @@ func columnData(c *data.Column) (arrow.ArrayData, error) {
 		return categoricalData(c, at, valid, nulls)
 
 	case dtype.TypeString, dtype.TypeBinary:
+		if o64 := c.RawOffsets64(); o64 != nil || large {
+			return wideStringData(c, at, valid, nulls, o64, large), nil
+		}
 		// Offsets are NOT rebased by Column.Slice — they stay absolute into the whole
 		// character buffer, which is exactly what Arrow reads. Arrow requires the
 		// offsets to be monotonic, not to start at zero.
@@ -413,29 +486,29 @@ func columnData(c *data.Column) (arrow.ArrayData, error) {
 			nil, nulls, 0), nil
 
 	case dtype.TypeList:
-		child, err := columnData(c.Child())
+		child, err := columnData(c.Child(), large)
 		if err != nil {
 			return nil, err
 		}
-		d := array.NewData(at, n,
+		d := array.NewData(heldType(at, []arrow.ArrayData{child}), n,
 			[]*memory.Buffer{valid, shareBytes(c.RawOffsets())},
 			[]arrow.ArrayData{child}, nulls, 0)
 		child.Release()
 		return d, nil
 
 	case dtype.TypeArray:
-		child, err := arrayChild(c)
+		child, err := arrayChild(c, large)
 		if err != nil {
 			return nil, err
 		}
-		d := array.NewData(at, n, []*memory.Buffer{valid}, []arrow.ArrayData{child}, nulls, 0)
+		d := array.NewData(heldType(at, []arrow.ArrayData{child}), n, []*memory.Buffer{valid}, []arrow.ArrayData{child}, nulls, 0)
 		child.Release()
 		return d, nil
 
 	case dtype.TypeStruct:
 		kids := make([]arrow.ArrayData, 0, len(c.Fields()))
 		for _, f := range c.Fields() {
-			k, err := columnData(f)
+			k, err := columnData(f, large)
 			if err != nil {
 				for _, done := range kids {
 					done.Release()
@@ -444,7 +517,7 @@ func columnData(c *data.Column) (arrow.ArrayData, error) {
 			}
 			kids = append(kids, k)
 		}
-		d := array.NewData(at, n, []*memory.Buffer{valid}, kids, nulls, 0)
+		d := array.NewData(heldType(at, kids), n, []*memory.Buffer{valid}, kids, nulls, 0)
 		for _, k := range kids {
 			k.Release()
 		}
@@ -520,6 +593,54 @@ func narrowToInt32(c *data.Column, n int) (*memory.Buffer, error) {
 		out[i] = int32(t)
 	}
 	return share(buf), nil
+}
+
+// wideStringData is a String or Binary column as Arrow holds it where its offsets,
+// raw64, are 64-bit (step 368), or where large asks for a LargeString or LargeBinary.
+//
+// A column of 64-bit offsets whose rows' characters fit 32-bit ones, data.MaxStringBytes
+// of them, as a slice of a collected frame's column does, is rebased to them, its
+// characters shared, and is the String or Binary at says. Past them, or with large,
+// it is the large type, its 64-bit offsets shared, or a 32-bit column's widened.
+func wideStringData(c *data.Column, at arrow.DataType, valid *memory.Buffer, nulls int, raw64 []byte, large bool) arrow.ArrayData {
+	n := c.Len()
+	if raw64 == nil {
+		// large, of a column of 32-bit offsets, or of none, every row null and
+		// empty.
+		o32 := data.Reinterpret[int32](c.RawOffsets())
+		buf := arrowx.NewBuffer((n + 1) * 8)
+		wide := data.Reinterpret[int64](buf.Bytes())[: n+1 : n+1]
+		for i := range wide {
+			if o32 == nil {
+				wide[i] = 0
+			} else {
+				wide[i] = int64(o32[i])
+			}
+		}
+		return array.NewData(largeOf(c), n,
+			[]*memory.Buffer{valid, share(buf), shareBytes(c.RawChars())}, nil, nulls, 0)
+	}
+	offs := data.Reinterpret[int64](raw64)[: n+1 : n+1]
+	lo, hi := offs[0], offs[n]
+	if large || hi-lo > data.MaxStringBytes {
+		return array.NewData(largeOf(c), n,
+			[]*memory.Buffer{valid, shareBytes(raw64), shareBytes(c.RawChars())}, nil, nulls, 0)
+	}
+	buf := arrowx.NewBuffer((n + 1) * 4)
+	out := data.Reinterpret[int32](buf.Bytes())[: n+1 : n+1]
+	for i, o := range offs {
+		out[i] = int32(o - lo)
+	}
+	return array.NewData(at, n,
+		[]*memory.Buffer{valid, share(buf), shareBytes(c.RawChars()[lo:hi])}, nil, nulls, 0)
+}
+
+// largeOf is the large type of a String or Binary column.
+func largeOf(c *data.Column) arrow.DataType {
+	if c.DType().ID() == dtype.TypeBinary {
+		return arrow.BinaryTypes.LargeBinary
+	}
+	return arrow.BinaryTypes.LargeString
 }
 
 // share re-wraps a buffer so that Release on it can never reach ursus's own memory.

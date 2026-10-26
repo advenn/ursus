@@ -50,6 +50,9 @@ const (
 	kindString
 	kindList   // validity, offsets, then the element column
 	kindStruct // validity, then each field column
+	// kindString64 is kindString with 64-bit offsets, for a String or Binary column
+	// whose rows hold more characters than 32-bit ones address (step 368).
+	kindString64
 )
 
 // Validity and Bool payload flags.
@@ -223,6 +226,45 @@ func (w *Writer) putDType(d dtype.DataType) error {
 	return nil
 }
 
+// putStrings writes a String or Binary column of offsets offs, 32-bit or, past a
+// collected frame's 2 GiB, 64-bit (step 368): kindString where its rows' characters
+// fit 32-bit offsets, data.MaxStringBytes of them, as a slice of a wide column's do,
+// and kindString64 where not.
+//
+// Offsets are rebased so the file carries only the characters this column actually
+// addresses. A sliced String column keeps the ORIGINAL character buffer and
+// re-windows the offsets, so writing the buffer as it stands would spill every
+// character the column no longer refers to.
+func putStrings[O int32 | int64](w *Writer, c *data.Column, offs []O) error {
+	n := c.Len()
+	if len(offs) < n+1 {
+		return uerr.Internalf("spill: column %q has %d offsets for %d rows",
+			c.Name(), len(offs), n)
+	}
+	lo, hi := int64(offs[0]), int64(offs[n])
+	if hi-lo > data.MaxStringBytes {
+		w.putByte(kindString64)
+		w.putView(c.Validity(), n)
+		w.putUint(uint64((n + 1) * 8))
+		var b8 [8]byte
+		for i := 0; i <= n; i++ {
+			binary.LittleEndian.PutUint64(b8[:], uint64(int64(offs[i])-lo))
+			w.w.Write(b8[:])
+		}
+	} else {
+		w.putByte(kindString)
+		w.putView(c.Validity(), n)
+		w.putUint(uint64((n + 1) * 4))
+		var b4 [4]byte
+		for i := 0; i <= n; i++ {
+			binary.LittleEndian.PutUint32(b4[:], uint32(int64(offs[i])-lo))
+			w.w.Write(b4[:])
+		}
+	}
+	w.putBytes(c.RawChars()[lo:hi])
+	return nil
+}
+
 func (w *Writer) putColumn(c *data.Column) error {
 	n := c.Len()
 	dt := c.DType()
@@ -233,25 +275,10 @@ func (w *Writer) putColumn(c *data.Column) error {
 		w.putView(c.Bools(), n)
 
 	case dt.HasStringStorage() && !c.IsPayloadFree():
-		w.putByte(kindString)
-		w.putView(c.Validity(), n)
-		// Offsets are rebased so the file carries only the characters this column
-		// actually addresses. A sliced String column keeps the ORIGINAL character
-		// buffer and re-windows the offsets, so writing the buffer as it stands
-		// would spill every character the column no longer refers to.
-		offs := data.Reinterpret[int32](c.RawOffsets())
-		if len(offs) < n+1 {
-			return uerr.Internalf("spill: column %q has %d offsets for %d rows",
-				c.Name(), len(offs), n)
+		if o64 := c.RawOffsets64(); o64 != nil {
+			return putStrings(w, c, data.Reinterpret[int64](o64))
 		}
-		lo, hi := offs[0], offs[n]
-		w.putUint(uint64((n + 1) * 4))
-		var b4 [4]byte
-		for i := 0; i <= n; i++ {
-			binary.LittleEndian.PutUint32(b4[:], uint32(offs[i]-lo))
-			w.w.Write(b4[:])
-		}
-		w.putBytes(c.RawChars()[lo:hi])
+		return putStrings(w, c, data.Reinterpret[int32](c.RawOffsets()))
 
 	case dt.IsListLike() && !c.IsPayloadFree():
 		// Offsets are rebased and the element column sliced to the range they
@@ -671,6 +698,22 @@ func (r *Reader) getColumn(f dtype.Field, n int) (*data.Column, error) {
 		// WithDType reinterprets rather than converts, which is exactly right here:
 		// the two share a representation and differ only in meaning.
 		return data.NewStringBuffers(f.Name, offs, chars, n, valid).WithDType(f.Type), nil
+
+	case kindString64:
+		ob, err := r.getBuffer()
+		if err != nil {
+			return nil, err
+		}
+		offs := data.Reinterpret[int64](ob.Bytes())
+		if len(offs) != n+1 {
+			return nil, uerr.Internalf("spill: %d offsets for %d rows of %q in %s",
+				len(offs), n, f.Name, r.path)
+		}
+		chars, err := r.getBuffer()
+		if err != nil {
+			return nil, err
+		}
+		return data.NewStringBuffers64(f.Name, offs, chars, valid).WithDType(f.Type), nil
 
 	case kindFixed:
 		raw, err := r.getBuffer()

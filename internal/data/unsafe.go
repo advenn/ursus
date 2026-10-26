@@ -40,6 +40,32 @@ func unsafeData[T Fixed](b []byte) []T {
 	return unsafe.Slice((*T)(unsafe.Pointer(&b[0])), len(b)/sz)
 }
 
+// entries views b's first n entries as T's: unsafeData for a buffer that holds n of
+// them, cheap enough that Strings inlines. The slice of b checks it holds them.
+func entries[T Fixed](b *memory.Buffer, n int) []T {
+	var z T
+	return unsafe.Slice((*T)(unsafe.Pointer(unsafe.SliceData(b.Bytes()[:n*int(unsafe.Sizeof(z))]))), n)
+}
+
+// bytesOf views s's elements as bytes, without copying: unsafeData's inverse. Nil
+// for an empty s.
+func bytesOf[T Fixed](s []T) []byte {
+	if len(s) == 0 {
+		return nil
+	}
+	var z T
+	return unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(s))), len(s)*int(unsafe.Sizeof(z)))
+}
+
+// sliceID is bufferID for a Go slice: its first byte, and its capacity in bytes.
+func sliceID[T Fixed](s []T) (BufferID, int64) {
+	if cap(s) == 0 {
+		return nil, 0
+	}
+	var z T
+	return (*byte)(unsafe.Pointer(unsafe.SliceData(s))), int64(cap(s)) * int64(unsafe.Sizeof(z))
+}
+
 // ownedBuffer wraps s's elements as a buffer without copying. The buffer's capacity
 // is s's, so it reports the allocation it holds, as Buffers measures by capacity.
 //

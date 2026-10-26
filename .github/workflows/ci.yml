@@ -117,3 +117,16 @@ jobs:
         with:
           go-version: '1.27.0'
       - run: go test -run TestRiskGate -v ./internal/arrowx/
+
+  bigstrings:
+    # A real String column of 3 GiB, its offsets 64-bit (v0.6.8 step 368). It holds
+    # about 4.6 GB, which a runner has and the gate's laptop does not spare.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+      - run: go test -count=1 -run TestTextPastTwoGiB -v ./internal/arrowout/
+        env:
+          URSUS_BIG_STRINGS: '1'
