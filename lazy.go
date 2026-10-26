@@ -246,6 +246,7 @@ type ExplainOption func(*explainCfg)
 type explainCfg struct {
 	optimized bool
 	schema    bool
+	flags     plan.Flags
 }
 
 // Optimized selects the optimized plan (the default) or the plan as written.
@@ -254,6 +255,12 @@ func Optimized(b bool) ExplainOption { return func(c *explainCfg) { c.optimized 
 // WithSchemas annotates every plan node with its output schema.
 func WithSchemas() ExplainOption { return func(c *explainCfg) { c.schema = true } }
 
+// ExplainOptFlags renders the plan as WithOptFlags(f) runs it: the rules f turns off
+// left out, where Explain would run them all.
+func ExplainOptFlags(f OptFlags) ExplainOption {
+	return func(c *explainCfg) { c.flags = plan.Flags(f) }
+}
+
 // Explain renders the query plan.
 //
 // The output is stable and diff-friendly on purpose: it is what golden tests
@@ -261,7 +268,7 @@ func WithSchemas() ExplainOption { return func(c *explainCfg) { c.schema = true 
 // returns the right answer while reading forty columns instead of two.
 func (lf *LazyFrame) Explain(ctx context.Context, opts ...ExplainOption) (out string, err error) {
 	defer uerr.Catch(&err, "explain")
-	cfg := explainCfg{optimized: true}
+	cfg := explainCfg{optimized: true, flags: plan.DefaultFlags()}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -271,7 +278,7 @@ func (lf *LazyFrame) Explain(ctx context.Context, opts ...ExplainOption) (out st
 
 	n := lf.node
 	if cfg.optimized {
-		n = plan.MarkShared(n, true)
+		n = plan.MarkShared(n, cfg.flags.ShareSubplans)
 	}
 	n, err = plan.Resolve(ctx, n)
 	if err != nil {
@@ -284,7 +291,7 @@ func (lf *LazyFrame) Explain(ctx context.Context, opts ...ExplainOption) (out st
 		// rule, which a plan being rendered for a person can afford.
 		o := optimizer()
 		o.Verify = true
-		if n, err = o.Run(n, plan.DefaultFlags()); err != nil {
+		if n, err = o.Run(n, cfg.flags); err != nil {
 			return "", err
 		}
 	}
@@ -306,6 +313,7 @@ type collectCfg struct {
 	spillDir  string
 	stats     *MemoryStats
 	budget    *execopt.Budget
+	profiler  *physical.Profiler // Profile's, measuring each node; nil otherwise
 }
 
 // WithBatchSize sets the rows per batch. Results must not depend on it; the test
@@ -640,10 +648,12 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 	if err != nil {
 		return nil, err
 	}
+	cfg.profiler.MarkOptimized()
 	return physical.PlanRoot(ctx, optimized, physical.Options{
 		BatchSize: cfg.batchSize,
 		Threads:   cfg.threads,
 		Budget:    cfg.budget,
+		Profiler:  cfg.profiler,
 	})
 }
 

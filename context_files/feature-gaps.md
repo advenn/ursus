@@ -260,7 +260,7 @@ These belong to a performance release more than to features.
 
 | missing or partial | prio |
 | --- | --- |
-| **`profile()` / EXPLAIN ANALYZE:** each operator's time and rows; a physical-plan explain; `Explain` honouring `OptFlags` | P1 |
+| built: **`profile()`,** in step 369: `Profile`, each node's span, rows, batches, own time and peak memory; `ExplainOptFlags`. Not built: a physical-plan explain | — |
 | **Slice pushdown** past projections, unions and joins, and of an offset slice | P1 |
 | **A count reads every column:** `Select(Len())` over a Parquet scan projects all of them, where Polars reads none (found at step 287) | P1 |
 | **Predicate pushdown through group-by keys and window partition keys** | P1 |

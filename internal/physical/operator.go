@@ -362,6 +362,9 @@ type Options struct {
 	// so an Options built by hand still works.
 	Budget *execopt.Budget
 
+	// Profiler, where set, measures each node as it runs (LazyFrame.Profile).
+	Profiler *Profiler
+
 	// opened is every source planning has opened so far; PlanRoot sets it, and
 	// closes them all if planning fails. See openedSources.
 	opened *openedSources
@@ -452,7 +455,7 @@ func PlanRoot(ctx context.Context, n plan.Node, opts Options) (Operator, error) 
 		return nil, err
 	}
 	planned = true
-	return parallelise(op, opts), nil
+	return opts.parallelise(op), nil
 }
 
 // planPipelined plans a child and parallelises it.
@@ -466,7 +469,17 @@ func planPipelined(ctx context.Context, n plan.Node, opts Options) (Operator, er
 	if err != nil {
 		return nil, err
 	}
-	return parallelise(op, opts), nil
+	return opts.parallelise(op), nil
+}
+
+// parallelise is parallelise of op, the operator Plan last returned, with a profile's
+// edge timing the parallel operator in place of the one pipelineOf saw through.
+func (o Options) parallelise(op Operator) Operator {
+	par := parallelise(op, o)
+	if o.Profiler != nil && par != op {
+		return o.Profiler.edge(par)
+	}
+	return par
 }
 
 // Plan lowers a resolved, optimized logical plan into an operator tree.
@@ -475,6 +488,21 @@ func planPipelined(ctx context.Context, n plan.Node, opts Options) (Operator, er
 // Project holds single-output expressions, and every Filter predicate is Boolean.
 // Resolve guarantees all three, so violations here are ursus bugs, not user errors.
 func Plan(ctx context.Context, n plan.Node, opts Options) (Operator, error) {
+	p := opts.Profiler
+	if p == nil {
+		return planNode(ctx, n, opts)
+	}
+	parent := p.enter(n)
+	op, err := planNode(ctx, n, opts)
+	pn := p.leave(parent)
+	if err != nil {
+		return nil, err
+	}
+	return p.wrap(op, pn), nil
+}
+
+// planNode is Plan of one node, its children planned by Plan.
+func planNode(ctx context.Context, n plan.Node, opts Options) (Operator, error) {
 	switch t := n.(type) {
 	case *plan.Scan:
 		return planScan(ctx, t, opts)

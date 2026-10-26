@@ -67,6 +67,10 @@ type Budget struct {
 	kept   int64 // what only a result holds, on top of total
 	peak   int64
 	spills int64
+
+	// opened, where set, is told of each account opened: a profile attributes an
+	// account to the plan node being planned when it opens (OnAccount).
+	opened func(*Account)
 }
 
 type entry struct {
@@ -242,7 +246,20 @@ func (b *Budget) Account(op string) *Account {
 	if b == nil {
 		return nil
 	}
-	return &Account{b: b, op: op, ids: map[data.BufferID]int64{}}
+	a := &Account{b: b, op: op, ids: map[data.BufferID]int64{}}
+	if b.opened != nil {
+		b.opened(a)
+	}
+	return a
+}
+
+// OnAccount has fn told of each account opened from now on, on the goroutine that
+// opens it: LazyFrame.Profile's, which attributes an account to the plan node being
+// planned (step 369). Set before the query runs.
+func (b *Budget) OnAccount(fn func(*Account)) {
+	if b != nil {
+		b.opened = fn
+	}
 }
 
 func (b *Budget) retain(id data.BufferID, size int64, result bool) {
@@ -320,6 +337,9 @@ type Account struct {
 	ids    map[data.BufferID]int64
 	raw    int64
 	result bool // opened by Result: what only it holds is kept off the operators' total
+
+	// used is Used kept as it changes, and peak the most it has been: Peak.
+	used, peak int64
 }
 
 // Retain records that the operator now holds the batch's allocations.
@@ -343,7 +363,25 @@ func (a *Account) retainColumn(c *data.Column) {
 		}
 		a.ids[id] = size
 		a.b.retain(id, size, a.result)
+		a.grow(size)
 	}
+}
+
+// grow notes n more bytes held, or fewer where n is negative, and the peak.
+func (a *Account) grow(n int64) {
+	a.used += n
+	if a.used > a.peak {
+		a.peak = a.used
+	}
+}
+
+// Peak returns the most this account has held at once, as Used counts it: the
+// memory a profile reports for its operator (step 369).
+func (a *Account) Peak() int64 {
+	if a == nil {
+		return 0
+	}
+	return a.peak
 }
 
 // RetainBytes records plain-Go state that has no BufferID.
@@ -359,6 +397,7 @@ func (a *Account) RetainBytes(n int64) {
 	}
 	a.raw += n
 	a.b.addExtra(n, a.result)
+	a.grow(n)
 }
 
 // Used returns what this account is holding.
@@ -415,6 +454,7 @@ func (a *Account) Release() {
 		a.b.addExtra(-a.raw, a.result)
 		a.raw = 0
 	}
+	a.used = 0
 }
 
 // CheckResult returns a resource error naming collect when the query holds more,

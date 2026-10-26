@@ -309,6 +309,10 @@ func parallelise(op Operator, opts Options) Operator {
 // be pulled from serially.
 func pipelineOf(op Operator) (base Operator, ops []BatchOp, ok bool) {
 	for {
+		if p, ok := op.(*profOp); ok && p.stageEdge {
+			op = p.inner // a profile's edge of a stage chain: the chain is the pipeline
+			continue
+		}
 		s, isStage := op.(*stage)
 		if !isStage {
 			// Reverse into application order: the walk above went outermost-in.

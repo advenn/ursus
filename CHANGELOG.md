@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.8
 
-Everything since `v0.6.7` (2026-10-26): steps 365–368, so far.
+Everything since `v0.6.7` (2026-10-26): steps 365–369, so far.
 [`v0.6.8-scope.md`](./context_files/v0.6.8-scope.md) set the scope: **the leftovers
 of feature completeness, and five of 0.7's performance tasks done ahead of it.**
 
@@ -28,6 +28,12 @@ of feature completeness, and five of 0.7's performance tasks done ahead of it.**
   slice's type changed.
 
 ### Features
+
+- **`Profile`** (369), Polars' `profile()`: a query's answer and a frame of each node of
+  its plan, as `Explain` prints it, after the optimization's row: its `start` and `end`
+  in microseconds, as Polars', and its `rows`, `batches`, `own` time, summed over the
+  threads that did it, and `peak_memory`. `Collect` builds none of its wrappers.
+  `ExplainOptFlags(f)` renders the plan `WithOptFlags(f)` runs.
 
 - **Large strings** (368): a String or Binary column past 2 GiB of characters holds
   64-bit offsets, where it was refused, so a Collect, a sort, a join, a group-by or a
