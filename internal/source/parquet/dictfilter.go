@@ -224,7 +224,27 @@ func (r pageStrings) mark(n int, keep []bool, df *dictFilter, i int, dt dtype.Da
 			return 0, err
 		}
 		table := r.table(df, i, dt)
-		if r.dict {
+		if r.dict && all {
+			// Every row present, the common page: a row's pending entry is its index,
+			// and its verdict its index's (step 378).
+			ids, err := r.indices(k)
+			if err != nil {
+				return 0, err
+			}
+			base := len(r.pend)
+			r.pend = r.pend[:base+k]
+			for j, id := range ids {
+				r.pend[base+j] = int32(id)
+			}
+			if table != nil {
+				kp := keep[rows : rows+k]
+				for j, id := range ids {
+					if !table[id] {
+						kp[j] = false
+					}
+				}
+			}
+		} else if r.dict {
 			ids, err := r.indices(present)
 			if err != nil {
 				return 0, err
@@ -280,15 +300,13 @@ func lookup(at int32, dictN int) int {
 	return int(at)
 }
 
-// emit appends the rows mark read that keep keeps, each value copied once.
-func (r pageStrings) emit(c *byteArrayCol, keep []bool) int {
-	total, kept := 0, 0
-	for j, at := range r.pend {
-		if !keep[j] {
-			continue
-		}
-		kept++
-		switch {
+// emit appends the rows mark read at sel, the kept rows' positions, ascending, each
+// value copied once. It walked every row mark read, twice, testing each against
+// keep (step 378).
+func (r pageStrings) emit(c *byteArrayCol, sel []int32) int {
+	total := 0
+	for _, j := range sel {
+		switch at := r.pend[j]; {
 		case at >= 0:
 			total += int(r.dictOffs[at+1] - r.dictOffs[at])
 		case at < -1:
@@ -297,9 +315,9 @@ func (r pageStrings) emit(c *byteArrayCol, keep []bool) int {
 		}
 	}
 	if c.offs == nil {
-		c.offs = make([]int32, 1, kept+1)
+		c.offs = make([]int32, 1, len(sel)+1)
 	}
-	c.offs = growExact(c.offs, kept)
+	c.offs = growExact(c.offs, len(sel))
 	c.chars = growExact(c.chars, total+gatherPad)
 	dst := c.chars[:cap(c.chars)]
 	at0 := len(c.chars)
@@ -320,11 +338,8 @@ func (r pageStrings) emit(c *byteArrayCol, keep []bool) int {
 	plain := r.pchars[:len(r.pchars)+gatherPad]
 	var word uint64
 	w := 0
-	for j, at := range r.pend {
-		if !keep[j] {
-			continue
-		}
-		switch {
+	for _, j := range sel {
+		switch at := r.pend[j]; {
 		case at >= 0:
 			copyIn(dict, int(r.dictOffs[at]), int(r.dictOffs[at+1]))
 			word |= 1 << uint(w)
@@ -343,7 +358,7 @@ func (r pageStrings) emit(c *byteArrayCol, keep []bool) int {
 		c.valid.appendWord(word, w)
 	}
 	c.chars = c.chars[:pos]
-	return kept
+	return len(sel)
 }
 
 // widen is how many rows to read for a batch of about batch rows, when the last

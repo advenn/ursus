@@ -452,12 +452,12 @@ func (c *byteArrayCol) keeps() bool { return c.pages.pageChunk != nil && c.paren
 
 // readKept marks the rows without copying a string, as a predicate's column is
 // marked, but with no table of its own, and copies the kept ones.
-func (c *byteArrayCol) readKept(keep []bool, _ []int32) (int, error) {
+func (c *byteArrayCol) readKept(keep []bool, sel []int32) (int, error) {
 	got, err := c.pages.mark(len(keep), keep, nil, 0, c.dt)
 	if err != nil {
 		return 0, err
 	}
-	c.pages.emit(c, keep[:got])
+	c.pages.emit(c, sel)
 	return got, nil
 }
 

@@ -1327,7 +1327,7 @@ func readBatch(chunks []colReader, out *dtype.Schema, n, rgIndex int, name strin
 	dropped := keep != nil && len(sel) < rows
 	for i, c := range chunks {
 		if marked != nil && marked[i] {
-			c.(*byteArrayCol).pages.emit(c.(*byteArrayCol), keep[:rows])
+			c.(*byteArrayCol).pages.emit(c.(*byteArrayCol), sel)
 			continue
 		}
 		if kr, ok := c.(keptReader); ok && dropped && kr.keeps() {
