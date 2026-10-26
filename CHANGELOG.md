@@ -15,12 +15,17 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.7
 
-Everything since `v0.6.8` (2026-10-26): steps 375–378, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–379, so far.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
 Parquet read first.
 
 ### Faster
 
+- **A join gathers its text by runs** (379): a run of consecutive matched rows, as a
+  probe side's are in order, is copied at once, and a short string alone is moved as
+  two words, where each row's bytes were a copy of their own. The gather takes 0.53
+  to 0.60 of its time on a join's two sides; h2o's joins over Parquet 0.96 to 0.99 of
+  theirs.
 - **A Parquet scan filtered by text reads its other columns at the kept rows** (377):
   where the reader judges a text's conjunct on its dictionary, as since 0.6.1, the
   batch's other columns are read only at the rows it keeps, where every row was

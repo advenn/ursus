@@ -21,6 +21,7 @@
 package data
 
 import (
+	"encoding/binary"
 	"math"
 	"slices"
 
@@ -471,17 +472,51 @@ func countChars[I offsetWidth](o []I, sel []int32) int64 {
 
 // takeInto writes rows sel of o and src into offs and out, from the start of both;
 // o nil is a column of no payload, every row empty.
+//
+// A run of at least four consecutive rows, as a join's probe side gathers its matches
+// in order, is copied at once and its offsets shifted; a lone row of at most sixteen
+// bytes is moved as two words where both buffers have room past it, which takes no
+// branch on its length. Every row was a copy call of its own: a tenth of h2o j1's
+// time over Parquet (step 379, J1 of v0.7-scope.md).
 func takeInto[O, I offsetWidth](offs []O, out []byte, sel []int32, o []I, src []byte) {
 	pos := O(0)
-	for j, i := range sel {
+	if o == nil {
+		clear(offs[:len(sel)+1])
+		return
+	}
+	n := len(sel)
+	for j := 0; j < n; {
+		i := sel[j]
 		offs[j] = pos
-		if i >= 0 && o != nil {
-			lo, hi := o[i], o[i+1]
+		if i < 0 {
+			j++
+			continue
+		}
+		if j+3 < n && sel[j+3] == i+3 && sel[j+1] == i+1 {
+			k := j + 2
+			for k < n && sel[k] == sel[k-1]+1 {
+				k++
+			}
+			lo, hi := int(o[i]), int(o[int(sel[k-1])+1])
+			for t, v := range o[i : int(i)+k-j] {
+				offs[j+t] = pos + O(int(v)-lo)
+			}
 			copy(out[pos:], src[lo:hi])
 			pos += O(hi - lo)
+			j = k
+			continue
 		}
+		lo, hi := int(o[i]), int(o[i+1])
+		if hi-lo <= 16 && lo+16 <= len(src) && int(pos)+16 <= len(out) {
+			binary.LittleEndian.PutUint64(out[pos:], binary.LittleEndian.Uint64(src[lo:]))
+			binary.LittleEndian.PutUint64(out[pos+8:], binary.LittleEndian.Uint64(src[lo+8:]))
+		} else {
+			copy(out[pos:], src[lo:hi])
+		}
+		pos += O(hi - lo)
+		j++
 	}
-	offs[len(sel)] = pos
+	offs[n] = pos
 }
 
 // TakeStringsChunked is TakeStrings of a long selection, a chunk of rows at a time,
