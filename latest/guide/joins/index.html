@@ -1145,6 +1145,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#updating-from-another-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating from another frame
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#filtering-by-another-frame" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1686,6 +1697,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#updating-from-another-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating from another frame
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#filtering-by-another-frame" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1767,7 +1789,7 @@ order 13's customer, 5, is not a customer.</p>
 <div class="tabbed-block">
 <p>Pairs of rows whose keys match. Order 13 and Ben are left out.</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nx">on</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinOn</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"customer_id"</span><span class="p">))</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nx">show</span><span class="p">(</span><span class="nx">orders</span><span class="p">().</span><span class="nx">Join</span><span class="p">(</span><span class="nx">customers</span><span class="p">(),</span><span class="w"> </span><span class="nx">on</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinMaintainOrder</span><span class="p">(</span><span class="kc">true</span><span class="p">)))</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nx">show</span><span class="p">(</span><span class="nx">orders</span><span class="p">().</span><span class="nx">Join</span><span class="p">(</span><span class="nx">customers</span><span class="p">(),</span><span class="w"> </span><span class="nx">on</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinMaintainOrder</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinOrderLeft</span><span class="p">)))</span>
 </span></code></pre></div>
 <div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>shape: (4, 4)
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>┌───────┬─────────────┬─────────┬────────┐
@@ -1890,17 +1912,20 @@ customers who ordered.</p>
 </div>
 </div>
 <p><strong>Row order.</strong> An inner join's order is not promised, as in Polars: ursus hashes the
-smaller input and the rows follow the other. <code>JoinMaintainOrder(true)</code> keeps the left
-frame's order, as the inner example does. Left, semi, anti and full joins keep the
-left frame's order.</p>
+smaller input and the rows follow the other. <code>JoinMaintainOrder</code> keeps an order, as
+Polars' <code>maintain_order</code> does, for every kind: <code>JoinOrderLeft</code> the left frame's, each
+row's matches in the right frame's order, as the inner example does, and
+<code>JoinOrderRight</code> the right frame's. <em>Changed in 0.6.7:</em> it took a Boolean, and kept
+an inner join's left order alone. Left, semi, anti and full joins keep the left
+frame's order without it while they fit in memory; <code>JoinMaintainOrder</code> keeps it when
+they spill too.</p>
 <div class="admonition note">
 <p class="admonition-title">A right join's order and columns are not Polars'</p>
 <p>A right join here keeps the left frame's row order, with the right rows that
 matched nothing after them, and keeps the key where the left frame has it. Polars
 gives a right join's rows in the right frame's order, and its key among the right
-frame's columns. For Polars' rows, swap the frames and join left,
-<code>customers.Join(orders, ..., JoinHow(JoinLeft))</code>, and <code>Select</code> the columns in the
-order you want them.</p>
+frame's columns. <code>JoinMaintainOrder(ursus.JoinOrderRight)</code> gives Polars' rows;
+<code>Select</code> the columns in the order you want them.</p>
 </div>
 <h2 id="keys">Keys<a class="headerlink" href="#keys" title="Permanent link">&para;</a></h2>
 <h3 id="merged-keys">Merged keys<a class="headerlink" href="#merged-keys" title="Permanent link">&para;</a></h3>
@@ -1961,7 +1986,7 @@ named. Polars drops the right one; <code>JoinCoalesce(true)</code> does here too
 </span><span id="__span-21-6"><a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="w">    </span><span class="nx">Join</span><span class="p">(</span><span class="nx">shipped</span><span class="p">,</span>
 </span><span id="__span-21-7"><a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinOn</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"order"</span><span class="p">)),</span>
 </span><span id="__span-21-8"><a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinSuffix</span><span class="p">(</span><span class="s">"_shipped"</span><span class="p">),</span>
-</span><span id="__span-21-9"><a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinMaintainOrder</span><span class="p">(</span><span class="kc">true</span><span class="p">)).</span>
+</span><span id="__span-21-9"><a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinMaintainOrder</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinOrderLeft</span><span class="p">)).</span>
 </span><span id="__span-21-10"><a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a><span class="w">    </span><span class="nx">Select</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"order"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"amount"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"amount_shipped"</span><span class="p">)))</span>
 </span></code></pre></div>
 <div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>shape: (3, 3)
@@ -1980,9 +2005,10 @@ equal:</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="nx">key</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">ValuesNullable</span><span class="p">(</span><span class="s">"k"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">int64</span><span class="p">{</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">},</span><span class="w"> </span><span class="p">[]</span><span class="kt">bool</span><span class="p">{</span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="kc">false</span><span class="p">})</span><span class="w"> </span><span class="c1">// 1 and null</span>
 </span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="nx">left</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"l"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"a"</span><span class="p">,</span><span class="w"> </span><span class="s">"b"</span><span class="p">}))</span>
 </span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="nx">right</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"r"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"x"</span><span class="p">,</span><span class="w"> </span><span class="s">"y"</span><span class="p">}))</span>
-</span><span id="__span-23-4"><a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="nx">on</span><span class="p">,</span><span class="w"> </span><span class="nx">ordered</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinOn</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"k"</span><span class="p">)),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinMaintainOrder</span><span class="p">(</span><span class="kc">true</span><span class="p">)</span>
-</span><span id="__span-23-5"><a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="nx">show</span><span class="p">(</span><span class="nx">left</span><span class="p">.</span><span class="nx">Join</span><span class="p">(</span><span class="nx">right</span><span class="p">,</span><span class="w"> </span><span class="nx">on</span><span class="p">,</span><span class="w"> </span><span class="nx">ordered</span><span class="p">))</span>
-</span><span id="__span-23-6"><a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a><span class="nx">show</span><span class="p">(</span><span class="nx">left</span><span class="p">.</span><span class="nx">Join</span><span class="p">(</span><span class="nx">right</span><span class="p">,</span><span class="w"> </span><span class="nx">on</span><span class="p">,</span><span class="w"> </span><span class="nx">ordered</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinNullsEqual</span><span class="p">(</span><span class="kc">true</span><span class="p">)))</span>
+</span><span id="__span-23-4"><a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="nx">on</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinOn</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"k"</span><span class="p">))</span>
+</span><span id="__span-23-5"><a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="nx">ordered</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinMaintainOrder</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinOrderLeft</span><span class="p">)</span>
+</span><span id="__span-23-6"><a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a><span class="nx">show</span><span class="p">(</span><span class="nx">left</span><span class="p">.</span><span class="nx">Join</span><span class="p">(</span><span class="nx">right</span><span class="p">,</span><span class="w"> </span><span class="nx">on</span><span class="p">,</span><span class="w"> </span><span class="nx">ordered</span><span class="p">))</span>
+</span><span id="__span-23-7"><a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a><span class="nx">show</span><span class="p">(</span><span class="nx">left</span><span class="p">.</span><span class="nx">Join</span><span class="p">(</span><span class="nx">right</span><span class="p">,</span><span class="w"> </span><span class="nx">on</span><span class="p">,</span><span class="w"> </span><span class="nx">ordered</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">JoinNullsEqual</span><span class="p">(</span><span class="kc">true</span><span class="p">)))</span>
 </span></code></pre></div>
 <div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>shape: (1, 3)
 </span><span id="__span-24-2"><a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>┌───────┬────────┬────────┐
@@ -2065,11 +2091,17 @@ tolerance, so its bid is null.</p>
   nearest either way.</li>
 <li>Both frames must be sorted by the as-of key, and ursus checks that they are rather
   than trusting it: an unsorted side fails with an error.</li>
+<li><em>New in 0.6.7:</em> a numeric key's tolerance is a number, <code>AsOfTolerance(5)</code>, and a
+  tolerance of zero admits only an exact match, as Polars'. <code>AsOfCoalesce(false)</code>
+  keeps the right frame's key too, <code>ts_right</code>; a key named apart on the two sides is
+  kept on both, as in Polars.</li>
 </ul>
 <h2 id="joins-on-a-condition">Joins on a condition<a class="headerlink" href="#joins-on-a-condition" title="Permanent link">&para;</a></h2>
 <p><code>JoinWhere(other, predicates...)</code> pairs the rows that satisfy every predicate, such as
 an interval: each order with the promotion running on its date. An equality among the
-predicates becomes a hash join's key; without one, every pair is tested.</p>
+predicates becomes a hash join's key; without one, every pair is tested.
+<code>JoinWhereSuffix(other, suffix, predicates...)</code> names a colliding right column with
+another suffix, which the predicates use.</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="nx">promotions</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span>
 </span><span id="__span-29-2"><a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"promotion"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"new year"</span><span class="p">,</span><span class="w"> </span><span class="s">"mid week"</span><span class="p">}),</span>
 </span><span id="__span-29-3"><a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"from"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"2026-01-01"</span><span class="p">,</span><span class="w"> </span><span class="s">"2026-01-06"</span><span class="p">}),</span>
@@ -2096,29 +2128,59 @@ predicates becomes a hash join's key; without one, every pair is tested.</p>
 </span><span id="__span-30-11"><a id="__codelineno-30-11" name="__codelineno-30-11" href="#__codelineno-30-11"></a>│ 8        │ 2026-01-07 │ "mid week" │
 </span><span id="__span-30-12"><a id="__codelineno-30-12" name="__codelineno-30-12" href="#__codelineno-30-12"></a>└──────────┴────────────┴────────────┘
 </span></code></pre></div>
+<h2 id="updating-from-another-frame">Updating from another frame<a class="headerlink" href="#updating-from-another-frame" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7.</em> <code>Update(other, options)</code> writes another frame's values over this
+one's, in the columns both have, matched by keys, as Polars' <code>update</code>: a null in
+<code>other</code> leaves the value unless <code>IncludeNulls</code>, and the frame keeps its rows, its
+columns and their order.</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="nx">prices</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span>
+</span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"sku"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"a"</span><span class="p">,</span><span class="w"> </span><span class="s">"b"</span><span class="p">,</span><span class="w"> </span><span class="s">"c"</span><span class="p">}),</span>
+</span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">ValuesNullable</span><span class="p">(</span><span class="s">"price"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">float64</span><span class="p">{</span><span class="mf">9.5</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">},</span><span class="w"> </span><span class="p">[]</span><span class="kt">bool</span><span class="p">{</span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="kc">false</span><span class="p">}),</span>
+</span><span id="__span-31-4"><a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a><span class="p">)</span>
+</span><span id="__span-31-5"><a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a><span class="nx">fixes</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span>
+</span><span id="__span-31-6"><a id="__codelineno-31-6" name="__codelineno-31-6" href="#__codelineno-31-6"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"sku"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"c"</span><span class="p">,</span><span class="w"> </span><span class="s">"a"</span><span class="p">}),</span>
+</span><span id="__span-31-7"><a id="__codelineno-31-7" name="__codelineno-31-7" href="#__codelineno-31-7"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"price"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">float64</span><span class="p">{</span><span class="mf">4.25</span><span class="p">,</span><span class="w"> </span><span class="mf">9.75</span><span class="p">}),</span>
+</span><span id="__span-31-8"><a id="__codelineno-31-8" name="__codelineno-31-8" href="#__codelineno-31-8"></a><span class="p">)</span>
+</span><span id="__span-31-9"><a id="__codelineno-31-9" name="__codelineno-31-9" href="#__codelineno-31-9"></a><span class="nx">show</span><span class="p">(</span><span class="nx">prices</span><span class="p">.</span><span class="nx">Update</span><span class="p">(</span><span class="nx">fixes</span><span class="p">,</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">UpdateOptions</span><span class="p">{</span><span class="nx">On</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"sku"</span><span class="p">}}))</span>
+</span></code></pre></div>
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-32-1"><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a>shape: (3, 2)
+</span><span id="__span-32-2"><a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a>┌────────┬─────────┐
+</span><span id="__span-32-3"><a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a>│ sku    │ price   │
+</span><span id="__span-32-4"><a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a>│ String │ Float64 │
+</span><span id="__span-32-5"><a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a>├────────┼─────────┤
+</span><span id="__span-32-6"><a id="__codelineno-32-6" name="__codelineno-32-6" href="#__codelineno-32-6"></a>│ "a"    │ 9.75    │
+</span><span id="__span-32-7"><a id="__codelineno-32-7" name="__codelineno-32-7" href="#__codelineno-32-7"></a>│ "b"    │ 3       │
+</span><span id="__span-32-8"><a id="__codelineno-32-8" name="__codelineno-32-8" href="#__codelineno-32-8"></a>│ "c"    │ 4.25    │
+</span><span id="__span-32-9"><a id="__codelineno-32-9" name="__codelineno-32-9" href="#__codelineno-32-9"></a>└────────┴─────────┘
+</span></code></pre></div>
+<p><code>How</code> keeps the frame's every row, <code>UpdateLeft</code>, the default; only those <code>other</code>
+matches, <code>UpdateInner</code>; or also <code>other</code>'s unmatched ones, as new rows, <code>UpdateFull</code>.
+Without keys, rows are matched by their places. A column whose types differ takes the
+type that holds both. It is a join, so it spills as one does and keeps its order.</p>
 <h2 id="filtering-by-another-frame">Filtering by another frame<a class="headerlink" href="#filtering-by-another-frame" title="Permanent link">&para;</a></h2>
 <p><code>WhereExists(other, predicates...)</code> keeps this frame's rows that have at least one row
 in <code>other</code> satisfying every predicate, once each, with only this frame's columns:
 SQL's <code>EXISTS</code>. <code>WhereNotExists</code> keeps those that have none. The predicates name
 <code>other</code>'s columns as a join would, with the suffix where a name collides:</p>
-<div class="language-go highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">customers</span><span class="p">().</span><span class="nx">WhereExists</span><span class="p">(</span><span class="nx">orders</span><span class="p">(),</span>
-</span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"customer_id"</span><span class="p">).</span><span class="nx">Eq</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"customer_id_right"</span><span class="p">)),</span>
-</span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"amount"</span><span class="p">).</span><span class="nx">Gt</span><span class="p">(</span><span class="mf">20.0</span><span class="p">)))</span>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-33-1"><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">customers</span><span class="p">().</span><span class="nx">WhereExists</span><span class="p">(</span><span class="nx">orders</span><span class="p">(),</span>
+</span><span id="__span-33-2"><a id="__codelineno-33-2" name="__codelineno-33-2" href="#__codelineno-33-2"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"customer_id"</span><span class="p">).</span><span class="nx">Eq</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"customer_id_right"</span><span class="p">)),</span>
+</span><span id="__span-33-3"><a id="__codelineno-33-3" name="__codelineno-33-3" href="#__codelineno-33-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"amount"</span><span class="p">).</span><span class="nx">Gt</span><span class="p">(</span><span class="mf">20.0</span><span class="p">)))</span>
 </span></code></pre></div>
-<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-32-1"><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a>shape: (2, 2)
-</span><span id="__span-32-2"><a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a>┌─────────────┬────────┐
-</span><span id="__span-32-3"><a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a>│ customer_id │ name   │
-</span><span id="__span-32-4"><a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a>│ Int64       │ String │
-</span><span id="__span-32-5"><a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a>├─────────────┼────────┤
-</span><span id="__span-32-6"><a id="__codelineno-32-6" name="__codelineno-32-6" href="#__codelineno-32-6"></a>│ 1           │ "Ada"  │
-</span><span id="__span-32-7"><a id="__codelineno-32-7" name="__codelineno-32-7" href="#__codelineno-32-7"></a>│ 3           │ "Cai"  │
-</span><span id="__span-32-8"><a id="__codelineno-32-8" name="__codelineno-32-8" href="#__codelineno-32-8"></a>└─────────────┴────────┘
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-34-1"><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a>shape: (2, 2)
+</span><span id="__span-34-2"><a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>┌─────────────┬────────┐
+</span><span id="__span-34-3"><a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a>│ customer_id │ name   │
+</span><span id="__span-34-4"><a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a>│ Int64       │ String │
+</span><span id="__span-34-5"><a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a>├─────────────┼────────┤
+</span><span id="__span-34-6"><a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a>│ 1           │ "Ada"  │
+</span><span id="__span-34-7"><a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a>│ 3           │ "Cai"  │
+</span><span id="__span-34-8"><a id="__codelineno-34-8" name="__codelineno-34-8" href="#__codelineno-34-8"></a>└─────────────┴────────┘
 </span></code></pre></div>
 <p>A semi or anti join asks the same question when the condition is equal keys alone.</p>
 <h2 id="under-a-memory-limit">Under a memory limit<a class="headerlink" href="#under-a-memory-limit" title="Permanent link">&para;</a></h2>
 <p>Equi-joins spill both sides to disk under a memory budget, and give the answer they
-give in memory; under a limit no join's row order is promised. A backward as-of join
-streams both sides. See <a href="../../concepts/memory/">Memory and spilling</a>.</p>
+give in memory; under a limit a join's row order is promised only with
+<code>JoinMaintainOrder</code>. An as-of join streams both sides, whatever its strategy. See
+<a href="../../concepts/memory/">Memory and spilling</a>.</p>
 
 
 

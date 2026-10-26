@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan options, globs, readers from memory or object storage, projection and predicate pushdown into Parquet, streaming sinks, and Arrow in and out.">
+        <meta name="description" content="Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan options, globs, readers from memory or object storage, projection and predicate pushdown into Parquet, streaming sinks, Arrow in and out, JSON, and databases through database/sql.">
       
       
       
@@ -68,13 +68,13 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ursus">
   <meta property="og:title" content="CSV, Parquet and Arrow - ursus">
-  <meta property="og:description" content="Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan options, globs, readers from memory or object storage, projection and predicate pushdown into Parquet, streaming sinks, and Arrow in and out.">
+  <meta property="og:description" content="Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan options, globs, readers from memory or object storage, projection and predicate pushdown into Parquet, streaming sinks, Arrow in and out, JSON, and databases through database/sql.">
   
     <meta property="og:url" content="https://advenn.github.io/ursus/latest/guide/io/">
   
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="CSV, Parquet and Arrow - ursus">
-  <meta name="twitter:description" content="Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan options, globs, readers from memory or object storage, projection and predicate pushdown into Parquet, streaming sinks, and Arrow in and out.">
+  <meta name="twitter:description" content="Reading and writing CSV and Parquet with ursus, the Go dataframe library: scan options, globs, readers from memory or object storage, projection and predicate pushdown into Parquet, streaming sinks, Arrow in and out, JSON, and databases through database/sql.">
   
 
   </head>
@@ -1308,6 +1308,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JSON
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#databases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Databases
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#larger-than-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1553,6 +1575,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JSON
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#databases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Databases
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#larger-than-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1620,15 +1664,15 @@ in memory. The types are inferred from the first rows, and the options say the r
 </thead>
 <tbody>
 <tr>
-<td><code>WithSeparator(c)</code>, <code>WithQuote(c)</code>, <code>WithComment(prefix)</code></td>
+<td><code>WithSeparator(c)</code>, <code>WithQuote(c)</code>, <code>WithQuoting(b)</code>, <code>WithComment(prefix)</code></td>
 <td>the dialect</td>
 </tr>
 <tr>
-<td><code>WithHasHeader(b)</code>, <code>WithColumnNames(names...)</code>, <code>WithSkipRows(n)</code></td>
-<td>the header</td>
+<td><code>WithHasHeader(b)</code>, <code>WithColumnNames(names...)</code>, <code>WithSkipRows(n)</code>, <code>WithSkipLines(n)</code>, <code>WithSkipRowsAfterHeader(n)</code></td>
+<td>the header and the rows skipped</td>
 </tr>
 <tr>
-<td><code>WithSchema(s)</code>, <code>WithSchemaOverrides(m)</code>, <code>WithInferRows(n)</code></td>
+<td><code>WithSchema(s)</code>, <code>WithSchemaOverrides(m)</code>, <code>WithInferRows(n)</code>, <code>WithInferSchema(b)</code></td>
 <td>the types</td>
 </tr>
 <tr>
@@ -1636,13 +1680,62 @@ in memory. The types are inferred from the first rows, and the options say the r
 <td>the text that means null</td>
 </tr>
 <tr>
-<td><code>WithTruncateRaggedLines(b)</code>, <code>WithMaxRecordSize(n)</code></td>
+<td><code>WithTruncateRaggedLines(b)</code>, <code>WithMaxRecordSize(n)</code>, <code>WithIgnoreErrors(b)</code>, <code>WithRaiseIfEmpty(b)</code></td>
 <td>malformed input</td>
+</tr>
+<tr>
+<td><code>WithTryParseDates(b)</code></td>
+<td>dates, instants and times of day inferred (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>WithDecimalComma(b)</code>, <code>WithEncoding(e)</code></td>
+<td>a float's comma, and text not UTF-8 (new in 0.6.7)</td>
 </tr>
 </tbody>
 </table>
+<p><em>New in 0.6.7:</em> <code>WithTryParseDates(true)</code> infers a column of dates as a Date, of
+instants as a Datetime in microseconds, in UTC where they carry an offset, and of
+times of day as a Time, by the patterns Polars' <code>try_parse_dates</code> reads:
+<code>2024-01-02</code>, <code>2024/1/2</code> and <code>02.01.2024</code>, the year first or the day; <code>2024-01-02
+03:04:05.123</code>, a <code>T</code> or a space between; offsets <code>Z</code>, <code>+09:00</code> and <code>+0900</code>. A month
+first is not one: <code>01/02/2024</code> is the first of February. A Date, Datetime or Time
+column a schema gives is read by the same patterns, scanned by hand, three times as
+fast as Polars reads one.</p>
+<p><em>New in 0.6.7:</em> the rest of Polars' reading options.</p>
+<ul>
+<li><code>WithIgnoreErrors(true)</code>, as <code>ignore_errors</code>, reads a value its column's type
+  cannot take as a null. A record of too many fields is still refused, as Polars
+  refuses it.</li>
+<li><code>WithInferSchema(false)</code>, as <code>infer_schema=False</code>, reads every column a schema or
+  an override does not type as a String.</li>
+<li><code>WithRaiseIfEmpty(false)</code>, as <code>raise_if_empty=False</code>, reads an empty file as a
+  frame of no columns, where by default it is refused.</li>
+<li><code>WithDecimalComma(true)</code>, as <code>decimal_comma</code>, reads <code>1,5</code> as 1.5, a float's or a
+  Decimal's; a value with a point is then no number.</li>
+<li><code>WithEncoding(ursus.UTF8Lossy)</code>, as <code>encoding="utf8-lossy"</code>, reads each invalid
+  UTF-8 sequence as U+FFFD. Without it, text that is not UTF-8 is refused, as Polars
+  refuses it. The check reads thirty-two bytes a step and costs a read nothing
+  measurable.</li>
+</ul>
+<p><em>New in 0.6.7:</em> <code>WithSkipLines(n)</code>, as <code>skip_lines</code>, skips the first lines by their
+line ends alone, a quote in them any byte, where <code>WithSkipRows(n)</code> skips records;
+the two are not both set. <code>WithSkipRowsAfterHeader(n)</code>, as <code>skip_rows_after_header</code>,
+skips the records after the header, a blank line one. Both skip in each file of
+several. <code>WithQuoting(false)</code>, as <code>quote_char=None</code>, reads a quote as any byte, so a
+separator or a line end always ends a field.</p>
+<p><em>Changed in 0.6.7:</em> a record of too few fields is padded with nulls, and a blank
+line after the header is a record of nulls, as Polars reads them; both were
+refused or skipped. <code>WithTruncateRaggedLines(true)</code> now concerns a record of too
+many fields alone, whose extra fields it drops.</p>
+<p><em>New in 0.6.7:</em> a file compressed by gzip, zlib or Zstandard is read as itself,
+known by its first bytes whatever its name, as Polars reads one:
+<code>ScanCSV("sales.csv.gz")</code>. It is decompressed as it is read, never held whole, and
+parsed in parallel as a plain file is. NDJSON and JSON files are read so too.</p>
 <p><code>ScanCSVGlob(pattern)</code> reads every file a pattern matches as one frame, in their
-names' order, and <code>ScanCSVFiles(paths)</code> a list:</p>
+names' order, and <code>ScanCSVFiles(paths)</code> a list. <em>New in 0.6.7:</em> a pattern's <code>**</code>
+matches any number of directories, <code>logs/**/*.csv</code>, in every scan's glob, and
+<code>ScanCSV(dir)</code> reads every file below a directory, as <code>ScanNDJSON(dir)</code> and
+<code>ScanParquet(dir)</code> do:</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nx">show</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">ScanCSVGlob</span><span class="p">(</span><span class="s">"testdata/parts/revenue-*.csv"</span><span class="p">).</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="nx">GroupBy</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"month"</span><span class="p">)).</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nx">Agg</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"revenue"</span><span class="p">).</span><span class="nx">Sum</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"revenue"</span><span class="p">)).</span>
@@ -1657,6 +1750,12 @@ names' order, and <code>ScanCSVFiles(paths)</code> a list:</p>
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>│ "2026-02" │ 79.25   │
 </span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>└───────────┴─────────┘
 </span></code></pre></div>
+<p><em>New in 0.6.7:</em> <code>WithCSVIncludeFilePaths(name)</code>, as Polars' <code>include_file_paths</code>,
+adds a String column of each row's file path after the files' columns: the path as
+it was given, or as a glob or a directory found it; <code>WithNDJSONIncludeFilePaths(name)</code>
+does so for NDJSON. A column the files have already of the name is refused, as Polars
+refuses it. Each file's path is repeated once and sliced for every batch, so the
+column costs a scan nothing measurable.</p>
 <p><code>WriteCSV(ctx, w, options...)</code> writes a query's answer to any <code>io.Writer</code>, and
 <code>SinkCSV(ctx, path)</code> to a file:</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kd">var</span><span class="w"> </span><span class="nx">out</span><span class="w"> </span><span class="nx">bytes</span><span class="p">.</span><span class="nx">Buffer</span>
@@ -1672,6 +1771,47 @@ names' order, and <code>ScanCSVFiles(paths)</code> a list:</p>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>1,NA,11.0
 </span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>2,NA,NA
 </span></code></pre></div>
+<p><em>New in 0.6.7:</em> the writer takes Polars' <code>write_csv</code> options:</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Polars'</th>
+<th>For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>WithQuoteStyle(ursus.QuoteAlways)</code>, <code>QuoteNever</code>, <code>QuoteNonNumeric</code>; <code>WithWriteQuote(c)</code></td>
+<td><code>quote_style</code>, <code>quote_char</code></td>
+<td>when a field is quoted, and with what</td>
+</tr>
+<tr>
+<td><code>WithDateFormat(f)</code>, <code>WithDatetimeFormat(f)</code>, <code>WithTimeFormat(f)</code></td>
+<td><code>date_format</code>, <code>datetime_format</code>, <code>time_format</code></td>
+<td>a temporal value's strftime format</td>
+</tr>
+<tr>
+<td><code>WithFloatPrecision(n)</code>, <code>WithFloatScientific(b)</code>, <code>WithWriteDecimalComma(b)</code></td>
+<td><code>float_precision</code>, <code>float_scientific</code>, <code>decimal_comma</code></td>
+<td>a float's text</td>
+</tr>
+<tr>
+<td><code>WithIncludeBOM(b)</code></td>
+<td><code>include_bom</code></td>
+<td>a UTF-8 byte-order mark first</td>
+</tr>
+<tr>
+<td><code>WithCSVCompression(ursus.CSVGzip)</code>, <code>CSVZstd</code>; <code>WithCSVCompressionLevel(n)</code>; <code>WithCSVCheckExtension(b)</code></td>
+<td><code>compression</code>, <code>compression_level</code>, <code>check_extension</code></td>
+<td>the file compressed, its path's name checked</td>
+</tr>
+</tbody>
+</table>
+<p>Each value is written as Polars writes it: an instant <code>2024-01-02T03:04:05.123456</code>, to
+its unit, with its offset <code>+0900</code> where it has a zone, a time of day to the
+nanosecond, and a float in Polars' text, <code>123456789.0</code> and <code>1e-7</code>. <code>ScanCSV</code> reads
+each back.</p>
 <h2 id="parquet">Parquet<a class="headerlink" href="#parquet" title="Permanent link">&para;</a></h2>
 <p><code>ScanParquet(path)</code> reads the footer when the query is planned, and at run time only
 the column chunks the query needs. A filter on a column with statistics skips whole
@@ -1715,6 +1855,23 @@ a match.</p>
 <li><code>WriteParquet(ctx, w)</code> and <code>SinkParquet(ctx, path)</code> write, with <code>WithCompression</code>,
   Snappy by default, <code>WithRowGroupRows</code> and <code>WithStatistics</code>.</li>
 </ul>
+<p><em>New in 0.6.7:</em> <code>ScanParquet(dir)</code> reads every file below a directory as one frame,
+as Polars' <code>scan_parquet</code> does, and reads a hive dataset's partitions: each directory
+named <code>key=value</code> gives the rows of the files beneath it a column <code>key</code>, after the
+files' own, its type inferred from every file's value as Polars infers it, an integer,
+a float, a Boolean, a date or an instant, or text. <code>__HIVE_DEFAULT_PARTITION__</code> is a
+null. A filter on the keys skips the files it rules out before any is opened.
+<code>WithHiveSchema(s)</code> gives keys their types, <code>WithHiveDates(false)</code> reads dates as
+text, and <code>WithHivePartitioning(true)</code> reads the keys of a file's, a list's or a
+glob's whole paths, where by default only a directory's are read.
+<code>WithIncludeFilePaths(name)</code> adds a column of each row's file path.</p>
+<p><em>New in 0.6.7:</em> files whose columns differ are read as one, as Polars' schema
+evolution reads them: as the first file's columns, or <code>WithParquetSchema(s)</code>'s; a
+column a file lacks as nulls with <code>WithInsertMissingColumns(true)</code>; a column a file has
+beyond them passed over with <code>WithIgnoreExtraColumns(true)</code>; and an Int32 where the
+schema's is an Int64, or a Float32 where it is a Float64, widened with
+<code>WithUpcastIntegers(true)</code> or <code>WithUpcastFloats(true)</code>. Each is refused otherwise, as
+Polars refuses it, naming the file and the column.</p>
 <h2 id="from-object-storage">From object storage<a class="headerlink" href="#from-object-storage" title="Permanent link">&para;</a></h2>
 <p>ursus has no S3 or GCS client of its own: each store wants its vendor's SDK, and ursus
 takes on none. <code>ScanParquetFrom</code> reads through any <code>io.ReaderAt</code>
@@ -1779,6 +1936,72 @@ Data Interface. Import copies, so nothing released afterwards reaches a frame.</
 </span></code></pre></div>
 <p>38 of Arrow's 45 types map to ursus's; Decimal256, intervals, unions and run-end
 encoding are refused by name.</p>
+<p><em>New in 0.6.7:</em> Arrow IPC, as Polars reads and writes it. <code>ScanIPC(path)</code> reads an IPC
+file, Feather version 2, the format of Polars' <code>write_ipc</code>, and <code>ScanIPCStream(path)</code>
+an IPC stream, <code>write_ipc_stream</code>'s; both read string views, large lists and
+compressed buffers, which Polars writes. <code>WriteIPC(ctx, w)</code>, <code>WriteIPCStream(ctx, w)</code>
+and <code>SinkIPC(ctx, path)</code> write them, uncompressed as Polars' are by default, or with
+<code>WithIPCCompression(ursus.IPCLZ4)</code> or <code>IPCZstd</code>. <code>ReadIPCSchema(path)</code> and
+<code>ReadParquetSchema(ctx, path)</code> read a file's schema from its footer alone.</p>
+<p><em>New in 0.6.7:</em> several IPC files as one frame, as Polars' <code>scan_ipc</code> reads them.
+<code>ScanIPCFiles(paths)</code> reads a list and <code>ScanIPCGlob(pattern)</code> a glob's matches, as
+the first file's columns: a later file's are read by name, and one it lacks, one more
+or one of another type is refused, as Polars refuses them. <code>ScanIPC(dir)</code> reads every
+file below a directory as a hive dataset, each <code>key=value</code> directory a column after
+the files' own, of the type its values infer; a filter on the keys skips the files it
+rules out before any is opened. <code>WithIPCHivePartitioning</code>, <code>WithIPCHiveSchema</code>,
+<code>WithIPCHiveDates</code> and <code>WithIPCIncludeFilePaths</code> are Polars' <code>hive_partitioning</code>,
+<code>hive_schema</code>, <code>try_parse_hive_dates</code> and <code>include_file_paths</code>.</p>
+<h2 id="json">JSON<a class="headerlink" href="#json" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7:</em> <code>ScanNDJSON(path)</code> reads newline-delimited JSON, an object a line, as
+Polars' <code>scan_ndjson</code> and <code>read_ndjson</code>. <code>ScanNDJSONFiles(paths)</code> and
+<code>ScanNDJSONGlob(pattern)</code> read several files as one frame, the schema the first's;
+<code>ScanNDJSONFrom(files)</code> reads files you open, from an object store, say; and
+<code>ScanNDJSONBytes(b, name)</code> reads NDJSON in memory. A key is a column, in the order the
+keys are first seen, and its type is inferred from the first 100 lines as Polars infers
+it: an integer is an Int64, or an Int128 past it; a number with a fraction or an
+exponent a Float64; an array a List, and an object a Struct. A key holding text and
+anything else is a String, the other value as Polars writes it: <code>1.5</code> for <code>1.50</code>, and
+an array as JSON. <code>WithInferSchemaLines(n)</code> infers from more lines, 0 from all of them;
+<code>WithNDJSONSchema(s)</code> reads the lines as a schema you give, of any type, a Date from
+its text; and <code>WithNDJSONIgnoreErrors(true)</code> reads a value its column cannot take as a
+null, as Polars' <code>ignore_errors</code>. An error names the line and the key. A file is read
+in blocks, each cut into a part a thread and the parts parsed at once, and only the
+columns a query uses are built.</p>
+<p><em>New in 0.6.7:</em> <code>ScanJSON(path)</code> reads a JSON file of an array of objects, a row an
+object, or of one object, one row, as Polars' <code>read_json</code>, and <code>ScanJSONBytes(b, name)</code>
+one in memory. Each object is read as a line of NDJSON is, under the same options, its
+schema inferred from the first 100 objects. As Polars, it refuses a key those objects
+have not, which NDJSON's reading skips, as a given schema's does here; an element that
+is not an object, or is null; and text after the array. An error names the object, and
+the file is streamed: each object is made a line where it is read, and the lines are
+parsed in parallel, so the document is never held whole. For both,
+<code>WithNDJSONSchemaOverrides(m)</code> gives some columns' types and infers the rest, as
+Polars' <code>schema_overrides</code>.</p>
+<p><em>New in 0.6.7:</em> <code>WriteNDJSON(ctx, w)</code> writes each row as a JSON object on a line of its
+own, as Polars' <code>write_ndjson</code>, and <code>WriteJSON(ctx, w)</code> one array of them, as
+<code>write_json</code>; <code>SinkNDJSON(ctx, path)</code> streams to a file, whole or not at all. Each
+value is written as Polars writes it: a float in Polars' text, NaN and the infinities
+<code>null</code>; a Decimal, a date and an instant quoted, <code>"2024-01-02 03:04:05.123456"</code>, a
+zoned instant with its offset, <code>"2024-01-02T03:04:05+05:00"</code>; a duration in ISO 8601's
+seconds, <code>"PT90S"</code>; a List an array and a Struct an object. A Binary column is refused,
+as Polars refuses it.</p>
+<h2 id="databases">Databases<a class="headerlink" href="#databases" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7:</em> <code>ReadDatabase(ctx, db, query, args...)</code> runs a query on a <code>*sql.DB</code>, a
+<code>*sql.Tx</code> or a <code>*sql.Conn</code> and reads its rows as a frame, as Polars' <code>read_database</code>;
+<code>ReadDatabaseRows(rows)</code> reads a result you have, a prepared statement's, say, and
+closes it. Any <code>database/sql</code> driver serves. A column's type is its values', met as
+Polars meets them: integers an Int64, floats a Float64, text a String, bytes a Binary,
+and instants a Datetime in microseconds, of no zone where each is in UTC, as a driver
+gives a timestamp without one, and in UTC where one is in a zone; an integer beside a
+float is a Float64, text beside a number text, and bytes beside an integer an error.
+Every row is read for it, where Polars reads 100. Then a column is of the type its
+driver names, where every value fits it: an <code>INT4</code> an Int32, a <code>NUMERIC(10, 2)</code> a
+Decimal(10, 2), a <code>DATE</code> a Date, a <code>TIME</code> a Time, a <code>TIMESTAMPTZ</code> a Datetime in UTC,
+and the bytes a driver gives for a <code>VARCHAR</code> or a <code>UUID</code> text. A result of no rows has
+its driver's types, and a column the driver calls <code>NOT NULL</code> is not nullable.
+<code>ReadDatabaseRows(rows, ursus.WithDatabaseSchemaOverrides(m))</code> gives some columns'
+types, as Polars' <code>schema_overrides</code>. The frame is read whole, as Polars' is.</p>
 <h2 id="larger-than-memory">Larger than memory<a class="headerlink" href="#larger-than-memory" title="Permanent link">&para;</a></h2>
 <p>A sink streams: a query whose answer is larger than memory writes it with
 <code>SinkParquet</code> or <code>SinkCSV</code>, the spilling operators under a memory limit, as

@@ -1657,6 +1657,18 @@ changes is what Go asks for.</p>
 <td><code>.Cast(ursus.Int64)</code>, strict; <code>.CastLossy(ursus.Int64)</code> turns failures into nulls</td>
 </tr>
 <tr>
+<td><code>df.sum()</code>, <code>df.mean()</code>, <code>df.null_count()</code> and the other frame aggregates</td>
+<td><code>lf.Sum()</code>, <code>lf.Mean()</code>, <code>lf.NullCount()</code> (new in 0.6.7); <code>df.Sum(ctx)</code> eagerly</td>
+</tr>
+<tr>
+<td><code>df.match_to_schema(schema, ...)</code></td>
+<td><code>lf.MatchToSchema(schema, ursus.MatchOptions{...})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.cast({"a": pl.Int32})</code>, <code>df.cast(pl.String)</code></td>
+<td><code>lf.Cast(map[string]ursus.DataType{"a": ursus.Int32})</code>, <code>lf.CastAll(ursus.String)</code>; <code>CastTypes</code> by type (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.filter(p)</code>, <code>.select(...)</code>, <code>.with_columns(...)</code></td>
 <td><code>.Filter(p)</code>, <code>.Select(...)</code>, <code>.WithColumns(...)</code></td>
 </tr>
@@ -1669,6 +1681,10 @@ changes is what Go asks for.</p>
 <td><code>.GroupBy(ursus.Col("k")).Agg(...)</code></td>
 </tr>
 <tr>
+<td><code>.group_by("k").agg(pl.col("x"), pl.col("x").cum_sum())</code>, a list a group</td>
+<td><code>.GroupBy(ursus.Col("k")).Agg(ursus.Col("x"), ursus.Col("x").CumSum(false))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.group_by("k", maintain_order=True)</code></td>
 <td><code>.GroupBy(ursus.Col("k")).MaintainOrder()</code></td>
 </tr>
@@ -1677,8 +1693,40 @@ changes is what Go asks for.</p>
 <td><code>.Join(other, ursus.JoinOn(ursus.Col("k")), ursus.JoinHow(ursus.JoinLeft))</code></td>
 </tr>
 <tr>
+<td><code>import polars.selectors as cs</code>; <code>cs.numeric() - cs.by_name("id")</code>; <code>~cs.string()</code></td>
+<td><code>import "github.com/advenn/ursus/selector"</code>; <code>selector.Numeric().Difference(selector.ByName("id")).Expr()</code>; <code>selector.String().Complement()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.join_asof(...)</code>, <code>.join_where(...)</code></td>
 <td><code>.JoinAsOf(...)</code>, <code>.JoinWhere(...)</code></td>
+</tr>
+<tr>
+<td><code>.join_asof(other, on="k", tolerance=5, coalesce=False)</code></td>
+<td><code>.JoinAsOf(other, ursus.AsOfOn(ursus.Col("k")), ursus.AsOfTolerance(5), ursus.AsOfCoalesce(false))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.join_where(other, *preds, suffix="_r")</code></td>
+<td><code>.JoinWhereSuffix(other, "_r", preds...)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.update(other, on="k", how="full")</code></td>
+<td><code>lf.Update(other, ursus.UpdateOptions{On: []string{"k"}, How: ursus.UpdateFull})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.rows_by_key("k", named=True)</code>, <code>df.to_dicts()</code>, <code>df.iter_rows(named=True)</code></td>
+<td><code>df.RowsByKey[K, T]("k")</code>, <code>df.ToMaps()</code>, <code>lf.IterRows[T](ctx)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>s.sort()</code>, <code>s.unique()</code>, <code>s.mean()</code>, <code>s.cast(pl.Float64)</code></td>
+<td><code>s.Sort(ctx)</code>, <code>s.Unique(ctx)</code>, <code>s.Mean(ctx)</code>, <code>s.Cast[float64](ctx, ursus.Float64)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.DataFrame(list_of_dataclasses)</code></td>
+<td><code>ursus.FromRows(structs)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.join(other, on="k", maintain_order="right")</code></td>
+<td><code>.Join(other, ursus.JoinOn(ursus.Col("k")), ursus.JoinMaintainOrder(ursus.JoinOrderRight))</code> (changed in 0.6.7)</td>
 </tr>
 <tr>
 <td><code>.over("k")</code></td>
@@ -1693,6 +1741,22 @@ changes is what Go asks for.</p>
 <td><code>.FillNullWith(0)</code>, <code>.FillNull(strategy)</code></td>
 </tr>
 <tr>
+<td><code>.fill_null(strategy="forward", limit=1)</code></td>
+<td><code>.FillNull(ursus.FillForward.Limit(1))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.drop_nans()</code>, <code>df.interpolate()</code></td>
+<td><code>lf.DropNans()</code>, <code>lf.Interpolate()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.col("x").interpolate_by("t")</code></td>
+<td><code>ursus.Col("x").InterpolateBy(ursus.Col("t"))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.col("p").top_k_by("sales", 3)</code>, <code>.bottom_k_by(...)</code></td>
+<td><code>ursus.Col("p").TopKBy(ursus.Col("sales"), 3)</code>, <code>.BottomKBy(...)</code>, a List (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.head(n)</code>, <code>.tail(n)</code>, <code>.slice(o, n)</code></td>
 <td><code>.Head(n)</code>, <code>.Tail(n)</code>, <code>.Slice(o, n)</code></td>
 </tr>
@@ -1705,12 +1769,76 @@ changes is what Go asks for.</p>
 <td><code>.WithRowIndex("index", 0)</code></td>
 </tr>
 <tr>
+<td><code>df.insert_column(1, s)</code>, <code>df.hash_rows()</code></td>
+<td><code>lf.InsertColumn(1, s)</code>, <code>df.HashRows(ctx, 0)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.explode("a")</code>, <code>.unnest("s")</code></td>
 <td><code>.Explode("a")</code>, <code>.Unnest("s")</code></td>
 </tr>
 <tr>
 <td><code>.unpivot(...)</code>, <code>df.pivot(...)</code></td>
 <td><code>.Unpivot(ursus.UnpivotOptions{...})</code>, <code>df.Pivot(ctx, ursus.PivotOptions{...})</code></td>
+</tr>
+<tr>
+<td><code>lf.pivot(on, on_columns=[...])</code></td>
+<td><code>lf.Pivot(ursus.PivotOptions{On: ..., OnColumns: ...})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.concat(frames, how="vertical_relaxed")</code>, <code>"diagonal_relaxed"</code>, <code>"horizontal_extend"</code>, <code>"align"</code></td>
+<td><code>ursus.Concat(frames, ursus.WithConcatMode(ursus.ConcatRelaxed))</code>, <code>ConcatDiagonalRelaxed</code>, <code>ConcatHorizontalExtend</code>, <code>ConcatAlign</code> (new in 0.6.7); <code>ursus.ConcatFrames</code> for <code>DataFrame</code>s</td>
+</tr>
+<tr>
+<td><code>pl.col("x").first(ignore_nulls=True)</code>, <code>.last(...)</code>; <code>df.group_by("k").all()</code></td>
+<td><code>ursus.Col("x").FirstNonNull()</code>, <code>LastNonNull()</code>; <code>lf.GroupBy(ursus.Col("k")).All()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>for key, g in df.group_by("k")</code>, <code>.map_groups(fn)</code></td>
+<td><code>for p, err := range lf.GroupBy(ursus.Col("k")).Groups(ctx)</code>, <code>.MapGroups(ctx, fn)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.extend(other)</code>, <code>df.glimpse()</code>, <code>df.estimated_size()</code></td>
+<td><code>df.Extend(ctx, other)</code>, <code>df.Glimpse()</code>, <code>df.EstimatedSize()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.gather([2, 0])</code>, <code>df.row(1)</code>, <code>df.row(by_predicate=p)</code>, <code>df.item()</code>, <code>df.item(1, "b")</code></td>
+<td><code>df.Gather(ctx, []int{2, 0}, false)</code>, <code>df.Row(1)</code>, <code>df.RowWhere(ctx, p)</code>, <code>df.Item()</code>, <code>df.ItemAt(1, "b")</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.replace_column(0, s)</code>, <code>df.drop_in_place("b")</code>, <code>df.get_column_index("b")</code>, <code>df.to_series(0)</code>, <code>df.to_struct()</code></td>
+<td><code>df.ReplaceColumn(0, s)</code>, <code>df.DropInPlace("b")</code>, <code>df.GetColumnIndex("b")</code>, <code>df.ToSeries(0)</code>, <code>df.ToStruct("")</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.corr()</code>, <code>df.sum_horizontal()</code>, <code>df.fold(lambda a, b: a + b)</code></td>
+<td><code>df.Corr(ctx)</code>, <code>df.SumHorizontal(ctx, true)</code>, <code>df.Fold(ctx, func(a, b ursus.Expr) ursus.Expr { return a.Add(b) })</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>lf.collect_schema().names()</code>, <code>.dtypes()</code>, <code>.len()</code></td>
+<td><code>lf.Columns(ctx)</code>, <code>lf.DTypes(ctx)</code>, <code>lf.Width(ctx)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.group_by("k").having(pl.len() &gt; 1).agg(...)</code></td>
+<td><code>lf.GroupBy(ursus.Col("k")).Having(ursus.Len().Gt(1)).Agg(...)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.group_by("k", maintain_order=True).head(2)</code>, <code>.tail(2)</code></td>
+<td><code>lf.GroupBy(ursus.Col("k")).Head(2)</code>, <code>.Tail(2)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.upsample("t", every="1d", group_by="g")</code></td>
+<td><code>lf.Upsample("t", ursus.Every("1d"), "g")</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.to_dummies(["c"], drop_first=True)</code>, <code>df.unstack(step=3)</code></td>
+<td><code>df.ToDummies(ctx, ursus.DummiesOptions{Columns: []string{"c"}, DropFirst: true})</code>, <code>df.Unstack(ctx, ursus.UnstackOptions{Step: 3})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.transpose(column_names="id")</code></td>
+<td><code>df.Transpose(ctx, ursus.TransposeOptions{ColumnNamesFrom: "id"})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.partition_by("k", include_key=False)</code></td>
+<td><code>df.PartitionBy(ctx, ursus.PartitionOptions{By: []string{"k"}, DropKey: true})</code> (new in 0.6.7)</td>
 </tr>
 <tr>
 <td><code>pl.concat([a, b])</code></td>
@@ -1721,6 +1849,22 @@ changes is what Go asks for.</p>
 <td><code>.GroupByDynamic(index, ursus.DynamicOptions{...})</code>, <code>.Rolling(index, ursus.RollingOptions{...})</code></td>
 </tr>
 <tr>
+<td><code>.rolling("t", period="7d", offset="0d")</code></td>
+<td><code>.Rolling(ursus.Col("t"), ursus.RollingOptions{Period: ursus.Every("7d"), Offset: ursus.NoOffset()})</code>, the next seven days (changed in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.rolling_rank_by("t", "3d")</code>, <code>.rolling_map(f, 5)</code></td>
+<td><code>.RollingRankBy(ursus.Col("t"), ursus.Every("3d"), ursus.RankAverage)</code>, <code>.RollingMap[float64, float64]("f", ursus.Float64, 5, f)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.col("x").sum().rolling("t", period="2d")</code>, <code>....over("g")</code></td>
+<td><code>ursus.Col("x").Sum().Rolling(ursus.Col("t"), ursus.RollingOptions{Period: ursus.Every("2d")})</code>, <code>....Over(ursus.Col("g"))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.group_by_dynamic("step", every="5i")</code>, <code>.rolling_sum_by("step", "3i")</code></td>
+<td><code>ursus.DynamicOptions{Every: ursus.Every("5i")}</code>, <code>.RollingSumBy(ursus.Col("step"), ursus.Every("3i"))</code>, over an integer index (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.str.contains(p)</code>, <code>.dt.year()</code>, <code>.list.len()</code></td>
 <td><code>.Str().Contains(p, false)</code>, <code>.Dt().Year()</code>, <code>.List().Len()</code></td>
 </tr>
@@ -1729,12 +1873,112 @@ changes is what Go asks for.</p>
 <td><code>.Struct().Field("f")</code></td>
 </tr>
 <tr>
+<td><code>pl.Array(pl.Float64, 3)</code>, <code>.list.to_array(3)</code>, <code>.arr.to_list()</code></td>
+<td><code>ursus.Array(ursus.Float64, 3)</code>, <code>.List().ToArray(3)</code>, <code>.Arr().ToList()</code>; a Go <code>[3]float64</code> in rows (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.arr.sum()</code>, <code>.arr.sort()</code>, <code>.arr.eval(pl.element() * 2)</code>, <code>.arr.to_struct()</code>, <code>.arr.dot(b)</code></td>
+<td><code>.Arr().Sum()</code>, <code>.Arr().Sort()</code>, <code>.Arr().Eval(ursus.Element().Mul(2), false)</code>, <code>.Arr().ToStruct()</code>, <code>.Arr().Dot(b)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.reshape((-1, 3))</code>, <code>pl.concat_arr(a, b)</code></td>
+<td><code>.Reshape(-1, 3)</code>, <code>ursus.ConcatArr(a, b)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.arctan2(y, x)</code>, <code>.truediv(v)</code>, <code>.limit(n)</code>, <code>.pipe(f)</code></td>
+<td><code>ursus.Arctan2(y, x)</code>, <code>.TrueDiv(v)</code>, <code>.Limit(n)</code>, <code>.Pipe(f)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.item()</code>, <code>.lower_bound()</code>, <code>.upper_bound()</code>, <code>.is_sorted()</code></td>
+<td><code>.Item(false)</code>, <code>.LowerBound()</code>, <code>.UpperBound()</code>, <code>.IsSorted(false, false)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.str.to_time("%H:%M")</code>, <code>.str.to_decimal(scale=2)</code>, <code>.dt.cast_time_unit("ms")</code></td>
+<td><code>.Str().ToTime("%H:%M", true)</code>, <code>.Str().ToDecimal(2)</code>, <code>.Dt().CastTimeUnit(ursus.Milli)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.meta.root_names()</code>, <code>.meta.output_name()</code>, <code>.meta.undo_aliases()</code>, <code>.meta.tree_format()</code></td>
+<td><code>.Meta().RootNames()</code>, <code>.Meta().OutputName()</code>, <code>.Meta().UndoAliases()</code>, <code>.Meta().TreeFormat()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.to_physical()</code>, <code>.reinterpret(signed=True)</code></td>
+<td><code>.ToPhysical()</code>, <code>.Reinterpret(true)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.name.keep()</code>, <code>.name.to_uppercase()</code>, <code>.name.replace(p, v)</code>, <code>.name.prefix_fields("p_")</code>; <code>.struct.drop(["f"])</code></td>
+<td><code>.Name().Keep()</code>, <code>.Name().ToUpper()</code>, <code>.Name().Replace(p, v, false)</code>, <code>.Name().PrefixFields("p_")</code>; <code>.Struct().Drop("f")</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>.map_elements(f)</code>, <code>.map_batches(f)</code></td>
 <td><code>.MapElements(name, type, f)</code>, <code>.MapBatches(name, type, f)</code>, with a Go function</td>
 </tr>
 <tr>
+<td><code>df.map_rows(f)</code>, <code>df.map_columns(["a"], f)</code></td>
+<td><code>df.MapRows(ctx, f)</code>, <code>df.MapColumns(ctx, []string{"a"}, f)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.show(20)</code>, <code>lf.cache()</code></td>
+<td><code>df.Show(20)</code>, <code>lf.Cache()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
 <td><code>df.write_parquet(f)</code>, <code>df.write_csv(f)</code></td>
 <td><code>lf.WriteParquet(ctx, w)</code>, <code>lf.WriteCSV(ctx, w)</code>, to any <code>io.Writer</code></td>
+</tr>
+<tr>
+<td><code>pl.read_ndjson(p)</code>, <code>pl.scan_ndjson([p, q], infer_schema_length=n, ignore_errors=True)</code></td>
+<td><code>ursus.ScanNDJSON(p)</code>, <code>ursus.ScanNDJSONFiles([]string{p, q}, ursus.WithInferSchemaLines(n), ursus.WithNDJSONIgnoreErrors(true))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.scan_parquet("ds/", hive_schema={"g": pl.Int8}, include_file_paths="path")</code></td>
+<td><code>ursus.ScanParquet("ds", ursus.WithHiveSchema(s), ursus.WithIncludeFilePaths("path"))</code>, a hive dataset's keys read from its directories (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.scan_parquet(files, missing_columns="insert", extra_columns="ignore", cast_options=pl.ScanCastOptions(integer_cast="upcast"))</code></td>
+<td><code>ursus.ScanParquetFiles(files, ursus.WithInsertMissingColumns(true), ursus.WithIgnoreExtraColumns(true), ursus.WithUpcastIntegers(true))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.read_csv(p, try_parse_dates=True)</code></td>
+<td><code>ursus.ScanCSV(p, ursus.WithTryParseDates(true))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.read_csv(p, ignore_errors=True, infer_schema=False, raise_if_empty=False, decimal_comma=True, encoding="utf8-lossy")</code></td>
+<td><code>ursus.ScanCSV(p, ursus.WithIgnoreErrors(true), ursus.WithInferSchema(false), ursus.WithRaiseIfEmpty(false), ursus.WithDecimalComma(true), ursus.WithEncoding(ursus.UTF8Lossy))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.read_csv(p, skip_lines=2, skip_rows_after_header=1, quote_char=None)</code></td>
+<td><code>ursus.ScanCSV(p, ursus.WithSkipLines(2), ursus.WithSkipRowsAfterHeader(1), ursus.WithQuoting(false))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.scan_csv("logs/*.csv", include_file_paths="path")</code>, <code>pl.scan_ndjson(p, include_file_paths="path")</code></td>
+<td><code>ursus.ScanCSVGlob("logs/*.csv", ursus.WithCSVIncludeFilePaths("path"))</code>, <code>ursus.ScanNDJSON(p, ursus.WithNDJSONIncludeFilePaths("path"))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.scan_ipc("ds/", hive_schema={"k": pl.Int8}, include_file_paths="path")</code>, <code>pl.scan_ipc("p*.arrow")</code></td>
+<td><code>ursus.ScanIPC("ds", ursus.WithIPCHiveSchema(s), ursus.WithIPCIncludeFilePaths("path"))</code>, <code>ursus.ScanIPCGlob("p*.arrow")</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.read_csv("sales.csv.gz")</code>, a zlib or Zstandard file too</td>
+<td><code>ursus.ScanCSV("sales.csv.gz")</code>, known by its first bytes (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.read_json(p, schema_overrides={"a": pl.Float32})</code></td>
+<td><code>ursus.ScanJSON(p, ursus.WithNDJSONSchemaOverrides(map[string]dtype.DataType{"a": ursus.Float32}))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.write_csv(f, quote_style="always", datetime_format="%Y-%m-%d %H:%M", float_precision=2, compression="gzip")</code></td>
+<td><code>lf.WriteCSV(ctx, w, ursus.WithQuoteStyle(ursus.QuoteAlways), ursus.WithDatetimeFormat("%Y-%m-%d %H:%M"), ursus.WithFloatPrecision(2), ursus.WithCSVCompression(ursus.CSVGzip))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.write_ndjson(f)</code>, <code>df.write_json(f)</code>, <code>lf.sink_ndjson(p)</code></td>
+<td><code>lf.WriteNDJSON(ctx, w)</code>, <code>lf.WriteJSON(ctx, w)</code>, <code>lf.SinkNDJSON(ctx, p)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.scan_ipc(p)</code>, <code>pl.read_ipc_stream(p)</code>, <code>df.write_ipc(f, compression="zstd")</code>, <code>lf.sink_ipc(p)</code>, <code>pl.read_ipc_schema(p)</code></td>
+<td><code>ursus.ScanIPC(p)</code>, <code>ursus.ScanIPCStream(p)</code>, <code>lf.WriteIPC(ctx, w, ursus.WithIPCCompression(ursus.IPCZstd))</code>, <code>lf.SinkIPC(ctx, p)</code>, <code>ursus.ReadIPCSchema(p)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.read_database("SELECT * FROM t WHERE a &gt; ?", conn, execute_options={"parameters": [5]}, schema_overrides={"a": pl.Int32})</code></td>
+<td><code>ursus.ReadDatabase(ctx, db, "SELECT * FROM t WHERE a &gt; ?", 5)</code>, any <code>database/sql</code> driver; <code>ursus.ReadDatabaseRows(rows, ursus.WithDatabaseSchemaOverrides(m))</code> (new in 0.6.7)</td>
 </tr>
 <tr>
 <td><code>df.to_arrow()</code></td>
@@ -1784,8 +2028,11 @@ changes is what Go asks for.</p>
   rows; Polars leaves them out.</li>
 <li><strong><code>ToInteger</code>, <code>ToDate</code> and <code>ToDatetime</code> give null for what does not parse;</strong>
   Polars' fail by default.</li>
-<li><strong><code>Cut</code> and <code>Hist</code> give text,</strong> where Polars gives a Categorical, which ursus does not
-  have yet.</li>
+<li><strong><code>Cut</code> gives an Enum of its labels,</strong> and <code>QCut</code> and <code>Hist</code>'s category a Categorical,
+  as Polars' do (new in 0.6.7).</li>
+<li><strong>A <code>Categorical</code> is stored as its text</strong> (new in 0.6.7): it costs what a String does,
+  and its codes, <code>Cat().Physical()</code>, are computed over the frame, the order its values
+  first appear in, where Polars' are a process's string cache.</li>
 <li><strong>A <code>Time</code> takes a unit,</strong> where Polars' is nanoseconds.</li>
 </ul>
 <p>The full list, with the step that made each choice, is in

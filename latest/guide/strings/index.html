@@ -1690,7 +1690,7 @@ examples read a small frame of people:</p>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>│ String         │ String         │ Uint32 │ Uint32 │
 </span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>├────────────────┼────────────────┼────────┼────────┤
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>│ "Ada Lovelace" │ "ada lovelace" │ 14     │ 14     │
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>│ "Zoë Smith"   │ "zoë smith"   │ 10     │ 11     │
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>│ "Zoë Smith"    │ "zoë smith"    │ 10     │ 11     │
 </span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>│ "Ben O'Brien"  │ "ben o'brien"  │ 11     │ 11     │
 </span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>└────────────────┴────────────────┴────────┴────────┘
 </span></code></pre></div>
@@ -1701,12 +1701,6 @@ examples read a small frame of people:</p>
 <li><code>LenChars</code> counts characters and <code>LenBytes</code> bytes of UTF-8: "Zoë Smith " is ten
   characters and eleven bytes.</li>
 </ul>
-<div class="admonition note">
-<p class="admonition-title">0.6.6 prints a row holding Zoë a column short</p>
-<p>A printed frame in 0.6.6 pads each cell by its bytes, so a row holding a letter
-outside ASCII comes out misaligned, as above. 0.6.7 pads by the columns a terminal
-draws, as Polars does. The values are right either way; only the printing moves.</p>
-</div>
 <h2 id="matching">Matching<a class="headerlink" href="#matching" title="Permanent link">&para;</a></h2>
 <p><code>Contains(pattern, literal)</code> tests a regular expression, or a literal string when
 <code>literal</code> is true. <code>StartsWith</code> and <code>EndsWith</code> take a literal, and <code>CountMatches</code>
@@ -1789,7 +1783,7 @@ fields, null where there are fewer parts, which <code>Unnest</code> turns into c
 </span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>│ List(String)        │
 </span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>├─────────────────────┤
 </span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>│ ["ada", "LOVELACE"] │
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>│ ["Zoë", "Smith"]   │
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>│ ["Zoë", "Smith"]    │
 </span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>│ ["ben", "o'brien"]  │
 </span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>└─────────────────────┘
 </span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>
@@ -1851,6 +1845,16 @@ fields, null where there are fewer parts, which <code>Unnest</code> turns into c
 <p><code>ToInteger</code>, <code>ToDate</code> and <code>ToDatetime</code> turn what does not parse into a null. Polars'
 <code>to_integer</code> and <code>to_date</code> fail the query by default instead. For that, ask for
 strictness: <code>Strptime(..., true)</code>, or <code>ToIntegerWith(base, type, true)</code>.</p>
+<p><em>New in 0.6.7:</em> <code>ToTime(format, strict)</code> parses a time of day, by a format or, with
+none, each value as it comes, and <code>ToDecimal(scale)</code> a number into a <code>Decimal(38,
+scale)</code>, rounded half away from zero, as Polars' <code>to_time</code> and <code>to_decimal</code>.</p>
+<p><em>New in 0.6.7:</em> <code>ToDate</code>, <code>ToDatetime</code> and <code>ToTime</code> without a format, and <code>Strptime</code>
+with an empty one, read the patterns Polars' <code>to_date</code> and <code>to_datetime</code> infer:
+<code>2024-01-02</code>, <code>2024/1/2</code>, <code>02.01.2024</code> and <code>02/01/2024</code>, the year first or the day,
+never the month; <code>2024-01-02 03:04:05.123</code>, a <code>T</code> or a space between; and an offset,
+<code>Z</code>, <code>+09:00</code> or <code>+0900</code>, which makes the value its instant. <code>ToDatetime(unit, tz)</code>
+reads a value with no offset on <code>tz</code>'s wall clock, as Polars' does, where it took it
+as UTC's. Each value is read by its own pattern; Polars infers one from the first.</p>
 <p><code>JsonDecode(type)</code> parses JSON into a value of a type, a struct or a list, and
 <code>Encode</code> and <code>Decode</code> convert to and from hex or base64.</p>
 <h2 id="joining">Joining<a class="headerlink" href="#joining" title="Permanent link">&para;</a></h2>

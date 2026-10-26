@@ -1651,6 +1651,10 @@ chain has one <code>if err != nil</code>, at the end.</p>
 <li><strong>constant folding and simplification;</strong></li>
 <li><strong>common subplans:</strong> a subtree used twice runs once.</li>
 </ul>
+<p>A subtree used twice runs once when it joins, aggregates or sorts, which is worth the
+fence it puts around it: a filter above one use stops there. <em>New in 0.6.7:</em>
+<code>Cache()</code> asks it of any query, as Polars' <code>cache</code> does, a scan read twice or a Go
+function's answer; a query used once is not cached.</p>
 <p><code>Explain</code> shows the plan. <code>Optimized(false)</code> shows it as written:</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nx">q</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sales</span><span class="p">().</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="nx">Filter</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"qty"</span><span class="p">).</span><span class="nx">Gt</span><span class="p">(</span><span class="kt">int64</span><span class="p">(</span><span class="mi">3</span><span class="p">))).</span>
@@ -1685,6 +1689,9 @@ two of six columns:</p>
 <p><code>Explain</code>'s output is stable on purpose: ursus's own tests compare plans as text, so a
 query that still gives the right answer while reading forty columns instead of two
 fails a test.</p>
+<p><em>New in 0.6.7.</em> <code>Columns(ctx)</code>, <code>DTypes(ctx)</code> and <code>Width(ctx)</code> are a query's column
+names, their types and how many there are, as Polars' lazy <code>columns</code>, <code>dtypes</code> and
+<code>width</code>: read from <code>CollectSchema</code>, which types the plan without running it.</p>
 <h2 id="eager-a-dataframe">Eager: a DataFrame<a class="headerlink" href="#eager-a-dataframe" title="Permanent link">&para;</a></h2>
 <p>A <code>DataFrame</code> is an answer in memory, Arrow arrays underneath. Its methods mirror
 <code>LazyFrame</code>'s, and each is a lazy query over the frame, collected at once. So each
@@ -1704,6 +1711,8 @@ takes a context, which can cancel it:</p>
 </span></code></pre></div>
 <p><code>df.Lazy()</code> turns a frame back into a query, for a chain of several steps optimized
 together.</p>
+<p>Printed, a frame draws its first ten rows. <em>New in 0.6.7:</em> <code>Show(n)</code> draws its first
+n, every one, as Polars' <code>show</code>, and a query's <code>Show(ctx, n)</code> computes only those.</p>
 <h2 id="streaming-the-answer">Streaming the answer<a class="headerlink" href="#streaming-the-answer" title="Permanent link">&para;</a></h2>
 <p><code>CollectBatches</code> is a Go iterator over the answer's batches, so an answer larger than
 memory never has to be held at once:</p>
@@ -1729,7 +1738,8 @@ that promises one:</p>
 <li><strong>a group-by's groups:</strong> <code>MaintainOrder()</code> gives them in the order their keys first
   appear;</li>
 <li><strong>an inner join's rows,</strong> which follow whichever input ursus did not hash:
-  <code>JoinMaintainOrder(true)</code> keeps the left frame's order.</li>
+  <code>JoinMaintainOrder(ursus.JoinOrderLeft)</code> keeps the left frame's order, and
+  <code>JoinOrderRight</code> the right's, for a join of any kind.</li>
 </ul>
 
 

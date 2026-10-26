@@ -1100,6 +1100,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-window-inside-a-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A window inside a window
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#under-a-memory-limit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1641,6 +1652,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-window-inside-a-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A window inside a window
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#under-a-memory-limit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1854,7 +1876,9 @@ here two 9s and two 7s:</p>
 </tbody>
 </table>
 <p>Under <code>Over</code>, a rank is within its partition: the <a href="../../concepts/expressions/">expressions</a>
-page ranks each order in its region.</p>
+page ranks each order in its region. A null's rank is null, and the values are ranked
+among themselves, as Polars ranks them. <em>Changed in 0.6.7:</em> a null ranked as the least
+value before, and took a position.</p>
 <h2 id="rolling-windows-by-rows">Rolling windows by rows<a class="headerlink" href="#rolling-windows-by-rows" title="Permanent link">&para;</a></h2>
 <p><code>RollingMean(n)</code> is the mean of each row and the n − 1 before it, and so on for
 <code>RollingSum</code>, <code>RollingMin</code>, <code>RollingMax</code>, <code>RollingStd</code>, <code>RollingVar</code>, <code>RollingMedian</code>,
@@ -1892,6 +1916,8 @@ page ranks each order in its region.</p>
   <code>MinSamples(k)</code> answers from k;</li>
 <li><code>RollingCenter()</code> centres the window on its row.</li>
 </ul>
+<p><em>New in 0.6.7:</em> <code>RollingMap(name, type, n, fn)</code> calls a Go function on each row's
+window, as Polars' <code>rolling_map</code>; see <a href="../go-functions/">Go functions</a>.</p>
 <h2 id="rolling-windows-by-time">Rolling windows by time<a class="headerlink" href="#rolling-windows-by-time" title="Permanent link">&para;</a></h2>
 <p>A window by rows counts rows; a window by time counts time. <code>RollingSumBy(by,
 period)</code> sums the rows whose <code>by</code> lies in the period up to each row's, <code>(t − period,
@@ -1930,7 +1956,24 @@ Wednesday, and its three days only to Saturday.</p>
 belong to it.</p>
 <p>The <code>By</code> forms take a <code>Date</code>, <code>Datetime</code> or <code>Time</code> column, which need not be sorted:
 a window is found by value, and rows tied with a row's instant are in its window.
-Unlike the windows by rows they answer from one value by default.</p>
+Unlike the windows by rows they answer from one value by default. <em>New in 0.6.7:</em>
+<code>RollingRankBy(by, period, method)</code> ranks each row's value among its window's, as
+Polars' <code>rolling_rank_by</code>; over one partition past a memory limit it is refused, as
+its window's values are not yet walked. <em>New in 0.6.7:</em> <code>by</code>
+can be an integer of 32 or 64 bits, a step rather than an instant, whose period counts
+it in Polars' integer unit: <code>Every("3i")</code> is three steps, as in
+<a href="../dates-and-times/#an-integer-index">Dates and times</a>.</p>
+<p><em>New in 0.6.7:</em> <code>e.Rolling(index, o)</code> is any aggregate expression over each row's
+window, as Polars' <code>Expr.rolling</code>: <code>Col("x").Max().Sub(Col("x").Min()).Rolling(Col("t"),
+ursus.RollingOptions{Period: ursus.Every("2d")})</code> is each row's range over the two days
+ending at it, the window placed as the frame's <code>Rolling</code> places it, and <code>Over(keys)</code>
+rolls within each partition. Where every aggregate in it is a sum, a mean, a minimum,
+a maximum, a variance, a standard deviation, a median or a quantile, and no offset is
+given, each is rolled by its own window above, found by value, so the index need not
+be sorted, and in an aggregation it is a list a group. Anything else, a row's value,
+which is the list of its window's, or a first, is rolled by the frame's rolling group,
+whose index is checked sorted, within each partition under <code>Over</code>, and is refused in
+an aggregation; under <code>Over</code> it holds its windows until the input ends.</p>
 <h2 id="exponentially-weighted">Exponentially weighted<a class="headerlink" href="#exponentially-weighted" title="Permanent link">&para;</a></h2>
 <p><code>EwmMean</code>, <code>EwmStd</code>, <code>EwmVar</code> and <code>EwmSum</code> weight recent rows more. The decay is
 <code>EwmAlpha</code>, <code>EwmSpan</code>, <code>EwmCom</code> or <code>EwmHalfLife</code>, as Polars' parameters are, and
@@ -1963,10 +2006,21 @@ Unlike the windows by rows they answer from one value by default.</p>
 </span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>│ 2026-01-12 │ 13.5    │ 12.6032 │ 12.5625        │
 </span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>└────────────┴─────────┴─────────┴────────────────┘
 </span></code></pre></div>
-<p><code>EwmMeanBy(by, halfLife)</code> decays by time between rows rather than by rows.</p>
+<p><code>EwmMeanBy(by, halfLife)</code> decays by time between rows rather than by rows, or by the
+steps of an integer <code>by</code>, its half-life such as <code>Every("2i")</code>.</p>
 <h2 id="without-over">Without Over<a class="headerlink" href="#without-over" title="Permanent link">&para;</a></h2>
 <p>A window function with no <code>Over</code> runs over the whole frame in the rows' order:
 <code>Col("close").CumSum(false)</code> is a running total from the first row to the last.</p>
+<h2 id="a-window-inside-a-window">A window inside a window<a class="headerlink" href="#a-window-inside-a-window" title="Permanent link">&para;</a></h2>
+<p><em>New in 0.6.7:</em> a window function's input may hold another, and an aggregate, each
+computed first in the outer window's partitions and order, as Polars computes them:
+<code>Col("x").Shift(1).CumSum(false).Over(Col("g"))</code> shifts within each g and then sums
+within each g, and <code>Col("x").Sub(Col("x").Mean()).CumSum(false).Over(Col("g"))</code> sums
+each row's distance from its group's mean. A window with an <code>Over</code> of its own inside
+another is computed within the outer one's partitions, so
+<code>Col("x").Sum().Over(Col("g")).CumSum(false).Over(Col("h"))</code> sums g's values within
+each h. An aggregate whose answer depends on the order, <code>First</code>, under an <code>OrderBy</code> is
+refused, as an ordering over an aggregate is.</p>
 <h2 id="under-a-memory-limit">Under a memory limit<a class="headerlink" href="#under-a-memory-limit" title="Permanent link">&para;</a></h2>
 <p>Windows spill to disk under a memory budget, over many partitions or one huge one,
 and give the answer they give in memory. A rolling window by time whose period holds
