@@ -3174,7 +3174,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v068">Unreleased — toward v0.6.8<a class="headerlink" href="#unreleased-toward-v068" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.7</code> (2026-10-26): steps 365–367, so far.
+<p>Everything since <code>v0.6.7</code> (2026-10-26): steps 365–368, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.8-scope.md"><code>v0.6.8-scope.md</code></a> set the scope: <strong>the leftovers
 of feature completeness, and five of 0.7's performance tasks done ahead of it.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3187,6 +3187,15 @@ of feature completeness, and five of 0.7's performance tasks done ahead of it.</
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li>
+<p><strong>Large strings</strong> (368): a String or Binary column past 2 GiB of characters holds
+  64-bit offsets, where it was refused, so a Collect, a sort, a join, a group-by or a
+  window over more than 2 GiB of text answers. It exports to Arrow as a LargeString or
+  a LargeBinary, a slice of it that fits as a String; <code>ScanArrowRecords</code> reads such a
+  record back, the IPC writers split a batch that would be one, and it spills. A batch
+  a source reads keeps 32-bit offsets and refuses past them, saying to read it in
+  smaller batches.</p>
+</li>
 <li>
 <p><strong>Partitioned writes</strong> (367): <code>WithPartitionBy(keys...)</code> makes <code>SinkParquet</code>,
   <code>SinkCSV</code>, <code>SinkIPC</code> and <code>SinkNDJSON</code> write a hive dataset, Polars'
