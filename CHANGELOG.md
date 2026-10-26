@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.8
 
-Everything since `v0.6.7` (2026-10-26): steps 365–370, so far.
+Everything since `v0.6.7` (2026-10-26): steps 365–371, so far.
 [`v0.6.8-scope.md`](./context_files/v0.6.8-scope.md) set the scope: **the leftovers
 of feature completeness, and five of 0.7's performance tasks done ahead of it.**
 
@@ -65,6 +65,11 @@ of feature completeness, and five of 0.7's performance tasks done ahead of it.**
 
 ### Faster
 
+- **Slice pushdown** (371): a `Head` or a `Slice` tells the scan or the sort beneath it
+  how few rows it needs through a projection, a `WithColumns`, a row index, a union's
+  inputs and an ordered left join's left input, where it reached only the one directly
+  beneath it. A projected sort's head over lineitem at SF=1 is a top-k, 147 ms where
+  it took 380.
 - **A count reads no column** (370): `Count` and `Select(Len())` scan none of a
   frame's columns, where they read all, a Parquet file's rows its footers', no column
   chunk opened. Over PDS-H's lineitem at SF=1, `Count` takes 2.5 ms where it took
