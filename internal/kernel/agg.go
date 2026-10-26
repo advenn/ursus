@@ -1115,25 +1115,25 @@ func newExtremum(in, out dtype.DataType, max bool) (Accumulator, error) {
 	}
 	switch in.Physical().ID() {
 	case dtype.TypeInt8:
-		return &extremumNum[int8]{out: out, max: max, less: lessOrdered[int8]}, nil
+		return &extremumNum[int8]{out: out, max: max, less: lessOrdered[int8], ordered: true}, nil
 	case dtype.TypeInt16:
-		return &extremumNum[int16]{out: out, max: max, less: lessOrdered[int16]}, nil
+		return &extremumNum[int16]{out: out, max: max, less: lessOrdered[int16], ordered: true}, nil
 	case dtype.TypeInt32:
-		return &extremumNum[int32]{out: out, max: max, less: lessOrdered[int32]}, nil
+		return &extremumNum[int32]{out: out, max: max, less: lessOrdered[int32], ordered: true}, nil
 	case dtype.TypeInt64:
-		return &extremumNum[int64]{out: out, max: max, less: lessOrdered[int64]}, nil
+		return &extremumNum[int64]{out: out, max: max, less: lessOrdered[int64], ordered: true}, nil
 	case dtype.TypeUint8:
-		return &extremumNum[uint8]{out: out, max: max, less: lessOrdered[uint8]}, nil
+		return &extremumNum[uint8]{out: out, max: max, less: lessOrdered[uint8], ordered: true}, nil
 	case dtype.TypeUint16:
-		return &extremumNum[uint16]{out: out, max: max, less: lessOrdered[uint16]}, nil
+		return &extremumNum[uint16]{out: out, max: max, less: lessOrdered[uint16], ordered: true}, nil
 	case dtype.TypeUint32:
-		return &extremumNum[uint32]{out: out, max: max, less: lessOrdered[uint32]}, nil
+		return &extremumNum[uint32]{out: out, max: max, less: lessOrdered[uint32], ordered: true}, nil
 	case dtype.TypeUint64:
-		return &extremumNum[uint64]{out: out, max: max, less: lessOrdered[uint64]}, nil
+		return &extremumNum[uint64]{out: out, max: max, less: lessOrdered[uint64], ordered: true}, nil
 	case dtype.TypeFloat32:
-		return &extremumNum[float32]{out: out, max: max, less: lessFloat32}, nil
+		return &extremumNum[float32]{out: out, max: max, less: lessFloat32, keyed: true}, nil
 	case dtype.TypeFloat64:
-		return &extremumNum[float64]{out: out, max: max, less: lessFloat64}, nil
+		return &extremumNum[float64]{out: out, max: max, less: lessFloat64, keyed: true}, nil
 	case dtype.TypeInt128:
 		return &extremumI128{out: out, max: max}, nil
 	default:
@@ -1148,6 +1148,10 @@ type extremumNum[T data.Primitive] struct {
 	out  dtype.DataType
 	max  bool
 	less func(a, b T) bool
+	// ordered: less is the type's own <, an integer's; keyed: it is a float's order
+	// key's, lessFloat64's or lessFloat32's. AddAll compares either in place (step
+	// 372).
+	ordered, keyed bool
 
 	best []T
 	seen []bool

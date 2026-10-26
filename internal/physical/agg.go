@@ -340,6 +340,12 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 	if n == 0 {
 		return nil
 	}
+	if len(s.keys) == 0 && s.wholeOK() {
+		if err := s.consumeWhole(ctx, in, n); err != nil {
+			return err
+		}
+		return s.consumed(ctx, n)
+	}
 
 	// Evaluate the key expressions for this batch.
 	keyCols := make([]*data.Column, len(s.keys))
@@ -509,7 +515,62 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 			}
 		}
 	}
+	return s.consumed(ctx, n)
+}
 
+// wholeOK reports whether every accumulator takes a whole column, so a frame's
+// aggregate of no keys feeds them so (consumeWhole).
+func (s *hashAggSink) wholeOK() bool {
+	for _, a := range s.accs {
+		if w, ok := a.(kernel.WholeAdder); !ok || !w.Whole() {
+			return false
+		}
+	}
+	return true
+}
+
+// consumeWhole is Consume for an aggregate of no keys whose accumulators take whole
+// columns (step 372): each input evaluated once and handed over whole, no group id
+// made a row, and a count of a literal told the rows, evaluating nothing.
+func (s *hashAggSink) consumeWhole(ctx context.Context, in *data.Batch, n int) error {
+	if s.ids.Len() == 0 {
+		s.ids.bytes.GetOrInsert(nil)
+		if s.ordered {
+			s.firstSeen = append(s.firstSeen, s.ordinalOf(in, 0))
+		}
+	}
+	for i, spec := range s.specs {
+		inner, preds := expr.FilterChain(spec.input)
+		if _, lit := inner.(*expr.Lit); lit && len(preds) == 0 {
+			if r, ok := s.accs[i].(kernel.RowAdder); ok && r.AddRows(n) {
+				continue
+			}
+		}
+		col, err := evalColumn(ctx, inner, in)
+		if err != nil {
+			return err
+		}
+		if len(preds) > 0 {
+			sel, err := passingRows(ctx, preds, in)
+			if err != nil {
+				return err
+			}
+			if len(sel) != n {
+				if col, err = kernel.Take(col, sel); err != nil {
+					return err
+				}
+			}
+		}
+		if err := s.accs[i].(kernel.WholeAdder).AddAll(col); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// consumed is Consume's end, once a batch of n rows is in the accumulators: its
+// memory, and the budget's freeze or a parallel worker's turn to serial.
+func (s *hashAggSink) consumed(ctx context.Context, n int) error {
 	acc := s.recharge()
 	s.nRows += int64(n)
 

@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.8
 
-Everything since `v0.6.7` (2026-10-26): steps 365–371, so far.
+Everything since `v0.6.7` (2026-10-26): steps 365–372, so far.
 [`v0.6.8-scope.md`](./context_files/v0.6.8-scope.md) set the scope: **the leftovers
 of feature completeness, and five of 0.7's performance tasks done ahead of it.**
 
@@ -65,6 +65,12 @@ of feature completeness, and five of 0.7's performance tasks done ahead of it.**
 
 ### Faster
 
+- **A frame's aggregate takes its columns whole** (372): an aggregate of no keys,
+  `Select(c("x").Mean())`, makes no group id a row; a count, a sum, a mean, a minimum
+  and a maximum, a first and a last take each batch's column at once, an integer's
+  sum and mean exact in 128 bits without a copy, a float's in the same order, to the
+  bit. Over a million rows `Len` takes 0.13 ms where it took 2.5, an integer's mean
+  1.0 where it took 3.8; `Select(Len())` over lineitem at SF=1 2.3 ms where it took 30.
 - **Slice pushdown** (371): a `Head` or a `Slice` tells the scan or the sort beneath it
   how few rows it needs through a projection, a `WithColumns`, a row index, a union's
   inputs and an ordered left join's left input, where it reached only the one directly
