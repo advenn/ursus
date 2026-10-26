@@ -1412,6 +1412,34 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#unreleased-toward-v07" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased — toward v0.7
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Unreleased — toward v0.7">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#faster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Faster
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#v068-2026-10-26" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1457,7 +1485,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#faster" class="md-nav__link">
+  <a href="#faster_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Faster
@@ -1773,7 +1801,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#faster_1" class="md-nav__link">
+  <a href="#faster_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Faster
@@ -1845,7 +1873,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#faster_2" class="md-nav__link">
+  <a href="#faster_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Faster
@@ -1917,7 +1945,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#faster_3" class="md-nav__link">
+  <a href="#faster_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Faster
@@ -1989,7 +2017,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#faster_4" class="md-nav__link">
+  <a href="#faster_5" class="md-nav__link">
     <span class="md-ellipsis">
       
         Faster
@@ -2329,6 +2357,34 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#unreleased-toward-v07" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased — toward v0.7
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Unreleased — toward v0.7">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#faster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Faster
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#v068-2026-10-26" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2374,7 +2430,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#faster" class="md-nav__link">
+  <a href="#faster_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Faster
@@ -2690,7 +2746,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#faster_1" class="md-nav__link">
+  <a href="#faster_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Faster
@@ -2762,7 +2818,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#faster_2" class="md-nav__link">
+  <a href="#faster_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Faster
@@ -2834,7 +2890,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#faster_3" class="md-nav__link">
+  <a href="#faster_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Faster
@@ -2906,7 +2962,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#faster_4" class="md-nav__link">
+  <a href="#faster_5" class="md-nav__link">
     <span class="md-ellipsis">
       
         Faster
@@ -3239,6 +3295,20 @@ replacements.</p>
 <a href="https://github.com/advenn/ursus/tree/master/context_files/"><code>context_files/</code></a>, with the measurements behind each change.
 Step numbers below point at those records.</p>
 <hr />
+<h2 id="unreleased-toward-v07">Unreleased — toward v0.7<a class="headerlink" href="#unreleased-toward-v07" title="Permanent link">&para;</a></h2>
+<p>Everything since <code>v0.6.8</code> (2026-10-26): steps 375–376, so far.
+<a href="https://github.com/advenn/ursus/blob/master/context_files/v0.7-scope.md"><code>v0.7-scope.md</code></a> set the scope: <strong>performance,</strong> the
+Parquet read first.</p>
+<h3 id="faster">Faster<a class="headerlink" href="#faster" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>A Parquet file's pages are decompressed into reused buffers</strong> (376): each column
+  chunk's page reader allocated its buffers afresh, a megabyte a page of DuckDB's
+  lineitem, and the collector and the zeroing followed. A scan of four lineitem
+  columns at SF=1 allocates 2.2 GB in seven runs where it allocated 3.9; PDS-H at
+  SF=0.1 takes 0.93 of v0.6.8's time, and at SF=1 its q14, q17, q19, q12 and q15 0.91
+  to 0.95.</li>
+</ul>
+<hr />
 <h2 id="v068-2026-10-26">v0.6.8 — 2026-10-26<a class="headerlink" href="#v068-2026-10-26" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.7</code> (2026-10-26): steps 365–374.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.8-scope.md"><code>v0.6.8-scope.md</code></a> set the scope: <strong>the leftovers
@@ -3321,7 +3391,7 @@ of feature completeness, and five of 0.7's performance tasks done ahead of it.</
   INSERTs of as many as the dialect's parameters allow, in one transaction.</p>
 </li>
 </ul>
-<h3 id="faster">Faster<a class="headerlink" href="#faster" title="Permanent link">&para;</a></h3>
+<h3 id="faster_1">Faster<a class="headerlink" href="#faster_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A CSV file read faster</strong> (373): a float parsed in one pass, to <code>strconv</code>'s bits,
   and an integer; a batch's column with no null has no validity bitmap, so the
@@ -4357,7 +4427,7 @@ one session, and step 232 measured the whole.</p>
   strict forms; rolling median and quantile; eager <code>Pivot</code> and <code>Transpose</code>;
   <code>DaysInMonth</code>, <code>Combine</code>, <code>RenameFields</code> and <code>JsonEncode</code>. Each answers as Polars
   does, checked against its answers, except where its docs say otherwise.</p>
-<h3 id="faster_1">Faster<a class="headerlink" href="#faster_1" title="Permanent link">&para;</a></h3>
+<h3 id="faster_2">Faster<a class="headerlink" href="#faster_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>The Parquet reader reads ahead</strong> (214). A row group not at the head decoded three
   batches and waited, so most of each decoded only once it was the head, one at a time.
@@ -4515,7 +4585,7 @@ session, and step 208 measured the whole.</p>
   partition of a keyed window, each past a limit that refused or held its answer
   before. Reverse passes under a tenth of its input, and the unkeyed <code>Rolling</code> too
   at batches of 2,048: it holds a batch's worth, about 700 KB at 8,192 rows.</p>
-<h3 id="faster_2">Faster<a class="headerlink" href="#faster_2" title="Permanent link">&para;</a></h3>
+<h3 id="faster_3">Faster<a class="headerlink" href="#faster_3" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A runtime filter tests a dense key against a bitmap</strong> (202), a bit for each
   value in the join keys' range, where it looked each probe row up in the join's
@@ -4639,7 +4709,7 @@ alternated in one session, and step 200 measured the whole.</p>
   <code>Rolling</code>, and a window with no <code>partition_by</code>, each past a limit that refused it
   before. h2o's <code>gb10</code> and <code>j5</code> pass under 3 GB, peaking at 2.74 to 2.91 GB.</li>
 </ul>
-<h3 id="faster_3">Faster<a class="headerlink" href="#faster_3" title="Permanent link">&para;</a></h3>
+<h3 id="faster_4">Faster<a class="headerlink" href="#faster_4" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>The Parquet reader decodes its own pages</strong> (192) for a flat column of an integer,
   float or byte-array type, PLAIN or dictionary-encoded: definition levels as runs,
@@ -4776,7 +4846,7 @@ than v0.5.0 on it. Both are met. Measured on 2026-10-11, at <code>c6aa77d</code>
 <li><strong>Under a 3 GB container,</strong> h2o's <code>gb10</code> and <code>j5</code> pass over Parquet and CSV,
   peaking at 2.77 to 2.92 GB.</li>
 </ul>
-<h3 id="faster_4">Faster<a class="headerlink" href="#faster_4" title="Permanent link">&para;</a></h3>
+<h3 id="faster_5">Faster<a class="headerlink" href="#faster_5" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A probe row that misses does no work</strong> when nothing spilled and nothing validates
   (158): q17 −19% CPU.</li>
