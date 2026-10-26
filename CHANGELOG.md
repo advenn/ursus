@@ -13,11 +13,48 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.6.7
+## v0.6.7 — 2026-10-26
 
-Everything since `v0.6.6` (2026-10-19): steps 288–363, so far.
+Everything since `v0.6.6` (2026-10-19): steps 288–364.
 [`v0.6.7-scope.md`](./context_files/v0.6.7-scope.md) set the scope: **feature
-completeness, part 3 — frame operations.**
+completeness, part 3 — frame operations.** It took in what was to be 0.6.8's I/O and
+the types after it, and three steps of performance. Step 364 checked the whole.
+
+### Where it ends
+
+- **Polars' frame operations:**
+  - rows: `UniqueKeep`, duplicates over columns, samples, negative slices, the row
+    shortcuts;
+  - columns and types: a frame's cast, `MatchToSchema`, a frame's aggregates and
+    fills, `InsertColumn`, `HashRows`;
+  - reshaping: a lazy `Pivot`, `Unpivot` without `On`, `PartitionBy`, `Upsample`,
+    `Concat`'s modes, `Transpose` named from a column, `ToDummies`;
+  - group-bys: a group's `Head` and `Tail`, `Having`, `FirstNonNull`, the groups as
+    frames;
+  - joins: `maintain_order`, an as-of numeric tolerance and coalesce, `Update`;
+  - Go values in and out: `FromRows`, `Rows`, `ToMaps`, `IterRows`, a `Series` with
+    operations.
+- **What remained of Polars' API,** by a diff of the two (`polars-parity.md`): selectors,
+  the name and meta namespaces, `TopKBy`, `InterpolateBy`, an expression's rolling, a
+  window inside a window, a list a group in `Agg`.
+- **Types:** `Array` and the `Arr()` namespace, `Categorical`, a List, an Array or a
+  Struct as a key.
+- **I/O:** Arrow IPC, JSON and NDJSON read and written; compressed input; Parquet,
+  CSV, NDJSON and IPC directories, globs and hive partitions; Parquet schema
+  evolution; databases read through `database/sql`; the rest of `read_csv`'s and
+  `write_csv`'s options, and Polars' date patterns.
+- **Performance:** a sort and a unique on several threads, and text sorted by its
+  bytes: a million distinct integers sort in 30 ms on eight threads where they took
+  100, and their unique takes 54 to 105 ms where it took 430 to 640.
+- **Each answers as Polars 1.44.1 does,** checked against its answers on the same
+  inputs, but for the differences `feature-gaps.md` §9 records.
+- **Nothing the benchmarks run got slower:**
+  - the optimized plans of the 22 PDS-H and 15 h2o queries are byte-identical to
+    v0.6.6's;
+  - the sort changed beneath them, so PDS-H at SF=0.1 was run against v0.6.6's,
+    alternating: 0.95 to 0.98 of its time in all, every query within its noise;
+  - every PDS-H answer at SF=0.1, at every step, and every h2o answer at 10,000,000
+    rows over Parquet match DuckDB's.
 
 ### Breaks
 
@@ -470,6 +507,22 @@ completeness, part 3 — frame operations.**
   whole rows; `DataFrame.NUnique(subset...)`.
 - **`UniqueKeep(keep, subset...)`** (289): the first, last, any or none of each key's
   rows, kept in their order, as Polars' `unique(keep=, maintain_order=True)`.
+
+### Known limitations
+
+As v0.6.6's, except:
+
+- **Lifted:** a window inside a window and an aggregate inside an aggregate (336);
+  `CorrSpearman` and `Mode` past a memory limit, which spill (339, 340); `.arr`
+  (341, 342).
+- **Not built,** in `polars-parity.md`: Excel, Avro, Delta and Iceberg; a database
+  written; partitioned writes; a plan serialized; a String column of more than 2 GiB,
+  which is refused. 0.6.8 takes partitioned writes, large strings and a database
+  written.
+- **A count still reads every column:** `Select(Len())` over Parquet projects them
+  all; Polars reads none.
+- **A CSV file is read in about three and a half times Polars' time** (step 357),
+  and the CSV writer runs on one thread.
 
 ---
 
