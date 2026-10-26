@@ -3174,7 +3174,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v068">Unreleased — toward v0.6.8<a class="headerlink" href="#unreleased-toward-v068" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.7</code> (2026-10-26): steps 365–368, so far.
+<p>Everything since <code>v0.6.7</code> (2026-10-26): steps 365–369, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.8-scope.md"><code>v0.6.8-scope.md</code></a> set the scope: <strong>the leftovers
 of feature completeness, and five of 0.7's performance tasks done ahead of it.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3187,6 +3187,13 @@ of feature completeness, and five of 0.7's performance tasks done ahead of it.</
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li>
+<p><strong><code>Profile</code></strong> (369), Polars' <code>profile()</code>: a query's answer and a frame of each node of
+  its plan, as <code>Explain</code> prints it, after the optimization's row: its <code>start</code> and <code>end</code>
+  in microseconds, as Polars', and its <code>rows</code>, <code>batches</code>, <code>own</code> time, summed over the
+  threads that did it, and <code>peak_memory</code>. <code>Collect</code> builds none of its wrappers.
+  <code>ExplainOptFlags(f)</code> renders the plan <code>WithOptFlags(f)</code> runs.</p>
+</li>
 <li>
 <p><strong>Large strings</strong> (368): a String or Binary column past 2 GiB of characters holds
   64-bit offsets, where it was refused, so a Collect, a sort, a join, a group-by or a
