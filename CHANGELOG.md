@@ -13,6 +13,23 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.7
+
+Everything since `v0.6.8` (2026-10-26): steps 375–376, so far.
+[`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
+Parquet read first.
+
+### Faster
+
+- **A Parquet file's pages are decompressed into reused buffers** (376): each column
+  chunk's page reader allocated its buffers afresh, a megabyte a page of DuckDB's
+  lineitem, and the collector and the zeroing followed. A scan of four lineitem
+  columns at SF=1 allocates 2.2 GB in seven runs where it allocated 3.9; PDS-H at
+  SF=0.1 takes 0.93 of v0.6.8's time, and at SF=1 its q14, q17, q19, q12 and q15 0.91
+  to 0.95.
+
+---
+
 ## v0.6.8 — 2026-10-26
 
 Everything since `v0.6.7` (2026-10-26): steps 365–374.

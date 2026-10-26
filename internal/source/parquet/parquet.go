@@ -702,7 +702,7 @@ func (s *Source) openFile(ctx context.Context, i int) (_ *file.Reader, _ func(),
 			err = corrupt(v, s.partName(i))
 		}
 	}()
-	r, err := file.NewParquetReader(ra)
+	r, err := file.NewParquetReader(ra, file.WithReadProps(readProps()))
 	if err != nil {
 		if closer != nil {
 			closer.Close()
