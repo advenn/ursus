@@ -1,8 +1,9 @@
 package kernel
 
-// Step 381: PairKeyTable against a map, through growth and lookups that miss;
-// KeyPacker's words equal exactly when their keys are; and n_unique of an integer
-// column, keyed by two words, counting as a map does through merges and spills.
+// Steps 381 and 384: WordKeyTable against a map, of two words and of three, through
+// growth and lookups that miss; KeyPacker's words equal exactly when their keys are;
+// and n_unique of an integer column, keyed by two words, counting as a map does
+// through merges and spills.
 
 import (
 	"fmt"
@@ -16,40 +17,59 @@ import (
 	"github.com/advenn/ursus/internal/data"
 )
 
-// pairPool is n keys that repeat, differ in one word alone, swap their words, and
-// reach both words' extremes.
-func pairPool(rng *rand.Rand, n int) [][2]uint64 {
+// wordPool is n keys of words words that repeat, differ in one word alone, swap
+// their words, and reach the words' extremes.
+func wordPool(rng *rand.Rand, n, words int) [][3]uint64 {
 	edges := []uint64{0, 1, math.MaxUint64, 1 << 63, math.MaxUint32, 1 << 32}
-	out := make([][2]uint64, n)
+	out := make([][3]uint64, n)
 	for i := range out {
-		a, b := uint64(rng.IntN(n/4+1)), uint64(rng.IntN(8))
+		a, b, c := uint64(rng.IntN(n/4+1)), uint64(rng.IntN(8)), uint64(rng.IntN(3))
 		switch rng.IntN(6) {
 		case 0:
-			a, b = edges[rng.IntN(len(edges))], edges[rng.IntN(len(edges))]
+			a, b, c = edges[rng.IntN(len(edges))], edges[rng.IntN(len(edges))], edges[rng.IntN(len(edges))]
 		case 1:
-			a, b = b, a
+			a, b, c = b, c, a
 		}
-		out[i] = [2]uint64{a, b}
+		if words == 2 {
+			c = 0
+		}
+		out[i] = [3]uint64{a, b, c}
 	}
 	return out
 }
 
-func TestPairKeyTableAgainstAMap(t *testing.T) {
+func TestWordKeyTableAgainstAMap(t *testing.T) {
 	rng := rand.New(rand.NewPCG(381, 1))
-	for _, reserve := range []int{0, 5000} {
-		tab := NewPairKeyTable()
+	for _, words := range []int{2, 3} {
+		for _, reserve := range []int{0, 5000} {
+			wordKeyTableAgainstAMap(t, rng, words, reserve)
+		}
+	}
+}
+
+func wordKeyTableAgainstAMap(t *testing.T, rng *rand.Rand, words, reserve int) {
+	t.Helper()
+	{
+		tab := NewWordKeyTable(words)
 		tab.Reserve(reserve)
-		want := map[[2]uint64]int32{}
-		keys := pairPool(rng, 20_000)
+		want := map[[3]uint64]int32{}
+		keys := wordPool(rng, 20_000, words)
+		// A key of two words is given no third, as the group-by's of two words is not.
+		third := func(c []uint64) []uint64 {
+			if words == 2 && rng.IntN(2) == 0 {
+				return nil
+			}
+			return c
+		}
 		for lo := 0; lo < len(keys); {
 			m := min(1+rng.IntN(ManyChunk), len(keys)-lo)
-			var a, b [ManyChunk]uint64
+			var a, b, c [ManyChunk]uint64
 			for j := range m {
-				a[j], b[j] = keys[lo+j][0], keys[lo+j][1]
+				a[j], b[j], c[j] = keys[lo+j][0], keys[lo+j][1], keys[lo+j][2]
 			}
 			var ids [ManyChunk]int32
 			var ins [ManyChunk]bool
-			tab.GetOrInsertMany(a[:m], b[:m], ids[:m], ins[:m])
+			tab.GetOrInsertMany(a[:m], b[:m], third(c[:m]), ids[:m], ins[:m])
 			for j := range m {
 				k := keys[lo+j]
 				id, had := want[k]
@@ -58,36 +78,36 @@ func TestPairKeyTableAgainstAMap(t *testing.T) {
 					want[k] = id
 				}
 				if ids[j] != id || ins[j] == had {
-					t.Fatalf("reserved %d: key %v given id %d inserted %v, want %d inserted %v",
-						reserve, k, ids[j], ins[j], id, !had)
+					t.Fatalf("%d words, reserved %d: key %v given id %d inserted %v, want %d inserted %v",
+						words, reserve, k, ids[j], ins[j], id, !had)
 				}
 			}
 			lo += m
 		}
 		if tab.Len() != len(want) || len(want) < 1000 {
-			t.Fatalf("reserved %d: %d keys, the map %d", reserve, tab.Len(), len(want))
+			t.Fatalf("%d words, reserved %d: %d keys, the map %d", words, reserve, tab.Len(), len(want))
 		}
 		for k, id := range want {
-			if a, b := tab.KeyAt(id); a != k[0] || b != k[1] {
-				t.Fatalf("id %d holds (%d, %d), want %v", id, a, b, k)
+			if a, b, c := tab.KeyAt(id); a != k[0] || b != k[1] || c != k[2] {
+				t.Fatalf("id %d holds (%d, %d, %d), want %v", id, a, b, c, k)
 			}
-			if tab.HashAt(id) != PairHash(k[0], k[1]) {
+			if tab.HashAt(id) != WordHash(k[0], k[1], k[2]) {
 				t.Fatalf("id %d's hash is not its key's", id)
 			}
 		}
-		// Lookups, half of them of keys never inserted.
-		var a, b [ManyChunk]uint64
+		// Lookups, half of them of keys never inserted, in the first word or the last.
+		var a, b, c [ManyChunk]uint64
 		var ids [ManyChunk]int32
 		for range 200 {
-			var ks [ManyChunk][2]uint64
+			var ks [ManyChunk][3]uint64
 			for j := range ManyChunk {
 				ks[j] = keys[rng.IntN(len(keys))]
 				if rng.IntN(2) == 0 {
-					ks[j][0] += 1 << 40
+					ks[j][words-1] += 1 << 40
 				}
-				a[j], b[j] = ks[j][0], ks[j][1]
+				a[j], b[j], c[j] = ks[j][0], ks[j][1], ks[j][2]
 			}
-			tab.GetMany(a[:], b[:], ids[:])
+			tab.GetMany(a[:], b[:], third(c[:]), ids[:])
 			for j, k := range ks {
 				id, ok := want[k]
 				if !ok {
@@ -172,6 +192,11 @@ func TestKeyPackerKeepsKeysApart(t *testing.T) {
 		{[]dtype.DataType{dtype.Int64, dtype.Int32, dtype.Int16, dtype.Int8}, -1},
 		{[]dtype.DataType{dtype.Date, dtype.Uint8, dtype.Uint32}, 1},
 		{[]dtype.DataType{dtype.Int16, dtype.Int16}, 0},
+		// Three words: PDS-H q20's two Int64s, q3's Int64, Date and Int32, and more.
+		{[]dtype.DataType{dtype.Int64, dtype.Int64}, -1},
+		{[]dtype.DataType{dtype.Int64, dtype.Date, dtype.Int32}, -1},
+		{[]dtype.DataType{dtype.Uint64, dtype.Int64, dtype.Int16, dtype.Uint8}, 2},
+		{[]dtype.DataType{dtype.Int32, dtype.Int32, dtype.Int32, dtype.Int32}, -1},
 	}
 	for _, c := range cases {
 		name := fmt.Sprint(c.types)
@@ -183,10 +208,17 @@ func TestKeyPackerKeepsKeysApart(t *testing.T) {
 		for i, dt := range c.types {
 			cols[i] = col(dt, i == c.free)
 		}
-		a, b := make([]uint64, n), make([]uint64, n)
+		a, b, w3 := make([]uint64, n), make([]uint64, n), make([]uint64, n)
 		for lo := 0; lo < n; lo += 64 {
 			m := min(64, n-lo)
-			p.Pack(cols, lo, a[lo:lo+m], b[lo:lo+m])
+			p.Pack(cols, lo, a[lo:lo+m], b[lo:lo+m], w3[lo:lo+m])
+		}
+		var bits int
+		for _, dt := range c.types {
+			bits += dt.Physical().BitWidth() + 1
+		}
+		if want := 2 + bits/129; p.Words() != want {
+			t.Fatalf("%s: %d words, want %d", name, p.Words(), want)
 		}
 		wide := make([][]int64, len(cols))
 		for i, c := range cols {
@@ -208,9 +240,9 @@ func TestKeyPackerKeepsKeysApart(t *testing.T) {
 		equal := 0
 		for i := range n {
 			for j := range n {
-				if (a[i] == a[j] && b[i] == b[j]) != same(i, j) {
-					t.Fatalf("%s: rows %d and %d pack equal %v, keys equal %v", name, i, j,
-						a[i] == a[j] && b[i] == b[j], same(i, j))
+				eq := a[i] == a[j] && b[i] == b[j] && w3[i] == w3[j]
+				if eq != same(i, j) {
+					t.Fatalf("%s: rows %d and %d pack equal %v, keys equal %v", name, i, j, eq, same(i, j))
 				}
 				if i != j && same(i, j) {
 					equal++
@@ -222,9 +254,9 @@ func TestKeyPackerKeepsKeysApart(t *testing.T) {
 		}
 	}
 	for _, types := range [][]dtype.DataType{
-		{dtype.Int64, dtype.Int64},                           // 130 bits
-		{dtype.Int32, dtype.Int32, dtype.Int32, dtype.Int32}, // 132
-		{dtype.Uint64, dtype.Int32, dtype.Int32},             // 131
+		{dtype.Int64, dtype.Int64, dtype.Int64},                            // 195 bits
+		{dtype.Int64, dtype.Int64, dtype.Int32, dtype.Int32},               // 196
+		{dtype.Uint64, dtype.Int32, dtype.Int32, dtype.Int32, dtype.Int32}, // 197
 		{dtype.Float64, dtype.Int32}, {dtype.String, dtype.Int8}, {dtype.Bool, dtype.Int8},
 	} {
 		if _, ok := NewKeyPacker(types); ok {

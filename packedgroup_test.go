@@ -1,10 +1,11 @@
 package ursus_test
 
-// Step 381: a group-by of several integer columns that fit two words with a null bit
-// each packs them, never encoded. Its answer must be the encoded keys': grouping by
-// the keys cast to String takes the encoded path, and each cast is one-to-one, null
-// to null, so the two group alike, on one thread in the same first-appearance order,
-// row for row, and on several, through the workers' merge, as the same set.
+// Steps 381 and 384: a group-by of several integer columns that fit two words, or
+// three, with a null bit each packs them, never encoded. Its answer must be the
+// encoded keys': grouping by the keys cast to String takes the encoded path, and each
+// cast is one-to-one, null to null, so the two group alike, on one thread in the same
+// first-appearance order, row for row, and on several, through the workers' merge,
+// as the same set.
 
 import (
 	"fmt"
@@ -82,7 +83,9 @@ func TestPackedGroupKeysAnswerAsEncodedOnes(t *testing.T) {
 		{dtype.Int8, dtype.Uint16, dtype.Int64},
 		{dtype.Uint64, dtype.Int32},
 		{dtype.Date, dtype.Int16, dtype.Int8},
-		{dtype.Int64, dtype.Int64}, // 130 bits with their nulls: encoded, both ways
+		{dtype.Int64, dtype.Int64},              // PDS-H q20's, three words since step 384
+		{dtype.Int64, dtype.Date, dtype.Int32},  // q3's
+		{dtype.Int64, dtype.Int64, dtype.Int64}, // 195 bits with their nulls: encoded, both ways
 	}
 	aggs := func(ordered bool) []ursus.Expr {
 		out := []ursus.Expr{c("v").Sum().Alias("sum"), ursus.Len().Alias("n"), c("v").Min().Alias("min"),

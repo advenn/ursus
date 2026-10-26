@@ -428,7 +428,7 @@ func (a *countAcc) Finish(name string, nGroups int) (*data.Column, error) {
 //
 // # An integer's value and group are two words
 //
-// Of an integer column the key is (value, group) in a PairKeyTable (step 381): the
+// Of an integer column the key is (value, group) in a WordKeyTable (step 381): the
 // value widened as IntKeys widens it, compared with ==, where encoding it called a
 // closure a row and the table hashed and compared its bytes. q16's count of distinct
 // suppliers a part spent a fifth of its CPU there. The first rows decide which table
@@ -442,7 +442,7 @@ type nuniqueAcc struct {
 	key    []byte // scratch, reused across rows
 
 	// ints holds (value, group) instead, for an integer column, once decided.
-	ints    *PairKeyTable
+	ints    *WordKeyTable
 	decided bool
 	reserve int     // the groups Reserve asked for before the table was decided
 	scratch []int64 // IntKeys's
@@ -484,7 +484,7 @@ func (a *nuniqueAcc) Reserve(n int) {
 func (a *nuniqueAcc) decide(ints bool) {
 	a.decided = true
 	if ints {
-		a.ints = NewPairKeyTable()
+		a.ints = NewWordKeyTable(2)
 		a.ints.Reserve(a.reserve)
 		return
 	}
@@ -567,7 +567,7 @@ func (a *nuniqueAcc) insertInts(va, vb []uint64, gs, ids []int32, ins []bool) {
 	if len(va) == 0 {
 		return
 	}
-	a.ints.GetOrInsertMany(va, vb, ids, ins)
+	a.ints.GetOrInsertMany(va, vb, nil, ids, ins)
 	for j, g := range gs {
 		if ins[j] {
 			a.counts[g]++
@@ -652,7 +652,7 @@ func (a *nuniqueAcc) mergeInts(o *nuniqueAcc, remap []int32) {
 	)
 	m := 0
 	for id := range int32(o.ints.Len()) {
-		v, g := o.ints.KeyAt(id)
+		v, g, _ := o.ints.KeyAt(id)
 		dst := int32(uint32(g))
 		if remap != nil {
 			if int(dst) >= len(remap) || remap[dst] < 0 {

@@ -102,8 +102,8 @@ func (a *nuniqueAcc) spillInts(sp KeySpill) (bool, error) {
 		ids[i] = int32(i)
 	}
 	slices.SortFunc(ids, func(x, y int32) int {
-		vx, gx := a.ints.KeyAt(x)
-		vy, gy := a.ints.KeyAt(y)
+		vx, gx, _ := a.ints.KeyAt(x)
+		vy, gy, _ := a.ints.KeyAt(y)
 		if c := cmp.Compare(gx, gy); c != 0 {
 			return c
 		}
@@ -113,7 +113,7 @@ func (a *nuniqueAcc) spillInts(sp KeySpill) (bool, error) {
 	keys := make([][]byte, 0, spillChunk)
 	buf := make([]byte, 0, 8*min(n, spillChunk))
 	for _, id := range ids {
-		v, g := a.ints.KeyAt(id)
+		v, g, _ := a.ints.KeyAt(id)
 		at := len(buf)
 		buf = binary.BigEndian.AppendUint64(buf, v)
 		gids, keys = append(gids, int32(uint32(g))), append(keys, buf[at:at+8:at+8])
@@ -129,7 +129,7 @@ func (a *nuniqueAcc) spillInts(sp KeySpill) (bool, error) {
 			return false, err
 		}
 	}
-	a.ints = NewPairKeyTable()
+	a.ints = NewWordKeyTable(2)
 	a.sp = sp
 	return true, sp.EndRun()
 }
