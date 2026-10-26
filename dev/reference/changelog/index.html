@@ -1412,6 +1412,34 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#unreleased-toward-v068" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased — toward v0.6.8
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Unreleased — toward v0.6.8">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#v067-2026-10-26" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1457,7 +1485,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#features" class="md-nav__link">
+  <a href="#features_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Features
@@ -1518,7 +1546,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#features_1" class="md-nav__link">
+  <a href="#features_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Features
@@ -1601,7 +1629,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#features_2" class="md-nav__link">
+  <a href="#features_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Features
@@ -1723,7 +1751,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#features_3" class="md-nav__link">
+  <a href="#features_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Features
@@ -2257,6 +2285,34 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#unreleased-toward-v068" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased — toward v0.6.8
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Unreleased — toward v0.6.8">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#v067-2026-10-26" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2302,7 +2358,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#features" class="md-nav__link">
+  <a href="#features_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Features
@@ -2363,7 +2419,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#features_1" class="md-nav__link">
+  <a href="#features_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Features
@@ -2446,7 +2502,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#features_2" class="md-nav__link">
+  <a href="#features_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Features
@@ -2568,7 +2624,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#features_3" class="md-nav__link">
+  <a href="#features_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Features
@@ -3095,6 +3151,20 @@ replacements.</p>
 <a href="https://github.com/advenn/ursus/tree/master/context_files/"><code>context_files/</code></a>, with the measurements behind each change.
 Step numbers below point at those records.</p>
 <hr />
+<h2 id="unreleased-toward-v068">Unreleased — toward v0.6.8<a class="headerlink" href="#unreleased-toward-v068" title="Permanent link">&para;</a></h2>
+<p>Everything since <code>v0.6.7</code> (2026-10-26): steps 365–366, so far.
+<a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.8-scope.md"><code>v0.6.8-scope.md</code></a> set the scope: <strong>the leftovers
+of feature completeness, and five of 0.7's performance tasks done ahead of it.</strong></p>
+<h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>A database written</strong> (366): <code>WriteDatabase</code>, Polars' <code>write_database</code>, on a
+  <code>LazyFrame</code> or a <code>DataFrame</code>, through <code>database/sql</code> into a <code>*sql.DB</code>, a <code>*sql.Conn</code>
+  or a <code>*sql.Tx</code>; <code>WithIfTableExists(IfExistsFail | IfExistsReplace | IfExistsAppend)</code>
+  as Polars' modes; a table created of the types <code>ReadDatabase</code> reads back, for SQLite,
+  PostgreSQL, MySQL or SQL Server, named by the driver or <code>WithDialect</code>; the rows in
+  INSERTs of as many as the dialect's parameters allow, in one transaction.</li>
+</ul>
+<hr />
 <h2 id="v067-2026-10-26">v0.6.7 — 2026-10-26<a class="headerlink" href="#v067-2026-10-26" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–364.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
@@ -3250,7 +3320,7 @@ the types after it, and three steps of performance. Step 364 checked the whole.<
   before the first row, <code>Slice(-7, 2)</code> of six rows two (291); and in an aggregation, a
   negative length, "to the end", failed.</li>
 </ul>
-<h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
+<h3 id="features_1">Features<a class="headerlink" href="#features_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A sort of text by its bytes, seven at a time</strong> (363): a String, Binary or
   Categorical key is radix-sorted, alone or beside other keys, where it went to the
@@ -3657,7 +3727,7 @@ missing. Step 287 checked the whole.</p>
   and a text function such as <code>Slice</code> split its bytes as runes; <code>Bin()</code> has the byte
   functions.</li>
 </ul>
-<h3 id="features_1">Features<a class="headerlink" href="#features_1" title="Permanent link">&para;</a></h3>
+<h3 id="features_2">Features<a class="headerlink" href="#features_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Generators</strong> (263): <code>IntRange</code>, <code>LinearSpace</code>, <code>Repeat</code>, <code>Ones</code> and <code>Zeros</code>, a
   column of their own length, e.g. <code>WithColumns(IntRange(0, Len(), 1).Alias("i"))</code>;
@@ -3821,7 +3891,7 @@ checked the whole.</p>
   numeric one; Polars fills a String with "" and a Bool with false for zero, and
   refuses a String for one and mean.</li>
 </ul>
-<h3 id="features_2">Features<a class="headerlink" href="#features_2" title="Permanent link">&para;</a></h3>
+<h3 id="features_3">Features<a class="headerlink" href="#features_3" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong><code>Dt().Date()</code> and <code>Dt().Time()</code></strong> (249), Polars' <code>dt.date</code> and <code>dt.time</code>: the
   date and time of day on the column's zone's wall clock. <code>Cast(Date)</code> reads the UTC
@@ -4124,7 +4194,7 @@ one session, and step 232 measured the whole.</p>
   state from batch to batch, and a reversed count counts down from the rows written.
   They refused.</li>
 </ul>
-<h3 id="features_3">Features<a class="headerlink" href="#features_3" title="Permanent link">&para;</a></h3>
+<h3 id="features_4">Features<a class="headerlink" href="#features_4" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong><code>List().NUnique()</code>, <code>List().ArgMin()</code> and <code>List().ArgMax()</code></strong> (222), each the
   column aggregate over a list's elements: Uint64s, nulls skipped and NaN the
