@@ -110,6 +110,9 @@ func (s *Source) Schema(context.Context) (*dtype.Schema, error) { return s.schem
 
 func (s *Source) Caps() plan.Caps { return plan.Caps{Projection: true} }
 
+// RowsOnly: a scan of no columns is the batches' rows (step 370).
+func (s *Source) RowsOnly(source.ScanSpec) bool { return true }
+
 // --- source.Openable ---------------------------------------------------------
 
 func (s *Source) Open(_ context.Context, spec source.ScanSpec) (source.BatchSource, error) {
@@ -223,5 +226,5 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 		}
 		cols[i] = c
 	}
-	return data.NewBatch(r.schema, cols)
+	return data.NewBatchRows(r.schema, cols, b.Rows()), nil
 }

@@ -87,11 +87,10 @@ func BenchmarkPipeline(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		n, err := ursus.Scan(src).
+		n, err := drained(b.Context(), ursus.Scan(src).
 			Filter(ursus.Col("qty").Gt(50)).
 			WithColumns(ursus.Col("price").Mul(ursus.Col("qty")).Alias("total")).
-			Select(ursus.Col("id"), ursus.Col("total")).
-			Count(b.Context())
+			Select(ursus.Col("id"), ursus.Col("total")))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -109,9 +108,8 @@ func BenchmarkFilterOnly(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		if _, err := ursus.Scan(src).
-			Filter(ursus.Col("qty").Gt(50)).
-			Count(b.Context()); err != nil {
+		if _, err := drained(b.Context(), ursus.Scan(src).
+			Filter(ursus.Col("qty").Gt(50))); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -124,9 +122,8 @@ func BenchmarkProjectArithmetic(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		if _, err := ursus.Scan(src).
-			Select(ursus.Col("price").Mul(ursus.Col("qty")).Add(ursus.Col("price")).Alias("t")).
-			Count(b.Context()); err != nil {
+		if _, err := drained(b.Context(), ursus.Scan(src).
+			Select(ursus.Col("price").Mul(ursus.Col("qty")).Add(ursus.Col("price")).Alias("t"))); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -312,9 +309,8 @@ func BenchmarkInnerJoin(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		if _, err := ursus.Scan(left).
-			Join(ursus.Scan(right), ursus.JoinOn(ursus.Col("id"))).
-			Count(b.Context()); err != nil {
+		if _, err := drained(b.Context(), ursus.Scan(left).
+			Join(ursus.Scan(right), ursus.JoinOn(ursus.Col("id")))); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -338,11 +334,10 @@ func BenchmarkJoinSpilling(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		if _, err := ursus.Scan(left).
-			Join(ursus.Scan(right), ursus.JoinOn(ursus.Col("id"))).
-			Count(b.Context(),
-				ursus.WithMemoryLimit(256<<10),
-				ursus.WithSpillDir(dir)); err != nil {
+		if _, err := drained(b.Context(), ursus.Scan(left).
+			Join(ursus.Scan(right), ursus.JoinOn(ursus.Col("id"))),
+			ursus.WithMemoryLimit(256<<10),
+			ursus.WithSpillDir(dir)); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -360,11 +355,10 @@ func BenchmarkPipelineThreads(b *testing.B) {
 		b.Run("threads="+strconv.Itoa(threads), func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
-				if _, err := ursus.Scan(src).
+				if _, err := drained(b.Context(), ursus.Scan(src).
 					Filter(ursus.Col("qty").Gt(50)).
 					WithColumns(ursus.Col("price").Mul(ursus.Col("qty")).Alias("total")).
-					Select(ursus.Col("id"), ursus.Col("total")).
-					Count(b.Context(), ursus.WithThreads(threads)); err != nil {
+					Select(ursus.Col("id"), ursus.Col("total")), ursus.WithThreads(threads)); err != nil {
 					b.Fatal(err)
 				}
 			}

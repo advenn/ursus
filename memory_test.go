@@ -524,6 +524,20 @@ func TestJoinAccountsItsHashTable(t *testing.T) {
 // partitioning, because partitioning divides the KEY SPACE and a holistic
 // accumulator's problem is inside one key. That is the case below, and its sibling
 // proves the distinction is real rather than a limit that is simply too small.
+// drained runs lf to its end, every column read, and answers its rows: what Count
+// did until step 370, since which a count reads no column, and an operator above a
+// scan holds none of its data.
+func drained(ctx context.Context, lf *ursus.LazyFrame, opts ...ursus.CollectOption) (int64, error) {
+	var n int64
+	for b, err := range lf.CollectBatches(ctx, opts...) {
+		if err != nil {
+			return n, err
+		}
+		n += int64(b.Height())
+	}
+	return n, nil
+}
+
 func TestBudgetErrorNamesTheOperator(t *testing.T) {
 	src := memFrame(t, 4000, 128, 50)
 	other := memFrame(t, 4000, 128, 50)
@@ -587,10 +601,10 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 	// be above one key and far below fifty.
 	t.Run("keyed_join_spills", func(t *testing.T) {
 		var stats ursus.MemoryStats
-		if _, err := ursus.Scan(src).Join(ursus.Scan(other), ursus.JoinOn(ursus.Col("k"))).
-			Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(32<<10),
-				ursus.WithSpillDir(t.TempDir()),
-				ursus.WithMemoryStats(&stats)); err != nil {
+		if _, err := drained(t.Context(), ursus.Scan(src).Join(ursus.Scan(other), ursus.JoinOn(ursus.Col("k"))),
+			ursus.WithBatchSize(128), ursus.WithMemoryLimit(32<<10),
+			ursus.WithSpillDir(t.TempDir()),
+			ursus.WithMemoryStats(&stats)); err != nil {
 			t.Errorf("a keyed join must partition rather than refuse: %v", err)
 		}
 		if stats.Spills == 0 {
@@ -601,10 +615,10 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 	// unique spills since step 82, so its entry moved here from the table above.
 	t.Run("unique_spills", func(t *testing.T) {
 		var stats ursus.MemoryStats
-		if _, err := ursus.Scan(src).Unique("seq").
-			Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
-				ursus.WithSpillDir(t.TempDir()),
-				ursus.WithMemoryStats(&stats)); err != nil {
+		if _, err := drained(t.Context(), ursus.Scan(src).Unique("seq"),
+			ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
+			ursus.WithSpillDir(t.TempDir()),
+			ursus.WithMemoryStats(&stats)); err != nil {
 			t.Errorf("unique must partition rather than refuse: %v", err)
 		}
 		if stats.Spills == 0 {
@@ -615,8 +629,8 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 	// hstack streams since step 218; TestHStackPairsItsFramesABatchAtATime checks its
 	// answer.
 	t.Run("hstack_streams", func(t *testing.T) {
-		if _, err := ursus.Scan(src).HStack(ursus.Scan(other).Select(ursus.Col("k").Alias("k2"))).
-			Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(32<<10)); err != nil {
+		if _, err := drained(t.Context(), ursus.Scan(src).HStack(ursus.Scan(other).Select(ursus.Col("k").Alias("k2"))),
+			ursus.WithBatchSize(128), ursus.WithMemoryLimit(32<<10)); err != nil {
 			t.Errorf("hstack must stream rather than refuse: %v", err)
 		}
 	})
@@ -625,10 +639,10 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 	// answer.
 	t.Run("tail_spills", func(t *testing.T) {
 		var stats ursus.MemoryStats
-		if _, err := ursus.Scan(src).Tail(3000).
-			Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
-				ursus.WithSpillDir(t.TempDir()),
-				ursus.WithMemoryStats(&stats)); err != nil {
+		if _, err := drained(t.Context(), ursus.Scan(src).Tail(3000),
+			ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
+			ursus.WithSpillDir(t.TempDir()),
+			ursus.WithMemoryStats(&stats)); err != nil {
 			t.Errorf("tail must spill rather than refuse: %v", err)
 		}
 		if stats.Spills == 0 {
@@ -640,10 +654,10 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 	// its answer.
 	t.Run("reverse_spills", func(t *testing.T) {
 		var stats ursus.MemoryStats
-		if _, err := ursus.Scan(src).Reverse().
-			Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
-				ursus.WithSpillDir(t.TempDir()),
-				ursus.WithMemoryStats(&stats)); err != nil {
+		if _, err := drained(t.Context(), ursus.Scan(src).Reverse(),
+			ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
+			ursus.WithSpillDir(t.TempDir()),
+			ursus.WithMemoryStats(&stats)); err != nil {
 			t.Errorf("reverse must spill rather than refuse: %v", err)
 		}
 		if stats.Spills == 0 {
@@ -653,10 +667,10 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 
 	t.Run("over_spills", func(t *testing.T) {
 		var stats ursus.MemoryStats
-		if _, err := ursus.Scan(src).WithColumns(ursus.Col("seq").Sum().Over(ursus.Col("k")).Alias("t")).
-			Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(32<<10),
-				ursus.WithSpillDir(t.TempDir()),
-				ursus.WithMemoryStats(&stats)); err != nil {
+		if _, err := drained(t.Context(), ursus.Scan(src).WithColumns(ursus.Col("seq").Sum().Over(ursus.Col("k")).Alias("t")),
+			ursus.WithBatchSize(128), ursus.WithMemoryLimit(32<<10),
+			ursus.WithSpillDir(t.TempDir()),
+			ursus.WithMemoryStats(&stats)); err != nil {
 			t.Errorf("a partitioned window must partition rather than refuse: %v", err)
 		}
 		if stats.Spills == 0 {
@@ -667,9 +681,9 @@ func TestBudgetErrorNamesTheOperator(t *testing.T) {
 	// And the case the entry above cannot show: one key too large for any amount of
 	// partitioning gets its OWN message, not the cross join's.
 	t.Run("one_key_too_large", func(t *testing.T) {
-		_, err := ursus.Scan(src).Join(ursus.Scan(other), ursus.JoinOn(ursus.Col("k"))).
-			Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
-				ursus.WithSpillDir(t.TempDir()))
+		_, err := drained(t.Context(), ursus.Scan(src).Join(ursus.Scan(other), ursus.JoinOn(ursus.Col("k"))),
+			ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
+			ursus.WithSpillDir(t.TempDir()))
 		if err == nil {
 			t.Fatal("eighty rows per key against a 4KiB limit was accepted")
 		}

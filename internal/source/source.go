@@ -165,3 +165,12 @@ type BatchSource interface {
 type Openable interface {
 	Open(ctx context.Context, spec ScanSpec) (BatchSource, error)
 }
+
+// RowsOnly is implemented by a source that may answer a scan of no columns, an
+// empty non-nil Projection, with batches of its rows and no columns: a count's,
+// which reads no column (step 370). RowsOnly says whether it answers spec's; where
+// it does not, or the source is not one, it is asked for one column, its cheapest,
+// which the scan trims away.
+type RowsOnly interface {
+	RowsOnly(spec ScanSpec) bool
+}

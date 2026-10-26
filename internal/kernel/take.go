@@ -430,7 +430,8 @@ func FilterBatch(b *data.Batch, mask *data.Column) (*data.Batch, error) {
 		}
 		cols[i] = out
 	}
-	return data.NewBatch(b.Schema(), cols)
+	// Its rows by the selection, so a batch of no columns keeps them (step 370).
+	return data.NewBatchRows(b.Schema(), cols, len(sel)), nil
 }
 
 // ConcatOwned is Concat for a caller that gives its batches up: it clears the slice

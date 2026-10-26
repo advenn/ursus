@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.8
 
-Everything since `v0.6.7` (2026-10-26): steps 365–369, so far.
+Everything since `v0.6.7` (2026-10-26): steps 365–370, so far.
 [`v0.6.8-scope.md`](./context_files/v0.6.8-scope.md) set the scope: **the leftovers
 of feature completeness, and five of 0.7's performance tasks done ahead of it.**
 
@@ -23,6 +23,10 @@ of feature completeness, and five of 0.7's performance tasks done ahead of it.**
 
 - **An empty hive key of text is the empty string** (367), as Polars reads `k=`,
   where it was null; in a key of any other type it is null still.
+- **`Count` computes no column it does not need** (370): a query's rows are counted
+  through a projection of none, so a column that would fail to compute, or a udf's
+  that nothing reads, no longer runs, and no longer fails or acts under a count. A
+  filter's columns still do.
 - **`SinkNDJSON` takes `NDJSONSinkOption`s** (367): a `CollectOption`, as before, or a
   `PartitionOption`. A call passing a `[]CollectOption` spread with `...` needs its
   slice's type changed.
@@ -58,6 +62,13 @@ of feature completeness, and five of 0.7's performance tasks done ahead of it.**
   as Polars' modes; a table created of the types `ReadDatabase` reads back, for SQLite,
   PostgreSQL, MySQL or SQL Server, named by the driver or `WithDialect`; the rows in
   INSERTs of as many as the dialect's parameters allow, in one transaction.
+
+### Faster
+
+- **A count reads no column** (370): `Count` and `Select(Len())` scan none of a
+  frame's columns, where they read all, a Parquet file's rows its footers', no column
+  chunk opened. Over PDS-H's lineitem at SF=1, `Count` takes 2.5 ms where it took
+  400–500; `Select(Len())` 27–39, the rest its aggregation's.
 
 ---
 

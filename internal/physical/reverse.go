@@ -264,5 +264,6 @@ func (r *reverseOp) backwards(b *data.Batch) (*data.Batch, error) {
 			return nil, err
 		}
 	}
-	return data.NewBatch(r.sink.schema, cols)
+	// Its rows, not its columns', so a batch of no columns keeps them (step 370).
+	return data.NewBatchRows(r.sink.schema, cols, n), nil
 }

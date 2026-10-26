@@ -237,6 +237,10 @@ func (s *Source) Describe() string { return s.desc }
 
 func (s *Source) Caps() plan.Caps { return plan.Caps{Projection: true} }
 
+// RowsOnly: a scan of no columns and no predicate is its files' footers' rows,
+// reading no column chunk (step 370). A predicate's columns are read as any scan's.
+func (s *Source) RowsOnly(spec source.ScanSpec) bool { return len(spec.Predicate) == 0 }
+
 // ClassifyPredicates reports every conjunct the pruner understands as INEXACT,
 // and everything else as Unsupported.
 //
@@ -815,6 +819,14 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 	if batchSize <= 0 {
 		batchSize = 8192
 	}
+	if out.Len() == 0 {
+		// The readers below decode columns; one of none and a predicate is not
+		// asked of them, which planScan answers with a column (RowsOnly).
+		if !s.RowsOnly(spec) {
+			return nil, uerr.Internalf("scan_parquet: a scan of no columns with a predicate")
+		}
+		return &rowsReader{src: s, out: out, size: batchSize, left: spec.MaxRows}, nil
+	}
 	// Predicates arrive only as ClassifyPredicates claimed them, which Prune gates.
 	df := newDictFilter(spec.Predicate, out, spec.Eval, spec.MaxRows)
 
@@ -884,6 +896,55 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 }
 
 // --- source.BatchSource --------------------------------------------------------
+
+// rowsReader answers a scan of no columns from the files' footers: batches of their
+// rows and no columns, no column chunk read (step 370), a file's footer read as its
+// rows are reached.
+type rowsReader struct {
+	src  *Source
+	out  *dtype.Schema
+	size int
+	left int // rows MaxRows leaves; 0 unlimited
+
+	mu    sync.Mutex
+	k     int   // the next file
+	rows  int64 // the current file's rows not yet handed on
+	ended bool  // MaxRows is reached
+}
+
+func (r *rowsReader) Schema() *dtype.Schema { return r.out }
+func (r *rowsReader) Close() error          { return nil }
+
+func (r *rowsReader) Next(ctx context.Context) (_ *data.Batch, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for r.rows == 0 {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if r.ended || r.k >= len(r.src.opens) {
+			return nil, io.EOF
+		}
+		f, closer, err := r.src.openFile(ctx, r.k)
+		if err != nil {
+			return nil, err
+		}
+		r.rows = f.NumRows()
+		closer()
+		r.k++
+	}
+	n := int(min(r.rows, int64(r.size)))
+	if r.left > 0 {
+		n = min(n, r.left)
+		r.left -= n
+		r.ended = r.left == 0
+	}
+	r.rows -= int64(n)
+	if r.ended {
+		r.rows = 0
+	}
+	return data.NewBatchRows(r.out, nil, n), nil
+}
 
 type reader struct {
 	src       *Source

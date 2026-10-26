@@ -175,10 +175,8 @@ func (ps *pushState) pushdown(n Node, required map[string]struct{}) (Node, bool,
 		// parent wants" — is exactly backwards here. Getting it wrong the other way
 		// merely loses the win; getting it wrong this way would keep every column.
 		//
-		// RootNames sees through *Agg, so `Col("x").Sum()` names x. Note that
-		// `Len()` reads no column and still names one, so a column nothing reads is
-		// kept — a missed optimisation, not a wrong answer, and closing it needs
-		// aggSpec to carry a "no input" marker that it does not have.
+		// RootNames sees through *Agg, so `Col("x").Sum()` names x, and `Len()`,
+		// `lit(1).len()`, names none: a count of a scan reads no column.
 		need := requiredOf(append(append([]expr.Node(nil), t.Keys...), t.Aggs...))
 		child, changed, err := ps.pushdown(t.Input, need)
 		if err != nil {
@@ -487,7 +485,11 @@ func (ps *pushState) pushdownScan(s *Scan, required map[string]struct{}) (Node, 
 	// Emit in the SOURCE's column order, not the required set's iteration order,
 	// so the plan is deterministic. Golden Explain files depend on it, and a
 	// non-deterministic projection would also defeat plan caching later.
-	var cols []string
+	//
+	// Nothing required is a scan of no columns, an empty projection, not a nil one,
+	// which is every column: a count reads none (step 370), and each source answers
+	// it with batches of rows and no columns.
+	cols := []string{}
 	for _, name := range s.Full.Names() {
 		if _, want := required[name]; want {
 			cols = append(cols, name)
@@ -845,9 +847,8 @@ func (ps *pushState) pushdownAsOfJoin(a *AsOfJoin, required map[string]struct{})
 // descent keeps each child's own pruning.
 //
 // An EMPTY target — a parent that reads no column, like GroupBy().Agg(Len()) — asks
-// for the first column instead, which is pushdownHStack's height trick. Asking for
-// nothing gives a Scan a nil projection, which means every column, while a Filter
-// child still keeps its predicate's: disagreement again.
+// each child for no column, and a scan reads none (step 370), where it asked for the
+// first column, since a scan asked for nothing read every one.
 func (ps *pushState) pushdownUnion(u *Union, required map[string]struct{}) (Node, bool, error) {
 	out, err := u.Schema()
 	if err != nil {
@@ -861,12 +862,6 @@ func (ps *pushState) pushdownUnion(u *Union, required map[string]struct{}) (Node
 			need[f.Name] = struct{}{}
 		}
 	}
-	if len(target) == 0 && out.Len() > 0 {
-		first := out.Field(0).Name
-		target = []string{first}
-		need[first] = struct{}{}
-	}
-
 	kids := make([]Node, len(u.Inputs))
 	names := make([][]string, len(u.Inputs))
 	changed, agree := false, true
@@ -938,10 +933,9 @@ func (ps *pushState) pushdownMergeSorted(m *MergeSorted, required map[string]str
 //
 // The one subtlety is the height. HStack pairs rows POSITIONALLY, and hstackOp
 // derives the output height from its children and errors when they disagree — so a
-// child must be read even when no column of it survives. Requiring its first column
-// is what guarantees that: an empty need set would make pushdownScan produce a nil
-// projection, which means "every column", so the prune would silently become a
-// no-op that still reports changed.
+// child must be read even when no column of it survives. A child of no column
+// survives as its rows: a scan of no columns still has its height (step 370), where
+// it took its first column for it.
 func (ps *pushState) pushdownHStack(h *HStack, required map[string]struct{}) (Node, bool, error) {
 	kids := h.Children()
 	needs := make([]map[string]struct{}, len(kids))
@@ -955,11 +949,6 @@ func (ps *pushState) pushdownHStack(h *HStack, required map[string]struct{}) (No
 			if _, want := required[name]; want {
 				need[name] = struct{}{}
 			}
-		}
-		if len(need) == 0 && cs.Len() > 0 {
-			// Read this child for its HEIGHT. Deterministic: the first column in
-			// the child's own order, so the plan does not depend on map iteration.
-			need[cs.Field(0).Name] = struct{}{}
 		}
 		needs[i] = need
 	}

@@ -359,7 +359,7 @@ func TestCrossJoinUnderALimitSpills(t *testing.T) {
 
 	// The same data with a KEY succeeds at the same limit, by partitioning.
 	stats = ursus.MemoryStats{}
-	if _, err := joinQuery(left, right, ursus.JoinInner).Count(t.Context(),
+	if _, err := drained(t.Context(), joinQuery(left, right, ursus.JoinInner),
 		ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
 		ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&stats)); err != nil {
 		t.Fatalf("a keyed join at the same limit must spill rather than refuse: %v", err)
@@ -372,10 +372,10 @@ func TestCrossJoinUnderALimitSpills(t *testing.T) {
 	// and answers as it does in memory: TestAKeylessExistsSpillsItsBuildSide.
 	big := joinFrame(t, 4000, 128, 900, 0, false)
 	var bigStats ursus.MemoryStats
-	if _, err := ursus.Scan(left).WhereExists(ursus.Scan(big).Select(ursus.Col("v").Alias("bv")),
-		ursus.Col("v").Lt(ursus.Col("bv"))).
-		Count(t.Context(), ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
-			ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&bigStats)); err != nil {
+	if _, err := drained(t.Context(), ursus.Scan(left).WhereExists(ursus.Scan(big).Select(ursus.Col("v").Alias("bv")),
+		ursus.Col("v").Lt(ursus.Col("bv"))),
+		ursus.WithBatchSize(128), ursus.WithMemoryLimit(4<<10),
+		ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&bigStats)); err != nil {
 		t.Fatalf("a residual join with no keys under a 4KiB limit must spill: %v", err)
 	}
 	if bigStats.Spills == 0 {
@@ -543,11 +543,11 @@ func TestSpilledJoinValidateStillFires(t *testing.T) {
 		if limit > 0 {
 			opts = append(opts, ursus.WithMemoryLimit(limit), ursus.WithSpillDir(t.TempDir()))
 		}
-		_, err := ursus.Scan(left).Select(ursus.Col("k"), ursus.Col("v")).
+		_, err := drained(t.Context(), ursus.Scan(left).Select(ursus.Col("k"), ursus.Col("v")).
 			Join(ursus.Scan(dup).Select(ursus.Col("k").Alias("k2")),
 				ursus.JoinLeftOn(ursus.Col("k")), ursus.JoinRightOn(ursus.Col("k2")),
-				ursus.JoinValidate(ursus.ValidateManyToOne)).
-			Count(t.Context(), opts...)
+				ursus.JoinValidate(ursus.ValidateManyToOne)),
+			opts...)
 		if err == nil {
 			t.Errorf("limit=%d: a duplicated right key must be rejected", limit)
 			continue

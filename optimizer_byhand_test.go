@@ -312,23 +312,29 @@ func TestOptimizerByHand(t *testing.T) {
 	}
 }
 
-// TestConcatUnderLenReadsOneColumn: a parent that reads no column — Len — must not
-// make a union read every column, or stack zero-column Projects to reconcile.
-//
-// Without pushdownUnion's empty-target guard the answer is still right — seven
-// rows either way, because a zero-column batch keeps its row count — so this is
-// the only place the guard shows: one scan read every column, and both children
-// were wrapped in a `PROJECT []`. The rows cannot tell; the plan can.
-func TestConcatUnderLenReadsOneColumn(t *testing.T) {
+// TestConcatUnderLenReadsNoColumn: a parent that reads no column — Len — makes a
+// union's children read none (step 370): a scan of no columns, and a filtered child
+// its predicate's column alone, under a `PROJECT []` so the children agree. It
+// read the first column of each, since a scan asked for nothing read every one.
+// Seven rows either way.
+func TestConcatUnderLenReadsNoColumn(t *testing.T) {
 	c := ursus.Col
 	l := ursus.Frame(ursus.Values("k", []int64{1, 2, 3, 4}), ursus.Values("v", []int64{10, 20, 30, 40}))
-	p, err := l.Concat(l.Filter(c("v").Gt(15))).GroupBy().Agg(ursus.Len().Alias("n")).
-		Explain(t.Context())
+	q := l.Concat(l.Filter(c("v").Gt(15))).GroupBy().Agg(ursus.Len().Alias("n"))
+	p, err := q.Explain(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(p, "PROJECT []") || !strings.Contains(p, "projection: [k] (1/2 cols)") {
-		t.Errorf("the union's children should be asked for one column, not none:\n%s", p)
+	if !strings.Contains(p, "projection: [] (0/2 cols)") || !strings.Contains(p, "projection: [v] (1/2 cols)") ||
+		strings.Contains(p, "projection: [k]") {
+		t.Errorf("the union's children should read no column but the filter's:\n%s", p)
+	}
+	n, err := q.Collect(t.Context(), ursus.WithBatchSize(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := n.Row(0); fmt.Sprint(r[0]) != "7" {
+		t.Errorf("%v rows, want 7", r[0])
 	}
 }
 

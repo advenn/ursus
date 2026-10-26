@@ -262,7 +262,7 @@ These belong to a performance release more than to features.
 | --- | --- |
 | built: **`profile()`,** in step 369: `Profile`, each node's span, rows, batches, own time and peak memory; `ExplainOptFlags`. Not built: a physical-plan explain | — |
 | **Slice pushdown** past projections, unions and joins, and of an offset slice | P1 |
-| **A count reads every column:** `Select(Len())` over a Parquet scan projects all of them, where Polars reads none (found at step 287) | P1 |
+| built: **a count reads no column,** in step 370: a scan of no columns, Parquet's rows from its footers; `Select(Len())`'s aggregation is slower than Polars' still, P4's | — |
 | **Predicate pushdown through group-by keys and window partition keys** | P1 |
 | **Expression-level CSE;** clustering of `with_columns`; dropping a computed column nothing reads | P1 |
 | **Multi-join reordering** on statistics; sortedness propagation and a merge join | P2 |

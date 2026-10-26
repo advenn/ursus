@@ -78,6 +78,9 @@ func (s *Source) Describe() string { return "" }
 // could use, and the rows arrive already decoded.
 func (s *Source) Caps() plan.Caps { return plan.Caps{Projection: true} }
 
+// RowsOnly: a scan of no columns is its rows (step 370).
+func (s *Source) RowsOnly(source.ScanSpec) bool { return true }
+
 // Schema opens one reader, converts its schema, and releases it. The result is
 // cached; a cancelled context is not, so a retry with a live one still works.
 func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {

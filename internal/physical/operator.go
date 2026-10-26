@@ -620,6 +620,7 @@ func planScan(ctx context.Context, s *plan.Scan, opts Options) (Operator, error)
 		ReadAhead:  readAhead(opts.Budget),
 		Eval:       Eval,
 	}
+	spec.Projection = noColumns(s, spec)
 	src, err := op.Open(ctx, spec)
 	if err != nil {
 		return nil, uerr.Wrap(err, uerr.KindIO, "scan", "opening %s source", s.Src.Name())
@@ -644,6 +645,25 @@ func planScan(ctx context.Context, s *plan.Scan, opts Options) (Operator, error)
 	return &scanOp{src: src, schema: want}, nil
 }
 
+// noColumns is the projection a scan opens its source with: its own, but where it
+// reads no column and its source cannot answer that (source.RowsOnly), its
+// cheapest column, which the trim above drops, keeping the rows (step 370).
+func noColumns(s *plan.Scan, spec source.ScanSpec) []string {
+	if s.Projection == nil || len(s.Projection) > 0 || s.Full == nil || s.Full.Len() == 0 {
+		return s.Projection
+	}
+	if r, ok := s.Src.(source.RowsOnly); ok && r.RowsOnly(spec) {
+		return s.Projection
+	}
+	best, width := s.Full.Field(0).Name, 1<<30
+	for _, f := range s.Full.All() {
+		if w := f.Type.Physical().BitWidth(); w > 0 && w < width {
+			best, width = f.Name, w
+		}
+	}
+	return []string{best}
+}
+
 // trimOp reorders and subsets a batch's columns to match a target schema.
 type trimOp struct {
 	target *dtype.Schema
@@ -663,7 +683,8 @@ func (t *trimOp) Apply(_ context.Context, in *data.Batch) (*data.Batch, error) {
 		}
 		cols[i] = c
 	}
-	return data.NewBatch(t.target, cols)
+	// Its rows, not its columns', so a trim to no columns keeps them.
+	return data.NewBatchRows(t.target, cols, in.Rows()), nil
 }
 
 // readAhead is the read-ahead a scan may hold under budget b: a thirty-second of

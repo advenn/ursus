@@ -736,9 +736,15 @@ func (lf *LazyFrame) CollectBatches(ctx context.Context, opts ...CollectOption) 
 // GroupBy().Agg(All().Count()).
 func (lf *LazyFrame) Count(ctx context.Context, opts ...CollectOption) (n int64, err error) {
 	defer uerr.Catch(&err, "count")
+	if lf.err != nil {
+		return 0, lf.err
+	}
 	cfg := newCollectCfg(opts)
 	defer cfg.report()
-	root, err := lf.compile(ctx, cfg)
+	// Its rows are all a count needs: a projection of no columns above the query,
+	// so a scan reads none (step 370).
+	rows := &LazyFrame{node: &plan.Project{Input: lf.node}}
+	root, err := rows.compile(ctx, cfg)
 	if err != nil {
 		return 0, err
 	}
