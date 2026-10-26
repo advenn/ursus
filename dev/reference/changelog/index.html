@@ -1424,6 +1424,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#breaks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breaks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#features" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1463,7 +1474,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#breaks" class="md-nav__link">
+  <a href="#breaks_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaks
@@ -1535,7 +1546,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#breaks_1" class="md-nav__link">
+  <a href="#breaks_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaks
@@ -1607,7 +1618,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#breaks_2" class="md-nav__link">
+  <a href="#breaks_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaks
@@ -1989,7 +2000,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#breaks_3" class="md-nav__link">
+  <a href="#breaks_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaks
@@ -2297,6 +2308,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#breaks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breaks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#features" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2336,7 +2358,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#breaks" class="md-nav__link">
+  <a href="#breaks_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaks
@@ -2408,7 +2430,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#breaks_1" class="md-nav__link">
+  <a href="#breaks_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaks
@@ -2480,7 +2502,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#breaks_2" class="md-nav__link">
+  <a href="#breaks_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaks
@@ -2862,7 +2884,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#breaks_3" class="md-nav__link">
+  <a href="#breaks_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaks
@@ -3152,17 +3174,37 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v068">Unreleased — toward v0.6.8<a class="headerlink" href="#unreleased-toward-v068" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.7</code> (2026-10-26): steps 365–366, so far.
+<p>Everything since <code>v0.6.7</code> (2026-10-26): steps 365–367, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.8-scope.md"><code>v0.6.8-scope.md</code></a> set the scope: <strong>the leftovers
 of feature completeness, and five of 0.7's performance tasks done ahead of it.</strong></p>
+<h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>An empty hive key of text is the empty string</strong> (367), as Polars reads <code>k=</code>,
+  where it was null; in a key of any other type it is null still.</li>
+<li><strong><code>SinkNDJSON</code> takes <code>NDJSONSinkOption</code>s</strong> (367): a <code>CollectOption</code>, as before, or a
+  <code>PartitionOption</code>. A call passing a <code>[]CollectOption</code> spread with <code>...</code> needs its
+  slice's type changed.</li>
+</ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>A database written</strong> (366): <code>WriteDatabase</code>, Polars' <code>write_database</code>, on a
+<li>
+<p><strong>Partitioned writes</strong> (367): <code>WithPartitionBy(keys...)</code> makes <code>SinkParquet</code>,
+  <code>SinkCSV</code>, <code>SinkIPC</code> and <code>SinkNDJSON</code> write a hive dataset, Polars'
+  <code>write_parquet(partition_by=...)</code> and <code>sink_parquet(pl.PartitionBy(...))</code>: a
+  directory a key's value, its files numbered from <code>00000000</code>, the values escaped as
+  Polars escapes them and a null <code>__HIVE_DEFAULT_PARTITION__</code>, so the tree is Polars'
+  name for name and each reads the other's; <code>WithPartitionIncludeKey(false)</code> drops the
+  keys from the files, and <code>WithMaxRowsPerFile(n)</code> ends a file at n rows, with or
+  without keys. Streamed, a file written to a temporary name and renamed as it ends.</p>
+</li>
+<li>
+<p><strong>A database written</strong> (366): <code>WriteDatabase</code>, Polars' <code>write_database</code>, on a
   <code>LazyFrame</code> or a <code>DataFrame</code>, through <code>database/sql</code> into a <code>*sql.DB</code>, a <code>*sql.Conn</code>
   or a <code>*sql.Tx</code>; <code>WithIfTableExists(IfExistsFail | IfExistsReplace | IfExistsAppend)</code>
   as Polars' modes; a table created of the types <code>ReadDatabase</code> reads back, for SQLite,
   PostgreSQL, MySQL or SQL Server, named by the driver or <code>WithDialect</code>; the rows in
-  INSERTs of as many as the dialect's parameters allow, in one transaction.</li>
+  INSERTs of as many as the dialect's parameters allow, in one transaction.</p>
+</li>
 </ul>
 <hr />
 <h2 id="v067-2026-10-26">v0.6.7 — 2026-10-26<a class="headerlink" href="#v067-2026-10-26" title="Permanent link">&para;</a></h2>
@@ -3206,7 +3248,7 @@ the types after it, and three steps of performance. Step 364 checked the whole.<
 <li>every PDS-H answer at SF=0.1, at every step, and every h2o answer at 10,000,000
     rows over Parquet match DuckDB's.</li>
 </ul>
-<h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
+<h3 id="breaks_1">Breaks<a class="headerlink" href="#breaks_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A CSV record of too few fields is padded with nulls, and a blank line read as a
   record of nulls</strong> (357), as Polars reads them: the record was refused unless
@@ -3714,7 +3756,7 @@ missing. Step 287 checked the whole.</p>
 <li>Every PDS-H answer at SF=0.1, at every step, and every h2o answer at 10,000,000
     rows over Parquet match DuckDB's.</li>
 </ul>
-<h3 id="breaks_1">Breaks<a class="headerlink" href="#breaks_1" title="Permanent link">&para;</a></h3>
+<h3 id="breaks_2">Breaks<a class="headerlink" href="#breaks_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong><code>Str().SplitN(by, n)</code> is a Struct,</strong> fields <code>field_0</code> to <code>field_{n-1}</code>, as Polars'
   <code>splitn</code> (270). It was a List, <code>n &lt;= 0</code> unlimited: <code>Str().Split(by)</code> is every part.</li>
@@ -3872,7 +3914,7 @@ checked the whole.</p>
   stand. Every PDS-H answer at SF=0.1, at every step, and every h2o answer at
   2,000,000 rows match DuckDB's.</li>
 </ul>
-<h3 id="breaks_2">Breaks<a class="headerlink" href="#breaks_2" title="Permanent link">&para;</a></h3>
+<h3 id="breaks_3">Breaks<a class="headerlink" href="#breaks_3" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong><code>List().Get</code>, and <code>Str()</code>'s <code>Contains</code>, <code>StartsWith</code>, <code>EndsWith</code>, <code>StripPrefix</code>,
   <code>StripSuffix</code>, <code>Split</code>, <code>Replace</code> and <code>ReplaceAll</code>, are generic methods now,</strong> over
@@ -4745,7 +4787,7 @@ than v0.5.0 on it. Both are met. Measured on 2026-10-11, at <code>c6aa77d</code>
   the query (166).</li>
 <li><strong>The record:</strong> v0.5.0's PDS-H SF=0.1 figure, below, read DuckDB-Go's column (166).</li>
 </ul>
-<h3 id="breaks_3">Breaks<a class="headerlink" href="#breaks_3" title="Permanent link">&para;</a></h3>
+<h3 id="breaks_4">Breaks<a class="headerlink" href="#breaks_4" title="Permanent link">&para;</a></h3>
 <p>These break code written against v0.5.0, each for a better API (186). Each took or
 returned a type in an internal package, which no caller outside the module could
 name or build:</p>
