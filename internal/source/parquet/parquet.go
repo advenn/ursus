@@ -1281,7 +1281,9 @@ func readBatch(chunks []colReader, out *dtype.Schema, n, rgIndex int, name strin
 		return nil
 	}
 	// The columns a dictionary judges are marked first, so every one has cleared
-	// keep before any copies a row (dictfilter.go).
+	// keep before any other column copies a row (dictfilter.go). The rest are then
+	// read at the kept rows where they can be, and every other read whole and taken
+	// to them.
 	var keep, marked []bool
 	if df != nil {
 		for i, c := range chunks {
@@ -1305,9 +1307,38 @@ func readBatch(chunks []colReader, out *dtype.Schema, n, rgIndex int, name strin
 			marked[i] = true
 		}
 	}
+	// The kept rows' positions. Where none is dropped every column is read whole, as
+	// it would be with no predicate, and nothing is taken.
+	var sel []int32
+	if keep != nil && rows > 0 {
+		kept := 0
+		for _, k := range keep[:rows] {
+			if k {
+				kept++
+			}
+		}
+		sel = make([]int32, 0, kept)
+		for j, k := range keep[:rows] {
+			if k {
+				sel = append(sel, int32(j))
+			}
+		}
+	}
+	dropped := keep != nil && len(sel) < rows
 	for i, c := range chunks {
 		if marked != nil && marked[i] {
 			c.(*byteArrayCol).pages.emit(c.(*byteArrayCol), keep[:rows])
+			continue
+		}
+		if kr, ok := c.(keptReader); ok && dropped && kr.keeps() {
+			got, err := kr.readKept(keep[:rows], sel)
+			if err != nil {
+				return nil, 0, err
+			}
+			if err := agree(got); err != nil {
+				return nil, 0, err
+			}
+			marked[i] = true // its rows are the kept ones already
 			continue
 		}
 		got, err := c.read(n)
@@ -1331,7 +1362,7 @@ func readBatch(chunks []colReader, out *dtype.Schema, n, rgIndex int, name strin
 		cols[i] = c.finish(out.Field(i).Name)
 	}
 	if keep != nil {
-		kept, err := compact(cols, marked, keep, rows)
+		kept, err := compact(cols, marked, keep, rows, sel)
 		if err != nil {
 			return nil, 0, err
 		}

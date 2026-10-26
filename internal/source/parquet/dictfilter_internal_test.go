@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -217,5 +218,84 @@ func TestWidenReadsWhatTheFilterDrops(t *testing.T) {
 		if got := widen(1000, c.rows, c.kept); got != c.want {
 			t.Errorf("widen(1000, %d, %d) = %d, want %d", c.rows, c.kept, got, c.want)
 		}
+	}
+}
+
+// TestColumnsBesideATextConjunctAreReadAtItsKeptRows: where a text's conjunct drops
+// rows in the reader, the batch's other columns are read at the rows it keeps (step
+// 377), not read whole and taken. A conjunct that keeps one row in 500 of eight row
+// groups is read with two Int64 columns beside its own and without: what the two
+// add is a fraction of their bytes, where reading them whole added all of them. And
+// the rows are the ones it keeps, their values theirs.
+func TestColumnsBesideATextConjunctAreReadAtItsKeptRows(t *testing.T) {
+	const groups, rows = 8, 50_000
+	path := filepath.Join(t.TempDir(), "t.parquet")
+	want := writePooledFile(t, path, groups, rows)
+	pred := []expr.Node{&expr.Binary{Op: expr.OpEq, L: &expr.Col{Name: "s"},
+		R: &expr.Lit{Value: "value-7", DT: dtype.String}}}
+	var keepRows []int64
+	for r, s := range want.s {
+		if s == "value-7" {
+			keepRows = append(keepRows, int64(r))
+		}
+	}
+	// read reads the file with the conjunct, the columns cols, and returns what it
+	// allocated from the third row group on: the reader widens its reads as the
+	// filter drops rows, and its scratch grows with them once. Each batch's rows are
+	// checked against the file's, where a and c are read.
+	read := func(cols []string) int64 {
+		bs, err := openSource(t, path).Open(t.Context(), source.ScanSpec{Projection: cols,
+			Predicate: pred, Eval: fakeEval, Threads: 1, BatchSize: 8192})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer bs.Close()
+		var before uint64
+		seen := 0
+		for {
+			b, err := bs.Next(t.Context())
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(cols) == 1 {
+				// The conjunct's column alone: the third row group begins after the
+				// kept rows of the first two.
+				seen += b.Rows()
+				if before == 0 && seen > len(keepRows)/4 {
+					runtime.GC()
+					before = allocatedBytes()
+				}
+				continue
+			}
+			a, _ := data.TypedColumn[int64](b.Column(0))
+			c, _ := data.TypedColumn[int64](b.Column(1))
+			for i := range b.Rows() {
+				av, _ := a.Get(i)
+				cv, _ := c.Get(i)
+				if av != keepRows[seen] || cv != want.c[av] {
+					t.Fatalf("kept row %d reads %d and %d, want %d and %d", seen, av, cv, keepRows[seen], want.c[keepRows[seen]])
+				}
+				seen++
+				if before == 0 && seen > len(keepRows)/4 {
+					runtime.GC()
+					before = allocatedBytes()
+				}
+			}
+		}
+		if seen != len(keepRows) {
+			t.Fatalf("read %d rows, want %d", seen, len(keepRows))
+		}
+		return int64(allocatedBytes() - before)
+	}
+	alone := read([]string{"s"})
+	beside := read([]string{"a", "c", "s"})
+	ints := int64(groups*rows*16) * 3 / 4
+	t.Logf("the conjunct's column alone %.2f MB; with the two Int64 columns %.2f MB, which whole are %.2f MB",
+		float64(alone)/(1<<20), float64(beside)/(1<<20), float64(ints)/(1<<20))
+	if beside-alone > ints/4 && !raceDetector {
+		t.Errorf("the two columns beside added %d bytes; read whole they are %d", beside-alone, ints)
 	}
 }

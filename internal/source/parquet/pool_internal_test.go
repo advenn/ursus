@@ -182,7 +182,9 @@ func writePooledFile(t *testing.T, path string, groups, rows int) pooledRows {
 			a[i], c[i] = int64(r), int64(r*7919%100_003)
 			s := ""
 			if r%9 != 0 {
-				s = fmt.Sprintf("value-%d", r%5_000)
+				// 500 values: arrow-go drops a dictionary of thousands of short
+				// strings after its first page, as parquet-mr does, for PLAIN pages.
+				s = fmt.Sprintf("value-%d", r%500)
 				vals, defs[i] = append(vals, parquet.ByteArray(s)), 1
 			}
 			all.s = append(all.s, s)

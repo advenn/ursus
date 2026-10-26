@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"encoding/binary"
+	"math"
 	"unsafe"
 
 	"github.com/apache/arrow-go/v18/parquet"
@@ -371,6 +372,87 @@ func (r pageFixed[P]) readSpaced(n int, out []P, valid *lazyValid) (int, error) 
 		rows += k
 	}
 	return rows, nil
+}
+
+// keptSegment reads up to n rows of one page, as segment does, and where every row
+// is present appends to dst only the rows of sel, positions counted from base,
+// decoding no other: a PLAIN value loaded from the page where it lies, a dictionary
+// index looked up. It returns the rows read, 0 at the end of the chunk, and how many
+// of sel fell among them. Where a row is null it appends nothing: it returns the
+// rows' levels, and their present values packed into *vals, grown to hold them, for
+// the caller to place.
+func (r pageFixed[P]) keptSegment(n int, sel []int32, base int, dst []P, vals *[]P) (k, used int, out []P, lvl []uint32, err error) {
+	if r.left == 0 {
+		more, err := r.nextPage()
+		if err != nil || !more {
+			return 0, 0, dst, nil, err
+		}
+	}
+	k = min(n, r.left)
+	present, all, err := r.levels(k)
+	if err != nil {
+		return 0, 0, dst, nil, err
+	}
+	for used < len(sel) && int(sel[used]) < base+k {
+		used++
+	}
+	if !all {
+		if cap(*vals) < present {
+			*vals = make([]P, present)
+		}
+		if err := r.values((*vals)[:present]); err != nil {
+			return 0, 0, dst, nil, err
+		}
+		r.left -= k
+		return k, used, dst, r.lvl[:k], nil
+	}
+	if r.dict {
+		ids, err := r.indices(k)
+		if err != nil {
+			return 0, 0, dst, nil, err
+		}
+		dict := unsafe.Slice((*P)(unsafe.Pointer(unsafe.SliceData(r.dictFixed))), r.dictN)
+		for _, s := range sel[:used] {
+			dst = append(dst, dict[ids[int(s)-base]])
+		}
+	} else {
+		bytes := k * r.size
+		if bytes > len(r.plain) {
+			return 0, 0, dst, nil, r.corrupt("a page ends inside its values")
+		}
+		dst = gatherPlain(dst, r.plain[:bytes], sel[:used], base)
+		r.plain = r.plain[bytes:]
+	}
+	r.left -= k
+	return k, used, dst, nil, nil
+}
+
+// gatherPlain appends the PLAIN values of plain at sel's positions, counted from base:
+// each loaded from its bytes, little-endian, wherever on the page they lie.
+func gatherPlain[P int32 | int64 | float32 | float64](dst []P, plain []byte, sel []int32, base int) []P {
+	switch d := any(dst).(type) {
+	case []int64:
+		for _, s := range sel {
+			d = append(d, int64(binary.LittleEndian.Uint64(plain[(int(s)-base)*8:])))
+		}
+		return any(d).([]P)
+	case []float64:
+		for _, s := range sel {
+			d = append(d, math.Float64frombits(binary.LittleEndian.Uint64(plain[(int(s)-base)*8:])))
+		}
+		return any(d).([]P)
+	case []int32:
+		for _, s := range sel {
+			d = append(d, int32(binary.LittleEndian.Uint32(plain[(int(s)-base)*4:])))
+		}
+		return any(d).([]P)
+	case []float32:
+		for _, s := range sel {
+			d = append(d, math.Float32frombits(binary.LittleEndian.Uint32(plain[(int(s)-base)*4:])))
+		}
+		return any(d).([]P)
+	}
+	panic("unreachable")
 }
 
 // values reads len(dst) present values of the current page.

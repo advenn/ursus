@@ -145,6 +145,10 @@ type batchReader[P any] interface {
 // places, and validity appended directly, with no level a row.
 type spacedReader[P any] interface {
 	readSpaced(n int, out []P, valid *lazyValid) (int, error)
+	// keptSegment reads up to n rows of one page and appends to dst the rows of sel,
+	// positions from base, where every row is present; else it returns their levels
+	// and their present values in vals (pageFixed.keptSegment).
+	keptSegment(n int, sel []int32, base int, dst []P, vals *[]P) (k, used int, out []P, lvl []uint32, err error)
 	close() error
 }
 
@@ -161,6 +165,7 @@ type fixedCol[P any, T data.Fixed] struct {
 
 	vals []P     // scratch: packed values from ReadBatch
 	defs []int16 // scratch: definition levels
+	kept []P     // scratch: the kept rows' values before conv, readKept's
 
 	out   []T
 	valid lazyValid
@@ -361,6 +366,99 @@ func (c *fixedCol[P, T]) close() error {
 		return c.own.close()
 	}
 	return c.cr.Close()
+}
+
+// keptReader is a colReader that can append only the rows a predicate keeps, where
+// it would append every row read and have them taken afterwards (step 377, R2 of
+// v0.7-scope.md): the columns beside a predicate's are read after it, and only each
+// kept row's value is appended, where every row's was copied into a column allocated
+// for all of them, and the kept ones copied again by the take. keeps says whether
+// this chunk can be: one read from its own pages, of no struct.
+type keptReader interface {
+	keeps() bool
+	// readKept reads the next len(keep) rows and appends those keep keeps, sel
+	// their positions, ascending; it returns the rows read, fewer only at the end of
+	// the chunk.
+	readKept(keep []bool, sel []int32) (int, error)
+}
+
+func (c *fixedCol[P, T]) keeps() bool { return c.own != nil && c.parent == nil }
+
+func (c *fixedCol[P, T]) readKept(keep []bool, sel []int32) (int, error) {
+	n := len(keep)
+	c.out = growExact(c.out, len(sel))
+	var zero T
+	rows, si := 0, 0
+	for rows < n {
+		var dst []P
+		if c.direct {
+			dst = any(c.out).([]P)
+		} else {
+			dst = c.kept[:0]
+		}
+		k, used, dst, lvl, err := c.own.keptSegment(n-rows, sel[si:], rows, dst, &c.vals)
+		if err != nil {
+			return 0, err
+		}
+		if k == 0 {
+			break
+		}
+		switch {
+		case lvl == nil && c.direct:
+			c.out = any(dst).([]T)
+			c.valid.appendValid(used)
+		case lvl == nil:
+			for _, v := range dst {
+				c.out = append(c.out, c.conv(v))
+			}
+			c.kept = dst[:0]
+			c.valid.appendValid(used)
+		default:
+			// A page with nulls: its present values are packed in c.vals, placed a
+			// row at a time.
+			kp, vals := keep[rows:rows+k], c.vals
+			vi := 0
+			var word uint64
+			w := 0
+			for j := range k {
+				present := lvl[j] == 1
+				if kp[j] {
+					if present {
+						c.out = append(c.out, c.conv(vals[vi]))
+						word |= 1 << uint(w)
+					} else {
+						c.out = append(c.out, zero)
+					}
+					if w++; w == 64 {
+						c.valid.appendWord(word, 64)
+						word, w = 0, 0
+					}
+				}
+				if present {
+					vi++
+				}
+			}
+			if w > 0 {
+				c.valid.appendWord(word, w)
+			}
+		}
+		si += used
+		rows += k
+	}
+	return rows, nil
+}
+
+func (c *byteArrayCol) keeps() bool { return c.pages.pageChunk != nil && c.parent == nil }
+
+// readKept marks the rows without copying a string, as a predicate's column is
+// marked, but with no table of its own, and copies the kept ones.
+func (c *byteArrayCol) readKept(keep []bool, _ []int32) (int, error) {
+	got, err := c.pages.mark(len(keep), keep, nil, 0, c.dt)
+	if err != nil {
+		return 0, err
+	}
+	c.pages.emit(c, keep[:got])
+	return got, nil
 }
 
 func ownFixed[P int32 | int64 | float32 | float64, T data.Fixed](src pageFixed[P], maxDef int16,

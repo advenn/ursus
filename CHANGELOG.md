@@ -15,12 +15,17 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.7
 
-Everything since `v0.6.8` (2026-10-26): steps 375–376, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–377, so far.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
 Parquet read first.
 
 ### Faster
 
+- **A Parquet scan filtered by text reads its other columns at the kept rows** (377):
+  where the reader judges a text's conjunct on its dictionary, as since 0.6.1, the
+  batch's other columns are read only at the rows it keeps, where every row was
+  decoded and the kept ones taken. PDS-H's q10 and q19 take 0.82 and 0.84 of their
+  time at SF=1.
 - **A Parquet file's pages are decompressed into reused buffers** (376): each column
   chunk's page reader allocated its buffers afresh, a megabyte a page of DuckDB's
   lineitem, and the collector and the zeroing followed. A scan of four lineitem

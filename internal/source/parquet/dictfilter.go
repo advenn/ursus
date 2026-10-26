@@ -27,7 +27,8 @@ import (
 //     once with the engine's own evaluator (ScanSpec.Eval) into a table;
 //   - a batch first marks its rows in those columns, each row's index looked up,
 //     copying no string; then they copy only the rows every table keeps, and the
-//     batch's other columns are taken to the same rows.
+//     batch's other columns are read at the same rows, where their reader can, or
+//     read whole and taken to them (step 377, R2 of v0.7-scope.md).
 //
 // The Filter above evaluates the conjunct again, on the rows that are left. A row
 // dropped here fails it, and a row kept may fail another conjunct; the Filter
@@ -148,6 +149,9 @@ func (df *dictFilter) marker(i int, c colReader) (*byteArrayCol, bool) {
 // every row. It is computed once per chunk, whose dictionary it is. A chunk with no
 // dictionary still has its null's entry: a null needs no dictionary to be judged.
 func (r pageStrings) table(df *dictFilter, i int, dt dtype.DataType) []bool {
+	if df == nil {
+		return nil // a column beside a predicate's, read at its kept rows
+	}
 	if r.tableDone {
 		return r.keep
 	}
@@ -197,6 +201,9 @@ func (r pageStrings) table(df *dictFilter, i int, dt dtype.DataType) []bool {
 // page reuses, a copy of its value. Where the column's table rejects a row it
 // clears keep. It returns the rows read; emit then appends the kept ones.
 func (r pageStrings) mark(n int, keep []bool, df *dictFilter, i int, dt dtype.DataType) (int, error) {
+	if cap(r.pend) < n {
+		r.pend = make([]int32, 0, n)
+	}
 	r.pend = r.pend[:0]
 	r.poffs = append(r.poffs[:0], 0)
 	r.pchars = r.pchars[:0]
@@ -352,12 +359,14 @@ func widen(batch, rows, kept int) int {
 }
 
 // compact takes cols, the batch's columns other than the marked ones, to the rows
-// keep keeps. rows is the rows read.
-func compact(cols []*data.Column, marked []bool, keep []bool, rows int) (int, error) {
-	sel := make([]int32, 0, rows)
-	for j, k := range keep[:rows] {
-		if k {
-			sel = append(sel, int32(j))
+// keep keeps, sel their positions where the caller has them. rows is the rows read.
+func compact(cols []*data.Column, marked []bool, keep []bool, rows int, sel []int32) (int, error) {
+	if sel == nil {
+		sel = make([]int32, 0, rows)
+		for j, k := range keep[:rows] {
+			if k {
+				sel = append(sel, int32(j))
+			}
 		}
 	}
 	if len(sel) == rows {
