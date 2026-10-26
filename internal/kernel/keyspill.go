@@ -2,6 +2,8 @@ package kernel
 
 import (
 	"bytes"
+	"cmp"
+	"encoding/binary"
 	"slices"
 
 	"github.com/advenn/ursus/internal/uerr"
@@ -45,6 +47,9 @@ func (a *nuniqueAcc) SpillKeys(sp KeySpill) (bool, error) {
 	if a.sp != nil && a.sp != sp {
 		return false, uerr.Internalf("kernel: an n_unique's keys spilled to two places")
 	}
+	if a.ints != nil {
+		return a.spillInts(sp)
+	}
 	n := a.tab.Len()
 	if n == 0 {
 		return false, nil
@@ -81,6 +86,50 @@ func (a *nuniqueAcc) SpillKeys(sp KeySpill) (bool, error) {
 		}
 	}
 	a.tab.Reset()
+	a.sp = sp
+	return true, sp.EndRun()
+}
+
+// spillInts is SpillKeys for keys of integers: each a value's eight bytes,
+// big-endian, ordered by group and then by value, as the bytes order.
+func (a *nuniqueAcc) spillInts(sp KeySpill) (bool, error) {
+	n := a.ints.Len()
+	if n == 0 {
+		return false, nil
+	}
+	ids := make([]int32, n)
+	for i := range ids {
+		ids[i] = int32(i)
+	}
+	slices.SortFunc(ids, func(x, y int32) int {
+		vx, gx := a.ints.KeyAt(x)
+		vy, gy := a.ints.KeyAt(y)
+		if c := cmp.Compare(gx, gy); c != 0 {
+			return c
+		}
+		return cmp.Compare(vx, vy)
+	})
+	gids := make([]int32, 0, spillChunk)
+	keys := make([][]byte, 0, spillChunk)
+	buf := make([]byte, 0, 8*min(n, spillChunk))
+	for _, id := range ids {
+		v, g := a.ints.KeyAt(id)
+		at := len(buf)
+		buf = binary.BigEndian.AppendUint64(buf, v)
+		gids, keys = append(gids, int32(uint32(g))), append(keys, buf[at:at+8:at+8])
+		if len(gids) == spillChunk {
+			if err := sp.Put(gids, keys); err != nil {
+				return false, err
+			}
+			gids, keys, buf = gids[:0], keys[:0], make([]byte, 0, cap(buf))
+		}
+	}
+	if len(gids) > 0 {
+		if err := sp.Put(gids, keys); err != nil {
+			return false, err
+		}
+	}
+	a.ints = NewPairKeyTable()
 	a.sp = sp
 	return true, sp.EndRun()
 }

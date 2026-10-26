@@ -425,12 +425,27 @@ func (a *countAcc) Finish(name string, nGroups int) (*data.Column, error) {
 // Fixed width is still the right choice: it makes this key's framing independent of
 // how another type happens to frame its own, rather than correct by a coincidence
 // between two decisions that nothing links.
+//
+// # An integer's value and group are two words
+//
+// Of an integer column the key is (value, group) in a PairKeyTable (step 381): the
+// value widened as IntKeys widens it, compared with ==, where encoding it called a
+// closure a row and the table hashed and compared its bytes. q16's count of distinct
+// suppliers a part spent a fifth of its CPU there. The first rows decide which table
+// holds the keys, by their column's type; a spilled run writes an integer's key as
+// its eight bytes, big-endian, so the runs order by value as the table's entries do.
 type nuniqueAcc struct {
 	// tab holds group ++ value; the zero value is usable, since GetOrInsert inits
 	// lazily and Len guards on a nil offs.
 	tab    KeyTable
 	counts []int32
 	key    []byte // scratch, reused across rows
+
+	// ints holds (value, group) instead, for an integer column, once decided.
+	ints    *PairKeyTable
+	decided bool
+	reserve int     // the groups Reserve asked for before the table was decided
+	scratch []int64 // IntKeys's
 
 	// Past its sink's budget its keys go to sp, and counts are recounted from there
 	// at Finish (keyspill.go, step 241).
@@ -456,10 +471,48 @@ func (a *nuniqueAcc) Reserve(n int) {
 	// Size the table by the GROUP count. It is a lower bound on the distinct pairs —
 	// every group contributes at least one — and it skips most of the doublings that
 	// otherwise rehash the whole table on the way up from 64 slots.
-	a.tab.Reserve(n)
+	a.reserve = max(a.reserve, n)
+	switch {
+	case a.ints != nil:
+		a.ints.Reserve(n)
+	case a.decided:
+		a.tab.Reserve(n)
+	}
+}
+
+// decide takes the table for keys of ints or not, sized as Reserve asked.
+func (a *nuniqueAcc) decide(ints bool) {
+	a.decided = true
+	if ints {
+		a.ints = NewPairKeyTable()
+		a.ints.Reserve(a.reserve)
+		return
+	}
+	a.tab.Reserve(a.reserve)
+}
+
+// empty reports whether the accumulator holds no key and none spilled, so it may
+// still take either table.
+func (a *nuniqueAcc) empty() bool {
+	return a.sp == nil && a.tab.Len() == 0 && (a.ints == nil || a.ints.Len() == 0)
 }
 
 func (a *nuniqueAcc) AddBatch(groups []int32, col *data.Column) error {
+	ints := IsIntKey(col.DType())
+	if !a.decided || a.ints != nil != ints && a.empty() {
+		a.ints = nil
+		a.decide(ints)
+	}
+	if a.ints != nil {
+		if !ints {
+			if col.NullCount() == col.Len() {
+				return nil
+			}
+			return uerr.Internalf("kernel: n_unique of integers given a %s column", col.DType())
+		}
+		a.addInts(groups, col)
+		return nil
+	}
 	// Reuse the group-key encoder, so distinctness uses ursus's grouping equality:
 	// NaN equals NaN and -0.0 equals +0.0. Using IEEE equality here would make
 	// n_unique disagree with group_by on the same data.
@@ -480,6 +533,48 @@ func (a *nuniqueAcc) AddBatch(groups []int32, col *data.Column) error {
 	return nil
 }
 
+// addInts is AddBatch for an integer column: each present row's (value, group), a
+// chunk at a time.
+func (a *nuniqueAcc) addInts(groups []int32, col *data.Column) {
+	keys := IntKeys(col, &a.scratch)
+	free, valid := col.IsPayloadFree(), col.Validity()
+	if free {
+		return
+	}
+	all := valid.IsAllSet()
+	var (
+		va, vb [ManyChunk]uint64
+		gs     [ManyChunk]int32
+		ids    [ManyChunk]int32
+		ins    [ManyChunk]bool
+	)
+	m := 0
+	for i, g := range groups {
+		if !all && !valid.Get(i) {
+			continue
+		}
+		va[m], vb[m], gs[m] = uint64(keys[i]), uint64(uint32(g)), g
+		if m++; m == ManyChunk {
+			a.insertInts(va[:m], vb[:m], gs[:m], ids[:m], ins[:m])
+			m = 0
+		}
+	}
+	a.insertInts(va[:m], vb[:m], gs[:m], ids[:m], ins[:m])
+}
+
+// insertInts inserts the keys (va[j], vb[j]), counting a new one in group gs[j].
+func (a *nuniqueAcc) insertInts(va, vb []uint64, gs, ids []int32, ins []bool) {
+	if len(va) == 0 {
+		return
+	}
+	a.ints.GetOrInsertMany(va, vb, ids, ins)
+	for j, g := range gs {
+		if ins[j] {
+			a.counts[g]++
+		}
+	}
+}
+
 // Merge walks the other accumulator's ENTRIES rather than its groups.
 //
 // There is no per-group set to union any more, so this reads each stored key, swaps
@@ -495,6 +590,17 @@ func (a *nuniqueAcc) Merge(other Accumulator, remap []int32) error {
 		// Only a serial sink spills its keys: parallel workers go serial first.
 		return uerr.Internalf("kernel: cannot merge an n_unique whose keys spilled")
 	}
+	if o.empty() {
+		a.Reserve(mergeCap(remap, len(o.counts)))
+		return nil
+	}
+	if oInts := o.ints != nil; !a.decided || a.ints != nil != oInts {
+		if !a.empty() {
+			return uerr.Internalf("kernel: cannot merge an n_unique of integers with one of encoded keys")
+		}
+		a.ints = nil
+		a.decide(oInts)
+	}
 	a.Reserve(mergeCap(remap, len(o.counts)))
 	if isSparse(remap) {
 		// Its lookup is by source group, which a list of pairs is not.
@@ -508,6 +614,10 @@ func (a *nuniqueAcc) Merge(other Accumulator, remap []int32) error {
 			}
 		}
 		remap = dense
+	}
+	if o.ints != nil {
+		a.mergeInts(o, remap)
+		return nil
 	}
 	for id := int32(0); id < int32(o.tab.Len()); id++ {
 		k := o.tab.KeyAt(id)
@@ -530,6 +640,36 @@ func (a *nuniqueAcc) Merge(other Accumulator, remap []int32) error {
 		}
 	}
 	return nil
+}
+
+// mergeInts is Merge's walk of o's keys of integers, through a dense remap or none.
+func (a *nuniqueAcc) mergeInts(o *nuniqueAcc, remap []int32) {
+	var (
+		va, vb [ManyChunk]uint64
+		gs     [ManyChunk]int32
+		ids    [ManyChunk]int32
+		ins    [ManyChunk]bool
+	)
+	m := 0
+	for id := range int32(o.ints.Len()) {
+		v, g := o.ints.KeyAt(id)
+		dst := int32(uint32(g))
+		if remap != nil {
+			if int(dst) >= len(remap) || remap[dst] < 0 {
+				continue // another partition's group (mergeEach)
+			}
+			dst = remap[dst]
+		}
+		if int(dst) >= len(a.counts) {
+			continue
+		}
+		va[m], vb[m], gs[m] = v, uint64(uint32(dst)), dst
+		if m++; m == ManyChunk {
+			a.insertInts(va[:m], vb[:m], gs[:m], ids[:m], ins[:m])
+			m = 0
+		}
+	}
+	a.insertInts(va[:m], vb[:m], gs[:m], ids[:m], ins[:m])
 }
 
 func (a *nuniqueAcc) Finish(name string, nGroups int) (*data.Column, error) {
@@ -1698,7 +1838,11 @@ func (a *countAcc) NBytes() int64 { return int64(cap(a.n)) * 8 }
 // the two that REFUSE to spill rather than spilling, so this number is what decides
 // when the refusal fires, and an under-count makes it fire late.
 func (a *nuniqueAcc) NBytes() int64 {
-	return a.tab.NBytes() + int64(cap(a.counts))*4
+	n := a.tab.NBytes() + int64(cap(a.counts))*4 + int64(cap(a.scratch))*8
+	if a.ints != nil {
+		n += a.ints.NBytes()
+	}
+	return n
 }
 
 func (a *sumAcc) NBytes() int64 {

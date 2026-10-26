@@ -19,23 +19,37 @@ import (
 // KeyTable of each value's own bytes, read in place from the column, and a null
 // placeholder as the integers' is. Encoding copied every row's string behind a
 // validity byte and a length, before the hash read it again: 14% of h2o gb1.
+//
+// A group-by's key of several integer columns that fit two words with a null bit
+// each is the fourth (step 381): packed, a PairKeyTable of each row's two words,
+// which the packer writes a column at a time, where encoding called a closure per
+// column per row. Two Int32 keys were a third of h2o gb6's CPU encoded.
 type groupKeys struct {
 	bytes *kernel.KeyTable
 	ints  *kernel.IntKeyTable
 	raw   bool // bytes holds one string column's values, not encoded keys
+	pairs *kernel.PairKeyTable
+	pack  *kernel.KeyPacker // pairs' packer
 }
 
-// newGroupKeys is the table for a key of these fields: integers for one integer
-// field, a string's own bytes for one String or Binary field, else encoded.
+// newGroupKeys is the table for a group-by's key of these fields: integers for one
+// integer field, a string's own bytes for one String or Binary field, two words for
+// several integer fields that fit them, else encoded.
 func newGroupKeys(keys *dtype.Schema) groupKeys {
 	types := make([]dtype.DataType, keys.Len())
 	for i := range types {
 		types[i] = keys.Field(i).Type
 	}
+	if len(types) > 1 {
+		if pack, ok := kernel.NewKeyPacker(types); ok {
+			return groupKeys{pairs: kernel.NewPairKeyTable(), pack: pack}
+		}
+	}
 	return groupKeysOf(types)
 }
 
-// groupKeysOf is newGroupKeys for a key of fields of these types.
+// groupKeysOf is newGroupKeys for a key of fields of these types, never packed:
+// unique's keys take these three forms.
 func groupKeysOf(types []dtype.DataType) groupKeys {
 	if len(types) == 1 {
 		switch t := types[0]; {
@@ -55,6 +69,9 @@ func isRawKey(t dtype.DataType) bool {
 
 // empty is a new table of the same form.
 func (g groupKeys) empty() groupKeys {
+	if g.pairs != nil {
+		return groupKeys{pairs: kernel.NewPairKeyTable(), pack: g.pack}
+	}
 	if g.ints != nil {
 		return groupKeys{ints: kernel.NewIntKeyTable()}
 	}
@@ -62,6 +79,9 @@ func (g groupKeys) empty() groupKeys {
 }
 
 func (g groupKeys) Len() int {
+	if g.pairs != nil {
+		return g.pairs.Len()
+	}
 	if g.ints != nil {
 		return g.ints.Len()
 	}
@@ -69,6 +89,9 @@ func (g groupKeys) Len() int {
 }
 
 func (g groupKeys) NBytes() int64 {
+	if g.pairs != nil {
+		return g.pairs.NBytes()
+	}
 	if g.ints != nil {
 		return g.ints.NBytes()
 	}
@@ -76,6 +99,10 @@ func (g groupKeys) NBytes() int64 {
 }
 
 func (g groupKeys) Reserve(n int) {
+	if g.pairs != nil {
+		g.pairs.Reserve(n)
+		return
+	}
 	if g.ints != nil {
 		g.ints.Reserve(n)
 		return
@@ -86,6 +113,9 @@ func (g groupKeys) Reserve(n int) {
 // HashAt is the hash the table keeps or computes for id's key, which the partitioned
 // fold routes by.
 func (g groupKeys) HashAt(id int32) uint64 {
+	if g.pairs != nil {
+		return g.pairs.HashAt(id)
+	}
 	if g.ints != nil {
 		return g.ints.HashAt(id)
 	}
@@ -95,6 +125,14 @@ func (g groupKeys) HashAt(id int32) uint64 {
 // insertFrom gives o's keys oids, up to kernel.ManyChunk of them, ids in g, in order,
 // inserting those g lacks: ids[j] and inserted[j] answer oids[j]. o is g's form.
 func (g groupKeys) insertFrom(o groupKeys, oids []int32, ids []int32, inserted []bool) {
+	if g.pairs != nil {
+		var a, b [kernel.ManyChunk]uint64
+		for j, oid := range oids {
+			a[j], b[j] = o.pairs.KeyAt(oid)
+		}
+		g.pairs.GetOrInsertMany(a[:len(oids)], b[:len(oids)], ids[:len(oids)], inserted[:len(oids)])
+		return
+	}
 	if g.ints != nil {
 		var keys [kernel.ManyChunk]int64
 		for j, oid := range oids {

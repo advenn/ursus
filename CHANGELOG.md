@@ -15,12 +15,17 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.7
 
-Everything since `v0.6.8` (2026-10-26): steps 375–380, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–381, so far.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
 Parquet read first.
 
 ### Faster
 
+- **A group-by of several integer keys packs them** (381): where they fit two words
+  with a null bit each, as two Int32s do, a row's keys are hashed and compared as two
+  integers, where they were encoded to bytes; and `NUnique` of an integer column keys
+  its values so too. h2o's gb6 takes 0.85 to 0.93 of its time, and PDS-H's q16 0.89
+  to 0.94.
 - **A join gathers its text by runs** (379): a run of consecutive matched rows, as a
   probe side's are in order, is copied at once, and a short string alone is moved as
   two words, where each row's bytes were a copy of their own. The gather takes 0.53

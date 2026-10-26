@@ -155,6 +155,49 @@ func TestAPartitionedFoldOfIntegerKeys(t *testing.T) {
 	}
 }
 
+// TestAPartitionedFoldOfPackedKeys: a key of two Int32 columns, packed into two words
+// since step 381, routes its groups by the packed key's hash, and folds partitioned
+// to the encoded keys' answer, nulls among them.
+func TestAPartitionedFoldOfPackedKeys(t *testing.T) {
+	rng := rand.New(rand.NewPCG(381, 1))
+	n := 200_000
+	a, b := make([]int32, n), make([]int32, n)
+	okA, okB := make([]bool, n), make([]bool, n)
+	w := make([]int64, n)
+	for i := range n {
+		a[i], okA[i] = int32(rng.IntN(400))-200, rng.IntN(50) != 0
+		b[i], okB[i] = int32(rng.IntN(400)), rng.IntN(50) != 0
+		w[i] = int64(rng.IntN(1 << 20))
+	}
+	frame := ursus.Frame(ursus.ValuesNullable("a", a, okA), ursus.ValuesNullable("b", b, okB),
+		ursus.Values("w", w))
+	aggs := []ursus.Expr{ursus.Col("w").Sum().Alias("sum"), ursus.Col("w").Min().Alias("min"),
+		ursus.Len().Alias("len")}
+	encoded, err := frame.GroupBy(ursus.Col("a").Cast(ursus.String), ursus.Col("b").Cast(ursus.String)).
+		Agg(aggs...).Collect(t.Context(), ursus.WithThreads(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if encoded.Height() < 1<<16 {
+		t.Fatalf("only %d groups: too few to fold partitioned", encoded.Height())
+	}
+	before := physical.PartitionedFolds()
+	par, err := frame.GroupBy(ursus.Col("a"), ursus.Col("b")).Agg(aggs...).
+		Collect(t.Context(), ursus.WithThreads(4), ursus.WithBatchSize(4096))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if physical.PartitionedFolds() == before {
+		t.Fatal("the fold did not run partitioned")
+	}
+	want, got := rowsOf(t, encoded), rowsOf(t, par)
+	slices.Sort(want)
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Fatalf("%d groups, the encoded keys give %d, or they differ", len(got), len(want))
+	}
+}
+
 func TestAFewGroupsFoldAsBefore(t *testing.T) {
 	k := make([]int64, 100_000)
 	for i := range k {

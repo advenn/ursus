@@ -389,6 +389,11 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 		if keep, newRows, routed, err = s.consumeInts(in, keyCols[0], keep); err != nil {
 			return err
 		}
+	} else if s.ids.pairs != nil {
+		var err error
+		if keep, newRows, routed, err = s.consumePairs(in, keyCols, keep); err != nil {
+			return err
+		}
 	} else if s.ids.raw {
 		var err error
 		if keep, newRows, routed, err = s.consumeStrings(in, keyCols[0], keep); err != nil {
@@ -658,6 +663,67 @@ func (s *hashAggSink) consumeInts(in *data.Batch, col *data.Column, keep []int32
 		} else {
 			t.GetOrInsertNullable(chunk, null, ids[:m], inserted[:m])
 		}
+		for j := range m {
+			i := int32(base + j)
+			if inserted[j] {
+				newRows = append(newRows, i)
+				if s.ordered {
+					s.firstSeen = append(s.firstSeen, s.ordinalOf(in, int(i)))
+				}
+			}
+			keep = append(keep, i)
+			s.groups = append(s.groups, ids[j])
+		}
+	}
+	return keep, newRows, routed, nil
+}
+
+// consumePairs is Consume's key assignment for a key of several integer columns
+// packed into two words (step 381), as consumeInts's is for one: a chunk of rows
+// packed a column at a time, never encoded except to route a frozen sink's new key.
+func (s *hashAggSink) consumePairs(in *data.Batch, cols []*data.Column, keep []int32,
+) (_ []int32, newRows []int32, routed int, _ error) {
+	for _, c := range cols {
+		if !kernel.IsIntKey(c.DType()) {
+			return nil, nil, 0, uerr.Internalf("physical: a packed group key evaluated to %s", c.DType())
+		}
+	}
+	t, pack := s.ids.pairs, s.ids.pack
+	n := cols[0].Len()
+	var (
+		a, b     [kernel.ManyChunk]uint64
+		ids      [kernel.ManyChunk]int32
+		inserted [kernel.ManyChunk]bool
+		enc      *kernel.GroupKeyEncoder
+	)
+	for base := 0; base < n; base += kernel.ManyChunk {
+		m := min(kernel.ManyChunk, n-base)
+		pack.Pack(cols, base, a[:m], b[:m])
+		if s.frozen {
+			// Residency is closed, as on the other paths: a new key is routed by
+			// partitionOf of its encoded key, so every later row of it lands in the
+			// same file.
+			t.GetMany(a[:m], b[:m], ids[:m])
+			for j := range m {
+				i := base + j
+				if ids[j] < 0 {
+					if enc == nil {
+						var err error
+						if enc, err = kernel.NewGroupKeyEncoder("group_by", cols); err != nil {
+							return nil, nil, 0, err
+						}
+					}
+					p := partitionOf(enc.Encode(i), s.level)
+					s.pend[p] = append(s.pend[p], int32(i))
+					routed++
+					continue
+				}
+				keep = append(keep, int32(i))
+				s.groups = append(s.groups, ids[j])
+			}
+			continue
+		}
+		t.GetOrInsertMany(a[:m], b[:m], ids[:m], inserted[:m])
 		for j := range m {
 			i := int32(base + j)
 			if inserted[j] {
