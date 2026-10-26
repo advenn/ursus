@@ -53,10 +53,41 @@ type colBuilder interface {
 // as the query holds the column, so more than an eighth unused is copied away.
 func wasteful(n, c int) bool { return c-n > n/8 }
 
+// validity is a batch's validity built in runs: valid values are counted, and put
+// in the bitmap only when a null comes, so a batch with no null builds none, and
+// its column says so without a bitmap of ones, which every kernel after it took
+// the slow path for (step 373).
+type validity struct {
+	bits *bitmap.Builder // nil until the batch's first null
+	run  int             // valid values since the last null
+	rows int             // the rows a sized batch holds, the bitmap's capacity
+}
+
+func (v *validity) null() {
+	if v.bits == nil {
+		v.bits = bitmap.NewBuilder(v.rows)
+	}
+	v.bits.AppendMany(true, v.run)
+	v.bits.Append(false)
+	v.run = 0
+}
+
+// finish is the batch's validity, and readies v for the next batch.
+func (v *validity) finish() bitmap.View {
+	b := v.bits
+	if b == nil {
+		v.run = 0
+		return bitmap.View{}
+	}
+	b.AppendMany(true, v.run)
+	v.bits, v.run = nil, 0
+	return b.Finish()
+}
+
 type fixedBuilder[T data.Fixed] struct {
 	dt    dtype.DataType
 	vals  []T
-	valid *bitmap.Builder
+	valid validity
 	parse func([]byte) (T, error)
 }
 
@@ -66,20 +97,20 @@ func (b *fixedBuilder[T]) appendField(f []byte) error {
 		return err
 	}
 	b.vals = append(b.vals, v)
-	b.valid.Append(true)
+	b.valid.run++
 	return nil
 }
 
 func (b *fixedBuilder[T]) appendNull() {
 	var zero T
 	b.vals = append(b.vals, zero)
-	b.valid.Append(false)
+	b.valid.null()
 }
 
 func (b *fixedBuilder[T]) len() int { return len(b.vals) }
 
 func (b *fixedBuilder[T]) finish(name string) *data.Column {
-	c := data.NewFixed(name, b.dt, b.vals, b.valid.Finish())
+	c := data.NewFixed(name, b.dt, b.vals, b.valid.finish())
 	// The values slice is kept for the next batch, as stringBuilder keeps its
 	// buffers: NewFixed copies into a fresh Arrow buffer, so the column just made
 	// does not alias it. This said NewFixed wrapped the slice, and dropped it every
@@ -88,27 +119,26 @@ func (b *fixedBuilder[T]) finish(name string) *data.Column {
 	// (step 136). TestReadingAllocatesAboutWhatItProduces checks an earlier batch is
 	// intact after the later ones.
 	b.vals = b.vals[:0]
-	b.valid = bitmap.NewBuilder(0)
 	return c
 }
 
 func (b *fixedBuilder[T]) size(rows, _ int) {
 	b.vals = make([]T, 0, rows)
-	b.valid = bitmap.NewBuilder(rows)
+	b.valid.rows = rows
 }
 
 func (b *fixedBuilder[T]) take(name string) *data.Column {
 	if wasteful(len(b.vals), cap(b.vals)) {
-		return data.NewFixed(name, b.dt, b.vals, b.valid.Finish())
+		return data.NewFixed(name, b.dt, b.vals, b.valid.finish())
 	}
-	return data.NewFixedOwned(name, b.dt, b.vals, b.valid.Finish())
+	return data.NewFixedOwned(name, b.dt, b.vals, b.valid.finish())
 }
 
 // boolBuilder is separate because Bool is stored as a bitmap, not a values
 // buffer — it is the one type outside data.Fixed.
 type boolBuilder struct {
 	vals  *bitmap.Builder
-	valid *bitmap.Builder
+	valid validity
 	n     int
 }
 
@@ -118,29 +148,28 @@ func (b *boolBuilder) appendField(f []byte) error {
 		return err
 	}
 	b.vals.Append(v)
-	b.valid.Append(true)
+	b.valid.run++
 	b.n++
 	return nil
 }
 
 func (b *boolBuilder) appendNull() {
 	b.vals.Append(false)
-	b.valid.Append(false)
+	b.valid.null()
 	b.n++
 }
 
 func (b *boolBuilder) len() int { return b.n }
 
 func (b *boolBuilder) finish(name string) *data.Column {
-	c := data.NewBool(name, b.vals.Finish(), b.valid.Finish())
+	c := data.NewBool(name, b.vals.Finish(), b.valid.finish())
 	b.vals = bitmap.NewBuilder(0)
-	b.valid = bitmap.NewBuilder(0)
 	b.n = 0
 	return c
 }
 
 func (b *boolBuilder) size(rows, _ int) {
-	b.vals, b.valid = bitmap.NewBuilder(rows), bitmap.NewBuilder(rows)
+	b.vals, b.valid.rows = bitmap.NewBuilder(rows), rows
 }
 
 // take is finish: a bitmap's Finish already hands its bytes over.
@@ -161,7 +190,7 @@ func (b *boolBuilder) take(name string) *data.Column { return b.finish(name) }
 type stringBuilder struct {
 	offs  []int32
 	chars []byte
-	valid *bitmap.Builder
+	valid validity
 	cat   bool // the column is a Categorical, stored as its text (step 351)
 	lossy bool // text that is not UTF-8 is read with U+FFFD, not refused (step 357)
 
@@ -193,14 +222,14 @@ func (b *stringBuilder) appendField(f []byte) error {
 		}
 		b.chars = appendLossy(b.chars, f)
 		b.offs = append(b.offs, int32(len(b.chars)))
-		b.valid.Append(true)
+		b.valid.run++
 		return nil
 	}
 	// The copy is not optional and never was: f aliases the scanner's buffer,
 	// which is valid only until the next call to Next.
 	b.chars = append(b.chars, f...)
 	b.offs = append(b.offs, int32(len(b.chars)))
-	b.valid.Append(true)
+	b.valid.run++
 	return nil
 }
 
@@ -285,13 +314,13 @@ func commaPoint(dst, b []byte) ([]byte, bool) {
 // cause, which is why the test for it puts a null between two multi-byte values.
 func (b *stringBuilder) appendNull() {
 	b.offs = append(b.offs, int32(len(b.chars)))
-	b.valid.Append(false)
+	b.valid.null()
 }
 
 func (b *stringBuilder) len() int { return len(b.offs) - 1 }
 
 func (b *stringBuilder) finish(name string) *data.Column {
-	c := data.NewStringParts(name, b.offs, b.chars, b.valid.Finish())
+	c := data.NewStringParts(name, b.offs, b.chars, b.valid.finish())
 	if b.cat {
 		c = c.WithDType(dtype.Categorical)
 	}
@@ -303,14 +332,13 @@ func (b *stringBuilder) finish(name string) *data.Column {
 	// Truncating to [:1] keeps the leading zero, so offs is never re-seeded.
 	b.offs = b.offs[:1]
 	b.chars = b.chars[:0]
-	b.valid = bitmap.NewBuilder(0)
 	return c
 }
 
 func (b *stringBuilder) size(rows, chars int) {
 	b.offs = make([]int32, 1, rows+1)
 	b.chars = make([]byte, 0, chars)
-	b.valid = bitmap.NewBuilder(rows)
+	b.valid.rows = rows
 }
 
 // take hands both buffers over. The characters are sized by an estimate, so the
@@ -324,7 +352,7 @@ func (b *stringBuilder) take(name string) *data.Column {
 	if wasteful(len(chars), cap(chars)) {
 		chars = append(make([]byte, 0, len(chars)), chars...)
 	}
-	c := data.NewStringOwned(name, offs, chars, b.valid.Finish())
+	c := data.NewStringOwned(name, offs, chars, b.valid.finish())
 	if b.cat {
 		c = c.WithDType(dtype.Categorical)
 	}
@@ -337,7 +365,7 @@ func (b *stringBuilder) take(name string) *data.Column {
 func newBuilder(dt dtype.DataType, o Options) (colBuilder, error) {
 	switch dt.ID() {
 	case dtype.TypeBool:
-		return &boolBuilder{vals: bitmap.NewBuilder(0), valid: bitmap.NewBuilder(0)}, nil
+		return &boolBuilder{vals: bitmap.NewBuilder(0)}, nil
 	case dtype.TypeInt8:
 		return intBuilder[int8](dt, 8), nil
 	case dtype.TypeInt16:
@@ -345,7 +373,7 @@ func newBuilder(dt dtype.DataType, o Options) (colBuilder, error) {
 	case dtype.TypeInt32:
 		return intBuilder[int32](dt, 32), nil
 	case dtype.TypeInt64:
-		return intBuilder[int64](dt, 64), nil
+		return &int64Builder{fixedBuilder[int64]{dt: dt}}, nil
 	case dtype.TypeUint8:
 		return uintBuilder[uint8](dt, 8), nil
 	case dtype.TypeUint16:
@@ -355,7 +383,7 @@ func newBuilder(dt dtype.DataType, o Options) (colBuilder, error) {
 	case dtype.TypeUint64:
 		return uintBuilder[uint64](dt, 64), nil
 	case dtype.TypeInt128:
-		return &fixedBuilder[i128.Int128]{dt: dt, valid: bitmap.NewBuilder(0),
+		return &fixedBuilder[i128.Int128]{dt: dt,
 			parse: func(b []byte) (i128.Int128, error) {
 				v, ok := i128.Parse(str(b))
 				if !ok {
@@ -369,7 +397,7 @@ func newBuilder(dt dtype.DataType, o Options) (colBuilder, error) {
 		// Polars and DuckDB read it.
 		prec, scale := int(dt.Precision()), int(dt.Scale())
 		var point []byte
-		return &fixedBuilder[i128.Int128]{dt: dt, valid: bitmap.NewBuilder(0),
+		return &fixedBuilder[i128.Int128]{dt: dt,
 			parse: func(b []byte) (i128.Int128, error) {
 				if o.DecimalComma {
 					var ok bool
@@ -387,7 +415,7 @@ func newBuilder(dt dtype.DataType, o Options) (colBuilder, error) {
 		for i, s := range dt.Categories() {
 			pos[s] = uint32(i)
 		}
-		return &fixedBuilder[uint32]{dt: dt, valid: bitmap.NewBuilder(0),
+		return &fixedBuilder[uint32]{dt: dt,
 			parse: func(b []byte) (uint32, error) {
 				if j, ok := pos[str(b)]; ok {
 					return j, nil
@@ -396,7 +424,7 @@ func newBuilder(dt dtype.DataType, o Options) (colBuilder, error) {
 			}}, nil
 	case dtype.TypeFloat32:
 		var point []byte
-		return &fixedBuilder[float32]{dt: dt, valid: bitmap.NewBuilder(0),
+		return &fixedBuilder[float32]{dt: dt,
 			parse: func(b []byte) (float32, error) {
 				if o.DecimalComma {
 					var ok bool
@@ -411,7 +439,7 @@ func newBuilder(dt dtype.DataType, o Options) (colBuilder, error) {
 	case dtype.TypeFloat64:
 		if o.DecimalComma {
 			var point []byte
-			return &fixedBuilder[float64]{dt: dt, valid: bitmap.NewBuilder(0),
+			return &fixedBuilder[float64]{dt: dt,
 				parse: func(b []byte) (float64, error) {
 					var ok bool
 					if point, ok = commaPoint(point[:0], b); !ok {
@@ -420,12 +448,11 @@ func newBuilder(dt dtype.DataType, o Options) (colBuilder, error) {
 					return dtype.ParseFloat(str(point), 64)
 				}}, nil
 		}
-		return &fixedBuilder[float64]{dt: dt, valid: bitmap.NewBuilder(0),
-			parse: func(b []byte) (float64, error) { return dtype.ParseFloat(str(b), 64) }}, nil
+		return &float64Builder{fixedBuilder[float64]{dt: dt}}, nil
 	case dtype.TypeString, dtype.TypeCategorical:
 		// offs is seeded with its leading zero here rather than branched on per
 		// append; finish preserves it, so the hot path never tests for it.
-		return &stringBuilder{offs: make([]int32, 1), valid: bitmap.NewBuilder(0),
+		return &stringBuilder{offs: make([]int32, 1),
 			cat: dt.ID() == dtype.TypeCategorical, lossy: o.Lossy}, nil
 
 	case dtype.TypeDate, dtype.TypeTime, dtype.TypeDatetime, dtype.TypeDuration:
@@ -439,7 +466,7 @@ func newBuilder(dt dtype.DataType, o Options) (colBuilder, error) {
 			parse = dtype.ParseTemporal
 		}
 		if dt.Physical().ID() == dtype.TypeInt32 {
-			return &fixedBuilder[int32]{dt: dt, valid: bitmap.NewBuilder(0),
+			return &fixedBuilder[int32]{dt: dt,
 				parse: func(b []byte) (int32, error) {
 					v, ok := parse(dt, str(b))
 					if !ok {
@@ -448,7 +475,7 @@ func newBuilder(dt dtype.DataType, o Options) (colBuilder, error) {
 					return int32(v), nil
 				}}, nil
 		}
-		return &fixedBuilder[int64]{dt: dt, valid: bitmap.NewBuilder(0),
+		return &fixedBuilder[int64]{dt: dt,
 			parse: func(b []byte) (int64, error) {
 				v, ok := parse(dt, str(b))
 				if !ok {
@@ -465,13 +492,39 @@ func newBuilder(dt dtype.DataType, o Options) (colBuilder, error) {
 	}
 }
 
+// int64Builder and float64Builder are fixedBuilder for the types inference gives a
+// file's numbers, their parse called, not a func value's (step 373).
+type int64Builder struct{ fixedBuilder[int64] }
+
+func (b *int64Builder) appendField(f []byte) error {
+	v, err := parseInt(f, 64)
+	if err != nil {
+		return err
+	}
+	b.vals = append(b.vals, v)
+	b.valid.run++
+	return nil
+}
+
+type float64Builder struct{ fixedBuilder[float64] }
+
+func (b *float64Builder) appendField(f []byte) error {
+	v, err := dtype.ParseFloat(str(f), 64)
+	if err != nil {
+		return err
+	}
+	b.vals = append(b.vals, v)
+	b.valid.run++
+	return nil
+}
+
 func intBuilder[T interface {
 	data.Fixed
 	~int8 | ~int16 | ~int32 | ~int64
 }](dt dtype.DataType, bits int) colBuilder {
-	return &fixedBuilder[T]{dt: dt, valid: bitmap.NewBuilder(0),
+	return &fixedBuilder[T]{dt: dt,
 		parse: func(b []byte) (T, error) {
-			v, err := strconv.ParseInt(str(b), 10, bits)
+			v, err := parseInt(b, bits)
 			return T(v), err
 		}}
 }
@@ -480,11 +533,61 @@ func uintBuilder[T interface {
 	data.Fixed
 	~uint8 | ~uint16 | ~uint32 | ~uint64
 }](dt dtype.DataType, bits int) colBuilder {
-	return &fixedBuilder[T]{dt: dt, valid: bitmap.NewBuilder(0),
+	return &fixedBuilder[T]{dt: dt,
 		parse: func(b []byte) (T, error) {
-			v, err := strconv.ParseUint(str(b), 10, bits)
+			v, err := parseUint(b, bits)
 			return T(v), err
 		}}
+}
+
+// parseInt is strconv.ParseInt(str(b), 10, bits), in one pass for what a file
+// mostly holds, a sign and at most 18 digits that fit bits, and strconv's for
+// anything else, its errors among it (step 373).
+func parseInt(b []byte, bits int) (int64, error) {
+	d := b
+	neg := false
+	if len(d) > 0 && (d[0] == '-' || d[0] == '+') {
+		neg, d = d[0] == '-', d[1:]
+	}
+	if len(d) == 0 || len(d) > 18 {
+		return strconv.ParseInt(str(b), 10, bits)
+	}
+	var v int64
+	for _, c := range d {
+		c -= '0'
+		if c > 9 {
+			return strconv.ParseInt(str(b), 10, bits)
+		}
+		v = v*10 + int64(c)
+	}
+	if neg {
+		v = -v
+	}
+	if bits < 64 && (v < -1<<(bits-1) || v >= 1<<(bits-1)) {
+		return strconv.ParseInt(str(b), 10, bits)
+	}
+	return v, nil
+}
+
+// parseUint is strconv.ParseUint(str(b), 10, bits) as parseInt is ParseInt's: at
+// most 19 digits that fit bits in one pass, strconv's for the rest. ParseUint takes
+// no sign, so a sign is the rest.
+func parseUint(b []byte, bits int) (uint64, error) {
+	if len(b) == 0 || len(b) > 19 {
+		return strconv.ParseUint(str(b), 10, bits)
+	}
+	var v uint64
+	for _, c := range b {
+		c -= '0'
+		if c > 9 {
+			return strconv.ParseUint(str(b), 10, bits)
+		}
+		v = v*10 + uint64(c)
+	}
+	if bits < 64 && v >= 1<<bits {
+		return strconv.ParseUint(str(b), 10, bits)
+	}
+	return v, nil
 }
 
 // parseBool accepts exactly true/false in any capitalisation.

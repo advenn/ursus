@@ -282,6 +282,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		batchSize: batchSize,
 		remaining: spec.MaxRows,
 		isNull:    s.nullTest(),
+		nulls:     len(s.opts.NullValues) > 0,
 		stage:     make([]colStage, out.Len()),
 		threads:   spec.Threads,
 		textRate:  make([]atomic.Int64, out.Len()),
@@ -319,6 +320,9 @@ type reader struct {
 	out    *dtype.Schema // what this reader emits
 	wanted []int         // THIS stream's column -> output position, or -1
 	isNull func([]byte) bool
+	// nulls says some text means null, WithNullValues': else isNull is not called,
+	// a call a field for a false (step 373).
+	nulls bool
 
 	// The reference header — the first stream's, as written in the file — and the
 	// column mapping that goes with it. Every later stream's header is matched to
@@ -735,7 +739,7 @@ func (r *reader) appendTo(sc *scanner, builders []colBuilder, wanted []int, row 
 		}
 		f := sc.Field(i)
 		b := builders[pos]
-		if r.isNull(f) || r.emptyIn(sc, i, pos, f) {
+		if r.nulls && r.isNull(f) || r.emptyIn(sc, i, pos, f) {
 			b.appendNull()
 			continue
 		}

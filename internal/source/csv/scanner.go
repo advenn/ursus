@@ -2,7 +2,9 @@ package csv
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
+	"math/bits"
 	"unicode/utf8"
 
 	"github.com/advenn/ursus/internal/kernel"
@@ -84,6 +86,14 @@ type scanner struct {
 	checkUTF8 bool
 	spanOK    bool
 	spanTo    int
+
+	// ends marks the separators and newlines of the sixty-four bytes of buf that end
+	// at endsTo, a bit a byte, where vectorFields: an unquoted field's end is then a
+	// shift and a count of zeros, its bytes compared once, sixty-four at a time,
+	// where they were compared a byte at a time, a third of reading a file of short
+	// fields (step 373). fill moves buf's bytes, and starts it over.
+	ends   uint64
+	endsTo int
 }
 
 // SetWidth says how many fields a record has. See width.
@@ -285,6 +295,7 @@ func (s *scanner) UTF8() *bool {
 // fill compacts and refills the buffer, growing it if the current record already
 // spans everything held.
 func (s *scanner) fill() error {
+	s.endsTo = 0
 	if s.beg > 0 {
 		copy(s.buf, s.buf[s.beg:s.end])
 		s.end -= s.beg
@@ -385,9 +396,7 @@ func (s *scanner) parse(b []byte, atEOF bool) (n, nl int, ok bool, err error) {
 		}
 
 		start := i
-		for i < len(b) && b[i] != s.sep && b[i] != '\n' {
-			i++
-		}
+		i = s.unquotedEnd(b, i)
 		if i == len(b) && !atEOF {
 			return 0, 0, false, nil // the field may continue past the buffer
 		}
@@ -409,6 +418,55 @@ func (s *scanner) parse(b []byte, atEOF bool) (n, nl int, ok bool, err error) {
 		i++ // step over the separator and read the next field
 	}
 }
+
+// unquotedEnd is the index of the first separator or newline in b from i, or len(b)
+// if there is none: an unquoted field's end. b is buf from beg, as parse reads it.
+// Where vectorFields, it is found in ends, made for the sixty-four bytes from i when
+// i is past them and as many are left; else, and in the last sixty-three bytes,
+// eight bytes at a time.
+func (s *scanner) unquotedEnd(b []byte, i int) int {
+	if vectorFields {
+		for {
+			if off := s.beg + i - (s.endsTo - 64); off >= 0 && off < 64 {
+				if m := s.ends >> off; m != 0 {
+					return i + bits.TrailingZeros64(m)
+				}
+				i += 64 - off
+			}
+			if i+64 > len(b) {
+				break
+			}
+			s.ends, s.endsTo = endsMask(b[i:], s.sep), s.beg+i+64
+		}
+	}
+	return wordEnd(b, i, s.sep)
+}
+
+// wordEnd is unquotedEnd eight bytes at a time.
+func wordEnd(b []byte, i int, sep byte) int {
+	seps := uint64(sep) * lows
+	for ; i+8 <= len(b); i += 8 {
+		w := binary.LittleEndian.Uint64(b[i:])
+		if m := zeroBytes(w^seps) | zeroBytes(w^newlines); m != 0 {
+			return i + bits.TrailingZeros64(m)>>3
+		}
+	}
+	for i < len(b) && b[i] != sep && b[i] != '\n' {
+		i++
+	}
+	return i
+}
+
+const (
+	lows     = 0x0101010101010101
+	highs    = 0x8080808080808080
+	newlines = '\n' * lows
+)
+
+// zeroBytes has the high bit of w's first zero byte set, and none below it: the
+// lowest set bit marks it exactly. A bit above it may be set for a byte that is not
+// zero, by the borrow out of the zero, which the lowest set bit never reads.
+func zeroBytes(w uint64) uint64 { return (w - lows) &^ w & highs }
 
 // quotedField consumes a quoted field starting at b[i] (which is the quote).
 // It returns the index just past the field's terminator, whether that terminator

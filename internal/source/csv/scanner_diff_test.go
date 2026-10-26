@@ -2,7 +2,9 @@ package csv
 
 import (
 	stdcsv "encoding/csv"
+	"fmt"
 	"io"
+	"math/rand/v2"
 	"strings"
 	"testing"
 )
@@ -281,4 +283,108 @@ func TestALongQuotedFieldIsNormalisedAndCounted(t *testing.T) {
 			t.Errorf("a field of %d: the record after it on line %d, want 5", n, lines[2])
 		}
 	}
+}
+
+// TestFieldEndsFoundSixtyFourBytesAtATime: an unquoted field's end, found in a mask
+// of sixty-four bytes since step 373, splits as encoding/csv splits, over records of
+// unquoted fields 0 to 150 bytes long, quoted ones holding separators, newlines and
+// doubled quotes between them, and CRLF line ends: through buffers either side of
+// sixty-four bytes and larger, refilled mid-mask, by reads of a few bytes as a pipe
+// gives them, over a whole block as the parallel path scans one, and with a
+// separator other than the comma.
+func TestFieldEndsFoundSixtyFourBytesAtATime(t *testing.T) {
+	r := rand.New(rand.NewPCG(37, 3))
+	for _, sep := range []byte{',', ';', '\t'} {
+		var sb strings.Builder
+		for range 600 {
+			for f := range 1 + r.IntN(14) {
+				if f > 0 {
+					sb.WriteByte(sep)
+				}
+				switch k := r.IntN(10); {
+				case k < 7:
+					n := r.IntN(30)
+					if r.IntN(8) == 0 {
+						n = 64 + r.IntN(90)
+					}
+					for range n {
+						sb.WriteByte("abcxyz0129 .-_/é"[r.IntN(16)])
+					}
+				case k < 9:
+					sb.WriteByte('"')
+					for range r.IntN(80) {
+						switch c := r.IntN(20); c {
+						case 0:
+							sb.WriteString(`""`)
+						case 1:
+							sb.WriteByte('\n')
+						case 2:
+							sb.WriteByte(sep)
+						default:
+							sb.WriteByte("pqrs789 "[c%8])
+						}
+					}
+					sb.WriteByte('"')
+				}
+			}
+			if r.IntN(4) == 0 {
+				sb.WriteByte('\r')
+			}
+			sb.WriteByte('\n')
+		}
+		in := sb.String()
+		std := stdcsv.NewReader(strings.NewReader(in))
+		std.Comma, std.FieldsPerRecord = rune(sep), -1
+		want, err := std.ReadAll()
+		if err != nil {
+			t.Fatalf("separator %q: the corpus is not CSV: %v", sep, err)
+		}
+		o := DefaultOptions()
+		o.Separator = sep
+		o = o.normalise()
+		for _, size := range []int{63, 64, 65, 100, 127, 128, 129, 200, 300, 1000, 4096, 0} {
+			for _, piecemeal := range []bool{false, true} {
+				var sc *scanner
+				switch {
+				case size == 0 && piecemeal:
+					continue
+				case size == 0:
+					sc = newScannerOver([]byte(in), o)
+				case piecemeal:
+					sc = newScannerSized(&pieces{in, r}, o, size)
+				default:
+					sc = newScannerSized(strings.NewReader(in), o, size)
+				}
+				what := fmt.Sprintf("separator %q, buffer %d, read piecemeal %v", sep, size, piecemeal)
+				got, err := drain(sc)
+				if err != nil {
+					t.Fatalf("%s: %v", what, err)
+				}
+				if !equal(got, want) {
+					for i := range min(len(got), len(want)) {
+						if !equal(got[i:i+1], want[i:i+1]) {
+							t.Fatalf("%s: record %d is %q, want %q", what, i, got[i], want[i])
+						}
+					}
+					t.Fatalf("%s: %d records, want %d", what, len(got), len(want))
+				}
+			}
+		}
+	}
+}
+
+// pieces reads its input 1 to 100 bytes at a time, as a pipe or a socket may give
+// it: a refill then brings fewer bytes than a mask covers.
+type pieces struct {
+	s string
+	r *rand.Rand
+}
+
+func (p *pieces) Read(b []byte) (int, error) {
+	if len(p.s) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(b[:min(len(b), 1+p.r.IntN(100))], p.s)
+	p.s = p.s[n:]
+	return n, nil
 }
