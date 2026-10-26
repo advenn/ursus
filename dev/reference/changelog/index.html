@@ -3196,7 +3196,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v068">Unreleased — toward v0.6.8<a class="headerlink" href="#unreleased-toward-v068" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.7</code> (2026-10-26): steps 365–372, so far.
+<p>Everything since <code>v0.6.7</code> (2026-10-26): steps 365–373, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.6.8-scope.md"><code>v0.6.8-scope.md</code></a> set the scope: <strong>the leftovers
 of feature completeness, and five of 0.7's performance tasks done ahead of it.</strong></p>
 <h3 id="breaks">Breaks<a class="headerlink" href="#breaks" title="Permanent link">&para;</a></h3>
@@ -3250,6 +3250,13 @@ of feature completeness, and five of 0.7's performance tasks done ahead of it.</
 </ul>
 <h3 id="faster">Faster<a class="headerlink" href="#faster" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A CSV file read faster</strong> (373): a float parsed in one pass, to <code>strconv</code>'s bits,
+  and an integer; a batch's column with no null has no validity bitmap, so the
+  kernels after the read take their paths for none; an unquoted field's end found in
+  a mask of 64 bytes. A million rows of an integer, two texts and a float, 43 MB, in
+  165–250 ms on one thread where they took 243–405, 78–142 on four where they took
+  133–188, at a load of 4 to 5.7; Polars 111–146 and 55–68. A cast from String to a
+  float takes the same parse.</li>
 <li><strong>A frame's aggregate takes its columns whole</strong> (372): an aggregate of no keys,
   <code>Select(c("x").Mean())</code>, makes no group id a row; a count, a sum, a mean, a minimum
   and a maximum, a first and a last take each batch's column at once, an integer's
