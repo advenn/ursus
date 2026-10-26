@@ -13,6 +13,7 @@ import (
 	arrowpq "github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/compress"
 
+	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/exec"
 	"github.com/advenn/ursus/internal/source/hive"
 	"github.com/advenn/ursus/internal/source/parquet"
@@ -336,6 +337,7 @@ type ParquetSinkOption interface{ applyParquetSink(*parquetSinkCfg) }
 type parquetSinkCfg struct {
 	write   parquet.WriteOptions
 	collect collectCfg
+	part    partitionCfg
 }
 
 func (o ParquetWriteOption) applyParquetSink(c *parquetSinkCfg) { o(&c.write) }
@@ -374,7 +376,14 @@ func WithStatistics(b bool) ParquetWriteOption {
 // success: a Parquet file without its footer is not merely truncated, it is
 // unreadable, so leaving a partial one where a complete one is expected would be
 // worse than leaving nothing.
+//
+// With WithPartitionBy or WithMaxRowsPerFile, path is a directory, and the result a
+// hive dataset below it, each file written to a temporary name and renamed as it ends.
 func (lf *LazyFrame) SinkParquet(ctx context.Context, path string, opts ...ParquetSinkOption) error {
+	if cfg := parquetSinkOptions(opts); cfg.part.partitioned() {
+		return lf.sinkPartitioned(ctx, "sink_parquet", path, cfg.collect, cfg.part, ".parquet",
+			func(w io.Writer, s *dtype.Schema) (fileWriter, error) { return parquet.NewWriter(w, s, cfg.write) })
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
 	if err != nil {
 		return uerr.Wrap(err, uerr.KindIO, "sink_parquet",
@@ -403,6 +412,9 @@ func (lf *LazyFrame) SinkParquet(ctx context.Context, path string, opts ...Parqu
 func (lf *LazyFrame) WriteParquet(ctx context.Context, w io.Writer, opts ...ParquetSinkOption) (err error) {
 	defer uerr.Catch(&err, "sink_parquet")
 	cfg := parquetSinkOptions(opts)
+	if err := noPartition("sink_parquet", cfg.part); err != nil {
+		return err
+	}
 	defer cfg.collect.report()
 	root, err := lf.compile(ctx, cfg.collect)
 	if err != nil {

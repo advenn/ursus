@@ -284,6 +284,7 @@ type CSVSinkOption interface{ applyCSVSink(*csvSinkCfg) }
 type csvSinkCfg struct {
 	write   csv.WriteOptions
 	collect collectCfg
+	part    partitionCfg
 }
 
 func (o CSVWriteOption) applyCSVSink(c *csvSinkCfg) { o(&c.write) }
@@ -431,7 +432,14 @@ func WithCSVCheckExtension(b bool) CSVWriteOption {
 //
 // The file is written to a temporary name and renamed on success, so a failed
 // query leaves no half-written file where a complete one is expected.
+//
+// With WithPartitionBy or WithMaxRowsPerFile, path is a directory, and the result a
+// hive dataset below it, of files named .csv, as Polars names them, compressed or not.
 func (lf *LazyFrame) SinkCSV(ctx context.Context, path string, opts ...CSVSinkOption) error {
+	if cfg := csvSinkOptions(opts); cfg.part.partitioned() {
+		return lf.sinkPartitioned(ctx, "sink_csv", path, cfg.collect, cfg.part, ".csv",
+			func(w io.Writer, _ *dtype.Schema) (fileWriter, error) { return csv.NewWriter(w, cfg.write) })
+	}
 	if err := csv.CheckExtension(path, csvSinkOptions(opts).write); err != nil {
 		return err
 	}
@@ -465,6 +473,9 @@ func (lf *LazyFrame) SinkCSV(ctx context.Context, path string, opts ...CSVSinkOp
 func (lf *LazyFrame) WriteCSV(ctx context.Context, w io.Writer, opts ...CSVSinkOption) (err error) {
 	defer uerr.Catch(&err, "sink_csv")
 	cfg := csvSinkOptions(opts)
+	if err := noPartition("sink_csv", cfg.part); err != nil {
+		return err
+	}
 	defer cfg.collect.report()
 	root, err := lf.compile(ctx, cfg.collect)
 	if err != nil {

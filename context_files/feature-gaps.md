@@ -246,7 +246,7 @@ differs from their input's, or scalars outside a group-by.
 | --- | --- |
 | built: **JSON read,** in step 345: `ScanJSON` and `ScanJSONBytes`, Polars' `read_json`, each object made a line of NDJSON in place and read as step 334's NDJSON is, faster than Polars; schema overrides for both. NDJSON read and scanned in step 334; JSON and NDJSON written and sunk in step 333, each value in Polars' text | — |
 | built: **Arrow IPC,** in step 332: a file or a stream scanned, written and sunk, uncompressed, LZ4 or Zstandard, and a file's schema read; and a Parquet file's schema. Over arrow-go's IPC readers and writers | — |
-| **Hive partitioning:** built on read for Parquet in step 347, a directory read whole, its `key=value` directories typed columns, a filter on them skipping files, `include_file_paths`; `include_file_paths` for CSV and NDJSON in step 359; IPC's in step 360, a directory, a glob and a list, `internal/source/files`. Left: **partitioned writes** by key | P1 |
+| **Hive partitioning:** built on read for Parquet in step 347, a directory read whole, its `key=value` directories typed columns, a filter on them skipping files, `include_file_paths`; `include_file_paths` for CSV and NDJSON in step 359; IPC's in step 360, a directory, a glob and a list, `internal/source/files`. **Partitioned writes** in step 367: `WithPartitionBy`, `WithPartitionIncludeKey` and `WithMaxRowsPerFile` for the four sinks, Polars' paths name for name | built |
 | **Multi-file schema evolution:** built for Parquet in step 348, `schema`, `missing_columns`, `extra_columns` and `cast_options`' integer and float upcasts; `include_file_paths` for Parquet in step 347. `**` globs, and CSV and NDJSON directories, in step 349. Left: `cast_options`' datetime casts and struct fields, `include_file_paths` for CSV, NDJSON and IPC | P1 |
 | **Schema overrides on Parquet and Arrow scans.** The rest of `read_csv`'s options built in step 357: `ignore_errors`, `infer_schema=False`, `raise_if_empty=False`, `decimal_comma` and `encoding="utf8-lossy"`, text checked as UTF-8; `skip_rows_after_header`, `skip_lines` and `quote_char=None` in step 358; `eol_char`, a line end other than `\n`, left: the scanner, the splitter and the UTF-8 span find `\n` by itself. CSV date inference built in step 355, `WithTryParseDates`, and `str.to_date()`, `to_datetime()` and `to_time()` without a format by the same patterns in step 356. The CSV writer's options built in step 354: quote style and character, date, datetime and time formats, float precision, scientific notation and the decimal comma, a BOM, gzip and Zstandard output and the path's extension check. Compressed input built in step 346: a CSV, NDJSON or JSON file of gzip, zlib or Zstandard, by its first bytes | P1 |
 | **Cloud object stores** by URI (`s3://`, `gs://`, `https://`), with listing, credentials and retries. Today you bring a `ReaderAt` | P2 |
@@ -562,6 +562,13 @@ decide whether to keep or switch each one.
   numeric affinity keeps a Decimal as a REAL, read back as a Float64; nor an instant
   with a zone, so one is SQLite's text with its offset, read back as its instant in
   UTC. MySQL keeps one at its UTC wall clock, read back with no zone (step 366).
+- A partitioned write: a time of day's key keeps its fraction, `03:04:05.123456`,
+  where Polars' path drops it, `03:04:05`, so a dataset of such keys reads back as it
+  was; a key's name is escaped as its value is, `a%20b%2Fc=1`, and read back so,
+  where Polars writes it as it is, and a slash in it makes a directory, read back as
+  another key. Past 64 keys' files open at once, the least recently written closes, and a
+  later row of its key begins its next file, numbered on, where Polars holds a file a
+  key open (step 367).
 - An aggregate whose answer depends on the order, `First` or `Last`, inside a window
   with an `OrderBy`, `(x - x.First()).CumSum(false)` over g ordered by t, is refused as
   an ordering over an aggregate is; Polars takes the first in the order (step 336).

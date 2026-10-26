@@ -15,11 +15,28 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.6.8
 
-Everything since `v0.6.7` (2026-10-26): steps 365–366, so far.
+Everything since `v0.6.7` (2026-10-26): steps 365–367, so far.
 [`v0.6.8-scope.md`](./context_files/v0.6.8-scope.md) set the scope: **the leftovers
 of feature completeness, and five of 0.7's performance tasks done ahead of it.**
 
+### Breaks
+
+- **An empty hive key of text is the empty string** (367), as Polars reads `k=`,
+  where it was null; in a key of any other type it is null still.
+- **`SinkNDJSON` takes `NDJSONSinkOption`s** (367): a `CollectOption`, as before, or a
+  `PartitionOption`. A call passing a `[]CollectOption` spread with `...` needs its
+  slice's type changed.
+
 ### Features
+
+- **Partitioned writes** (367): `WithPartitionBy(keys...)` makes `SinkParquet`,
+  `SinkCSV`, `SinkIPC` and `SinkNDJSON` write a hive dataset, Polars'
+  `write_parquet(partition_by=...)` and `sink_parquet(pl.PartitionBy(...))`: a
+  directory a key's value, its files numbered from `00000000`, the values escaped as
+  Polars escapes them and a null `__HIVE_DEFAULT_PARTITION__`, so the tree is Polars'
+  name for name and each reads the other's; `WithPartitionIncludeKey(false)` drops the
+  keys from the files, and `WithMaxRowsPerFile(n)` ends a file at n rows, with or
+  without keys. Streamed, a file written to a temporary name and renamed as it ends.
 
 - **A database written** (366): `WriteDatabase`, Polars' `write_database`, on a
   `LazyFrame` or a `DataFrame`, through `database/sql` into a `*sql.DB`, a `*sql.Conn`

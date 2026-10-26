@@ -66,8 +66,9 @@ func TestInfer(t *testing.T) {
 }
 
 // TestParse: each path's key=value directories below the root, percent-decoded,
-// Hive's default partition and an empty value null; a directory of another form and
-// the root's own name passed over; paths of other keys refused.
+// Hive's default partition null, and an empty value null but in a key of text, where
+// it is the empty string, as Polars reads it (step 367); a directory of another form
+// and the root's own name passed over; paths of other keys refused.
 func TestParse(t *testing.T) {
 	root := filepath.FromSlash("/data/k=0/t")
 	paths := []string{
@@ -83,7 +84,7 @@ func TestParse(t *testing.T) {
 		t.Errorf("keys %s", got)
 	}
 	want := [][]string{{"1", "y z"}, {DefaultPartition, ""}, {"x=y", "w"}}
-	nulls := [][]bool{{false, false}, {true, true}, {false, false}}
+	nulls := [][]bool{{false, false}, {true, false}, {false, false}}
 	for k := range paths {
 		for j := range p.Keys {
 			if p.Text[k][j] != want[k][j] || p.Null[k][j] != nulls[k][j] {
@@ -101,6 +102,16 @@ func TestParse(t *testing.T) {
 	}
 	if vals[1][0].IsValid(0) || !vals[2][0].IsValid(0) || vals[2][0].Strings().Get(0) != "x=y" {
 		t.Errorf("values %v", vals)
+	}
+	if !vals[1][1].IsValid(0) || vals[1][1].Strings().Get(0) != "" {
+		t.Errorf("an empty key of text: %v", vals[1][1])
+	}
+	// An empty value of an integer key is null, and leaves the type the others infer.
+	q := &Partitions{Keys: []string{"n"}, Text: [][]string{{""}, {"1"}}, Null: [][]bool{{false}, {false}}}
+	if types := q.Types(nil, noFiles(t), true); types[0] != dtype.Int64 {
+		t.Errorf("an empty value beside an integer typed the key %s", types[0])
+	} else if vals, err := q.Values(types); err != nil || vals[0][0].IsValid(0) {
+		t.Errorf("an empty integer key: %v, %v", vals, err)
 	}
 
 	for name, bad := range map[string][]string{

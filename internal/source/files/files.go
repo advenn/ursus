@@ -184,8 +184,8 @@ func (s *Source) share() error {
 		}
 		for j, key := range p.Keys {
 			null := false
-			for k := range p.Null {
-				null = null || p.Null[k][j]
+			for k := range vals {
+				null = null || !vals[k][j].IsValid(0)
 			}
 			s.shared = append(s.shared, dtype.Field{Name: key, Type: types[j], Nullable: null})
 			for k := range s.files {

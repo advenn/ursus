@@ -57,12 +57,18 @@ func ParseFor(op, root string, paths []string) (*Partitions, error) {
 			if !ok || key == "" {
 				continue
 			}
+			// A key's name is decoded as its value is: Escape spells both (step 367).
+			if k, err := url.PathUnescape(key); err == nil {
+				key = k
+			}
 			value, err := url.PathUnescape(raw)
 			if err != nil {
 				value = raw
 			}
 			keys = append(keys, key)
-			null := value == "" || value == DefaultPartition
+			// An empty value is null too, but in a key of text, where it is the empty
+			// string, as Polars reads it (Values).
+			null := value == DefaultPartition
 			p.Text[k] = append(p.Text[k], value)
 			p.Null[k] = append(p.Null[k], null)
 		}
@@ -114,7 +120,7 @@ func (p *Partitions) Types(given map[string]dtype.DataType, files *dtype.Schema,
 		}
 		vals := make([]string, 0, len(p.Text))
 		for k := range p.Text {
-			if !p.Null[k][j] {
+			if !p.Null[k][j] && p.Text[k][j] != "" {
 				vals = append(vals, p.Text[k][j])
 			}
 		}
@@ -125,7 +131,8 @@ func (p *Partitions) Types(given map[string]dtype.DataType, files *dtype.Schema,
 
 // Values are each file's partition values as columns of one row, by file then key,
 // of the types: each key's values cast from their text, strictly, a value its type
-// cannot take refused, as Polars refuses it.
+// cannot take refused, as Polars refuses it. An empty value is the empty string in a
+// key of text, and null in any other, as Polars reads `k=` (step 367).
 func (p *Partitions) Values(types []dtype.DataType) ([][]*data.Column, error) {
 	out := make([][]*data.Column, len(p.Text))
 	for k := range out {
@@ -134,9 +141,10 @@ func (p *Partitions) Values(types []dtype.DataType) ([][]*data.Column, error) {
 	for j, key := range p.Keys {
 		texts := make([]string, len(p.Text))
 		valid := bitmap.NewBuilder(len(p.Text))
+		text := types[j].HasStringStorage()
 		for k := range p.Text {
 			texts[k] = canonical(p.Text[k][j], types[j])
-			valid.Append(!p.Null[k][j])
+			valid.Append(!p.Null[k][j] && (text || p.Text[k][j] != ""))
 		}
 		col, err := kernel.Cast(key, types[j], true, data.NewString(key, texts, valid.Finish()))
 		if err != nil {
@@ -398,4 +406,29 @@ func canonical(v string, t dtype.DataType) string {
 		}
 	}
 	return v
+}
+
+// Escape is a key's name or value as a path segment holds it, as Polars writes one
+// (step 367): a byte below a space, DEL, a byte past ASCII, and `/`, `=`, a space,
+// `%` and `:` percent-encoded, every other byte as it is. ParseFor decodes it.
+func Escape(s string) string {
+	const hex = "0123456789ABCDEF"
+	var b []byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 0x20 && c < 0x7f && c != '/' && c != '=' && c != ' ' && c != '%' && c != ':' {
+			if b != nil {
+				b = append(b, c)
+			}
+			continue
+		}
+		if b == nil {
+			b = append(make([]byte, 0, len(s)+8), s[:i]...)
+		}
+		b = append(b, '%', hex[c>>4], hex[c&15])
+	}
+	if b == nil {
+		return s
+	}
+	return string(b)
 }

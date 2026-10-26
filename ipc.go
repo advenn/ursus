@@ -12,6 +12,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 
+	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/arrowin"
 	"github.com/advenn/ursus/internal/arrowout"
 	"github.com/advenn/ursus/internal/exec"
@@ -275,6 +276,18 @@ type ipcWriteCfg struct {
 	compression IPCCompression
 }
 
+// options are the IPC writer's options for a file of schema.
+func (c ipcWriteCfg) options(schema *arrow.Schema) []ipc.Option {
+	opts := []ipc.Option{ipc.WithSchema(schema)}
+	switch c.compression {
+	case IPCLZ4:
+		opts = append(opts, ipc.WithLZ4())
+	case IPCZstd:
+		opts = append(opts, ipc.WithZstd())
+	}
+	return opts
+}
+
 // WithIPCCompression sets the codec, as Polars' write_ipc(compression=...): none by
 // default, as Polars'.
 func WithIPCCompression(c IPCCompression) IPCWriteOption {
@@ -288,6 +301,7 @@ type IPCSinkOption interface{ applyIPCSink(*ipcSinkCfg) }
 type ipcSinkCfg struct {
 	write   ipcWriteCfg
 	collect collectCfg
+	part    partitionCfg
 }
 
 func (o IPCWriteOption) applyIPCSink(c *ipcSinkCfg) { o(&c.write) }
@@ -318,7 +332,24 @@ func (lf *LazyFrame) WriteIPCStream(ctx context.Context, w io.Writer, opts ...IP
 // SinkIPC runs the query and writes the answer to path as an Arrow IPC file,
 // streaming, as Polars' sink_ipc: to a temporary name, renamed on success, since a
 // file without its footer cannot be read.
+//
+// With WithPartitionBy or WithMaxRowsPerFile, path is a directory, and the result a
+// hive dataset below it, of files named .ipc, as Polars names them.
 func (lf *LazyFrame) SinkIPC(ctx context.Context, path string, opts ...IPCSinkOption) error {
+	if cfg := ipcSinkOptions(opts); cfg.part.partitioned() {
+		return lf.sinkPartitioned(ctx, "sink_ipc", path, cfg.collect, cfg.part, ".ipc",
+			func(w io.Writer, s *dtype.Schema) (fileWriter, error) {
+				schema, err := arrowout.Schema(s)
+				if err != nil {
+					return nil, err
+				}
+				fw, err := ipc.NewFileWriter(w, cfg.write.options(schema)...)
+				if err != nil {
+					return nil, uerr.Wrap(err, uerr.KindIO, "sink_ipc", "starting the file")
+				}
+				return ipcPart{w: fw, op: "sink_ipc"}, nil
+			})
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
 	if err != nil {
 		return uerr.Wrap(err, uerr.KindIO, "sink_ipc", "creating a temporary file for %s", path)
@@ -343,6 +374,9 @@ func (lf *LazyFrame) SinkIPC(ctx context.Context, path string, opts ...IPCSinkOp
 func (lf *LazyFrame) writeIPC(ctx context.Context, op string, w io.Writer, stream bool, opts []IPCSinkOption) (err error) {
 	defer uerr.Catch(&err, op)
 	cfg := ipcSinkOptions(opts)
+	if err := noPartition(op, cfg.part); err != nil {
+		return err
+	}
 	defer cfg.collect.report()
 	root, err := lf.compile(ctx, cfg.collect)
 	if err != nil {
@@ -354,13 +388,7 @@ func (lf *LazyFrame) writeIPC(ctx context.Context, op string, w io.Writer, strea
 	if err != nil {
 		return err
 	}
-	wopts := []ipc.Option{ipc.WithSchema(schema)}
-	switch cfg.write.compression {
-	case IPCLZ4:
-		wopts = append(wopts, ipc.WithLZ4())
-	case IPCZstd:
-		wopts = append(wopts, ipc.WithZstd())
-	}
+	wopts := cfg.write.options(schema)
 	type recordWriter interface {
 		Write(arrow.RecordBatch) error
 		Close() error

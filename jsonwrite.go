@@ -50,7 +50,18 @@ func (lf *LazyFrame) WriteJSON(ctx context.Context, w io.Writer, opts ...Collect
 // SinkNDJSON runs the query and writes it to path as WriteNDJSON writes, streaming,
 // as Polars' sink_ndjson: to a temporary name, renamed on success, so a failed query
 // leaves no file half written.
-func (lf *LazyFrame) SinkNDJSON(ctx context.Context, path string, opts ...CollectOption) error {
+//
+// With WithPartitionBy or WithMaxRowsPerFile, path is a directory, and the result a
+// hive dataset below it, of files named .jsonl, as Polars names them.
+func (lf *LazyFrame) SinkNDJSON(ctx context.Context, path string, opts ...NDJSONSinkOption) error {
+	cfg := ndjsonSinkCfg{collect: baseCollectCfg()}
+	for _, o := range opts {
+		o.applyNDJSONSink(&cfg)
+	}
+	cfg.collect.finish()
+	if cfg.part.partitioned() {
+		return lf.sinkPartitioned(ctx, "sink_ndjson", path, cfg.collect, cfg.part, ".jsonl", newNDJSONFile)
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
 	if err != nil {
 		return uerr.Wrap(err, uerr.KindIO, "sink_ndjson", "creating a temporary file for %s", path)
@@ -60,7 +71,7 @@ func (lf *LazyFrame) SinkNDJSON(ctx context.Context, path string, opts ...Collec
 		tmp.Close()
 		os.Remove(tmpName) // a no-op on the success path, which ends with a rename
 	}()
-	if err := lf.WriteNDJSON(ctx, tmp, opts...); err != nil {
+	if err := lf.writeJSONCfg(ctx, "write_ndjson", tmp, false, cfg.collect); err != nil {
 		return err
 	}
 	if err := tmp.Close(); err != nil {
@@ -72,13 +83,28 @@ func (lf *LazyFrame) SinkNDJSON(ctx context.Context, path string, opts ...Collec
 	return nil
 }
 
-func (lf *LazyFrame) writeJSON(ctx context.Context, op string, w io.Writer, array bool, opts []CollectOption) (err error) {
-	defer uerr.Catch(&err, op)
+// NDJSONSinkOption is an option to SinkNDJSON: a PartitionOption or a CollectOption.
+// New in 0.6.8, where SinkNDJSON took CollectOptions alone.
+type NDJSONSinkOption interface{ applyNDJSONSink(*ndjsonSinkCfg) }
+
+type ndjsonSinkCfg struct {
+	collect collectCfg
+	part    partitionCfg
+}
+
+func (o CollectOption) applyNDJSONSink(c *ndjsonSinkCfg) { o(&c.collect) }
+
+func (lf *LazyFrame) writeJSON(ctx context.Context, op string, w io.Writer, array bool, opts []CollectOption) error {
 	cfg := baseCollectCfg()
 	for _, o := range opts {
 		o(&cfg)
 	}
 	cfg.finish()
+	return lf.writeJSONCfg(ctx, op, w, array, cfg)
+}
+
+func (lf *LazyFrame) writeJSONCfg(ctx context.Context, op string, w io.Writer, array bool, cfg collectCfg) (err error) {
+	defer uerr.Catch(&err, op)
 	defer cfg.report()
 	root, err := lf.compile(ctx, cfg)
 	if err != nil {
