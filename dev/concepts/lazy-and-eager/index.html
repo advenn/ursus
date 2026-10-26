@@ -1648,8 +1648,11 @@ chain has one <code>if err != nil</code>, at the end.</p>
 <ul>
 <li><strong>predicate pushdown:</strong> a filter moves toward the scan, through joins, so fewer rows
   travel;</li>
-<li><strong>projection pushdown:</strong> a scan reads only the columns the query uses;</li>
-<li><strong>limit and top-k pushdown:</strong> a <code>Head</code> after a <code>Sort</code> becomes a top-k;</li>
+<li><strong>projection pushdown:</strong> a scan reads only the columns the query uses, and a count
+  none (<em>new in 0.6.8</em>);</li>
+<li><strong>limit and top-k pushdown:</strong> a <code>Head</code> after a <code>Sort</code> becomes a top-k, and, <em>new in
+  0.6.8</em>, a <code>Head</code> or a <code>Slice</code> reaches its scan or its sort through a projection, a
+  row index, a union's inputs and an ordered left join's left input;</li>
 <li><strong>constant folding and simplification;</strong></li>
 <li><strong>common subplans:</strong> a subtree used twice runs once.</li>
 </ul>
@@ -1691,6 +1694,13 @@ two of six columns:</p>
 <p><code>Explain</code>'s output is stable on purpose: ursus's own tests compare plans as text, so a
 query that still gives the right answer while reading forty columns instead of two
 fails a test.</p>
+<p><em>New in 0.6.8:</em> <code>Profile(ctx)</code> runs the query, as Polars' <code>profile()</code>, and answers its
+frame and a second one, a row a node of the plan as <code>Explain</code> prints it, after a row
+for the optimization: when the node began and ended its work, in microseconds since
+the query began, the rows and batches it handed on, its own time, summed over the
+threads that did it, and the most memory it held. A profiled query reads the clock
+around each operator, so it takes a little longer; <code>Collect</code> does not.
+<code>Explain(ctx, ursus.ExplainOptFlags(f))</code> prints the plan <code>WithOptFlags(f)</code> runs.</p>
 <p><em>New in 0.6.7.</em> <code>Columns(ctx)</code>, <code>DTypes(ctx)</code> and <code>Width(ctx)</code> are a query's column
 names, their types and how many there are, as Polars' lazy <code>columns</code>, <code>dtypes</code> and
 <code>width</code>: read from <code>CollectSchema</code>, which types the plan without running it.</p>
