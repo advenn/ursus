@@ -180,3 +180,51 @@ func TestUpsampleUnderAMemoryLimit(t *testing.T) {
 		t.Errorf("%d rows, want %d", got.Height(), 40*499)
 	}
 }
+
+// TestUpsampleKeepsTheGridsOrder: since step 383 the join of the grid to the frame
+// keeps the grid's order and each step's rows in the frame's, where a sort by the
+// two, numbered, restored it. Over 20,000 rows of 60 groups, a null group among them,
+// in no order, with instants repeated, between two steps, and null, on one thread and
+// eight in batches of 97, the answer is the numbered sort's, row for row.
+func TestUpsampleKeepsTheGridsOrder(t *testing.T) {
+	const n = 20_000
+	ts := make([]time.Time, n)
+	g, gOK := make([]int64, n), make([]bool, n)
+	v := make([]int64, n)
+	for i := range n {
+		h := uint64(i) * 0x9E3779B97F4A7C15 >> 9
+		g[i], gOK[i] = int64(h%60), h%61 != 0
+		ts[i] = at(2024, 1, 1, 0).Add(time.Duration(h%900) * time.Hour)
+		if h%7 == 0 {
+			ts[i] = ts[i].Add(30 * time.Minute) // between two steps
+		}
+		if h%101 == 0 {
+			ts[i] = time.Time{}
+		}
+		v[i] = int64(i)
+	}
+	lf := timed(ts, ursus.ValuesNullable("g", g, gOK), ursus.Values("v", v))
+	c := ursus.Col
+	// The composition step 306 built: the grid and the frame numbered, joined, and
+	// sorted by the two numbers.
+	grid := lf.GroupBy(c("g")).MaintainOrder().
+		Agg(ursus.DatetimeRanges(c("t").Min(), c("t").Max(), ursus.Every("1h")).Alias("t")).
+		Explode("t").Filter(c("t").IsNotNull()).WithRowIndex("step", 0)
+	want, err := grid.Join(lf.WithRowIndex("row", 0), ursus.JoinOn(c("g"), c("t")), ursus.JoinHow(ursus.JoinLeft),
+		ursus.JoinNullsEqual(true)).Sort(ursus.Asc(c("step")), ursus.Asc(c("row"))).
+		Select(c("t"), c("g"), c("v")).Collect(t.Context(), ursus.WithThreads(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want.Height() < 2*n {
+		t.Fatalf("%d rows: too few steps without a row", want.Height())
+	}
+	for _, threads := range []int{1, 8} {
+		got, err := lf.Upsample("t", ursus.Every("1h"), "g").
+			Collect(t.Context(), ursus.WithThreads(threads), ursus.WithBatchSize(97))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ursustest.AssertFrameEqual(t, got, want)
+	}
+}

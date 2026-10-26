@@ -15,12 +15,15 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.7
 
-Everything since `v0.6.8` (2026-10-26): steps 375–382, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–383, so far.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
 Parquet read first.
 
 ### Faster
 
+- **`Upsample` no longer sorts its answer** (383): its grid is joined to the frame
+  keeping the grid's order, where both were numbered and the join sorted back. A
+  million rows of 100 groups upsampled by the second take 0.74 of their time.
 - **A filter of a group-by's keys runs before it** (382): `GroupBy(k).Agg(...)`
   filtered on `k` filters `k` first, through a key's definition, and a filter of a
   window's partition keys runs before the window; a filter of an aggregate, HAVING,

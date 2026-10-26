@@ -28,8 +28,8 @@ import (
 // forward after it reads the rows it should.
 //
 // It is a join: a grid made by a group-by of each group's first and last instant,
-// joined with the frame and sorted back into the grid's order, each part streaming
-// and spilling as it does. The frame need not be sorted, which Polars' must be. A row
+// joined with the frame in the grid's order, each part streaming and spilling as it
+// does. The frame need not be sorted, which Polars' must be. A row
 // of a null instant has no place on the grid and is left out, and a frame of no rows
 // upsamples to none, where Polars refuses either.
 func (lf *LazyFrame) Upsample[T Span](time string, every T, groupBy ...string) *LazyFrame {
@@ -97,23 +97,22 @@ func (lf *LazyFrame) Upsample[T Span](time string, every T, groupBy ...string) *
 		keys = append(keys, Col(name))
 	}
 
-	// The grid, a row for each group's step, numbered in its order; the frame's rows
-	// numbered in theirs. A group of no instant has a null range, which explodes to a
-	// row of a null instant, and is dropped.
+	// The grid, a row for each group's step, in its order. A group of no instant has a
+	// null range, which explodes to a row of a null instant, and is dropped. The join
+	// keeps the grid's order and each step's rows in the frame's (step 383), which a
+	// sort by the two numbered restored before.
 	names := s.Names()
-	step, row := freshName(names, "step"), freshName(names, "row")
 	grid := lf.GroupBy(keys...).MaintainOrder().Agg(steps.Alias(time)).Explode(time).Filter(t.IsNotNull())
 	if typ.IsInteger() {
 		grid = grid.WithColumns(t.Cast(Int64).Cast(typ))
 	}
-	grid = grid.WithRowIndex(step, 0)
-	joined := grid.Join(lf.WithRowIndex(row, 0), JoinOn(append(keys, t)...), JoinHow(JoinLeft),
-		JoinNullsEqual(true))
+	joined := grid.Join(lf, JoinOn(append(keys, t)...), JoinHow(JoinLeft), JoinNullsEqual(true),
+		JoinMaintainOrder(JoinOrderLeft))
 	cols := make([]Expr, len(names))
 	for k, name := range names {
 		cols[k] = Col(name)
 	}
-	return joined.Sort(Asc(Col(step)), Asc(Col(row))).Select(cols...)
+	return joined.Select(cols...)
 }
 
 // Upsample is a DataFrame's: LazyFrame's.
