@@ -655,6 +655,9 @@ func TestEveryEntryPointRecovers(t *testing.T) {
 			return reflect.ValueOf(filepath.Join(t.TempDir(), "out"))
 		case reflect.TypeFor[int]():
 			return reflect.ValueOf(2) // Show's limit
+		case reflect.TypeFor[ursus.DatabaseWriter]():
+			db, _ := writeDB(t)
+			return reflect.ValueOf(ursus.DatabaseWriter(db))
 		}
 		t.Fatalf("no argument for a %s", in)
 		return reflect.Value{}

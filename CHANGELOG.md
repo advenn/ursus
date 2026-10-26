@@ -13,6 +13,23 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.6.8
+
+Everything since `v0.6.7` (2026-10-26): steps 365–366, so far.
+[`v0.6.8-scope.md`](./context_files/v0.6.8-scope.md) set the scope: **the leftovers
+of feature completeness, and five of 0.7's performance tasks done ahead of it.**
+
+### Features
+
+- **A database written** (366): `WriteDatabase`, Polars' `write_database`, on a
+  `LazyFrame` or a `DataFrame`, through `database/sql` into a `*sql.DB`, a `*sql.Conn`
+  or a `*sql.Tx`; `WithIfTableExists(IfExistsFail | IfExistsReplace | IfExistsAppend)`
+  as Polars' modes; a table created of the types `ReadDatabase` reads back, for SQLite,
+  PostgreSQL, MySQL or SQL Server, named by the driver or `WithDialect`; the rows in
+  INSERTs of as many as the dialect's parameters allow, in one transaction.
+
+---
+
 ## v0.6.7 — 2026-10-26
 
 Everything since `v0.6.6` (2026-10-19): steps 288–364.

@@ -86,7 +86,7 @@ what we are lacking".
 | ~~`read_csv(try_parse_dates=True)`~~ | built in step 355: `WithTryParseDates`, Polars' patterns, and a schema's temporal columns read by them; `str.to_date()`, `to_datetime()` and `to_time()` of no format by them in step 356, `ToDate`, `ToDatetime`, `ToTime`, `Strptime(dt, "", strict)` |
 | ~~`read_csv`'s options~~ | built in step 357: `WithIgnoreErrors`, `WithInferSchema`, `WithRaiseIfEmpty`, `WithDecimalComma`, `WithEncoding(UTF8Lossy)`; text checked as UTF-8, a short record padded and a blank line a record of nulls, as Polars reads them; `WithSkipLines`, `WithSkipRowsAfterHeader`, `WithQuoting(false)` in step 358; `eol_char` left |
 | ~~`write_csv`'s options~~ | built in step 354: `WithQuoteStyle`, `WithWriteQuote`, `WithDateFormat`, `WithDatetimeFormat`, `WithTimeFormat`, `WithFloatPrecision`, `WithFloatScientific`, `WithWriteDecimalComma`, `WithIncludeBOM`, `WithCSVCompression`, `WithCSVCompressionLevel`, `WithCSVCheckExtension`; an instant's and a float's text Polars' |
-| ~~databases: `read_database`~~ | built in step 353: `ReadDatabase`, `ReadDatabaseRows`, `WithDatabaseSchemaOverrides`, through `database/sql`; `write_database` and `iter_batches` left |
+| ~~databases: `read_database`, `write_database`~~ | built in step 353: `ReadDatabase`, `ReadDatabaseRows`, `WithDatabaseSchemaOverrides`, through `database/sql`; written in step 366: `WriteDatabase`, `WithIfTableExists`, `WithDialect`; `iter_batches` left |
 | Excel, Avro, Delta, Iceberg | missing (P2/P3) |
 
 ## 6. Left out on purpose

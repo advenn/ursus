@@ -251,7 +251,7 @@ differs from their input's, or scalars outside a group-by.
 | **Schema overrides on Parquet and Arrow scans.** The rest of `read_csv`'s options built in step 357: `ignore_errors`, `infer_schema=False`, `raise_if_empty=False`, `decimal_comma` and `encoding="utf8-lossy"`, text checked as UTF-8; `skip_rows_after_header`, `skip_lines` and `quote_char=None` in step 358; `eol_char`, a line end other than `\n`, left: the scanner, the splitter and the UTF-8 span find `\n` by itself. CSV date inference built in step 355, `WithTryParseDates`, and `str.to_date()`, `to_datetime()` and `to_time()` without a format by the same patterns in step 356. The CSV writer's options built in step 354: quote style and character, date, datetime and time formats, float precision, scientific notation and the decimal comma, a BOM, gzip and Zstandard output and the path's extension check. Compressed input built in step 346: a CSV, NDJSON or JSON file of gzip, zlib or Zstandard, by its first bytes | P1 |
 | **Cloud object stores** by URI (`s3://`, `gs://`, `https://`), with listing, credentials and retries. Today you bring a `ReaderAt` | P2 |
 | **Parquet:** page index and bloom filters (read and write), compression level, per-column options, a metadata cache | P2 |
-| Avro write; Excel; Delta Lake; Iceberg. **Databases** read in step 353, `ReadDatabase` and `ReadDatabaseRows` through `database/sql`, Polars' `read_database`; left: `write_database`, `read_database`'s `iter_batches`, and ADBC's Arrow results | P2/P3 |
+| Avro write; Excel; Delta Lake; Iceberg. **Databases** read in step 353, `ReadDatabase` and `ReadDatabaseRows` through `database/sql`, Polars' `read_database`; written in step 366, `WriteDatabase`, Polars' `write_database`; left: `read_database`'s `iter_batches`, and ADBC's Arrow results | P2/P3 |
 | Predicate pushdown into CSV and Arrow scans | P2 |
 
 ## 8. Engine and tooling
@@ -555,6 +555,13 @@ decide whether to keep or switch each one.
   them, so SQLite's DATE, TIMESTAMP and BOOLEAN columns, which go-sqlite3 and modernc
   give as instants and Booleans, are a Date, a Datetime and a Bool, where Python's
   sqlite3 gives Polars their text and integers (step 353).
+- A database written: a table's columns are of ursus's own types for its dialect,
+  where Polars' are SQLAlchemy's or ADBC's; the dialect is the driver's package's, or
+  named, since `database/sql` has no name for it. A Duration is refused, which
+  SQLAlchemy writes as an INTERVAL in PostgreSQL. SQLite has no decimal, and its
+  numeric affinity keeps a Decimal as a REAL, read back as a Float64; nor an instant
+  with a zone, so one is SQLite's text with its offset, read back as its instant in
+  UTC. MySQL keeps one at its UTC wall clock, read back with no zone (step 366).
 - An aggregate whose answer depends on the order, `First` or `Last`, inside a window
   with an `OrderBy`, `(x - x.First()).CumSum(false)` over g ordered by t, is refused as
   an ordering over an aggregate is; Polars takes the first in the order (step 336).
