@@ -3296,11 +3296,14 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v07">Unreleased — toward v0.7<a class="headerlink" href="#unreleased-toward-v07" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.8</code> (2026-10-26): steps 375–382, so far.
+<p>Everything since <code>v0.6.8</code> (2026-10-26): steps 375–383, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.7-scope.md"><code>v0.7-scope.md</code></a> set the scope: <strong>performance,</strong> the
 Parquet read first.</p>
 <h3 id="faster">Faster<a class="headerlink" href="#faster" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>Upsample</code> no longer sorts its answer</strong> (383): its grid is joined to the frame
+  keeping the grid's order, where both were numbered and the join sorted back. A
+  million rows of 100 groups upsampled by the second take 0.74 of their time.</li>
 <li><strong>A filter of a group-by's keys runs before it</strong> (382): <code>GroupBy(k).Agg(...)</code>
   filtered on <code>k</code> filters <code>k</code> first, through a key's definition, and a filter of a
   window's partition keys runs before the window; a filter of an aggregate, HAVING,
