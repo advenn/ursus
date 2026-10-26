@@ -142,6 +142,16 @@ schema's is an Int64, or a Float32 where it is a Float64, widened with
 `WithUpcastIntegers(true)` or `WithUpcastFloats(true)`. Each is refused otherwise, as
 Polars refuses it, naming the file and the column.
 
+*New in 0.6.8:* a hive dataset written, as Polars' `partition_by` writes one.
+`SinkParquet(ctx, dir, ursus.WithPartitionBy("year", "month"))` writes each key's rows
+to the directory `year=2024/month=1` below `dir`, in files numbered from `00000000`;
+`SinkCSV`, `SinkIPC` and `SinkNDJSON` take the same options. A value is escaped as
+Polars escapes it and a null is `__HIVE_DEFAULT_PARTITION__`, so each reads the
+other's dataset. `WithPartitionIncludeKey(false)` leaves the keys out of the files, as
+`include_key=False`, and `WithMaxRowsPerFile(n)` ends a file at n rows, with keys or
+without. The rows stream: each file is written under a temporary name and renamed as
+it ends.
+
 ## From object storage
 
 ursus has no S3 or GCS client of its own: each store wants its vendor's SDK, and ursus
@@ -183,6 +193,13 @@ the files' own, of the type its values infer; a filter on the keys skips the fil
 rules out before any is opened. `WithIPCHivePartitioning`, `WithIPCHiveSchema`,
 `WithIPCHiveDates` and `WithIPCIncludeFilePaths` are Polars' `hive_partitioning`,
 `hive_schema`, `try_parse_hive_dates` and `include_file_paths`.
+
+*New in 0.6.8:* a String or a Binary column of more than 2 GiB of characters, as a
+`Collect`, a sort or a join of much text makes, is held, where it was refused. It
+exports as Arrow's LargeString or LargeBinary, and below 2 GiB as a String or a
+Binary, where Polars always exports the large type. A batch a reader reads, a Parquet
+column chunk's, a CSV block's or an Arrow record's rows, still holds at most 2 GiB of
+text a column, and past it the read says to read in smaller batches.
 
 ## JSON
 
@@ -239,6 +256,16 @@ and the bytes a driver gives for a `VARCHAR` or a `UUID` text. A result of no ro
 its driver's types, and a column the driver calls `NOT NULL` is not nullable.
 `ReadDatabaseRows(rows, ursus.WithDatabaseSchemaOverrides(m))` gives some columns'
 types, as Polars' `schema_overrides`. The frame is read whole, as Polars' is.
+
+*New in 0.6.8:* `WriteDatabase(ctx, db, table)` writes a query's rows, or a frame's,
+to a table, as Polars' `write_database`, and answers how many it wrote. A table
+already there is refused, replaced or appended to, as
+`WithIfTableExists(ursus.IfExistsFail)`, `IfExistsReplace` or `IfExistsAppend` says,
+Polars' `if_table_exists`; one that is not is created, of the types `ReadDatabase`
+reads back. The dialect, SQLite, PostgreSQL, MySQL or SQL Server, is named by the
+driver, or by `WithDialect(ursus.DialectPostgres)` and its kin. The rows go in
+INSERTs of as many as the dialect's parameters allow, in one transaction: a
+`*sql.DB`'s or a `*sql.Conn`'s own, or your `*sql.Tx`.
 
 ## Larger than memory
 

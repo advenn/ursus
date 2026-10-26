@@ -60,7 +60,12 @@ measured 76 ms against 22 on a quiet machine, each at its default threads.
 parse 16%, most of it its divide; the builders' interface call and `appendTo`'s loop
 15%; the text columns' copies 10%; the reads 5%.
 
-**The suites** read Parquet: no query of theirs reads a CSV, so none was timed.
+**The suites** read Parquet, and h2o reads CSV too, its `-io csv`. Its `gb1`, a sum
+by a key of 100, over the 569 MB `g1.csv` of ten million rows, on four threads, step
+372's runner and this step's alternating, three rounds of three iterations at a load
+of 4.5 to 5.0: 1,136–1,930 ms, median 1,259, before; 958–1,154, median 986, after,
+0.78 of the time; the answers byte for byte the same. (This record said at first that
+no suite reads a CSV; the 0.6.8 report, step 374, found the h2o one.)
 
 ## 3. Tests
 

@@ -13,11 +13,40 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.6.8
+## v0.6.8 — 2026-10-26
 
-Everything since `v0.6.7` (2026-10-26): steps 365–373, so far.
+Everything since `v0.6.7` (2026-10-26): steps 365–374.
 [`v0.6.8-scope.md`](./context_files/v0.6.8-scope.md) set the scope: **the leftovers
-of feature completeness, and five of 0.7's performance tasks done ahead of it.**
+of feature completeness, and five of 0.7's performance tasks done ahead of it.** Step
+374 checked the whole.
+
+### Where it ends
+
+- **The leftovers of feature completeness:**
+  - a database written, `WriteDatabase`, Polars' `write_database`, for SQLite,
+    PostgreSQL, MySQL and SQL Server;
+  - partitioned writes for the four sinks, Polars' tree name for name;
+  - a String or Binary column past 2 GiB, exported to Arrow as the large type.
+- **Five of 0.7's performance tasks:**
+  - `Profile`, Polars' `profile()`;
+  - a count that reads no column: `Count` over PDS-H's lineitem at SF=1 in 2.5 ms
+    where it took 400 to 500;
+  - slice pushdown through what keeps rows: a projected sort's head over lineitem a
+    top-k, 147 ms where it took 380;
+  - a frame's aggregate that takes its columns whole: `Len` over a million rows 0.13
+    ms where it took 2.5;
+  - a CSV file read in about 1.4 times Polars' time, where it was 2.4, and h2o's
+    `gb1` over CSV in 0.78 of its time.
+- **Each answers as Polars 1.44.1 does,** checked against its answers on the same
+  inputs, but for the differences `feature-gaps.md` §9 records.
+- **Nothing the benchmarks run got slower:**
+  - the optimized plans of the 22 PDS-H and 15 h2o queries are byte-identical to
+    v0.6.7's;
+  - the strings, the scans, the aggregates and the CSV reader changed beneath them,
+    so PDS-H at SF=0.1 was run against v0.6.7's, alternating: 1.00 of its time in
+    all, twice, every query within its noise;
+  - every PDS-H answer at SF=0.1, at every step, and every h2o answer at 10,000,000
+    rows, over Parquet and over CSV, match DuckDB's.
 
 ### Breaks
 
@@ -87,6 +116,20 @@ of feature completeness, and five of 0.7's performance tasks done ahead of it.**
   frame's columns, where they read all, a Parquet file's rows its footers', no column
   chunk opened. Over PDS-H's lineitem at SF=1, `Count` takes 2.5 ms where it took
   400–500; `Select(Len())` 27–39, the rest its aggregation's.
+
+### Known limitations
+
+As v0.6.7's, except:
+
+- **Lifted:** a database written, partitioned writes and a String column of more than
+  2 GiB (366–368); a count that reads every column (370).
+- **Not built,** in `polars-parity.md`: Excel, Avro, Delta and Iceberg, and a plan
+  serialized.
+- **A batch a source reads holds at most 2 GiB of text a column** (368): a Parquet
+  column chunk's, a CSV block's or one Arrow record's rows. Past it the read refuses,
+  saying to read it in smaller batches; a whole frame past it is held.
+- **A CSV file is read in about 1.4 times Polars' time** (373), and the CSV writer
+  runs on one thread.
 
 ---
 

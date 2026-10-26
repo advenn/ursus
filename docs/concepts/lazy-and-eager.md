@@ -37,8 +37,11 @@ The optimizer rewrites the plan into one that gives the same answer for less wor
 
 - **predicate pushdown:** a filter moves toward the scan, through joins, so fewer rows
   travel;
-- **projection pushdown:** a scan reads only the columns the query uses;
-- **limit and top-k pushdown:** a `Head` after a `Sort` becomes a top-k;
+- **projection pushdown:** a scan reads only the columns the query uses, and a count
+  none (*new in 0.6.8*);
+- **limit and top-k pushdown:** a `Head` after a `Sort` becomes a top-k, and, *new in
+  0.6.8*, a `Head` or a `Slice` reaches its scan or its sort through a projection, a
+  row index, a union's inputs and an ordered left join's left input;
 - **constant folding and simplification;**
 - **common subplans:** a subtree used twice runs once.
 
@@ -59,6 +62,14 @@ two of six columns:
 `Explain`'s output is stable on purpose: ursus's own tests compare plans as text, so a
 query that still gives the right answer while reading forty columns instead of two
 fails a test.
+
+*New in 0.6.8:* `Profile(ctx)` runs the query, as Polars' `profile()`, and answers its
+frame and a second one, a row a node of the plan as `Explain` prints it, after a row
+for the optimization: when the node began and ended its work, in microseconds since
+the query began, the rows and batches it handed on, its own time, summed over the
+threads that did it, and the most memory it held. A profiled query reads the clock
+around each operator, so it takes a little longer; `Collect` does not.
+`Explain(ctx, ursus.ExplainOptFlags(f))` prints the plan `WithOptFlags(f)` runs.
 
 *New in 0.6.7.* `Columns(ctx)`, `DTypes(ctx)` and `Width(ctx)` are a query's column
 names, their types and how many there are, as Polars' lazy `columns`, `dtypes` and
