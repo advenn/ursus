@@ -1872,6 +1872,15 @@ beyond them passed over with <code>WithIgnoreExtraColumns(true)</code>; and an I
 schema's is an Int64, or a Float32 where it is a Float64, widened with
 <code>WithUpcastIntegers(true)</code> or <code>WithUpcastFloats(true)</code>. Each is refused otherwise, as
 Polars refuses it, naming the file and the column.</p>
+<p><em>New in 0.6.8:</em> a hive dataset written, as Polars' <code>partition_by</code> writes one.
+<code>SinkParquet(ctx, dir, ursus.WithPartitionBy("year", "month"))</code> writes each key's rows
+to the directory <code>year=2024/month=1</code> below <code>dir</code>, in files numbered from <code>00000000</code>;
+<code>SinkCSV</code>, <code>SinkIPC</code> and <code>SinkNDJSON</code> take the same options. A value is escaped as
+Polars escapes it and a null is <code>__HIVE_DEFAULT_PARTITION__</code>, so each reads the
+other's dataset. <code>WithPartitionIncludeKey(false)</code> leaves the keys out of the files, as
+<code>include_key=False</code>, and <code>WithMaxRowsPerFile(n)</code> ends a file at n rows, with keys or
+without. The rows stream: each file is written under a temporary name and renamed as
+it ends.</p>
 <h2 id="from-object-storage">From object storage<a class="headerlink" href="#from-object-storage" title="Permanent link">&para;</a></h2>
 <p>ursus has no S3 or GCS client of its own: each store wants its vendor's SDK, and ursus
 takes on none. <code>ScanParquetFrom</code> reads through any <code>io.ReaderAt</code>
@@ -1952,6 +1961,12 @@ the files' own, of the type its values infer; a filter on the keys skips the fil
 rules out before any is opened. <code>WithIPCHivePartitioning</code>, <code>WithIPCHiveSchema</code>,
 <code>WithIPCHiveDates</code> and <code>WithIPCIncludeFilePaths</code> are Polars' <code>hive_partitioning</code>,
 <code>hive_schema</code>, <code>try_parse_hive_dates</code> and <code>include_file_paths</code>.</p>
+<p><em>New in 0.6.8:</em> a String or a Binary column of more than 2 GiB of characters, as a
+<code>Collect</code>, a sort or a join of much text makes, is held, where it was refused. It
+exports as Arrow's LargeString or LargeBinary, and below 2 GiB as a String or a
+Binary, where Polars always exports the large type. A batch a reader reads, a Parquet
+column chunk's, a CSV block's or an Arrow record's rows, still holds at most 2 GiB of
+text a column, and past it the read says to read in smaller batches.</p>
 <h2 id="json">JSON<a class="headerlink" href="#json" title="Permanent link">&para;</a></h2>
 <p><em>New in 0.6.7:</em> <code>ScanNDJSON(path)</code> reads newline-delimited JSON, an object a line, as
 Polars' <code>scan_ndjson</code> and <code>read_ndjson</code>. <code>ScanNDJSONFiles(paths)</code> and
@@ -2002,6 +2017,15 @@ and the bytes a driver gives for a <code>VARCHAR</code> or a <code>UUID</code> t
 its driver's types, and a column the driver calls <code>NOT NULL</code> is not nullable.
 <code>ReadDatabaseRows(rows, ursus.WithDatabaseSchemaOverrides(m))</code> gives some columns'
 types, as Polars' <code>schema_overrides</code>. The frame is read whole, as Polars' is.</p>
+<p><em>New in 0.6.8:</em> <code>WriteDatabase(ctx, db, table)</code> writes a query's rows, or a frame's,
+to a table, as Polars' <code>write_database</code>, and answers how many it wrote. A table
+already there is refused, replaced or appended to, as
+<code>WithIfTableExists(ursus.IfExistsFail)</code>, <code>IfExistsReplace</code> or <code>IfExistsAppend</code> says,
+Polars' <code>if_table_exists</code>; one that is not is created, of the types <code>ReadDatabase</code>
+reads back. The dialect, SQLite, PostgreSQL, MySQL or SQL Server, is named by the
+driver, or by <code>WithDialect(ursus.DialectPostgres)</code> and its kin. The rows go in
+INSERTs of as many as the dialect's parameters allow, in one transaction: a
+<code>*sql.DB</code>'s or a <code>*sql.Conn</code>'s own, or your <code>*sql.Tx</code>.</p>
 <h2 id="larger-than-memory">Larger than memory<a class="headerlink" href="#larger-than-memory" title="Permanent link">&para;</a></h2>
 <p>A sink streams: a query whose answer is larger than memory writes it with
 <code>SinkParquet</code> or <code>SinkCSV</code>, the spilling operators under a memory limit, as
