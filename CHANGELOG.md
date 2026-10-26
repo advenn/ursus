@@ -15,12 +15,18 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.7
 
-Everything since `v0.6.8` (2026-10-26): steps 375–381, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–382, so far.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
 Parquet read first.
 
 ### Faster
 
+- **A filter of a group-by's keys runs before it** (382): `GroupBy(k).Agg(...)`
+  filtered on `k` filters `k` first, through a key's definition, and a filter of a
+  window's partition keys runs before the window; a filter of an aggregate, HAVING,
+  stays after, as does one of a float key. Over ten million rows of a thousand keys
+  filtered to ten, the group-by takes 12 ms where it took 52, and a window 14 where
+  it took 197.
 - **A group-by of several integer keys packs them** (381): where they fit two words
   with a null bit each, as two Int32s do, a row's keys are hashed and compared as two
   integers, where they were encoded to bytes; and `NUnique` of an integer column keys

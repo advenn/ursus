@@ -36,7 +36,9 @@ chain has one `if err != nil`, at the end.
 The optimizer rewrites the plan into one that gives the same answer for less work:
 
 - **predicate pushdown:** a filter moves toward the scan, through joins, so fewer rows
-  travel;
+  travel; *new in 0.7*, a filter of a group-by's keys moves below the group-by, and
+  one of a window's partition keys below the window, since each keeps or drops a
+  group whole;
 - **projection pushdown:** a scan reads only the columns the query uses, and a count
   none (*new in 0.6.8*);
 - **limit and top-k pushdown:** a `Head` after a `Sort` becomes a top-k, and, *new in

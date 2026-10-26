@@ -22,7 +22,8 @@ import (
 //	Sort               push freely: reordering rows cannot change which rows survive
 //	Distinct(*)        push freely
 //	Distinct(subset)   push only if the predicate reads nothing outside the subset
-//	Aggregate          BARRIER (see below)
+//	Aggregate          push a conjunct of its keys alone, with substitution (below)
+//	Window             push a conjunct of every window's partition columns (below)
 //	Limit / Head       BARRIER (see below)
 //	anything unknown   BARRIER — fail closed
 //
@@ -37,13 +38,14 @@ import (
 // every dataset small enough that the limit never binds, which is exactly why it
 // passes unit tests and fails in production.
 //
-// # Aggregate is a barrier here, though it need not be forever
+// # Aggregate and Window pass a predicate of their keys alone (step 382)
 //
-// A predicate on a GROUP KEY could legally move below (with substitution), and a
-// predicate on an aggregate OUTPUT is HAVING and never can. Telling them apart
-// mechanically is a real piece of work, and getting it wrong computes the
-// aggregate over a filtered subset — silent, plausible-looking numbers. Until that
-// is built, both stay above.
+// A predicate on a GROUP KEY moves below, with substitution, and a predicate on an
+// aggregate OUTPUT is HAVING and never can: it removes whole groups, where the other
+// would compute the aggregate over a filtered subset — silent, plausible-looking
+// numbers. A window's partition key is the same: a predicate of it removes whole
+// partitions, and one of anything else shrinks them, changing every window value.
+// pushThroughAggregate and pushThroughWindow tell the two apart.
 //
 // # Fail closed
 //
@@ -171,21 +173,14 @@ func push(n Node, preds []expr.Node, flags Flags) (Node, error) {
 		// not a missing one, and no schema check can see it.
 		return pushClosed(t, preds, flags)
 
-	case *Limit, *Aggregate, *Window, *TemporalGroup:
+	case *Aggregate:
+		return pushThroughAggregate(t, preds, flags)
+
+	case *Window:
+		return pushThroughWindow(t, preds, flags)
+
+	case *Limit, *TemporalGroup:
 		// BARRIERS. Descend to optimize below them, but leave every predicate above.
-		//
-		// Window is listed EXPLICITLY although the fail-closed default below would
-		// treat it identically — for a single-child node the two are the same code.
-		// It is here to state the reason, because the reason is not obvious and the
-		// default is silent: pushing a filter below a window removes rows from the
-		// PARTITIONS, so every window value changes. `mean over g` computed after
-		// dropping half the rows is a different number, and nothing downstream could
-		// detect the substitution.
-		//
-		// A predicate on a partition KEY is genuinely safe — it removes whole
-		// partitions rather than shrinking them — and would be a real optimisation.
-		// It is not done, and listing the node here is what makes that a visible
-		// choice rather than an omission.
 		child, err := push(t.Children()[0], nil, flags)
 		if err != nil {
 			return nil, err
@@ -571,6 +566,162 @@ func pushThroughDistinct(d *Distinct, preds []expr.Node, flags Flags) (Node, err
 		return nil, err
 	}
 	return refilter(d.WithChildren([]Node{child}), stay), nil
+}
+
+// pushThroughAggregate moves below a group-by each conjunct that reads its keys alone,
+// rewritten through the keys' definitions as pushThroughProjection rewrites through
+// a Project's (step 382, O1 of v0.7-scope.md).
+//
+// A key's rows are its group's, so a predicate of the keys keeps or drops a group
+// whole, and filtering its rows first leaves every other group as it was: the same
+// groups, the same aggregates, in the same first-appearance order. A conjunct that
+// reads an aggregate is HAVING and stays above, and so does:
+//
+//   - one that reads no column: below a group-by of no rows it is still false, but
+//     a group-by of no keys answers a row of no input, which a filter above removes;
+//     with keys the two agree, and one rule is the simpler;
+//   - one that reads a key holding a float: a group merges −0 with +0, and one NaN
+//     with another, under grouping equality, and keeps its first row's value, so a
+//     predicate that tells them apart, x.Cast(String) == "0", is not constant on
+//     the group, as pushThroughDistinct's O9 has it;
+//   - one whose substitution would duplicate a UDF, or that holds an aggregate or a
+//     window, which substitutable refuses;
+//   - any of an aggregate of no keys, whose one group is every row.
+//
+// h2o's GroupBy(k).Agg(...).Filter(k < 10) over ten million rows took 43 ms where
+// Polars, filtering first, takes 7.7.
+func pushThroughAggregate(a *Aggregate, preds []expr.Node, flags Flags) (Node, error) {
+	in, err := a.Input.Schema()
+	if err != nil {
+		return nil, err
+	}
+	out, err := a.Schema()
+	if err != nil {
+		return nil, err
+	}
+	defs := make(map[string]expr.Node, len(a.Keys))
+	for _, k := range a.Keys {
+		f, err := expr.Resolve(k, in)
+		if err != nil {
+			return nil, err
+		}
+		if holdsFloat(f.Type) {
+			continue // a predicate reading it finds no definition, and stays
+		}
+		defs[f.Name] = stripNaming(k)
+	}
+	const stayDest, downDest = 0, 1
+	subs := make([]expr.Node, len(preds))
+	dest := make([]int, len(preds))
+	for i, p := range preds {
+		if len(a.Keys) == 0 || len(expr.RootNames(p)) == 0 {
+			continue
+		}
+		// Not passthrough: a name no key defines is an aggregate's, even one named as
+		// an input column is, Agg(Col("v").Sum()) filtered on v, and is refused.
+		if sub, ok := substitutable(p, defs, nil, in, false); ok {
+			subs[i], dest[i] = sub, downDest
+		}
+	}
+	holdFallible(preds, dest, stayDest, out)
+	var down, stay []expr.Node
+	for i, p := range preds {
+		if dest[i] == downDest {
+			down = append(down, subs[i])
+		} else {
+			stay = append(stay, p)
+		}
+	}
+	child, err := push(a.Input, down, flags)
+	if err != nil {
+		return nil, err
+	}
+	return refilter(a.WithChildren([]Node{child}), stay), nil
+}
+
+// pushThroughWindow moves below a Window each conjunct that reads only columns every
+// window of the node partitions by (step 382).
+//
+// A Window appends its windows to its input's rows, so a conjunct of the input's
+// columns is the same conjunct below it. It may move only where it keeps or drops
+// each partition whole: each column it reads is a plain partition key of every
+// window here, so two rows of one partition agree on it. A conjunct of anything else
+// shrinks a partition, and `mean over g` over half its rows is another number. So a
+// window of no partition, the frame's, keeps every conjunct above, and so does one
+// that maps a partition to other than its rows, and a conjunct that reads a float
+// key, for the reason pushThroughAggregate gives, or holds an aggregate or a window.
+//
+// Over ten million rows, WithColumns(v.Sum().Over(k)).Filter(k < 10) took 167 ms
+// where Polars takes 9.6.
+func pushThroughWindow(w *Window, preds []expr.Node, flags Flags) (Node, error) {
+	in, err := w.Input.Schema()
+	if err != nil {
+		return nil, err
+	}
+	out, err := w.Schema()
+	if err != nil {
+		return nil, err
+	}
+	// The plain columns every window partitions by.
+	var common map[string]bool
+	for i, e := range w.Exprs {
+		win, ok := stripNaming(e).(*expr.Window)
+		if !ok || win.Mapping != expr.MapGroupsToRows {
+			common = nil
+			break
+		}
+		keys := map[string]bool{}
+		for _, k := range win.PartitionBy {
+			if c, ok := stripNaming(k).(*expr.Col); ok {
+				if j := in.IndexOf(c.Name); j >= 0 && !holdsFloat(in.Field(j).Type) {
+					keys[c.Name] = true
+				}
+			}
+		}
+		if i == 0 {
+			common = keys
+			continue
+		}
+		for k := range common {
+			if !keys[k] {
+				delete(common, k)
+			}
+		}
+	}
+	const stayDest, downDest = 0, 1
+	dest := make([]int, len(preds))
+	for i, p := range preds {
+		names := expr.RootNames(p)
+		if len(names) == 0 {
+			continue
+		}
+		down := true
+		for _, n := range names {
+			if !common[n] {
+				down = false
+				break
+			}
+		}
+		// Row-local and of the input's columns alone: substitutable with nothing to
+		// substitute refuses an aggregate, a window and a name the input lacks.
+		if _, ok := substitutable(p, nil, nil, in, true); down && ok {
+			dest[i] = downDest
+		}
+	}
+	holdFallible(preds, dest, stayDest, out)
+	var down, stay []expr.Node
+	for i, p := range preds {
+		if dest[i] == downDest {
+			down = append(down, p)
+		} else {
+			stay = append(stay, p)
+		}
+	}
+	child, err := push(w.Input, down, flags)
+	if err != nil {
+		return nil, err
+	}
+	return refilter(w.WithChildren([]Node{child}), stay), nil
 }
 
 // pushThroughJoin moves each conjunct into the side that can evaluate it, when the
