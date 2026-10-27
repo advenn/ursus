@@ -33,7 +33,7 @@ func swapJoinOf(t *testing.T, left, right int) *plan.Join {
 }
 
 func TestASmallProbeSideIsBuiltInstead(t *testing.T) {
-	serial := Options{Threads: 1, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
+	serial := streamingOpts()
 	parallel := Options{Threads: 4, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
 	for _, c := range []struct {
 		name        string
@@ -97,7 +97,7 @@ func TestAnUnmarkedJoinIsNotExchanged(t *testing.T) {
 func TestReadingAheadStopsAtHalfTheBudget(t *testing.T) {
 	ctx := t.Context()
 	want, _, _, err := runJoin(t, swapJoinOf(t, 1_500, 8_000),
-		Options{Threads: 1, BatchSize: 512, Budget: execopt.NewBudget(0, "")})
+		streamingOpts())
 	if err != nil {
 		t.Fatal(err)
 	}

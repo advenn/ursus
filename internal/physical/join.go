@@ -322,6 +322,16 @@ type joinBuildSink struct {
 
 	ids    *kernel.KeyTable
 	counts []int32
+
+	// ints, where set, keys the streaming build by its one integer key in place of
+	// ids, never encoded (step 398, B4 of v0.8-scope.md): under a limit the caller
+	// set, or once a deferred build catches up, a join encoded every key, where the
+	// partitioned build keyed them so since step 159. planJoin sets it; a split routes
+	// by the encoded bytes, so escalate and Merge turn it into ids first, each id
+	// kept (bytesKeys), and a spill's sub-sinks key by bytes.
+	ints       *kernel.IntKeyTable
+	intScratch []int64
+
 	rowKey []int32
 	parts  []*data.Batch
 	nRows  int
@@ -513,6 +523,12 @@ func (s *joinBuildSink) Merge(other Sink) error {
 	if s.split != splitNone || o.split != splitNone {
 		return uerr.Internalf("physical: cannot merge joinBuildSinks that have spilled")
 	}
+	if err := s.bytesKeys(); err != nil {
+		return err
+	}
+	if err := o.bytesKeys(); err != nil {
+		return err
+	}
 
 	// Visited in o's own ID ORDER. Ranging a Go map here made two things vary run
 	// to run: the ids this sink assigned to o's new keys, and — when Validate is on
@@ -558,7 +574,7 @@ func (s *joinBuildSink) Merge(other Sink) error {
 	for _, b := range o.keyParts {
 		s.mem.Retain(b)
 	}
-	st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + s.ids.NBytes()
+	st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + s.keyBytes()
 	s.mem.RetainBytes(st - s.stateBytes)
 	s.stateBytes = st
 	return nil
@@ -685,6 +701,10 @@ func (s *joinBuildSink) freeze(ctx context.Context) (*joinTable, error) {
 	}
 	nKeys := s.ids.Len()
 	t := &joinTable{ids: s.ids, nKeys: nKeys}
+	if s.ints != nil {
+		nKeys = s.ints.Len()
+		t = &joinTable{ints: kernel.NewIntKeyParts([]*kernel.IntKeyTable{s.ints}), nKeys: nKeys}
+	}
 	if s.deferred {
 		keys, err := s.partitionedKeys(ctx)
 		if err != nil {
@@ -988,6 +1008,9 @@ func (p *joinProbeOp) stepCurrent(ctx context.Context) (*data.Batch, error) {
 		return p.stepResidual(ctx)
 	}
 	p.reset()
+	if p.plain() {
+		p.stepPlain()
+	}
 	for p.row < p.cur.Rows() && p.outLen() < p.spec.batchSize {
 		if !p.entered {
 			if err := p.enter(); err != nil {
@@ -1019,6 +1042,54 @@ func (p *joinProbeOp) stepCurrent(ctx context.Context) (*data.Batch, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// plain reports whether a probe row's output is its match list alone: a join of keys
+// that emits pairs, nothing spilled to route a row to and no Validate to police. Then
+// stepPlain does enter's and appendMatches' work in one loop.
+func (p *joinProbeOp) plain() bool {
+	return !p.spec.maskOnly && len(p.keys) > 0 && !p.routes && p.seen == nil && p.t.off != nil
+}
+
+// stepPlain is stepCurrent's loop for a plain probe (step 398, B4 of v0.8-scope.md):
+// the same pairs, in the same order, cut at the same batch size, without a call a row.
+// A 10,000-row join to a 100-row dimension spent a third of its own time in enter and
+// appendMatches.
+func (p *joinProbeOp) stepPlain() {
+	n, limit := p.cur.Rows(), p.spec.batchSize
+	off, rows, found := p.t.off, p.t.rows, p.found
+	unmatched := p.spec.emitProbeUnmatched
+	for p.row < n && len(p.lsel) < limit {
+		if !p.entered {
+			p.entered, p.routed = true, false
+			p.hit, p.nHit = 0, 0
+			if id := found[p.row]; id >= 0 {
+				p.hit, p.nHit = off[id], off[id+1]
+				if p.matched != nil && p.nHit > p.hit {
+					p.matched[id] = true
+				}
+			}
+			if p.hit >= p.nHit {
+				if unmatched {
+					p.lsel = append(p.lsel, int32(p.row))
+					p.rsel = append(p.rsel, kernel.NullIndex)
+				}
+				p.row++
+				p.entered = false
+				continue
+			}
+		}
+		r := int32(p.row)
+		for p.hit < p.nHit && len(p.lsel) < limit {
+			p.lsel = append(p.lsel, r)
+			p.rsel = append(p.rsel, rows[p.hit])
+			p.hit++
+		}
+		if p.hit >= p.nHit {
+			p.row++
+			p.entered = false
+		}
+	}
 }
 
 // stepResidual is stepCurrent for a semi or anti join carrying a residual.
@@ -1955,6 +2026,9 @@ func planJoin(ctx context.Context, j *plan.Join, opts Options) (Operator, error)
 		bfiles:   make([]string, nBuckets),
 		pend:     make([][]int32, nBuckets),
 		buildOrd: buildOrd,
+	}
+	if sink.intKeyed() {
+		sink.ints = kernel.NewIntKeyTable()
 	}
 	br := &joinBreaker{build: build, probe: probe, builder: sink}
 	if j.SwapAtRuntime && sink.deferred {

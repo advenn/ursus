@@ -70,7 +70,7 @@ const maxBuildParts = 64
 // until freeze: about what a kept build side costs every other kind, and bounded the
 // same way, by catchUp at half the budget.
 func deferBuild(j *plan.Join, opts Options) bool {
-	if opts.Threads <= 1 || len(j.RightOn) == 0 {
+	if len(j.RightOn) == 0 {
 		return false
 	}
 	return opts.Budget.Limit() == 0 || opts.Budget.IsDefault()
