@@ -27,6 +27,10 @@ jobs:
       - run: go vet ./...
       - name: import-level invariants
         run: go run ./internal/gen/levels
+      # Every break of the public API since the last tag, named in the CHANGELOG
+      # (step 401): make api.
+      - name: the API's breaks since the last tag
+        run: go run ./internal/gen/api -check
 
   test:
     runs-on: ubuntu-latest
