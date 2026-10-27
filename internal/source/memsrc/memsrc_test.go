@@ -181,3 +181,55 @@ func TestSourceStillRecordsProjections(t *testing.T) {
 		t.Errorf("Projections() = %v, want [[b]]", p)
 	}
 }
+
+// TestAProjectionIsTakenBeforeTheCut: a batch of 10 rows of v, a text column s and w,
+// read as [w, v] in batches of 4, is batches of 4, 4 and 2 of w and v alone, in that
+// order, each the window of its rows. Next takes the projection before it cuts the
+// batch, so that s is not sliced for nothing (step 400); what it saves is measured,
+// and this is the answer it must keep.
+func TestAProjectionIsTakenBeforeTheCut(t *testing.T) {
+	const n = 10
+	s := dtype.MustSchema(dtype.NotNull("v", dtype.Int64), dtype.Of("s", dtype.String), dtype.NotNull("w", dtype.Int64))
+	v, w, strs := make([]int64, n), make([]int64, n), make([]string, n)
+	for i := range n {
+		v[i], w[i], strs[i] = int64(i), int64(100+i), "x"
+	}
+	b, err := data.NewBatch(s, []*data.Column{
+		data.NewFixed("v", dtype.Int64, v, bitmap.AllSet(n)),
+		data.NewString("s", strs, bitmap.AllSet(n)),
+		data.NewFixed("w", dtype.Int64, w, bitmap.AllSet(n)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := New(s, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := src.Open(context.Background(), source.ScanSpec{Projection: []string{"w", "v"}, BatchSize: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	at := 0
+	for _, rows := range []int{4, 4, 2} {
+		got, err := r.Next(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Rows() != rows || got.NumCols() != 2 || got.Schema().Field(0).Name != "w" || got.Schema().Field(1).Name != "v" {
+			t.Fatalf("a batch of %d rows of %v, want %d of [w v]", got.Rows(), got.Schema().Names(), rows)
+		}
+		gw, _ := data.Values[int64](got.Column(0))
+		gv, _ := data.Values[int64](got.Column(1))
+		for i := range rows {
+			if gw[i] != w[at+i] || gv[i] != v[at+i] {
+				t.Fatalf("row %d reads w %d, v %d; want %d, %d", at+i, gw[i], gv[i], w[at+i], v[at+i])
+			}
+		}
+		at += rows
+	}
+	if _, err := r.Next(context.Background()); err != io.EOF {
+		t.Fatalf("after 10 rows: %v, want EOF", err)
+	}
+}

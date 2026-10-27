@@ -19,6 +19,9 @@ var (
 
 	arithAddF64 TotalBinary[float64] = addScalar[float64]
 	arithMulF64 TotalBinary[float64] = mulScalar[float64]
+
+	arithAddF64Const TotalBinaryConst[float64] = addScalarConst[float64]
+	arithMulF64Const TotalBinaryConst[float64] = mulScalarConst[float64]
 )
 
 // Accelerated reports whether hardware SIMD kernels are in use.

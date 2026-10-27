@@ -232,6 +232,67 @@ func cmpNum[T data.Primitive](op expr.BinaryOp, l, r *data.Column, n int, out *b
 	return cmpWords(out, op, lv, rv, n)
 }
 
+// byConst is a sum, a difference or a product of a column and a constant, a
+// literal's one value, read once where broadcastVals copied it into a column of the
+// batch's length (step 400, B3 of v0.8-scope.md): a filter's x*2 allocated twice its
+// answer. It reports false for anything else, which broadcasts.
+func byConst[T Numeric](op expr.BinaryOp, dst, lv, rv []T, n int) bool {
+	a, s, left, ok := constSide(lv, rv, n)
+	if !ok {
+		return false
+	}
+	switch op {
+	case expr.OpAdd:
+		if d, ok := any(dst).([]float64); ok {
+			arithAddF64Const(d, any(a).([]float64), any(s).(float64))
+		} else {
+			addScalarConst(dst, a, s)
+		}
+	case expr.OpMul:
+		if d, ok := any(dst).([]float64); ok {
+			arithMulF64Const(d, any(a).([]float64), any(s).(float64))
+		} else {
+			mulScalarConst(dst, a, s)
+		}
+	case expr.OpSub:
+		if left {
+			constSubScalar(dst, s, a)
+		} else {
+			subScalarConst(dst, a, s)
+		}
+	default:
+		return false
+	}
+	return true
+}
+
+// divByConst is byConst's division of floats, which never traps.
+func divByConst[T ~float32 | ~float64](op expr.BinaryOp, dst, lv, rv []T, n int) bool {
+	a, s, left, ok := constSide(lv, rv, n)
+	if !ok || op != expr.OpDiv {
+		return false
+	}
+	if left {
+		constDivFloatScalar(dst, s, a)
+	} else {
+		divFloatScalarConst(dst, a, s)
+	}
+	return true
+}
+
+// constSide finds the constant of lv and rv, one of them a single value and the
+// other n, and reports whether it is the left.
+func constSide[T Numeric](lv, rv []T, n int) (a []T, s T, left, ok bool) {
+	switch {
+	case n == 1:
+	case len(rv) == 1 && len(lv) == n:
+		return lv, rv[0], false, true
+	case len(lv) == 1 && len(rv) == n:
+		return rv, lv[0], true, true
+	}
+	return nil, s, false, false
+}
+
 func broadcastVals[T data.Primitive](lv, rv []T, n int) ([]T, []T) {
 	if len(lv) == 1 && n != 1 {
 		v := lv[0]
@@ -641,9 +702,11 @@ func arithNum[T Integer](op expr.BinaryOp, name string, out dtype.DataType,
 	if err != nil {
 		return nil, err
 	}
-	lv, rv = broadcastVals(lv, rv, n)
-
 	buf, dst := newValuesBuffer[T](n)
+	if byConst(op, dst, lv, rv, n) {
+		return data.NewFixedBuffer(name, out, buf, n, valid), nil
+	}
+	lv, rv = broadcastVals(lv, rv, n)
 
 	switch op {
 	case expr.OpAdd:
@@ -680,9 +743,11 @@ func arithFloat[T ~float32 | ~float64](op expr.BinaryOp, name string, out dtype.
 	if err != nil {
 		return nil, err
 	}
-	lv, rv = broadcastVals(lv, rv, n)
-
 	buf, dst := newValuesBuffer[T](n)
+	if byConst(op, dst, lv, rv, n) || divByConst(op, dst, lv, rv, n) {
+		return data.NewFixedBuffer(name, out, buf, n, valid), nil
+	}
+	lv, rv = broadcastVals(lv, rv, n)
 
 	switch op {
 	case expr.OpAdd:

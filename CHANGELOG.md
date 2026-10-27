@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–399, so far, after 0.7's 375–391.
+Steps 392–400, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
@@ -49,9 +49,20 @@ that stops when its request is cancelled.
   of RSS on one engine of 256 MiB, where each on its own of 256 MiB took 3.7 to
   3.9 GB, and finished no slower. `WithEngineThreads(n)` sets the threads its queries
   share (397), and `Stats()` reports them and how many queries run on more than one.
+  A Parquet scan's pages count on its engine while it reads them (400), up to 105 MiB
+  for all of a wide table's columns: the engine's other queries spill sooner beside
+  it, the scan's own query does not, and `Stats().Held` includes them.
 
 ### Faster
 
+- **A small query allocates less** (400): a 10,000-row group-by allocated 358 kB, its
+  scratch grown from nothing in every query and a text column it never read sliced;
+  it allocates 66 kB, a join to a dimension 0.66 of what it did, a filter 0.76. A
+  text column's slice no longer copies its offsets, and a column added to, subtracted
+  from, multiplied or divided by a constant no longer copies the constant into a
+  column first. Sixty-four 10,000-row group-bys at once answer about 1.4 times the
+  queries a second, the collector's share of the CPU halved; a small query alone
+  takes 0.81 of its time, the 10,000-row group-by 0.60.
 - **A small query runs on one thread** (396): every pipeline started a worker a
   thread, and a group-by a sink a thread, whatever its rows. Given no `WithThreads`,
   a query whose every input fits in a batch, by an in-memory frame's length or a

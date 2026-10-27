@@ -148,6 +148,32 @@ func mulF64SIMD(dst, a, b []float64) {
 	}
 }
 
+// addF64SIMDConst and mulF64SIMDConst are addF64SIMD and mulF64SIMD of a column and
+// a constant, broadcast once to a vector (step 400).
+func addF64SIMDConst(dst, a []float64, s float64) {
+	vs := simd.BroadcastFloat64s(s)
+	for i := 0; i < len(a); {
+		va, _ := simd.LoadFloat64sPart(a[i:])
+		n := va.Add(vs).StorePart(dst[i:])
+		if n == 0 {
+			panic("kernel: StorePart made no progress")
+		}
+		i += n
+	}
+}
+
+func mulF64SIMDConst(dst, a []float64, s float64) {
+	vs := simd.BroadcastFloat64s(s)
+	for i := 0; i < len(a); {
+		va, _ := simd.LoadFloat64sPart(a[i:])
+		n := va.Mul(vs).StorePart(dst[i:])
+		if n == 0 {
+			panic("kernel: StorePart made no progress")
+		}
+		i += n
+	}
+}
+
 // simdAvailable reports whether hardware SIMD is in use, for Profile output and
 // for tests that want to assert both paths were actually exercised.
 func simdAvailable() bool { return !simd.Emulated() }

@@ -1125,12 +1125,10 @@ func (c *Column) Slice(offset, length int) *Column {
 		// Offsets are relative to the payload, so a slice can keep the same payload
 		// and re-window the offsets. That holds whether the payload is a character
 		// buffer or a child column: the offsets are not rebased, so the child stays
-		// whole and the slice stays O(1).
-		o := unsafeData[int32](c.offs.Bytes())
-		nb := arrowx.NewBuffer((length + 1) * 4)
-		no := unsafeData[int32](nb.Bytes())
-		copy(no, o[offset:offset+length+1])
-		d.offs = nb
+		// whole and the slice stays O(1). The window is a view of the offsets, as a
+		// fixed column's is of its values: it copied them, a join's probe a 10,000-row
+		// query's tenth of what it allocated (step 400).
+		d.offs = memory.SliceBuffer(c.offs, offset*4, (length+1)*4)
 		d.chars = c.chars
 		d.child = c.child
 	case c.offs64 != nil:

@@ -95,6 +95,13 @@ type ScanSpec struct {
 	// derives the bound from the budget instead.
 	ReadAhead int64
 
+	// Pages is told the bytes a source holds for a moment to read with, more as it
+	// takes them and fewer as it gives them back: the Parquet reader's decompressed
+	// pages (step 400). Not charged to the query's budget either, for ReadAhead's
+	// reason: they count against the engine's other queries (execopt.Budget.Pressure).
+	// nil tells no one.
+	Pages func(d int64)
+
 	// Eval evaluates an expression over a batch, as the engine does. A source that
 	// evaluates a pushed conjunct itself uses it; the engine sets it, and a source
 	// handed none evaluates nothing. The Parquet reader evaluates a string
