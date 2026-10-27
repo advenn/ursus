@@ -3420,7 +3420,7 @@ section here names it.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v08">Unreleased — toward v0.8<a class="headerlink" href="#unreleased-toward-v08" title="Permanent link">&para;</a></h2>
-<p>Steps 392–401, so far, after 0.7's 375–391.
+<p>Steps 392–402, so far, after 0.7's 375–391.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.8-scope.md"><code>v0.8-scope.md</code></a> set the scope: <strong>ursus inside a Go
 service</strong>, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.</p>
@@ -3459,13 +3459,19 @@ that stops when its request is cancelled.</p>
   it, the scan's own query does not, and <code>Stats().Held</code> includes them.</p>
 </li>
 <li>
-<p><strong>Every break of the public API, checked</strong> (401): <code>api/v0.6.8.txt</code> lists v0.6.8's
+<p><strong><code>Error</code>, an error a caller reads</strong> (402): a failure of ursus's own is an
+  <code>*ursus.Error</code> through <code>errors.As</code>, its <code>Kind</code> (<code>KindSchema</code>, <code>KindResource</code> and the
+  rest, an <code>ErrorKind</code>), the operation, the message, the plan node, the hints, a near
+  column's name or a knob to turn, and the cause. The sentinels for <code>errors.Is</code> are as
+  they were; an <code>Error</code> matches its kind's too. A query stopped by its context fails
+  with the context's error, not an <code>Error</code>.</p>
+</li>
+<li><strong>Every break of the public API, checked</strong> (401): <code>api/v0.6.8.txt</code> lists v0.6.8's
   public API a feature a line, each function's and method's signature, each type's
   fields and interface methods, each constant's value; <code>make api</code> lists what the
   tree no longer has, and CI fails until the Breaks below name each. A minor version
   may still break, on ZeroVer, a stable 1.0 not expected yet; it is listed first.
-  None since v0.6.8: 0.7's and 0.8's breaks so far are what code does, not its API.</p>
-</li>
+  None since v0.6.8: 0.7's and 0.8's breaks so far are what code does, not its API.</li>
 </ul>
 <h3 id="faster">Faster<a class="headerlink" href="#faster" title="Permanent link">&para;</a></h3>
 <ul>
