@@ -1412,6 +1412,34 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#unreleased-toward-v08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased — toward v0.8
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Unreleased — toward v0.8">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#unreleased-toward-v07" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1690,7 +1718,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed" class="md-nav__link">
+  <a href="#fixed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -1895,7 +1923,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_1" class="md-nav__link">
+  <a href="#fixed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -1967,7 +1995,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_2" class="md-nav__link">
+  <a href="#fixed_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2050,7 +2078,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_3" class="md-nav__link">
+  <a href="#fixed_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2357,6 +2385,34 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#unreleased-toward-v08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased — toward v0.8
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Unreleased — toward v0.8">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#unreleased-toward-v07" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2635,7 +2691,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed" class="md-nav__link">
+  <a href="#fixed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2840,7 +2896,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_1" class="md-nav__link">
+  <a href="#fixed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2912,7 +2968,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_2" class="md-nav__link">
+  <a href="#fixed_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2995,7 +3051,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_3" class="md-nav__link">
+  <a href="#fixed_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -3295,6 +3351,20 @@ replacements.</p>
 <a href="https://github.com/advenn/ursus/tree/master/context_files/"><code>context_files/</code></a>, with the measurements behind each change.
 Step numbers below point at those records.</p>
 <hr />
+<h2 id="unreleased-toward-v08">Unreleased — toward v0.8<a class="headerlink" href="#unreleased-toward-v08" title="Permanent link">&para;</a></h2>
+<p>Steps 392–393, so far, after 0.7's 375–391.
+<a href="https://github.com/advenn/ursus/blob/master/context_files/v0.8-scope.md"><code>v0.8-scope.md</code></a> set the scope: <strong>ursus inside a Go
+service</strong>, small queries, many at once, memory a service can predict, and a query
+that stops when its request is cancelled.</p>
+<h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>A panic on one of a query's goroutines no longer ends the process</strong> (393): a
+  sort's and a unique's parallel pieces, first-seen keys, a text sort, a Spearman
+  rank, and <code>PartitionBy</code>, <code>ToDummies</code> and <code>Corr</code>, started goroutines that recovered
+  nothing, so a bug in one ended the program that asked, a service with every request
+  it served. Each panic is an internal error from the call now, as one anywhere else
+  in a query is, naming the line that panicked.</li>
+</ul>
 <h2 id="unreleased-toward-v07">Unreleased — toward v0.7<a class="headerlink" href="#unreleased-toward-v07" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.8</code> (2026-10-26): steps 375–391, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.7-scope.md"><code>v0.7-scope.md</code></a> set the scope: <strong>performance,</strong> the
@@ -4206,7 +4276,7 @@ checked the whole.</p>
 <li><strong><code>Expr.Explode</code>, <code>Unnest</code>, <code>DropNulls</code> and <code>DropNans</code> no longer refuse;</strong> code that
   relied on the refusal to catch a mistake gets an answer.</li>
 </ul>
-<h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong><code>lf.FillNull(ursus.FillForward)</code> fills by the strategy</strong> (249). It filled every
   null with the constant 2: <code>FillStrategy</code> is a <code>uint8</code>, so it was taken for a value.
@@ -4679,7 +4749,7 @@ session, and step 208 measured the whole.</p>
   spill as before. It refused. A rank, an ewm or an ordered window over it still
   does.</li>
 </ul>
-<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_2">Fixed<a class="headerlink" href="#fixed_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A join's key tables are on the memory ledger while it probes</strong> (204). The
   account was rebased at the end of the build without them, so a join probing
@@ -4809,7 +4879,7 @@ alternated in one session, and step 200 measured the whole.</p>
   so did <code>JoinWhere</code>, a cross join under a filter. A join with no keys and a residual,
   a <code>WhereExists</code> of a predicate alone, still refuses.</li>
 </ul>
-<h3 id="fixed_2">Fixed<a class="headerlink" href="#fixed_2" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_3">Fixed<a class="headerlink" href="#fixed_3" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A Parquet page whose RLE run holds a value wider than its bit width</strong> is refused
   as corrupt (192), found by fuzzing the new decoder.</li>
@@ -5031,7 +5101,7 @@ than v0.5.0 on it. Both are met. Measured on 2026-10-11, at <code>c6aa77d</code>
   ends</strong> (161), where it held only the distinct keys, as other joins hold their build
   rows. Past half the memory budget it streams, as before.</li>
 </ul>
-<h3 id="fixed_3">Fixed<a class="headerlink" href="#fixed_3" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_4">Fixed<a class="headerlink" href="#fixed_4" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A grid of weeks starts on a Monday,</strong> as Polars' does (184): <code>Truncate</code>, <code>Round</code>
   and <code>GroupByDynamic</code> with <code>Every("1w")</code> gave weeks from Thursday, the epoch's day,
