@@ -492,7 +492,8 @@ func (lf *LazyFrame) WriteCSV(ctx context.Context, w io.Writer, opts ...CSVSinkO
 	if err := cw.WriteEmpty(exec.Schema(root)); err != nil {
 		return err
 	}
-	if cfg.collect.threads <= 1 {
+	threads := cfg.collect.planned()
+	if threads <= 1 {
 		for b, err := range exec.Batches(ctx, root) {
 			if err != nil {
 				return err
@@ -533,7 +534,7 @@ func (lf *LazyFrame) WriteCSV(ctx context.Context, w io.Writer, opts ...CSVSinkO
 		if err != nil {
 			return err
 		}
-		if len(pending) == cfg.collect.threads {
+		if len(pending) == threads {
 			if err := next(); err != nil {
 				return err
 			}

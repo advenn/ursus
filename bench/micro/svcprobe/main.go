@@ -7,7 +7,8 @@
 //	        one: a filter and projection, a group-by's sum and mean, a join to a
 //	        100-row dimension and a sort's head of ten; pl_lat.py is Polars' twin.
 //	        ROWS=n,... and THREADS=t,... choose others, 0 the default
-//	conc    a 10,000-row group-by from 1, 4, 16 and 64 goroutines, queries a second
+//	conc    a 10,000-row group-by from 1, 4, 16 and 64 goroutines, queries a second;
+//	        ROWS=n another size
 //	conc64  the same from 64 goroutines on one thread each, profiled to $PROF and the
 //	        collector's share printed
 //	alloc   what each small query allocates on one thread
@@ -136,7 +137,9 @@ func lat() {
 }
 
 func conc() {
-	df := frame(10_000)
+	rows := 10_000
+	fmt.Sscan(os.Getenv("ROWS"), &rows)
+	df := frame(rows)
 	q := func(opts ...ursus.CollectOption) error {
 		_, err := df.Lazy().GroupBy(c("k")).Agg(c("x").Sum().Alias("sum"), c("x").Mean().Alias("mean")).Collect(context.Background(), opts...)
 		return err

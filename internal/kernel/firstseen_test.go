@@ -54,7 +54,7 @@ func TestFirstSeenIDs(t *testing.T) {
 		{"all null", data.NewNull("x", dtype.Int64, 3), []int32{0, 0, 0}, []int32{0}},
 		{"no rows", data.NewFixed("x", dtype.Int64, []int64{}, bitmap.AllSet(0)), []int32{}, nil},
 	} {
-		ids, firsts, err := kernel.FirstSeenIDs("test", tc.col)
+		ids, firsts, err := kernel.FirstSeenIDs("test", tc.col, 4)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
@@ -108,7 +108,7 @@ func TestFirstSeenIDs(t *testing.T) {
 			}
 			wantIDs[i] = id
 		}
-		ids, firsts, err := kernel.FirstSeenIDs("test", tc.col)
+		ids, firsts, err := kernel.FirstSeenIDs("test", tc.col, 4)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
@@ -123,7 +123,7 @@ func TestFirstSeenIDs(t *testing.T) {
 	for i := range vals {
 		vals[i] = int64(i % 100)
 	}
-	ids, firsts, err := kernel.FirstSeenIDs("test", data.NewFixed("x", dtype.Int64, vals, bitmap.AllSet(n)))
+	ids, firsts, err := kernel.FirstSeenIDs("test", data.NewFixed("x", dtype.Int64, vals, bitmap.AllSet(n)), 4)
 	if err != nil {
 		t.Fatal(err)
 	}

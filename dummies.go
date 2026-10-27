@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -106,7 +105,9 @@ func framed(cols []*data.Column, rows int) (*DataFrame, error) {
 // values.
 func dummies(c *data.Column, o DummiesOptions) ([]*data.Column, error) {
 	sep := cmp.Or(o.Separator, "_")
-	ids, firsts, err := kernel.FirstSeenIDs("to_dummies", c)
+	workers, release := frameWorkers(c.Len())
+	defer release()
+	ids, firsts, err := kernel.FirstSeenIDs("to_dummies", c, workers)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +168,7 @@ func dummies(c *data.Column, o DummiesOptions) ([]*data.Column, error) {
 		relay uerr.Relay
 		took  atomic.Int64
 	)
-	for range min(runtime.GOMAXPROCS(0), len(kept)) {
+	for range min(workers, len(kept)) {
 		relay.Go(&wg, func() {
 			for k := int(took.Add(1)) - 1; k < len(kept); k = int(took.Add(1)) - 1 {
 				d := kept[k]

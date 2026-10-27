@@ -67,8 +67,8 @@ import (
 //
 // # fn must be safe to call from several goroutines
 //
-// ursus parallelises a Select or Filter across runtime.NumCPU() workers by
-// default, and there is no way to opt a single expression out. A closure over a
+// ursus parallelises a Select or Filter across its engine's threads by default, and
+// there is no way to opt a single expression out. A closure over a
 // shared map is a data race. fn must also not depend on the ORDER it is called in:
 // output order is preserved, invocation order is not.
 //

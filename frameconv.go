@@ -3,7 +3,6 @@ package ursus
 import (
 	"context"
 	"math"
-	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -241,11 +240,13 @@ func takeEach(ctx context.Context, in []*data.Column, sel []int32) ([]*data.Colu
 	return cols, nil
 }
 
-// inParallel runs fn for 0 to n-1 on up to GOMAXPROCS goroutines, each taking the
-// next index; the first error stops it, and is its answer. A panic is raised again in
-// the caller, whose entry point recovers it (step 393).
+// inParallel runs fn for 0 to n-1 on up to its share of DefaultEngine's threads
+// (frameWorkers), each goroutine taking the next index; the first error stops it, and
+// is its answer. A panic is raised again in the caller, whose entry point recovers it
+// (step 393).
 func inParallel(ctx context.Context, n int, fn func(i int) error) error {
-	workers := min(runtime.GOMAXPROCS(0), n)
+	workers, release := frameWorkers(n)
+	defer release()
 	if workers <= 1 {
 		for i := range n {
 			if err := ctx.Err(); err != nil {

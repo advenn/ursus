@@ -8,7 +8,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -131,7 +130,7 @@ func (lf *LazyFrame) writeJSONCfg(ctx context.Context, op string, w io.Writer, a
 		buf []byte
 		err error
 	}
-	pending := make(chan chan text, max(2, runtime.GOMAXPROCS(0)))
+	pending := make(chan chan text, max(2, cfg.planned()))
 	written := make(chan error, 1)
 	go func() {
 		var err error

@@ -19,7 +19,7 @@ func BudgetOf(opts ...CollectOption) *execopt.Budget { return newCollectCfg(opts
 // small enough to reach: DefaultEngine, by one whose budget is n and behaves as the
 // default's. The returned function restores it.
 func SetDefaultMemoryLimit(n int64) (restore func()) {
-	old := defaultEngine.Swap(newEngine(n, "", true))
+	old := defaultEngine.Swap(newEngine(n, "", true, 0))
 	return func() { defaultEngine.Store(old) }
 }
 
@@ -46,4 +46,11 @@ func Press(e *Engine, n int64) (release func()) {
 	b.Join()
 	b.Account("press").RetainBytes(n)
 	return b.Leave
+}
+
+// SetDefaultEngine replaces DefaultEngine for a test; the returned function restores
+// it.
+func SetDefaultEngine(e *Engine) (restore func()) {
+	old := defaultEngine.Swap(e)
+	return func() { defaultEngine.Store(old) }
 }

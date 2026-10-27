@@ -19,7 +19,7 @@ import (
 // expr.UDF.Field has already committed to that name in the schema.
 //
 // A ColumnUDF must be safe to call from several goroutines at once. That is not a
-// preference: parallelise hands any Select or Filter to runtime.NumCPU() workers by
+// preference: parallelise hands any Select or Filter to a query's workers by
 // structure, and there is no operator-level flag to decline. The public MapElements
 // and MapBatches say so in their own docs, where a user will see it.
 type ColumnUDF func(ctx context.Context, in *data.Column, name string) (*data.Column, error)

@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–396, so far, after 0.7's 375–391.
+Steps 392–397, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
@@ -31,6 +31,12 @@ that stops when its request is cancelled.
   move with them, as it moved with scheduling before; answers do not change. A query
   is refused only when it alone holds more than the whole budget, as before.
   `WithMemoryLimit` gives a query a budget of its own, apart, as it did.
+- **A query shares its engine's threads** (397): a query with no `WithThreads` ran on
+  `runtime.NumCPU()` workers, whatever ran beside it. It runs on its engine's threads
+  now, `GOMAXPROCS` by default, which follows a container's CPU limit where `NumCPU`
+  does not, divided by the queries on more than one thread as it is planned, at least
+  one. Alone, a query runs on all of them as before. `WithThreads(n)` runs a query on
+  n, as it did.
 
 ### Features
 
@@ -41,7 +47,8 @@ that stops when its request is cancelled.
   reports what its queries hold now, their peak, how many run and how many files they
   spilled. Sixteen sorts and group-bys of four million rows at once peaked at 1.7 GB
   of RSS on one engine of 256 MiB, where each on its own of 256 MiB took 3.7 to
-  3.9 GB, and finished no slower.
+  3.9 GB, and finished no slower. `WithEngineThreads(n)` sets the threads its queries
+  share (397), and `Stats()` reports them and how many queries run on more than one.
 
 ### Faster
 
@@ -53,6 +60,11 @@ that stops when its request is cancelled.
   A 1,000-row group-by takes 47 µs where it took 133, and sixty-four 10,000-row
   group-bys at once answer 7,190 queries a second where 4,280 to 5,090, on a tenth of
   the goroutines. `WithThreads(n)` runs a query on n at any size, as before.
+- **Many large queries at once start fewer workers** (397): each takes its share of
+  its engine's threads, so sixty-four 200,000-row group-bys at once answer about a
+  fifth more queries a second, on 100 goroutines where they started 950. The eager
+  `PartitionBy`, `ToDummies`, `Corr` and their kin, and the JSON and CSV writers,
+  take a share as the queries do, where each took every thread.
 
 ### Fixed
 

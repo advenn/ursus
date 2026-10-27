@@ -2,7 +2,6 @@ package ursus
 
 import (
 	"context"
-	"runtime"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -72,7 +71,9 @@ func (df *DataFrame) PartitionBy(ctx context.Context, o PartitionOptions) (_ []P
 	// Each row's part, numbered in the order each key first appears, as a group-by
 	// numbers its groups; then the rows by part, a counting sort, each part's in the
 	// frame's order and a slice of one array (step 321).
-	ids, firsts, err := kernel.FirstSeenKeys("partition_by", keys)
+	workers, release := frameWorkers(b.Rows())
+	defer release()
+	ids, firsts, err := kernel.FirstSeenKeys("partition_by", keys, workers)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +121,7 @@ func (df *DataFrame) PartitionBy(ctx context.Context, o PartitionOptions) (_ []P
 		once  sync.Once
 		abort atomic.Bool
 	)
-	for range min(runtime.GOMAXPROCS(0), len(parts)) {
+	for range min(workers, len(parts)) {
 		relay.Go(&wg, func() {
 			for p := int(took.Add(1)) - 1; p < len(parts) && !abort.Load(); p = int(took.Add(1)) - 1 {
 				sel := order[start[p]:start[p+1]]

@@ -102,7 +102,9 @@ Breaking out of the loop stops the query and removes any spill files it wrote.
 
 ## Order and threads
 
-A query runs on every core by default; `WithThreads(n)` sets how many. A scan's rows
+A query runs on its engine's threads by default, every core Go may use, a share of
+them where several queries run at once, and one where its input fits in a batch;
+`WithThreads(n)` sets how many. A scan's rows
 come in the file's order at any thread count, a filter keeps its input's order, and a
 sort's is sorted. Two orders are not promised, as in Polars, and each has an option
 that promises one:
