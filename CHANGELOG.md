@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–401, so far, after 0.7's 375–391.
+Steps 392–402, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
@@ -55,6 +55,12 @@ that stops when its request is cancelled.
   for all of a wide table's columns: the engine's other queries spill sooner beside
   it, the scan's own query does not, and `Stats().Held` includes them.
 
+- **`Error`, an error a caller reads** (402): a failure of ursus's own is an
+  `*ursus.Error` through `errors.As`, its `Kind` (`KindSchema`, `KindResource` and the
+  rest, an `ErrorKind`), the operation, the message, the plan node, the hints, a near
+  column's name or a knob to turn, and the cause. The sentinels for `errors.Is` are as
+  they were; an `Error` matches its kind's too. A query stopped by its context fails
+  with the context's error, not an `Error`.
 - **Every break of the public API, checked** (401): `api/v0.6.8.txt` lists v0.6.8's
   public API a feature a line, each function's and method's signature, each type's
   fields and interface methods, each constant's value; `make api` lists what the
