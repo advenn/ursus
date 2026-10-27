@@ -692,7 +692,7 @@ func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (df *Da
 	if err != nil {
 		return nil, err
 	}
-	b, err := exec.Collect(ctx, root, cfg.budget.Result())
+	b, err := exec.Collect(ctx, root, cfg.budget.Result(), cfg.threads)
 	cfg.report()
 	if err != nil {
 		return nil, err

@@ -82,4 +82,52 @@ func TestParseFloatIsStrconvsToTheBit(t *testing.T) {
 		}
 		check(b.String())
 	}
+
+	// Since step 389 a decimal past Clinger's case, a float written in full, is found
+	// by Eisel-Lemire, its fraction read eight digits at a time: the range's edges and
+	// past them, subnormals, the halfway cases between two floats, which it leaves to
+	// strconv; random floats as Go and Polars write them; and fractions of runs of
+	// zeros and digits across the eight-digit words.
+	for _, s := range []string{
+		"0.30000000000000004", "1.7976931348623157e308", "1.7976931348623158e308", "1.7976931348623159e308",
+		"1e308", "1e309", "-1e309", "5e-324", "4.9406564584124654e-324", "2.4703282292062327e-324",
+		"2.4703282292062328e-324", "1e-324", "2.2250738585072011e-308", "2.2250738585072012e-308",
+		"2.2250738585072014e-308", "9007199254740995", "18014398509481986", "18446744073709551615",
+		"18446744073709551616", "9999999999999999999", "99999999999999999999", "1234567890123456789.5",
+		"4503599627370496.5", "4503599627370497.5", "8.98846567431158e307", "0.1234567890123456789",
+		"0.12345678901234567890", "0.000000001234567890123456789", "0.3333333333333333", "1.6666666666666667",
+		"333333.3333333333", "16.666666666666668", "0.00000000", "0.0000000000000000", "-0.00000001",
+		// A byte in eight that is no digit, either side of '0' to '9'.
+		"0.1234567:", "0.:2345678", "0.12345678/", "0.1234/678", "0.1234567a8", "1.0000000 0", "0.12345678e",
+		"0.1234567\x0089", "0.\xff2345678",
+	} {
+		check(s)
+	}
+	for k := range 12 {
+		check(strconv.FormatUint((1<<53+1)<<k, 10))
+		check(strconv.FormatUint((1<<53+3)<<k, 10))
+		check(strconv.FormatUint((1<<53+1)<<k, 10) + ".00000000")
+	}
+	for range 300_000 {
+		f := math.Float64frombits(r.Uint64())
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			continue
+		}
+		check(strconv.FormatFloat(f, 'g', -1, 64))
+		check(strconv.FormatFloat(f, 'e', r.IntN(25), 64))
+		if math.Abs(f) < 1e30 && math.Abs(f) > 1e-30 {
+			check(strconv.FormatFloat(f, 'f', -1, 64))
+		}
+	}
+	for range 300_000 {
+		b := []byte(digits(r.IntN(4)))
+		b = append(b, '.')
+		b = append(b, strings.Repeat("0", r.IntN(20))...)
+		b = append(b, digits(r.IntN(30))...)
+		if r.IntN(4) == 0 {
+			b = append(b, 'e')
+			b = append(b, strconv.Itoa(r.IntN(60)-30)...)
+		}
+		check(string(b))
+	}
 }

@@ -31,7 +31,8 @@ import (
 	"github.com/advenn/ursus/internal/physical"
 )
 
-// Collect runs the tree to completion and concatenates every batch.
+// Collect runs the tree to completion and concatenates every batch, each column's
+// rows copied on up to threads goroutines (step 389).
 //
 // held is the account the result is held in, from execopt.Budget.Result; nil holds
 // it unchecked. Each batch is retained in it as it arrives, and Collect stops with
@@ -41,14 +42,14 @@ import (
 // The ledger's keys are pointers into the buffers it counts, so an account keeps
 // alive what it holds: released after, it kept every batch until the result was
 // whole, and the result was held twice while it was copied (step 131).
-func Collect(ctx context.Context, root physical.Operator, held *execopt.Account) (*data.Batch, error) {
+func Collect(ctx context.Context, root physical.Operator, held *execopt.Account, threads int) (*data.Batch, error) {
 	schema := root.Schema()
 	batches, err := drain(ctx, root, held)
 	held.Release()
 	if err != nil {
 		return nil, err
 	}
-	return kernel.ConcatOwned(schema, batches)
+	return kernel.ConcatOwnedN(schema, batches, threads)
 }
 
 // drain pulls every batch, and closes the tree before it returns.
@@ -57,7 +58,7 @@ func Collect(ctx context.Context, root physical.Operator, held *execopt.Account)
 // once the stream has ended. Collect used to close it only after concatenating the
 // result, so a join's whole build side, the result's batches and the concatenated
 // result were alive at once: the moment a large join over CSV was OOM-killed under
-// a 4 GB container (step 128). The batches are then concatenated by ConcatOwned,
+// a 4 GB container (step 128). The batches are then concatenated by ConcatOwnedN,
 // which lets go of them column by column.
 //
 // It refuses as soon as the result is too large, not once the stream ends: a

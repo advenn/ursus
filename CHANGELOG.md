@@ -15,12 +15,21 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.7
 
-Everything since `v0.6.8` (2026-10-26): steps 375–388, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–389, so far.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
 Parquet read first.
 
 ### Faster
 
+- **A CSV file's floats are read in one pass however they are written** (389): a
+  float of 17 digits, as Go and Polars write one in full, was parsed three times; its
+  value is now found by the Eisel-Lemire algorithm, as strconv finds it, and its
+  fraction read eight digits at a time. Such a float parses in a third of its time,
+  and a `Cast(String)` to a float with it.
+- **`Collect` copies its answer on the query's threads** (389): a result's batches
+  were concatenated into one frame on one thread after the query ran on all of them;
+  each column's rows are now copied in pieces at once. A million rows read from a CSV
+  file on four threads take 0.78 of their time.
 - **An aggregate over a window no longer copies the frame** (388): `x - x.Mean()` or
   `x.Sum().Over(g)` in a `WithColumns` hands its batches on as they came, each with
   the window's values, where the window concatenated them all first.

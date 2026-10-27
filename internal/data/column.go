@@ -358,8 +358,9 @@ func fillStrings[O offsetWidth](o []O, d []byte, vals []string) {
 // end, and validity valid: each part's live characters copied once, its offsets
 // shifted by the characters before it.
 //
-// Every Collect ends in one of these per String column, serially. It used to build
-// a Go string per row and hand the slice to NewString, which copied every byte a
+// Every Collect ends in one of these per String column, its rows copied on the
+// query's threads since step 389 (ConcatStringsWith). It used to build a Go string per
+// row and hand the slice to NewString, which copied every byte a
 // second time: 0.37 s of h2o j3's 0.58 s at 2M rows (step 101's profile).
 //
 // A part is a derived column as often as not — Column.Slice keeps the whole
@@ -368,6 +369,19 @@ func fillStrings[O offsetWidth](o []O, d []byte, vals []string) {
 //
 // Past MaxStringBytes its offsets are 64-bit (step 368), whatever its parts' are.
 func ConcatStrings(name string, dt dtype.DataType, parts []*Column, valid bitmap.View) *Column {
+	return ConcatStringsWith(name, dt, parts, valid, Serial)
+}
+
+// Spread runs fn over pieces of [0, n) that cover it, one after another or at once.
+type Spread func(n int, fn func(lo, hi int))
+
+// Serial is the Spread of one piece, run by the caller.
+func Serial(n int, fn func(lo, hi int)) { fn(0, n) }
+
+// ConcatStringsWith is ConcatStrings with its rows copied by spread, a piece of them
+// at a time: where each part's rows and characters land is known before any is copied
+// (step 389).
+func ConcatStringsWith(name string, dt dtype.DataType, parts []*Column, valid bitmap.View, spread Spread) *Column {
 	n, chars := 0, int64(0)
 	for _, p := range parts {
 		n += p.len
@@ -378,9 +392,9 @@ func ConcatStrings(name string, dt dtype.DataType, parts []*Column, valid bitmap
 	// Counted before anything is allocated, as NewString counts.
 	ob, ob64, cb := stringBuffers(n, chars)
 	if ob != nil {
-		concatInto(unsafeData[int32](ob.Bytes()), cb.Bytes(), parts)
+		concatInto(unsafeData[int32](ob.Bytes()), cb.Bytes(), parts, spread)
 	} else {
-		concatInto(ob64, cb.Bytes(), parts)
+		concatInto(ob64, cb.Bytes(), parts, spread)
 	}
 	if valid.Len() == 0 && n > 0 {
 		valid = bitmap.AllSet(n)
@@ -388,27 +402,45 @@ func ConcatStrings(name string, dt dtype.DataType, parts []*Column, valid bitmap
 	return &Column{name: name, dt: dt, len: n, valid: valid, offs: ob, offs64: ob64, chars: cb}
 }
 
-// concatInto writes parts' offsets, rebased, into offs, and their characters into out.
-func concatInto[O offsetWidth](offs []O, out []byte, parts []*Column) {
-	row, pos := 0, O(0)
-	for _, p := range parts {
-		if p.len == 0 {
-			continue
-		}
-		switch o32, o64 := p.offsets(); {
-		case o32 != nil:
-			row, pos = appendPart(offs, out, row, pos, o32, p.chars.Bytes())
-		case o64 != nil:
-			row, pos = appendPart(offs, out, row, pos, o64, p.chars.Bytes())
-		default:
-			// A column with no payload — every row null — holds no characters.
-			for range p.len {
-				offs[row] = pos
-				row++
-			}
+// concatInto writes parts' offsets, rebased, into offs, and their characters into out,
+// spread's pieces of rows each by itself.
+func concatInto[O offsetWidth](offs []O, out []byte, parts []*Column, spread Spread) {
+	// Each part's first row and first character in the result.
+	rows, at := make([]int, len(parts)+1), make([]O, len(parts)+1)
+	for k, p := range parts {
+		rows[k+1], at[k+1] = rows[k]+p.len, at[k]
+		if lo, hi, ok := p.charSpan(); ok && p.len > 0 {
+			at[k+1] += O(hi - lo)
 		}
 	}
-	offs[row] = pos
+	spread(rows[len(parts)], func(lo, hi int) {
+		for k := PartAt(rows, lo); k < len(parts) && rows[k] < hi; k++ {
+			p := parts[k]
+			a, b := max(lo, rows[k])-rows[k], min(hi, rows[k+1])-rows[k]
+			if a >= b {
+				continue
+			}
+			switch o32, o64 := p.offsets(); {
+			case o32 != nil:
+				appendPart(offs, out, rows[k]+a, at[k]+O(o32[a]-o32[0]), o32[a:b+1], p.chars.Bytes())
+			case o64 != nil:
+				appendPart(offs, out, rows[k]+a, at[k]+O(o64[a]-o64[0]), o64[a:b+1], p.chars.Bytes())
+			default:
+				// A column with no payload — every row null — holds no characters.
+				for r := rows[k] + a; r < rows[k]+b; r++ {
+					offs[r] = at[k]
+				}
+			}
+		}
+	})
+	offs[rows[len(parts)]] = at[len(parts)]
+}
+
+// PartAt is the part row lo falls in, of parts whose first rows are rows, the last
+// entry their total: the first whose end is past lo.
+func PartAt(rows []int, lo int) int {
+	k, _ := slices.BinarySearch(rows[1:], lo+1)
+	return k
 }
 
 // appendPart appends one part's rows, its offsets o, at row and pos.

@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"slices"
+	"sync"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
@@ -444,6 +445,14 @@ func FilterBatch(b *data.Batch, mask *data.Column) (*data.Batch, error) {
 // assembles it, and none of it counted against the budget. Here the two overlap by
 // one column (step 128).
 func ConcatOwned(schema *dtype.Schema, batches []*data.Batch) (*data.Batch, error) {
+	return ConcatOwnedN(schema, batches, 1)
+}
+
+// ConcatOwnedN is ConcatOwned with each column's rows copied on up to workers
+// goroutines, a piece each (step 389). The columns still go one at a time, so the
+// batches are let go of as before. A million rows read from a CSV file spent a fifth
+// of their time on one thread in Collect's copy, after the read on four.
+func ConcatOwnedN(schema *dtype.Schema, batches []*data.Batch, workers int) (*data.Batch, error) {
 	if len(batches) <= 1 || schema.Len() == 0 {
 		out, err := Concat(schema, batches)
 		clear(batches)
@@ -463,7 +472,7 @@ func ConcatOwned(schema *dtype.Schema, batches []*data.Batch) (*data.Batch, erro
 	clear(batches)
 	cols := make([]*data.Column, schema.Len())
 	for ci := range parts {
-		out, err := concatColumn(parts[ci], total)
+		out, err := concatColumnN(parts[ci], total, spreader(workers))
 		if err != nil {
 			return nil, err
 		}
@@ -572,6 +581,12 @@ func ConcatColumns(name string, parts []*data.Column) (*data.Column, error) {
 }
 
 func concatColumn(parts []*data.Column, total int) (*data.Column, error) {
+	return concatColumnN(parts, total, data.Serial)
+}
+
+// concatColumnN is concatColumn with a fixed-width or text column's rows copied by
+// spread; the other types are copied by the caller.
+func concatColumnN(parts []*data.Column, total int, spread data.Spread) (*data.Column, error) {
 	first := parts[0]
 
 	// Parts with every row valid make a column that says so, with no bitmap: a
@@ -606,54 +621,91 @@ func concatColumn(parts []*data.Column, total int) (*data.Column, error) {
 		return concatStruct(parts, total, outValid)
 
 	case first.DType().HasStringStorage(): // an Enum is indices, as in Take
-		return data.ConcatStrings(first.Name(), first.DType(), parts, outValid), nil
+		return data.ConcatStringsWith(first.Name(), first.DType(), parts, outValid, spread), nil
 
 	default:
-		return concatFixed(parts, total, outValid)
+		return concatFixed(parts, total, outValid, spread)
 	}
 }
 
-func concatFixed(parts []*data.Column, total int, valid bitmap.View) (*data.Column, error) {
+// spreader is the Spread of up to workers pieces at once, each on a goroutine of its
+// own, where there are rows enough to share; else the caller copies all of them. A
+// panic in a piece is raised again in the caller, where the query recovers it.
+func spreader(workers int) data.Spread {
+	return func(n int, fn func(lo, hi int)) {
+		if workers <= 1 || n < parallelMin {
+			fn(0, n)
+			return
+		}
+		var (
+			wg     sync.WaitGroup
+			once   sync.Once
+			caught any
+		)
+		for w := range workers {
+			lo, hi := w*n/workers, (w+1)*n/workers
+			wg.Go(func() {
+				defer func() {
+					if v := recover(); v != nil {
+						once.Do(func() { caught = v })
+					}
+				}()
+				fn(lo, hi)
+			})
+		}
+		wg.Wait()
+		if caught != nil {
+			panic(caught)
+		}
+	}
+}
+
+func concatFixed(parts []*data.Column, total int, valid bitmap.View, spread data.Spread) (*data.Column, error) {
 	switch parts[0].DType().Physical().ID() {
 	case dtype.TypeInt8:
-		return concatT[int8](parts, total, valid)
+		return concatT[int8](parts, total, valid, spread)
 	case dtype.TypeInt16:
-		return concatT[int16](parts, total, valid)
+		return concatT[int16](parts, total, valid, spread)
 	case dtype.TypeInt32:
-		return concatT[int32](parts, total, valid)
+		return concatT[int32](parts, total, valid, spread)
 	case dtype.TypeInt64:
-		return concatT[int64](parts, total, valid)
+		return concatT[int64](parts, total, valid, spread)
 	case dtype.TypeUint8:
-		return concatT[uint8](parts, total, valid)
+		return concatT[uint8](parts, total, valid, spread)
 	case dtype.TypeUint16:
-		return concatT[uint16](parts, total, valid)
+		return concatT[uint16](parts, total, valid, spread)
 	case dtype.TypeUint32:
-		return concatT[uint32](parts, total, valid)
+		return concatT[uint32](parts, total, valid, spread)
 	case dtype.TypeUint64:
-		return concatT[uint64](parts, total, valid)
+		return concatT[uint64](parts, total, valid, spread)
 	case dtype.TypeFloat32:
-		return concatT[float32](parts, total, valid)
+		return concatT[float32](parts, total, valid, spread)
 	case dtype.TypeFloat64:
-		return concatT[float64](parts, total, valid)
+		return concatT[float64](parts, total, valid, spread)
 	case dtype.TypeInt128:
-		return concatT[i128.Int128](parts, total, valid)
+		return concatT[i128.Int128](parts, total, valid, spread)
 	default:
 		return nil, uerr.New(uerr.KindUnsupported, "",
 			"concat is not implemented for %s", parts[0].DType())
 	}
 }
 
-func concatT[T data.Fixed](parts []*data.Column, total int, valid bitmap.View) (*data.Column, error) {
+func concatT[T data.Fixed](parts []*data.Column, total int, valid bitmap.View, spread data.Spread) (*data.Column, error) {
 	buf, dst := newValuesBuffer[T](total)
-	pos := 0
-	for _, p := range parts {
+	srcs, rows := make([][]T, len(parts)), make([]int, len(parts)+1)
+	for k, p := range parts {
 		src, err := data.Values[T](p)
 		if err != nil {
 			return nil, err
 		}
-		copy(dst[pos:], src)
-		pos += p.Len()
+		srcs[k], rows[k+1] = src, rows[k]+p.Len()
 	}
+	spread(total, func(lo, hi int) {
+		for k := data.PartAt(rows, lo); k < len(parts) && rows[k] < hi; k++ {
+			a, b := max(lo, rows[k]), min(hi, rows[k+1])
+			copy(dst[a:b], srcs[k][a-rows[k]:b-rows[k]])
+		}
+	})
 	return data.NewFixedBuffer(parts[0].Name(), parts[0].DType(), buf, total, valid), nil
 }
 

@@ -44,7 +44,7 @@ func TestDrainClosesTheTreeBeforeTheResultIsAssembled(t *testing.T) {
 	if len(batches) != 3 {
 		t.Errorf("%d batches, want 3", len(batches))
 	}
-	b, err := Collect(t.Context(), &spyOp{n: 3}, nil)
+	b, err := Collect(t.Context(), &spyOp{n: 3}, nil, 1)
 	if err != nil || b.Rows() != 3 {
 		t.Fatalf("Collect: %v rows, %v", b, err)
 	}
