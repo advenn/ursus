@@ -15,13 +15,21 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–393, so far, after 0.7's 375–391.
+Steps 392–394, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
 
 ### Fixed
 
+- **A cancelled query no longer answers part of its input as the whole** (394): a
+  query cancelled while it read could return the rows read before the cancel, and no
+  error: a count of a CSV file cancelled partway was an empty frame. A query whose
+  context is cancelled before it finishes now returns the cancellation, from
+  `Collect`, `CollectBatches`, `Count` and the writers.
+- **A cancelled sort or join stops promptly** (394): a sort of ten million rows came
+  back 400 ms and more after its cancel, and a join's build 100 to 170; now some tens
+  of milliseconds at most.
 - **A panic on one of a query's goroutines no longer ends the process** (393): a
   sort's and a unique's parallel pieces, first-seen keys, a text sort, a Spearman
   rank, and `PartitionBy`, `ToDummies` and `Corr`, started goroutines that recovered

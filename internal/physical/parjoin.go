@@ -95,8 +95,12 @@ func (p *parProbeOp) Next(ctx context.Context) (*data.Batch, error) {
 		r, ok := <-p.results[p.turn]
 		if !ok {
 			// Dispatch is monotone — worker i gets batches i, i+N, i+2N — so once the
-			// lane whose turn it is has closed, every later lane in this round has too.
+			// lane whose turn it is has closed, every later lane in this round has too;
+			// unless the query was cancelled, which closes them too (step 394).
 			p.done = true
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			return nil, io.EOF
 		}
 		if r.err != nil {
