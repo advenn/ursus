@@ -76,8 +76,12 @@ func TestTheDefaultBudgetSetsTheProcessMemoryLimit(t *testing.T) {
 	}
 	restoreLimit := debug.SetMemoryLimit(-1)
 	restoreCeiling, restoreDefault := processCeiling, defaultMemoryLimit
+	// The default engine is made at its first use, of the default limit then: one made
+	// here, of the lowered limit, must not outlive the test (step 398).
+	restoreEngine := defaultEngine.Swap(nil)
 	t.Cleanup(func() {
 		debug.SetMemoryLimit(restoreLimit)
+		defaultEngine.Store(restoreEngine)
 		processCeiling, defaultMemoryLimit = restoreCeiling, restoreDefault
 		autoLimitOnce, _ = sync.Once{}, autoLimitOff.Swap(false)
 	})

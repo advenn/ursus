@@ -99,6 +99,28 @@ func drainRows(ctx context.Context, op Operator) ([]string, error) {
 // runJoin plans and drains j, and returns its rows, rendered, with the build sink
 // and the table its probe read: a *kernel.KeyTable, *kernel.KeyParts,
 // *kernel.IntKeyParts or *kernel.WordKeyParts.
+// streamingOpts plans a join's streaming build, the one that can spill: one thread,
+// under a limit the caller set, so the build does not defer (step 398 deferred it on
+// one thread too, under the default budget).
+func streamingOpts() Options {
+	return Options{Threads: 1, BatchSize: 512, Budget: execopt.NewBudget(1<<40, "")}
+}
+
+// keyCount is how many keys a table runJoin returns holds.
+func keyCount(t *testing.T, keys any) int {
+	t.Helper()
+	switch k := keys.(type) {
+	case *kernel.KeyTable:
+		return k.Len()
+	case *kernel.IntKeyParts:
+		return k.Len()
+	case *kernel.WordKeyParts:
+		return k.Len()
+	}
+	t.Fatalf("a %T, not a key table", keys)
+	return 0
+}
+
 func runJoin(t *testing.T, j *plan.Join, opts Options) ([]string, *joinBuildSink, any, error) {
 	t.Helper()
 	ctx := t.Context()
@@ -134,7 +156,7 @@ func runJoin(t *testing.T, j *plan.Join, opts Options) ([]string, *joinBuildSink
 }
 
 func TestThePartitionedBuildAnswersAsTheStreamingOne(t *testing.T) {
-	serial := Options{Threads: 1, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
+	serial := streamingOpts()
 	parallel := Options{Threads: 4, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
 	kinds := []plan.JoinKind{plan.JoinInner, plan.JoinLeft, plan.JoinRight, plan.JoinFull,
 		plan.JoinSemi, plan.JoinAnti} // Semi and Anti since step 161
@@ -186,7 +208,7 @@ func TestThePartitionedBuildAnswersAsTheStreamingOne(t *testing.T) {
 					t.Fatalf("the probe read a %T, not the partitioned tables", keys)
 				}
 				// A null key is no key unless nulls are equal, in both builds.
-				if want := streamed.(*kernel.KeyTable).Len(); n != want {
+				if want := keyCount(t, streamed); n != want {
 					t.Errorf("%d keys, the streaming build has %d", n, want)
 				}
 				if len(got) != len(want) {
@@ -222,7 +244,7 @@ func TestThePartitionedBuildRefusesADuplicateAtTheSameRow(t *testing.T) {
 		if !deferBuild(join(), opts) {
 			t.Fatal("a validated join does not defer")
 		}
-		_, _, _, want := runJoin(t, join(), Options{Threads: 1, BatchSize: 512, Budget: execopt.NewBudget(0, "")})
+		_, _, _, want := runJoin(t, join(), streamingOpts())
 		_, _, _, got := runJoin(t, join(), opts)
 		if want == nil {
 			t.Fatalf("seed %d: the fixture's right side has no duplicate key", seed)
@@ -245,7 +267,7 @@ func TestADeferredBuildPastHalfItsBudgetStreams(t *testing.T) {
 			Kind:    plan.JoinInner,
 		}
 	}
-	want, _, _, err := runJoin(t, join(), Options{Threads: 1, BatchSize: 512, Budget: execopt.NewBudget(0, "")})
+	want, _, _, err := runJoin(t, join(), streamingOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +366,7 @@ func TestTheIntegerKeysAnswerAsTheEncodedOnes(t *testing.T) {
 		{"Int32 to Int64", of(typedScan[int32], dtype.Int32), of(typedScan[int64], dtype.Int64)},
 		{"Uint32 to Int64", of(typedScan[uint32], dtype.Uint32), of(typedScan[int64], dtype.Int64)},
 	}
-	serial := Options{Threads: 1, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
+	serial := streamingOpts()
 	parallel := Options{Threads: 4, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
 	for _, c := range cases {
 		for _, kind := range []plan.JoinKind{plan.JoinInner, plan.JoinLeft, plan.JoinRight, plan.JoinFull} {
@@ -512,13 +534,16 @@ func TestADeferredSemiJoinCatchesUpOnItsKeys(t *testing.T) {
 	if used := sink.mem.Used(); used != sink.stateBytes {
 		t.Fatalf("charged %d bytes, of which its state is %d", used, sink.stateBytes)
 	}
-	if got, want := sink.ids.Len(), distinctKeys(right); got != want {
+	// Keyed by its integer since step 398, where the catch-up streams.
+	if sink.ints == nil {
+		t.Fatal("a caught-up build of an integer key encoded its keys")
+	}
+	if got, want := sink.ints.Len(), distinctKeys(right); got != want {
 		t.Fatalf("its table has %d keys, the build side %d", got, want)
 	}
 
 	// And it answers as the streaming build does.
-	want, _, _, err := runJoin(t, semiJoinOver(t, sch, right), Options{Threads: 1, BatchSize: 512,
-		Budget: execopt.NewBudget(0, "")})
+	want, _, _, err := runJoin(t, semiJoinOver(t, sch, right), streamingOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -626,7 +651,7 @@ func TestADenseBuildHoldsOneIndexAndNoTables(t *testing.T) {
 // two words, and two Int64s and an Int32, three; with nulls in each, matching or not;
 // for every kind. A key past three words is encoded still.
 func TestAPartitionedBuildOfIntegerKeysPacksThem(t *testing.T) {
-	serial := Options{Threads: 1, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
+	serial := streamingOpts()
 	parallel := Options{Threads: 4, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
 	scan := func(rng *rand.Rand, prefix string, n int) *plan.Scan {
 		sch := dtype.MustSchema(dtype.Of(prefix+"a", dtype.Int64), dtype.Of(prefix+"b", dtype.Int32),

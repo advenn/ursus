@@ -6,7 +6,8 @@
 //	lat     four small queries at 1,000, 10,000 and 100,000 rows, on all threads and
 //	        one: a filter and projection, a group-by's sum and mean, a join to a
 //	        100-row dimension and a sort's head of ten; pl_lat.py is Polars' twin.
-//	        ROWS=n,... and THREADS=t,... choose others, 0 the default
+//	        ROWS=n,... and THREADS=t,... choose others, 0 the default; MEMLIMIT=bytes
+//	        gives each query a limit of its own
 //	conc    a 10,000-row group-by from 1, 4, 16 and 64 goroutines, queries a second;
 //	        ROWS=n another size
 //	conc64  the same from 64 goroutines on one thread each, profiled to $PROF and the
@@ -100,6 +101,8 @@ func lat() {
 			threads = append(threads, n)
 		}
 	}
+	var limit int64
+	fmt.Sscan(os.Getenv("MEMLIMIT"), &limit)
 	sizes := []int{1_000, 10_000, 100_000}
 	if s := os.Getenv("ROWS"); s != "" {
 		sizes = nil
@@ -117,6 +120,9 @@ func lat() {
 				opts := []ursus.CollectOption{}
 				if th > 0 {
 					opts = append(opts, ursus.WithThreads(th))
+				}
+				if limit > 0 {
+					opts = append(opts, ursus.WithMemoryLimit(limit))
 				}
 				var ts []time.Duration
 				for range iters {

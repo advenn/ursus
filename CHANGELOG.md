@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–397, so far, after 0.7's 375–391.
+Steps 392–398, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
@@ -60,6 +60,11 @@ that stops when its request is cancelled.
   A 1,000-row group-by takes 47 µs where it took 133, and sixty-four 10,000-row
   group-bys at once answer 7,190 queries a second where 4,280 to 5,090, on a tenth of
   the goroutines. `WithThreads(n)` runs a query on n at any size, as before.
+- **A join on one thread, or under a limit of its own, keys its integers** (398): its
+  build encoded every key to bytes, where on several threads it keyed an integer key
+  by the integer. A join to a 100-row dimension on one thread takes 0.54 of its time at
+  10,000 rows and 0.46 at 100,000, under `WithMemoryLimit` 0.53 and 0.43; on all
+  threads 0.90, its probe's loop made one for a plain join.
 - **Many large queries at once start fewer workers** (397): each takes its share of
   its engine's threads, so sixty-four 200,000-row group-bys at once answer about a
   fifth more queries a second, on 100 goroutines where they started 950. The eager

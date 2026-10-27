@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/execopt"
 	"github.com/advenn/ursus/internal/kernel"
@@ -197,6 +198,9 @@ func (s *joinBuildSink) closeBuildParts() error {
 // oversized bucket from being unbounded. Semi and Anti never reach splitAll: their
 // resident state is flat after the freeze, so a second overflow is somebody else's.
 func (s *joinBuildSink) escalate(ctx context.Context) error {
+	if err := s.bytesKeys(); err != nil {
+		return err
+	}
 	switch {
 	case s.split == splitNone:
 		s.split = splitHybrid
@@ -336,6 +340,9 @@ func (s *joinBuildSink) admit(ctx context.Context, in *data.Batch, rowBase int) 
 // Anti join's catchUp calls with the keys it kept (step 161).
 func (s *joinBuildSink) admitKeys(keyCols []*data.Column, n, rowBase int) error {
 	ok := keyValidity(keyCols)
+	if s.ints != nil {
+		return s.admitInts(keyCols[0], ok, n, rowBase)
+	}
 	enc, err := kernel.NewGroupKeyEncoder("join", keyCols)
 	if err != nil {
 		return err
@@ -392,9 +399,103 @@ func (s *joinBuildSink) admitKeys(keyCols []*data.Column, n, rowBase int) error 
 	return nil
 }
 
+// admitInts is admitKeys for a build keyed by its integer (ints): the column's values,
+// a chunk at a time, never encoded, as the partitioned build's are.
+func (s *joinBuildSink) admitInts(col *data.Column, ok bitmap.View, n, rowBase int) error {
+	v := kernel.IntKeys(col, &s.intScratch)
+	track := s.spec.tracksRows()
+	base := len(s.rowKey)
+	if track {
+		s.rowKey = kernel.Extend(s.rowKey, base+n, 0)
+	}
+	var (
+		keys     [kernel.ManyChunk]int64
+		rows     [kernel.ManyChunk]int32
+		ids      [kernel.ManyChunk]int32
+		inserted [kernel.ManyChunk]bool
+	)
+	m := 0
+	flush := func() error {
+		s.ints.GetOrInsertMany(keys[:m], ids[:m], inserted[:m])
+		s.counts = kernel.Extend(s.counts, s.ints.Len(), 0)
+		for j := range m {
+			if !inserted[j] && s.spec.validate.RequiresRightUnique() {
+				row := -1
+				if rowBase >= 0 {
+					row = rowBase + int(rows[j])
+				}
+				return duplicateKeyErr(s.spec, true, s.keys, row)
+			}
+			if track {
+				s.counts[ids[j]]++
+				s.rowKey[base+int(rows[j])] = ids[j]
+			}
+		}
+		m = 0
+		return nil
+	}
+	for i := range n {
+		if !ok.Get(i) {
+			if track {
+				s.rowKey[base+i] = noKey
+			}
+			continue
+		}
+		keys[m], rows[m] = v[i], int32(i)
+		if m++; m == len(keys) {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+	}
+	if err := flush(); err != nil {
+		return err
+	}
+	s.nBuild += n
+	return nil
+}
+
+// bytesKeys turns a build keyed by its integer into encoded keys, each id kept, before
+// what reads them: a split, which routes a key by its encoded bytes, and Merge. The
+// integers are made a column of the key's type again, which encodes as the column
+// they were read from did.
+func (s *joinBuildSink) bytesKeys() error {
+	if s.ints == nil {
+		return nil
+	}
+	n := s.ints.Len()
+	keys := make([]int64, n)
+	for id := range n {
+		keys[id] = s.ints.KeyAt(int32(id))
+	}
+	enc, err := kernel.NewGroupKeyEncoder("join",
+		[]*data.Column{kernel.IntKeyColumn("key", s.layout.KeyTypes[0], keys)})
+	if err != nil {
+		return err
+	}
+	s.ids.Reserve(n)
+	for id := range n {
+		if got, _ := s.ids.GetOrInsert(enc.Encode(id)); got != int32(id) {
+			return uerr.Internalf("physical: a join's integer key %d was encoded as key %d", id, got)
+		}
+	}
+	s.ints = nil
+	s.reaccount()
+	return nil
+}
+
+// keyBytes is what the build's key tables hold.
+func (s *joinBuildSink) keyBytes() int64 {
+	n := s.ids.NBytes()
+	if s.ints != nil {
+		n += s.ints.NBytes()
+	}
+	return n
+}
+
 // reaccount re-charges the sink's plain-Go state after it has been rebuilt.
 func (s *joinBuildSink) reaccount() {
-	st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + s.ids.NBytes()
+	st := int64(cap(s.rowKey))*4 + int64(cap(s.counts))*4 + s.keyBytes()
 	s.mem.RetainBytes(st - s.stateBytes)
 	s.stateBytes = st
 }

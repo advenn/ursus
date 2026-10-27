@@ -477,15 +477,17 @@ func joinShape(left, right *memsrc.Source, kind ursus.JoinKind) *ursus.LazyFrame
 // threshold set between the two measurements. It survives step 13's spilling change
 // because an unbounded run never spills.
 //
-// On one thread that is the streaming build's table. On several, since step 159, an
-// Int64 key goes into integer tables instead, eight bytes a key and a slot or two:
-// 0.97 MiB at the peak when charged and 0.48 MiB when not, so their floor is 3/4 MiB.
+// On several threads, since step 159, an Int64 key goes into integer tables, eight
+// bytes a key and a slot or two: 0.97 MiB at the peak when charged and 0.48 MiB when
+// not, so their floor is 3/4 MiB. On one since step 398 too, and in the streaming
+// build under a limit the caller set, which keyed by encoded bytes.
 func TestJoinAccountsItsHashTable(t *testing.T) {
 	const n = 20_000
 	for _, c := range []struct {
 		threads int
 		floor   int64
-	}{{1, 1 << 20}, {4, 3 << 18}} {
+		opts    []ursus.CollectOption
+	}{{1, 3 << 18, nil}, {4, 3 << 18, nil}, {1, 3 << 18, []ursus.CollectOption{ursus.WithMemoryLimit(1 << 30)}}} {
 		left := memFrame(t, n, 512, n)
 		right := memFrame(t, n, 512, n)
 
@@ -496,8 +498,8 @@ func TestJoinAccountsItsHashTable(t *testing.T) {
 		df, err := ursus.Scan(left).Select(spread.Alias("k")).
 			Join(ursus.Scan(right).Select(spread.Alias("k2"), ursus.Col("seq")),
 				ursus.JoinLeftOn(ursus.Col("k")), ursus.JoinRightOn(ursus.Col("k2"))).
-			Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithMemoryStats(&stats),
-				ursus.WithThreads(c.threads))
+			Collect(t.Context(), append(c.opts, ursus.WithBatchSize(512), ursus.WithMemoryStats(&stats),
+				ursus.WithThreads(c.threads))...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -507,9 +509,9 @@ func TestJoinAccountsItsHashTable(t *testing.T) {
 		// 320 KiB of column payload plus the table. Below the floor the table is not
 		// being counted.
 		if stats.Peak < c.floor {
-			t.Errorf("%d threads: peak = %d over %d distinct keys, which is the column "+
+			t.Errorf("%d threads, %d options: peak = %d over %d distinct keys, which is the column "+
 				"payload and little else — the key table is not on the ledger",
-				c.threads, stats.Peak, n)
+				c.threads, len(c.opts), stats.Peak, n)
 		}
 	}
 }

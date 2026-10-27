@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/advenn/ursus/dtype"
+	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/uerr"
 )
@@ -490,6 +491,41 @@ func IntKeys(c *data.Column, scratch *[]int64) []int64 {
 		panic(uerr.Internalf("kernel: IntKeys of a %s column", c.DType()))
 	}
 	return *scratch
+}
+
+// IntKeyColumn is IntKeys undone: a column of type dt, IsIntKey, holding keys
+// narrowed back to its storage, so that a GroupKeyEncoder encodes each as it encodes
+// the value it was widened from (step 398, a join's streaming build turning its
+// integer table into encoded keys as it first spills).
+func IntKeyColumn(name string, dt dtype.DataType, keys []int64) *data.Column {
+	all := bitmap.AllSet(len(keys))
+	switch dt.Physical().ID() {
+	case dtype.TypeInt64:
+		return data.NewFixed(name, dt, slices.Clone(keys), all)
+	case dtype.TypeInt8:
+		return data.NewFixed(name, dt, narrow[int8](keys), all)
+	case dtype.TypeInt16:
+		return data.NewFixed(name, dt, narrow[int16](keys), all)
+	case dtype.TypeInt32:
+		return data.NewFixed(name, dt, narrow[int32](keys), all)
+	case dtype.TypeUint8:
+		return data.NewFixed(name, dt, narrow[uint8](keys), all)
+	case dtype.TypeUint16:
+		return data.NewFixed(name, dt, narrow[uint16](keys), all)
+	case dtype.TypeUint32:
+		return data.NewFixed(name, dt, narrow[uint32](keys), all)
+	case dtype.TypeUint64:
+		return data.NewFixed(name, dt, narrow[uint64](keys), all)
+	}
+	panic(uerr.Internalf("kernel: IntKeyColumn of %s", dt))
+}
+
+func narrow[T int8 | int16 | int32 | uint8 | uint16 | uint32 | uint64](keys []int64) []T {
+	out := make([]T, len(keys))
+	for i, k := range keys {
+		out[i] = T(k)
+	}
+	return out
 }
 
 func widen[T int8 | int16 | int32 | uint8 | uint16 | uint32 | uint64](v []T, dst []int64) []int64 {
