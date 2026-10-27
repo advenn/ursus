@@ -65,6 +65,7 @@ type windowSink struct {
 	// The spill state, idle until the query goes over its limit: extwindow.go.
 	exprs       []expr.Node // the window expressions, to build fresh sinks from
 	budget      *execopt.Budget
+	threads     int // the windows computed at once at Finish; 0 or 1 is one at a time
 	batch       int
 	level       int
 	ord         string        // the input-ordinal column's name
@@ -313,19 +314,24 @@ func (s *windowSink) Finish(ctx context.Context) (Operator, error) {
 	cols := make([]*data.Column, 0, s.inSchema.Len()+len(s.specs))
 	cols = append(cols, all.Columns()...)
 
-	for i := range s.specs {
+	// Each window reads the rows and its partition's ids and writes a column of its
+	// own, so the windows run at once, a thread each (step 387, W2 of v0.7-scope.md):
+	// a rolling mean, max and std over a million rows were one after another.
+	answers := make([]*data.Column, len(s.specs))
+	err = eachConcurrently(len(s.specs), max(1, s.threads), func(i int) error {
 		sp := &s.specs[i]
-		var c *data.Column
+		var err error
 		if sp.acc != nil {
-			c, err = s.finishAggregate(sp)
+			answers[i], err = s.finishAggregate(sp)
 		} else {
-			c, err = s.finishOrdered(ctx, sp, all, nRows)
+			answers[i], err = s.finishOrdered(ctx, sp, all, nRows)
 		}
-		if err != nil {
-			return nil, err
-		}
-		cols = append(cols, c)
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
+	cols = append(cols, answers...)
 
 	out, err := data.NewBatch(s.schema, cols)
 	if err != nil {
@@ -537,6 +543,7 @@ func planWindow(ctx context.Context, w *plan.Window, opts Options) (Operator, er
 		return nil, err
 	}
 	sink.budget, sink.batch, sink.ord, sink.spillSchema = opts.Budget, opts.batchSize(), ord, sp
+	sink.threads = opts.Threads
 	return &breaker{child: child, sink: sink}, nil
 }
 

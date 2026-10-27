@@ -222,11 +222,18 @@ func rollingExtremum(max bool, name string, col *data.Column, seg Segments, win 
 // rollingIntSum sums an integer or Bool window exactly, as an Int128: N values of 64
 // bits cannot leave 128.
 func rollingIntSum(name string, out dtype.DataType, col *data.Column, seg Segments, win windowsOf, minN int) (*data.Column, error) {
-	vals, err := widenToInt128(col)
-	if err != nil {
+	// An Int64's values are read where they lie, as winCumInt128 reads them, and a
+	// column of no nulls is not asked for each row's (step 387).
+	var vals []i128.Int128
+	var vals64 []int64
+	var err error
+	if col.DType().Physical().ID() == dtype.TypeInt64 && !col.IsPayloadFree() {
+		vals64 = data.MustValues[int64](col)
+	} else if vals, err = widenToInt128(col); err != nil {
 		return nil, err
 	}
 	valid := col.Validity()
+	all := valid.IsAllSet() && !col.IsPayloadFree()
 	res := make([]i128.Int128, col.Len())
 	ok := make([]bool, col.Len())
 	forEachOrdered(seg, false, func(rows []int32) {
@@ -235,13 +242,25 @@ func rollingIntSum(name string, out dtype.DataType, col *data.Column, seg Segmen
 		count, from, to := 0, 0, 0
 		for i, row := range rows {
 			for ; to < int(hi[i]); to++ {
-				if r := rows[to]; valid.Get(int(r)) {
-					sum, count = sum.Add(vals[r]), count+1
+				if r := rows[to]; all || valid.Get(int(r)) {
+					x := i128.FromInt64(0)
+					if vals64 != nil {
+						x = i128.FromInt64(vals64[r])
+					} else {
+						x = vals[r]
+					}
+					sum, count = sum.Add(x), count+1
 				}
 			}
 			for ; from < int(lo[i]); from++ {
-				if old := rows[from]; valid.Get(int(old)) {
-					sum, count = sum.Sub(vals[old]), count-1
+				if old := rows[from]; all || valid.Get(int(old)) {
+					x := i128.FromInt64(0)
+					if vals64 != nil {
+						x = i128.FromInt64(vals64[old])
+					} else {
+						x = vals[old]
+					}
+					sum, count = sum.Sub(x), count-1
 				}
 			}
 			if count >= minN {

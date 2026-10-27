@@ -36,8 +36,8 @@ func rollingBy(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Da
 		return nil, err
 	}
 	pv, bv := pair.Validity(), by.Validity()
-	sorted := Segments{Perm: make([]int32, 0, len(seg.Perm)), Bounds: make([]int32, 1, len(seg.Bounds))}
-	for p := 0; p+1 < len(seg.Bounds); p++ {
+	sorted, done := inOrderBy(seg, ticks, pv.IsAllSet() && bv.IsAllSet())
+	for p := 0; !done && p+1 < len(seg.Bounds); p++ {
 		start := len(sorted.Perm)
 		for _, r := range seg.Perm[seg.Bounds[p]:seg.Bounds[p+1]] {
 			if pv.Get(int(r)) && bv.Get(int(r)) {
@@ -61,6 +61,7 @@ func rollingBy(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Da
 		return nil, err
 	}
 	closed := params.Closed.Or(expr.ClosedRight)
+	lowerOpen, upperClosed := closed.LowerOpen(), closed.UpperClosed()
 	win := func(rows []int32) (lo, hi []int32) {
 		lo, hi = make([]int32, len(rows)), make([]int32, len(rows))
 		l, h := 0, 0
@@ -68,11 +69,11 @@ func rollingBy(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Da
 			start, end := starts[r], ticks[r]
 			// The first row in the window, and the first past it. Both only rise, as
 			// the rows' own values do.
-			for l < len(rows) && (ticks[rows[l]] < start || closed.LowerOpen() && ticks[rows[l]] == start) {
+			for l < len(rows) && (ticks[rows[l]] < start || lowerOpen && ticks[rows[l]] == start) {
 				l++
 			}
 			h = max(h, l)
-			for h < len(rows) && (ticks[rows[h]] < end || closed.UpperClosed() && ticks[rows[h]] == end) {
+			for h < len(rows) && (ticks[rows[h]] < end || upperClosed && ticks[rows[h]] == end) {
 				h++
 			}
 			lo[i], hi[i] = int32(l), int32(max(h, l))
@@ -84,6 +85,29 @@ func rollingBy(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Da
 		return nil, uerr.Internalf("kernel: %s by time needing %d values", fn, minN)
 	}
 	return rollingOver(fn, params, name, out, value, sorted, win, minN)
+}
+
+// inOrderBy is seg itself, and true, where every row is present and each partition's
+// by already in order, as a rolling of an expression's index is: the rows a
+// partition, filtered and sorted, would be seg's own (step 387). Otherwise it is an
+// empty Segments for rollingBy to fill.
+func inOrderBy(seg Segments, ticks []int64, present bool) (Segments, bool) {
+	if present {
+		ordered := true
+		for p := 0; ordered && p+1 < len(seg.Bounds); p++ {
+			part := seg.Perm[seg.Bounds[p]:seg.Bounds[p+1]]
+			for j := 1; j < len(part); j++ {
+				if ticks[part[j]] < ticks[part[j-1]] {
+					ordered = false
+					break
+				}
+			}
+		}
+		if ordered {
+			return seg, true
+		}
+	}
+	return Segments{Perm: make([]int32, 0, len(seg.Perm)), Bounds: make([]int32, 1, len(seg.Bounds))}, false
 }
 
 // byTicks is a window's by as ticks: a temporal column's own, or an integer's values

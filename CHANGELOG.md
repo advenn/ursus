@@ -15,12 +15,15 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.7
 
-Everything since `v0.6.8` (2026-10-26): steps 375–386, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–387, so far.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
 Parquet read first.
 
 ### Faster
 
+- **Windows in one `WithColumns` or `Select` are computed at once** (387), a thread
+  each, where they were one after another: a rolling mean, max and std over a million
+  rows take 0.55 of their time. An integer rolling sum reads its values in place.
 - **A window function in an aggregation runs over each group's list** (386):
   `GroupBy(g).Agg(Col("x").CumSum())` collects each group's values and runs the
   window over them, where it partitioned the rows a second time; a million rows of a
