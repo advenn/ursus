@@ -3296,11 +3296,14 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v07">Unreleased — toward v0.7<a class="headerlink" href="#unreleased-toward-v07" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.8</code> (2026-10-26): steps 375–387, so far.
+<p>Everything since <code>v0.6.8</code> (2026-10-26): steps 375–388, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.7-scope.md"><code>v0.7-scope.md</code></a> set the scope: <strong>performance,</strong> the
 Parquet read first.</p>
 <h3 id="faster">Faster<a class="headerlink" href="#faster" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>An aggregate over a window no longer copies the frame</strong> (388): <code>x - x.Mean()</code> or
+  <code>x.Sum().Over(g)</code> in a <code>WithColumns</code> hands its batches on as they came, each with
+  the window's values, where the window concatenated them all first.</li>
 <li><strong>Windows in one <code>WithColumns</code> or <code>Select</code> are computed at once</strong> (387), a thread
   each, where they were one after another: a rolling mean, max and std over a million
   rows take 0.55 of their time. An integer rolling sum reads its values in place.</li>
