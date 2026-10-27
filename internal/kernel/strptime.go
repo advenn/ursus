@@ -31,7 +31,7 @@ func strptimeCall(fn expr.CallFn, name string, out dtype.DataType, c *data.Colum
 	strict, _ := argBool(args, 1)
 	parse := inferredFields(out.ID())
 	if src != "" {
-		f, err := strftime.Compile(src)
+		f, err := strftime.Shared(src)
 		if err != nil {
 			return nil, uerr.Internalf("kernel: %s: the format %q did not compile: %v", fn, src, err)
 		}
@@ -196,7 +196,7 @@ func sameWallClock(t time.Time, p strftime.Fields) bool {
 // format, as dt.strftime: a zoned Datetime in its own zone's wall clock.
 func strftimeCall(name string, c *data.Column, args []any) (*data.Column, error) {
 	src, _ := argString(args, 0)
-	f, err := strftime.Compile(src)
+	f, err := strftime.Shared(src)
 	if err != nil {
 		return nil, uerr.Internalf("kernel: dt.strftime: the format %q did not compile: %v", src, err)
 	}

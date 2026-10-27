@@ -28,7 +28,6 @@ package arrowin
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 
@@ -335,7 +334,7 @@ func checkZone(tz string) error {
 	if tz == "" {
 		return nil
 	}
-	if _, err := time.LoadLocation(tz); err != nil {
+	if _, err := dtype.Location(tz); err != nil {
 		return uerr.New(uerr.KindUnsupported, op,
 			"time zone %q cannot be loaded, and ursus would read it as UTC", tz).
 			Hint("use an IANA name such as \"Asia/Tokyo\"; a fixed offset such as " +

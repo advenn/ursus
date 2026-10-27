@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–398, so far, after 0.7's 375–391.
+Steps 392–399, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
@@ -60,6 +60,11 @@ that stops when its request is cancelled.
   A 1,000-row group-by takes 47 µs where it took 133, and sixty-four 10,000-row
   group-bys at once answer 7,190 queries a second where 4,280 to 5,090, on a tenth of
   the goroutines. `WithThreads(n)` runs a query on n at any size, as before.
+- **An instant in a zone is cast to text twenty times as fast** (399): a zone was
+  loaded from its file for every instant formatted, and for every batch a kernel
+  read in one; each is loaded once a process now. A million instants in a zone cast
+  to text take 156 ms where they took 3.2 s. A strftime format is compiled once,
+  where it was for every batch.
 - **A join on one thread, or under a limit of its own, keys its integers** (398): its
   build encoded every key to bytes, where on several threads it keyed an integer key
   by the integer. A join to a 100-row dimension on one thread takes 0.54 of its time at

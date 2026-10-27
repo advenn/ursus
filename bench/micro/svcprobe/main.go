@@ -23,6 +23,9 @@
 //	        (ARM=own), or all on one (ARM=shared): the peak RSS, spills and time;
 //	        MIX=sort or MIX=agg runs sixteen of one, N=n n queries, EACH=1 prints
 //	        each query's
+//	zone    a million instants in Europe/Amsterdam formatted by strftime, cast to text,
+//	        truncated to the hour and their hour read, and the head of a frame of
+//	        them printed: the median of five, on all threads and one
 //	noop    nothing, for GODEBUG=inittrace=1
 package main
 
@@ -437,6 +440,54 @@ func shared() {
 		os.Getenv("ARM"), budget, time.Since(t0).Seconds(), spills.Load(), hwm(), one.Stats().Peak>>20)
 }
 
+func zone() {
+	n := 1_000_000
+	ts := make([]int64, n)
+	for i := range ts {
+		ts[i] = 1_700_000_000_000_000 + int64(i)*37_000_001
+	}
+	df := must(ursus.Frame(ursus.Values("t", ts)).
+		Select(c("t").Cast(ursus.Datetime(ursus.Micro, "Europe/Amsterdam"))).Collect(context.Background()))
+	t := c("t")
+	cases := []struct {
+		name string
+		e    ursus.Expr
+	}{
+		{"strftime", t.Dt().Strftime("%Y-%m-%d %H:%M:%S %z")},
+		{"cast to text", t.Cast(ursus.String)},
+		{"truncate to the hour", t.Dt().Truncate(ursus.Every("1h"))},
+		{"hour", t.Dt().Hour()},
+	}
+	for _, th := range []int{0, 1} {
+		for _, cs := range cases {
+			opts := []ursus.CollectOption{}
+			if th > 0 {
+				opts = append(opts, ursus.WithThreads(th))
+			}
+			var times []time.Duration
+			for range 5 {
+				t0 := time.Now()
+				if _, err := df.Lazy().Select(cs.e).Collect(context.Background(), opts...); err != nil {
+					panic(err)
+				}
+				times = append(times, time.Since(t0))
+			}
+			label := "default"
+			if th > 0 {
+				label = "1 thread"
+			}
+			fmt.Printf("zone %-22s %-8s median %8.2f ms\n", cs.name, label, float64(median(times).Microseconds())/1e3)
+		}
+	}
+	var times []time.Duration
+	for range 50 {
+		t0 := time.Now()
+		_ = df.String()
+		times = append(times, time.Since(t0))
+	}
+	fmt.Printf("zone %-22s %-8s median %8.2f ms\n", "a frame printed", "", float64(median(times).Microseconds())/1e3)
+}
+
 func main() {
 	switch os.Args[1] {
 	case "lat":
@@ -454,5 +505,7 @@ func main() {
 		alloc()
 	case "shared":
 		shared()
+	case "zone":
+		zone()
 	}
 }

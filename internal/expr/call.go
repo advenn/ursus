@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/uerr"
@@ -2271,7 +2270,7 @@ func convertZoneOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 			"%s needs a time zone, such as \"Europe/London\"", c.Fn)
 	}
 	if tz != "UTC" {
-		if _, err := time.LoadLocation(tz); err != nil {
+		if _, err := dtype.Location(tz); err != nil {
 			return dtype.Null, uerr.New(uerr.KindValue, "dt",
 				"the time zone %q is not known: %v", tz, err)
 		}
@@ -2312,7 +2311,7 @@ func replaceZoneOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 			"%s needs a time zone, such as \"Europe/London\", or \"\" for none", c.Fn)
 	}
 	if tz != "" && tz != "UTC" {
-		if _, err := time.LoadLocation(tz); err != nil {
+		if _, err := dtype.Location(tz); err != nil {
 			return dtype.Null, uerr.New(uerr.KindValue, "dt",
 				"the time zone %q is not known: %v", tz, err)
 		}

@@ -237,7 +237,7 @@ func polarsText(c *data.Column) (func(row int) string, error) {
 		var loc *time.Location
 		if tz := dt.TimeZone(); tz != "" {
 			var err error
-			if loc, err = time.LoadLocation(tz); err != nil {
+			if loc, err = dtype.Location(tz); err != nil {
 				return nil, uerr.New(uerr.KindValue, "to_dummies", "unknown time zone %q", tz)
 			}
 		}

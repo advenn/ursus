@@ -356,7 +356,7 @@ func timeSetter(c *data.Column) (func(reflect.Value, int), error) {
 
 	loc := time.UTC
 	if tz := dt.TimeZone(); tz != "" {
-		if l, err := time.LoadLocation(tz); err == nil {
+		if l, err := dtype.Location(tz); err == nil {
 			loc = l
 		}
 	}
