@@ -50,7 +50,8 @@ type DummiesOptions struct {
 // refused, as a group key of one is.
 //
 //	df.ToDummies(ctx, ursus.DummiesOptions{Columns: []string{"color"}}) // color_blue, color_red
-func (df *DataFrame) ToDummies(ctx context.Context, o DummiesOptions) (*DataFrame, error) {
+func (df *DataFrame) ToDummies(ctx context.Context, o DummiesOptions) (_ *DataFrame, err error) {
+	defer uerr.Catch(&err, "to_dummies")
 	encode := make(map[string]bool, len(o.Columns))
 	for _, name := range o.Columns {
 		if !df.batch.Schema().Has(name) {
@@ -78,7 +79,8 @@ func (df *DataFrame) ToDummies(ctx context.Context, o DummiesOptions) (*DataFram
 
 // ToDummies is the series' dummy columns, as DataFrame.ToDummies makes a column's:
 // Polars' Series.to_dummies.
-func (s *Series[T]) ToDummies(ctx context.Context, o DummiesOptions) (*DataFrame, error) {
+func (s *Series[T]) ToDummies(ctx context.Context, o DummiesOptions) (_ *DataFrame, err error) {
+	defer uerr.Catch(&err, "to_dummies")
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -161,11 +163,12 @@ func dummies(c *data.Column, o DummiesOptions) ([]*data.Column, error) {
 	}
 	cols := make([]*data.Column, len(kept))
 	var (
-		wg   sync.WaitGroup
-		took atomic.Int64
+		wg    sync.WaitGroup
+		relay uerr.Relay
+		took  atomic.Int64
 	)
 	for range min(runtime.GOMAXPROCS(0), len(kept)) {
-		wg.Go(func() {
+		relay.Go(&wg, func() {
 			for k := int(took.Add(1)) - 1; k < len(kept); k = int(took.Add(1)) - 1 {
 				d := kept[k]
 				vals := make([]uint8, n)
@@ -177,6 +180,7 @@ func dummies(c *data.Column, o DummiesOptions) ([]*data.Column, error) {
 		})
 	}
 	wg.Wait()
+	relay.Raise()
 	return cols, nil
 }
 

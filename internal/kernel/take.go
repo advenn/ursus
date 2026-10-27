@@ -638,25 +638,15 @@ func spreader(workers int) data.Spread {
 			return
 		}
 		var (
-			wg     sync.WaitGroup
-			once   sync.Once
-			caught any
+			wg    sync.WaitGroup
+			relay uerr.Relay
 		)
 		for w := range workers {
 			lo, hi := w*n/workers, (w+1)*n/workers
-			wg.Go(func() {
-				defer func() {
-					if v := recover(); v != nil {
-						once.Do(func() { caught = v })
-					}
-				}()
-				fn(lo, hi)
-			})
+			relay.Go(&wg, func() { fn(lo, hi) })
 		}
 		wg.Wait()
-		if caught != nil {
-			panic(caught)
-		}
+		relay.Raise()
 	}
 }
 

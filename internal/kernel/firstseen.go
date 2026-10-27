@@ -8,6 +8,7 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // firstSeenPart is the fewest rows a part of FirstSeenIDs numbers in parallel.
@@ -53,14 +54,18 @@ func FirstSeenKeys(op string, cols []*data.Column) (ids, firsts []int32, _ error
 	}
 	bounds := func(p int) (int, int) { return p * n / parts, (p + 1) * n / parts }
 	local := make([][]int32, parts) // each part's firsts
-	var wg sync.WaitGroup
+	var (
+		wg    sync.WaitGroup
+		relay uerr.Relay
+	)
 	for p := range parts {
-		wg.Go(func() {
+		relay.Go(&wg, func() {
 			lo, hi := bounds(p)
 			local[p] = k.number(k.table(), lo, hi, ids)
 		})
 	}
 	wg.Wait()
+	relay.Raise()
 	all := k.table()
 	renumber := make([][]int32, parts)
 	for p, rows := range local {
@@ -74,7 +79,7 @@ func FirstSeenKeys(op string, cols []*data.Column) (ids, firsts []int32, _ error
 		}
 	}
 	for p := range parts {
-		wg.Go(func() {
+		relay.Go(&wg, func() {
 			lo, hi := bounds(p)
 			to := renumber[p]
 			for i := lo; i < hi; i++ {
@@ -83,6 +88,7 @@ func FirstSeenKeys(op string, cols []*data.Column) (ids, firsts []int32, _ error
 		})
 	}
 	wg.Wait()
+	relay.Raise()
 	return ids, firsts, nil
 }
 

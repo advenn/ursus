@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // A sort of text by its bytes, seven at a time (step 363). A String key went to the
@@ -194,10 +195,13 @@ func (r *radixSorter) sortText(t textOrder, rows []int32, off int) {
 			small = append(small, run)
 		}
 	}
-	var wg sync.WaitGroup
+	var (
+		wg    sync.WaitGroup
+		relay uerr.Relay
+	)
 	for w := range workers {
 		lo, hi := w*len(small)/workers, (w+1)*len(small)/workers
-		wg.Go(func() {
+		relay.Go(&wg, func() {
 			serial := &radixSorter{}
 			for _, run := range small[lo:hi] {
 				serial.sortText(t, rows[run[0]:run[1]], off+7)
@@ -205,4 +209,5 @@ func (r *radixSorter) sortText(t textOrder, rows []int32, off int) {
 		})
 	}
 	wg.Wait()
+	relay.Raise()
 }

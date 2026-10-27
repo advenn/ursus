@@ -208,10 +208,14 @@ func (k *ranker) spearman(x, y []float64) float64 {
 		if k.other == nil {
 			k.other = &ranker{}
 		}
-		var wg sync.WaitGroup
-		wg.Go(func() { k.other.ry = k.other.doubled(y, k.other.ry) })
+		var (
+			wg    sync.WaitGroup
+			relay uerr.Relay
+		)
+		relay.Go(&wg, func() { k.other.ry = k.other.doubled(y, k.other.ry) })
 		k.rx = k.doubled(x, k.rx)
 		wg.Wait()
+		relay.Raise()
 		k.ry, k.other.ry = k.other.ry, k.ry
 	} else {
 		k.rx = k.doubled(x, k.rx)

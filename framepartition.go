@@ -49,7 +49,8 @@ type PartitionOptions struct {
 //
 // The parts are taken from the frame it is given, and together hold as much as it
 // does.
-func (df *DataFrame) PartitionBy(ctx context.Context, o PartitionOptions) ([]Partition, error) {
+func (df *DataFrame) PartitionBy(ctx context.Context, o PartitionOptions) (_ []Partition, err error) {
+	defer uerr.Catch(&err, "partition_by")
 	if len(o.By) == 0 {
 		return nil, uerr.New(uerr.KindValue, "partition_by", "PartitionBy needs a column to partition by").
 			Hint("name the columns whose values key the parts in By")
@@ -113,13 +114,14 @@ func (df *DataFrame) PartitionBy(ctx context.Context, o PartitionOptions) ([]Par
 	parts := make([]Partition, len(firsts))
 	var (
 		wg    sync.WaitGroup
+		relay uerr.Relay
 		took  atomic.Int64
 		fail  error
 		once  sync.Once
 		abort atomic.Bool
 	)
 	for range min(runtime.GOMAXPROCS(0), len(parts)) {
-		wg.Go(func() {
+		relay.Go(&wg, func() {
 			for p := int(took.Add(1)) - 1; p < len(parts) && !abort.Load(); p = int(took.Add(1)) - 1 {
 				sel := order[start[p]:start[p+1]]
 				if err := partOf(ctx, &parts[p], b, keys, kept, keySchema, frameSchema, sel); err != nil {
@@ -130,6 +132,7 @@ func (df *DataFrame) PartitionBy(ctx context.Context, o PartitionOptions) ([]Par
 		})
 	}
 	wg.Wait()
+	relay.Raise()
 	if fail != nil {
 		return nil, fail
 	}

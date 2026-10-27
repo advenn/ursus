@@ -1,15 +1,18 @@
 package kernel
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"strings"
 	"testing"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // TestConcatOwnedNIsConcat: since step 389 Collect copies each column's rows on the
@@ -91,18 +94,19 @@ func TestConcatOwnedNIsConcat(t *testing.T) {
 		}
 	}
 
-	// A panic in a piece reaches the caller, where the query recovers it.
-	defer func() {
-		if v := recover(); v != "boom" {
-			t.Fatalf("recovered %v, want the piece's panic", v)
-		}
-	}()
-	spreader(4)(1000, func(lo, hi int) {
-		if lo > 0 {
-			panic("boom")
-		}
+	// A panic in a piece reaches the caller, where the query recovers it: since step
+	// 393 relayed, its site the piece's (TestAPiecesPanicReachesTheCaller).
+	err := uerr.GuardErr("concat", func() error {
+		spreader(4)(1000, func(lo, hi int) {
+			if lo > 0 {
+				panic("boom")
+			}
+		})
+		return nil
 	})
-	t.Fatal("a piece's panic was lost")
+	if !errors.Is(err, uerr.ErrInternal) || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("recovered %v, want the piece's panic", err)
+	}
 }
 
 // sameColumns fails unless got and want hold the same rows, column by column.

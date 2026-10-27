@@ -24,7 +24,8 @@ import (
 // does this, to within rounding: a column holding a null is NaN throughout, its own
 // correlation too, as is one that does not vary, and each value is clipped to
 // [-1, 1]. Corr of two expressions differs: it skips the rows where either is null.
-func (df *DataFrame) Corr(ctx context.Context) (*DataFrame, error) {
+func (df *DataFrame) Corr(ctx context.Context) (_ *DataFrame, err error) {
+	defer uerr.Catch(&err, "corr")
 	for _, f := range df.batch.Schema().All() {
 		if !f.Type.IsNumeric() && f.Type.ID() != dtype.TypeBool {
 			return nil, uerr.New(uerr.KindType, "corr", "corr reads numbers, and %q is %s", f.Name, f.Type).
@@ -241,7 +242,8 @@ func takeEach(ctx context.Context, in []*data.Column, sel []int32) ([]*data.Colu
 }
 
 // inParallel runs fn for 0 to n-1 on up to GOMAXPROCS goroutines, each taking the
-// next index; the first error stops it, and is its answer.
+// next index; the first error stops it, and is its answer. A panic is raised again in
+// the caller, whose entry point recovers it (step 393).
 func inParallel(ctx context.Context, n int, fn func(i int) error) error {
 	workers := min(runtime.GOMAXPROCS(0), n)
 	if workers <= 1 {
@@ -257,13 +259,14 @@ func inParallel(ctx context.Context, n int, fn func(i int) error) error {
 	}
 	var (
 		wg    sync.WaitGroup
+		relay uerr.Relay
 		took  atomic.Int64
 		fail  error
 		once  sync.Once
 		abort atomic.Bool
 	)
 	for range workers {
-		wg.Go(func() {
+		relay.Go(&wg, func() {
 			for i := int(took.Add(1)) - 1; i < n && !abort.Load(); i = int(took.Add(1)) - 1 {
 				err := ctx.Err()
 				if err == nil {
@@ -278,6 +281,7 @@ func inParallel(ctx context.Context, n int, fn func(i int) error) error {
 		})
 	}
 	wg.Wait()
+	relay.Raise()
 	return fail
 }
 

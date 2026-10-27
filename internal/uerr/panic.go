@@ -24,7 +24,7 @@ type PanicError struct {
 
 	// Callers are the functions from the panic site outward, the runtime's own left
 	// out. It is how a recover decides whose code panicked: a Parquet read that
-	// panicked inside arrow-go was reading a corrupt file, and one that panicked in
+	// panicked inside its decoder was reading a corrupt file, and one that panicked in
 	// ursus is ursus's bug.
 	Callers []string
 }
@@ -62,7 +62,7 @@ func FromPanic(v any, op string) *Error {
 	if e, ok := v.(*Error); ok && e.Kind == KindInternal {
 		return e
 	}
-	p := recovered(v)
+	p := panicOf(v)
 	e := &Error{Kind: KindInternal, Op: op, Msg: "recovered a panic", Err: p}
 	if p.Site != "" {
 		e.Hint("at %s", p.Site)
@@ -82,7 +82,7 @@ func Attributed(v any, kind Kind, op, format string, args ...any) *Error {
 	if e, ok := v.(*Error); ok && e.Kind == KindInternal {
 		return e
 	}
-	p := recovered(v)
+	p := panicOf(v)
 	e := &Error{Kind: kind, Op: op, Msg: fmt.Sprintf(format, args...), Err: p}
 	if p.Site != "" {
 		e.Hint("at %s", p.Site)

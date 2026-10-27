@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Parallel sorting (step 361). Each piece gives exactly the permutation its serial
@@ -19,18 +20,23 @@ import (
 var parallelMin = 1 << 16
 
 // ranges runs fn on workers contiguous pieces of [0, n), w numbering each, on a
-// goroutine apiece, and waits; on one worker or few rows it runs in the caller.
+// goroutine apiece, and waits; on one worker or few rows it runs in the caller. A
+// piece's panic is raised again in the caller (step 393).
 func ranges(n, workers int, fn func(w, lo, hi int)) {
 	if workers <= 1 || n < 2*workers {
 		fn(0, 0, n)
 		return
 	}
-	var wg sync.WaitGroup
+	var (
+		wg    sync.WaitGroup
+		relay uerr.Relay
+	)
 	for w := range workers {
 		lo, hi := w*n/workers, (w+1)*n/workers
-		wg.Go(func() { fn(w, lo, hi) })
+		relay.Go(&wg, func() { fn(w, lo, hi) })
 	}
 	wg.Wait()
+	relay.Raise()
 }
 
 // ArgSortColumnsN is ArgSortColumns on up to workers goroutines: the same
