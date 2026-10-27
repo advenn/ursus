@@ -304,17 +304,18 @@ func (lf *LazyFrame) Explain(ctx context.Context, opts ...ExplainOption) (out st
 type CollectOption func(*collectCfg)
 
 type collectCfg struct {
-	batchSize int
-	threads   int
-	flags     plan.Flags
-	verify    bool
-	memLimit  int64
-	limitSet  bool // WithMemoryLimit was given; otherwise finish takes the default
-	spillDir  string
-	stats     *MemoryStats
-	engine    *Engine // WithEngine's, nil for DefaultEngine
-	budget    *execopt.Budget
-	profiler  *physical.Profiler // Profile's, measuring each node; nil otherwise
+	batchSize  int
+	threads    int
+	threadsSet bool // WithThreads was given; otherwise a small query runs on fewer
+	flags      plan.Flags
+	verify     bool
+	memLimit   int64
+	limitSet   bool // WithMemoryLimit was given; otherwise finish takes the default
+	spillDir   string
+	stats      *MemoryStats
+	engine     *Engine // WithEngine's, nil for DefaultEngine
+	budget     *execopt.Budget
+	profiler   *physical.Profiler // Profile's, measuring each node; nil otherwise
 }
 
 // WithBatchSize sets the rows per batch. Results must not depend on it; the test
@@ -361,7 +362,15 @@ func WithOptFlags(f OptFlags) CollectOption {
 // On in tests, off by default because it costs a schema resolution per rule.
 func WithVerify() CollectOption { return func(c *collectCfg) { c.verify = true } }
 
-// WithThreads sets how many workers a query runs on. Default runtime.NumCPU().
+// WithThreads sets how many workers a query runs on, at any size of its input.
+//
+// Without it a query runs on runtime.NumCPU() workers, and on fewer where its input
+// is small, by the sources' own counts, an in-memory frame's length or a Parquet
+// file's footers (step 396): on one where every input it reads fits in a batch; a
+// pipeline over at most 16,384 rows on the goroutine that pulls it, and a group-by
+// over at most 32,768 rows on one sink. Eight workers and their channels took a
+// 1,000-row group-by two and a half times one thread's time. A CSV file has no count
+// to read, and runs on them all.
 //
 // Results do not depend on it. Parallelism over the PIPELINE — the scan and the
 // stateless per-batch operators above it — is ORDER-PRESERVING: workers process
@@ -395,7 +404,7 @@ func WithThreads(n int) CollectOption {
 		if n < 1 {
 			n = 1
 		}
-		c.threads = n
+		c.threads, c.threadsSet = n, true
 	}
 }
 
@@ -638,6 +647,20 @@ func (c collectCfg) done() {
 	}
 }
 
+// planThreads is how many workers the query's operators are planned for: one, where
+// the caller gave no WithThreads and every input the query reads fits in a batch, by
+// the sources' own counts (step 396, B1 of v0.8-scope.md). Eight workers and their
+// channels for one batch took a 1,000-row group-by 104 µs, and one thread 42.
+func (c collectCfg) planThreads(n plan.Node) int {
+	if c.threadsSet {
+		return c.threads
+	}
+	if rows, ok := plan.LargestInput(n); ok && rows <= int64(c.batchSize) {
+		return 1
+	}
+	return c.threads
+}
+
 // optimizer builds the rule set and gives it a constant folder.
 //
 // The injection is the whole reason plan.ConstEvaluator exists: constant folding
@@ -673,7 +696,8 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 	cfg.budget.Join()
 	return physical.PlanRoot(ctx, optimized, physical.Options{
 		BatchSize: cfg.batchSize,
-		Threads:   cfg.threads,
+		Threads:   cfg.planThreads(optimized),
+		Fewer:     !cfg.threadsSet,
 		Budget:    cfg.budget,
 		Profiler:  cfg.profiler,
 	})

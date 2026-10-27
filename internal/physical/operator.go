@@ -357,6 +357,11 @@ type Options struct {
 	// 0 or 1 means serial, and reproduces the pre-step-5 operator tree exactly.
 	Threads int
 
+	// Fewer is set where Threads is the default, not the caller's WithThreads: an
+	// operator over a small input may then run on fewer (step 396, B1 of
+	// v0.8-scope.md), as a group-by over a few batches builds one sink.
+	Fewer bool
+
 	// Budget is the query's memory ceiling and spill location, shared by every
 	// buffering operator in the tree. A nil Budget means unlimited and untracked,
 	// so an Options built by hand still works.
@@ -455,7 +460,7 @@ func PlanRoot(ctx context.Context, n plan.Node, opts Options) (Operator, error) 
 		return nil, err
 	}
 	planned = true
-	return opts.parallelise(op), nil
+	return opts.parallelisePlan(n, op), nil
 }
 
 // planPipelined plans a child and parallelises it.
@@ -469,7 +474,24 @@ func planPipelined(ctx context.Context, n plan.Node, opts Options) (Operator, er
 	if err != nil {
 		return nil, err
 	}
-	return opts.parallelise(op), nil
+	return opts.parallelisePlan(n, op), nil
+}
+
+// fewPipelineRows is the most rows a pipeline's sources give, by their own counts, for
+// it to run on the goroutine that pulls it where the caller gave no WithThreads (step
+// 396): a filter and projection of 10,000 rows took 239 µs on eight workers and 201
+// on one, and of 40,000 rows the workers were the quicker by two fifths.
+const fewPipelineRows = 16_384
+
+// parallelisePlan is parallelise of op, planned from n, unless the caller gave no
+// WithThreads and n's sources give at most fewPipelineRows.
+func (o Options) parallelisePlan(n plan.Node, op Operator) Operator {
+	if o.Fewer && o.Threads > 1 {
+		if rows, ok := plan.LargestInput(n); ok && rows <= fewPipelineRows {
+			return op
+		}
+	}
+	return o.parallelise(op)
 }
 
 // parallelise is parallelise of op, the operator Plan last returned, with a profile's

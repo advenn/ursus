@@ -5,7 +5,8 @@
 //
 //	lat     four small queries at 1,000, 10,000 and 100,000 rows, on all threads and
 //	        one: a filter and projection, a group-by's sum and mean, a join to a
-//	        100-row dimension and a sort's head of ten; pl_lat.py is Polars' twin
+//	        100-row dimension and a sort's head of ten; pl_lat.py is Polars' twin.
+//	        ROWS=n,... and THREADS=t,... choose others, 0 the default
 //	conc    a 10,000-row group-by from 1, 4, 16 and 64 goroutines, queries a second
 //	conc64  the same from 64 goroutines on one thread each, profiled to $PROF and the
 //	        collector's share printed
@@ -89,11 +90,29 @@ func median(ts []time.Duration) time.Duration { slices.Sort(ts); return ts[len(t
 func lat() {
 	defer func() { fmt.Printf("lat the default engine after: %+v\n", ursus.DefaultEngine().Stats()) }()
 	d := dim()
-	for _, n := range []int{1_000, 10_000, 100_000} {
+	threads := []int{0, 1}
+	if s := os.Getenv("THREADS"); s != "" {
+		threads = nil
+		for _, f := range strings.Split(s, ",") {
+			var n int
+			fmt.Sscan(f, &n)
+			threads = append(threads, n)
+		}
+	}
+	sizes := []int{1_000, 10_000, 100_000}
+	if s := os.Getenv("ROWS"); s != "" {
+		sizes = nil
+		for _, f := range strings.Split(s, ",") {
+			var n int
+			fmt.Sscan(f, &n)
+			sizes = append(sizes, n)
+		}
+	}
+	for _, n := range sizes {
 		df := frame(n)
-		iters := map[int]int{1_000: 2000, 10_000: 500, 100_000: 100}[n]
+		iters := max(2_000_000/max(n, 1_000), 50)
 		for _, q := range queries {
-			for _, th := range []int{0, 1} {
+			for _, th := range threads {
 				opts := []ursus.CollectOption{}
 				if th > 0 {
 					opts = append(opts, ursus.WithThreads(th))
@@ -108,7 +127,7 @@ func lat() {
 				}
 				label := "default"
 				if th > 0 {
-					label = "1 thread"
+					label = fmt.Sprintf("%d thread", th)
 				}
 				fmt.Printf("lat %7d rows  %-20s %-8s median %8.1f µs\n", n, q.name, label, float64(median(ts).Nanoseconds())/1e3)
 			}

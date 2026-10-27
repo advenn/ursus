@@ -955,6 +955,10 @@ func (s *hashAggSink) Merge(other Sink) error {
 	return nil
 }
 
+// fewAggRows is the most rows a group-by's input holds, by the sources' counts, for it
+// to build one sink where the caller gave no WithThreads (step 396).
+const fewAggRows = 32_768
+
 // aggWorkers decides how many sinks a group-by gets, and is the whole safety
 // argument for running one on several threads.
 //
@@ -1002,6 +1006,14 @@ func aggWorkers(a *plan.Aggregate, specs []aggSpec, opts Options) int {
 	// explicit limit, run to run reproducibility is what the caller gets (step 92).
 	if opts.Budget.Limit() > 0 && !opts.Budget.IsDefault() {
 		return 1
+	}
+	// A few batches, where the caller gave no WithThreads, on one sink (step 396): a
+	// 10,000-row group-by took 395 µs on eight sinks and their merge, and 248 on one;
+	// at 40,000 rows two sinks were the quicker.
+	if opts.Fewer {
+		if rows, ok := plan.EstimateRows(a.Input); ok && rows <= fewAggRows {
+			return 1
+		}
 	}
 	for _, spec := range specs {
 		if spec.op.IsOrderDependent() {
