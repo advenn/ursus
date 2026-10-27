@@ -267,7 +267,7 @@ These belong to a performance release more than to features.
 | **Expression-level CSE;** clustering of `with_columns`; dropping a computed column nothing reads. Measured at step 388: a row-wise subexpression in two outputs of a million rows is a sixth of the query, windows and aggregates already shared by identity; a `WithColumns` reads its earlier outputs, so a shared subexpression must not cross one that redefines what it reads | P1 |
 | **Multi-join reordering** on statistics; sortedness propagation and a merge join | P2 |
 | **A work-stealing morsel scheduler.** A sort runs on the query's threads since step 361 | P1 |
-| **The CSV writer is one thread's:** a million rows of an integer, a float, text and an instant take 397 ms, where Polars, formatting a file's parts in parallel, takes 168; an instant alone 246 against 129 (step 354) | P1 |
+| built: **the CSV writer on the query's threads,** in step 390: each batch's text made on a goroutine of its own and the texts written in order, and a Date, a naive Datetime and a Time written digit by digit; a million rows of an integer, a float, text and an instant 108–116 ms where they took 367–501 and Polars takes 162–189. A partitioned sink writes a batch at a time still. Step 354 measured 397 ms against 168 | — |
 | `collect_all` and several sinks from one plan; plan serialization. `cache()` built in step 328 | P2 |
 | Display settings (rows, width, `glimpse`) | P1 |
 | Spill-file compression; approximate aggregates | P2 |

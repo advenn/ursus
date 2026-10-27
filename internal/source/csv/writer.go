@@ -145,13 +145,12 @@ type Writer struct {
 	w     *bufio.Writer
 	codec io.Closer // a compressor between w and the destination, closed by Close
 	o     WriteOptions
-	line  []byte // reused per record
+	line  []byte // a batch's text, reused
 
 	dateFmt, datetimeFmt, timeFmt *strftime.Format
 	null, yes, no                 []byte // a null's, true's and false's text, quoted as the style says
 
 	schema *dtype.Schema
-	fmts   []func([]byte, int) []byte // one formatter per column, resolved once
 }
 
 // NewWriter builds a writer over w, its formats compiled and its codec begun. Close
@@ -217,32 +216,34 @@ func NewWriter(w io.Writer, o WriteOptions) (*Writer, error) {
 // WriteBatch appends a batch. The first call fixes the schema and writes the
 // header; later batches must match it.
 func (w *Writer) WriteBatch(b *data.Batch) error {
-	if err := noColumns("sink_csv", "CSV", b); err != nil {
+	text, err := w.Format(w.line[:0], b)
+	if err != nil {
 		return err
 	}
-	if w.schema == nil {
-		if err := w.begin(b.Schema()); err != nil {
-			return err
-		}
-	} else if !w.schema.Equal(b.Schema()) {
-		return uerr.Internalf("sink_csv: batch schema %s does not match %s",
-			b.Schema(), w.schema)
-	}
+	w.line = text
+	return w.WriteText(b.Schema(), text)
+}
 
+// Format appends b's records to dst as WriteBatch writes them. It changes nothing of
+// w's, so batches may be formatted at once, a goroutine each, and their texts written
+// in their order by WriteText (step 390).
+func (w *Writer) Format(dst []byte, b *data.Batch) ([]byte, error) {
+	if err := noColumns("sink_csv", "CSV", b); err != nil {
+		return dst, err
+	}
 	// Formatters are resolved per BATCH, not per schema, because each one closes
 	// over that batch's columns. Resolving per row would repeat a type dispatch for
 	// every value in the file.
-	if err := w.bind(b); err != nil {
-		return err
+	fmts, err := w.formatters(b)
+	if err != nil {
+		return dst, err
 	}
-
 	for row := range b.Rows() {
-		w.line = w.line[:0]
-		for c := range b.NumCols() {
+		for c, f := range fmts {
 			if c > 0 {
-				w.line = append(w.line, w.o.Separator)
+				dst = append(dst, w.o.Separator)
 			}
-			w.line = w.fmts[c](w.line, row)
+			dst = f(dst, row)
 		}
 		// A record that renders to nothing at all is a blank line: a one-column
 		// frame's null under the default empty NullValue. This writer used to write
@@ -250,10 +251,23 @@ func (w *Writer) WriteBatch(b *data.Batch) error {
 		// longer is in a one-column file, and `""` is now the empty string, so the
 		// blank line is what reads back as the null — as it does in Polars and
 		// DuckDB. An empty string is "" from appendQuoted, never blank.
-		w.line = append(w.line, w.o.LineTerminator...)
-		if _, err := w.w.Write(w.line); err != nil {
-			return uerr.Wrap(err, uerr.KindIO, "sink_csv", "writing a record")
+		dst = append(dst, w.o.LineTerminator...)
+	}
+	return dst, nil
+}
+
+// WriteText writes a batch's records as Format made them. The first call fixes the
+// schema and writes the header; later batches must match it.
+func (w *Writer) WriteText(s *dtype.Schema, text []byte) error {
+	if w.schema == nil {
+		if err := w.begin(s); err != nil {
+			return err
 		}
+	} else if !w.schema.Equal(s) {
+		return uerr.Internalf("sink_csv: batch schema %s does not match %s", s, w.schema)
+	}
+	if _, err := w.w.Write(text); err != nil {
+		return uerr.Wrap(err, uerr.KindIO, "sink_csv", "writing a record")
 	}
 	return nil
 }
@@ -301,15 +315,16 @@ func (w *Writer) begin(s *dtype.Schema) error {
 	if !w.o.Header || s.Len() == 0 {
 		return nil
 	}
-	w.line = w.line[:0]
+	// A buffer of its own: WriteBatch's text, in w.line, is written after it.
+	var line []byte
 	for i, f := range s.All() {
 		if i > 0 {
-			w.line = append(w.line, w.o.Separator)
+			line = append(line, w.o.Separator)
 		}
-		w.line = w.text(w.line, f.Name)
+		line = w.text(line, f.Name)
 	}
-	w.line = append(w.line, w.o.LineTerminator...)
-	if _, err := w.w.Write(w.line); err != nil {
+	line = append(line, w.o.LineTerminator...)
+	if _, err := w.w.Write(line); err != nil {
 		return uerr.Wrap(err, uerr.KindIO, "sink_csv", "writing the header")
 	}
 	return nil
@@ -410,16 +425,17 @@ func quotedOf[S ~string | ~[]byte](w *Writer, dst []byte, s S) []byte {
 }
 
 // bind resolves one formatter per column of b.
-func (w *Writer) bind(b *data.Batch) error {
-	w.fmts = w.fmts[:0]
+// formatters is a formatter for each of b's columns, its own.
+func (w *Writer) formatters(b *data.Batch) ([]func([]byte, int) []byte, error) {
+	fmts := make([]func([]byte, int) []byte, 0, b.NumCols())
 	for _, c := range b.Columns() {
 		f, err := w.formatter(c)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		w.fmts = append(w.fmts, f)
+		fmts = append(fmts, f)
 	}
-	return nil
+	return fmts, nil
 }
 
 func (w *Writer) formatter(c *data.Column) (func([]byte, int) []byte, error) {
@@ -680,7 +696,14 @@ func (w *Writer) temporal(c *data.Column, wrap func(func([]byte, int) []byte) fu
 		}
 	}
 	var scratch []byte
+	plain := f == nil && loc == nil // the default layout, written digit by digit (step 390)
 	put := func(dst []byte, ticks int64) []byte {
+		if plain {
+			if b, ok := dtype.AppendISO(scratch[:0], dt, ticks); ok {
+				scratch = b
+				return textOf(w, dst, scratch)
+			}
+		}
 		t, ok := dt.ToTime(ticks)
 		if !ok {
 			return strconv.AppendInt(dst, ticks, 10)

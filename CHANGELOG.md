@@ -15,12 +15,18 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.7
 
-Everything since `v0.6.8` (2026-10-26): steps 375–389, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–390, so far.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
 Parquet read first.
 
 ### Faster
 
+- **The CSV writer runs on the query's threads** (390): each batch's text is made on
+  a goroutine of its own and the texts written in order, the same bytes however many
+  run; and a date, an instant without a zone or a time of day is written digit by
+  digit where Go's time package read a layout for each. A million rows of an integer,
+  a float, text and an instant are written in a third of their time, about three
+  quarters of Polars'.
 - **A CSV file's floats are read in one pass however they are written** (389): a
   float of 17 digits, as Go and Polars write one in full, was parsed three times; its
   value is now found by the Eisel-Lemire algorithm, as strconv finds it, and its

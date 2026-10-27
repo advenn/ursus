@@ -738,6 +738,7 @@ var goroutineSites = map[string]string{
 	"internal/physical/parjoin.go launch 1":       "TestParProbeDispatcherPanicIsAnError",
 	"internal/physical/parjoin.go launch 2":       "TestPanicsAreErrors", // a kernel panic in a join's probe key
 	"internal/physical/parallelsink.go drain 1":   "TestParallelSinkWorkerPanicStopsConsuming",
+	"csv.go WriteCSV 1":                           "TestCSVFormatterPanicIsAnError",
 	"internal/source/csv/csv.go convertAll 1":     "TestConvertAllRecoversAPanic",
 	"internal/source/parquet/parallel.go issue 1": "TestParallelRowGroupPanicIsAnError",
 	"jsonwrite.go writeJSONCfg 1":                 "TestJSONWriterPanicIsAnError",

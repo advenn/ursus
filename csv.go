@@ -492,11 +492,66 @@ func (lf *LazyFrame) WriteCSV(ctx context.Context, w io.Writer, opts ...CSVSinkO
 	if err := cw.WriteEmpty(exec.Schema(root)); err != nil {
 		return err
 	}
+	if cfg.collect.threads <= 1 {
+		for b, err := range exec.Batches(ctx, root) {
+			if err != nil {
+				return err
+			}
+			if err := cw.WriteBatch(b); err != nil {
+				return err
+			}
+		}
+		return cw.Close()
+	}
+
+	// Each batch's text is made on a goroutine of its own, as many at once as the
+	// query's threads, and written in the batches' order, so the bytes are the same
+	// however many run, as the JSON writer writes (step 390), where the goroutine
+	// that wrote the text made it.
+	type text struct {
+		buf    []byte
+		schema *dtype.Schema
+		err    error
+	}
+	var pending []chan text
+	// A batch still being formatted when the write stops is waited for, before the
+	// tree that made it is closed.
+	defer func() {
+		for _, ch := range pending {
+			<-ch
+		}
+	}()
+	next := func() error {
+		t := <-pending[0]
+		pending = pending[1:]
+		if t.err != nil {
+			return t.err
+		}
+		return cw.WriteText(t.schema, t.buf)
+	}
 	for b, err := range exec.Batches(ctx, root) {
 		if err != nil {
 			return err
 		}
-		if err := cw.WriteBatch(b); err != nil {
+		if len(pending) == cfg.collect.threads {
+			if err := next(); err != nil {
+				return err
+			}
+		}
+		ch := make(chan text, 1)
+		pending = append(pending, ch)
+		go func() {
+			defer func() {
+				if p := recover(); p != nil {
+					ch <- text{err: uerr.FromPanic(p, "sink_csv")} // a panic in a value's text
+				}
+			}()
+			buf, err := cw.Format(nil, b)
+			ch <- text{buf, b.Schema(), err}
+		}()
+	}
+	for len(pending) > 0 {
+		if err := next(); err != nil {
 			return err
 		}
 	}
