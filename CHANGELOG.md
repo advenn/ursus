@@ -15,7 +15,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–395, so far, after 0.7's 375–391.
+Steps 392–396, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
@@ -42,6 +42,17 @@ that stops when its request is cancelled.
   spilled. Sixteen sorts and group-bys of four million rows at once peaked at 1.7 GB
   of RSS on one engine of 256 MiB, where each on its own of 256 MiB took 3.7 to
   3.9 GB, and finished no slower.
+
+### Faster
+
+- **A small query runs on one thread** (396): every pipeline started a worker a
+  thread, and a group-by a sink a thread, whatever its rows. Given no `WithThreads`,
+  a query whose every input fits in a batch, by an in-memory frame's length or a
+  Parquet file's footers, now runs on one thread, a pipeline over at most 16,384 rows
+  on the goroutine that pulls it, and a group-by over at most 32,768 rows on one sink.
+  A 1,000-row group-by takes 47 µs where it took 133, and sixty-four 10,000-row
+  group-bys at once answer 7,190 queries a second where 4,280 to 5,090, on a tenth of
+  the goroutines. `WithThreads(n)` runs a query on n at any size, as before.
 
 ### Fixed
 

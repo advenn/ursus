@@ -281,6 +281,28 @@ func swapJoin(j *Join) Node {
 	return out
 }
 
+// LargestInput is the most rows any one source of n gives, from the sources' own
+// counts, and false where one has none: a CSV file, or a node that reads no source.
+// A query whose every input fits in a batch runs on one thread (step 396).
+func LargestInput(n Node) (int64, bool) {
+	var most int64
+	ok := true
+	Walk(n, func(m Node) bool {
+		if !ok || len(m.Children()) > 0 {
+			return ok
+		}
+		s, scan := m.(*Scan)
+		rows, known := int64(0), false
+		if scan {
+			rows, known = EstimateRows(s)
+		}
+		ok = ok && known
+		most = max(most, rows)
+		return false
+	})
+	return most, ok
+}
+
 // EstimateRows estimates how many rows n produces, from the sources' own counts,
 // and reports false when it cannot.
 //
