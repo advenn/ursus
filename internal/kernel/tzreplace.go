@@ -147,7 +147,7 @@ func newZoneClock(tz string) (*zoneClock, error) {
 	if tz == "" || tz == "UTC" {
 		return &zoneClock{}, nil
 	}
-	loc, err := time.LoadLocation(tz)
+	loc, err := dtype.Location(tz)
 	if err != nil {
 		return nil, uerr.Internalf("kernel: the time zone %q passed planning but does not load: %v", tz, err)
 	}

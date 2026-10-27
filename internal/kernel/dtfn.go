@@ -537,7 +537,7 @@ func locationOf(dt dtype.DataType) *time.Location {
 	if tz == "" || tz == "UTC" {
 		return nil
 	}
-	loc, err := time.LoadLocation(tz)
+	loc, err := dtype.Location(tz)
 	if err != nil {
 		return nil
 	}

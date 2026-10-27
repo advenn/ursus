@@ -322,7 +322,7 @@ func jsonValueText(c *data.Column) (jsonAppender, error) {
 		})
 	case dtype.TypeDatetime:
 		if tz := dt.TimeZone(); tz != "" {
-			loc, err := time.LoadLocation(tz)
+			loc, err := dtype.Location(tz)
 			if err != nil {
 				return nil, uerr.New(uerr.KindValue, "", "unknown time zone %q", tz)
 			}

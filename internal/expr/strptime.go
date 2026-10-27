@@ -1,8 +1,6 @@
 package expr
 
 import (
-	"time"
-
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/strftime"
 	"github.com/advenn/ursus/internal/uerr"
@@ -86,7 +84,7 @@ func strptimeOut(c *Call) (dtype.DataType, error) {
 		}
 		tz, _ := callLitString(c, 4)
 		if tz != "" && tz != "UTC" {
-			if _, err := time.LoadLocation(tz); err != nil {
+			if _, err := dtype.Location(tz); err != nil {
 				return refuse("the time zone %q is not known: %v", tz, err)
 			}
 		}
@@ -119,7 +117,7 @@ func inferredOut(c *Call) (dtype.DataType, error) {
 	case FnStrToDatetimeFmt:
 		tz, _ := callLitString(c, 4)
 		if tz != "" && tz != "UTC" {
-			if _, err := time.LoadLocation(tz); err != nil {
+			if _, err := dtype.Location(tz); err != nil {
 				return dtype.Null, uerr.New(uerr.KindValue, c.Fn.String(), "the time zone %q is not known: %v", tz, err)
 			}
 		}

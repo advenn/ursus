@@ -197,7 +197,7 @@ func FormatTemporal(d DataType, ticks int64) string {
 			return strconv.FormatInt(ticks, 10)
 		}
 		if tz := d.TimeZone(); tz != "" && tz != "UTC" {
-			if loc, err := time.LoadLocation(tz); err == nil {
+			if loc, err := Location(tz); err == nil {
 				t = t.In(loc)
 			}
 		}

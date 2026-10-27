@@ -685,7 +685,7 @@ func (w *Writer) temporal(c *data.Column, wrap func(func([]byte, int) []byte) fu
 			layout += "-0700"
 			loc = time.UTC
 			if tz := dt.TimeZone(); tz != "UTC" {
-				l, err := time.LoadLocation(tz)
+				l, err := dtype.Location(tz)
 				if err != nil {
 					return nil, uerr.Wrap(err, uerr.KindValue, "sink_csv", "the time zone %q", tz)
 				}

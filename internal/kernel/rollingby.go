@@ -172,7 +172,7 @@ func windowStarts(dt dtype.DataType, period dtype.Interval, ticks []int64) ([]in
 	var loc *time.Location
 	if tz := dt.TimeZone(); tz != "" && tz != "UTC" {
 		var err error
-		if loc, err = time.LoadLocation(tz); err != nil {
+		if loc, err = dtype.Location(tz); err != nil {
 			return nil, uerr.Internalf("kernel: the time zone %q passed planning but does not load: %v", tz, err)
 		}
 	}
