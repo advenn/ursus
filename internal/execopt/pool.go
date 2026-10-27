@@ -23,7 +23,7 @@ type Pool struct {
 	derived  bool  // the limit is DefaultLimit's, not one the caller gave
 	grain    int64 // how far a query's total moves before it tells the pool
 
-	held    atomic.Int64 // the queries' totals, as each last told them
+	held    atomic.Int64 // the queries' totals, as each last told them, and their pages
 	peak    atomic.Int64
 	running atomic.Int64
 	spills  atomic.Int64
@@ -60,7 +60,7 @@ func (p *Pool) Budget(spillDir string) *Budget {
 
 // PoolStats is what a pool's queries hold now and have held.
 type PoolStats struct {
-	Held    int64 // what its running queries' operators hold, to a grain each
+	Held    int64 // what its running queries' operators hold, to a grain each, and their scans' pages
 	Peak    int64 // the most Held has been
 	Limit   int64
 	Running int   // queries between Join and Leave
@@ -94,12 +94,13 @@ func (p *Pool) add(d int64) {
 type share struct {
 	pool  *Pool
 	told  atomic.Int64
+	pages atomic.Int64 // what its scans hold for a moment outside its ledger (Pressure)
 	state atomic.Int32 // 0 not joined, 1 running, 2 left
 }
 
 func (s *share) leave() {
 	if s.state.CompareAndSwap(1, 2) {
-		s.pool.add(-s.told.Swap(0))
+		s.pool.add(-s.told.Swap(0) - s.pages.Load())
 		s.pool.running.Add(-1)
 	}
 }
@@ -116,8 +117,28 @@ func (b *Budget) Join() {
 	// even shares down for as long as the process runs.
 	runtime.AddCleanup(b, (*share).leave, b.share)
 	b.mu.Lock()
+	b.share.pool.add(b.share.pages.Load())
 	b.tell()
 	b.mu.Unlock()
+}
+
+// Pressure tells the query's engine of d bytes more, or fewer, that the query holds
+// for a moment outside its ledger: a Parquet scan's pages, decompressed into and
+// read at once, up to 105 MiB for all sixteen of lineitem's columns at SF=1 (step
+// 400, B3 of v0.8-scope.md). They count against the room of the engine's other
+// queries, never against this one's: like a scan's read-ahead (step 214), they are
+// bytes about to be consumed, which its own sinks should not spill for. A budget on
+// no engine's pool does nothing with them.
+func (b *Budget) Pressure(d int64) {
+	if b == nil || b.share == nil || d == 0 {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.share.pages.Add(d)
+	if b.share.state.Load() == 1 {
+		b.share.pool.add(d)
+	}
 }
 
 // Leave takes the query out of its pool: its total, and its count among those
@@ -153,7 +174,7 @@ func (b *Budget) room() int64 {
 	if s == nil || s.state.Load() != 1 {
 		return b.limit
 	}
-	others := s.pool.held.Load() - s.told.Load()
+	others := s.pool.held.Load() - s.told.Load() - s.pages.Load()
 	n := max(s.pool.running.Load(), 1)
 	return max(b.limit-others, b.limit/n)
 }

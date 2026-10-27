@@ -146,6 +146,37 @@ func TestDifferentialArithmetic(t *testing.T) {
 	}
 }
 
+// TestDifferentialArithmeticConst: the constant kernels of step 400 against their
+// scalar twins, every constant randFloats makes among them.
+func TestDifferentialArithmeticConst(t *testing.T) {
+	rng := rand.New(rand.NewPCG(7, 400))
+	ops := []struct {
+		name     string
+		dispatch TotalBinaryConst[float64]
+		scalar   TotalBinaryConst[float64]
+	}{
+		{"Add", arithAddF64Const, addScalarConst[float64]},
+		{"Mul", arithMulF64Const, mulScalarConst[float64]},
+	}
+	for _, op := range ops {
+		for _, n := range lengths {
+			a := randFloats(rng, n)
+			for _, s := range randFloats(rng, 20) {
+				want := make([]float64, n)
+				op.scalar(want, a, s)
+				got := make([]float64, n)
+				op.dispatch(got, a, s)
+				for i := range want {
+					if math.Float64bits(got[i]) != math.Float64bits(want[i]) {
+						t.Fatalf("%s n=%d s=%v: index %d = %v, scalar says %v (a=%v)",
+							op.name, n, s, i, got[i], want[i], a[i])
+					}
+				}
+			}
+		}
+	}
+}
+
 // TestNaNComparisonSemantics pins IEEE behaviour for Expr-level comparisons.
 //
 // NaN compares FALSE against everything, including itself. This is deliberately

@@ -162,3 +162,55 @@ func TestAPoolsBudgetIsTheDefaultsKind(t *testing.T) {
 		t.Errorf("spill directories %q and %q", derived.SpillDir(), given.SpillDir())
 	}
 }
+
+// TestAScansPagesPressTheOtherQueries: what a query's scan holds for a moment, told as
+// Pressure, counts against the room of the pool's other queries, never against its
+// own (step 400). Told before the query joins, it reaches the pool as it joins; as
+// it leaves, the pool lets go of it, and what it tells afterwards does not reach the
+// pool. A budget on no pool takes none.
+func TestAScansPagesPressTheOtherQueries(t *testing.T) {
+	const mib = 1 << 20
+	p := execopt.NewPool(64*mib, "", false)
+	a, b := p.Budget(""), p.Budget("")
+	a.Pressure(8 * mib)
+	if s := p.Stats(); s.Held != 0 {
+		t.Fatalf("pages told before the query joined reached the pool: %d held", s.Held)
+	}
+	a.Join()
+	b.Join()
+	defer b.Leave()
+	a.Pressure(12 * mib)
+	if s := p.Stats(); s.Held != 20*mib {
+		t.Fatalf("the pool holds %d MiB, want a's 20 of pages", s.Held/mib)
+	}
+	if got := a.Room(); got != 64*mib {
+		t.Errorf("a's room %d MiB, want the limit: its own pages are not its own query's", got/mib)
+	}
+	if got := b.Room(); got != 44*mib {
+		t.Errorf("b's room %d MiB, want the 44 a's pages leave", got/mib)
+	}
+	hb := b.Account("sort")
+	hb.RetainBytes(46 * mib)
+	if !b.Over() || b.OverAlone() || hb.Check() != nil {
+		t.Error("b, holding 46 MiB where a's pages leave it 44, is not over, or was refused")
+	}
+	a.Pressure(-20 * mib)
+	if b.Over() {
+		t.Error("b, the pages given back, is over")
+	}
+	a.Pressure(4 * mib)
+	a.Leave()
+	if s := p.Stats(); s.Held != 46*mib {
+		t.Errorf("a left: the pool holds %d MiB, want b's 46", s.Held/mib)
+	}
+	a.Pressure(-4 * mib)
+	if s := p.Stats(); s.Held != 46*mib {
+		t.Errorf("pages a gave back once it left reached the pool: %d MiB", s.Held/mib)
+	}
+
+	own := execopt.NewBudget(64*mib, "")
+	own.Pressure(100 * mib)
+	if own.Over() || own.Room() != 64*mib {
+		t.Error("a budget on no pool took a scan's pages")
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/file"
 	"github.com/apache/arrow-go/v18/parquet/metadata"
@@ -335,7 +336,7 @@ func (s *Source) readSchemas(ctx context.Context) (*dtype.Schema, map[int]error,
 		if err := ctx.Err(); err != nil {
 			return nil, nil, err
 		}
-		r, closer, err := s.openFile(ctx, k)
+		r, closer, err := s.openFile(ctx, k, pages)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -686,7 +687,7 @@ func (s *Source) layoutFor(full *dtype.Schema, md *metadata.FileMetaData, k int)
 	return lay, nil
 }
 
-func (s *Source) openFile(ctx context.Context, i int) (_ *file.Reader, _ func(), err error) {
+func (s *Source) openFile(ctx context.Context, i int, mem memory.Allocator) (_ *file.Reader, _ func(), err error) {
 	ra, closer, err := s.opens[i](ctx)
 	if err != nil {
 		return nil, nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
@@ -702,7 +703,7 @@ func (s *Source) openFile(ctx context.Context, i int) (_ *file.Reader, _ func(),
 			err = corrupt(v, s.partName(i))
 		}
 	}()
-	r, err := file.NewParquetReader(ra, file.WithReadProps(readProps()))
+	r, err := file.NewParquetReader(ra, file.WithReadProps(readProps(mem)))
 	if err != nil {
 		if closer != nil {
 			closer.Close()
@@ -846,6 +847,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 			threads:   spec.Threads,
 			stop:      make(chan struct{}),
 			gate:      newAheadGate(spec.ReadAhead),
+			pages:     newScanPages(spec.Pages),
 		}
 		// As the serial reader does: the first file is opened now, so one that
 		// cannot be read is refused while the query is planned. A panic in its
@@ -859,6 +861,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 			return pr.openFirst(ctx)
 		}()
 		if err != nil {
+			pr.pages.close()
 			return nil, err
 		}
 		return pr, nil
@@ -876,6 +879,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		df:        df,
 		wide:      batchSize,
 		rgIndex:   -1,
+		pages:     newScanPages(spec.Pages),
 	}
 	// The first row group is opened here, outside Next, so it is recovered here as
 	// Next recovers. On any failure the reader is not returned, so whatever it
@@ -890,6 +894,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 	}()
 	if err != nil && err != io.EOF {
 		r.closeLocked()
+		r.pages.close()
 		return nil, err
 	}
 	return r, nil
@@ -925,7 +930,7 @@ func (r *rowsReader) Next(ctx context.Context) (_ *data.Batch, err error) {
 		if r.ended || r.k >= len(r.src.opens) {
 			return nil, io.EOF
 		}
-		f, closer, err := r.src.openFile(ctx, r.k)
+		f, closer, err := r.src.openFile(ctx, r.k, pages)
 		if err != nil {
 			return nil, err
 		}
@@ -956,7 +961,8 @@ type reader struct {
 	preds     []expr.Node
 	eval      func(context.Context, expr.Node, *data.Batch) (*data.Column, error)
 	df        *dictFilter
-	wide      int // under df, the rows the next read takes; see widen
+	wide      int        // under df, the rows the next read takes; see widen
+	pages     *scanPages // what the scan's page readers hold, told to its engine
 
 	mu      sync.Mutex
 	err     error  // a recovered panic, returned from every Next after it
@@ -981,7 +987,9 @@ func (r *reader) Schema() *dtype.Schema { return r.out }
 func (r *reader) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.closeLocked()
+	err := r.closeLocked()
+	r.pages.close()
+	return err
 }
 
 // closeLocked is Close for callers that already hold the lock — openNext closes the
@@ -1018,7 +1026,7 @@ func (r *reader) openNext(ctx context.Context) error {
 				return io.EOF
 			}
 			r.name = r.src.partName(r.fileIdx)
-			pf, closeFn, err := r.src.openFile(ctx, r.fileIdx)
+			pf, closeFn, err := r.src.openFile(ctx, r.fileIdx, r.pages.alloc())
 			if err != nil {
 				return err
 			}

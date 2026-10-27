@@ -1008,6 +1008,7 @@ func (p *joinProbeOp) stepCurrent(ctx context.Context) (*data.Batch, error) {
 		return p.stepResidual(ctx)
 	}
 	p.reset()
+	p.room(min(p.cur.Rows(), p.spec.batchSize))
 	if p.plain() {
 		p.stepPlain()
 	}
@@ -1639,6 +1640,19 @@ func (p *joinProbeOp) account() {
 func (p *joinProbeOp) reset() {
 	p.lsel = p.lsel[:0]
 	p.rsel = p.rsel[:0]
+}
+
+// room gives lsel, and rsel where pairs are emitted, room for n rows, a probe
+// batch's up to the batch size: they grew from nothing by doubling, in every query,
+// where a join of keys emits about a row for each it probes (step 400, B3 of
+// v0.8-scope.md).
+func (p *joinProbeOp) room(n int) {
+	if cap(p.lsel) < n {
+		p.lsel = make([]int32, 0, n)
+	}
+	if !p.spec.maskOnly && cap(p.rsel) < n {
+		p.rsel = make([]int32, 0, n)
+	}
 }
 
 func (p *joinProbeOp) outLen() int { return len(p.lsel) }

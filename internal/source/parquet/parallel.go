@@ -78,6 +78,7 @@ type parallelReader struct {
 	stopOnce sync.Once
 	wg       sync.WaitGroup
 	gate     *aheadGate // bounds what the workers hold ahead of Next
+	pages    *scanPages // what the scan's page readers hold, told to its engine
 }
 
 // sharedFile is a file several row-group workers read at once. Its readers are
@@ -209,7 +210,7 @@ func (r *parallelReader) openFirst(ctx context.Context) error {
 // openFile opens file r.fileIdx and makes it cur.
 func (r *parallelReader) openFile(ctx context.Context) error {
 	name := r.src.partName(r.fileIdx)
-	pf, closeFn, err := r.src.openFile(ctx, r.fileIdx)
+	pf, closeFn, err := r.src.openFile(ctx, r.fileIdx, r.pages.alloc())
 	if err != nil {
 		return err
 	}
@@ -489,5 +490,6 @@ func (r *parallelReader) Close() error {
 		r.cur = nil
 	}
 	r.inflight = nil
+	r.pages.close()
 	return nil
 }

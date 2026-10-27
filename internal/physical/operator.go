@@ -640,6 +640,7 @@ func planScan(ctx context.Context, s *plan.Scan, opts Options) (Operator, error)
 		BatchSize:  opts.BatchSize,
 		Threads:    opts.Threads,
 		ReadAhead:  readAhead(opts.Budget),
+		Pages:      opts.Budget.Pressure,
 		Eval:       Eval,
 	}
 	spec.Projection = noColumns(s, spec)

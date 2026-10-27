@@ -43,6 +43,11 @@ Each query looks at the budget as it goes, so at a moment the engine's queries c
 hold more than it, up to about one and a half times it with sixteen large queries at
 once. *Changed in 0.8:* each query had a budget of its own, half the memory each.
 
+A Parquet scan's pages, decompressed and read at once, count on its engine too, up to
+about 100 MiB for every column of a wide table read on eight threads: the engine's
+other queries spill sooner beside it, and its own query does not, as the bytes are
+about to be consumed.
+
 ## A limit of your own
 
 `WithMemoryLimit` sets the budget for one query, apart from its engine's, so it spills

@@ -65,6 +65,9 @@ type Integer interface {
 // TotalBinary computes dst = a OP b elementwise.
 type TotalBinary[T Numeric] func(dst, a, b []T)
 
+// TotalBinaryConst is TotalBinary of a column and a constant, dst[i] = a[i] op s.
+type TotalBinaryConst[T Numeric] func(dst, a []T, s T)
+
 // TotalBinaryScalar computes dst = a OP s elementwise.
 type TotalBinaryScalar[T Numeric] func(dst, a []T, s T)
 

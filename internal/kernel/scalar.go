@@ -124,6 +124,21 @@ func divFloatScalarConst[T ~float32 | ~float64](dst, a []T, s T) {
 	}
 }
 
+// The constant on the left: s - a[i] and s / a[i], which do not commute. A sum and a
+// product do, so addScalarConst and mulScalarConst serve either side.
+
+func constSubScalar[T Numeric](dst []T, s T, a []T) {
+	for i := range a {
+		dst[i] = s - a[i]
+	}
+}
+
+func constDivFloatScalar[T ~float32 | ~float64](dst []T, s T, a []T) {
+	for i := range a {
+		dst[i] = s / a[i]
+	}
+}
+
 func negScalar[T Numeric](dst, a []T) {
 	for i := range a {
 		dst[i] = -a[i]

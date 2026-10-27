@@ -307,3 +307,31 @@ func TestTwoQueriesOnAnEngineShareIt(t *testing.T) {
 		t.Errorf("after both: %+v", s)
 	}
 }
+
+// TestAnEngineCountsAScansPages: a Parquet scan's pages, which its query does not
+// hold, count on its engine while it reads them (step 400): a scan of 200,000 rows,
+// filtered to none by a predicate no statistic answers, holds nothing, and its engine
+// peaks at a page of its column; once it ends, the engine holds none.
+func TestAnEngineCountsAScansPages(t *testing.T) {
+	df := engineFrame(t, 200_000, 1_000)
+	var pq bytes.Buffer
+	if err := df.Lazy().WriteParquet(t.Context(), &pq); err != nil {
+		t.Fatal(err)
+	}
+	c := ursus.Col
+	for _, threads := range []int{1, 4} {
+		e := ursus.NewEngine(ursus.WithEngineThreads(threads))
+		got, err := ursus.ScanParquetBytes(pq.Bytes(), "t.parquet").Filter(c("k").Add(c("v")).Lt(int64(0))).
+			Collect(t.Context(), ursus.WithEngine(e))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A row group's column of 200,000 Int64s, or its share of it, decompressed: 1.6
+		// MB at most, and a page of it at the least.
+		s := e.Stats()
+		t.Logf("%d threads: the engine's peak %d bytes", threads, s.Peak)
+		if got.Height() != 0 || s.Peak < 64<<10 || s.Held != 0 {
+			t.Errorf("%d threads: %d rows, the engine's peak %d bytes, %d held after", threads, got.Height(), s.Peak, s.Held)
+		}
+	}
+}

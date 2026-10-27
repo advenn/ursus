@@ -111,7 +111,7 @@ type hashAggSink struct {
 	parts    []*partWriter // one per radix bucket, opened lazily
 	files    []string      // closed partition files, in bucket order
 	pend     [][]int32     // scratch: this batch's rows bound for each bucket
-	keep     []int32       // scratch: this batch's rows that stay resident
+	keep     []int32       // scratch: a frozen sink's rows of this batch that stay resident
 
 	// --- MaintainOrder --------------------------------------------------------
 	ordered   bool
@@ -365,6 +365,17 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 	// range, because ids is monotone — and fold into an arbitrary resident group
 	// with no panic, no length mismatch and no error. Keeping it dense makes that
 	// unreachable rather than merely unlikely.
+	//
+	// keep is the resident rows of a frozen sink's batch; an open sink's are all its
+	// rows, which it does not list. Each grown to the batch at once (step 400):
+	// appended from empty, a query's sink grew them a dozen times each, and listed
+	// every row in keep, 250 kB of the 358 a 10,000-row group-by allocated.
+	if cap(s.groups) < n {
+		s.groups = make([]int32, 0, n)
+	}
+	if s.frozen && cap(s.keep) < n {
+		s.keep = make([]int32, 0, n)
+	}
 	s.groups = s.groups[:0]
 	keep := s.keep[:0]
 	var newRows []int32
@@ -374,9 +385,8 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 		// A global aggregate: every row belongs to group 0, and group 0 exists even
 		// if no row ever arrives (see Finish). No new key can ever appear, so this
 		// path never routes.
-		for i := range n {
+		for range n {
 			s.groups = append(s.groups, 0)
-			keep = append(keep, int32(i))
 		}
 		if s.ids.Len() == 0 {
 			s.ids.bytes.GetOrInsert(nil)
@@ -451,7 +461,6 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 							s.firstSeen = append(s.firstSeen, s.ordinalOf(in, int(i)))
 						}
 					}
-					keep = append(keep, i)
 					s.groups = append(s.groups, id)
 				}
 				ch.reset()
@@ -497,9 +506,13 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 	// row-local expression — the same argument the sort's re-keying makes for
 	// evaluating a key over a gathered batch. A window inside Agg() is refused at
 	// plan time, so there is no non-row-local case to worry about.
-	if len(keep) > 0 {
+	kept := n
+	if s.frozen {
+		kept = len(keep)
+	}
+	if kept > 0 {
 		src := in
-		if len(keep) != n {
+		if kept != n {
 			var err error
 			if src, err = takeBatch(s.inSchema, in, keep); err != nil {
 				return err
@@ -613,8 +626,9 @@ func (s *hashAggSink) consumed(ctx context.Context, n int) error {
 
 // consumeInts is Consume's key assignment for a key of one integer column (step 160):
 // the column's values, a chunk at a time, never encoded except to route a frozen
-// sink's new key. It appends to s.groups and keep as the encoded path does, and
-// returns keep, the rows that introduced groups, and how many rows it routed.
+// sink's new key. It appends to s.groups, and a frozen sink's resident rows to keep,
+// as the encoded path does, and returns keep, the rows that introduced groups, and
+// how many rows it routed.
 func (s *hashAggSink) consumeInts(in *data.Batch, col *data.Column, keep []int32,
 ) (_ []int32, newRows []int32, routed int, _ error) {
 	if !kernel.IsIntKey(col.DType()) {
@@ -676,7 +690,6 @@ func (s *hashAggSink) consumeInts(in *data.Batch, col *data.Column, keep []int32
 					s.firstSeen = append(s.firstSeen, s.ordinalOf(in, int(i)))
 				}
 			}
-			keep = append(keep, i)
 			s.groups = append(s.groups, ids[j])
 		}
 	}
@@ -737,7 +750,6 @@ func (s *hashAggSink) consumePairs(in *data.Batch, cols []*data.Column, keep []i
 					s.firstSeen = append(s.firstSeen, s.ordinalOf(in, int(i)))
 				}
 			}
-			keep = append(keep, i)
 			s.groups = append(s.groups, ids[j])
 		}
 	}
@@ -816,7 +828,6 @@ func (s *hashAggSink) consumeStrings(in *data.Batch, col *data.Column, keep []in
 					s.firstSeen = append(s.firstSeen, s.ordinalOf(in, int(i)))
 				}
 			}
-			keep = append(keep, i)
 			s.groups = append(s.groups, ids[j])
 		}
 	}

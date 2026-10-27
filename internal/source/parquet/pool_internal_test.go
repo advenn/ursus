@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/parquet"
@@ -221,4 +222,83 @@ func writePooledFile(t *testing.T, path string, groups, rows int) pooledRows {
 		t.Fatal(err)
 	}
 	return all
+}
+
+// TestAScanTellsItsPages: a scan tells ScanSpec.Pages what its page readers hold out
+// of the pool, the decompressed pages of each column chunk, serially and on four
+// threads, and holds none once closed, read to its end or after one batch (step
+// 400).
+func TestAScanTellsItsPages(t *testing.T) {
+	const groups, rows = 4, 50_000
+	path := filepath.Join(t.TempDir(), "t.parquet")
+	writePooledFile(t, path, groups, rows)
+	for _, threads := range []int{1, 4} {
+		for _, whole := range []bool{true, false} {
+			var mu sync.Mutex
+			var held, most int64
+			tell := func(d int64) {
+				mu.Lock()
+				defer mu.Unlock()
+				held += d
+				most = max(most, held)
+			}
+			bs, err := openSource(t, path).Open(t.Context(),
+				source.ScanSpec{Threads: threads, BatchSize: 8192, Pages: tell})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for {
+				_, err := bs.Next(t.Context())
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !whole {
+					break
+				}
+			}
+			bs.Close()
+			mu.Lock()
+			// A column chunk of 50,000 Int64s is a page of 400,000 bytes decompressed.
+			if most < 400_000 {
+				t.Errorf("%d threads, read whole %v: told at most %d bytes of pages", threads, whole, most)
+			}
+			if held != 0 {
+				t.Errorf("%d threads, read whole %v: holds %d bytes of pages once closed", threads, whole, held)
+			}
+			mu.Unlock()
+		}
+	}
+}
+
+// TestAScansPagesEndWithIt: what a scan holds is told as it takes and gives back
+// buffers, a grown one by its new size; a buffer a page reader keeps past the scan's
+// end is untold as it closes, and one given back afterwards is not told again (step
+// 400).
+func TestAScansPagesEndWithIt(t *testing.T) {
+	var held int64
+	s := newScanPages(func(d int64) { held += d })
+	a := s.Allocate(5000)
+	b := s.Allocate(100)
+	if held != 8192+4096 {
+		t.Fatalf("two buffers of 8 and 4 KiB told as %d bytes", held)
+	}
+	b = s.Reallocate(20_000, b)
+	if held != 8192+32768 {
+		t.Fatalf("a buffer grown to 32 KiB told as %d bytes with the other's 8", held)
+	}
+	s.Free(b)
+	if held != 8192 {
+		t.Fatalf("one of 8 KiB left told as %d bytes", held)
+	}
+	s.close()
+	if held != 0 {
+		t.Fatalf("a closed scan told as holding %d bytes", held)
+	}
+	s.Free(a)
+	if held != 0 {
+		t.Fatalf("a buffer given back once the scan closed told: %d bytes", held)
+	}
 }

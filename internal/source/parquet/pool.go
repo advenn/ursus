@@ -37,14 +37,14 @@ const (
 // pages is the pool every file of the process is read with.
 var pages = &pagePool{}
 
-// readProps are the properties a file is opened with: the pool. GetStream still reads
-// each column chunk into a slice of its own, 81 MB of q14's scan a run. arrow-go's
-// buffered stream would read a page straight into its decompression buffer, but with
-// it a file whose row group claims more rows than its chunks hold read as no rows and
-// no error, and a read that failed mid-scan lost the file's name: TestPanicsAreErrors
-// and TestScanParquetFrom caught them (step 376).
-func readProps() *parquet.ReaderProperties {
-	return parquet.NewReaderProperties(pages)
+// readProps are the properties a file is opened with: the pool, or a scan's view of
+// it. GetStream still reads each column chunk into a slice of its own, 81 MB of q14's
+// scan a run. arrow-go's buffered stream would read a page straight into its
+// decompression buffer, but with it a file whose row group claims more rows than its
+// chunks hold read as no rows and no error, and a read that failed mid-scan lost the
+// file's name: TestPanicsAreErrors and TestScanParquetFrom caught them (step 376).
+func readProps(mem memory.Allocator) *parquet.ReaderProperties {
+	return parquet.NewReaderProperties(mem)
 }
 
 // class is the size class of a buffer of n bytes, or -1 for one the pool does not
@@ -90,3 +90,76 @@ func (p *pagePool) Free(b []byte) {
 }
 
 var _ memory.Allocator = (*pagePool)(nil)
+
+// scanPages is the pool as one scan reads from it: what its page readers hold out of
+// it is told to tell, the scan's query's budget's Pressure, which counts it against
+// the room of its engine's other queries (step 400, B3 of v0.8-scope.md). A scan of
+// all sixteen of lineitem's columns at SF=1 holds up to 105 MiB of pages at once,
+// which no budget saw.
+type scanPages struct {
+	tell func(int64)
+
+	mu   sync.Mutex
+	held int64
+	done bool
+}
+
+// newScanPages returns the allocator a scan's files are read with: pages itself where
+// no one is told.
+func newScanPages(tell func(int64)) *scanPages {
+	return &scanPages{tell: tell}
+}
+
+// alloc is the allocator to open a file with.
+func (s *scanPages) alloc() memory.Allocator {
+	if s == nil || s.tell == nil {
+		return pages
+	}
+	return s
+}
+
+func (s *scanPages) Allocate(size int) []byte {
+	b := pages.Allocate(size)
+	s.add(int64(cap(b)))
+	return b
+}
+
+func (s *scanPages) Reallocate(size int, b []byte) []byte {
+	if size <= cap(b) {
+		return b[:size]
+	}
+	nb := s.Allocate(size)
+	copy(nb, b)
+	s.Free(b)
+	return nb
+}
+
+func (s *scanPages) Free(b []byte) {
+	s.add(-int64(cap(b)))
+	pages.Free(b)
+}
+
+func (s *scanPages) add(d int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.done {
+		return
+	}
+	s.held += d
+	s.tell(d)
+}
+
+// close tells the budget the scan holds none once it ends: a buffer a page reader
+// did not give back is the collector's, and one given back later is not told.
+func (s *scanPages) close() {
+	if s == nil || s.tell == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.done {
+		s.done = true
+		s.tell(-s.held)
+		s.held = 0
+	}
+}

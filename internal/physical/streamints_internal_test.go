@@ -219,3 +219,33 @@ func TestAPlainProbeCutsItsBatches(t *testing.T) {
 		t.Errorf("%d rows, want %d", total, 4*1_800)
 	}
 }
+
+// TestAProbeTakesItsBatchsRoomAtOnce: the probe's selections are given a probe batch's
+// rows up to the batch size before its first match, where they grew from nothing by
+// doubling, in every query (step 400): 300 rows of room, not the 512 doubling reaches.
+func TestAProbeTakesItsBatchsRoomAtOnce(t *testing.T) {
+	rng := rand.New(rand.NewPCG(400, 1))
+	j := &plan.Join{
+		Left:    keyedScan(t, rng, "k", "l", dtype.Int64, 3_000, 100),
+		Right:   keyedScan(t, rng, "k2", "r", dtype.Int64, 1_000, 100),
+		LeftOn:  []expr.Node{&expr.Col{Name: "k"}},
+		RightOn: []expr.Node{&expr.Col{Name: "k2"}},
+		Kind:    plan.JoinInner,
+	}
+	opts := Options{Threads: 1, BatchSize: 300, Budget: execopt.NewBudget(1<<40, "")}
+	op, err := planJoin(t.Context(), j, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer op.Close()
+	if _, err := op.Next(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	p, ok := op.(*joinBreaker).out.(*joinProbeOp)
+	if !ok {
+		t.Fatalf("the join's output is a %T", op.(*joinBreaker).out)
+	}
+	if cap(p.lsel) != 300 || cap(p.rsel) != 300 {
+		t.Errorf("selections of %d and %d rows' room, want the batch's 300", cap(p.lsel), cap(p.rsel))
+	}
+}

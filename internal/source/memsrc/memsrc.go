@@ -198,33 +198,35 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 		r.mu.Unlock()
 		return nil, io.EOF
 	}
-	b := r.batches[r.i]
-	if n := b.Rows() - r.off; n > r.size {
-		b = b.Slice(r.off, r.size)
+	b, off, n := r.batches[r.i], r.off, r.batches[r.i].Rows()-r.off
+	if n > r.size {
+		n = r.size
 		r.off += r.size
 	} else {
-		if r.off > 0 {
-			b = b.Slice(r.off, n)
-		}
 		r.i++
 		r.off = 0
 	}
 	r.mu.Unlock()
 
-	if r.schema.Equal(b.Schema()) {
-		return b, nil
-	}
-
 	// Honour the projection: hand back only the requested columns, in the
 	// requested order. This is the whole point of pushdown — a real reader would
-	// never touch the other columns' bytes at all.
-	cols := make([]*data.Column, r.schema.Len())
-	for i, f := range r.schema.All() {
-		c, ok := b.ByName(f.Name)
-		if !ok {
-			return nil, uerr.UnknownColumn("scan", f.Name, b.Schema().Names())
+	// never touch the other columns' bytes at all. Taken before the batch is cut, so
+	// that only these columns are sliced: every column was, a text column's offsets
+	// copied, a third of what a 10,000-row group-by of a frame with one allocated
+	// (step 400).
+	if !r.schema.Equal(b.Schema()) {
+		cols := make([]*data.Column, r.schema.Len())
+		for i, f := range r.schema.All() {
+			c, ok := b.ByName(f.Name)
+			if !ok {
+				return nil, uerr.UnknownColumn("scan", f.Name, b.Schema().Names())
+			}
+			cols[i] = c
 		}
-		cols[i] = c
+		b = data.NewBatchRows(r.schema, cols, b.Rows())
 	}
-	return data.NewBatchRows(r.schema, cols, b.Rows()), nil
+	if off > 0 || n < b.Rows() {
+		b = b.Slice(off, n)
+	}
+	return b, nil
 }

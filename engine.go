@@ -186,7 +186,8 @@ func WithEngine(e *Engine) CollectOption {
 // EngineStats is what an engine's queries hold now, and have held.
 type EngineStats struct {
 	// Held is what the operators of the queries running on the engine hold now, as
-	// MemoryStats.Peak counts a query's, each query's to a mebibyte.
+	// MemoryStats.Peak counts a query's, each query's to a mebibyte, and the pages
+	// their Parquet scans are reading.
 	Held int64
 
 	// Peak is the most Held has been since the engine was made.
