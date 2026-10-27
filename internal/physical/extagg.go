@@ -263,14 +263,27 @@ func (s *hashAggSink) ordinalOf(in *data.Batch, i int) int64 {
 // refusing, either way, the sink spills the values of every accumulator that keeps
 // them, is charged again, and refuses only if it is still over. What remains is
 // implode, whose state per value is its answer.
+//
+// The values spill under an engine's pressure too, past the room its other queries
+// leave the query (pressed); the refusal asks the query's own limit (step 395).
 func (s *hashAggSink) overBudget(ctx context.Context) error {
-	if s.budgetErr() == nil {
+	if !s.pressed() {
 		return nil
 	}
 	if err := s.spillValues(ctx); err != nil {
 		return err
 	}
 	return s.budgetErr()
+}
+
+// pressed is budgetErr's question asked of the room an engine's other queries leave
+// the query, not of its limit: alone, the same.
+func (s *hashAggSink) pressed() bool {
+	if !s.frozen {
+		return s.mem.Over()
+	}
+	room := s.budget.Room()
+	return room > 0 && s.accBytes > s.frozenAcc+room
 }
 
 // budgetErr is overBudget without the spill of values.

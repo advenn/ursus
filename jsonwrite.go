@@ -105,7 +105,7 @@ func (lf *LazyFrame) writeJSON(ctx context.Context, op string, w io.Writer, arra
 
 func (lf *LazyFrame) writeJSONCfg(ctx context.Context, op string, w io.Writer, array bool, cfg collectCfg) (err error) {
 	defer uerr.Catch(&err, op)
-	defer cfg.report()
+	defer cfg.done()
 	root, err := lf.compile(ctx, cfg)
 	if err != nil {
 		return err

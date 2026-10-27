@@ -430,6 +430,39 @@ func Example_memorySpill() {
 	// spilled: true
 }
 
+func Example_memoryEngine() {
+	// One budget for a service's requests, shared by every query run on it.
+	requests := ursus.NewEngine(
+		ursus.WithEngineMemoryLimit(2<<30),
+		ursus.WithEngineSpillDir(os.TempDir()))
+
+	orders := ursus.Frame(
+		ursus.Values("customer", []string{"b", "a", "b", "c"}),
+		ursus.Values("amount", []float64{30, 10, 15, 5}))
+	df, err := orders.GroupBy(ursus.Col("customer")).
+		Agg(ursus.Col("amount").Sum()).
+		Sort(ursus.Desc(ursus.Col("amount"))).
+		Collect(context.Background(), ursus.WithEngine(requests))
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(df)
+	s := requests.Stats()
+	fmt.Printf("budget %d MiB, %d running, %d held\n", s.Limit>>20, s.Running, s.Held)
+	// Output:
+	// shape: (3, 2)
+	// ┌──────────┬─────────┐
+	// │ customer │ amount  │
+	// │ String   │ Float64 │
+	// ├──────────┼─────────┤
+	// │ "b"      │ 45      │
+	// │ "a"      │ 10      │
+	// │ "c"      │ 5       │
+	// └──────────┴─────────┘
+	//
+	// budget 2048 MiB, 0 running, 0 held
+}
+
 func Example_memoryRefusal() {
 	keys := make([]int64, 100_000)
 	_, err := ursus.Frame(ursus.Values("k", keys)).

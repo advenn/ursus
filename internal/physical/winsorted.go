@@ -525,7 +525,7 @@ func (s *windowSink) sortedPass(ctx context.Context, group []*winSpec, rows int6
 // the limit. The pass's walks and merges keep the query over its limit at times, and
 // a sort that spilled at every batch then would leave hundreds of runs for one merge.
 func (s *windowSink) minRun() int64 {
-	return s.budget.Limit() / 16
+	return s.budget.Room() / 16
 }
 
 // hasBack reports whether a pass walks backward.

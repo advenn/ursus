@@ -56,10 +56,16 @@ import (
 //
 // A nil *Budget means unlimited and untracked; every method is nil-safe so that
 // operators need no branch of their own.
+//
+// A query on an engine's budget has one opened from the engine's Pool, and is over
+// when the engine's queries together are, as room says; one with a limit of its own
+// has one apart (NewBudget).
 type Budget struct {
-	isDefault bool // the limit is DefaultLimit, not the caller's; see MarkDefault
-	limit     int64
-	spillDir  string
+	isDefault   bool // the limit is not one the caller gave this query; see MarkDefault
+	checkResult bool // Collect checks its result: see ResultLimit
+	limit       int64
+	spillDir    string
+	share       *share // its place in an engine's pool, or nil
 
 	mu     sync.Mutex
 	held   map[data.BufferID]entry
@@ -100,16 +106,19 @@ func NewBudget(limit int64, spillDir string) *Budget {
 }
 
 // MarkDefault records that the limit is the default (DefaultLimit), not one the
-// caller asked for. Only a parallel group-by reads it: under a limit the caller set,
-// it stays serial, as it always was, so its row order is the same on every run
-// (step 92).
+// caller asked for: a parallel group-by and a join's partitioned build read it, as
+// under a limit the caller set they stay serial, so a group-by's row order is the
+// same on every run (step 92); and Collect checks its result (ResultLimit). A budget
+// opened from a pool is marked so, as its spills depend on the other queries anyway,
+// and checks its result where the pool's limit is DefaultLimit's.
 func (b *Budget) MarkDefault() {
 	if b != nil {
-		b.isDefault = true
+		b.isDefault, b.checkResult = true, true
 	}
 }
 
-// IsDefault reports whether the limit is the default rather than the caller's.
+// IsDefault reports whether the limit is not one the caller gave this query alone:
+// the default, or an engine's.
 func (b *Budget) IsDefault() bool { return b != nil && b.isDefault }
 
 // Limit returns the ceiling in bytes, or 0 when unlimited.
@@ -175,17 +184,47 @@ func (b *Budget) NoteSpill() {
 	b.mu.Lock()
 	b.spills++
 	b.mu.Unlock()
+	if b.share != nil {
+		b.share.pool.spills.Add(1)
+	}
 }
 
-// Over reports whether the query is above its ceiling. Always false when
-// unlimited.
+// Over reports whether the query is above its ceiling: on an engine's budget, past
+// the room the engine's other queries leave it. An operator that can spill asks it.
+// Always false when unlimited.
 func (b *Budget) Over() bool {
 	if b == nil || b.limit <= 0 {
 		return false
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	return b.total > b.room()
+}
+
+// OverAlone reports whether the query alone is above its limit, whatever an engine's
+// other queries hold. A refusal asks it: another query's holding makes this one
+// spill sooner, and never makes it fail. On no engine's budget it is Over.
+func (b *Budget) OverAlone() bool {
+	if b == nil || b.limit <= 0 {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return b.total > b.limit
+}
+
+// Room returns what the query may hold now before it is Over: its limit, alone or
+// on no engine's budget; on one, what the engine's other queries leave of it, never
+// less than an even share. A threshold an operator sizes by its budget takes it, so
+// that under load its runs and its read-ahead shrink with what it may hold. 0 when
+// unlimited.
+func (b *Budget) Room() int64 {
+	if b == nil || b.limit <= 0 {
+		return 0
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.room()
 }
 
 // Holding returns everything the query holds now: what its operators hold, and
@@ -212,7 +251,7 @@ func (b *Budget) Holding() int64 {
 // Only under the default budget. A limit the caller gave bounds what the
 // operators hold, as it always has: Collect then holds whatever it is asked to.
 func (b *Budget) ResultLimit() int64 {
-	if b == nil || !b.isDefault || b.limit <= 0 {
+	if b == nil || !b.checkResult || b.limit <= 0 {
 		return 0
 	}
 	return b.limit + b.limit/2
@@ -308,6 +347,7 @@ func (b *Budget) move(e entry, wasOps, wasKept int64) {
 	if b.total > b.peak {
 		b.peak = b.total
 	}
+	b.tell()
 }
 
 func (b *Budget) addExtra(n int64, result bool) {
@@ -321,6 +361,7 @@ func (b *Budget) addExtra(n int64, result bool) {
 	if b.total > b.peak {
 		b.peak = b.total
 	}
+	b.tell()
 }
 
 // Account is one operator's share of a budget.
@@ -416,7 +457,8 @@ func (a *Account) Used() int64 {
 //
 // Deliberately query-wide rather than per-account: the budget is shared, so an
 // operator that can spill should do so when the query is under pressure, not only
-// when its own share happens to be the large one.
+// when its own share happens to be the large one. On an engine's budget, the
+// engine's queries' pressure too: Budget.Over.
 func (a *Account) Over() bool {
 	if a == nil {
 		return false
@@ -424,10 +466,19 @@ func (a *Account) Over() bool {
 	return a.b.Over()
 }
 
-// Check returns a resource error naming this operator when the query is over
-// budget. An operator that can spill calls Over instead and spills.
+// OverAlone reports whether the query alone is over its limit: Budget.OverAlone.
+func (a *Account) OverAlone() bool {
+	if a == nil {
+		return false
+	}
+	return a.b.OverAlone()
+}
+
+// Check returns a resource error naming this operator when the query alone is over
+// its limit. An operator that can spill calls Over instead and spills. Not Over: an
+// engine's other queries holding its budget make a query spill, not fail.
 func (a *Account) Check() error {
-	if a == nil || !a.b.Over() {
+	if a == nil || !a.b.OverAlone() {
 		return nil
 	}
 	return uerr.New(uerr.KindResource, a.op,

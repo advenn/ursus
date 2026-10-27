@@ -37,13 +37,13 @@ func (lf *LazyFrame) Profile(ctx context.Context, opts ...CollectOption) (df, pr
 	defer uerr.Catch(&err, "profile")
 	start := time.Now()
 	cfg := newCollectCfg(opts)
+	defer cfg.done()
 	cfg.profiler = physical.NewProfiler(start, cfg.budget)
 	root, err := lf.compile(ctx, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
 	b, err := exec.Collect(ctx, root, cfg.budget.Result(), cfg.threads)
-	cfg.report()
 	if err != nil {
 		return nil, nil, err
 	}

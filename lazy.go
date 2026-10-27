@@ -312,6 +312,7 @@ type collectCfg struct {
 	limitSet  bool // WithMemoryLimit was given; otherwise finish takes the default
 	spillDir  string
 	stats     *MemoryStats
+	engine    *Engine // WithEngine's, nil for DefaultEngine
 	budget    *execopt.Budget
 	profiler  *physical.Profiler // Profile's, measuring each node; nil otherwise
 }
@@ -428,7 +429,9 @@ type MemoryStats struct {
 	Spills int64
 }
 
-// WithMemoryLimit caps what buffering operators may hold, in bytes.
+// WithMemoryLimit caps what buffering operators may hold, in bytes: this query's
+// alone, apart from its engine's budget, which the engine's other queries share (see
+// Engine). Without it a query draws on its engine's.
 //
 //	df, err := ursus.ScanParquet("120gb/*.parquet").
 //	    Sort(ursus.Desc(ursus.Col("ts"))).
@@ -508,25 +511,33 @@ type MemoryStats struct {
 //
 // # Without it
 //
-// A query with no WithMemoryLimit is budgeted at half the memory it can have: the
-// smaller of its cgroup's limit — a container's, or a systemd slice's — and the
-// machine's RAM on Linux, and the machine's RAM on macOS and Windows. Half, because ursus's buffers are on the Go heap, which
-// with GOGC=100 grows to about twice what is live before it collects. So a query
-// spills by default rather than growing until the kernel kills it, and an operator
-// that cannot spill fails at that point with an error naming itself. Collect also
-// refuses a result too large to hold: see Collect. WithMemoryLimit(0) turns the
-// budget off; on another system, where no memory can be read, there is no default
-// and it is off already.
+// A query with no WithMemoryLimit draws on its engine's budget, which DefaultEngine's
+// is half the memory the process can have: the smaller of its cgroup's limit — a
+// container's, or a systemd slice's — and the machine's RAM on Linux, and the
+// machine's RAM on macOS and Windows. Half, because ursus's buffers are on the Go
+// heap, which with GOGC=100 grows to about twice what is live before it collects. So
+// a query spills by default rather than growing until the kernel kills it, and an
+// operator that cannot spill fails at that point with an error naming itself.
+// Collect also refuses a result too large to hold: see Collect. WithMemoryLimit(0)
+// turns the budget off for the query; on another system, where no memory can be
+// read, there is no default and it is off already.
 //
-// The heap's slack is the Go runtime's to bound, not the budget's. Under the default
-// budget ursus sets the Go soft memory limit too, to nine tenths of the same ceiling,
-// unless GOMEMLIMIT or an earlier debug.SetMemoryLimit chose one: see
-// SetProcessMemoryLimit. Under a limit given here, it does not, and a program running
-// under a container's limit should call SetProcessMemoryLimit itself.
+// The engine's budget is shared by its queries: since 0.8 (step 395), sixty-four
+// queries at once share the half, where each assumed it for itself. Engine says how a
+// query spills for the others' holding, and is refused only for its own.
+//
+// The heap's slack is the Go runtime's to bound, not the budget's. On an engine whose
+// budget is the default's, ursus sets the Go soft memory limit too, to nine tenths of
+// the same ceiling, unless GOMEMLIMIT or an earlier debug.SetMemoryLimit chose one:
+// see SetProcessMemoryLimit. Under a limit given here or to an engine, it does not,
+// and a program running under a container's limit should call SetProcessMemoryLimit
+// itself.
 //
 // # A group-by under a limit you set is serial
 //
-// So that a group-by that spills gives its rows in the same order on every run.
+// So that a group-by that spills gives its rows in the same order on every run. A
+// limit given to an engine is shared, and spills move with the other queries anyway,
+// so its group-by runs in parallel, as on the default budget.
 //
 // Under the DEFAULT budget it runs on several workers until the query holds half the
 // budget, then folds them into one and finishes serially, spilling as the serial path
@@ -582,20 +593,24 @@ func baseCollectCfg() collectCfg {
 // finish turns the accumulated knobs into the budget the operators share. It is
 // separate from baseCollectCfg because the sinks apply their options through a
 // different union type and still need exactly this step.
+//
+// The budget is the engine's, shared with its other queries (step 395), unless the
+// query has a limit of its own, which is apart from it.
 func (c *collectCfg) finish() {
-	if !c.limitSet {
-		c.memLimit = defaultMemoryLimit()
-		// The default budget is half the ceiling, and only holds if the heap's own
-		// slack does too, so the Go soft limit is set with it. See
-		// SetProcessMemoryLimit.
-		if c.memLimit > 0 {
-			applyAutoMemoryLimit()
-		}
+	if c.limitSet {
+		c.budget = execopt.NewBudget(c.memLimit, c.spillDir)
+		return
 	}
-	c.budget = execopt.NewBudget(c.memLimit, c.spillDir)
-	if !c.limitSet {
-		c.budget.MarkDefault()
+	e := c.engine
+	if e == nil {
+		e = DefaultEngine()
 	}
+	// The default budget is half the ceiling, and only holds if the heap's own slack
+	// does too, so the Go soft limit is set with it. See SetProcessMemoryLimit.
+	if e.pool.Derived() && e.pool.Limit() > 0 {
+		applyAutoMemoryLimit()
+	}
+	c.budget = e.pool.Budget(c.spillDir)
 }
 
 func newCollectCfg(opts []CollectOption) collectCfg {
@@ -607,8 +622,12 @@ func newCollectCfg(opts []CollectOption) collectCfg {
 	return cfg
 }
 
-// report copies the budget's final figures out, if the caller asked for them.
-func (c collectCfg) report() {
+// done ends the query's share of its engine's budget, and copies the budget's final
+// figures out, if the caller asked for them. Every entry point that compiles a query
+// defers it first: a query not taken out of its engine would hold the engine's other
+// queries' even shares down for as long as the process runs.
+func (c collectCfg) done() {
+	c.budget.Leave()
 	if c.stats == nil {
 		return
 	}
@@ -649,6 +668,9 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 		return nil, err
 	}
 	cfg.profiler.MarkOptimized()
+	// Counted among its engine's queries from here to done: the operators planned
+	// below size themselves by the room the others leave it.
+	cfg.budget.Join()
 	return physical.PlanRoot(ctx, optimized, physical.Options{
 		BatchSize: cfg.batchSize,
 		Threads:   cfg.threads,
@@ -661,10 +683,11 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 //
 // # A result too large to hold is an error
 //
-// Under the default budget, Collect counts its result as it arrives, and refuses
-// once the query holds more, the result and what its operators hold together, than
-// three quarters of the memory it may use: the default budget and half as much
-// again. The error is a resource error naming collect.
+// Under the default budget, on an engine whose budget is the default's, Collect
+// counts its result as it arrives, and refuses once the query holds more, the result
+// and what its operators hold together, than three quarters of the memory it may use:
+// the default budget and half as much again. The error is a resource error naming
+// collect. The query's own holding, not its engine's other queries'.
 //
 // Three quarters, because ursus sets the Go soft limit at nine tenths of the same
 // ceiling, and a query holds up to about a fifth more than it counts: three quarters
@@ -676,8 +699,8 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 // The result is counted apart from what the operators hold, so they spill exactly
 // as they would if it were streamed, and MemoryStats.Peak leaves it out.
 //
-// Under a limit you give with WithMemoryLimit, or none, Collect is not checked and
-// holds whatever it is asked to, as it always has.
+// Under a limit you give with WithMemoryLimit or WithEngineMemoryLimit, or none,
+// Collect is not checked and holds whatever it is asked to, as it always has.
 //
 // # A panic is an error
 //
@@ -688,12 +711,12 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (df *DataFrame, err error) {
 	defer uerr.Catch(&err, "collect")
 	cfg := newCollectCfg(opts)
+	defer cfg.done()
 	root, err := lf.compile(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 	b, err := exec.Collect(ctx, root, cfg.budget.Result(), cfg.threads)
-	cfg.report()
 	if err != nil {
 		return nil, err
 	}
@@ -710,7 +733,7 @@ func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (df *Da
 func (lf *LazyFrame) CollectBatches(ctx context.Context, opts ...CollectOption) iter.Seq2[*DataFrame, error] {
 	return func(yield func(*DataFrame, error) bool) {
 		cfg := newCollectCfg(opts)
-		defer cfg.report()
+		defer cfg.done()
 		// Guarded here and in exec.Batches' Pull, and nowhere that encloses yield.
 		root, err := uerr.Guard("collect_batches", func() (physical.Operator, error) {
 			return lf.compile(ctx, cfg)
@@ -740,7 +763,7 @@ func (lf *LazyFrame) Count(ctx context.Context, opts ...CollectOption) (n int64,
 		return 0, lf.err
 	}
 	cfg := newCollectCfg(opts)
-	defer cfg.report()
+	defer cfg.done()
 	// Its rows are all a count needs: a projection of no columns above the query,
 	// so a scan reads none (step 370).
 	rows := &LazyFrame{node: &plan.Project{Input: lf.node}}

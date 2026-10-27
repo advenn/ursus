@@ -122,7 +122,7 @@ func (lf *LazyFrame) WriteDatabase(ctx context.Context, db DatabaseWriter, table
 		o.applyDatabaseWrite(&cfg)
 	}
 	cfg.collect.finish()
-	defer cfg.collect.report()
+	defer cfg.collect.done()
 	if cfg.ifExists < IfExistsFail || cfg.ifExists > IfExistsAppend {
 		return 0, uerr.New(uerr.KindValue, "write_database", "%d is not an IfTableExists", cfg.ifExists).
 			Hint("IfExistsFail, IfExistsReplace or IfExistsAppend")

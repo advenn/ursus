@@ -557,7 +557,9 @@ func (s *temporalSink) letGo() error {
 // implode, whose answer is every value, and the windows themselves.
 func (s *temporalSink) chargeState(ctx context.Context) error {
 	s.charge()
-	if s.limit <= 0 || s.mem.Used() <= s.limit {
+	// The values go under an engine's pressure too, past the room its other queries
+	// leave the query; the refusal below asks the limit (step 395).
+	if s.limit <= 0 || s.mem.Used() <= s.budget.Room() {
 		return nil
 	}
 	for _, g := range s.segs {

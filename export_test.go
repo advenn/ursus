@@ -16,11 +16,11 @@ func ExprOf(n expr.Node) Expr { return wrap(n) }
 func BudgetOf(opts ...CollectOption) *execopt.Budget { return newCollectCfg(opts).budget }
 
 // SetDefaultMemoryLimit replaces the default budget for a test, which a test needs
-// small enough to reach; the returned function restores it.
+// small enough to reach: DefaultEngine, by one whose budget is n and behaves as the
+// default's. The returned function restores it.
 func SetDefaultMemoryLimit(n int64) (restore func()) {
-	old := defaultMemoryLimit
-	defaultMemoryLimit = func() int64 { return n }
-	return func() { defaultMemoryLimit = old }
+	old := defaultEngine.Swap(newEngine(n, "", true))
+	return func() { defaultEngine.Store(old) }
 }
 
 // What step 186 took out of the public API, each because it took or returned a type
@@ -38,3 +38,12 @@ func (lf *LazyFrame) Plan() plan.Node { return lf.node }
 
 // Batch returns the DataFrame's batch.
 func (df *DataFrame) Batch() *data.Batch { return df.batch }
+
+// Press holds n bytes on e's budget as another query running on it would, until
+// release is called: an engine's pressure, for a test.
+func Press(e *Engine, n int64) (release func()) {
+	b := e.pool.Budget("")
+	b.Join()
+	b.Account("press").RetainBytes(n)
+	return b.Leave
+}

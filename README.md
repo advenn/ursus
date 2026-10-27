@@ -13,8 +13,8 @@ experimental, at 0.6.
 Polars users, versioned by release, with every example run by the test suite.
 
 Sort, group-by, join, unique, every
-window function and the temporal groups spill or stream — by default once a query holds half the memory its container or
-machine allows, on Linux, macOS and Windows — and an
+window function and the temporal groups spill or stream — by default once a process's queries together hold half the
+memory its container or machine allows, on Linux, macOS and Windows, a budget they share (an `Engine`'s) — and an
 operator that cannot spill fails with an error naming itself. Under that default budget ursus also sets the Go runtime's
 soft memory limit near the same ceiling, so the heap's own slack stays under it too; `GOMEMLIMIT`, or
 `ursus.LeaveProcessMemoryLimit()`, keeps a program's own choice.

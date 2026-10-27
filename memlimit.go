@@ -16,7 +16,8 @@ import (
 // returns the limit in effect afterwards, in bytes; math.MaxInt64 means none.
 //
 // ursus calls it itself, once, the first time a query runs under the default budget
-// (step 128). Calling it at start-up does the same thing earlier.
+// (step 128): on DefaultEngine, or an engine made without WithEngineMemoryLimit.
+// Calling it at start-up does the same thing earlier.
 //
 // # Why
 //
@@ -42,7 +43,8 @@ import (
 //
 // So it is set where ursus already decides how much memory the process may use: when
 // a query runs under the default budget, which ursus derives from that same ceiling.
-// Not on import, and not under a limit the caller gave WithMemoryLimit.
+// Not on import, and not under a limit the caller gave WithMemoryLimit or
+// WithEngineMemoryLimit.
 //
 // To keep ursus from setting it, set GOMEMLIMIT, "off" included, or call
 // LeaveProcessMemoryLimit before the first query.

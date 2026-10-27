@@ -172,7 +172,7 @@ func (s *joinBuildSink) orderedProbe(ctx context.Context, probe Operator, opts O
 		return nil, err
 	}
 	sorted := &breaker{child: op, sink: &sortSink{schema: out, keys: keys, kSch: kSch, budget: opts.Budget,
-		mem: opts.Budget.Account("join"), batch: opts.batchSize(), maxHeld: opts.Budget.Limit() / 4}}
+		mem: opts.Budget.Account("join"), batch: opts.batchSize(), maxHeld: opts.Budget.Room() / 4}}
 	return &dropTailOp{child: sorted, schema: declared}, nil
 }
 

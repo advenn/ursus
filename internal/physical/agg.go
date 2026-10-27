@@ -594,13 +594,18 @@ func (s *hashAggSink) consumed(ctx context.Context, n int) error {
 		// At HALF the budget, because the fold that follows builds the merged table
 		// while the workers' still exist: switching at the budget itself doubled it
 		// there, and h2o gb10 — ten million groups — was OOM-killed under the very
-		// cap its serial run spills within.
-		if lim := s.budget.Limit(); lim > 0 && s.budget.Used() > lim/2 {
+		// cap its serial run spills within. Of the room an engine's other queries
+		// leave it (step 395).
+		if room := s.budget.Room(); room > 0 && s.budget.Used() > room/2 {
 			return errWantSerial
 		}
 		return nil
 	}
-	if !s.frozen && s.budget.Limit() > 0 && s.mem.Over() && len(s.keys) > 0 {
+	// At the last depth, only when the query alone is over: its files' sub-sinks
+	// would refuse, and pressure from an engine's other queries makes a query spill,
+	// never fail (step 395).
+	if !s.frozen && s.budget.Limit() > 0 && s.mem.Over() && len(s.keys) > 0 &&
+		(s.level < maxSpillDepth || s.mem.OverAlone()) {
 		s.frozen, s.frozenAcc = true, acc
 	}
 	return s.overBudget(ctx)
@@ -1090,7 +1095,7 @@ func (s *hashAggSink) foldPartitioned(ctx context.Context, sinks []Sink, newSink
 	if total < partitionedFoldMin {
 		return nil, nil, nil
 	}
-	if b := s.budget; b != nil && b.Limit() > 0 && b.Used()+held > b.Limit() {
+	if room := s.budget.Room(); room > 0 && s.budget.Used()+held > room {
 		return nil, nil, nil
 	}
 
