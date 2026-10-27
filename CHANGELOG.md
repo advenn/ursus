@@ -15,12 +15,16 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.7
 
-Everything since `v0.6.8` (2026-10-26): steps 375–384, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–385, so far.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
 Parquet read first.
 
 ### Faster
 
+- **A large top-k sorts rather than heaps** (385): a `Head(k)` after a `Sort` kept a
+  heap of k rows, whose cost grows past a sort's for a k of some tens of thousands;
+  past that it sorts every row and keeps k. The first million of ten million floats
+  take 327–357 ms where they took 3,994–4,202.
 - **`Upsample` no longer sorts its answer** (383): its grid is joined to the frame
   keeping the grid's order, where both were numbered and the join sorted back. A
   million rows of 100 groups upsampled by the second take 0.74 of their time.

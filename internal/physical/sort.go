@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"math/bits"
 	"os"
 	"path/filepath"
@@ -193,6 +194,19 @@ func (s *sortSink) Merge(other Sink) error {
 	return s.mem.Check()
 }
 
+// sortBeatsHeap reports whether k rows of n are cheaper found by sorting every row
+// than by ArgTopK's heap of k (step 385). The heap reads each row once, and each that
+// beats its root, about k ln(n/k) of them in no order, costs log2 k comparisons to
+// place; the sort costs about the same a row whatever k is. Over ten million floats
+// on four threads the heap took 196 ms for 10,000 rows, 677 for 100,000, 1.8 s for
+// 300,000 and 5.7 s for a million, the sort 330 to 420 whatever k: a heap's work
+// past a third of n's is the crossing, about k = 38,000 there and 5,000 of a million
+// rows.
+func sortBeatsHeap(n, k int) bool {
+	fk := float64(k)
+	return fk*math.Log2(fk)*math.Log(float64(n)/fk) > float64(n)/3
+}
+
 // order sorts the buffered rows and returns them as references into s.rows.
 //
 // Only the KEY batches are concatenated, never the data: the data is gathered
@@ -208,7 +222,18 @@ func (s *sortSink) order(limit int) ([]rowRef, error) {
 	// O(n log n). ArgTopK is required to agree with ArgSort[:k] exactly, so this
 	// is a pure performance substitution.
 	var sel []int32
-	if limit > 0 && limit < n {
+	if limit > 0 && limit < n && sortBeatsHeap(n, limit) {
+		// A large k sorts every row and keeps the first k (step 385, T1 of
+		// v0.7-scope.md): the sort's order, whose first k ArgTopK's must equal.
+		var err error
+		sel, err = kernel.ArgSortColumnsN(keys.Columns(), s.specs(), n, s.threads)
+		if err != nil {
+			return nil, err
+		}
+		if limit < len(sel) {
+			sel = sel[:limit]
+		}
+	} else if limit > 0 && limit < n {
 		cmp, err := kernel.NewComparator(keys.Columns(), s.specs())
 		if err != nil {
 			return nil, err
