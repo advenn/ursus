@@ -15,12 +15,17 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.7
 
-Everything since `v0.6.8` (2026-10-26): steps 375–385, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–386, so far.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
 Parquet read first.
 
 ### Faster
 
+- **A window function in an aggregation runs over each group's list** (386):
+  `GroupBy(g).Agg(Col("x").CumSum())` collects each group's values and runs the
+  window over them, where it partitioned the rows a second time; a million rows of a
+  thousand groups take 0.52 of their time. `List().Eval` of a window with no order
+  takes half its time, and an integer `CumSum` reads its values in place.
 - **A large top-k sorts rather than heaps** (385): a `Head(k)` after a `Sort` kept a
   heap of k rows, whose cost grows past a sort's for a k of some tens of thousands;
   past that it sorts every row and keeps k. The first million of ten million floats

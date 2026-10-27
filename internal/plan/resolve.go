@@ -575,6 +575,10 @@ func listsPerGroup(input Node, keys, aggs []expr.Node) (Node, []expr.Node, error
 	for i, e := range aggs {
 		e = innerAggsWindowed(e)
 		if !expr.IsAggregation(e) {
+			if lm, ok := listEvalPerGroup(e); ok {
+				out[i] = lm
+				continue
+			}
 			e = innerAggsWindowed(imploded(e))
 		}
 		if expr.HasWindow(e) {
@@ -598,6 +602,60 @@ func listsPerGroup(input Node, keys, aggs []expr.Node) (Node, []expr.Node, error
 		out[i] = ws[j]
 	}
 	return input, out, nil
+}
+
+// listEvalPerGroup is e, a window function of one column computed a group at a time,
+// as that column's list a group with e evaluated over each list (step 386, W1 of
+// v0.7-scope.md): Agg(Col("x").CumSum()) is Agg(Col("x")).List().Eval(Element()
+// .CumSum()), as Polars computes it in the group-by's own groups. The window a group
+// at a time hashed and partitioned the rows again beneath the aggregation, sorted
+// each partition, and was imploded after: 66 ms over a million rows of a thousand
+// groups, where the lists and their eval take 42 and Polars 11.
+//
+// Only an expression of one column, of window functions with no partition or order
+// of their own and of row-wise functions, is so: an Over within the group, an
+// aggregate, a UDF or a second column keeps the window beneath, as before. Both read
+// a group's rows in their order and give a list of the group's answers.
+func listEvalPerGroup(e expr.Node) (expr.Node, bool) {
+	body := stripNaming(e)
+	names := expr.RootNames(body)
+	if len(names) != 1 || !expr.HasWindow(body) || expr.HasUDF(body) {
+		return nil, false
+	}
+	col := names[0]
+	ok := true
+	var walk func(n expr.Node) expr.Node
+	walk = func(n expr.Node) expr.Node {
+		if !ok {
+			return n
+		}
+		switch n.(type) {
+		case *expr.Col:
+			return &expr.Element{}
+		case *expr.Lit:
+			return n
+		case *expr.Binary, *expr.Unary, *expr.Cast, *expr.Cond, *expr.Call, *expr.WinFn:
+		default:
+			// An Over, an aggregate, an alias inside, a list's own eval: as before.
+			ok = false
+			return n
+		}
+		kids := n.Children()
+		out := make([]expr.Node, len(kids))
+		for i, k := range kids {
+			out[i] = walk(k)
+		}
+		return expr.Rebuild(n, out)
+	}
+	over := walk(body)
+	if !ok {
+		return nil, false
+	}
+	lm := expr.LowerListEval(&expr.Agg{Op: expr.AggImplode, Child: &expr.Col{Name: col}}, over, false)
+	if _, failed := lm.(*expr.Err); failed {
+		return nil, false
+	}
+	return &expr.Alias{Child: lm, Name: expr.OutputName(e)}, true
 }
 
 // innerAggsWindowed is e with each aggregate inside another aggregate's input made a

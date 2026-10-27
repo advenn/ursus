@@ -332,11 +332,18 @@ func winCumulative(fn expr.WinFnOp, params expr.WinParams, name string,
 func winCumInt128(params expr.WinParams, name string, out dtype.DataType,
 	col *data.Column, seg Segments) (*data.Column, error) {
 
-	src, err := widenToInt128(col)
-	if err != nil {
+	// An Int64's values are read where they lie, widened a row at a time, where a
+	// copy of them all at 128 bits was made first (step 386).
+	var src []i128.Int128
+	var src64 []int64
+	var err error
+	if col.DType().Physical().ID() == dtype.TypeInt64 && !col.IsPayloadFree() {
+		src64 = data.MustValues[int64](col)
+	} else if src, err = widenToInt128(col); err != nil {
 		return nil, err
 	}
 	valid := col.Validity()
+	all := valid.IsAllSet() && !col.IsPayloadFree()
 	n := col.Len()
 	vals := make([]i128.Int128, n)
 	ok := make([]bool, n)
@@ -368,11 +375,17 @@ func winCumInt128(params expr.WinParams, name string, out dtype.DataType,
 		}
 		var acc i128.Int128
 		for _, row := range rows {
-			if !valid.Get(int(row)) {
+			if !all && !valid.Get(int(row)) {
 				continue // skipped by the running total, still null in the output
 			}
+			var x i128.Int128
+			if src64 != nil {
+				x = i128.FromInt64(src64[row])
+			} else {
+				x = src[row]
+			}
 			var carry int64
-			acc, carry = addCarry(acc, src[row])
+			acc, carry = addCarry(acc, x)
 			if wide && (carry != 0 || (dec && !withinDigits(acc, int(out.Precision())))) {
 				why := "values of 128 bits can sum past 128 bits"
 				if dec {

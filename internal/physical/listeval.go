@@ -149,9 +149,20 @@ func bodyWindows(ctx context.Context, n expr.Node, eb *data.Batch, list []int32)
 		keys = append(keys, c)
 		specs = append(specs, kernel.SortSpec{Descending: k.Descending, NullsLast: k.NullsLast})
 	}
-	perm, err := kernel.ArgSortColumns(keys, specs, rows)
-	if err != nil {
-		return nil, nil, err
+	var perm []int32
+	if len(keys) == 1 {
+		// The elements lie a list at a time, in order, so sorting by the list alone,
+		// stably, is the identity: half of an eval's time over a million elements
+		// (step 386, W1 of v0.7-scope.md).
+		perm = make([]int32, rows)
+		for j := range perm {
+			perm[j] = int32(j)
+		}
+	} else {
+		var err error
+		if perm, err = kernel.ArgSortColumns(keys, specs, rows); err != nil {
+			return nil, nil, err
+		}
 	}
 	bounds := []int32{0}
 	for j := 1; j < rows; j++ {
