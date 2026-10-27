@@ -3412,13 +3412,15 @@ Go's rule for v0 applies, so a minor version may change behaviour, and an API ma
 renamed, removed or reshaped when the result is better, without being deprecated
 first. Each release below therefore says what a user of the previous one can trip
 on, not only what is new; from 0.6 on, each lists its breaks with their
-replacements.</p>
+replacements, and from 0.8 a tool checks the list: <code>make api</code>, which CI runs, fails
+on a feature of the last tag's public API (<code>api/</code>) that is gone, until a Breaks
+section here names it.</p>
 <p>Every step of construction has an as-built record in
 <a href="https://github.com/advenn/ursus/tree/master/context_files/"><code>context_files/</code></a>, with the measurements behind each change.
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v08">Unreleased — toward v0.8<a class="headerlink" href="#unreleased-toward-v08" title="Permanent link">&para;</a></h2>
-<p>Steps 392–400, so far, after 0.7's 375–391.
+<p>Steps 392–401, so far, after 0.7's 375–391.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.8-scope.md"><code>v0.8-scope.md</code></a> set the scope: <strong>ursus inside a Go
 service</strong>, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.</p>
@@ -3442,7 +3444,8 @@ that stops when its request is cancelled.</p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong><code>Engine</code></strong> (395): the memory budget and spill directory its queries share.
+<li>
+<p><strong><code>Engine</code></strong> (395): the memory budget and spill directory its queries share.
   <code>NewEngine(WithEngineMemoryLimit(n), WithEngineSpillDir(dir))</code> makes one, a
   service's for its requests, say, and another for its exports; <code>WithEngine(e)</code> runs a
   query on it; <code>DefaultEngine()</code> is the one a query given none runs on; <code>Stats()</code>
@@ -3453,7 +3456,16 @@ that stops when its request is cancelled.</p>
   share (397), and <code>Stats()</code> reports them and how many queries run on more than one.
   A Parquet scan's pages count on its engine while it reads them (400), up to 105 MiB
   for all of a wide table's columns: the engine's other queries spill sooner beside
-  it, the scan's own query does not, and <code>Stats().Held</code> includes them.</li>
+  it, the scan's own query does not, and <code>Stats().Held</code> includes them.</p>
+</li>
+<li>
+<p><strong>Every break of the public API, checked</strong> (401): <code>api/v0.6.8.txt</code> lists v0.6.8's
+  public API a feature a line, each function's and method's signature, each type's
+  fields and interface methods, each constant's value; <code>make api</code> lists what the
+  tree no longer has, and CI fails until the Breaks below name each. A minor version
+  may still break, on ZeroVer, a stable 1.0 not expected yet; it is listed first.
+  None since v0.6.8: 0.7's and 0.8's breaks so far are what code does, not its API.</p>
+</li>
 </ul>
 <h3 id="faster">Faster<a class="headerlink" href="#faster" title="Permanent link">&para;</a></h3>
 <ul>
