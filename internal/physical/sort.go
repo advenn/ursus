@@ -163,7 +163,7 @@ func (s *sortSink) Consume(ctx context.Context, in *data.Batch) error {
 		// A large k: its best rows alone keep the query over, so they go to disk as
 		// a run, as a sort's rows do (v0.6.4 step 245). A small k's never do: they
 		// spill only when they are a sixteenth of the limit.
-		if !s.mem.Over() || s.mem.Used() < max(s.minRun, s.budget.Limit()/16) {
+		if !s.mem.Over() || s.mem.Used() < max(s.minRun, s.budget.Room()/16) {
 			return nil
 		}
 	}

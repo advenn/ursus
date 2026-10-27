@@ -540,7 +540,7 @@ func bucketOrder(s *temporalSink, opts Options, rowOrder bool) (*bucketOrderSink
 	}
 	return &bucketOrderSink{out: out, bkt: s.schema.IndexOf(s.bktName), rowOrder: rowOrder, sort: &sortSink{schema: s.schema,
 		keys: keys, kSch: kSch, budget: opts.Budget, mem: opts.Budget.Account(s.op()),
-		batch: opts.batchSize(), minRun: opts.Budget.Limit() / 16}}, nil
+		batch: opts.batchSize(), minRun: opts.Budget.Room() / 16}}, nil
 }
 
 // temporalLocation resolves a Datetime's zone once per query. An unloadable zone

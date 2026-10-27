@@ -1,6 +1,6 @@
 ---
 description: >-
-  Out-of-core execution in ursus, the Go dataframe library: a default memory budget,
+  Out-of-core execution in ursus, the Go dataframe library: a memory budget its queries share,
   sort, group-by, join, unique and window functions that spill to disk, and errors that
   name the operator that cannot.
 ---
@@ -15,19 +15,39 @@ the operating system kills the process.
 
 ## The default budget
 
-A query with no limit of its own is budgeted at **half the memory the process can
-have**: the smaller of its container's limit and the machine's memory on Linux, and the
-machine's memory on macOS and Windows. Half, because ursus's buffers live on the Go
-heap, which grows to about twice what is live before it collects.
+The queries of a process share one budget, by default **half the memory the process
+can have**: the smaller of its container's limit and the machine's memory on Linux,
+and the machine's memory on macOS and Windows. Half, because ursus's buffers live on
+the Go heap, which grows to about twice what is live before it collects.
 
 Under that default, ursus also sets the Go runtime's soft memory limit near the same
 ceiling, so the heap's slack stays under it. `GOMEMLIMIT`, or calling
 `ursus.LeaveProcessMemoryLimit()` before the first query, keeps a program's own choice.
 
+## Queries at once
+
+The budget belongs to an `Engine`, and the queries run on it share it:
+`DefaultEngine()` for a query given none. A query spills once the engine's queries
+together hold more than the budget and it holds more than the others leave it, never
+less than an even share; alone, it spills where it would on a budget of its own. It is
+refused only when it alone holds more than the whole budget, so another query's
+holding makes it spill sooner, not fail.
+
+A service can make engines of its own, one for its requests and another for its
+exports, say, each with its budget and spill directory, and read what their queries
+hold for its metrics:
+
+--8<-- "Example_memoryEngine.md"
+
+Each query looks at the budget as it goes, so at a moment the engine's queries can
+hold more than it, up to about one and a half times it with sixteen large queries at
+once. *Changed in 0.8:* each query had a budget of its own, half the memory each.
+
 ## A limit of your own
 
-`WithMemoryLimit` sets the budget for one query, `WithSpillDir` where its files go,
-and `WithMemoryStats` reports what it held and how many files it wrote. A group-by
+`WithMemoryLimit` sets the budget for one query, apart from its engine's, so it spills
+where it would alone; `WithSpillDir` sets where its files go, and `WithMemoryStats`
+reports what it held and how many files it wrote. A group-by
 over 25,000 keys under 256 KiB:
 
 --8<-- "Example_memorySpill.md"

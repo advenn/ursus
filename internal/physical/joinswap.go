@@ -84,9 +84,11 @@ func (j *joinBreaker) swapIfSmaller(ctx context.Context) (Operator, error) {
 }
 
 // overHalf reports whether the query is past half its budget, where a deferred
-// build stops waiting (catchUp) and a probe side stops being read ahead.
+// build stops waiting (catchUp) and a probe side stops being read ahead: half the
+// room an engine's other queries leave it (step 395).
 func overHalf(s *joinBuildSink) bool {
-	return s.budget.Limit() > 0 && s.budget.Used()*2 > s.budget.Limit()
+	room := s.budget.Room()
+	return room > 0 && s.budget.Used()*2 > room
 }
 
 // putBack makes the probe batches read the first the probe side gives.

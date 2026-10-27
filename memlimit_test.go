@@ -143,4 +143,20 @@ func TestTheDefaultBudgetSetsTheProcessMemoryLimit(t *testing.T) {
 			t.Errorf("the runtime's limit is %d, want the existing %d", got, int64(3<<30))
 		}
 	})
+	// Step 395: an engine of the default budget is the default's kind; one given a
+	// limit, the caller's.
+	t.Run("an engine of the default budget sets it", func(t *testing.T) {
+		fresh()
+		query(t, WithEngine(NewEngine(WithEngineSpillDir(t.TempDir()))))
+		if got := debug.SetMemoryLimit(-1); got != want {
+			t.Errorf("the runtime's limit is %d, want %d", got, want)
+		}
+	})
+	t.Run("an engine given a limit leaves it alone", func(t *testing.T) {
+		fresh()
+		query(t, WithEngine(NewEngine(WithEngineMemoryLimit(1<<30))))
+		if got := debug.SetMemoryLimit(-1); got != math.MaxInt64 {
+			t.Errorf("the runtime's limit is %d, want none", got)
+		}
+	})
 }

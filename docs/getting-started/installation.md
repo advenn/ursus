@@ -56,8 +56,8 @@ own builds and benchmarks use it; any amd64 machine from the last decade has the
 
 ## Platforms
 
-ursus runs wherever Go does. Its memory limit, on by default at half the memory the
-machine or the container allows, reads that allowance on Linux (cgroups included),
+ursus runs wherever Go does. Its memory budget, on by default at half the memory the
+machine or the container allows and shared by a process's queries, reads that allowance on Linux (cgroups included),
 macOS and Windows.
 
 ## Versions

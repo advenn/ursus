@@ -689,10 +689,10 @@ func (t *trimOp) Apply(_ context.Context, in *data.Batch) (*data.Batch, error) {
 
 // readAhead is the read-ahead a scan may hold under budget b: a thirty-second of
 // its limit, so four scans at once hold an eighth, and at most maxReadAhead (step
-// 214).
+// 214); of the room an engine's other queries leave it as it is planned (step 395).
 func readAhead(b *execopt.Budget) int64 {
-	if lim := b.Limit(); lim > 0 {
-		return max(min(maxReadAhead, lim/32), 1)
+	if room := b.Room(); room > 0 {
+		return max(min(maxReadAhead, room/32), 1)
 	}
 	return maxReadAhead
 }

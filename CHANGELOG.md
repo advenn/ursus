@@ -15,10 +15,33 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–394, so far, after 0.7's 375–391.
+Steps 392–395, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
+
+### Breaks
+
+- **The queries of a process share one memory budget** (395): a query with no
+  `WithMemoryLimit` took half the memory the process may use for itself, so sixty-four
+  at once each assumed half the machine. They share that half now, on
+  `DefaultEngine`: a query spills once the queries together hold more than it and it
+  more than the others leave it, never less than an even share. So a query run beside
+  others can spill where it did not alone, and an unordered group-by's row order can
+  move with them, as it moved with scheduling before; answers do not change. A query
+  is refused only when it alone holds more than the whole budget, as before.
+  `WithMemoryLimit` gives a query a budget of its own, apart, as it did.
+
+### Features
+
+- **`Engine`** (395): the memory budget and spill directory its queries share.
+  `NewEngine(WithEngineMemoryLimit(n), WithEngineSpillDir(dir))` makes one, a
+  service's for its requests, say, and another for its exports; `WithEngine(e)` runs a
+  query on it; `DefaultEngine()` is the one a query given none runs on; `Stats()`
+  reports what its queries hold now, their peak, how many run and how many files they
+  spilled. Sixteen sorts and group-bys of four million rows at once peaked at 1.7 GB
+  of RSS on one engine of 256 MiB, where each on its own of 256 MiB took 3.7 to
+  3.9 GB, and finished no slower.
 
 ### Fixed
 

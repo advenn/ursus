@@ -415,7 +415,7 @@ func (lf *LazyFrame) WriteParquet(ctx context.Context, w io.Writer, opts ...Parq
 	if err := noPartition("sink_parquet", cfg.part); err != nil {
 		return err
 	}
-	defer cfg.collect.report()
+	defer cfg.collect.done()
 	root, err := lf.compile(ctx, cfg.collect)
 	if err != nil {
 		return err

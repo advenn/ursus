@@ -15,6 +15,11 @@
 //	        g1 scanned from Parquet and CSV (run from the repository's root); CASE
 //	        picks one by name
 //	mem     what a group-by of five million keys leaves held once it is done
+//	shared  sixteen queries at once over four million rows, half sorts and half
+//	        group-bys of a million keys, each on an engine of its own of $BUDGET MiB
+//	        (ARM=own), or all on one (ARM=shared): the peak RSS, spills and time;
+//	        MIX=sort or MIX=agg runs sixteen of one, N=n n queries, EACH=1 prints
+//	        each query's
 //	noop    nothing, for GODEBUG=inittrace=1
 package main
 
@@ -82,6 +87,7 @@ var queries = []query{
 func median(ts []time.Duration) time.Duration { slices.Sort(ts); return ts[len(ts)/2] }
 
 func lat() {
+	defer func() { fmt.Printf("lat the default engine after: %+v\n", ursus.DefaultEngine().Stats()) }()
 	d := dim()
 	for _, n := range []int{1_000, 10_000, 100_000} {
 		df := frame(n)
@@ -329,6 +335,80 @@ func mem() {
 	runtime.KeepAlive(df)
 }
 
+func hwm() string {
+	b, _ := os.ReadFile("/proc/self/status")
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(l, "VmHWM") {
+			return strings.Join(strings.Fields(l)[1:], " ")
+		}
+	}
+	return "?"
+}
+
+func shared() {
+	n := 4_000_000
+	k, x := make([]int64, n), make([]float64, n)
+	for i := range n {
+		r := uint64(i) * 0x9E3779B97F4A7C15
+		k[i], x[i] = int64(r>>20%1_000_000), float64(r>>30%100_000)
+	}
+	df := must(ursus.Frame(ursus.Values("k", k), ursus.Values("x", x)).Collect(context.Background()))
+	k, x = nil, nil
+	budget := int64(256)
+	fmt.Sscan(os.Getenv("BUDGET"), &budget)
+	one := ursus.NewEngine(ursus.WithEngineMemoryLimit(budget << 20))
+	runtime.GC()
+	fmt.Printf("shared %s: the input held, RSS %s\n", os.Getenv("ARM"), rss())
+	var (
+		wg     sync.WaitGroup
+		spills atomic.Int64
+	)
+	queries := 16
+	fmt.Sscan(os.Getenv("N"), &queries)
+	t0 := time.Now()
+	for i := range queries {
+		e := one
+		if os.Getenv("ARM") == "own" {
+			e = ursus.NewEngine(ursus.WithEngineMemoryLimit(budget << 20))
+		}
+		lf := df.Lazy().Sort(ursus.Asc(c("x")), ursus.Asc(c("k")))
+		if mix := os.Getenv("MIX"); mix == "agg" || mix == "" && i%2 == 1 {
+			lf = df.Lazy().GroupBy(c("k")).Agg(c("x").Sum())
+		}
+		wg.Go(func() {
+			var st ursus.MemoryStats
+			for _, err := range lf.CollectBatches(context.Background(), ursus.WithEngine(e), ursus.WithMemoryStats(&st)) {
+				if err != nil {
+					panic(err)
+				}
+			}
+			spills.Add(st.Spills)
+			if os.Getenv("EACH") != "" {
+				fmt.Printf("  query %2d: done at %.2f s, its peak %d MiB, %d files\n",
+					i, time.Since(t0).Seconds(), st.Peak>>20, st.Spills)
+			}
+		})
+	}
+	if os.Getenv("EACH") != "" {
+		stop := make(chan struct{})
+		defer close(stop)
+		go func() {
+			for t := time.NewTicker(250 * time.Millisecond); ; {
+				select {
+				case <-stop:
+					return
+				case <-t.C:
+					s := one.Stats()
+					fmt.Printf("  at %.2f s: %d running, holding %d MiB\n", time.Since(t0).Seconds(), s.Running, s.Held>>20)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	fmt.Printf("shared %s, %d MiB: %.2f s, %d files spilled, peak RSS %s, the shared engine's peak held %d MiB\n",
+		os.Getenv("ARM"), budget, time.Since(t0).Seconds(), spills.Load(), hwm(), one.Stats().Peak>>20)
+}
+
 func main() {
 	switch os.Args[1] {
 	case "lat":
@@ -344,5 +424,7 @@ func main() {
 		conc64()
 	case "alloc":
 		alloc()
+	case "shared":
+		shared()
 	}
 }

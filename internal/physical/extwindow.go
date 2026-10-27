@@ -66,6 +66,11 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 		if len(p.keys) > 0 || s.keylessStreams(i) {
 			continue
 		}
+		// Over only with an engine's other queries: it cannot spill, so it holds
+		// (step 395).
+		if !s.mem.OverAlone() {
+			return nil
+		}
 		return s.refuse("a window with no partition_by is one partition, which partitioning "+
 			"to disk cannot divide, and this one computes a function that needs all of it",
 			"every window function streams past the limit, in an order_by too, a rolling "+
@@ -79,6 +84,9 @@ func (s *windowSink) overBudget(ctx context.Context) error {
 		return s.startSkew(ctx)
 	}
 	if s.level >= maxSpillDepth || (s.level > 0 && len(s.parts) == 1 && s.parts[0].ids.Len() == 1) {
+		if !s.mem.OverAlone() {
+			return nil
+		}
 		return s.refuse("one partition holds more rows than the limit, and partitioning to disk "+
 			"divides partitions, not the rows of one; this one computes a function that "+
 			"needs all of it at once",

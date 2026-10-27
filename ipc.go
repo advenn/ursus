@@ -402,7 +402,7 @@ func (lf *LazyFrame) writeIPC(ctx context.Context, op string, w io.Writer, strea
 	if err := noPartition(op, cfg.part); err != nil {
 		return err
 	}
-	defer cfg.collect.report()
+	defer cfg.collect.done()
 	root, err := lf.compile(ctx, cfg.collect)
 	if err != nil {
 		return err

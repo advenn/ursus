@@ -465,7 +465,7 @@ func (s *joinBuildSink) Consume(ctx context.Context, in *data.Batch) error {
 
 	// Only the streaming build can spill, so past half the budget a deferred one
 	// becomes it, before anything below could need to split.
-	if s.deferred && s.budget.Limit() > 0 && s.budget.Used()*2 > s.budget.Limit() {
+	if s.deferred && overHalf(s) {
 		if err := s.catchUp(ctx); err != nil {
 			return err
 		}
@@ -476,11 +476,14 @@ func (s *joinBuildSink) Consume(ctx context.Context, in *data.Batch) error {
 	// that the invariant every proof here rests on — a key is wholly resident or
 	// wholly routed — is visible rather than argued.
 	if s.split != splitAll && s.budget.Limit() > 0 && len(s.keys) > 0 && s.mem.Over() {
-		if err := s.oneKeyOver(); err != nil {
+		hold, err := s.oneKeyOver()
+		if err != nil {
 			return err
 		}
-		if err := s.escalate(ctx); err != nil {
-			return err
+		if !hold {
+			if err := s.escalate(ctx); err != nil {
+				return err
+			}
 		}
 	}
 	return s.overBudget()

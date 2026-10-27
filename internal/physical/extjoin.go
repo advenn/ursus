@@ -434,7 +434,7 @@ func (s *joinBuildSink) overBudget() error {
 	if s.budget.Limit() > 0 && s.crossSpills() && s.mem.Over() {
 		return s.spillCross()
 	}
-	if s.budget.Limit() > 0 && len(s.keys) == 0 && s.mem.Over() {
+	if s.budget.Limit() > 0 && len(s.keys) == 0 && s.mem.OverAlone() {
 		return uerr.New(uerr.KindResource, "join",
 			"memory limit of %s exceeded: a join with no keys and a residual buffers "+
 				"its whole build side and cannot spill", execopt.Bytes(s.budget.Limit())).
@@ -453,9 +453,16 @@ func (s *joinBuildSink) overBudget() error {
 // rows, or the sink's own partition writers: each buffers partBufBytes, and a limit
 // smaller than the ones a spilling sink holds open leaves every sink over it whatever
 // its keys. That second case was reported as the first, about a key of two rows.
-func (s *joinBuildSink) oneKeyOver() error {
+//
+// Over only with an engine's other queries, not alone, it holds the key instead,
+// hold true: splitting cannot divide it, and an engine's pressure makes a query
+// spill, never fail (step 395).
+func (s *joinBuildSink) oneKeyOver() (hold bool, _ error) {
 	if s.level < maxSpillDepth || s.ids == nil || s.ids.Len() > 1 {
-		return nil
+		return false, nil
+	}
+	if !s.mem.OverAlone() {
+		return true, nil
 	}
 	var writers int64
 	for _, w := range s.bparts {
@@ -465,14 +472,14 @@ func (s *joinBuildSink) oneKeyOver() error {
 	}
 	limit := s.budget.Limit()
 	if writers > 0 && s.mem.Used()-writers*partBufBytes <= limit {
-		return uerr.New(uerr.KindResource, "join",
+		return false, uerr.New(uerr.KindResource, "join",
 			"memory limit of %s exceeded: the join's own spill writers need more, "+
 				"%d of them buffering %s each, before any row is held",
 			execopt.Bytes(limit), writers, execopt.Bytes(partBufBytes)).
 			Hint("a join that spills writes up to %d partitions at once; give it at least %s "+
 				"with WithMemoryLimit", nParts, execopt.Bytes(nParts*partBufBytes))
 	}
-	return uerr.New(uerr.KindResource, "join",
+	return false, uerr.New(uerr.KindResource, "join",
 		"memory limit of %s exceeded: a single join key has more build rows than the limit",
 		execopt.Bytes(limit)).
 		Hint("partitioning divides work across KEYS, so it cannot split one key's rows").

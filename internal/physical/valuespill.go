@@ -491,7 +491,7 @@ func (s *pairSpill) Sorting() (kernel.PairSpill, error) {
 	}
 	s.next = newPairSpill(s.ctx, s.budget, s.batch, s.prefix+"x")
 	s.next.sorting = true
-	s.next.most = max(int(s.budget.Limit()/4/heldPairBytes), minSortedRun)
+	s.next.most = max(int(s.budget.Room()/4/heldPairBytes), minSortedRun)
 	s.next.mem = s.budget.Account("group_by")
 	return s.next, nil
 }
