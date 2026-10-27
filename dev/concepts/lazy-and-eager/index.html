@@ -1744,7 +1744,9 @@ memory never has to be held at once:</p>
 </span></code></pre></div>
 <p>Breaking out of the loop stops the query and removes any spill files it wrote.</p>
 <h2 id="order-and-threads">Order and threads<a class="headerlink" href="#order-and-threads" title="Permanent link">&para;</a></h2>
-<p>A query runs on every core by default; <code>WithThreads(n)</code> sets how many. A scan's rows
+<p>A query runs on its engine's threads by default, every core Go may use, a share of
+them where several queries run at once, and one where its input fits in a batch;
+<code>WithThreads(n)</code> sets how many. A scan's rows
 come in the file's order at any thread count, a filter keeps its input's order, and a
 sort's is sorted. Two orders are not promised, as in Polars, and each has an option
 that promises one:</p>

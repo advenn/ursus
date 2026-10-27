@@ -3418,7 +3418,7 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v08">Unreleased — toward v0.8<a class="headerlink" href="#unreleased-toward-v08" title="Permanent link">&para;</a></h2>
-<p>Steps 392–396, so far, after 0.7's 375–391.
+<p>Steps 392–397, so far, after 0.7's 375–391.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.8-scope.md"><code>v0.8-scope.md</code></a> set the scope: <strong>ursus inside a Go
 service</strong>, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.</p>
@@ -3433,6 +3433,12 @@ that stops when its request is cancelled.</p>
   move with them, as it moved with scheduling before; answers do not change. A query
   is refused only when it alone holds more than the whole budget, as before.
   <code>WithMemoryLimit</code> gives a query a budget of its own, apart, as it did.</li>
+<li><strong>A query shares its engine's threads</strong> (397): a query with no <code>WithThreads</code> ran on
+  <code>runtime.NumCPU()</code> workers, whatever ran beside it. It runs on its engine's threads
+  now, <code>GOMAXPROCS</code> by default, which follows a container's CPU limit where <code>NumCPU</code>
+  does not, divided by the queries on more than one thread as it is planned, at least
+  one. Alone, a query runs on all of them as before. <code>WithThreads(n)</code> runs a query on
+  n, as it did.</li>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3443,7 +3449,8 @@ that stops when its request is cancelled.</p>
   reports what its queries hold now, their peak, how many run and how many files they
   spilled. Sixteen sorts and group-bys of four million rows at once peaked at 1.7 GB
   of RSS on one engine of 256 MiB, where each on its own of 256 MiB took 3.7 to
-  3.9 GB, and finished no slower.</li>
+  3.9 GB, and finished no slower. <code>WithEngineThreads(n)</code> sets the threads its queries
+  share (397), and <code>Stats()</code> reports them and how many queries run on more than one.</li>
 </ul>
 <h3 id="faster">Faster<a class="headerlink" href="#faster" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3455,6 +3462,11 @@ that stops when its request is cancelled.</p>
   A 1,000-row group-by takes 47 µs where it took 133, and sixty-four 10,000-row
   group-bys at once answer 7,190 queries a second where 4,280 to 5,090, on a tenth of
   the goroutines. <code>WithThreads(n)</code> runs a query on n at any size, as before.</li>
+<li><strong>Many large queries at once start fewer workers</strong> (397): each takes its share of
+  its engine's threads, so sixty-four 200,000-row group-bys at once answer about a
+  fifth more queries a second, on 100 goroutines where they started 950. The eager
+  <code>PartitionBy</code>, <code>ToDummies</code>, <code>Corr</code> and their kin, and the JSON and CSV writers,
+  take a share as the queries do, where each took every thread.</li>
 </ul>
 <h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
 <ul>
