@@ -19,6 +19,7 @@ package uerr
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -122,6 +123,41 @@ func (e *Error) Error() string {
 }
 
 func (e *Error) Unwrap() error { return e.Err }
+
+// Public is the Error a caller outside the module reads, ursus.Error, through
+// errors.As (step 402, C2 of v0.8-scope.md). It is a copy of the Error made as it is
+// asked for, not the Error: an Error is annotated in place as it propagates
+// (Annotate), and its builders, Hint, WithOp and WithNode, are ursus's own.
+type Public struct {
+	Kind  Kind
+	Op    string   // the operation, as the caller named it: "select", "scan_parquet"
+	Msg   string   // the one-line statement of what is wrong
+	Node  string   // the plan node it happened at, where known
+	Hints []string // the lines under Msg: a near column's name, a knob to turn
+	Err   error    // the cause, if any
+}
+
+func (p *Public) inner() *Error {
+	return &Error{Kind: p.Kind, Op: p.Op, Msg: p.Msg, Node: p.Node, Hints: p.Hints, Err: p.Err}
+}
+
+// Error is the message the Error it copies gives.
+func (p *Public) Error() string { return p.inner().Error() }
+
+// Unwrap returns the cause.
+func (p *Public) Unwrap() error { return p.Err }
+
+// Is matches the sentinel of its kind, as the Error does.
+func (p *Public) Is(target error) bool { return p.inner().Is(target) }
+
+// As gives errors.As a Public of e, for a target of *Public.
+func (e *Error) As(target any) bool {
+	p, ok := target.(**Public)
+	if ok {
+		*p = &Public{Kind: e.Kind, Op: e.Op, Msg: e.Msg, Node: e.Node, Hints: slices.Clone(e.Hints), Err: e.Err}
+	}
+	return ok
+}
 
 // Is supports errors.Is(err, uerr.Kind*) style matching via a sentinel per kind.
 func (e *Error) Is(target error) bool {

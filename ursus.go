@@ -112,6 +112,37 @@ var (
 	ErrInternal = uerr.ErrInternal
 )
 
+// Error is a failure of ursus's own, for a caller to read rather than match its
+// message (step 402):
+//
+//	var e *ursus.Error
+//	if errors.As(err, &e) {
+//		log.Printf("ursus %s, %s: %s", e.Kind, e.Op, e.Msg)
+//	}
+//
+// Kind classifies it, as the sentinels above do for errors.Is, which an Error
+// matches too; Op is the operation as the caller named it ("select",
+// "scan_parquet"); Msg the statement of what is wrong; Node the plan node it
+// happened at, where known; Hints the lines under it, a near column's name or a
+// knob to turn; and Err its cause, which Unwrap returns. errors.As gives a copy, made
+// as it is asked for. A query stopped by its context fails with the context's
+// error, context.Canceled or context.DeadlineExceeded, not an Error.
+type Error = uerr.Public
+
+// ErrorKind classifies an Error: the kinds below, which the sentinels name.
+type ErrorKind = uerr.Kind
+
+// The kinds of Error.
+const (
+	KindInternal    = uerr.KindInternal    // a bug in ursus
+	KindSchema      = uerr.KindSchema      // an unknown, duplicate or ambiguous column
+	KindType        = uerr.KindType        // an operation not defined for the given types
+	KindValue       = uerr.KindValue       // a bad literal, an out-of-range cast, a bad pattern
+	KindUnsupported = uerr.KindUnsupported // a well-formed request ursus cannot yet serve
+	KindIO          = uerr.KindIO          // a failure reading or writing a source
+	KindResource    = uerr.KindResource    // a limit ursus refused to exceed
+)
+
 // Time resolutions.
 const (
 	Second = dtype.Second

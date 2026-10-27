@@ -11,6 +11,7 @@ package ursus_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -49,6 +50,24 @@ func Example() {
 	// │ "east"  │ "pear"  │ 2     │ 2.25    │
 	// │ "south" │ "fig"   │ 9     │ 3       │
 	// └─────────┴─────────┴───────┴─────────┘
+}
+
+// A failure of ursus's own is an Error, which errors.As reads: its kind, the
+// operation, what is wrong, and the hints under it.
+func ExampleError() {
+	_, err := exampleSales().Select(ursus.Col("prise")).Collect(context.Background())
+	var e *ursus.Error
+	if errors.As(err, &e) {
+		fmt.Println(e.Kind, e.Op, e.Node)
+		fmt.Println(e.Msg)
+		fmt.Println(e.Hints[0])
+	}
+	fmt.Println(errors.Is(err, ursus.ErrSchema))
+	// Output:
+	// schema select Project
+	// unknown column "prise"
+	// did you mean: "price"?
+	// true
 }
 
 // Filter keeps rows; Select keeps columns. Neither runs until Collect.
