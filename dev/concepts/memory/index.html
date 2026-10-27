@@ -1670,6 +1670,10 @@ hold for its metrics:</p>
 <p>Each query looks at the budget as it goes, so at a moment the engine's queries can
 hold more than it, up to about one and a half times it with sixteen large queries at
 once. <em>Changed in 0.8:</em> each query had a budget of its own, half the memory each.</p>
+<p>A Parquet scan's pages, decompressed and read at once, count on its engine too, up to
+about 100 MiB for every column of a wide table read on eight threads: the engine's
+other queries spill sooner beside it, and its own query does not, as the bytes are
+about to be consumed.</p>
 <h2 id="a-limit-of-your-own">A limit of your own<a class="headerlink" href="#a-limit-of-your-own" title="Permanent link">&para;</a></h2>
 <p><code>WithMemoryLimit</code> sets the budget for one query, apart from its engine's, so it spills
 where it would alone; <code>WithSpillDir</code> sets where its files go, and <code>WithMemoryStats</code>
