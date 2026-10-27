@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Out-of-core execution in ursus, the Go dataframe library: a default memory budget, sort, group-by, join, unique and window functions that spill to disk, and errors that name the operator that cannot.">
+        <meta name="description" content="Out-of-core execution in ursus, the Go dataframe library: a memory budget its queries share, sort, group-by, join, unique and window functions that spill to disk, and errors that name the operator that cannot.">
       
       
       
@@ -70,13 +70,13 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ursus">
   <meta property="og:title" content="Memory and spilling - ursus">
-  <meta property="og:description" content="Out-of-core execution in ursus, the Go dataframe library: a default memory budget, sort, group-by, join, unique and window functions that spill to disk, and errors that name the operator that cannot.">
+  <meta property="og:description" content="Out-of-core execution in ursus, the Go dataframe library: a memory budget its queries share, sort, group-by, join, unique and window functions that spill to disk, and errors that name the operator that cannot.">
   
     <meta property="og:url" content="https://advenn.github.io/ursus/latest/concepts/memory/">
   
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Memory and spilling - ursus">
-  <meta name="twitter:description" content="Out-of-core execution in ursus, the Go dataframe library: a default memory budget, sort, group-by, join, unique and window functions that spill to disk, and errors that name the operator that cannot.">
+  <meta name="twitter:description" content="Out-of-core execution in ursus, the Go dataframe library: a memory budget its queries share, sort, group-by, join, unique and window functions that spill to disk, and errors that name the operator that cannot.">
   
 
   </head>
@@ -843,6 +843,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#queries-at-once" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Queries at once
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#a-limit-of-your-own" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1522,6 +1533,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#queries-at-once" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Queries at once
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#a-limit-of-your-own" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1597,44 +1619,89 @@ to disk and carry on, and the answer is the one they give in memory. An operator
 cannot spill fails at the budget with an error naming itself, instead of growing until
 the operating system kills the process.</p>
 <h2 id="the-default-budget">The default budget<a class="headerlink" href="#the-default-budget" title="Permanent link">&para;</a></h2>
-<p>A query with no limit of its own is budgeted at <strong>half the memory the process can
-have</strong>: the smaller of its container's limit and the machine's memory on Linux, and the
-machine's memory on macOS and Windows. Half, because ursus's buffers live on the Go
-heap, which grows to about twice what is live before it collects.</p>
+<p>The queries of a process share one budget, by default <strong>half the memory the process
+can have</strong>: the smaller of its container's limit and the machine's memory on Linux,
+and the machine's memory on macOS and Windows. Half, because ursus's buffers live on
+the Go heap, which grows to about twice what is live before it collects.</p>
 <p>Under that default, ursus also sets the Go runtime's soft memory limit near the same
 ceiling, so the heap's slack stays under it. <code>GOMEMLIMIT</code>, or calling
 <code>ursus.LeaveProcessMemoryLimit()</code> before the first query, keeps a program's own choice.</p>
-<h2 id="a-limit-of-your-own">A limit of your own<a class="headerlink" href="#a-limit-of-your-own" title="Permanent link">&para;</a></h2>
-<p><code>WithMemoryLimit</code> sets the budget for one query, <code>WithSpillDir</code> where its files go,
-and <code>WithMemoryStats</code> reports what it held and how many files it wrote. A group-by
-over 25,000 keys under 256 KiB:</p>
-<div class="language-go highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nx">keys</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">([]</span><span class="kt">int64</span><span class="p">,</span><span class="w"> </span><span class="mi">100_000</span><span class="p">)</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">for</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">range</span><span class="w"> </span><span class="nx">keys</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nx">keys</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">int64</span><span class="p">(</span><span class="nx">i</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">7919</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">25_000</span><span class="p">)</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">}</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="kd">var</span><span class="w"> </span><span class="nx">stats</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">MemoryStats</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nx">df</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"k"</span><span class="p">,</span><span class="w"> </span><span class="nx">keys</span><span class="p">)).</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nx">GroupBy</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"k"</span><span class="p">)).</span><span class="nx">Agg</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Len</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"n"</span><span class="p">)).</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span><span class="nx">Select</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Len</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"groups"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"n"</span><span class="p">).</span><span class="nx">Max</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"largest"</span><span class="p">)).</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="nx">Collect</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">(),</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithMemoryLimit</span><span class="p">(</span><span class="mi">256</span><span class="o">&lt;&lt;</span><span class="mi">10</span><span class="p">),</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithSpillDir</span><span class="p">(</span><span class="nx">os</span><span class="p">.</span><span class="nx">TempDir</span><span class="p">()),</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithMemoryStats</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">stats</span><span class="p">))</span>
+<h2 id="queries-at-once">Queries at once<a class="headerlink" href="#queries-at-once" title="Permanent link">&para;</a></h2>
+<p>The budget belongs to an <code>Engine</code>, and the queries run on it share it:
+<code>DefaultEngine()</code> for a query given none. A query spills once the engine's queries
+together hold more than the budget and it holds more than the others leave it, never
+less than an even share; alone, it spills where it would on a budget of its own. It is
+refused only when it alone holds more than the whole budget, so another query's
+holding makes it spill sooner, not fail.</p>
+<p>A service can make engines of its own, one for its requests and another for its
+exports, say, each with its budget and spill directory, and read what their queries
+hold for its metrics:</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1">// One budget for a service's requests, shared by every query run on it.</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nx">requests</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">NewEngine</span><span class="p">(</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithEngineMemoryLimit</span><span class="p">(</span><span class="mi">2</span><span class="o">&lt;&lt;</span><span class="mi">30</span><span class="p">),</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithEngineSpillDir</span><span class="p">(</span><span class="nx">os</span><span class="p">.</span><span class="nx">TempDir</span><span class="p">()))</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nx">orders</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"customer"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">"b"</span><span class="p">,</span><span class="w"> </span><span class="s">"a"</span><span class="p">,</span><span class="w"> </span><span class="s">"b"</span><span class="p">,</span><span class="w"> </span><span class="s">"c"</span><span class="p">}),</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"amount"</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">float64</span><span class="p">{</span><span class="mi">30</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="mi">15</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">}))</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="nx">df</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">orders</span><span class="p">.</span><span class="nx">GroupBy</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"customer"</span><span class="p">)).</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nx">Agg</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"amount"</span><span class="p">).</span><span class="nx">Sum</span><span class="p">()).</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">    </span><span class="nx">Sort</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Desc</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"amount"</span><span class="p">))).</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span><span class="nx">Collect</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">(),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithEngine</span><span class="p">(</span><span class="nx">requests</span><span class="p">))</span>
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
 </span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">    </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
 </span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="p">}</span>
 </span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">df</span><span class="p">)</span>
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="s">"spilled:"</span><span class="p">,</span><span class="w"> </span><span class="nx">stats</span><span class="p">.</span><span class="nx">Spills</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="nx">s</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">requests</span><span class="p">.</span><span class="nx">Stats</span><span class="p">()</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="nx">fmt</span><span class="p">.</span><span class="nx">Printf</span><span class="p">(</span><span class="s">"budget %d MiB, %d running, %d held\n"</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">Limit</span><span class="o">&gt;&gt;</span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">Running</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">Held</span><span class="p">)</span>
 </span></code></pre></div>
-<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>shape: (1, 2)
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>┌────────┬─────────┐
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│ groups │ largest │
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│ Uint64 │ Uint64  │
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>├────────┼─────────┤
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>│ 25000  │ 4       │
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>└────────┴─────────┘
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>spilled: true
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>shape: (3, 2)
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>┌──────────┬─────────┐
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│ customer │ amount  │
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│ String   │ Float64 │
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>├──────────┼─────────┤
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>│ "b"      │ 45      │
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│ "a"      │ 10      │
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>│ "c"      │ 5       │
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>└──────────┴─────────┘
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>budget 2048 MiB, 0 running, 0 held
+</span></code></pre></div>
+<p>Each query looks at the budget as it goes, so at a moment the engine's queries can
+hold more than it, up to about one and a half times it with sixteen large queries at
+once. <em>Changed in 0.8:</em> each query had a budget of its own, half the memory each.</p>
+<h2 id="a-limit-of-your-own">A limit of your own<a class="headerlink" href="#a-limit-of-your-own" title="Permanent link">&para;</a></h2>
+<p><code>WithMemoryLimit</code> sets the budget for one query, apart from its engine's, so it spills
+where it would alone; <code>WithSpillDir</code> sets where its files go, and <code>WithMemoryStats</code>
+reports what it held and how many files it wrote. A group-by
+over 25,000 keys under 256 KiB:</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nx">keys</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">([]</span><span class="kt">int64</span><span class="p">,</span><span class="w"> </span><span class="mi">100_000</span><span class="p">)</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">for</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">range</span><span class="w"> </span><span class="nx">keys</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nx">keys</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">int64</span><span class="p">(</span><span class="nx">i</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">7919</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">25_000</span><span class="p">)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="p">}</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="kd">var</span><span class="w"> </span><span class="nx">stats</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">MemoryStats</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nx">df</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"k"</span><span class="p">,</span><span class="w"> </span><span class="nx">keys</span><span class="p">)).</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="nx">GroupBy</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"k"</span><span class="p">)).</span><span class="nx">Agg</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Len</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"n"</span><span class="p">)).</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="nx">Select</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Len</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"groups"</span><span class="p">),</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"n"</span><span class="p">).</span><span class="nx">Max</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"largest"</span><span class="p">)).</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">    </span><span class="nx">Collect</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">(),</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithMemoryLimit</span><span class="p">(</span><span class="mi">256</span><span class="o">&lt;&lt;</span><span class="mi">10</span><span class="p">),</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithSpillDir</span><span class="p">(</span><span class="nx">os</span><span class="p">.</span><span class="nx">TempDir</span><span class="p">()),</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithMemoryStats</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">stats</span><span class="p">))</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">    </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="p">}</span>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">df</span><span class="p">)</span>
+</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="s">"spilled:"</span><span class="p">,</span><span class="w"> </span><span class="nx">stats</span><span class="p">.</span><span class="nx">Spills</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
+</span></code></pre></div>
+<div class="language-text highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>shape: (1, 2)
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>┌────────┬─────────┐
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>│ groups │ largest │
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>│ Uint64 │ Uint64  │
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>├────────┼─────────┤
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>│ 25000  │ 4       │
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>└────────┴─────────┘
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>spilled: true
 </span></code></pre></div>
 <p>The spill files are removed when the query ends, on success, on an error, and when a
 loop over <code>CollectBatches</code> breaks early. <code>WithMemoryLimit(0)</code> turns the budget off.</p>
@@ -1659,32 +1726,32 @@ group, where each failed.</p>
 <code>Implode</code> holds every value of a group as its answer, for one. Each such operator
 fails at the budget, and its error says what it holds, why it cannot spill, and what
 the alternatives are:</p>
-<div class="language-go highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nx">keys</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">([]</span><span class="kt">int64</span><span class="p">,</span><span class="w"> </span><span class="mi">100_000</span><span class="p">)</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"k"</span><span class="p">,</span><span class="w"> </span><span class="nx">keys</span><span class="p">)).</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nx">Select</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"k"</span><span class="p">).</span><span class="nx">Implode</span><span class="p">()).</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nx">Collect</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">(),</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithMemoryLimit</span><span class="p">(</span><span class="mi">64</span><span class="o">&lt;&lt;</span><span class="mi">10</span><span class="p">),</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithSpillDir</span><span class="p">(</span><span class="nx">os</span><span class="p">.</span><span class="nx">TempDir</span><span class="p">()))</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nx">keys</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">([]</span><span class="kt">int64</span><span class="p">,</span><span class="w"> </span><span class="mi">100_000</span><span class="p">)</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Frame</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Values</span><span class="p">(</span><span class="s">"k"</span><span class="p">,</span><span class="w"> </span><span class="nx">keys</span><span class="p">)).</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nx">Select</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"k"</span><span class="p">).</span><span class="nx">Implode</span><span class="p">()).</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="nx">Collect</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">(),</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithMemoryLimit</span><span class="p">(</span><span class="mi">64</span><span class="o">&lt;&lt;</span><span class="mi">10</span><span class="p">),</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithSpillDir</span><span class="p">(</span><span class="nx">os</span><span class="p">.</span><span class="nx">TempDir</span><span class="p">()))</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
 </span></code></pre></div>
-<div class="language-text wrap highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>ursus: group_by: memory limit of 64.0KiB exceeded: the query is holding 105.2KiB, 105.2KiB of it in this operator
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>  group_by holds one entry per distinct key, and implode holds every VALUE as its answer — which partitioning to disk cannot divide, because it divides across keys (quantile, median, n_unique, mode and corr_spearman spill their values); raise the limit with WithMemoryLimit
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>  sort, group_by, join, unique, over, reverse and tail spill to disk; join_asof, merge_sorted, hstack, rolling and group_by_dynamic stream their input; an over computing a rolling window by time one of whose periods holds more than the limit fails rather than exceed it, and so does implode over one group larger than it
+<div class="language-text wrap highlight"><span class="filename">Output</span><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>ursus: group_by: memory limit of 64.0KiB exceeded: the query is holding 105.2KiB, 105.2KiB of it in this operator
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>  group_by holds one entry per distinct key, and implode holds every VALUE as its answer — which partitioning to disk cannot divide, because it divides across keys (quantile, median, n_unique, mode and corr_spearman spill their values); raise the limit with WithMemoryLimit
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>  sort, group_by, join, unique, over, reverse and tail spill to disk; join_asof, merge_sorted, hstack, rolling and group_by_dynamic stream their input; an over computing a rolling window by time one of whose periods holds more than the limit fails rather than exceed it, and so does implode over one group larger than it
 </span></code></pre></div>
 <p><code>Collect</code> itself holds its whole answer, by definition. An answer larger than memory
 goes through <code>CollectBatches</code>, or <code>WriteParquet</code> and <code>WriteCSV</code>, which stream it.</p>
 <h2 id="a-larger-than-memory-query">A larger-than-memory query<a class="headerlink" href="#a-larger-than-memory-query" title="Permanent link">&para;</a></h2>
 <p>A sort of more Parquet than fits in memory, written to a file as it comes out of the
 sort, holding at most 512 MiB:</p>
-<div class="language-go highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nx">ctx</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">()</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">ScanParquet</span><span class="p">(</span><span class="s">"events/*.parquet"</span><span class="p">).</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nx">Sort</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Desc</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"ts"</span><span class="p">))).</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="nx">SinkParquet</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="s">"sorted.parquet"</span><span class="p">,</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithMemoryLimit</span><span class="p">(</span><span class="mi">512</span><span class="o">&lt;&lt;</span><span class="mi">20</span><span class="p">),</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithSpillDir</span><span class="p">(</span><span class="s">"/var/tmp/ursus"</span><span class="p">))</span>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">    </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="p">}</span>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nx">ctx</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">()</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">ScanParquet</span><span class="p">(</span><span class="s">"events/*.parquet"</span><span class="p">).</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nx">Sort</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Desc</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"ts"</span><span class="p">))).</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="nx">SinkParquet</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="s">"sorted.parquet"</span><span class="p">,</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithMemoryLimit</span><span class="p">(</span><span class="mi">512</span><span class="o">&lt;&lt;</span><span class="mi">20</span><span class="p">),</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">WithSpillDir</span><span class="p">(</span><span class="s">"/var/tmp/ursus"</span><span class="p">))</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="p">}</span>
 </span></code></pre></div>
 <p>Each path that spills is tested under a limit far below its input, against its answer
 without one.</p>
