@@ -72,7 +72,7 @@ func TestTextSortMatchesTheComparator(t *testing.T) {
 					}
 					want := ArgSort(n, cmp)
 					for _, w := range []int{1, 4} {
-						got, err := ArgSortColumnsN(cols, specs, n, w)
+						got, err := ArgSortColumnsN(t.Context(), cols, specs, n, w)
 						if err != nil {
 							t.Fatal(err)
 						}

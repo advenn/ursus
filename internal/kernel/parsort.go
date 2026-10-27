@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"context"
 	"slices"
 	"sync"
 
@@ -41,12 +42,17 @@ func ranges(n, workers int, fn func(w, lo, hi int)) {
 
 // ArgSortColumnsN is ArgSortColumns on up to workers goroutines: the same
 // permutation, ties included, the radix passes and the comparator sort each split.
-func ArgSortColumnsN(cols []*data.Column, specs []SortSpec, n, workers int) ([]int32, error) {
+// A cancelled ctx stops it between passes, runs and merges, and is its error (step
+// 394).
+func ArgSortColumnsN(ctx context.Context, cols []*data.Column, specs []SortSpec, n, workers int) ([]int32, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if workers <= 1 || n < parallelMin {
 		return ArgSortColumns(cols, specs, n)
 	}
 	if len(cols) == len(specs) && radixable(cols) {
-		idx, err := argSortRadixN(cols, specs, n, workers)
+		idx, err := argSortRadixN(ctx, cols, specs, n, workers)
 		if err != nil {
 			return nil, err
 		}
@@ -58,12 +64,12 @@ func ArgSortColumnsN(cols []*data.Column, specs []SortSpec, n, workers int) ([]i
 	if err != nil {
 		return nil, err
 	}
-	return ArgSortN(n, cmp, workers), nil
+	return argSortNCtx(ctx, n, cmp, workers)
 }
 
 // argSortRadixN is argSortRadix with each byte pass split across workers.
-func argSortRadixN(cols []*data.Column, specs []SortSpec, n, workers int) ([]int32, error) {
-	r := &radixSorter{scratch: make([]int32, n), workers: workers}
+func argSortRadixN(ctx context.Context, cols []*data.Column, specs []SortSpec, n, workers int) ([]int32, error) {
+	r := &radixSorter{scratch: make([]int32, n), workers: workers, ctx: ctx}
 	return r.argSort(cols, specs, n)
 }
 
@@ -103,6 +109,9 @@ func (r *radixSorter) radixSortedN(src, dst []int32, keys []uint64) ([]int32, []
 	first := true
 	chunk := make([][256]int32, workers)
 	for b := range 8 {
+		if r.halted() {
+			return src, ka // argSort answers the cancellation
+		}
 		if total[b][byte(ka[0]>>(8*b))] == int32(n) {
 			continue // a byte of one value sorts nothing, as in radixSorted
 		}
@@ -153,8 +162,16 @@ func (r *radixSorter) radixSortedN(src, dst []int32, keys []uint64) ([]int32, []
 // is ArgSort's exactly. cmp must be safe for concurrent use, as a comparator over
 // columns, which only reads them, is.
 func ArgSortN(n int, cmp Comparator, workers int) []int32 {
+	idx, _ := argSortNCtx(context.Background(), n, cmp, workers)
+	return idx
+}
+
+// argSortNCtx is ArgSortN stopped by a cancelled ctx before its runs are sorted and
+// at each round of merges, its error the answer (step 394). A run is sorted whole, a
+// worker's share of the rows, so a cancel waits for one.
+func argSortNCtx(ctx context.Context, n int, cmp Comparator, workers int) ([]int32, error) {
 	if workers <= 1 || n < parallelMin {
-		return ArgSort(n, cmp)
+		return ArgSort(n, cmp), nil
 	}
 	idx := make([]int32, n)
 	for i := range idx {
@@ -169,6 +186,9 @@ func ArgSortN(n int, cmp Comparator, workers int) []int32 {
 
 	tmp := make([]int32, n)
 	for len(bounds) > 2 {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		next := []int{0}
 		for i := 0; i+2 < len(bounds); i += 2 {
 			lo, mid, hi := bounds[i], bounds[i+1], bounds[i+2]
@@ -183,7 +203,7 @@ func ArgSortN(n int, cmp Comparator, workers int) []int32 {
 		}
 		idx, tmp, bounds = tmp, idx, next
 	}
-	return idx
+	return idx, ctx.Err()
 }
 
 // mergeN merges the sorted runs l and r into dst, a tie taken from l, on up to

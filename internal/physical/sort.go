@@ -211,7 +211,7 @@ func sortBeatsHeap(n, k int) bool {
 //
 // Only the KEY batches are concatenated, never the data: the data is gathered
 // through rowRefs instead, so the peak never includes a second copy of the input.
-func (s *sortSink) order(limit int) ([]rowRef, error) {
+func (s *sortSink) order(ctx context.Context, limit int) ([]rowRef, error) {
 	keys, err := kernel.Concat(s.kSch, s.keyB)
 	if err != nil {
 		return nil, err
@@ -226,7 +226,7 @@ func (s *sortSink) order(limit int) ([]rowRef, error) {
 		// A large k sorts every row and keeps the first k (step 385, T1 of
 		// v0.7-scope.md): the sort's order, whose first k ArgTopK's must equal.
 		var err error
-		sel, err = kernel.ArgSortColumnsN(keys.Columns(), s.specs(), n, s.threads)
+		sel, err = kernel.ArgSortColumnsN(ctx, keys.Columns(), s.specs(), n, s.threads)
 		if err != nil {
 			return nil, err
 		}
@@ -245,7 +245,7 @@ func (s *sortSink) order(limit int) ([]rowRef, error) {
 		// is what lets it radix-sort. It falls back to exactly the comparator
 		// above for String and Int128 keys.
 		var err error
-		sel, err = kernel.ArgSortColumnsN(keys.Columns(), s.specs(), n, s.threads)
+		sel, err = kernel.ArgSortColumnsN(ctx, keys.Columns(), s.specs(), n, s.threads)
 		if err != nil {
 			return nil, err
 		}
@@ -344,7 +344,7 @@ func (s *sortSink) compact(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	refs, err := s.order(s.limit)
+	refs, err := s.order(ctx, s.limit)
 	if err != nil {
 		return err
 	}
@@ -372,7 +372,7 @@ func (s *sortSink) spill(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	refs, err := s.order(0)
+	refs, err := s.order(ctx, 0)
 	if err != nil {
 		return err
 	}
@@ -547,7 +547,7 @@ func (s *sortSink) Finish(ctx context.Context) (Operator, error) {
 	// output batch at a time out of the retained input batches.
 	var tail runSource
 	if len(s.rows) > 0 {
-		refs, err := s.order(s.limit)
+		refs, err := s.order(ctx, s.limit)
 		if err != nil {
 			return nil, err
 		}

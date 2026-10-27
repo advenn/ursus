@@ -11,7 +11,9 @@
 //	        collector's share printed
 //	alloc   what each small query allocates on one thread
 //	cancel  how soon a query over ten million rows returns once cancelled, and the
-//	        goroutines left after
+//	        goroutines left after: a group-by, a sort, a join, a collect, and h2o's
+//	        g1 scanned from Parquet and CSV (run from the repository's root); CASE
+//	        picks one by name
 //	mem     what a group-by of five million keys leaves held once it is done
 //	noop    nothing, for GODEBUG=inittrace=1
 package main
@@ -234,17 +236,33 @@ func big() *ursus.DataFrame {
 
 func cancel() {
 	df := big()
-	for _, name := range []string{"group-by of 5M keys", "sort"} {
+	dim := must(ursus.Frame(ursus.Values("k", seq(5_000_000)), ursus.Values("y", seq(5_000_000))).Collect(context.Background()))
+	h2o := "bench/data/h2o/n10000000/groupby/g1"
+	cases := []struct {
+		name string
+		lf   func() *ursus.LazyFrame
+	}{
+		{"group-by of 5M keys", func() *ursus.LazyFrame { return df.Lazy().GroupBy(c("k")).Agg(c("x").Sum()) }},
+		{"sort", func() *ursus.LazyFrame { return df.Lazy().Sort(ursus.Asc(c("x")), ursus.Asc(c("k"))) }},
+		{"join to 5M keys", func() *ursus.LazyFrame { return df.Lazy().Join(dim.Lazy(), ursus.JoinOn(c("k"))) }},
+		{"10M rows collected", func() *ursus.LazyFrame { return df.Lazy().Select(c("k"), c("x").Mul(2.0)) }},
+		{"Parquet scan, group-by", func() *ursus.LazyFrame {
+			return ursus.ScanParquet(h2o + ".parquet").GroupBy(c("id3")).Agg(c("v1").Sum())
+		}},
+		{"CSV scan, group-by", func() *ursus.LazyFrame {
+			return ursus.ScanCSV(h2o + ".csv").GroupBy(c("id3")).Agg(c("v1").Sum())
+		}},
+	}
+	for _, cs := range cases {
+		if only := os.Getenv("CASE"); only != "" && !strings.Contains(cs.name, only) {
+			continue
+		}
 		for _, after := range []time.Duration{10 * time.Millisecond, 50 * time.Millisecond} {
 			runtime.GC()
 			before := runtime.NumGoroutine()
 			ctx, stop := context.WithCancel(context.Background())
-			lf := df.Lazy().GroupBy(c("k")).Agg(c("x").Sum())
-			if name == "sort" {
-				lf = df.Lazy().Sort(ursus.Asc(c("x")), ursus.Asc(c("k")))
-			}
+			lf := cs.lf()
 			done := make(chan error, 1)
-			t0 := time.Now()
 			go func() { _, err := lf.Collect(ctx); done <- err }()
 			time.Sleep(after)
 			tc := time.Now()
@@ -252,10 +270,25 @@ func cancel() {
 			err := <-done
 			back := time.Since(tc)
 			time.Sleep(200 * time.Millisecond)
-			fmt.Printf("cancel %-20s at %3d ms: returned %6.1f ms after the cancel (%v), goroutines %d before, %d 200 ms after; whole %v\n",
-				name, after.Milliseconds(), float64(back.Microseconds())/1e3, err != nil, before, runtime.NumGoroutine(), time.Since(t0).Round(time.Millisecond))
+			fmt.Printf("cancel %-24s at %3d ms: returned %6.1f ms after the cancel (cancelled %v), goroutines %d before, %d after\n",
+				cs.name, after.Milliseconds(), float64(back.Microseconds())/1e3, err != nil, before, runtime.NumGoroutine())
 		}
 	}
+}
+
+func seq(n int) []int64 {
+	v := make([]int64, n)
+	for i := range v {
+		v[i] = int64(i)
+	}
+	return v
+}
+
+func must(df *ursus.DataFrame, err error) *ursus.DataFrame {
+	if err != nil {
+		panic(err)
+	}
+	return df
 }
 
 func heap() (live, mapped uint64) {

@@ -73,6 +73,14 @@ func drain(ctx context.Context, root physical.Operator, held *execopt.Account) (
 		}
 		b, err := physical.Pull(ctx, root)
 		if errors.Is(err, io.EOF) {
+			// A stream that ended under a cancelled context may have ended for it
+			// (step 394): a parallel operator's lanes close when it is cancelled,
+			// which read as the end of its input, and a group-by above answered on
+			// the rows it had; a cancelled count of a CSV file returned an empty frame
+			// and no error. The cancellation is the answer, never what was read before.
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			return batches, nil
 		}
 		if err != nil {
@@ -101,6 +109,9 @@ func Batches(ctx context.Context, root physical.Operator) iter.Seq2[*data.Batch,
 			}
 			b, err := physical.Pull(ctx, root)
 			if errors.Is(err, io.EOF) {
+				if err := ctx.Err(); err != nil {
+					yield(nil, err) // as drain asks
+				}
 				return
 			}
 			if err != nil {
@@ -125,6 +136,9 @@ func Count(ctx context.Context, root physical.Operator) (int64, error) {
 		}
 		b, err := physical.Pull(ctx, root)
 		if errors.Is(err, io.EOF) {
+			if err := ctx.Err(); err != nil {
+				return 0, err // as drain asks
+			}
 			return n, nil
 		}
 		if err != nil {

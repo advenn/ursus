@@ -75,7 +75,7 @@ func TestParallelSortMatchesSerial(t *testing.T) {
 					t.Fatal(err)
 				}
 				for _, w := range []int{2, 3, 4, 7} {
-					got, err := ArgSortColumnsN(keys, specs, n, w)
+					got, err := ArgSortColumnsN(t.Context(), keys, specs, n, w)
 					if err != nil {
 						t.Fatal(err)
 					}

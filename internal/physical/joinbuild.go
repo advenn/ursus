@@ -285,7 +285,12 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 
 	// 1. Each batch's keys, evaluated, hashed and routed. An intKeyed join's are only
 	// gathered, with their range, and routed below unless they are dense.
+	// Each pass looks at ctx a batch at a time (step 394): a build of five million
+	// keys took 100 to 170 ms to come back from a cancel.
 	err := eachConcurrently(len(batches), nParts, func(bi int) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		b := batches[bi]
 		cols := b.Columns()
 		if s.spec.needBuildRows {
@@ -374,6 +379,9 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 			shift++
 		}
 		err := eachConcurrently(len(batches), nParts, func(bi int) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			counts := make([]int, nParts)
 			v, at := keyInts[bi], part[starts[bi]:starts[bi+1]]
 			for i := range at {
@@ -396,7 +404,7 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 			return builtKeys{}, err
 		}
 		if dense {
-			return s.buildDense(batches, keyInts, inPart, starts, all, nParts, shift)
+			return s.buildDense(ctx, batches, keyInts, inPart, starts, all, nParts, shift)
 		}
 	}
 
@@ -478,6 +486,9 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 			n, buf = 0, buf[:0]
 		}
 		for bi := range batches {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			mine := inPart[bi][p]
 			if len(mine) == 0 {
 				continue
@@ -581,7 +592,7 @@ func (a intKeyStat) merge(b intKeyStat) intKeyStat {
 // found or made by subtraction, where the partitioned build hashed and probed every
 // row into its partition's table, q21's 19%. Then each partition's ids move past the
 // partitions' before it, in the index and in rowKey, as step 3 numbers the tables.
-func (s *joinBuildSink) buildDense(batches []*data.Batch, keyInts [][]int64, inPart [][][]int32,
+func (s *joinBuildSink) buildDense(ctx context.Context, batches []*data.Batch, keyInts [][]int64, inPart [][][]int32,
 	starts []int, st intKeyStat, nParts int, shift uint) (builtKeys, error) {
 	index := make([]int32, uint64(st.hi)-uint64(st.lo)+1)
 	slots := func(p int) []int32 {
@@ -605,6 +616,9 @@ func (s *joinBuildSink) buildDense(batches []*data.Batch, keyInts [][]int64, inP
 		)
 		dup[p] = -1
 		for bi := range batches {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			v := keyInts[bi]
 			for _, r := range inPart[bi][p] {
 				g := starts[bi] + int(r)

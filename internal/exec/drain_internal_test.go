@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"io"
 	"testing"
 
@@ -47,5 +48,46 @@ func TestDrainClosesTheTreeBeforeTheResultIsAssembled(t *testing.T) {
 	b, err := Collect(t.Context(), &spyOp{n: 3}, nil, 1)
 	if err != nil || b.Rows() != 3 {
 		t.Fatalf("Collect: %v rows, %v", b, err)
+	}
+}
+
+// cancelsOp cancels its query's context on its last Next and ends its stream there,
+// as a parallel operator's lanes did, closed by the cancel and read as the end.
+type cancelsOp struct {
+	spyOp
+	cancel context.CancelFunc
+}
+
+func (c *cancelsOp) Next(ctx context.Context) (*data.Batch, error) {
+	if c.sent == c.n {
+		c.cancel()
+		return nil, io.EOF
+	}
+	return c.spyOp.Next(ctx)
+}
+
+// TestAStreamEndedByACancelIsTheCancel (step 394): a stream that ends under a
+// cancelled context answers the cancellation, from Collect, Batches and Count,
+// where it answered the rows read before it as the whole.
+func TestAStreamEndedByACancelIsTheCancel(t *testing.T) {
+	run := map[string]func(ctx context.Context, op *cancelsOp) error{
+		"Collect": func(ctx context.Context, op *cancelsOp) error { _, err := Collect(ctx, op, nil, 1); return err },
+		"Count":   func(ctx context.Context, op *cancelsOp) error { _, err := Count(ctx, op); return err },
+		"Batches": func(ctx context.Context, op *cancelsOp) error {
+			for _, err := range Batches(ctx, op) {
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+	for name, fn := range run {
+		ctx, cancel := context.WithCancel(t.Context())
+		op := &cancelsOp{spyOp: spyOp{n: 3}, cancel: cancel}
+		if err := fn(ctx, op); !errors.Is(err, context.Canceled) {
+			t.Errorf("%s: %v, want the cancellation", name, err)
+		}
+		cancel()
 	}
 }
