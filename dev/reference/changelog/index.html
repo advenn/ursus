@@ -3296,11 +3296,20 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v07">Unreleased — toward v0.7<a class="headerlink" href="#unreleased-toward-v07" title="Permanent link">&para;</a></h2>
-<p>Everything since <code>v0.6.8</code> (2026-10-26): steps 375–388, so far.
+<p>Everything since <code>v0.6.8</code> (2026-10-26): steps 375–389, so far.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.7-scope.md"><code>v0.7-scope.md</code></a> set the scope: <strong>performance,</strong> the
 Parquet read first.</p>
 <h3 id="faster">Faster<a class="headerlink" href="#faster" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A CSV file's floats are read in one pass however they are written</strong> (389): a
+  float of 17 digits, as Go and Polars write one in full, was parsed three times; its
+  value is now found by the Eisel-Lemire algorithm, as strconv finds it, and its
+  fraction read eight digits at a time. Such a float parses in a third of its time,
+  and a <code>Cast(String)</code> to a float with it.</li>
+<li><strong><code>Collect</code> copies its answer on the query's threads</strong> (389): a result's batches
+  were concatenated into one frame on one thread after the query ran on all of them;
+  each column's rows are now copied in pieces at once. A million rows read from a CSV
+  file on four threads take 0.78 of their time.</li>
 <li><strong>An aggregate over a window no longer copies the frame</strong> (388): <code>x - x.Mean()</code> or
   <code>x.Sum().Over(g)</code> in a <code>WithColumns</code> hands its batches on as they came, each with
   the window's values, where the window concatenated them all first.</li>
