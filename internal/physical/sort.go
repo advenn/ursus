@@ -307,18 +307,23 @@ func uniformShift(rows []*data.Batch) (uint, bool) {
 }
 
 // eachPiece runs fn on workers contiguous pieces of [0, n), a goroutine apiece, and
-// waits; on one worker, or fewer than 1<<16 items, it runs in the caller.
+// waits; on one worker, or fewer than 1<<16 items, it runs in the caller. A piece's
+// panic is raised again in the caller (step 393).
 func eachPiece(n, workers int, fn func(lo, hi int)) {
 	if workers <= 1 || n < 1<<16 {
 		fn(0, n)
 		return
 	}
-	var wg sync.WaitGroup
+	var (
+		wg    sync.WaitGroup
+		relay uerr.Relay
+	)
 	for w := range workers {
 		lo, hi := w*n/workers, (w+1)*n/workers
-		wg.Go(func() { fn(lo, hi) })
+		relay.Go(&wg, func() { fn(lo, hi) })
 	}
 	wg.Wait()
+	relay.Raise()
 }
 
 // compact reduces a BOUNDED sort's buffer to the best `limit` rows.

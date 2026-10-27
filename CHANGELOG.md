@@ -13,6 +13,22 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.8
+
+Steps 392–393, so far, after 0.7's 375–391.
+[`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
+service**, small queries, many at once, memory a service can predict, and a query
+that stops when its request is cancelled.
+
+### Fixed
+
+- **A panic on one of a query's goroutines no longer ends the process** (393): a
+  sort's and a unique's parallel pieces, first-seen keys, a text sort, a Spearman
+  rank, and `PartitionBy`, `ToDummies` and `Corr`, started goroutines that recovered
+  nothing, so a bug in one ended the program that asked, a service with every request
+  it served. Each panic is an internal error from the call now, as one anywhere else
+  in a query is, naming the line that panicked.
+
 ## Unreleased — toward v0.7
 
 Everything since `v0.6.8` (2026-10-26): steps 375–391, so far.
