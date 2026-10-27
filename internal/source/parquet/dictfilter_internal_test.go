@@ -290,8 +290,14 @@ func TestColumnsBesideATextConjunctAreReadAtItsKeptRows(t *testing.T) {
 		}
 		return int64(allocatedBytes() - before)
 	}
-	alone := read([]string{"s"})
-	beside := read([]string{"a", "c", "s"})
+	// The least of three reads: the count is the process's, and what else allocates
+	// while one reads, the runtime's or a goroutine's, only adds to it. One read on
+	// CI's runners counted 1.22 MB beside where the laptop counts 0.72 (step 391).
+	least := func(cols []string) int64 {
+		return min(read(cols), read(cols), read(cols))
+	}
+	alone := least([]string{"s"})
+	beside := least([]string{"a", "c", "s"})
 	ints := int64(groups*rows*16) * 3 / 4
 	t.Logf("the conjunct's column alone %.2f MB; with the two Int64 columns %.2f MB, which whole are %.2f MB",
 		float64(alone)/(1<<20), float64(beside)/(1<<20), float64(ints)/(1<<20))

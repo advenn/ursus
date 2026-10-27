@@ -68,3 +68,13 @@ another slice, was no fault, as `Pack` fills whatever slice it is given.
 **Gate:** the light gate, one package at a time on four procs: the tests at v3, 28
 packages ok; levels, vet ×3 and the bench engine tests clean; the 22 PDS-H answers
 match DuckDB. `./internal/...` and the root package ran whole before it.
+
+## 5. CI
+
+The push's CI failed in two of its jobs, the scalar build and the 512-bit one, on step
+377's `TestColumnsBesideATextConjunctAreReadAtItsKeptRows` (`parquet`), which this
+step does not touch: the two Int64 columns read beside a text conjunct added 1.22 and
+1.26 MB where its bound is 1.20 and the laptop counts 0.72, scalar or not. Its count
+is the process's allocations, and whatever else allocates while it reads only adds;
+the failed jobs passed when run again. It takes the least of three reads each way
+now, its bound kept.
