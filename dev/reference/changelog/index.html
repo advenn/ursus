@@ -3352,12 +3352,20 @@ replacements.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v08">Unreleased — toward v0.8<a class="headerlink" href="#unreleased-toward-v08" title="Permanent link">&para;</a></h2>
-<p>Steps 392–393, so far, after 0.7's 375–391.
+<p>Steps 392–394, so far, after 0.7's 375–391.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.8-scope.md"><code>v0.8-scope.md</code></a> set the scope: <strong>ursus inside a Go
 service</strong>, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.</p>
 <h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>A cancelled query no longer answers part of its input as the whole</strong> (394): a
+  query cancelled while it read could return the rows read before the cancel, and no
+  error: a count of a CSV file cancelled partway was an empty frame. A query whose
+  context is cancelled before it finishes now returns the cancellation, from
+  <code>Collect</code>, <code>CollectBatches</code>, <code>Count</code> and the writers.</li>
+<li><strong>A cancelled sort or join stops promptly</strong> (394): a sort of ten million rows came
+  back 400 ms and more after its cancel, and a join's build 100 to 170; now some tens
+  of milliseconds at most.</li>
 <li><strong>A panic on one of a query's goroutines no longer ends the process</strong> (393): a
   sort's and a unique's parallel pieces, first-seen keys, a text sort, a Spearman
   rank, and <code>PartitionBy</code>, <code>ToDummies</code> and <code>Corr</code>, started goroutines that recovered
