@@ -15,12 +15,15 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.7
 
-Everything since `v0.6.8` (2026-10-26): steps 375–387, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–388, so far.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
 Parquet read first.
 
 ### Faster
 
+- **An aggregate over a window no longer copies the frame** (388): `x - x.Mean()` or
+  `x.Sum().Over(g)` in a `WithColumns` hands its batches on as they came, each with
+  the window's values, where the window concatenated them all first.
 - **Windows in one `WithColumns` or `Select` are computed at once** (387), a thread
   each, where they were one after another: a rolling mean, max and std over a million
   rows take 0.55 of their time. An integer rolling sum reads its values in place.

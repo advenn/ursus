@@ -82,3 +82,51 @@ func TestASinksWindowsAnswerTogetherAsAlone(t *testing.T) {
 		t.Fatal("a Duration's running sum past its range answered")
 	}
 }
+
+// TestAggregateWindowsAnswerBatchByBatchAsWhole: since step 388 a sink whose windows
+// are all aggregates hands back its batches as they came, each with its windows'
+// values, where it concatenated them first. Its answer, in its rows' order, is the
+// one the concatenating path gives, which an ordered window beside the same
+// aggregates takes: over the frame and two partitionings, with nulls, on one thread
+// and four, in batches of 97 and the default.
+func TestAggregateWindowsAnswerBatchByBatchAsWhole(t *testing.T) {
+	const n = 4000
+	g, h := make([]int64, n), make([]string, n)
+	x, xOK := make([]int64, n), make([]bool, n)
+	f := make([]float64, n)
+	for i := range n {
+		r := uint64(i) * 0x9E3779B97F4A7C15 >> 19
+		g[i], h[i] = int64(r%9), "h"+string(rune('a'+r%4))
+		x[i], xOK[i] = int64(r%800)-400, r%7 != 0
+		f[i] = float64(r%113) / 7
+	}
+	src := ursus.Frame(ursus.Values("g", g), ursus.Values("h", h), ursus.ValuesNullable("x", x, xOK),
+		ursus.Values("f", f))
+	c := ursus.Col
+	aggs := []ursus.Expr{
+		c("x").Sub(c("x").Mean()).Alias("centred"),
+		c("f").Max().Alias("fmax"),
+		c("x").Sum().Over(c("g")).Alias("sum_g"),
+		c("f").Mean().Over(c("h")).Alias("mean_h"),
+		c("x").Count().Over(c("g"), c("h")).Alias("count_gh"),
+	}
+	names := []ursus.Expr{c("g"), c("h"), c("x"), c("f"), c("centred"), c("fmax"), c("sum_g"), c("mean_h"), c("count_gh")}
+	whole, err := src.WithColumns(append(aggs, c("x").CumSum(false).Over(c("g")).Alias("ordered"))...).
+		Select(names...).Collect(t.Context(), ursus.WithThreads(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, threads := range []int{1, 4} {
+		for _, size := range []int{97, 0} {
+			opts := []ursus.CollectOption{ursus.WithThreads(threads)}
+			if size > 0 {
+				opts = append(opts, ursus.WithBatchSize(size))
+			}
+			got, err := src.WithColumns(aggs...).Select(names...).Collect(t.Context(), opts...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ursustest.AssertFrameEqual(t, got, whole)
+		}
+	}
+}

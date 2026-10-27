@@ -302,6 +302,10 @@ func (s *windowSink) Finish(ctx context.Context) (Operator, error) {
 		return newBatchOperator(s.schema, empty), nil
 	}
 
+	if s.aggregatesOnly() {
+		return s.finishByBatch()
+	}
+
 	// The ordered functions need every row addressable by one index, and the output
 	// carries the input's columns through, so the retained batches are concatenated
 	// once here. This is the peak-memory moment, as it is for sortSink.
@@ -338,6 +342,62 @@ func (s *windowSink) Finish(ctx context.Context) (Operator, error) {
 		return nil, err
 	}
 	return newBatchOperator(s.schema, out), nil
+}
+
+// aggregatesOnly reports whether every window of s is an aggregate over its
+// partition, which no window needs the rows addressable as one for.
+func (s *windowSink) aggregatesOnly() bool {
+	for i := range s.specs {
+		if s.specs[i].acc == nil {
+			return false
+		}
+	}
+	return len(s.specs) > 0
+}
+
+// finishByBatch is Finish for windows that are all aggregates (step 388, O2 of
+// v0.7-scope.md): each retained batch keeps its rows and has its windows' values
+// gathered beside them by its own rows' partition ids, the batches at once, where
+// every batch was concatenated into one first. x - x.Mean() over a million rows
+// spent a fifth of its time copying the frame it already held.
+func (s *windowSink) finishByBatch() (Operator, error) {
+	res := make([]*data.Column, len(s.specs))
+	err := eachConcurrently(len(s.specs), max(1, s.threads), func(i int) error {
+		sp := &s.specs[i]
+		nGroups := s.parts[sp.part].groups()
+		sp.acc.Reserve(nGroups)
+		var err error
+		res[i], err = sp.acc.Finish(sp.name, nGroups)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	starts := make([]int, len(s.rows)+1)
+	for i, b := range s.rows {
+		starts[i+1] = starts[i] + b.Rows()
+	}
+	out := make([]*data.Batch, len(s.rows))
+	err = eachConcurrently(len(s.rows), max(1, s.threads), func(bi int) error {
+		b, lo, hi := s.rows[bi], starts[bi], starts[bi+1]
+		cols := make([]*data.Column, 0, len(b.Columns())+len(s.specs))
+		cols = append(cols, b.Columns()...)
+		for i := range s.specs {
+			sp := &s.specs[i]
+			c, err := kernel.Take(res[i], s.parts[sp.part].perRow[lo:hi])
+			if err != nil {
+				return err
+			}
+			cols = append(cols, c.Rename(sp.name))
+		}
+		var err error
+		out[bi], err = data.NewBatch(s.schema, cols)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return newBatchOperator(s.schema, out...), nil
 }
 
 // finishAggregate is the whole broadcast: one value per partition, gathered back

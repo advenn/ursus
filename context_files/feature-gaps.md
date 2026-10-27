@@ -264,7 +264,7 @@ These belong to a performance release more than to features.
 | built: **slice pushdown,** in step 371: through projections, `WithColumns`, a row index, a union's inputs and an ordered left join's left input, and of an offset slice | — |
 | built: **a count reads no column,** in step 370: a scan of no columns, Parquet's rows from its footers; `Select(Len())`'s aggregation is slower than Polars' still, P4's | — |
 | built: **predicate pushdown through group-by keys and window partition keys,** in step 382: a conjunct of the keys alone, rewritten through their definitions, not of a float key; a window's where every window of the node partitions by its columns | — |
-| **Expression-level CSE;** clustering of `with_columns`; dropping a computed column nothing reads | P1 |
+| **Expression-level CSE;** clustering of `with_columns`; dropping a computed column nothing reads. Measured at step 388: a row-wise subexpression in two outputs of a million rows is a sixth of the query, windows and aggregates already shared by identity; a `WithColumns` reads its earlier outputs, so a shared subexpression must not cross one that redefines what it reads | P1 |
 | **Multi-join reordering** on statistics; sortedness propagation and a merge join | P2 |
 | **A work-stealing morsel scheduler.** A sort runs on the query's threads since step 361 | P1 |
 | **The CSV writer is one thread's:** a million rows of an integer, a float, text and an instant take 397 ms, where Polars, formatting a file's parts in parallel, takes 168; an instant alone 246 against 129 (step 354) | P1 |
