@@ -2,98 +2,98 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://advenn.github.io/ursus/latest/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/benchmarks/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/concepts/expressions/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/concepts/lazy-and-eager/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/concepts/memory/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/concepts/types-and-nulls/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/getting-started/coming-from-polars/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/getting-started/installation/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/getting-started/quickstart/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/aggregation/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/dates-and-times/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/go-functions/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/go-values/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/io/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/joins/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/lists-and-structs/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/missing-data/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/reshaping/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/selecting/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/strings/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/guide/windows/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/reference/api/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
     <url>
          <loc>https://advenn.github.io/ursus/latest/reference/changelog/</loc>
-         <lastmod>2026-10-26</lastmod>
+         <lastmod>2026-10-27</lastmod>
     </url>
 </urlset>
