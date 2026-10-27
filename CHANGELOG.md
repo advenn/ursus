@@ -5,7 +5,9 @@ Go's rule for v0 applies, so a minor version may change behaviour, and an API ma
 renamed, removed or reshaped when the result is better, without being deprecated
 first. Each release below therefore says what a user of the previous one can trip
 on, not only what is new; from 0.6 on, each lists its breaks with their
-replacements.
+replacements, and from 0.8 a tool checks the list: `make api`, which CI runs, fails
+on a feature of the last tag's public API (`api/`) that is gone, until a Breaks
+section here names it.
 
 Every step of construction has an as-built record in
 [`context_files/`](./context_files/), with the measurements behind each change.
@@ -15,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–400, so far, after 0.7's 375–391.
+Steps 392–401, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
@@ -52,6 +54,13 @@ that stops when its request is cancelled.
   A Parquet scan's pages count on its engine while it reads them (400), up to 105 MiB
   for all of a wide table's columns: the engine's other queries spill sooner beside
   it, the scan's own query does not, and `Stats().Held` includes them.
+
+- **Every break of the public API, checked** (401): `api/v0.6.8.txt` lists v0.6.8's
+  public API a feature a line, each function's and method's signature, each type's
+  fields and interface methods, each constant's value; `make api` lists what the
+  tree no longer has, and CI fails until the Breaks below name each. A minor version
+  may still break, on ZeroVer, a stable 1.0 not expected yet; it is listed first.
+  None since v0.6.8: 0.7's and 0.8's breaks so far are what code does, not its API.
 
 ### Faster
 

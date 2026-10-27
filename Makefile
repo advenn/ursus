@@ -90,6 +90,18 @@ riskgate:
 levels:
 	$(GO) run ./internal/gen/levels
 
+# The public API against the last tag's (step 401): a feature api/<newest tag>.txt
+# lists that this tree no longer has is a break, and fails the check unless a Breaks
+# section of the CHANGELOG's unreleased versions names it. A tag's list is written at
+# the commit tagged, as it is cut: make api-tag TAG=v0.8.0.
+.PHONY: api api-tag
+api:
+	$(GO) run ./internal/gen/api -check
+
+api-tag:
+	@test -n "$(TAG)" || { echo "usage: make api-tag TAG=vX.Y.Z"; exit 2; }
+	$(GO) run ./internal/gen/api -tag $(TAG) > api/$(TAG).txt
+
 # The documentation site (context_files/docs-site-scope.md). `docs` writes the
 # fragments the pages include from docs/examples; `docs-serve` previews the site at
 # http://127.0.0.1:8000, and `docs-build` builds it into site/, refusing a broken

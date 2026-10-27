@@ -184,7 +184,9 @@ not, which the rest of 0.6 works through.
 
 **ursus is on [ZeroVer](https://0ver.org): 0.x, and a stable 1.0 is not expected yet.** Version numbers follow Go's
 rule for v0, so a minor version may rename, remove or reshape an API when the result is better, with no deprecation
-period. The changelog lists each release's breaks with their replacements.
+period. The changelog lists each release's breaks with their replacements, and a tool holds it to them: CI's
+`make api` fails on any feature of the last tag's public API, in [`api/`](./api/), that a change takes away, until the
+changelog's breaks name it.
 
 ---
 
