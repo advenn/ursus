@@ -185,10 +185,12 @@ const noKey = int32(-1)
 // Nothing mutates it after freeze, which is what would let a future morsel
 // scheduler share one table across N probe workers with no lock.
 type joinTable struct {
-	ids   joinKeys            // encoded key -> key id
-	ints  *kernel.IntKeyParts // integer key -> key id, in place of ids (step 159)
-	off   []int32             // len nKeys+1; rows[off[id]:off[id+1]] are id's build rows
-	rows  []int32             // build row indices, ascending within each key
+	ids   joinKeys             // encoded key -> key id
+	ints  *kernel.IntKeyParts  // integer key -> key id, in place of ids (step 159)
+	words *kernel.WordKeyParts // packed integer keys -> key id, in place of ids (step 391)
+	pack  *kernel.KeyPacker    // and their packer
+	off   []int32              // len nKeys+1; rows[off[id]:off[id+1]] are id's build rows
+	rows  []int32              // build row indices, ascending within each key
 	nKeys int
 
 	// build holds every build row, addressable by one index. nil for Semi/Anti,
@@ -687,9 +689,12 @@ func (s *joinBuildSink) freeze(ctx context.Context) (*joinTable, error) {
 		}
 		nKeys = keys.Len()
 		t = &joinTable{nKeys: nKeys}
-		if keys.ints != nil {
+		switch {
+		case keys.ints != nil:
 			t.ints = keys.ints
-		} else {
+		case keys.words != nil:
+			t.words, t.pack = keys.words, keys.pack
+		default:
 			t.ids = keys.bytes
 		}
 		// A Semi or Anti join's keys are in the tables now; the rebase below drops
@@ -762,9 +767,12 @@ func (s *joinBuildSink) freeze(ctx context.Context) (*joinTable, error) {
 	// And the keys the probe looks up: hash tables, a direct index (step 203), or a
 	// dense build's index alone (step 204). The rebase dropped their charge, and the
 	// probe holds them to its end.
-	if t.ints != nil {
+	switch {
+	case t.ints != nil:
 		s.tableBytes += t.ints.NBytes()
-	} else if t.ids != nil {
+	case t.words != nil:
+		s.tableBytes += t.words.NBytes()
+	case t.ids != nil:
 		s.tableBytes += t.ids.NBytes()
 	}
 	s.mem.RetainBytes(s.tableBytes)
@@ -1151,6 +1159,29 @@ func (p *joinProbeOp) startBatch(ctx context.Context, in *data.Batch) error {
 			p.t.ints.GetMany(keys[i:j], p.found[i:j])
 		}
 		if !p.curOK.IsAllSet() {
+			for i := range n {
+				if !p.curOK.Get(i) {
+					p.found[i] = noLookup
+				}
+			}
+		}
+		return nil
+	}
+	if p.t.words != nil {
+		// Several integer keys, packed as the build packed them (step 391), a chunk at
+		// a time. A null row is packed and looked up like the rest, and then marked
+		// where nulls match nothing; where they match, its null bits are its key.
+		var a, b, c [kernel.ManyChunk]uint64
+		var cs []uint64
+		for i := 0; i < n; i += kernel.ManyChunk {
+			m := min(kernel.ManyChunk, n-i)
+			if p.t.pack.Words() == 3 {
+				cs = c[:m]
+			}
+			p.t.pack.Pack(keyCols, i, a[:m], b[:m], cs)
+			p.t.words.GetMany(a[:m], b[:m], cs, p.found[i:i+m])
+		}
+		if !p.spec.nullsEqual && !p.curOK.IsAllSet() {
 			for i := range n {
 				if !p.curOK.Get(i) {
 					p.found[i] = noLookup

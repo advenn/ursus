@@ -97,8 +97,8 @@ func drainRows(ctx context.Context, op Operator) ([]string, error) {
 }
 
 // runJoin plans and drains j, and returns its rows, rendered, with the build sink
-// and the table its probe read: a *kernel.KeyTable, *kernel.KeyParts or
-// *kernel.IntKeyParts.
+// and the table its probe read: a *kernel.KeyTable, *kernel.KeyParts,
+// *kernel.IntKeyParts or *kernel.WordKeyParts.
 func runJoin(t *testing.T, j *plan.Join, opts Options) ([]string, *joinBuildSink, any, error) {
 	t.Helper()
 	ctx := t.Context()
@@ -127,6 +127,8 @@ func runJoin(t *testing.T, j *plan.Join, opts Options) ([]string, *joinBuildSink
 		return rows, sink, nil, nil
 	case table.ints != nil:
 		return rows, sink, table.ints, nil
+	case table.words != nil:
+		return rows, sink, table.words, nil
 	}
 	return rows, sink, table.ids, nil
 }
@@ -166,12 +168,13 @@ func TestThePartitionedBuildAnswersAsTheStreamingOne(t *testing.T) {
 				if len(sink.keyParts) != 0 {
 					t.Fatal("a Semi or Anti join kept its key batches past freeze")
 				}
-				// An Int64 key whose nulls match nothing is an integer (step 159).
+				// An Int64 key whose nulls match nothing is an integer (step 159), and
+				// one whose nulls match packed words (step 391).
 				var n int
 				switch parts := keys.(type) {
-				case *kernel.KeyParts:
+				case *kernel.WordKeyParts:
 					if !nullsEqual {
-						t.Fatal("the probe read encoded keys, not integers")
+						t.Fatal("the probe read packed words, not integers")
 					}
 					n = parts.Len()
 				case *kernel.IntKeyParts:
@@ -613,6 +616,105 @@ func TestADenseBuildHoldsOneIndexAndNoTables(t *testing.T) {
 		}
 		if dense := parts.Tables() == 1 && parts.Index(); dense != c.dense {
 			t.Errorf("%s: %d tables, an index %v", c.name, parts.Tables(), parts.Index())
+		}
+	}
+}
+
+// TestAPartitionedBuildOfIntegerKeysPacksThem: since step 391 a join's partitioned
+// build of several integer keys packs them into words, two or three, where it encoded
+// them, and answers as the streaming build does, row for row: an Int64 and an Int32,
+// two words, and two Int64s and an Int32, three; with nulls in each, matching or not;
+// for every kind. A key past three words is encoded still.
+func TestAPartitionedBuildOfIntegerKeysPacksThem(t *testing.T) {
+	serial := Options{Threads: 1, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
+	parallel := Options{Threads: 4, BatchSize: 512, Budget: execopt.NewBudget(0, "")}
+	scan := func(rng *rand.Rand, prefix string, n int) *plan.Scan {
+		sch := dtype.MustSchema(dtype.Of(prefix+"a", dtype.Int64), dtype.Of(prefix+"b", dtype.Int32),
+			dtype.Of(prefix+"c", dtype.Int64), dtype.Of(prefix+"d", dtype.Int64), dtype.Of(prefix+"name", dtype.String))
+		var batches []*data.Batch
+		for lo := 0; lo < n; lo += 512 {
+			m := min(512, n-lo)
+			a, c, d := make([]int64, m), make([]int64, m), make([]int64, m)
+			b := make([]int32, m)
+			names := make([]string, m)
+			va, vb, vc := bitmap.NewBuilder(m), bitmap.NewBuilder(m), bitmap.NewBuilder(m)
+			for i := range m {
+				a[i], b[i], c[i], d[i] = int64(rng.IntN(40))-20, int32(rng.IntN(30)), int64(rng.IntN(5))<<40, int64(rng.IntN(3))
+				va.Append(rng.IntN(50) != 0)
+				vb.Append(rng.IntN(50) != 0)
+				vc.Append(rng.IntN(50) != 0)
+				names[i] = fmt.Sprintf("%s%d", prefix, lo+i)
+			}
+			bt, err := data.NewBatch(sch, []*data.Column{
+				data.NewFixed(prefix+"a", dtype.Int64, a, va.Finish()),
+				data.NewFixed(prefix+"b", dtype.Int32, b, vb.Finish()),
+				data.NewFixed(prefix+"c", dtype.Int64, c, vc.Finish()),
+				data.NewFixed(prefix+"d", dtype.Int64, d, bitmap.AllSet(m)),
+				data.NewString(prefix+"name", names, bitmap.AllSet(m)),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			batches = append(batches, bt)
+		}
+		src, err := memsrc.New(sch, batches...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &plan.Scan{Src: src, Full: sch}
+	}
+	kinds := []plan.JoinKind{plan.JoinInner, plan.JoinLeft, plan.JoinRight, plan.JoinFull, plan.JoinSemi, plan.JoinAnti}
+	for _, cols := range []struct {
+		names string
+		words int // 0: encoded
+	}{{"ab", 2}, {"acb", 3}, {"acdb", 0}} {
+		for _, kind := range kinds {
+			for _, nullsEqual := range []bool{false, true} {
+				name := fmt.Sprintf("keys %s, %s, nulls equal %v", cols.names, kind, nullsEqual)
+				join := func() *plan.Join {
+					rng := rand.New(rand.NewPCG(391, uint64(kind)))
+					j := &plan.Join{Left: scan(rng, "l", 7_000), Right: scan(rng, "r", 9_000), Kind: kind, NullsEqual: nullsEqual}
+					for _, c := range cols.names {
+						j.LeftOn = append(j.LeftOn, &expr.Col{Name: "l" + string(c)})
+						j.RightOn = append(j.RightOn, &expr.Col{Name: "r" + string(c)})
+					}
+					return j
+				}
+				want, _, _, err := runJoin(t, join(), serial)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, sink, keys, err := runJoin(t, join(), parallel)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !sink.deferred {
+					t.Fatalf("%s: the build did not defer", name)
+				}
+				switch parts := keys.(type) {
+				case *kernel.WordKeyParts:
+					if cols.words == 0 {
+						t.Fatalf("%s: packed, past three words", name)
+					}
+					if w := parts.Words(); w != cols.words {
+						t.Fatalf("%s: keys of %d words, want %d", name, w, cols.words)
+					}
+				case *kernel.KeyParts:
+					if cols.words != 0 {
+						t.Fatalf("%s: encoded, not packed", name)
+					}
+				default:
+					t.Fatalf("%s: the probe read a %T", name, keys)
+				}
+				if len(got) != len(want) {
+					t.Fatalf("%s: %d rows, the streaming build gives %d", name, len(got), len(want))
+				}
+				for i := range want {
+					if got[i] != want[i] {
+						t.Fatalf("%s, row %d: %s, the streaming build gives %s", name, i, got[i], want[i])
+					}
+				}
+			}
 		}
 	}
 }

@@ -173,6 +173,68 @@ func (t *WordKeyTable) getFrom(a, b, c, h, s uint64) int32 {
 	}
 }
 
+// WordKeyParts is several WordKeyTables, each holding the keys PartitionOf gives it by
+// WordHash, read as one, as IntKeyParts reads IntKeyTables: a key's id is its table's
+// base plus its id there. A join's partitioned build of several integer keys hands
+// one to the probe (step 391). It mutates nothing when read, so probe workers share
+// one.
+type WordKeyParts struct {
+	tables []*WordKeyTable
+	base   []int32
+	n      int
+}
+
+// NewWordKeyParts reads tables as one, numbered in their order.
+func NewWordKeyParts(tables []*WordKeyTable) *WordKeyParts {
+	k := &WordKeyParts{tables: tables, base: make([]int32, len(tables))}
+	for i, t := range tables {
+		k.base[i] = int32(k.n)
+		k.n += t.Len()
+	}
+	return k
+}
+
+func (k *WordKeyParts) Len() int         { return k.n }
+func (k *WordKeyParts) Base(p int) int32 { return k.base[p] }
+
+// Words is a key's words, 2 or 3.
+func (k *WordKeyParts) Words() int { return k.tables[0].words }
+
+// NBytes is what every table holds.
+func (k *WordKeyParts) NBytes() int64 {
+	var n int64
+	for _, t := range k.tables {
+		n += t.NBytes()
+	}
+	return n
+}
+
+// GetMany is WordKeyTable.GetMany across the tables: ids[j] is (a[j], b[j], c[j])'s
+// id, or -1, c nil for keys of two words.
+func (k *WordKeyParts) GetMany(a, b, c []uint64, ids []int32) {
+	var (
+		hs, first, cs [ManyChunk]uint64
+		part          [ManyChunk]int
+	)
+	if c != nil {
+		copy(cs[:], c[:len(a)])
+	}
+	b = b[:len(a)]
+	for j := range a {
+		h := WordHash(a[j], b[j], cs[j])
+		p := PartitionOf(h, len(k.tables))
+		t := k.tables[p]
+		hs[j], part[j], first[j] = h, p, t.slots[h&t.mask]
+	}
+	for j := range a {
+		id := k.tables[part[j]].getFrom(a[j], b[j], cs[j], hs[j], first[j])
+		if id >= 0 {
+			id += k.base[part[j]]
+		}
+		ids[j] = id
+	}
+}
+
 // grow doubles the slots, placing each key by its stored hash.
 func (t *WordKeyTable) grow() {
 	slots := make([]uint64, len(t.slots)*2)

@@ -15,12 +15,16 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.7
 
-Everything since `v0.6.8` (2026-10-26): steps 375–390, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–391, so far.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
 Parquet read first.
 
 ### Faster
 
+- **A join on several integer keys packs them** (391): two Int64 keys, or a key
+  whose nulls match, are packed into two or three machine words and hashed as such,
+  where each row's key was encoded as bytes; a join of a million rows on two keys
+  takes 0.76 of its time, and an `Upsample` by groups 0.85.
 - **The CSV writer runs on the query's threads** (390): each batch's text is made on
   a goroutine of its own and the texts written in order, the same bytes however many
   run; and a date, an instant without a zone or a time of day is written digit by

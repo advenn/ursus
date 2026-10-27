@@ -175,43 +175,74 @@ func (s *joinBuildSink) intKeyed() bool {
 	return len(s.keys) == 1 && !s.spec.nullsEqual && kernel.IsIntKey(s.layout.KeyTypes[0])
 }
 
+// wordKeyed is the packer of a join's keys where they are integers, more than one or
+// one whose nulls match, that pack into two words or three; nil otherwise. The
+// partitioned build keys them in WordKeyTables, where it encoded them (step 391).
+func (s *joinBuildSink) wordKeyed() *kernel.KeyPacker {
+	if len(s.keys) == 0 || s.intKeyed() {
+		return nil
+	}
+	pack, ok := kernel.NewKeyPacker(s.layout.KeyTypes)
+	if !ok {
+		return nil
+	}
+	return pack
+}
+
 // builtKeys is what buildPartitioned leaves the probe: the tables read as one, of
-// encoded keys or, for an intKeyed join, of integers. One of the two is set.
+// encoded keys or, for an intKeyed join, of integers, or for a wordKeyed one of
+// packed words with their packer. One of the three is set.
 type builtKeys struct {
 	bytes *kernel.KeyParts
 	ints  *kernel.IntKeyParts
+	words *kernel.WordKeyParts
+	pack  *kernel.KeyPacker
 }
 
 func (k builtKeys) Len() int {
-	if k.ints != nil {
+	switch {
+	case k.ints != nil:
 		return k.ints.Len()
+	case k.words != nil:
+		return k.words.Len()
 	}
 	return k.bytes.Len()
 }
 
 func (k builtKeys) Base(p int) int32 {
-	if k.ints != nil {
+	switch {
+	case k.ints != nil:
 		return k.ints.Base(p)
+	case k.words != nil:
+		return k.words.Base(p)
 	}
 	return k.bytes.Base(p)
 }
 
 func (k builtKeys) NBytes() int64 {
-	if k.ints != nil {
+	switch {
+	case k.ints != nil:
 		return k.ints.NBytes()
+	case k.words != nil:
+		return k.words.NBytes()
 	}
 	return k.bytes.NBytes()
 }
+
+// packedKeys are a batch's keys packed, a word slice each, c nil for two words.
+type packedKeys struct{ a, b, c []uint64 }
 
 // buildPartitioned inserts the deferred build side's keys, partitioned, and leaves
 // counts and rowKey in the streaming build's shape, numbered by the tables it
 // returns read as one.
 //
-// An intKeyed join's keys are the column's integers, hashed with IntHash, and never
-// encoded: the two forms differ only in how a key is made and which table holds it.
+// An intKeyed join's keys are the column's integers, hashed with IntHash, and a
+// wordKeyed one's packed words, hashed with WordHash, never encoded: the forms differ
+// only in how a key is made and which table holds it.
 func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error) {
 	nParts := min(max(s.threads, 1), maxBuildParts)
 	ints := s.intKeyed()
+	pack := s.wordKeyed()
 	// The batches: the build rows, or a Semi or Anti join's keys alone.
 	batches := s.parts
 	if !s.spec.needBuildRows {
@@ -225,8 +256,9 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 	nRows := starts[len(batches)]
 	part := make([]uint8, nRows)
 	keyCols := make([][]*data.Column, len(batches))
-	keyInts := make([][]int64, len(batches))    // an intKeyed join's keys, by batch
-	keyStat := make([]intKeyStat, len(batches)) // and their range, for buildDense
+	keyInts := make([][]int64, len(batches))     // an intKeyed join's keys, by batch
+	keyStat := make([]intKeyStat, len(batches))  // and their range, for buildDense
+	keyWords := make([]packedKeys, len(batches)) // a wordKeyed join's keys, packed
 	// inPart[bi][p] are batch bi's rows in partition p, ascending, so a partition's
 	// goroutine visits its own rows alone: scanning every row's partition, once a
 	// partition, was a ninth of q4's CPU at eight (step 161).
@@ -282,11 +314,34 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 			keyInts[bi] = v
 			return nil
 		}
+		counts := make([]int, nParts)
+		if pack != nil {
+			n := b.Rows()
+			w := packedKeys{a: make([]uint64, n), b: make([]uint64, n)}
+			if pack.Words() == 3 {
+				w.c = make([]uint64, n)
+			}
+			pack.Pack(cols, 0, w.a, w.b, w.c)
+			for i := range n {
+				if !s.spec.nullsEqual && !ok.Get(i) {
+					part[starts[bi]+i] = noPart
+					continue
+				}
+				var c uint64
+				if w.c != nil {
+					c = w.c[i]
+				}
+				p := kernel.PartitionOf(kernel.WordHash(w.a[i], w.b[i], c), nParts)
+				part[starts[bi]+i] = uint8(p)
+				counts[p]++
+			}
+			keyWords[bi], inPart[bi] = w, byPart(bi, counts)
+			return nil
+		}
 		enc, err := kernel.NewGroupKeyEncoder("join", cols)
 		if err != nil {
 			return err
 		}
-		counts := make([]int, nParts)
 		var key []byte
 		for i := range b.Rows() {
 			if !s.spec.nullsEqual && !ok.Get(i) {
@@ -352,6 +407,7 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 	}
 	tables := make([]*kernel.KeyTable, nParts)
 	intTables := make([]*kernel.IntKeyTable, nParts)
+	wordTables := make([]*kernel.WordKeyTable, nParts)
 	counts := make([][]int32, nParts)
 	dup := make([]int, nParts)
 	err = eachConcurrently(nParts, nParts, func(p int) error {
@@ -364,11 +420,16 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 		var (
 			t  *kernel.KeyTable
 			it *kernel.IntKeyTable
+			wt *kernel.WordKeyTable
 		)
-		if ints {
+		switch {
+		case ints:
 			it = kernel.NewIntKeyTable()
 			it.Reserve(rows / 2)
-		} else {
+		case pack != nil:
+			wt = kernel.NewWordKeyTable(pack.Words())
+			wt.Reserve(rows / 2)
+		default:
 			t = kernel.NewKeyTable()
 			t.Reserve(rows / 2)
 		}
@@ -378,6 +439,8 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 			keys     [kernel.ManyChunk][]byte
 			hs       [kernel.ManyChunk]uint64
 			intKeys  [kernel.ManyChunk]int64
+			wa, wb   [kernel.ManyChunk]uint64
+			wc       [kernel.ManyChunk]uint64
 			at       [kernel.ManyChunk]int
 			ids      [kernel.ManyChunk]int32
 			inserted [kernel.ManyChunk]bool
@@ -385,9 +448,16 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 		dup[p] = -1
 		n := 0
 		flush := func() {
-			if ints {
+			switch {
+			case ints:
 				it.GetOrInsertMany(intKeys[:n], ids[:n], inserted[:n])
-			} else {
+			case pack != nil:
+				var c []uint64
+				if pack.Words() == 3 {
+					c = wc[:n]
+				}
+				wt.GetOrInsertMany(wa[:n], wb[:n], c, ids[:n], inserted[:n])
+			default:
 				t.GetOrInsertHashed(keys[:n], hs[:n], ids[:], inserted[:])
 			}
 			for j := range n {
@@ -413,7 +483,7 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 				continue
 			}
 			var enc *kernel.GroupKeyEncoder
-			if !ints {
+			if !ints && pack == nil {
 				var err error
 				if enc, err = kernel.NewGroupKeyEncoder("join", keyCols[bi]); err != nil {
 					return err
@@ -422,9 +492,16 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 			for _, r := range mine {
 				i := int(r)
 				g := starts[bi] + i
-				if ints {
+				switch {
+				case ints:
 					intKeys[n] = keyInts[bi][i]
-				} else {
+				case pack != nil:
+					w := keyWords[bi]
+					wa[n], wb[n] = w.a[i], w.b[i]
+					if w.c != nil {
+						wc[n] = w.c[i]
+					}
+				default:
 					start := len(buf)
 					buf = enc.AppendKey(buf, i)
 					keys[n] = buf[start:len(buf):len(buf)]
@@ -437,7 +514,7 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 			}
 		}
 		flush()
-		tables[p], intTables[p], counts[p] = t, it, cnt
+		tables[p], intTables[p], wordTables[p], counts[p] = t, it, wt, cnt
 		return nil
 	})
 	if err != nil {
@@ -459,9 +536,12 @@ func (s *joinBuildSink) buildPartitioned(ctx context.Context) (builtKeys, error)
 
 	// 3. One numbering: each table's keys after the tables before it.
 	var keys builtKeys
-	if ints {
+	switch {
+	case ints:
 		keys.ints = kernel.NewIntKeyParts(intTables)
-	} else {
+	case pack != nil:
+		keys.words, keys.pack = kernel.NewWordKeyParts(wordTables), pack
+	default:
 		keys.bytes = kernel.NewKeyParts(tables)
 	}
 	if !track {
