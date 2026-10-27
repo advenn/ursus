@@ -3,7 +3,6 @@ package ursus
 import (
 	"context"
 	"iter"
-	"runtime"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
@@ -313,7 +312,8 @@ type collectCfg struct {
 	limitSet   bool // WithMemoryLimit was given; otherwise finish takes the default
 	spillDir   string
 	stats      *MemoryStats
-	engine     *Engine // WithEngine's, nil for DefaultEngine
+	engine     *Engine  // WithEngine's, nil for DefaultEngine
+	work       *workers // the threads compile planned the query on, its engine's share
 	budget     *execopt.Budget
 	profiler   *physical.Profiler // Profile's, measuring each node; nil otherwise
 }
@@ -362,15 +362,17 @@ func WithOptFlags(f OptFlags) CollectOption {
 // On in tests, off by default because it costs a schema resolution per rule.
 func WithVerify() CollectOption { return func(c *collectCfg) { c.verify = true } }
 
-// WithThreads sets how many workers a query runs on, at any size of its input.
+// WithThreads sets how many workers a query runs on, at any size of its input and
+// whatever its engine's other queries.
 //
-// Without it a query runs on runtime.NumCPU() workers, and on fewer where its input
-// is small, by the sources' own counts, an in-memory frame's length or a Parquet
-// file's footers (step 396): on one where every input it reads fits in a batch; a
-// pipeline over at most 16,384 rows on the goroutine that pulls it, and a group-by
-// over at most 32,768 rows on one sink. Eight workers and their channels took a
-// 1,000-row group-by two and a half times one thread's time. A CSV file has no count
-// to read, and runs on them all.
+// Without it a query runs on its share of its engine's threads, GOMAXPROCS by
+// default, all of them where it runs alone: see Engine. It ran on runtime.NumCPU()
+// each before step 397. And on fewer where its input is small, by the sources' own
+// counts, an in-memory frame's length or a Parquet file's footers (step 396): on one
+// where every input it reads fits in a batch; a pipeline over at most 16,384 rows on
+// the goroutine that pulls it, and a group-by over at most 32,768 rows on one sink.
+// Eight workers and their channels took a 1,000-row group-by two and a half times one
+// thread's time. A CSV file has no count to read, and runs on them all.
 //
 // Results do not depend on it. Parallelism over the PIPELINE — the scan and the
 // stateless per-batch operators above it — is ORDER-PRESERVING: workers process
@@ -594,7 +596,6 @@ var defaultMemoryLimit = execopt.DefaultLimit
 func baseCollectCfg() collectCfg {
 	return collectCfg{
 		batchSize: physical.DefaultOptions().BatchSize,
-		threads:   runtime.NumCPU(),
 		flags:     plan.DefaultFlags(),
 	}
 }
@@ -604,15 +605,21 @@ func baseCollectCfg() collectCfg {
 // different union type and still need exactly this step.
 //
 // The budget is the engine's, shared with its other queries (step 395), unless the
-// query has a limit of its own, which is apart from it.
+// query has a limit of its own, which is apart from it. The threads are the engine's
+// unless the query was given WithThreads, and it takes its share of them as compile
+// plans it (step 397).
 func (c *collectCfg) finish() {
-	if c.limitSet {
-		c.budget = execopt.NewBudget(c.memLimit, c.spillDir)
-		return
-	}
 	e := c.engine
 	if e == nil {
 		e = DefaultEngine()
+	}
+	c.work = &workers{e: e}
+	if !c.threadsSet {
+		c.threads = e.threads
+	}
+	if c.limitSet {
+		c.budget = execopt.NewBudget(c.memLimit, c.spillDir)
+		return
 	}
 	// The default budget is half the ceiling, and only holds if the heap's own slack
 	// does too, so the Go soft limit is set with it. See SetProcessMemoryLimit.
@@ -637,6 +644,7 @@ func newCollectCfg(opts []CollectOption) collectCfg {
 // queries' even shares down for as long as the process runs.
 func (c collectCfg) done() {
 	c.budget.Leave()
+	c.work.release()
 	if c.stats == nil {
 		return
 	}
@@ -657,6 +665,43 @@ func (c collectCfg) planThreads(n plan.Node) int {
 	}
 	if rows, ok := plan.LargestInput(n); ok && rows <= int64(c.batchSize) {
 		return 1
+	}
+	return c.threads
+}
+
+// workers is the threads a query was planned on, and the engine it took them from.
+type workers struct {
+	e       *Engine
+	threads int // 0 until compile plans the query
+	done    bool
+}
+
+// take is the threads a query that wants want runs on: want, where the caller gave
+// them, counted among the engine's queries on more than one; else its share of the
+// engine's (Engine.share). Once.
+func (w *workers) take(want int, given bool) int {
+	if w.threads == 0 {
+		if given {
+			w.threads = w.e.hold(want)
+		} else {
+			w.threads = w.e.share(want)
+		}
+	}
+	return w.threads
+}
+
+// release gives the threads back to the engine: done does, once.
+func (w *workers) release() {
+	if w != nil && w.threads > 0 && !w.done {
+		w.done = true
+		w.e.release(w.threads)
+	}
+}
+
+// planned is the threads compile planned the query on, or its threads before it.
+func (c collectCfg) planned() int {
+	if c.work != nil && c.work.threads > 0 {
+		return c.work.threads
 	}
 	return c.threads
 }
@@ -696,7 +741,7 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 	cfg.budget.Join()
 	return physical.PlanRoot(ctx, optimized, physical.Options{
 		BatchSize: cfg.batchSize,
-		Threads:   cfg.planThreads(optimized),
+		Threads:   cfg.work.take(cfg.planThreads(optimized), cfg.threadsSet),
 		Fewer:     !cfg.threadsSet,
 		Budget:    cfg.budget,
 		Profiler:  cfg.profiler,
@@ -740,7 +785,7 @@ func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (df *Da
 	if err != nil {
 		return nil, err
 	}
-	b, err := exec.Collect(ctx, root, cfg.budget.Result(), cfg.threads)
+	b, err := exec.Collect(ctx, root, cfg.budget.Result(), cfg.planned())
 	if err != nil {
 		return nil, err
 	}

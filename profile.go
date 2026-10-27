@@ -43,7 +43,7 @@ func (lf *LazyFrame) Profile(ctx context.Context, opts ...CollectOption) (df, pr
 	if err != nil {
 		return nil, nil, err
 	}
-	b, err := exec.Collect(ctx, root, cfg.budget.Result(), cfg.threads)
+	b, err := exec.Collect(ctx, root, cfg.budget.Result(), cfg.planned())
 	if err != nil {
 		return nil, nil, err
 	}

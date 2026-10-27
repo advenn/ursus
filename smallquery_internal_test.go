@@ -13,7 +13,7 @@ import (
 // B1 of v0.8-scope.md); a larger one, one reading a source of no count, and one given
 // WithThreads, on its threads.
 func TestASmallQueryRunsOnOneThread(t *testing.T) {
-	if runtime.NumCPU() < 2 {
+	if runtime.GOMAXPROCS(0) < 2 {
 		t.Skip("one CPU: every query runs on one thread")
 	}
 	threads := func(lf *LazyFrame, opts ...CollectOption) int {
@@ -30,7 +30,7 @@ func TestASmallQueryRunsOnOneThread(t *testing.T) {
 		return cfg.planThreads(n)
 	}
 	rows := func(n int) *LazyFrame { return Frame(Values("k", make([]int64, n))) }
-	all := runtime.NumCPU()
+	all := DefaultEngine().threads
 	var csv strings.Builder
 	csv.WriteString("k\n1\n2\n")
 	for _, c := range []struct {

@@ -34,8 +34,9 @@ func engineFrame(t *testing.T, n, keys int) *ursus.DataFrame {
 }
 
 // TestEveryEntryPointLeavesItsEngine: a sort run through each way of running a query,
-// to its end, broken off, failed and panicked, leaves its engine with nothing held
-// and no query running; one paused halfway is counted, holding its rows.
+// to its end, broken off, failed and panicked, leaves its engine with nothing held,
+// no query running and its threads given back (step 397); one paused halfway is
+// counted, holding its rows and its threads.
 func TestEveryEntryPointLeavesItsEngine(t *testing.T) {
 	ctx := t.Context()
 	e := ursus.NewEngine(ursus.WithEngineMemoryLimit(1 << 30))
@@ -129,7 +130,7 @@ func TestEveryEntryPointLeavesItsEngine(t *testing.T) {
 		if err := c.run(); err != nil {
 			t.Errorf("%s: %v", c.name, err)
 		}
-		if s := e.Stats(); s.Running != 0 || s.Held != 0 {
+		if s := e.Stats(); s.Running != 0 || s.Held != 0 || s.Parallel != 0 {
 			t.Errorf("%s left its engine at %+v", c.name, s)
 		}
 	}
@@ -138,11 +139,11 @@ func TestEveryEntryPointLeavesItsEngine(t *testing.T) {
 	if _, err, ok := next(); !ok || err != nil {
 		t.Fatalf("the first batch: %v", err)
 	}
-	if s := e.Stats(); s.Running != 1 || s.Held < 3<<20 {
+	if s := e.Stats(); s.Running != 1 || s.Held < 3<<20 || s.Parallel != min(s.Threads-1, 1) {
 		t.Errorf("a sort of 3 MiB paused after its first batch: %+v", s)
 	}
 	stop()
-	if s := e.Stats(); s.Running != 0 || s.Held != 0 || s.Peak < 3<<20 {
+	if s := e.Stats(); s.Running != 0 || s.Held != 0 || s.Peak < 3<<20 || s.Parallel != 0 {
 		t.Errorf("after it stopped: %+v", s)
 	}
 

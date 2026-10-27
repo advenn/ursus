@@ -2,7 +2,6 @@ package kernel
 
 import (
 	"math"
-	"runtime"
 	"sync"
 
 	"github.com/advenn/ursus/dtype"
@@ -24,18 +23,19 @@ const firstSeenPart = 1 << 16
 // and for -0.0 and +0.0, a String or Binary column's own bytes, any other column's
 // encoded keys. A column that cannot be a key is refused, op naming the operation.
 //
-// A long column is numbered in parts, in parallel, each in a table of its own. The
-// parts' values are then numbered again in one table, part by part in order, each
-// by the row it first appears at in its part, so a value's number is where it first
-// appears in the whole column; and each part's ids are renumbered, in parallel.
-func FirstSeenIDs(op string, c *data.Column) (ids, firsts []int32, _ error) {
-	return FirstSeenKeys(op, []*data.Column{c})
+// A long column is numbered in parts, in parallel on up to workers goroutines, each
+// in a table of its own. The parts' values are then numbered again in one table,
+// part by part in order, each by the row it first appears at in its part, so a
+// value's number is where it first appears in the whole column; and each part's ids
+// are renumbered, in parallel.
+func FirstSeenIDs(op string, c *data.Column, workers int) (ids, firsts []int32, _ error) {
+	return FirstSeenKeys(op, []*data.Column{c}, workers)
 }
 
 // FirstSeenKeys is FirstSeenIDs of the keys columns make together, a row's values in
 // each, as a group-by keys by several columns: encoded, so that they are equal as
 // one column's values are (step 321, for PartitionBy). One column is FirstSeenIDs'.
-func FirstSeenKeys(op string, cols []*data.Column) (ids, firsts []int32, _ error) {
+func FirstSeenKeys(op string, cols []*data.Column, workers int) (ids, firsts []int32, _ error) {
 	n := cols[0].Len()
 	ids = make([]int32, n)
 	if n == 0 {
@@ -48,7 +48,7 @@ func FirstSeenKeys(op string, cols []*data.Column) (ids, firsts []int32, _ error
 	if err != nil {
 		return nil, nil, err
 	}
-	parts := min(runtime.GOMAXPROCS(0), n/firstSeenPart)
+	parts := min(workers, n/firstSeenPart)
 	if parts <= 1 {
 		return ids, k.number(k.table(), 0, n, ids), nil
 	}
