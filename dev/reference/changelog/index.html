@@ -3420,7 +3420,7 @@ section here names it.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v08">Unreleased — toward v0.8<a class="headerlink" href="#unreleased-toward-v08" title="Permanent link">&para;</a></h2>
-<p>Steps 392–404, so far, after 0.7's 375–391.
+<p>Steps 392–405, so far, after 0.7's 375–391.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.8-scope.md"><code>v0.8-scope.md</code></a> set the scope: <strong>ursus inside a Go
 service</strong>, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.</p>
@@ -3459,12 +3459,18 @@ that stops when its request is cancelled.</p>
   it, the scan's own query does not, and <code>Stats().Held</code> includes them.</p>
 </li>
 <li>
-<p><strong>Arrow IPC from bytes and from the caller's openers</strong> (404), as Parquet, CSV and
+<p><strong>Every format from an <code>fs.FS</code></strong> (405): <code>ScanCSVFS</code>, <code>ScanNDJSONFS</code>, <code>ScanJSONFS</code>,
+  <code>ScanParquetFS</code>, <code>ScanIPCFS</code> and <code>ScanIPCStreamFS</code>, so a program reads the data it
+  embeds (<code>embed.FS</code>), a test its <code>fstest.MapFS</code>, and <code>os.DirFS</code> or a zip archive as
+  files. A pattern is a file's name, a directory's, read whole as the path readers
+  read one, hive keys and all, or a glob, <code>**</code> among it; a Parquet or IPC file that
+  reads at an offset is read a column chunk at a time, as a file on disk is.</p>
+</li>
+<li><strong>Arrow IPC from bytes and from the caller's openers</strong> (404), as Parquet, CSV and
   NDJSON are read: <code>ScanIPCBytes</code> and <code>ScanIPCFrom</code> of <code>IPCFile</code>s, each opened
   through <code>ReadAt</code> over its size as a <code>ParquetFile</code> is, from an object store or an
   HTTP server; <code>ScanIPCStreamBytes</code> and <code>ScanIPCStreamFrom</code> of <code>IPCStreamFile</code>s, a
-  reader each. Each opener is given the query's context and closed after.</p>
-</li>
+  reader each. Each opener is given the query's context and closed after.</li>
 <li><strong>A hook for each query, a service's metrics</strong> (403):
   <code>NewEngine(WithEngineQueryHook(fn))</code> calls fn as each of the engine's queries ends,
   with the query's context and its <code>QueryStats</code>: how it was run, its duration, rows,
