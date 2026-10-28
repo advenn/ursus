@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–403, so far, after 0.7's 375–391.
+Steps 392–404, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
@@ -55,6 +55,11 @@ that stops when its request is cancelled.
   for all of a wide table's columns: the engine's other queries spill sooner beside
   it, the scan's own query does not, and `Stats().Held` includes them.
 
+- **Arrow IPC from bytes and from the caller's openers** (404), as Parquet, CSV and
+  NDJSON are read: `ScanIPCBytes` and `ScanIPCFrom` of `IPCFile`s, each opened
+  through `ReadAt` over its size as a `ParquetFile` is, from an object store or an
+  HTTP server; `ScanIPCStreamBytes` and `ScanIPCStreamFrom` of `IPCStreamFile`s, a
+  reader each. Each opener is given the query's context and closed after.
 - **A hook for each query, a service's metrics** (403):
   `NewEngine(WithEngineQueryHook(fn))` calls fn as each of the engine's queries ends,
   with the query's context and its `QueryStats`: how it was run, its duration, rows,
