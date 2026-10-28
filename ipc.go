@@ -1,11 +1,13 @@
 package ursus
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync/atomic"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -73,7 +75,8 @@ func ScanIPCGlob(pattern string, opts ...IPCScanOption) *LazyFrame {
 	return scanIPCPaths(paths, pattern, "", ipcScanOptions(opts))
 }
 
-// IPCScanOption configures ScanIPC, ScanIPCFiles and ScanIPCGlob. New in 0.6.7.
+// IPCScanOption configures ScanIPC, ScanIPCFiles and ScanIPCGlob, and ScanIPCFrom
+// and ScanIPCBytes. New in 0.6.7.
 type IPCScanOption func(*ipcScan)
 
 type ipcScan struct {
@@ -114,14 +117,25 @@ func WithIPCIncludeFilePaths(name string) IPCScanOption {
 // below root, a directory scanned, or from the whole of each where root is "", where
 // hive partitioning is on (step 360).
 func scanIPCPaths(paths []string, desc, root string, o ipcScan) *LazyFrame {
+	opens := make([]recordOpener, len(paths))
+	for i, p := range paths {
+		opens[i] = func(context.Context) (array.RecordReader, error) { return openIPCFile("scan_ipc", p) }
+	}
+	return scanIPCOpened("scan_ipc", paths, opens, desc, root, o)
+}
+
+// recordOpener opens one file's record batches, for the query whose context it is.
+type recordOpener = func(context.Context) (array.RecordReader, error)
+
+// scanIPCOpened reads the files opens opens, named by names, as one frame, as
+// scanIPCPaths reads paths (step 404).
+func scanIPCOpened(op string, paths []string, opens []recordOpener, desc, root string, o ipcScan) *LazyFrame {
 	if len(paths) == 0 {
-		return &LazyFrame{err: uerr.New(uerr.KindValue, "scan_ipc", "no files to read")}
+		return &LazyFrame{err: uerr.New(uerr.KindValue, op, "no files to read")}
 	}
 	fs := make([]files.File, len(paths))
 	for i, p := range paths {
-		fs[i] = files.File{Path: p, Src: arrowsrc.New(func() (array.RecordReader, error) {
-			return openIPCFile("scan_ipc", p)
-		})}
+		fs[i] = files.File{Path: p, Src: arrowsrc.NewContext(opens[i])}
 	}
 	with := files.Shared{Dates: !o.noDates, PathColumn: o.pathColumn}
 	on := root != ""
@@ -129,7 +143,7 @@ func scanIPCPaths(paths []string, desc, root string, o ipcScan) *LazyFrame {
 		on = *o.hive
 	}
 	if on {
-		parts, err := hive.ParseFor("scan_ipc", root, paths)
+		parts, err := hive.ParseFor(op, root, paths)
 		if err != nil {
 			return &LazyFrame{err: err}
 		}
@@ -141,7 +155,120 @@ func scanIPCPaths(paths []string, desc, root string, o ipcScan) *LazyFrame {
 			}
 		}
 	}
-	return scan(files.New("scan_ipc", "ipc", desc, fs, with))
+	return scan(files.New(op, "ipc", desc, fs, with))
+}
+
+// IPCFile is one Arrow IPC file, read through ReadAt from wherever it lives, as a
+// ParquetFile is: an object store, an HTTP server, an archive. New in 0.8.
+type IPCFile struct {
+	// Name identifies the file in errors and in Explain, and is its path where hive
+	// partitioning reads keys from one.
+	Name string
+
+	// Open returns the file's bytes and their size, as ParquetFile's does: a fresh
+	// reader each call, once for the schema and once for each execution, given the
+	// query's context. If the reader is also an io.Closer, ursus closes it.
+	Open func(ctx context.Context) (r io.ReaderAt, size int64, err error)
+}
+
+// ScanIPCFrom reads Arrow IPC files the caller opens, as one frame in the order given,
+// under ScanIPCFiles' rules for several files (step 404, C4 of v0.8-scope.md). New in
+// 0.8.
+func ScanIPCFrom(files []IPCFile, opts ...IPCScanOption) *LazyFrame {
+	names, err := fileNames("scan_ipc", "ipc file", len(files), func(i int) (string, bool) {
+		return files[i].Name, files[i].Open != nil
+	})
+	if err != nil {
+		return &LazyFrame{err: err}
+	}
+	opens := make([]recordOpener, len(files))
+	for i, f := range files {
+		opens[i] = func(ctx context.Context) (array.RecordReader, error) {
+			ra, size, err := f.Open(ctx)
+			if err != nil {
+				return nil, uerr.Wrap(err, uerr.KindIO, "scan_ipc", "opening %s", names[i])
+			}
+			c, _ := ra.(io.Closer)
+			return openIPC("scan_ipc", names[i], io.NewSectionReader(ra, 0, size), c)
+		}
+	}
+	return scanIPCOpened("scan_ipc", names, opens, describe(names), "", ipcScanOptions(opts))
+}
+
+// ScanIPCBytes reads an Arrow IPC file from memory. New in 0.8.
+func ScanIPCBytes(b []byte, name string, opts ...IPCScanOption) *LazyFrame {
+	return ScanIPCFrom([]IPCFile{{Name: name, Open: func(context.Context) (io.ReaderAt, int64, error) {
+		return bytes.NewReader(b), int64(len(b)), nil
+	}}}, opts...)
+}
+
+// IPCStreamFile is one Arrow IPC stream, read from the start to its end by whatever
+// reaches it, as a CSVFile is. New in 0.8.
+type IPCStreamFile struct {
+	// Name identifies the stream in errors and in Explain.
+	Name string
+
+	// Open returns a fresh reader of the stream each call, once for the schema and
+	// once for each execution, given the query's context; ursus closes it.
+	Open func(ctx context.Context) (io.ReadCloser, error)
+}
+
+// ScanIPCStreamFrom reads Arrow IPC streams the caller opens, as one frame in the
+// order given, as the first one's columns, by name, as ScanIPCFiles reads files. New
+// in 0.8.
+func ScanIPCStreamFrom(streams []IPCStreamFile) *LazyFrame {
+	names, err := fileNames("scan_ipc_stream", "ipc stream", len(streams), func(i int) (string, bool) {
+		return streams[i].Name, streams[i].Open != nil
+	})
+	if err != nil {
+		return &LazyFrame{err: err}
+	}
+	opens := make([]recordOpener, len(streams))
+	for i, f := range streams {
+		opens[i] = func(ctx context.Context) (array.RecordReader, error) {
+			rc, err := f.Open(ctx)
+			if err != nil {
+				return nil, uerr.Wrap(err, uerr.KindIO, "scan_ipc_stream", "opening %s", names[i])
+			}
+			return openIPCStream(names[i], rc)
+		}
+	}
+	return scanIPCOpened("scan_ipc_stream", names, opens, describe(names), "", ipcScan{})
+}
+
+// ScanIPCStreamBytes reads an Arrow IPC stream from memory. New in 0.8.
+func ScanIPCStreamBytes(b []byte, name string) *LazyFrame {
+	return ScanIPCStreamFrom([]IPCStreamFile{{Name: name, Open: func(context.Context) (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(b)), nil
+	}}})
+}
+
+// fileNames are n files' names, kind and its place where one has none, or an error
+// for none at all or one with no Open.
+func fileNames(op, kind string, n int, at func(int) (name string, opens bool)) ([]string, error) {
+	if n == 0 {
+		return nil, uerr.New(uerr.KindValue, op, "no files given")
+	}
+	names := make([]string, n)
+	for i := range n {
+		name, opens := at(i)
+		if name == "" {
+			name = kind + " " + strconv.Itoa(i+1)
+		}
+		if !opens {
+			return nil, uerr.New(uerr.KindValue, op, "%s has no Open function", name)
+		}
+		names[i] = name
+	}
+	return names, nil
+}
+
+// describe is files' description in Explain: the first's name, and how many more.
+func describe(names []string) string {
+	if len(names) > 1 {
+		return names[0] + " and " + strconv.Itoa(len(names)-1) + " more"
+	}
+	return names[0]
 }
 
 // ScanIPCStream reads an Arrow IPC stream, the format of Polars' write_ipc_stream and
@@ -152,14 +279,19 @@ func ScanIPCStream(path string) *LazyFrame {
 		if err != nil {
 			return nil, uerr.Wrap(err, uerr.KindIO, "scan_ipc_stream", "opening %s", path)
 		}
-		r, err := ipc.NewReader(f)
-		if err != nil {
-			f.Close()
-			return nil, uerr.Wrap(err, uerr.KindIO, "scan_ipc_stream", "reading %s as an Arrow IPC stream", path).
-				Hint("an IPC file, Feather version 2, is ScanIPC's")
-		}
-		return &closingReader{RecordReader: r, close: f.Close}, nil
+		return openIPCStream(path, f)
 	})
+}
+
+// openIPCStream reads name's IPC stream from rc, which it closes when released.
+func openIPCStream(name string, rc io.ReadCloser) (array.RecordReader, error) {
+	r, err := ipc.NewReader(rc)
+	if err != nil {
+		rc.Close()
+		return nil, uerr.Wrap(err, uerr.KindIO, "scan_ipc_stream", "reading %s as an Arrow IPC stream", name).
+			Hint("an IPC file, Feather version 2, is ScanIPC's")
+	}
+	return &closingReader{RecordReader: r, close: rc.Close}, nil
 }
 
 // ReadIPCSchema is an Arrow IPC file's schema, read from its footer, as Polars'
@@ -186,19 +318,27 @@ func openIPCFile(op, path string) (*fileRecords, error) {
 	if err != nil {
 		return nil, uerr.Wrap(err, uerr.KindIO, op, "opening %s", path)
 	}
-	r, err := ipc.NewFileReader(f)
+	return openIPC(op, path, f, f)
+}
+
+// openIPC reads name's IPC file from r, closing c, where it is not nil, when released
+// or refused.
+func openIPC(op, name string, r ipc.ReadAtSeeker, c io.Closer) (*fileRecords, error) {
+	fr, err := ipc.NewFileReader(r)
 	if err != nil {
-		f.Close()
-		return nil, uerr.Wrap(err, uerr.KindIO, op, "reading %s as an Arrow IPC file", path).
+		if c != nil {
+			c.Close()
+		}
+		return nil, uerr.Wrap(err, uerr.KindIO, op, "reading %s as an Arrow IPC file", name).
 			Hint("an IPC stream is ScanIPCStream's")
 	}
-	return &fileRecords{r: r, f: f, refs: 1}, nil
+	return &fileRecords{r: fr, f: c, refs: 1}, nil
 }
 
 // fileRecords walks an IPC file's record batches as a RecordReader.
 type fileRecords struct {
 	r    *ipc.FileReader
-	f    *os.File
+	f    io.Closer // nil for none
 	i    int
 	rec  arrow.RecordBatch
 	err  error
@@ -216,7 +356,9 @@ func (f *fileRecords) Release() {
 		f.rec = nil
 	}
 	f.r.Close()
-	f.f.Close()
+	if f.f != nil {
+		f.f.Close()
+	}
 }
 
 func (f *fileRecords) Schema() *arrow.Schema { return f.r.Schema() }

@@ -53,7 +53,7 @@ const defaultBatchSize = 8192
 
 // Source scans the readers a factory returns.
 type Source struct {
-	open func() (array.RecordReader, error)
+	open func(context.Context) (array.RecordReader, error)
 
 	once   sync.Once
 	schema *dtype.Schema
@@ -69,7 +69,16 @@ type Source struct {
 
 // New returns a source over the readers open returns. open must return a new,
 // independent reader on every call.
-func New(open func() (array.RecordReader, error)) *Source { return &Source{open: open} }
+func New(open func() (array.RecordReader, error)) *Source {
+	return &Source{open: func(context.Context) (array.RecordReader, error) { return open() }}
+}
+
+// NewContext is New of a factory given the context of the query that opens it, the
+// schema's or a scan's (step 404): an IPC file read over a network keeps it for its
+// reads, as a Parquet file's opener does.
+func NewContext(open func(context.Context) (array.RecordReader, error)) *Source {
+	return &Source{open: open}
+}
 
 func (s *Source) Name() string     { return "arrow" }
 func (s *Source) Describe() string { return "" }
@@ -98,7 +107,7 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 					"opening the Arrow stream panicked")
 			}
 		}()
-		rr, err := s.call()
+		rr, err := s.call(ctx)
 		if err != nil {
 			s.err = err
 			return
@@ -117,8 +126,8 @@ func (s *Source) Projections() [][]string {
 }
 
 // call runs the factory and refuses what it must not return.
-func (s *Source) call() (array.RecordReader, error) {
-	rr, err := s.open()
+func (s *Source) call(ctx context.Context) (array.RecordReader, error) {
+	rr, err := s.open(ctx)
 	if err != nil {
 		return nil, uerr.Wrap(err, uerr.KindIO, op, "opening the Arrow stream")
 	}
@@ -231,7 +240,7 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 		return nil, r.finish(nil)
 	}
 	if r.rr == nil {
-		if err := callerCode("opening", r.start); err != nil {
+		if err := callerCode("opening", func() error { return r.start(ctx) }); err != nil {
 			return nil, r.finish(err)
 		}
 	}
@@ -295,8 +304,8 @@ func callerCode(what string, f func() error) (err error) {
 	return f()
 }
 
-func (r *reader) start() error {
-	rr, err := r.src.call()
+func (r *reader) start(ctx context.Context) error {
+	rr, err := r.src.call(ctx)
 	if err != nil {
 		return err
 	}
