@@ -3,6 +3,7 @@ package ursus
 import (
 	"context"
 	"iter"
+	"time"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
@@ -316,6 +317,7 @@ type collectCfg struct {
 	work       *workers // the threads compile planned the query on, its engine's share
 	budget     *execopt.Budget
 	profiler   *physical.Profiler // Profile's, measuring each node; nil otherwise
+	query      *query             // its figures for the engine's hook, from finish
 }
 
 // WithBatchSize sets the rows per batch. Results must not depend on it; the test
@@ -614,6 +616,7 @@ func (c *collectCfg) finish() {
 		e = DefaultEngine()
 	}
 	c.work = &workers{e: e}
+	c.query = &query{hook: e.hook, start: time.Now()}
 	if !c.threadsSet {
 		c.threads = e.threads
 	}
@@ -739,13 +742,18 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 	// Counted among its engine's queries from here to done: the operators planned
 	// below size themselves by the room the others leave it.
 	cfg.budget.Join()
-	return physical.PlanRoot(ctx, optimized, physical.Options{
+	root, err := physical.PlanRoot(ctx, optimized, physical.Options{
 		BatchSize: cfg.batchSize,
 		Threads:   cfg.work.take(cfg.planThreads(optimized), cfg.threadsSet),
 		Fewer:     !cfg.threadsSet,
 		Budget:    cfg.budget,
 		Profiler:  cfg.profiler,
 	})
+	if err != nil || cfg.query == nil || cfg.query.hook == nil {
+		return root, err
+	}
+	// Its rows, for the engine's hook (step 403).
+	return &counted{Operator: root, rows: &cfg.query.rows}, nil
 }
 
 // Collect runs the query and returns the whole result.
@@ -778,8 +786,9 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 // does the same for its own work, so no query can take down the process that asked
 // it. A panic in a udf is the caller's own, and is a KindValue error naming the udf.
 func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (df *DataFrame, err error) {
-	defer uerr.Catch(&err, "collect")
-	cfg := newCollectCfg(opts)
+	var cfg collectCfg
+	defer cfg.end(ctx, "collect", &err)
+	cfg = newCollectCfg(opts)
 	defer cfg.done()
 	root, err := lf.compile(ctx, cfg)
 	if err != nil {
@@ -801,18 +810,23 @@ func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (df *Da
 // loop: recovering around yield is something Go forbids a range function to do.
 func (lf *LazyFrame) CollectBatches(ctx context.Context, opts ...CollectOption) iter.Seq2[*DataFrame, error] {
 	return func(yield func(*DataFrame, error) bool) {
-		cfg := newCollectCfg(opts)
+		var cfg collectCfg
+		var failed error
+		defer func() { cfg.report(ctx, "collect_batches", failed) }()
+		cfg = newCollectCfg(opts)
 		defer cfg.done()
 		// Guarded here and in exec.Batches' Pull, and nowhere that encloses yield.
 		root, err := uerr.Guard("collect_batches", func() (physical.Operator, error) {
 			return lf.compile(ctx, cfg)
 		})
 		if err != nil {
+			failed = err
 			yield(nil, err)
 			return
 		}
 		for b, err := range exec.Batches(ctx, root) {
 			if err != nil {
+				failed = err
 				yield(nil, err)
 				return
 			}
@@ -827,12 +841,13 @@ func (lf *LazyFrame) CollectBatches(ctx context.Context, opts ...CollectOption) 
 // Polars' count(), which counts each column's non-null values; that is
 // GroupBy().Agg(All().Count()).
 func (lf *LazyFrame) Count(ctx context.Context, opts ...CollectOption) (n int64, err error) {
-	defer uerr.Catch(&err, "count")
+	var cfg collectCfg
+	defer cfg.end(ctx, "count", &err)
+	cfg = newCollectCfg(opts)
+	defer cfg.done()
 	if lf.err != nil {
 		return 0, lf.err
 	}
-	cfg := newCollectCfg(opts)
-	defer cfg.done()
 	// Its rows are all a count needs: a projection of no columns above the query,
 	// so a scan reads none (step 370).
 	rows := &LazyFrame{node: &plan.Project{Input: lf.node}}

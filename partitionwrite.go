@@ -79,7 +79,7 @@ const maxOpenPartitions = 64
 // pc's keys, each file of ext opened by open.
 func (lf *LazyFrame) sinkPartitioned(ctx context.Context, op, dir string, collect collectCfg,
 	pc partitionCfg, ext string, open func(io.Writer, *dtype.Schema) (fileWriter, error)) (err error) {
-	defer uerr.Catch(&err, op)
+	defer collect.end(ctx, op, &err)
 	defer collect.done()
 	if pc.maxRows < 0 {
 		return uerr.New(uerr.KindValue, op, "%d rows a file", pc.maxRows).Hint("give a positive number, or none")

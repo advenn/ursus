@@ -110,14 +110,15 @@ func (df *DataFrame) WriteDatabase(ctx context.Context, db DatabaseWriter, table
 // none. New in 0.6.8.
 func (lf *LazyFrame) WriteDatabase(ctx context.Context, db DatabaseWriter, table string,
 	opts ...DatabaseWriteOption) (n int64, err error) {
-	defer uerr.Catch(&err, "write_database")
+	var cfg dbWriteCfg
+	defer cfg.collect.end(ctx, "write_database", &err)
 	if db == nil {
 		return 0, uerr.New(uerr.KindValue, "write_database", "no database to write to")
 	}
 	if table == "" {
 		return 0, uerr.New(uerr.KindValue, "write_database", "no table named")
 	}
-	cfg := dbWriteCfg{collect: baseCollectCfg()}
+	cfg = dbWriteCfg{collect: baseCollectCfg()}
 	for _, o := range opts {
 		o.applyDatabaseWrite(&cfg)
 	}

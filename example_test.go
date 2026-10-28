@@ -70,6 +70,24 @@ func ExampleError() {
 	// true
 }
 
+// An engine's hook hears of each of its queries as it ends, for a service's metrics:
+// how it was run, its rows, its spills, its error.
+func ExampleWithEngineQueryHook() {
+	e := ursus.NewEngine(ursus.WithEngineQueryHook(func(ctx context.Context, s ursus.QueryStats) {
+		fmt.Printf("%s: %d rows, %d spills, error %v\n", s.Op, s.Rows, s.Spills, s.Err)
+	}))
+	q := exampleSales().GroupBy(ursus.Col("region")).Agg(ursus.Col("qty").Sum())
+	if _, err := q.Collect(context.Background(), ursus.WithEngine(e)); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := q.Count(context.Background(), ursus.WithEngine(e)); err != nil {
+		log.Fatal(err)
+	}
+	// Output:
+	// collect: 3 rows, 0 spills, error <nil>
+	// count: 3 rows, 0 spills, error <nil>
+}
+
 // Filter keeps rows; Select keeps columns. Neither runs until Collect.
 func ExampleLazyFrame_Filter() {
 	df, err := exampleSales().

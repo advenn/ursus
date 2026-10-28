@@ -397,8 +397,9 @@ func writeRecords(w interface{ Write(arrow.RecordBatch) error }, schema *arrow.S
 }
 
 func (lf *LazyFrame) writeIPC(ctx context.Context, op string, w io.Writer, stream bool, opts []IPCSinkOption) (err error) {
-	defer uerr.Catch(&err, op)
-	cfg := ipcSinkOptions(opts)
+	var cfg ipcSinkCfg
+	defer cfg.collect.end(ctx, op, &err)
+	cfg = ipcSinkOptions(opts)
 	if err := noPartition(op, cfg.part); err != nil {
 		return err
 	}

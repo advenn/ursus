@@ -1,6 +1,7 @@
 package ursus
 
 import (
+	"context"
 	"runtime"
 	"sync/atomic"
 
@@ -65,6 +66,8 @@ type Engine struct {
 	// parallel is how many of its running queries run on more than one thread: the
 	// divisor of a query's share.
 	parallel atomic.Int64
+
+	hook func(context.Context, QueryStats) // WithEngineQueryHook's, nil for none
 }
 
 // EngineOption configures NewEngine.
@@ -75,6 +78,7 @@ type engineCfg struct {
 	limitSet bool
 	spillDir string
 	threads  int
+	hook     func(context.Context, QueryStats)
 }
 
 // WithEngineMemoryLimit sets the engine's budget, in bytes, which its queries share;
@@ -111,7 +115,9 @@ func NewEngine(opts ...EngineOption) *Engine {
 	if !c.limitSet {
 		c.memLimit = defaultMemoryLimit()
 	}
-	return newEngine(c.memLimit, c.spillDir, !c.limitSet, c.threads)
+	e := newEngine(c.memLimit, c.spillDir, !c.limitSet, c.threads)
+	e.hook = c.hook
+	return e
 }
 
 // newEngine is an engine of its budget, derived where it is the default's, and of
