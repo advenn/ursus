@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–404, so far, after 0.7's 375–391.
+Steps 392–405, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
@@ -55,6 +55,12 @@ that stops when its request is cancelled.
   for all of a wide table's columns: the engine's other queries spill sooner beside
   it, the scan's own query does not, and `Stats().Held` includes them.
 
+- **Every format from an `fs.FS`** (405): `ScanCSVFS`, `ScanNDJSONFS`, `ScanJSONFS`,
+  `ScanParquetFS`, `ScanIPCFS` and `ScanIPCStreamFS`, so a program reads the data it
+  embeds (`embed.FS`), a test its `fstest.MapFS`, and `os.DirFS` or a zip archive as
+  files. A pattern is a file's name, a directory's, read whole as the path readers
+  read one, hive keys and all, or a glob, `**` among it; a Parquet or IPC file that
+  reads at an offset is read a column chunk at a time, as a file on disk is.
 - **Arrow IPC from bytes and from the caller's openers** (404), as Parquet, CSV and
   NDJSON are read: `ScanIPCBytes` and `ScanIPCFrom` of `IPCFile`s, each opened
   through `ReadAt` over its size as a `ParquetFile` is, from an object store or an

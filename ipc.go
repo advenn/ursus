@@ -175,6 +175,12 @@ type IPCFile struct {
 // under ScanIPCFiles' rules for several files (step 404, C4 of v0.8-scope.md). New in
 // 0.8.
 func ScanIPCFrom(files []IPCFile, opts ...IPCScanOption) *LazyFrame {
+	return scanIPCFrom(files, "", ipcScanOptions(opts))
+}
+
+// scanIPCFrom is ScanIPCFrom of files whose hive keys are read below root, a directory
+// ScanIPCFS read, or from the whole of each name where root is "".
+func scanIPCFrom(files []IPCFile, root string, o ipcScan) *LazyFrame {
 	names, err := fileNames("scan_ipc", "ipc file", len(files), func(i int) (string, bool) {
 		return files[i].Name, files[i].Open != nil
 	})
@@ -192,7 +198,7 @@ func ScanIPCFrom(files []IPCFile, opts ...IPCScanOption) *LazyFrame {
 			return openIPC("scan_ipc", names[i], io.NewSectionReader(ra, 0, size), c)
 		}
 	}
-	return scanIPCOpened("scan_ipc", names, opens, describe(names), "", ipcScanOptions(opts))
+	return scanIPCOpened("scan_ipc", names, opens, describe(names), root, o)
 }
 
 // ScanIPCBytes reads an Arrow IPC file from memory. New in 0.8.

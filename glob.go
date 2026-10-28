@@ -55,7 +55,7 @@ func globFiles(pattern string) ([]string, error) {
 		if err != nil {
 			return nil
 		}
-		if matchElems(rest, strings.Split(filepath.ToSlash(rel), "/")) {
+		if matchElems(filepath.Match, rest, strings.Split(filepath.ToSlash(rel), "/")) {
 			out = append(out, p)
 		}
 		return nil
@@ -67,13 +67,13 @@ func globFiles(pattern string) ([]string, error) {
 	return out, nil
 }
 
-// matchElems reports whether the path's elements match the pattern's, ** any run of
-// them, none among them.
-func matchElems(pat, path []string) bool {
+// matchElems reports whether the path's elements match the pattern's by match, **
+// any run of them, none among them.
+func matchElems(match func(pattern, name string) (bool, error), pat, path []string) bool {
 	for len(pat) > 0 {
 		if pat[0] == "**" {
 			for i := 0; i <= len(path); i++ {
-				if matchElems(pat[1:], path[i:]) {
+				if matchElems(match, pat[1:], path[i:]) {
 					return true
 				}
 			}
@@ -82,7 +82,7 @@ func matchElems(pat, path []string) bool {
 		if len(path) == 0 {
 			return false
 		}
-		if ok, _ := filepath.Match(pat[0], path[0]); !ok {
+		if ok, _ := match(pat[0], path[0]); !ok {
 			return false
 		}
 		pat, path = pat[1:], path[1:]
