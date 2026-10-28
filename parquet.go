@@ -269,6 +269,12 @@ type ParquetFile struct {
 //	}}
 //	df, err := ursus.ScanParquetFrom(files).Filter(ursus.Col("status").Eq(500)).Collect(ctx)
 func ScanParquetFrom(files []ParquetFile, opts ...ParquetOption) *LazyFrame {
+	return scanParquetFrom(files, "", opts)
+}
+
+// scanParquetFrom is ScanParquetFrom of files whose hive keys are read below root, a
+// directory ScanParquetFS read, or from the whole of each name where root is "".
+func scanParquetFrom(files []ParquetFile, root string, opts []ParquetOption) *LazyFrame {
 	if len(files) == 0 {
 		return &LazyFrame{err: uerr.New(uerr.KindValue, "scan_parquet", "no files given")}
 	}
@@ -290,7 +296,7 @@ func ScanParquetFrom(files []ParquetFile, opts ...ParquetOption) *LazyFrame {
 		desc += " and " + strconv.Itoa(len(names)-1) + " more"
 	}
 	o := parquetOptions(opts)
-	if err := partition(&o, names, ""); err != nil {
+	if err := partition(&o, names, root); err != nil {
 		return &LazyFrame{err: err}
 	}
 	return scan(parquet.NewNamed(opens, names, desc, o))
