@@ -410,8 +410,9 @@ func (lf *LazyFrame) SinkParquet(ctx context.Context, path string, opts ...Parqu
 // WriteParquet runs the query and writes the result to w, streaming. It does not
 // close w.
 func (lf *LazyFrame) WriteParquet(ctx context.Context, w io.Writer, opts ...ParquetSinkOption) (err error) {
-	defer uerr.Catch(&err, "sink_parquet")
-	cfg := parquetSinkOptions(opts)
+	var cfg parquetSinkCfg
+	defer cfg.collect.end(ctx, "sink_parquet", &err)
+	cfg = parquetSinkOptions(opts)
 	if err := noPartition("sink_parquet", cfg.part); err != nil {
 		return err
 	}

@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–402, so far, after 0.7's 375–391.
+Steps 392–403, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
@@ -55,6 +55,13 @@ that stops when its request is cancelled.
   for all of a wide table's columns: the engine's other queries spill sooner beside
   it, the scan's own query does not, and `Stats().Held` includes them.
 
+- **A hook for each query, a service's metrics** (403):
+  `NewEngine(WithEngineQueryHook(fn))` calls fn as each of the engine's queries ends,
+  with the query's context and its `QueryStats`: how it was run, its duration, rows,
+  peak memory, spills, threads and error. Once a query, by `Collect`,
+  `CollectBatches`, `Count`, `Profile` and every writer, a failed one included.
+  ursus imports no logging or tracing package; the context carries the service's
+  own, a request's route or a span.
 - **`Error`, an error a caller reads** (402): a failure of ursus's own is an
   `*ursus.Error` through `errors.As`, its `Kind` (`KindSchema`, `KindResource` and the
   rest, an `ErrorKind`), the operation, the message, the plan node, the hints, a near

@@ -471,8 +471,9 @@ func (lf *LazyFrame) SinkCSV(ctx context.Context, path string, opts ...CSVSinkOp
 // It does not close w. Whoever opened it closes it — the only rule that works when
 // the destination might be os.Stdout.
 func (lf *LazyFrame) WriteCSV(ctx context.Context, w io.Writer, opts ...CSVSinkOption) (err error) {
-	defer uerr.Catch(&err, "sink_csv")
-	cfg := csvSinkOptions(opts)
+	var cfg csvSinkCfg
+	defer cfg.collect.end(ctx, "sink_csv", &err)
+	cfg = csvSinkOptions(opts)
 	if err := noPartition("sink_csv", cfg.part); err != nil {
 		return err
 	}

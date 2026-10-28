@@ -10,7 +10,6 @@ import (
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/exec"
 	"github.com/advenn/ursus/internal/physical"
-	"github.com/advenn/ursus/internal/uerr"
 )
 
 // Profile runs the query as Collect does, and answers its result and a frame of how
@@ -34,9 +33,10 @@ import (
 // A profiled query runs each operator in a wrapper that reads the clock, so it takes
 // a little longer; Collect builds none.
 func (lf *LazyFrame) Profile(ctx context.Context, opts ...CollectOption) (df, profile *DataFrame, err error) {
-	defer uerr.Catch(&err, "profile")
+	var cfg collectCfg
+	defer cfg.end(ctx, "profile", &err)
 	start := time.Now()
-	cfg := newCollectCfg(opts)
+	cfg = newCollectCfg(opts)
 	defer cfg.done()
 	cfg.profiler = physical.NewProfiler(start, cfg.budget)
 	root, err := lf.compile(ctx, cfg)
