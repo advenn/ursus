@@ -3420,7 +3420,7 @@ section here names it.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v08">Unreleased — toward v0.8<a class="headerlink" href="#unreleased-toward-v08" title="Permanent link">&para;</a></h2>
-<p>Steps 392–403, so far, after 0.7's 375–391.
+<p>Steps 392–404, so far, after 0.7's 375–391.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.8-scope.md"><code>v0.8-scope.md</code></a> set the scope: <strong>ursus inside a Go
 service</strong>, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.</p>
@@ -3459,14 +3459,19 @@ that stops when its request is cancelled.</p>
   it, the scan's own query does not, and <code>Stats().Held</code> includes them.</p>
 </li>
 <li>
-<p><strong>A hook for each query, a service's metrics</strong> (403):
+<p><strong>Arrow IPC from bytes and from the caller's openers</strong> (404), as Parquet, CSV and
+  NDJSON are read: <code>ScanIPCBytes</code> and <code>ScanIPCFrom</code> of <code>IPCFile</code>s, each opened
+  through <code>ReadAt</code> over its size as a <code>ParquetFile</code> is, from an object store or an
+  HTTP server; <code>ScanIPCStreamBytes</code> and <code>ScanIPCStreamFrom</code> of <code>IPCStreamFile</code>s, a
+  reader each. Each opener is given the query's context and closed after.</p>
+</li>
+<li><strong>A hook for each query, a service's metrics</strong> (403):
   <code>NewEngine(WithEngineQueryHook(fn))</code> calls fn as each of the engine's queries ends,
   with the query's context and its <code>QueryStats</code>: how it was run, its duration, rows,
   peak memory, spills, threads and error. Once a query, by <code>Collect</code>,
   <code>CollectBatches</code>, <code>Count</code>, <code>Profile</code> and every writer, a failed one included.
   ursus imports no logging or tracing package; the context carries the service's
-  own, a request's route or a span.</p>
-</li>
+  own, a request's route or a span.</li>
 <li><strong><code>Error</code>, an error a caller reads</strong> (402): a failure of ursus's own is an
   <code>*ursus.Error</code> through <code>errors.As</code>, its <code>Kind</code> (<code>KindSchema</code>, <code>KindResource</code> and the
   rest, an <code>ErrorKind</code>), the operation, the message, the plan node, the hints, a near
