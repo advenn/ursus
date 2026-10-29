@@ -114,5 +114,5 @@ benchmark at ten million rows it takes about 1.3 times Polars' time over Parquet
 - interactive analytics over hundreds of millions of rows: use DuckDB or Polars;
 - anywhere you can link cgo freely: `duckdb-go` is a binding to a mature engine and
   about twice as fast on TPC-H;
-- anything production-critical today. ursus is at 0.6, and its API still changes
+- anything production-critical today. ursus is at 0.x, and its API still changes
   between releases, as the [changelog](reference/changelog.md) records.

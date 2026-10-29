@@ -10,9 +10,10 @@ description: >-
 go get github.com/advenn/ursus
 ```
 
-That is the whole install. ursus is pure Go, with Apache Arrow's Go library as its one
-direct dependency besides `golang.org/x/text`: no cgo, no C or C++ toolchain, no Python
-runtime and no sidecar process. It cross-compiles like any other Go module.
+That is the whole install. ursus is pure Go, with three direct dependencies, Apache
+Arrow's Go library, klauspost's compression and `golang.org/x/text`: no cgo, no C or
+C++ toolchain, no Python runtime and no sidecar process. It cross-compiles like any
+other Go module.
 
 ## Requirements
 
@@ -62,7 +63,7 @@ macOS and Windows.
 
 ## Versions
 
-ursus is on [ZeroVer](https://0ver.org), at 0.6, and a stable 1.0 is not expected
+ursus is on [ZeroVer](https://0ver.org), at 0.x, and a stable 1.0 is not expected
 yet. Go's rule for v0 applies: a release may rename, remove or reshape an API, and the
 [changelog](../reference/changelog.md) lists each release's breaks with their
 replacements. Pin a version in your `go.mod`, and read the
