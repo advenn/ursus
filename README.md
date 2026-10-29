@@ -7,10 +7,11 @@
 
 **ursus is a dataframe library for Go (Golang), modelled on Polars** — lazy execution with a query optimizer, Apache
 Arrow memory, SIMD kernels, and streaming execution that spills to disk rather than falling over. Pure Go, no cgo;
-experimental, at 0.6.
+experimental: v0.6.8 is the last release, and master holds 0.7's performance work and 0.8's for a Go service.
 
 **Documentation: [advenn.github.io/ursus](https://advenn.github.io/ursus/)** — a quick start, the concepts, a guide for
-Polars users, versioned by release, with every example run by the test suite.
+Polars users and [one for a Go service](https://advenn.github.io/ursus/dev/guide/services/), versioned by release, with
+every example run by the test suite.
 
 Sort, group-by, join, unique, every
 window function and the temporal groups spill or stream — by default once a process's queries together hold half the
@@ -52,7 +53,9 @@ to.
   second against a tenth of one and nobody is waiting. Larger data still runs, spilling to disk past the memory limit,
   but there the same ratio is seconds or minutes, and a spilled query pays for its disk too.
 - A Go service that needs real dataframe work — joins, group-bys, window functions — and cannot take on cgo, a Python
-  sidecar, or a large C++ dependency to get it.
+  sidecar, or a large C++ dependency to get it. Its queries share one memory budget and the machine's threads, stop
+  when their request's context does, and report to a hook for its metrics; the
+  [service guide](https://advenn.github.io/ursus/dev/guide/services/) shows each.
 - Anywhere the deployment story is worth more than the last multiple of speed.
 
 **Where it is not**
@@ -60,7 +63,7 @@ to.
 - Interactive analytics over hundreds of millions of rows. Use DuckDB or Polars.
 - Anywhere you can link cgo freely: `duckdb-go` is around 2x faster than this on TPC-H and is a binding to a mature
   engine.
-- Anything production-critical today. This is v0.6, the API still moves, and nothing here is promised.
+- Anything production-critical today. This is 0.x, the API still moves, and nothing here is promised.
 
 The honest summary is that Go has not had a dataframe library of this shape, and one that is correct and a few times
 slower is more useful than none — for the sizes most services actually handle.
@@ -111,12 +114,15 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 
 ## Status
 
-**v0.6** — what changed since v0.5 is in [`CHANGELOG.md`](./CHANGELOG.md), and what 0.6 set out to do,
-and did, in [`v0.6-scope.md`](./context_files/v0.6-scope.md). What works today:
+**v0.6.8** is the last release. Master has two minor versions' work since, each in the unreleased sections of
+[`CHANGELOG.md`](./CHANGELOG.md): 0.7's, performance, the Parquet read first
+([`v0.7-scope.md`](./context_files/v0.7-scope.md)), and 0.8's, ursus inside a Go service: queries that share a memory
+budget and threads, stop when they are cancelled, report to a hook and fail with an error a caller reads
+([`v0.8-scope.md`](./context_files/v0.8-scope.md)). What works on master:
 
 |                 |                                                                                                                                                   |
 |-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Sources**     | Parquet, CSV (gzip, zlib or Zstandard too), JSON, NDJSON and Arrow IPC, read and written, from paths, memory, or any `io.ReaderAt` / stream you open; directories, `**` globs and hive partitions, read and written, with Parquet schema evolution; databases read and written through `database/sql`; in-memory frames and Go values (`FromRows`, `Rows`, `ToMaps`); Arrow (records and streams in; records out, zero-copy) |
+| **Sources**     | Parquet, CSV (gzip, zlib or Zstandard too), JSON, NDJSON and Arrow IPC, read and written, from paths, memory, an `fs.FS` (`embed` too), or any `io.ReaderAt` / stream you open; directories, `**` globs and hive partitions, read and written, with Parquet schema evolution; databases read and written through `database/sql`; in-memory frames and Go values (`FromRows`, `Rows`, `ToMaps`); Arrow (records and streams in; records out, zero-copy) |
 | **Types**       | Bool, Int8–64, Uint8–64, Float32/64, String and Binary (past 2 GiB too), Date, Time, Datetime (unit + zone), Duration, Decimal (128-bit; exact `+ - *` and `sum`, refused past 38 digits; `/` to the nearest Float64; casts to and from every numeric type exact or refused, except to a float, which rounds to the nearest), Enum (built from String, ordered by its categories), Categorical, List, Array (fixed width, the `Arr()` namespace) and Struct, each of the last three a key too |
 | **Expressions** | Polars' contexts: an aggregate is one value in `Select`, `WithColumns` and `Filter`; `Expr.Filter` is an aggregate's input; `Sort`, `SortBy`, `Head`, `Tail`, `Slice`, `Reverse`, `Unique`, `DropNulls`, `DropNans`, `Gather`, `GatherEvery`, `Get`, `Explode`, `ArgSort`, `Mode`, `ValueCounts`, `Rle`, `Append`, `SampleN` and `Hist` are a list a group in an aggregation and a column of their own length in `Select` and `WithColumns`; `Unnest` and `Struct().Field` of several names are a column a field; arguments take expressions, and a Go slice is a List literal. Generators (`IntRange`, `LinearSpace`, `Repeat`, the date, datetime and time ranges, `MakeDate` and its kin), folds (`Fold`, `Reduce`, `CumFold`, `ConcatList`, `Format`), selection by position (`Nth`, `ArgWhere`), and `List().Eval` over `Element()`. Then arithmetic, comparison, Kleene three-valued logic and the bits of integers, conditionals, casts, null repair, value maps (`Replace`, `ReplaceStrict`, `ReplaceOr`), rounding with a mode, `RoundSigFigs` and `Truncate`, trigonometric and hyperbolic functions, bit counts, `Hash`, `SearchSorted` and `IndexOf`, `ConcatStr`, `Struct`, `Max`/`Min`/`Sum`/`Mean`/`Any`/`AllHorizontal`, `Cut`/`QCut`, the `.str` (incl. `Split`, `SplitExact`, `ContainsAny` and `ReplaceMany` over many patterns, `Normalize`, `Encode`, `JsonDecode` and `Strptime` with strftime formats), `.dt` (incl. `Date`, `Time`, `Strftime`, `OffsetBy`, `Round`, `ConvertTimeZone`, `Replace`, `IsBusinessDay`, `AddBusinessDays` and the fractional totals), `.list` (incl. `Join`, `NUnique`, `ArgMin`/`ArgMax`, the set operations, `Gather`, `ToStruct`, `Shift`, `Diff`, `SampleN`), `.cat` (on an Enum), `.bin` and `.struct` namespaces, the aggregates (incl. `Implode`, `TopK`, `BottomK`, `Corr`, `Cov`, `CorrSpearman`, `Skew`, `Kurtosis`, `Entropy`, `MinBy`, `MaxBy`, the bitwise reductions and `ApproxNUnique`), and window functions (incl. `Rolling*` with `RollingMedian`, `RollingQuantile`, `RollingSkew`, `RollingKurtosis`, `RollingRank`, `RollingCov` and `RollingCorr`, `Rolling*By` by time, `Ewm*` with `EwmSum` and `EwmMeanBy`, `RleID`, `Interpolate`, `CumulativeEval`, and any body around an aggregate inside `.Over`) |
 | **Frame ops**   | filter, select, with-columns, sort, top-k, distinct (`UniqueKeep`, duplicates over columns), concat in its modes/vstack/hstack, slice/tail/reverse/row-index, drop/rename/drop-nulls, a frame's cast, fills, aggregates and sample, pivot, unpivot, transpose, `PartitionBy`, `Upsample`, `ToDummies`, selectors, `ValueCounts`, `Describe`, a `Series` with operations |
@@ -126,9 +132,10 @@ and did, in [`v0.6-scope.md`](./context_files/v0.6-scope.md). What works today:
 | **Execution**   | order-preserving pipeline parallelism, Parquet row groups decoded and CSV parsed in parallel, parallel hash aggregation with a partitioned fold and a frame's aggregate a column at a time, `Profile` of each node, a partitioned parallel join build, a sort and a unique on several threads, text sorted by radix, inner joins that hash their smaller input, and spilling for sort and top-k, hash aggregation (a median's, quantile's and n_unique's values too), hash join, unique, every window function over one huge partition too, keyed `Rolling` and `GroupByDynamic`, tail and reverse (`WithMemoryLimit` names the rest, which fail rather than spill) |
 | **UDFs**        | `MapElements` (per value) and `MapBatches` (per column) — generic methods, so the Go types are inferred from your function                        |
 
-Nested types are partly there: **List and Struct read from Parquet and Arrow and write to Parquet**, with
-`Explode`, `Unnest`, a `.list` namespace and `.struct` (`Field`, `WithFields`, `RenameFields`, `JsonEncode`). An Arrow Map arrives as a list of key/value structs.
-Array is not there, and a List of Lists or of Structs is refused by name on both sides.
+Nested types: **List, Array and Struct, nested as deep as you like, read and write through Arrow IPC and Arrow
+records**, with `Explode`, `Unnest`, the `.list`, `.arr` and `.struct` namespaces, and each a key. Parquet reads and
+writes a List of a primitive type, an Array, and a Struct of primitive fields; a List of Lists or of Structs is refused
+by name there, on both sides. An Arrow Map arrives as a list of key/value structs.
 
 **Arrow** goes both ways, in pure Go. `df.Record()` and `lf.CollectRecords(ctx)` export without copying;
 `ScanArrow` reads any `array.RecordReader` — an IPC stream, Flight, the C Data Interface — and `ScanArrowRecords` reads
@@ -143,7 +150,8 @@ lf := ursus.ScanArrow(func() (array.RecordReader, error) {
 The function is called once to plan the query and once per scan, because a reader cannot be rewound. 38 of Arrow's 45
 types map; Decimal256, intervals, unions and run-end encoding are refused by name.
 
-**Object storage** has no client built in: each store wants its vendor's SDK, and ursus is pure Go with one dependency.
+**Object storage** has no client built in: each store wants its vendor's SDK, and ursus is pure Go with three
+dependencies, arrow-go, klauspost's compression and `golang.org/x/text`.
 `ScanParquetFrom` reads Parquet through any `io.ReaderAt` instead, so a ReadAt over ranged GETs reaches S3, GCS or an
 HTTP server — and ursus reads the footer and then only the column chunks the query needs, after statistics have pruned
 the row groups it does not:
@@ -157,8 +165,9 @@ lf := ursus.ScanParquetFrom([]ursus.ParquetFile{{
 }})
 ```
 
-`ScanCSVFrom` takes a stream the same way, and `WriteParquet` and `WriteCSV` write to any `io.Writer`, an upload
-included. Built-in stores — `s3://` paths, listing for globs, retries — are out by decision; the seam is the way in.
+`ScanIPCFrom` takes a `ReaderAt` the same way, and `ScanCSVFrom`, `ScanNDJSONFrom` and `ScanIPCStreamFrom` a stream; every
+writer writes to any `io.Writer`, an upload included. Built-in stores — `s3://` paths, listing for globs, retries — are
+out by decision; the seam is the way in.
 
 The escape hatch is real: a per-element UDF in Go is a function call, not a Python
 interpreter round trip, which is the one place this library can beat Polars outright
@@ -174,13 +183,12 @@ tell from a real one; use `MapBatches` when the null is the point. The name is
 required, and `Explain` shows it. Your function is called from several goroutines at
 once, so it must be safe for that.
 
-Not done: built-in object stores and SQL, both out by decision (the seam above reaches a store today); `MapGroups`
-and `RollingMap`; a lazy `Pivot`, whose output columns are the distinct values of a column, so its schema would depend on
-data and no plan node here does (`Unpivot` ships, and `DataFrame.Pivot` and `Transpose` eagerly); `Upsample`; `Sample` and
-`List().Eval`; a rolling rank, and a rolling window by an integer `by`; Spearman's correlation;
-Arrow IPC files and NDJSON. [`v0.6-scope.md`](./context_files/v0.6-scope.md) says why each waits, and
+Not done: built-in object stores and SQL, both out by decision (the seam above reaches a store today); in Parquet, a
+List of Lists or of Structs, page indexes and bloom filters; Avro, Excel, Delta Lake and Iceberg; predicate pushdown
+into CSV and Arrow scans; common subexpressions shared across a query's expressions, a join order chosen by
+statistics, and a work-stealing scheduler; `collect_all` and a plan serialized; rolling weights.
 [`feature-gaps.md`](./context_files/feature-gaps.md) lists everything Polars, pandas and DuckDB have that ursus does
-not, which the rest of 0.6 works through.
+not, and what each step since has built.
 
 **ursus is on [ZeroVer](https://0ver.org): 0.x, and a stable 1.0 is not expected yet.** Version numbers follow Go's
 rule for v0, so a minor version may rename, remove or reshape an API when the result is better, with no deprecation

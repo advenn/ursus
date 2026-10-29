@@ -10,7 +10,8 @@ on:
   pull_request:
 
 env:
-  # Mandatory: package `simd` does not compile without it.
+  # The SIMD kernels, which the test matrix's widths exercise. Optional: without it
+  # every kernel falls back to its scalar twin, as the scalar-only job proves.
   GOEXPERIMENT: simd
   GOAMD64: v3
 
