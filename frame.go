@@ -18,6 +18,14 @@ import (
 // There is no row index. Row order is a property of the data, not an addressable
 // label space — the single most consequential thing Polars got right and pandas
 // did not.
+//
+// # Immutable
+//
+// A DataFrame is never changed once made: every method gives a new one, sharing the
+// columns it leaves as they were. So a DataFrame is safe to share between goroutines,
+// as a LazyFrame is: a service may load reference data once and read it from every
+// request. A Column's raw accessors, RawChars and FixedSlice among them, give slices
+// of its memory, which must not be written.
 type DataFrame struct {
 	batch *data.Batch
 }

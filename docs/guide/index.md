@@ -98,4 +98,11 @@ orders, its dates read as dates, unless a chapter says otherwise:
     Scans and their options, globs, object storage, pushdown into Parquet, sinks, and
     Arrow in and out.
 
+-   :material-server-network:{ .lg .middle } **[ursus in a service](services.md)**
+
+    ---
+
+    Queries built once and shared, answers streamed to the client, cancellation,
+    errors as statuses, a shared budget, metrics and embedded data.
+
 </div>
