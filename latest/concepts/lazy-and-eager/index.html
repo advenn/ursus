@@ -1645,7 +1645,9 @@ chain has one <code>if err != nil</code>, at the end.</p>
 <p>The optimizer rewrites the plan into one that gives the same answer for less work:</p>
 <ul>
 <li><strong>predicate pushdown:</strong> a filter moves toward the scan, through joins, so fewer rows
-  travel;</li>
+  travel; <em>new in 0.7</em>, a filter of a group-by's keys moves below the group-by, and
+  one of a window's partition keys below the window, since each keeps or drops a
+  group whole;</li>
 <li><strong>projection pushdown:</strong> a scan reads only the columns the query uses, and a count
   none (<em>new in 0.6.8</em>);</li>
 <li><strong>limit and top-k pushdown:</strong> a <code>Head</code> after a <code>Sort</code> becomes a top-k, and, <em>new in
