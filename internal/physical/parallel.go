@@ -100,9 +100,13 @@ func (p *parallelOp) Next(ctx context.Context) (*data.Batch, error) {
 
 		// Round-robin dispatch is monotone: worker i receives batches i, i+N,
 		// i+2N… so once the lane whose turn it is has closed, every later lane in
-		// this round has too. That is why one closed lane means end of stream.
+		// this round has too. That is why one closed lane means end of stream —
+		// unless the query was cancelled, which closes them too (step 394).
 		if !ok {
 			p.done = true
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			return nil, io.EOF
 		}
 		if r.err != nil {
