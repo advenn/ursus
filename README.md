@@ -7,7 +7,7 @@
 
 **ursus is a dataframe library for Go (Golang), modelled on Polars** — lazy execution with a query optimizer, Apache
 Arrow memory, SIMD kernels, and streaming execution that spills to disk rather than falling over. Pure Go, no cgo;
-experimental: v0.6.8 is the last release, and master holds 0.7's performance work and 0.8's for a Go service.
+experimental: v0.7.0 is the last release, and master holds 0.8's work, for a Go service.
 
 **Documentation: [advenn.github.io/ursus](https://advenn.github.io/ursus/)** — a quick start, the concepts, a guide for
 Polars users and [one for a Go service](https://advenn.github.io/ursus/dev/guide/services/), versioned by release, with
@@ -114,10 +114,10 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 
 ## Status
 
-**v0.6.8** is the last release. Master has two minor versions' work since, each in the unreleased sections of
-[`CHANGELOG.md`](./CHANGELOG.md): 0.7's, performance, the Parquet read first
-([`v0.7-scope.md`](./context_files/v0.7-scope.md)), and 0.8's, ursus inside a Go service: queries that share a memory
-budget and threads, stop when they are cancelled, report to a hook and fail with an error a caller reads
+**v0.7.0** is the last release, performance, the Parquet read first
+([`v0.7-scope.md`](./context_files/v0.7-scope.md)). Master has 0.8's work since, in the unreleased section of
+[`CHANGELOG.md`](./CHANGELOG.md): ursus inside a Go service, queries that share a memory budget and threads, stop when
+they are cancelled, report to a hook and fail with an error a caller reads
 ([`v0.8-scope.md`](./context_files/v0.8-scope.md)). What works on master:
 
 |                 |                                                                                                                                                   |
@@ -235,10 +235,10 @@ See [`bench/README.md`](./bench/README.md) for what is timed and why.
 reference, and a disagreement is struck through rather than quietly reported as a fast number.
 
 **How current it is, precisely.** ursus and Polars were re-run together, every query of all four suites, on 0.7's
-code, `16e617a`, on 2026-10-29 (step 408). Master has 0.8's steps on top of it, which 0.8's report will time. The other
-engines' numbers are from an earlier session, every engine together on `5a721e0` on 2026-10-08 (step 127): their code
-has not changed, and re-running them would have taken the laptop for an hour and more. So ursus is compared with Polars
-within one session, and with the rest across sessions.
+code, `16e617a`, on 2026-10-29 (step 408), and v0.7.0 is that code with its documents. Master has 0.8's steps on top
+of it, which 0.8's report will time. The other engines' numbers are from an earlier session, every engine together on
+`5a721e0` on 2026-10-08 (step 127): their code has not changed, and re-running them would have taken the laptop for an
+hour and more. So ursus is compared with Polars within one session, and with the rest across sessions.
 
 The caveats that apply to *this* run:
 
