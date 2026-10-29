@@ -23,22 +23,23 @@ on 8 threads:
 
 | Suite | ursus | Polars | ursus / Polars |
 |---|---:|---:|---:|
-| h2o.ai, 10M rows, Parquet | 697 ms | 531 ms | 1.3× |
-| h2o.ai, 10M rows, CSV | 1,784 ms | 1,088 ms | 1.6× |
-| TPC-H, scale factor 1 | 158 ms | 79 ms | 2.0× |
-| TPC-H, scale factor 0.1 | 20 ms | 9 ms | 2.3× |
-| TPC-H SF=1, peak memory | 0.83 GB | 0.92 GB | 0.9× |
+| h2o.ai, 10M rows, Parquet | 670 ms | 563 ms | 1.2× |
+| h2o.ai, 10M rows, CSV | 1,505 ms | 1,221 ms | 1.2× |
+| TPC-H, scale factor 1 | 178 ms | 91 ms | 2.0× |
+| TPC-H, scale factor 0.1 | 17 ms | 9 ms | 1.9× |
+| TPC-H SF=1, peak memory | 0.84 GB | 0.84 GB | 1.0× |
 
-Over the releases, ursus's time against Polars' has come down from 3.3× to 1.3× on
-h2o.ai over Parquet, and from 10.8× to 2.0× on TPC-H at scale factor 1.
+With the two engines alternated query by query, TPC-H at scale factor 1 is 1.8× and
+h2o.ai over CSV 1.2×. Over the releases, ursus's time against Polars' has come down
+from 3.3× to 1.2× on h2o.ai over Parquet, from 3.6× to 1.2× over CSV, and from 10.8×
+to about 2× on TPC-H at scale factor 1.
 
 ## How they were taken
 
-The figures are v0.6.4's, from a laptop under real conditions, so a small difference is
-noise and the ordering is the signal. Later 0.6 releases changed no plan the suites run,
-which a byte-for-byte diff of all 37 queries' optimized plans checks at each release,
-so the figures stand. The full report, with every engine, every query, the caveats and
-peak memory, is
+The figures are 0.7's, from a laptop under real conditions, so a small difference is
+noise and the ordering is the signal. 0.7's code took 0.91 to 1.00 of v0.6.8's time
+over the four suites, the two alternated query by query. The full report, with every
+engine, every query, the caveats and peak memory, is
 [`bench/results/REPORT.md`](https://github.com/advenn/ursus/blob/master/bench/results/REPORT.md).
 
 To run them yourself:

@@ -13,11 +13,30 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.7
+## v0.7.0 — 2026-10-29
 
-Everything since `v0.6.8` (2026-10-26): steps 375–391, so far.
+Everything since `v0.6.8` (2026-10-26): steps 375–391, and 408.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
-Parquet read first.
+Parquet read first. Step 408 checked the whole, on 0.7's code, `16e617a`.
+
+### Where it ends
+
+- **Against Polars 1.44.1,** the two run together on eight threads: h2o at ten
+  million rows in 1.19 times Polars' time over Parquet and 1.23 over CSV, where
+  v0.6.4's report had 1.31 and 1.64; PDS-H at SF=1 in 1.96, 1.82 with the two
+  alternated query by query, where it had 2.01; at SF=0.1 in 1.87, where it had 2.29.
+- **Against v0.6.8,** both built alike and alternated query by query on four
+  threads: PDS-H at SF=1 0.94 of its time and at SF=0.1 0.91, h2o over Parquet 0.93
+  and over CSV 1.00. No query is slower once run again.
+- **Every answer matches DuckDB's,** ursus's and Polars': PDS-H's 22 at both scales
+  and h2o's 15 over Parquet and over CSV.
+- **Built:** the Parquet read's buffers, its columns read at a text predicate's kept
+  rows and its dictionary text (R1 to R3); a join's text gathered by runs (J1);
+  integer keys packed into words for a group-by and a join (G1); a filter of keys
+  below a group-by or a window (O1); `Upsample`'s grid joined in its order (U1); a
+  large top-k that sorts (T1); windows over a group's list, and a sink's at once (W1,
+  W2); the CSV writer on the query's threads (C1); a CSV file's floats in one pass
+  (C2).
 
 ### Faster
 
@@ -86,6 +105,24 @@ Parquet read first.
   columns at SF=1 allocates 2.2 GB in seven runs where it allocated 3.9; PDS-H at
   SF=0.1 takes 0.93 of v0.6.8's time, and at SF=1 its q14, q17, q19, q12 and q15 0.91
   to 0.95.
+
+### Known limitations
+
+As v0.6.8's, except:
+
+- **Lifted:** the CSV writer on one thread (390).
+- **Measured and left:**
+  - expression-level CSE: the repeated row-wise subexpression is a sixth of its probe,
+    and windows and aggregates are shared already (388);
+  - a CSV file read a column at a time: the builders' calls made direct measured
+    nothing (389);
+  - zstd: about 170 ms of the 248–277 ms a bare scan of q14's four columns takes on
+    one thread, where Polars' whole scan takes 141–156 (380, `feature-gaps.md` §8);
+  - `Upsample`, about nine times Polars' time, its join's keys the most of it (383,
+    391);
+  - a window's partitions walked on one thread (386, 391).
+- **Not measured:** a work-stealing scheduler, which the scope made depend on a
+  profile showing threads idle (S1).
 
 ---
 
