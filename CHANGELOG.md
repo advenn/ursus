@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8
 
-Steps 392–405, so far, after 0.7's 375–391.
+Steps 392–407, so far, after 0.7's 375–391.
 [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
 service**, small queries, many at once, memory a service can predict, and a query
 that stops when its request is cancelled.
@@ -55,6 +55,12 @@ that stops when its request is cancelled.
   for all of a wide table's columns: the engine's other queries spill sooner beside
   it, the scan's own query does not, and `Stats().Held` includes them.
 
+- **A guide for a service** (406): the user guide's "ursus in a service", every
+  example run by the test suite: a query built once and shared, its answer streamed
+  to an `http.ResponseWriter`, a request's context and deadline, errors as HTTP
+  statuses, an engine of a service's own and its hook, embedded data, and what a
+  large query leaves in RSS. A `DataFrame`'s doc says it is immutable, and so
+  shared as a `LazyFrame` is.
 - **Every format from an `fs.FS`** (405): `ScanCSVFS`, `ScanNDJSONFS`, `ScanJSONFS`,
   `ScanParquetFS`, `ScanIPCFS` and `ScanIPCStreamFS`, so a program reads the data it
   embeds (`embed.FS`), a test its `fstest.MapFS`, and `os.DirFS` or a zip archive as

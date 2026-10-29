@@ -147,6 +147,7 @@ nav:
       - Go values in and out: guide/go-values.md
       - Go functions: guide/go-functions.md
       - CSV, Parquet and Arrow: guide/io.md
+      - ursus in a service: guide/services.md
   - Benchmarks: benchmarks.md
   - Reference:
       - API reference: reference/api.md
