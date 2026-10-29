@@ -939,6 +939,8 @@
       
         
       
+        
+      
     
     
     
@@ -1329,6 +1331,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ursus in a service
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1593,9 +1623,10 @@
 <h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>go<span class="w"> </span>get<span class="w"> </span>github.com/advenn/ursus
 </span></code></pre></div>
-<p>That is the whole install. ursus is pure Go, with Apache Arrow's Go library as its one
-direct dependency besides <code>golang.org/x/text</code>: no cgo, no C or C++ toolchain, no Python
-runtime and no sidecar process. It cross-compiles like any other Go module.</p>
+<p>That is the whole install. ursus is pure Go, with three direct dependencies, Apache
+Arrow's Go library, klauspost's compression and <code>golang.org/x/text</code>: no cgo, no C or
+C++ toolchain, no Python runtime and no sidecar process. It cross-compiles like any
+other Go module.</p>
 <h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
 <p><strong>Go 1.27 or newer.</strong> Two of its changes are load-bearing:</p>
 <ul>
@@ -1656,7 +1687,7 @@ own builds and benchmarks use it; any amd64 machine from the last decade has the
 machine or the container allows and shared by a process's queries, reads that allowance on Linux (cgroups included),
 macOS and Windows.</p>
 <h2 id="versions">Versions<a class="headerlink" href="#versions" title="Permanent link">&para;</a></h2>
-<p>ursus is on <a href="https://0ver.org">ZeroVer</a>, at 0.6, and a stable 1.0 is not expected
+<p>ursus is on <a href="https://0ver.org">ZeroVer</a>, at 0.x, and a stable 1.0 is not expected
 yet. Go's rule for v0 applies: a release may rename, remove or reshape an API, and the
 <a href="../../reference/changelog/">changelog</a> lists each release's breaks with their
 replacements. Pin a version in your <code>go.mod</code>, and read the
