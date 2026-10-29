@@ -732,6 +732,12 @@ func recoveredPanic(err error) bool {
 // function and order within it, with the test that makes a panic there an error.
 // TestEveryGoroutineIsCovered fails on a site not listed here, so a new goroutine
 // cannot be started without saying what recovers its panics.
+//
+// A WaitGroup's Go starts one too, and escaped this until step 393: six helpers,
+// a sort's pieces among them, recovered nothing, so a panic in one ended the
+// process. One recovers in its own body, a deferred recover, a uerr.Guard, or a call
+// to a function of its package that defers one, or goes through uerr.Relay; any
+// other is a site, "file function wg.Go n", listed here as a go statement is.
 var goroutineSites = map[string]string{
 	"internal/physical/parallel.go launch 1":      "TestParallelDispatcherPanicIsAnError",
 	"internal/physical/parallel.go launch 2":      "TestParallelWorkerPanicIsAnError",
@@ -748,6 +754,12 @@ var goroutineSites = map[string]string{
 func TestEveryGoroutineIsCovered(t *testing.T) {
 	found := map[string]bool{}
 	tests := map[string]bool{}
+	type source struct {
+		path string
+		file *ast.File
+	}
+	var sources []source
+	recovering := map[string]bool{} // "dir name": a function whose body defers a recover
 	repoFiles(t, func(path string, src []byte) {
 		path = filepath.ToSlash(path)
 		if strings.HasPrefix(path, ".claude/") {
@@ -765,21 +777,41 @@ func TestEveryGoroutineIsCovered(t *testing.T) {
 			}
 			return
 		}
+		sources = append(sources, source{path, f})
 		for _, d := range f.Decls {
+			if fd, ok := d.(*ast.FuncDecl); ok && fd.Body != nil && defersRecover(fd.Body) {
+				recovering[filepath.Dir(path)+" "+fd.Name.Name] = true
+			}
+		}
+	})
+	for _, src := range sources {
+		path := src.path
+		for _, d := range src.file.Decls {
 			fd, ok := d.(*ast.FuncDecl)
 			if !ok {
 				continue
 			}
-			n := 0
+			n, waits := 0, 0
 			ast.Inspect(fd, func(x ast.Node) bool {
-				if _, ok := x.(*ast.GoStmt); ok {
+				switch x := x.(type) {
+				case *ast.GoStmt:
 					n++
 					found[fmt.Sprintf("%s %s %d", path, fd.Name.Name, n)] = true
+				case *ast.CallExpr:
+					sel, ok := x.Fun.(*ast.SelectorExpr)
+					if !ok || sel.Sel.Name != "Go" || len(x.Args) != 1 {
+						return true // uerr.Relay's Go takes the WaitGroup and the function
+					}
+					if lit, ok := x.Args[0].(*ast.FuncLit); ok && goRecovers(lit.Body, filepath.Dir(path), recovering) {
+						return true
+					}
+					waits++
+					found[fmt.Sprintf("%s %s wg.Go %d", path, fd.Name.Name, waits)] = true
 				}
 				return true
 			})
 		}
-	})
+	}
 	for site := range found {
 		if _, ok := goroutineSites[site]; !ok {
 			t.Errorf("%s starts a goroutine and goroutineSites does not list it: recover "+
@@ -794,6 +826,75 @@ func TestEveryGoroutineIsCovered(t *testing.T) {
 			t.Errorf("goroutineSites names %s for %s, and there is no such test", test, site)
 		}
 	}
+}
+
+// defersRecover reports whether body defers, at its top level, a function that
+// calls recover.
+func defersRecover(body *ast.BlockStmt) bool {
+	for _, st := range body.List {
+		d, ok := st.(*ast.DeferStmt)
+		if !ok {
+			continue
+		}
+		lit, ok := d.Call.Fun.(*ast.FuncLit)
+		if !ok {
+			continue
+		}
+		calls := false
+		ast.Inspect(lit.Body, func(x ast.Node) bool {
+			if c, ok := x.(*ast.CallExpr); ok {
+				if id, ok := c.Fun.(*ast.Ident); ok && id.Name == "recover" {
+					calls = true
+				}
+			}
+			return !calls
+		})
+		if calls {
+			return true
+		}
+	}
+	return false
+}
+
+// goRecovers reports whether a goroutine's body, started by a WaitGroup's Go in the
+// package in dir, recovers its panics: it defers a recover, it calls uerr.Guard or
+// GuardErr, or it is one call to a function of its package that defers a recover.
+func goRecovers(body *ast.BlockStmt, dir string, recovering map[string]bool) bool {
+	if defersRecover(body) {
+		return true
+	}
+	guards := false
+	ast.Inspect(body, func(x ast.Node) bool {
+		if c, ok := x.(*ast.CallExpr); ok {
+			if sel, ok := c.Fun.(*ast.SelectorExpr); ok {
+				if id, ok := sel.X.(*ast.Ident); ok && id.Name == "uerr" && (sel.Sel.Name == "GuardErr" || sel.Sel.Name == "Guard") {
+					guards = true
+				}
+			}
+		}
+		return !guards
+	})
+	if guards {
+		return true
+	}
+	if len(body.List) != 1 {
+		return false
+	}
+	st, ok := body.List[0].(*ast.ExprStmt)
+	if !ok {
+		return false
+	}
+	c, ok := st.X.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	switch fn := c.Fun.(type) {
+	case *ast.Ident:
+		return recovering[dir+" "+fn.Name]
+	case *ast.SelectorExpr:
+		return recovering[dir+" "+fn.Sel.Name]
+	}
+	return false
 }
 
 // TestOnlyNodeReadsTheField: Expr.node is nil-safe, and reading the field directly

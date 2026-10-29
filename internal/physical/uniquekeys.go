@@ -340,11 +340,15 @@ func (d *uniqueKeys) eachPart(workers int, fn func(p int)) {
 		}
 		return
 	}
-	var wg sync.WaitGroup
+	var (
+		wg    sync.WaitGroup
+		relay uerr.Relay
+	)
 	for p := range d.parts {
-		wg.Go(func() { fn(p) })
+		relay.Go(&wg, func() { fn(p) })
 	}
 	wg.Wait()
+	relay.Raise()
 }
 
 // eachRange runs fn on workers contiguous ranges of [0, n), w numbering each, a
@@ -354,9 +358,13 @@ func eachRange(n, workers int, fn func(w, lo, hi int)) {
 		fn(0, 0, n)
 		return
 	}
-	var wg sync.WaitGroup
+	var (
+		wg    sync.WaitGroup
+		relay uerr.Relay
+	)
 	for w := range workers {
-		wg.Go(func() { fn(w, w*n/workers, (w+1)*n/workers) })
+		relay.Go(&wg, func() { fn(w, w*n/workers, (w+1)*n/workers) })
 	}
 	wg.Wait()
+	relay.Raise()
 }
