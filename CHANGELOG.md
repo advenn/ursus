@@ -147,7 +147,8 @@ that stops when its request is cancelled.
 
 Everything since `v0.6.8` (2026-10-26): steps 375–391, and 408.
 [`v0.7-scope.md`](./context_files/v0.7-scope.md) set the scope: **performance,** the
-Parquet read first. Step 408 checked the whole, on 0.7's code, `16e617a`.
+Parquet read first. Step 408 checked the whole, on 0.7's code, `16e617a`. The tag is
+`3d7810c`, off master: that code with these documents.
 
 ### Where it ends
 

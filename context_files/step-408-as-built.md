@@ -153,9 +153,19 @@ As the CHANGELOG's known limitations say:
   known limitations; 0.8's notes step 408 as 0.7's report.
 - **`v0.7-scope.md`:** where it stands.
 
-**The tag is not cut:** v0.7.0 waits for the maintainer's word. Master has 0.8's
-steps 392 to 407 above 0.7's code, so a tag of 0.7 alone is a commit off master: 0.7's
-code with this step's documents.
+**The tag, v0.7.0, is `3d7810c`,** off master, on the branch `release-0.7`, as the
+maintainer chose: master has 0.8's steps 392 to 407 above 0.7's code, so 0.7 alone is
+`16e617a` with this step's documents. With them went step 407's fixes of what was
+stale in the README and was so at 0.7 too: its version, its three dependencies, the
+nested types and what is not done; and the installation page's dependencies and the
+site's version. The tag's push publishes 0.7's documentation and moves `latest` to it.
 
-**Gate:** no code changed; step 407's light gate stands for master's code. `make api`
-passes with 0.7's section dated.
+**On master, after the tag:**
+
+- `api/v0.7.0.txt`, written by master's `internal/gen/api -dir` over the release
+  tree, the tool being 0.8's: 2,389 features, two more than v0.6.8's. `make api` now
+  measures against it: 70 added since and none gone;
+- the README names v0.7.0 as the last release, and master as 0.8's.
+
+**Gate:** no code changed; `16e617a`'s CI passed, every width, the scalar build and
+the race detector, and step 407's light gate stands for master's code.
