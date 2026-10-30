@@ -7,7 +7,7 @@
 
 **ursus is a dataframe library for Go (Golang), modelled on Polars** — lazy execution with a query optimizer, Apache
 Arrow memory, SIMD kernels, and streaming execution that spills to disk rather than falling over. Pure Go, no cgo;
-experimental: v0.7.0 is the last release, and master holds 0.8's work, for a Go service.
+experimental: v0.7.1 is the last release, and master holds 0.8's work, for a Go service.
 
 **Documentation: [advenn.github.io/ursus](https://advenn.github.io/ursus/)** — a quick start, the concepts, a guide for
 Polars users and [one for a Go service](https://advenn.github.io/ursus/dev/guide/services/), versioned by release, with
@@ -114,10 +114,10 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 
 ## Status
 
-**v0.7.0** is the last release, performance, the Parquet read first
-([`v0.7-scope.md`](./context_files/v0.7-scope.md)). Master has 0.8's work since, in the unreleased section of
-[`CHANGELOG.md`](./CHANGELOG.md): ursus inside a Go service, queries that share a memory budget and threads, stop when
-they are cancelled, report to a hook and fail with an error a caller reads
+**v0.7.1** is the last release: 0.7, performance, the Parquet read first
+([`v0.7-scope.md`](./context_files/v0.7-scope.md)), and three of 0.8's fixes. Master has 0.8's work since, in the
+unreleased section of [`CHANGELOG.md`](./CHANGELOG.md): ursus inside a Go service, queries that share a memory budget
+and threads, stop when they are cancelled, report to a hook and fail with an error a caller reads
 ([`v0.8-scope.md`](./context_files/v0.8-scope.md)). What works on master:
 
 |                 |                                                                                                                                                   |
