@@ -1,0 +1,2392 @@
+# ursus's public API at v0.7.1, a feature a line: go run ./internal/gen/api in a checkout
+# of the tag (step 401). `make api` lists what it has and the tree does not, each a break
+# the CHANGELOG names.
+pkg github.com/advenn/ursus, const AmbiguousEarliest = "earliest"
+pkg github.com/advenn/ursus, const AmbiguousEarliest Ambiguous
+pkg github.com/advenn/ursus, const AmbiguousLatest = "latest"
+pkg github.com/advenn/ursus, const AmbiguousLatest Ambiguous
+pkg github.com/advenn/ursus, const AmbiguousNull = "null"
+pkg github.com/advenn/ursus, const AmbiguousNull Ambiguous
+pkg github.com/advenn/ursus, const AmbiguousRaise = "raise"
+pkg github.com/advenn/ursus, const AmbiguousRaise Ambiguous
+pkg github.com/advenn/ursus, const AsOfBackward = 0
+pkg github.com/advenn/ursus, const AsOfBackward AsOfStrategy
+pkg github.com/advenn/ursus, const AsOfForward = 1
+pkg github.com/advenn/ursus, const AsOfForward AsOfStrategy
+pkg github.com/advenn/ursus, const AsOfNearest = 2
+pkg github.com/advenn/ursus, const AsOfNearest AsOfStrategy
+pkg github.com/advenn/ursus, const Base64 = "base64"
+pkg github.com/advenn/ursus, const Base64 Encoding
+pkg github.com/advenn/ursus, const BigEndian = "big"
+pkg github.com/advenn/ursus, const BigEndian Endianness
+pkg github.com/advenn/ursus, const CSVGzip = 1
+pkg github.com/advenn/ursus, const CSVGzip CSVCompression
+pkg github.com/advenn/ursus, const CSVUncompressed = 0
+pkg github.com/advenn/ursus, const CSVUncompressed CSVCompression
+pkg github.com/advenn/ursus, const CSVZstd = 2
+pkg github.com/advenn/ursus, const CSVZstd CSVCompression
+pkg github.com/advenn/ursus, const ClosedBoth = 3
+pkg github.com/advenn/ursus, const ClosedBoth Closed
+pkg github.com/advenn/ursus, const ClosedDefault = 0
+pkg github.com/advenn/ursus, const ClosedDefault Closed
+pkg github.com/advenn/ursus, const ClosedLeft = 1
+pkg github.com/advenn/ursus, const ClosedLeft Closed
+pkg github.com/advenn/ursus, const ClosedNone = 4
+pkg github.com/advenn/ursus, const ClosedNone Closed
+pkg github.com/advenn/ursus, const ClosedRight = 2
+pkg github.com/advenn/ursus, const ClosedRight Closed
+pkg github.com/advenn/ursus, const ConcatAlign = 6
+pkg github.com/advenn/ursus, const ConcatAlign ConcatMode
+pkg github.com/advenn/ursus, const ConcatAlignInner = 7
+pkg github.com/advenn/ursus, const ConcatAlignInner ConcatMode
+pkg github.com/advenn/ursus, const ConcatAlignLeft = 8
+pkg github.com/advenn/ursus, const ConcatAlignLeft ConcatMode
+pkg github.com/advenn/ursus, const ConcatAlignRight = 9
+pkg github.com/advenn/ursus, const ConcatAlignRight ConcatMode
+pkg github.com/advenn/ursus, const ConcatDiagonal = 1
+pkg github.com/advenn/ursus, const ConcatDiagonal ConcatMode
+pkg github.com/advenn/ursus, const ConcatDiagonalRelaxed = 3
+pkg github.com/advenn/ursus, const ConcatDiagonalRelaxed ConcatMode
+pkg github.com/advenn/ursus, const ConcatHorizontal = 4
+pkg github.com/advenn/ursus, const ConcatHorizontal ConcatMode
+pkg github.com/advenn/ursus, const ConcatHorizontalExtend = 5
+pkg github.com/advenn/ursus, const ConcatHorizontalExtend ConcatMode
+pkg github.com/advenn/ursus, const ConcatRelaxed = 2
+pkg github.com/advenn/ursus, const ConcatRelaxed ConcatMode
+pkg github.com/advenn/ursus, const ConcatStrict = 0
+pkg github.com/advenn/ursus, const ConcatStrict ConcatMode
+pkg github.com/advenn/ursus, const DialectAuto = 0
+pkg github.com/advenn/ursus, const DialectAuto SQLDialect
+pkg github.com/advenn/ursus, const DialectMySQL = 3
+pkg github.com/advenn/ursus, const DialectMySQL SQLDialect
+pkg github.com/advenn/ursus, const DialectPostgres = 2
+pkg github.com/advenn/ursus, const DialectPostgres SQLDialect
+pkg github.com/advenn/ursus, const DialectSQLServer = 4
+pkg github.com/advenn/ursus, const DialectSQLServer SQLDialect
+pkg github.com/advenn/ursus, const DialectSQLite = 1
+pkg github.com/advenn/ursus, const DialectSQLite SQLDialect
+pkg github.com/advenn/ursus, const FillBackward = 3
+pkg github.com/advenn/ursus, const FillBackward FillStrategy
+pkg github.com/advenn/ursus, const FillForward = 2
+pkg github.com/advenn/ursus, const FillForward FillStrategy
+pkg github.com/advenn/ursus, const FillMax = 5
+pkg github.com/advenn/ursus, const FillMax FillStrategy
+pkg github.com/advenn/ursus, const FillMean = 6
+pkg github.com/advenn/ursus, const FillMean FillStrategy
+pkg github.com/advenn/ursus, const FillMin = 4
+pkg github.com/advenn/ursus, const FillMin FillStrategy
+pkg github.com/advenn/ursus, const FillOne = 1
+pkg github.com/advenn/ursus, const FillOne FillStrategy
+pkg github.com/advenn/ursus, const FillZero = 0
+pkg github.com/advenn/ursus, const FillZero FillStrategy
+pkg github.com/advenn/ursus, const Hex = "hex"
+pkg github.com/advenn/ursus, const Hex Encoding
+pkg github.com/advenn/ursus, const IPCLZ4 = 1
+pkg github.com/advenn/ursus, const IPCLZ4 IPCCompression
+pkg github.com/advenn/ursus, const IPCUncompressed = 0
+pkg github.com/advenn/ursus, const IPCUncompressed IPCCompression
+pkg github.com/advenn/ursus, const IPCZstd = 2
+pkg github.com/advenn/ursus, const IPCZstd IPCCompression
+pkg github.com/advenn/ursus, const IfExistsAppend = 2
+pkg github.com/advenn/ursus, const IfExistsAppend IfTableExists
+pkg github.com/advenn/ursus, const IfExistsFail = 0
+pkg github.com/advenn/ursus, const IfExistsFail IfTableExists
+pkg github.com/advenn/ursus, const IfExistsReplace = 1
+pkg github.com/advenn/ursus, const IfExistsReplace IfTableExists
+pkg github.com/advenn/ursus, const InterpHigher = 2
+pkg github.com/advenn/ursus, const InterpHigher Interpolation
+pkg github.com/advenn/ursus, const InterpLinear = 0
+pkg github.com/advenn/ursus, const InterpLinear Interpolation
+pkg github.com/advenn/ursus, const InterpLower = 1
+pkg github.com/advenn/ursus, const InterpLower Interpolation
+pkg github.com/advenn/ursus, const InterpMidpoint = 4
+pkg github.com/advenn/ursus, const InterpMidpoint Interpolation
+pkg github.com/advenn/ursus, const InterpNearest = 3
+pkg github.com/advenn/ursus, const InterpNearest Interpolation
+pkg github.com/advenn/ursus, const JoinAnti = 5
+pkg github.com/advenn/ursus, const JoinAnti JoinKind
+pkg github.com/advenn/ursus, const JoinCross = 6
+pkg github.com/advenn/ursus, const JoinCross JoinKind
+pkg github.com/advenn/ursus, const JoinFull = 3
+pkg github.com/advenn/ursus, const JoinFull JoinKind
+pkg github.com/advenn/ursus, const JoinInner = 0
+pkg github.com/advenn/ursus, const JoinInner JoinKind
+pkg github.com/advenn/ursus, const JoinLeft = 1
+pkg github.com/advenn/ursus, const JoinLeft JoinKind
+pkg github.com/advenn/ursus, const JoinOrderLeft = 1
+pkg github.com/advenn/ursus, const JoinOrderLeft JoinOrder
+pkg github.com/advenn/ursus, const JoinOrderLeftRight = 3
+pkg github.com/advenn/ursus, const JoinOrderLeftRight JoinOrder
+pkg github.com/advenn/ursus, const JoinOrderNone = 0
+pkg github.com/advenn/ursus, const JoinOrderNone JoinOrder
+pkg github.com/advenn/ursus, const JoinOrderRight = 2
+pkg github.com/advenn/ursus, const JoinOrderRight JoinOrder
+pkg github.com/advenn/ursus, const JoinOrderRightLeft = 4
+pkg github.com/advenn/ursus, const JoinOrderRightLeft JoinOrder
+pkg github.com/advenn/ursus, const JoinRight = 2
+pkg github.com/advenn/ursus, const JoinRight JoinKind
+pkg github.com/advenn/ursus, const JoinSemi = 4
+pkg github.com/advenn/ursus, const JoinSemi JoinKind
+pkg github.com/advenn/ursus, const KeepAny = 2
+pkg github.com/advenn/ursus, const KeepAny KeepStrategy
+pkg github.com/advenn/ursus, const KeepFirst = 0
+pkg github.com/advenn/ursus, const KeepFirst KeepStrategy
+pkg github.com/advenn/ursus, const KeepLast = 1
+pkg github.com/advenn/ursus, const KeepLast KeepStrategy
+pkg github.com/advenn/ursus, const KeepNone = 3
+pkg github.com/advenn/ursus, const KeepNone KeepStrategy
+pkg github.com/advenn/ursus, const LittleEndian = "little"
+pkg github.com/advenn/ursus, const LittleEndian Endianness
+pkg github.com/advenn/ursus, const MapExplode = 1
+pkg github.com/advenn/ursus, const MapExplode MappingStrategy
+pkg github.com/advenn/ursus, const MapGroupsToRows = 0
+pkg github.com/advenn/ursus, const MapGroupsToRows MappingStrategy
+pkg github.com/advenn/ursus, const MapJoin = 2
+pkg github.com/advenn/ursus, const MapJoin MappingStrategy
+pkg github.com/advenn/ursus, const MatchForbid = 4
+pkg github.com/advenn/ursus, const MatchForbid MatchAction
+pkg github.com/advenn/ursus, const MatchIgnore = 3
+pkg github.com/advenn/ursus, const MatchIgnore MatchAction
+pkg github.com/advenn/ursus, const MatchInsert = 2
+pkg github.com/advenn/ursus, const MatchInsert MatchAction
+pkg github.com/advenn/ursus, const MatchRaise = 1
+pkg github.com/advenn/ursus, const MatchRaise MatchAction
+pkg github.com/advenn/ursus, const MatchUpcast = 5
+pkg github.com/advenn/ursus, const MatchUpcast MatchAction
+pkg github.com/advenn/ursus, const Micro = 2
+pkg github.com/advenn/ursus, const Micro dtype.TimeUnit
+pkg github.com/advenn/ursus, const Milli = 1
+pkg github.com/advenn/ursus, const Milli dtype.TimeUnit
+pkg github.com/advenn/ursus, const NFC = "NFC"
+pkg github.com/advenn/ursus, const NFC UnicodeForm
+pkg github.com/advenn/ursus, const NFD = "NFD"
+pkg github.com/advenn/ursus, const NFD UnicodeForm
+pkg github.com/advenn/ursus, const NFKC = "NFKC"
+pkg github.com/advenn/ursus, const NFKC UnicodeForm
+pkg github.com/advenn/ursus, const NFKD = "NFKD"
+pkg github.com/advenn/ursus, const NFKD UnicodeForm
+pkg github.com/advenn/ursus, const Nano = 3
+pkg github.com/advenn/ursus, const Nano dtype.TimeUnit
+pkg github.com/advenn/ursus, const NonExistentNull = "null"
+pkg github.com/advenn/ursus, const NonExistentNull NonExistent
+pkg github.com/advenn/ursus, const NonExistentRaise = "raise"
+pkg github.com/advenn/ursus, const NonExistentRaise NonExistent
+pkg github.com/advenn/ursus, const QuoteAlways = 1
+pkg github.com/advenn/ursus, const QuoteAlways QuoteStyle
+pkg github.com/advenn/ursus, const QuoteNecessary = 0
+pkg github.com/advenn/ursus, const QuoteNecessary QuoteStyle
+pkg github.com/advenn/ursus, const QuoteNever = 2
+pkg github.com/advenn/ursus, const QuoteNever QuoteStyle
+pkg github.com/advenn/ursus, const QuoteNonNumeric = 3
+pkg github.com/advenn/ursus, const QuoteNonNumeric QuoteStyle
+pkg github.com/advenn/ursus, const RankAverage = 4
+pkg github.com/advenn/ursus, const RankAverage RankMethod
+pkg github.com/advenn/ursus, const RankDense = 1
+pkg github.com/advenn/ursus, const RankDense RankMethod
+pkg github.com/advenn/ursus, const RankMax = 3
+pkg github.com/advenn/ursus, const RankMax RankMethod
+pkg github.com/advenn/ursus, const RankMin = 2
+pkg github.com/advenn/ursus, const RankMin RankMethod
+pkg github.com/advenn/ursus, const RankOrdinal = 0
+pkg github.com/advenn/ursus, const RankOrdinal RankMethod
+pkg github.com/advenn/ursus, const RollBackward = "backward"
+pkg github.com/advenn/ursus, const RollBackward Roll
+pkg github.com/advenn/ursus, const RollForward = "forward"
+pkg github.com/advenn/ursus, const RollForward Roll
+pkg github.com/advenn/ursus, const RollRaise = "raise"
+pkg github.com/advenn/ursus, const RollRaise Roll
+pkg github.com/advenn/ursus, const RoundHalfAwayFromZero = "half_away_from_zero"
+pkg github.com/advenn/ursus, const RoundHalfAwayFromZero RoundMode
+pkg github.com/advenn/ursus, const RoundHalfToEven = "half_to_even"
+pkg github.com/advenn/ursus, const RoundHalfToEven RoundMode
+pkg github.com/advenn/ursus, const Second = 0
+pkg github.com/advenn/ursus, const Second dtype.TimeUnit
+pkg github.com/advenn/ursus, const SideAny = "any"
+pkg github.com/advenn/ursus, const SideAny SearchSide
+pkg github.com/advenn/ursus, const SideLeft = "left"
+pkg github.com/advenn/ursus, const SideLeft SearchSide
+pkg github.com/advenn/ursus, const SideRight = "right"
+pkg github.com/advenn/ursus, const SideRight SearchSide
+pkg github.com/advenn/ursus, const SizeB = 1
+pkg github.com/advenn/ursus, const SizeB SizeUnit
+pkg github.com/advenn/ursus, const SizeGB = 1073741824
+pkg github.com/advenn/ursus, const SizeGB SizeUnit
+pkg github.com/advenn/ursus, const SizeKB = 1024
+pkg github.com/advenn/ursus, const SizeKB SizeUnit
+pkg github.com/advenn/ursus, const SizeMB = 1048576
+pkg github.com/advenn/ursus, const SizeMB SizeUnit
+pkg github.com/advenn/ursus, const SizeTB = 1099511627776
+pkg github.com/advenn/ursus, const SizeTB SizeUnit
+pkg github.com/advenn/ursus, const UTF8 = 0
+pkg github.com/advenn/ursus, const UTF8 CSVEncoding
+pkg github.com/advenn/ursus, const UTF8Lossy = 1
+pkg github.com/advenn/ursus, const UTF8Lossy CSVEncoding
+pkg github.com/advenn/ursus, const UnstackHorizontal = 1
+pkg github.com/advenn/ursus, const UnstackHorizontal UnstackHow
+pkg github.com/advenn/ursus, const UnstackVertical = 0
+pkg github.com/advenn/ursus, const UnstackVertical UnstackHow
+pkg github.com/advenn/ursus, const UpdateFull = 2
+pkg github.com/advenn/ursus, const UpdateFull UpdateHow
+pkg github.com/advenn/ursus, const UpdateInner = 1
+pkg github.com/advenn/ursus, const UpdateInner UpdateHow
+pkg github.com/advenn/ursus, const UpdateLeft = 0
+pkg github.com/advenn/ursus, const UpdateLeft UpdateHow
+pkg github.com/advenn/ursus, const ValidateManyToMany = 4
+pkg github.com/advenn/ursus, const ValidateManyToMany JoinValidation
+pkg github.com/advenn/ursus, const ValidateManyToOne = 3
+pkg github.com/advenn/ursus, const ValidateManyToOne JoinValidation
+pkg github.com/advenn/ursus, const ValidateNone = 0
+pkg github.com/advenn/ursus, const ValidateNone JoinValidation
+pkg github.com/advenn/ursus, const ValidateOneToMany = 2
+pkg github.com/advenn/ursus, const ValidateOneToMany JoinValidation
+pkg github.com/advenn/ursus, const ValidateOneToOne = 1
+pkg github.com/advenn/ursus, const ValidateOneToOne JoinValidation
+pkg github.com/advenn/ursus, func All() Expr
+pkg github.com/advenn/ursus, func AllHorizontal(...Expr) Expr
+pkg github.com/advenn/ursus, func AnyHorizontal(...Expr) Expr
+pkg github.com/advenn/ursus, func Arctan2(Expr, Expr) Expr
+pkg github.com/advenn/ursus, func ArgSortBy(...SortKey) Expr
+pkg github.com/advenn/ursus, func ArgWhere(Expr) Expr
+pkg github.com/advenn/ursus, func AsOfAllowExactMatches(bool) AsOfOption
+pkg github.com/advenn/ursus, func AsOfBy(...Expr) AsOfOption
+pkg github.com/advenn/ursus, func AsOfCoalesce(bool) AsOfOption
+pkg github.com/advenn/ursus, func AsOfLeftBy(...Expr) AsOfOption
+pkg github.com/advenn/ursus, func AsOfLeftOn(Expr) AsOfOption
+pkg github.com/advenn/ursus, func AsOfOn(Expr) AsOfOption
+pkg github.com/advenn/ursus, func AsOfRightBy(...Expr) AsOfOption
+pkg github.com/advenn/ursus, func AsOfRightOn(Expr) AsOfOption
+pkg github.com/advenn/ursus, func AsOfStrategyOpt(AsOfStrategy) AsOfOption
+pkg github.com/advenn/ursus, func AsOfSuffix(string) AsOfOption
+pkg github.com/advenn/ursus, func AsOfTolerance[T0 AsOfToleranceValue](T0) AsOfOption
+pkg github.com/advenn/ursus, func Asc(Expr) SortKey
+pkg github.com/advenn/ursus, func Biased() WindowOption
+pkg github.com/advenn/ursus, func BusinessDayCount[T0 Operand, T1 Operand](T0, T1, ...BusinessCalendar) Expr
+pkg github.com/advenn/ursus, func CastStrict(bool) CastOption
+pkg github.com/advenn/ursus, func Coalesce(...Expr) Expr
+pkg github.com/advenn/ursus, func Col(...string) Expr
+pkg github.com/advenn/ursus, func ColDType(...dtype.DataType) Expr
+pkg github.com/advenn/ursus, func ColRegex(string) Expr
+pkg github.com/advenn/ursus, func Concat([]*LazyFrame, ...ConcatOption) *LazyFrame
+pkg github.com/advenn/ursus, func ConcatArr(...Expr) Expr
+pkg github.com/advenn/ursus, func ConcatFrames(context.Context, []*DataFrame, ...ConcatOption) (*DataFrame, error)
+pkg github.com/advenn/ursus, func ConcatList(...Expr) Expr
+pkg github.com/advenn/ursus, func ConcatStr(string, ...Expr) Expr
+pkg github.com/advenn/ursus, func ConcatStrIgnoreNulls(string, ...Expr) Expr
+pkg github.com/advenn/ursus, func Corr(Expr, Expr) Expr
+pkg github.com/advenn/ursus, func CorrSpearman(Expr, Expr) Expr
+pkg github.com/advenn/ursus, func Cov(Expr, Expr, int) Expr
+pkg github.com/advenn/ursus, func CumFold[T0 Operand](T0, func(Expr, Expr) Expr, ...Expr) Expr
+pkg github.com/advenn/ursus, func CumReduce(func(Expr, Expr) Expr, ...Expr) Expr
+pkg github.com/advenn/ursus, func CumSumHorizontal(...Expr) Expr
+pkg github.com/advenn/ursus, func CutLabels(...string) CutOption
+pkg github.com/advenn/ursus, func CutLeftClosed() CutOption
+pkg github.com/advenn/ursus, func DateRange[T0 Operand, T1 Operand, T2 Span](T0, T1, T2, ...Closed) Expr
+pkg github.com/advenn/ursus, func DateRanges[T0 Operand, T1 Operand, T2 Span](T0, T1, T2, ...Closed) Expr
+pkg github.com/advenn/ursus, func DatetimeRange[T0 Operand, T1 Operand, T2 Span](T0, T1, T2, ...Closed) Expr
+pkg github.com/advenn/ursus, func DatetimeRanges[T0 Operand, T1 Operand, T2 Span](T0, T1, T2, ...Closed) Expr
+pkg github.com/advenn/ursus, func Ddof(int) WindowOption
+pkg github.com/advenn/ursus, func DefaultOptFlags() OptFlags
+pkg github.com/advenn/ursus, func Desc(Expr) SortKey
+pkg github.com/advenn/ursus, func Element() Expr
+pkg github.com/advenn/ursus, func Every(string) Interval
+pkg github.com/advenn/ursus, func EwmAdjust(bool) WindowOption
+pkg github.com/advenn/ursus, func EwmAlpha(float64) EwmDecay
+pkg github.com/advenn/ursus, func EwmCom(float64) EwmDecay
+pkg github.com/advenn/ursus, func EwmHalfLife(float64) EwmDecay
+pkg github.com/advenn/ursus, func EwmSpan(float64) EwmDecay
+pkg github.com/advenn/ursus, func Exclude(...string) Expr
+pkg github.com/advenn/ursus, func ExcludeRegex(string) Expr
+pkg github.com/advenn/ursus, func ExplainOptFlags(OptFlags) ExplainOption
+pkg github.com/advenn/ursus, func First(...string) Expr
+pkg github.com/advenn/ursus, func Fold[T0 Operand](T0, func(Expr, Expr) Expr, ...Expr) Expr
+pkg github.com/advenn/ursus, func Format(string, ...Expr) Expr
+pkg github.com/advenn/ursus, func Frame(...*Column) *LazyFrame
+pkg github.com/advenn/ursus, func FrameOf(...*Column) (*LazyFrame, error)
+pkg github.com/advenn/ursus, func FromDuration(time.Duration) Interval
+pkg github.com/advenn/ursus, func FromEpoch(Expr, TimeUnit) Expr
+pkg github.com/advenn/ursus, func FromRows[T0 any]([]T0) *LazyFrame
+pkg github.com/advenn/ursus, func HashRows(uint64, ...Expr) Expr
+pkg github.com/advenn/ursus, func HistBinCount(int) HistOption
+pkg github.com/advenn/ursus, func HistBins(...float64) HistOption
+pkg github.com/advenn/ursus, func HistBreakpoint() HistOption
+pkg github.com/advenn/ursus, func HistCategory() HistOption
+pkg github.com/advenn/ursus, func IgnoreNulls() WindowOption
+pkg github.com/advenn/ursus, func IntRange[T0 Operand, T1 Operand](T0, T1, int) Expr
+pkg github.com/advenn/ursus, func IntRanges[T0 Operand, T1 Operand, T2 Operand](T0, T1, T2) Expr
+pkg github.com/advenn/ursus, func InterpolateNearest() WindowOption
+pkg github.com/advenn/ursus, func IsDuplicated(...Expr) Expr
+pkg github.com/advenn/ursus, func IsUnique(...Expr) Expr
+pkg github.com/advenn/ursus, func JoinCoalesce(bool) JoinOption
+pkg github.com/advenn/ursus, func JoinHow(JoinKind) JoinOption
+pkg github.com/advenn/ursus, func JoinLeftOn(...Expr) JoinOption
+pkg github.com/advenn/ursus, func JoinMaintainOrder(JoinOrder) JoinOption
+pkg github.com/advenn/ursus, func JoinNullsEqual(bool) JoinOption
+pkg github.com/advenn/ursus, func JoinOn(...Expr) JoinOption
+pkg github.com/advenn/ursus, func JoinRightOn(...Expr) JoinOption
+pkg github.com/advenn/ursus, func JoinSuffix(string) JoinOption
+pkg github.com/advenn/ursus, func JoinValidate(JoinValidation) JoinOption
+pkg github.com/advenn/ursus, func Last(...string) Expr
+pkg github.com/advenn/ursus, func LeaveProcessMemoryLimit()
+pkg github.com/advenn/ursus, func Len() Expr
+pkg github.com/advenn/ursus, func LinearSpace[T0 Operand, T1 Operand](T0, T1, int, ...Closed) Expr
+pkg github.com/advenn/ursus, func LinearSpaces[T0 Operand, T1 Operand, T2 Operand](T0, T1, T2, ...Closed) Expr
+pkg github.com/advenn/ursus, func Lit[T0 Literal | ListLiteral](T0) Expr
+pkg github.com/advenn/ursus, func MakeDate[T0 Operand, T1 Operand, T2 Operand](T0, T1, T2) Expr
+pkg github.com/advenn/ursus, func MakeDatetime[T0 Operand, T1 Operand, T2 Operand, T3 Operand, T4 Operand, T5 Operand, T6 Operand](T0, T1, T2, T3, T4, T5, T6) Expr
+pkg github.com/advenn/ursus, func MakeDuration(DurationParts, ...TimeUnit) Expr
+pkg github.com/advenn/ursus, func MakeTime[T0 Operand, T1 Operand, T2 Operand, T3 Operand](T0, T1, T2, T3) Expr
+pkg github.com/advenn/ursus, func MaxHorizontal(...Expr) Expr
+pkg github.com/advenn/ursus, func MeanHorizontal(...Expr) Expr
+pkg github.com/advenn/ursus, func MinHorizontal(...Expr) Expr
+pkg github.com/advenn/ursus, func MinSamples(int) WindowOption
+pkg github.com/advenn/ursus, func MustSchema(...Field) *Schema
+pkg github.com/advenn/ursus, func NewSchema(...Field) (*Schema, error)
+pkg github.com/advenn/ursus, func NoOffset() Interval
+pkg github.com/advenn/ursus, func NoOptFlags() OptFlags
+pkg github.com/advenn/ursus, func Nth(...int) Expr
+pkg github.com/advenn/ursus, func Null(dtype.DataType) Expr
+pkg github.com/advenn/ursus, func Ones[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, func Optimized(bool) ExplainOption
+pkg github.com/advenn/ursus, func ReadDatabase(context.Context, Queryer, string, ...any) (*DataFrame, error)
+pkg github.com/advenn/ursus, func ReadDatabaseRows(*sql.Rows, ...DatabaseOption) (*DataFrame, error)
+pkg github.com/advenn/ursus, func ReadIPCSchema(string) (*Schema, error)
+pkg github.com/advenn/ursus, func ReadParquetSchema(context.Context, string) (*Schema, error)
+pkg github.com/advenn/ursus, func Reduce(func(Expr, Expr) Expr, ...Expr) Expr
+pkg github.com/advenn/ursus, func Repeat[T0 Operand, T1 Operand](T0, T1) Expr
+pkg github.com/advenn/ursus, func RollingCenter() WindowOption
+pkg github.com/advenn/ursus, func RollingCorr(Expr, Expr, int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, func RollingCov(Expr, Expr, int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, func ScanArrow(func() (array.RecordReader, error)) *LazyFrame
+pkg github.com/advenn/ursus, func ScanArrowRecords(...arrow.RecordBatch) *LazyFrame
+pkg github.com/advenn/ursus, func ScanCSV(string, ...CSVOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanCSVFiles([]string, ...CSVOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanCSVFrom([]CSVFile, ...CSVOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanCSVGlob(string, ...CSVOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanCSVReader([]byte, string, ...CSVOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanIPC(string, ...IPCScanOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanIPCFiles([]string, ...IPCScanOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanIPCGlob(string, ...IPCScanOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanIPCStream(string) *LazyFrame
+pkg github.com/advenn/ursus, func ScanJSON(string, ...NDJSONOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanJSONBytes([]byte, string, ...NDJSONOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanNDJSON(string, ...NDJSONOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanNDJSONBytes([]byte, string, ...NDJSONOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanNDJSONFiles([]string, ...NDJSONOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanNDJSONFrom([]NDJSONFile, ...NDJSONOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanNDJSONGlob(string, ...NDJSONOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanParquet(string, ...ParquetOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanParquetBytes([]byte, string, ...ParquetOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanParquetFiles([]string, ...ParquetOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanParquetFrom([]ParquetFile, ...ParquetOption) *LazyFrame
+pkg github.com/advenn/ursus, func ScanParquetGlob(string, ...ParquetOption) *LazyFrame
+pkg github.com/advenn/ursus, func SetProcessMemoryLimit() int64
+pkg github.com/advenn/ursus, func Struct(...Expr) Expr
+pkg github.com/advenn/ursus, func StructOf(...Field) DataType
+pkg github.com/advenn/ursus, func SumHorizontal(...Expr) Expr
+pkg github.com/advenn/ursus, func TimeRange[T0 Operand, T1 Operand, T2 Span](T0, T1, T2, ...Closed) Expr
+pkg github.com/advenn/ursus, func TimeRanges[T0 Operand, T1 Operand, T2 Span](T0, T1, T2, ...Closed) Expr
+pkg github.com/advenn/ursus, func TypedColumn[T0 any](*Column) (*Series[T0], error)
+pkg github.com/advenn/ursus, func ValuesNullable[T0 Literal](string, []T0, []bool) *Column
+pkg github.com/advenn/ursus, func Values[T0 Literal](string, []T0) *Column
+pkg github.com/advenn/ursus, func When(Expr) WhenBuilder
+pkg github.com/advenn/ursus, func WindowClosed(Closed) WindowOption
+pkg github.com/advenn/ursus, func WithBatchSize(int) CollectOption
+pkg github.com/advenn/ursus, func WithCSVCheckExtension(bool) CSVWriteOption
+pkg github.com/advenn/ursus, func WithCSVCompression(CSVCompression) CSVWriteOption
+pkg github.com/advenn/ursus, func WithCSVCompressionLevel(int) CSVWriteOption
+pkg github.com/advenn/ursus, func WithCSVIncludeFilePaths(string) CSVOption
+pkg github.com/advenn/ursus, func WithColumnNames(...string) CSVOption
+pkg github.com/advenn/ursus, func WithComment(string) CSVOption
+pkg github.com/advenn/ursus, func WithCompression(compress.Compression) ParquetWriteOption
+pkg github.com/advenn/ursus, func WithConcatMode(ConcatMode) ConcatOption
+pkg github.com/advenn/ursus, func WithDatabaseSchemaOverrides(map[string]DataType) DatabaseOption
+pkg github.com/advenn/ursus, func WithDateFormat(string) CSVWriteOption
+pkg github.com/advenn/ursus, func WithDatetimeFormat(string) CSVWriteOption
+pkg github.com/advenn/ursus, func WithDecimalComma(bool) CSVOption
+pkg github.com/advenn/ursus, func WithDialect(SQLDialect) DatabaseWriteOption
+pkg github.com/advenn/ursus, func WithEncoding(CSVEncoding) CSVOption
+pkg github.com/advenn/ursus, func WithFloatPrecision(int) CSVWriteOption
+pkg github.com/advenn/ursus, func WithFloatScientific(bool) CSVWriteOption
+pkg github.com/advenn/ursus, func WithHasHeader(bool) CSVOption
+pkg github.com/advenn/ursus, func WithHiveDates(bool) ParquetOption
+pkg github.com/advenn/ursus, func WithHivePartitioning(bool) ParquetOption
+pkg github.com/advenn/ursus, func WithHiveSchema(*Schema) ParquetOption
+pkg github.com/advenn/ursus, func WithIPCCompression(IPCCompression) IPCWriteOption
+pkg github.com/advenn/ursus, func WithIPCHiveDates(bool) IPCScanOption
+pkg github.com/advenn/ursus, func WithIPCHivePartitioning(bool) IPCScanOption
+pkg github.com/advenn/ursus, func WithIPCHiveSchema(*Schema) IPCScanOption
+pkg github.com/advenn/ursus, func WithIPCIncludeFilePaths(string) IPCScanOption
+pkg github.com/advenn/ursus, func WithIfTableExists(IfTableExists) DatabaseWriteOption
+pkg github.com/advenn/ursus, func WithIgnoreErrors(bool) CSVOption
+pkg github.com/advenn/ursus, func WithIgnoreExtraColumns(bool) ParquetOption
+pkg github.com/advenn/ursus, func WithIncludeBOM(bool) CSVWriteOption
+pkg github.com/advenn/ursus, func WithIncludeFilePaths(string) ParquetOption
+pkg github.com/advenn/ursus, func WithInferRows(int) CSVOption
+pkg github.com/advenn/ursus, func WithInferSchema(bool) CSVOption
+pkg github.com/advenn/ursus, func WithInferSchemaLines(int) NDJSONOption
+pkg github.com/advenn/ursus, func WithInsertMissingColumns(bool) ParquetOption
+pkg github.com/advenn/ursus, func WithLineTerminator(string) CSVWriteOption
+pkg github.com/advenn/ursus, func WithMaxRecordSize(int) CSVOption
+pkg github.com/advenn/ursus, func WithMaxRowsPerFile(int) PartitionOption
+pkg github.com/advenn/ursus, func WithMemoryLimit(int64) CollectOption
+pkg github.com/advenn/ursus, func WithMemoryStats(*MemoryStats) CollectOption
+pkg github.com/advenn/ursus, func WithNDJSONIgnoreErrors(bool) NDJSONOption
+pkg github.com/advenn/ursus, func WithNDJSONIncludeFilePaths(string) NDJSONOption
+pkg github.com/advenn/ursus, func WithNDJSONSchema(*Schema) NDJSONOption
+pkg github.com/advenn/ursus, func WithNDJSONSchemaOverrides(map[string]dtype.DataType) NDJSONOption
+pkg github.com/advenn/ursus, func WithNullValue(string) CSVWriteOption
+pkg github.com/advenn/ursus, func WithNullValues(...string) CSVOption
+pkg github.com/advenn/ursus, func WithOptFlags(OptFlags) CollectOption
+pkg github.com/advenn/ursus, func WithParquetSchema(*Schema) ParquetOption
+pkg github.com/advenn/ursus, func WithPartitionBy(...string) PartitionOption
+pkg github.com/advenn/ursus, func WithPartitionIncludeKey(bool) PartitionOption
+pkg github.com/advenn/ursus, func WithPruning(bool) ParquetOption
+pkg github.com/advenn/ursus, func WithQuote(byte) CSVOption
+pkg github.com/advenn/ursus, func WithQuoteStyle(QuoteStyle) CSVWriteOption
+pkg github.com/advenn/ursus, func WithQuoting(bool) CSVOption
+pkg github.com/advenn/ursus, func WithRaiseIfEmpty(bool) CSVOption
+pkg github.com/advenn/ursus, func WithRowGroupRows(int) ParquetWriteOption
+pkg github.com/advenn/ursus, func WithSchema(*Schema) CSVOption
+pkg github.com/advenn/ursus, func WithSchemaOverrides(map[string]dtype.DataType) CSVOption
+pkg github.com/advenn/ursus, func WithSchemas() ExplainOption
+pkg github.com/advenn/ursus, func WithSeparator(byte) CSVOption
+pkg github.com/advenn/ursus, func WithSkipLines(int) CSVOption
+pkg github.com/advenn/ursus, func WithSkipRows(int) CSVOption
+pkg github.com/advenn/ursus, func WithSkipRowsAfterHeader(int) CSVOption
+pkg github.com/advenn/ursus, func WithSpillDir(string) CollectOption
+pkg github.com/advenn/ursus, func WithStatistics(bool) ParquetWriteOption
+pkg github.com/advenn/ursus, func WithThreads(int) CollectOption
+pkg github.com/advenn/ursus, func WithTimeFormat(string) CSVWriteOption
+pkg github.com/advenn/ursus, func WithTruncateRaggedLines(bool) CSVOption
+pkg github.com/advenn/ursus, func WithTryParseDates(bool) CSVOption
+pkg github.com/advenn/ursus, func WithUpcastFloats(bool) ParquetOption
+pkg github.com/advenn/ursus, func WithUpcastIntegers(bool) ParquetOption
+pkg github.com/advenn/ursus, func WithVerify() CollectOption
+pkg github.com/advenn/ursus, func WithWriteDecimalComma(bool) CSVWriteOption
+pkg github.com/advenn/ursus, func WithWriteHeader(bool) CSVWriteOption
+pkg github.com/advenn/ursus, func WithWriteQuote(byte) CSVWriteOption
+pkg github.com/advenn/ursus, func WithWriteSeparator(byte) CSVWriteOption
+pkg github.com/advenn/ursus, func Zeros[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Agg(Expr) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) All(bool) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Any(bool) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) ArgMax() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) ArgMin() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Contains(any) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) CountMatches(any) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Dot(Expr) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Eval(Expr, bool) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Explode() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) First() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Get[T0 int | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Head(int) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Join(string) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Last() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Len() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Max() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Mean() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Median() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Min() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) NUnique() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Reverse() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Shift[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Slice(int, int) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Sort() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) SortDesc() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) SortWith(bool, bool) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Std(int) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Sum() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Tail(int) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) ToList() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) ToStruct(...string) Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Unique() Expr
+pkg github.com/advenn/ursus, method (*ArrExpr) Var(int) Expr
+pkg github.com/advenn/ursus, method (*AsOfStrategy) String() string
+pkg github.com/advenn/ursus, method (*BinExpr) Contains[T0 []byte | string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*BinExpr) Decode(Encoding, bool) Expr
+pkg github.com/advenn/ursus, method (*BinExpr) Encode(Encoding) Expr
+pkg github.com/advenn/ursus, method (*BinExpr) EndsWith[T0 []byte | string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*BinExpr) Get[T0 int | Expr](T0, bool) Expr
+pkg github.com/advenn/ursus, method (*BinExpr) Head[T0 int | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*BinExpr) Reinterpret(DataType, Endianness) Expr
+pkg github.com/advenn/ursus, method (*BinExpr) Size(SizeUnit) Expr
+pkg github.com/advenn/ursus, method (*BinExpr) Slice[T0 int | Expr](T0, ...any) Expr
+pkg github.com/advenn/ursus, method (*BinExpr) StartsWith[T0 []byte | string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*BinExpr) Tail[T0 int | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*CatExpr) EndsWith(string) Expr
+pkg github.com/advenn/ursus, method (*CatExpr) GetCategories() Expr
+pkg github.com/advenn/ursus, method (*CatExpr) LenBytes() Expr
+pkg github.com/advenn/ursus, method (*CatExpr) LenChars() Expr
+pkg github.com/advenn/ursus, method (*CatExpr) Physical() Expr
+pkg github.com/advenn/ursus, method (*CatExpr) Slice(int, ...int) Expr
+pkg github.com/advenn/ursus, method (*CatExpr) StartsWith(string) Expr
+pkg github.com/advenn/ursus, method (*Closed) LowerOpen() bool
+pkg github.com/advenn/ursus, method (*Closed) Or(Closed) Closed
+pkg github.com/advenn/ursus, method (*Closed) String() string
+pkg github.com/advenn/ursus, method (*Closed) UpperClosed() bool
+pkg github.com/advenn/ursus, method (*Closed) Valid() bool
+pkg github.com/advenn/ursus, method (*Column) Bools() bitmap.View
+pkg github.com/advenn/ursus, method (*Column) Buffers() iter.Seq2[data.BufferID, int64]
+pkg github.com/advenn/ursus, method (*Column) Child() *Column
+pkg github.com/advenn/ursus, method (*Column) DType() dtype.DataType
+pkg github.com/advenn/ursus, method (*Column) Field(string) (*Column, bool)
+pkg github.com/advenn/ursus, method (*Column) Fields() []*Column
+pkg github.com/advenn/ursus, method (*Column) FixedSlice() any
+pkg github.com/advenn/ursus, method (*Column) IsPayloadFree() bool
+pkg github.com/advenn/ursus, method (*Column) IsValid(int) bool
+pkg github.com/advenn/ursus, method (*Column) Len() int
+pkg github.com/advenn/ursus, method (*Column) Lists() data.ListAccessor
+pkg github.com/advenn/ursus, method (*Column) NBytes() int64
+pkg github.com/advenn/ursus, method (*Column) Name() string
+pkg github.com/advenn/ursus, method (*Column) NullCount() int
+pkg github.com/advenn/ursus, method (*Column) RawChars() []byte
+pkg github.com/advenn/ursus, method (*Column) RawFixed() []byte
+pkg github.com/advenn/ursus, method (*Column) RawOffsets() []byte
+pkg github.com/advenn/ursus, method (*Column) RawOffsets64() []byte
+pkg github.com/advenn/ursus, method (*Column) Rename(string) *Column
+pkg github.com/advenn/ursus, method (*Column) Slice(int, int) *Column
+pkg github.com/advenn/ursus, method (*Column) Strings() data.StringAccessor
+pkg github.com/advenn/ursus, method (*Column) Validity() bitmap.View
+pkg github.com/advenn/ursus, method (*Column) WithDType(dtype.DataType) *Column
+pkg github.com/advenn/ursus, method (*Column) WithValidity(bitmap.View) *Column
+pkg github.com/advenn/ursus, method (*ConcatMode) String() string
+pkg github.com/advenn/ursus, method (*DataFrame) ArrowSchema() (*arrow.Schema, error)
+pkg github.com/advenn/ursus, method (*DataFrame) At[T0 any](int, string) (T0, bool, error)
+pkg github.com/advenn/ursus, method (*DataFrame) BottomK(context.Context, int, ...SortKey) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Cast(context.Context, map[string]DataType, ...CastOption) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) CastAll(context.Context, DataType, ...CastOption) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) CastTypes(context.Context, map[DataType]DataType, ...CastOption) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Clear(context.Context, int) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) ColumnAt(int) *Column
+pkg github.com/advenn/ursus, method (*DataFrame) Column[T0 any](string) (*Series[T0], error)
+pkg github.com/advenn/ursus, method (*DataFrame) Columns() []string
+pkg github.com/advenn/ursus, method (*DataFrame) Concat(context.Context, ...*DataFrame) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Corr(context.Context) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Describe(context.Context, ...float64) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Drop(context.Context, ...string) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) DropInPlace(string) (*Column, *DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) DropNans(context.Context, ...string) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) DropNulls(context.Context, ...string) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Equals(context.Context, *DataFrame, bool) (bool, error)
+pkg github.com/advenn/ursus, method (*DataFrame) EstimatedSize() int64
+pkg github.com/advenn/ursus, method (*DataFrame) Explode(context.Context, ...string) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Extend(context.Context, *DataFrame) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) FillNan[T0 Operand](context.Context, T0, ...string) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) FillNull[T0 Operand](context.Context, T0, ...string) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Filter(context.Context, ...Expr) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Fold(context.Context, func(Expr, Expr) Expr) (*Column, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Gather(context.Context, []int, bool) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) GatherEvery(context.Context, int, int) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) GetColumnIndex(string) (int, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Glimpse() string
+pkg github.com/advenn/ursus, method (*DataFrame) GroupBy(...Expr) *GroupBy
+pkg github.com/advenn/ursus, method (*DataFrame) GroupByDynamic(Expr, DynamicOptions) *GroupBy
+pkg github.com/advenn/ursus, method (*DataFrame) HStack(context.Context, ...*DataFrame) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) HashRows(context.Context, uint64) (*Series[uint64], error)
+pkg github.com/advenn/ursus, method (*DataFrame) Head(context.Context, int) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Height() int
+pkg github.com/advenn/ursus, method (*DataFrame) InsertColumn[T0 Expr | *Column](context.Context, int, T0) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Interpolate(context.Context) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) IsDuplicated(context.Context) (*Series[bool], error)
+pkg github.com/advenn/ursus, method (*DataFrame) IsEmpty() bool
+pkg github.com/advenn/ursus, method (*DataFrame) IsUnique(context.Context) (*Series[bool], error)
+pkg github.com/advenn/ursus, method (*DataFrame) Item() (any, error)
+pkg github.com/advenn/ursus, method (*DataFrame) ItemAt(int, string) (any, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Join(context.Context, *DataFrame, ...JoinOption) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) JoinAsOf(context.Context, *DataFrame, ...AsOfOption) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) JoinWhere(context.Context, *DataFrame, ...Expr) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Lazy() *LazyFrame
+pkg github.com/advenn/ursus, method (*DataFrame) Limit(context.Context, int) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) MapColumns(context.Context, []string, func(*Column) (*Column, error)) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) MapRows[T0 any, T1 any](context.Context, func(T0) (T1, error)) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) MatchToSchema(context.Context, *Schema, MatchOptions) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Max(context.Context) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) MaxHorizontal(context.Context) (*Column, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Mean(context.Context) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) MeanHorizontal(context.Context, bool) (*Column, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Median(context.Context) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) MergeSorted(context.Context, *DataFrame, string) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Min(context.Context) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) MinHorizontal(context.Context) (*Column, error)
+pkg github.com/advenn/ursus, method (*DataFrame) NUnique(context.Context, ...string) (int, error)
+pkg github.com/advenn/ursus, method (*DataFrame) NullCount(context.Context) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) PartitionBy(context.Context, PartitionOptions) ([]Partition, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Pivot(context.Context, PivotOptions) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Product(context.Context) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Quantile(context.Context, float64, Interpolation) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Record() (arrow.Record, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Remove(context.Context, ...Expr) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Rename(context.Context, map[string]string) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) ReplaceColumn(int, *Column) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Reverse(context.Context) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Rolling(Expr, RollingOptions) *GroupBy
+pkg github.com/advenn/ursus, method (*DataFrame) Row(int) ([]any, error)
+pkg github.com/advenn/ursus, method (*DataFrame) RowNamed(int) (map[string]any, error)
+pkg github.com/advenn/ursus, method (*DataFrame) RowWhere(context.Context, Expr) ([]any, error)
+pkg github.com/advenn/ursus, method (*DataFrame) RowsByKey[T0 comparable, T1 any](string) (map[T0][]T1, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Rows[T0 any]() ([]T0, error)
+pkg github.com/advenn/ursus, method (*DataFrame) SampleFraction(context.Context, float64, bool, bool, uint64) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) SampleN(context.Context, int, bool, bool, uint64) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Schema() *Schema
+pkg github.com/advenn/ursus, method (*DataFrame) Select(context.Context, ...Expr) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Shape() (int, int)
+pkg github.com/advenn/ursus, method (*DataFrame) Shift(context.Context, int) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) ShiftFill[T0 Operand](context.Context, int, T0) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Show(int) string
+pkg github.com/advenn/ursus, method (*DataFrame) Shuffle(context.Context, uint64) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Slice(context.Context, int, int) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Sort(context.Context, ...SortKey) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Std(context.Context, int) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) String() string
+pkg github.com/advenn/ursus, method (*DataFrame) Sum(context.Context) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) SumHorizontal(context.Context, bool) (*Column, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Tail(context.Context, int) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) ToDummies(context.Context, DummiesOptions) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) ToMaps() ([]map[string]any, error)
+pkg github.com/advenn/ursus, method (*DataFrame) ToSeries(int) (*Column, error)
+pkg github.com/advenn/ursus, method (*DataFrame) ToStruct(string) *Column
+pkg github.com/advenn/ursus, method (*DataFrame) TopK(context.Context, int, ...SortKey) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Transpose(context.Context, TransposeOptions) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Unique(context.Context, ...string) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) UniqueKeep(context.Context, KeepStrategy, ...string) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Unnest(context.Context, ...string) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Unpivot(context.Context, UnpivotOptions) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Unstack(context.Context, UnstackOptions) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Update(context.Context, *DataFrame, UpdateOptions) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Upsample[T0 Span](context.Context, string, T0, ...string) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) VStack(context.Context, *DataFrame) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) ValueCounts(context.Context, ...Expr) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Var(context.Context, int) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) WhereExists(context.Context, *DataFrame, ...Expr) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) WhereNotExists(context.Context, *DataFrame, ...Expr) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) Width() int
+pkg github.com/advenn/ursus, method (*DataFrame) WithColumns(context.Context, ...Expr) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) WithRowIndex(context.Context, string, uint32) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*DataFrame) WriteDatabase(context.Context, DatabaseWriter, string, ...DatabaseWriteOption) (int64, error)
+pkg github.com/advenn/ursus, method (*DtExpr) AddBusinessDays[T0 Operand](T0, Roll, ...BusinessCalendar) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) BaseUtcOffset() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) CastTimeUnit(TimeUnit) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Century() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Combine(Expr) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) ConvertTimeZone(string) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Date() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Day() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) DaysInMonth() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) DstOffset() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Epoch() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) EpochDays() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) EpochIn(TimeUnit) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Hour() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) IsBusinessDay(...BusinessCalendar) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) IsLeapYear() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) IsoYear() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Microsecond() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Millennium() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Millisecond() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Minute() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Month() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) MonthEnd() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) MonthStart() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Nanosecond() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) OffsetBy[T0 Span | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) OrdinalDay() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Quarter() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Replace(DateTimeParts, ...ZoneOption) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) ReplaceTimeZone(string, ...ZoneOption) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Round[T0 Span](T0) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Second() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) SecondFractional() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Strftime(string) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Time() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Timestamp(TimeUnit) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) ToString() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalDays() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalDaysFractional() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalHours() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalHoursFractional() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalMicroseconds() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalMicrosecondsFractional() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalMilliseconds() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalMillisecondsFractional() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalMinutes() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalMinutesFractional() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalNanoseconds() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalNanosecondsFractional() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalSeconds() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) TotalSecondsFractional() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Truncate[T0 Span](T0) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Week() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Weekday() Expr
+pkg github.com/advenn/ursus, method (*DtExpr) WithTimeUnit(TimeUnit) Expr
+pkg github.com/advenn/ursus, method (*DtExpr) Year() Expr
+pkg github.com/advenn/ursus, method (*Expr) Abs() Expr
+pkg github.com/advenn/ursus, method (*Expr) Add[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Alias(string) Expr
+pkg github.com/advenn/ursus, method (*Expr) AllTrue() Expr
+pkg github.com/advenn/ursus, method (*Expr) And[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Any() Expr
+pkg github.com/advenn/ursus, method (*Expr) Append(Expr, bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) ApproxNUnique() Expr
+pkg github.com/advenn/ursus, method (*Expr) ArcCos() Expr
+pkg github.com/advenn/ursus, method (*Expr) ArcCosh() Expr
+pkg github.com/advenn/ursus, method (*Expr) ArcSin() Expr
+pkg github.com/advenn/ursus, method (*Expr) ArcSinh() Expr
+pkg github.com/advenn/ursus, method (*Expr) ArcTan() Expr
+pkg github.com/advenn/ursus, method (*Expr) ArcTanh() Expr
+pkg github.com/advenn/ursus, method (*Expr) ArgMax() Expr
+pkg github.com/advenn/ursus, method (*Expr) ArgMin() Expr
+pkg github.com/advenn/ursus, method (*Expr) ArgSort(bool, bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) ArgTrue() Expr
+pkg github.com/advenn/ursus, method (*Expr) ArgUnique() Expr
+pkg github.com/advenn/ursus, method (*Expr) Arr() ArrExpr
+pkg github.com/advenn/ursus, method (*Expr) BackwardFill(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Bin() BinExpr
+pkg github.com/advenn/ursus, method (*Expr) BitwiseAnd() Expr
+pkg github.com/advenn/ursus, method (*Expr) BitwiseCountOnes() Expr
+pkg github.com/advenn/ursus, method (*Expr) BitwiseCountZeros() Expr
+pkg github.com/advenn/ursus, method (*Expr) BitwiseLeadingOnes() Expr
+pkg github.com/advenn/ursus, method (*Expr) BitwiseLeadingZeros() Expr
+pkg github.com/advenn/ursus, method (*Expr) BitwiseOr() Expr
+pkg github.com/advenn/ursus, method (*Expr) BitwiseTrailingOnes() Expr
+pkg github.com/advenn/ursus, method (*Expr) BitwiseTrailingZeros() Expr
+pkg github.com/advenn/ursus, method (*Expr) BitwiseXor() Expr
+pkg github.com/advenn/ursus, method (*Expr) BottomK(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) BottomKBy(Expr, int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Cast(dtype.DataType) Expr
+pkg github.com/advenn/ursus, method (*Expr) CastLossy(dtype.DataType) Expr
+pkg github.com/advenn/ursus, method (*Expr) Cat() CatExpr
+pkg github.com/advenn/ursus, method (*Expr) Cbrt() Expr
+pkg github.com/advenn/ursus, method (*Expr) Ceil() Expr
+pkg github.com/advenn/ursus, method (*Expr) ClipLower[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) ClipUpper[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Clip[T0 Operand, T1 Operand](T0, T1) Expr
+pkg github.com/advenn/ursus, method (*Expr) Cos() Expr
+pkg github.com/advenn/ursus, method (*Expr) Cosh() Expr
+pkg github.com/advenn/ursus, method (*Expr) Cot() Expr
+pkg github.com/advenn/ursus, method (*Expr) Count() Expr
+pkg github.com/advenn/ursus, method (*Expr) CumCount(bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) CumMax(bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) CumMin(bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) CumProd(bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) CumSum(bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) CumulativeEval(Expr, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) Cut([]float64, ...CutOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) Degrees() Expr
+pkg github.com/advenn/ursus, method (*Expr) Diff(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Div[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Dot(Expr) Expr
+pkg github.com/advenn/ursus, method (*Expr) DropNans() Expr
+pkg github.com/advenn/ursus, method (*Expr) DropNulls() Expr
+pkg github.com/advenn/ursus, method (*Expr) Dt() DtExpr
+pkg github.com/advenn/ursus, method (*Expr) Entropy(float64, bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) EqMissing[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Eq[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Err() error
+pkg github.com/advenn/ursus, method (*Expr) EwmMean(EwmDecay, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) EwmMeanBy(Expr, Interval) Expr
+pkg github.com/advenn/ursus, method (*Expr) EwmStd(EwmDecay, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) EwmSum(EwmDecay, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) EwmSumBy(Expr, Interval) Expr
+pkg github.com/advenn/ursus, method (*Expr) EwmVar(EwmDecay, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) Exp() Expr
+pkg github.com/advenn/ursus, method (*Expr) Explode() Expr
+pkg github.com/advenn/ursus, method (*Expr) ExtendConstant[T0 int | Expr](any, T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) FillNan[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) FillNull(FillStrategy) Expr
+pkg github.com/advenn/ursus, method (*Expr) FillNullWith[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Filter(...Expr) Expr
+pkg github.com/advenn/ursus, method (*Expr) First() Expr
+pkg github.com/advenn/ursus, method (*Expr) FirstNonNull() Expr
+pkg github.com/advenn/ursus, method (*Expr) Floor() Expr
+pkg github.com/advenn/ursus, method (*Expr) FloorDiv[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) ForwardFill(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Gather(Expr) Expr
+pkg github.com/advenn/ursus, method (*Expr) GatherEvery(int, int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Ge[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Get(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Gt[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) HasNulls() Expr
+pkg github.com/advenn/ursus, method (*Expr) Hash(uint64) Expr
+pkg github.com/advenn/ursus, method (*Expr) Head(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Hist(...HistOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) Implode() Expr
+pkg github.com/advenn/ursus, method (*Expr) IndexOf(any) Expr
+pkg github.com/advenn/ursus, method (*Expr) Interpolate(...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) InterpolateBy(Expr) Expr
+pkg github.com/advenn/ursus, method (*Expr) IsBetween[T0 Operand, T1 Operand](T0, T1, ...Closed) Expr
+pkg github.com/advenn/ursus, method (*Expr) IsClose(Expr, float64, float64) Expr
+pkg github.com/advenn/ursus, method (*Expr) IsDuplicated() Expr
+pkg github.com/advenn/ursus, method (*Expr) IsEmpty() Expr
+pkg github.com/advenn/ursus, method (*Expr) IsFinite() Expr
+pkg github.com/advenn/ursus, method (*Expr) IsFirstDistinct() Expr
+pkg github.com/advenn/ursus, method (*Expr) IsIn[T0 Operand](...T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) IsInfinite() Expr
+pkg github.com/advenn/ursus, method (*Expr) IsLastDistinct() Expr
+pkg github.com/advenn/ursus, method (*Expr) IsNan() Expr
+pkg github.com/advenn/ursus, method (*Expr) IsNotNan() Expr
+pkg github.com/advenn/ursus, method (*Expr) IsNotNull() Expr
+pkg github.com/advenn/ursus, method (*Expr) IsNull() Expr
+pkg github.com/advenn/ursus, method (*Expr) IsSorted(bool, bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) IsUnique() Expr
+pkg github.com/advenn/ursus, method (*Expr) Item(bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) Kurtosis(bool, bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) Last() Expr
+pkg github.com/advenn/ursus, method (*Expr) LastNonNull() Expr
+pkg github.com/advenn/ursus, method (*Expr) Le[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Len() Expr
+pkg github.com/advenn/ursus, method (*Expr) Limit(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) List() ListExpr
+pkg github.com/advenn/ursus, method (*Expr) Ln() Expr
+pkg github.com/advenn/ursus, method (*Expr) Log(float64) Expr
+pkg github.com/advenn/ursus, method (*Expr) Log10() Expr
+pkg github.com/advenn/ursus, method (*Expr) Log1p() Expr
+pkg github.com/advenn/ursus, method (*Expr) LowerBound() Expr
+pkg github.com/advenn/ursus, method (*Expr) Lt[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) MapBatches[T0 Literal, T1 Literal](string, DataType, func([]T0, []bool) ([]T1, []bool, error)) Expr
+pkg github.com/advenn/ursus, method (*Expr) MapElements[T0 Literal, T1 Literal](string, DataType, func(T0) (T1, error)) Expr
+pkg github.com/advenn/ursus, method (*Expr) MapName(func(string) string) Expr
+pkg github.com/advenn/ursus, method (*Expr) Max() Expr
+pkg github.com/advenn/ursus, method (*Expr) MaxBy(Expr) Expr
+pkg github.com/advenn/ursus, method (*Expr) Mean() Expr
+pkg github.com/advenn/ursus, method (*Expr) Median() Expr
+pkg github.com/advenn/ursus, method (*Expr) Meta() MetaExpr
+pkg github.com/advenn/ursus, method (*Expr) Min() Expr
+pkg github.com/advenn/ursus, method (*Expr) MinBy(Expr) Expr
+pkg github.com/advenn/ursus, method (*Expr) Mod[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Mode(bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) Mul[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) NUnique() Expr
+pkg github.com/advenn/ursus, method (*Expr) Name() NameExpr
+pkg github.com/advenn/ursus, method (*Expr) NanMax() Expr
+pkg github.com/advenn/ursus, method (*Expr) NanMin() Expr
+pkg github.com/advenn/ursus, method (*Expr) NeMissing[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Ne[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Neg() Expr
+pkg github.com/advenn/ursus, method (*Expr) Not() Expr
+pkg github.com/advenn/ursus, method (*Expr) NullCount() Expr
+pkg github.com/advenn/ursus, method (*Expr) Or[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Over(...Expr) Expr
+pkg github.com/advenn/ursus, method (*Expr) OverWith(WindowSpec) Expr
+pkg github.com/advenn/ursus, method (*Expr) PctChange(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) PeakMax() Expr
+pkg github.com/advenn/ursus, method (*Expr) PeakMin() Expr
+pkg github.com/advenn/ursus, method (*Expr) Pipe(func(Expr) Expr) Expr
+pkg github.com/advenn/ursus, method (*Expr) Pow[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Prefix(string) Expr
+pkg github.com/advenn/ursus, method (*Expr) Product() Expr
+pkg github.com/advenn/ursus, method (*Expr) QCut([]float64, ...CutOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) QCutN(int, ...CutOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) Quantile(float64, Interpolation) Expr
+pkg github.com/advenn/ursus, method (*Expr) Radians() Expr
+pkg github.com/advenn/ursus, method (*Expr) Rank(RankMethod, bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) Reinterpret(bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) RepeatBy[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) ReplaceOr[T0 Literal, T1 Literal]([]T0, []T1, T1) Expr
+pkg github.com/advenn/ursus, method (*Expr) ReplaceStrict[T0 Literal, T1 Literal]([]T0, []T1) Expr
+pkg github.com/advenn/ursus, method (*Expr) Replace[T0 Literal, T1 Literal]([]T0, []T1) Expr
+pkg github.com/advenn/ursus, method (*Expr) Reshape(...int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Reverse() Expr
+pkg github.com/advenn/ursus, method (*Expr) Rle() Expr
+pkg github.com/advenn/ursus, method (*Expr) RleID() Expr
+pkg github.com/advenn/ursus, method (*Expr) Rolling(Expr, RollingOptions) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingKurtosis(int, bool, bool, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingMap[T0 Literal, T1 Literal](string, DataType, int, func([]T0, []bool) (T1, error), ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingMax(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingMaxBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingMean(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingMeanBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingMedian(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingMedianBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingMin(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingMinBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingQuantile(float64, Interpolation, int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingQuantileBy(float64, Interpolation, Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingRank(int, RankMethod, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingRankBy(Expr, Interval, RankMethod, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingSkew(int, bool, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingStd(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingStdBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingSum(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingSumBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingVar(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) RollingVarBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (*Expr) Round(int, ...RoundMode) Expr
+pkg github.com/advenn/ursus, method (*Expr) RoundSigFigs(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) SampleFraction(float64, bool, bool, uint64) Expr
+pkg github.com/advenn/ursus, method (*Expr) SampleN(int, bool, bool, uint64) Expr
+pkg github.com/advenn/ursus, method (*Expr) SearchSorted(any, SearchSide, bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) Shift(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) ShiftFill[T0 Operand](int, T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Shuffle(uint64) Expr
+pkg github.com/advenn/ursus, method (*Expr) Sign() Expr
+pkg github.com/advenn/ursus, method (*Expr) Sin() Expr
+pkg github.com/advenn/ursus, method (*Expr) Sinh() Expr
+pkg github.com/advenn/ursus, method (*Expr) Skew(bool) Expr
+pkg github.com/advenn/ursus, method (*Expr) Slice(int, int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Sort() Expr
+pkg github.com/advenn/ursus, method (*Expr) SortBy(Expr) Expr
+pkg github.com/advenn/ursus, method (*Expr) SortByDesc(Expr) Expr
+pkg github.com/advenn/ursus, method (*Expr) SortDesc() Expr
+pkg github.com/advenn/ursus, method (*Expr) Sqrt() Expr
+pkg github.com/advenn/ursus, method (*Expr) Std(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Str() StrExpr
+pkg github.com/advenn/ursus, method (*Expr) String() string
+pkg github.com/advenn/ursus, method (*Expr) Struct() StructExpr
+pkg github.com/advenn/ursus, method (*Expr) Sub[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Suffix(string) Expr
+pkg github.com/advenn/ursus, method (*Expr) Sum() Expr
+pkg github.com/advenn/ursus, method (*Expr) Tail(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Tan() Expr
+pkg github.com/advenn/ursus, method (*Expr) Tanh() Expr
+pkg github.com/advenn/ursus, method (*Expr) ToPhysical() Expr
+pkg github.com/advenn/ursus, method (*Expr) TopK(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) TopKBy(Expr, int) Expr
+pkg github.com/advenn/ursus, method (*Expr) TrueDiv[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*Expr) Truncate(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Unique() Expr
+pkg github.com/advenn/ursus, method (*Expr) UniqueCounts() Expr
+pkg github.com/advenn/ursus, method (*Expr) Unnest() Expr
+pkg github.com/advenn/ursus, method (*Expr) UpperBound() Expr
+pkg github.com/advenn/ursus, method (*Expr) ValueCounts(bool, bool, ...string) Expr
+pkg github.com/advenn/ursus, method (*Expr) Var(int) Expr
+pkg github.com/advenn/ursus, method (*Expr) Xor[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*FillStrategy) Limit(int) FillStrategy
+pkg github.com/advenn/ursus, method (*FillStrategy) String() string
+pkg github.com/advenn/ursus, method (*GroupBy) Agg(...Expr) *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) All() *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) Count() *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) First() *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) FirstNonNull() *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) Groups(context.Context, ...CollectOption) iter.Seq2[Partition, error]
+pkg github.com/advenn/ursus, method (*GroupBy) Having(...Expr) *GroupBy
+pkg github.com/advenn/ursus, method (*GroupBy) Head(int) *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) Last() *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) LastNonNull() *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) Len(string) *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) MaintainOrder() *GroupBy
+pkg github.com/advenn/ursus, method (*GroupBy) MapGroups(context.Context, func(*DataFrame) (*DataFrame, error), ...CollectOption) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*GroupBy) Max() *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) Mean() *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) Median() *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) Min() *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) NUnique() *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) Quantile(float64, Interpolation) *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) Sum() *LazyFrame
+pkg github.com/advenn/ursus, method (*GroupBy) Tail(int) *LazyFrame
+pkg github.com/advenn/ursus, method (*Interpolation) String() string
+pkg github.com/advenn/ursus, method (*Interpolation) Valid() bool
+pkg github.com/advenn/ursus, method (*JoinKind) Keyed() bool
+pkg github.com/advenn/ursus, method (*JoinKind) String() string
+pkg github.com/advenn/ursus, method (*JoinOrder) Rightward() bool
+pkg github.com/advenn/ursus, method (*JoinOrder) String() string
+pkg github.com/advenn/ursus, method (*JoinOrder) Valid() bool
+pkg github.com/advenn/ursus, method (*JoinValidation) RequiresLeftUnique() bool
+pkg github.com/advenn/ursus, method (*JoinValidation) RequiresRightUnique() bool
+pkg github.com/advenn/ursus, method (*JoinValidation) String() string
+pkg github.com/advenn/ursus, method (*LazyFrame) BottomK(int, ...SortKey) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Cache() *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Cast(map[string]DataType, ...CastOption) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) CastAll(DataType, ...CastOption) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) CastTypes(map[DataType]DataType, ...CastOption) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Clear(int) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Collect(context.Context, ...CollectOption) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*LazyFrame) CollectBatches(context.Context, ...CollectOption) iter.Seq2[*DataFrame, error]
+pkg github.com/advenn/ursus, method (*LazyFrame) CollectInto[T0 any](context.Context, ...CollectOption) ([]T0, error)
+pkg github.com/advenn/ursus, method (*LazyFrame) CollectRecords(context.Context, ...CollectOption) iter.Seq2[arrow.Record, error]
+pkg github.com/advenn/ursus, method (*LazyFrame) CollectSchema(context.Context) (*Schema, error)
+pkg github.com/advenn/ursus, method (*LazyFrame) Columns(context.Context) ([]string, error)
+pkg github.com/advenn/ursus, method (*LazyFrame) Concat(...*LazyFrame) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Count(context.Context, ...CollectOption) (int64, error)
+pkg github.com/advenn/ursus, method (*LazyFrame) DTypes(context.Context) ([]DataType, error)
+pkg github.com/advenn/ursus, method (*LazyFrame) Describe(context.Context, ...float64) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*LazyFrame) Drop(...string) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) DropNans(...string) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) DropNulls(...string) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Err() error
+pkg github.com/advenn/ursus, method (*LazyFrame) Explain(context.Context, ...ExplainOption) (string, error)
+pkg github.com/advenn/ursus, method (*LazyFrame) Explode(...string) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) FillNan[T0 Operand](T0, ...string) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) FillNull[T0 Operand](T0, ...string) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Filter(...Expr) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) First() *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) GatherEvery(int, int) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) GroupBy(...Expr) *GroupBy
+pkg github.com/advenn/ursus, method (*LazyFrame) GroupByDynamic(Expr, DynamicOptions) *GroupBy
+pkg github.com/advenn/ursus, method (*LazyFrame) HStack(...*LazyFrame) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Head(int) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) InsertColumn[T0 Expr | *Column](int, T0) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Interpolate() *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) IterRows[T0 any](context.Context, ...CollectOption) iter.Seq2[T0, error]
+pkg github.com/advenn/ursus, method (*LazyFrame) Join(*LazyFrame, ...JoinOption) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) JoinAsOf(*LazyFrame, ...AsOfOption) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) JoinWhere(*LazyFrame, ...Expr) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) JoinWhereSuffix(*LazyFrame, string, ...Expr) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Last() *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Limit(int) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) MatchToSchema(*Schema, MatchOptions) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Max() *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Mean() *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Median() *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) MergeSorted(*LazyFrame, string) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Min() *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) NullCount() *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Pipe(func(*LazyFrame) *LazyFrame) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Pivot(PivotOptions) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Product() *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Profile(context.Context, ...CollectOption) (*DataFrame, *DataFrame, error)
+pkg github.com/advenn/ursus, method (*LazyFrame) Quantile(float64, Interpolation) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Remove(...Expr) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Rename(map[string]string) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Reverse() *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Rolling(Expr, RollingOptions) *GroupBy
+pkg github.com/advenn/ursus, method (*LazyFrame) SampleFraction(float64, bool, bool, uint64) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) SampleN(int, bool, bool, uint64) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Select(...Expr) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) SelectSeq(...Expr) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Shift(int) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) ShiftFill[T0 Operand](int, T0) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Show(context.Context, int) (string, error)
+pkg github.com/advenn/ursus, method (*LazyFrame) Shuffle(uint64) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) SinkCSV(context.Context, string, ...CSVSinkOption) error
+pkg github.com/advenn/ursus, method (*LazyFrame) SinkIPC(context.Context, string, ...IPCSinkOption) error
+pkg github.com/advenn/ursus, method (*LazyFrame) SinkNDJSON(context.Context, string, ...NDJSONSinkOption) error
+pkg github.com/advenn/ursus, method (*LazyFrame) SinkParquet(context.Context, string, ...ParquetSinkOption) error
+pkg github.com/advenn/ursus, method (*LazyFrame) Slice(int, int) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Sort(...SortKey) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Std(int) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Sum() *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Tail(int) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) TopK(int, ...SortKey) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Unique(...string) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) UniqueKeep(KeepStrategy, ...string) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Unnest(...string) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Unpivot(UnpivotOptions) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Update(*LazyFrame, UpdateOptions) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Upsample[T0 Span](string, T0, ...string) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) VStack(*LazyFrame) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) ValueCounts(...Expr) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Var(int) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) WhereExists(*LazyFrame, ...Expr) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) WhereNotExists(*LazyFrame, ...Expr) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) Width(context.Context) (int, error)
+pkg github.com/advenn/ursus, method (*LazyFrame) WithColumns(...Expr) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) WithColumnsSeq(...Expr) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) WithRowIndex(string, uint32) *LazyFrame
+pkg github.com/advenn/ursus, method (*LazyFrame) WriteCSV(context.Context, io.Writer, ...CSVSinkOption) error
+pkg github.com/advenn/ursus, method (*LazyFrame) WriteDatabase(context.Context, DatabaseWriter, string, ...DatabaseWriteOption) (int64, error)
+pkg github.com/advenn/ursus, method (*LazyFrame) WriteIPC(context.Context, io.Writer, ...IPCSinkOption) error
+pkg github.com/advenn/ursus, method (*LazyFrame) WriteIPCStream(context.Context, io.Writer, ...IPCSinkOption) error
+pkg github.com/advenn/ursus, method (*LazyFrame) WriteJSON(context.Context, io.Writer, ...CollectOption) error
+pkg github.com/advenn/ursus, method (*LazyFrame) WriteNDJSON(context.Context, io.Writer, ...CollectOption) error
+pkg github.com/advenn/ursus, method (*LazyFrame) WriteParquet(context.Context, io.Writer, ...ParquetSinkOption) error
+pkg github.com/advenn/ursus, method (*ListExpr) Agg(Expr) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) All(bool) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Any(bool) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) ArgMax() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) ArgMin() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Concat(...Expr) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Contains(any) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) CountMatches(any) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Diff(int, bool) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) DropNans() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) DropNulls() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Eval(Expr) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Filter(Expr) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) First() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Gather(Expr, bool) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) GatherEvery(int, int) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Get[T0 int | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Head(int) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Item(bool) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Join(string) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Last() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Len() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Max() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Mean() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Median() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Min() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) NUnique() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Quantile(float64, Interpolation) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Reverse() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) SampleFraction(float64, bool, bool, uint64) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) SampleN(int, bool, bool, uint64) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) SetDifference(Expr) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) SetIntersection(Expr) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) SetSymmetricDifference(Expr) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) SetUnion(Expr) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Shift[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Slice(int, int) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Sort() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) SortBy(Expr) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) SortByDesc(Expr) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) SortDesc() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) SortWith(bool, bool) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Std(int) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Sum() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Tail(int) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) ToArray(int) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) ToStruct(...string) Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Unique() Expr
+pkg github.com/advenn/ursus, method (*ListExpr) Var(int) Expr
+pkg github.com/advenn/ursus, method (*MappingStrategy) String() string
+pkg github.com/advenn/ursus, method (*MatchAction) String() string
+pkg github.com/advenn/ursus, method (*MetaExpr) Eq(Expr) bool
+pkg github.com/advenn/ursus, method (*MetaExpr) HasMultipleOutputs() bool
+pkg github.com/advenn/ursus, method (*MetaExpr) IsColumn() bool
+pkg github.com/advenn/ursus, method (*MetaExpr) IsColumnSelection(bool) bool
+pkg github.com/advenn/ursus, method (*MetaExpr) IsLiteral(bool) bool
+pkg github.com/advenn/ursus, method (*MetaExpr) IsRegexProjection() bool
+pkg github.com/advenn/ursus, method (*MetaExpr) OutputName() (string, error)
+pkg github.com/advenn/ursus, method (*MetaExpr) Pop() []Expr
+pkg github.com/advenn/ursus, method (*MetaExpr) RootNames() []string
+pkg github.com/advenn/ursus, method (*MetaExpr) TreeFormat() string
+pkg github.com/advenn/ursus, method (*MetaExpr) UndoAliases() Expr
+pkg github.com/advenn/ursus, method (*NameExpr) Keep() Expr
+pkg github.com/advenn/ursus, method (*NameExpr) Map(func(string) string) Expr
+pkg github.com/advenn/ursus, method (*NameExpr) MapFields(func(string) string) Expr
+pkg github.com/advenn/ursus, method (*NameExpr) Prefix(string) Expr
+pkg github.com/advenn/ursus, method (*NameExpr) PrefixFields(string) Expr
+pkg github.com/advenn/ursus, method (*NameExpr) Replace(string, string, bool) Expr
+pkg github.com/advenn/ursus, method (*NameExpr) Suffix(string) Expr
+pkg github.com/advenn/ursus, method (*NameExpr) SuffixFields(string) Expr
+pkg github.com/advenn/ursus, method (*NameExpr) ToLower() Expr
+pkg github.com/advenn/ursus, method (*NameExpr) ToUpper() Expr
+pkg github.com/advenn/ursus, method (*RankMethod) String() string
+pkg github.com/advenn/ursus, method (*RankMethod) Valid() bool
+pkg github.com/advenn/ursus, method (*Series) All() iter.Seq2[P0, bool]
+pkg github.com/advenn/ursus, method (*Series) Cast[T0 any](context.Context, DataType) (*Series[T0], error)
+pkg github.com/advenn/ursus, method (*Series) Column() *Column
+pkg github.com/advenn/ursus, method (*Series) Count(context.Context) (int, error)
+pkg github.com/advenn/ursus, method (*Series) DType() dtype.DataType
+pkg github.com/advenn/ursus, method (*Series) DropNulls(context.Context) (*Series[P0], error)
+pkg github.com/advenn/ursus, method (*Series) FillNull(context.Context, FillStrategy) (*Series[P0], error)
+pkg github.com/advenn/ursus, method (*Series) Fold[T0 any](T0, func(T0, P0) T0) T0
+pkg github.com/advenn/ursus, method (*Series) Get(int) (P0, bool)
+pkg github.com/advenn/ursus, method (*Series) Head(int) *Series[P0]
+pkg github.com/advenn/ursus, method (*Series) Len() int
+pkg github.com/advenn/ursus, method (*Series) MapErr[T0 any](func(P0) (T0, error)) ([]T0, error)
+pkg github.com/advenn/ursus, method (*Series) Map[T0 any](func(P0) T0) []T0
+pkg github.com/advenn/ursus, method (*Series) Max(context.Context) (P0, bool, error)
+pkg github.com/advenn/ursus, method (*Series) Mean(context.Context) (float64, bool, error)
+pkg github.com/advenn/ursus, method (*Series) Median(context.Context) (float64, bool, error)
+pkg github.com/advenn/ursus, method (*Series) Min(context.Context) (P0, bool, error)
+pkg github.com/advenn/ursus, method (*Series) NUnique(context.Context) (int, error)
+pkg github.com/advenn/ursus, method (*Series) Name() string
+pkg github.com/advenn/ursus, method (*Series) NullCount() int
+pkg github.com/advenn/ursus, method (*Series) Rename(string) *Series[P0]
+pkg github.com/advenn/ursus, method (*Series) Reverse(context.Context) (*Series[P0], error)
+pkg github.com/advenn/ursus, method (*Series) Slice(int, int) *Series[P0]
+pkg github.com/advenn/ursus, method (*Series) Sort(context.Context) (*Series[P0], error)
+pkg github.com/advenn/ursus, method (*Series) SortDesc(context.Context) (*Series[P0], error)
+pkg github.com/advenn/ursus, method (*Series) Std(context.Context, int) (float64, bool, error)
+pkg github.com/advenn/ursus, method (*Series) Sum(context.Context) (P0, error)
+pkg github.com/advenn/ursus, method (*Series) Tail(int) *Series[P0]
+pkg github.com/advenn/ursus, method (*Series) ToDummies(context.Context, DummiesOptions) (*DataFrame, error)
+pkg github.com/advenn/ursus, method (*Series) Unique(context.Context) (*Series[P0], error)
+pkg github.com/advenn/ursus, method (*Series) Values() []P0
+pkg github.com/advenn/ursus, method (*Series) Var(context.Context, int) (float64, bool, error)
+pkg github.com/advenn/ursus, method (*SortKey) NullsFirst() SortKey
+pkg github.com/advenn/ursus, method (*SortKey) NullsLast() SortKey
+pkg github.com/advenn/ursus, method (*StrExpr) ContainsAny([]string, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Contains[T0 string | Expr](T0, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) CountMatches(string, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Decode(Encoding, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Encode(Encoding) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) EndsWith[T0 string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) EscapeRegex() Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Extract(string, int) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ExtractAll(string) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ExtractGroups(string) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ExtractMany([]string, bool, bool, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Find(string, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) FindMany([]string, bool, bool, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Head(int) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Join(string) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) JsonDecode(DataType) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) JsonPathMatch(string) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) LenBytes() Expr
+pkg github.com/advenn/ursus, method (*StrExpr) LenChars() Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Normalize(UnicodeForm) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) PadEnd(int, string) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) PadStart(int, string) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ReplaceAll[T0 string | Expr](string, T0, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ReplaceMany([]string, []string, bool, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ReplaceN(string, string, bool, int) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Replace[T0 string | Expr](string, T0, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Reverse() Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Slice(int, int) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) SplitExact(string, int, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) SplitInclusive(string) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) SplitN(string, int) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Split[T0 string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) StartsWith[T0 string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) StripChars(string) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) StripCharsEnd(string) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) StripCharsStart(string) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) StripPrefix[T0 string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) StripSuffix[T0 string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Strptime(dtype.DataType, string, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) Tail(int) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ToDate() Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ToDatetime(dtype.TimeUnit, string) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ToDecimal(int) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ToInteger() Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ToIntegerWith[T0 int | Expr](T0, DataType, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ToLower() Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ToTime(string, bool) Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ToTitlecase() Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ToUpper() Expr
+pkg github.com/advenn/ursus, method (*StrExpr) ZFill(int) Expr
+pkg github.com/advenn/ursus, method (*StructExpr) Drop(...string) Expr
+pkg github.com/advenn/ursus, method (*StructExpr) Field(...string) Expr
+pkg github.com/advenn/ursus, method (*StructExpr) JsonEncode() Expr
+pkg github.com/advenn/ursus, method (*StructExpr) RenameFields(...string) Expr
+pkg github.com/advenn/ursus, method (*StructExpr) Unnest() Expr
+pkg github.com/advenn/ursus, method (*StructExpr) WithFields(...Expr) Expr
+pkg github.com/advenn/ursus, method (*ThenBuilder) Otherwise[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (*ThenBuilder) When(Expr) WhenBuilder
+pkg github.com/advenn/ursus, method (*WhenBuilder) Then[T0 Operand](T0) ThenBuilder
+pkg github.com/advenn/ursus, method (ArrExpr) Agg(Expr) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) All(bool) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Any(bool) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) ArgMax() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) ArgMin() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Contains(any) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) CountMatches(any) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Dot(Expr) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Eval(Expr, bool) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Explode() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) First() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Get[T0 int | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Head(int) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Join(string) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Last() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Len() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Max() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Mean() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Median() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Min() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) NUnique() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Reverse() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Shift[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Slice(int, int) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Sort() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) SortDesc() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) SortWith(bool, bool) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Std(int) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Sum() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Tail(int) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) ToList() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) ToStruct(...string) Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Unique() Expr
+pkg github.com/advenn/ursus, method (ArrExpr) Var(int) Expr
+pkg github.com/advenn/ursus, method (AsOfStrategy) String() string
+pkg github.com/advenn/ursus, method (BinExpr) Contains[T0 []byte | string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (BinExpr) Decode(Encoding, bool) Expr
+pkg github.com/advenn/ursus, method (BinExpr) Encode(Encoding) Expr
+pkg github.com/advenn/ursus, method (BinExpr) EndsWith[T0 []byte | string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (BinExpr) Get[T0 int | Expr](T0, bool) Expr
+pkg github.com/advenn/ursus, method (BinExpr) Head[T0 int | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (BinExpr) Reinterpret(DataType, Endianness) Expr
+pkg github.com/advenn/ursus, method (BinExpr) Size(SizeUnit) Expr
+pkg github.com/advenn/ursus, method (BinExpr) Slice[T0 int | Expr](T0, ...any) Expr
+pkg github.com/advenn/ursus, method (BinExpr) StartsWith[T0 []byte | string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (BinExpr) Tail[T0 int | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (CatExpr) EndsWith(string) Expr
+pkg github.com/advenn/ursus, method (CatExpr) GetCategories() Expr
+pkg github.com/advenn/ursus, method (CatExpr) LenBytes() Expr
+pkg github.com/advenn/ursus, method (CatExpr) LenChars() Expr
+pkg github.com/advenn/ursus, method (CatExpr) Physical() Expr
+pkg github.com/advenn/ursus, method (CatExpr) Slice(int, ...int) Expr
+pkg github.com/advenn/ursus, method (CatExpr) StartsWith(string) Expr
+pkg github.com/advenn/ursus, method (Closed) LowerOpen() bool
+pkg github.com/advenn/ursus, method (Closed) Or(Closed) Closed
+pkg github.com/advenn/ursus, method (Closed) String() string
+pkg github.com/advenn/ursus, method (Closed) UpperClosed() bool
+pkg github.com/advenn/ursus, method (Closed) Valid() bool
+pkg github.com/advenn/ursus, method (ConcatMode) String() string
+pkg github.com/advenn/ursus, method (DtExpr) AddBusinessDays[T0 Operand](T0, Roll, ...BusinessCalendar) Expr
+pkg github.com/advenn/ursus, method (DtExpr) BaseUtcOffset() Expr
+pkg github.com/advenn/ursus, method (DtExpr) CastTimeUnit(TimeUnit) Expr
+pkg github.com/advenn/ursus, method (DtExpr) Century() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Combine(Expr) Expr
+pkg github.com/advenn/ursus, method (DtExpr) ConvertTimeZone(string) Expr
+pkg github.com/advenn/ursus, method (DtExpr) Date() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Day() Expr
+pkg github.com/advenn/ursus, method (DtExpr) DaysInMonth() Expr
+pkg github.com/advenn/ursus, method (DtExpr) DstOffset() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Epoch() Expr
+pkg github.com/advenn/ursus, method (DtExpr) EpochDays() Expr
+pkg github.com/advenn/ursus, method (DtExpr) EpochIn(TimeUnit) Expr
+pkg github.com/advenn/ursus, method (DtExpr) Hour() Expr
+pkg github.com/advenn/ursus, method (DtExpr) IsBusinessDay(...BusinessCalendar) Expr
+pkg github.com/advenn/ursus, method (DtExpr) IsLeapYear() Expr
+pkg github.com/advenn/ursus, method (DtExpr) IsoYear() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Microsecond() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Millennium() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Millisecond() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Minute() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Month() Expr
+pkg github.com/advenn/ursus, method (DtExpr) MonthEnd() Expr
+pkg github.com/advenn/ursus, method (DtExpr) MonthStart() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Nanosecond() Expr
+pkg github.com/advenn/ursus, method (DtExpr) OffsetBy[T0 Span | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (DtExpr) OrdinalDay() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Quarter() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Replace(DateTimeParts, ...ZoneOption) Expr
+pkg github.com/advenn/ursus, method (DtExpr) ReplaceTimeZone(string, ...ZoneOption) Expr
+pkg github.com/advenn/ursus, method (DtExpr) Round[T0 Span](T0) Expr
+pkg github.com/advenn/ursus, method (DtExpr) Second() Expr
+pkg github.com/advenn/ursus, method (DtExpr) SecondFractional() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Strftime(string) Expr
+pkg github.com/advenn/ursus, method (DtExpr) Time() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Timestamp(TimeUnit) Expr
+pkg github.com/advenn/ursus, method (DtExpr) ToString() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalDays() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalDaysFractional() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalHours() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalHoursFractional() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalMicroseconds() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalMicrosecondsFractional() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalMilliseconds() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalMillisecondsFractional() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalMinutes() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalMinutesFractional() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalNanoseconds() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalNanosecondsFractional() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalSeconds() Expr
+pkg github.com/advenn/ursus, method (DtExpr) TotalSecondsFractional() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Truncate[T0 Span](T0) Expr
+pkg github.com/advenn/ursus, method (DtExpr) Week() Expr
+pkg github.com/advenn/ursus, method (DtExpr) Weekday() Expr
+pkg github.com/advenn/ursus, method (DtExpr) WithTimeUnit(TimeUnit) Expr
+pkg github.com/advenn/ursus, method (DtExpr) Year() Expr
+pkg github.com/advenn/ursus, method (Expr) Abs() Expr
+pkg github.com/advenn/ursus, method (Expr) Add[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Alias(string) Expr
+pkg github.com/advenn/ursus, method (Expr) AllTrue() Expr
+pkg github.com/advenn/ursus, method (Expr) And[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Any() Expr
+pkg github.com/advenn/ursus, method (Expr) Append(Expr, bool) Expr
+pkg github.com/advenn/ursus, method (Expr) ApproxNUnique() Expr
+pkg github.com/advenn/ursus, method (Expr) ArcCos() Expr
+pkg github.com/advenn/ursus, method (Expr) ArcCosh() Expr
+pkg github.com/advenn/ursus, method (Expr) ArcSin() Expr
+pkg github.com/advenn/ursus, method (Expr) ArcSinh() Expr
+pkg github.com/advenn/ursus, method (Expr) ArcTan() Expr
+pkg github.com/advenn/ursus, method (Expr) ArcTanh() Expr
+pkg github.com/advenn/ursus, method (Expr) ArgMax() Expr
+pkg github.com/advenn/ursus, method (Expr) ArgMin() Expr
+pkg github.com/advenn/ursus, method (Expr) ArgSort(bool, bool) Expr
+pkg github.com/advenn/ursus, method (Expr) ArgTrue() Expr
+pkg github.com/advenn/ursus, method (Expr) ArgUnique() Expr
+pkg github.com/advenn/ursus, method (Expr) Arr() ArrExpr
+pkg github.com/advenn/ursus, method (Expr) BackwardFill(int) Expr
+pkg github.com/advenn/ursus, method (Expr) Bin() BinExpr
+pkg github.com/advenn/ursus, method (Expr) BitwiseAnd() Expr
+pkg github.com/advenn/ursus, method (Expr) BitwiseCountOnes() Expr
+pkg github.com/advenn/ursus, method (Expr) BitwiseCountZeros() Expr
+pkg github.com/advenn/ursus, method (Expr) BitwiseLeadingOnes() Expr
+pkg github.com/advenn/ursus, method (Expr) BitwiseLeadingZeros() Expr
+pkg github.com/advenn/ursus, method (Expr) BitwiseOr() Expr
+pkg github.com/advenn/ursus, method (Expr) BitwiseTrailingOnes() Expr
+pkg github.com/advenn/ursus, method (Expr) BitwiseTrailingZeros() Expr
+pkg github.com/advenn/ursus, method (Expr) BitwiseXor() Expr
+pkg github.com/advenn/ursus, method (Expr) BottomK(int) Expr
+pkg github.com/advenn/ursus, method (Expr) BottomKBy(Expr, int) Expr
+pkg github.com/advenn/ursus, method (Expr) Cast(dtype.DataType) Expr
+pkg github.com/advenn/ursus, method (Expr) CastLossy(dtype.DataType) Expr
+pkg github.com/advenn/ursus, method (Expr) Cat() CatExpr
+pkg github.com/advenn/ursus, method (Expr) Cbrt() Expr
+pkg github.com/advenn/ursus, method (Expr) Ceil() Expr
+pkg github.com/advenn/ursus, method (Expr) ClipLower[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) ClipUpper[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Clip[T0 Operand, T1 Operand](T0, T1) Expr
+pkg github.com/advenn/ursus, method (Expr) Cos() Expr
+pkg github.com/advenn/ursus, method (Expr) Cosh() Expr
+pkg github.com/advenn/ursus, method (Expr) Cot() Expr
+pkg github.com/advenn/ursus, method (Expr) Count() Expr
+pkg github.com/advenn/ursus, method (Expr) CumCount(bool) Expr
+pkg github.com/advenn/ursus, method (Expr) CumMax(bool) Expr
+pkg github.com/advenn/ursus, method (Expr) CumMin(bool) Expr
+pkg github.com/advenn/ursus, method (Expr) CumProd(bool) Expr
+pkg github.com/advenn/ursus, method (Expr) CumSum(bool) Expr
+pkg github.com/advenn/ursus, method (Expr) CumulativeEval(Expr, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) Cut([]float64, ...CutOption) Expr
+pkg github.com/advenn/ursus, method (Expr) Degrees() Expr
+pkg github.com/advenn/ursus, method (Expr) Diff(int) Expr
+pkg github.com/advenn/ursus, method (Expr) Div[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Dot(Expr) Expr
+pkg github.com/advenn/ursus, method (Expr) DropNans() Expr
+pkg github.com/advenn/ursus, method (Expr) DropNulls() Expr
+pkg github.com/advenn/ursus, method (Expr) Dt() DtExpr
+pkg github.com/advenn/ursus, method (Expr) Entropy(float64, bool) Expr
+pkg github.com/advenn/ursus, method (Expr) EqMissing[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Eq[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Err() error
+pkg github.com/advenn/ursus, method (Expr) EwmMean(EwmDecay, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) EwmMeanBy(Expr, Interval) Expr
+pkg github.com/advenn/ursus, method (Expr) EwmStd(EwmDecay, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) EwmSum(EwmDecay, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) EwmSumBy(Expr, Interval) Expr
+pkg github.com/advenn/ursus, method (Expr) EwmVar(EwmDecay, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) Exp() Expr
+pkg github.com/advenn/ursus, method (Expr) Explode() Expr
+pkg github.com/advenn/ursus, method (Expr) ExtendConstant[T0 int | Expr](any, T0) Expr
+pkg github.com/advenn/ursus, method (Expr) FillNan[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) FillNull(FillStrategy) Expr
+pkg github.com/advenn/ursus, method (Expr) FillNullWith[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Filter(...Expr) Expr
+pkg github.com/advenn/ursus, method (Expr) First() Expr
+pkg github.com/advenn/ursus, method (Expr) FirstNonNull() Expr
+pkg github.com/advenn/ursus, method (Expr) Floor() Expr
+pkg github.com/advenn/ursus, method (Expr) FloorDiv[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) ForwardFill(int) Expr
+pkg github.com/advenn/ursus, method (Expr) Gather(Expr) Expr
+pkg github.com/advenn/ursus, method (Expr) GatherEvery(int, int) Expr
+pkg github.com/advenn/ursus, method (Expr) Ge[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Get(int) Expr
+pkg github.com/advenn/ursus, method (Expr) Gt[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) HasNulls() Expr
+pkg github.com/advenn/ursus, method (Expr) Hash(uint64) Expr
+pkg github.com/advenn/ursus, method (Expr) Head(int) Expr
+pkg github.com/advenn/ursus, method (Expr) Hist(...HistOption) Expr
+pkg github.com/advenn/ursus, method (Expr) Implode() Expr
+pkg github.com/advenn/ursus, method (Expr) IndexOf(any) Expr
+pkg github.com/advenn/ursus, method (Expr) Interpolate(...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) InterpolateBy(Expr) Expr
+pkg github.com/advenn/ursus, method (Expr) IsBetween[T0 Operand, T1 Operand](T0, T1, ...Closed) Expr
+pkg github.com/advenn/ursus, method (Expr) IsClose(Expr, float64, float64) Expr
+pkg github.com/advenn/ursus, method (Expr) IsDuplicated() Expr
+pkg github.com/advenn/ursus, method (Expr) IsEmpty() Expr
+pkg github.com/advenn/ursus, method (Expr) IsFinite() Expr
+pkg github.com/advenn/ursus, method (Expr) IsFirstDistinct() Expr
+pkg github.com/advenn/ursus, method (Expr) IsIn[T0 Operand](...T0) Expr
+pkg github.com/advenn/ursus, method (Expr) IsInfinite() Expr
+pkg github.com/advenn/ursus, method (Expr) IsLastDistinct() Expr
+pkg github.com/advenn/ursus, method (Expr) IsNan() Expr
+pkg github.com/advenn/ursus, method (Expr) IsNotNan() Expr
+pkg github.com/advenn/ursus, method (Expr) IsNotNull() Expr
+pkg github.com/advenn/ursus, method (Expr) IsNull() Expr
+pkg github.com/advenn/ursus, method (Expr) IsSorted(bool, bool) Expr
+pkg github.com/advenn/ursus, method (Expr) IsUnique() Expr
+pkg github.com/advenn/ursus, method (Expr) Item(bool) Expr
+pkg github.com/advenn/ursus, method (Expr) Kurtosis(bool, bool) Expr
+pkg github.com/advenn/ursus, method (Expr) Last() Expr
+pkg github.com/advenn/ursus, method (Expr) LastNonNull() Expr
+pkg github.com/advenn/ursus, method (Expr) Le[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Len() Expr
+pkg github.com/advenn/ursus, method (Expr) Limit(int) Expr
+pkg github.com/advenn/ursus, method (Expr) List() ListExpr
+pkg github.com/advenn/ursus, method (Expr) Ln() Expr
+pkg github.com/advenn/ursus, method (Expr) Log(float64) Expr
+pkg github.com/advenn/ursus, method (Expr) Log10() Expr
+pkg github.com/advenn/ursus, method (Expr) Log1p() Expr
+pkg github.com/advenn/ursus, method (Expr) LowerBound() Expr
+pkg github.com/advenn/ursus, method (Expr) Lt[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) MapBatches[T0 Literal, T1 Literal](string, DataType, func([]T0, []bool) ([]T1, []bool, error)) Expr
+pkg github.com/advenn/ursus, method (Expr) MapElements[T0 Literal, T1 Literal](string, DataType, func(T0) (T1, error)) Expr
+pkg github.com/advenn/ursus, method (Expr) MapName(func(string) string) Expr
+pkg github.com/advenn/ursus, method (Expr) Max() Expr
+pkg github.com/advenn/ursus, method (Expr) MaxBy(Expr) Expr
+pkg github.com/advenn/ursus, method (Expr) Mean() Expr
+pkg github.com/advenn/ursus, method (Expr) Median() Expr
+pkg github.com/advenn/ursus, method (Expr) Meta() MetaExpr
+pkg github.com/advenn/ursus, method (Expr) Min() Expr
+pkg github.com/advenn/ursus, method (Expr) MinBy(Expr) Expr
+pkg github.com/advenn/ursus, method (Expr) Mod[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Mode(bool) Expr
+pkg github.com/advenn/ursus, method (Expr) Mul[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) NUnique() Expr
+pkg github.com/advenn/ursus, method (Expr) Name() NameExpr
+pkg github.com/advenn/ursus, method (Expr) NanMax() Expr
+pkg github.com/advenn/ursus, method (Expr) NanMin() Expr
+pkg github.com/advenn/ursus, method (Expr) NeMissing[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Ne[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Neg() Expr
+pkg github.com/advenn/ursus, method (Expr) Not() Expr
+pkg github.com/advenn/ursus, method (Expr) NullCount() Expr
+pkg github.com/advenn/ursus, method (Expr) Or[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Over(...Expr) Expr
+pkg github.com/advenn/ursus, method (Expr) OverWith(WindowSpec) Expr
+pkg github.com/advenn/ursus, method (Expr) PctChange(int) Expr
+pkg github.com/advenn/ursus, method (Expr) PeakMax() Expr
+pkg github.com/advenn/ursus, method (Expr) PeakMin() Expr
+pkg github.com/advenn/ursus, method (Expr) Pipe(func(Expr) Expr) Expr
+pkg github.com/advenn/ursus, method (Expr) Pow[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Prefix(string) Expr
+pkg github.com/advenn/ursus, method (Expr) Product() Expr
+pkg github.com/advenn/ursus, method (Expr) QCut([]float64, ...CutOption) Expr
+pkg github.com/advenn/ursus, method (Expr) QCutN(int, ...CutOption) Expr
+pkg github.com/advenn/ursus, method (Expr) Quantile(float64, Interpolation) Expr
+pkg github.com/advenn/ursus, method (Expr) Radians() Expr
+pkg github.com/advenn/ursus, method (Expr) Rank(RankMethod, bool) Expr
+pkg github.com/advenn/ursus, method (Expr) Reinterpret(bool) Expr
+pkg github.com/advenn/ursus, method (Expr) RepeatBy[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) ReplaceOr[T0 Literal, T1 Literal]([]T0, []T1, T1) Expr
+pkg github.com/advenn/ursus, method (Expr) ReplaceStrict[T0 Literal, T1 Literal]([]T0, []T1) Expr
+pkg github.com/advenn/ursus, method (Expr) Replace[T0 Literal, T1 Literal]([]T0, []T1) Expr
+pkg github.com/advenn/ursus, method (Expr) Reshape(...int) Expr
+pkg github.com/advenn/ursus, method (Expr) Reverse() Expr
+pkg github.com/advenn/ursus, method (Expr) Rle() Expr
+pkg github.com/advenn/ursus, method (Expr) RleID() Expr
+pkg github.com/advenn/ursus, method (Expr) Rolling(Expr, RollingOptions) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingKurtosis(int, bool, bool, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingMap[T0 Literal, T1 Literal](string, DataType, int, func([]T0, []bool) (T1, error), ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingMax(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingMaxBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingMean(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingMeanBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingMedian(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingMedianBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingMin(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingMinBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingQuantile(float64, Interpolation, int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingQuantileBy(float64, Interpolation, Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingRank(int, RankMethod, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingRankBy(Expr, Interval, RankMethod, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingSkew(int, bool, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingStd(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingStdBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingSum(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingSumBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingVar(int, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) RollingVarBy(Expr, Interval, ...WindowOption) Expr
+pkg github.com/advenn/ursus, method (Expr) Round(int, ...RoundMode) Expr
+pkg github.com/advenn/ursus, method (Expr) RoundSigFigs(int) Expr
+pkg github.com/advenn/ursus, method (Expr) SampleFraction(float64, bool, bool, uint64) Expr
+pkg github.com/advenn/ursus, method (Expr) SampleN(int, bool, bool, uint64) Expr
+pkg github.com/advenn/ursus, method (Expr) SearchSorted(any, SearchSide, bool) Expr
+pkg github.com/advenn/ursus, method (Expr) Shift(int) Expr
+pkg github.com/advenn/ursus, method (Expr) ShiftFill[T0 Operand](int, T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Shuffle(uint64) Expr
+pkg github.com/advenn/ursus, method (Expr) Sign() Expr
+pkg github.com/advenn/ursus, method (Expr) Sin() Expr
+pkg github.com/advenn/ursus, method (Expr) Sinh() Expr
+pkg github.com/advenn/ursus, method (Expr) Skew(bool) Expr
+pkg github.com/advenn/ursus, method (Expr) Slice(int, int) Expr
+pkg github.com/advenn/ursus, method (Expr) Sort() Expr
+pkg github.com/advenn/ursus, method (Expr) SortBy(Expr) Expr
+pkg github.com/advenn/ursus, method (Expr) SortByDesc(Expr) Expr
+pkg github.com/advenn/ursus, method (Expr) SortDesc() Expr
+pkg github.com/advenn/ursus, method (Expr) Sqrt() Expr
+pkg github.com/advenn/ursus, method (Expr) Std(int) Expr
+pkg github.com/advenn/ursus, method (Expr) Str() StrExpr
+pkg github.com/advenn/ursus, method (Expr) String() string
+pkg github.com/advenn/ursus, method (Expr) Struct() StructExpr
+pkg github.com/advenn/ursus, method (Expr) Sub[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Suffix(string) Expr
+pkg github.com/advenn/ursus, method (Expr) Sum() Expr
+pkg github.com/advenn/ursus, method (Expr) Tail(int) Expr
+pkg github.com/advenn/ursus, method (Expr) Tan() Expr
+pkg github.com/advenn/ursus, method (Expr) Tanh() Expr
+pkg github.com/advenn/ursus, method (Expr) ToPhysical() Expr
+pkg github.com/advenn/ursus, method (Expr) TopK(int) Expr
+pkg github.com/advenn/ursus, method (Expr) TopKBy(Expr, int) Expr
+pkg github.com/advenn/ursus, method (Expr) TrueDiv[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (Expr) Truncate(int) Expr
+pkg github.com/advenn/ursus, method (Expr) Unique() Expr
+pkg github.com/advenn/ursus, method (Expr) UniqueCounts() Expr
+pkg github.com/advenn/ursus, method (Expr) Unnest() Expr
+pkg github.com/advenn/ursus, method (Expr) UpperBound() Expr
+pkg github.com/advenn/ursus, method (Expr) ValueCounts(bool, bool, ...string) Expr
+pkg github.com/advenn/ursus, method (Expr) Var(int) Expr
+pkg github.com/advenn/ursus, method (Expr) Xor[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (FillStrategy) Limit(int) FillStrategy
+pkg github.com/advenn/ursus, method (FillStrategy) String() string
+pkg github.com/advenn/ursus, method (Interpolation) String() string
+pkg github.com/advenn/ursus, method (Interpolation) Valid() bool
+pkg github.com/advenn/ursus, method (JoinKind) Keyed() bool
+pkg github.com/advenn/ursus, method (JoinKind) String() string
+pkg github.com/advenn/ursus, method (JoinOrder) Rightward() bool
+pkg github.com/advenn/ursus, method (JoinOrder) String() string
+pkg github.com/advenn/ursus, method (JoinOrder) Valid() bool
+pkg github.com/advenn/ursus, method (JoinValidation) RequiresLeftUnique() bool
+pkg github.com/advenn/ursus, method (JoinValidation) RequiresRightUnique() bool
+pkg github.com/advenn/ursus, method (JoinValidation) String() string
+pkg github.com/advenn/ursus, method (ListExpr) Agg(Expr) Expr
+pkg github.com/advenn/ursus, method (ListExpr) All(bool) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Any(bool) Expr
+pkg github.com/advenn/ursus, method (ListExpr) ArgMax() Expr
+pkg github.com/advenn/ursus, method (ListExpr) ArgMin() Expr
+pkg github.com/advenn/ursus, method (ListExpr) Concat(...Expr) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Contains(any) Expr
+pkg github.com/advenn/ursus, method (ListExpr) CountMatches(any) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Diff(int, bool) Expr
+pkg github.com/advenn/ursus, method (ListExpr) DropNans() Expr
+pkg github.com/advenn/ursus, method (ListExpr) DropNulls() Expr
+pkg github.com/advenn/ursus, method (ListExpr) Eval(Expr) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Filter(Expr) Expr
+pkg github.com/advenn/ursus, method (ListExpr) First() Expr
+pkg github.com/advenn/ursus, method (ListExpr) Gather(Expr, bool) Expr
+pkg github.com/advenn/ursus, method (ListExpr) GatherEvery(int, int) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Get[T0 int | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Head(int) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Item(bool) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Join(string) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Last() Expr
+pkg github.com/advenn/ursus, method (ListExpr) Len() Expr
+pkg github.com/advenn/ursus, method (ListExpr) Max() Expr
+pkg github.com/advenn/ursus, method (ListExpr) Mean() Expr
+pkg github.com/advenn/ursus, method (ListExpr) Median() Expr
+pkg github.com/advenn/ursus, method (ListExpr) Min() Expr
+pkg github.com/advenn/ursus, method (ListExpr) NUnique() Expr
+pkg github.com/advenn/ursus, method (ListExpr) Quantile(float64, Interpolation) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Reverse() Expr
+pkg github.com/advenn/ursus, method (ListExpr) SampleFraction(float64, bool, bool, uint64) Expr
+pkg github.com/advenn/ursus, method (ListExpr) SampleN(int, bool, bool, uint64) Expr
+pkg github.com/advenn/ursus, method (ListExpr) SetDifference(Expr) Expr
+pkg github.com/advenn/ursus, method (ListExpr) SetIntersection(Expr) Expr
+pkg github.com/advenn/ursus, method (ListExpr) SetSymmetricDifference(Expr) Expr
+pkg github.com/advenn/ursus, method (ListExpr) SetUnion(Expr) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Shift[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Slice(int, int) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Sort() Expr
+pkg github.com/advenn/ursus, method (ListExpr) SortBy(Expr) Expr
+pkg github.com/advenn/ursus, method (ListExpr) SortByDesc(Expr) Expr
+pkg github.com/advenn/ursus, method (ListExpr) SortDesc() Expr
+pkg github.com/advenn/ursus, method (ListExpr) SortWith(bool, bool) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Std(int) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Sum() Expr
+pkg github.com/advenn/ursus, method (ListExpr) Tail(int) Expr
+pkg github.com/advenn/ursus, method (ListExpr) ToArray(int) Expr
+pkg github.com/advenn/ursus, method (ListExpr) ToStruct(...string) Expr
+pkg github.com/advenn/ursus, method (ListExpr) Unique() Expr
+pkg github.com/advenn/ursus, method (ListExpr) Var(int) Expr
+pkg github.com/advenn/ursus, method (MappingStrategy) String() string
+pkg github.com/advenn/ursus, method (MatchAction) String() string
+pkg github.com/advenn/ursus, method (MetaExpr) Eq(Expr) bool
+pkg github.com/advenn/ursus, method (MetaExpr) HasMultipleOutputs() bool
+pkg github.com/advenn/ursus, method (MetaExpr) IsColumn() bool
+pkg github.com/advenn/ursus, method (MetaExpr) IsColumnSelection(bool) bool
+pkg github.com/advenn/ursus, method (MetaExpr) IsLiteral(bool) bool
+pkg github.com/advenn/ursus, method (MetaExpr) IsRegexProjection() bool
+pkg github.com/advenn/ursus, method (MetaExpr) OutputName() (string, error)
+pkg github.com/advenn/ursus, method (MetaExpr) Pop() []Expr
+pkg github.com/advenn/ursus, method (MetaExpr) RootNames() []string
+pkg github.com/advenn/ursus, method (MetaExpr) TreeFormat() string
+pkg github.com/advenn/ursus, method (MetaExpr) UndoAliases() Expr
+pkg github.com/advenn/ursus, method (NameExpr) Keep() Expr
+pkg github.com/advenn/ursus, method (NameExpr) Map(func(string) string) Expr
+pkg github.com/advenn/ursus, method (NameExpr) MapFields(func(string) string) Expr
+pkg github.com/advenn/ursus, method (NameExpr) Prefix(string) Expr
+pkg github.com/advenn/ursus, method (NameExpr) PrefixFields(string) Expr
+pkg github.com/advenn/ursus, method (NameExpr) Replace(string, string, bool) Expr
+pkg github.com/advenn/ursus, method (NameExpr) Suffix(string) Expr
+pkg github.com/advenn/ursus, method (NameExpr) SuffixFields(string) Expr
+pkg github.com/advenn/ursus, method (NameExpr) ToLower() Expr
+pkg github.com/advenn/ursus, method (NameExpr) ToUpper() Expr
+pkg github.com/advenn/ursus, method (RankMethod) String() string
+pkg github.com/advenn/ursus, method (RankMethod) Valid() bool
+pkg github.com/advenn/ursus, method (Series) All() iter.Seq2[P0, bool]
+pkg github.com/advenn/ursus, method (Series) Column() *Column
+pkg github.com/advenn/ursus, method (Series) DType() dtype.DataType
+pkg github.com/advenn/ursus, method (Series) Fold[T0 any](T0, func(T0, P0) T0) T0
+pkg github.com/advenn/ursus, method (Series) Get(int) (P0, bool)
+pkg github.com/advenn/ursus, method (Series) Len() int
+pkg github.com/advenn/ursus, method (Series) MapErr[T0 any](func(P0) (T0, error)) ([]T0, error)
+pkg github.com/advenn/ursus, method (Series) Map[T0 any](func(P0) T0) []T0
+pkg github.com/advenn/ursus, method (Series) Name() string
+pkg github.com/advenn/ursus, method (Series) NullCount() int
+pkg github.com/advenn/ursus, method (Series) Values() []P0
+pkg github.com/advenn/ursus, method (SortKey) NullsFirst() SortKey
+pkg github.com/advenn/ursus, method (SortKey) NullsLast() SortKey
+pkg github.com/advenn/ursus, method (StrExpr) ContainsAny([]string, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) Contains[T0 string | Expr](T0, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) CountMatches(string, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) Decode(Encoding, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) Encode(Encoding) Expr
+pkg github.com/advenn/ursus, method (StrExpr) EndsWith[T0 string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (StrExpr) EscapeRegex() Expr
+pkg github.com/advenn/ursus, method (StrExpr) Extract(string, int) Expr
+pkg github.com/advenn/ursus, method (StrExpr) ExtractAll(string) Expr
+pkg github.com/advenn/ursus, method (StrExpr) ExtractGroups(string) Expr
+pkg github.com/advenn/ursus, method (StrExpr) ExtractMany([]string, bool, bool, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) Find(string, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) FindMany([]string, bool, bool, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) Head(int) Expr
+pkg github.com/advenn/ursus, method (StrExpr) Join(string) Expr
+pkg github.com/advenn/ursus, method (StrExpr) JsonDecode(DataType) Expr
+pkg github.com/advenn/ursus, method (StrExpr) JsonPathMatch(string) Expr
+pkg github.com/advenn/ursus, method (StrExpr) LenBytes() Expr
+pkg github.com/advenn/ursus, method (StrExpr) LenChars() Expr
+pkg github.com/advenn/ursus, method (StrExpr) Normalize(UnicodeForm) Expr
+pkg github.com/advenn/ursus, method (StrExpr) PadEnd(int, string) Expr
+pkg github.com/advenn/ursus, method (StrExpr) PadStart(int, string) Expr
+pkg github.com/advenn/ursus, method (StrExpr) ReplaceAll[T0 string | Expr](string, T0, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) ReplaceMany([]string, []string, bool, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) ReplaceN(string, string, bool, int) Expr
+pkg github.com/advenn/ursus, method (StrExpr) Replace[T0 string | Expr](string, T0, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) Reverse() Expr
+pkg github.com/advenn/ursus, method (StrExpr) Slice(int, int) Expr
+pkg github.com/advenn/ursus, method (StrExpr) SplitExact(string, int, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) SplitInclusive(string) Expr
+pkg github.com/advenn/ursus, method (StrExpr) SplitN(string, int) Expr
+pkg github.com/advenn/ursus, method (StrExpr) Split[T0 string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (StrExpr) StartsWith[T0 string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (StrExpr) StripChars(string) Expr
+pkg github.com/advenn/ursus, method (StrExpr) StripCharsEnd(string) Expr
+pkg github.com/advenn/ursus, method (StrExpr) StripCharsStart(string) Expr
+pkg github.com/advenn/ursus, method (StrExpr) StripPrefix[T0 string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (StrExpr) StripSuffix[T0 string | Expr](T0) Expr
+pkg github.com/advenn/ursus, method (StrExpr) Strptime(dtype.DataType, string, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) Tail(int) Expr
+pkg github.com/advenn/ursus, method (StrExpr) ToDate() Expr
+pkg github.com/advenn/ursus, method (StrExpr) ToDatetime(dtype.TimeUnit, string) Expr
+pkg github.com/advenn/ursus, method (StrExpr) ToDecimal(int) Expr
+pkg github.com/advenn/ursus, method (StrExpr) ToInteger() Expr
+pkg github.com/advenn/ursus, method (StrExpr) ToIntegerWith[T0 int | Expr](T0, DataType, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) ToLower() Expr
+pkg github.com/advenn/ursus, method (StrExpr) ToTime(string, bool) Expr
+pkg github.com/advenn/ursus, method (StrExpr) ToTitlecase() Expr
+pkg github.com/advenn/ursus, method (StrExpr) ToUpper() Expr
+pkg github.com/advenn/ursus, method (StrExpr) ZFill(int) Expr
+pkg github.com/advenn/ursus, method (StructExpr) Drop(...string) Expr
+pkg github.com/advenn/ursus, method (StructExpr) Field(...string) Expr
+pkg github.com/advenn/ursus, method (StructExpr) JsonEncode() Expr
+pkg github.com/advenn/ursus, method (StructExpr) RenameFields(...string) Expr
+pkg github.com/advenn/ursus, method (StructExpr) Unnest() Expr
+pkg github.com/advenn/ursus, method (StructExpr) WithFields(...Expr) Expr
+pkg github.com/advenn/ursus, method (ThenBuilder) Otherwise[T0 Operand](T0) Expr
+pkg github.com/advenn/ursus, method (ThenBuilder) When(Expr) WhenBuilder
+pkg github.com/advenn/ursus, method (WhenBuilder) Then[T0 Operand](T0) ThenBuilder
+pkg github.com/advenn/ursus, type Ambiguous string
+pkg github.com/advenn/ursus, type ArrExpr struct
+pkg github.com/advenn/ursus, type AsOfOption func(*asOfCfg)
+pkg github.com/advenn/ursus, type AsOfStrategy uint8
+pkg github.com/advenn/ursus, type AsOfToleranceValue interface {  }
+pkg github.com/advenn/ursus, type AsOfToleranceValue interface, embedded Interval | time.Duration | int | int64 | float64
+pkg github.com/advenn/ursus, type BinExpr struct
+pkg github.com/advenn/ursus, type BusinessCalendar struct
+pkg github.com/advenn/ursus, type BusinessCalendar struct, Holidays []time.Time
+pkg github.com/advenn/ursus, type BusinessCalendar struct, WeekMask [7]bool
+pkg github.com/advenn/ursus, type CSVCompression uint8
+pkg github.com/advenn/ursus, type CSVEncoding int
+pkg github.com/advenn/ursus, type CSVFile struct
+pkg github.com/advenn/ursus, type CSVFile struct, Name string
+pkg github.com/advenn/ursus, type CSVFile struct, Open func(context.Context) (io.ReadCloser, error)
+pkg github.com/advenn/ursus, type CSVOption func(*csv.Options)
+pkg github.com/advenn/ursus, type CSVSinkOption interface { unexported methods }
+pkg github.com/advenn/ursus, type CSVWriteOption func(*csv.WriteOptions)
+pkg github.com/advenn/ursus, type CastOption func(*castCfg)
+pkg github.com/advenn/ursus, type CatExpr struct
+pkg github.com/advenn/ursus, type Closed uint8
+pkg github.com/advenn/ursus, type CollectOption func(*collectCfg)
+pkg github.com/advenn/ursus, type Column struct
+pkg github.com/advenn/ursus, type ColumnMatch struct
+pkg github.com/advenn/ursus, type ColumnMatch struct, ExtraStructFields MatchAction
+pkg github.com/advenn/ursus, type ColumnMatch struct, Fill Expr
+pkg github.com/advenn/ursus, type ColumnMatch struct, FloatCast MatchAction
+pkg github.com/advenn/ursus, type ColumnMatch struct, IntegerCast MatchAction
+pkg github.com/advenn/ursus, type ColumnMatch struct, Missing MatchAction
+pkg github.com/advenn/ursus, type ColumnMatch struct, MissingStructFields MatchAction
+pkg github.com/advenn/ursus, type ConcatMode uint8
+pkg github.com/advenn/ursus, type ConcatOption func(*concatCfg)
+pkg github.com/advenn/ursus, type CutOption func(*cutOptions)
+pkg github.com/advenn/ursus, type DataFrame struct
+pkg github.com/advenn/ursus, type DataType = dtype.DataType
+pkg github.com/advenn/ursus, type DatabaseOption func(*sqlrows.Options)
+pkg github.com/advenn/ursus, type DatabaseWriteOption interface { unexported methods }
+pkg github.com/advenn/ursus, type DatabaseWriter interface { ExecContext, PrepareContext, QueryContext }
+pkg github.com/advenn/ursus, type DatabaseWriter interface, ExecContext(context.Context, string, ...any) (sql.Result, error)
+pkg github.com/advenn/ursus, type DatabaseWriter interface, PrepareContext(context.Context, string) (*sql.Stmt, error)
+pkg github.com/advenn/ursus, type DatabaseWriter interface, QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+pkg github.com/advenn/ursus, type DateTimeParts struct
+pkg github.com/advenn/ursus, type DateTimeParts struct, Day any
+pkg github.com/advenn/ursus, type DateTimeParts struct, Hour any
+pkg github.com/advenn/ursus, type DateTimeParts struct, Microsecond any
+pkg github.com/advenn/ursus, type DateTimeParts struct, Minute any
+pkg github.com/advenn/ursus, type DateTimeParts struct, Month any
+pkg github.com/advenn/ursus, type DateTimeParts struct, Second any
+pkg github.com/advenn/ursus, type DateTimeParts struct, Year any
+pkg github.com/advenn/ursus, type DtExpr struct
+pkg github.com/advenn/ursus, type DummiesOptions struct
+pkg github.com/advenn/ursus, type DummiesOptions struct, Columns []string
+pkg github.com/advenn/ursus, type DummiesOptions struct, DropFirst bool
+pkg github.com/advenn/ursus, type DummiesOptions struct, DropNulls bool
+pkg github.com/advenn/ursus, type DummiesOptions struct, Separator string
+pkg github.com/advenn/ursus, type DurationParts struct
+pkg github.com/advenn/ursus, type DurationParts struct, Days any
+pkg github.com/advenn/ursus, type DurationParts struct, Hours any
+pkg github.com/advenn/ursus, type DurationParts struct, Microseconds any
+pkg github.com/advenn/ursus, type DurationParts struct, Milliseconds any
+pkg github.com/advenn/ursus, type DurationParts struct, Minutes any
+pkg github.com/advenn/ursus, type DurationParts struct, Nanoseconds any
+pkg github.com/advenn/ursus, type DurationParts struct, Seconds any
+pkg github.com/advenn/ursus, type DurationParts struct, Weeks any
+pkg github.com/advenn/ursus, type DynamicOptions struct
+pkg github.com/advenn/ursus, type DynamicOptions struct, Closed Closed
+pkg github.com/advenn/ursus, type DynamicOptions struct, Every Interval
+pkg github.com/advenn/ursus, type DynamicOptions struct, GroupBy []Expr
+pkg github.com/advenn/ursus, type DynamicOptions struct, IncludeBoundaries bool
+pkg github.com/advenn/ursus, type DynamicOptions struct, Label string
+pkg github.com/advenn/ursus, type DynamicOptions struct, Offset Interval
+pkg github.com/advenn/ursus, type DynamicOptions struct, Period Interval
+pkg github.com/advenn/ursus, type DynamicOptions struct, StartBy string
+pkg github.com/advenn/ursus, type Encoding string
+pkg github.com/advenn/ursus, type Endianness string
+pkg github.com/advenn/ursus, type EwmDecay struct
+pkg github.com/advenn/ursus, type ExplainOption func(*explainCfg)
+pkg github.com/advenn/ursus, type Expr struct
+pkg github.com/advenn/ursus, type Field = dtype.Field
+pkg github.com/advenn/ursus, type FillStrategy uint64
+pkg github.com/advenn/ursus, type GroupBy struct
+pkg github.com/advenn/ursus, type HistOption func(*histOptions)
+pkg github.com/advenn/ursus, type IPCCompression int
+pkg github.com/advenn/ursus, type IPCScanOption func(*ipcScan)
+pkg github.com/advenn/ursus, type IPCSinkOption interface { unexported methods }
+pkg github.com/advenn/ursus, type IPCWriteOption func(*ipcWriteCfg)
+pkg github.com/advenn/ursus, type IfTableExists int
+pkg github.com/advenn/ursus, type Int128Value = i128.Int128
+pkg github.com/advenn/ursus, type Interpolation uint8
+pkg github.com/advenn/ursus, type Interval = dtype.Interval
+pkg github.com/advenn/ursus, type JoinKind uint8
+pkg github.com/advenn/ursus, type JoinOption func(*joinCfg)
+pkg github.com/advenn/ursus, type JoinOrder uint8
+pkg github.com/advenn/ursus, type JoinValidation uint8
+pkg github.com/advenn/ursus, type KeepStrategy uint8
+pkg github.com/advenn/ursus, type LazyFrame struct
+pkg github.com/advenn/ursus, type ListExpr struct
+pkg github.com/advenn/ursus, type ListLiteral interface {  }
+pkg github.com/advenn/ursus, type ListLiteral interface, embedded []bool | []int | []int8 | []int16 | []int32 | []int64 | []uint | []uint16 | []uint32 | []uint64 | []float32 | []float64 | []string | []time.Time | []time.Duration
+pkg github.com/advenn/ursus, type Literal interface {  }
+pkg github.com/advenn/ursus, type Literal interface, embedded ~bool | ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64 | ~string | ~[]byte | time.Time
+pkg github.com/advenn/ursus, type MappingStrategy uint8
+pkg github.com/advenn/ursus, type MatchAction uint8
+pkg github.com/advenn/ursus, type MatchOptions struct
+pkg github.com/advenn/ursus, type MatchOptions struct, Columns map[string]ColumnMatch
+pkg github.com/advenn/ursus, type MatchOptions struct, ExtraColumns MatchAction
+pkg github.com/advenn/ursus, type MatchOptions struct, ExtraStructFields MatchAction
+pkg github.com/advenn/ursus, type MatchOptions struct, FloatCast MatchAction
+pkg github.com/advenn/ursus, type MatchOptions struct, IntegerCast MatchAction
+pkg github.com/advenn/ursus, type MatchOptions struct, MissingColumns MatchAction
+pkg github.com/advenn/ursus, type MatchOptions struct, MissingStructFields MatchAction
+pkg github.com/advenn/ursus, type MemoryStats struct
+pkg github.com/advenn/ursus, type MemoryStats struct, Limit int64
+pkg github.com/advenn/ursus, type MemoryStats struct, Peak int64
+pkg github.com/advenn/ursus, type MemoryStats struct, Spills int64
+pkg github.com/advenn/ursus, type MetaExpr struct
+pkg github.com/advenn/ursus, type NDJSONFile struct
+pkg github.com/advenn/ursus, type NDJSONFile struct, Name string
+pkg github.com/advenn/ursus, type NDJSONFile struct, Open func(context.Context) (io.ReadCloser, error)
+pkg github.com/advenn/ursus, type NDJSONOption func(*ndjsonCfg)
+pkg github.com/advenn/ursus, type NDJSONSinkOption interface { unexported methods }
+pkg github.com/advenn/ursus, type NameExpr struct
+pkg github.com/advenn/ursus, type NonExistent string
+pkg github.com/advenn/ursus, type Operand interface {  }
+pkg github.com/advenn/ursus, type Operand interface, embedded Expr | Literal
+pkg github.com/advenn/ursus, type OptFlags struct
+pkg github.com/advenn/ursus, type OptFlags struct, BuildSide bool
+pkg github.com/advenn/ursus, type OptFlags struct, CollapseCrossJoin bool
+pkg github.com/advenn/ursus, type OptFlags struct, JoinPredicatePushdown bool
+pkg github.com/advenn/ursus, type OptFlags struct, LimitPushdown bool
+pkg github.com/advenn/ursus, type OptFlags struct, PredicatePushdown bool
+pkg github.com/advenn/ursus, type OptFlags struct, ProjectionPushdown bool
+pkg github.com/advenn/ursus, type OptFlags struct, RuntimeFilters bool
+pkg github.com/advenn/ursus, type OptFlags struct, ShareSubplans bool
+pkg github.com/advenn/ursus, type OptFlags struct, SimplifyExprs bool
+pkg github.com/advenn/ursus, type ParquetFile struct
+pkg github.com/advenn/ursus, type ParquetFile struct, Name string
+pkg github.com/advenn/ursus, type ParquetFile struct, Open func(context.Context) (io.ReaderAt, int64, error)
+pkg github.com/advenn/ursus, type ParquetOption func(*parquet.Options)
+pkg github.com/advenn/ursus, type ParquetSinkOption interface { unexported methods }
+pkg github.com/advenn/ursus, type ParquetWriteOption func(*parquet.WriteOptions)
+pkg github.com/advenn/ursus, type Partition struct
+pkg github.com/advenn/ursus, type Partition struct, Frame *DataFrame
+pkg github.com/advenn/ursus, type Partition struct, Key *DataFrame
+pkg github.com/advenn/ursus, type PartitionOption func(*partitionCfg)
+pkg github.com/advenn/ursus, type PartitionOptions struct
+pkg github.com/advenn/ursus, type PartitionOptions struct, By []string
+pkg github.com/advenn/ursus, type PartitionOptions struct, DropKey bool
+pkg github.com/advenn/ursus, type PivotOptions struct
+pkg github.com/advenn/ursus, type PivotOptions struct, Agg func(Expr) Expr
+pkg github.com/advenn/ursus, type PivotOptions struct, Index []string
+pkg github.com/advenn/ursus, type PivotOptions struct, On []string
+pkg github.com/advenn/ursus, type PivotOptions struct, OnColumns []*Column
+pkg github.com/advenn/ursus, type PivotOptions struct, Separator string
+pkg github.com/advenn/ursus, type PivotOptions struct, SortColumns bool
+pkg github.com/advenn/ursus, type PivotOptions struct, Values []string
+pkg github.com/advenn/ursus, type Queryer interface { QueryContext }
+pkg github.com/advenn/ursus, type Queryer interface, QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+pkg github.com/advenn/ursus, type QuoteStyle uint8
+pkg github.com/advenn/ursus, type RankMethod uint8
+pkg github.com/advenn/ursus, type Roll string
+pkg github.com/advenn/ursus, type RollingOptions struct
+pkg github.com/advenn/ursus, type RollingOptions struct, Closed Closed
+pkg github.com/advenn/ursus, type RollingOptions struct, GroupBy []Expr
+pkg github.com/advenn/ursus, type RollingOptions struct, Offset Interval
+pkg github.com/advenn/ursus, type RollingOptions struct, Period Interval
+pkg github.com/advenn/ursus, type RoundMode string
+pkg github.com/advenn/ursus, type SQLDialect int
+pkg github.com/advenn/ursus, type Schema = dtype.Schema
+pkg github.com/advenn/ursus, type SearchSide string
+pkg github.com/advenn/ursus, type Series struct, embedded *data.Series[P0]
+pkg github.com/advenn/ursus, type Series[P0 any] struct
+pkg github.com/advenn/ursus, type SizeUnit int64
+pkg github.com/advenn/ursus, type SortKey struct
+pkg github.com/advenn/ursus, type Span interface {  }
+pkg github.com/advenn/ursus, type Span interface, embedded Interval | time.Duration
+pkg github.com/advenn/ursus, type StrExpr struct
+pkg github.com/advenn/ursus, type StructExpr struct
+pkg github.com/advenn/ursus, type ThenBuilder struct
+pkg github.com/advenn/ursus, type TimeUnit = dtype.TimeUnit
+pkg github.com/advenn/ursus, type TransposeOptions struct
+pkg github.com/advenn/ursus, type TransposeOptions struct, ColumnNames []string
+pkg github.com/advenn/ursus, type TransposeOptions struct, ColumnNamesFrom string
+pkg github.com/advenn/ursus, type TransposeOptions struct, HeaderName string
+pkg github.com/advenn/ursus, type TransposeOptions struct, IncludeHeader bool
+pkg github.com/advenn/ursus, type UnicodeForm string
+pkg github.com/advenn/ursus, type UnpivotOptions struct
+pkg github.com/advenn/ursus, type UnpivotOptions struct, Index []string
+pkg github.com/advenn/ursus, type UnpivotOptions struct, On []string
+pkg github.com/advenn/ursus, type UnpivotOptions struct, ValueName string
+pkg github.com/advenn/ursus, type UnpivotOptions struct, VariableName string
+pkg github.com/advenn/ursus, type UnstackHow uint8
+pkg github.com/advenn/ursus, type UnstackOptions struct
+pkg github.com/advenn/ursus, type UnstackOptions struct, Columns []string
+pkg github.com/advenn/ursus, type UnstackOptions struct, Fill []any
+pkg github.com/advenn/ursus, type UnstackOptions struct, How UnstackHow
+pkg github.com/advenn/ursus, type UnstackOptions struct, Step int
+pkg github.com/advenn/ursus, type UpdateHow uint8
+pkg github.com/advenn/ursus, type UpdateOptions struct
+pkg github.com/advenn/ursus, type UpdateOptions struct, How UpdateHow
+pkg github.com/advenn/ursus, type UpdateOptions struct, IncludeNulls bool
+pkg github.com/advenn/ursus, type UpdateOptions struct, LeftOn []string
+pkg github.com/advenn/ursus, type UpdateOptions struct, MaintainOrder JoinOrder
+pkg github.com/advenn/ursus, type UpdateOptions struct, On []string
+pkg github.com/advenn/ursus, type UpdateOptions struct, RightOn []string
+pkg github.com/advenn/ursus, type WhenBuilder struct
+pkg github.com/advenn/ursus, type WindowOption func(*expr.WinParams)
+pkg github.com/advenn/ursus, type WindowSpec struct
+pkg github.com/advenn/ursus, type WindowSpec struct, Mapping MappingStrategy
+pkg github.com/advenn/ursus, type WindowSpec struct, OrderBy []SortKey
+pkg github.com/advenn/ursus, type WindowSpec struct, PartitionBy []Expr
+pkg github.com/advenn/ursus, type ZoneOption interface { unexported methods }
+pkg github.com/advenn/ursus, var Array func(dtype.DataType, int) dtype.DataType
+pkg github.com/advenn/ursus, var Binary dtype.DataType
+pkg github.com/advenn/ursus, var Bool dtype.DataType
+pkg github.com/advenn/ursus, var Categorical dtype.DataType
+pkg github.com/advenn/ursus, var Date dtype.DataType
+pkg github.com/advenn/ursus, var Datetime func(dtype.TimeUnit, string) dtype.DataType
+pkg github.com/advenn/ursus, var Decimal func(uint8, uint8) dtype.DataType
+pkg github.com/advenn/ursus, var Duration func(dtype.TimeUnit) dtype.DataType
+pkg github.com/advenn/ursus, var Enum func(...string) dtype.DataType
+pkg github.com/advenn/ursus, var ErrIO error
+pkg github.com/advenn/ursus, var ErrInternal error
+pkg github.com/advenn/ursus, var ErrResource error
+pkg github.com/advenn/ursus, var ErrSchema error
+pkg github.com/advenn/ursus, var ErrType error
+pkg github.com/advenn/ursus, var ErrUnsupported error
+pkg github.com/advenn/ursus, var ErrValue error
+pkg github.com/advenn/ursus, var Float32 dtype.DataType
+pkg github.com/advenn/ursus, var Float64 dtype.DataType
+pkg github.com/advenn/ursus, var Int128 dtype.DataType
+pkg github.com/advenn/ursus, var Int16 dtype.DataType
+pkg github.com/advenn/ursus, var Int32 dtype.DataType
+pkg github.com/advenn/ursus, var Int64 dtype.DataType
+pkg github.com/advenn/ursus, var Int8 dtype.DataType
+pkg github.com/advenn/ursus, var List func(dtype.DataType) dtype.DataType
+pkg github.com/advenn/ursus, var NotNull func(string, dtype.DataType) dtype.Field
+pkg github.com/advenn/ursus, var NullT dtype.DataType
+pkg github.com/advenn/ursus, var Of func(string, dtype.DataType) dtype.Field
+pkg github.com/advenn/ursus, var String dtype.DataType
+pkg github.com/advenn/ursus, var TimeOf func(dtype.TimeUnit) dtype.DataType
+pkg github.com/advenn/ursus, var Uint16 dtype.DataType
+pkg github.com/advenn/ursus, var Uint32 dtype.DataType
+pkg github.com/advenn/ursus, var Uint64 dtype.DataType
+pkg github.com/advenn/ursus, var Uint8 dtype.DataType
+pkg github.com/advenn/ursus/dtype, const DateText = 1
+pkg github.com/advenn/ursus/dtype, const DateText TemporalTextKind
+pkg github.com/advenn/ursus/dtype, const DatetimeText = 2
+pkg github.com/advenn/ursus/dtype, const DatetimeText TemporalTextKind
+pkg github.com/advenn/ursus/dtype, const MaxDecimalPrecision = 38
+pkg github.com/advenn/ursus/dtype, const MaxDecimalPrecision untyped int
+pkg github.com/advenn/ursus/dtype, const Micro = 2
+pkg github.com/advenn/ursus/dtype, const Micro TimeUnit
+pkg github.com/advenn/ursus/dtype, const Milli = 1
+pkg github.com/advenn/ursus/dtype, const Milli TimeUnit
+pkg github.com/advenn/ursus/dtype, const Nano = 3
+pkg github.com/advenn/ursus/dtype, const Nano TimeUnit
+pkg github.com/advenn/ursus/dtype, const NoTemporalText = 0
+pkg github.com/advenn/ursus/dtype, const NoTemporalText TemporalTextKind
+pkg github.com/advenn/ursus/dtype, const Second = 0
+pkg github.com/advenn/ursus/dtype, const Second TimeUnit
+pkg github.com/advenn/ursus/dtype, const TimeText = 4
+pkg github.com/advenn/ursus/dtype, const TimeText TemporalTextKind
+pkg github.com/advenn/ursus/dtype, const TypeArray = 20
+pkg github.com/advenn/ursus/dtype, const TypeArray TypeID
+pkg github.com/advenn/ursus/dtype, const TypeBinary = 14
+pkg github.com/advenn/ursus/dtype, const TypeBinary TypeID
+pkg github.com/advenn/ursus/dtype, const TypeBool = 1
+pkg github.com/advenn/ursus/dtype, const TypeBool TypeID
+pkg github.com/advenn/ursus/dtype, const TypeCategorical = 23
+pkg github.com/advenn/ursus/dtype, const TypeCategorical TypeID
+pkg github.com/advenn/ursus/dtype, const TypeDate = 15
+pkg github.com/advenn/ursus/dtype, const TypeDate TypeID
+pkg github.com/advenn/ursus/dtype, const TypeDatetime = 17
+pkg github.com/advenn/ursus/dtype, const TypeDatetime TypeID
+pkg github.com/advenn/ursus/dtype, const TypeDecimal = 12
+pkg github.com/advenn/ursus/dtype, const TypeDecimal TypeID
+pkg github.com/advenn/ursus/dtype, const TypeDuration = 18
+pkg github.com/advenn/ursus/dtype, const TypeDuration TypeID
+pkg github.com/advenn/ursus/dtype, const TypeEnum = 22
+pkg github.com/advenn/ursus/dtype, const TypeEnum TypeID
+pkg github.com/advenn/ursus/dtype, const TypeFloat32 = 10
+pkg github.com/advenn/ursus/dtype, const TypeFloat32 TypeID
+pkg github.com/advenn/ursus/dtype, const TypeFloat64 = 11
+pkg github.com/advenn/ursus/dtype, const TypeFloat64 TypeID
+pkg github.com/advenn/ursus/dtype, const TypeIDCount = 26
+pkg github.com/advenn/ursus/dtype, const TypeIDCount TypeID
+pkg github.com/advenn/ursus/dtype, const TypeInt128 = 24
+pkg github.com/advenn/ursus/dtype, const TypeInt128 TypeID
+pkg github.com/advenn/ursus/dtype, const TypeInt16 = 3
+pkg github.com/advenn/ursus/dtype, const TypeInt16 TypeID
+pkg github.com/advenn/ursus/dtype, const TypeInt32 = 4
+pkg github.com/advenn/ursus/dtype, const TypeInt32 TypeID
+pkg github.com/advenn/ursus/dtype, const TypeInt64 = 5
+pkg github.com/advenn/ursus/dtype, const TypeInt64 TypeID
+pkg github.com/advenn/ursus/dtype, const TypeInt8 = 2
+pkg github.com/advenn/ursus/dtype, const TypeInt8 TypeID
+pkg github.com/advenn/ursus/dtype, const TypeList = 19
+pkg github.com/advenn/ursus/dtype, const TypeList TypeID
+pkg github.com/advenn/ursus/dtype, const TypeNull = 0
+pkg github.com/advenn/ursus/dtype, const TypeNull TypeID
+pkg github.com/advenn/ursus/dtype, const TypeString = 13
+pkg github.com/advenn/ursus/dtype, const TypeString TypeID
+pkg github.com/advenn/ursus/dtype, const TypeStruct = 21
+pkg github.com/advenn/ursus/dtype, const TypeStruct TypeID
+pkg github.com/advenn/ursus/dtype, const TypeTime = 16
+pkg github.com/advenn/ursus/dtype, const TypeTime TypeID
+pkg github.com/advenn/ursus/dtype, const TypeUint128 = 25
+pkg github.com/advenn/ursus/dtype, const TypeUint128 TypeID
+pkg github.com/advenn/ursus/dtype, const TypeUint16 = 7
+pkg github.com/advenn/ursus/dtype, const TypeUint16 TypeID
+pkg github.com/advenn/ursus/dtype, const TypeUint32 = 8
+pkg github.com/advenn/ursus/dtype, const TypeUint32 TypeID
+pkg github.com/advenn/ursus/dtype, const TypeUint64 = 9
+pkg github.com/advenn/ursus/dtype, const TypeUint64 TypeID
+pkg github.com/advenn/ursus/dtype, const TypeUint8 = 6
+pkg github.com/advenn/ursus/dtype, const TypeUint8 TypeID
+pkg github.com/advenn/ursus/dtype, const ZonedDatetimeText = 3
+pkg github.com/advenn/ursus/dtype, const ZonedDatetimeText TemporalTextKind
+pkg github.com/advenn/ursus/dtype, func AppendISO([]byte, DataType, int64) ([]byte, bool)
+pkg github.com/advenn/ursus/dtype, func Array(DataType, int) DataType
+pkg github.com/advenn/ursus/dtype, func CanCast(DataType, DataType) bool
+pkg github.com/advenn/ursus/dtype, func ClassifyTemporalText(string) TemporalTextKind
+pkg github.com/advenn/ursus/dtype, func Datetime(TimeUnit, string) DataType
+pkg github.com/advenn/ursus/dtype, func Decimal(uint8, uint8) DataType
+pkg github.com/advenn/ursus/dtype, func DecimalDigits(DataType) (int, int, bool)
+pkg github.com/advenn/ursus/dtype, func DecimalMeet(DataType, DataType) (DataType, bool)
+pkg github.com/advenn/ursus/dtype, func Duration(TimeUnit) DataType
+pkg github.com/advenn/ursus/dtype, func Enum(...string) DataType
+pkg github.com/advenn/ursus/dtype, func Every(string) Interval
+pkg github.com/advenn/ursus/dtype, func ExactMismatch(DataType, DataType) bool
+pkg github.com/advenn/ursus/dtype, func FormatDecimal(string, uint8) string
+pkg github.com/advenn/ursus/dtype, func FormatTemporal(DataType, int64) string
+pkg github.com/advenn/ursus/dtype, func FromDuration(time.Duration) Interval
+pkg github.com/advenn/ursus/dtype, func GivenZero() Interval
+pkg github.com/advenn/ursus/dtype, func IntervalOf(int32, int32, int64) Interval
+pkg github.com/advenn/ursus/dtype, func IsLeapYear(int) bool
+pkg github.com/advenn/ursus/dtype, func List(DataType) DataType
+pkg github.com/advenn/ursus/dtype, func LooksTemporal(DataType, string) bool
+pkg github.com/advenn/ursus/dtype, func MeetHint(DataType, DataType) string
+pkg github.com/advenn/ursus/dtype, func MonthEnd(time.Time) time.Time
+pkg github.com/advenn/ursus/dtype, func MonthStart(time.Time) time.Time
+pkg github.com/advenn/ursus/dtype, func MustSchema(...Field) *Schema
+pkg github.com/advenn/ursus/dtype, func NearestFloat(uint64, int, bool) (float64, bool)
+pkg github.com/advenn/ursus/dtype, func NewSchema(...Field) (*Schema, error)
+pkg github.com/advenn/ursus/dtype, func NotNull(string, DataType) Field
+pkg github.com/advenn/ursus/dtype, func Of(string, DataType) Field
+pkg github.com/advenn/ursus/dtype, func ParseFloat(string, int) (float64, error)
+pkg github.com/advenn/ursus/dtype, func ParseTemporal(DataType, string) (int64, bool)
+pkg github.com/advenn/ursus/dtype, func ParseTemporalText(DataType, string) (int64, bool)
+pkg github.com/advenn/ursus/dtype, func Promote(DataType, DataType) (DataType, bool)
+pkg github.com/advenn/ursus/dtype, func PromoteExact(DataType, DataType) (DataType, bool)
+pkg github.com/advenn/ursus/dtype, func QuoteName(string) string
+pkg github.com/advenn/ursus/dtype, func ScanTemporalText(string) (TemporalText, bool)
+pkg github.com/advenn/ursus/dtype, func Struct(...Field) DataType
+pkg github.com/advenn/ursus/dtype, func Supertype(DataType, DataType) (DataType, bool)
+pkg github.com/advenn/ursus/dtype, func TicksPerDay(DataType) (int64, bool)
+pkg github.com/advenn/ursus/dtype, func Time(TimeUnit) DataType
+pkg github.com/advenn/ursus/dtype, func ValidDecimal(uint8, uint8) bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) BitWidth() int
+pkg github.com/advenn/ursus/dtype, method (*DataType) Categories() []string
+pkg github.com/advenn/ursus/dtype, method (*DataType) CategoryIndex(string) (uint32, bool)
+pkg github.com/advenn/ursus/dtype, method (*DataType) Equal(DataType) bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) Fields() []Field
+pkg github.com/advenn/ursus/dtype, method (*DataType) FromTime(time.Time) (int64, bool)
+pkg github.com/advenn/ursus/dtype, method (*DataType) FromTimeBound(time.Time, bool) int64
+pkg github.com/advenn/ursus/dtype, method (*DataType) HasStringStorage() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) ID() TypeID
+pkg github.com/advenn/ursus/dtype, method (*DataType) Inner() DataType
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsBool() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsFixedWidth() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsFloat() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsHashable() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsInteger() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsListLike() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsNested() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsNull() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsNumeric() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsOrdered() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsSignedInteger() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsString() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsTemporal() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) IsUnsignedInteger() bool
+pkg github.com/advenn/ursus/dtype, method (*DataType) NanosPerTick() (int64, bool)
+pkg github.com/advenn/ursus/dtype, method (*DataType) Physical() DataType
+pkg github.com/advenn/ursus/dtype, method (*DataType) Precision() uint8
+pkg github.com/advenn/ursus/dtype, method (*DataType) Scale() uint8
+pkg github.com/advenn/ursus/dtype, method (*DataType) Size() int
+pkg github.com/advenn/ursus/dtype, method (*DataType) String() string
+pkg github.com/advenn/ursus/dtype, method (*DataType) TimeUnit() TimeUnit
+pkg github.com/advenn/ursus/dtype, method (*DataType) TimeZone() string
+pkg github.com/advenn/ursus/dtype, method (*DataType) ToDuration(int64) (time.Duration, bool)
+pkg github.com/advenn/ursus/dtype, method (*DataType) ToTime(int64) (time.Time, bool)
+pkg github.com/advenn/ursus/dtype, method (*Field) AsNullable() Field
+pkg github.com/advenn/ursus/dtype, method (*Field) Equal(Field) bool
+pkg github.com/advenn/ursus/dtype, method (*Field) Rename(string) Field
+pkg github.com/advenn/ursus/dtype, method (*Field) String() string
+pkg github.com/advenn/ursus/dtype, method (*Field) WithType(DataType) Field
+pkg github.com/advenn/ursus/dtype, method (*Interval) AddTo(time.Time) time.Time
+pkg github.com/advenn/ursus/dtype, method (*Interval) AsWeekly() Interval
+pkg github.com/advenn/ursus/dtype, method (*Interval) Days() int32
+pkg github.com/advenn/ursus/dtype, method (*Interval) Err() error
+pkg github.com/advenn/ursus/dtype, method (*Interval) Given() bool
+pkg github.com/advenn/ursus/dtype, method (*Interval) Index() bool
+pkg github.com/advenn/ursus/dtype, method (*Interval) IsCalendar() bool
+pkg github.com/advenn/ursus/dtype, method (*Interval) IsZero() bool
+pkg github.com/advenn/ursus/dtype, method (*Interval) Months() int32
+pkg github.com/advenn/ursus/dtype, method (*Interval) Nanos() int64
+pkg github.com/advenn/ursus/dtype, method (*Interval) Neg() Interval
+pkg github.com/advenn/ursus/dtype, method (*Interval) Negative() bool
+pkg github.com/advenn/ursus/dtype, method (*Interval) RoundTo(time.Time) time.Time
+pkg github.com/advenn/ursus/dtype, method (*Interval) String() string
+pkg github.com/advenn/ursus/dtype, method (*Interval) TruncateTo(time.Time) time.Time
+pkg github.com/advenn/ursus/dtype, method (*Interval) Weekly() bool
+pkg github.com/advenn/ursus/dtype, method (*Schema) All() iter.Seq2[int, Field]
+pkg github.com/advenn/ursus/dtype, method (*Schema) ByName(string) (Field, bool)
+pkg github.com/advenn/ursus/dtype, method (*Schema) Drop(...string) *Schema
+pkg github.com/advenn/ursus/dtype, method (*Schema) Equal(*Schema) bool
+pkg github.com/advenn/ursus/dtype, method (*Schema) Field(int) Field
+pkg github.com/advenn/ursus/dtype, method (*Schema) FieldSlice() []Field
+pkg github.com/advenn/ursus/dtype, method (*Schema) Has(string) bool
+pkg github.com/advenn/ursus/dtype, method (*Schema) IndexOf(string) int
+pkg github.com/advenn/ursus/dtype, method (*Schema) Len() int
+pkg github.com/advenn/ursus/dtype, method (*Schema) Names() []string
+pkg github.com/advenn/ursus/dtype, method (*Schema) Select([]string) (*Schema, error)
+pkg github.com/advenn/ursus/dtype, method (*Schema) String() string
+pkg github.com/advenn/ursus/dtype, method (*TimeUnit) Duration() time.Duration
+pkg github.com/advenn/ursus/dtype, method (*TimeUnit) Finer(TimeUnit) bool
+pkg github.com/advenn/ursus/dtype, method (*TimeUnit) String() string
+pkg github.com/advenn/ursus/dtype, method (*TypeID) String() string
+pkg github.com/advenn/ursus/dtype, method (DataType) BitWidth() int
+pkg github.com/advenn/ursus/dtype, method (DataType) Categories() []string
+pkg github.com/advenn/ursus/dtype, method (DataType) CategoryIndex(string) (uint32, bool)
+pkg github.com/advenn/ursus/dtype, method (DataType) Equal(DataType) bool
+pkg github.com/advenn/ursus/dtype, method (DataType) Fields() []Field
+pkg github.com/advenn/ursus/dtype, method (DataType) FromTime(time.Time) (int64, bool)
+pkg github.com/advenn/ursus/dtype, method (DataType) FromTimeBound(time.Time, bool) int64
+pkg github.com/advenn/ursus/dtype, method (DataType) HasStringStorage() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) ID() TypeID
+pkg github.com/advenn/ursus/dtype, method (DataType) Inner() DataType
+pkg github.com/advenn/ursus/dtype, method (DataType) IsBool() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsFixedWidth() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsFloat() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsHashable() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsInteger() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsListLike() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsNested() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsNull() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsNumeric() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsOrdered() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsSignedInteger() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsString() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsTemporal() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) IsUnsignedInteger() bool
+pkg github.com/advenn/ursus/dtype, method (DataType) NanosPerTick() (int64, bool)
+pkg github.com/advenn/ursus/dtype, method (DataType) Physical() DataType
+pkg github.com/advenn/ursus/dtype, method (DataType) Precision() uint8
+pkg github.com/advenn/ursus/dtype, method (DataType) Scale() uint8
+pkg github.com/advenn/ursus/dtype, method (DataType) Size() int
+pkg github.com/advenn/ursus/dtype, method (DataType) String() string
+pkg github.com/advenn/ursus/dtype, method (DataType) TimeUnit() TimeUnit
+pkg github.com/advenn/ursus/dtype, method (DataType) TimeZone() string
+pkg github.com/advenn/ursus/dtype, method (DataType) ToDuration(int64) (time.Duration, bool)
+pkg github.com/advenn/ursus/dtype, method (DataType) ToTime(int64) (time.Time, bool)
+pkg github.com/advenn/ursus/dtype, method (Field) AsNullable() Field
+pkg github.com/advenn/ursus/dtype, method (Field) Equal(Field) bool
+pkg github.com/advenn/ursus/dtype, method (Field) Rename(string) Field
+pkg github.com/advenn/ursus/dtype, method (Field) String() string
+pkg github.com/advenn/ursus/dtype, method (Field) WithType(DataType) Field
+pkg github.com/advenn/ursus/dtype, method (Interval) AddTo(time.Time) time.Time
+pkg github.com/advenn/ursus/dtype, method (Interval) AsWeekly() Interval
+pkg github.com/advenn/ursus/dtype, method (Interval) Days() int32
+pkg github.com/advenn/ursus/dtype, method (Interval) Err() error
+pkg github.com/advenn/ursus/dtype, method (Interval) Given() bool
+pkg github.com/advenn/ursus/dtype, method (Interval) Index() bool
+pkg github.com/advenn/ursus/dtype, method (Interval) IsCalendar() bool
+pkg github.com/advenn/ursus/dtype, method (Interval) IsZero() bool
+pkg github.com/advenn/ursus/dtype, method (Interval) Months() int32
+pkg github.com/advenn/ursus/dtype, method (Interval) Nanos() int64
+pkg github.com/advenn/ursus/dtype, method (Interval) Neg() Interval
+pkg github.com/advenn/ursus/dtype, method (Interval) Negative() bool
+pkg github.com/advenn/ursus/dtype, method (Interval) RoundTo(time.Time) time.Time
+pkg github.com/advenn/ursus/dtype, method (Interval) String() string
+pkg github.com/advenn/ursus/dtype, method (Interval) TruncateTo(time.Time) time.Time
+pkg github.com/advenn/ursus/dtype, method (Interval) Weekly() bool
+pkg github.com/advenn/ursus/dtype, method (TimeUnit) Duration() time.Duration
+pkg github.com/advenn/ursus/dtype, method (TimeUnit) Finer(TimeUnit) bool
+pkg github.com/advenn/ursus/dtype, method (TimeUnit) String() string
+pkg github.com/advenn/ursus/dtype, method (TypeID) String() string
+pkg github.com/advenn/ursus/dtype, type DataType struct
+pkg github.com/advenn/ursus/dtype, type Field struct
+pkg github.com/advenn/ursus/dtype, type Field struct, Name string
+pkg github.com/advenn/ursus/dtype, type Field struct, Nullable bool
+pkg github.com/advenn/ursus/dtype, type Field struct, Type DataType
+pkg github.com/advenn/ursus/dtype, type Interval struct
+pkg github.com/advenn/ursus/dtype, type Schema struct
+pkg github.com/advenn/ursus/dtype, type TemporalText struct
+pkg github.com/advenn/ursus/dtype, type TemporalText struct, Day int
+pkg github.com/advenn/ursus/dtype, type TemporalText struct, HasDate bool
+pkg github.com/advenn/ursus/dtype, type TemporalText struct, HasTime bool
+pkg github.com/advenn/ursus/dtype, type TemporalText struct, HasZone bool
+pkg github.com/advenn/ursus/dtype, type TemporalText struct, Hour int
+pkg github.com/advenn/ursus/dtype, type TemporalText struct, Minute int
+pkg github.com/advenn/ursus/dtype, type TemporalText struct, Month int
+pkg github.com/advenn/ursus/dtype, type TemporalText struct, Nanos int
+pkg github.com/advenn/ursus/dtype, type TemporalText struct, Offset int
+pkg github.com/advenn/ursus/dtype, type TemporalText struct, Second int
+pkg github.com/advenn/ursus/dtype, type TemporalText struct, Year int
+pkg github.com/advenn/ursus/dtype, type TemporalTextKind uint8
+pkg github.com/advenn/ursus/dtype, type TimeUnit uint8
+pkg github.com/advenn/ursus/dtype, type TypeID uint8
+pkg github.com/advenn/ursus/dtype, var Binary DataType
+pkg github.com/advenn/ursus/dtype, var Bool DataType
+pkg github.com/advenn/ursus/dtype, var Categorical DataType
+pkg github.com/advenn/ursus/dtype, var Date DataType
+pkg github.com/advenn/ursus/dtype, var EmptySchema *Schema
+pkg github.com/advenn/ursus/dtype, var Float32 DataType
+pkg github.com/advenn/ursus/dtype, var Float64 DataType
+pkg github.com/advenn/ursus/dtype, var Int128 DataType
+pkg github.com/advenn/ursus/dtype, var Int16 DataType
+pkg github.com/advenn/ursus/dtype, var Int32 DataType
+pkg github.com/advenn/ursus/dtype, var Int64 DataType
+pkg github.com/advenn/ursus/dtype, var Int8 DataType
+pkg github.com/advenn/ursus/dtype, var Null DataType
+pkg github.com/advenn/ursus/dtype, var String DataType
+pkg github.com/advenn/ursus/dtype, var Uint16 DataType
+pkg github.com/advenn/ursus/dtype, var Uint32 DataType
+pkg github.com/advenn/ursus/dtype, var Uint64 DataType
+pkg github.com/advenn/ursus/dtype, var Uint8 DataType
+pkg github.com/advenn/ursus/i128, func FromFloat64(float64) (Int128, bool)
+pkg github.com/advenn/ursus/i128, func FromInt64(int64) Int128
+pkg github.com/advenn/ursus/i128, func FromUint64(uint64) Int128
+pkg github.com/advenn/ursus/i128, func Parse(string) (Int128, bool)
+pkg github.com/advenn/ursus/i128, func ParseDecimal(string, int, int) (Int128, error)
+pkg github.com/advenn/ursus/i128, method (*Int128) Add(Int128) Int128
+pkg github.com/advenn/ursus/i128, method (*Int128) AddChecked(Int128) (Int128, bool)
+pkg github.com/advenn/ursus/i128, method (*Int128) AppendBigEndian([]byte) []byte
+pkg github.com/advenn/ursus/i128, method (*Int128) Cmp(Int128) int
+pkg github.com/advenn/ursus/i128, method (*Int128) DivMod(Int128) (Int128, Int128, bool)
+pkg github.com/advenn/ursus/i128, method (*Int128) DivUint64(uint64) (Int128, uint64, bool)
+pkg github.com/advenn/ursus/i128, method (*Int128) Float32() float32
+pkg github.com/advenn/ursus/i128, method (*Int128) Float64() float64
+pkg github.com/advenn/ursus/i128, method (*Int128) GoString() string
+pkg github.com/advenn/ursus/i128, method (*Int128) Int64() (int64, bool)
+pkg github.com/advenn/ursus/i128, method (*Int128) IsZero() bool
+pkg github.com/advenn/ursus/i128, method (*Int128) MulChecked(Int128) (Int128, bool)
+pkg github.com/advenn/ursus/i128, method (*Int128) Neg() Int128
+pkg github.com/advenn/ursus/i128, method (*Int128) Sign() int
+pkg github.com/advenn/ursus/i128, method (*Int128) String() string
+pkg github.com/advenn/ursus/i128, method (*Int128) Sub(Int128) Int128
+pkg github.com/advenn/ursus/i128, method (*Int128) SubChecked(Int128) (Int128, bool)
+pkg github.com/advenn/ursus/i128, method (*Int128) Uint64() (uint64, bool)
+pkg github.com/advenn/ursus/i128, method (Int128) Add(Int128) Int128
+pkg github.com/advenn/ursus/i128, method (Int128) AddChecked(Int128) (Int128, bool)
+pkg github.com/advenn/ursus/i128, method (Int128) AppendBigEndian([]byte) []byte
+pkg github.com/advenn/ursus/i128, method (Int128) Cmp(Int128) int
+pkg github.com/advenn/ursus/i128, method (Int128) DivMod(Int128) (Int128, Int128, bool)
+pkg github.com/advenn/ursus/i128, method (Int128) DivUint64(uint64) (Int128, uint64, bool)
+pkg github.com/advenn/ursus/i128, method (Int128) Float32() float32
+pkg github.com/advenn/ursus/i128, method (Int128) Float64() float64
+pkg github.com/advenn/ursus/i128, method (Int128) GoString() string
+pkg github.com/advenn/ursus/i128, method (Int128) Int64() (int64, bool)
+pkg github.com/advenn/ursus/i128, method (Int128) IsZero() bool
+pkg github.com/advenn/ursus/i128, method (Int128) MulChecked(Int128) (Int128, bool)
+pkg github.com/advenn/ursus/i128, method (Int128) Neg() Int128
+pkg github.com/advenn/ursus/i128, method (Int128) Sign() int
+pkg github.com/advenn/ursus/i128, method (Int128) String() string
+pkg github.com/advenn/ursus/i128, method (Int128) Sub(Int128) Int128
+pkg github.com/advenn/ursus/i128, method (Int128) SubChecked(Int128) (Int128, bool)
+pkg github.com/advenn/ursus/i128, method (Int128) Uint64() (uint64, bool)
+pkg github.com/advenn/ursus/i128, type Int128 struct
+pkg github.com/advenn/ursus/i128, type Int128 struct, Hi int64
+pkg github.com/advenn/ursus/i128, type Int128 struct, Lo uint64
+pkg github.com/advenn/ursus/i128, var Max Int128
+pkg github.com/advenn/ursus/i128, var Min Int128
+pkg github.com/advenn/ursus/i128, var One Int128
+pkg github.com/advenn/ursus/i128, var Zero Int128
+pkg github.com/advenn/ursus/selector, func All() Selector
+pkg github.com/advenn/ursus/selector, func Alpha() Selector
+pkg github.com/advenn/ursus/selector, func Alphanumeric() Selector
+pkg github.com/advenn/ursus/selector, func Array() Selector
+pkg github.com/advenn/ursus/selector, func Binary() Selector
+pkg github.com/advenn/ursus/selector, func Boolean() Selector
+pkg github.com/advenn/ursus/selector, func ByDType(...ursus.DataType) Selector
+pkg github.com/advenn/ursus/selector, func ByIndex(...int) Selector
+pkg github.com/advenn/ursus/selector, func ByName(...string) Selector
+pkg github.com/advenn/ursus/selector, func Categorical() Selector
+pkg github.com/advenn/ursus/selector, func Contains(...string) Selector
+pkg github.com/advenn/ursus/selector, func Date() Selector
+pkg github.com/advenn/ursus/selector, func Datetime() Selector
+pkg github.com/advenn/ursus/selector, func Decimal() Selector
+pkg github.com/advenn/ursus/selector, func Digit() Selector
+pkg github.com/advenn/ursus/selector, func Duration() Selector
+pkg github.com/advenn/ursus/selector, func Empty() Selector
+pkg github.com/advenn/ursus/selector, func EndsWith(...string) Selector
+pkg github.com/advenn/ursus/selector, func Enum() Selector
+pkg github.com/advenn/ursus/selector, func First() Selector
+pkg github.com/advenn/ursus/selector, func Float() Selector
+pkg github.com/advenn/ursus/selector, func Integer() Selector
+pkg github.com/advenn/ursus/selector, func Last() Selector
+pkg github.com/advenn/ursus/selector, func List() Selector
+pkg github.com/advenn/ursus/selector, func Matches(string) Selector
+pkg github.com/advenn/ursus/selector, func Nested() Selector
+pkg github.com/advenn/ursus/selector, func Numeric() Selector
+pkg github.com/advenn/ursus/selector, func SignedInteger() Selector
+pkg github.com/advenn/ursus/selector, func StartsWith(...string) Selector
+pkg github.com/advenn/ursus/selector, func String() Selector
+pkg github.com/advenn/ursus/selector, func Struct() Selector
+pkg github.com/advenn/ursus/selector, func Temporal() Selector
+pkg github.com/advenn/ursus/selector, func Time() Selector
+pkg github.com/advenn/ursus/selector, func UnsignedInteger() Selector
+pkg github.com/advenn/ursus/selector, method (*Selector) Complement() Selector
+pkg github.com/advenn/ursus/selector, method (*Selector) Difference(Selector) Selector
+pkg github.com/advenn/ursus/selector, method (*Selector) Exclude(...string) Selector
+pkg github.com/advenn/ursus/selector, method (*Selector) Expand(*ursus.Schema) ([]string, error)
+pkg github.com/advenn/ursus/selector, method (*Selector) Expr() ursus.Expr
+pkg github.com/advenn/ursus/selector, method (*Selector) Intersect(Selector) Selector
+pkg github.com/advenn/ursus/selector, method (*Selector) String() string
+pkg github.com/advenn/ursus/selector, method (*Selector) SymmetricDifference(Selector) Selector
+pkg github.com/advenn/ursus/selector, method (*Selector) Union(Selector) Selector
+pkg github.com/advenn/ursus/selector, method (Selector) Complement() Selector
+pkg github.com/advenn/ursus/selector, method (Selector) Difference(Selector) Selector
+pkg github.com/advenn/ursus/selector, method (Selector) Exclude(...string) Selector
+pkg github.com/advenn/ursus/selector, method (Selector) Expand(*ursus.Schema) ([]string, error)
+pkg github.com/advenn/ursus/selector, method (Selector) Expr() ursus.Expr
+pkg github.com/advenn/ursus/selector, method (Selector) Intersect(Selector) Selector
+pkg github.com/advenn/ursus/selector, method (Selector) String() string
+pkg github.com/advenn/ursus/selector, method (Selector) SymmetricDifference(Selector) Selector
+pkg github.com/advenn/ursus/selector, method (Selector) Union(Selector) Selector
+pkg github.com/advenn/ursus/selector, type Selector struct
+pkg github.com/advenn/ursus/ursustest, func AssertFrameEqual(testing.TB, *ursus.DataFrame, *ursus.DataFrame, ...Option)
+pkg github.com/advenn/ursus/ursustest, func AssertPlan(testing.TB, *ursus.LazyFrame, string, ...ursus.ExplainOption)
+pkg github.com/advenn/ursus/ursustest, func AssertSchemaEqual(testing.TB, *ursus.Schema, *ursus.Schema, ...Option)
+pkg github.com/advenn/ursus/ursustest, func AssertSeriesEqual[T0 comparable](testing.TB, *data.Series[T0], *data.Series[T0])
+pkg github.com/advenn/ursus/ursustest, func CheckNullability() Option
+pkg github.com/advenn/ursus/ursustest, func IgnoreColumnOrder() Option
+pkg github.com/advenn/ursus/ursustest, func IgnoreDTypes() Option
+pkg github.com/advenn/ursus/ursustest, func IgnoreRowOrder() Option
+pkg github.com/advenn/ursus/ursustest, func WithTolerance(float64, float64) Option
+pkg github.com/advenn/ursus/ursustest, type Option func(*config)
