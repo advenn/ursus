@@ -13,6 +13,31 @@ Step numbers below point at those records.
 
 ---
 
+## v0.7.1 — 2026-10-30
+
+Everything since `v0.7.0` (2026-10-29): the fixes of steps 393 and 394, backported
+from master, where they are part of 0.8's work. Step 409 checked them on the 0.7
+line. No API is added, changed or removed.
+
+### Fixed
+
+- **A cancelled query no longer answers part of its input as the whole** (394): a
+  query cancelled while it read could return the rows read before the cancel, and no
+  error: a count of a CSV file cancelled partway was an empty frame. A query whose
+  context is cancelled before it finishes now returns the cancellation, from
+  `Collect`, `CollectBatches`, `Count` and the writers.
+- **A cancelled sort or join stops promptly** (394): a sort of ten million rows came
+  back 400 ms and more after its cancel, and a join's build 100 to 170; now some tens
+  of milliseconds at most.
+- **A panic on one of a query's goroutines no longer ends the process** (393): a
+  sort's and a unique's parallel pieces, first-seen keys, a text sort, a Spearman
+  rank, and `PartitionBy`, `ToDummies` and `Corr`, started goroutines that recovered
+  nothing, so a bug in one ended the program that asked, a service with every request
+  it served. Each panic is an internal error from the call now, as one anywhere else
+  in a query is, naming the line that panicked.
+
+---
+
 ## v0.7.0 — 2026-10-29
 
 Everything since `v0.6.8` (2026-10-26): steps 375–391, and 408.

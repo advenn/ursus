@@ -5,8 +5,8 @@ on:
     # Both, deliberately: this repository's default branch is master, and the
     # workflow triggered only on main — so CI had never run on a push. Listing
     # both keeps it working through a future rename instead of silently going
-    # quiet again.
-    branches: [main, master]
+    # quiet again. A release branch, release-0.7, carries a patch's backports.
+    branches: [main, master, 'release-*']
   pull_request:
 
 env:
