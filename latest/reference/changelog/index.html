@@ -1410,6 +1410,34 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#v071-2026-10-30" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v0.7.1 — 2026-10-30
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="v0.7.1 — 2026-10-30">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#v070-2026-10-29" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1710,7 +1738,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed" class="md-nav__link">
+  <a href="#fixed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -1915,7 +1943,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_1" class="md-nav__link">
+  <a href="#fixed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -1987,7 +2015,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_2" class="md-nav__link">
+  <a href="#fixed_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2070,7 +2098,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_3" class="md-nav__link">
+  <a href="#fixed_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2377,6 +2405,34 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#v071-2026-10-30" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v0.7.1 — 2026-10-30
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="v0.7.1 — 2026-10-30">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#v070-2026-10-29" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2677,7 +2733,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed" class="md-nav__link">
+  <a href="#fixed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2882,7 +2938,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_1" class="md-nav__link">
+  <a href="#fixed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2954,7 +3010,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_2" class="md-nav__link">
+  <a href="#fixed_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -3037,7 +3093,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_3" class="md-nav__link">
+  <a href="#fixed_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -3334,12 +3390,34 @@ first. Each release below therefore says what a user of the previous one can tri
 on, not only what is new; from 0.6 on, each lists its breaks with their
 replacements.</p>
 <p>Every step of construction has an as-built record in
-<a href="https://github.com/advenn/ursus/tree/v0.7.0/context_files/"><code>context_files/</code></a>, with the measurements behind each change.
+<a href="https://github.com/advenn/ursus/tree/v0.7.1/context_files/"><code>context_files/</code></a>, with the measurements behind each change.
 Step numbers below point at those records.</p>
+<hr />
+<h2 id="v071-2026-10-30">v0.7.1 — 2026-10-30<a class="headerlink" href="#v071-2026-10-30" title="Permanent link">&para;</a></h2>
+<p>Everything since <code>v0.7.0</code> (2026-10-29): the fixes of steps 393 and 394, backported
+from master, where they are part of 0.8's work. Step 409 checked them on the 0.7
+line. No API is added, changed or removed.</p>
+<h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>A cancelled query no longer answers part of its input as the whole</strong> (394): a
+  query cancelled while it read could return the rows read before the cancel, and no
+  error: a count of a CSV file cancelled partway was an empty frame. A query whose
+  context is cancelled before it finishes now returns the cancellation, from
+  <code>Collect</code>, <code>CollectBatches</code>, <code>Count</code> and the writers.</li>
+<li><strong>A cancelled sort or join stops promptly</strong> (394): a sort of ten million rows came
+  back 400 ms and more after its cancel, and a join's build 100 to 170; now some tens
+  of milliseconds at most.</li>
+<li><strong>A panic on one of a query's goroutines no longer ends the process</strong> (393): a
+  sort's and a unique's parallel pieces, first-seen keys, a text sort, a Spearman
+  rank, and <code>PartitionBy</code>, <code>ToDummies</code> and <code>Corr</code>, started goroutines that recovered
+  nothing, so a bug in one ended the program that asked, a service with every request
+  it served. Each panic is an internal error from the call now, as one anywhere else
+  in a query is, naming the line that panicked.</li>
+</ul>
 <hr />
 <h2 id="v070-2026-10-29">v0.7.0 — 2026-10-29<a class="headerlink" href="#v070-2026-10-29" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.8</code> (2026-10-26): steps 375–391, and 408.
-<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.7-scope.md"><code>v0.7-scope.md</code></a> set the scope: <strong>performance,</strong> the
+<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.7-scope.md"><code>v0.7-scope.md</code></a> set the scope: <strong>performance,</strong> the
 Parquet read first. Step 408 checked the whole, on 0.7's code, <code>16e617a</code>.</p>
 <h3 id="where-it-ends">Where it ends<a class="headerlink" href="#where-it-ends" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3448,7 +3526,7 @@ Parquet read first. Step 408 checked the whole, on 0.7's code, <code>16e617a</co
 <hr />
 <h2 id="v068-2026-10-26">v0.6.8 — 2026-10-26<a class="headerlink" href="#v068-2026-10-26" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.7</code> (2026-10-26): steps 365–374.
-<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.6.8-scope.md"><code>v0.6.8-scope.md</code></a> set the scope: <strong>the leftovers
+<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.6.8-scope.md"><code>v0.6.8-scope.md</code></a> set the scope: <strong>the leftovers
 of feature completeness, and five of 0.7's performance tasks done ahead of it.</strong> Step
 374 checked the whole.</p>
 <h3 id="where-it-ends_1">Where it ends<a class="headerlink" href="#where-it-ends_1" title="Permanent link">&para;</a></h3>
@@ -3569,7 +3647,7 @@ of feature completeness, and five of 0.7's performance tasks done ahead of it.</
 <hr />
 <h2 id="v067-2026-10-26">v0.6.7 — 2026-10-26<a class="headerlink" href="#v067-2026-10-26" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.6</code> (2026-10-19): steps 288–364.
-<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
+<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.6.7-scope.md"><code>v0.6.7-scope.md</code></a> set the scope: <strong>feature
 completeness, part 3 — frame operations.</strong> It took in what was to be 0.6.8's I/O and
 the types after it, and three steps of performance. Step 364 checked the whole.</p>
 <h3 id="where-it-ends_2">Where it ends<a class="headerlink" href="#where-it-ends_2" title="Permanent link">&para;</a></h3>
@@ -4084,9 +4162,9 @@ the types after it, and three steps of performance. Step 364 checked the whole.<
 <hr />
 <h2 id="v066-2026-10-19">v0.6.6 — 2026-10-19<a class="headerlink" href="#v066-2026-10-19" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.5</code> (2026-10-15): steps 262–287.
-<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.6.6-scope.md"><code>v0.6.6-scope.md</code></a> set the scope: <strong>feature
+<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.6.6-scope.md"><code>v0.6.6-scope.md</code></a> set the scope: <strong>feature
 completeness, part 2 — namespaces and generators.</strong> Frame operations are 0.6.7 and
-I/O 0.6.8; <a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/feature-gaps.md"><code>feature-gaps.md</code></a> lists what is
+I/O 0.6.8; <a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/feature-gaps.md"><code>feature-gaps.md</code></a> lists what is
 missing. Step 287 checked the whole.</p>
 <h3 id="where-it-ends_3">Where it ends<a class="headerlink" href="#where-it-ends_3" title="Permanent link">&para;</a></h3>
 <ul>
@@ -4250,10 +4328,10 @@ missing. Step 287 checked the whole.</p>
 <hr />
 <h2 id="v065-2026-10-15">v0.6.5 — 2026-10-15<a class="headerlink" href="#v065-2026-10-15" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.4</code> (2026-10-14): steps 248–261.
-<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.6.5-scope.md"><code>v0.6.5-scope.md</code></a> set the scope: <strong>feature
+<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.6.5-scope.md"><code>v0.6.5-scope.md</code></a> set the scope: <strong>feature
 completeness, part 1 — the bugs, and the expression model.</strong> The rest of 0.6 is
 feature completeness, and 0.7 performance;
-<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/feature-gaps.md"><code>feature-gaps.md</code></a> lists what is missing. Step 261
+<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/feature-gaps.md"><code>feature-gaps.md</code></a> lists what is missing. Step 261
 checked the whole.</p>
 <h3 id="where-it-ends_4">Where it ends<a class="headerlink" href="#where-it-ends_4" title="Permanent link">&para;</a></h3>
 <ul>
@@ -4284,7 +4362,7 @@ checked the whole.</p>
 <li><strong><code>Expr.Explode</code>, <code>Unnest</code>, <code>DropNulls</code> and <code>DropNans</code> no longer refuse;</strong> code that
   relied on the refusal to catch a mistake gets an answer.</li>
 </ul>
-<h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong><code>lf.FillNull(ursus.FillForward)</code> fills by the strategy</strong> (249). It filled every
   null with the constant 2: <code>FillStrategy</code> is a <code>uint8</code>, so it was taken for a value.
@@ -4364,7 +4442,7 @@ checked the whole.</p>
 <hr />
 <h2 id="v064-2026-10-14">v0.6.4 — 2026-10-14<a class="headerlink" href="#v064-2026-10-14" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.3</code> (2026-10-12): steps 234–247.
-<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.6.4-scope.md"><code>v0.6.4-scope.md</code></a> set the scope: <strong>out of core, the
+<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.6.4-scope.md"><code>v0.6.4-scope.md</code></a> set the scope: <strong>out of core, the
 leftovers</strong> — what still refuses under a memory budget, made to spill or stream.
 Step 247 measured the whole.</p>
 <h3 id="where-it-ends_5">Where it ends<a class="headerlink" href="#where-it-ends_5" title="Permanent link">&para;</a></h3>
@@ -4498,7 +4576,7 @@ Step 247 measured the whole.</p>
 <hr />
 <h2 id="v063-2026-10-12">v0.6.3 — 2026-10-12<a class="headerlink" href="#v063-2026-10-12" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.2</code> (2026-10-12): steps 213–232.
-<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.6.3-scope.md"><code>v0.6.3-scope.md</code></a> set the scope: <strong>wall-time speed,
+<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.6.3-scope.md"><code>v0.6.3-scope.md</code></a> set the scope: <strong>wall-time speed,
 out-of-core, and features.</strong> Each step was timed against 0.6.2's code, alternated in
 one session, and step 232 measured the whole.</p>
 <h3 id="where-it-ends_6">Where it ends<a class="headerlink" href="#where-it-ends_6" title="Permanent link">&para;</a></h3>
@@ -4662,7 +4740,7 @@ one session, and step 232 measured the whole.</p>
 <hr />
 <h2 id="v062-2026-10-12">v0.6.2 — 2026-10-12<a class="headerlink" href="#v062-2026-10-12" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.1</code> (2026-10-11): steps 201–212.
-<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.6.2-scope.md"><code>v0.6.2-scope.md</code></a> set the scope: <strong>speed and
+<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.6.2-scope.md"><code>v0.6.2-scope.md</code></a> set the scope: <strong>speed and
 out-of-core, continued.</strong> Each step was timed against 0.6.1's code, alternated in one
 session, and step 208 measured the whole.</p>
 <h3 id="where-it-ends_7">Where it ends<a class="headerlink" href="#where-it-ends_7" title="Permanent link">&para;</a></h3>
@@ -4757,7 +4835,7 @@ session, and step 208 measured the whole.</p>
   spill as before. It refused. A rank, an ewm or an ordered window over it still
   does.</li>
 </ul>
-<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_2">Fixed<a class="headerlink" href="#fixed_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A join's key tables are on the memory ledger while it probes</strong> (204). The
   account was rebased at the end of the build without them, so a join probing
@@ -4791,7 +4869,7 @@ session, and step 208 measured the whole.</p>
 <hr />
 <h2 id="v061-2026-10-11">v0.6.1 — 2026-10-11<a class="headerlink" href="#v061-2026-10-11" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.0</code> (2026-10-11): steps 191–200.
-<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.6.1-scope.md"><code>v0.6.1-scope.md</code></a> set the scope: <strong>speed where the
+<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.6.1-scope.md"><code>v0.6.1-scope.md</code></a> set the scope: <strong>speed where the
 profile points, and out-of-core.</strong> Each step was timed against v0.6.0's code,
 alternated in one session, and step 200 measured the whole.</p>
 <h3 id="where-it-ends_8">Where it ends<a class="headerlink" href="#where-it-ends_8" title="Permanent link">&para;</a></h3>
@@ -4887,7 +4965,7 @@ alternated in one session, and step 200 measured the whole.</p>
   so did <code>JoinWhere</code>, a cross join under a filter. A join with no keys and a residual,
   a <code>WhereExists</code> of a predicate alone, still refuses.</li>
 </ul>
-<h3 id="fixed_2">Fixed<a class="headerlink" href="#fixed_2" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_3">Fixed<a class="headerlink" href="#fixed_3" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A Parquet page whose RLE run holds a value wider than its bit width</strong> is refused
   as corrupt (192), found by fuzzing the new decoder.</li>
@@ -4917,8 +4995,8 @@ alternated in one session, and step 200 measured the whole.</p>
 <hr />
 <h2 id="v060-2026-10-11">v0.6.0 — 2026-10-11<a class="headerlink" href="#v060-2026-10-11" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.5.0</code> (2026-10-09): steps 156–190.
-<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.6-scope.md"><code>v0.6-scope.md</code></a> set the scope: <strong>speed, the features
-0.5 left, and robustness.</strong> <a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/audit-0.6-midpoint.md"><code>audit-0.6-midpoint.md</code></a>
+<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.6-scope.md"><code>v0.6-scope.md</code></a> set the scope: <strong>speed, the features
+0.5 left, and robustness.</strong> <a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/audit-0.6-midpoint.md"><code>audit-0.6-midpoint.md</code></a>
 took stock after step 165. Each step below was timed against the one before it, and
 step 189 measured the whole against v0.5.0 and against Polars.</p>
 <h3 id="where-it-ends_9">Where it ends<a class="headerlink" href="#where-it-ends_9" title="Permanent link">&para;</a></h3>
@@ -5109,7 +5187,7 @@ than v0.5.0 on it. Both are met. Measured on 2026-10-11, at <code>c6aa77d</code>
   ends</strong> (161), where it held only the distinct keys, as other joins hold their build
   rows. Past half the memory budget it streams, as before.</li>
 </ul>
-<h3 id="fixed_3">Fixed<a class="headerlink" href="#fixed_3" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_4">Fixed<a class="headerlink" href="#fixed_4" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A grid of weeks starts on a Monday,</strong> as Polars' does (184): <code>Truncate</code>, <code>Round</code>
   and <code>GroupByDynamic</code> with <code>Every("1w")</code> gave weeks from Thursday, the epoch's day,
@@ -5222,7 +5300,7 @@ name or build:</p>
 <hr />
 <h2 id="v050-2026-10-09">v0.5.0 — 2026-10-09<a class="headerlink" href="#v050-2026-10-09" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.4.0</code> (2026-10-09): steps 140–155.</p>
-<p><a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.5-scope.md"><code>v0.5-scope.md</code></a> set the scope: <strong>speed, and the
+<p><a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.5-scope.md"><code>v0.5-scope.md</code></a> set the scope: <strong>speed, and the
 features users reach for first.</strong> Object stores stayed out, by decision. Its
 "Where it stands" list records each step; its Tier 2 and Tier 3 say what moved to
 0.6 and why.</p>
@@ -5304,7 +5382,7 @@ parameters</strong> since v0.4.0.</p>
 </ul>
 <h3 id="everything-by-step">Everything, by step<a class="headerlink" href="#everything-by-step" title="Permanent link">&para;</a></h3>
 <p>Newest first. The numbers are steps, each with an as-built record in
-<a href="https://github.com/advenn/ursus/tree/v0.7.0/context_files/"><code>context_files/</code></a>.</p>
+<a href="https://github.com/advenn/ursus/tree/v0.7.1/context_files/"><code>context_files/</code></a>.</p>
 <ul>
 <li><strong>v0.5.0 is tagged</strong> (155). <code>gb10</code> and <code>j5</code> were run once more under 3 GB first,
   and pass.</li>
@@ -5386,7 +5464,7 @@ parameters</strong> since v0.4.0.</p>
 <hr />
 <h2 id="v040-2026-10-09">v0.4.0 — 2026-10-09<a class="headerlink" href="#v040-2026-10-09" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.3.1</code> (2026-10-06): steps 92–138.</p>
-<p><a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.4-scope.md"><code>v0.4-scope.md</code></a> set the scope: <strong>fast where it is
+<p><a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.4-scope.md"><code>v0.4-scope.md</code></a> set the scope: <strong>fast where it is
 slow, and safe inside a service.</strong> Its §7 records what was done, and what moved to
 0.5 and why. Step 92 was also meant to be v0.3.2, which is not tagged; 0.4.0
 contains it.</p>
@@ -5502,7 +5580,7 @@ changed its parameters</strong> since v0.3.1.</p>
 </ul>
 <h3 id="everything-by-step_1">Everything, by step<a class="headerlink" href="#everything-by-step_1" title="Permanent link">&para;</a></h3>
 <p>Newest first. The numbers are steps, each with an as-built record in
-<a href="https://github.com/advenn/ursus/tree/v0.7.0/context_files/"><code>context_files/</code></a>.</p>
+<a href="https://github.com/advenn/ursus/tree/v0.7.1/context_files/"><code>context_files/</code></a>.</p>
 <ul>
 <li><strong>The Parquet reader keeps its values slice too, and a join's per-row arrays
   double</strong> (138), from an allocation profile of h2o <code>j5</code> (137).</li>
@@ -5768,7 +5846,7 @@ changed its parameters</strong> since v0.3.1.</p>
 <h3 id="known-limitations_11">Known limitations<a class="headerlink" href="#known-limitations_11" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Object stores:</strong> there is no built-in client, by decision for 0.4
-  (<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.4-scope.md"><code>v0.4-scope.md</code></a> §4). <code>ScanParquetFrom</code> and
+  (<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.4-scope.md"><code>v0.4-scope.md</code></a> §4). <code>ScanParquetFrom</code> and
   <code>ScanCSVFrom</code> are the seam, through any <code>io.ReaderAt</code> or stream.</li>
 <li><strong>Operators that do not spill</strong> each fail under a budget with an error naming
   themselves:</li>
@@ -5863,9 +5941,9 @@ figures above it.</em></p>
 <hr />
 <h2 id="v030-2026-10-06">v0.3.0 — 2026-10-06<a class="headerlink" href="#v030-2026-10-06" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.2.0</code> (2026-09-04): steps 22–88, about 270 commits.</p>
-<p><a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.3-scope.md"><code>v0.3-scope.md</code></a> set the scope: <strong>the types and the
+<p><a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.3-scope.md"><code>v0.3-scope.md</code></a> set the scope: <strong>the types and the
 I/O are honest</strong>. Most of the release is correctness work. A measured audit,
-<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/audit.md"><code>audit.md</code></a>, found 78 defects, about 40 of them silent
+<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/audit.md"><code>audit.md</code></a>, found 78 defects, about 40 of them silent
 wrong answers. Steps 70–85 fixed nearly all of them, each alongside the instrument
 that would have caught it.</p>
 <h3 id="highlights_2">Highlights<a class="headerlink" href="#highlights_2" title="Permanent link">&para;</a></h3>
@@ -6112,7 +6190,7 @@ the right one could not be given.</p>
 <li><strong>Object stores:</strong> there is no built-in client. S3, GCS and Azure each want a
   vendor SDK, and ursus is pure Go with one dependency. <code>ScanParquetFrom</code> and
   <code>ScanCSVFrom</code> are the seam. The stores were planned for 0.4, and have since
-  been deferred past it (<a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/v0.4-scope.md"><code>v0.4-scope.md</code></a> §4).</li>
+  been deferred past it (<a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/v0.4-scope.md"><code>v0.4-scope.md</code></a> §4).</li>
 <li><strong>Operators that do not spill</strong> each fail under <code>WithMemoryLimit</code> with an error
   naming themselves:</li>
 <li>reverse, hstack, tail, <code>JoinAsOf</code>, <code>MergeSorted</code>, <code>Rolling</code> and
@@ -6130,7 +6208,7 @@ the right one could not be given.</p>
 <li>Enum is not written to Parquet or Arrow.</li>
 <li>Duration is not written to Parquet; cast it to Int64.</li>
 <li><strong>Still-open audit rows that can answer wrongly</strong>, each recorded in
-  <a href="https://github.com/advenn/ursus/blob/v0.7.0/context_files/audit.md"><code>audit.md</code></a>:</li>
+  <a href="https://github.com/advenn/ursus/blob/v0.7.1/context_files/audit.md"><code>audit.md</code></a>:</li>
 <li><strong>I23:</strong> a third-party Parquet file written without null counts can be pruned
     wrongly by an <code>IsNull</code> filter.</li>
 <li><strong>O13</strong>, unmeasured: two Enum or Struct types can render alike.</li>
