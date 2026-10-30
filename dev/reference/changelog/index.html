@@ -1503,6 +1503,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#v071-2026-10-30" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v0.7.1 — 2026-10-30
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="v0.7.1 — 2026-10-30">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#v070-2026-10-29" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1803,7 +1831,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_1" class="md-nav__link">
+  <a href="#fixed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2008,7 +2036,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_2" class="md-nav__link">
+  <a href="#fixed_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2080,7 +2108,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_3" class="md-nav__link">
+  <a href="#fixed_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2163,7 +2191,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_4" class="md-nav__link">
+  <a href="#fixed_5" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -2531,6 +2559,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#v071-2026-10-30" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v0.7.1 — 2026-10-30
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="v0.7.1 — 2026-10-30">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#v070-2026-10-29" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2831,7 +2887,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_1" class="md-nav__link">
+  <a href="#fixed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -3036,7 +3092,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_2" class="md-nav__link">
+  <a href="#fixed_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -3108,7 +3164,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_3" class="md-nav__link">
+  <a href="#fixed_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -3191,7 +3247,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_4" class="md-nav__link">
+  <a href="#fixed_5" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -3606,6 +3662,7 @@ that stops when its request is cancelled.</p>
   take a share as the queries do, where each took every thread.</li>
 </ul>
 <h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<p>All three are in v0.7.1 too.</p>
 <ul>
 <li><strong>A cancelled query no longer answers part of its input as the whole</strong> (394): a
   query cancelled while it read could return the rows read before the cancel, and no
@@ -3622,6 +3679,29 @@ that stops when its request is cancelled.</p>
   it served. Each panic is an internal error from the call now, as one anywhere else
   in a query is, naming the line that panicked.</li>
 </ul>
+<h2 id="v071-2026-10-30">v0.7.1 — 2026-10-30<a class="headerlink" href="#v071-2026-10-30" title="Permanent link">&para;</a></h2>
+<p>Everything since <code>v0.7.0</code> (2026-10-29): the fixes of steps 393 and 394, backported
+from master, where they are part of 0.8's work. Step 409 checked them on the 0.7
+line. No API is added, changed or removed. The tag is on the branch <code>release-0.7</code>,
+off master.</p>
+<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>A cancelled query no longer answers part of its input as the whole</strong> (394): a
+  query cancelled while it read could return the rows read before the cancel, and no
+  error: a count of a CSV file cancelled partway was an empty frame. A query whose
+  context is cancelled before it finishes now returns the cancellation, from
+  <code>Collect</code>, <code>CollectBatches</code>, <code>Count</code> and the writers.</li>
+<li><strong>A cancelled sort or join stops promptly</strong> (394): a sort of ten million rows came
+  back 400 ms and more after its cancel, and a join's build 100 to 170; now some tens
+  of milliseconds at most.</li>
+<li><strong>A panic on one of a query's goroutines no longer ends the process</strong> (393): a
+  sort's and a unique's parallel pieces, first-seen keys, a text sort, a Spearman
+  rank, and <code>PartitionBy</code>, <code>ToDummies</code> and <code>Corr</code>, started goroutines that recovered
+  nothing, so a bug in one ended the program that asked, a service with every request
+  it served. Each panic is an internal error from the call now, as one anywhere else
+  in a query is, naming the line that panicked.</li>
+</ul>
+<hr />
 <h2 id="v070-2026-10-29">v0.7.0 — 2026-10-29<a class="headerlink" href="#v070-2026-10-29" title="Permanent link">&para;</a></h2>
 <p>Everything since <code>v0.6.8</code> (2026-10-26): steps 375–391, and 408.
 <a href="https://github.com/advenn/ursus/blob/master/context_files/v0.7-scope.md"><code>v0.7-scope.md</code></a> set the scope: <strong>performance,</strong> the
@@ -4570,7 +4650,7 @@ checked the whole.</p>
 <li><strong><code>Expr.Explode</code>, <code>Unnest</code>, <code>DropNulls</code> and <code>DropNans</code> no longer refuse;</strong> code that
   relied on the refusal to catch a mistake gets an answer.</li>
 </ul>
-<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_2">Fixed<a class="headerlink" href="#fixed_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong><code>lf.FillNull(ursus.FillForward)</code> fills by the strategy</strong> (249). It filled every
   null with the constant 2: <code>FillStrategy</code> is a <code>uint8</code>, so it was taken for a value.
@@ -5043,7 +5123,7 @@ session, and step 208 measured the whole.</p>
   spill as before. It refused. A rank, an ewm or an ordered window over it still
   does.</li>
 </ul>
-<h3 id="fixed_2">Fixed<a class="headerlink" href="#fixed_2" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_3">Fixed<a class="headerlink" href="#fixed_3" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A join's key tables are on the memory ledger while it probes</strong> (204). The
   account was rebased at the end of the build without them, so a join probing
@@ -5173,7 +5253,7 @@ alternated in one session, and step 200 measured the whole.</p>
   so did <code>JoinWhere</code>, a cross join under a filter. A join with no keys and a residual,
   a <code>WhereExists</code> of a predicate alone, still refuses.</li>
 </ul>
-<h3 id="fixed_3">Fixed<a class="headerlink" href="#fixed_3" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_4">Fixed<a class="headerlink" href="#fixed_4" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A Parquet page whose RLE run holds a value wider than its bit width</strong> is refused
   as corrupt (192), found by fuzzing the new decoder.</li>
@@ -5395,7 +5475,7 @@ than v0.5.0 on it. Both are met. Measured on 2026-10-11, at <code>c6aa77d</code>
   ends</strong> (161), where it held only the distinct keys, as other joins hold their build
   rows. Past half the memory budget it streams, as before.</li>
 </ul>
-<h3 id="fixed_4">Fixed<a class="headerlink" href="#fixed_4" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_5">Fixed<a class="headerlink" href="#fixed_5" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A grid of weeks starts on a Monday,</strong> as Polars' does (184): <code>Truncate</code>, <code>Round</code>
   and <code>GroupByDynamic</code> with <code>Every("1w")</code> gave weeks from Thursday, the epoch's day,
