@@ -13,6 +13,14 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.7.2
+
+[`v0.7.2-scope.md`](./context_files/v0.7.2-scope.md) set the scope (step 410):
+**finding the bugs, and fixing them,** on the 0.7 line, and nothing else. No API is
+added, changed or removed.
+
+---
+
 ## v0.7.1 — 2026-10-30
 
 Everything since `v0.7.0` (2026-10-29): the fixes of steps 393 and 394, backported
