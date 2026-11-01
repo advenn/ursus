@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -196,6 +197,9 @@ func (p *partitioner) write(b *data.Batch) error {
 			segs := make([]string, len(p.keys))
 			for j, i := range p.keys {
 				segs[j] = hive.Escape(b.Schema().Field(i).Name) + "=" + texts[j][r]
+				if err := noParent(p.op, segs[j]); err != nil {
+					return err
+				}
 			}
 			part = &hivePart{dir: filepath.Join(append([]string{p.dir}, segs...)...)}
 			p.parts[string(k)] = part
@@ -342,6 +346,21 @@ func (p *partitioner) abort() {
 // null __HIVE_DEFAULT_PARTITION__, a date 2024-01-02, an instant its wall clock with
 // its unit's digits and, with a zone, its offset, as Polars writes them; a time of day
 // with its fraction, which Polars drops; anything else its text, as a cast gives it.
+// noParent refuses a partition's path segment that a system splits into a parent
+// directory, `..`, as Polars refuses one (step 420): Escape leaves `\` as it is, which
+// Windows splits a path at, so a key or a value of `..\..\x` wrote its files outside
+// the dataset. It is refused on every system, so a dataset reads and writes alike on
+// each; a `..` alone is one segment, `k=..`, and is written.
+func noParent(op, seg string) error {
+	for _, c := range strings.FieldsFunc(seg, func(r rune) bool { return r == '\\' || r == '/' }) {
+		if c == ".." {
+			return uerr.New(uerr.KindValue, op, "the partition path %q holds a parent directory, '..'", seg).
+				Hint("a key or a value of the partition holds `\\..`; change it, or partition by another column")
+		}
+	}
+	return nil
+}
+
 func keyTexts(cols []*data.Column) ([][]string, error) {
 	out := make([][]string, len(cols))
 	for j, c := range cols {
