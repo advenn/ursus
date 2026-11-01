@@ -140,9 +140,8 @@ type Source struct {
 	desc  string
 	opts  Options
 
-	once   sync.Once
+	once   source.Once
 	schema *dtype.Schema
-	err    error
 
 	// unread holds, per unreadable field of the reconciled schema, the refusal to
 	// return if a query asks for it. Non-nil entries are the nested columns.
@@ -285,18 +284,23 @@ func (s *Source) ClassifyPredicates(preds []expr.Node) []plan.Pushdown {
 // produced, rather than in the middle of a read after earlier files' rows have
 // gone downstream — and nullability is only right if every file is seen. One open
 // and one footer parse per file, at plan time; each is opened again to be read.
+//
+// A read its caller's cancellation cut short is not kept, and the next caller reads
+// again (source.Once).
 func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
-	s.once.Do(func() {
-		// Recovered INSIDE the function Do runs: a panic that escaped it would still
-		// mark the Once done, and every later call would return (nil, nil).
+	err := s.once.Do(ctx, func(ctx context.Context) (err error) {
 		defer func() {
 			if v := recover(); v != nil {
-				s.schema, s.unread, s.err = nil, nil, corrupt(v, s.desc)
+				s.schema, s.unread, err = nil, nil, corrupt(v, s.desc)
 			}
 		}()
-		s.schema, s.unread, s.err = s.readSchemas(ctx)
+		s.schema, s.unread, err = s.readSchemas(ctx)
+		return err
 	})
-	return s.schema, s.err
+	if err != nil {
+		return nil, err
+	}
+	return s.schema, nil
 }
 
 // corrupt turns a panic recovered while reading a file into an error.
