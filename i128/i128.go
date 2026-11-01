@@ -436,6 +436,12 @@ func ParseDecimal(s string, precision, scale int) (Int128, error) {
 	if digits == "" {
 		return Zero, nil
 	}
+	// An exponent past ±2^40 is out of range, as DuckDB and Polars refuse one, before
+	// the sum below can wrap: at 2^63-1 it wrapped below zero, and the value rounded to
+	// nothing and read as 0 (step 414).
+	if exp > 1<<40 || exp < -(1<<40) {
+		return rangeErr()
+	}
 	shift := exp - len(frac) + scale
 	if shift > precision || len(digits)+shift > precision+1 {
 		return rangeErr() // more digits than precision, before rounding can matter
