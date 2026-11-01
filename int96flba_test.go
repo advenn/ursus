@@ -30,7 +30,7 @@ func TestInt96AndFixedLenByteArrayRead(t *testing.T) {
 		t.Errorf("ts is %s, want Datetime(ns), as PyArrow reads INT96", typ)
 	}
 	// The instants PyArrow wrote, as ursus renders a Datetime(ns) cast to text.
-	want := []string{"2024-01-02T03:04:05.123456000Z", "∅", "1969-12-31T23:59:59.999999000Z", "1900-01-01T00:00:00.000000000Z"}
+	want := []string{"2024-01-02T03:04:05.123456000", "∅", "1969-12-31T23:59:59.999999000", "1900-01-01T00:00:00.000000000"}
 	if !slices.Equal(ts, want) {
 		t.Errorf("ts %v, want %v", ts, want)
 	}

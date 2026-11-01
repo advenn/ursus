@@ -50,23 +50,23 @@ func TestTemporalMeanAndMedianAnswerAsPolars(t *testing.T) {
 		typ  dtype.DataType
 	}{
 		{"date mean", dates([]time.Time{at(2024, 1, 1, 0, 0, 0, 0), at(2024, 1, 4, 0, 0, 0, 0), {}}, []bool{true, true, false}),
-			c("d").Mean(), "2024-01-02T12:00:00.000000Z ", us},
+			c("d").Mean(), "2024-01-02T12:00:00.000000 ", us},
 		{"date median, even", dates([]time.Time{at(2024, 1, 1, 0, 0, 0, 0), at(2024, 1, 2, 0, 0, 0, 0)}, []bool{true, true}),
-			c("d").Median(), "2024-01-01T12:00:00.000000Z ", us},
+			c("d").Median(), "2024-01-01T12:00:00.000000 ", us},
 		{"date mean before 1970", dates([]time.Time{at(1969, 12, 31, 0, 0, 0, 0), at(1969, 12, 30, 0, 0, 0, 0)}, []bool{true, true}),
-			c("d").Mean(), "1969-12-30T12:00:00.000000Z ", us},
+			c("d").Mean(), "1969-12-30T12:00:00.000000 ", us},
 		{"datetime mean", instants(at(2024, 1, 1, 0, 0, 0, 0), at(2024, 1, 1, 0, 1, 0, 0), at(2024, 1, 1, 0, 3, 0, 0)),
-			c("t").Mean(), "2024-01-01T00:01:20.000000Z ", us},
+			c("t").Mean(), "2024-01-01T00:01:20.000000 ", us},
 		{"datetime median", instants(at(2024, 1, 1, 0, 0, 0, 0), at(2024, 1, 1, 0, 1, 0, 0), at(2024, 1, 1, 0, 3, 0, 0)),
-			c("t").Median(), "2024-01-01T00:01:00.000000Z ", us},
+			c("t").Median(), "2024-01-01T00:01:00.000000 ", us},
 		{"datetime mean, truncated", instants(at(2024, 1, 1, 0, 0, 0, 1), at(2024, 1, 1, 0, 0, 0, 2)),
-			c("t").Mean(), "2024-01-01T00:00:00.000001Z ", us},
+			c("t").Mean(), "2024-01-01T00:00:00.000001 ", us},
 		{"datetime median, even, truncated", instants(at(2024, 1, 1, 0, 0, 0, 1), at(2024, 1, 1, 0, 0, 0, 2)),
-			c("t").Median(), "2024-01-01T00:00:00.000001Z ", us},
+			c("t").Median(), "2024-01-01T00:00:00.000001 ", us},
 		{"datetime mean before 1970, toward zero", instants(at(1969, 12, 31, 23, 59, 59, 999999), at(1969, 12, 31, 23, 59, 59, 999998)),
-			c("t").Mean(), "1969-12-31T23:59:59.999999Z ", us},
+			c("t").Mean(), "1969-12-31T23:59:59.999999 ", us},
 		{"datetime median before 1970, toward zero", instants(at(1969, 12, 31, 23, 59, 59, 999999), at(1969, 12, 31, 23, 59, 59, 999998)),
-			c("t").Median(), "1969-12-31T23:59:59.999999Z ", us},
+			c("t").Median(), "1969-12-31T23:59:59.999999 ", us},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, typ := agg1(t, tc.lf, tc.e)
@@ -99,7 +99,7 @@ func TestTemporalMeanAndMedianAnswerAsPolars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := rendered172(t, df, "m"); got != "2024-01-01T00:01:00.000000Z 2024-05-05T00:00:00.000000Z " {
+	if got := rendered172(t, df, "m"); got != "2024-01-01T00:01:00.000000 2024-05-05T00:00:00.000000 " {
 		t.Errorf("grouped means %q", got)
 	}
 }
@@ -203,12 +203,12 @@ func TestTemporalQuantile(t *testing.T) {
 		interp ursus.Interpolation
 		want   string
 	}{
-		{0.5, ursus.InterpLinear, "2026-01-04T00:00:00.000000Z 2026-01-01T07:30:00.000000Z 2h0m0s 02:30:00.000000000"},
-		{0.25, ursus.InterpLinear, "2026-01-02T12:00:00.000000Z 2026-01-01T06:45:00.000000Z 1h30m0s 01:45:00.000000000"},
-		{0.5, ursus.InterpNearest, "2026-01-04T00:00:00.000000Z 2026-01-01T07:30:00.000000Z 2h0m0s 02:30:00.000000000"},
-		{0.9, ursus.InterpLower, "2026-01-04T00:00:00.000000Z 2026-01-01T07:30:00.000000Z 2h0m0s 02:30:00.000000000"},
-		{0.9, ursus.InterpHigher, "2026-01-08T00:00:00.000000Z 2026-01-03T06:00:00.000000Z 4h10m0s 09:00:00.000000000"},
-		{0.3, ursus.InterpMidpoint, "2026-01-02T12:00:00.000000Z 2026-01-01T06:45:00.000000Z 1h30m0s 01:45:00.000000000"},
+		{0.5, ursus.InterpLinear, "2026-01-04T00:00:00.000000 2026-01-01T07:30:00.000000 2h0m0s 02:30:00.000000000"},
+		{0.25, ursus.InterpLinear, "2026-01-02T12:00:00.000000 2026-01-01T06:45:00.000000 1h30m0s 01:45:00.000000000"},
+		{0.5, ursus.InterpNearest, "2026-01-04T00:00:00.000000 2026-01-01T07:30:00.000000 2h0m0s 02:30:00.000000000"},
+		{0.9, ursus.InterpLower, "2026-01-04T00:00:00.000000 2026-01-01T07:30:00.000000 2h0m0s 02:30:00.000000000"},
+		{0.9, ursus.InterpHigher, "2026-01-08T00:00:00.000000 2026-01-03T06:00:00.000000 4h10m0s 09:00:00.000000000"},
+		{0.3, ursus.InterpMidpoint, "2026-01-02T12:00:00.000000 2026-01-01T06:45:00.000000 1h30m0s 01:45:00.000000000"},
 	} {
 		df, err := lf.Select(ursus.All().Quantile(tc.q, tc.interp)).Collect(t.Context())
 		if err != nil {

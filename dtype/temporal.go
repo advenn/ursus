@@ -209,6 +209,11 @@ func FormatTemporal(d DataType, ticks int64) string {
 		if _, off := t.Zone(); off%60 != 0 {
 			t = t.UTC()
 		}
+		if d.TimeZone() == "" {
+			// A naive value is a wall clock, in no zone: it has no offset to write.
+			// "Z07:00" wrote its UTC "Z", which named it an instant in UTC (step 422).
+			return t.Format("2006-01-02T15:04:05" + fracLayout(d.TimeUnit()))
+		}
 		return t.Format("2006-01-02T15:04:05" + fracLayout(d.TimeUnit()) + "Z07:00")
 
 	case TypeDuration:

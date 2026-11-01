@@ -69,7 +69,7 @@ Fix these before anything new. **Step 249 fixed every row** (see its record).
 | **A null condition yielded null, where Polars and SQL take Otherwise.** `When(c).Then(a).Otherwise(b)` of a null c was null, by design (internal/expr/cond.go: "a null condition takes neither branch"); Polars' `when` gives b, and SQL's `CASE WHEN NULL` its ELSE. Found at step 310, in none of the docs; the maintainer chose Polars', and step 311 made a null mask take the Else branch, a break. `Clip` of a null bound follows Polars now too; `FillNan`, which leaned on the old rule, was rewritten to keep its nulls | internal/kernel/select.go, internal/expr/cond.go | fixed |
 | **A date before 1677 or after 2262 was a wrong Go value.** `Rows`, `ToMaps` and `At` built each instant as `time.Unix(0, ticks*nanosPerTick)`, whose nanosecond count overflows outside those years, which a Date and a coarser Datetime hold: 0999-01-02 came out as 2168-02-10. Found by step 355's tests; fixed there, the seconds and nanoseconds taken apart (`instantOf`, by `ToTime`) | rows.go | fixed |
 | **A typed view of a `Date` or a `Datetime` is its integer.** `df.Column[time.Time]` and `df.At[time.Time]` refuse one, "no typed view for time.Time"; `Column[int32]` gives a Date's days and `Column[int64]` a Datetime's ticks. `Rows[T]` decodes either into a `time.Time`. Polars' `to_list` gives dates and datetimes. For 0.6.7's V3, the eager Series (step 297) | series.go, internal/data | open |
-| **A naive `Datetime` is written with a `Z`,** as though it were UTC: `Datetime(s)` prints `2026-03-08T06:30:00Z`, and a cast to String gives it so (step 298). Polars writes a naive instant with no offset. The CSV writer, which shared `FormatTemporal`, writes Polars' text since step 354, a naive instant with none and a zoned one with `+0900`; the print and the cast are left (step 296) | dtype/temporal.go:212 | open |
+| **A naive `Datetime` is written with a `Z`,** as though it were UTC: `Datetime(s)` prints `2026-03-08T06:30:00Z`, and a cast to String gives it so (step 298). Polars writes a naive instant with no offset. The CSV writer, which shared `FormatTemporal`, writes Polars' text since step 354, a naive instant with none and a zoned one with `+0900`; the print and the cast are left (step 296); since step 422 (0.7.2) none writes an offset for a naive one | dtype/temporal.go:212 | fixed, step 422 |
 | **`RollingOptions.Offset` was not Polars' `offset`.** ursus's moved a window's end from its row's instant, `(t + offset − period, t + offset]`; Polars' places its start, `(t + offset, t + offset + period]`, by default `−period`. Found at step 312; the maintainer's goal of 2026-10-22, Polars' features matched, decided it, and step 313 placed the window as Polars does, a break, with `NoOffset()` for Polars' `"0d"` and Polars' rule for a window that ends at its row | groupby.go `RollingOptions`, internal/physical/tempstream.go `rollRow` | fixed |
 
 ## 2. The expression model
@@ -370,7 +370,7 @@ decide whether to keep or switch each one.
 - A pivot's cell with no value is null under `Sum`, as any empty sum is; Polars' is 0
   (step 296). A count of none is 0, as Polars' is, since step 303.
 - A pivot's columns are named by ursus's text of their On values, which differs from
-  Polars' for a float (§1), an instant (§1's naive `Z`) and a duration, whose String
+  Polars' for a float (§1), an instant (its `T`, below) and a duration, whose String
   cast Polars refuses. A combination holding a null is written `{1,null}`; Polars
   names that whole column "null", and refuses a second. Several On columns' instants
   and durations are written as their casts are, where Polars' display writes
@@ -388,8 +388,8 @@ decide whether to keep or switch each one.
   −1.7 is −1. ursus's casts are exact or refused; `Truncate(0)` first for Polars'
   answer. Listed by step 298, where a frame's cast inherits it.
 - A cast of an instant to text is ISO 8601's, `2026-01-01T00:00:00.000000`, where
-  Polars writes a space for the `T`. A naive one gains a `Z`, §1's open row (step
-  298).
+  Polars writes a space for the `T`. A naive one is written with no offset, as Polars
+  writes it, since step 422; before, it gained a `Z` (step 298).
 - `MatchToSchema`'s computed fill meets the schema's type as a column of the frame
   would, widened only as its casts allow, or is refused; Polars 1.44.1 keeps the
   expression's own type, so `missing_columns={"c": pl.col("b")}` of an Int32 `b`
