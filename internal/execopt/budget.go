@@ -27,7 +27,7 @@
 //
 // # An account keeps alive what it holds
 //
-// A data.BufferID is a pointer to an allocation's first byte, and the ledger is
+// A data.BufferID is a pointer to an allocation's last byte, and the ledger is
 // keyed by it, so an allocation stays reachable while any account holds it. An
 // operator that lets go of a buffer it will not read again, to free it, must
 // release it from its account first: released afterwards, the account keeps it
@@ -80,7 +80,7 @@ type Budget struct {
 }
 
 type entry struct {
-	size int64
+	span data.Span // what its holders' views hold of it, between them
 	refs int
 	kept int // how many of refs are a result's
 }
@@ -92,9 +92,9 @@ func (e entry) counted() (ops, kept int64) {
 	case e.refs == 0:
 		return 0, 0
 	case e.refs > e.kept:
-		return e.size, 0
+		return e.span.Size(), 0
 	default:
-		return 0, e.size
+		return 0, e.span.Size()
 	}
 }
 
@@ -274,7 +274,7 @@ func (b *Budget) Result() *Account {
 	if b.ResultLimit() == 0 {
 		return nil
 	}
-	return &Account{b: b, op: "collect", ids: map[data.BufferID]int64{}, result: true}
+	return &Account{b: b, op: "collect", ids: map[data.BufferID]data.Span{}, result: true}
 }
 
 // Account opens an operator's view of the budget.
@@ -285,7 +285,7 @@ func (b *Budget) Account(op string) *Account {
 	if b == nil {
 		return nil
 	}
-	a := &Account{b: b, op: op, ids: map[data.BufferID]int64{}}
+	a := &Account{b: b, op: op, ids: map[data.BufferID]data.Span{}}
 	if b.opened != nil {
 		b.opened(a)
 	}
@@ -301,18 +301,34 @@ func (b *Budget) OnAccount(fn func(*Account)) {
 	}
 }
 
-func (b *Budget) retain(id data.BufferID, size int64, result bool) {
+func (b *Budget) retain(id data.BufferID, sp data.Span, result bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	e := b.held[id]
-	if e.refs == 0 {
-		e.size = size
-	}
 	ops, kept := e.counted()
+	if e.refs == 0 {
+		e.span = sp
+	} else {
+		e.span = e.span.With(sp) // another account's view of it
+	}
 	e.refs++
 	if result {
 		e.kept++
 	}
+	b.move(e, ops, kept)
+	b.held[id] = e
+}
+
+// widen records that an account holding an allocation now holds more of it.
+func (b *Budget) widen(id data.BufferID, sp data.Span) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	e, ok := b.held[id]
+	if !ok {
+		return
+	}
+	ops, kept := e.counted()
+	e.span = e.span.With(sp)
 	b.move(e, ops, kept)
 	b.held[id] = e
 }
@@ -375,7 +391,7 @@ func (b *Budget) addExtra(n int64, result bool) {
 type Account struct {
 	b      *Budget
 	op     string
-	ids    map[data.BufferID]int64
+	ids    map[data.BufferID]data.Span
 	raw    int64
 	result bool // opened by Result: what only it holds is kept off the operators' total
 
@@ -398,13 +414,19 @@ func (a *Account) retainColumn(c *data.Column) {
 	if a == nil || c == nil {
 		return
 	}
-	for id, size := range c.Buffers() {
-		if _, dup := a.ids[id]; dup {
+	for id, sp := range c.Spans() {
+		if old, dup := a.ids[id]; dup {
+			// Another view of an allocation it holds: a batch and its head.
+			if u := old.With(sp); u != old {
+				a.ids[id] = u
+				a.b.widen(id, u)
+				a.grow(u.Size() - old.Size())
+			}
 			continue
 		}
-		a.ids[id] = size
-		a.b.retain(id, size, a.result)
-		a.grow(size)
+		a.ids[id] = sp
+		a.b.retain(id, sp, a.result)
+		a.grow(sp.Size())
 	}
 }
 
@@ -447,8 +469,8 @@ func (a *Account) Used() int64 {
 		return 0
 	}
 	var n int64
-	for _, size := range a.ids {
-		n += size
+	for _, sp := range a.ids {
+		n += sp.Size()
 	}
 	return n + a.raw
 }

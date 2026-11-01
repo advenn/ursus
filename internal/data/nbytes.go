@@ -8,7 +8,14 @@ import (
 	"github.com/advenn/ursus/internal/bitmap"
 )
 
-// BufferID identifies one allocation by the address of its first byte.
+// BufferID identifies one allocation by the address of its last byte.
+//
+// Every view of an allocation, a slice from its start or from within it, runs to
+// the allocation's end in Go's capacity, so all of them have the one ID, and a Span
+// says which of its bytes each holds. It was the first byte (step 424): a slice from
+// the start, a frame's Head, had its parent's ID and its own few bytes for a size,
+// and seen first hid the parent from the ledger; a slice from within had an ID of
+// its own and counted the allocation a second time.
 //
 // # Why identity rather than a sum
 //
@@ -29,7 +36,8 @@ type BufferID = *byte
 // Buffers yields each distinct allocation the column holds, with its size.
 //
 // Size is the buffer's CAPACITY, not the bytes in use: the allocation is what is
-// actually held, and an under-filled buffer still occupies all of it.
+// actually held, and an under-filled buffer still occupies all of it. Of a view, a
+// slice of a larger allocation, it is the view's bytes: Spans places them in it.
 //
 // A column has five slots of its own — fixed, offs, chars and the two bitmaps —
 // so the within-column deduplication below is a linear scan rather than a map.
@@ -41,9 +49,21 @@ type BufferID = *byte
 // list column would have run off the end of.
 func (c *Column) Buffers() iter.Seq2[BufferID, int64] {
 	return func(yield func(BufferID, int64) bool) {
+		for id, sp := range c.Spans() {
+			if !yield(id, sp.Size()) {
+				return
+			}
+		}
+	}
+}
+
+// Spans is Buffers with the part of each allocation the column's view holds, which
+// is what lets a consumer seeing two views of one allocation count it once.
+func (c *Column) Spans() iter.Seq2[BufferID, Span] {
+	return func(yield func(BufferID, Span) bool) {
 		seen := make([]BufferID, 0, 5)
-		emit := func(id BufferID, size int64) bool {
-			if id == nil || size == 0 {
+		emit := func(id BufferID, sp Span) bool {
+			if id == nil || sp.Size() == 0 {
 				return true
 			}
 			for _, s := range seen {
@@ -52,7 +72,7 @@ func (c *Column) Buffers() iter.Seq2[BufferID, int64] {
 				}
 			}
 			seen = append(seen, id)
-			return yield(id, size)
+			return yield(id, sp)
 		}
 		for _, b := range [...]*memory.Buffer{c.fixed, c.offs, c.chars} {
 			if !emit(bufferID(b)) {
@@ -71,8 +91,8 @@ func (c *Column) Buffers() iter.Seq2[BufferID, int64] {
 		// any other. Omitting them would under-report a list column by everything
 		// it actually holds — the offsets are the small part.
 		if c.child != nil {
-			for id, size := range c.child.Buffers() {
-				if !emit(id, size) {
+			for id, sp := range c.child.Spans() {
+				if !emit(id, sp) {
 					return
 				}
 			}
@@ -80,8 +100,8 @@ func (c *Column) Buffers() iter.Seq2[BufferID, int64] {
 		// A Struct is ALL child, having no payload buffer of its own — so omitting
 		// these would report a struct column as costing only its validity bitmap.
 		for _, f := range c.fields {
-			for id, size := range f.Buffers() {
-				if !emit(id, size) {
+			for id, sp := range f.Spans() {
+				if !emit(id, sp) {
 					return
 				}
 			}
@@ -106,48 +126,72 @@ func (b *Batch) NBytes() int64 {
 	return s.Total()
 }
 
-func bufferID(b *memory.Buffer) (BufferID, int64) {
+func bufferID(b *memory.Buffer) (BufferID, Span) {
 	if b == nil {
-		return nil, 0
+		return nil, Span{}
 	}
 	raw := b.Bytes()
 	if len(raw) == 0 {
-		return nil, 0
+		return nil, Span{}
 	}
-	return &raw[0], int64(b.Cap())
+	return spanOf(raw, int64(b.Cap()))
 }
 
-func viewID(v bitmap.View) (BufferID, int64) {
+func viewID(v bitmap.View) (BufferID, Span) {
 	raw, _ := v.RawBits()
 	if len(raw) == 0 {
 		// The all-set form has no storage at all, which is exactly why it is the
 		// representation of "no nulls".
-		return nil, 0
+		return nil, Span{}
 	}
-	return &raw[0], int64(cap(raw))
+	return spanOf(raw, int64(cap(raw)))
+}
+
+// A Span is the bytes of an allocation a view holds, [Lo, Hi), counted back from
+// the allocation's end, so Lo < Hi <= 0. Every view of an allocation is placed on
+// the one line, and two views' spans say what they hold between them.
+type Span struct{ Lo, Hi int64 }
+
+// Size is the span's bytes.
+func (s Span) Size() int64 { return s.Hi - s.Lo }
+
+// With is the least span covering s and t: what two views of one allocation hold
+// between them, any gap between them included, since what stays alive is the
+// allocation. A sort holding a frame's batches holds all of it; an operator holding
+// one batch at a time holds a batch.
+func (s Span) With(t Span) Span { return Span{min(s.Lo, t.Lo), max(s.Hi, t.Hi)} }
+
+// spanOf places a view of size bytes from raw's first byte: raw's Go capacity runs
+// to its allocation's end, which is the allocation's ID.
+func spanOf(raw []byte, size int64) (BufferID, Span) {
+	whole := raw[:cap(raw)]
+	lo := -int64(cap(raw))
+	return &whole[len(whole)-1], Span{lo, lo + size}
 }
 
 // BufferSet accumulates the distinct allocations of any number of columns.
 //
 // The zero value is ready to use.
 type BufferSet struct {
-	seen  map[BufferID]int64
+	seen  map[BufferID]Span
 	total int64
 }
 
-// Add records one allocation, ignoring one it has already seen.
-func (s *BufferSet) Add(id BufferID, size int64) {
-	if id == nil || size == 0 {
+// Add records the part of one allocation a view holds; of an allocation seen
+// already, it adds what the view holds beyond what was seen.
+func (s *BufferSet) Add(id BufferID, sp Span) {
+	if id == nil || sp.Size() == 0 {
 		return
 	}
 	if s.seen == nil {
-		s.seen = make(map[BufferID]int64)
+		s.seen = make(map[BufferID]Span)
 	}
-	if _, dup := s.seen[id]; dup {
-		return
+	old, dup := s.seen[id]
+	if dup {
+		sp = old.With(sp)
 	}
-	s.seen[id] = size
-	s.total += size
+	s.seen[id] = sp
+	s.total += sp.Size() - old.Size()
 }
 
 // AddColumn records every allocation the column holds.
@@ -155,8 +199,8 @@ func (s *BufferSet) AddColumn(c *Column) {
 	if c == nil {
 		return
 	}
-	for id, size := range c.Buffers() {
-		s.Add(id, size)
+	for id, sp := range c.Spans() {
+		s.Add(id, sp)
 	}
 }
 
