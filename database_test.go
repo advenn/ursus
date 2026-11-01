@@ -210,9 +210,9 @@ func TestReadDatabase(t *testing.T) {
 		{"an instant in UTC", column(bare, utc(2020, 1, 2, 3, 4, 5, 6)), "2020-01-02 03:04:05.000006 +0000 UTC Datetime(us)"},
 		{"an instant in a zone", column(bare, time.Date(2020, 1, 1, 0, 0, 0, 0, plus5)), "2019-12-31 19:00:00 +0000 UTC Datetime(us, UTC)"},
 		// Polars refuses a datetime among text, "could not append value"; it meets at
-		// text by Polars' supertype here, the instant's text ursus's cast's, which a
-		// naive one ends with a Z (feature-gaps §1 and §9).
-		{"an instant and text", column(bare, utc(2020, 1, 2, 3, 4, 5, 6), "a"), "2020-01-02T03:04:05.000006Z a String"},
+		// text by Polars' supertype here, the instant's text ursus's cast's, a naive
+		// one's with no offset (step 422).
+		{"an instant and text", column(bare, utc(2020, 1, 2, 3, 4, 5, 6), "a"), "2020-01-02T03:04:05.000006 a String"},
 		// Polars: [1, 2**63] is an Int128.
 		{"past an Int64", column(bare, uint64(math.MaxUint64)), "18446744073709551615 Uint64"},
 		{"an Int64 and past one", column(bare, int64(1), uint64(1<<63)), "1 9223372036854775808 Int128"},
