@@ -702,6 +702,13 @@ func (s *Source) openFile(ctx context.Context, i int) (_ *file.Reader, _ func(),
 			err = corrupt(v, s.partName(i))
 		}
 	}()
+	// The footer's schema is measured before arrow-go recurses on it (step 423).
+	if ra, err = measureFooter(ra); err != nil {
+		if closer != nil {
+			closer.Close()
+		}
+		return nil, nil, uerr.Annotate(err, "scan_parquet", s.partName(i))
+	}
 	r, err := file.NewParquetReader(ra, file.WithReadProps(readProps()))
 	if err != nil {
 		if closer != nil {
