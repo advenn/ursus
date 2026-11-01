@@ -40,6 +40,9 @@ func FromRows[T any](rows []T) *LazyFrame {
 	if rt == nil || rt.Kind() != reflect.Struct {
 		return &LazyFrame{err: uerr.New(uerr.KindType, "from_rows", "FromRows takes structs, got %T", zero)}
 	}
+	if err := refuseRecursive("from_rows", rt); err != nil {
+		return &LazyFrame{err: err}
+	}
 	at := loc{rows: len(rows), stride: rt.Size()}
 	if len(rows) > 0 {
 		at.base = unsafe.Pointer(&rows[0])
@@ -49,6 +52,57 @@ func FromRows[T any](rows []T) *LazyFrame {
 		return &LazyFrame{err: err}
 	}
 	return Frame(cols...)
+}
+
+// refuseRecursive refuses a struct type that holds itself, through a pointer, a slice
+// or an array, in a field its walk reads: the walk follows the type, a nil pointer's
+// zero value in turn, so it went on forever and overflowed the goroutine's stack, a
+// fatal error (step 413). Such a type has no column type.
+func refuseRecursive(op string, rt reflect.Type) error {
+	field := recursiveField(rt)
+	if field == "" {
+		return nil
+	}
+	return uerr.New(uerr.KindType, op, "field %s holds its own type: a recursive type has no column type", field).
+		Hint("leave the field out with `ursus:\"-\"`, or flatten the type to the depth the frame needs")
+}
+
+// recursiveField is "T.F", the field through which a struct type read from rt holds a
+// type it is within, or "" where none does. It reads the fields structColumns reads,
+// and goes through what encodeField goes through, a pointer, a slice or an array.
+func recursiveField(rt reflect.Type) string {
+	within := map[reflect.Type]bool{} // the struct types being walked
+	clean := map[reflect.Type]bool{}  // the ones walked whole and found to hold none
+	var walk func(st reflect.Type) string
+	walk = func(st reflect.Type) string {
+		within[st] = true
+		defer delete(within, st)
+		for i := range st.NumField() {
+			f := st.Field(i)
+			if !f.IsExported() {
+				continue
+			}
+			if _, skip := columnName(f); skip {
+				continue
+			}
+			t := f.Type
+			for !isScalar(t) && (t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Array) {
+				t = t.Elem()
+			}
+			if t.Kind() != reflect.Struct || isScalar(t) || clean[t] {
+				continue
+			}
+			if within[t] {
+				return st.Name() + "." + f.Name
+			}
+			if field := walk(t); field != "" {
+				return field
+			}
+		}
+		clean[st] = true
+		return ""
+	}
+	return walk(rt)
 }
 
 var (
