@@ -49,7 +49,7 @@ func TestARollingQuantileIsEachWindowsQuantile(t *testing.T) {
 					minN := 1 + rng.IntN(size)
 					p := expr.WinParams{N: int64(size), MinSamples: int64(minN), Center: center,
 						Q: q, Interp: interp}
-					got, err := WinCall(expr.WinRollingQuantile, p, "r", dtype.Float64, col, nil, seg)
+					got, err := WinCall(t.Context(), expr.WinRollingQuantile, p, "r", dtype.Float64, col, nil, seg)
 					if err != nil {
 						t.Fatal(err)
 					}

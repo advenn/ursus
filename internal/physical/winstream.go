@@ -445,7 +445,7 @@ func (p *winStreamOp) answer(ctx context.Context, st *winStreamSpec, target *dat
 		return nil, err
 	}
 	if st.need.carry {
-		return p.carried(st, child)
+		return p.carried(ctx, st, child)
 	}
 	if st.need.ewm {
 		return kernel.EwmNext(sp.fn.Fn, sp.fn.Params, sp.name, sp.out, child, &st.ewm)
@@ -496,7 +496,7 @@ func (p *winStreamOp) answer(ctx context.Context, st *winStreamSpec, target *dat
 			return nil, err
 		}
 	}
-	res, err := kernel.WinCall(sp.fn.Fn, sp.fn.Params, sp.name, sp.out, all, allF, wholeSegment(all.Len()))
+	res, err := kernel.WinCall(ctx, sp.fn.Fn, sp.fn.Params, sp.name, sp.out, all, allF, wholeSegment(all.Len()))
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +514,7 @@ func (p *winStreamOp) answer(ctx context.Context, st *winStreamSpec, target *dat
 // carried runs a cumulative function, or a forward fill without a limit, over the
 // batch with its last answer in front, and keeps the batch's last answer that holds
 // a value for the next.
-func (p *winStreamOp) carried(st *winStreamSpec, child *data.Column) (*data.Column, error) {
+func (p *winStreamOp) carried(ctx context.Context, st *winStreamSpec, child *data.Column) (*data.Column, error) {
 	sp := st.sp
 	col := child
 	lead := 0
@@ -531,7 +531,7 @@ func (p *winStreamOp) carried(st *winStreamSpec, child *data.Column) (*data.Colu
 		}
 		lead = 1
 	}
-	res, err := kernel.WinCall(sp.fn.Fn, sp.fn.Params, sp.name, sp.out, col, nil, wholeSegment(col.Len()))
+	res, err := kernel.WinCall(ctx, sp.fn.Fn, sp.fn.Params, sp.name, sp.out, col, nil, wholeSegment(col.Len()))
 	if err != nil {
 		return nil, err
 	}
