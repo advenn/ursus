@@ -311,7 +311,12 @@ func (s *scanner) fill() error {
 		copy(next, s.buf[:s.end])
 		s.buf = next
 	}
-	n, err := s.r.Read(s.buf[s.end:])
+	// A read of nothing and no error is no news, not the end, so read again: the
+	// stream's reader fails one that does it for good (source.Decompressed).
+	n, err := 0, error(nil)
+	for n == 0 && err == nil {
+		n, err = s.r.Read(s.buf[s.end:])
+	}
 	s.end += n
 	if err == io.EOF {
 		s.eof = true
@@ -319,11 +324,6 @@ func (s *scanner) fill() error {
 	}
 	if err != nil {
 		return uerr.Wrap(err, uerr.KindIO, "scan_csv", "reading near line %d", s.line+1)
-	}
-	if n == 0 {
-		// A reader that returns (0, nil) forever would spin. Treat a second empty
-		// read as end of input rather than hanging.
-		s.eof = true
 	}
 	return nil
 }
