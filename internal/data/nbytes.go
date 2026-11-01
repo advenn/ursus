@@ -74,10 +74,13 @@ func (c *Column) Spans() iter.Seq2[BufferID, Span] {
 			seen = append(seen, id)
 			return yield(id, sp)
 		}
-		for _, b := range [...]*memory.Buffer{c.fixed, c.offs, c.chars} {
+		for _, b := range [...]*memory.Buffer{c.fixed, c.offs} {
 			if !emit(bufferID(b)) {
 				return
 			}
+		}
+		if !emit(c.charsID()) {
+			return
 		}
 		if !emit(sliceID(c.offs64)) {
 			return
@@ -145,6 +148,28 @@ func viewID(v bitmap.View) (BufferID, Span) {
 		return nil, Span{}
 	}
 	return spanOf(raw, int64(cap(raw)))
+}
+
+// charsID is bufferID for the characters, spanning the bytes the column's rows
+// cover. A String column's Slice shares its parent's characters (step 425), so a
+// batch of a frame's strings was charged as all the frame's text, and an operator
+// holding one batch of 64 rows held 135 KB. Rows covering the characters from their
+// first byte, or to their last, hold the buffer from its start, or to its end, an
+// under-filled buffer's room included, as bufferID has it.
+func (c *Column) charsID() (BufferID, Span) {
+	id, sp := bufferID(c.chars)
+	lo, hi, ok := c.charSpan()
+	if id == nil || !ok {
+		return id, sp
+	}
+	first := sp.Lo
+	if lo > 0 {
+		sp.Lo = first + lo
+	}
+	if hi < int64(c.chars.Len()) {
+		sp.Hi = first + hi
+	}
+	return id, sp
 }
 
 // A Span is the bytes of an allocation a view holds, [Lo, Hi), counted back from
