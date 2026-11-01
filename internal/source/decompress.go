@@ -29,6 +29,7 @@ import (
 // is read as text, where Polars reads a CSV of "x^2,b" as no rows. Bytes after a zlib
 // stream's end are refused, as a gzip stream's are.
 func Decompressed(rc io.ReadCloser) (io.ReadCloser, error) {
+	rc = &progressing{ReadCloser: rc}
 	head := make([]byte, 4)
 	n, err := io.ReadFull(rc, head)
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
@@ -117,3 +118,29 @@ type decompressing struct {
 
 func (d *decompressing) Read(p []byte) (int, error) { return d.r.Read(p) }
 func (d *decompressing) Close() error               { return d.close() }
+
+// maxEmptyReads is how many reads in a row may hand back no bytes and no error before
+// a stream is taken to be stuck: bufio's rule.
+const maxEmptyReads = 100
+
+// progressing is a stream with its empty reads counted (step 415). io.Reader's
+// contract has a read of no bytes and no error mean that nothing happened, not the
+// end, so the readers read again; a stream that hands back nothing maxEmptyReads times
+// in a row fails with io.ErrNoProgress, as bufio's readers do, where a loop around it
+// would spin.
+type progressing struct {
+	io.ReadCloser
+	empty int
+}
+
+func (p *progressing) Read(b []byte) (int, error) {
+	n, err := p.ReadCloser.Read(b)
+	if n > 0 || err != nil || len(b) == 0 {
+		p.empty = 0
+		return n, err
+	}
+	if p.empty++; p.empty >= maxEmptyReads {
+		return 0, io.ErrNoProgress
+	}
+	return 0, nil
+}
