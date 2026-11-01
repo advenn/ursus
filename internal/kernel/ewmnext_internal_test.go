@@ -40,7 +40,7 @@ func TestAnEwmCarriedAcrossSplitsIsOnePass(t *testing.T) {
 			if flags&8 != 0 {
 				params.MinSamples = 4
 			}
-			want, err := WinCall(fn, params, "w", dtype.Float64, col, nil, whole)
+			want, err := WinCall(t.Context(), fn, params, "w", dtype.Float64, col, nil, whole)
 			if err != nil {
 				t.Fatal(err)
 			}
