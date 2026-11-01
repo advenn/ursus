@@ -61,3 +61,36 @@ not, and H3 takes them:
 
 **Open for the maintainer:** protecting the two branches, the nightly runs on GitHub
 Actions, and a person's review (the scope's §7).
+
+## 4. The plan
+
+At the maintainer's word ("plan next steps with agent swarm"), a workflow of nine
+agents planned 0.7.2 over this line: seven area planners, H0 and H7, H1, H2, H3, H4,
+H5 and H6, H8 and H9; a synthesizer; a critic. It is
+[`v0.7.2-plan.md`](./v0.7.2-plan.md), steps 411 to 485 in five milestones, about four
+to five months of one agent's work, gated by the maintainer's merges, and 32
+decisions only the maintainer can make.
+
+- **H2's prober ran Go,** in a module outside the repository, one probe at a time,
+  allocations capped. Confirmed by running: the Parquet dictionary page allocating
+  by its header's count, 76 MB for a 2.4 KB file; a corrupt row group's `num_rows`
+  truncating the read, 257 of 300 rows where DuckDB and pyarrow read 300; a source's
+  schema `sync.Once` keeping the first caller's cancellation for every later
+  `Collect`; a business day's `Add` overflowing to a wrong Datetime; interned types
+  never freed; `hive.Escape` keeping `\`; the ledger defeated by an offset-0 slice;
+  the naive Datetime's "Z"; corrupt Parquet read silently in 87% of flips
+  uncompressed and 43% with Snappy, as DuckDB and pyarrow read them.
+- **Confirmed by reading,** among others: `i128.ParseDecimal`'s exponent wrapping, so
+  `1e9223372036854775807` at Decimal(38,2) parses to 0; the CSV reader taking a
+  `(0, nil)` Read for the end; `FromRows` and `MapRows` recursing forever on a
+  recursive struct type; the Arrow importer's and Parquet's schema walks unbounded;
+  `rolling_map` under `context.Background()`; the race job at 1,049 to 1,072 s of its
+  1,200.
+- **Refuted:** the cached node's cancellation, by 80 concurrent pairs and by reading;
+  Min and Max of ±0 as a defect, which equal DuckDB's; a ListView's reservation as
+  an over-allocation.
+- **Corrected:** the scope's "101 expression cases" is 46 cases and 2 frames.
+
+The probes' sources and the swarm's result are kept in
+`~/ursus-scratch-archive/probes-0.7.2/`, outside the repository.
+
