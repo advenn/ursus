@@ -21,6 +21,15 @@ import (
 // business day. Whole weeks are jumped, less the holidays in them, so a count of
 // thousands takes a few steps.
 func (b BusinessDays) Add(d, n int64) int64 {
+	// n business days are at least n days, so past farDays the answer is past any
+	// Date or Datetime: it stops there, for the caller's range check to refuse, before
+	// d+7w can wrap and answer a wrong date (step 419).
+	switch {
+	case n > farDays:
+		return d + farDays
+	case n < -farDays:
+		return d - farDays
+	}
 	k := int64(bits.OnesCount8(b.Mask))
 	for n != 0 {
 		if n >= k || n <= -k {
@@ -51,6 +60,11 @@ func (b BusinessDays) Add(d, n int64) int64 {
 	}
 	return d
 }
+
+// farDays is past the range of every Date, ±2^31 days, and every Datetime, and far
+// enough inside an int64 that a day of it times a day's seconds does not wrap, in
+// build, before its range check refuses it.
+const farDays = 1 << 40
 
 // roll is d, or where it is not a business day the next one, forward, or the one
 // before, backward.
