@@ -550,10 +550,12 @@ func (s *joinBuildSink) overBudget() error {
 // holds one key: partitioning divides keys, so nothing below it can fit that key's
 // rows. With two keys or more it can, and the sink splits as at any level.
 //
-// It names which of two things is over the limit (step 180, audit row J11). The key's
-// rows, or the sink's own partition writers: each buffers partBufBytes, and a limit
-// smaller than the ones a spilling sink holds open leaves every sink over it whatever
-// its keys. That second case was reported as the first, about a key of two rows.
+// It names which of three things is over the limit (step 180, audit row J11; step
+// 426). The key's rows; the sink's own partition writers, each buffering
+// partBufBytes, a limit smaller than the ones a spilling sink holds open leaving
+// every sink over it whatever its keys; or the query's other operators, the limit
+// being the query's. The second and the third were reported as the first, about a
+// key of two rows.
 //
 // Over only with an engine's other queries, not alone, it holds the key instead,
 // hold true: splitting cannot divide it, and an engine's pressure makes a query
@@ -571,8 +573,18 @@ func (s *joinBuildSink) oneKeyOver() (hold bool, _ error) {
 			writers++
 		}
 	}
-	limit := s.budget.Limit()
-	if writers > 0 && s.mem.Used()-writers*partBufBytes <= limit {
+	limit, own := s.budget.Limit(), s.mem.Used()
+	if own <= limit {
+		used := s.budget.Used()
+		return false, uerr.New(uerr.KindResource, "join",
+			"memory limit of %s exceeded: the query is holding %s, %s of it in its other "+
+				"operators, beside this join's %s of one key",
+			execopt.Bytes(limit), execopt.Bytes(used), execopt.Bytes(used-own), execopt.Bytes(own)).
+			Hint("the join's key fits the limit alone; the limit is the query's, and what " +
+				"the other operators hold leaves too little of it").
+			Hint("raise the limit with WithMemoryLimit")
+	}
+	if writers > 0 && own-writers*partBufBytes <= limit {
 		return false, uerr.New(uerr.KindResource, "join",
 			"memory limit of %s exceeded: the join's own spill writers need more, "+
 				"%d of them buffering %s each, before any row is held",
