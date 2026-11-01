@@ -342,10 +342,14 @@ func (b *listBuilder) decode(p *parser) error {
 	if p.s[p.pos] != '[' {
 		return p.refuse(b.want)
 	}
+	if err := p.enter(); err != nil {
+		return err
+	}
 	p.pos++
 	p.space()
 	if p.pos < len(p.s) && p.s[p.pos] == ']' {
 		p.pos++
+		p.leave()
 		b.offs = append(b.offs, b.n)
 		b.valid.valid()
 		return nil
@@ -365,6 +369,7 @@ func (b *listBuilder) decode(p *parser) error {
 			p.pos++
 		case ']':
 			p.pos++
+			p.leave()
 			b.offs = append(b.offs, b.n)
 			b.valid.valid()
 			return nil
@@ -450,6 +455,9 @@ func (b *structBuilder) decode(p *parser) error {
 
 // decodeFields decodes the object at p as a row of each field.
 func (b *structBuilder) decodeFields(p *parser) error {
+	if err := p.enter(); err != nil {
+		return err
+	}
 	p.pos++ // {
 	if b.stamp++; b.stamp == 0 {
 		clear(b.seen)
@@ -514,6 +522,7 @@ func (b *structBuilder) decodeFields(p *parser) error {
 			b.fields[j].addNull()
 		}
 	}
+	p.leave()
 	return nil
 }
 
