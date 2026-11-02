@@ -35,7 +35,7 @@ import (
 // does. A window of N rows is lo_i = i−N+1, hi_i = i+1. A window by time is the rows
 // whose by value lies within the period of row i's, in by's order (rollingBy), so
 // hi_i may pass i, where later rows tie with it.
-func winRolling(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
+func winRolling(ctx context.Context, fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
 	col *data.Column, seg Segments) (*data.Column, error) {
 
 	if params.By {
@@ -61,7 +61,7 @@ func winRolling(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.D
 				return lo, hi
 			}
 		}
-		return rollingMap(params, name, col, seg, win, minN)
+		return rollingMap(ctx, params, name, col, seg, win, minN)
 	}
 	if params.Center {
 		if fn == expr.WinRollingRank {
@@ -69,7 +69,7 @@ func winRolling(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.D
 			// a trailing window's answer taken from a later row (step 284).
 			return rollingOver(fn, params, name, out, col, seg, centeredWindows(size), minN)
 		}
-		return rollingCentered(fn, params, name, out, col, seg)
+		return rollingCentered(ctx, fn, params, name, out, col, seg)
 	}
 	trailing := func(rows []int32) (lo, hi []int32) {
 		lo, hi = make([]int32, len(rows)), make([]int32, len(rows))
@@ -115,13 +115,13 @@ func rollingOver(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.
 // partition is padded with that many null rows after its last, the trailing kernel
 // runs unchanged, and each row takes the answer from those rows on. A padded row is
 // null, so it counts as no value, which is Polars' partial window at the end.
-func rollingCentered(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
+func rollingCentered(ctx context.Context, fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
 	col *data.Column, seg Segments) (*data.Column, error) {
 
 	params.Center = false
 	k := (int(params.N) - 1) / 2
 	if k == 0 {
-		return winRolling(fn, params, name, out, col, seg)
+		return winRolling(ctx, fn, params, name, out, col, seg)
 	}
 	col, err := readable(col)
 	if err != nil {
@@ -147,7 +147,7 @@ func rollingCentered(fn expr.WinFnOp, params expr.WinParams, name string, out dt
 		}
 		bounds = append(bounds, int32(len(perm)))
 	}
-	res, err := winRolling(fn, params, name, out, ext, Segments{Perm: perm, Bounds: bounds})
+	res, err := winRolling(ctx, fn, params, name, out, ext, Segments{Perm: perm, Bounds: bounds})
 	if err != nil {
 		return nil, err
 	}
@@ -436,8 +436,10 @@ func rollingAnswer(fn expr.WinFnOp, ddof int, s *rollingState) (float64, bool) {
 	return v, true
 }
 
-// rollingMap runs rolling_map's Go function over each partition's windows (step 338).
-func rollingMap(params expr.WinParams, name string, col *data.Column, seg Segments,
+// rollingMap runs rolling_map's Go function over each partition's windows (step 338),
+// under the query's ctx, which it looks at a window, where it ran under
+// context.Background() and a cancelled query called it for every window (step 421).
+func rollingMap(ctx context.Context, params expr.WinParams, name string, col *data.Column, seg Segments,
 	win windowsOf, minN int) (*data.Column, error) {
 
 	if params.Map == nil {
@@ -456,5 +458,5 @@ func rollingMap(params expr.WinParams, name string, col *data.Column, seg Segmen
 			}
 		}
 	}
-	return m(context.Background(), col, name, parts, minN)
+	return m(ctx, col, name, parts, minN)
 }
