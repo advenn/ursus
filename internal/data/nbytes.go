@@ -49,7 +49,7 @@ type BufferID = *byte
 // list column would have run off the end of.
 func (c *Column) Buffers() iter.Seq2[BufferID, int64] {
 	return func(yield func(BufferID, int64) bool) {
-		for id, sp := range c.Spans() {
+		for id, sp := range Spans(c) {
 			if !yield(id, sp.Size()) {
 				return
 			}
@@ -57,9 +57,12 @@ func (c *Column) Buffers() iter.Seq2[BufferID, int64] {
 	}
 }
 
-// Spans is Buffers with the part of each allocation the column's view holds, which
-// is what lets a consumer seeing two views of one allocation count it once.
-func (c *Column) Spans() iter.Seq2[BufferID, Span] {
+// Spans is Buffers with the part of each allocation c's view holds, which is what
+// lets a consumer seeing two views of one allocation count it once.
+//
+// A function, not a method: the public ursus.Column is this package's Column, so
+// a method here is a method of ursus's API, and 0.7.2 adds none (step 436).
+func Spans(c *Column) iter.Seq2[BufferID, Span] {
 	return func(yield func(BufferID, Span) bool) {
 		seen := make([]BufferID, 0, 5)
 		emit := func(id BufferID, sp Span) bool {
@@ -94,7 +97,7 @@ func (c *Column) Spans() iter.Seq2[BufferID, Span] {
 		// any other. Omitting them would under-report a list column by everything
 		// it actually holds — the offsets are the small part.
 		if c.child != nil {
-			for id, sp := range c.child.Spans() {
+			for id, sp := range Spans(c.child) {
 				if !emit(id, sp) {
 					return
 				}
@@ -103,7 +106,7 @@ func (c *Column) Spans() iter.Seq2[BufferID, Span] {
 		// A Struct is ALL child, having no payload buffer of its own — so omitting
 		// these would report a struct column as costing only its validity bitmap.
 		for _, f := range c.fields {
-			for id, sp := range f.Spans() {
+			for id, sp := range Spans(f) {
 				if !emit(id, sp) {
 					return
 				}
@@ -224,7 +227,7 @@ func (s *BufferSet) AddColumn(c *Column) {
 	if c == nil {
 		return
 	}
-	for id, sp := range c.Spans() {
+	for id, sp := range Spans(c) {
 		s.Add(id, sp)
 	}
 }

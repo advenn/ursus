@@ -90,6 +90,19 @@ riskgate:
 levels:
 	$(GO) run ./internal/gen/levels
 
+# The public API is the newest tag's, feature for feature (step 436): a release on
+# the 0.7 line is fixes alone, so the list is diffed strictly against the newest
+# api/<tag>.txt, an addition failing as a removal does. Master's `make api` checks
+# breaks only. A tag's list is written at the commit tagged: make api-tag TAG=v0.7.2.
+.PHONY: api api-tag
+api:
+	@newest=$$(ls api/v*.txt | sort -V | tail -1); \
+	$(GO) run ./internal/gen/api -tag $$(basename $$newest .txt) | diff -u $$newest -
+
+api-tag:
+	@test -n "$(TAG)" || { echo "usage: make api-tag TAG=vX.Y.Z"; exit 2; }
+	$(GO) run ./internal/gen/api -tag $(TAG) > api/$(TAG).txt
+
 # The documentation site (context_files/docs-site-scope.md). `docs` writes the
 # fragments the pages include from docs/examples; `docs-serve` previews the site at
 # http://127.0.0.1:8000, and `docs-build` builds it into site/, refusing a broken
