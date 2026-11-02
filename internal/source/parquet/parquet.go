@@ -140,9 +140,8 @@ type Source struct {
 	desc  string
 	opts  Options
 
-	once   sync.Once
+	once   source.Once
 	schema *dtype.Schema
-	err    error
 
 	// unread holds, per unreadable field of the reconciled schema, the refusal to
 	// return if a query asks for it. Non-nil entries are the nested columns.
@@ -285,18 +284,23 @@ func (s *Source) ClassifyPredicates(preds []expr.Node) []plan.Pushdown {
 // produced, rather than in the middle of a read after earlier files' rows have
 // gone downstream — and nullability is only right if every file is seen. One open
 // and one footer parse per file, at plan time; each is opened again to be read.
+//
+// A read its caller's cancellation cut short is not kept, and the next caller reads
+// again (source.Once).
 func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
-	s.once.Do(func() {
-		// Recovered INSIDE the function Do runs: a panic that escaped it would still
-		// mark the Once done, and every later call would return (nil, nil).
+	err := s.once.Do(ctx, func(ctx context.Context) (err error) {
 		defer func() {
 			if v := recover(); v != nil {
-				s.schema, s.unread, s.err = nil, nil, corrupt(v, s.desc)
+				s.schema, s.unread, err = nil, nil, corrupt(v, s.desc)
 			}
 		}()
-		s.schema, s.unread, s.err = s.readSchemas(ctx)
+		s.schema, s.unread, err = s.readSchemas(ctx)
+		return err
 	})
-	return s.schema, s.err
+	if err != nil {
+		return nil, err
+	}
+	return s.schema, nil
 }
 
 // corrupt turns a panic recovered while reading a file into an error.
@@ -702,7 +706,20 @@ func (s *Source) openFile(ctx context.Context, i int) (_ *file.Reader, _ func(),
 			err = corrupt(v, s.partName(i))
 		}
 	}()
+	// The footer's schema is measured before arrow-go recurses on it (step 423).
+	if ra, err = measureFooter(ra); err != nil {
+		if closer != nil {
+			closer.Close()
+		}
+		return nil, nil, uerr.Annotate(err, "scan_parquet", s.partName(i))
+	}
 	r, err := file.NewParquetReader(ra, file.WithReadProps(readProps()))
+	if err == nil {
+		err = checkRowCounts(r.MetaData())
+		if err != nil {
+			r.Close()
+		}
+	}
 	if err != nil {
 		if closer != nil {
 			closer.Close()
@@ -716,6 +733,39 @@ func (s *Source) openFile(ctx context.Context, i int) (_ *file.Reader, _ func(),
 			closer.Close()
 		}
 	}, nil
+}
+
+// checkRowCounts refuses a footer whose row counts disagree (step 416): a row group's
+// against each of its column chunks', which hold a value a row where the column is
+// not repeated and at least one where it is, and the file's against its row groups'.
+// A read takes a row group's count for its rows, and a count its sum, so a count
+// short of the columns' read short, with no error, and one past them counted rows
+// that are not there.
+func checkRowCounts(md *metadata.FileMetaData) error {
+	var total int64
+	for g := range md.NumRowGroups() {
+		rg := md.RowGroup(g)
+		rows := rg.NumRows()
+		if rows < 0 {
+			return fmt.Errorf("corrupt: row group %d says %d rows", g, rows)
+		}
+		total += rows
+		for c := range rg.NumColumns() {
+			cc, err := rg.ColumnChunk(c)
+			if err != nil {
+				return err
+			}
+			vals := cc.NumValues()
+			if repeated := md.Schema.Column(c).MaxRepetitionLevel() > 0; vals < rows || !repeated && vals != rows {
+				return fmt.Errorf("corrupt: row group %d says %d rows, and its column %s holds %d values",
+					g, rows, md.Schema.Column(c).Path(), vals)
+			}
+		}
+	}
+	if total != md.NumRows {
+		return fmt.Errorf("corrupt: the file says %d rows, and its row groups hold %d", md.NumRows, total)
+	}
+	return nil
 }
 
 // fileSchema maps a Parquet schema to an ursus one, per TOP-LEVEL FIELD.

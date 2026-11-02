@@ -234,7 +234,7 @@ func (sp *splitter) read(buf []byte, want int) ([]byte, error) {
 	for !sp.eof && len(buf) < want {
 		n, err := sp.r.Read(buf[len(buf):cap(buf)])
 		buf = buf[:len(buf)+n]
-		if err == io.EOF || (err == nil && n == 0) {
+		if err == io.EOF { // a read of nothing and no error is no news, not the end
 			sp.eof = true
 			break
 		}

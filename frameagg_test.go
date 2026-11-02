@@ -31,8 +31,8 @@ func TestFrameAggregates(t *testing.T) {
 	).WithColumns(ursus.Col("d").Cast(ursus.Date), ursus.Col("t").Cast(ursus.Datetime(ursus.Micro, "")),
 		ursus.Col("l").Str().Split(","))
 	const (
-		jan3 = "2026-01-03T00:00:00.000000Z"
-		jan2 = "2026-01-02T06:00:00.000000Z"
+		jan3 = "2026-01-03T00:00:00.000000"
+		jan2 = "2026-01-02T06:00:00.000000"
 	)
 	for _, tc := range []struct {
 		name  string
@@ -43,13 +43,13 @@ func TestFrameAggregates(t *testing.T) {
 		{"sum", lf.Sum(), "Int128 Int128 Float64 Int128 String Date Datetime(us) Duration(ns) List(String)",
 			"7 10 8.0 2 ∅ ∅ ∅ 7h0m0s"},
 		{"mean", lf.Mean(), "Float64 Float64 Float64 Float64 String Datetime(us) Datetime(us) Duration(ns) List(String)",
-			"2.3333333333333335 2.5 2.6666666666666665 0.6666666666666666 ∅ 2026-01-04T00:00:00.000000Z " + jan2 + " 2h20m0s"},
+			"2.3333333333333335 2.5 2.6666666666666665 0.6666666666666666 ∅ 2026-01-04T00:00:00.000000 " + jan2 + " 2h20m0s"},
 		{"median", lf.Median(), "Float64 Float64 Float64 Float64 String Datetime(us) Datetime(us) Duration(ns) List(String)",
 			"2.0 2.5 2.5 1.0 ∅ " + jan3 + " " + jan2 + " 2h0m0s"},
 		{"min", lf.Min(), "Int64 Int8 Float64 Bool String Date Datetime(us) Duration(ns) List(String)",
-			"1 1 1.5 false p 2026-01-01 2026-01-01T06:00:00.000000Z 1h0m0s"},
+			"1 1 1.5 false p 2026-01-01 2026-01-01T06:00:00.000000 1h0m0s"},
 		{"max", lf.Max(), "Int64 Int8 Float64 Bool String Date Datetime(us) Duration(ns) List(String)",
-			"4 4 4.0 true r 2026-01-08 2026-01-03T06:00:00.000000Z 4h0m0s"},
+			"4 4 4.0 true r 2026-01-08 2026-01-03T06:00:00.000000 4h0m0s"},
 		// Polars' f is 1.2583057392117916 and 1.5833333333333333: §9's ulp.
 		{"std", lf.Std(1), "Float64 Float64 Float64 Float64 String Date Datetime(us) Duration(ns) List(String)",
 			"1.5275252316519465 1.2909944487358056 1.2583057392117918 0.5773502691896258 ∅ ∅ ∅ ∅"},
