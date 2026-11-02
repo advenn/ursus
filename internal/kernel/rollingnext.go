@@ -20,10 +20,13 @@ import (
 // every add, removal, refresh and flip is the in-memory kernel's, in its order, and
 // the answers are the same to the bit.
 
-// RollingSteps reports whether fn over a window of rows ending at each row is
-// RollingNext's: the functions whose state is a float's.
+// RollingSteps reports whether fn over a window of rows is RollingNext's: the
+// functions whose state is a float's. A centred window is the window ending
+// (N−1)/2 rows later over the partition with that many null rows after it, as
+// rollingCentered runs it, so the caller walks that far ahead and pads the end
+// (step 430); RollingNext itself walks the window ending at each row.
 func RollingSteps(fn expr.WinFnOp, params expr.WinParams, out dtype.DataType) bool {
-	if params.By || params.Center {
+	if params.By {
 		return false
 	}
 	switch fn {
@@ -63,7 +66,7 @@ func RollingNext(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.
 	if minN == 0 {
 		minN = size
 	}
-	if size < 1 || minN < 1 || minN > size || !RollingSteps(fn, params, out) {
+	if size < 1 || minN < 1 || minN > size || params.Center || !RollingSteps(fn, params, out) {
 		return nil, uerr.Internalf("kernel: %s walked over %d rows needing %d", fn, size, minN)
 	}
 	if st.next == 0 {
