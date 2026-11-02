@@ -46,6 +46,8 @@ milestone 2's fixes in. The finders of milestones 3 and 4 go on toward 0.7.3.
 
 ## 3. Tagging
 
-The tag is the maintainer's: `v0.7.2` at the merge commit of this pull request, on `release-0.7`. After it,
+The tag is the maintainer's: `v0.7.2` on `release-0.7`, at step 438's merge commit. That step
+fixed a flaky bound CI found at #29's merge commit, so the commit tagged is one whose
+CI passed. After it,
 master takes the CHANGELOG's v0.7.2 section and `api/v0.7.2.txt` by a pull request, as
 it took v0.7.1's (`f2d2746`). The fixes go to master one forward-port each.
