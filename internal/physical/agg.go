@@ -1403,6 +1403,9 @@ func (s *hashAggSink) residentResult(ctx context.Context) (*data.Batch, error) {
 			return nil, err
 		}
 		cols = append(cols, c)
+		if AggColumnDone != nil {
+			AggColumnDone(i)
+		}
 	}
 
 	if len(cols) == 0 {
@@ -1412,6 +1415,12 @@ func (s *hashAggSink) residentResult(ctx context.Context) (*data.Batch, error) {
 	}
 	return data.NewBatch(s.schema, cols)
 }
+
+// AggColumnDone, when set, is called as residentResult has made aggregate i's column
+// and let go of its accumulator. It is for internal/memcheck, which collects garbage
+// there to read that each accumulator goes as its column is made (step 432). Nothing
+// else sets it.
+var AggColumnDone func(i int)
 
 // --- planning -----------------------------------------------------------------
 

@@ -396,7 +396,7 @@ func TestCumulativesAreExactOnAOneRowPartition(t *testing.T) {
 			if err != nil || !exactType(out) {
 				continue
 			}
-			got, err := kernel.WinCall(fn, params, "out", out, col, nil, seg)
+			got, err := kernel.WinCall(t.Context(), fn, params, "out", out, col, nil, seg)
 			if err != nil {
 				continue
 			}

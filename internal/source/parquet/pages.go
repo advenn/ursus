@@ -234,6 +234,12 @@ func (c *pageChunk) readDictionary(p *file.DictionaryPage) error {
 		c.dictFixed = append([]byte(nil), data[:n*c.size]...)
 		return nil
 	}
+	// Each value holds a 4-byte length, so the page's bytes bound its count before
+	// the count sizes anything: a page of a few bytes saying ten million values
+	// allocated 40 MB of offsets, and a count can ask for 8 GiB (step 417).
+	if n > len(data)/4 {
+		return c.corrupt("a dictionary page of %d bytes says %d values", len(data), n)
+	}
 	offs := make([]int32, 1, n+1)
 	chars := make([]byte, 0, max(len(data)-4*n, 0))
 	for range n {
