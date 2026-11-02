@@ -232,21 +232,27 @@ func rollingMoment(fn expr.WinFnOp, params expr.WinParams, name string, out dtyp
 			if q.len() < minN {
 				continue
 			}
-			s := q.state()
-			var v float64
-			var has bool
-			if fn == expr.WinRollingKurtosis {
-				v, has = s.kurtosis(params.Fisher, params.Bias)
-			} else {
-				v, has = s.skew(params.Bias)
-			}
-			if has && q.nonFinite > 0 {
-				v = math.NaN()
-			}
-			res[row], ok[row] = v, has
+			res[row], ok[row] = momentAnswer(fn, params, &q)
 		}
 	})
 	return floatsOut(name, out, res, ok), nil
+}
+
+// momentAnswer is a window's skew or kurtosis from its queue: NaN where it holds a
+// NaN or an infinity.
+func momentAnswer(fn expr.WinFnOp, params expr.WinParams, q *momentQueue) (float64, bool) {
+	s := q.state()
+	var v float64
+	var has bool
+	if fn == expr.WinRollingKurtosis {
+		v, has = s.kurtosis(params.Fisher, params.Bias)
+	} else {
+		v, has = s.skew(params.Bias)
+	}
+	if has && q.nonFinite > 0 {
+		v = math.NaN()
+	}
+	return v, has
 }
 
 // floatsOut is a float answer a row, as a Float64 or a Float32, null where !ok.
@@ -407,11 +413,6 @@ func rollingCovCorr(fn expr.WinFnOp, params expr.WinParams, name string, out dty
 	}
 	pv, xv, yv := pair.Validity(), x.Validity(), y.Validity()
 	both := func(r int32) bool { return pv.Get(int(r)) && xv.Get(int(r)) && yv.Get(int(r)) }
-	corr := fn == expr.WinRollingCorr
-	ddof := float64(params.Ddof)
-	if corr {
-		ddof = 1
-	}
 	res := make([]float64, pair.Len())
 	ok := make([]bool, pair.Len())
 	forEachOrdered(seg, false, func(rows []int32) {
@@ -453,21 +454,32 @@ func rollingCovCorr(fn expr.WinFnOp, params expr.WinParams, name string, out dty
 			if count < minN {
 				continue
 			}
-			mxy, _ := rollingAnswer(expr.WinRollingMean, 0, &sxy)
-			mx, _ := rollingAnswer(expr.WinRollingMean, 0, &sx)
-			my, _ := rollingAnswer(expr.WinRollingMean, 0, &sy)
-			n := float64(count)
-			v := (mxy - float64(mx*my)) * (n / (n - ddof))
-			if corr {
-				vx, okx := rollingAnswer(expr.WinRollingVar, 1, &sx)
-				vy, oky := rollingAnswer(expr.WinRollingVar, 1, &sy)
-				if !okx || !oky {
-					continue
-				}
-				v /= math.Sqrt(vx * vy)
-			}
-			res[row], ok[row] = v, true
+			res[row], ok[row] = covCorrAnswer(fn, params, count, &sx, &sy, &sxy)
 		}
 	})
 	return floatsOut(name, out, res, ok), nil
+}
+
+// covCorrAnswer is a window's covariance or correlation from its count of pairs and
+// the states of its x, y and x·y: a correlation is null where a variance is.
+func covCorrAnswer(fn expr.WinFnOp, params expr.WinParams, count int, sx, sy, sxy *rollingState) (float64, bool) {
+	corr := fn == expr.WinRollingCorr
+	ddof := float64(params.Ddof)
+	if corr {
+		ddof = 1
+	}
+	mxy, _ := rollingAnswer(expr.WinRollingMean, 0, sxy)
+	mx, _ := rollingAnswer(expr.WinRollingMean, 0, sx)
+	my, _ := rollingAnswer(expr.WinRollingMean, 0, sy)
+	n := float64(count)
+	v := (mxy - float64(mx*my)) * (n / (n - ddof))
+	if corr {
+		vx, okx := rollingAnswer(expr.WinRollingVar, 1, sx)
+		vy, oky := rollingAnswer(expr.WinRollingVar, 1, sy)
+		if !okx || !oky {
+			return 0, false
+		}
+		v /= math.Sqrt(vx * vy)
+	}
+	return v, true
 }
