@@ -44,9 +44,8 @@ type Source struct {
 	desc  string
 	opts  Options
 
-	once   sync.Once
+	once   source.Once
 	schema *dtype.Schema
-	err    error
 }
 
 // New builds a source over anything an Opener can produce. desc appears in
@@ -145,49 +144,45 @@ func (s *Source) Caps() plan.Caps { return plan.Caps{Projection: true} }
 func (s *Source) RowsOnly(source.ScanSpec) bool { return true }
 
 // Schema infers the schema on first use and caches it. Inference reads the file,
-// so it happens at most once per Source regardless of how many times a plan is
-// resolved.
+// so it happens once per Source however many times a plan is resolved; a read its
+// caller's cancellation cut short is not kept, and the next caller reads again
+// (source.Once).
 func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
-	s.once.Do(func() {
-		// Recovered INSIDE the function Do runs. A panic that escaped it would still
-		// mark the Once done, and every later call would return (nil, nil) — a
-		// source with no schema and no error.
+	err := s.once.Do(ctx, func(ctx context.Context) (err error) {
+		// A panic is this read's answer, kept as an error, as any other failure is.
 		defer func() {
 			if v := recover(); v != nil {
-				s.schema, s.err = nil, uerr.FromPanic(v, "scan_csv")
+				s.schema, err = nil, uerr.FromPanic(v, "scan_csv")
 			}
 		}()
 		if s.opts.SkipRows > 0 && s.opts.SkipLines > 0 {
-			s.err = uerr.New(uerr.KindValue, "scan_csv", "WithSkipRows and WithSkipLines are both set").
+			return uerr.New(uerr.KindValue, "scan_csv", "WithSkipRows and WithSkipLines are both set").
 				Hint("skip records with WithSkipRows, or lines whatever their quotes with WithSkipLines, as Polars takes one")
-			return
 		}
 		if s.opts.Schema != nil {
-			s.schema, s.err = s.withPath(s.opts.Schema, nil)
-			return
+			s.schema, err = s.withPath(s.opts.Schema, nil)
+			return err
 		}
 		if err := ctx.Err(); err != nil {
-			s.err = err
-			return
+			return err
 		}
 		// Inference reads the FIRST stream only. Reading them all would make opening
 		// a thousand-part dataset cost a thousand file opens before the query starts,
 		// and the parts of a partitioned dataset share a schema by construction.
 		r, err := s.open(ctx, 0)
 		if err != nil {
-			s.err = uerr.Wrap(err, uerr.KindIO, "scan_csv", "opening %s", s.partName(0))
-			return
+			return uerr.Wrap(err, uerr.KindIO, "scan_csv", "opening %s", s.partName(0))
 		}
 		defer r.Close()
-		s.schema, s.err = s.withPath(inferSchema(newScanner(r, s.opts), s.opts, s.nullTest()))
-		if s.err != nil {
-			s.err = uerr.Annotate(s.err, "scan_csv", s.desc)
+		if s.schema, err = s.withPath(inferSchema(newScanner(r, s.opts), s.opts, s.nullTest())); err != nil {
+			return uerr.Annotate(err, "scan_csv", s.desc)
 		}
+		return nil
 	})
-	if s.err != nil {
-		// once.Do caches the failure, so a retry does not re-read a file that is
-		// still broken. Returning the same error is the honest answer.
-		return nil, s.err
+	if err != nil {
+		// A failure is kept, but for a cancellation, so a retry does not re-read a
+		// file that is still broken.
+		return nil, err
 	}
 	return s.schema, nil
 }
