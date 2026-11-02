@@ -160,9 +160,13 @@ func TestRollingStateIsCharged(t *testing.T) {
 // every, and a rolling quantile and n_unique by key. Under 2 MB, at batches of 256
 // rows, so that eight segments of windows, none closed before the end, spill side
 // by side, the answer is the one without a limit, it spills, it peaks at most twice
-// the limit, the live heap grows by under 10 MB of the 16 MB the values are, and the
-// spill directory is empty after. Beside an implode, the median spills and the
-// implode refuses, and the directory is empty after the error too.
+// the limit, and the spill directory is empty after. Beside an implode, the median
+// spills and the implode refuses, and the directory is empty after the error too.
+//
+// What the live heap holds is internal/memcheck's to read, exactly, where a segment
+// finishes (step 431). This test sampled it, under a bound of 10 MB that the heap
+// with the values spilled and without passed alike, and that a loaded machine's
+// floating garbage crossed.
 func TestTemporalMediansSpillTheirValues(t *testing.T) {
 	const n = 2000
 	c := ursus.Col
@@ -191,13 +195,10 @@ func TestTemporalMediansSpillTheirValues(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var got *ursus.DataFrame
 			var st ursus.MemoryStats
 			dir := t.TempDir()
-			grown := peakHeapGrowth(t, func() {
-				got, err = tc.lf.Collect(t.Context(), ursus.WithBatchSize(256), ursus.WithMemoryLimit(2<<20),
-					ursus.WithSpillDir(dir), ursus.WithMemoryStats(&st))
-			})
+			got, err := tc.lf.Collect(t.Context(), ursus.WithBatchSize(256), ursus.WithMemoryLimit(2<<20),
+				ursus.WithSpillDir(dir), ursus.WithMemoryStats(&st))
 			if err != nil {
 				t.Fatalf("under 2 MB: %v", err)
 			}
@@ -206,9 +207,6 @@ func TestTemporalMediansSpillTheirValues(t *testing.T) {
 			}
 			if st.Peak > 2*(2<<20) {
 				t.Errorf("a peak of %d KB under a 2 MB limit", st.Peak>>10)
-			}
-			if grown > 10<<20 {
-				t.Errorf("the live heap grew by %d MB under a 2 MB limit", grown>>20)
 			}
 			ursustest.AssertFrameEqual(t, got, want)
 			if left, _ := os.ReadDir(dir); len(left) > 0 {
