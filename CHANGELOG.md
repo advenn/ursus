@@ -13,11 +13,36 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.7.2
+## v0.7.2 — 2026-11-02
 
-[`v0.7.2-scope.md`](./context_files/v0.7.2-scope.md) set the scope (step 410):
-**finding the bugs, and fixing them,** on the 0.7 line, and nothing else. No API is
-added, changed or removed.
+Everything since `v0.7.1` (2026-10-30): steps 410–436, the bug hunt
+[`v0.7.2-scope.md`](./context_files/v0.7.2-scope.md) set, on the 0.7 line. No API is
+added, changed or removed. `api/v0.7.2.txt` lists v0.7.1's 2,389 features, and CI
+diffs the API against it strictly from step 436 on.
+
+### What a v0.7.1 user can trip on
+
+- **A naive Datetime's text has no "Z"** (422): "2024-01-02T03:04:05", where it was
+  "…05Z". This applies to prints, casts to String, `JsonEncode`, a pivot's column
+  names and error texts. A zoned Datetime keeps its offset.
+- **Input that answered wrongly, or crashed, is refused:**
+  - a JSON value nested past 1,000 levels (412);
+  - a Parquet column nested past 1,000 levels (423);
+  - a Parquet footer whose row counts disagree (416);
+  - a decimal exponent out of range (414);
+  - a business day's `Add` past the range (419);
+  - a partition key or value holding `..` (420);
+  - `FromRows` and `MapRows` of a recursive type (413).
+- **A query under a memory limit may spill where it did not, or answer where it
+  refused** (424, 425): the ledger counts a slice as part of the allocation it views,
+  and a batch of strings as the text its rows cover.
+- **Errors:**
+  - a panic in ursus's own code inside an Arrow stream is `ErrInternal`, where it was
+    `ErrIO` (428);
+  - a join past its deepest split names the query's other operators, where it named
+    one key (426);
+  - a stream that returns no bytes a hundred times in a row is `io.ErrNoProgress`
+    (415).
 
 ### Fixed
 
@@ -87,6 +112,8 @@ added, changed or removed.
   group-by's release of each aggregate is measured (432).
 - Teeth for eleven guards no public query reaches (433, 434).
 - `release-0.7`'s tests built again after the merges of 2026-11-02 (435).
+- The public API is pinned: CI diffs it against the newest `api/<tag>.txt` (436),
+  which took out step 424's `Column.Spans`, a method the public `Column` had gained.
 
 ---
 
