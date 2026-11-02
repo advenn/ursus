@@ -44,7 +44,29 @@ type parser struct {
 	scratch []byte // a key with an escape, decoded
 	ignore  bool   // a value its column cannot take is a null, Polars' ignore_errors
 	given   bool   // the columns' types are a given schema's, not inferred
+	depth   int    // the arrays and objects open at pos, the line's own among them
 }
+
+// maxNesting is the deepest a line's JSON may nest, its object counted. Each level is
+// a frame or two of a recursive parse, so a line nested millions deep overflowed the
+// goroutine's stack, a fatal error no recover catches (step 412). It is not
+// encoding/json's 10,000: a column's type nests as deep as its values, and building
+// one costs the square of its depth, 3 s at 2,000 levels. Python's json stops near
+// 1,000; Polars 1.44.1 raises at 1,000 and crashes at 5,000.
+const maxNesting = 1_000
+
+// enter counts an array or an object opened at p, refusing one past maxNesting; the
+// caller counts it closed with leave when it has read it whole. An error ends the
+// line's parse, so a count left open by one is never read.
+func (p *parser) enter() error {
+	if p.depth++; p.depth > maxNesting {
+		return uerr.New(uerr.KindValue, "read_ndjson",
+			"JSON nested deeper than %d levels at byte %d", maxNesting, p.pos+1)
+	}
+	return nil
+}
+
+func (p *parser) leave() { p.depth-- }
 
 // parseObject parses line as one JSON object and nothing more, but space.
 func parseObject(line []byte) (value, error) {
@@ -96,7 +118,7 @@ func (p *parser) space() {
 	}
 }
 
-// value parses one value, depth-first; it may recurse as deep as the line nests.
+// value parses one value, depth-first, as deep as maxNesting.
 func (p *parser) value() (value, error) {
 	if p.pos >= len(p.s) {
 		return value{}, p.fail("a value was expected")
@@ -138,11 +160,15 @@ func (p *parser) lit(w string) error {
 }
 
 func (p *parser) object() (value, error) {
+	if err := p.enter(); err != nil {
+		return value{}, err
+	}
 	p.pos++ // {
 	v := value{kind: kObject}
 	p.space()
 	if p.pos < len(p.s) && p.s[p.pos] == '}' {
 		p.pos++
+		p.leave()
 		return v, nil
 	}
 	for {
@@ -174,6 +200,7 @@ func (p *parser) object() (value, error) {
 			p.pos++
 		case '}':
 			p.pos++
+			p.leave()
 			return v, nil
 		default:
 			return value{}, p.fail("',' or '}' was expected")
@@ -182,11 +209,15 @@ func (p *parser) object() (value, error) {
 }
 
 func (p *parser) array() (value, error) {
+	if err := p.enter(); err != nil {
+		return value{}, err
+	}
 	p.pos++ // [
 	v := value{kind: kArray, arr: []value{}}
 	p.space()
 	if p.pos < len(p.s) && p.s[p.pos] == ']' {
 		p.pos++
+		p.leave()
 		return v, nil
 	}
 	for {
@@ -205,6 +236,7 @@ func (p *parser) array() (value, error) {
 			p.pos++
 		case ']':
 			p.pos++
+			p.leave()
 			return v, nil
 		default:
 			return value{}, p.fail("',' or ']' was expected")
@@ -390,10 +422,14 @@ func (p *parser) skip() error {
 	}
 	switch c := p.s[p.pos]; {
 	case c == '{':
+		if err := p.enter(); err != nil {
+			return err
+		}
 		p.pos++
 		p.space()
 		if p.pos < len(p.s) && p.s[p.pos] == '}' {
 			p.pos++
+			p.leave()
 			return nil
 		}
 		for {
@@ -422,16 +458,21 @@ func (p *parser) skip() error {
 				p.pos++
 			case '}':
 				p.pos++
+				p.leave()
 				return nil
 			default:
 				return p.fail("',' or '}' was expected")
 			}
 		}
 	case c == '[':
+		if err := p.enter(); err != nil {
+			return err
+		}
 		p.pos++
 		p.space()
 		if p.pos < len(p.s) && p.s[p.pos] == ']' {
 			p.pos++
+			p.leave()
 			return nil
 		}
 		for {
@@ -448,6 +489,7 @@ func (p *parser) skip() error {
 				p.pos++
 			case ']':
 				p.pos++
+				p.leave()
 				return nil
 			default:
 				return p.fail("',' or ']' was expected")
@@ -561,11 +603,15 @@ func (p *parser) appendNested(dst []byte) ([]byte, error) {
 		if c == '[' {
 			end = ']'
 		}
+		if err := p.enter(); err != nil {
+			return dst, err
+		}
 		p.pos++
 		dst = append(dst, c)
 		p.space()
 		if p.pos < len(p.s) && p.s[p.pos] == end {
 			p.pos++
+			p.leave()
 			return append(dst, end), nil
 		}
 		for first := true; ; first = false {
@@ -604,6 +650,7 @@ func (p *parser) appendNested(dst []byte) ([]byte, error) {
 				p.pos++
 			case end:
 				p.pos++
+				p.leave()
 				return append(dst, end), nil
 			default:
 				if c == '{' {

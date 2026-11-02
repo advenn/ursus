@@ -500,7 +500,7 @@ func (r *reader) parse(part []byte) (*data.Batch, int, error) {
 		if blank(text) {
 			continue
 		}
-		p.s, p.pos = text, 0
+		p.s, p.pos, p.depth = text, 0, 0
 		p.space()
 		if text[p.pos] != '{' {
 			_, err := parseObject(text) // what the line holds instead
