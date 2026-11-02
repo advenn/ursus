@@ -353,8 +353,9 @@ func TestAGroupByHoldsItsAnswerOnce(t *testing.T) {
 		Agg(c("v3").Sum(), ursus.Len())
 
 	// The answer's size: what its batches point into, each allocation once. They are
-	// slices of the one answer the group-by built.
-	answer := map[data.BufferID]int64{}
+	// slices of the one answer the group-by built, so it is a BufferSet's: since step
+	// 424 every slice of an allocation has its ID.
+	var answer data.BufferSet
 	var st ursus.MemoryStats
 	live, atColumns := liveDuring(func() {
 		for out, err := range q.CollectBatches(t.Context(), ursus.WithMemoryLimit(1<<30),
@@ -363,16 +364,11 @@ func TestAGroupByHoldsItsAnswerOnce(t *testing.T) {
 				t.Fatal(err)
 			}
 			for i := range out.Width() {
-				for id, size := range out.ColumnAt(i).Buffers() {
-					answer[id] = size
-				}
+				answer.AddColumn(out.ColumnAt(i))
 			}
 		}
 	}, df)
-	var result int64
-	for _, size := range answer {
-		result += size
-	}
+	result := answer.Total()
 	report(t, t.Name(), live, st)
 	report(t, t.Name()+" (assembling)", atColumns, st)
 	if os.Getenv("URSUS_MEMCHECK_VERBOSE") != "" {
