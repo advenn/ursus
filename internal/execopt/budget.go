@@ -414,7 +414,7 @@ func (a *Account) retainColumn(c *data.Column) {
 	if a == nil || c == nil {
 		return
 	}
-	for id, sp := range c.Spans() {
+	for id, sp := range data.Spans(c) {
 		if old, dup := a.ids[id]; dup {
 			// Another view of an allocation it holds: a batch and its head.
 			if u := old.With(sp); u != old {
