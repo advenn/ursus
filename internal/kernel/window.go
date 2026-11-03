@@ -1,8 +1,8 @@
 package kernel
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"fmt"
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
