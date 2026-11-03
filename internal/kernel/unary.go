@@ -682,7 +682,8 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 		// CanCast has refused these all along — its temporal arms cover numeric and
 		// string, never Bool — so the two answers disagreed in the SAFE direction,
 		// with the planner refusing what the kernel would have done. Narrowing the
-		// kernel is what makes them agree; see TestCanCastAgreesWithTheKernel.
+		// kernel is what makes them agree; see physical's TestEvaluatorContract,
+		// whose cast arm sweeps every pair.
 		if from.IsTemporal() || to.IsTemporal() {
 			return nil, uerr.New(uerr.KindUnsupported, "cast",
 				"cannot cast %s to %s", from, to).
@@ -699,7 +700,7 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 	// along and the kernel refused it — the FOURTH plan-accepts / kernel-rejects
 	// divergence this file records, after null casts, string casts and bool casts,
 	// and the one that hid longest: the contract matrix had no List column and no
-	// List cast target, and TestCanCastAgreesWithTheKernel names List as an
+	// List cast target, and the TypeID-pair check of the day named List as an
 	// unsamplable source, so neither cast instrument could reach it.
 	//
 	// It gathers through listGather rather than casting the child in place, and the
