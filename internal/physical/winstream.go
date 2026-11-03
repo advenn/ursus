@@ -63,6 +63,13 @@ type winNeed struct {
 	// rollingBy is a rolling window by time, in its by order, which carries the rows
 	// in reach of a window and its kernel's state (step 246).
 	rollingBy bool
+	// rolling is a rolling window of rows whose state is a float's, which carries the
+	// window's rows and its kernel's state, so it answers as in memory to the bit
+	// (step 429): from the rows before each batch, its refreshes fell elsewhere. A
+	// centred one walks lead rows ahead of the batch, and lead null rows past the
+	// last (step 430).
+	rolling bool
+	lead    int
 }
 
 // streamNeed is spec sp's need, and false when no bounded one answers it.
@@ -97,6 +104,13 @@ func streamNeed(sp *winSpec) (winNeed, bool) {
 	case fn.IsRolling():
 		if p.By {
 			return winNeed{}, false
+		}
+		if kernel.RollingSteps(fn, p, sp.out) {
+			if !p.Center {
+				return winNeed{rolling: true}, true
+			}
+			k := int(p.N-1) / 2
+			return winNeed{rolling: true, lead: k, l: k}, true
 		}
 		need := winNeed{h: int(p.N)}
 		if p.Center {
@@ -303,15 +317,23 @@ type winStreamSpec struct {
 	need winNeed
 	agg  *data.Column // an aggregate's one value
 
-	hist  *data.Column     // the last h rows of the child before the batch
-	histF *data.Column     // and of the fill
-	last  *data.Column     // carry: the last answer that held a value, one row
-	n     int64            // count: rows numbered so far
-	ewm   kernel.EwmState  // ewm: the running state
-	rank  kernel.RankState // rank: its position, groups and last row
-	held  int64            // lastPos: the last position holding a value, or −1; walkPass sets −1
-	rby   kernel.RollingByState
-	rbyAt int64 // what rby was charged
+	hist   *data.Column     // the last h rows of the child before the batch
+	histF  *data.Column     // and of the fill
+	last   *data.Column     // carry: the last answer that held a value, one row
+	n      int64            // count: rows numbered so far
+	ewm    kernel.EwmState  // ewm: the running state
+	rank   kernel.RankState // rank: its position, groups and last row
+	held   int64            // lastPos: the last position holding a value, or −1; walkPass sets −1
+	rby    kernel.RollingByState
+	rbyAt  int64               // what rby was charged
+	roll   kernel.RollingState // rolling: the window's walk
+	rollAt int64               // what roll was charged
+	// A centred window's walk: the rows answered before the batch, those walked,
+	// the answers walked ahead of the batch's, and how many of the first lead
+	// answers, which no row takes, are dropped.
+	rollBase, rollFed int64
+	rollPend          *data.Column
+	rollDrop          int
 
 	// A spec with an order of its own is answered in a sorted pass: its answer is
 	// column col of the answer file ans (winsorted.go).
@@ -456,6 +478,12 @@ func (p *winStreamOp) answer(ctx context.Context, st *winStreamSpec, target *dat
 	if st.need.rollingBy {
 		return p.rollingBy(st, child)
 	}
+	if st.need.rolling {
+		if st.need.lead > 0 {
+			return p.centred(ctx, st, child)
+		}
+		return p.rollingRows(st, child)
+	}
 	if st.need.lastPos {
 		return p.lastHeld(st, child), nil
 	}
@@ -509,6 +537,103 @@ func (p *winStreamOp) answer(ctx context.Context, st *winStreamSpec, target *dat
 		}
 	}
 	return res.Slice(before, n), nil
+}
+
+// rollingRows walks a rolling window of rows over child, the next rows, on from the
+// last batch's state.
+func (p *winStreamOp) rollingRows(st *winStreamSpec, child *data.Column) (*data.Column, error) {
+	sp := st.sp
+	params := sp.fn.Params
+	params.Center = false
+	c, err := kernel.RollingNext(sp.fn.Fn, params, sp.name, sp.out, child, &st.roll)
+	if err != nil {
+		return nil, err
+	}
+	held := st.roll.NBytes()
+	if st.rollPend != nil {
+		held += st.rollPend.NBytes()
+	}
+	p.mem.RetainBytes(held - st.rollAt)
+	st.rollAt = held
+	return c, nil
+}
+
+// centred answers a centred rolling window for the batch, child its rows: row j's
+// answer is the window ending lead rows later, over the partition with lead null rows
+// after its last, as rollingCentered runs it in memory. The walk is fed the batch's
+// rows not yet walked, the lookahead's up to lead rows past the batch, and, past the
+// last row, nulls; each row is walked once, and the answers walked ahead of the
+// batch's wait for the next.
+func (p *winStreamOp) centred(ctx context.Context, st *winStreamSpec, child *data.Column) (*data.Column, error) {
+	sp := st.sp
+	k, n := st.need.lead, child.Len()
+	through := st.rollBase + int64(n+k)
+	var feed []*data.Column
+	// at is where a batch starts, counted from this one's first row.
+	walk := func(c *data.Column, at int64) {
+		from := st.rollFed - st.rollBase - at
+		if from < 0 || from >= int64(c.Len()) || st.rollFed >= through {
+			return
+		}
+		take := min(int64(c.Len())-from, through-st.rollFed)
+		feed = append(feed, c.Slice(int(from), int(take)))
+		st.rollFed += take
+	}
+	walk(child, 0)
+	at := int64(n)
+	for _, b := range p.queue[1:] {
+		if st.rollFed >= through {
+			break
+		}
+		if st.rollFed-st.rollBase < at+int64(b.Rows()) {
+			c, _, err := p.inputs(ctx, sp, b)
+			if err != nil {
+				return nil, err
+			}
+			walk(c, at)
+		}
+		at += int64(b.Rows())
+	}
+	if st.rollFed < through {
+		if !p.eof || st.rollFed-st.rollBase < at {
+			return nil, uerr.Internalf("over: a centred window's walk is short of its lookahead")
+		}
+		pad, err := kernel.NullColumn(child.Name(), child.DType(), int(through-st.rollFed))
+		if err != nil {
+			return nil, err
+		}
+		feed = append(feed, pad)
+		st.rollFed = through
+	}
+	if len(feed) > 0 {
+		all, err := concatCols(feed)
+		if err != nil {
+			return nil, err
+		}
+		c, err := p.rollingRows(st, all)
+		if err != nil {
+			return nil, err
+		}
+		if d := min(k-st.rollDrop, c.Len()); d > 0 {
+			c, st.rollDrop = c.Slice(d, c.Len()-d), st.rollDrop+d
+		}
+		if st.rollPend != nil && st.rollPend.Len() > 0 {
+			if c, err = concatCols([]*data.Column{st.rollPend, c}); err != nil {
+				return nil, err
+			}
+		}
+		st.rollPend = c
+	}
+	if have := 0; st.rollPend == nil || st.rollPend.Len() < n {
+		if st.rollPend != nil {
+			have = st.rollPend.Len()
+		}
+		return nil, uerr.Internalf("over: a centred window answered %d rows of %d", have, n)
+	}
+	out := st.rollPend.Slice(0, n)
+	st.rollPend = st.rollPend.Slice(n, st.rollPend.Len()-n)
+	st.rollBase += int64(n)
+	return out, nil
 }
 
 // carried runs a cumulative function, or a forward fill without a limit, over the

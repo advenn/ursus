@@ -330,10 +330,10 @@ func TestRollingCovAndCorr(t *testing.T) {
 // bounded need, its window's rows, so over the whole frame it streams past its limit
 // as the rolling functions before it do (step 197), and over a key its partitions
 // spill. 20,000 rows in batches of 64 under a 16 KiB limit, against the answer
-// without one: the ranks equal, and the moments, covariance and correlation within
-// 1e-9. Streamed, a window's state is rebuilt from each batch's history rows, so its
-// rounding falls elsewhere and the last bits can differ, as RollingVar's and
-// RollingStd's already did (feature-gaps.md §5).
+// without one: the ranks equal, and the moments, covariance and correlation to the
+// bit. They were within 1e-9: streamed, a window's state was rebuilt from each
+// batch's history rows, so its rounding fell elsewhere; it is carried from batch to
+// batch since steps 429 and 430.
 func TestRollingMoreStreamPastTheirLimit(t *testing.T) {
 	const n = 20_000
 	v, vok, f, k := make([]int64, n), make([]bool, n), make([]float64, n), make([]int64, n)
@@ -387,7 +387,7 @@ func TestRollingMoreStreamPastTheirLimit(t *testing.T) {
 			for i := range want.Height() {
 				w, wok := wc.Get(i)
 				g, gok := gc.Get(i)
-				if wok != gok || wok && !(math.IsNaN(w) && math.IsNaN(g)) && math.Abs(g-w) > 1e-9*math.Max(1, math.Abs(w)) {
+				if wok != gok || wok && math.Float64bits(g) != math.Float64bits(w) {
 					t.Fatalf("%s: %s row %d streamed %v (%v), want %v (%v)", name, col, i, g, gok, w, wok)
 				}
 			}
