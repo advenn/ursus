@@ -175,7 +175,7 @@ func bodyWindows(ctx context.Context, n expr.Node, eb *data.Batch, list []int32)
 		bounds = bounds[:1]
 	}
 	name := "\x00window" + itoa(eb.Schema().Len())
-	ans, err := kernel.WinCall(fn.Fn, fn.Params, name, f.Type, child, fill, kernel.Segments{Perm: perm, Bounds: bounds})
+	ans, err := kernel.WinCall(ctx, fn.Fn, fn.Params, name, f.Type, child, fill, kernel.Segments{Perm: perm, Bounds: bounds})
 	if err != nil {
 		return nil, nil, err
 	}
