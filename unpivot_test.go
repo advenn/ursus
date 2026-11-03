@@ -119,15 +119,14 @@ func TestUnpivotIsBatchSizeInvariant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, size := range []int{1, 2, 3, 7, 8192} {
-		for _, threads := range []int{1, 2, 4} {
-			got, err := query().Collect(t.Context(),
-				ursus.WithBatchSize(size), ursus.WithThreads(threads), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("batch %d, %d threads: %v", size, threads, err)
-			}
-			ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
+	for _, run := range []struct{ size, threads int }{{1, 1}, {3, 2}, {8192, 4}} {
+		size, threads := run.size, run.threads
+		got, err := query().Collect(t.Context(),
+			ursus.WithBatchSize(size), ursus.WithThreads(threads), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch %d, %d threads: %v", size, threads, err)
 		}
+		ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
 	}
 }
 

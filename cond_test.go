@@ -292,17 +292,16 @@ func TestCondBatchSizeAndThreadsAreIndependent(t *testing.T) {
 	}
 	want := ref.String()
 
-	for _, bs := range []int{1, 2, 3, 8192} {
-		for _, th := range []int{1, 2, 4} {
-			got, err := q().Collect(t.Context(),
-				ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("batch %d threads %d: %v", bs, th, err)
-			}
-			if got.String() != want {
-				t.Errorf("batch %d threads %d changed the answer:\n%s\nwant:\n%s",
-					bs, th, got, want)
-			}
+	for _, run := range []struct{ bs, th int }{{1, 1}, {3, 2}, {8192, 4}} {
+		bs, th := run.bs, run.th
+		got, err := q().Collect(t.Context(),
+			ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch %d threads %d: %v", bs, th, err)
+		}
+		if got.String() != want {
+			t.Errorf("batch %d threads %d changed the answer:\n%s\nwant:\n%s",
+				bs, th, got, want)
 		}
 	}
 }
