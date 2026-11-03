@@ -1,0 +1,35 @@
+/* ursus's colours: a deep slate header, Go's blue for accents. */
+:root > * {
+  --md-primary-fg-color: #1f2d3d;
+  --md-primary-fg-color--light: #2c3e50;
+  --md-primary-fg-color--dark: #121c26;
+  --md-accent-fg-color: #00add8;
+  --md-accent-fg-color--transparent: rgba(0, 173, 216, 0.1);
+  --md-typeset-a-color: #007d9c;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-typeset-a-color: #5dc9e2;
+}
+
+/* Go is written with tabs; show them four wide. */
+.md-typeset pre > code {
+  tab-size: 4;
+}
+
+/* The home page's opening. */
+.md-typeset .hero {
+  font-size: 1.15em;
+  margin-bottom: 1.5em;
+}
+
+.md-typeset .hero .lead {
+  font-size: 1.25em;
+  line-height: 1.5;
+}
+
+/* An error message or a schema wider than the page wraps; a printed frame scrolls. */
+.md-typeset .wrap pre > code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
