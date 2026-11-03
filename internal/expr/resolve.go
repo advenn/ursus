@@ -683,18 +683,13 @@ func ResolveUnary(op UnaryOp, in dtype.DataType) (dtype.DataType, error) {
 		// These keep the operand's type: floor on an integer is the identity, and
 		// widening it to a float would be a schema change in exchange for nothing.
 		//
-		// ALL THREE are refused for Decimal, and sign() was the one that got away.
-		// A decimal's physical type is Int128 and its value is an UNSCALED integer,
-		// so flooring it floors 1234 rather than 12.34 — and sign() is worse, not
-		// better: it returns unscaled 1, labelled Decimal(10,2), which renders as
-		// "0.01". The argument the next paragraph gives for excluding Duration — a
-		// Duration of -1, 0 or 1 TICKS is not a sign, it is a nanosecond — is the
-		// same argument, and it was written three lines from the code that ignored it.
+		// A Decimal is rounded at its scale, on its unscaled integer (step 490), into
+		// Polars 2.0's type: DecimalRounded. All three were refused until then, and
+		// sign() had once got away: a decimal's value is an UNSCALED integer, so
+		// unaryI128's sign of it was unscaled 1, labelled Decimal(10,2), which renders
+		// as "0.01". kernel.Unary sends a Decimal to its own kernels before that one.
 		if in.ID() == dtype.TypeDecimal {
-			return dtype.Null, decimalRemedy(uerr.New(uerr.KindType, "",
-				"%s() is not defined for %s", op, in).
-				Hint("a decimal is stored as an unscaled integer, so %s() would "+
-					"answer about the unscaled value rather than the decimal one", op))
+			return DecimalRounded(in, 0, op == OpSign), nil
 		}
 		// Sign keeps the operand's type, so sign(Int64) is Int64 rather than a float.
 		// Duration is excluded even though abs() admits it: a Duration of -1, 0 or 1
