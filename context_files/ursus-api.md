@@ -262,6 +262,7 @@ func (e Expr) Sub[T Operand](v T) Expr
 func (e Expr) Mul[T Operand](v T) Expr
 func (e Expr) Div[T Operand](v T) Expr
 func (e Expr) FloorDiv[T Operand](v T) Expr
+func (e Expr) TruncDiv[T Operand](v T) Expr   // toward zero
 func (e Expr) Mod[T Operand](v T) Expr
 func (e Expr) Pow[T Operand](v T) Expr
 func (e Expr) Neg() Expr

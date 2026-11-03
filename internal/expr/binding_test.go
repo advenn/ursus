@@ -45,7 +45,7 @@ var bindingTypes = []dtype.DataType{
 
 var bindingOps = []expr.BinaryOp{
 	expr.OpAdd, expr.OpSub, expr.OpMul, expr.OpDiv, expr.OpFloorDiv, expr.OpMod,
-	expr.OpPow,
+	expr.OpPow, expr.OpTruncDiv,
 	expr.OpEq, expr.OpNe, expr.OpLt, expr.OpLe, expr.OpGt, expr.OpGe,
 	expr.OpEqMissing, expr.OpNeMissing,
 	expr.OpAnd, expr.OpOr, expr.OpXor,
