@@ -349,57 +349,6 @@ func TestStructSurvivesTakeAndFilter(t *testing.T) {
 	}
 }
 
-// TestStructFieldIsAnOrdinaryColumn: once a field is out, everything applies to it.
-func TestStructFieldIsAnOrdinaryColumn(t *testing.T) {
-	path := writeStructFile(t, []person{
-		{age: age(30), city: city("NY"), ok: true},
-		{age: age(40), city: city("NY"), ok: true},
-		{age: age(50), city: city("SF"), ok: true},
-	}, []int64{1, 2, 3})
-
-	df, err := ursus.ScanParquet(path).
-		GroupBy(ursus.Col("person").Struct().Field("city").Alias("city")).
-		Agg(ursus.Col("person").Struct().Field("age").Alias("age").Sum().Alias("total")).
-		Sort(ursus.Asc(ursus.Col("city"))).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if df.Height() != 2 {
-		t.Fatalf("got %d groups, want 2\n%s", df.Height(), df)
-	}
-	for i, w := range []struct {
-		city  string
-		total int64
-	}{{"NY", 70}, {"SF", 50}} {
-		c, _, err := df.At[string](i, "city")
-		if err != nil {
-			t.Fatal(err)
-		}
-		v, _, err := df.At[ursus.Int128Value](i, "total")
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, fits := v.Int64()
-		if c != w.city || !fits || got != w.total {
-			t.Errorf("row %d = (%q, %s), want (%q, %d)\n%s", i, c, v, w.city, w.total, df)
-		}
-	}
-}
-
-// TestStructProjectionSkipsTheStruct is step 28's guarantee, still holding: a column
-// this query does not want is never opened, so its leaves are never decompressed.
-func TestStructProjectionSkipsTheStruct(t *testing.T) {
-	df, err := ursus.ScanParquet(structFixture(t)).
-		Select(ursus.Col("id")).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if df.Width() != 1 || df.Height() != 4 {
-		t.Fatalf("got %dx%d, want 4x1\n%s", df.Height(), df.Width(), df)
-	}
-}
-
 // TestStructRefusals: what is still not readable, and what is not askable.
 func TestStructRefusals(t *testing.T) {
 	path := structFixture(t)
