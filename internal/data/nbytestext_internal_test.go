@@ -9,8 +9,9 @@ import (
 // TestAStringSliceHoldsItsText (step 425): a slice of a String column shares the
 // column's characters and is charged the bytes its rows cover, the buffer's room
 // past them included when its rows run to the end. Alone it holds its offsets and
-// that text; beside the column it adds only its offsets, and the column's batches
-// together hold all its text.
+// that text; beside the column it adds only its offsets where they are its own, and
+// nothing where they are a view of the column's; the column's batches together hold
+// all its text.
 func TestAStringSliceHoldsItsText(t *testing.T) {
 	strs := make([]string, 1024)
 	for i := range strs {
@@ -39,12 +40,19 @@ func TestAStringSliceHoldsItsText(t *testing.T) {
 			t.Errorf("rows %d to %d alone: %d bytes, want their offsets' %d and their text's %d",
 				lo, lo+64, got, offs.Size(), want)
 		}
+		// Master's Slice views the column's offsets, where 0.7's copied them: a view
+		// adds nothing beside the column, and a copy its own offsets.
+		extra := offs.Size()
+		partID, _ := bufferID(part.offs)
+		if colID, _ := bufferID(col.offs); partID == colID {
+			extra = 0
+		}
 		var s BufferSet
 		s.AddColumn(part)
 		s.AddColumn(col)
-		if s.Total() != col.NBytes()+offs.Size() {
-			t.Errorf("rows %d to %d beside the column: %d bytes, want the column's %d and their offsets' %d",
-				lo, lo+64, s.Total(), col.NBytes(), offs.Size())
+		if s.Total() != col.NBytes()+extra {
+			t.Errorf("rows %d to %d beside the column: %d bytes, want the column's %d and %d more",
+				lo, lo+64, s.Total(), col.NBytes(), extra)
 		}
 	}
 	var all BufferSet
