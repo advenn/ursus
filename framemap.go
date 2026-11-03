@@ -53,6 +53,9 @@ func (df *DataFrame) MapRows[T, R any](ctx context.Context, fn func(T) (R, error
 	}
 	// One column, "map": R read as the one field of a struct laid out as R is.
 	one := reflect.StructOf([]reflect.StructField{{Name: "Map", Type: rt, Tag: `ursus:"map"`}})
+	if err := refuseRecursive("map_rows", one); err != nil {
+		return nil, err
+	}
 	at := loc{rows: len(out), stride: rt.Size()}
 	if len(out) > 0 {
 		at.base = unsafe.Pointer(&out[0])
