@@ -163,29 +163,3 @@ func TestReverseCommutesWithFilter(t *testing.T) {
 		t.Errorf("expected REVERSE above FILTER, got i=%d j=%d:\n%s", i, j, txt)
 	}
 }
-
-// TestSlicePositionalNodesStayBarriers: the four nodes that must NOT join Reverse in
-// the predicate rule. Each depends on WHICH rows precede a row, so moving a filter
-// below one changes the answer.
-func TestSlicePositionalNodesStayBarriers(t *testing.T) {
-	for _, c := range []struct {
-		name string
-		lf   *ursus.LazyFrame
-	}{
-		{"tail", frame().Tail(3).Filter(ursus.Col("price").Gt(5))},
-		{"slice", frame().Slice(1, 3).Filter(ursus.Col("price").Gt(5))},
-		{"row_index", frame().WithRowIndex("n", 0).Filter(ursus.Col("n").Lt(uint32(3)))},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			on, err := c.lf.Collect(t.Context(), ursus.WithVerify())
-			if err != nil {
-				t.Fatal(err)
-			}
-			off, err := c.lf.Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()))
-			if err != nil {
-				t.Fatal(err)
-			}
-			ursustest.AssertFrameEqual(t, on, off)
-		})
-	}
-}

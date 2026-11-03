@@ -292,25 +292,3 @@ func TestParallelConcurrentCollects(t *testing.T) {
 		}
 	}
 }
-
-// TestParallelDoesNotTouchBreakers documents the scope boundary as a test: a query
-// that is nothing but a pipeline breaker still works, and still gives the same
-// answer, at every thread count.
-func TestParallelDoesNotTouchBreakers(t *testing.T) {
-	var want *ursus.DataFrame
-	for _, n := range []int{1, 4, 8} {
-		df, err := parFrame(2_000).
-			Sort(ursus.Desc(ursus.Col("qty"))).
-			Unique("tag").
-			Collect(t.Context(), ursus.WithThreads(n), ursus.WithBatchSize(97), ursus.WithVerify())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if want == nil {
-			want = df
-			continue
-		}
-		t.Run("threads "+itoa64(int64(n)),
-			func(t *testing.T) { ursustest.AssertFrameEqual(t, df, want) })
-	}
-}

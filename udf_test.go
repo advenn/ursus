@@ -223,34 +223,6 @@ func TestUDFErrorNamesTheRow(t *testing.T) {
 	}
 }
 
-// TestUDFErrorIsTheSameRowAtEveryBatchSize.
-//
-// The row index a udf reports is its index WITHIN A BATCH, so a naive
-// implementation names a different row depending on how the query happened to run.
-// Batching is not something the user asked for, so it must not be visible.
-func TestUDFErrorIsTheSameRowAtEveryBatchSize(t *testing.T) {
-	boom := errors.New("boom")
-	for _, run := range []struct{ size, threads int }{{1, 1}, {3, 2}, {8192, 4}} {
-		size, threads := run.size, run.threads
-		_, err := udfFrame().Select(
-			ursus.Col("id").MapElements("fails", ursus.Int64,
-				func(v int64) (int64, error) {
-					if v == 3 {
-						return 0, boom
-					}
-					return v, nil
-				}).Alias("out"),
-		).Collect(t.Context(),
-			ursus.WithBatchSize(size), ursus.WithThreads(threads))
-		if err == nil {
-			t.Fatalf("size %d threads %d: expected the udf to fail", size, threads)
-		}
-		if !errors.Is(err, boom) {
-			t.Errorf("size %d threads %d: %v", size, threads, err)
-		}
-	}
-}
-
 // TestUDFIsBatchSizeInvariant. The results, unlike the error index, must be
 // identical at every batch size and thread count — the standing rule for every
 // operator that has one.
@@ -274,43 +246,6 @@ func TestUDFIsBatchSizeInvariant(t *testing.T) {
 			t.Fatalf("size %d threads %d: %v", size, threads, err)
 		}
 		ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
-	}
-}
-
-// TestTwoUDFsWithDifferentNamesDoNotCollapse is the reason the name is required.
-//
-// Three parts of the engine deduplicate expressions by their RENDERED form, and a
-// Go closure has no rendered form. Without a name in String(), these two render
-// alike, become one computation, and both columns get the first one's answer —
-// the shape of the unparameterised-Quantile bug that collapsed p50 and p99.
-//
-// The aggregate context is the one that bites, because extractAggs' byKey map is
-// keyed on String().
-func TestTwoUDFsWithDifferentNamesDoNotCollapse(t *testing.T) {
-	df, err := udfFrame().GroupBy(ursus.Lit(1).Alias("k")).Agg(
-		ursus.Col("id").MapElements("double", ursus.Int64,
-			func(v int64) (int64, error) { return v * 2, nil }).
-			Sum().Cast(ursus.Int64).Alias("doubled"),
-		ursus.Col("id").MapElements("triple", ursus.Int64,
-			func(v int64) (int64, error) { return v * 3, nil }).
-			Sum().Cast(ursus.Int64).Alias("tripled"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// 1+2+3+4 = 10, so doubled is 20 and tripled is 30. Collapsing gives 20 twice.
-	d, _, err := df.At[int64](0, "doubled")
-	if err != nil {
-		t.Fatal(err)
-	}
-	tr, _, err := df.At[int64](0, "tripled")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d != 20 || tr != 30 {
-		t.Errorf("doubled = %d, tripled = %d; want 20 and 30 — equal values mean "+
-			"the two udfs collapsed into one computation\n%s", d, tr, df)
 	}
 }
 

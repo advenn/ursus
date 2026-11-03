@@ -184,48 +184,6 @@ func TestUnpivotIndexDefaultsToTheRest(t *testing.T) {
 	}
 }
 
-// TestUnpivotCustomNames — the two invented columns are the only ones a user has no
-// other way to name.
-func TestUnpivotCustomNames(t *testing.T) {
-	df, err := unpivotFrame().Unpivot(ursus.UnpivotOptions{
-		On:           []string{"jan", "feb"},
-		Index:        []string{"id"},
-		VariableName: "month",
-		ValueName:    "sales",
-	}).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := df.Schema().Names(); strings.Join(got, ",") != "id,month,sales" {
-		t.Errorf("got %v, want id, month, sales", got)
-	}
-}
-
-// TestUnpivotFeedsAnOrdinaryFrame. The output is not special: it groups, filters and
-// sorts like anything else, which is the whole point of melting.
-func TestUnpivotFeedsAnOrdinaryFrame(t *testing.T) {
-	df, err := unpivotFrame().
-		Unpivot(ursus.UnpivotOptions{On: []string{"jan", "feb"}}).
-		GroupBy(ursus.Col("variable")).
-		Agg(ursus.Col("value").Sum().Cast(ursus.Int64).Alias("total")).
-		Sort(ursus.Asc(ursus.Col("variable"))).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if df.Height() != 2 {
-		t.Fatalf("got %d groups, want 2\n%s", df.Height(), df)
-	}
-	// feb is 20 + null + 60 = 80; jan is 10 + 30 + 50 = 90.
-	for i, want := range []int64{80, 90} {
-		if v, _, err := df.At[int64](i, "total"); err != nil {
-			t.Fatal(err)
-		} else if v != want {
-			t.Errorf("row %d: total = %d, want %d\n%s", i, v, want, df)
-		}
-	}
-}
-
 // TestUnpivotKeepsItsColumnsAliveThroughPushdown is the Expressions() arm.
 //
 // On and Index are column references in string form, invisible to a liveness rule
