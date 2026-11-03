@@ -42,6 +42,10 @@ that stops when its request is cancelled.
 
 ### Features
 
+- **`Erf` and `Erfc`** (488): the error function and its complement, Polars' `erf`
+  and `erfc`, widening as `Sqrt` does; `Erfc` computed apart, so `Erfc(6)` is
+  2.15e-17 where 1 − `Erf(6)` is 0. Go's `math.Erf` and `math.Erfc`, within an ulp
+  and four of Polars'.
 - **`Engine`** (395): the memory budget and spill directory its queries share.
   `NewEngine(WithEngineMemoryLimit(n), WithEngineSpillDir(dir))` makes one, a
   service's for its requests, say, and another for its exports; `WithEngine(e)` runs a

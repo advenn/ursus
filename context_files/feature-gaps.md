@@ -200,6 +200,7 @@ differs from their input's, or scalars outside a group-by.
     component expressions;
   - `first` and `last` as aggregates only;
   - `row_index` as a frame operation only.
+- **Built in 0.8:** `erf` and `erfc`, Polars 2.x's, as `Erf` and `Erfc` (step 488).
 
 ## 5. Computation and aggregation
 
