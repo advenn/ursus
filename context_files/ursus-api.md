@@ -1015,6 +1015,7 @@ func ScanParquet(paths ...string) *LazyFrame
 func ScanCSV(paths ...string) *LazyFrame
 func ScanIPC(paths ...string) *LazyFrame
 func ScanNDJSON(paths ...string) *LazyFrame
+func ScanLines(path string, opts ...LinesOption) *LazyFrame   // a String column, "line"
 func ScanAvro(paths ...string) *LazyFrame
 func ScanDelta(uri string, opts ...DeltaOption) *LazyFrame
 func ScanIceberg(table string, opts ...IcebergOption) *LazyFrame
