@@ -539,6 +539,7 @@ type NameExpr struct{ e Expr }
 func (n NameExpr) Keep() Expr
 func (n NameExpr) Prefix(p string) Expr
 func (n NameExpr) Suffix(s string) Expr
+func (n NameExpr) StripPrefix(p string) Expr; func (n NameExpr) StripSuffix(s string) Expr
 func (n NameExpr) Map(fn func(string) string) Expr
 func (n NameExpr) Replace(old, new string) Expr
 func (n NameExpr) ToLower() Expr; func (n NameExpr) ToUpper() Expr
