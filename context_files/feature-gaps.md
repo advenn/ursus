@@ -2,7 +2,8 @@
 
 **Taken on 2026-10-14, at `028f0c6`** (after v0.6.4's step 246), at the maintainer's
 request: everything a user of Polars, pandas or DuckDB would reach for that ursus
-does not have today.
+does not have today. **Measured again against Polars 2.1 on 2026-11-03** (step 487):
+§11.
 
 **How:**
 
@@ -26,7 +27,8 @@ does not have today.
   generators (`int_range`, `date_range`), `list.eval`, JSON and IPC I/O, hive
   partitions, selectors, and a frame-level surface (sample, partition_by, frame
   cast) that pandas and Polars users expect;
-- SQL is out by an earlier decision.
+- SQL was out by an earlier decision; since step 487, SQL execution in DuckDB's
+  dialect is wanted (§8).
 
 Priorities are the checklist's (P0 must exist, P1 Polars-class, P2 long tail, P3
 maybe never), or inferred where it gives none.
@@ -293,7 +295,7 @@ These belong to a performance release more than to features.
 | **A Parquet file's Zstandard is a pure-Go decoder's:** klauspost's, the one arrow-go uses, decodes lineitem's two widest columns at 508–571 MB/s on one thread, where libzstd, through pyarrow, decodes 849; its faster copy is off in its source (`seqdec_asm.go`, `const useSafe = true`) (step 375). The four columns q14 reads at SF=1, summed on one thread, take 248–277 ms where Polars takes 141–156, and zstd is 62% of ursus's, about 170 ms, more than Polars' whole read; `l_extendedprice` alone 100–104 against 56–58; on four threads the four 118–127 against 55–70 and the one 48–54 against 22–29; at a load of 3.3 to 3.5, a first round there reading 342–374 against 167–175 (step 380). The rest of ursus's, about 105 ms, is the sums' 40 and the read's own decode, collections and copies 65, where it was about 115 at step 375. A decoder of ursus's own is out of 0.7's scope | P2 |
 | **A Parquet dataset is read in about twice Polars' time:** two million rows in forty Zstandard files, 42–61 ms against 19–28, its column chunks decompressed and decoded; the keys of a hive dataset cost nothing over it (step 347) | P2 |
 | **A Categorical is a String's cost:** stored as its text, it groups in 7.6 ms over a million rows of 1000 values where Polars, grouping its codes, takes 2.6; its codes are computed, 41 ms, where Polars' are stored; and it sorts as a String does, 616 ms against Polars' 40, the String sort's own gap (step 351) | P2 |
-| **SQL** (`SQLContext`, `.sql()`, `sql_expr`) | out by decision |
+| **SQL, DuckDB-compatible** (Polars' `SQLContext`, `.sql()`, `sql_expr`): DuckDB's dialect parsed into ursus's plan, so a SQL query shares the optimizer, the spilling and the memory budget, and its answers are checked against DuckDB, the bench's oracle; PDS-H's 22 queries in their SQL the first suite. Out by decision at step 156; wanted since step 487, a theme of its own | **wanted** |
 | GPU, plugins, Python bindings, distributed execution | P3 |
 
 ## 9. Where ursus differs from Polars on purpose
@@ -601,3 +603,36 @@ A completeness release should keep these intact:
   (§1);
 - `ursustest` with golden plans;
 - validation of every benchmark answer against DuckDB.
+
+## 11. Against Polars 2.1
+
+Polars 2.0 shipped after the parity work, which was against 1.44.1.
+[`step-487-as-built.md`](./step-487-as-built.md) matched 2.1.0's 853 public names
+outside `Series` against ursus's API and ran 2.0's semantic changes in both. The
+expression oracle's 46 cases answer under 2.1 as under 1.44.1.
+
+| missing | Polars | prio |
+| --- | --- | --- |
+| `Erf`, `Erfc` | `erf`, `erfc` | P1, step 488 on |
+| `TruncDiv`, division toward zero | `truncdiv` | P1, step 488 on |
+| `Round`, `Ceil`, `Floor` and `Sign` of a Decimal, refused today | `Decimal(p+1, s)` since 2.0 | P1, step 488 on |
+| `Name().StripPrefix`, `StripSuffix` | `name.strip_prefix`, `strip_suffix` | P2, step 488 on |
+| `ScanLines`, `ReadLines`: a file's lines as one String column | `scan_lines`, `read_lines` | P1, step 488 on |
+| `CollectAll`, `ExplainAll`: queries run together, a shared `Cache` once | `collect_all`, `explain_all` | P1 |
+| the Map type, `List().ToMap()`, Parquet and Arrow maps read as Maps | `Map`, `list.to_map` | P2 |
+| `ApproxQuantile` in bounded memory | `approx_quantile` | P2 |
+| `Struct().Eval` | `struct.eval` | P2 |
+| `BinIntervals`, `BinQuantiles`, `BinRanks`; `Cut` and `QCut` answer the first two | 2.0's spellings, `cut` and `qcut` deprecated | P2 |
+| `LazyFrame.Gather`, `DataFrame.IsSorted(by)`, Parquet key-value metadata | `gather`, `is_sorted`, `read_parquet_metadata` | P2 |
+| `Meta()`'s `IsScalar` and kin, `SetSorted`, `json_normalize`, `align_frames` | | P3 |
+
+**Where ursus answers as 1.44.1 and 2.0 does not,** each a break for the maintainer
+to decide:
+
+- `Explode` of an empty list is one null row; 2.0's is none.
+- A headerless CSV's columns are `column_1`, …; 2.0's start at `column_0`.
+- `Repeat` and `MakeDatetime` are named `repeat` and `datetime`; 2.0 names them after
+  their first input.
+- `Int64.IsIn(1.5)` answers false, and `Cast(String → Date)` parses; 2.0 refuses
+  both.
+- Parquet and Arrow map columns read as `List(Struct)`; 2.0's are its `Map` type.
