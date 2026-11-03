@@ -54,6 +54,9 @@ func TestV066UnderAMemoryLimit(t *testing.T) {
 		"M1, mode by k": true}
 	for name, q := range map[string]*ursus.LazyFrame{
 		"G1, a literal range": frame.WithColumns(ursus.IntRange(ursus.Lit(int64(0)), ursus.Lit(int64(n)), 1).Alias("i")),
+		// The frame's side of the stack is a batch in hand while Len() counts, charged
+		// as all the text until step 425.
+		"G1, a range to Len() beside text": frame.WithColumns(ursus.IntRange(ursus.Lit(int64(0)), ursus.Len(), 1).Alias("i")),
 		"G2, a date range a row": frame.WithColumns(ursus.DateRanges(c("d"), c("d").Dt().OffsetBy(ursus.Every("3d")),
 			ursus.Every("1d")).List().Len().Alias("r")),
 		"F1, cum_sum_horizontal": frame.WithColumns(ursus.CumSumHorizontal(c("v"), c("f")).Alias("cs")),
@@ -120,11 +123,6 @@ func TestV066UnderAMemoryLimit(t *testing.T) {
 		"tier 2, hist": {frame.Select(c("f").Hist(ursus.HistBinCount(5)).Alias("h")), "memory limit"},
 		// Each row reads its whole prefix.
 		"tier 2, cumulative_eval": {frame.Select(c("f").CumulativeEval(el().Sum()).Alias("c")), "cumulative_eval"},
-		// The frame's side of the stack is held while Len() counts, and the count, with
-		// nothing of its own to spill, refuses; a literal end streams, and so does
-		// WithRowIndex.
-		"G1, a range to Len() beside text": {frame.WithColumns(ursus.IntRange(ursus.Lit(int64(0)), ursus.Len(), 1).Alias("i")),
-			"memory limit"},
 	} {
 		if _, _, err := limited(t, tc.q, small); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: got %v, want a refusal naming %q", name, err, tc.want)

@@ -1,10 +1,12 @@
 package dtype
 
 import (
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"unsafe"
+	"weak"
 )
 
 // typeExt is the payload of a parameterised or nested type.
@@ -12,6 +14,15 @@ import (
 // Instances are INTERNED: exactly one *typeExt exists per distinct payload, so
 // pointer equality is semantic equality and DataType stays comparable with ==.
 // Nothing here is ever mutated after interning.
+//
+// The table holds each payload WEAKLY (step 427): a payload no type holds is
+// collected, and a cleanup deletes its entry. It held them strongly, so every
+// struct, list, enum and zone ever built stayed, and a service reading files of
+// varied schemas grew without end. Equality holds still: two types held at once
+// share their payload, since while one is held its entry answers the other, and a
+// payload nobody holds has nothing to compare with. A parent's key names its inner
+// types by address, which is safe for the same reason: a held parent holds its
+// inner types, so their addresses are not reused while its entry answers.
 type typeExt struct {
 	tz     string   // Datetime
 	inner  DataType // List, Array
@@ -23,8 +34,31 @@ type typeExt struct {
 
 var (
 	internMu sync.RWMutex
-	interned = map[string]*typeExt{}
+	interned = map[string]weak.Pointer[typeExt]{}
 )
+
+// lookup returns the payload interned under k, if it is still held.
+func lookup(k string) *typeExt {
+	if w, ok := interned[k]; ok {
+		return w.Value()
+	}
+	return nil
+}
+
+// forget is the cleanup of a payload collected: its entry goes, unless the key has
+// been interned again since, as another payload.
+func forget(e entryRef) {
+	internMu.Lock()
+	defer internMu.Unlock()
+	if interned[e.key] == e.w {
+		delete(interned, e.key)
+	}
+}
+
+type entryRef struct {
+	key string
+	w   weak.Pointer[typeExt]
+}
 
 // intern returns the canonical *typeExt equal to e, registering e if it is new.
 //
@@ -35,9 +69,9 @@ func intern(e *typeExt) *typeExt {
 	k := e.key()
 
 	internMu.RLock()
-	got, ok := interned[k]
+	got := lookup(k)
 	internMu.RUnlock()
-	if ok {
+	if got != nil {
 		return got
 	}
 
@@ -52,10 +86,12 @@ func intern(e *typeExt) *typeExt {
 
 	internMu.Lock()
 	defer internMu.Unlock()
-	if got, ok := interned[k]; ok { // lost the race; use the winner
+	if got := lookup(k); got != nil { // lost the race; use the winner
 		return got
 	}
-	interned[k] = e
+	w := weak.Make(e)
+	interned[k] = w
+	runtime.AddCleanup(e, forget, entryRef{k, w})
 	return e
 }
 

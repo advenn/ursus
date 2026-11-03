@@ -57,13 +57,14 @@ func bytesOf[T Fixed](s []T) []byte {
 	return unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(s))), len(s)*int(unsafe.Sizeof(z)))
 }
 
-// sliceID is bufferID for a Go slice: its first byte, and its capacity in bytes.
-func sliceID[T Fixed](s []T) (BufferID, int64) {
+// sliceID is bufferID for a Go slice: its last byte, and its capacity in bytes.
+func sliceID[T Fixed](s []T) (BufferID, Span) {
 	if cap(s) == 0 {
-		return nil, 0
+		return nil, Span{}
 	}
 	var z T
-	return (*byte)(unsafe.Pointer(unsafe.SliceData(s))), int64(cap(s)) * int64(unsafe.Sizeof(z))
+	size := int64(cap(s)) * int64(unsafe.Sizeof(z))
+	return (*byte)(unsafe.Add(unsafe.Pointer(unsafe.SliceData(s)), size-1)), Span{-size, 0}
 }
 
 // ownedBuffer wraps s's elements as a buffer without copying. The buffer's capacity
