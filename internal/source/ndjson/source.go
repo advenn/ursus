@@ -65,9 +65,8 @@ type Source struct {
 	given *dtype.Schema // the given schema, every column nullable
 	bad   error         // the given schema's error
 
-	once   sync.Once
+	once   source.Once
 	schema *dtype.Schema
-	err    error
 }
 
 // New is a source of files, described as desc in Explain. Every column is nullable,
@@ -161,28 +160,31 @@ func (s *Source) Caps() plan.Caps  { return plan.Caps{Projection: true} }
 // RowsOnly: a scan of no columns is its rows (step 370).
 func (s *Source) RowsOnly(source.ScanSpec) bool { return true }
 
-// Schema is the given schema, or the one the first lines infer, read once.
+// Schema is the given schema, or the one the first lines infer, read once: a read its
+// caller's cancellation cut short is not kept, and the next caller reads again
+// (source.Once).
 func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 	if s.given != nil || s.bad != nil {
 		return s.given, s.bad
 	}
-	s.once.Do(func() {
-		// Recovered inside the function Do runs: a panic past it would leave the
-		// Once done and every later call a source with no schema and no error.
+	err := s.once.Do(ctx, func(ctx context.Context) (err error) {
 		defer func() {
 			if p := recover(); p != nil {
-				s.schema, s.err = nil, uerr.FromPanic(p, "read_ndjson")
+				s.schema, err = nil, uerr.FromPanic(p, "read_ndjson")
 			}
 		}()
-		if s.schema, s.err = s.inferred(ctx); s.err == nil {
-			s.schema, s.err = s.overridden(s.schema)
+		if s.schema, err = s.inferred(ctx); err == nil {
+			s.schema, err = s.overridden(s.schema)
 		}
-		if s.err == nil && s.opts.PathColumn != "" {
-			s.schema, s.err = source.WithPathColumn("read_ndjson", s.schema, s.opts.PathColumn)
+		if err == nil && s.opts.PathColumn != "" {
+			s.schema, err = source.WithPathColumn("read_ndjson", s.schema, s.opts.PathColumn)
 		}
-		s.err = s.named(s.err)
+		return s.named(err)
 	})
-	return s.schema, s.err
+	if err != nil {
+		return nil, err
+	}
+	return s.schema, nil
 }
 
 func (s *Source) inferred(ctx context.Context) (*dtype.Schema, error) {
@@ -500,7 +502,7 @@ func (r *reader) parse(part []byte) (*data.Batch, int, error) {
 		if blank(text) {
 			continue
 		}
-		p.s, p.pos = text, 0
+		p.s, p.pos, p.depth = text, 0, 0
 		p.space()
 		if text[p.pos] != '{' {
 			_, err := parseObject(text) // what the line holds instead

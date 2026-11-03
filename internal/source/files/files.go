@@ -49,12 +49,11 @@ type Source struct {
 	files          []File
 	with           Shared
 
-	once   sync.Once
+	once   source.Once
 	schema *dtype.Schema
 	own    *dtype.Schema    // the first file's columns
 	shared []dtype.Field    // the shared columns, as Schema found them
 	consts [][]*data.Column // by file, then shared column, one row each
-	err    error
 }
 
 // New is a source of files, op naming it in errors, name and desc in Explain, with
@@ -143,19 +142,18 @@ func (s *Source) keep(ctx context.Context, k int, preds []expr.Node,
 }
 
 // Schema is the first file's columns, then the shared ones; a shared column of a
-// file column's name takes its place, as a partition key's does.
+// file column's name takes its place, as a partition key's does. A read its caller's
+// cancellation cut short is not kept, and the next caller reads again (source.Once).
 func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
-	s.once.Do(func() {
+	err := s.once.Do(ctx, func(ctx context.Context) (err error) {
 		if len(s.files) == 0 {
-			s.err = uerr.New(uerr.KindValue, s.op, "no files to read")
-			return
+			return uerr.New(uerr.KindValue, s.op, "no files to read")
 		}
-		if s.own, s.err = s.files[0].Src.Schema(ctx); s.err != nil {
-			s.err = uerr.Annotate(s.err, s.op, s.files[0].Path)
-			return
+		if s.own, err = s.files[0].Src.Schema(ctx); err != nil {
+			return uerr.Annotate(err, s.op, s.files[0].Path)
 		}
-		if s.err = s.share(); s.err != nil {
-			return
+		if err = s.share(); err != nil {
+			return err
 		}
 		fields := s.own.FieldSlice()
 		for _, f := range s.shared {
@@ -165,9 +163,13 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 				fields = append(fields, f)
 			}
 		}
-		s.schema, s.err = dtype.NewSchema(fields...)
+		s.schema, err = dtype.NewSchema(fields...)
+		return err
 	})
-	return s.schema, s.err
+	if err != nil {
+		return nil, err
+	}
+	return s.schema, nil
 }
 
 // share finds the shared columns and each file's values of them: the partition keys,
