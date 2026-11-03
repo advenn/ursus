@@ -84,7 +84,7 @@ func Unary(op expr.UnaryOp, name string, out dtype.DataType, c *data.Column) (*d
 	case expr.OpSqrt, expr.OpCbrt, expr.OpExp, expr.OpLn, expr.OpLog10, expr.OpLog1p,
 		expr.OpSin, expr.OpCos, expr.OpTan, expr.OpArcSin, expr.OpArcCos, expr.OpArcTan,
 		expr.OpSinh, expr.OpCosh, expr.OpTanh, expr.OpArcSinh, expr.OpArcCosh, expr.OpArcTanh,
-		expr.OpDegrees, expr.OpRadians, expr.OpCot:
+		expr.OpDegrees, expr.OpRadians, expr.OpCot, expr.OpErf, expr.OpErfc:
 		// The widening family. Listed rather than routed through op.IsMath() so that
 		// a math op added to the enum without an arm here fails loudly in Unary's
 		// default rather than silently taking the type-preserving path.
@@ -363,6 +363,15 @@ func unaryMath(op expr.UnaryOp, name string, out dtype.DataType,
 	case expr.OpLog1p:
 		for i, v := range src {
 			dst[i] = math.Log1p(v)
+		}
+	case expr.OpErf:
+		for i, v := range src {
+			dst[i] = math.Erf(v)
+		}
+	case expr.OpErfc:
+		// Erfc is not 1 - Erf: erfc(6) is 2.2e-17, a value where 1 - erf(6) is 0.
+		for i, v := range src {
+			dst[i] = math.Erfc(v)
 		}
 	case expr.OpCot:
 		// A Float32's is 1/tan in float32, as Polars divides it, where the float64
