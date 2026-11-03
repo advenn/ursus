@@ -130,6 +130,9 @@ that stops when its request is cancelled.
 
 All three are in v0.7.1 too.
 
+Every fix of v0.7.2 is in 0.8 too, forward-ported from `release-0.7` by #33 to #37:
+its section below lists them.
+
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
   error: a count of a CSV file cancelled partway was an empty frame. A query whose
@@ -144,6 +147,108 @@ All three are in v0.7.1 too.
   nothing, so a bug in one ended the program that asked, a service with every request
   it served. Each panic is an internal error from the call now, as one anywhere else
   in a query is, naming the line that panicked.
+
+## v0.7.2 — 2026-11-02
+
+Everything since `v0.7.1` (2026-10-30): steps 410–436, the bug hunt
+[`v0.7.2-scope.md`](./context_files/v0.7.2-scope.md) set, on the 0.7 line. No API is
+added, changed or removed. `api/v0.7.2.txt` lists v0.7.1's 2,389 features, and CI
+diffs the API against it strictly from step 436 on.
+
+### What a v0.7.1 user can trip on
+
+- **A naive Datetime's text has no "Z"** (422): "2024-01-02T03:04:05", where it was
+  "…05Z". This applies to prints, casts to String, `JsonEncode`, a pivot's column
+  names and error texts. A zoned Datetime keeps its offset.
+- **Input that answered wrongly, or crashed, is refused:**
+  - a JSON value nested past 1,000 levels (412);
+  - a Parquet column nested past 1,000 levels (423);
+  - a Parquet footer whose row counts disagree (416);
+  - a decimal exponent out of range (414);
+  - a business day's `Add` past the range (419);
+  - a partition key or value holding `..` (420);
+  - `FromRows` and `MapRows` of a recursive type (413).
+- **A query under a memory limit may spill where it did not, or answer where it
+  refused** (424, 425): the ledger counts a slice as part of the allocation it views,
+  and a batch of strings as the text its rows cover.
+- **Errors:**
+  - a panic in ursus's own code inside an Arrow stream is `ErrInternal`, where it was
+    `ErrIO` (428);
+  - a join past its deepest split names the query's other operators, where it named
+    one key (426);
+  - a stream that returns no bytes a hundred times in a row is `io.ErrNoProgress`
+    (415).
+
+### Fixed
+
+- **A deeply nested JSON line no longer ends the process** (412): NDJSON's parser
+  recursed once a level with no limit, and a line nested two million deep, 4 MB,
+  overflowed the stack, `fatal error: stack overflow`, which nothing recovers. A value
+  nested past 1,000 levels is an error naming the line's byte.
+- **A Parquet file can no longer end the process through its footer** (423): a schema
+  of 200,000 nested groups, a 1.6 MB footer, overflowed the stack in ursus's naming of
+  a column's type, and two million in arrow-go's own reading. The footer is measured
+  before either recurses, and a column nested past 1,000 levels is refused.
+- **`FromRows` and `MapRows` of a recursive type are refused** (413), naming the
+  field, where a linked list's `Next *node` or a tree's `Kids []tree` overflowed the
+  stack however few rows.
+- **A decimal's huge exponent no longer reads as 0** (414): "1e9223372036854775807"
+  cast to a Decimal wrapped its scale and answered 0 with no error. It is refused as
+  out of range, as DuckDB and Polars refuse it.
+- **A stream's empty read is not its end** (415): `ScanCSVFrom` took a read of no bytes
+  for the end of the input, so a CSV from a stream that paused read as 0 rows, and a
+  stream that never moved hung the read. CSV reads on; a hundred empty reads in a row
+  are `io.ErrNoProgress`.
+- **A Parquet footer whose row counts disagree is refused as corrupt** (416), where a
+  row group claiming 257 rows of its 300 read 257 and `Count` answered rows not there.
+- **A Parquet dictionary page's count is checked before it sizes anything** (417): a
+  2.4 KB file drew 76 MB, and a count could ask for 8 GiB.
+- **A cancelled `Collect` no longer poisons its LazyFrame** (418): a source cached the
+  first schema read's answer, a cancellation included, so one client going away failed
+  every later `Collect` of a shared query. A caller waiting on another's read also
+  honours its own deadline now.
+- **A business day's `Add` past any Date or Datetime is refused** (419), where a
+  count of `MaxInt64` wrapped to a wrong instant with no error. Polars answers null;
+  ursus keeps an error, as for Date.
+- **A partitioned write refuses a parent directory in a key or a value** (420): a
+  value `..\..\x` escaped the dataset's directory on Windows.
+- **A cancelled query stops calling `RollingMap`'s Go function** (421), where it went
+  on for the rest of the column, 199,998 calls over 200,000 rows.
+- **A naive Datetime is written without an offset** (422): a print, a cast to String,
+  `JsonEncode`, a pivot's column names and error texts wrote a wall clock as
+  "…T03:04:05Z", an instant in UTC.
+- **The memory ledger counts a slice as part of the allocation it views** (424): a
+  frame's head beside the frame read a peak of 0 MB and did not spill under a limit,
+  and a slice from the second row counted the frame twice.
+- **A batch of strings is charged the text its rows cover** (425): one 64-row batch of
+  a frame was charged all the column's text, so `WithColumns(IntRange(0, Len(), 1))`
+  beside text refused under 16 KiB. It answers.
+- **A type nobody holds is freed** (427): every struct, list, enum and zone type ever
+  built stayed in memory, so a service reading files of varied schemas grew without
+  end, 118.8 MB for 400,000 types.
+- **A streamed rolling window answers as in memory, to the bit** (429, 430): a rolling
+  var, std, skew, kurtosis, cov or corr over one huge partition under a memory limit
+  differed from the in-memory answer in its last bits, in up to 81% of its rows. Its
+  state is carried from batch to batch now, centred windows included.
+
+### Changed
+
+- **A join past its deepest split names what holds the memory** (426): it blamed "a
+  single join key" when the query's other operators held the limit, and names them and
+  their bytes now.
+- **A panic in ursus's own code inside an Arrow stream is an internal error** (428),
+  where every panic there was `ErrIO`, the caller's. A panic in the caller's factory or
+  reader is still `ErrIO`.
+
+### Tests
+
+- The race job has 40 minutes (411).
+- A temporal median's held values are read exactly, not sampled (431), and a
+  group-by's release of each aggregate is measured (432).
+- Teeth for eleven guards no public query reaches (433, 434).
+- `release-0.7`'s tests built again after the merges of 2026-11-02 (435).
+- The public API is pinned: CI diffs it against the newest `api/<tag>.txt` (436),
+  which took out step 424's `Column.Spans`, a method the public `Column` had gained.
 
 ## v0.7.1 — 2026-10-30
 
