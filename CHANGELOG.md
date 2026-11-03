@@ -42,6 +42,9 @@ that stops when its request is cancelled.
 
 ### Features
 
+- **`Name().StripPrefix` and `StripSuffix`** (491): the output name without an affix,
+  taken off once where the name has it, Polars' `name.strip_prefix` and
+  `strip_suffix`: `Col("a_x").Name().StripPrefix("a_")` is x.
 - **`Engine`** (395): the memory budget and spill directory its queries share.
   `NewEngine(WithEngineMemoryLimit(n), WithEngineSpillDir(dir))` makes one, a
   service's for its requests, say, and another for its exports; `WithEngine(e)` runs a

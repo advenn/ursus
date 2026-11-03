@@ -183,6 +183,8 @@ differs from their input's, or scalars outside a group-by.
   `get`, `head`, `tail`, `slice`, `size`, `encode`, `decode` and `reinterpret`, with
   expressions where Polars takes them. `reinterpret` to an Array waits for the Array
   type. `Str()` now refuses a Binary, as Polars' `.str` does.
+- **`.name`:** `strip_prefix` and `strip_suffix` built in 0.8 (step 491), as
+  `Name().StripPrefix` and `StripSuffix`.
 
 ### 4.6 Top-level functions (P0/P1)
 
