@@ -614,8 +614,8 @@ func callLit(v any) expr.Node {
 //
 // Cast x nested was invisible to both of this repository's cast instruments at once:
 // dtype.CanCast promises List -> List while the kernel refuses anything non-numeric,
-// and TestCanCastAgreesWithTheKernel names List and Struct as unsamplable SOURCES.
-// Deriving this axis is what closes that.
+// and the TypeID-pair check this arm has since replaced named List and Struct as
+// unsamplable SOURCES. Deriving this axis is what closes that.
 func contractCastTargetsOf(cols []*data.Column) []dtype.DataType {
 	seen := map[string]bool{}
 	var out []dtype.DataType
@@ -711,11 +711,12 @@ func checkContract(t *testing.T, n expr.Node, b *data.Batch, label string) (ran 
 // that mixed an Int32 Date with an Int64 Duration, and six Bool <-> temporal casts
 // where CanCast and the kernel disagreed.
 //
-// All ten are fixed, and both classes now have a check that is total rather than a
-// list — expr's TestBindingsArePhysicallyCoherent over the binding cross-product,
-// and kernel's TestCanCastAgreesWithTheKernel over every TypeID pair. The second
-// found seventeen MORE disagreements than this ratchet ever recorded, including
-// sixteen in the dangerous direction, because this fixture has no Decimal column.
+// All ten are fixed, and both classes were then given a check that was total rather
+// than a list — one over expr's binding cross-product, one over every TypeID pair of
+// CanCast against kernel.Cast. The second found seventeen MORE disagreements than
+// this ratchet ever recorded, including sixteen in the dangerous direction, because
+// this fixture had no Decimal column. Since step 64 derived the type axis below, the
+// binary and cast arms sweep every TypeID themselves, and those two checks are gone.
 //
 // It is kept, empty, because the mechanism is the useful part: an entry asserts a
 // gap still EXISTS, so fixing one without deleting its line fails the test. That is
