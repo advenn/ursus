@@ -707,7 +707,20 @@ func (s *Source) openFile(ctx context.Context, i int, mem memory.Allocator) (_ *
 			err = corrupt(v, s.partName(i))
 		}
 	}()
+	// The footer's schema is measured before arrow-go recurses on it (step 423).
+	if ra, err = measureFooter(ra); err != nil {
+		if closer != nil {
+			closer.Close()
+		}
+		return nil, nil, uerr.Annotate(err, "scan_parquet", s.partName(i))
+	}
 	r, err := file.NewParquetReader(ra, file.WithReadProps(readProps(mem)))
+	if err == nil {
+		err = checkRowCounts(r.MetaData())
+		if err != nil {
+			r.Close()
+		}
+	}
 	if err != nil {
 		if closer != nil {
 			closer.Close()
@@ -721,6 +734,39 @@ func (s *Source) openFile(ctx context.Context, i int, mem memory.Allocator) (_ *
 			closer.Close()
 		}
 	}, nil
+}
+
+// checkRowCounts refuses a footer whose row counts disagree (step 416): a row group's
+// against each of its column chunks', which hold a value a row where the column is
+// not repeated and at least one where it is, and the file's against its row groups'.
+// A read takes a row group's count for its rows, and a count its sum, so a count
+// short of the columns' read short, with no error, and one past them counted rows
+// that are not there.
+func checkRowCounts(md *metadata.FileMetaData) error {
+	var total int64
+	for g := range md.NumRowGroups() {
+		rg := md.RowGroup(g)
+		rows := rg.NumRows()
+		if rows < 0 {
+			return fmt.Errorf("corrupt: row group %d says %d rows", g, rows)
+		}
+		total += rows
+		for c := range rg.NumColumns() {
+			cc, err := rg.ColumnChunk(c)
+			if err != nil {
+				return err
+			}
+			vals := cc.NumValues()
+			if repeated := md.Schema.Column(c).MaxRepetitionLevel() > 0; vals < rows || !repeated && vals != rows {
+				return fmt.Errorf("corrupt: row group %d says %d rows, and its column %s holds %d values",
+					g, rows, md.Schema.Column(c).Path(), vals)
+			}
+		}
+	}
+	if total != md.NumRows {
+		return fmt.Errorf("corrupt: the file says %d rows, and its row groups hold %d", md.NumRows, total)
+	}
+	return nil
 }
 
 // fileSchema maps a Parquet schema to an ursus one, per TOP-LEVEL FIELD.
