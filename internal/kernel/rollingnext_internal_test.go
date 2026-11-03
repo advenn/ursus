@@ -77,7 +77,7 @@ func TestARollingWindowStreamedInPiecesIsTheWindow(t *testing.T) {
 					if !RollingSteps(fc.fn, params, out) {
 						t.Fatalf("%s: not RollingNext's", name)
 					}
-					want, err := winRolling(fc.fn, params, "r", out, col, seg)
+					want, err := winRolling(t.Context(), fc.fn, params, "r", out, col, seg)
 					if err != nil {
 						t.Fatalf("%s: %v", name, err)
 					}
