@@ -99,6 +99,7 @@ differs from their input's, or scalars outside a group-by.
 | **String view layout** | Arrow's view types are converted on import | P2 |
 | **UInt128, Float16, Object, Unknown** | Float16 is widened to Float32 on import | P2 |
 | **Dictionary, run-end, union, ListView** in memory | decoded or refused on import | P2 |
+| built: **a Decimal's `round`, `floor`, `ceil` and `sign`,** Polars 2.0's, exact at its scale, Decimal(p+1, s) where digits are dropped, in step 490; `truncate` and `round_sig_figs` of one still refused | — |
 | `Expr.ToPhysical`, `Reinterpret`, `ShrinkDtype` | `Cast(dt.Physical())` works for temporal types only | P2 |
 | built: **a List, an Array or a Struct column as a key,** in step 344: the group-key encoder writes a list's length and each element tagged, and a struct's fields tagged, so `Unique`, `UniqueKeep`, `GroupBy`, `Over`, `Join`, `PartitionBy`, `RleID`, `Rle`, `Mode` and `HashRows` key them as Polars does, and a group-by of them spills; a mode of them without `maintainOrder` comes as its values first appear, having no order (found at step 289) | — |
 
