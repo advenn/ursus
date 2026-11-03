@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
@@ -43,7 +44,7 @@ type Segments struct {
 //
 // col is the function's input in ORIGINAL row order — Perm indexes into it. fill is
 // Shift's replacement for vacated rows, or nil for null.
-func WinCall(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
+func WinCall(ctx context.Context, fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
 	col *data.Column, fill *data.Column, seg Segments) (*data.Column, error) {
 
 	switch {
@@ -62,7 +63,7 @@ func WinCall(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Data
 	case fn.IsCumulative():
 		return winCumulative(fn, params, name, out, col, seg)
 	case fn.IsRolling():
-		return winRolling(fn, params, name, out, col, seg)
+		return winRolling(ctx, fn, params, name, out, col, seg)
 	case fn.IsEwm():
 		return winEwm(fn, params, name, out, col, seg)
 	case fn == expr.WinInterpolate && params.By:

@@ -33,6 +33,7 @@ import (
 	"errors"
 	"io"
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -100,11 +101,11 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 		// Recovered INSIDE the function Do runs: a panic that escaped it would still
 		// mark the Once done, and every later call would return (nil, nil). The
 		// factory and the reader are the caller's code, so a panic in them is an I/O
-		// failure of the stream rather than ursus's bug.
+		// failure of the stream rather than ursus's bug; one in ursus's own
+		// conversion of the schema is ursus's (attributed).
 		defer func() {
 			if v := recover(); v != nil {
-				s.schema, s.err = nil, uerr.Attributed(v, uerr.KindIO, op,
-					"opening the Arrow stream panicked")
+				s.schema, s.err = nil, attributed(v, "opening the Arrow stream panicked")
 			}
 		}()
 		rr, err := s.call(ctx)
@@ -298,10 +299,65 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 func callerCode(what string, f func() error) (err error) {
 	defer func() {
 		if v := recover(); v != nil {
-			err = uerr.Attributed(v, uerr.KindIO, op, "%s the Arrow stream panicked", what)
+			err = attributed(v, "%s the Arrow stream panicked", what)
 		}
 	}()
 	return f()
+}
+
+// attributed is a panic recovered around the caller's code as the error of whoever's
+// code raised it (step 428), as Parquet's corrupt is. The innermost frame outside Go's
+// standard library decides:
+//   - the caller's, or arrow-go's reading the stream, is an I/O failure of the
+//     stream: KindIO;
+//   - ursus's own is ursus's bug, ErrInternal, as anywhere else.
+//
+// Every panic here was KindIO, ursus's own among them: its conversion of the schema,
+// its checks of a reader's schema and records, and the readers ScanIPC and
+// ScanIPCStream open.
+func attributed(v any, format string, args ...any) *uerr.Error {
+	e := uerr.Attributed(v, uerr.KindIO, op, format, args...)
+	var p *uerr.PanicError
+	if !errors.As(e, &p) {
+		return e
+	}
+	for _, fn := range p.Callers {
+		switch ownerOf(fn) {
+		case ownedByUrsus:
+			return uerr.FromPanic(v, op)
+		case ownedByOthers:
+			return e
+		}
+	}
+	return e
+}
+
+type owner int
+
+const (
+	ownedByGo     owner = iota // the standard library, called by whichever comes next
+	ownedByUrsus               // this module, its test packages apart
+	ownedByOthers              // the caller's, or another module's: arrow-go's
+)
+
+// ownerOf is whose a function is, by the package path in its name as runtime.Frame
+// writes it: "github.com/advenn/ursus/internal/x.(*T).F", "main.f", "strings.Index".
+// A standard library path has no dot in its first element.
+func ownerOf(fn string) owner {
+	slash := strings.LastIndexByte(fn, '/')
+	pkg := fn
+	if dot := strings.IndexByte(fn[slash+1:], '.'); dot >= 0 {
+		pkg = fn[:slash+1+dot]
+	}
+	const self = "github.com/advenn/ursus"
+	first, _, _ := strings.Cut(pkg, "/")
+	switch {
+	case pkg == self || strings.HasPrefix(pkg, self+"/"):
+		return ownedByUrsus
+	case pkg == "main" || strings.Contains(first, "."):
+		return ownedByOthers
+	}
+	return ownedByGo
 }
 
 func (r *reader) start(ctx context.Context) error {
