@@ -146,6 +146,9 @@ func (s *temporalSink) segBatch(ctx context.Context, g *tgSeg) (*data.Batch, err
 		}
 		cols = append(cols, keys.Columns()...)
 	}
+	if TemporalSegmentFinishing != nil {
+		TemporalSegmentFinishing()
+	}
 	for i, spec := range s.specs {
 		g.accs[i].Reserve(n)
 		c, err := g.accs[i].Finish(spec.name, n)
@@ -169,6 +172,12 @@ func (s *temporalSink) segBatch(ctx context.Context, g *tgSeg) (*data.Batch, err
 	}
 	return data.NewBatch(s.schema, cols)
 }
+
+// TemporalSegmentFinishing, when set, is called as a segment of a temporal group-by's
+// windows is about to finish its aggregates, when every segment still open holds its
+// windows' values, in memory or spilled. It is for internal/memcheck, which collects
+// garbage there to read what they keep reachable (step 431). Nothing else sets it.
+var TemporalSegmentFinishing func()
 
 // windowKeys is the key of each bucket in bkts, a row each.
 func (s *temporalSink) windowKeys(bkts []int32) (*data.Batch, error) {
