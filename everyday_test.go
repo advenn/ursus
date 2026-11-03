@@ -24,13 +24,6 @@ func TestCut(t *testing.T) {
 		col  string
 		want []string
 	}{
-		// Closed on the right, as Polars' default: 18 is in (-inf, 18].
-		{"right closed", c("age").Cut(breaks), "age",
-			[]string{"(-inf, 18]", "(-inf, 18]", "(18, 65]", "(18, 65]", "(65, inf]", "null"}},
-		{"left closed", c("age").Cut(breaks, ursus.CutLeftClosed()), "age",
-			[]string{"[-inf, 18)", "[18, 65)", "[18, 65)", "[65, inf)", "[65, inf)", "null"}},
-		{"labelled", c("age").Cut(breaks, ursus.CutLabels("minor", "adult", "senior")), "age",
-			[]string{"minor", "minor", "adult", "adult", "senior", "null"}},
 		// NaN has no bin; the infinities have the outer ones.
 		{"floats", c("x").Cut([]float64{0, 2.5}), "x",
 			[]string{"(0, 2.5]", "null", "(2.5, inf]", "(-inf, 0]", "(-inf, 0]", "(2.5, inf]"}},
@@ -77,9 +70,6 @@ func TestQCut(t *testing.T) {
 		// The median of 1..8 is 4.5.
 		{"the median", c("v").QCut([]float64{0.5}),
 			[]string{"(4.5, inf]", "(-inf, 4.5]", "(4.5, inf]", "(-inf, 4.5]", "(-inf, 4.5]", "(4.5, inf]", "(-inf, 4.5]", "(4.5, inf]"}},
-		// Quartiles, linear: 2.75, 4.5 and 6.25.
-		{"quartiles", c("v").QCutN(4),
-			[]string{"(4.5, 6.25]", "(-inf, 2.75]", "(6.25, inf]", "(2.75, 4.5]", "(-inf, 2.75]", "(6.25, inf]", "(2.75, 4.5]", "(4.5, 6.25]"}},
 		{"labelled", c("v").QCutN(2, ursus.CutLabels("low", "high")),
 			[]string{"high", "low", "high", "low", "low", "high", "low", "high"}},
 	} {

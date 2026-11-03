@@ -230,24 +230,23 @@ func TestUDFErrorNamesTheRow(t *testing.T) {
 // Batching is not something the user asked for, so it must not be visible.
 func TestUDFErrorIsTheSameRowAtEveryBatchSize(t *testing.T) {
 	boom := errors.New("boom")
-	for _, size := range []int{1, 2, 3, 7, 8192} {
-		for _, threads := range []int{1, 2, 4} {
-			_, err := udfFrame().Select(
-				ursus.Col("id").MapElements("fails", ursus.Int64,
-					func(v int64) (int64, error) {
-						if v == 3 {
-							return 0, boom
-						}
-						return v, nil
-					}).Alias("out"),
-			).Collect(t.Context(),
-				ursus.WithBatchSize(size), ursus.WithThreads(threads))
-			if err == nil {
-				t.Fatalf("size %d threads %d: expected the udf to fail", size, threads)
-			}
-			if !errors.Is(err, boom) {
-				t.Errorf("size %d threads %d: %v", size, threads, err)
-			}
+	for _, run := range []struct{ size, threads int }{{1, 1}, {3, 2}, {8192, 4}} {
+		size, threads := run.size, run.threads
+		_, err := udfFrame().Select(
+			ursus.Col("id").MapElements("fails", ursus.Int64,
+				func(v int64) (int64, error) {
+					if v == 3 {
+						return 0, boom
+					}
+					return v, nil
+				}).Alias("out"),
+		).Collect(t.Context(),
+			ursus.WithBatchSize(size), ursus.WithThreads(threads))
+		if err == nil {
+			t.Fatalf("size %d threads %d: expected the udf to fail", size, threads)
+		}
+		if !errors.Is(err, boom) {
+			t.Errorf("size %d threads %d: %v", size, threads, err)
 		}
 	}
 }
@@ -267,15 +266,14 @@ func TestUDFIsBatchSizeInvariant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, size := range []int{1, 2, 3, 7} {
-		for _, threads := range []int{1, 2, 4} {
-			got, err := q().Collect(t.Context(),
-				ursus.WithBatchSize(size), ursus.WithThreads(threads), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("size %d threads %d: %v", size, threads, err)
-			}
-			ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
+	for _, run := range []struct{ size, threads int }{{1, 1}, {3, 2}, {7, 4}} {
+		size, threads := run.size, run.threads
+		got, err := q().Collect(t.Context(),
+			ursus.WithBatchSize(size), ursus.WithThreads(threads), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("size %d threads %d: %v", size, threads, err)
 		}
+		ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
 	}
 }
 

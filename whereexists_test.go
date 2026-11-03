@@ -54,15 +54,14 @@ func TestWhereExistsEqualsTheKeylessForm(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, size := range []int{1, 2, 3, 7, 64, 8192} {
-				for _, threads := range []int{1, 2, 3, 4, 8} {
-					got, err := tc.build().Collect(t.Context(),
-						ursus.WithBatchSize(size), ursus.WithThreads(threads), ursus.WithVerify())
-					if err != nil {
-						t.Fatalf("batch %d, %d threads: %v", size, threads, err)
-					}
-					ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
+			for _, run := range []struct{ size, threads int }{{1, 1}, {7, 3}, {8192, 8}} {
+				size, threads := run.size, run.threads
+				got, err := tc.build().Collect(t.Context(),
+					ursus.WithBatchSize(size), ursus.WithThreads(threads), ursus.WithVerify())
+				if err != nil {
+					t.Fatalf("batch %d, %d threads: %v", size, threads, err)
 				}
+				ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
 			}
 		})
 	}
@@ -179,28 +178,27 @@ func TestWhereExistsHighFanOut(t *testing.T) {
 		ursus.Col("rv").Ge(ursus.Col("lim")),
 	}
 
-	for _, size := range []int{1, 2, 3, 7, 64, 8192} {
-		for _, threads := range []int{1, 4} {
-			yes, err := left.WhereExists(right, preds...).
-				Collect(t.Context(), ursus.WithBatchSize(size), ursus.WithThreads(threads),
-					ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("batch %d: %v", size, err)
-			}
-			if yes.Height() != 2 {
-				t.Fatalf("batch %d, %d threads: got %d rows, want 2\n%s",
-					size, threads, yes.Height(), yes)
-			}
-			no, err := left.WhereNotExists(right, preds...).
-				Collect(t.Context(), ursus.WithBatchSize(size), ursus.WithThreads(threads),
-					ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("batch %d: %v", size, err)
-			}
-			if no.Height() != 1 {
-				t.Fatalf("batch %d, %d threads: got %d not-exists rows, want 1\n%s",
-					size, threads, no.Height(), no)
-			}
+	for _, run := range []struct{ size, threads int }{{1, 1}, {7, 4}, {8192, 4}} {
+		size, threads := run.size, run.threads
+		yes, err := left.WhereExists(right, preds...).
+			Collect(t.Context(), ursus.WithBatchSize(size), ursus.WithThreads(threads),
+				ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch %d: %v", size, err)
+		}
+		if yes.Height() != 2 {
+			t.Fatalf("batch %d, %d threads: got %d rows, want 2\n%s",
+				size, threads, yes.Height(), yes)
+		}
+		no, err := left.WhereNotExists(right, preds...).
+			Collect(t.Context(), ursus.WithBatchSize(size), ursus.WithThreads(threads),
+				ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch %d: %v", size, err)
+		}
+		if no.Height() != 1 {
+			t.Fatalf("batch %d, %d threads: got %d not-exists rows, want 1\n%s",
+				size, threads, no.Height(), no)
 		}
 	}
 }

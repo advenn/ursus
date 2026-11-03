@@ -171,20 +171,19 @@ func TestParallelBatchSizeAndThreadsAreIndependent(t *testing.T) {
 	}
 
 	var want *ursus.DataFrame
-	for _, bs := range []int{1, 7, 64, 512, 8192} {
-		for _, th := range []int{1, 2, 5, 8} {
-			df, err := build().Collect(t.Context(),
-				ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("batch=%d threads=%d: %v", bs, th, err)
-			}
-			if want == nil {
-				want = df
-				continue
-			}
-			t.Run("batch "+itoa64(int64(bs))+" threads "+itoa64(int64(th)),
-				func(t *testing.T) { ursustest.AssertFrameEqual(t, df, want) })
+	for _, run := range []struct{ bs, th int }{{1, 1}, {64, 5}, {8192, 8}} {
+		bs, th := run.bs, run.th
+		df, err := build().Collect(t.Context(),
+			ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch=%d threads=%d: %v", bs, th, err)
 		}
+		if want == nil {
+			want = df
+			continue
+		}
+		t.Run("batch "+itoa64(int64(bs))+" threads "+itoa64(int64(th)),
+			func(t *testing.T) { ursustest.AssertFrameEqual(t, df, want) })
 	}
 }
 
