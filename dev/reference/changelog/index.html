@@ -3839,6 +3839,16 @@ that stops when its request is cancelled.</p>
   named with its reason in <code>oracleDifferences</code>. CI regenerates the recordings and
   fails on one that is not Polars'. Three files converted first: <code>numodds_test.go</code>,
   <code>rollmore_test.go</code> and <code>dtmore_test.go</code>, 305 hand-typed lines of values gone.</li>
+<li><strong>The temporal wave converted</strong> (498): <code>calendar_test.go</code>'s by-hand half,
+  <code>tzreplace</code>, <code>components</code>, <code>daterange</code>, <code>csvdates</code>, <code>strtemporal</code>, <code>temporalagg</code>,
+  <code>weeks</code>, <code>dtcombine</code>, <code>dtexact</code>, <code>timearith</code>, <code>businessdays_range</code> and
+  <code>interpby_test.go</code>, 260 recorded cases in thirteen groups, 48 generated, 905 lines
+  gone; what Polars 2.1 has no answer for (a Time plus a Duration, the epoch's grid, two
+  patterns in one column, a zoned combine's day, <code>Duration(s)</code>) is held to Go's time
+  package. Four findings recorded and not asserted, for the maintainer: Polars 2.1
+  rounds a month by adding fourteen days, starts a <code>group_by_dynamic</code> day at 23:00
+  where midnight does not exist, combines a zoned Datetime's UTC date, and counts
+  business days back to an earlier date by numpy's rule.</li>
 </ul>
 <h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
 <p>All three are in v0.7.1 too.</p>
