@@ -28,7 +28,10 @@ POLARS = "2.1.0"
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 # The groups, in the order the runner writes them.
-GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore"]
+GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
+          # step 499: strings, lists, structs and enums
+          "listns", "arrns", "listeval", "listmore", "listset", "liststruct", "structfields", "withfields",
+          "enum_byhand", "expr_bin", "expr_cat", "strmany", "strcodec", "strsplit", "strptime"]
 
 
 @dataclass
