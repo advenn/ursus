@@ -11,9 +11,9 @@ package ursus_test
 // merge is gone even without the refusal; the refusal stays because the name is
 // all a person sees of a udf.
 //
-// udf.go's own doc states this and does not enforce it. udf_test.go proves only the
-// POSITIVE direction, that differently-named udfs stay apart; change its two names
-// to one string and it returns 20 and 20.
+// udf.go's own doc states this and does not enforce it. udf_test.go proved only the
+// POSITIVE direction, that differently-named udfs stay apart; with its two names
+// made one string it returned 20 and 20.
 //
 // # Each test was first written to assert the WRONG ANSWER
 //
