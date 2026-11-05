@@ -456,12 +456,16 @@ func strToList(fn expr.CallFn, name string, c *data.Column,
 			sep, _ := argString(args, 0)
 			parts = append(parts, strings.Split(s, sep)...)
 		case expr.FnStrSplitInclusive:
-			// Each part keeps the separator after it, and an empty string is no part,
-			// as Polars' split(inclusive=True) makes them (step 270).
-			if s != "" {
-				sep, _ := argString(args, 0)
-				parts = append(parts, strings.SplitAfter(s, sep)...)
+			// Each part keeps the separator after it, and what follows the last
+			// separator is a part only where there is something: an empty string is
+			// no part and "a,b," is ["a,", "b,"], as Polars' split(inclusive=True)
+			// makes them (steps 270 and 499).
+			sep, _ := argString(args, 0)
+			after := strings.SplitAfter(s, sep)
+			if after[len(after)-1] == "" {
+				after = after[:len(after)-1]
 			}
+			parts = append(parts, after...)
 		default: // ExtractAll
 			if re != nil {
 				parts = append(parts, re.FindAllString(s, -1)...)

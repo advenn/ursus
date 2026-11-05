@@ -160,6 +160,18 @@ that stops when its request is cancelled.
   named with its reason in `oracleDifferences`. CI regenerates the recordings and
   fails on one that is not Polars'. Three files converted first: `numodds_test.go`,
   `rollmore_test.go` and `dtmore_test.go`, 305 hand-typed lines of values gone.
+- **The expressions-and-math wave converted** (497): thirteen files, `scalar_byhand`
+  to `int128exact`, 264 recorded cases in thirteen groups, 72 generated, 229 hand-typed
+  lines gone; what Polars 2.1 has no spelling for is a Go oracle (an Int64 Sum past
+  2^63 against math/big, seconds, Decimal products and quotients against big.Rat with
+  seeded values) or a differential; nineteen documented differences named, two
+  findings left for the maintainer.
+- **Strings, lists, structs and enums from recorded oracles** (499): fifteen files
+  converted, `listns_test.go`'s 739 lines of null-against-empty by hand among them;
+  321 cases in fifteen groups, 58 generated, 1,611 lines gone. What Polars 2 has no
+  answer for is held to Go: a `List(Duration)` mean past int64 to `math/big`, a regex
+  replaced n times to `regexp`, a Datetime of seconds and a Date formatted with a
+  clock to `time`, `GetCategories` (removed from Polars 2) to the type's own list.
 - **The temporal wave converted** (498): `calendar_test.go`'s by-hand half,
   `tzreplace`, `components`, `daterange`, `csvdates`, `strtemporal`, `temporalagg`,
   `weeks`, `dtcombine`, `dtexact`, `timearith`, `businessdays_range` and
@@ -195,6 +207,23 @@ its section below lists them.
   answer was named after the bound, `literal` for a Go number and `lo` for `Col("lo")`,
   where Polars' clip keeps the value's name. Every test had aliased it; the recorded
   oracle found it.
+- **`Ln` and `Log10` of a subnormal** (497): Go's amd64 `math.Log` misreads a
+  subnormal, so `Ln(5e-324)` was −709.09, ln(2^-1022), where it is −744.44, and
+  `Log10` −307.95 for −323.31; the test against `math.Log` itself could not see it,
+  the recorded oracle did. A subnormal is scaled into the normal range first, within
+  two ulps of the correctly rounded answer.
+- **A Float32 cast to text uses Polars' Float32 bounds** (497): plain from 1e-6 to
+  below 1e13 and scientific outside, where a Float64's are 1e-5 and 1e16; both widths
+  used the Float64 bounds, so `float32(9e15)` read `9000000000000000.0` where Polars
+  writes `9e+15`.
+- **`Str().ToTitlecase` titlecases a digraph** (499): "ǆemal" was "Ǆemal" (U+01C4,
+  the upper case); it is "ǅemal" (U+01C5), Unicode's title mapping and Polars'. The
+  recorded oracle found it.
+- **`Str().ExtractGroups` of a null is a null Struct** (499), as Polars 2.1 gives it;
+  it was a Struct of null fields, which `SplitExact` and `SplitN` keep, as Polars does.
+- **An inclusive split has no trailing empty part** (499): `SplitInclusive(",")` of
+  "a,b," is `["a,", "b,"]`, and `SplitExact(",", 1, true)` of "a," is `{"a,", null}`,
+  as Polars splits them; each had an empty part after the last separator.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

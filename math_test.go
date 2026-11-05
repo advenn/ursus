@@ -16,6 +16,11 @@ import (
 // domain of sqrt/log are the three things a comparison written with `==` cannot
 // see at all, and exact halves are the only inputs that distinguish
 // round-half-away-from-zero from round-half-to-even.
+//
+// Since step 497 the same corpus, and a generated one, are also answered by Polars
+// 2.1.0 in the math group of testdata/oracle (oracle_math_test.go), which found
+// Ln and Log10 of a subnormal wrong: Go's amd64 math.Log misreads one, and this
+// file's oracle, math.Log itself, could not see it (goLog below).
 var mathCorpus = []float64{
 	0, math.Copysign(0, -1), // +0.0 and -0.0
 	1, -1, 2, 4, 9,
@@ -47,8 +52,8 @@ var mathOps = []struct {
 	{"sqrt", ursus.Expr.Sqrt, math.Sqrt},
 	{"cbrt", ursus.Expr.Cbrt, math.Cbrt},
 	{"exp", ursus.Expr.Exp, math.Exp},
-	{"ln", ursus.Expr.Ln, math.Log},
-	{"log10", ursus.Expr.Log10, math.Log10},
+	{"ln", ursus.Expr.Ln, goLog},
+	{"log10", ursus.Expr.Log10, goLog10},
 	{"log1p", ursus.Expr.Log1p, math.Log1p},
 	{"floor", ursus.Expr.Floor, math.Floor},
 	{"ceil", ursus.Expr.Ceil, math.Ceil},
@@ -83,7 +88,7 @@ func TestMathMatchesStdlib(t *testing.T) {
 					"value and nothing manufactures a null", op.name, in)
 			}
 			want := op.want(in)
-			if math.Float64bits(got) != math.Float64bits(want) {
+			if math.Float64bits(got) != math.Float64bits(want) && !(subnormal(in) && ulpsApart(got, want) <= 2) {
 				t.Errorf("%s(%v) = %v (bits %#x), want %v (bits %#x)",
 					op.name, in, got, math.Float64bits(got), want, math.Float64bits(want))
 			}
@@ -273,6 +278,38 @@ func judgeFloat32Op(t *testing.T, name string, wrong []string) {
 	}
 }
 
+// goLog and goLog10 are the math package's, but for a subnormal, which Go's amd64
+// Log misreads: its assembly takes the exponent field apart, which a subnormal has
+// not, so math.Log(5e-324) is -709.09 where ln(5e-324) is -744.44 (found by the
+// recorded oracle, step 497). Log2 takes the exponent by Frexp first and reads a
+// subnormal right, so its log is Log2's scaled; the kernel scales the value into the
+// normal range instead, and the two can differ in the last bits, so a subnormal input
+// is allowed two ulps.
+func goLog(v float64) float64 {
+	if subnormal(v) {
+		return math.Log2(v) * math.Ln2
+	}
+	return math.Log(v)
+}
+
+func goLog10(v float64) float64 {
+	if subnormal(v) {
+		return math.Log2(v) * (math.Ln2 / math.Ln10)
+	}
+	return math.Log10(v)
+}
+
+func subnormal(v float64) bool { return v > 0 && v < 0x1p-1022 }
+
+// ulpsApart is the number of float64s between a and b, which must have one sign.
+func ulpsApart(a, b float64) uint64 {
+	x, y := math.Float64bits(a), math.Float64bits(b)
+	if x > y {
+		return x - y
+	}
+	return y - x
+}
+
 func goSign(v float64) float64 {
 	switch {
 	case v > 0:
@@ -317,7 +354,9 @@ func TestRoundEdges(t *testing.T) {
 // Before it, ResolveUnary accepted every IsNumeric() type while the kernel handled
 // only the signed integers and the floats — so an ordinary query type-checked,
 // planned, rendered in Explain, and failed at EXECUTION. Nothing anywhere called
-// .Abs(), so nothing noticed for four steps.
+// .Abs(), so nothing noticed for four steps. The values are the math group's
+// (abs_sign_every_type, sum_abs_neg_sign_sqrt); what stays is that the types are
+// preserved and that the query over a Sum runs at all.
 func TestAbsAndNegCoverEveryNumericType(t *testing.T) {
 	f := ursus.Frame(
 		ursus.Values("i8", []int8{-3}),
@@ -366,7 +405,7 @@ func TestAbsAndNegCoverEveryNumericType(t *testing.T) {
 
 	// Int128 and Decimal reach the same kernel, and Int128 is not exotic: it is what
 	// every integer Sum produces, so this is an ordinary query.
-	agg, err := ursus.Frame(
+	if _, err := ursus.Frame(
 		ursus.Values("g", []string{"a", "a"}),
 		ursus.Values("v", []int64{-3, 1}),
 	).GroupBy(ursus.Col("g")).Agg(
@@ -374,145 +413,27 @@ func TestAbsAndNegCoverEveryNumericType(t *testing.T) {
 		ursus.Col("v").Sum().Neg().Alias("neg"),
 		ursus.Col("v").Sum().Sign().Alias("sign"),
 		ursus.Col("v").Sum().Sqrt().Alias("sqrt"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
+	).Collect(t.Context(), ursus.WithVerify()); err != nil {
 		t.Fatalf("GroupBy(g).Agg(Col(\"v\").Sum().Abs()) — the query that used to "+
 			"fail at execution: %v", err)
 	}
-	if got, _, _ := agg.At[ursus.Int128Value](0, "abs"); got.String() != "2" {
-		t.Errorf("abs(sum) = %s, want 2", got)
-	}
-	if got, _, _ := agg.At[ursus.Int128Value](0, "sign"); got.String() != "-1" {
-		t.Errorf("sign(sum) = %s, want -1", got)
-	}
 }
 
-// TestUnsignedAbsIsTheIdentity: refusing abs on an unsigned column would have been
-// an error where the right answer is free, which is why the kernel widened rather
-// than ResolveUnary narrowing.
-func TestUnsignedAbsIsTheIdentity(t *testing.T) {
-	df, err := ursus.Frame(ursus.Values("u", []uint32{0, 7, 4294967295})).
-		Select(ursus.Col("u").Abs().Alias("a"), ursus.Col("u").Sign().Alias("s")).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, want := range []uint32{0, 7, 4294967295} {
-		if got, _, _ := df.At[uint32](i, "a"); got != want {
-			t.Errorf("abs row %d = %d, want %d", i, got, want)
-		}
-	}
-	for i, want := range []uint32{0, 1, 1} {
-		if got, _, _ := df.At[uint32](i, "s"); got != want {
-			t.Errorf("sign row %d = %d, want %d", i, got, want)
-		}
-	}
-}
-
-// TestFloatModAndFloorDiv covers the twin defect, and the deliberate disagreement
-// between integer and float division by zero.
-//
-// Neither Mod nor FloorDiv had a single test anywhere before this, which is how
-// arithFloat came to accept % at plan time and refuse it at execution for nine
-// steps.
-func TestFloatModAndFloorDiv(t *testing.T) {
-	df, err := ursus.Frame(
-		ursus.Values("a", []float64{7, -7, 7, 5.5}),
-		ursus.Values("b", []float64{2, 2, 0, 2}),
-		ursus.Values("ia", []int64{7, -7, 7, 5}),
-		ursus.Values("ib", []int64{2, 2, 0, 2}),
-	).Select(
-		ursus.Col("a").Mod(ursus.Col("b")).Alias("fmod"),
-		ursus.Col("a").FloorDiv(ursus.Col("b")).Alias("fdiv"),
-		ursus.Col("ia").Mod(ursus.Col("ib")).Alias("imod"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatalf("float Mod: %v", err)
-	}
-
-	// The floored remainder takes the sign of the DIVISOR, as the integer one does
-	// and as Polars and Python answer: −7 % 2 is 1. math.Mod's −1 was the dividend's.
-	for i, want := range []float64{1, 1, math.NaN(), 1.5} {
-		got, ok, _ := df.At[float64](i, "fmod")
-		if !ok {
-			t.Fatalf("fmod row %d is null; float mod is TOTAL, unlike integer mod", i)
-		}
-		if math.Float64bits(got) != math.Float64bits(want) {
-			t.Errorf("fmod row %d = %v, want %v", i, got, want)
-		}
-	}
-	// FloorDiv, which this test NAMED and never asserted. "fdiv" was selected on
-	// the line above and then read by nothing — the column was computed and thrown
-	// away, including the row where b is zero.
-	//
-	// What it was hiding: the arm did `dst[i] = T(int64(dst[i]))`, and a float-to-
-	// integer conversion is IMPLEMENTATION-DEFINED when the value does not fit. On
-	// amd64 every one of these came back as -9223372036854775808.
-	//
-	// Float division is TOTAL by design — the OpDiv arm says so — so flooring it
-	// must stay total: +Inf and NaN survive, and a value too large to be an int64
-	// is simply already an integer.
-	for i, want := range []float64{3, -4, math.Inf(1), 2} {
-		got, ok, _ := df.At[float64](i, "fdiv")
-		if !ok {
-			t.Fatalf("fdiv row %d is null; float floor division is TOTAL", i)
-		}
-		if math.Float64bits(got) != math.Float64bits(want) {
-			t.Errorf("fdiv row %d = %v, want %v", i, got, want)
-		}
-	}
-	// Integer mod by zero is NULL, and that disagreement with the float case is a
-	// decision: Go panics on integer division by zero, IEEE does not.
-	if _, ok, _ := df.At[int64](2, "imod"); ok {
-		t.Error("integer mod by zero must be null")
-	}
-}
-
-// TestFloatFloorDivStaysFinite is the case that makes the defect not a corner.
-//
-// 1e300 // 1 is an ordinary computation on ordinary input. Through an int64 round
-// trip it returned -9.22e18 — a plausible finite number, with no error and no null.
-func TestFloatFloorDivStaysFinite(t *testing.T) {
-	df, err := ursus.Frame(
-		ursus.Values("a", []float64{1e300, -1e300, 1e18}),
-		ursus.Values("b", []float64{1, 1, 1}),
-	).Select(ursus.Col("a").FloorDiv(ursus.Col("b")).Alias("fd")).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, want := range []float64{1e300, -1e300, 1e18} {
-		got, ok, _ := df.At[float64](i, "fd")
-		if !ok || got != want {
-			t.Errorf("row %d = %v (present %v), want %v — a value past int64's "+
-				"range is already an integer; flooring it changes nothing",
-				i, got, ok, want)
-		}
-	}
-}
-
-// TestPowIsNotIntegerTruncated: 2**-1 is 0.5. With the default binding it would
-// have been 0, which is the reason Pow copies Div's arm rather than the default.
-func TestPowIsNotIntegerTruncated(t *testing.T) {
-	df, err := ursus.Frame(ursus.Values("v", []int64{2, 4, 10})).Select(
+// TestPowIsAFloat: 2**-1 is 0.5 (the math group's pow). With the default binding it
+// would have been 0, which is the reason Pow copies Div's arm rather than the default
+// and always returns a float.
+func TestPowIsAFloat(t *testing.T) {
+	s, err := ursus.Frame(ursus.Values("v", []int64{2, 4, 10})).Select(
 		ursus.Col("v").Pow(int64(-1)).Alias("inv"),
-		ursus.Col("v").Pow(0.5).Alias("root"),
 		ursus.Col("v").Pow(int64(2)).Alias("sq"),
-	).Collect(t.Context(), ursus.WithVerify())
+	).CollectSchema(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := df.Schema().Field(0).Type; got != ursus.Float64 {
-		t.Fatalf("Pow returned %s; it must always be a float", got)
-	}
-	if got, _, _ := df.At[float64](0, "inv"); got != 0.5 {
-		t.Errorf("2**-1 = %v, want 0.5 — an integer binding would give 0", got)
-	}
-	if got, _, _ := df.At[float64](1, "root"); got != 2 {
-		t.Errorf("4**0.5 = %v, want 2", got)
-	}
-	if got, _, _ := df.At[float64](2, "sq"); got != 100 {
-		t.Errorf("10**2 = %v, want 100", got)
+	for _, f := range s.FieldSlice() {
+		if f.Type != ursus.Float64 {
+			t.Errorf("%s is %s; Pow must always be a float", f.Name, f.Type)
+		}
 	}
 }
 

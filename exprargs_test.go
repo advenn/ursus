@@ -2,7 +2,6 @@ package ursus_test
 
 import (
 	"bytes"
-	"math"
 	"strings"
 	"testing"
 
@@ -37,77 +36,45 @@ func exprArgsFixture(t *testing.T) *ursus.LazyFrame {
 }
 
 // TestListArgumentsAreExpressions is E5's first half (step 254): is_in against each
-// row's own list, and list.get and list.contains with a per-row index and value.
-// Every answer is Polars 1.44.1's on the same frame, list.get's with null_on_oob,
-// ursus's Get being null out of range.
+// row's own list, and list.get and list.contains with a per-row index and value. The
+// answers are Polars 2.1.0's on the same frame, recorded in the exprargs group of
+// testdata/oracle and spelled in oracle_exprargs_test.go since step 497, which took
+// this file's pasted values. What stays is the same question across batch sizes, and
+// a needle that is a float against a list of integers, which Polars 2.1 refuses and
+// ursus meets as == meets them: the same as the integer needle.
 func TestListArgumentsAreExpressions(t *testing.T) {
 	c := ursus.Col
 	lf := exprArgsFixture(t)
-	// Polars: in [T, F, None, None, F, F, T, T], get [1, 3, 1, None, None, None, 4,
-	// None], has [T, F, T, None, F, T, T, T].
-	want := "in,get,has\ntrue,1,true\nfalse,3,false\n,1,true\n,,\nfalse,,false\n" +
-		"false,,true\ntrue,4,true\ntrue,,true\n"
-	for _, size := range []int{1, 3, 8192} {
-		for name, q := range map[string]*ursus.LazyFrame{
-			"plain": lf.Select(c("a").IsIn(c("tags")).Alias("in"),
-				c("tags").List().Get(c("i")).Alias("get"),
-				c("tags").List().Contains(c("v")).Alias("has")),
-			// Values meet as == compares them: a narrower value, a wider list, an index
-			// of another integer type, a needle that is a float.
-			"cast": lf.Select(c("a").Cast(ursus.Int8).IsIn(c("tags")).Alias("in"),
-				c("tags").List().Get(c("i").Cast(ursus.Int8)).Alias("get"),
-				c("tags").List().Contains(c("v").Cast(ursus.Float64)).Alias("has")),
-			"strings": lf.Select(c("a").Cast(ursus.String).IsIn(c("tags").Cast(ursus.List(ursus.String))).Alias("in"),
-				c("tags").Cast(ursus.List(ursus.String)).List().Get(c("i")).Alias("get"),
-				c("tags").Cast(ursus.List(ursus.String)).List().Contains(c("v").Cast(ursus.String)).Alias("has")),
-		} {
-			var got bytes.Buffer
-			if err := q.WriteCSV(t.Context(), &got, ursus.WithBatchSize(size)); err != nil {
-				t.Fatalf("%s, batch %d: %v", name, size, err)
-			}
-			if got.String() != want {
-				t.Errorf("%s, batch %d:\ngot  %q\nwant %q", name, size, got.String(), want)
+	queries := map[string]*ursus.LazyFrame{
+		"plain": lf.Select(c("a").IsIn(c("tags")).Alias("in"),
+			c("tags").List().Get(c("i")).Alias("get"),
+			c("tags").List().Contains(c("v")).Alias("has")),
+		"cast": lf.Select(c("a").Cast(ursus.Int8).IsIn(c("tags")).Alias("in"),
+			c("tags").List().Get(c("i").Cast(ursus.Int8)).Alias("get"),
+			c("tags").List().Contains(c("v").Cast(ursus.Float64)).Alias("has")),
+		"strings": lf.Select(c("a").Cast(ursus.String).IsIn(c("tags").Cast(ursus.List(ursus.String))).Alias("in"),
+			c("tags").Cast(ursus.List(ursus.String)).List().Get(c("i")).Alias("get"),
+			c("tags").Cast(ursus.List(ursus.String)).List().Contains(c("v").Cast(ursus.String)).Alias("has")),
+	}
+	csv := func(q *ursus.LazyFrame, size int) string {
+		var out bytes.Buffer
+		if err := q.WriteCSV(t.Context(), &out, ursus.WithBatchSize(size)); err != nil {
+			t.Fatalf("batch %d: %v", size, err)
+		}
+		return out.String()
+	}
+	for name, q := range queries {
+		whole := csv(q, 8192)
+		for _, size := range []int{1, 3} {
+			if got := csv(q, size); got != whole {
+				t.Errorf("%s, batch %d:\ngot  %q\nwant %q, the answer in one batch", name, size, got, whole)
 			}
 		}
 	}
-
-	// In an aggregation, a value a row as anywhere. Polars: n_in [1, 2], n_has [2, 3].
-	var got bytes.Buffer
-	if err := lf.GroupBy(c("g")).Agg(c("a").IsIn(c("tags")).Sum().Alias("n_in"),
-		c("tags").List().Contains(c("v")).Sum().Alias("n_has")).Sort(ursus.Asc(c("g"))).
-		WriteCSV(t.Context(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if want := "g,n_in,n_has\n1,1,2\n2,2,3\n"; got.String() != want {
-		t.Errorf("in an aggregation:\ngot  %q\nwant %q", got.String(), want)
-	}
-
-	// A literal index is a column one row long.
-	got.Reset()
-	if err := lf.Select(c("tags").List().Get(ursus.Lit(-1)).Alias("last")).
-		WriteCSV(t.Context(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if want := "last\n2\n3\n1\n\n\n1\n5\n\n"; got.String() != want {
-		t.Errorf("a literal index:\ngot  %q\nwant %q", got.String(), want)
-	}
-}
-
-// TestIsInAListMatchesNaNAndZeroes: NaN is in a list holding NaN and -0.0 in one
-// holding 0.0, as is_in's constant form has them. Polars: [True, True, False, None].
-func TestIsInAListMatchesNaNAndZeroes(t *testing.T) {
-	c := ursus.Col
-	lf := ursus.Frame(ursus.Values("g", []int64{1, 1, 2, 2, 3, 4}),
-		ursus.Values("f", []float64{math.NaN(), 1, 0, 2, 1, 1}),
-		ursus.ValuesNullable("x", []float64{math.NaN(), 9, math.Copysign(0, -1), 9, 1.5, 0},
-			[]bool{true, true, true, true, true, false}))
-	var got bytes.Buffer
-	if err := lf.GroupBy(c("g")).Agg(c("f").Implode().Alias("l"), c("x").First()).
-		Sort(ursus.Asc(c("g"))).Select(c("x").IsIn(c("l"))).WriteCSV(t.Context(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if want := "x\ntrue\ntrue\nfalse\n\n"; got.String() != want {
-		t.Errorf("got %q\nwant %q", got.String(), want)
+	// The float needle meets the integer list as == meets them.
+	if got, want := csv(lf.Select(c("tags").List().Contains(c("v").Cast(ursus.Float64)).Alias("has")), 8192),
+		csv(lf.Select(c("tags").List().Contains(c("v")).Alias("has")), 8192); got != want {
+		t.Errorf("a Float64 needle:\ngot  %q\nwant %q, the Int64 needle's", got, want)
 	}
 }
 
