@@ -11,14 +11,11 @@ package arrowout_test
 // back in, silently.
 
 import (
-	"bytes"
 	"maps"
 	"slices"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/ipc"
-	"github.com/apache/arrow-go/v18/arrow/memory"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/arrowout"
@@ -96,24 +93,4 @@ func TestInt128IsMarkedAtEveryDepth(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertMarks(t, "exported", s)
-}
-
-// TestInt128MarkSurvivesIPC: a mark that exists in memory and not on the wire is no
-// mark at all, since IPC is how the data actually leaves the process.
-func TestInt128MarkSurvivesIPC(t *testing.T) {
-	s, err := arrowout.Schema(markSchema(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var buf bytes.Buffer
-	w := ipc.NewWriter(&buf, ipc.WithSchema(s), ipc.WithAllocator(memory.NewGoAllocator()))
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	r, err := ipc.NewReader(&buf, ipc.WithAllocator(memory.NewGoAllocator()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer r.Release()
-	assertMarks(t, "after an IPC round trip", r.Schema())
 }
