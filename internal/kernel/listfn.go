@@ -581,8 +581,10 @@ func listContains(name string, c *data.Column, needle []byte) (*data.Column, err
 // careful justification attached is worse than no code.
 //
 // It would be needed the moment an accumulator answered 0 for an empty group
-// instead. TestListNamespaceSemantics pins both rows for exactly that reason, so
-// the equivalence is deliberate rather than something that happens to hold.
+// instead. The oracle's listns/semantics case pins both rows for exactly that reason
+// (its sum cell a named difference from Polars' 0), and TestListNamespaceBatchSizes
+// reads them in batches, so the equivalence is deliberate rather than something that
+// happens to hold.
 // It takes no `out`: the output type is ResolveAggBinding's answer and nothing else,
 // which is now also what expr.listCallOut returns. Carrying the declared type here
 // as well would be a second copy of a fact with one owner — and while it WAS carried,
