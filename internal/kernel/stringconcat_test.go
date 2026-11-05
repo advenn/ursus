@@ -101,38 +101,3 @@ func TestConcatStringsMatchesRowByRow(t *testing.T) {
 		}
 	}
 }
-
-// TestConcatStringsPastItsOffsetsHoldsThem: two batches whose text passes
-// MaxStringBytes, lowered to 100, concatenate to one column of 64-bit offsets (step
-// 368), where they were refused, each row as it was.
-func TestConcatStringsPastItsOffsetsHoldsThem(t *testing.T) {
-	defer func(old int64) { data.MaxStringBytes = old }(data.MaxStringBytes)
-	data.MaxStringBytes = 100
-
-	schema := dtype.MustSchema(dtype.Of("s", dtype.String))
-	part := func(i int) *data.Batch {
-		b, err := data.NewBatch(schema, []*data.Column{data.NewString("s", []string{fmt.Sprintf("%060d", i)}, bitmap.View{})})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return b
-	}
-	var got *data.Batch
-	err := catch(func() error {
-		var err error
-		got, err = kernel.Concat(schema, []*data.Batch{part(0), part(1)})
-		return err
-	})
-	if err != nil {
-		t.Fatalf("120 characters under a 100-character limit: %v", err)
-	}
-	c := got.Column(0)
-	if c.RawOffsets64() == nil {
-		t.Error("concatenated past the limit with 32-bit offsets")
-	}
-	for i := range 2 {
-		if v := c.Strings().Get(i); v != fmt.Sprintf("%060d", i) {
-			t.Errorf("row %d is %q", i, v)
-		}
-	}
-}

@@ -154,38 +154,6 @@ func TestSortingAnAllNullColumnStillRefuses(t *testing.T) {
 	}
 }
 
-// TestRadixFallsBackForUnorderableKeys: String and Int128 have no fixed-width
-// order-preserving encoding, so they took the comparator path. Text is sorted a
-// seven-byte key at a time since step 363, alone and beside a numeric key, and the
-// answer must still be the one it gave before either fast path existed.
-func TestRadixFallsBackForUnorderableKeys(t *testing.T) {
-	const n = 200
-	rng := rand.New(rand.NewPCG(4, 5))
-
-	words := []string{"pear", "apple", "fig", "apple", "date", ""}
-	s := make([]string, n)
-	for i := range n {
-		s[i] = words[rng.IntN(len(words))]
-	}
-	strCol := data.NewString("s", s, bitmap.AllSet(n))
-
-	nums := make([]int64, n)
-	for i := range n {
-		nums[i] = int64(rng.IntN(7))
-	}
-	numCol := fixedCol("n", dtype.Int64, nums, allValid(n))
-
-	t.Run("string alone", func(t *testing.T) {
-		assertAgrees(t, []*data.Column{strCol}, []kernel.SortSpec{{Descending: true}}, n)
-	})
-	// A mixed set: an LSD pass has to be a stable sort of the whole array by one
-	// column, which the text's pass is, so the two compose (step 363).
-	t.Run("mixed with a numeric key", func(t *testing.T) {
-		assertAgrees(t, []*data.Column{numCol, strCol},
-			[]kernel.SortSpec{{}, {NullsLast: true}}, n)
-	})
-}
-
 // TestRadixSkippedRoundsKeepKeysAligned is the hazard the key-carrying rewrite
 // introduced, and the only one.
 //

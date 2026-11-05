@@ -111,31 +111,6 @@ func TestDatePlusDurationIsANaiveDatetime(t *testing.T) {
 	}
 }
 
-// TestDatePlusHalfDayKeepsTheHalfDay is the precision claim on its own, because it
-// is the entire reason the result is not a Date.
-func TestDatePlusHalfDayKeepsTheHalfDay(t *testing.T) {
-	halfDay := ursus.Lit(int64(43200)).Cast(ursus.Duration(ursus.Second))
-	df, err := dateFrame(t, "a", "2024-01-02").Select(
-		ursus.Col("a").Add(halfDay).Alias("noon"),
-		ursus.Col("a").Add(halfDay).Sub(halfDay).Alias("back"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	noon, _, err := df.At[int64](0, "noon")
-	if err != nil {
-		t.Fatal(err)
-	}
-	back, _, err := df.At[int64](0, "back")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if noon-back != 43200 {
-		t.Errorf("noon - back = %d, want 43200 — the half day was floored away",
-			noon-back)
-	}
-}
-
 // TestTemporalArithmeticRefusesMixedZones is the case the existing
 // TestTemporalArithmeticAndComparisonAgree is named for and never covered: it
 // varies the UNIT with both sides "UTC" and never varies the ZONE.

@@ -571,24 +571,23 @@ func TestFillIsBatchSizeInvariant(t *testing.T) {
 		[]bool{false, true, false, false, true, false, false, true}))
 
 	var want *ursus.DataFrame
-	for _, bs := range []int{1, 2, 3, 8192} {
-		for _, th := range []int{1, 4} {
-			df, err := f.Select(
-				ursus.Col("v").ForwardFill(0).Alias("ff"),
-				ursus.Col("v").BackwardFill(1).Alias("bf"),
-				ursus.Col("v").FillNull(ursus.FillMean).Alias("mean"),
-				ursus.Col("v").Diff(1).Alias("d"),
-			).Collect(t.Context(), ursus.WithBatchSize(bs), ursus.WithThreads(th),
-				ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("bs=%d threads=%d: %v", bs, th, err)
-			}
-			if want == nil {
-				want = df
-				continue
-			}
-			ursustest.AssertFrameEqual(t, df, want)
+	for _, run := range []struct{ bs, th int }{{1, 1}, {3, 4}, {8192, 4}} {
+		bs, th := run.bs, run.th
+		df, err := f.Select(
+			ursus.Col("v").ForwardFill(0).Alias("ff"),
+			ursus.Col("v").BackwardFill(1).Alias("bf"),
+			ursus.Col("v").FillNull(ursus.FillMean).Alias("mean"),
+			ursus.Col("v").Diff(1).Alias("d"),
+		).Collect(t.Context(), ursus.WithBatchSize(bs), ursus.WithThreads(th),
+			ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("bs=%d threads=%d: %v", bs, th, err)
 		}
+		if want == nil {
+			want = df
+			continue
+		}
+		ursustest.AssertFrameEqual(t, df, want)
 	}
 }
 

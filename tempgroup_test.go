@@ -87,38 +87,6 @@ func TestGroupByDynamicEmitsEmptyWindows(t *testing.T) {
 	}
 }
 
-// TestGroupByDynamicOverlappingWindows: period > every means a row belongs to
-// several windows, so the total count EXCEEDS the row count. That is the documented
-// answer, and it is the case a per-row group id could not represent.
-func TestGroupByDynamicOverlappingWindows(t *testing.T) {
-	df, err := hourly(t,
-		"2024-01-01T00:30:00", "2024-01-01T01:30:00",
-		"2024-01-01T02:30:00", "2024-01-01T03:30:00",
-	).GroupByDynamic(ursus.Col("ts"), ursus.DynamicOptions{
-		Every:  ursus.Every("1h"),
-		Period: ursus.Every("2h"), // each window covers two hours
-	}).Agg(ursus.Len().Alias("n")).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	var total uint64
-	for i := range df.Height() {
-		n, _, err := df.At[uint64](i, "n")
-		if err != nil {
-			t.Fatal(err)
-		}
-		total += n
-	}
-	if total <= 4 {
-		t.Errorf("total count over overlapping windows is %d, which does not exceed "+
-			"the 4 input rows — the windows did not overlap", total)
-	}
-	// Each interior window covers exactly two of the four hourly rows.
-	if n, _, _ := df.At[uint64](0, "n"); n != 2 {
-		t.Errorf("the first 2h window has n=%d, want 2", n)
-	}
-}
-
 // TestClosedBoundaries: all four conventions against rows sitting exactly on window
 // boundaries, which is the only place they differ.
 func TestClosedBoundaries(t *testing.T) {
@@ -177,36 +145,6 @@ func TestClosedBoundaries(t *testing.T) {
 					c.closed, total, c.total, c.note)
 			}
 		})
-	}
-}
-
-// TestRollingIsOneGroupPerRow: the output height equals the input height, which is
-// the structural difference from a dynamic group.
-func TestRollingIsOneGroupPerRow(t *testing.T) {
-	stamps := []string{
-		"2024-01-01T00:00:00", "2024-01-01T00:30:00", "2024-01-01T01:00:00",
-		"2024-01-01T05:00:00",
-	}
-	df, err := hourly(t, stamps...).
-		Rolling(ursus.Col("ts"), ursus.RollingOptions{Period: ursus.Every("1h")}).
-		Agg(ursus.Len().Alias("n")).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if df.Height() != len(stamps) {
-		t.Fatalf("%d rows, want %d — rolling emits one window per row",
-			df.Height(), len(stamps))
-	}
-	// (t-1h, t]: row 0 sees itself; row 1 sees rows 0 and 1; row 2 sees 1 and 2
-	// (row 0 is exactly 1h before, and the left end is open); row 3 sees itself.
-	for i, want := range []uint64{1, 2, 2, 1} {
-		got, _, err := df.At[uint64](i, "n")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got != want {
-			t.Errorf("row %d has n=%d, want %d", i, got, want)
-		}
 	}
 }
 

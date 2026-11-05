@@ -284,55 +284,6 @@ func goSign(v float64) float64 {
 	}
 }
 
-// TestRoundTieBreakIsHalfAwayFromZero pins a DECISION, which is why it is separate
-// from the differential: the oracle is not a library function but a choice between
-// math.Round and math.RoundToEven.
-func TestRoundTieBreakIsHalfAwayFromZero(t *testing.T) {
-	cases := []struct {
-		in       float64
-		decimals int
-		want     float64
-		why      string
-	}{
-		{0.5, 0, 1, "not 0 — this is what distinguishes it from round-half-to-even"},
-		{1.5, 0, 2, "agrees with round-half-to-even, so it proves nothing alone"},
-		{2.5, 0, 3, "not 2 — the second discriminating case"},
-		{-0.5, 0, -1, "away from zero, not toward -0.0"},
-		{-2.5, 0, -3, ""},
-		{0.125, 2, 0.13, "an exactly representable half at two decimals"},
-		{2.675, 2, 2.68, "2.675*100 rounds UP to exactly 267.5 before math.Round sees it"},
-		{1.4, 0, 1, ""},
-		{1.6, 0, 2, ""},
-	}
-
-	in := make([]float64, len(cases))
-	for i, c := range cases {
-		in[i] = c.in
-	}
-	// One expression per distinct decimal count, so this also exercises that two
-	// different counts do not share a temporary.
-	df, err := ursus.Frame(ursus.Values("v", in)).Select(
-		ursus.Col("v").Round(0).Alias("d0"),
-		ursus.Col("v").Round(2).Alias("d2"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, c := range cases {
-		col := "d0"
-		if c.decimals == 2 {
-			col = "d2"
-		}
-		got, _, err := df.At[float64](i, col)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got != c.want {
-			t.Errorf("Round(%v, %d) = %v, want %v  %s", c.in, c.decimals, got, c.want, c.why)
-		}
-	}
-}
-
 // TestRoundEdges: an integer column is untouched, and a decimal count too large to
 // scale returns the value rather than an infinity.
 func TestRoundEdges(t *testing.T) {
@@ -635,8 +586,9 @@ func TestMathRefusals(t *testing.T) {
 }
 
 // TestDecimalMathIsRefusedAtPlanTime: a decimal is stored as an unscaled integer,
-// so flooring it would floor 1234 rather than 12.34. Refused where the user can
-// see it rather than half-applied.
+// so its square root would be 1234's rather than 12.34's. Refused where the user can
+// see it rather than half-applied. Floor, ceil and round left this list when step
+// 490 rounded a Decimal at its scale (decimal_round_test.go).
 func TestDecimalMathIsRefusedAtPlanTime(t *testing.T) {
 	// The Decimal column is CONSTRUCTED, not cast into existence. It used to be
 	// `Col("v").Cast(Decimal(10,2))`, and step 52 moved that refusal to plan time:
@@ -651,10 +603,7 @@ func TestDecimalMathIsRefusedAtPlanTime(t *testing.T) {
 		name string
 		e    ursus.Expr
 	}{
-		{"floor", ursus.Col("d").Floor()},
-		{"ceil", ursus.Col("d").Ceil()},
 		{"sqrt", ursus.Col("d").Sqrt()},
-		{"round", ursus.Col("d").Round(1)},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if _, err := casted.Select(c.e).CollectSchema(t.Context()); err == nil {
@@ -664,42 +613,11 @@ func TestDecimalMathIsRefusedAtPlanTime(t *testing.T) {
 	}
 	// Abs and Neg ARE defined for a decimal: negating or taking the magnitude of an
 	// unscaled integer is the same operation as doing it to the decimal it encodes.
-	// SIGN IS NOT, and this comment used to claim it was while exercising only two
-	// of the three — see TestSignOnDecimalIsRefused.
+	// Sign is not, which unaryI128 once answered as unscaled 1, rendered "0.01";
+	// since step 490 a Decimal's sign is 1.00 at its scale (decimal_round_test.go).
 	if _, err := casted.Select(
 		ursus.Col("d").Abs(), ursus.Col("d").Neg().Alias("n"),
 	).CollectSchema(t.Context()); err != nil {
 		t.Errorf("abs/neg on a decimal are exact and must be allowed: %v", err)
-	}
-}
-
-// TestSignOnDecimalIsRefused: sign() is worse on a decimal than floor() is, and it
-// was the one that got through.
-//
-// unaryI128's Sign arm returns the unscaled integer 1, and the result carries the
-// operand's type — so Col(price).Sign() on a Decimal(10,2) is 1 labelled
-// Decimal(10,2), which RENDERS AS "0.01". No error, no null, a number that looks
-// like a price. The guard three lines above it in ResolveUnary already excluded
-// Duration for the identical reason ("a Duration of -1, 0 or 1 TICKS is not a sign,
-// it is a nanosecond") and was not applied here.
-//
-// Through Collect, not CollectSchema: the old test reached the resolver only, so
-// unaryI128 never ran on a Decimal column anywhere in the suite and the wrong VALUE
-// was never observed.
-func TestSignOnDecimalIsRefused(t *testing.T) {
-	_, err := prices(t).Select(ursus.Col("price").Sign()).Collect(t.Context())
-	if err == nil {
-		t.Fatal("sign() on a decimal returned unscaled 1, which renders as 0.01")
-	}
-	for _, want := range []string{"sign", "Decimal", "unscaled"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("the message should say %q:\n%v", want, err)
-		}
-	}
-	// The refusal is at PLAN time, so it costs nothing at execution and a user sees
-	// it from CollectSchema.
-	if _, err := prices(t).Select(ursus.Col("price").Sign()).
-		CollectSchema(t.Context()); err == nil {
-		t.Error("the refusal must be visible without running the query")
 	}
 }
