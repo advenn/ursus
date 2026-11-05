@@ -28,7 +28,10 @@ POLARS = "2.1.0"
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 # The groups, in the order the runner writes them.
-GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore"]
+GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
+          # step 498, the temporal wave
+          "calendar", "tzreplace", "components", "daterange", "csvdates", "strtemporal", "temporalagg", "weeks",
+          "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby"]
 
 
 @dataclass
