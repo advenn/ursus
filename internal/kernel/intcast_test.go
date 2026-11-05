@@ -28,9 +28,59 @@ import (
 	"github.com/advenn/ursus/internal/uerr"
 )
 
+// castTarget is the DataType to cast TO for each TypeID that names one without a
+// child or a category list. Enum, List, Struct and Array need those, Categorical is
+// reserved, and Uint128 has no storage, so those six have none; the parametrised
+// types take one fixed unit, zone or precision each.
+func castTarget(id dtype.TypeID) (dtype.DataType, bool) {
+	switch id {
+	case dtype.TypeBool:
+		return dtype.Bool, true
+	case dtype.TypeInt8:
+		return dtype.Int8, true
+	case dtype.TypeInt16:
+		return dtype.Int16, true
+	case dtype.TypeInt32:
+		return dtype.Int32, true
+	case dtype.TypeInt64:
+		return dtype.Int64, true
+	case dtype.TypeUint8:
+		return dtype.Uint8, true
+	case dtype.TypeUint16:
+		return dtype.Uint16, true
+	case dtype.TypeUint32:
+		return dtype.Uint32, true
+	case dtype.TypeUint64:
+		return dtype.Uint64, true
+	case dtype.TypeFloat32:
+		return dtype.Float32, true
+	case dtype.TypeFloat64:
+		return dtype.Float64, true
+	case dtype.TypeString:
+		return dtype.String, true
+	case dtype.TypeBinary:
+		return dtype.Binary, true
+	case dtype.TypeDate:
+		return dtype.Date, true
+	case dtype.TypeDatetime:
+		return dtype.Datetime(dtype.Micro, "UTC"), true
+	case dtype.TypeTime:
+		return dtype.Time(dtype.Nano), true
+	case dtype.TypeDuration:
+		return dtype.Duration(dtype.Second), true
+	case dtype.TypeNull:
+		return dtype.Null, true
+	case dtype.TypeInt128:
+		return dtype.Int128, true
+	case dtype.TypeDecimal:
+		return dtype.Decimal(10, 2), true
+	}
+	return dtype.DataType{}, false
+}
+
 // integerTypes is every integer type a column can hold, derived from the TypeID
-// enumeration. Int128 is added by hand because castTarget has no sample for it — the
-// same gap expectedUnsampled records.
+// enumeration. The Int128 fallback is from before castTarget had an Int128 arm, and
+// is kept so that losing the arm cannot shrink the list silently.
 func integerTypes(t *testing.T) []dtype.DataType {
 	t.Helper()
 	var out []dtype.DataType

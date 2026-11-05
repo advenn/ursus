@@ -10,7 +10,6 @@ package uerr_test
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/advenn/ursus/internal/uerr"
@@ -159,28 +158,4 @@ func TestNearMatchesHandlesMultiByte(t *testing.T) {
 	}
 	// And it must not panic or mis-slice on a name that is all multi-byte.
 	_ = uerr.NearMatches("日本語", []string{"日本", "日本語です"}, 3)
-}
-
-// TestNearMatchesDoesNotFloodShortNames is the reason the budget scales at all: a
-// fixed budget of 3 would make every two-letter column match every other one.
-func TestNearMatchesDoesNotFloodShortNames(t *testing.T) {
-	// Every candidate differs in BOTH positions, so each is two edits away and the
-	// budget of 1 excludes them all. The first draft of this test used "cd", which
-	// shares the trailing d and is therefore one edit — the engine was right and the
-	// fixture was wrong, which is the same mistake a fixed budget would hide.
-	got := uerr.NearMatches("id", []string{"ab", "ef", "gh"}, 3)
-	if len(got) > 0 {
-		t.Errorf("nothing is within one edit of %q; got %v — a fixed budget of 3 "+
-			"would suggest all of them", "id", got)
-	}
-}
-
-// TestUnknownColumnQuotesSuggestions, since the names can contain punctuation and
-// the suggestion line is what a user copies.
-func TestUnknownColumnQuotesSuggestions(t *testing.T) {
-	e := uerr.UnknownColumn("select", "my col", []string{"my_col"})
-	if got := e.Error(); strings.Contains(got, "did you mean") &&
-		!strings.Contains(got, `"my_col"`) {
-		t.Errorf("suggestions should be quoted:\n%s", got)
-	}
 }

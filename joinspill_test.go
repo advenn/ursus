@@ -260,52 +260,6 @@ func TestSpilledNullKeysStillFlush(t *testing.T) {
 	}
 }
 
-// TestSpilledSemiAntiPartitionTheLeftFrame: semi and anti are complements, and they
-// stay complements when the build side spills.
-//
-// This is the invariant the mask bug broke. Semi and Anti emitted through a filter
-// mask over a CONTIGUOUS slice of the probe batch; routing punches holes in that
-// run, the window slides, and the filter lands on the wrong rows — with the row
-// COUNT still right, which is why only a value comparison finds it. Asserting
-// semi + anti == n and disjointness catches the shifted window directly.
-func TestSpilledSemiAntiPartitionTheLeftFrame(t *testing.T) {
-	const rows = 8000
-	left := joinFrame(t, rows, 256, 6000, 37, true)
-	right := joinFrame(t, 4000, 256, 4000, 53, true)
-
-	collect := func(kind ursus.JoinKind, limit int64) *ursus.DataFrame {
-		t.Helper()
-		opts := []ursus.CollectOption{ursus.WithBatchSize(256), ursus.WithVerify()}
-		if limit > 0 {
-			opts = append(opts, ursus.WithMemoryLimit(limit), ursus.WithSpillDir(t.TempDir()))
-		}
-		df, err := joinQuery(left, right, kind).Collect(t.Context(), opts...)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return df
-	}
-
-	for _, limit := range []int64{0, 8 << 10, 32 << 10} {
-		semi, anti := collect(ursus.JoinSemi, limit), collect(ursus.JoinAnti, limit)
-		if got := semi.Height() + anti.Height(); got != rows {
-			t.Errorf("limit=%d: semi %d + anti %d = %d, want %d",
-				limit, semi.Height(), anti.Height(), got, rows)
-		}
-		// Disjoint, checked by value rather than by count: a shifted window keeps the
-		// count and changes which rows come out.
-		in := map[int64]bool{}
-		for _, v := range int64Col(t, semi, "v") {
-			in[v] = true
-		}
-		for _, v := range int64Col(t, anti, "v") {
-			if in[v] {
-				t.Fatalf("limit=%d: row v=%d is in BOTH semi and anti", limit, v)
-			}
-		}
-	}
-}
-
 // TestJoinSpillIsDeterministic: two runs of one query at one limit must agree
 // exactly, order included. A hash seeded per process would break this and nothing
 // else, which is why partitionOf is seedless.

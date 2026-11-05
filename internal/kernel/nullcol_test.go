@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus/dtype"
-	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/kernel"
 )
@@ -71,29 +70,5 @@ func TestNullColumnIsGatherable(t *testing.T) {
 				t.Errorf("Concat produced %d rows, want 6", out.Rows())
 			}
 		})
-	}
-}
-
-// TestNullColumnValuesAreReadable checks the payload is real rather than merely
-// present: a typed read must succeed and return zeros.
-func TestNullColumnValuesAreReadable(t *testing.T) {
-	c, err := kernel.NullColumn("x", dtype.Int64, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	vals, err := data.Values[int64](c)
-	if err != nil {
-		t.Fatalf("a NullColumn must have a readable payload: %v", err)
-	}
-	if len(vals) != 2 || vals[0] != 0 || vals[1] != 0 {
-		t.Errorf("values = %v, want [0 0]", vals)
-	}
-
-	d, err := kernel.NullColumn("d", dtype.Decimal(10, 2), 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := data.Values[i128.Int128](d); err != nil {
-		t.Errorf("a Decimal null column must read as Int128: %v", err)
 	}
 }

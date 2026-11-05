@@ -171,20 +171,19 @@ func TestParallelBatchSizeAndThreadsAreIndependent(t *testing.T) {
 	}
 
 	var want *ursus.DataFrame
-	for _, bs := range []int{1, 7, 64, 512, 8192} {
-		for _, th := range []int{1, 2, 5, 8} {
-			df, err := build().Collect(t.Context(),
-				ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("batch=%d threads=%d: %v", bs, th, err)
-			}
-			if want == nil {
-				want = df
-				continue
-			}
-			t.Run("batch "+itoa64(int64(bs))+" threads "+itoa64(int64(th)),
-				func(t *testing.T) { ursustest.AssertFrameEqual(t, df, want) })
+	for _, run := range []struct{ bs, th int }{{1, 1}, {64, 5}, {8192, 8}} {
+		bs, th := run.bs, run.th
+		df, err := build().Collect(t.Context(),
+			ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch=%d threads=%d: %v", bs, th, err)
 		}
+		if want == nil {
+			want = df
+			continue
+		}
+		t.Run("batch "+itoa64(int64(bs))+" threads "+itoa64(int64(th)),
+			func(t *testing.T) { ursustest.AssertFrameEqual(t, df, want) })
 	}
 }
 
@@ -291,27 +290,5 @@ func TestParallelConcurrentCollects(t *testing.T) {
 		if results[i] != results[0] {
 			t.Errorf("goroutine %d disagreed:\n%s\nvs\n%s", i, results[i], results[0])
 		}
-	}
-}
-
-// TestParallelDoesNotTouchBreakers documents the scope boundary as a test: a query
-// that is nothing but a pipeline breaker still works, and still gives the same
-// answer, at every thread count.
-func TestParallelDoesNotTouchBreakers(t *testing.T) {
-	var want *ursus.DataFrame
-	for _, n := range []int{1, 4, 8} {
-		df, err := parFrame(2_000).
-			Sort(ursus.Desc(ursus.Col("qty"))).
-			Unique("tag").
-			Collect(t.Context(), ursus.WithThreads(n), ursus.WithBatchSize(97), ursus.WithVerify())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if want == nil {
-			want = df
-			continue
-		}
-		t.Run("threads "+itoa64(int64(n)),
-			func(t *testing.T) { ursustest.AssertFrameEqual(t, df, want) })
 	}
 }

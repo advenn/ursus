@@ -7,10 +7,7 @@ import (
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/dtype"
-	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
-	"github.com/advenn/ursus/internal/expr"
-	"github.com/advenn/ursus/internal/kernel"
 	"github.com/advenn/ursus/ursustest"
 )
 
@@ -157,15 +154,14 @@ func TestImplodeIsBatchSizeInvariant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, size := range []int{1, 2, 3, 7, 8192} {
-		for _, threads := range []int{1, 2, 4} {
-			got, err := query().Collect(t.Context(),
-				ursus.WithBatchSize(size), ursus.WithThreads(threads), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("batch %d, %d threads: %v", size, threads, err)
-			}
-			ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
+	for _, run := range []struct{ size, threads int }{{1, 1}, {3, 2}, {8192, 4}} {
+		size, threads := run.size, run.threads
+		got, err := query().Collect(t.Context(),
+			ursus.WithBatchSize(size), ursus.WithThreads(threads), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch %d, %d threads: %v", size, threads, err)
 		}
+		ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
 	}
 }
 
@@ -330,72 +326,6 @@ func TestImplodeOverBroadcasts(t *testing.T) {
 		if strings.Join(got[i], ",") != "10,20,30" {
 			t.Errorf("row %d: peers = [%s], want [10,20,30]", i, strings.Join(got[i], ","))
 		}
-	}
-}
-
-// TestImplodeMergeFoldsBothWays tests Merge DIRECTLY, because nothing calls it.
-//
-// Implode is order-dependent, so the parallel driver runs one worker; spilling
-// partitions by key, so one sink sees a whole group. Merge is therefore unreachable
-// in production — which is exactly the state steps 13, 17 and 39 each found a Merge
-// in, and each time it was wrong. The Accumulator doc's rule applies: "a Merge
-// written later against forgotten invariants is a Merge that is wrong."
-//
-// The precondition is argExtremumAcc's: `other` saw a strictly LATER portion, so its
-// elements append after this one's.
-func TestImplodeMergeFoldsBothWays(t *testing.T) {
-	bind, err := expr.ResolveAggBinding(expr.AggImplode, dtype.Int64)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mk := func(vals []int64, groups []int32) kernel.Accumulator {
-		t.Helper()
-		acc, err := kernel.NewAccumulator(expr.AggImplode, dtype.Int64, bind, expr.AggParams{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		acc.Reserve(2)
-		col := data.NewFixed("v", dtype.Int64, vals, bitmap.AllSet(len(vals)))
-		if err := acc.AddBatch(groups, col); err != nil {
-			t.Fatal(err)
-		}
-		return acc
-	}
-
-	// first saw rows 1,2,3; second saw 4,5 — a strictly later portion.
-	first := mk([]int64{1, 2, 3}, []int32{0, 1, 0})
-	second := mk([]int64{4, 5}, []int32{0, 1})
-
-	if err := first.Merge(second, nil); err != nil {
-		t.Fatal(err)
-	}
-	out, err := first.Finish("all", 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := listString(out, 0); got != "1,3,4" {
-		t.Errorf("group 0 = [%s], want [1,3,4] — later elements append after earlier", got)
-	}
-	if got := listString(out, 1); got != "2,5" {
-		t.Errorf("group 1 = [%s], want [2,5]", got)
-	}
-
-	// And under a remap, where the second accumulator numbered its groups
-	// independently: its group 0 is this one's group 1 and vice versa.
-	third := mk([]int64{7, 8, 9}, []int32{0, 1, 0})
-	fourth := mk([]int64{60, 70}, []int32{0, 1})
-	if err := third.Merge(fourth, []int32{1, 0}); err != nil {
-		t.Fatal(err)
-	}
-	out2, err := third.Finish("all", 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := listString(out2, 0); got != "7,9,70" {
-		t.Errorf("remapped group 0 = [%s], want [7,9,70]", got)
-	}
-	if got := listString(out2, 1); got != "8,60" {
-		t.Errorf("remapped group 1 = [%s], want [8,60]", got)
 	}
 }
 

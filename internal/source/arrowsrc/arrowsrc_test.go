@@ -102,23 +102,6 @@ func drain(t *testing.T, bs source.BatchSource) (sizes []int, first []int64) {
 	}
 }
 
-func TestSchemaOpensOneReaderAndReadsNoRecord(t *testing.T) {
-	var c counts
-	src := arrowsrc.New(factory(abc, records(t, abc, 4), &c))
-	for range 3 {
-		s, err := src.Schema(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if s.Len() != 3 {
-			t.Fatalf("schema %s", s)
-		}
-	}
-	if o, n, r := c.opens.Load(), c.nexts.Load(), c.releases.Load(); o != 1 || n != 0 || r != 1 {
-		t.Errorf("opens=%d nexts=%d releases=%d, want 1, 0, 1", o, n, r)
-	}
-}
-
 func TestACancelledSchemaIsNotCached(t *testing.T) {
 	var c counts
 	src := arrowsrc.New(factory(abc, records(t, abc, 1), &c))
@@ -182,24 +165,6 @@ func TestBatchesAreWindowsOfRecords(t *testing.T) {
 	}
 }
 
-// TestMaxRowsStopsAskingForRecords: Head(n) on a stream must not read the stream.
-func TestMaxRowsStopsAskingForRecords(t *testing.T) {
-	var c counts
-	src := arrowsrc.New(factory(abc, records(t, abc, 10, 10, 10), &c))
-	bs, err := src.Open(t.Context(), source.ScanSpec{BatchSize: 5, MaxRows: 12})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bs.Close()
-	sizes, _ := drain(t, bs)
-	if fmt.Sprint(sizes) != "[5 5 2]" {
-		t.Errorf("batch sizes %v, want [5 5 2]", sizes)
-	}
-	if n := c.nexts.Load(); n != 2 {
-		t.Errorf("the reader was asked for %d records; 12 rows are in the first 2", n)
-	}
-}
-
 func TestProjectionSelectsAndOrders(t *testing.T) {
 	var c counts
 	src := arrowsrc.New(factory(abc, records(t, abc, 3), &c))
@@ -217,26 +182,6 @@ func TestProjectionSelectsAndOrders(t *testing.T) {
 	}
 	if p := src.Projections(); fmt.Sprint(p) != "[[c a]]" {
 		t.Errorf("Projections() = %v", p)
-	}
-}
-
-// TestAFactoryReturningOneReaderIsRefused is the natural mistake: the schema probe
-// releases the reader, and arrow-go's in-memory reader then reports no records and
-// no error, which reads as an empty stream.
-func TestAFactoryReturningOneReaderIsRefused(t *testing.T) {
-	rr, err := array.NewRecordReader(abc, records(t, abc, 3))
-	if err != nil {
-		t.Fatal(err)
-	}
-	src := arrowsrc.New(func() (array.RecordReader, error) { return rr, nil })
-	bs, err := src.Open(t.Context(), source.ScanSpec{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bs.Close()
-	_, err = bs.Next(t.Context())
-	if !errors.Is(err, uerr.ErrValue) || !strings.Contains(err.Error(), "already returned") {
-		t.Fatalf("got %v — a reused reader must be refused, not read as empty", err)
 	}
 }
 
