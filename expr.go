@@ -314,6 +314,19 @@ func (e Expr) Div[T Operand](v T) Expr { return e.bin(expr.OpDiv, lift(v)) }
 func (e Expr) FloorDiv[T Operand](v T) Expr { return e.bin(expr.OpFloorDiv, lift(v)) }
 func (e Expr) Mod[T Operand](v T) Expr      { return e.bin(expr.OpMod, lift(v)) }
 
+// TruncDiv divides, its quotient rounded toward zero, as Go's / and C's are: −7
+// TruncDiv 2 is −3, where FloorDiv gives −4. Polars 2.0's truncdiv. Its type is
+// FloorDiv's: two integers an integer, a float beside either a float, and an integer
+// divisor of zero a null. A float's is trunc(a/b), so −0.5 by 2 is −0 and 1 by 0 is
+// +Inf.
+//
+// It differs from Polars where FloorDiv does. MinInt64 by −1 wraps to MinInt64, as
+// Polars' does, but an Int128's is refused, as Int128 arithmetic is exact or refused,
+// where Polars wraps it. A Duration by an integer, which Polars 2.1 refuses, is its
+// ticks divided toward zero, as FloorDiv floors them. A Decimal, which Polars
+// divides at Decimal(38, s), is refused, as its FloorDiv is.
+func (e Expr) TruncDiv[T Operand](v T) Expr { return e.bin(expr.OpTruncDiv, lift(v)) }
+
 // Pow raises the receiver to the power v.
 //
 // The result is ALWAYS a float, for the same reason Div's is: 2**-1 is 0.5, and a
@@ -363,11 +376,18 @@ func (e Expr) Abs() Expr { return e.un(expr.OpAbs) }
 // For floats it returns the operand itself in the zero case, so sign(-0.0) is
 // -0.0 and sign(NaN) is NaN. That matches NumPy and falls out of the ordering test
 // rather than being special-cased.
+//
+// A Decimal's is -1, 0 or 1 at its scale, as Polars 2.0's: 1.00 of a Decimal(3, 2),
+// in its type, or Decimal(p+1, s) where the type has no integer digit, Decimal(1, 1)'s
+// a Decimal(2, 1). A Decimal(38, 38) other than 0 has no sign it can hold, and is
+// refused.
 func (e Expr) Sign() Expr { return e.un(expr.OpSign) }
 
 // Floor and Ceil round towards -Inf and +Inf. Both are the identity on an integer
-// column and both are refused for Decimal, whose stored value is unscaled — so
-// flooring it would floor 1234 rather than 12.34.
+// column. A Decimal's are its value's, at its scale, as Polars 2.0's are: Floor of a
+// Decimal(3, 2) -1.25 is -2.00. Their type is Decimal(p+1, s), as 9.99's ceiling,
+// 10.00, has a digit more; Decimal(38, s) stays 38, and a row past it is refused, as
+// Polars refuses it. A Decimal of scale 0 keeps its type.
 func (e Expr) Floor() Expr { return e.un(expr.OpFloor) }
 func (e Expr) Ceil() Expr  { return e.un(expr.OpCeil) }
 
@@ -450,6 +470,15 @@ const (
 //
 // A Float32 is rounded as a Float64 and the result rounded once more to a float32,
 // so Round(0.1, 1) of a Float32 is the float32 nearest 0.1.
+//
+// A Decimal is rounded exactly, at its own scale, as Polars 2.0 rounds one, by the
+// same modes and the same default as a float, half away from zero where Polars'
+// is half to even: Round(1) of a Decimal(3, 2) 1.25 is 1.30, and 1.20
+// RoundHalfToEven. Where digits are dropped the type is
+// Decimal(p+1, s), for the carry 9.99 makes, 10.00; where none are, decimals at the
+// scale or past it, the operand's. At Decimal(38, s) the type stays 38 and a row the
+// carry takes past it is refused, as Polars refuses it. Truncate and RoundSigFigs of
+// a Decimal are refused still.
 func (e Expr) Round(decimals int, mode ...RoundMode) Expr {
 	if decimals < 0 {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "round",
