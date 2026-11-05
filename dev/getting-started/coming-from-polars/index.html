@@ -1957,6 +1957,10 @@ changes is what Go asks for.</p>
 <td><code>df.MapRows(ctx, f)</code>, <code>df.MapColumns(ctx, []string{"a"}, f)</code> (new in 0.6.7)</td>
 </tr>
 <tr>
+<td><code>.name.strip_prefix("a_")</code>, <code>.name.strip_suffix("_x")</code></td>
+<td><code>.Name().StripPrefix("a_")</code>, <code>.Name().StripSuffix("_x")</code> (new in 0.8)</td>
+</tr>
+<tr>
 <td><code>df.show(20)</code>, <code>lf.cache()</code></td>
 <td><code>df.Show(20)</code>, <code>lf.Cache()</code> (new in 0.6.7)</td>
 </tr>

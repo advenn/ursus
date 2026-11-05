@@ -3696,6 +3696,9 @@ that stops when its request is cancelled.</p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>Name().StripPrefix</code> and <code>StripSuffix</code></strong> (491): the output name without an affix,
+  taken off once where the name has it, Polars' <code>name.strip_prefix</code> and
+  <code>strip_suffix</code>: <code>Col("a_x").Name().StripPrefix("a_")</code> is x.</li>
 <li><strong>A Decimal's <code>Round</code>, <code>Floor</code>, <code>Ceil</code> and <code>Sign</code></strong> (490), refused until now:
   exact, at its scale, as Polars 2.0 answers them. Where digits are dropped the type
   is Decimal(p+1, s), for 9.99's 10.00; a row past 38 digits is refused. <code>Round</code>
