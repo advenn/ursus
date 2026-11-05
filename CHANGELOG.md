@@ -160,6 +160,12 @@ that stops when its request is cancelled.
   named with its reason in `oracleDifferences`. CI regenerates the recordings and
   fails on one that is not Polars'. Three files converted first: `numodds_test.go`,
   `rollmore_test.go` and `dtmore_test.go`, 305 hand-typed lines of values gone.
+- **Strings, lists, structs and enums from recorded oracles** (499): fifteen files
+  converted, `listns_test.go`'s 739 lines of null-against-empty by hand among them;
+  321 cases in fifteen groups, 58 generated, 1,611 lines gone. What Polars 2 has no
+  answer for is held to Go: a `List(Duration)` mean past int64 to `math/big`, a regex
+  replaced n times to `regexp`, a Datetime of seconds and a Date formatted with a
+  clock to `time`, `GetCategories` (removed from Polars 2) to the type's own list.
 - **The temporal wave converted** (498): `calendar_test.go`'s by-hand half,
   `tzreplace`, `components`, `daterange`, `csvdates`, `strtemporal`, `temporalagg`,
   `weeks`, `dtcombine`, `dtexact`, `timearith`, `businessdays_range` and
@@ -182,6 +188,14 @@ its section below lists them.
   answer was named after the bound, `literal` for a Go number and `lo` for `Col("lo")`,
   where Polars' clip keeps the value's name. Every test had aliased it; the recorded
   oracle found it.
+- **`Str().ToTitlecase` titlecases a digraph** (499): "ǆemal" was "Ǆemal" (U+01C4,
+  the upper case); it is "ǅemal" (U+01C5), Unicode's title mapping and Polars'. The
+  recorded oracle found it.
+- **`Str().ExtractGroups` of a null is a null Struct** (499), as Polars 2.1 gives it;
+  it was a Struct of null fields, which `SplitExact` and `SplitN` keep, as Polars does.
+- **An inclusive split has no trailing empty part** (499): `SplitInclusive(",")` of
+  "a,b," is `["a,", "b,"]`, and `SplitExact(",", 1, true)` of "a," is `{"a,", null}`,
+  as Polars splits them; each had an empty part after the last separator.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

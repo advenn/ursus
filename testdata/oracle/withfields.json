@@ -1,0 +1,1470 @@
+{
+ "cases": [
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Struct(age: Int64, name: String)",
+       "name": "p",
+       "values": [
+        {
+         "age": 30,
+         "name": "ann"
+        },
+        {
+         "age": 40,
+         "name": "bo"
+        },
+        {
+         "age": null,
+         "name": "cy"
+        }
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "city",
+       "values": [
+        "x",
+        "y",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "with_fields",
+   "note": "age replaced in place, name kept, city and tag added after; a null age plus one is null",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(age: Int64, name: String, city: String, tag: String)",
+      "name": "p",
+      "values": [
+       {
+        "age": 31,
+        "city": "x",
+        "name": "ann",
+        "tag": "fixed"
+       },
+       {
+        "age": 41,
+        "city": "y",
+        "name": "bo",
+        "tag": "fixed"
+       },
+       {
+        "age": null,
+        "city": "z",
+        "name": "cy",
+        "tag": "fixed"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Struct(age: Int64, name: String)",
+       "name": "p",
+       "values": [
+        {
+         "age": 30,
+         "name": "ann"
+        },
+        {
+         "age": 40,
+         "name": "bo"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "name": "names_a_field_as_planned",
+   "note": "a Field read is named after its field, so with_fields of name sets name itself",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(age: Int64, name: String)",
+      "name": "q",
+      "values": [
+       {
+        "age": 30,
+        "name": "ann"
+       },
+       {
+        "age": 40,
+        "name": "bo"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Struct(age: Int64, name: String)",
+       "name": "p",
+       "values": [
+        {
+         "age": 23,
+         "name": "a"
+        },
+        {
+         "age": 97,
+         "name": "ccxa"
+        },
+        {
+         "age": 13,
+         "name": "zcxa"
+        },
+        {
+         "age": null,
+         "name": "bazyxc"
+        },
+        {
+         "age": 84,
+         "name": "ba"
+        },
+        {
+         "age": 74,
+         "name": "bzbxy"
+        },
+        {
+         "age": 96,
+         "name": "yx"
+        },
+        {
+         "age": 7,
+         "name": "\"q\""
+        },
+        {
+         "age": 98,
+         "name": "c"
+        },
+        {
+         "age": 28,
+         "name": "cba"
+        },
+        {
+         "age": null,
+         "name": "xzc"
+        },
+        {
+         "age": 83,
+         "name": "accc"
+        },
+        {
+         "age": null,
+         "name": "byby"
+        },
+        {
+         "age": null,
+         "name": "by"
+        },
+        {
+         "age": 79,
+         "name": "\ud835\udd18rsus"
+        },
+        {
+         "age": 75,
+         "name": "ycay"
+        },
+        {
+         "age": 71,
+         "name": "yaxy"
+        },
+        {
+         "age": 73,
+         "name": "ccay"
+        },
+        {
+         "age": 70,
+         "name": "baxa"
+        },
+        {
+         "age": 83,
+         "name": "aax"
+        },
+        {
+         "age": 35,
+         "name": "byacca"
+        },
+        {
+         "age": 15,
+         "name": "xxxb"
+        },
+        {
+         "age": 42,
+         "name": null
+        },
+        {
+         "age": 25,
+         "name": "cabzcb"
+        },
+        {
+         "age": 66,
+         "name": "zxacx"
+        },
+        {
+         "age": 50,
+         "name": "ybxab"
+        },
+        {
+         "age": 84,
+         "name": "aa"
+        },
+        {
+         "age": 91,
+         "name": null
+        },
+        {
+         "age": 71,
+         "name": "abazac"
+        },
+        {
+         "age": null,
+         "name": "xbbc"
+        },
+        {
+         "age": 58,
+         "name": "zzyzy"
+        },
+        {
+         "age": 10,
+         "name": "cybc"
+        },
+        {
+         "age": 36,
+         "name": "byyc"
+        },
+        {
+         "age": 54,
+         "name": "axxz"
+        },
+        {
+         "age": 80,
+         "name": "yzyby"
+        },
+        {
+         "age": 99,
+         "name": "xcycx"
+        },
+        {
+         "age": 97,
+         "name": "yyabaa"
+        },
+        {
+         "age": 68,
+         "name": "bxx"
+        },
+        {
+         "age": 57,
+         "name": "cb"
+        },
+        {
+         "age": 78,
+         "name": "axcacx"
+        },
+        {
+         "age": 80,
+         "name": "ca"
+        },
+        {
+         "age": null,
+         "name": null
+        },
+        {
+         "age": null,
+         "name": "cbbyx"
+        },
+        {
+         "age": 46,
+         "name": "zc"
+        },
+        {
+         "age": 61,
+         "name": null
+        },
+        {
+         "age": null,
+         "name": "yzb"
+        },
+        {
+         "age": 36,
+         "name": "ccacbz"
+        },
+        {
+         "age": 79,
+         "name": "x"
+        },
+        {
+         "age": 79,
+         "name": "xacca"
+        },
+        {
+         "age": null,
+         "name": "byyxz"
+        },
+        {
+         "age": 6,
+         "name": null
+        },
+        {
+         "age": 77,
+         "name": "abxy"
+        },
+        {
+         "age": 54,
+         "name": null
+        },
+        {
+         "age": 15,
+         "name": null
+        },
+        {
+         "age": 2,
+         "name": "bxxy"
+        },
+        {
+         "age": 93,
+         "name": "zbbcxb"
+        },
+        {
+         "age": 32,
+         "name": "yy"
+        },
+        {
+         "age": 65,
+         "name": "ac"
+        },
+        {
+         "age": 37,
+         "name": "xcxzyx"
+        },
+        {
+         "age": 89,
+         "name": "bc"
+        },
+        {
+         "age": 12,
+         "name": "aax"
+        },
+        {
+         "age": 1,
+         "name": "ycbxyc"
+        },
+        {
+         "age": null,
+         "name": "axz"
+        },
+        {
+         "age": 58,
+         "name": "aacyba"
+        },
+        {
+         "age": 31,
+         "name": "baxyxz"
+        },
+        {
+         "age": 4,
+         "name": "ayb"
+        },
+        {
+         "age": 96,
+         "name": "zyxax"
+        },
+        {
+         "age": null,
+         "name": "byxczb"
+        },
+        {
+         "age": 95,
+         "name": "aza"
+        },
+        {
+         "age": 7,
+         "name": "xacx"
+        },
+        {
+         "age": 33,
+         "name": "xyycz"
+        },
+        {
+         "age": 31,
+         "name": "xb"
+        },
+        {
+         "age": null,
+         "name": "xaybxy"
+        },
+        {
+         "age": 75,
+         "name": "ybcxb"
+        },
+        {
+         "age": 25,
+         "name": "yyxxza"
+        },
+        {
+         "age": 47,
+         "name": "ycyxb"
+        },
+        {
+         "age": 55,
+         "name": "xycx"
+        },
+        {
+         "age": null,
+         "name": "axa"
+        },
+        {
+         "age": 62,
+         "name": "zab"
+        },
+        {
+         "age": 96,
+         "name": "y"
+        },
+        {
+         "age": 95,
+         "name": "baxxb"
+        },
+        {
+         "age": 76,
+         "name": "xybxbz"
+        },
+        {
+         "age": 36,
+         "name": "cazab"
+        },
+        {
+         "age": 12,
+         "name": null
+        },
+        {
+         "age": 68,
+         "name": "bab"
+        },
+        {
+         "age": 46,
+         "name": "ycyc"
+        },
+        {
+         "age": 12,
+         "name": "zaaaxz"
+        },
+        {
+         "age": 9,
+         "name": "a,b"
+        },
+        {
+         "age": null,
+         "name": "abcxb"
+        },
+        {
+         "age": 14,
+         "name": "c"
+        },
+        {
+         "age": 33,
+         "name": "yxyx"
+        },
+        {
+         "age": 32,
+         "name": "xbxbxa"
+        },
+        {
+         "age": 50,
+         "name": ""
+        },
+        {
+         "age": 98,
+         "name": "c"
+        },
+        {
+         "age": 31,
+         "name": "czzc"
+        },
+        {
+         "age": 61,
+         "name": "byzxax"
+        },
+        {
+         "age": null,
+         "name": "yxcz"
+        },
+        {
+         "age": 4,
+         "name": "ax"
+        },
+        {
+         "age": 86,
+         "name": " "
+        },
+        {
+         "age": 25,
+         "name": "xzxbay"
+        },
+        {
+         "age": 29,
+         "name": null
+        },
+        {
+         "age": 12,
+         "name": "cxy"
+        },
+        {
+         "age": null,
+         "name": "zza"
+        },
+        {
+         "age": 44,
+         "name": "ayxay"
+        },
+        {
+         "age": 54,
+         "name": "ax"
+        },
+        {
+         "age": 26,
+         "name": "c"
+        },
+        {
+         "age": 86,
+         "name": "cczzay"
+        },
+        {
+         "age": 99,
+         "name": "azb"
+        },
+        {
+         "age": 14,
+         "name": "yc"
+        },
+        {
+         "age": 0,
+         "name": "bxbxxa"
+        },
+        {
+         "age": 38,
+         "name": "a"
+        },
+        {
+         "age": 35,
+         "name": "z"
+        },
+        {
+         "age": 13,
+         "name": "zcx"
+        },
+        {
+         "age": 84,
+         "name": "abxy"
+        },
+        {
+         "age": 65,
+         "name": "bbxyx"
+        },
+        {
+         "age": 52,
+         "name": "aac"
+        },
+        {
+         "age": 39,
+         "name": "zxx"
+        },
+        {
+         "age": null,
+         "name": null
+        },
+        {
+         "age": 77,
+         "name": "cyxc"
+        },
+        {
+         "age": 36,
+         "name": "cx"
+        }
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "city",
+       "values": [
+        null,
+        "z",
+        "z",
+        "y",
+        "z",
+        "z",
+        "x",
+        "y",
+        "y",
+        "x",
+        null,
+        "z",
+        "x",
+        "z",
+        "x",
+        "y",
+        "x",
+        "y",
+        "y",
+        "y",
+        "x",
+        "x",
+        "x",
+        null,
+        null,
+        "z",
+        "x",
+        "y",
+        "x",
+        null,
+        "y",
+        "y",
+        null,
+        "z",
+        "z",
+        "z",
+        null,
+        "x",
+        "z",
+        "y",
+        "z",
+        "y",
+        "z",
+        "z",
+        "y",
+        "x",
+        "x",
+        "y",
+        "x",
+        "x",
+        "y",
+        "z",
+        "y",
+        "y",
+        "z",
+        "z",
+        null,
+        "\"q\"",
+        "x",
+        "y",
+        "x",
+        "y",
+        "z",
+        "x",
+        null,
+        "x",
+        "y",
+        "z",
+        "z",
+        "y",
+        "x",
+        "y",
+        "z",
+        "y",
+        "x",
+        "y",
+        "x",
+        "z",
+        "\ud835\udd18rsus",
+        "y",
+        "x",
+        "x",
+        "x",
+        "y",
+        "y",
+        "a,b",
+        "y",
+        "y",
+        "x",
+        "y",
+        "y",
+        "y",
+        "z",
+        "x",
+        "z",
+        "z",
+        "y",
+        "y",
+        "y",
+        "z",
+        "y",
+        "z",
+        "x",
+        "x",
+        "x",
+        "z",
+        "y",
+        "",
+        "x",
+        "y",
+        "x",
+        "y",
+        "y",
+        "z",
+        "z",
+        "x",
+        "x",
+        "\u00e9",
+        "y",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "with_fields_gen",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(age: Int64, name: String, city: String, shout: String)",
+      "name": "p",
+      "values": [
+       {
+        "age": 46,
+        "city": null,
+        "name": "a",
+        "shout": "A"
+       },
+       {
+        "age": 194,
+        "city": "z",
+        "name": "ccxa",
+        "shout": "CCXA"
+       },
+       {
+        "age": 26,
+        "city": "z",
+        "name": "zcxa",
+        "shout": "ZCXA"
+       },
+       {
+        "age": null,
+        "city": "y",
+        "name": "bazyxc",
+        "shout": "BAZYXC"
+       },
+       {
+        "age": 168,
+        "city": "z",
+        "name": "ba",
+        "shout": "BA"
+       },
+       {
+        "age": 148,
+        "city": "z",
+        "name": "bzbxy",
+        "shout": "BZBXY"
+       },
+       {
+        "age": 192,
+        "city": "x",
+        "name": "yx",
+        "shout": "YX"
+       },
+       {
+        "age": 14,
+        "city": "y",
+        "name": "\"q\"",
+        "shout": "\"Q\""
+       },
+       {
+        "age": 196,
+        "city": "y",
+        "name": "c",
+        "shout": "C"
+       },
+       {
+        "age": 56,
+        "city": "x",
+        "name": "cba",
+        "shout": "CBA"
+       },
+       {
+        "age": null,
+        "city": null,
+        "name": "xzc",
+        "shout": "XZC"
+       },
+       {
+        "age": 166,
+        "city": "z",
+        "name": "accc",
+        "shout": "ACCC"
+       },
+       {
+        "age": null,
+        "city": "x",
+        "name": "byby",
+        "shout": "BYBY"
+       },
+       {
+        "age": null,
+        "city": "z",
+        "name": "by",
+        "shout": "BY"
+       },
+       {
+        "age": 158,
+        "city": "x",
+        "name": "\ud835\udd18rsus",
+        "shout": "\ud835\udd18RSUS"
+       },
+       {
+        "age": 150,
+        "city": "y",
+        "name": "ycay",
+        "shout": "YCAY"
+       },
+       {
+        "age": 142,
+        "city": "x",
+        "name": "yaxy",
+        "shout": "YAXY"
+       },
+       {
+        "age": 146,
+        "city": "y",
+        "name": "ccay",
+        "shout": "CCAY"
+       },
+       {
+        "age": 140,
+        "city": "y",
+        "name": "baxa",
+        "shout": "BAXA"
+       },
+       {
+        "age": 166,
+        "city": "y",
+        "name": "aax",
+        "shout": "AAX"
+       },
+       {
+        "age": 70,
+        "city": "x",
+        "name": "byacca",
+        "shout": "BYACCA"
+       },
+       {
+        "age": 30,
+        "city": "x",
+        "name": "xxxb",
+        "shout": "XXXB"
+       },
+       {
+        "age": 84,
+        "city": "x",
+        "name": null,
+        "shout": null
+       },
+       {
+        "age": 50,
+        "city": null,
+        "name": "cabzcb",
+        "shout": "CABZCB"
+       },
+       {
+        "age": 132,
+        "city": null,
+        "name": "zxacx",
+        "shout": "ZXACX"
+       },
+       {
+        "age": 100,
+        "city": "z",
+        "name": "ybxab",
+        "shout": "YBXAB"
+       },
+       {
+        "age": 168,
+        "city": "x",
+        "name": "aa",
+        "shout": "AA"
+       },
+       {
+        "age": 182,
+        "city": "y",
+        "name": null,
+        "shout": null
+       },
+       {
+        "age": 142,
+        "city": "x",
+        "name": "abazac",
+        "shout": "ABAZAC"
+       },
+       {
+        "age": null,
+        "city": null,
+        "name": "xbbc",
+        "shout": "XBBC"
+       },
+       {
+        "age": 116,
+        "city": "y",
+        "name": "zzyzy",
+        "shout": "ZZYZY"
+       },
+       {
+        "age": 20,
+        "city": "y",
+        "name": "cybc",
+        "shout": "CYBC"
+       },
+       {
+        "age": 72,
+        "city": null,
+        "name": "byyc",
+        "shout": "BYYC"
+       },
+       {
+        "age": 108,
+        "city": "z",
+        "name": "axxz",
+        "shout": "AXXZ"
+       },
+       {
+        "age": 160,
+        "city": "z",
+        "name": "yzyby",
+        "shout": "YZYBY"
+       },
+       {
+        "age": 198,
+        "city": "z",
+        "name": "xcycx",
+        "shout": "XCYCX"
+       },
+       {
+        "age": 194,
+        "city": null,
+        "name": "yyabaa",
+        "shout": "YYABAA"
+       },
+       {
+        "age": 136,
+        "city": "x",
+        "name": "bxx",
+        "shout": "BXX"
+       },
+       {
+        "age": 114,
+        "city": "z",
+        "name": "cb",
+        "shout": "CB"
+       },
+       {
+        "age": 156,
+        "city": "y",
+        "name": "axcacx",
+        "shout": "AXCACX"
+       },
+       {
+        "age": 160,
+        "city": "z",
+        "name": "ca",
+        "shout": "CA"
+       },
+       {
+        "age": null,
+        "city": "y",
+        "name": null,
+        "shout": null
+       },
+       {
+        "age": null,
+        "city": "z",
+        "name": "cbbyx",
+        "shout": "CBBYX"
+       },
+       {
+        "age": 92,
+        "city": "z",
+        "name": "zc",
+        "shout": "ZC"
+       },
+       {
+        "age": 122,
+        "city": "y",
+        "name": null,
+        "shout": null
+       },
+       {
+        "age": null,
+        "city": "x",
+        "name": "yzb",
+        "shout": "YZB"
+       },
+       {
+        "age": 72,
+        "city": "x",
+        "name": "ccacbz",
+        "shout": "CCACBZ"
+       },
+       {
+        "age": 158,
+        "city": "y",
+        "name": "x",
+        "shout": "X"
+       },
+       {
+        "age": 158,
+        "city": "x",
+        "name": "xacca",
+        "shout": "XACCA"
+       },
+       {
+        "age": null,
+        "city": "x",
+        "name": "byyxz",
+        "shout": "BYYXZ"
+       },
+       {
+        "age": 12,
+        "city": "y",
+        "name": null,
+        "shout": null
+       },
+       {
+        "age": 154,
+        "city": "z",
+        "name": "abxy",
+        "shout": "ABXY"
+       },
+       {
+        "age": 108,
+        "city": "y",
+        "name": null,
+        "shout": null
+       },
+       {
+        "age": 30,
+        "city": "y",
+        "name": null,
+        "shout": null
+       },
+       {
+        "age": 4,
+        "city": "z",
+        "name": "bxxy",
+        "shout": "BXXY"
+       },
+       {
+        "age": 186,
+        "city": "z",
+        "name": "zbbcxb",
+        "shout": "ZBBCXB"
+       },
+       {
+        "age": 64,
+        "city": null,
+        "name": "yy",
+        "shout": "YY"
+       },
+       {
+        "age": 130,
+        "city": "\"q\"",
+        "name": "ac",
+        "shout": "AC"
+       },
+       {
+        "age": 74,
+        "city": "x",
+        "name": "xcxzyx",
+        "shout": "XCXZYX"
+       },
+       {
+        "age": 178,
+        "city": "y",
+        "name": "bc",
+        "shout": "BC"
+       },
+       {
+        "age": 24,
+        "city": "x",
+        "name": "aax",
+        "shout": "AAX"
+       },
+       {
+        "age": 2,
+        "city": "y",
+        "name": "ycbxyc",
+        "shout": "YCBXYC"
+       },
+       {
+        "age": null,
+        "city": "z",
+        "name": "axz",
+        "shout": "AXZ"
+       },
+       {
+        "age": 116,
+        "city": "x",
+        "name": "aacyba",
+        "shout": "AACYBA"
+       },
+       {
+        "age": 62,
+        "city": null,
+        "name": "baxyxz",
+        "shout": "BAXYXZ"
+       },
+       {
+        "age": 8,
+        "city": "x",
+        "name": "ayb",
+        "shout": "AYB"
+       },
+       {
+        "age": 192,
+        "city": "y",
+        "name": "zyxax",
+        "shout": "ZYXAX"
+       },
+       {
+        "age": null,
+        "city": "z",
+        "name": "byxczb",
+        "shout": "BYXCZB"
+       },
+       {
+        "age": 190,
+        "city": "z",
+        "name": "aza",
+        "shout": "AZA"
+       },
+       {
+        "age": 14,
+        "city": "y",
+        "name": "xacx",
+        "shout": "XACX"
+       },
+       {
+        "age": 66,
+        "city": "x",
+        "name": "xyycz",
+        "shout": "XYYCZ"
+       },
+       {
+        "age": 62,
+        "city": "y",
+        "name": "xb",
+        "shout": "XB"
+       },
+       {
+        "age": null,
+        "city": "z",
+        "name": "xaybxy",
+        "shout": "XAYBXY"
+       },
+       {
+        "age": 150,
+        "city": "y",
+        "name": "ybcxb",
+        "shout": "YBCXB"
+       },
+       {
+        "age": 50,
+        "city": "x",
+        "name": "yyxxza",
+        "shout": "YYXXZA"
+       },
+       {
+        "age": 94,
+        "city": "y",
+        "name": "ycyxb",
+        "shout": "YCYXB"
+       },
+       {
+        "age": 110,
+        "city": "x",
+        "name": "xycx",
+        "shout": "XYCX"
+       },
+       {
+        "age": null,
+        "city": "z",
+        "name": "axa",
+        "shout": "AXA"
+       },
+       {
+        "age": 124,
+        "city": "\ud835\udd18rsus",
+        "name": "zab",
+        "shout": "ZAB"
+       },
+       {
+        "age": 192,
+        "city": "y",
+        "name": "y",
+        "shout": "Y"
+       },
+       {
+        "age": 190,
+        "city": "x",
+        "name": "baxxb",
+        "shout": "BAXXB"
+       },
+       {
+        "age": 152,
+        "city": "x",
+        "name": "xybxbz",
+        "shout": "XYBXBZ"
+       },
+       {
+        "age": 72,
+        "city": "x",
+        "name": "cazab",
+        "shout": "CAZAB"
+       },
+       {
+        "age": 24,
+        "city": "y",
+        "name": null,
+        "shout": null
+       },
+       {
+        "age": 136,
+        "city": "y",
+        "name": "bab",
+        "shout": "BAB"
+       },
+       {
+        "age": 92,
+        "city": "a,b",
+        "name": "ycyc",
+        "shout": "YCYC"
+       },
+       {
+        "age": 24,
+        "city": "y",
+        "name": "zaaaxz",
+        "shout": "ZAAAXZ"
+       },
+       {
+        "age": 18,
+        "city": "y",
+        "name": "a,b",
+        "shout": "A,B"
+       },
+       {
+        "age": null,
+        "city": "x",
+        "name": "abcxb",
+        "shout": "ABCXB"
+       },
+       {
+        "age": 28,
+        "city": "y",
+        "name": "c",
+        "shout": "C"
+       },
+       {
+        "age": 66,
+        "city": "y",
+        "name": "yxyx",
+        "shout": "YXYX"
+       },
+       {
+        "age": 64,
+        "city": "y",
+        "name": "xbxbxa",
+        "shout": "XBXBXA"
+       },
+       {
+        "age": 100,
+        "city": "z",
+        "name": "",
+        "shout": ""
+       },
+       {
+        "age": 196,
+        "city": "x",
+        "name": "c",
+        "shout": "C"
+       },
+       {
+        "age": 62,
+        "city": "z",
+        "name": "czzc",
+        "shout": "CZZC"
+       },
+       {
+        "age": 122,
+        "city": "z",
+        "name": "byzxax",
+        "shout": "BYZXAX"
+       },
+       {
+        "age": null,
+        "city": "y",
+        "name": "yxcz",
+        "shout": "YXCZ"
+       },
+       {
+        "age": 8,
+        "city": "y",
+        "name": "ax",
+        "shout": "AX"
+       },
+       {
+        "age": 172,
+        "city": "y",
+        "name": " ",
+        "shout": " "
+       },
+       {
+        "age": 50,
+        "city": "z",
+        "name": "xzxbay",
+        "shout": "XZXBAY"
+       },
+       {
+        "age": 58,
+        "city": "y",
+        "name": null,
+        "shout": null
+       },
+       {
+        "age": 24,
+        "city": "z",
+        "name": "cxy",
+        "shout": "CXY"
+       },
+       {
+        "age": null,
+        "city": "x",
+        "name": "zza",
+        "shout": "ZZA"
+       },
+       {
+        "age": 88,
+        "city": "x",
+        "name": "ayxay",
+        "shout": "AYXAY"
+       },
+       {
+        "age": 108,
+        "city": "x",
+        "name": "ax",
+        "shout": "AX"
+       },
+       {
+        "age": 52,
+        "city": "z",
+        "name": "c",
+        "shout": "C"
+       },
+       {
+        "age": 172,
+        "city": "y",
+        "name": "cczzay",
+        "shout": "CCZZAY"
+       },
+       {
+        "age": 198,
+        "city": "",
+        "name": "azb",
+        "shout": "AZB"
+       },
+       {
+        "age": 28,
+        "city": "x",
+        "name": "yc",
+        "shout": "YC"
+       },
+       {
+        "age": 0,
+        "city": "y",
+        "name": "bxbxxa",
+        "shout": "BXBXXA"
+       },
+       {
+        "age": 76,
+        "city": "x",
+        "name": "a",
+        "shout": "A"
+       },
+       {
+        "age": 70,
+        "city": "y",
+        "name": "z",
+        "shout": "Z"
+       },
+       {
+        "age": 26,
+        "city": "y",
+        "name": "zcx",
+        "shout": "ZCX"
+       },
+       {
+        "age": 168,
+        "city": "z",
+        "name": "abxy",
+        "shout": "ABXY"
+       },
+       {
+        "age": 130,
+        "city": "z",
+        "name": "bbxyx",
+        "shout": "BBXYX"
+       },
+       {
+        "age": 104,
+        "city": "x",
+        "name": "aac",
+        "shout": "AAC"
+       },
+       {
+        "age": 78,
+        "city": "x",
+        "name": "zxx",
+        "shout": "ZXX"
+       },
+       {
+        "age": null,
+        "city": "\u00e9",
+        "name": null,
+        "shout": null
+       },
+       {
+        "age": 154,
+        "city": "y",
+        "name": "cyxc",
+        "shout": "CYXC"
+       },
+       {
+        "age": 72,
+        "city": "z",
+        "name": "cx",
+        "shout": "CX"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "generator": "bench/scripts/oracle/withfields.py",
+ "polars": "2.1.0"
+}
