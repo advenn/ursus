@@ -114,7 +114,7 @@ where it checks structure.
 
 | wave | area | files (the largest first) |
 | --- | --- | --- |
-| 497 | expressions and math | scalar_byhand, castround_byhand, castedges_byhand, castmore, exprodds, exprargs, fold, variadic, math, trig, bits, decimal_arith_byhand (big.Rat), int128exact |
+| 497 | expressions and math | scalar_byhand, castround_byhand, castedges_byhand, castmore, exprodds, exprargs, fold, variadic, math, trig, bits, decimal_arith_byhand (big.Rat), int128exact — done in step 497: 264 cases, 229 lines gone |
 | 498 | temporal | calendar (the by-hand half), tzreplace, components, daterange, csvdates, strtemporal, temporalagg, weeks, dtcombine, dtexact, timearith, businessdays_range, interpby |
 | 499 | strings, lists, structs, enums | listns, arrns, listeval, listmore, listset, liststruct, structfields, withfields, enum_byhand, expr_bin, expr_cat, strmany, strcodec, strsplit, strptime (Go's time) |
 | 500 | aggregates and windows | aggwindow_byhand, aggstats, aggpair, agglists, argsort, hist, search, seq, modeagg, ewmmore, window172, windownest, rollingby, rollingoffset, rollingquantile, rollmap, exprroll, cumeval, topk_agg |

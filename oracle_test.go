@@ -144,6 +144,58 @@ var oracleDifferences = map[string]oracleDifference{
 		why:   "a centred window ending in a null ranks its value here, where Polars answers null",
 		cells: map[string]map[int]any{"x": {1: 2}},
 	},
+
+	// --- step 497, expressions and math ---------------------------------------------
+	// Len is a count, a Uint64 here (value_counts above); Polars' is a UInt32.
+	"scalar_byhand/gbd_kolkata_1h":    {why: "Len is a Uint64 here, Polars' a UInt32", dtypes: map[string]string{"n": "Uint64"}},
+	"scalar_byhand/gbd_ny_spring_gen": {why: "Len is a Uint64 here, Polars' a UInt32", dtypes: map[string]string{"n": "Uint64"}},
+	// ursus's casts are exact or refused, and null when lossy (feature-gaps §9): a
+	// float past a Float32's range, whose nearest float32 is an infinity, and a float
+	// with a fraction cast to an integer, which Polars overflows and truncates.
+	"castround_byhand/f64_1e39_to_f32_lossy": {
+		why:   "a float past a Float32's range is null when lossy here; Polars' cast overflows to an infinity",
+		cells: map[string]map[int]any{"x": {0: nil}},
+	},
+	"int128exact/float_to_i128_lossy": {
+		why:   "a float with a fraction is null when cast lossily to an integer here; Polars truncates it to 3",
+		cells: map[string]map[int]any{"f": {0: nil}},
+	},
+	// An integer Sum is an Int128 here (internal/expr.ResolveAggBinding; feature-gaps
+	// §9), Polars' an Int64, a Boolean's a UInt32; abs, neg, sign and a fold over sums
+	// keep the width.
+	"math/sum_abs_neg_sign_sqrt": {
+		why:    "an integer Sum is an Int128 here, Polars' an Int64; abs, neg and sign keep it",
+		dtypes: map[string]string{"abs": "Int128", "neg": "Int128", "sign": "Int128"},
+	},
+	"fold/fold_agg": {why: "a fold over integer Sums is an Int128 here, Polars' an Int64", dtypes: map[string]string{"literal": "Int128"}},
+	"exprargs/lists_agg": {
+		why:    "a Boolean's Sum is an Int128 here, as every integer Sum is; Polars counts to a UInt32",
+		dtypes: map[string]string{"n_in": "Int128", "n_has": "Int128"},
+	},
+	"exprargs/lists_agg_gen": {
+		why:    "a Boolean's Sum is an Int128 here, as every integer Sum is; Polars counts to a UInt32",
+		dtypes: map[string]string{"n_in": "Int128", "n_has": "Int128"},
+	},
+	// SumHorizontal widens an integer sum to Int128 and answers null for a row of
+	// nulls, as Sum does of an all-null group (its doc; feature-gaps §9); Polars'
+	// sum_horizontal keeps the operand's type and sums the row to 0.
+	"variadic/sum_horizontal_cols":      {why: "SumHorizontal of integers is an Int128 here, Polars' an Int64", dtypes: map[string]string{"a": "Int128"}},
+	"variadic/all_minus_sum_horizontal": {why: "SumHorizontal of integers is an Int128 here, Polars' an Int64", dtypes: map[string]string{"a": "Int128", "b": "Int128"}},
+	"variadic/horizontal_gen":           {why: "SumHorizontal of integers is an Int128 here, Polars' an Int64", dtypes: map[string]string{"sum": "Int128"}},
+	"variadic/eval_sum_horizontal":      {why: "SumHorizontal of integers is an Int128 here, Polars' an Int64", dtypes: map[string]string{"x": "Int128"}},
+	"variadic/eval_gen":                 {why: "SumHorizontal of integers is an Int128 here, Polars' an Int64", dtypes: map[string]string{"sum": "List(Int128)"}},
+	"variadic/cumulative_eval_max_horizontal": {
+		why:    "a Sum inside the body is an Int128 here, and MaxHorizontal keeps it; Polars' is an Int64",
+		dtypes: map[string]string{"x": "Int128"},
+	},
+	"variadic/sum_horizontal_all_null": {
+		why:    "SumHorizontal of a row of nulls is null here, as Sum's of an all-null group; Polars sums it to 0",
+		dtypes: map[string]string{"a": "Int128"},
+		cells:  map[string]map[int]any{"a": {0: nil}},
+	},
+	// Div and Pow always return a float (feature-gaps §9); Polars' integer power is
+	// an Int64.
+	"math/pow": {why: "Pow always returns a float here; Polars' integer square is an Int64", dtypes: map[string]string{"sq": "Float64"}},
 }
 
 // readOracleGroup decodes one group's file; numbers stay text, so 1<<62 and every

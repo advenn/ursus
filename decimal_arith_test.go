@@ -1,20 +1,23 @@
 package ursus_test
 
 // Decimal + - * / against exact rationals, generated over pairs of Decimal types and
-// each type's edges.
+// each type's edges and seeded values.
 //
 // For + - and *, the answer is the exact value at the rule's scale, or — when that
 // needs more digits than the rule's precision — a refusal: each such row is run on
 // its own, so a refusal is attributed to the row that earns it and a row that should
 // answer is never hidden behind one that should not. For /, it is the nearest
 // Float64 to the exact quotient. The oracle is big.Rat, which shares no code with the
-// kernels.
+// kernels. Polars 2.1 rounds a product to the wider scale and a quotient to a
+// Decimal, so this sweep, not the recorded oracle, holds them (step 497, which put
+// decimal_arith_byhand_test.go's hand cases among the values here).
 
 import (
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"math/rand"
 	"strings"
 	"testing"
 
@@ -29,12 +32,28 @@ type decType struct{ p, s int }
 
 func (d decType) dt() dtype.DataType { return dtype.Decimal(uint8(d.p), uint8(d.s)) }
 
-// edges are d's unscaled edge values: ±max, ±1, 0, 7, and one when the type holds it.
-func (d decType) edges() []string {
+// values are d's unscaled values: the edges ±max, ±1, 0, 7, and one when the type
+// holds it; for Decimal(38, 0) the value whose rescale by ten digits passes 2^127,
+// 17014118346046923173168730372, 1.70e38 at scale 10, whose sum with Decimal(38,
+// 10)'s -max still has 38 digits, so the kernel's big.Int fallback answers it; and
+// three seeded values of up to p digits, signed (step 497).
+func (d decType) values() []string {
 	max := strings.Repeat("9", d.p)
 	out := []string{max, "-" + max, "1", "-1", "0", "7"}
 	if d.s < d.p {
 		out = append(out, "1"+strings.Repeat("0", d.s))
+	}
+	if d.p == 38 && d.s == 0 {
+		out = append(out, "17014118346046923173168730372")
+	}
+	rng := rand.New(rand.NewSource(int64(497_000 + d.p*100 + d.s)))
+	limit := pow10(d.p)
+	for range 3 {
+		v := new(big.Int).Rand(rng, limit)
+		if rng.Intn(2) == 1 {
+			v.Neg(v)
+		}
+		out = append(out, v.String())
 	}
 	return out
 }
@@ -83,8 +102,8 @@ func TestDecimalArithmeticAgainstExactRationals(t *testing.T) {
 				pairs++
 				key := fmt.Sprintf("%s %s %s", A.dt(), op, B.dt())
 				var as, bs []string
-				for _, x := range A.edges() {
-					for _, y := range B.edges() {
+				for _, x := range A.values() {
+					for _, y := range B.values() {
 						as, bs = append(as, x), append(bs, y)
 					}
 				}
@@ -102,7 +121,7 @@ func TestDecimalArithmeticAgainstExactRationals(t *testing.T) {
 			}
 		}
 	}
-	if pairs != 256 || rows < 10000 {
+	if pairs != 256 || rows < 20000 {
 		t.Fatalf("%d pairs, %d rows — the sweep has gone vacuous", pairs, rows)
 	}
 }
