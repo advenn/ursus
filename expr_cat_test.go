@@ -6,7 +6,11 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/ursustest"
 )
+
+// fruits are the categories of fruit's Enum, in their order.
+var fruits = []string{"apple", "banana", "éclair", ""}
 
 // fruit is Polars' Enum(["apple", "banana", "éclair", ""]) column s of banana, a
 // null, éclair, apple, "" and banana, beside g, the groups 0, 1, 0, 1, 0, 1.
@@ -14,46 +18,20 @@ func fruit() *ursus.LazyFrame {
 	c := ursus.Col
 	return ursus.Frame(ursus.ValuesNullable("s", []string{"banana", "", "éclair", "apple", "", "banana"},
 		[]bool{true, false, true, true, true, true}), ursus.Values("g", []int64{0, 1, 0, 1, 0, 1})).
-		Select(c("s").Cast(ursus.Enum("apple", "banana", "éclair", "")), c("g"))
+		Select(c("s").Cast(ursus.Enum(fruits...)), c("g"))
 }
 
-// TestCatMethods is C of v0.6.6-scope.md (step 273): the categorical namespace on an
-// Enum. Every answer is Polars 1.44.1's.
-func TestCatMethods(t *testing.T) {
+// The categorical namespace on an Enum, C of v0.6.6-scope.md (step 273): every
+// answer over fruit is Polars 2.1.0's, recorded in the expr_cat group of
+// testdata/oracle and spelled in oracle_expr_cat_test.go since step 499, which took
+// this file's hand table. GetCategories, which Polars 2 removed, is held to the
+// type's own category list below.
+
+// TestCatPhysicalWidth: the index's type grows with the categories, Uint8 to 255,
+// Uint16 to 65,535 and Uint32 past, as Polars' does; the last category's index is
+// the count less one.
+func TestCatPhysicalWidth(t *testing.T) {
 	c := ursus.Col
-	s := c("s").Cat()
-	lf := fruit()
-	for _, tc := range []struct {
-		name string
-		e    ursus.Expr
-		want string
-	}{
-		{"starts_with", s.StartsWith("ba"), "true\n\nfalse\nfalse\nfalse\ntrue"},
-		{"ends_with", s.EndsWith("ir"), "false\n\ntrue\nfalse\nfalse\nfalse"},
-		{"an empty prefix", s.StartsWith(""), "true\n\ntrue\ntrue\ntrue\ntrue"},
-		{"len_bytes", s.LenBytes(), "6\n\n7\n5\n0\n6"},
-		{"len_chars", s.LenChars(), "6\n\n6\n5\n0\n6"},
-		{"slice", s.Slice(1, 3), "ana\n\ncla\nppl\n\"\"\nana"},
-		{"slice from the end", s.Slice(-2), "na\n\nir\nle\n\"\"\nna"},
-		{"slice to the end", s.Slice(2), "nana\n\nlair\nple\n\"\"\nnana"},
-		{"physical", s.Physical(), "1\n\n2\n0\n3\n1"},
-	} {
-		if got, want := csvOf(t, lf.Select(tc.e.Alias("r"))), "r\n"+tc.want+"\n"; got != want {
-			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, want)
-		}
-	}
-	// The types: UInt32 lengths, String slices, and the indices at Polars' width.
-	for _, tc := range []struct {
-		e    ursus.Expr
-		want ursus.DataType
-	}{
-		{s.LenBytes(), ursus.Uint32}, {s.Slice(0, 1), ursus.String}, {s.Physical(), ursus.Uint8},
-	} {
-		got, err := lf.Select(tc.e).Collect(t.Context())
-		if err != nil || got.Schema().Field(0).Type != tc.want {
-			t.Errorf("%s: %v, %v, want %s", tc.e, got, err, tc.want)
-		}
-	}
 	for _, tc := range []struct {
 		n    int
 		want ursus.DataType
@@ -75,43 +53,42 @@ func TestCatMethods(t *testing.T) {
 
 // TestGetCategories: the categories, a column of their own length in a selection,
 // refused beside a column of another length, and a list a group in an aggregation.
+// Polars 2 removed get_categories (the Enum's dtype.categories is its answer), so
+// every expected frame here is built from the type's own list, fruits.
 func TestGetCategories(t *testing.T) {
 	c := ursus.Col
 	lf := fruit()
-	if got, want := csvOf(t, lf.Select(c("s").Cat().GetCategories())), "s\napple\nbanana\néclair\n\"\"\n"; got != want {
-		t.Errorf("a selection:\ngot  %q\nwant %q", got, want)
-	}
-	if got := csvOf(t, lf.Select(c("s").Cat().GetCategories().Len())); got != "s\n4\n" {
-		t.Errorf("its length: %q", got)
-	}
-	agg := lf.GroupBy(c("g")).Agg(c("s").Cat().GetCategories().List().Join("|")).Sort(ursus.Asc(c("g")))
-	if got, want := csvOf(t, agg), "g,s\n0,apple|banana|éclair|\n1,apple|banana|éclair|\n"; got != want {
-		t.Errorf("an aggregation:\ngot  %q\nwant %q", got, want)
-	}
-	// In WithColumns beside a frame of its length, of an aliased receiver, its length
-	// a group, and Physical in a Filter.
-	four := fruit().Head(4)
-	for _, tc := range []struct {
-		name string
-		q    *ursus.LazyFrame
-		want string
-	}{
-		{"WithColumns", four.WithColumns(c("s").Cat().GetCategories().Alias("c")).Select(c("c")),
-			"c\napple\nbanana\néclair\n\"\"\n"},
-		{"an aliased receiver", four.Select(c("s").Alias("t").Cat().GetCategories()), "t\napple\nbanana\néclair\n\"\"\n"},
-		{"its length a group", four.GroupBy(c("g")).Agg(c("s").Cat().GetCategories().Len()).Sort(ursus.Asc(c("g"))),
-			"g,s\n0,4\n1,4\n"},
-		{"Physical in a Filter", four.Filter(c("s").Cat().Physical().Eq(1)), "s,g\nbanana,0\n"},
-		// One value for the frame: all its rows kept, or none.
-		{"a Filter by their count", four.Filter(c("s").Cat().GetCategories().Len().Gt(3)).Select(ursus.Len()),
-			"len\n4\n"},
-		{"a Filter by too many", four.Filter(c("s").Cat().GetCategories().Len().Gt(4)).Select(ursus.Len()),
-			"len\n0\n"},
-	} {
-		if got := csvOf(t, tc.q); got != tc.want {
-			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)
+	same := func(t *testing.T, q, want *ursus.LazyFrame) {
+		t.Helper()
+		got, err := q.Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
 		}
+		w, err := want.Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		ursustest.AssertFrameEqual(t, got, w)
 	}
+	cats := ursus.Enum(fruits...).Categories()
+	joined := strings.Join(cats, "|")
+	count := uint32(len(cats)) // an expression's Len is a Uint32
+	same(t, lf.Select(c("s").Cat().GetCategories()), ursus.Frame(ursus.Values("s", cats)))
+	same(t, lf.Select(c("s").Cat().GetCategories().Len()), ursus.Frame(ursus.Values("s", []uint32{count})))
+	same(t, lf.GroupBy(c("g")).Agg(c("s").Cat().GetCategories().List().Join("|")).Sort(ursus.Asc(c("g"))),
+		ursus.Frame(ursus.Values("g", []int64{0, 1}), ursus.Values("s", []string{joined, joined})))
+	// In WithColumns beside a frame of its length, of an aliased receiver, its length
+	// a group, and a Filter by their count: one value for the frame, all its rows
+	// kept, or none.
+	four := fruit().Head(4)
+	same(t, four.WithColumns(c("s").Cat().GetCategories().Alias("c")).Select(c("c")), ursus.Frame(ursus.Values("c", cats)))
+	same(t, four.Select(c("s").Alias("t").Cat().GetCategories()), ursus.Frame(ursus.Values("t", cats)))
+	same(t, four.GroupBy(c("g")).Agg(c("s").Cat().GetCategories().Len()).Sort(ursus.Asc(c("g"))),
+		ursus.Frame(ursus.Values("g", []int64{0, 1}), ursus.Values("s", []uint32{count, count})))
+	same(t, four.Filter(c("s").Cat().GetCategories().Len().Gt(count-1)).Select(ursus.Len()),
+		ursus.Frame(ursus.Values("len", []uint64{4})))
+	same(t, four.Filter(c("s").Cat().GetCategories().Len().Gt(count)).Select(ursus.Len()),
+		ursus.Frame(ursus.Values("len", []uint64{0})))
 	for name, tc := range map[string]struct {
 		q    *ursus.LazyFrame
 		want string
