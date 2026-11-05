@@ -188,6 +188,20 @@ func divIntScalar[T Integer](dst []T, ok *bitmap.Builder, a, b []T, in bitmap.Vi
 	}
 }
 
+// divTruncIntScalar is TruncDiv's (step 489): Go's /, which rounds toward zero, so
+// −7 / 2 is −3, a zero divisor a null as divIntScalar's is. MinInt / −1 is MinInt,
+// the wrap Go and Polars share.
+func divTruncIntScalar[T Integer](dst []T, ok *bitmap.Builder, a, b []T, in bitmap.View) {
+	for i := range a {
+		if !in.Get(i) || b[i] == 0 {
+			ok.Append(false)
+			continue
+		}
+		dst[i] = a[i] / b[i]
+		ok.Append(true)
+	}
+}
+
 // modIntScalar is FloorDiv's remainder, so a == b*(a//b) + a%b and a%b takes the
 // divisor's sign: −7 % 2 is 1. Go's % takes the dividend's.
 func modIntScalar[T Integer](dst []T, ok *bitmap.Builder, a, b []T, in bitmap.View) {

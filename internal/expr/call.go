@@ -801,7 +801,7 @@ func ResolveCall(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		return genCallOut(c, in)
 
 	case fn.IsMath():
-		return mathCallOut(fn, in)
+		return mathCallOut(fn, in, c)
 
 	case fn.IsList():
 		return listCallOut(c, in)
@@ -1691,12 +1691,25 @@ func membershipOf(fn CallFn, against dtype.DataType, lits []*Lit) (dtype.DataTyp
 	return common, nil
 }
 
+// DecimalRounded is the type of a Decimal rounded to places decimal places, by Round,
+// Floor or Ceil, or of its Sign, as Polars 2.0 types them (step 490): Decimal(p+1, s),
+// at most 38, where a carry can make a new integer digit, 9.99 to 10.00, or a sign
+// of ±1 needs one the type has not, Decimal(2, 2)'s; the operand's type where nothing
+// is dropped, places ≥ s, or where it has an integer digit for a sign.
+func DecimalRounded(in dtype.DataType, places int, sign bool) dtype.DataType {
+	p, s := int(in.Precision()), int(in.Scale())
+	if sign && p > s || !sign && places >= s {
+		return in
+	}
+	return dtype.Decimal(uint8(min(dtype.MaxDecimalPrecision, p+1)), uint8(s))
+}
+
 // mathCallOut types the parameterised maths family.
 //
 // Round PRESERVES the operand's type, like Floor and Ceil and for the same reason:
 // rounding an integer to any number of decimals is the identity, and widening it
 // to a float would change a schema in exchange for nothing.
-func mathCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
+func mathCallOut(fn CallFn, in dtype.DataType, c *Call) (dtype.DataType, error) {
 	switch fn {
 	case FnMathRound:
 		// Null is refused, as it is for floor() and ceil() — round is their
@@ -1710,10 +1723,12 @@ func mathCallOut(fn CallFn, in dtype.DataType) (dtype.DataType, error) {
 				Hint("cast it first, e.g. .Cast(ursus.Float64)")
 		}
 		if in.ID() == dtype.TypeDecimal {
-			return dtype.Null, decimalRemedy(uerr.New(uerr.KindType, "round",
-				"round() is not defined for %s", in).
-				Hint("a decimal is stored as an unscaled integer, so rounding it would " +
-					"scale the wrong number"))
+			// Rounded at its scale (step 490), the type by the places it keeps.
+			d, ok := callLitInt64(c, 1)
+			if !ok {
+				return dtype.Null, uerr.Internalf("expr: round without its decimals")
+			}
+			return DecimalRounded(in, int(d), false), nil
 		}
 		return in, nil
 	case FnMathRoundSigFigs, FnMathTruncate:
