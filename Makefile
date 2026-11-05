@@ -102,6 +102,17 @@ api-tag:
 	@test -n "$(TAG)" || { echo "usage: make api-tag TAG=vX.Y.Z"; exit 2; }
 	$(GO) run ./internal/gen/api -tag $(TAG) > api/$(TAG).txt
 
+# The recorded oracle (step 496): Polars 2.1.0's answers to the questions
+# bench/scripts/oracle asks, written to testdata/oracle/<group>.json, which TestOracle
+# in the root package compares ursus against (go test -run TestOracle .). Needs a
+# Python with bench/scripts/oracle/requirements.txt installed; point ORACLE_PYTHON at
+# it, and GROUPS at the groups to record (all, unset). CI's oracle workflow runs the
+# same command and fails on a recording that changes.
+ORACLE_PYTHON ?= python3
+.PHONY: oracle
+oracle:
+	$(ORACLE_PYTHON) -m bench.scripts.oracle $(GROUPS)
+
 # The documentation site (context_files/docs-site-scope.md). `docs` writes the
 # fragments the pages include from docs/examples; `docs-serve` previews the site at
 # http://127.0.0.1:8000, and `docs-build` builds it into site/, refusing a broken

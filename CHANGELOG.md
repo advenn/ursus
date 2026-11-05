@@ -130,12 +130,28 @@ that stops when its request is cancelled.
   `PartitionBy`, `ToDummies`, `Corr` and their kin, and the JSON and CSV writers,
   take a share as the queries do, where each took every thread.
 
+### Tests
+
+- **Expected values are recorded, not typed** (496): `make oracle` asks Polars 2.1.0
+  the suite's questions, from `bench/scripts/oracle/`, and writes the inputs and the
+  answers to `testdata/oracle/<group>.json`, every type ursus has, several inputs, a
+  whole answer frame, a refusal, an unordered answer; `TestOracle` compares ursus
+  against them, dtypes checked and floats to the bit, and a difference ursus means is
+  named with its reason in `oracleDifferences`. CI regenerates the recordings and
+  fails on one that is not Polars'. Three files converted first: `numodds_test.go`,
+  `rollmore_test.go` and `dtmore_test.go`, 305 hand-typed lines of values gone.
+
 ### Fixed
 
 All three are in v0.7.1 too.
 
 Every fix of v0.7.2 is in 0.8 too, forward-ported from `release-0.7` by #33 to #37:
 its section below lists them.
+
+- **`Clip`, `ClipLower` and `ClipUpper` are named after their value** (496): the
+  answer was named after the bound, `literal` for a Go number and `lo` for `Col("lo")`,
+  where Polars' clip keeps the value's name. Every test had aliased it; the recorded
+  oracle found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
