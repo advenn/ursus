@@ -109,21 +109,29 @@ MIXED = pl.DataFrame({
 })
 
 
-# A variance's merge order leaves last bits apart (feature-gaps.md §1): Polars 2.1.0's
-# ewm_std and ewm_var moved by an ulp from 1.44.1's in two cases, and ursus's rolling
-# and ewm variances are an ulp or two from Polars' in four more. These are held to
-# rel:1e-12; every other case is compared by its bits (step 496).
-LAST_BITS = {"rolling_var_3_min2", "rolling_std_4_min1_ddof0", "ewm_mean_alpha05", "ewm_var_alpha03_bias",
-             "ewm_std_halflife2", "ewm_var_span4_noadjust"}
+# Last bits apart, held to rel:1e-12 (step 496); every other case is compared by its
+# bits. A variance's merge order (feature-gaps.md §1): Polars 2.1.0's ewm_std and
+# ewm_var moved by an ulp from 1.44.1's in two cases, and ursus's rolling variances are
+# an ulp or two from Polars'. An ewm's a*b+c, which one build fuses to an FMA and
+# another does not: ewm_mean_com2_ignore_nulls was an ulp apart under CI's race build
+# alone, so the ewm family is held as one.
+LAST_BITS = {"rolling_var_3_min2", "rolling_std_4_min1_ddof0", "ewm_mean_alpha05", "ewm_mean_span3_noadjust",
+             "ewm_mean_com2_ignore_nulls", "ewm_mean_alpha05_min3", "ewm_std_halflife2", "ewm_var_alpha03_bias",
+             "ewm_var_span4_noadjust"}
 
 
 def cases() -> list[Case]:
     out = [case(name, frame(cols), (lambda e: lambda df: df.select(e.alias("r")))(e),
-                **({"float": "rel:1e-12", "note": "a variance's merge order: last bits apart"}
+                **({"float": "rel:1e-12", "note": "a variance's merge order, or an a*b+c fused to an FMA by one "
+                                                   "build and not another: last bits apart"}
                    if name in LAST_BITS else {}))
            for name, cols, e in CASES]
-    out.append(case("describe", MIXED, lambda df: df.describe(), float="rel:1e-12",
-                    note="the statistics as Polars' describe gives them, every number a Float64; the std's last bits"))
+    # Polars' own std of six values differs by an ulp between a laptop and GitHub's
+    # runner, a parallel reduction's order, so a recording of it holds on one machine
+    # only: describe is recorded without its std row, which rolling_std covers.
+    out.append(case("describe", MIXED, lambda df: df.describe().filter(pl.col("statistic") != "std"),
+                    note="the statistics as Polars' describe gives them, every number a Float64, the std left out: "
+                         "Polars' own differs by an ulp between machines"))
     out.append(case("value_counts", MIXED, lambda df: df.get_column("s").value_counts(sort=True), order="set",
                     note="Polars leaves ties' order to its threads"))
     return out
