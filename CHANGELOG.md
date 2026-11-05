@@ -182,6 +182,17 @@ that stops when its request is cancelled.
   rounds a month by adding fourteen days, starts a `group_by_dynamic` day at 23:00
   where midnight does not exist, combines a zoned Datetime's UTC date, and counts
   business days back to an earlier date by numpy's rule.
+- **The frames, joins and reshaping wave converted** (501): `join_byhand`, `joinorder`,
+  `asofoptions`, `concat`, `pivot`, `dummies`, `unstack`, `unpivot`, `upsample`,
+  `update`, `matchschema`, `frameagg`, `framecolumns`, `framerows`, `frameconv`,
+  `framenulls`, `fill`, `intindex`, `dynamicopts`, `having`, `grouphead` and
+  `generate_test.go`, 482 recorded cases in twenty-two groups, 70 generated, 2,213
+  lines gone; a join's or a full update's unmatched tail, which Polars 2's streaming
+  engine appends in no promised order, is recorded in the order ursus promises. Three
+  findings recorded and not asserted, for the maintainer: a fill of 5000 into an Int8
+  column is an Int16 in Polars 2.1 and an Int64 here, the mean fill strategy keeps an
+  integer column's type there and widens it to Float64 here, and `AsOfNearest`'s tie
+  goes forward there and backward here.
 
 ### Fixed
 

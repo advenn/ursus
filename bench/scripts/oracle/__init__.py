@@ -37,7 +37,11 @@ GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
           "enum_byhand", "expr_bin", "expr_cat", "strmany", "strcodec", "strsplit", "strptime",
           # step 498, the temporal wave
           "calendar", "tzreplace", "components", "daterange", "csvdates", "strtemporal", "temporalagg", "weeks",
-          "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby"]
+          "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby",
+          # step 501, frames, joins and reshaping
+          "join_byhand", "joinorder", "asofoptions", "concat", "pivot", "dummies", "unstack", "unpivot", "upsample", "update",
+          "matchschema", "frameagg", "framecolumns", "framerows", "frameconv", "framenulls", "fill", "intindex", "dynamicopts",
+          "having", "grouphead", "generate"]
 
 
 @dataclass
