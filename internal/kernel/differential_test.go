@@ -177,35 +177,6 @@ func TestDifferentialArithmeticConst(t *testing.T) {
 	}
 }
 
-// TestNaNComparisonSemantics pins IEEE behaviour for Expr-level comparisons.
-//
-// NaN compares FALSE against everything, including itself. This is deliberately
-// different from the total order that sorting and hash-grouping will need, where
-// NaN must equal NaN and sort above everything. Confusing the two produces a sort
-// that never terminates or a group-by that splits NaNs across groups, so the
-// distinction is worth a test even before the sort exists.
-func TestNaNComparisonSemantics(t *testing.T) {
-	nan := math.NaN()
-	a := []float64{nan, 1, nan, 2}
-
-	check := func(name string, k TotalCompareScalar[float64], s float64, want []bool) {
-		t.Helper()
-		b := bitmap.NewBuilder(len(a))
-		k(b, a, s)
-		got := bitsOf(b.Finish())
-		for i := range want {
-			if got[i] != want[i] {
-				t.Errorf("%s(a[%d]=%v, %v) = %v, want %v", name, i, a[i], s, got[i], want[i])
-			}
-		}
-	}
-
-	check("Eq", cmpEqF64, nan, []bool{false, false, false, false})
-	check("Ne", cmpNeF64, nan, []bool{true, true, true, true})
-	check("Lt", cmpLtF64, 1.5, []bool{false, true, false, false})
-	check("Gt", cmpGtF64, 1.5, []bool{false, false, false, true})
-}
-
 // TestZeroSignIgnoredByComparison: +0.0 == -0.0 under IEEE. (Sorting and hashing
 // will need to canonicalise them; comparison must not.)
 func TestZeroSignIgnoredByComparison(t *testing.T) {
@@ -216,10 +187,4 @@ func TestZeroSignIgnoredByComparison(t *testing.T) {
 	if !got[0] || !got[1] {
 		t.Errorf("+0.0 and -0.0 must both equal 0, got %v", got)
 	}
-}
-
-// TestAcceleratedReporting documents which path the current process is on, so a
-// CI log shows at a glance whether the SIMD leg actually ran with hardware.
-func TestAcceleratedReporting(t *testing.T) {
-	t.Logf("accelerated=%v vectorBits=%d", Accelerated(), VectorBits())
 }

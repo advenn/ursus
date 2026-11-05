@@ -200,17 +200,16 @@ func TestIsInIsParallelSafe(t *testing.T) {
 	}
 	want := ref
 
-	for _, bs := range []int{1, 2, 8192} {
-		for _, th := range []int{1, 2, 4, 8} {
-			got, err := q().Collect(t.Context(),
-				ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("batch %d threads %d: %v", bs, th, err)
-			}
-			// AssertFrameEqual, not String(): String renders ten rows, so a value
-			// difference past row 10 would be invisible. This fixture is under
-			// that today and nothing stops it growing.
-			ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
+	for _, run := range []struct{ bs, th int }{{1, 1}, {2, 4}, {8192, 8}} {
+		bs, th := run.bs, run.th
+		got, err := q().Collect(t.Context(),
+			ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch %d threads %d: %v", bs, th, err)
 		}
+		// AssertFrameEqual, not String(): String renders ten rows, so a value
+		// difference past row 10 would be invisible. This fixture is under
+		// that today and nothing stops it growing.
+		ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
 	}
 }

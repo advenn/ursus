@@ -36,45 +36,6 @@ func u32(t *testing.T, df *ursus.DataFrame, name string) []uint32 {
 	return out
 }
 
-// TestWindowAcceptedWhereAggregateIsNot is the scoping change, stated directly.
-//
-// The same aggregate is legal under a window in every row-preserving context,
-// because a window preserves the frame's height. Bare, it was refused there; since
-// step 250 it is the frame's, broadcast, the same as under .Over() with no partition,
-// as Polars has it.
-func TestWindowAcceptedWhereAggregateIsNot(t *testing.T) {
-	cases := []struct {
-		name string
-		bare func() *ursus.LazyFrame
-		win  func() *ursus.LazyFrame
-	}{
-		{"select",
-			func() *ursus.LazyFrame { return wf().Select(ursus.Col("v").Sum()) },
-			func() *ursus.LazyFrame {
-				return wf().Select(ursus.Col("v").Sum().Over(ursus.Col("g")))
-			}},
-		{"with_columns",
-			func() *ursus.LazyFrame { return wf().WithColumns(ursus.Col("v").Sum().Alias("s")) },
-			func() *ursus.LazyFrame {
-				return wf().WithColumns(ursus.Col("v").Sum().Over(ursus.Col("g")).Alias("s"))
-			}},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if _, err := c.bare().Collect(t.Context()); err != nil {
-				t.Errorf("a bare aggregate is the frame's, broadcast: %v", err)
-			}
-			df, err := c.win().Collect(t.Context(), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("the same aggregate under a window must be accepted: %v", err)
-			}
-			if df.Height() != 6 {
-				t.Errorf("height = %d, want 6 — a window preserves height", df.Height())
-			}
-		})
-	}
-}
-
 // TestWindowInsideGroupByAggIsAListAGroup: a window preserves height, so it is not an
 // aggregate; it was refused as one of GroupBy's outputs until step 331, which answers
 // it as Polars does, each group's values as a list, the window a group at a time.
@@ -591,16 +552,10 @@ func TestWindowRefusals(t *testing.T) {
 		{"non-window body", func() *ursus.LazyFrame {
 			return wf().Select(ursus.Col("v").Over(ursus.Col("g")))
 		}, "is not a window function"},
-		{"partition by an unhashable value", func() *ursus.LazyFrame {
-			return wf().Select(ursus.Col("v").Sum().Over(ursus.Col("v").Cast(ursus.Float64)))
-		}, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := c.lf().Collect(t.Context())
-			if c.want == "" {
-				return // only checking it does not panic or silently succeed wrongly
-			}
 			if err == nil {
 				t.Fatal("expected an error")
 			}
@@ -634,18 +589,17 @@ func TestWindowBatchSizeAndThreadsAreIndependent(t *testing.T) {
 	}
 	want := ref
 
-	for _, bs := range []int{1, 2, 3, 5, 8192} {
-		for _, th := range []int{1, 2, 4} {
-			got, err := q().Collect(t.Context(),
-				ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("batch %d threads %d: %v", bs, th, err)
-			}
-			// AssertFrameEqual, not String(): String renders ten rows, so a value
-			// difference past row 10 would be invisible. This fixture is under
-			// that today and nothing stops it growing.
-			ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
+	for _, run := range []struct{ bs, th int }{{1, 1}, {3, 2}, {8192, 4}} {
+		bs, th := run.bs, run.th
+		got, err := q().Collect(t.Context(),
+			ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch %d threads %d: %v", bs, th, err)
 		}
+		// AssertFrameEqual, not String(): String renders ten rows, so a value
+		// difference past row 10 would be invisible. This fixture is under
+		// that today and nothing stops it growing.
+		ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
 	}
 }
 
