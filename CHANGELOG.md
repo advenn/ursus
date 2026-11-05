@@ -48,6 +48,22 @@ that stops when its request is cancelled.
   are, `WithLinesName` and `WithLinesIncludeFilePaths`. Read as NDJSON is, in blocks
   a part a thread; a "\r\n" end is a newline, an empty line a row, a last line
   needs no newline, and text that is not UTF-8 is refused.
+- **`Name().StripPrefix` and `StripSuffix`** (491): the output name without an affix,
+  taken off once where the name has it, Polars' `name.strip_prefix` and
+  `strip_suffix`: `Col("a_x").Name().StripPrefix("a_")` is x.
+- **A Decimal's `Round`, `Floor`, `Ceil` and `Sign`** (490), refused until now:
+  exact, at its scale, as Polars 2.0 answers them. Where digits are dropped the type
+  is Decimal(p+1, s), for 9.99's 10.00; a row past 38 digits is refused. `Round`
+  takes its two modes, half away from zero by default, where Polars' default is
+  half to even.
+- **`TruncDiv`** (489): division whose quotient rounds toward zero, as Go's `/` does,
+  Polars 2.0's `truncdiv`: −7 by 2 is −3, where `FloorDiv` gives −4. Typed as
+  `FloorDiv`, a zero integer divisor a null; an Int128's MinInt128 by −1 is refused
+  and a Decimal too, as `FloorDiv`'s are.
+- **`Erf` and `Erfc`** (488): the error function and its complement, Polars' `erf`
+  and `erfc`, widening as `Sqrt` does; `Erfc` computed apart, so `Erfc(6)` is
+  2.15e-17 where 1 − `Erf(6)` is 0. Go's `math.Erf` and `math.Erfc`, within an ulp
+  and four of Polars'.
 - **`Engine`** (395): the memory budget and spill directory its queries share.
   `NewEngine(WithEngineMemoryLimit(n), WithEngineSpillDir(dir))` makes one, a
   service's for its requests, say, and another for its exports; `WithEngine(e)` runs a

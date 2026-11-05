@@ -28,18 +28,21 @@ func MathCall(fn expr.CallFn, name string, out dtype.DataType,
 		if err != nil {
 			return nil, err
 		}
-		op := math.Round
+		op, mode := math.Round, decHalfAway
 		switch {
 		case fn == expr.FnMathTruncate:
 			op = math.Trunc
 		case len(args) > 1:
 			switch m, _ := args[1].(string); m {
 			case "half_to_even":
-				op = math.RoundToEven
+				op, mode = math.RoundToEven, decHalfEven
 			case "half_away_from_zero":
 			default:
 				return nil, uerr.Internalf("kernel: round has no mode %q", m)
 			}
+		}
+		if c.DType().ID() == dtype.TypeDecimal && fn == expr.FnMathRound {
+			return decimalRound("round", name, out, c, d, mode)
 		}
 		return round(name, out, c, d, op)
 	case expr.FnMathRoundSigFigs:

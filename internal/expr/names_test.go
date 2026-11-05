@@ -273,6 +273,8 @@ func TestMathOpsAreClassified(t *testing.T) {
 		OpDegrees: true, OpRadians: true,
 		// The cotangent, appended in step 283.
 		OpCot: true,
+		// The error function and its complement, appended in step 488.
+		OpErf: true, OpErfc: true,
 	}
 	preserving := []UnaryOp{OpNeg, OpAbs, OpSign, OpFloor, OpCeil}
 

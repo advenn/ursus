@@ -10,7 +10,8 @@ package kernel_test
 //
 // Two failures, and they need different assertions:
 //
-//   - the VALUES were wrong — rows read other rows' elements — which renderRow sees;
+//   - the VALUES were wrong — rows read other rows' elements — which renderRow sees,
+//     here through a Struct's List field, whose concat is concatList's;
 //   - the child GREW by a whole copy per part, which no value comparison can see at
 //     all, because the offsets can be internally consistent over a child that is far
 //     too big. TestConcatOfSlicedListsHoldsOnlyItsWindow asserts the length directly.
@@ -78,21 +79,6 @@ var cutPlans = [][]int{
 	{1, 2, 3, 4}, // every row but the last on its own
 	{3},
 	{6},
-}
-
-func TestConcatOfSlicedListsIsTheOriginal(t *testing.T) {
-	full := intLists("l", fixtureRows)
-	want := renderAll(t, full)
-
-	for _, cuts := range cutPlans {
-		got, err := kernel.ConcatColumns("l", splitAt(full, cuts...))
-		if err != nil {
-			t.Fatalf("cuts %v: %v", cuts, err)
-		}
-		if s := renderAll(t, got); s != want {
-			t.Errorf("concatenating slices cut at %v:\n got:  %s\n want: %s", cuts, s, want)
-		}
-	}
 }
 
 // TestConcatOfSlicedListsHoldsOnlyItsWindow is the half no value comparison can see.

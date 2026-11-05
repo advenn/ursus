@@ -314,6 +314,19 @@ func (e Expr) Div[T Operand](v T) Expr { return e.bin(expr.OpDiv, lift(v)) }
 func (e Expr) FloorDiv[T Operand](v T) Expr { return e.bin(expr.OpFloorDiv, lift(v)) }
 func (e Expr) Mod[T Operand](v T) Expr      { return e.bin(expr.OpMod, lift(v)) }
 
+// TruncDiv divides, its quotient rounded toward zero, as Go's / and C's are: −7
+// TruncDiv 2 is −3, where FloorDiv gives −4. Polars 2.0's truncdiv. Its type is
+// FloorDiv's: two integers an integer, a float beside either a float, and an integer
+// divisor of zero a null. A float's is trunc(a/b), so −0.5 by 2 is −0 and 1 by 0 is
+// +Inf.
+//
+// It differs from Polars where FloorDiv does. MinInt64 by −1 wraps to MinInt64, as
+// Polars' does, but an Int128's is refused, as Int128 arithmetic is exact or refused,
+// where Polars wraps it. A Duration by an integer, which Polars 2.1 refuses, is its
+// ticks divided toward zero, as FloorDiv floors them. A Decimal, which Polars
+// divides at Decimal(38, s), is refused, as its FloorDiv is.
+func (e Expr) TruncDiv[T Operand](v T) Expr { return e.bin(expr.OpTruncDiv, lift(v)) }
+
 // Pow raises the receiver to the power v.
 //
 // The result is ALWAYS a float, for the same reason Div's is: 2**-1 is 0.5, and a
@@ -363,11 +376,18 @@ func (e Expr) Abs() Expr { return e.un(expr.OpAbs) }
 // For floats it returns the operand itself in the zero case, so sign(-0.0) is
 // -0.0 and sign(NaN) is NaN. That matches NumPy and falls out of the ordering test
 // rather than being special-cased.
+//
+// A Decimal's is -1, 0 or 1 at its scale, as Polars 2.0's: 1.00 of a Decimal(3, 2),
+// in its type, or Decimal(p+1, s) where the type has no integer digit, Decimal(1, 1)'s
+// a Decimal(2, 1). A Decimal(38, 38) other than 0 has no sign it can hold, and is
+// refused.
 func (e Expr) Sign() Expr { return e.un(expr.OpSign) }
 
 // Floor and Ceil round towards -Inf and +Inf. Both are the identity on an integer
-// column and both are refused for Decimal, whose stored value is unscaled — so
-// flooring it would floor 1234 rather than 12.34.
+// column. A Decimal's are its value's, at its scale, as Polars 2.0's are: Floor of a
+// Decimal(3, 2) -1.25 is -2.00. Their type is Decimal(p+1, s), as 9.99's ceiling,
+// 10.00, has a digit more; Decimal(38, s) stays 38, and a row past it is refused, as
+// Polars refuses it. A Decimal of scale 0 keeps its type.
 func (e Expr) Floor() Expr { return e.un(expr.OpFloor) }
 func (e Expr) Ceil() Expr  { return e.un(expr.OpCeil) }
 
@@ -410,6 +430,19 @@ func (e Expr) Radians() Expr { return e.un(expr.OpRadians) }
 // near a multiple of pi/2 its relative error grows, its absolute error below 1e-30.
 func (e Expr) Cot() Expr { return e.un(expr.OpCot) }
 
+// Erf is the error function, and Erfc its complement, 1 - erf(x), computed apart so
+// that it keeps its precision where erf is near 1: Erfc(6) is 2.15e-17, where
+// 1 - Erf(6) is 0. The normal distribution's CDF at x is Erfc(-x/√2)/2. Polars'
+// `erf` and `erfc`.
+//
+// Both widen as Sqrt does, keeping Float32. Erf(±Inf) is ±1, Erfc(+Inf) is 0 and
+// Erfc(-Inf) 2; Erf(-0) is -0, and NaN is NaN. They are Go's math.Erf and math.Erfc,
+// within one ulp and four of Polars' glibc ones; a Float32's is the Float64 answer
+// rounded once, as Polars rounds it. Polars also takes a Boolean or a Decimal, as a
+// Float64; ursus refuses both, as it refuses their Sqrt: cast first.
+func (e Expr) Erf() Expr  { return e.un(expr.OpErf) }
+func (e Expr) Erfc() Expr { return e.un(expr.OpErfc) }
+
 // RoundMode is how Round breaks a tie, a value halfway between its two roundings.
 type RoundMode string
 
@@ -437,6 +470,15 @@ const (
 //
 // A Float32 is rounded as a Float64 and the result rounded once more to a float32,
 // so Round(0.1, 1) of a Float32 is the float32 nearest 0.1.
+//
+// A Decimal is rounded exactly, at its own scale, as Polars 2.0 rounds one, by the
+// same modes and the same default as a float, half away from zero where Polars'
+// is half to even: Round(1) of a Decimal(3, 2) 1.25 is 1.30, and 1.20
+// RoundHalfToEven. Where digits are dropped the type is
+// Decimal(p+1, s), for the carry 9.99 makes, 10.00; where none are, decimals at the
+// scale or past it, the operand's. At Decimal(38, s) the type stays 38 and a row the
+// carry takes past it is refused, as Polars refuses it. Truncate and RoundSigFigs of
+// a Decimal are refused still.
 func (e Expr) Round(decimals int, mode ...RoundMode) Expr {
 	if decimals < 0 {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "round",

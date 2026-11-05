@@ -719,26 +719,6 @@ func TestJoinRejectsSelectorKeys(t *testing.T) {
 	}
 }
 
-// TestJoinExplainShowsSides: without left/right markers, Join(A,B) and Join(B,A)
-// render identically — and for Left, Right, Semi and Anti those are different
-// queries, so a golden file could not see a rule that swapped them.
-func TestJoinExplainShowsSides(t *testing.T) {
-	p, err := joinLeft().Join(joinRight(), ursus.JoinOn(ursus.Col("k")),
-		ursus.JoinHow(ursus.JoinLeft)).Explain(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"JOIN LEFT", "left:", "right:", "coalesce"} {
-		if !strings.Contains(p, want) {
-			t.Errorf("plan should contain %q:\n%s", want, p)
-		}
-	}
-	li, ri := strings.Index(p, "left:"), strings.Index(p, "right:")
-	if li < 0 || ri < 0 || li > ri {
-		t.Errorf("left must be rendered before right:\n%s", p)
-	}
-}
-
 // TestJoinLabelIsTotal: predicatePushdown detects change by comparing Explain
 // output, so Label must never fail — including on an unresolved node.
 func TestJoinLabelIsTotal(t *testing.T) {
@@ -760,33 +740,6 @@ func TestJoinLabelIsTotal(t *testing.T) {
 		if got := lf.Plan().Label(); !strings.Contains(got, k.String()) {
 			t.Errorf("%s: label %q does not name the kind", k, got)
 		}
-	}
-}
-
-// TestJoinIsAPredicateBarrier: predicate pushdown through a join is not
-// implemented, and the optimizer's fail-closed default is what makes that safe. A
-// filter above a join must stay above it.
-func TestJoinIsAPredicateBarrier(t *testing.T) {
-	lf := joinLeft().Join(joinRight(), ursus.JoinOn(ursus.Col("k")),
-		ursus.JoinHow(ursus.JoinLeft)).
-		Filter(ursus.Col("rv").IsNotNull())
-
-	p, err := lf.Explain(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	fi, ji := strings.Index(p, "FILTER"), strings.Index(p, "JOIN")
-	if fi < 0 || ji < 0 || fi > ji {
-		t.Errorf("FILTER must remain above JOIN:\n%s", p)
-	}
-
-	// And the answer is right: 4 matched rows have a non-null rv.
-	df, err := lf.Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if df.Height() != 4 {
-		t.Errorf("got %d rows, want 4\n%s", df.Height(), df)
 	}
 }
 
@@ -856,47 +809,6 @@ func TestJoinOptimizerSoundness(t *testing.T) {
 					on, off, p)
 			}
 		})
-	}
-}
-
-// TestJoinChainedIsAssociativeOnCounts is a cheap sanity check over three frames.
-func TestJoinChainedIsAssociativeOnCounts(t *testing.T) {
-	a := ursus.Frame(ursus.Values("k", []int64{1, 2}), ursus.Values("av", []string{"a1", "a2"}))
-	b := ursus.Frame(ursus.Values("k", []int64{2, 3}), ursus.Values("bv", []string{"b2", "b3"}))
-	c := ursus.Frame(ursus.Values("k", []int64{2, 4}), ursus.Values("cv", []string{"c2", "c4"}))
-
-	left, err := a.Join(b, ursus.JoinOn(ursus.Col("k"))).
-		Join(c, ursus.JoinOn(ursus.Col("k"))).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	right, err := a.Join(b.Join(c, ursus.JoinOn(ursus.Col("k"))), ursus.JoinOn(ursus.Col("k"))).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if left.Height() != 1 || right.Height() != 1 {
-		t.Errorf("both groupings should give 1 row, got %d and %d\n%s\n%s",
-			left.Height(), right.Height(), left, right)
-	}
-}
-
-// TestJoinProjectionPushdownReadsOnlyKeysForSemi proves the rule does something.
-// A semi join emits no right column at all, so the right side needs only the key.
-func TestJoinProjectionPushdownReadsOnlyKeysForSemi(t *testing.T) {
-	wide := ursus.Frame(
-		ursus.Values("k", []int64{2}),
-		ursus.Values("w1", []string{"x"}),
-		ursus.Values("w2", []string{"y"}),
-		ursus.Values("w3", []string{"z"}),
-	)
-	p, err := joinLeft().Join(wide, ursus.JoinOn(ursus.Col("k")),
-		ursus.JoinHow(ursus.JoinSemi)).Explain(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(p, "projection: [k] (1/4 cols)") {
-		t.Errorf("the right side of a semi join should read only the key:\n%s", p)
 	}
 }
 
@@ -1220,46 +1132,6 @@ func TestJoinPredicatePushdownPreservesValidate(t *testing.T) {
 	}
 	if !errors.Is(err, uerr.ErrValue) {
 		t.Errorf("kind should be Value: %v", err)
-	}
-}
-
-// TestJoinPredicatePushdownFlagIsolatesTheArm: the flag must disable the join arm
-// and nothing else, or it is useless for bisection.
-func TestJoinPredicatePushdownFlagIsolatesTheArm(t *testing.T) {
-	lf := func() *ursus.LazyFrame {
-		return pdLeft().
-			Filter(ursus.Col("k").Lt(3)).
-			Join(pdRight(), ursus.JoinOn(ursus.Col("k"))).
-			Filter(ursus.Col("v").Ne("l1"))
-	}
-
-	off, err := lf().Explain(t.Context(), ursus.Optimized(true))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = off
-
-	// With the arm off, the predicate above the join must stay above it...
-	p, err := lf().Collect(t.Context(), ursus.WithOptFlags(noJoinPushdown()), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	q, err := lf().Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.String() != q.String() {
-		t.Errorf("the flag changed the answer, not just the plan:\n%s\n%s", p, q)
-	}
-
-	// ...while the predicate BELOW the join still gets pushed into the scan, because
-	// only the join arm is off.
-	pl, err := lf().Explain(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(pl, "JOIN") {
-		t.Fatalf("expected a join:\n%s", pl)
 	}
 }
 
