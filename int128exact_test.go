@@ -12,11 +12,18 @@ package ursus_test
 //     2^127 takes 2^63 rows of maximal Int64. True of inputs of 64 bits or fewer;
 //     false of an Int128 column, where two rows are enough.
 //
-// None of them errors. Each is a plausible number of the right type.
+// None of them errors. Each is a plausible number of the right type. Since step 497
+// the casts and the Int128 column's sums are Polars 2.1.0's answers, recorded in the
+// int128exact group of testdata/oracle (oracle_int128exact_test.go); an Int64
+// column's Sum, which Polars totals as an Int64 and wraps past 2^63 where ursus
+// widens it (feature-gaps.md §9), is held to math/big over seeded values. What
+// stays here asserts the refusals.
 
 import (
 	"errors"
 	"math"
+	"math/big"
+	"math/rand/v2"
 	"testing"
 
 	"github.com/advenn/ursus"
@@ -79,104 +86,130 @@ func only[T any](t *testing.T, lf *ursus.LazyFrame, render func(T) string) (stri
 	return render(v), nil
 }
 
-// knownInexactInt128 names each case that answers wrongly, with what it answers.
-// Empty since integer casts stopped going through a float and a 128-bit sum began
-// counting its carries; a case that regresses fails as unlisted.
-var knownInexactInt128 = map[string]string{}
-
 func TestInt128BoundaryIsExactOrRefused(t *testing.T) {
-	const twoTo53 = int64(1) << 53
 	// 2^126 + 5, four of which total 2^128 + 20. Wrapping modulo 2^128 lands on
 	// 20: a perfectly ordinary number, which no range check on the RESULT can
 	// distinguish from a true 20.
 	quarter := i128Of(t, "85070591730234615865843651857942052869")
-
-	i64 := func(v int64) string { return i128.FromInt64(v).String() }
-	u64 := func(v uint64) string { return i128.FromUint64(v).String() }
 	s128 := func(v i128.Int128) string { return v.String() }
 
 	for _, c := range []struct {
 		name string
 		run  func() (string, error)
-		want string // "" means: refused, with ErrValue
 	}{
-		{"sum-cast-int64", func() (string, error) {
-			return only(t, ursus.Frame(ursus.Values("v", []int64{twoTo53, 1})).
-				GroupBy().Agg(ursus.Col("v").Sum().Cast(ursus.Int64)), i64)
-		}, "9007199254740993"},
-		{"sum-cast-uint64", func() (string, error) {
-			return only(t, ursus.Frame(ursus.Values("v", []int64{math.MaxInt64, math.MaxInt64})).
-				GroupBy().Agg(ursus.Col("v").Sum().Cast(ursus.Uint64)), u64)
-		}, "18446744073709551614"},
 		{"float-int128-strict", func() (string, error) {
+			// A fraction is refused; the lossy null and a whole float are recorded.
 			return only(t, ursus.Frame(ursus.Values("f", []float64{3.7})).
 				Select(ursus.Col("f").Cast(ursus.Int128)), s128)
-		}, ""},
-		{"float-int128-lossy", func() (string, error) {
-			return only(t, ursus.Frame(ursus.Values("f", []float64{3.7})).
-				Select(ursus.Col("f").CastLossy(ursus.Int128)), s128)
-		}, "null"},
-		{"float-int128-whole", func() (string, error) {
-			// The control: a float that IS an integer converts, so the fix cannot
-			// pass by refusing every float.
-			return only(t, ursus.Frame(ursus.Values("f", []float64{-3e20})).
-				Select(ursus.Col("f").Cast(ursus.Int128)), s128)
-		}, "-300000000000000000000"},
+		}},
 		{"sum-wraps-once", func() (string, error) {
 			return only(t, int128Frame(t, i128.Max, i128.One).
 				GroupBy().Agg(ursus.Col("v").Sum()), s128)
-		}, ""},
+		}},
 		{"sum-wraps-fully", func() (string, error) {
 			return only(t, int128Frame(t, quarter, quarter, quarter, quarter).
 				GroupBy().Agg(ursus.Col("v").Sum()), s128)
-		}, ""},
+		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got, err := c.run()
-			if err != nil && !errors.Is(err, ursus.ErrValue) {
-				t.Fatalf("refused with the wrong kind: %v", err)
-			}
-			right := (c.want == "" && err != nil) || (c.want != "" && err == nil && got == c.want)
-			why, known := knownInexactInt128[c.name]
 			switch {
-			case known && right:
-				t.Errorf("answers correctly now (%s, %v); delete it from knownInexactInt128", got, err)
-			case known:
-				t.Logf("known inexact: %s (got %s, err %v)", why, got, err)
-			case !right && c.want == "":
+			case err == nil:
 				t.Errorf("= %s, want a refusal", got)
-			case !right:
-				t.Errorf("= %s (err %v), want %s", got, err, c.want)
+			case !errors.Is(err, ursus.ErrValue):
+				t.Errorf("refused with the wrong kind: %v", err)
 			}
 		})
 	}
 }
 
-// TestInt128CumSumRefusesAWrappedPrefix: a cumulative publishes every prefix, so a
-// running total that wraps has no value to show for that row — even if the total
-// comes back into range later. It is refused where sum() of the same rows is not.
-func TestInt128CumSumRefusesAWrappedPrefix(t *testing.T) {
-	df, err := int128Frame(t, i128.Max.Sub(i128.One), i128.One).
-		Select(ursus.Col("v").CumSum(false)).Collect(t.Context())
-	if err != nil {
-		t.Fatalf("a running total that reaches Max exactly was refused: %v", err)
+// TestInt64SumWidensExactly: every integer Sum is an Int128 (ResolveAggBinding),
+// where Polars totals an Int64 column as an Int64 and wraps past 2^63, so Polars has
+// no answer for a column whose total passes it (feature-gaps.md §9). math/big is the
+// oracle: 300 seeded Int64s of the whole range, the extremes among them, summed
+// whole, by group and as running totals, and a total cast to an Int64 or a Uint64
+// where it fits, refused where it does not.
+func TestInt64SumWidensExactly(t *testing.T) {
+	c := ursus.Col
+	rng := rand.New(rand.NewPCG(497, 128))
+	vals := []int64{math.MaxInt64, math.MaxInt64, math.MinInt64, 1 << 53, 1<<53 + 1, -1, 0, 1, math.MaxInt64}
+	for range 300 {
+		vals = append(vals, rng.Int64()) // the whole range, both signs
 	}
-	col, err := df.Column[ursus.Int128Value]("v")
+	groups := make([]int64, len(vals))
+	byGroup := map[int64]*big.Int{}
+	total := new(big.Int)
+	prefixes := make([]string, len(vals))
+	for i, v := range vals {
+		groups[i] = int64(i % 7)
+		if byGroup[groups[i]] == nil {
+			byGroup[groups[i]] = new(big.Int)
+		}
+		byGroup[groups[i]].Add(byGroup[groups[i]], big.NewInt(v))
+		total.Add(total, big.NewInt(v))
+		prefixes[i] = total.String()
+	}
+	frame := ursus.Frame(ursus.Values("g", groups), ursus.Values("v", vals))
+	s128 := func(v i128.Int128) string { return v.String() }
+
+	got, err := only(t, frame.GroupBy().Agg(c("v").Sum()), s128)
+	if err != nil || got != total.String() {
+		t.Errorf("Sum = %s, %v; want %s", got, err, total)
+	}
+	df, err := frame.Select(c("v").CumSum(false)).Collect(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, _ := col.Get(1); v != i128.Max {
-		t.Errorf("last prefix = %s, want Max", v)
+	col, err := df.Column[i128.Int128]("v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range prefixes {
+		if v, ok := col.Get(i); !ok || v.String() != want {
+			t.Errorf("CumSum row %d = %s (present %v), want %s", i, v, ok, want)
+			break
+		}
+	}
+	grouped, err := frame.GroupBy(c("g")).MaintainOrder().Agg(c("v").Sum()).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sums, err := grouped.Column[i128.Int128]("v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range grouped.Height() {
+		g, _, _ := grouped.At[int64](i, "g")
+		if v, ok := sums.Get(i); !ok || v.String() != byGroup[g].String() {
+			t.Errorf("group %d's Sum = %s (present %v), want %s", g, v, ok, byGroup[g])
+		}
 	}
 
-	_, err = int128Frame(t, i128.Max, i128.One, i128.FromInt64(-1)).
+	// The first three total MaxInt64 - 1, an Int64; the first two 2^64 - 2, a Uint64
+	// and not an Int64.
+	three := ursus.Frame(ursus.Values("v", vals[:3]))
+	if got, err := only(t, three.GroupBy().Agg(c("v").Sum().Cast(ursus.Int64)), func(v int64) string { return big.NewInt(v).String() }); err != nil ||
+		got != new(big.Int).Sub(big.NewInt(math.MaxInt64), big.NewInt(1)).String() {
+		t.Errorf("Sum of [Max, Max, Min] cast to Int64 = %s, %v", got, err)
+	}
+	two := ursus.Frame(ursus.Values("v", vals[:2]))
+	if got, err := only(t, two.GroupBy().Agg(c("v").Sum().Cast(ursus.Uint64)), func(v uint64) string { return new(big.Int).SetUint64(v).String() }); err != nil ||
+		got != "18446744073709551614" {
+		t.Errorf("Sum of [Max, Max] cast to Uint64 = %s, %v; want 18446744073709551614", got, err)
+	}
+	if _, err := two.GroupBy().Agg(c("v").Sum().Cast(ursus.Int64)).Collect(t.Context()); !errors.Is(err, ursus.ErrValue) {
+		t.Errorf("Sum of [Max, Max] cast to Int64 = %v, want ErrValue", err)
+	}
+}
+
+// TestInt128CumSumRefusesAWrappedPrefix: a cumulative publishes every prefix, so a
+// running total that wraps has no value to show for that row — even if the total
+// comes back into range later. It is refused where sum() of the same rows is not
+// (the recorded i128_sum_max_1_minus_1 answers Max).
+func TestInt128CumSumRefusesAWrappedPrefix(t *testing.T) {
+	_, err := int128Frame(t, i128.Max, i128.One, i128.FromInt64(-1)).
 		Select(ursus.Col("v").CumSum(false)).Collect(t.Context())
 	if !errors.Is(err, ursus.ErrValue) {
 		t.Fatalf("a prefix of Max+1 = %v, want ErrValue", err)
-	}
-	sum, err := only(t, int128Frame(t, i128.Max, i128.One, i128.FromInt64(-1)).
-		GroupBy().Agg(ursus.Col("v").Sum()), func(v i128.Int128) string { return v.String() })
-	if err != nil || sum != i128.Max.String() {
-		t.Errorf("sum() of the same rows = %s, %v; want Max — only the prefix was out of range", sum, err)
 	}
 }
