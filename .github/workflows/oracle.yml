@@ -1,0 +1,37 @@
+name: oracle
+
+# The recorded oracle is regenerated under Polars 2.1.0 and must not change: a
+# recorded answer that is not Polars 2.1.0's fails here (step 496,
+# context_files/oracle-v2-scope.md §2). It runs on a pull request that touches the
+# recordings, their generators or this file, and by hand. It is not a required check
+# of master's protection until it has run green on three pull requests.
+
+on:
+  pull_request:
+    paths:
+      - 'testdata/oracle/**'
+      - 'bench/scripts/oracle/**'
+      - '.github/workflows/oracle.yml'
+  workflow_dispatch:
+
+jobs:
+  recorded:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: bench/scripts/oracle/requirements.txt
+
+      - run: pip install -r bench/scripts/oracle/requirements.txt
+
+      # The one command, from the repository root; `make oracle` runs it too.
+      - name: record every group under Polars 2.1.0
+        run: python -m bench.scripts.oracle
+
+      - name: every recorded answer is Polars 2.1.0's
+        run: git diff --exit-code -- testdata/oracle

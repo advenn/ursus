@@ -1,0 +1,3 @@
+# The oracle's Python: every answer in testdata/oracle is recorded under these.
+polars==2.1.0
+numpy==2.5.4
