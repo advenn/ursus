@@ -42,6 +42,9 @@ that stops when its request is cancelled.
 
 ### Features
 
+- **`Name().StripPrefix` and `StripSuffix`** (491): the output name without an affix,
+  taken off once where the name has it, Polars' `name.strip_prefix` and
+  `strip_suffix`: `Col("a_x").Name().StripPrefix("a_")` is x.
 - **A Decimal's `Round`, `Floor`, `Ceil` and `Sign`** (490), refused until now:
   exact, at its scale, as Polars 2.0 answers them. Where digits are dropped the type
   is Decimal(p+1, s), for 9.99's 10.00; a row past 38 digits is refused. `Round`
