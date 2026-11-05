@@ -12,8 +12,8 @@ func init() {
 		return func(in oracleInputs) *ursus.LazyFrame { return in.df().Select(exprs...) }
 	}
 	libm := sel(x.Sin().Alias("sin"), x.Cos().Alias("cos"), x.Tan().Alias("tan"), x.ArcSin().Alias("arcsin"), x.ArcCos().Alias("arccos"),
-		x.ArcTan().Alias("arctan"), x.Sinh().Alias("sinh"), x.Cosh().Alias("cosh"), x.Tanh().Alias("tanh"), x.ArcSinh().Alias("arcsinh"),
-		x.ArcCosh().Alias("arccosh"), x.ArcTanh().Alias("arctanh"), x.Cot().Alias("cot"))
+		x.ArcTan().Alias("arctan"), x.Sinh().Alias("sinh"), x.Cosh().Alias("cosh"), x.Tanh().Alias("tanh"),
+		x.ArcTanh().Alias("arctanh"), x.Cot().Alias("cot"))
 	angles := sel(x.Degrees().Alias("degrees"), x.Radians().Alias("radians"))
 	oracleGroups["trig"] = map[string]oracleQuery{
 		"trig":                 libm,
