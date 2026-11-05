@@ -144,16 +144,22 @@ func (e Expr) ClipUpper[H Operand](hi H) Expr { return e.clip(nil, liftWeak(hi))
 // When/Then, because that builder lifts its values strongly and there is
 // deliberately no weak spelling of it — Otherwise(0) must keep widening. The shape is
 // a right-nested pair of Conds in written order.
+//
+// The value is each Cond's Then and the bound its Else, so the answer is named after
+// the value, as Polars' clip names it. With the bound as Then it was named after the
+// bound, "literal" for a Go number and "lo" for Col("lo"); every test aliased the
+// answer, and the oracle found it (step 496). A comparison that is null, of a null
+// value, a null bound or a NaN, keeps the value either way.
 func (e Expr) clip(l, h expr.Node) Expr {
-	past := func(op expr.BinaryOp, bound expr.Node) expr.Node {
-		return wrap(&expr.Binary{Op: op, L: e.node(), R: bound}).FillNullWith(false).node()
+	within := func(op expr.BinaryOp, bound expr.Node) expr.Node {
+		return wrap(&expr.Binary{Op: op, L: e.node(), R: bound}).FillNullWith(false).Not().node()
 	}
 	out := e.node()
 	if h != nil {
-		out = &expr.Cond{Pred: past(expr.OpGt, h), Then: h, Else: out}
+		out = &expr.Cond{Pred: within(expr.OpGt, h), Then: out, Else: h}
 	}
 	if l != nil {
-		out = &expr.Cond{Pred: past(expr.OpLt, l), Then: l, Else: out}
+		out = &expr.Cond{Pred: within(expr.OpLt, l), Then: out, Else: l}
 	}
 	return wrap(out)
 }

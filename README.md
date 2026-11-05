@@ -214,7 +214,9 @@ bitmap byte — a coincidence that hides an entire class of sub-byte bitmap bug.
 Correctness is also checked against other engines. The benchmark suite validates every result against a duckdb
 reference, and ursus currently passes **22/22 PDS-H (TPC-H) queries and 15/15 h2o.ai queries** — PDS-H at scale factor
 0.1, re-run at every step, and both suites at the published sizes in the report below; every answer ursus gave there
-validates.
+validates. The unit tests' expected values are recorded, not typed: `make oracle` asks Polars 2.1.0 the suite's
+questions and writes its answers to [`testdata/oracle/`](./testdata/oracle/), and `go test -run TestOracle .`
+compares ursus against them, dtypes checked and floats to the bit.
 
 ---
 
