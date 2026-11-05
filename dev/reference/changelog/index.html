@@ -3696,6 +3696,10 @@ that stops when its request is cancelled.</p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>TruncDiv</code></strong> (489): division whose quotient rounds toward zero, as Go's <code>/</code> does,
+  Polars 2.0's <code>truncdiv</code>: −7 by 2 is −3, where <code>FloorDiv</code> gives −4. Typed as
+  <code>FloorDiv</code>, a zero integer divisor a null; an Int128's MinInt128 by −1 is refused
+  and a Decimal too, as <code>FloorDiv</code>'s are.</li>
 <li><strong><code>Erf</code> and <code>Erfc</code></strong> (488): the error function and its complement, Polars' <code>erf</code>
   and <code>erfc</code>, widening as <code>Sqrt</code> does; <code>Erfc</code> computed apart, so <code>Erfc(6)</code> is
   2.15e-17 where 1 − <code>Erf(6)</code> is 0. Go's <code>math.Erf</code> and <code>math.Erfc</code>, within an ulp
