@@ -66,7 +66,11 @@ func init() {
 			ursus.NonExistentNull).Dt().ConvertTimeZone("UTC")),
 		"strftime": r(c("t").Dt().Strftime("%Y-%m-%d %H:%M %a %j")),
 
-		"describe":     func(in oracleInputs) *ursus.LazyFrame { return in.eager(in.df().Describe(in.t.Context())) },
+		// Without the std row, which Polars' own answer holds to an ulp on one machine
+		// only (expressions.py).
+		"describe": func(in oracleInputs) *ursus.LazyFrame {
+			return in.eager(in.df().Describe(in.t.Context())).Filter(c("statistic").Ne("std"))
+		},
 		"value_counts": func(in oracleInputs) *ursus.LazyFrame { return in.df().ValueCounts(c("s")) },
 	}
 }

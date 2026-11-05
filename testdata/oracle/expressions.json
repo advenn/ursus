@@ -213,7 +213,7 @@
     }
    },
    "name": "rolling_var_3_min2",
-   "note": "a variance's merge order: last bits apart",
+   "note": "a variance's merge order, or an a*b+c fused to an FMA by one build and not another: last bits apart",
    "order": "rows",
    "want": {
     "columns": [
@@ -261,7 +261,7 @@
     }
    },
    "name": "rolling_std_4_min1_ddof0",
-   "note": "a variance's merge order: last bits apart",
+   "note": "a variance's merge order, or an a*b+c fused to an FMA by one build and not another: last bits apart",
    "order": "rows",
    "want": {
     "columns": [
@@ -511,7 +511,7 @@
     }
    },
    "name": "ewm_mean_alpha05",
-   "note": "a variance's merge order: last bits apart",
+   "note": "a variance's merge order, or an a*b+c fused to an FMA by one build and not another: last bits apart",
    "order": "rows",
    "want": {
     "columns": [
@@ -535,7 +535,7 @@
    }
   },
   {
-   "float": "bits",
+   "float": "rel:1e-12",
    "inputs": {
     "df": {
      "columns": [
@@ -559,6 +559,7 @@
     }
    },
    "name": "ewm_mean_span3_noadjust",
+   "note": "a variance's merge order, or an a*b+c fused to an FMA by one build and not another: last bits apart",
    "order": "rows",
    "want": {
     "columns": [
@@ -582,7 +583,7 @@
    }
   },
   {
-   "float": "bits",
+   "float": "rel:1e-12",
    "inputs": {
     "df": {
      "columns": [
@@ -606,6 +607,7 @@
     }
    },
    "name": "ewm_mean_com2_ignore_nulls",
+   "note": "a variance's merge order, or an a*b+c fused to an FMA by one build and not another: last bits apart",
    "order": "rows",
    "want": {
     "columns": [
@@ -629,7 +631,7 @@
    }
   },
   {
-   "float": "bits",
+   "float": "rel:1e-12",
    "inputs": {
     "df": {
      "columns": [
@@ -653,6 +655,7 @@
     }
    },
    "name": "ewm_mean_alpha05_min3",
+   "note": "a variance's merge order, or an a*b+c fused to an FMA by one build and not another: last bits apart",
    "order": "rows",
    "want": {
     "columns": [
@@ -700,7 +703,7 @@
     }
    },
    "name": "ewm_std_halflife2",
-   "note": "a variance's merge order: last bits apart",
+   "note": "a variance's merge order, or an a*b+c fused to an FMA by one build and not another: last bits apart",
    "order": "rows",
    "want": {
     "columns": [
@@ -748,7 +751,7 @@
     }
    },
    "name": "ewm_var_alpha03_bias",
-   "note": "a variance's merge order: last bits apart",
+   "note": "a variance's merge order, or an a*b+c fused to an FMA by one build and not another: last bits apart",
    "order": "rows",
    "want": {
     "columns": [
@@ -796,7 +799,7 @@
     }
    },
    "name": "ewm_var_span4_noadjust",
-   "note": "a variance's merge order: last bits apart",
+   "note": "a variance's merge order, or an a*b+c fused to an FMA by one build and not another: last bits apart",
    "order": "rows",
    "want": {
     "columns": [
@@ -2053,7 +2056,7 @@
    }
   },
   {
-   "float": "rel:1e-12",
+   "float": "bits",
    "inputs": {
     "df": {
      "columns": [
@@ -2109,7 +2112,7 @@
     }
    },
    "name": "describe",
-   "note": "the statistics as Polars' describe gives them, every number a Float64; the std's last bits",
+   "note": "the statistics as Polars' describe gives them, every number a Float64, the std left out: Polars' own differs by an ulp between machines",
    "order": "rows",
    "want": {
     "columns": [
@@ -2120,7 +2123,6 @@
        "count",
        "null_count",
        "mean",
-       "std",
        "min",
        "25%",
        "50%",
@@ -2135,7 +2137,6 @@
        5.0,
        1.0,
        3.4,
-       4.407380174207802,
        -2.0,
        1.5,
        3.0,
@@ -2150,7 +2151,6 @@
        5.0,
        1.0,
        2.8,
-       1.7888543819998317,
        1.0,
        1.0,
        3.0,
@@ -2164,7 +2164,6 @@
       "values": [
        "5",
        "1",
-       null,
        null,
        "a",
        null,
@@ -2180,7 +2179,6 @@
        5.0,
        1.0,
        0.6,
-       null,
        0.0,
        null,
        null,

@@ -108,9 +108,19 @@ Polars 1.44.1's pasted values against 2.1.0's answers, and ursus against both:
 - **`ewm_std_halflife2` and `ewm_var_span4_noadjust`** moved by an ulp between 1.44.1
   and 2.1.0 (step 487 compared them to 1e-12 and called them identical). ursus answers
   1.44.1's bits. Held to rel:1e-12 with the reason, as are `rolling_var_3_min2`,
-  `rolling_std_4_min1_ddof0`, `ewm_mean_alpha05`, `ewm_var_alpha03_bias` and
-  `describe`'s std, where ursus is an ulp or two from Polars and the old test's 1e-9
-  hid it: a variance's merge order, feature-gaps.md §1.
+  `rolling_std_4_min1_ddof0`, `ewm_mean_alpha05` and `ewm_var_alpha03_bias`, where
+  ursus is an ulp or two from Polars and the old test's 1e-9 hid it: a variance's
+  merge order, feature-gaps.md §1.
+- **The first CI run found two more, both an ulp.** `ewm_mean_com2_ignore_nulls` was
+  2.1052631578947367 against Polars' 2.105263157894737 under the race job alone, every
+  width leg and the scalar-only leg agreeing with Polars: the race build fuses an
+  a*b+c to an FMA where the others do not, or the reverse. The ewm family is held to
+  rel:1e-12 as one, with that reason in the note. And `describe`'s std of six values
+  is Polars' own by an ulp otherwise on GitHub's runner than on the laptop,
+  4.407380174207803 against 4.407380174207802, a parallel reduction's order: a
+  recording of it holds on one machine only, so `describe` is recorded without its
+  std row, which `rolling_std` covers. Every other recorded value was the same on
+  both machines, and every other case passed on every leg.
 - **`Clip`, `ClipLower` and `ClipUpper` named their answer after the bound,** "literal"
   for a Go number and "lo" for `Col("lo")`, where Polars keeps the value's name. Every
   test aliased the answer. Fixed in `fill.go`: the value is each conditional's Then and
