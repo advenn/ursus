@@ -160,6 +160,12 @@ that stops when its request is cancelled.
   named with its reason in `oracleDifferences`. CI regenerates the recordings and
   fails on one that is not Polars'. Three files converted first: `numodds_test.go`,
   `rollmore_test.go` and `dtmore_test.go`, 305 hand-typed lines of values gone.
+- **The expressions-and-math wave converted** (497): thirteen files, `scalar_byhand`
+  to `int128exact`, 264 recorded cases in thirteen groups, 72 generated, 229 hand-typed
+  lines gone; what Polars 2.1 has no spelling for is a Go oracle (an Int64 Sum past
+  2^63 against math/big, seconds, Decimal products and quotients against big.Rat with
+  seeded values) or a differential; nineteen documented differences named, two
+  findings left for the maintainer.
 
 ### Fixed
 
@@ -172,6 +178,15 @@ its section below lists them.
   answer was named after the bound, `literal` for a Go number and `lo` for `Col("lo")`,
   where Polars' clip keeps the value's name. Every test had aliased it; the recorded
   oracle found it.
+- **`Ln` and `Log10` of a subnormal** (497): Go's amd64 `math.Log` misreads a
+  subnormal, so `Ln(5e-324)` was −709.09, ln(2^-1022), where it is −744.44, and
+  `Log10` −307.95 for −323.31; the test against `math.Log` itself could not see it,
+  the recorded oracle did. A subnormal is scaled into the normal range first, within
+  two ulps of the correctly rounded answer.
+- **A Float32 cast to text uses Polars' Float32 bounds** (497): plain from 1e-6 to
+  below 1e13 and scientific outside, where a Float64's are 1e-5 and 1e16; both widths
+  used the Float64 bounds, so `float32(9e15)` read `9000000000000000.0` where Polars
+  writes `9e+15`.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
