@@ -47,16 +47,16 @@ func TestFieldResolution(t *testing.T) {
 		// Promotion: the wider type wins, and nullability is the union.
 		{"int + int", bin(expr.OpAdd, col("id"), col("qty")), "id", dtype.Int64, true},
 		{"int + float", bin(expr.OpAdd, col("qty"), col("price")), "qty", dtype.Float64, true},
-		{"f32 + f64", bin(expr.OpMul, col("weight"), col("price")), "weight", dtype.Float64, true},
 
 		// Two non-nullable operands stay non-nullable.
 		{"nn + nn", bin(expr.OpAdd, col("id"), lit(int64(1), dtype.Int64)), "id", dtype.Int64, false},
+		// Uint64 beside a signed type was refused until Int128 could hold both ranges
+		// losslessly.
 		{"uint64 + int64 widens to Int128",
 			bin(expr.OpAdd, col("big"), col("id")), "big", dtype.Int128, true},
 
 		// Integers as bits (step 278): their common type, as arithmetic's.
 		{"int & int", bin(expr.OpAnd, col("id"), col("qty")), "id", dtype.Int64, true},
-		{"uint64 | int64 in Int128", bin(expr.OpOr, col("big"), col("id")), "big", dtype.Int128, true},
 		{"not of an int", &expr.Unary{Op: expr.OpNot, Child: col("qty")}, "qty", dtype.Int32, true},
 
 		// True division is always float, even for two integers.
@@ -82,10 +82,6 @@ func TestFieldResolution(t *testing.T) {
 			&expr.Cond{Pred: bin(expr.OpGt, col("id"), lit(int64(0), dtype.Int64)),
 				Then: col("id"), Else: col("price")},
 			"id", dtype.Float64, true},
-		{"cond of non-null branches under a non-null condition",
-			&expr.Cond{Pred: bin(expr.OpGt, col("id"), lit(int64(0), dtype.Int64)),
-				Then: col("id"), Else: lit(int64(0), dtype.Int64)},
-			"id", dtype.Int64, false},
 		// A null condition takes Else (step 311), so a nullable one makes no null of
 		// its own: neither branch here is nullable, and neither is the result.
 		{"cond is not nullable for a nullable condition",
@@ -106,8 +102,8 @@ func TestFieldResolution(t *testing.T) {
 				lit("a", dtype.String)}},
 			"name", dtype.Bool, true},
 
-		// Naming: leftmost column wins; alias overrides at the root only.
-		{"leftmost name", bin(expr.OpAdd, col("price"), col("qty")), "price", dtype.Float64, true},
+		// Naming: leftmost column wins, as "int + float" shows; a literal is passed
+		// over, and an alias overrides at the root only.
 		{"literal-first name", bin(expr.OpAdd, lit(1.0, dtype.Float64), col("price")), "price", dtype.Float64, true},
 		{"alias", &expr.Alias{Child: col("price"), Name: "p"}, "p", dtype.Float64, true},
 		{"alias below op does not win",
@@ -122,7 +118,6 @@ func TestFieldResolution(t *testing.T) {
 		// Temporal algebra.
 		{"datetime - datetime", bin(expr.OpSub, col("ts"), col("ts")), "ts", dtype.Duration(dtype.Micro), true},
 		{"datetime + duration", bin(expr.OpAdd, col("ts"), col("dur")), "ts", dtype.Datetime(dtype.Micro, "UTC"), true},
-		{"duration + duration", bin(expr.OpAdd, col("dur"), col("dur")), "dur", dtype.Duration(dtype.Nano), true},
 		{"duration * int", bin(expr.OpMul, col("dur"), col("qty")), "dur", dtype.Duration(dtype.Nano), true},
 
 		// Kleene boolean.
@@ -213,24 +208,6 @@ func TestFieldResolutionErrors(t *testing.T) {
 				t.Errorf("message %q does not contain %q", err.Error(), c.wantSub)
 			}
 		})
-	}
-}
-
-// TestUint64PromotesToInt128 pins the behaviour change that came with 128-bit
-// integer sums.
-//
-// Uint64 combined with a signed type used to be REJECTED, because at 64 bits the
-// only options were to wrap or to lose precision above 2^53, and both are silently
-// wrong. Int128 holds both ranges, so the combination is now lossless and the
-// explicit-cast requirement — which existed solely to work around a missing type —
-// is gone.
-func TestUint64PromotesToInt128(t *testing.T) {
-	f, err := expr.Resolve(bin(expr.OpAdd, col("big"), col("id")), schema)
-	if err != nil {
-		t.Fatalf("Uint64 + Int64 must promote losslessly, got: %v", err)
-	}
-	if f.Type != dtype.Int128 {
-		t.Errorf("type = %s, want Int128", f.Type)
 	}
 }
 

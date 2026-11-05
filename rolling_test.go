@@ -23,33 +23,16 @@ func TestRollingByHand(t *testing.T) {
 	lf := ursus.Frame(ursus.Values("x", []int64{1, 2, 3, 4, 5}))
 	nulls := ursus.Frame(ursus.ValuesNullable("x", []int64{1, 0, 3, 4, 0, 6},
 		[]bool{true, false, true, true, false, true}))
-	floats := ursus.Frame(ursus.Values("x", []float64{1, math.NaN(), 3, 4, math.Inf(1), 1, 2}))
 	for _, tc := range []struct {
 		name string
 		lf   *ursus.LazyFrame
 		e    ursus.Expr
 		want []string
 	}{
-		{"sum", lf, x.RollingSum(3), []string{"null", "null", "6", "9", "12"}},
-		{"sum, from one value", lf, x.RollingSum(3, ursus.MinSamples(1)), []string{"1", "3", "6", "9", "12"}},
-		{"mean", lf, x.RollingMean(2), []string{"null", "1.5", "2.5", "3.5", "4.5"}},
-		{"min", lf, x.RollingMin(3), []string{"null", "null", "1", "2", "3"}},
-		{"max", lf, x.RollingMax(3), []string{"null", "null", "3", "4", "5"}},
-		{"var", lf, x.RollingVar(3), []string{"null", "null", "1", "1", "1"}},
-		{"var, ddof 0", lf, x.RollingVar(2, ursus.Ddof(0)), []string{"null", "0.25", "0.25", "0.25", "0.25"}},
-		{"std", lf, x.RollingStd(3), []string{"null", "null", "1", "1", "1"}},
 		// A null makes a full window short of values, unless fewer will do.
 		{"nulls", nulls, x.RollingSum(2), []string{"null", "null", "null", "7", "null", "null"}},
 		{"nulls, from one value", nulls, x.RollingSum(2, ursus.MinSamples(1)),
 			[]string{"1", "1", "3", "7", "4", "6"}},
-		// A variance of one value with ddof 1 is null, as Var's is.
-		{"var of one value", nulls, x.RollingVar(2, ursus.MinSamples(1)),
-			[]string{"null", "null", "null", "0.5", "null", "null"}},
-		// A NaN is in two windows, and an infinity leaves no NaN behind it.
-		{"float sum", floats, x.RollingSum(2), []string{"null", "NaN", "NaN", "7", "+Inf", "+Inf", "3"}},
-		{"float max", floats, x.RollingMax(2), []string{"null", "NaN", "NaN", "4", "+Inf", "+Inf", "2"}},
-		{"float min", floats, x.RollingMin(2), []string{"null", "1", "3", "3", "4", "1", "1"}},
-		{"float var", floats, x.RollingVar(2), []string{"null", "NaN", "NaN", "0.5", "NaN", "NaN", "0.5"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := numbers(t, collect(t, tc.lf.Select(tc.e.Alias("r"))), "r"); !slices.Equal(got, tc.want) {

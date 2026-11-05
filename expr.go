@@ -314,6 +314,19 @@ func (e Expr) Div[T Operand](v T) Expr { return e.bin(expr.OpDiv, lift(v)) }
 func (e Expr) FloorDiv[T Operand](v T) Expr { return e.bin(expr.OpFloorDiv, lift(v)) }
 func (e Expr) Mod[T Operand](v T) Expr      { return e.bin(expr.OpMod, lift(v)) }
 
+// TruncDiv divides, its quotient rounded toward zero, as Go's / and C's are: −7
+// TruncDiv 2 is −3, where FloorDiv gives −4. Polars 2.0's truncdiv. Its type is
+// FloorDiv's: two integers an integer, a float beside either a float, and an integer
+// divisor of zero a null. A float's is trunc(a/b), so −0.5 by 2 is −0 and 1 by 0 is
+// +Inf.
+//
+// It differs from Polars where FloorDiv does. MinInt64 by −1 wraps to MinInt64, as
+// Polars' does, but an Int128's is refused, as Int128 arithmetic is exact or refused,
+// where Polars wraps it. A Duration by an integer, which Polars 2.1 refuses, is its
+// ticks divided toward zero, as FloorDiv floors them. A Decimal, which Polars
+// divides at Decimal(38, s), is refused, as its FloorDiv is.
+func (e Expr) TruncDiv[T Operand](v T) Expr { return e.bin(expr.OpTruncDiv, lift(v)) }
+
 // Pow raises the receiver to the power v.
 //
 // The result is ALWAYS a float, for the same reason Div's is: 2**-1 is 0.5, and a
@@ -416,6 +429,19 @@ func (e Expr) Radians() Expr { return e.un(expr.OpRadians) }
 // one over ordinary values, as each trigonometric function here is within a few;
 // near a multiple of pi/2 its relative error grows, its absolute error below 1e-30.
 func (e Expr) Cot() Expr { return e.un(expr.OpCot) }
+
+// Erf is the error function, and Erfc its complement, 1 - erf(x), computed apart so
+// that it keeps its precision where erf is near 1: Erfc(6) is 2.15e-17, where
+// 1 - Erf(6) is 0. The normal distribution's CDF at x is Erfc(-x/√2)/2. Polars'
+// `erf` and `erfc`.
+//
+// Both widen as Sqrt does, keeping Float32. Erf(±Inf) is ±1, Erfc(+Inf) is 0 and
+// Erfc(-Inf) 2; Erf(-0) is -0, and NaN is NaN. They are Go's math.Erf and math.Erfc,
+// within one ulp and four of Polars' glibc ones; a Float32's is the Float64 answer
+// rounded once, as Polars rounds it. Polars also takes a Boolean or a Decimal, as a
+// Float64; ursus refuses both, as it refuses their Sqrt: cast first.
+func (e Expr) Erf() Expr  { return e.un(expr.OpErf) }
+func (e Expr) Erfc() Expr { return e.un(expr.OpErfc) }
 
 // RoundMode is how Round breaks a tie, a value halfway between its two roundings.
 type RoundMode string

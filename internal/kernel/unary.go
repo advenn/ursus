@@ -96,7 +96,7 @@ func Unary(op expr.UnaryOp, name string, out dtype.DataType, c *data.Column) (*d
 	case expr.OpSqrt, expr.OpCbrt, expr.OpExp, expr.OpLn, expr.OpLog10, expr.OpLog1p,
 		expr.OpSin, expr.OpCos, expr.OpTan, expr.OpArcSin, expr.OpArcCos, expr.OpArcTan,
 		expr.OpSinh, expr.OpCosh, expr.OpTanh, expr.OpArcSinh, expr.OpArcCosh, expr.OpArcTanh,
-		expr.OpDegrees, expr.OpRadians, expr.OpCot:
+		expr.OpDegrees, expr.OpRadians, expr.OpCot, expr.OpErf, expr.OpErfc:
 		// The widening family. Listed rather than routed through op.IsMath() so that
 		// a math op added to the enum without an arm here fails loudly in Unary's
 		// default rather than silently taking the type-preserving path.
@@ -376,6 +376,15 @@ func unaryMath(op expr.UnaryOp, name string, out dtype.DataType,
 	case expr.OpLog1p:
 		for i, v := range src {
 			dst[i] = math.Log1p(v)
+		}
+	case expr.OpErf:
+		for i, v := range src {
+			dst[i] = math.Erf(v)
+		}
+	case expr.OpErfc:
+		// Erfc is not 1 - Erf: erfc(6) is 2.2e-17, a value where 1 - erf(6) is 0.
+		for i, v := range src {
+			dst[i] = math.Erfc(v)
 		}
 	case expr.OpCot:
 		// A Float32's is 1/tan in float32, as Polars divides it, where the float64
@@ -695,7 +704,8 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 		// CanCast has refused these all along — its temporal arms cover numeric and
 		// string, never Bool — so the two answers disagreed in the SAFE direction,
 		// with the planner refusing what the kernel would have done. Narrowing the
-		// kernel is what makes them agree; see TestCanCastAgreesWithTheKernel.
+		// kernel is what makes them agree; see physical's TestEvaluatorContract,
+		// whose cast arm sweeps every pair.
 		if from.IsTemporal() || to.IsTemporal() {
 			return nil, uerr.New(uerr.KindUnsupported, "cast",
 				"cannot cast %s to %s", from, to).
@@ -712,7 +722,7 @@ func castTo(name string, to dtype.DataType, strict bool, c *data.Column) (*data.
 	// along and the kernel refused it — the FOURTH plan-accepts / kernel-rejects
 	// divergence this file records, after null casts, string casts and bool casts,
 	// and the one that hid longest: the contract matrix had no List column and no
-	// List cast target, and TestCanCastAgreesWithTheKernel names List as an
+	// List cast target, and the TypeID-pair check of the day named List as an
 	// unsamplable source, so neither cast instrument could reach it.
 	//
 	// It gathers through listGather rather than casting the child in place, and the

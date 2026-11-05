@@ -1,8 +1,8 @@
 package ursus_test
 
-// Step 153: the exponentially weighted functions and Interpolate. By hand against
-// pandas' answers, then the adjusted ewm against its closed form, which weighs each
-// value explicitly and shares no recurrence with the kernel.
+// Step 153: the exponentially weighted functions and Interpolate. The adjusted ewm
+// against its closed form, which weighs each value explicitly and shares no
+// recurrence with the kernel, and by hand what the closed form does not reach.
 
 import (
 	"fmt"
@@ -19,7 +19,6 @@ func TestEwmByHand(t *testing.T) {
 	x := c("x")
 	half := ursus.EwmAlpha(0.5)
 	lf := ursus.Frame(ursus.Values("x", []float64{1, 2, 3}))
-	gap := ursus.Frame(ursus.ValuesNullable("x", []float64{1, 0, 3}, []bool{true, false, true}))
 	lead := ursus.Frame(ursus.ValuesNullable("x", []float64{0, 1, 2}, []bool{false, true, true}))
 	for _, tc := range []struct {
 		name string
@@ -27,27 +26,13 @@ func TestEwmByHand(t *testing.T) {
 		e    ursus.Expr
 		want []string
 	}{
-		// pandas' Series([1, 2, 3]).ewm(alpha=0.5).mean() and its siblings.
-		{"mean", lf, x.EwmMean(half), []string{"1", "1.667", "2.429"}},
-		{"mean, unadjusted", lf, x.EwmMean(half, ursus.EwmAdjust(false)), []string{"1", "1.5", "2.25"}},
-		{"var", lf, x.EwmVar(half), []string{"null", "0.5", "0.9286"}},
-		{"std", lf, x.EwmStd(half), []string{"null", "0.7071", "0.9636"}},
-		{"var, biased", lf, x.EwmVar(half, ursus.Biased()), []string{"0", "0.2222", "0.5306"}},
-		{"mean from two values", lf, x.EwmMean(half, ursus.MinSamples(2)), []string{"null", "1.667", "2.429"}},
-		// A null ages the weights before it, unless nulls are ignored; its row
-		// answers the running value.
-		// A null row answers null, as Polars' does (step 184); it ages the weights
-		// all the same, unless IgnoreNulls.
-		{"a null", gap, x.EwmMean(half), []string{"1", "null", "2.6"}},
-		{"a null, ignored", gap, x.EwmMean(half, ursus.IgnoreNulls()), []string{"1", "null", "2.333"}},
+		// The adjusted mean and variance, with nulls, are checked against their closed
+		// form below, and every option against Polars in testdata/oracle; these are the
+		// rows neither reaches.
 		{"a leading null", lead, x.EwmMean(half), []string{"null", "1", "1.667"}},
 		// A NaN is a value, and the mean is NaN from there on.
 		{"a NaN", ursus.Frame(ursus.Values("x", []float64{1, math.NaN(), 3})), x.EwmMean(half),
 			[]string{"1", "NaN", "NaN"}},
-		// Four spellings of one decay.
-		{"span", lf, x.EwmMean(ursus.EwmSpan(3)), []string{"1", "1.667", "2.429"}},
-		{"com", lf, x.EwmMean(ursus.EwmCom(1)), []string{"1", "1.667", "2.429"}},
-		{"half-life", lf, x.EwmMean(ursus.EwmHalfLife(1)), []string{"1", "1.667", "2.429"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := numbers(t, collect(t, tc.lf.Select(tc.e.Alias("r"))), "r"); !slices.Equal(got, tc.want) {

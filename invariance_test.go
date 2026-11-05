@@ -5,7 +5,7 @@ package ursus_test
 // The standing rule in this project is that an operator's answer must not depend on
 // how the query happened to be chunked or scheduled — batching is an execution
 // detail, not something the user asked for. Roughly twenty operators have a
-// `{1, 2, 3, 7, 8192} × threads` sweep pinning that. These five had NOTHING:
+// batch-size × threads sweep pinning that. These five had NOTHING:
 // asof_test.go, tempgroup_test.go and topk_test.go contained zero WithBatchSize and
 // zero WithThreads; MergeSorted has no dedicated file; and Distinct was thread-swept
 // but never batch-swept.

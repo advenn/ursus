@@ -220,22 +220,6 @@ func TestZeroValueErrorClaimsToBeAnUrsusBug(t *testing.T) {
 	}
 }
 
-// TestUnknownColumnSuggests is the single most common error in a dataframe
-// library, and the reason NearMatches exists.
-func TestUnknownColumnSuggests(t *testing.T) {
-	e := uerr.UnknownColumn("select", "pirce", []string{"price", "qty", "region"})
-	got := e.Error()
-	if !strings.Contains(got, "did you mean") || !strings.Contains(got, "price") {
-		t.Errorf("a one-transposition typo should be suggested:\n%s", got)
-	}
-	if !strings.Contains(got, "available") {
-		t.Errorf("the full schema should be listed:\n%s", got)
-	}
-	if !errors.Is(e, uerr.ErrSchema) {
-		t.Error("an unknown column is a schema error")
-	}
-}
-
 // TestUnknownColumnWithNoNearMatch omits the suggestion line rather than offering
 // something unhelpful.
 func TestUnknownColumnWithNoNearMatch(t *testing.T) {

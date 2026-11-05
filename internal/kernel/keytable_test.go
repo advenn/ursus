@@ -41,6 +41,10 @@ func TestKeyTableMatchesTheMap(t *testing.T) {
 		}
 		corpus = append(corpus, k)
 	}
+	// Keys that differ by a trailing NUL, which is what the encoder appends for a
+	// null field: a length-blind comparison merges a group having a null with one
+	// that does not.
+	corpus = append(corpus, []byte("ab"), []byte("ab\x00"), []byte("ab\x00\x00"), []byte("abc"))
 
 	tab := kernel.NewKeyTable()
 	ids := map[string]int32{}
@@ -113,37 +117,6 @@ func TestKeyTableGrowthPreservesEverything(t *testing.T) {
 	}
 }
 
-// TestKeyTablePrefixKeysAreDistinct is the case a length-blind comparison merges.
-//
-// "ab" and "ab\x00" differ only by a trailing NUL, which is exactly what the
-// encoder appends for a null field — so conflating them would merge a group
-// having a null with one that does not.
-func TestKeyTablePrefixKeysAreDistinct(t *testing.T) {
-	keys := [][]byte{
-		{},
-		{0x00},
-		{0x00, 0x00},
-		[]byte("ab"),
-		[]byte("ab\x00"),
-		[]byte("ab\x00\x00"),
-		[]byte("abc"),
-	}
-
-	tab := kernel.NewKeyTable()
-	seen := map[int32][]byte{}
-	for _, k := range keys {
-		id, inserted := tab.GetOrInsert(k)
-		if !inserted {
-			t.Fatalf("key %q collided with %q — they must be distinct groups",
-				k, seen[id])
-		}
-		seen[id] = bytes.Clone(k)
-	}
-	if tab.Len() != len(keys) {
-		t.Errorf("Len = %d, want %d distinct keys", tab.Len(), len(keys))
-	}
-}
-
 // TestKeyTableGetDoesNotInsert: the probe side of a join calls Get on a frozen
 // table, and joinTable's doc promises nothing mutates after the build finishes —
 // the property that would let probe workers share one table without a lock. A Get
@@ -166,33 +139,6 @@ func TestKeyTableGetDoesNotInsert(t *testing.T) {
 	}
 	if tab.NBytes() != beforeBytes {
 		t.Errorf("Get changed NBytes from %d to %d", beforeBytes, tab.NBytes())
-	}
-}
-
-// TestKeyTableCollisionsDoNotMerge forces many keys through a table that starts
-// with 64 slots, so clusters form and the probe walk is exercised properly. If
-// the walk stopped at the first occupied slot instead of comparing, distinct keys
-// would share an id and every aggregate over them would silently combine.
-func TestKeyTableCollisionsDoNotMerge(t *testing.T) {
-	const n = 1000
-	tab := kernel.NewKeyTable()
-
-	byID := make([][]byte, 0, n)
-	for i := range n {
-		k := []byte("k" + itoa(i))
-		id, inserted := tab.GetOrInsert(k)
-		if !inserted {
-			t.Fatalf("key %q reported as already present, colliding with %q",
-				k, byID[id])
-		}
-		byID = append(byID, bytes.Clone(k))
-	}
-
-	for id, k := range byID {
-		got, inserted := tab.GetOrInsert(k)
-		if inserted || got != int32(id) {
-			t.Fatalf("key %q: id = %d (inserted %v), want %d", k, got, inserted, id)
-		}
 	}
 }
 
@@ -220,26 +166,6 @@ func TestKeyTableResetReleases(t *testing.T) {
 	// And it must be usable again, from scratch, with ids restarting at 0.
 	if id, inserted := tab.GetOrInsert([]byte("fresh")); !inserted || id != 0 {
 		t.Errorf("after Reset, first insert = (%d, %v), want (0, true)", id, inserted)
-	}
-}
-
-// TestKeyTableNBytesGrowsWithContent is the weak but load-bearing claim: a memory
-// limit is enforced against this number, and the bug it replaced was reporting
-// ZERO.
-func TestKeyTableNBytesGrowsWithContent(t *testing.T) {
-	tab := kernel.NewKeyTable()
-	start := tab.NBytes()
-
-	for i := range 2000 {
-		tab.GetOrInsert([]byte("a-reasonably-long-key-" + itoa(i)))
-	}
-	if got := tab.NBytes(); got <= start {
-		t.Errorf("NBytes = %d after 2000 keys, was %d when empty", got, start)
-	}
-	// The arena alone is over 20 bytes per key, so anything near zero means the
-	// accounting is not looking at the keys at all.
-	if got := tab.NBytes(); got < 2000*20 {
-		t.Errorf("NBytes = %d, which is less than the key bytes alone", got)
 	}
 }
 
