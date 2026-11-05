@@ -1487,6 +1487,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#fixed" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1548,7 +1559,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#tests" class="md-nav__link">
+  <a href="#tests_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Tests
@@ -2604,6 +2615,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#fixed" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2665,7 +2687,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#tests" class="md-nav__link">
+  <a href="#tests_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Tests
@@ -3807,16 +3829,35 @@ that stops when its request is cancelled.</p>
   <code>PartitionBy</code>, <code>ToDummies</code>, <code>Corr</code> and their kin, and the JSON and CSV writers,
   take a share as the queries do, where each took every thread.</li>
 </ul>
+<h3 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Expected values are recorded, not typed</strong> (496): <code>make oracle</code> asks Polars 2.1.0
+  the suite's questions, from <code>bench/scripts/oracle/</code>, and writes the inputs and the
+  answers to <code>testdata/oracle/&lt;group&gt;.json</code>, every type ursus has, several inputs, a
+  whole answer frame, a refusal, an unordered answer; <code>TestOracle</code> compares ursus
+  against them, dtypes checked and floats to the bit, and a difference ursus means is
+  named with its reason in <code>oracleDifferences</code>. CI regenerates the recordings and
+  fails on one that is not Polars'. Three files converted first: <code>numodds_test.go</code>,
+  <code>rollmore_test.go</code> and <code>dtmore_test.go</code>, 305 hand-typed lines of values gone.</li>
+</ul>
 <h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
 <p>All three are in v0.7.1 too.</p>
 <p>Every fix of v0.7.2 is in 0.8 too, forward-ported from <code>release-0.7</code> by #33 to #37:
 its section below lists them.</p>
 <ul>
-<li><strong>A cancelled query no longer answers part of its input as the whole</strong> (394): a
+<li>
+<p><strong><code>Clip</code>, <code>ClipLower</code> and <code>ClipUpper</code> are named after their value</strong> (496): the
+  answer was named after the bound, <code>literal</code> for a Go number and <code>lo</code> for <code>Col("lo")</code>,
+  where Polars' clip keeps the value's name. Every test had aliased it; the recorded
+  oracle found it.</p>
+</li>
+<li>
+<p><strong>A cancelled query no longer answers part of its input as the whole</strong> (394): a
   query cancelled while it read could return the rows read before the cancel, and no
   error: a count of a CSV file cancelled partway was an empty frame. A query whose
   context is cancelled before it finishes now returns the cancellation, from
-  <code>Collect</code>, <code>CollectBatches</code>, <code>Count</code> and the writers.</li>
+  <code>Collect</code>, <code>CollectBatches</code>, <code>Count</code> and the writers.</p>
+</li>
 <li><strong>A cancelled sort or join stops promptly</strong> (394): a sort of ten million rows came
   back 400 ms and more after its cancel, and a join's build 100 to 170; now some tens
   of milliseconds at most.</li>
@@ -3917,7 +3958,7 @@ diffs the API against it strictly from step 436 on.</p>
   where every panic there was <code>ErrIO</code>, the caller's. A panic in the caller's factory or
   reader is still <code>ErrIO</code>.</li>
 </ul>
-<h3 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h3>
+<h3 id="tests_1">Tests<a class="headerlink" href="#tests_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li>The race job has 40 minutes (411).</li>
 <li>A temporal median's held values are read exactly, not sampled (431), and a
