@@ -1,13 +1,15 @@
 # Changelog
 
 ursus is on [ZeroVer](https://0ver.org): 0.x, and a stable 1.0 is not expected yet.
-Go's rule for v0 applies, so a minor version may change behaviour, and an API may be
-renamed, removed or reshaped when the result is better, without being deprecated
-first. Each release below therefore says what a user of the previous one can trip
-on, not only what is new; from 0.6 on, each lists its breaks with their
-replacements, and from 0.8 a tool checks the list: `make api`, which CI runs, fails
-on a feature of the last tag's public API (`api/`) that is gone, until a Breaks
-section here names it.
+**The public API is stable since 2026-11-05 (step 494):** a release adds, and never
+renames, removes or reshapes what an earlier release had; a better design goes beside
+the old one. `make api`, which CI runs, fails on any feature of the last tag's public
+API (`api/`) that is gone. Up to v0.7.2, Go's rule for v0 applied: a minor version
+could change behaviour, and an API could be renamed, removed or reshaped when the
+result was better. Each release below therefore says what a user of the previous one
+can trip on, not only what is new; from 0.6 on, each lists its breaks with their
+replacements. 0.8's two changes of defaults under Breaks below were made before the
+rule and are the last.
 
 Every step of construction has an as-built record in
 [`context_files/`](./context_files/), with the measurements behind each change.
@@ -42,6 +44,12 @@ that stops when its request is cancelled.
 
 ### Features
 
+- **`ScanLines`** (492): a text file's lines as one String column, `line`, Polars
+  2.x's `scan_lines` and `read_lines`; `ScanLinesFiles`, `ScanLinesGlob`,
+  `ScanLinesBytes`, `ScanLinesFrom` of `LinesFile`s and `ScanLinesFS` as NDJSON's
+  are, `WithLinesName` and `WithLinesIncludeFilePaths`. Read as NDJSON is, in blocks
+  a part a thread; a "\r\n" end is a newline, an empty line a row, a last line
+  needs no newline, and text that is not UTF-8 is refused.
 - **`Name().StripPrefix` and `StripSuffix`** (491): the output name without an affix,
   taken off once where the name has it, Polars' `name.strip_prefix` and
   `strip_suffix`: `Col("a_x").Name().StripPrefix("a_")` is x.
