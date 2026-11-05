@@ -329,6 +329,7 @@ func (e Expr) RoundSigFigs(n int) Expr
 func (e Expr) Floor() Expr; func (e Expr) Ceil() Expr
 func (e Expr) Clip(lo, hi Expr) Expr
 func (e Expr) Sin() Expr /* … Cos, Tan, Cot, Arc*, *h, Degrees, Radians … */
+func (e Expr) Erf() Expr;  func (e Expr) Erfc() Expr
 func (e Expr) Skew(bias bool) Expr;  func (e Expr) Kurtosis(fisher, bias bool) Expr
 func (e Expr) Entropy(base float64, normalize bool) Expr
 func (e Expr) Hist(bins []float64, opts ...HistOption) Expr

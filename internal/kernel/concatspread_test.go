@@ -18,9 +18,11 @@ import (
 // TestConcatOwnedNIsConcat: since step 389 Collect copies each column's rows on the
 // query's threads, a piece each, where the pieces fall anywhere in the parts. The
 // answer is Concat's, row for row: integers, floats, Int128 and text with nulls, and a
-// Bool, which is copied whole; parts empty, of one row, sliced out of a larger column,
-// and text parts with no payload; at 32-bit offsets and past MaxStringBytes at 64; on
-// 2 to 7 workers. A panic in a piece is raised again in the caller.
+// Bool, which is copied whole; no batch, or forty; parts empty, of one row, sliced out
+// of a larger column, and text parts with no payload; at 32-bit offsets and past
+// MaxStringBytes at 64; on 1 to 7 workers, one being ConcatOwned's. It clears the
+// slice it was handed, so the caller holds no batch it gave up (step 128). A panic in
+// a piece is raised again in the caller.
 func TestConcatOwnedNIsConcat(t *testing.T) {
 	defer func(m int) { parallelMin = m }(parallelMin)
 	defer func(old int64) { data.MaxStringBytes = old }(data.MaxStringBytes)
@@ -64,8 +66,8 @@ func TestConcatOwnedNIsConcat(t *testing.T) {
 	}
 	for _, limit := range []int64{math.MaxInt32, 64} {
 		data.MaxStringBytes = limit
-		for _, workers := range []int{2, 3, 4, 7} {
-			for _, nb := range []int{1, 2, 5, 40} {
+		for _, workers := range []int{1, 2, 3, 4, 7} {
+			for _, nb := range []int{0, 1, 2, 5, 40} {
 				in := make([]*data.Batch, nb)
 				for k := range in {
 					switch rng.IntN(6) {
@@ -86,6 +88,11 @@ func TestConcatOwnedNIsConcat(t *testing.T) {
 					t.Fatal(err)
 				}
 				name := fmt.Sprintf("offsets to %d, %d workers, %d batches", limit, workers, nb)
+				for k, b := range in {
+					if b != nil {
+						t.Fatalf("%s: batch %d is still held", name, k)
+					}
+				}
 				if got.Rows() != want.Rows() {
 					t.Fatalf("%s: %d rows, want %d", name, got.Rows(), want.Rows())
 				}

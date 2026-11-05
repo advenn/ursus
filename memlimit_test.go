@@ -68,8 +68,9 @@ func TestSetProcessMemoryLimit(t *testing.T) {
 
 // TestTheDefaultBudgetSetsTheProcessMemoryLimit: the first query under the default
 // budget sets the Go soft limit to nine tenths of the ceiling, once (step 128). A
-// limit the caller gave, LeaveProcessMemoryLimit, GOMEMLIMIT and a limit already
-// chosen all keep it from doing so.
+// limit the caller gave and LeaveProcessMemoryLimit keep it from doing so. GOMEMLIMIT
+// and a limit already chosen are kept by SetProcessMemoryLimit, which it calls, and
+// TestSetProcessMemoryLimit pins those.
 func TestTheDefaultBudgetSetsTheProcessMemoryLimit(t *testing.T) {
 	if _, set := os.LookupEnv("GOMEMLIMIT"); set {
 		t.Skip("GOMEMLIMIT is set in this environment")
@@ -129,22 +130,6 @@ func TestTheDefaultBudgetSetsTheProcessMemoryLimit(t *testing.T) {
 		query(t)
 		if got := debug.SetMemoryLimit(-1); got != math.MaxInt64 {
 			t.Errorf("the runtime's limit is %d, want none", got)
-		}
-	})
-	t.Run("GOMEMLIMIT=off leaves it alone", func(t *testing.T) {
-		fresh()
-		t.Setenv("GOMEMLIMIT", "off")
-		query(t)
-		if got := debug.SetMemoryLimit(-1); got != math.MaxInt64 {
-			t.Errorf("the runtime's limit is %d, want none", got)
-		}
-	})
-	t.Run("a limit already chosen is kept", func(t *testing.T) {
-		fresh()
-		debug.SetMemoryLimit(3 << 30)
-		query(t)
-		if got := debug.SetMemoryLimit(-1); got != 3<<30 {
-			t.Errorf("the runtime's limit is %d, want the existing %d", got, int64(3<<30))
 		}
 	})
 	// Step 395: an engine of the default budget is the default's kind; one given a

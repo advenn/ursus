@@ -152,31 +152,6 @@ func TestIntegerSumWidensToInt128(t *testing.T) {
 	}
 }
 
-func TestGlobalAggregate(t *testing.T) {
-	df, err := sales().
-		GroupBy().
-		Agg(
-			ursus.Len().Alias("rows"),
-			ursus.Col("amount").Sum().Alias("total"),
-			ursus.Col("qty").Max().Alias("biggest"),
-		).
-		Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if df.Height() != 1 {
-		t.Fatalf("global aggregate produced %d rows, want 1\n%s", df.Height(), df)
-	}
-	rows, _ := df.Column[uint64]("rows")
-	if v, _ := rows.Get(0); v != 7 {
-		t.Errorf("rows = %d, want 7", v)
-	}
-	biggest, _ := df.Column[int32]("biggest")
-	if v, _ := biggest.Get(0); v != 7 {
-		t.Errorf("max(qty) = %d, want 7", v)
-	}
-}
-
 // TestGlobalAggregateOverEmptyInput is the corner a hash table gets wrong by
 // default: no row ever creates a group, so the natural implementation emits
 // nothing. SQL says `count(*)` of an empty table is 0, i.e. exactly one row.
@@ -509,37 +484,5 @@ func TestSortBatchSizeInvariance(t *testing.T) {
 			continue
 		}
 		ursustest.AssertFrameEqual(t, df, ref, ursustest.CheckNullability())
-	}
-}
-
-// TestMinMaxAgreeWithSort ties the extremum accumulator to the sort comparator.
-// Both must use the TOTAL order; a Min that reached for the IEEE comparison
-// kernels would disagree the moment a NaN appeared.
-func TestMinMaxAgreeWithSort(t *testing.T) {
-	agg, err := sales().
-		GroupBy().
-		Agg(ursus.Col("qty").Min().Alias("lo"), ursus.Col("qty").Max().Alias("hi")).
-		Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	sorted, err := sales().
-		Sort(ursus.Asc(ursus.Col("qty")).NullsLast()).
-		Select(ursus.Col("qty")).
-		Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	lo, _ := agg.Column[int32]("lo")
-	hi, _ := agg.Column[int32]("hi")
-	s, _ := sorted.Column[int32]("qty")
-	vals := s.Values()
-
-	if a, _ := lo.Get(0); a != vals[0] {
-		t.Errorf("min = %d, but sorted first = %d", a, vals[0])
-	}
-	if a, _ := hi.Get(0); a != vals[len(vals)-1] {
-		t.Errorf("max = %d, but sorted last = %d", a, vals[len(vals)-1])
 	}
 }

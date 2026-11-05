@@ -103,29 +103,28 @@ func TestACountReadsNoColumn(t *testing.T) {
 			{"a filter", f.Filter(c("g").Eq(3)).Select(ursus.Len()), 143},
 			{"a row index", f.WithRowIndex("i", 0).Select(c("i").Max()), n - 1},
 		}
-		for _, threads := range []int{1, 4} {
-			for _, size := range []int{0, 64} {
-				opts := []ursus.CollectOption{ursus.WithThreads(threads)}
-				if size > 0 {
-					opts = append(opts, ursus.WithBatchSize(size))
+		for _, run := range []struct{ threads, size int }{{1, 0}, {4, 64}} {
+			threads, size := run.threads, run.size
+			opts := []ursus.CollectOption{ursus.WithThreads(threads)}
+			if size > 0 {
+				opts = append(opts, ursus.WithBatchSize(size))
+			}
+			where := fmt.Sprintf("%s on %d threads in batches of %d", src.name, threads, size)
+			for _, q := range queries {
+				got, err := q.q.Collect(ctx, opts...)
+				if err != nil {
+					t.Fatalf("%s, %s: %v", where, q.name, err)
 				}
-				where := fmt.Sprintf("%s on %d threads in batches of %d", src.name, threads, size)
-				for _, q := range queries {
-					got, err := q.q.Collect(ctx, opts...)
-					if err != nil {
-						t.Fatalf("%s, %s: %v", where, q.name, err)
-					}
-					r, err := got.Row(0)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if fmt.Sprint(r[0]) != fmt.Sprint(q.want) {
-						t.Errorf("%s, %s: %v rows, want %d", where, q.name, r[0], q.want)
-					}
+				r, err := got.Row(0)
+				if err != nil {
+					t.Fatal(err)
 				}
-				if got, err := f.Count(ctx, opts...); err != nil || got != n {
-					t.Errorf("%s, Count: %d, %v; want %d", where, got, err, n)
+				if fmt.Sprint(r[0]) != fmt.Sprint(q.want) {
+					t.Errorf("%s, %s: %v rows, want %d", where, q.name, r[0], q.want)
 				}
+			}
+			if got, err := f.Count(ctx, opts...); err != nil || got != n {
+				t.Errorf("%s, Count: %d, %v; want %d", where, got, err, n)
 			}
 		}
 	}

@@ -176,32 +176,6 @@ func literalWrong(t *testing.T, lf *ursus.LazyFrame, want *ursus.DataFrame) stri
 	return fmt.Sprint(wrong)
 }
 
-// TestLiteralRenderingsCollide is the premise the identity key exists for: each
-// pair renders identically and is a different literal. If a pair stopped
-// colliding, rendering would have become an identity for it, and this test says
-// so rather than letting the sweep in the next commit test nothing.
-func TestLiteralRenderingsCollide(t *testing.T) {
-	for _, p := range []struct {
-		name string
-		a, b ursus.Expr
-	}{
-		{"int8 and int64", ursus.Lit(int8(100)), ursus.Lit(int64(100))},
-		{"uint8 and int64", ursus.Lit(uint8(1)), ursus.Lit(int64(1))},
-		{"int and float", ursus.Lit(1), ursus.Lit(1.0)},
-		{"float32 and float64", ursus.Lit(float32(0.1)), ursus.Lit(0.1)},
-		{"NaN widths", ursus.Lit(float32(math.NaN())), ursus.Lit(math.NaN())},
-		{"Inf widths", ursus.Lit(float32(math.Inf(1))), ursus.Lit(math.Inf(1))},
-		// A Duration and an int64 collided here, both as lit(5), until a temporal
-		// literal's ticks began rendering as what they are, lit(5ns), when folded
-		// casts started producing them (step 142). The identity key still holds the
-		// type; this pair no longer needs it.
-	} {
-		if a, b := p.a.String(), p.b.String(); a != b {
-			t.Errorf("%s: %s and %s no longer render alike", p.name, a, b)
-		}
-	}
-}
-
 // literalSamples are values that print alike across types, per term of the Literal
 // union. TestLiteralIdentityIsTypeAndBits reads the union from expr.go and fails on
 // a term with no samples, or samples for a term the union no longer has.

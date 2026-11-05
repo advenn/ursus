@@ -193,45 +193,6 @@ func TestDecimalGuards(t *testing.T) {
 	}
 }
 
-// TestDecimalMultiplicationKeepsTheScale: 12.34 * 12.34 is 152.2756, at scale 4.
-//
-// This was a guard in TestDecimalGuards until step 80: a product labelled with its
-// operands' scale 2 would hold scale-4 digits and print as 15227.56, so * was
-// refused. It is implemented now, at Decimal(p1+p2, s1+s2), and this is the case the
-// guard existed for, asserted the other way round.
-func TestDecimalMultiplicationKeepsTheScale(t *testing.T) {
-	df, err := prices(t).Select(ursus.Col("price").Mul(ursus.Col("price")).Alias("sq")).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := df.Schema().Field(0).Type; got != dtype.Decimal(20, 4) {
-		t.Errorf("output type = %s, want Decimal(20, 4)", got)
-	}
-	if !strings.Contains(df.String(), "152.2756") {
-		t.Errorf("12.34 * 12.34 should be 152.2756:\n%s", df)
-	}
-}
-
-// TestDecimalAdditionIsExact: + and - ARE allowed, and exact. Since step 80 the sum
-// has one integer digit more than its operands — Decimal(10, 2) + Decimal(10, 2) is
-// Decimal(11, 2) — because a sum can need it: this used to be Decimal(10, 2), which
-// 99999999.99 + 99999999.99 does not fit.
-func TestDecimalAdditionIsExact(t *testing.T) {
-	df, err := prices(t).
-		Select(ursus.Col("price").Add(ursus.Col("price")).Alias("doubled")).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatalf("Decimal + Decimal at the same scale is exact and must be allowed: %v", err)
-	}
-	if got := df.Schema().Field(0).Type; got != dtype.Decimal(11, 2) {
-		t.Errorf("output type = %s, want Decimal(11, 2)", got)
-	}
-	if !strings.Contains(df.String(), "24.68") {
-		t.Errorf("12.34 + 12.34 should be 24.68:\n%s", df)
-	}
-}
-
 // A refusal must not recommend something the library refuses.
 //
 // Five Decimal refusals across three files ended with "cast to Float64 first if

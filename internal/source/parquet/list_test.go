@@ -173,29 +173,6 @@ func sameRows(a, b []row) bool {
 	return true
 }
 
-// TestListRoundTripsEveryRowState is the state machine, end to end.
-//
-// The four states all have to be distinguishable, and two of them — an empty list
-// and a null list — append no elements and leave the offset unmoved. Only the
-// validity bit separates those, exactly as for an empty string against a null
-// string, and getting it wrong is one row quietly holding the wrong answer.
-func TestListRoundTripsEveryRowState(t *testing.T) {
-	want := []row{
-		{vals: []int64{10, 11}, ok: true},
-		{ok: true},                    // present but EMPTY
-		{ok: false},                   // NULL list
-		{vals: []int64{12}, ok: true}, // back to a normal row afterwards
-		{vals: []int64{0}, ok: true},  // a list holding a zero is not an empty list
-		{ok: true},                    // two empties in a row
-		{ok: true},
-		{vals: []int64{-1, -2, -3}, ok: true},
-	}
-	got := readLists(t, writeLists(t, want), 8192)
-	if !sameRows(got, want) {
-		t.Errorf("round trip changed the rows\n got: %+v\nwant: %+v", got, want)
-	}
-}
-
 // TestListSpansTheReadBlock is the case a fixture of short lists cannot produce.
 //
 // listCol refills its levels a block at a time and a row is closed only when the
@@ -225,13 +202,21 @@ func TestListSpansTheReadBlock(t *testing.T) {
 // TestListIsBatchSizeInvariant: batch size is a tuning knob, never a semantic one.
 // Small sizes split rows across batches, which is what exercises Concat's offset
 // shifting.
+//
+// The rows are the state machine, too: an empty list and a null list append no
+// elements and leave the offset unmoved, so only the validity bit separates them,
+// exactly as for an empty string against a null string, and getting it wrong is one
+// row quietly holding the wrong answer.
 func TestListIsBatchSizeInvariant(t *testing.T) {
 	want := []row{
 		{vals: []int64{1, 2}, ok: true},
-		{ok: true},
-		{ok: false},
-		{vals: []int64{3}, ok: true},
+		{ok: true},                   // present but EMPTY
+		{ok: false},                  // NULL list
+		{vals: []int64{3}, ok: true}, // back to a normal row afterwards
 		{vals: []int64{4, 5, 6}, ok: true},
+		{vals: []int64{0}, ok: true}, // a list holding a zero is not an empty list
+		{ok: true},                   // two empties in a row
+		{ok: true},
 	}
 	path := writeLists(t, want)
 	for _, size := range []int{1, 2, 3, 5, 8192} {

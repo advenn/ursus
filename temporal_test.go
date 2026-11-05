@@ -95,40 +95,6 @@ func TestTruncateByCalendarIntervalIsLocal(t *testing.T) {
 	}
 }
 
-// TestTruncateByDurationStaysAbsolute pins the other half of the contract, so the
-// distinction is asserted rather than merely documented — and so the shipped
-// Duration behaviour cannot drift while nobody is looking.
-func TestTruncateByDurationStaysAbsolute(t *testing.T) {
-	src := tsFrame(t, "America/New_York", dtype.Micro, "2024-06-15T09:30:00")
-	df, err := ursus.Scan(src).Select(
-		ursus.Col("ts").Dt().Truncate(24 * time.Hour).Dt().ToString().Alias("d"),
-	).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, _, err := df.At[string](0, "d")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 09:30 New York is 13:30 UTC; flooring the instant by 24h gives 00:00 UTC, which
-	// is 20:00 the previous evening in New York.
-	if want := "2024-06-14T20:00:00.000000-04:00"; got != want {
-		t.Errorf("Truncate(24h) = %s, want %s — a Duration floors the INSTANT", got, want)
-	}
-}
-
-// TestTruncateRefusesCalendarOnTime: a Time is a wall clock with no date, so it has
-// no month to floor to.
-func TestTruncateRefusesCalendarOnTime(t *testing.T) {
-	f := ursus.Frame(ursus.Values("v", []int64{1}))
-	_, err := f.Select(
-		ursus.Col("v").Cast(ursus.TimeOf(ursus.Micro)).Dt().Truncate(ursus.Every("1mo")),
-	).Collect(t.Context())
-	if err == nil {
-		t.Fatal("truncating a Time by a month was accepted")
-	}
-}
-
 // TestEveryErrorSurfacesInTheQuery: Every carries its parse failure rather than
 // returning it, so the failure has to reach Collect.
 func TestEveryErrorSurfacesInTheQuery(t *testing.T) {

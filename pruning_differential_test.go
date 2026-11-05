@@ -4,9 +4,9 @@ package ursus_test
 //
 // Pruning skips a row group when its statistics PROVE no row can match, and a
 // wrong proof is silent: the Filter above the scan still runs, so a skipped group
-// that held matching rows simply loses them. TestParquetPruningIsSound compares a
-// hand-picked list of predicates over integers and plain strings, with no nulls,
-// no NaN, no nested column, and none of I2–I5 (audit.md §5) was on it.
+// that held matching rows simply loses them. A hand-picked list of predicates over
+// integers and plain strings once checked this, with no nulls, no NaN, no nested
+// column, and none of I2–I5 (audit.md §5) on it.
 //
 // This derives its predicates from the data instead — every comparison at every
 // distinct value of every flat column, and just beyond each end, and at the values
