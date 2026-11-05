@@ -2,17 +2,17 @@ package ursus_test
 
 // The calendar (step 145): OffsetBy, Round, MonthStart, MonthEnd, IsLeapYear and
 // ConvertTimeZone, and the wall-clock reading they share with Truncate and
-// GroupByDynamic.
-//
-// The by-hand cases name each rule once, in a form a reader can check against a
-// calendar. The sweeps then hold the rules across every transition of six zones,
-// against an oracle that tries each offset a zone uses near a wall clock and knows
-// nothing of how the kernel reads one.
+// GroupByDynamic. Their answers are Polars 2.1.0's, recorded in the calendar group of
+// testdata/oracle and spelled in oracle_calendar_test.go since step 498, which took
+// this file's by-hand tables. What stays asserts the refusals; holds Round by a
+// time.Duration on a zoned column, the epoch's grid, to Go's time package, Polars'
+// round having no spelling for it; and sweeps the rules across every transition of
+// seven zones, against an oracle that tries each offset a zone uses near a wall clock
+// and knows nothing of how the kernel reads one.
 
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -66,62 +66,19 @@ func calColumn(t *testing.T, dt dtype.DataType, vals ...string) *ursus.LazyFrame
 	return ursus.Frame(data.NewFixed("ts", dt, ticks, valid.Finish()))
 }
 
-// calRender reads column ts of lf as calColumn writes its values, in the zone of the
-// type the column has.
-func calRender(t *testing.T, lf *ursus.LazyFrame) []string {
-	t.Helper()
-	schema, err := lf.CollectSchema(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	dt := schema.Field(0).Type
-	df, err := lf.Select(ursus.Col("ts").Cast(ursus.Int64)).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	col, err := df.Column[int64]("ts")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var loc *time.Location
-	if tz := dt.TimeZone(); tz != "" {
-		if loc, err = time.LoadLocation(tz); err != nil {
-			t.Fatal(err)
-		}
-	}
-	out := make([]string, col.Len())
-	for i := range out {
-		v, ok := col.Get(i)
-		if !ok {
-			out[i] = "null"
-			continue
-		}
-		tm, _ := dt.ToTime(v)
-		switch {
-		case dt.ID() == dtype.TypeDate:
-			out[i] = tm.Format(time.DateOnly)
-		case loc == nil:
-			out[i] = tm.Format("2006-01-02T15:04:05.999999999")
-		default:
-			out[i] = tm.In(loc).Format(time.RFC3339Nano)
-		}
-	}
-	return out
-}
-
 var (
-	ny      = dtype.Datetime(dtype.Micro, "America/New_York")
 	utcUs   = dtype.Datetime(dtype.Micro, "UTC")
 	naiveUs = dtype.Datetime(dtype.Micro, "")
 )
 
+// calCase is a question of column ts refused while the query is planned, its error
+// naming refuse.
 type calCase struct {
 	name   string
 	dt     dtype.DataType
 	in     []string
 	f      func(ursus.DtExpr) ursus.Expr
-	want   []string // or
-	refuse string   // a plan-time refusal naming this
+	refuse string
 }
 
 func runCalCases(t *testing.T, cases []calCase) {
@@ -129,70 +86,60 @@ func runCalCases(t *testing.T, cases []calCase) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			lf := calColumn(t, c.dt, c.in...).Select(c.f(ursus.Col("ts").Dt()).Alias("ts"))
-			if c.refuse != "" {
-				_, err := lf.CollectSchema(t.Context())
-				if err == nil || !strings.Contains(err.Error(), c.refuse) {
-					t.Fatalf("want a plan-time refusal naming %q, got %v", c.refuse, err)
-				}
-				assertUserError(t, lf, c.refuse)
-				return
+			_, err := lf.CollectSchema(t.Context())
+			if err == nil || !strings.Contains(err.Error(), c.refuse) {
+				t.Fatalf("want a plan-time refusal naming %q, got %v", c.refuse, err)
 			}
-			got := calRender(t, lf)
-			if !slices.Equal(got, c.want) {
-				t.Errorf("got  %v\nwant %v", got, c.want)
-			}
+			assertUserError(t, lf, c.refuse)
 		})
 	}
 }
 
-func TestOffsetByByHand(t *testing.T) {
-	month, year := ursus.Every("1mo"), ursus.Every("1y")
+// TestCalendarRefusals: what OffsetBy, MonthStart, Round, IsLeapYear and
+// ConvertTimeZone refuse while the query is planned.
+func TestCalendarRefusals(t *testing.T) {
+	nsTime := dtype.Time(dtype.Nano)
+	one := []string{"2024-01-01T00:00:00Z"}
 	runCalCases(t, []calCase{
-		// Months clamp to the end of the month, years too, and back as well.
-		{name: "a month after the 31st", dt: dtype.Date,
-			in:   []string{"2024-01-31", "2023-01-31", "2024-03-31", "null"},
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(month) },
-			want: []string{"2024-02-29", "2023-02-28", "2024-04-30", "null"}},
-		{name: "a year after the 29th of February", dt: dtype.Date,
-			in:   []string{"2024-02-29"},
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(year) },
-			want: []string{"2025-02-28"}},
-		{name: "a month before the 31st", dt: utcUs,
-			in:   []string{"2024-03-31T10:15:00Z"},
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(ursus.Every("-1mo")) },
-			want: []string{"2024-02-29T10:15:00Z"}},
-		{name: "a Date by days, and by a whole number of days as a Duration", dt: dtype.Date,
-			in:   []string{"2024-12-31"},
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(48 * time.Hour) },
-			want: []string{"2025-01-02"}},
-		{name: "a naive Datetime moves its wall clock", dt: naiveUs,
-			in:   []string{"2024-03-10T01:30:00"},
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(ursus.Every("1d2h")) },
-			want: []string{"2024-03-11T03:30:00"}},
-
-		// An hour is elapsed time, both spellings.
-		{name: "an hour across spring forward is elapsed time", dt: ny,
-			in:   []string{"2024-03-10T01:30:00-05:00"},
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(ursus.Every("1h")) },
-			want: []string{"2024-03-10T03:30:00-04:00"}},
-		{name: "minus ninety minutes", dt: ny,
-			in:   []string{"2024-03-10T03:30:00-04:00"},
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(-90 * time.Minute) },
-			want: []string{"2024-03-10T01:00:00-05:00"}},
-
-		// Refused while the query is planned.
 		{name: "an hour on a Date", dt: dtype.Date, in: []string{"2024-01-01"},
 			f:      func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(time.Hour) },
 			refuse: "finer than Date holds"},
-		{name: "a nanosecond on microseconds", dt: utcUs, in: []string{"2024-01-01T00:00:00Z"},
+		{name: "a nanosecond on microseconds", dt: utcUs, in: one,
 			f:      func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(time.Nanosecond) },
 			refuse: "finer than"},
-		{name: "a Time", dt: dtype.Time(dtype.Nano), in: nil,
+		{name: "offset_by of a Time", dt: nsTime,
 			f:      func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(time.Hour) },
 			refuse: "requires a Date or Datetime"},
-		{name: "an interval that does not parse", dt: utcUs, in: nil,
+		{name: "an interval that does not parse", dt: utcUs,
 			f:      func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(ursus.Every("1mo-1d")) },
 			refuse: "cannot parse interval"},
+		{name: "month_start of a Time", dt: nsTime,
+			f:      func(d ursus.DtExpr) ursus.Expr { return d.MonthStart() },
+			refuse: "requires a Date or Datetime"},
+		{name: "round of a Time", dt: nsTime,
+			f:      func(d ursus.DtExpr) ursus.Expr { return d.Round(time.Hour) },
+			refuse: "round is not defined for Time"},
+		{name: "a zero interval", dt: utcUs,
+			f:      func(d ursus.DtExpr) ursus.Expr { return d.Round(time.Duration(0)) },
+			refuse: "round needs a positive interval"},
+		{name: "round of a Duration column", dt: dtype.Duration(dtype.Nano),
+			f:      func(d ursus.DtExpr) ursus.Expr { return d.Round(time.Hour) },
+			refuse: "requires a Date, Time or Datetime"},
+		{name: "is_leap_year of a Duration column", dt: dtype.Duration(dtype.Nano), in: []string{"null"},
+			f:      func(d ursus.DtExpr) ursus.Expr { return d.IsLeapYear() },
+			refuse: "requires a Date or Datetime"},
+		{name: "convert_time_zone of a naive Datetime", dt: naiveUs,
+			f:      func(d ursus.DtExpr) ursus.Expr { return d.ConvertTimeZone("UTC") },
+			refuse: "requires a Datetime with a time zone"},
+		{name: "convert_time_zone of a Date", dt: dtype.Date,
+			f:      func(d ursus.DtExpr) ursus.Expr { return d.ConvertTimeZone("UTC") },
+			refuse: "requires a Datetime"},
+		{name: "an unknown zone", dt: utcUs,
+			f:      func(d ursus.DtExpr) ursus.Expr { return d.ConvertTimeZone("Mars/Olympus_Mons") },
+			refuse: "not known"},
+		{name: "no zone", dt: utcUs,
+			f:      func(d ursus.DtExpr) ursus.Expr { return d.ConvertTimeZone("") },
+			refuse: "needs a time zone"},
 	})
 }
 
@@ -221,197 +168,38 @@ func TestOffsetByPastTheRangeIsRefused(t *testing.T) {
 	}
 }
 
-func TestMonthStartAndEndByHand(t *testing.T) {
-	start := func(d ursus.DtExpr) ursus.Expr { return d.MonthStart() }
-	end := func(d ursus.DtExpr) ursus.Expr { return d.MonthEnd() }
-	tokyo := dtype.Datetime(dtype.Micro, "Asia/Tokyo")
-	runCalCases(t, []calCase{
-		{name: "dates", dt: dtype.Date, f: start,
-			in:   []string{"2024-02-10", "2023-12-31", "null"},
-			want: []string{"2024-02-01", "2023-12-01", "null"}},
-		{name: "dates, the end", dt: dtype.Date, f: end,
-			in:   []string{"2024-02-10", "2023-02-10", "1900-02-01", "2000-02-01"},
-			want: []string{"2024-02-29", "2023-02-28", "1900-02-28", "2000-02-29"}},
-		{name: "the time of day is kept", dt: utcUs, f: start,
-			in:   []string{"2024-02-10T13:45:01.5Z"},
-			want: []string{"2024-02-01T13:45:01.5Z"}},
-		// 2024-01-31T20:00Z is February 1st in Tokyo: its month is February.
-		{name: "the month is the zone's", dt: tokyo, f: end,
-			in:   []string{"2024-01-31T20:00:00Z"},
-			want: []string{"2024-02-29T05:00:00+09:00"}},
-		{name: "a Time", dt: dtype.Time(dtype.Nano), f: start,
-			refuse: "requires a Date or Datetime"},
-	})
-}
-
-func TestIsLeapYear(t *testing.T) {
-	lf := calColumn(t, dtype.Date, "1900-06-01", "2000-06-01", "2023-06-01", "2024-06-01",
-		"2100-06-01", "0004-06-01", "null")
-	df, err := lf.Select(ursus.Col("ts").Dt().IsLeapYear()).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := df.Column[bool]("ts")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"false", "true", "false", "true", "false", "true", "null"}
-	for i, w := range want {
-		v, ok := got.Get(i)
-		s := fmt.Sprint(v)
-		if !ok {
-			s = "null"
+// TestRoundByADurationIsTheEpochsGrid: Round by a time.Duration rounds on the epoch's
+// grid, where an Interval rounds on the zone's wall clock (Round's doc), so an hour at
+// Kolkata's +05:30 lands on the half hour. Polars' round has no spelling for the
+// epoch's grid on a zoned column; the oracle is Go's time package: the floor, on the
+// epoch's grid of the step, of the instant plus half the step.
+func TestRoundByADurationIsTheEpochsGrid(t *testing.T) {
+	stamps := []string{"2024-06-01T05:17:00Z", "2024-03-10T06:40:00Z", "2024-11-03T05:50:00Z", "2024-04-06T15:20:00Z",
+		"1969-12-31T22:50:00Z", "2024-01-01T00:45:00.5Z"}
+	floorDiv := func(a, b int64) int64 {
+		q := a / b
+		if a%b != 0 && (a < 0) != (b < 0) {
+			q--
 		}
-		if s != w {
-			t.Errorf("row %d: %s, want %s", i, s, w)
-		}
+		return q
 	}
-
-	// The year is the zone's: the last half hour of 2024 in UTC is 2025 in Tokyo.
-	for zone, want := range map[string]bool{"UTC": true, "Asia/Tokyo": false} {
-		df, err := calColumn(t, dtype.Datetime(dtype.Micro, zone), "2024-12-31T23:30:00Z").
-			Select(ursus.Col("ts").Dt().IsLeapYear()).Collect(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, _ := df.Column[bool]("ts")
-		if v, _ := got.Get(0); v != want {
-			t.Errorf("%s: %v, want %v", zone, v, want)
-		}
-	}
-	assertUserError(t, calColumn(t, dtype.Duration(dtype.Nano), "null").
-		Select(ursus.Col("ts").Dt().IsLeapYear()), "requires a Date or Datetime")
-}
-
-func TestRoundByHand(t *testing.T) {
-	round := func(every any) func(ursus.DtExpr) ursus.Expr {
-		return func(d ursus.DtExpr) ursus.Expr {
-			if iv, ok := every.(ursus.Interval); ok {
-				return d.Round(iv)
+	for _, zone := range []string{"Asia/Kolkata", "America/New_York", "Australia/Lord_Howe"} {
+		dt := dtype.Datetime(dtype.Micro, zone)
+		for _, every := range []time.Duration{time.Hour, 90 * time.Minute, 15 * time.Minute} {
+			got := typedCells[int64](t, calColumn(t, dt, stamps...).Select(ursus.Col("ts").Dt().Round(every).Cast(ursus.Int64)))
+			want := make([]any, len(stamps))
+			for i, s := range stamps {
+				tm, err := time.Parse(time.RFC3339Nano, s)
+				if err != nil {
+					t.Fatal(err)
+				}
+				step := every.Microseconds()
+				want[i] = floorDiv(tm.UnixMicro()+step/2, step) * step
 			}
-			return d.Round(every.(time.Duration))
+			if !sameCells(got, want) {
+				t.Errorf("%s round %s: got %v, want %v", zone, every, got, want)
+			}
 		}
-	}
-	kolkata := dtype.Datetime(dtype.Micro, "Asia/Kolkata")
-	runCalCases(t, []calCase{
-		// Halfway rounds up, and only halfway.
-		{name: "fifteen minutes", dt: utcUs, f: round(15 * time.Minute),
-			in:   []string{"2024-01-01T10:07:30Z", "2024-01-01T10:07:29.999999Z", "null"},
-			want: []string{"2024-01-01T10:15:00Z", "2024-01-01T10:00:00Z", "null"}},
-		{name: "before the epoch", dt: naiveUs, f: round(ursus.Every("1h")),
-			in:   []string{"1969-12-31T23:30:00", "1969-12-31T23:29:59"},
-			want: []string{"1970-01-01T00:00:00", "1969-12-31T23:00:00"}},
-		// A month's middle depends on its length: February 2024 has 29 days, so its
-		// middle is the 15th at noon, and January's the 16th at noon.
-		{name: "a month", dt: utcUs, f: round(ursus.Every("1mo")),
-			in:   []string{"2024-02-15T12:00:00Z", "2024-02-15T11:59:59Z"},
-			want: []string{"2024-03-01T00:00:00Z", "2024-02-01T00:00:00Z"}},
-		{name: "a month, on dates", dt: dtype.Date, f: round(ursus.Every("1mo")),
-			in:   []string{"2024-01-16", "2024-01-17", "2023-02-15"},
-			want: []string{"2024-01-01", "2024-02-01", "2023-03-01"}},
-		// The wall clock's hour for an Interval, the epoch's for a Duration, as
-		// Truncate.
-		{name: "the local hour at +05:30", dt: kolkata, f: round(ursus.Every("1h")),
-			in:   []string{"2024-06-01T10:47:00+05:30"},
-			want: []string{"2024-06-01T11:00:00+05:30"}},
-		{name: "the epoch's hour at +05:30", dt: kolkata, f: round(time.Hour),
-			in:   []string{"2024-06-01T10:47:00+05:30"},
-			want: []string{"2024-06-01T10:30:00+05:30"}},
-
-		{name: "a Time", dt: dtype.Time(dtype.Nano), f: round(time.Hour),
-			refuse: "round is not defined for Time"},
-		{name: "a zero interval", dt: utcUs, f: round(time.Duration(0)),
-			refuse: "round needs a positive interval"},
-		{name: "a Duration column", dt: dtype.Duration(dtype.Nano), f: round(time.Hour),
-			refuse: "requires a Date, Time or Datetime"},
-	})
-}
-
-func TestConvertTimeZone(t *testing.T) {
-	lf := calColumn(t, utcUs, "2024-06-01T09:00:00Z", "null").
-		Select(ursus.Col("ts").Dt().ConvertTimeZone("Asia/Tokyo").Alias("ts"))
-	if got := calRender(t, lf); !slices.Equal(got, []string{"2024-06-01T18:00:00+09:00", "null"}) {
-		t.Errorf("got %v", got)
-	}
-	schema, err := lf.CollectSchema(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := schema.Field(0).Type, dtype.Datetime(dtype.Micro, "Asia/Tokyo"); got != want {
-		t.Errorf("the type is %s, want %s", got, want)
-	}
-	// Components follow the new zone, and the instants do not move.
-	df, err := lf.Select(ursus.Col("ts").Dt().Hour().Alias("h"),
-		ursus.Col("ts").Dt().ConvertTimeZone("UTC").Cast(ursus.Int64).Alias("t")).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, _ := df.Column[int32]("h")
-	if v, _ := h.Get(0); v != 18 {
-		t.Errorf("the hour in Tokyo is %d, want 18", v)
-	}
-	ticks, _ := df.Column[int64]("t")
-	if v, _ := ticks.Get(0); v != time.Date(2024, 6, 1, 9, 0, 0, 0, time.UTC).UnixMicro() {
-		t.Errorf("the instant moved: %d", v)
-	}
-
-	for _, c := range []struct {
-		name string
-		dt   dtype.DataType
-		tz   string
-		want string
-	}{
-		{"a naive Datetime", naiveUs, "UTC", "requires a Datetime with a time zone"},
-		{"a Date", dtype.Date, "UTC", "requires a Datetime"},
-		{"an unknown zone", utcUs, "Mars/Olympus_Mons", "not known"},
-		{"no zone", utcUs, "", "needs a time zone"},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			assertUserError(t, calColumn(t, c.dt).Select(ursus.Col("ts").Dt().ConvertTimeZone(c.tz)), c.want)
-		})
-	}
-}
-
-// TestADayStartsWhereItsMidnightDoesNotExist: Santiago's 2024-09-08 and Havana's
-// 2024-03-10 begin at 01:00, and Asunción's October 2023 too. Truncate and
-// GroupByDynamic put the start of each at 23:00 the day before, a whole day off,
-// until step 145.
-func TestADayStartsWhereItsMidnightDoesNotExist(t *testing.T) {
-	santiago := dtype.Datetime(dtype.Micro, "America/Santiago")
-	runCalCases(t, []calCase{
-		{name: "Santiago, a day", dt: santiago,
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.Truncate(ursus.Every("1d")) },
-			in:   []string{"2024-09-08T10:00:00-03:00"},
-			want: []string{"2024-09-08T01:00:00-03:00"}},
-		{name: "Havana, a day", dt: dtype.Datetime(dtype.Micro, "America/Havana"),
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.Truncate(ursus.Every("1d")) },
-			in:   []string{"2024-03-10T10:00:00-04:00"},
-			want: []string{"2024-03-10T01:00:00-04:00"}},
-		{name: "Asunción, a month", dt: dtype.Datetime(dtype.Micro, "America/Asuncion"),
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.Truncate(ursus.Every("1mo")) },
-			in:   []string{"2023-10-15T10:00:00-03:00"},
-			want: []string{"2023-10-01T01:00:00-03:00"}},
-	})
-
-	// The windows of a day: the row at 23:30 on the 7th is the 7th's.
-	df, err := calColumn(t, santiago,
-		"2024-09-07T12:00:00-04:00", "2024-09-07T23:30:00-04:00", "2024-09-08T12:00:00-03:00").
-		GroupByDynamic(ursus.Col("ts"), ursus.DynamicOptions{Every: ursus.Every("1d")}).
-		Agg(ursus.Len().Alias("n")).
-		Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	starts := calRender(t, df.Lazy().Select(ursus.Col("ts")))
-	n, _ := df.Column[uint64]("n")
-	var got []string
-	for i, s := range starts {
-		v, _ := n.Get(i)
-		got = append(got, fmt.Sprintf("%s n=%d", s, v))
-	}
-	want := []string{"2024-09-07T00:00:00-04:00 n=2", "2024-09-08T01:00:00-03:00 n=1"}
-	if !slices.Equal(got, want) {
-		t.Errorf("windows\n got %v\nwant %v", got, want)
 	}
 }
 

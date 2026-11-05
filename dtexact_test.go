@@ -8,7 +8,10 @@ package ursus_test
 // either a whole number of seconds or a whole fraction of one.
 //
 // The expected values come from Go's own time package rather than from the same
-// arithmetic written twice.
+// arithmetic written twice. At the units Polars has, milliseconds and finer, the same
+// questions are Polars 2.1.0's answers, recorded in the dtexact group of
+// testdata/oracle and spelled in oracle_dtexact_test.go since step 498; Datetime(s)
+// and Duration(s), which Polars has not, stay here.
 
 import (
 	"testing"
@@ -73,7 +76,9 @@ func TestEpochSurvivesEveryTemporalUnit(t *testing.T) {
 
 // TestTotalsSurviveAThreeCenturySpan: Duration(s) totals multiplied up to nanoseconds
 // first, so a span past 292 years wrapped — and 292 years is exactly what
-// Datetime(s) - Datetime(s) legitimately produces.
+// Datetime(s) - Datetime(s) legitimately produces. Polars has no Duration of seconds
+// (the dtexact group holds the span in milliseconds); each total here is the quotient
+// of the seconds by the unit's.
 func TestTotalsSurviveAThreeCenturySpan(t *testing.T) {
 	const secs = 9_467_280_000 // 109575 days
 	df, err := ursus.Frame(ursus.Values("n", []int64{secs, 86_400, 0, -secs})).
@@ -100,33 +105,27 @@ func TestTotalsSurviveAThreeCenturySpan(t *testing.T) {
 }
 
 // TestTotalsStillFloorTowardsZeroAtEveryUnit pins what the multiply was there for: a
-// coarse total of a fine span must not be computed by flooring twice.
+// coarse total of a fine span must not be computed by flooring twice. Ninety minutes
+// at a second's resolution, Go's time.Duration the oracle; the finer units, which
+// Polars has, are the dtexact group's totals_90min cases.
 func TestTotalsStillFloorTowardsZeroAtEveryUnit(t *testing.T) {
-	// 90 minutes, expressed at each resolution.
-	spans := map[ursus.TimeUnit]int64{
-		ursus.Second: 5400,
-		ursus.Milli:  5400_000,
-		ursus.Micro:  5400_000_000,
-		ursus.Nano:   5400_000_000_000,
+	span := 90 * time.Minute
+	df, err := ursus.Frame(ursus.Values("n", []int64{int64(span / time.Second)})).
+		Select(
+			ursus.Col("n").Cast(ursus.Duration(ursus.Second)).Dt().TotalDays().Alias("d"),
+			ursus.Col("n").Cast(ursus.Duration(ursus.Second)).Dt().TotalHours().Alias("h"),
+			ursus.Col("n").Cast(ursus.Duration(ursus.Second)).Dt().TotalMinutes().Alias("m"),
+		).Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
 	}
-	for u, ticks := range spans {
-		df, err := ursus.Frame(ursus.Values("n", []int64{ticks})).
-			Select(
-				ursus.Col("n").Cast(ursus.Duration(u)).Dt().TotalDays().Alias("d"),
-				ursus.Col("n").Cast(ursus.Duration(u)).Dt().TotalHours().Alias("h"),
-				ursus.Col("n").Cast(ursus.Duration(u)).Dt().TotalMinutes().Alias("m"),
-			).Collect(t.Context())
+	for name, want := range map[string]int64{"d": int64(span.Hours()) / 24, "h": int64(span.Hours()), "m": int64(span.Minutes())} {
+		c, err := df.Column[int64](name)
 		if err != nil {
-			t.Fatalf("%s: %v", u, err)
+			t.Fatal(err)
 		}
-		for name, want := range map[string]int64{"d": 0, "h": 1, "m": 90} {
-			c, err := df.Column[int64](name)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if v, _ := c.Get(0); v != want {
-				t.Errorf("90 minutes at %s: %s = %d, want %d", u, name, v, want)
-			}
+		if v, _ := c.Get(0); v != want {
+			t.Errorf("90 minutes at seconds: %s = %d, want %d", name, v, want)
 		}
 	}
 }
