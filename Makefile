@@ -91,9 +91,8 @@ levels:
 	$(GO) run ./internal/gen/levels
 
 # The public API against the last tag's (step 401): a feature api/<newest tag>.txt
-# lists that this tree no longer has is a break, and fails the check unless a Breaks
-# section of the CHANGELOG's unreleased versions names it. A tag's list is written at
-# the commit tagged, as it is cut: make api-tag TAG=v0.8.0.
+# lists that this tree no longer has fails the check: the API is stable (step 494). A
+# tag's list is written at the commit tagged, as it is cut: make api-tag TAG=v0.8.0.
 .PHONY: api api-tag
 api:
 	$(GO) run ./internal/gen/api -check
