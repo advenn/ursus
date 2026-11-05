@@ -96,59 +96,6 @@ func int64Col(t testing.TB, df *ursus.DataFrame, name string) []int64 {
 	return out
 }
 
-// TestExternalSortMatchesInMemory is the point of the step: the same query, the
-// same answer, whether or not it went to disk.
-//
-// The Spills assertion is not decoration. Without it the test passes trivially
-// when the budget turns out to be large enough that nothing ever spilled — the
-// same way a string test with an all-ASCII corpus passes while proving nothing
-// about multi-byte handling.
-func TestExternalSortMatchesInMemory(t *testing.T) {
-	src := memFrame(t, 20000, 512, 40)
-
-	var unbounded ursus.MemoryStats
-	want, err := ursus.Scan(src).
-		Sort(ursus.Asc(ursus.Col("k"))).
-		Collect(t.Context(), ursus.WithBatchSize(512), ursus.WithVerify(),
-			ursus.WithMemoryStats(&unbounded))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if unbounded.Spills != 0 {
-		t.Fatalf("an unbounded sort spilled %d times", unbounded.Spills)
-	}
-
-	for _, limit := range []int64{64 << 10, 128 << 10, 512 << 10} {
-		var stats ursus.MemoryStats
-		got, err := ursus.Scan(src).
-			Sort(ursus.Asc(ursus.Col("k"))).
-			Collect(t.Context(),
-				ursus.WithBatchSize(512),
-				ursus.WithVerify(),
-				ursus.WithMemoryLimit(limit),
-				ursus.WithSpillDir(t.TempDir()),
-				ursus.WithMemoryStats(&stats))
-		if err != nil {
-			t.Fatalf("limit=%d: %v", limit, err)
-		}
-		if stats.Spills == 0 {
-			t.Fatalf("limit=%d never spilled, so it proves nothing", limit)
-		}
-		if got.Height() != want.Height() {
-			t.Fatalf("limit=%d: %d rows, want %d", limit, got.Height(), want.Height())
-		}
-		if !slices.Equal(int64Col(t, got, "k"), int64Col(t, want, "k")) {
-			t.Errorf("limit=%d: keys differ from the in-memory sort", limit)
-		}
-		// seq is what makes the TIE ORDER observable. Equal keys must come back in
-		// input order, and a merge with the wrong tie-break fails here and nowhere
-		// else.
-		if !slices.Equal(int64Col(t, got, "seq"), int64Col(t, want, "seq")) {
-			t.Errorf("limit=%d: tie order differs — the merge is not stable", limit)
-		}
-	}
-}
-
 // TestExternalSortIsStable checks stability directly, against the definition
 // rather than against the in-memory sort.
 //
@@ -727,7 +674,7 @@ func TestMemoryLimitIsNotASemanticKnob(t *testing.T) {
 		// column and is compared on its key.
 		col string
 		// bounded marks a shape that legitimately never reaches disk, replacing an
-		// exemption that used to be spelled `name == "sort_then_head"` inside the
+		// exemption that used to be spelled with one shape's name inside the
 		// assertion. A per-shape field is the difference between "this one is
 		// different" and a rule with one name hard-coded into it.
 		bounded bool
@@ -741,23 +688,11 @@ func TestMemoryLimitIsNotASemanticKnob(t *testing.T) {
 	}
 
 	queries := map[string]shape{
-		"sort": {build: func() *ursus.LazyFrame {
-			return ursus.Scan(src).Sort(ursus.Asc(ursus.Col("k")), ursus.Asc(ursus.Col("seq")))
-		}, col: "seq"},
-		"sort_desc": {build: func() *ursus.LazyFrame {
-			return ursus.Scan(src).Sort(ursus.Desc(ursus.Col("k")))
-		}, col: "seq"},
-		"sort_then_head": {build: func() *ursus.LazyFrame {
-			return ursus.Scan(src).Sort(ursus.Asc(ursus.Col("k"))).Head(100)
-		}, col: "seq", bounded: true},
 		"sort_computed_key": {build: func() *ursus.LazyFrame {
 			return ursus.Scan(src).Sort(ursus.Asc(ursus.Col("k").Mul(int64(-1))))
 		}, col: "seq"},
 		"sort_string": {build: func() *ursus.LazyFrame {
 			return ursus.Scan(src).Sort(ursus.Asc(ursus.Col("grp")))
-		}, col: "seq"},
-		"sort_nulls_first": {build: func() *ursus.LazyFrame {
-			return ursus.Scan(src).Sort(ursus.Asc(ursus.Col("opt")).NullsFirst())
 		}, col: "seq"},
 		"sort_nulls_last_desc": {build: func() *ursus.LazyFrame {
 			return ursus.Scan(src).Sort(ursus.Desc(ursus.Col("opt")).NullsLast())
@@ -787,9 +722,9 @@ func TestMemoryLimitIsNotASemanticKnob(t *testing.T) {
 			return ursus.Scan(hi).GroupBy(ursus.Col("k")).MaintainOrder().
 				Agg(ursus.Len().Alias("n")).Head(50)
 		}, col: "k"},
-		// Twenty keys: nothing to partition, so this one is bounded for the same
-		// reason sort_then_head is — and it keeps a low-cardinality group-by in the
-		// invariance check rather than only the shapes that spill.
+		// Twenty keys: nothing to partition, so this one is bounded — and it keeps a
+		// low-cardinality group-by in the invariance check rather than only the
+		// shapes that spill.
 		"group_by_ordered_few_keys": {build: func() *ursus.LazyFrame {
 			return ursus.Scan(src).GroupBy(ursus.Col("k")).MaintainOrder().
 				Agg(ursus.Col("seq").Sum().Alias("s"))

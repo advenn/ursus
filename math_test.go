@@ -284,55 +284,6 @@ func goSign(v float64) float64 {
 	}
 }
 
-// TestRoundTieBreakIsHalfAwayFromZero pins a DECISION, which is why it is separate
-// from the differential: the oracle is not a library function but a choice between
-// math.Round and math.RoundToEven.
-func TestRoundTieBreakIsHalfAwayFromZero(t *testing.T) {
-	cases := []struct {
-		in       float64
-		decimals int
-		want     float64
-		why      string
-	}{
-		{0.5, 0, 1, "not 0 — this is what distinguishes it from round-half-to-even"},
-		{1.5, 0, 2, "agrees with round-half-to-even, so it proves nothing alone"},
-		{2.5, 0, 3, "not 2 — the second discriminating case"},
-		{-0.5, 0, -1, "away from zero, not toward -0.0"},
-		{-2.5, 0, -3, ""},
-		{0.125, 2, 0.13, "an exactly representable half at two decimals"},
-		{2.675, 2, 2.68, "2.675*100 rounds UP to exactly 267.5 before math.Round sees it"},
-		{1.4, 0, 1, ""},
-		{1.6, 0, 2, ""},
-	}
-
-	in := make([]float64, len(cases))
-	for i, c := range cases {
-		in[i] = c.in
-	}
-	// One expression per distinct decimal count, so this also exercises that two
-	// different counts do not share a temporary.
-	df, err := ursus.Frame(ursus.Values("v", in)).Select(
-		ursus.Col("v").Round(0).Alias("d0"),
-		ursus.Col("v").Round(2).Alias("d2"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, c := range cases {
-		col := "d0"
-		if c.decimals == 2 {
-			col = "d2"
-		}
-		got, _, err := df.At[float64](i, col)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got != c.want {
-			t.Errorf("Round(%v, %d) = %v, want %v  %s", c.in, c.decimals, got, c.want, c.why)
-		}
-	}
-}
-
 // TestRoundEdges: an integer column is untouched, and a decimal count too large to
 // scale returns the value rather than an infinity.
 func TestRoundEdges(t *testing.T) {

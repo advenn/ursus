@@ -60,9 +60,12 @@ func aggFamilies(t *testing.T, n int) map[string]struct {
 	f64 := make([]float64, n)
 	strs := make([]string, n)
 	bools := bitmap.NewBuilder(n)
+	// The empty string and a word of more bytes than letters among them: a
+	// string-carrying accumulator's merge concatenates its rows' bytes.
+	words := []string{"alpha", "beta", "", "delta", "épée", "zzz"}
 	for i := range n {
 		f64[i] = float64((i * 13) % 11)
-		strs[i] = string(rune('a' + (i*5)%6))
+		strs[i] = words[(i*5)%6]
 		bools.Append(i%3 != 0)
 	}
 

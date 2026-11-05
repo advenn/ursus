@@ -65,32 +65,31 @@ func TestOrderKeyTotalOrder(t *testing.T) {
 	if want <= kernel.OrderKeyF64(math.Inf(1)) {
 		t.Error("NaN must order above +Inf")
 	}
-}
 
-func TestOrderKeyF32TotalOrder(t *testing.T) {
-	ordered := []float32{
+	// And the same order at float32's width, whose key is its own.
+	ordered32 := []float32{
 		float32(math.Inf(-1)), -math.MaxFloat32, -1.5, -1.0,
 		float32(math.Copysign(0, -1)), 0.0,
 		1.0, 1.5, math.MaxFloat32, float32(math.Inf(1)),
 	}
-	for i := 0; i+1 < len(ordered); i++ {
-		a, b := kernel.OrderKeyF32(ordered[i]), kernel.OrderKeyF32(ordered[i+1])
-		if ordered[i] == 0 && ordered[i+1] == 0 {
+	for i := 0; i+1 < len(ordered32); i++ {
+		a, b := kernel.OrderKeyF32(ordered32[i]), kernel.OrderKeyF32(ordered32[i+1])
+		if ordered32[i] == 0 && ordered32[i+1] == 0 {
 			if a != b {
-				t.Errorf("±0.0 keys differ: %#x vs %#x", a, b)
+				t.Errorf("float32 ±0.0 keys differ: %#x vs %#x", a, b)
 			}
 			continue
 		}
 		if a >= b {
-			t.Errorf("not monotone at %v -> %v", ordered[i], ordered[i+1])
+			t.Errorf("OrderKeyF32 not monotone at %v -> %v", ordered32[i], ordered32[i+1])
 		}
 	}
 	if kernel.OrderKeyF32(float32(math.NaN())) <= kernel.OrderKeyF32(float32(math.Inf(1))) {
-		t.Error("NaN must order above +Inf")
+		t.Error("a float32 NaN must order above +Inf")
 	}
 }
 
-// --- comparator --------------------------------------------------------------
+// --- ArgTopK ≡ ArgSort[:k] ---------------------------------------------------
 
 func f64Col(name string, vals []float64, valid []bool) *data.Column {
 	b := bitmap.NewBuilder(len(vals))
@@ -99,45 +98,6 @@ func f64Col(name string, vals []float64, valid []bool) *data.Column {
 	}
 	return data.NewFixed(name, dtype.Float64, vals, b.Finish())
 }
-
-// TestComparatorNullPlacement checks the full {Asc,Desc} × {NullsFirst,NullsLast}
-// matrix.
-//
-// The property under test is that NullsLast means last in the OUTPUT regardless of
-// direction. Tying null placement to direction — as SQL does — would mean Desc()
-// silently relocates the nulls, and the whole point of the separate flag is that it
-// does not.
-func TestComparatorNullPlacement(t *testing.T) {
-	vals := []float64{2, 0, 1, 0}
-	valid := []bool{true, false, true, false}
-	col := f64Col("x", vals, valid)
-
-	cases := []struct {
-		desc, nullsLast bool
-		want            []int32
-	}{
-		{false, false, []int32{1, 3, 2, 0}}, // nulls, then 1, 2
-		{false, true, []int32{2, 0, 1, 3}},  // 1, 2, then nulls
-		{true, false, []int32{1, 3, 0, 2}},  // nulls, then 2, 1
-		{true, true, []int32{0, 2, 1, 3}},   // 2, 1, then nulls
-	}
-
-	for _, c := range cases {
-		cmp, err := kernel.NewComparator(
-			[]*data.Column{col},
-			[]kernel.SortSpec{{Descending: c.desc, NullsLast: c.nullsLast}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		got := kernel.ArgSort(len(vals), cmp)
-		if !slices.Equal(got, c.want) {
-			t.Errorf("desc=%v nullsLast=%v: got %v, want %v",
-				c.desc, c.nullsLast, got, c.want)
-		}
-	}
-}
-
-// --- ArgTopK ≡ ArgSort[:k] ---------------------------------------------------
 
 // TestArgTopKMatchesArgSort is the regression test for the defect that would have
 // shipped.

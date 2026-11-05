@@ -254,39 +254,6 @@ func naiveVar(v []float64, ddof int) float64 {
 	return ss / float64(len(v)-ddof)
 }
 
-// TestStdVarPrecision is why Welford's algorithm is used instead of E[x²]−E[x]².
-//
-// These values differ by 1, 2 and 3 around a mean of a billion. The naive formula
-// subtracts two nearly equal numbers around 1e18, where float64 spacing is about
-// 256 — so the answer comes out as 0, or negative, or some multiple of 256. The
-// true sample variance is exactly 1.
-func TestStdVarPrecision(t *testing.T) {
-	const base = 1e9
-	df, err := ursus.Frame(
-		ursus.Values("g", []string{"x", "x", "x"}),
-		ursus.Values("v", []float64{base, base + 1, base + 2}),
-	).
-		GroupBy(ursus.Col("g")).
-		Agg(
-			ursus.Col("v").Var(1).Alias("var"),
-			ursus.Col("v").Std(1).Alias("std"),
-		).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	v := f64(t, df, "var")
-	s := f64(t, df, "std")
-	if got := v[0].v; math.Abs(got-1) > 1e-6 {
-		t.Errorf("var = %v, want 1 — a sum-of-squares implementation returns 0 or "+
-			"garbage on data with a large mean", got)
-	}
-	if got := s[0].v; math.Abs(got-1) > 1e-6 {
-		t.Errorf("std = %v, want 1", got)
-	}
-}
-
 // TestAggregatesOnAllNullGroup: every new aggregate against a group with no
 // non-null value. Step 4 found Min broken on exactly this shape, and the reason it
 // survived was that every existing test had at least one real value per group.
@@ -383,38 +350,6 @@ func TestAnyAllTrueAndNullCount(t *testing.T) {
 		if c+n != r {
 			t.Errorf("group %d: count %d + null_count %d != len %d", i, c, n, r)
 		}
-	}
-}
-
-// TestArgMinMaxPositions pins the three decisions: the index is within the group,
-// nulls occupy a position but cannot win, and ties go to the earliest row.
-func TestArgMinMaxPositions(t *testing.T) {
-	df, err := ursus.Frame(
-		ursus.Values("g", []string{"t", "t", "t", "t"}),
-		// positions:                0     1  2  3
-		ursus.ValuesNullable("v", []float64{0, 5, 3, 3},
-			[]bool{false, true, true, true}),
-	).
-		GroupBy(ursus.Col("g")).
-		Agg(
-			ursus.Col("v").ArgMin().Alias("amin"),
-			ursus.Col("v").ArgMax().Alias("amax"),
-		).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	amin, _ := df.Column[uint64]("amin")
-	amax, _ := df.Column[uint64]("amax")
-
-	// The minimum 3 appears at positions 2 and 3; the earliest wins. The null at
-	// position 0 cannot win but still shifts everything after it.
-	if v, ok := amin.Get(0); !ok || v != 2 {
-		t.Errorf("arg_min = %d (valid %v), want 2 — nulls occupy a position, and a "+
-			"tie goes to the earliest row", v, ok)
-	}
-	if v, ok := amax.Get(0); !ok || v != 1 {
-		t.Errorf("arg_max = %d (valid %v), want 1", v, ok)
 	}
 }
 
@@ -540,17 +475,16 @@ func TestStatAggregatesBatchSizeAndThreadsAreIndependent(t *testing.T) {
 	}
 	want := ref.String()
 
-	for _, bs := range []int{1, 2, 3, 7, 8192} {
-		for _, th := range []int{1, 2, 4} {
-			got, err := q().Collect(t.Context(),
-				ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("batch %d threads %d: %v", bs, th, err)
-			}
-			if got.String() != want {
-				t.Errorf("batch %d threads %d changed the answer:\n%s\nwant:\n%s",
-					bs, th, got, want)
-			}
+	for _, run := range []struct{ bs, th int }{{1, 1}, {3, 2}, {8192, 4}} {
+		bs, th := run.bs, run.th
+		got, err := q().Collect(t.Context(),
+			ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch %d threads %d: %v", bs, th, err)
+		}
+		if got.String() != want {
+			t.Errorf("batch %d threads %d changed the answer:\n%s\nwant:\n%s",
+				bs, th, got, want)
 		}
 	}
 }

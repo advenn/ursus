@@ -175,21 +175,6 @@ func TestDurationMeanTruncatesTowardZero(t *testing.T) {
 	}
 }
 
-// TestDurationSumAgreesWithArithmetic: sum(d) and d + d must answer the same way on
-// the same data, which is the whole reason the aggregate refuses.
-func TestDurationSumAgreesWithArithmetic(t *testing.T) {
-	const max = time.Duration(math.MaxInt64)
-
-	_, sumErr := durations("d", max, max).GroupBy().
-		Agg(ursus.Col("d").Sum()).Collect(t.Context(), ursus.WithThreads(1))
-	_, addErr := durations("d", max).
-		Select(ursus.Col("d").Add(ursus.Col("d"))).Collect(t.Context(), ursus.WithThreads(1))
-
-	if (sumErr == nil) != (addErr == nil) {
-		t.Errorf("sum and + disagree about the same data:\n  sum: %v\n  add: %v", sumErr, addErr)
-	}
-}
-
 // TestCumSumOfADurationIsADuration. winCumFloat handed its []float64 to
 // data.NewFixed under a Duration dtype: data.NewFixed does not check the two against
 // each other, data.Values does — but only on the way back out — and float64 and

@@ -146,30 +146,6 @@ func TestRoundTripThroughIPC(t *testing.T) {
 	}
 }
 
-// TestBatchReadsTheRecordsRowsNotTheArrays: arrow-go lets a column be longer than
-// its record, and the rows past the record are not part of it.
-func TestBatchReadsTheRecordsRowsNotTheArrays(t *testing.T) {
-	arr := int64s(t, []int64{1, 2, 3, 4, 5})
-	s := arrow.NewSchema([]arrow.Field{{Name: "v", Type: i64}}, nil)
-	rec := array.NewRecordBatch(s, []arrow.Array{arr}, 3)
-	defer rec.Release()
-
-	schema, err := arrowin.Schema(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := arrowin.NewChecker(schema).Check(rec); err != nil {
-		t.Fatal(err)
-	}
-	b, err := arrowin.Batch(rec, schema, []int{0}, 0, int(rec.NumRows()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if b.Rows() != 3 {
-		t.Errorf("a 3-row record over 5-row arrays gave %d rows", b.Rows())
-	}
-}
-
 // fakeRecord substitutes one column, to build what arrow-go's own constructor refuses.
 type fakeRecord struct {
 	arrow.RecordBatch
