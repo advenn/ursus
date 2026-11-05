@@ -3839,6 +3839,12 @@ that stops when its request is cancelled.</p>
   named with its reason in <code>oracleDifferences</code>. CI regenerates the recordings and
   fails on one that is not Polars'. Three files converted first: <code>numodds_test.go</code>,
   <code>rollmore_test.go</code> and <code>dtmore_test.go</code>, 305 hand-typed lines of values gone.</li>
+<li><strong>Strings, lists, structs and enums from recorded oracles</strong> (499): fifteen files
+  converted, <code>listns_test.go</code>'s 739 lines of null-against-empty by hand among them;
+  321 cases in fifteen groups, 58 generated, 1,611 lines gone. What Polars 2 has no
+  answer for is held to Go: a <code>List(Duration)</code> mean past int64 to <code>math/big</code>, a regex
+  replaced n times to <code>regexp</code>, a Datetime of seconds and a Date formatted with a
+  clock to <code>time</code>, <code>GetCategories</code> (removed from Polars 2) to the type's own list.</li>
 <li><strong>The temporal wave converted</strong> (498): <code>calendar_test.go</code>'s by-hand half,
   <code>tzreplace</code>, <code>components</code>, <code>daterange</code>, <code>csvdates</code>, <code>strtemporal</code>, <code>temporalagg</code>,
   <code>weeks</code>, <code>dtcombine</code>, <code>dtexact</code>, <code>timearith</code>, <code>businessdays_range</code> and
@@ -3855,11 +3861,19 @@ that stops when its request is cancelled.</p>
 <p>Every fix of v0.7.2 is in 0.8 too, forward-ported from <code>release-0.7</code> by #33 to #37:
 its section below lists them.</p>
 <ul>
-<li>
-<p><strong><code>Clip</code>, <code>ClipLower</code> and <code>ClipUpper</code> are named after their value</strong> (496): the
+<li><strong><code>Clip</code>, <code>ClipLower</code> and <code>ClipUpper</code> are named after their value</strong> (496): the
   answer was named after the bound, <code>literal</code> for a Go number and <code>lo</code> for <code>Col("lo")</code>,
   where Polars' clip keeps the value's name. Every test had aliased it; the recorded
-  oracle found it.</p>
+  oracle found it.</li>
+<li><strong><code>Str().ToTitlecase</code> titlecases a digraph</strong> (499): "ǆemal" was "Ǆemal" (U+01C4,
+  the upper case); it is "ǅemal" (U+01C5), Unicode's title mapping and Polars'. The
+  recorded oracle found it.</li>
+<li><strong><code>Str().ExtractGroups</code> of a null is a null Struct</strong> (499), as Polars 2.1 gives it;
+  it was a Struct of null fields, which <code>SplitExact</code> and <code>SplitN</code> keep, as Polars does.</li>
+<li>
+<p><strong>An inclusive split has no trailing empty part</strong> (499): <code>SplitInclusive(",")</code> of
+  "a,b," is <code>["a,", "b,"]</code>, and <code>SplitExact(",", 1, true)</code> of "a," is <code>{"a,", null}</code>,
+  as Polars splits them; each had an empty part after the last separator.</p>
 </li>
 <li>
 <p><strong>A cancelled query no longer answers part of its input as the whole</strong> (394): a
