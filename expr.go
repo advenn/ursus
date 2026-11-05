@@ -376,11 +376,18 @@ func (e Expr) Abs() Expr { return e.un(expr.OpAbs) }
 // For floats it returns the operand itself in the zero case, so sign(-0.0) is
 // -0.0 and sign(NaN) is NaN. That matches NumPy and falls out of the ordering test
 // rather than being special-cased.
+//
+// A Decimal's is -1, 0 or 1 at its scale, as Polars 2.0's: 1.00 of a Decimal(3, 2),
+// in its type, or Decimal(p+1, s) where the type has no integer digit, Decimal(1, 1)'s
+// a Decimal(2, 1). A Decimal(38, 38) other than 0 has no sign it can hold, and is
+// refused.
 func (e Expr) Sign() Expr { return e.un(expr.OpSign) }
 
 // Floor and Ceil round towards -Inf and +Inf. Both are the identity on an integer
-// column and both are refused for Decimal, whose stored value is unscaled — so
-// flooring it would floor 1234 rather than 12.34.
+// column. A Decimal's are its value's, at its scale, as Polars 2.0's are: Floor of a
+// Decimal(3, 2) -1.25 is -2.00. Their type is Decimal(p+1, s), as 9.99's ceiling,
+// 10.00, has a digit more; Decimal(38, s) stays 38, and a row past it is refused, as
+// Polars refuses it. A Decimal of scale 0 keeps its type.
 func (e Expr) Floor() Expr { return e.un(expr.OpFloor) }
 func (e Expr) Ceil() Expr  { return e.un(expr.OpCeil) }
 
@@ -463,6 +470,15 @@ const (
 //
 // A Float32 is rounded as a Float64 and the result rounded once more to a float32,
 // so Round(0.1, 1) of a Float32 is the float32 nearest 0.1.
+//
+// A Decimal is rounded exactly, at its own scale, as Polars 2.0 rounds one, by the
+// same modes and the same default as a float, half away from zero where Polars'
+// is half to even: Round(1) of a Decimal(3, 2) 1.25 is 1.30, and 1.20
+// RoundHalfToEven. Where digits are dropped the type is
+// Decimal(p+1, s), for the carry 9.99 makes, 10.00; where none are, decimals at the
+// scale or past it, the operand's. At Decimal(38, s) the type stays 38 and a row the
+// carry takes past it is refused, as Polars refuses it. Truncate and RoundSigFigs of
+// a Decimal are refused still.
 func (e Expr) Round(decimals int, mode ...RoundMode) Expr {
 	if decimals < 0 {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "round",
