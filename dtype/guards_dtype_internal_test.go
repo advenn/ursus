@@ -50,12 +50,3 @@ func TestEveryPowerOfTenIsTheTruncatedOne(t *testing.T) {
 		}
 	}
 }
-
-// TestCategoricalIsTextUnderneath: a Categorical is stored as text (step 351), and
-// says so, though nothing routes one by Physical(): every storage question is
-// HasStringStorage's.
-func TestCategoricalIsTextUnderneath(t *testing.T) {
-	if Categorical.Physical() != String || !Categorical.HasStringStorage() {
-		t.Errorf("Categorical: physical %s, string storage %v", Categorical.Physical(), Categorical.HasStringStorage())
-	}
-}

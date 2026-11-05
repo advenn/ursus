@@ -5,8 +5,8 @@ package kernel_test
 // dtype.CanCast has promised List -> List all along and the kernel refused it — the
 // fourth plan-accepts / kernel-rejects divergence unary.go records. It hid longest
 // because neither cast instrument could reach it: the contract matrix had no List
-// column and no List cast target, and TestCanCastAgreesWithTheKernel names List as
-// an unsamplable source.
+// column and no List cast target, and the TypeID-pair check of the day named List
+// as an unsamplable source.
 //
 // The risk that matters is a SLICED List. Offsets are absolute and the child stays
 // whole, so a slice has offs[0] > 0 and a child holding elements belonging to rows

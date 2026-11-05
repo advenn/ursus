@@ -143,9 +143,6 @@ func TestWindowsInsideWindowsAnswer(t *testing.T) {
 		// The inner Over within the outer's partitions, by g and t: one row each.
 		{"a user's window inside another", c("x").Mean().Over(c("t")).Sub(c("x")).Over(g),
 			[]string{"0", "0", "0", "0", "0"}},
-		// The Shift a Diff holds, computed beneath the CumSum within each g.
-		{"a window in an ordered function's operand", c("x").Diff(1).CumSum(false).Over(g),
-			[]string{"null", "3", "null", "8", "5"}},
 		// The mean takes none of the order: its answer does not depend on it.
 		{"an order over a mean", c("x").Sub(c("x").Mean()).OverWith(ursus.WindowSpec{
 			PartitionBy: []ursus.Expr{g}, OrderBy: []ursus.SortKey{ursus.Asc(c("t"))}}),

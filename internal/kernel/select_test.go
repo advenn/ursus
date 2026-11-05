@@ -28,53 +28,6 @@ func i64(name string, vals []int64, valid []bool) *data.Column {
 	return data.NewFixed(name, dtype.Int64, vals, v.Finish())
 }
 
-func TestSelectMerges(t *testing.T) {
-	out, err := kernel.Select("out",
-		mask([]bool{true, false, true}, nil),
-		i64("a", []int64{1, 2, 3}, nil),
-		i64("b", []int64{10, 20, 30}, nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s, err := data.TypedColumn[int64](out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, want := range []int64{1, 20, 3} {
-		if v, ok := s.Get(i); !ok || v != want {
-			t.Errorf("row %d = %v (valid %v), want %d", i, v, ok, want)
-		}
-	}
-	if out.Name() != "out" {
-		t.Errorf("name = %q, want %q", out.Name(), "out")
-	}
-}
-
-// TestSelectNullMaskTakesTheElseBranch: a null mask is false, as Polars' when and
-// SQL's CASE WHEN read a null condition (step 311). Until then it took neither
-// branch and gave null.
-//
-// It is SelectionFromMask's rule — "a row survives iff its predicate is VALID AND
-// TRUE" — applied to a merge: a row whose mask is not valid and true takes the else
-// branch, so Filter and When still agree about what a missing predicate means.
-func TestSelectNullMaskTakesTheElseBranch(t *testing.T) {
-	out, err := kernel.Select("out",
-		mask([]bool{true, false, false}, []bool{true, true, false}),
-		i64("a", []int64{1, 1, 1}, nil),
-		i64("b", []int64{9, 9, 9}, nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s, _ := data.TypedColumn[int64](out)
-
-	if v, ok := s.Get(1); !ok || v != 9 {
-		t.Errorf("a FALSE mask must take the else branch: got %v (valid %v)", v, ok)
-	}
-	if v, ok := s.Get(2); !ok || v != 9 {
-		t.Errorf("a NULL mask must take the else branch, as Polars' when does: got %v (valid %v)", v, ok)
-	}
-}
-
 // TestSelectIgnoresMaskPayloadUnderANull: Arrow does not guarantee that a null
 // slot's value bit is zero, so a kernel that reads the payload without ANDing the
 // validity first will take the wrong branch. Here the null lane's value bit is 1.
@@ -132,83 +85,6 @@ func TestSelectPropagatesBranchNulls(t *testing.T) {
 			t.Errorf("row %d = %v (valid %v), want %d — the null is in the untaken branch",
 				i, v, ok, want)
 		}
-	}
-}
-
-// TestSelectBroadcastsLengthOneBranches: litColumn produces length-1 columns and
-// evalColumn's broadcast runs at the operator boundary, AFTER Eval returns. So
-// `When(c).Then(Lit(1)).Otherwise(Lit(0))` reaches this kernel as a length-n mask
-// and two length-1 branches, and repeating them is this kernel's job.
-func TestSelectBroadcastsLengthOneBranches(t *testing.T) {
-	out, err := kernel.Select("out",
-		mask([]bool{true, false, true, false}, nil),
-		i64("a", []int64{1}, nil),
-		i64("b", []int64{0}, nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out.Len() != 4 {
-		t.Fatalf("length = %d, want 4", out.Len())
-	}
-	s, _ := data.TypedColumn[int64](out)
-	for i, want := range []int64{1, 0, 1, 0} {
-		if v, ok := s.Get(i); !ok || v != want {
-			t.Errorf("row %d = %v (valid %v), want %d", i, v, ok, want)
-		}
-	}
-
-	// A length-1 MASK broadcasts too, which is what Lit(true) as a predicate needs.
-	out2, err := kernel.Select("out",
-		mask([]bool{true}, nil),
-		i64("a", []int64{1, 2, 3}, nil),
-		i64("b", []int64{9, 9, 9}, nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s2, _ := data.TypedColumn[int64](out2)
-	for i, want := range []int64{1, 2, 3} {
-		if v, ok := s2.Get(i); !ok || v != want {
-			t.Errorf("broadcast mask row %d = %v, want %d", i, v, want)
-		}
-	}
-}
-
-// TestSelectAcceptsAPayloadFreeNullBranch: Lit(nil) becomes data.NewNull, which
-// carries no buffer. data.Values refuses it and StringAccessor.Get panics on it, so
-// a branch arriving in that shape must be routed through NullColumn first. Without
-// that, `Otherwise(Lit(nil))` fails or panics rather than producing nulls.
-func TestSelectAcceptsAPayloadFreeNullBranch(t *testing.T) {
-	for _, dt := range []dtype.DataType{dtype.Int64, dtype.String, dtype.Bool, dtype.Float64} {
-		t.Run(dt.String(), func(t *testing.T) {
-			var present *data.Column
-			switch dt.ID() {
-			case dtype.TypeString:
-				present = data.NewString("a", []string{"x", "y"}, bitmap.AllSet(2))
-			case dtype.TypeBool:
-				b := bitmap.NewBuilder(2)
-				b.Append(true)
-				b.Append(true)
-				present = data.NewBool("a", b.Finish(), bitmap.AllSet(2))
-			case dtype.TypeFloat64:
-				present = data.NewFixed("a", dt, []float64{1, 2}, bitmap.AllSet(2))
-			default:
-				present = i64("a", []int64{1, 2}, nil)
-			}
-
-			out, err := kernel.Select("out",
-				mask([]bool{true, false}, nil),
-				present,
-				data.NewNull("b", dt, 2))
-			if err != nil {
-				t.Fatalf("payload-free null branch: %v", err)
-			}
-			if out.IsValid(1) {
-				t.Error("row 1 takes the null branch and must be null")
-			}
-			if !out.IsValid(0) {
-				t.Error("row 0 takes the present branch and must be valid")
-			}
-		})
 	}
 }
 

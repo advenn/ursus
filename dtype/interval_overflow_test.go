@@ -220,6 +220,8 @@ func FuzzEvery(f *testing.F) {
 		"1h", "1y6mo", "-1d", "3mo", "1500ms", "0s", "", "-", "banana", "1h30",
 		"--1h", "1.5h", "357913942y", "536870912y", "5124096h", "613566757w",
 		"2000000000ms2000000000ms", "1h1d1227133513w",
+		// Every unit's rendering, a week's kept apart from seven days'.
+		"1ns", "5us", "30s", "15m", "2d", "1w", "1y", "-1h30m", "3i", "-1i",
 	} {
 		f.Add(s)
 	}
