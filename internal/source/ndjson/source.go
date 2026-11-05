@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
@@ -53,6 +54,12 @@ type Options struct {
 	// PathColumn, when set, is a String column of each row's file path after the
 	// files' columns, as Polars' include_file_paths (step 359).
 	PathColumn string
+
+	// Lines reads each stream's lines as one String column, LineName, as Polars'
+	// scan_lines (step 492): no JSON is parsed, a line's one "\r" before its newline
+	// is dropped, an empty line is a row, and a stream's last line needs no newline.
+	Lines    bool
+	LineName string
 }
 
 // Source is NDJSON streams as one scan, read in order: of the given schema, or of the
@@ -73,6 +80,14 @@ type Source struct {
 // whatever a given schema declares: a line may leave any key out.
 func New(desc string, files []File, o Options) *Source {
 	s := &Source{desc: desc, files: files, opts: o}
+	if o.Lines {
+		// The schema is the lines' column, never null: no line is read for it.
+		if s.given, s.bad = dtype.NewSchema(dtype.Field{Name: o.LineName, Type: dtype.String}); s.bad == nil && o.PathColumn != "" {
+			s.given, s.bad = source.WithPathColumn("read_ndjson", s.given, o.PathColumn)
+		}
+		s.bad = s.named(s.bad)
+		return s
+	}
 	if o.Schema != nil {
 		fields := o.Schema.FieldSlice()
 		for i := range fields {
@@ -108,10 +123,15 @@ func (s *Source) overridden(schema *dtype.Schema) (*dtype.Schema, error) {
 }
 
 // named is err with the operation the files' format names: read_json for a JSON
-// document's, whose reading is NDJSON's.
+// document's, whose reading is NDJSON's, and read_lines for lines.
 func (s *Source) named(err error) error {
-	if e, ok := errors.AsType[*uerr.Error](err); ok && s.opts.JSON && e.Op == "read_ndjson" {
-		e.Op = "read_json"
+	if e, ok := errors.AsType[*uerr.Error](err); ok && e.Op == "read_ndjson" {
+		switch {
+		case s.opts.JSON:
+			e.Op = "read_json"
+		case s.opts.Lines:
+			e.Op = "read_lines"
+		}
 	}
 	return err
 }
@@ -148,8 +168,11 @@ func readError(err error, name string) error {
 }
 
 func (s *Source) Name() string {
-	if s.opts.JSON {
+	switch {
+	case s.opts.JSON:
 		return "json"
+	case s.opts.Lines:
+		return "lines"
 	}
 	return "ndjson"
 }
@@ -480,6 +503,9 @@ func (r *reader) placed(err error, line int) error {
 // parse is part's lines as a batch, and how many lines it holds; on an error in a
 // line, that line, numbered from the part's first, else 0.
 func (r *reader) parse(part []byte) (*data.Batch, int, error) {
+	if r.src.opts.Lines {
+		return r.lines(part)
+	}
 	b, err := newBuilder(r.read)
 	if err != nil {
 		return nil, 0, err
@@ -531,6 +557,42 @@ func (r *reader) parse(part []byte) (*data.Batch, int, error) {
 		cols[i] = c
 	}
 	return data.NewBatchRows(r.out, cols, n), line, nil
+}
+
+// lines is part's lines as a batch of their column, or of no column where the
+// projection has not it, a count's, which reads no text (step 492); and how many it
+// holds. Each line is cut at its newline, as bufio.ScanLines cuts one: one "\r"
+// before the newline, or at the stream's end, is dropped, and an empty line is a row.
+// A part ends at a newline but for the stream's last, so a last line without one is
+// a row too. Text that is not UTF-8 is refused, at its line.
+func (r *reader) lines(part []byte) (*data.Batch, int, error) {
+	n := bytes.Count(part, []byte{'\n'})
+	if len(part) > 0 && part[len(part)-1] != '\n' {
+		n++
+	}
+	if r.out.Len() == 0 {
+		return data.NewBatchRows(r.out, nil, n), n, nil
+	}
+	whole := utf8.Valid(part) // a newline is no byte of a longer character
+	offs, chars := make([]int32, 1, n+1), make([]byte, 0, len(part)-n)
+	for line := 1; len(part) > 0; line++ {
+		text := part
+		if end := bytes.IndexByte(part, '\n'); end >= 0 {
+			text, part = part[:end], part[end+1:]
+		} else {
+			part = nil
+		}
+		if k := len(text) - 1; k >= 0 && text[k] == '\r' {
+			text = text[:k]
+		}
+		if !whole && !utf8.Valid(text) {
+			return nil, line, uerr.New(uerr.KindValue, "read_lines", "the line is not UTF-8")
+		}
+		chars = append(chars, text...)
+		offs = append(offs, int32(len(chars)))
+	}
+	col := data.NewStringOwned(r.out.Field(0).Name, offs, chars, bitmap.AllSet(n))
+	return data.NewBatchRows(r.out, []*data.Column{col}, n), n, nil
 }
 
 // castRefusal is the row of the first value of c, a column as read, that a cast to t
