@@ -240,6 +240,27 @@ func sigFigs(v float64, digits int) float64 {
 	return r
 }
 
+// safeLog and safeLog10 are math.Log and math.Log10 with a subnormal read right.
+// Go's amd64 Log takes the exponent field apart, which a subnormal has not, so
+// math.Log(5e-324) is ln(2^-1022), -709.09, where ln(5e-324) is -744.44, and Log10,
+// which is Log's, -307.95 for -323.31; the recorded oracle found Ln and Log10
+// answering so (step 497; floorLog10 below works around the same misreading). A
+// subnormal is scaled by 2^54 into the normal range and the scale's log taken off,
+// within an ulp or two of the correctly rounded answer.
+func safeLog(v float64) float64 {
+	if v > 0 && v < 0x1p-1022 {
+		return math.Log(v*0x1p54) - 54*math.Ln2
+	}
+	return math.Log(v)
+}
+
+func safeLog10(v float64) float64 {
+	if v > 0 && v < 0x1p-1022 {
+		return math.Log10(v*0x1p54) - 54*(math.Ln2/math.Ln10)
+	}
+	return math.Log10(v)
+}
+
 // floorLog10 is floor(log10(a)) for a finite a > 0, an exact power of ten its own
 // exponent, as a correctly rounded log10 gives it. It is Log2's, scaled: Go's Log10
 // is Log's, which on amd64 misreads a subnormal, so Log10(1.5e-315) is -307.95. Log2
