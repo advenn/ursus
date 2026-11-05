@@ -6,7 +6,6 @@ import (
 	"math/rand/v2"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
@@ -56,37 +55,41 @@ func TestASortStopsWhenCancelled(t *testing.T) {
 }
 
 // TestARadixSortStopsAtItsNextPass: cancelled at its first byte's pass, a radix sort
-// of four million floats comes back in well under half the time it takes to sort
-// them, where without a look a pass it ran every pass first, some tens of ms each.
-// The two times are the same process's, the least of three each.
+// does no more passes. The countdown counts the sort's looks at its context: one a
+// pass, and at the cancellation two more, halted's and the error's it returns; a sort
+// that ran every pass first and answered the cancellation at its end would look once
+// a pass to the end, as the whole sort does. Until step 495 this compared the two
+// sorts' wall-clock times, under half, which a loaded CI runner failed at 52%.
 func TestARadixSortStopsAtItsNextPass(t *testing.T) {
-	const n = 1 << 22
+	const n = 1 << 16
 	rng := rand.New(rand.NewPCG(394, 2))
 	f := make([]float64, n)
 	for i := range f {
 		f[i] = rng.NormFloat64()
 	}
 	cols := []*data.Column{data.NewFixed("f", dtype.Float64, f, bitmap.View{})}
-	least := func(left int64) time.Duration {
-		best := time.Duration(1 << 62)
-		for range 3 {
-			ctx := &countdown{Context: t.Context()}
-			ctx.left.Store(left)
-			t0 := time.Now()
-			_, err := ArgSortColumnsN(ctx, cols, []SortSpec{{}}, n, 4)
-			if el := time.Since(t0); el < best {
-				best = el
-			}
-			if left < 1<<40 && !errors.Is(err, context.Canceled) {
-				t.Fatalf("cancelled at look %d: %v", left+1, err)
-			}
-		}
-		return best
+	looks := func(left int64) (int64, error) {
+		ctx := &countdown{Context: t.Context()}
+		ctx.left.Store(left)
+		_, err := ArgSortColumnsN(ctx, cols, []SortSpec{{}}, n, 4)
+		return left - ctx.left.Load(), err
 	}
-	whole := least(1 << 50)
+	whole, err := looks(1 << 50)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Looks: the entry's, the column's, then the first byte pass's, cancelled.
-	cut := least(2)
-	if cut > whole/2 {
-		t.Fatalf("cancelled at its first pass it took %v, sorting whole %v", cut, whole)
+	cut, err := looks(2)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled at its third look: %v", err)
+	}
+	t.Logf("the whole sort looked %d times, the cancelled one %d", whole, cut)
+	// Eight byte passes, so the whole sort looks at least ten times; the cancelled one
+	// its three, the return's two more, and no pass's.
+	if whole < 10 {
+		t.Fatalf("the whole sort looked %d times, fewer than its eight byte passes and two entries", whole)
+	}
+	if cut > 5 {
+		t.Fatalf("cancelled at its third look the sort looked %d times, so it went on past the cancellation", cut)
 	}
 }
