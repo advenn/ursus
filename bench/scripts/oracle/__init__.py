@@ -31,7 +31,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[3]
 GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
           # step 498, the temporal wave
           "calendar", "tzreplace", "components", "daterange", "csvdates", "strtemporal", "temporalagg", "weeks",
-          "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby"]
+          "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby",
+          # step 500, aggregates and windows
+          "aggwindow_byhand", "aggstats", "aggpair", "agglists", "argsort", "hist", "search", "seq", "modeagg", "ewmmore",
+          "window172", "windownest", "rollingby", "rollingoffset", "rollingquantile", "rollmap", "exprroll", "cumeval", "topk_agg"]
 
 
 @dataclass

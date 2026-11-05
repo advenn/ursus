@@ -12,60 +12,21 @@ import (
 	"github.com/advenn/ursus/ursustest"
 )
 
-// TestModeInAnAggregation is step 340: a group's Mode is an aggregate of its own,
-// an entry a distinct value, where it was the list kernel over the group's values
-// imploded. Every answer is Polars 1.44.1's, in the order the values first appear
-// with maintainOrder; sorted, nulls first, without, where Polars' order is its hash
-// table's.
+// TestModeInAnAggregation is step 340: a group's Mode is an aggregate of its own, an
+// entry a distinct value, where it was the list kernel over the group's values
+// imploded. Its answers are Polars 2.1.0's since step 500, recorded in the modeagg
+// group of testdata/oracle and spelled in oracle_modeagg_test.go, which took this
+// file's table. What stays asserts the plan and the first-seen order on four threads.
 func TestModeInAnAggregation(t *testing.T) {
 	c := ursus.Col
-	nan := math.NaN()
 	lf := ursus.Frame(
 		ursus.Values("g", []int64{1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3}),
-		ursus.ValuesNullable("x", []float64{3, 0, 0, 3, math.Copysign(0, -1), 0, 2, nan, 1, nan, 1},
-			[]bool{true, false, false, true, true, true, true, true, true, true, true}),
-		ursus.ValuesNullable("s", []string{"b", "a", "b", "a", "z", "y", "z", "", "", "q", "q"},
-			[]bool{true, true, true, true, true, true, true, false, false, true, true}),
-		ursus.ValuesNullable("b", []bool{true, false, true, false, false, false, true, false, false, true, true},
-			[]bool{true, true, true, false, false, false, true, true, true, true, true}),
-		ursus.Values("i", []int64{5, 7, 7, 5, 1, 2, 3, 9, 9, 8, 8}),
-	).WithColumns(c("i").Cast(ursus.Int32).Cast(ursus.Date).Alias("d"))
-	text := func(e ursus.Expr) ursus.Expr {
-		return e.List().Eval(ursus.Element().Cast(ursus.String).FillNullWith("null")).List().Join("|")
-	}
-	byG := func(es ...ursus.Expr) *ursus.LazyFrame {
-		return lf.GroupBy(c("g")).Agg(es...).Sort(ursus.Asc(c("g"))).Drop("g")
-	}
-	for _, tc := range []struct {
-		name string
-		q    *ursus.LazyFrame
-		want string
-	}{
-		{"as they come", byG(text(c("x").Mode(true)), text(c("s").Mode(true)), text(c("b").Mode(true)), text(c("d").Mode(true)),
-			c("i").Mode(true).First().Alias("i1")),
-			"x,s,b,d,i1\n3.0|null,b|a,true,1970-01-06|1970-01-08,5\n-0.0,z,null,1970-01-02|1970-01-03|1970-01-04,1\n" +
-				"NaN|1.0,null|q,false|true,1970-01-10|1970-01-09,9\n"},
-		{"sorted", byG(text(c("x").Mode(false)), text(c("s").Mode(false)), text(c("b").Mode(false)), text(c("d").Mode(false))),
-			"x,s,b,d\nnull|3.0,a|b,true,1970-01-06|1970-01-08\n-0.0,z,null,1970-01-02|1970-01-03|1970-01-04\n" +
-				"1.0|NaN,null|q,false|true,1970-01-09|1970-01-10\n"},
-		{"over the frame", lf.Select(c("s").Mode(true).First(), c("i").Mode(true).Last()), "s,i\nb,8\n"},
-		{"in a dynamic group", lf.WithRowIndex("r", 0).WithColumns(c("r").Cast(ursus.Int64)).GroupByDynamic(c("r"),
-			ursus.DynamicOptions{Every: ursus.Every("4i")}).Agg(text(c("i").Mode(true))).Select(c("i")),
-			"i\n5|7\n1|2|3|9\n8\n"},
-	} {
-		if got := csvOf(t, tc.q); got != tc.want {
-			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)
-		}
-	}
+		ursus.ValuesNullable("x", []float64{3, 0, 0, 3, math.Copysign(0, -1), 0, 2, math.NaN(), 1, math.NaN(), 1},
+			[]bool{true, false, false, true, true, true, true, true, true, true, true}))
 	// The aggregate, not an implode.
 	plan, err := lf.GroupBy(c("g")).Agg(c("x").Mode(true)).Explain(t.Context())
 	if err != nil || !strings.Contains(plan, "mode(maintain_order=true)") || strings.Contains(plan, "implode") {
 		t.Errorf("the plan of a mode by g:\n%s\n%v", plan, err)
-	}
-	// A mode of a reshape keeps the list kernel: it reads the reshape's list.
-	got := csvOf(t, lf.GroupBy(c("g")).Agg(text(c("i").Sort().Mode(true))).Sort(ursus.Asc(c("g"))).Select(c("i")))
-	if got != "i\n5|7\n1|2|3\n8|9\n" {
-		t.Errorf("a mode of a sort: %q", got)
 	}
 	// The order the values first appear is the rows', on four threads too: each value
 	// first in a batch of its own, and every value as frequent.
@@ -85,14 +46,6 @@ func TestModeInAnAggregation(t *testing.T) {
 		rows, _ := got.ToMaps()
 		if s := fmt.Sprint(rows[0]["m"]); !strings.HasPrefix(s, "[0 1 2 3 4 5 6 7 8 9 10 ") {
 			t.Errorf("first-seen order on %d threads: %s", threads, s)
-		}
-	}
-	// A Struct's modes, field by field, as Polars counts them (step 344); without
-	// maintainOrder too, a Struct having no order.
-	for _, maintain := range []bool{true, false} {
-		q := lf.GroupBy(c("g")).Agg(ursus.Struct(c("x")).Mode(maintain).Alias("m")).Sort(ursus.Asc(c("g")))
-		if got := cells(t, q, "m"); got != "[map[x:3] map[x:<nil>]] [map[x:-0]] [map[x:NaN] map[x:1]] List(Struct(x: Float64))" {
-			t.Errorf("a mode of structs, maintaining order %v: %s", maintain, got)
 		}
 	}
 }
