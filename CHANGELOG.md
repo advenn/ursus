@@ -166,6 +166,16 @@ that stops when its request is cancelled.
   2^63 against math/big, seconds, Decimal products and quotients against big.Rat with
   seeded values) or a differential; nineteen documented differences named, two
   findings left for the maintainer.
+- **The temporal wave converted** (498): `calendar_test.go`'s by-hand half,
+  `tzreplace`, `components`, `daterange`, `csvdates`, `strtemporal`, `temporalagg`,
+  `weeks`, `dtcombine`, `dtexact`, `timearith`, `businessdays_range` and
+  `interpby_test.go`, 260 recorded cases in thirteen groups, 48 generated, 905 lines
+  gone; what Polars 2.1 has no answer for (a Time plus a Duration, the epoch's grid, two
+  patterns in one column, a zoned combine's day, `Duration(s)`) is held to Go's time
+  package. Four findings recorded and not asserted, for the maintainer: Polars 2.1
+  rounds a month by adding fourteen days, starts a `group_by_dynamic` day at 23:00
+  where midnight does not exist, combines a zoned Datetime's UTC date, and counts
+  business days back to an earlier date by numpy's rule.
 
 ### Fixed
 
