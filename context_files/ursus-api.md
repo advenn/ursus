@@ -262,6 +262,7 @@ func (e Expr) Sub[T Operand](v T) Expr
 func (e Expr) Mul[T Operand](v T) Expr
 func (e Expr) Div[T Operand](v T) Expr
 func (e Expr) FloorDiv[T Operand](v T) Expr
+func (e Expr) TruncDiv[T Operand](v T) Expr   // toward zero
 func (e Expr) Mod[T Operand](v T) Expr
 func (e Expr) Pow[T Operand](v T) Expr
 func (e Expr) Neg() Expr
@@ -328,6 +329,7 @@ func (e Expr) RoundSigFigs(n int) Expr
 func (e Expr) Floor() Expr; func (e Expr) Ceil() Expr
 func (e Expr) Clip(lo, hi Expr) Expr
 func (e Expr) Sin() Expr /* … Cos, Tan, Cot, Arc*, *h, Degrees, Radians … */
+func (e Expr) Erf() Expr;  func (e Expr) Erfc() Expr
 func (e Expr) Skew(bias bool) Expr;  func (e Expr) Kurtosis(fisher, bias bool) Expr
 func (e Expr) Entropy(base float64, normalize bool) Expr
 func (e Expr) Hist(bins []float64, opts ...HistOption) Expr
@@ -539,6 +541,7 @@ type NameExpr struct{ e Expr }
 func (n NameExpr) Keep() Expr
 func (n NameExpr) Prefix(p string) Expr
 func (n NameExpr) Suffix(s string) Expr
+func (n NameExpr) StripPrefix(p string) Expr; func (n NameExpr) StripSuffix(s string) Expr
 func (n NameExpr) Map(fn func(string) string) Expr
 func (n NameExpr) Replace(old, new string) Expr
 func (n NameExpr) ToLower() Expr; func (n NameExpr) ToUpper() Expr
@@ -1015,6 +1018,7 @@ func ScanParquet(paths ...string) *LazyFrame
 func ScanCSV(paths ...string) *LazyFrame
 func ScanIPC(paths ...string) *LazyFrame
 func ScanNDJSON(paths ...string) *LazyFrame
+func ScanLines(path string, opts ...LinesOption) *LazyFrame   // a String column, "line"
 func ScanAvro(paths ...string) *LazyFrame
 func ScanDelta(uri string, opts ...DeltaOption) *LazyFrame
 func ScanIceberg(table string, opts ...IcebergOption) *LazyFrame

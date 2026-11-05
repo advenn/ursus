@@ -191,11 +191,11 @@ statistics, and a work-stealing scheduler; `collect_all` and a plan serialized; 
 [`feature-gaps.md`](./context_files/feature-gaps.md) lists everything Polars, pandas and DuckDB have that ursus does
 not, and what each step since has built.
 
-**ursus is on [ZeroVer](https://0ver.org): 0.x, and a stable 1.0 is not expected yet.** Version numbers follow Go's
-rule for v0, so a minor version may rename, remove or reshape an API when the result is better, with no deprecation
-period. The changelog lists each release's breaks with their replacements, and a tool holds it to them: CI's
-`make api` fails on any feature of the last tag's public API, in [`api/`](./api/), that a change takes away, until the
-changelog's breaks name it.
+**ursus is on [ZeroVer](https://0ver.org): 0.x, and a stable 1.0 is not expected yet. The public API is stable
+all the same, since 2026-11-05:** a release adds, and never renames, removes or reshapes what an earlier release had; a
+better design goes beside the old one. A tool holds it to that: CI's `make api` fails on any feature of the last
+tag's public API, in [`api/`](./api/), that a change takes away. Up to v0.7.2 a minor could break, and the changelog
+lists each release's breaks with their replacements.
 
 ---
 
