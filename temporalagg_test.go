@@ -1,13 +1,14 @@
 package ursus_test
 
-// Step 173: the mean and median of instants and durations, as Polars 1.44.1 answers
-// them in the bench's own environment, and Parquet's UUID and JSON columns read as
-// Polars reads them.
+// Step 173: the mean and median of instants and durations, and their quantiles (step
+// 300). Their answers are Polars 2.1.0's, recorded in the temporalagg group of
+// testdata/oracle and spelled in oracle_temporalagg_test.go since step 498, which took
+// this file's tables. What stays: a spread of instants refused, and Parquet's UUID and
+// JSON columns read as Polars reads them.
 
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -19,94 +20,9 @@ import (
 	"github.com/advenn/ursus/dtype"
 )
 
-// agg1 is one aggregate of col over the frame, rendered, with its type.
-func agg1(t *testing.T, lf *ursus.LazyFrame, e ursus.Expr) (string, dtype.DataType) {
-	t.Helper()
-	df, err := lf.GroupBy().Agg(e.Alias("r")).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	typ := df.Schema().Field(0).Type
-	return rendered172(t, df, "r"), typ
-}
-
-func TestTemporalMeanAndMedianAnswerAsPolars(t *testing.T) {
-	c := ursus.Col
-	us := dtype.Datetime(dtype.Micro, "")
-	at := func(y int, mo time.Month, d, h, mi, s, usec int) time.Time {
-		return time.Date(y, mo, d, h, mi, s, usec*1000, time.UTC)
-	}
-	instants := func(ts ...time.Time) *ursus.LazyFrame {
-		return ursus.Frame(ursus.Values("t", ts)).Select(c("t").Cast(us))
-	}
-	dates := func(ts []time.Time, ok []bool) *ursus.LazyFrame {
-		return ursus.Frame(ursus.ValuesNullable("d", ts, ok)).Select(c("d").Cast(dtype.Date))
-	}
-	for _, tc := range []struct {
-		name string
-		lf   *ursus.LazyFrame
-		e    ursus.Expr
-		want string
-		typ  dtype.DataType
-	}{
-		{"date mean", dates([]time.Time{at(2024, 1, 1, 0, 0, 0, 0), at(2024, 1, 4, 0, 0, 0, 0), {}}, []bool{true, true, false}),
-			c("d").Mean(), "2024-01-02T12:00:00.000000 ", us},
-		{"date median, even", dates([]time.Time{at(2024, 1, 1, 0, 0, 0, 0), at(2024, 1, 2, 0, 0, 0, 0)}, []bool{true, true}),
-			c("d").Median(), "2024-01-01T12:00:00.000000 ", us},
-		{"date mean before 1970", dates([]time.Time{at(1969, 12, 31, 0, 0, 0, 0), at(1969, 12, 30, 0, 0, 0, 0)}, []bool{true, true}),
-			c("d").Mean(), "1969-12-30T12:00:00.000000 ", us},
-		{"datetime mean", instants(at(2024, 1, 1, 0, 0, 0, 0), at(2024, 1, 1, 0, 1, 0, 0), at(2024, 1, 1, 0, 3, 0, 0)),
-			c("t").Mean(), "2024-01-01T00:01:20.000000 ", us},
-		{"datetime median", instants(at(2024, 1, 1, 0, 0, 0, 0), at(2024, 1, 1, 0, 1, 0, 0), at(2024, 1, 1, 0, 3, 0, 0)),
-			c("t").Median(), "2024-01-01T00:01:00.000000 ", us},
-		{"datetime mean, truncated", instants(at(2024, 1, 1, 0, 0, 0, 1), at(2024, 1, 1, 0, 0, 0, 2)),
-			c("t").Mean(), "2024-01-01T00:00:00.000001 ", us},
-		{"datetime median, even, truncated", instants(at(2024, 1, 1, 0, 0, 0, 1), at(2024, 1, 1, 0, 0, 0, 2)),
-			c("t").Median(), "2024-01-01T00:00:00.000001 ", us},
-		{"datetime mean before 1970, toward zero", instants(at(1969, 12, 31, 23, 59, 59, 999999), at(1969, 12, 31, 23, 59, 59, 999998)),
-			c("t").Mean(), "1969-12-31T23:59:59.999999 ", us},
-		{"datetime median before 1970, toward zero", instants(at(1969, 12, 31, 23, 59, 59, 999999), at(1969, 12, 31, 23, 59, 59, 999998)),
-			c("t").Median(), "1969-12-31T23:59:59.999999 ", us},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, typ := agg1(t, tc.lf, tc.e)
-			if typ != tc.typ || got != tc.want {
-				t.Fatalf("%q of %s, want %q of %s", got, typ, tc.want, tc.typ)
-			}
-		})
-	}
-
-	// Times and durations keep their types.
-	hm := func(h, m int) time.Duration { return time.Duration(h)*time.Hour + time.Duration(m)*time.Minute }
-	times := ursus.Frame(ursus.Values("u", []time.Duration{hm(1, 0), hm(3, 0), hm(4, 0)})).
-		Select(c("u").Cast(dtype.Time(dtype.Nano)))
-	if got, typ := agg1(t, times, c("u").Mean()); typ.ID() != dtype.TypeTime || got != "02:40:00.000000000 " {
-		t.Errorf("time mean %q of %s", got, typ)
-	}
-	if got, typ := agg1(t, times, c("u").Median()); typ.ID() != dtype.TypeTime || got != "03:00:00.000000000 " {
-		t.Errorf("time median %q of %s", got, typ)
-	}
-	durs := ursus.Frame(ursus.ValuesNullable("du", []time.Duration{time.Second, 4 * time.Second, 0}, []bool{true, true, false}))
-	if got, typ := agg1(t, durs, c("du").Median()); typ.ID() != dtype.TypeDuration || got != "2.5s " {
-		t.Errorf("duration median %q of %s", got, typ)
-	}
-
-	// Per group, as any aggregate.
-	df, err := ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}),
-		ursus.Values("t", []time.Time{at(2024, 1, 1, 0, 0, 0, 0), at(2024, 1, 1, 0, 2, 0, 0), at(2024, 5, 5, 0, 0, 0, 0)})).
-		Select(c("g"), c("t").Cast(us)).GroupBy(c("g")).Agg(c("t").Mean().Alias("m")).
-		Sort(ursus.Asc(c("g"))).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := rendered172(t, df, "m"); got != "2024-01-01T00:01:00.000000 2024-05-05T00:00:00.000000 " {
-		t.Errorf("grouped means %q", got)
-	}
-}
-
 // TestTemporalVarAndStdStillRefuse: a spread of instants is not implemented, as
 // Polars' frame std and var answer null for one. A quantile answers since step 300,
-// TestTemporalQuantile.
+// the temporalagg group's quantile cases.
 func TestTemporalVarAndStdStillRefuse(t *testing.T) {
 	c := ursus.Col
 	lf := ursus.Frame(ursus.Values("t", []time.Time{time.Unix(0, 0), time.Unix(60, 0)}))
@@ -181,52 +97,5 @@ func TestParquetUUIDAndJSONRead(t *testing.T) {
 	}
 	if df.Height() != 2 {
 		t.Fatalf("%d rows, want 2", df.Height())
-	}
-}
-
-// TestTemporalQuantile (step 300): a quantile of a Date, a Datetime, a Duration or a
-// Time is one of them, as its median is, truncated toward zero, a Date's a
-// Datetime(us). Every answer is Polars 1.44.1's.
-func TestTemporalQuantile(t *testing.T) {
-	c := ursus.Col
-	at := func(d, h, m int) time.Time { return time.Date(2026, 1, d, h, m, 0, 0, time.UTC) }
-	ok := []bool{true, true, false, true}
-	lf := ursus.Frame(
-		ursus.ValuesNullable("d", []time.Time{at(1, 0, 0), at(4, 0, 0), {}, at(8, 0, 0)}, ok),
-		ursus.ValuesNullable("t", []time.Time{at(1, 6, 0), at(1, 7, 30), {}, at(3, 6, 0)}, ok),
-		ursus.ValuesNullable("u", []time.Duration{time.Hour, 2 * time.Hour, 0, 250 * time.Minute}, ok),
-		ursus.ValuesNullable("tm", []time.Time{at(1, 1, 0), at(1, 2, 30), {}, at(1, 9, 0)}, ok),
-	).Select(c("d").Cast(ursus.Date), c("t").Cast(ursus.Datetime(ursus.Micro, "")), c("u"),
-		c("tm").Dt().Time())
-	for _, tc := range []struct {
-		q      float64
-		interp ursus.Interpolation
-		want   string
-	}{
-		{0.5, ursus.InterpLinear, "2026-01-04T00:00:00.000000 2026-01-01T07:30:00.000000 2h0m0s 02:30:00.000000000"},
-		{0.25, ursus.InterpLinear, "2026-01-02T12:00:00.000000 2026-01-01T06:45:00.000000 1h30m0s 01:45:00.000000000"},
-		{0.5, ursus.InterpNearest, "2026-01-04T00:00:00.000000 2026-01-01T07:30:00.000000 2h0m0s 02:30:00.000000000"},
-		{0.9, ursus.InterpLower, "2026-01-04T00:00:00.000000 2026-01-01T07:30:00.000000 2h0m0s 02:30:00.000000000"},
-		{0.9, ursus.InterpHigher, "2026-01-08T00:00:00.000000 2026-01-03T06:00:00.000000 4h10m0s 09:00:00.000000000"},
-		{0.3, ursus.InterpMidpoint, "2026-01-02T12:00:00.000000 2026-01-01T06:45:00.000000 1h30m0s 01:45:00.000000000"},
-	} {
-		df, err := lf.Select(ursus.All().Quantile(tc.q, tc.interp)).Collect(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		var got []string
-		for _, name := range []string{"d", "t", "u", "tm"} {
-			got = append(got, strings.TrimSpace(rendered172(t, df, name)))
-		}
-		if g := strings.Join(got, " "); g != tc.want {
-			t.Errorf("%v %v: got %s, want %s", tc.q, tc.interp, g, tc.want)
-		}
-	}
-	s, err := lf.Select(ursus.All().Quantile(0.5, ursus.InterpLinear)).CollectSchema(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := s.String(); !strings.Contains(got, "d: Datetime(us)") || !strings.Contains(got, "u: Duration(ns)") {
-		t.Errorf("types %s", got)
 	}
 }
