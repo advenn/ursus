@@ -37,7 +37,10 @@ GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
           "enum_byhand", "expr_bin", "expr_cat", "strmany", "strcodec", "strsplit", "strptime",
           # step 498, the temporal wave
           "calendar", "tzreplace", "components", "daterange", "csvdates", "strtemporal", "temporalagg", "weeks",
-          "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby"]
+          "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby",
+          # step 500, aggregates and windows
+          "aggwindow_byhand", "aggstats", "aggpair", "agglists", "argsort", "hist", "search", "seq", "modeagg", "ewmmore",
+          "window172", "windownest", "rollingby", "rollingoffset", "rollingquantile", "rollmap", "exprroll", "cumeval", "topk_agg"]
 
 
 @dataclass
