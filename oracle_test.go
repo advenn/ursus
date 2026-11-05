@@ -73,13 +73,24 @@ type oracleWant struct {
 	} `json:"error"`
 }
 
-// oracleInputs is a case's input frames by name, df the usual one.
+// oracleInputs is a case's input frames by name, df the usual one, and its params,
+// an input that is not a frame (step 498: a CSV's text).
 type oracleInputs struct {
 	t      *testing.T
 	frames map[string]*ursus.LazyFrame
+	params map[string]any
 }
 
 func (in oracleInputs) df() *ursus.LazyFrame { return in.frame("df") }
+
+// text is the case's param name, a string.
+func (in oracleInputs) text(name string) string {
+	v, ok := in.params[name].(string)
+	if !ok {
+		in.t.Fatalf("the case has no text param %q", name)
+	}
+	return v
+}
 
 func (in oracleInputs) frame(name string) *ursus.LazyFrame {
 	f, ok := in.frames[name]
@@ -100,6 +111,17 @@ func (in oracleInputs) eager(df *ursus.DataFrame, err error) *ursus.LazyFrame {
 // oracleQuery is ursus's spelling of one recorded question.
 type oracleQuery = func(in oracleInputs) *ursus.LazyFrame
 
+// oracleFinding is the registry's entry for a case recorded and not asserted: ursus
+// answers otherwise than Polars 2.1.0, the difference is documented nowhere, and it is
+// the maintainer's to decide (a wave's record lists it under Found). The test skips
+// it, naming the finding.
+func oracleFinding(what string) oracleQuery {
+	return func(in oracleInputs) *ursus.LazyFrame {
+		in.t.Skip("a finding, not asserted: " + what)
+		return nil
+	}
+}
+
 // oracleGroups is the registry: a group's name, as its JSON file is named, to its
 // cases' names and ursus's spelling of each. Each oracle_<group>_test.go fills its
 // own entry in an init, so groups never edit one file.
@@ -108,11 +130,13 @@ var oracleGroups = map[string]map[string]oracleQuery{}
 // oracleDifference is ursus's documented answer where it differs from Polars' on
 // purpose: cells names the column and row of each value ursus gives instead, in the
 // format's own spelling (a float as a float64 or "NaN", an integer as an int, nil a
-// null); dtypes names a column whose type ursus gives otherwise. why cites the doc.
+// null); dtypes names a column whose type ursus gives otherwise; names a column ursus
+// names otherwise, the recorded name to ursus's. why cites the doc.
 type oracleDifference struct {
 	why    string
 	cells  map[string]map[int]any
 	dtypes map[string]string
+	names  map[string]string
 }
 
 // oracleDifferences are the cases, as group/name, where ursus answers otherwise than
@@ -271,7 +295,7 @@ func TestOracle(t *testing.T) {
 // oracleRun asks ursus one case's question and compares with the recorded answer.
 func oracleRun(t *testing.T, tc oracleCase, q oracleQuery, diff oracleDifference) {
 	t.Helper()
-	in := oracleInputs{t: t, frames: map[string]*ursus.LazyFrame{}}
+	in := oracleInputs{t: t, frames: map[string]*ursus.LazyFrame{}, params: tc.Params}
 	for name, f := range tc.Inputs {
 		in.frames[name] = oracleBuild(t, f.Columns)
 	}
@@ -332,7 +356,7 @@ func oracleTolerance(t *testing.T, f string) float64 {
 // oracleDiffer applies ursus's documented difference to the recorded columns.
 func oracleDiffer(t *testing.T, cols []oracleColumn, diff oracleDifference) []oracleColumn {
 	t.Helper()
-	if diff.cells == nil && diff.dtypes == nil {
+	if diff.cells == nil && diff.dtypes == nil && diff.names == nil {
 		return cols
 	}
 	out := make([]oracleColumn, len(cols))
@@ -340,6 +364,9 @@ func oracleDiffer(t *testing.T, cols []oracleColumn, diff oracleDifference) []or
 		out[i] = c
 		if dt, ok := diff.dtypes[c.Name]; ok {
 			out[i].DType = dt
+		}
+		if name, ok := diff.names[c.Name]; ok {
+			out[i].Name = name
 		}
 		if cells, ok := diff.cells[c.Name]; ok {
 			vals := make([]any, len(c.Values))
