@@ -8,7 +8,8 @@ package ursus_test
 // every case of every group: it builds the inputs through the public constructors,
 // asks ursus, builds the recorded answer the same way, and compares the two frames
 // with ursustest.AssertFrameEqual, dtypes checked and floats by their bits (NaN equal
-// to NaN, -0 apart from 0) unless the case says why a tolerance.
+// to NaN, -0 apart from 0) unless the case says why a tolerance, relative ("rel:1e-12"),
+// absolute ("abs:1e-15") or both.
 //
 // A case whose answer ursus gives on purpose otherwise is named in oracleDifferences
 // with its reason, and the test asserts ursus's documented answer instead.
@@ -266,10 +267,10 @@ func oracleRun(t *testing.T, tc oracleCase, q oracleQuery, diff oracleDifference
 	}
 	got, want = oracleComparable(t, got), oracleComparable(t, want)
 
-	tol := oracleTolerance(t, tc.Float)
+	abs, rel := oracleTolerance(t, tc.Float)
 	var opts []ursustest.Option
 	switch {
-	case tc.Order == "set" && tol > 0:
+	case tc.Order == "set" && (abs > 0 || rel > 0):
 		// AssertFrameEqual refuses IgnoreRowOrder beside a tolerance, so both sides
 		// are sorted on every column first.
 		got, want = oracleSorted(t, got), oracleSorted(t, want)
@@ -278,27 +279,36 @@ func oracleRun(t *testing.T, tc oracleCase, q oracleQuery, diff oracleDifference
 	case tc.Order != "rows" && tc.Order != "":
 		t.Fatalf("order %q is neither rows nor set", tc.Order)
 	}
-	if tol > 0 {
-		opts = append(opts, ursustest.WithTolerance(0, tol))
+	if abs > 0 || rel > 0 {
+		opts = append(opts, ursustest.WithTolerance(abs, rel))
 	}
 	ursustest.AssertFrameEqual(t, got, want, opts...)
 }
 
-// oracleTolerance is 0 for bits, else the relative tolerance "rel:<x>" names.
-func oracleTolerance(t *testing.T, f string) float64 {
+// oracleTolerance is 0, 0 for bits, else the tolerances "rel:<x>", "abs:<y>" or
+// "rel:<x> abs:<y>" name (step 500: an absolute one beside the relative, for an
+// answer that is exactly 0 in Polars and a rounding's 1e-16 here).
+func oracleTolerance(t *testing.T, f string) (abs, rel float64) {
 	t.Helper()
-	switch {
-	case f == "" || f == "bits":
-		return 0
-	case strings.HasPrefix(f, "rel:"):
-		tol, err := strconv.ParseFloat(strings.TrimPrefix(f, "rel:"), 64)
-		if err != nil || tol <= 0 {
-			t.Fatalf("float %q is not a tolerance", f)
-		}
-		return tol
+	if f == "" || f == "bits" {
+		return 0, 0
 	}
-	t.Fatalf("float %q is neither bits nor rel:<x>", f)
-	return 0
+	for _, part := range strings.Fields(f) {
+		kind, text, found := strings.Cut(part, ":")
+		tol, err := strconv.ParseFloat(text, 64)
+		if !found || err != nil || tol <= 0 {
+			t.Fatalf("float %q is neither bits nor rel:<x> or abs:<y>", f)
+		}
+		switch kind {
+		case "rel":
+			rel = tol
+		case "abs":
+			abs = tol
+		default:
+			t.Fatalf("float %q is neither bits nor rel:<x> or abs:<y>", f)
+		}
+	}
+	return abs, rel
 }
 
 // oracleDiffer applies ursus's documented difference to the recorded columns.
