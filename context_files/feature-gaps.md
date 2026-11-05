@@ -251,6 +251,7 @@ differs from their input's, or scalars outside a group-by.
 
 | missing or partial | prio |
 | --- | --- |
+| built: **lines,** Polars 2.x's `scan_lines` and `read_lines`, as `ScanLines` and NDJSON's spellings of it, in step 492 | — |
 | built: **JSON read,** in step 345: `ScanJSON` and `ScanJSONBytes`, Polars' `read_json`, each object made a line of NDJSON in place and read as step 334's NDJSON is, faster than Polars; schema overrides for both. NDJSON read and scanned in step 334; JSON and NDJSON written and sunk in step 333, each value in Polars' text | — |
 | built: **Arrow IPC,** in step 332: a file or a stream scanned, written and sunk, uncompressed, LZ4 or Zstandard, and a file's schema read; and a Parquet file's schema. Over arrow-go's IPC readers and writers | — |
 | **Hive partitioning:** built on read for Parquet in step 347, a directory read whole, its `key=value` directories typed columns, a filter on them skipping files, `include_file_paths`; `include_file_paths` for CSV and NDJSON in step 359; IPC's in step 360, a directory, a glob and a list, `internal/source/files`. **Partitioned writes** in step 367: `WithPartitionBy`, `WithPartitionIncludeKey` and `WithMaxRowsPerFile` for the four sinks, Polars' paths name for name | built |
