@@ -2,8 +2,8 @@ package ursus_test
 
 // The optimizer against itself, generated.
 //
-// TestPushdownSoundness compares twelve hand-picked queries with the optimizer on
-// and off, and none of the twelve is a chained WithColumns — which is the most
+// A list of twelve hand-picked queries compared with the optimizer on and off once
+// checked this, and none of the twelve was a chained WithColumns — which is the most
 // ordinary query that answered wrongly (audit.md §3, O1). A hand-picked list covers
 // what its author thought of. This one composes query shapes instead: two dozen
 // frame transforms, singly and in pairs, each followed by "tops" DERIVED from the

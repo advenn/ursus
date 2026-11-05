@@ -3,9 +3,10 @@ package ursus_test
 // Nested columns through Parquet, by hand: v0.3-scope.md §2.2 and audit.md's I17.
 //
 // ursus reads a List of primitives and a Struct of primitive fields from Parquet,
-// and could write neither back. Each case writes a frame and reads it back, and the
-// two must be equal; the I17 cases read lists a pyarrow file holds, whose element
-// types the reader refused.
+// and could write neither back. Every element type's round trip is swept in
+// parquet_nested_test.go; here a NaN element is written and read back, the I17
+// cases read lists a pyarrow file holds, whose element types the reader refused,
+// and deeper nesting is refused.
 
 import (
 	"bytes"
@@ -100,31 +101,10 @@ func TestNestedParquetByHand(t *testing.T) {
 	ms := func(h, m, s, milli int64) int64 { return ((h*60+m)*60+s)*1000 + milli }
 
 	cases := []ioCase{
-		// --- written by ursus, read back ---
-		{"List(Int64)", roundTrips(ursus.Frame(fourLists("l",
-			data.NewFixed("item", dtype.Int64, []int64{1, 0, 3}, three))))},
-		{"List(String)", roundTrips(ursus.Frame(fourLists("l",
-			data.NewString("item", []string{"", "x", "z"}, three))))},
+		// --- written by ursus, read back: the one value the sweep in
+		// parquet_nested_test.go does not hold ---
 		{"List(Float64) with NaN", roundTrips(ursus.Frame(fourLists("l",
 			data.NewFixed("item", dtype.Float64, []float64{math.NaN(), 0, -1.5}, three))))},
-		{"Struct(a Int64, b String)", roundTrips(ursus.Frame(data.NewStruct("s", []*ursus.Column{
-			data.NewFixed("a", dtype.Int64, []int64{1, 0, 3}, validity(true, false, true)),
-			data.NewString("b", []string{"x", "y", ""}, validity(true, true, false)),
-		}, validity(true, true, false))))},
-		{"List(Bool)", roundTrips(ursus.Frame(fourLists("l",
-			data.NewBool("item", validity(true, false, false), three))))},
-		{"List(Uint8)", roundTrips(ursus.Frame(fourLists("l",
-			data.NewFixed("item", dtype.Uint8, []uint8{1, 0, 255}, three))))},
-		{"List(Uint64)", roundTrips(ursus.Frame(fourLists("l",
-			data.NewFixed("item", dtype.Uint64, []uint64{1, 0, math.MaxUint64}, three))))},
-		{"List(Decimal(10, 2))", roundTrips(ursus.Frame(fourLists("l",
-			data.NewFixed("item", dtype.Decimal(10, 2), i128s("125", "0", "-350"), three))))},
-		{"List(Time(ms))", roundTrips(ursus.Frame(fourLists("l",
-			data.NewFixed("item", dtype.Time(dtype.Milli), []int64{ms(1, 2, 3, 4), 0, ms(23, 59, 59, 0)}, three))))},
-		{"lists across row groups of two", roundTrips(ursus.Frame(
-			data.NewList("l", []int32{0, 2, 2, 2, 3, 6}, data.NewFixed("item", dtype.Int64,
-				[]int64{1, 2, 3, 4, 5, 6}, bitmap.AllSet(6)), validity(true, true, false, true, true))),
-			ursus.WithRowGroupRows(2))},
 
 		// --- written by pyarrow: audit.md's I17 element types ---
 		{"pyarrow List(Bool)", readsAs("lb", fourLists("lb",

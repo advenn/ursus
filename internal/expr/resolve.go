@@ -309,7 +309,7 @@ func resolveArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error) {
 	// has: every arithmetic operator, with / and ** cast to floats below.
 	if common.ID() == dtype.TypeInt128 {
 		switch op {
-		case OpAdd, OpSub, OpMul, OpFloorDiv, OpMod, OpDiv, OpPow, OpArctan2:
+		case OpAdd, OpSub, OpMul, OpFloorDiv, OpMod, OpDiv, OpPow, OpArctan2, OpTruncDiv:
 		default:
 			return Binding{}, uerr.New(uerr.KindType, "",
 				"operator %s is not implemented for %s", op, common).
@@ -468,7 +468,7 @@ func resolveTemporalArithmetic(op BinaryOp, l, r dtype.DataType) (Binding, error
 			Hint("dividing a duration by a number rounds; spell it FloorDiv, which floors").
 			Hint("or cast the duration to Float64 for an approximate result")
 
-	case (op == OpMul || op == OpFloorDiv) && isDur(l) && r.IsNumeric():
+	case (op == OpMul || op == OpFloorDiv || op == OpTruncDiv) && isDur(l) && r.IsNumeric():
 		if err := integralScale(op, l, r); err != nil {
 			return Binding{}, err
 		}
@@ -557,6 +557,8 @@ func opMethod(op BinaryOp) string {
 		return "Div"
 	case OpFloorDiv:
 		return "FloorDiv"
+	case OpTruncDiv:
+		return "TruncDiv"
 	}
 	return op.String()
 }
@@ -565,7 +567,7 @@ func opVerb(op BinaryOp) string {
 	switch op {
 	case OpMul:
 		return "multiply"
-	case OpDiv, OpFloorDiv:
+	case OpDiv, OpFloorDiv, OpTruncDiv:
 		return "divide"
 	default:
 		return op.String()

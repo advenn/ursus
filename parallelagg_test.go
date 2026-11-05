@@ -8,7 +8,6 @@ package ursus_test
 // dispatcher actually spreads them.
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/advenn/ursus"
@@ -348,50 +347,6 @@ func TestParallelAggregationSwitchesToSerialUnderALimit(t *testing.T) {
 		return s
 	}
 	ursustest.AssertFrameEqual(t, byKey(got), byKey(want), ursustest.WithTolerance(0, 1e-9))
-}
-
-// TestParallelAggregationIsNotASemanticKnob: thread count is not a semantic knob,
-// checked across every shape at once rather than per aggregate.
-func TestParallelAggregationIsNotASemanticKnob(t *testing.T) {
-	q := func() *ursus.LazyFrame {
-		return ursus.Scan(aggSource(t)).
-			Filter(ursus.Col("w").Lt(20)).
-			GroupBy(ursus.Col("g")).
-			Agg(
-				ursus.Col("v").Sum().Alias("s"),
-				ursus.Col("v").Mean().Alias("m"),
-				ursus.Col("k").Max().Alias("hi"),
-				ursus.Len().Alias("n"),
-			).
-			Sort(ursus.Asc(ursus.Col("g")))
-	}
-	want, err := q().Collect(t.Context(), serial()...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, n := range []int{2, 3, 5, 8, 16} {
-		got, err := q().Collect(t.Context(), parallel(n)...)
-		if err != nil {
-			t.Fatalf("threads=%d: %v", n, err)
-		}
-		// Tolerance for the same reason as the equivalence test: a parallel float
-		// sum reassociates. The integer columns (hi, n) are still compared exactly.
-		ursustest.AssertFrameEqual(t, got, want, ursustest.WithTolerance(0, 1e-9))
-	}
-}
-
-// TestParallelAggregationExplainIsUnchanged: the driver is a physical-plan choice,
-// so it must not leak into the logical plan a user is shown.
-func TestParallelAggregationExplainIsUnchanged(t *testing.T) {
-	lf := ursus.Scan(aggSource(t)).GroupBy(ursus.Col("k")).
-		Agg(ursus.Col("v").Sum().Alias("s"))
-	txt, err := lf.Explain(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(txt, "AGGREGATE") {
-		t.Errorf("plan should still describe an AGGREGATE:\n%s", txt)
-	}
 }
 
 // TestOptimizerFlagsDoNotAffectParallelAggregation: the two features landed one

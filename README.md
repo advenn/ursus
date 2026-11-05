@@ -184,7 +184,7 @@ tell from a real one; use `MapBatches` when the null is the point. The name is
 required, and `Explain` shows it. Your function is called from several goroutines at
 once, so it must be safe for that.
 
-Not done: built-in object stores and SQL, both out by decision (the seam above reaches a store today); in Parquet, a
+Not done: built-in object stores, out by decision (the seam above reaches a store today); SQL, in DuckDB's dialect, wanted; in Parquet, a
 List of Lists or of Structs, page indexes and bloom filters; Avro, Excel, Delta Lake and Iceberg; predicate pushdown
 into CSV and Arrow scans; common subexpressions shared across a query's expressions, a join order chosen by
 statistics, and a work-stealing scheduler; `collect_all` and a plan serialized; rolling weights.
