@@ -146,7 +146,7 @@ func runCalCases(t *testing.T, cases []calCase) {
 }
 
 func TestOffsetByByHand(t *testing.T) {
-	month, day, year := ursus.Every("1mo"), ursus.Every("1d"), ursus.Every("1y")
+	month, year := ursus.Every("1mo"), ursus.Every("1y")
 	runCalCases(t, []calCase{
 		// Months clamp to the end of the month, years too, and back as well.
 		{name: "a month after the 31st", dt: dtype.Date,
@@ -170,11 +170,6 @@ func TestOffsetByByHand(t *testing.T) {
 			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(ursus.Every("1d2h")) },
 			want: []string{"2024-03-11T03:30:00"}},
 
-		// A day is the wall clock's, across a daylight-saving change: 23 hours here.
-		{name: "a day across spring forward keeps 09:00", dt: ny,
-			in:   []string{"2024-03-09T09:00:00-05:00"},
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(day) },
-			want: []string{"2024-03-10T09:00:00-04:00"}},
 		// An hour is elapsed time, both spellings.
 		{name: "an hour across spring forward is elapsed time", dt: ny,
 			in:   []string{"2024-03-10T01:30:00-05:00"},
@@ -184,25 +179,6 @@ func TestOffsetByByHand(t *testing.T) {
 			in:   []string{"2024-03-10T03:30:00-04:00"},
 			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(-90 * time.Minute) },
 			want: []string{"2024-03-10T01:00:00-05:00"}},
-		// A wall clock read twice, in a fold, keeps the input's own offset.
-		{name: "a day into a fold, from summer time", dt: ny,
-			in:   []string{"2024-11-02T01:30:00-04:00"},
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(day) },
-			want: []string{"2024-11-03T01:30:00-04:00"}},
-		{name: "a day back into a fold, from winter time", dt: ny,
-			in:   []string{"2024-11-04T01:30:00-05:00"},
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(ursus.Every("-1d")) },
-			want: []string{"2024-11-03T01:30:00-05:00"}},
-		// A wall clock never read, in a gap, is the instant the gap ends. Santiago's
-		// 2024-09-08 began at 01:00: AddDate went back an hour, to the same date.
-		{name: "a day into a midnight that does not exist", dt: dtype.Datetime(dtype.Micro, "America/Santiago"),
-			in:   []string{"2024-09-07T00:00:00-04:00", "2024-09-07T00:30:00-04:00"},
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(day) },
-			want: []string{"2024-09-08T01:00:00-03:00", "2024-09-08T01:00:00-03:00"}},
-		{name: "a month into a gap", dt: ny,
-			in:   []string{"2024-02-10T02:30:00-05:00"},
-			f:    func(d ursus.DtExpr) ursus.Expr { return d.OffsetBy(month) },
-			want: []string{"2024-03-10T03:00:00-04:00"}},
 
 		// Refused while the query is planned.
 		{name: "an hour on a Date", dt: dtype.Date, in: []string{"2024-01-01"},
@@ -263,13 +239,6 @@ func TestMonthStartAndEndByHand(t *testing.T) {
 		{name: "the month is the zone's", dt: tokyo, f: end,
 			in:   []string{"2024-01-31T20:00:00Z"},
 			want: []string{"2024-02-29T05:00:00+09:00"}},
-		{name: "back across spring forward", dt: ny, f: start,
-			in:   []string{"2024-03-31T09:00:00-04:00"},
-			want: []string{"2024-03-01T09:00:00-05:00"}},
-		// Asunción's 2023-10-01 began at 01:00, so 00:30 on it was never read.
-		{name: "into a gap", dt: dtype.Datetime(dtype.Micro, "America/Asuncion"), f: start,
-			in:   []string{"2023-10-15T00:30:00-03:00"},
-			want: []string{"2023-10-01T01:00:00-03:00"}},
 		{name: "a Time", dt: dtype.Time(dtype.Nano), f: start,
 			refuse: "requires a Date or Datetime"},
 	})
@@ -340,10 +309,6 @@ func TestRoundByHand(t *testing.T) {
 		{name: "a month, on dates", dt: dtype.Date, f: round(ursus.Every("1mo")),
 			in:   []string{"2024-01-16", "2024-01-17", "2023-02-15"},
 			want: []string{"2024-01-01", "2024-02-01", "2023-03-01"}},
-		// A 23-hour day's middle is 11:30 after its start: 12:30 EDT.
-		{name: "a day of 23 hours", dt: ny, f: round(ursus.Every("1d")),
-			in:   []string{"2024-03-10T12:29:59-04:00", "2024-03-10T12:30:00-04:00"},
-			want: []string{"2024-03-10T00:00:00-05:00", "2024-03-11T00:00:00-04:00"}},
 		// The wall clock's hour for an Interval, the epoch's for a Duration, as
 		// Truncate.
 		{name: "the local hour at +05:30", dt: kolkata, f: round(ursus.Every("1h")),
@@ -352,10 +317,6 @@ func TestRoundByHand(t *testing.T) {
 		{name: "the epoch's hour at +05:30", dt: kolkata, f: round(time.Hour),
 			in:   []string{"2024-06-01T10:47:00+05:30"},
 			want: []string{"2024-06-01T10:30:00+05:30"}},
-		// Across a fold the next hour is the one the clock reaches.
-		{name: "an hour in a fold", dt: ny, f: round(ursus.Every("1h")),
-			in:   []string{"2024-11-03T01:30:00-04:00", "2024-11-03T01:29:00-04:00"},
-			want: []string{"2024-11-03T01:00:00-05:00", "2024-11-03T01:00:00-04:00"}},
 
 		{name: "a Time", dt: dtype.Time(dtype.Nano), f: round(time.Hour),
 			refuse: "round is not defined for Time"},

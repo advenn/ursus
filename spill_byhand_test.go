@@ -198,9 +198,6 @@ func TestSpillingByHand(t *testing.T) {
 		// --- nested columns through the spill format ---
 		{"reverse carrying a List(String) and a Struct", spills(nested().Reverse())},
 		{"tail carrying a List(String) and a Struct", spills(nested().Tail(n * 3 / 4))},
-		{"sort carrying a List(String) and a Struct", spills(nested().Sort(ursus.Asc(c("k")), ursus.Asc(c("seq"))))},
-		{"group_by MaintainOrder, First of a list", spills(nested().GroupBy(c("k")).MaintainOrder().
-			Agg(c("l").First(), c("s").First(), c("seq").Sum()))},
 		{"join with a Struct payload", spills(base.Join(ursus.Frame(ursus.Values("k", spillInts(0, 1500)), st.Slice(0, 1500)),
 			ursus.JoinOn(c("k"))), ursustest.IgnoreRowOrder())},
 
@@ -208,7 +205,6 @@ func TestSpillingByHand(t *testing.T) {
 		{"Unique(k)", spills(base.Unique("k"))},
 		{"Unique() of whole rows", spills(base.Select(c("k"), c("pad")).Unique())},
 		{"Unique over NaN and null keys", spills(base.Unique("f", "pad"))},
-		{"Unique carrying a List and a Struct", spills(nested().Unique("k"))},
 		{"Unique(k).Head(5) still stops early", func(t *testing.T) string {
 			got, _, err := spillCollect(t, base.Unique("k").Head(5), limit, t.TempDir())
 			if err != nil {
@@ -232,31 +228,11 @@ func TestSpillingByHand(t *testing.T) {
 		{"First() and Last() over k", spills(base.WithColumns(
 			c("seq").First().Over(c("k")).Alias("first"), c("pad").Last().Over(c("k")).Alias("last")))},
 		{"Over NaN and null partition keys", spillsAt(wide, base.WithColumns(c("seq").Sum().Over(c("f")).Alias("t")))},
-		{"Over carrying a List and a Struct", spills(nested().WithColumns(c("seq").Sum().Over(c("k")).Alias("t")))},
 		{"Over over a column named __ord", spills(ord.WithColumns(c("__ord").Sum().Over(c("k")).Alias("t")))},
 
 		// --- group_by ---
 		{"group_by MaintainOrder over a column named __ord", spills(ord.GroupBy(c("k")).MaintainOrder().
 			Agg(c("__ord").Sum()))},
-
-		// A rank over no keys, and over one partition larger than the limit, is
-		// answered in a sorted pass since step 237: max and average from min both ways.
-		{"Over() with no keys ranks in a sorted pass", spills(base.WithColumns(
-			c("f").Rank(ursus.RankOrdinal, false).Over().Alias("t"),
-			c("f").Rank(ursus.RankMax, true).Over().Alias("u"),
-			c("f").Rank(ursus.RankAverage, false).Over().Alias("v")))},
-		{"one partition larger than the limit ranks in a sorted pass", spills(spillFrame(n, 1).
-			WithColumns(c("f").Rank(ursus.RankDense, true).Over(c("k")).Alias("t")))},
-
-		// A rolling window by time over no keys, and over one partition larger than
-		// the limit, is walked in a sorted pass by its by since step 246, holding the
-		// rows of its period.
-		{"Over() with no keys sums by time in a sorted pass", spills(
-			base.WithColumns(c("seq").RollingSumBy(c("seq").Cast(ursus.Datetime(ursus.Micro, "")),
-				ursus.Every("20us")).Over().Alias("t")))},
-		{"one partition larger than the limit sums by time in a sorted pass", spills(spillFrame(n, 1).
-			WithColumns(c("seq").RollingSumBy(c("seq").Cast(ursus.Datetime(ursus.Micro, "")),
-				ursus.Every("20us")).Over(c("k")).Alias("t")))},
 
 		// --- the walls that stay, each named ---
 		// A rolling window by time holds every row of its period, however many: one

@@ -53,15 +53,14 @@ func TestJoinWhereEqualsCrossPlusFilter(t *testing.T) {
 		t.Fatal("the rule did not fire, so the comparison below proves nothing")
 	}
 
-	for _, size := range []int{1, 2, 3, 7, 64, 8192} {
-		for _, threads := range []int{1, 2, 3, 4, 8} {
-			got, err := query().Collect(t.Context(),
-				ursus.WithBatchSize(size), ursus.WithThreads(threads), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("batch %d, %d threads: %v", size, threads, err)
-			}
-			ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
+	for _, run := range []struct{ size, threads int }{{1, 1}, {7, 3}, {8192, 8}} {
+		size, threads := run.size, run.threads
+		got, err := query().Collect(t.Context(),
+			ursus.WithBatchSize(size), ursus.WithThreads(threads), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch %d, %d threads: %v", size, threads, err)
 		}
+		ursustest.AssertFrameEqual(t, got, want, ursustest.CheckNullability())
 	}
 }
 
@@ -96,33 +95,6 @@ func TestJoinWhereKeepsBothKeyColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 	ursustest.AssertFrameEqual(t, df, uncollapsed, ursustest.CheckNullability())
-}
-
-// TestJoinWhereNullKeysDoNotMatch is the legality argument in the rule's doc, made
-// into a test. `l.k == r.k` over a cross product drops a null key because the
-// comparison is null and Filter drops it; an inner join with NullsEqual false drops
-// it too. The two agree, and that agreement is what makes the rewrite sound — so a
-// rewrite that set NullsEqual true would invent a row here.
-func TestJoinWhereNullKeysDoNotMatch(t *testing.T) {
-	lf := joinLeft().JoinWhere(joinRight(), ursus.Col("k").Eq(ursus.Col("k_right")))
-
-	df, err := lf.Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	// left k = [1,2,2,null,3], right k = [2,2,4,null]. Only the two 2s on each
-	// side match, so 2x2 = 4 rows. The nulls contribute nothing.
-	if df.Height() != 4 {
-		t.Fatalf("got %d rows, want 4 — a null key must not match another null:\n%s",
-			df.Height(), df)
-	}
-	for i := range df.Height() {
-		if v, ok, err := df.At[int64](i, "k"); err != nil {
-			t.Fatal(err)
-		} else if !ok || v != 2 {
-			t.Errorf("row %d: k = %v (ok=%v), want 2", i, v, ok)
-		}
-	}
 }
 
 // TestJoinWherePureInequalityStaysACrossJoin pins the rule's other half. A

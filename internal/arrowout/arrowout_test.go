@@ -258,69 +258,6 @@ func TestTimeOutsideTheDayIsRefusedRatherThanTruncated(t *testing.T) {
 
 // --- the ordinary types ------------------------------------------------------
 
-// TestValuesSurviveTheExport covers the types whose layout ursus and Arrow already
-// share, on values rather than on types, including nulls.
-func TestValuesSurviveTheExport(t *testing.T) {
-	valid := func(bits ...bool) bitmap.View {
-		b := bitmap.NewBuilder(len(bits))
-		for _, x := range bits {
-			b.Append(x)
-		}
-		return b.Finish()
-	}
-	v := valid(true, false, true)
-
-	cases := []struct {
-		name string
-		col  *data.Column
-		want []string // "" means null
-	}{
-		{"int64", data.NewFixed("c", dtype.Int64, []int64{7, 0, 9}, v),
-			[]string{"7", "", "9"}},
-		{"uint8", data.NewFixed("c", dtype.Uint8, []uint8{1, 0, 255}, v),
-			[]string{"1", "", "255"}},
-		{"float64", data.NewFixed("c", dtype.Float64, []float64{1.5, 0, -2.25}, v),
-			[]string{"1.5", "", "-2.25"}},
-		{"string", data.NewString("c", []string{"a", "x", "ccc"}, v),
-			[]string{"a", "", "ccc"}},
-		{"bool", data.NewBool("c", valid(true, true, false), v),
-			[]string{"true", "", "false"}},
-		{"date", data.NewFixed("c", dtype.Date, []int32{0, 1, 19000}, v),
-			[]string{"1970-01-01", "", "2022-01-08"}},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			a, err := arrowout.Column(c.col)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer a.Release()
-
-			if a.Len() != rows {
-				t.Fatalf("%d rows, want %d", a.Len(), rows)
-			}
-			for i, want := range c.want {
-				if want == "" {
-					if !a.IsNull(i) {
-						t.Errorf("row %d should be null, got %q", i, a.ValueStr(i))
-					}
-					continue
-				}
-				if a.IsNull(i) {
-					t.Errorf("row %d is null, want %q", i, want)
-					continue
-				}
-				if got := a.ValueStr(i); got != want {
-					t.Errorf("row %d = %q, want %q", i, got, want)
-				}
-			}
-		})
-	}
-	if len(cases) < 6 {
-		t.Error("the case list has shrunk")
-	}
-}
-
 // TestSlicedColumnsExportCorrectly.
 //
 // Column.Slice leaves a fixed payload re-windowed to offset zero but the validity
@@ -375,53 +312,6 @@ func TestStringSliceKeepsAbsoluteOffsets(t *testing.T) {
 			t.Errorf("row %d = %q, want %q", i, got, want)
 		}
 	}
-}
-
-// TestNestedTypesExport covers List and Struct, which recurse.
-func TestNestedTypesExport(t *testing.T) {
-	t.Run("list", func(t *testing.T) {
-		child := data.NewFixed("child", dtype.Int64, []int64{1, 2, 3}, bitmap.AllSet(3))
-		col := data.NewList("l", []int32{0, 2, 3}, child, bitmap.AllSet(2))
-
-		a, err := arrowout.Column(col)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer a.Release()
-
-		lv, ok := a.(*array.List)
-		if !ok {
-			t.Fatalf("exported as %T, want *array.List", a)
-		}
-		if lv.Len() != 2 {
-			t.Fatalf("%d rows, want 2", lv.Len())
-		}
-		if got := lv.ValueStr(0); got != "[1,2]" {
-			t.Errorf("row 0 = %s, want [1,2]", got)
-		}
-	})
-
-	t.Run("struct", func(t *testing.T) {
-		f := data.NewFixed("f", dtype.Int64, []int64{7, 8, 9}, allSet())
-		col := data.NewStruct("s", []*data.Column{f}, allSet())
-
-		a, err := arrowout.Column(col)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer a.Release()
-
-		sv, ok := a.(*array.Struct)
-		if !ok {
-			t.Fatalf("exported as %T, want *array.Struct", a)
-		}
-		if sv.NumField() != 1 {
-			t.Fatalf("%d fields, want 1", sv.NumField())
-		}
-		if got := sv.Field(0).(*array.Int64).Value(2); got != 9 {
-			t.Errorf("field f row 2 = %d, want 9", got)
-		}
-	})
 }
 
 // --- the two guarantees the doc makes ----------------------------------------

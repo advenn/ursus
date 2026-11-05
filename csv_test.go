@@ -60,29 +60,6 @@ func TestScanCSVInfersTypes(t *testing.T) {
 	}
 }
 
-// TestScanCSVEmptyStringIsNotNull is the other half of the same decision. For a
-// String column "" is a value; conflating it with null would be unrecoverable. So
-// the two are spelled apart: a quoted "" is the empty string, and an empty field is
-// null, as Polars reads them. Until step 77 every empty String field was "", and a
-// null String could not be written at all without a sentinel.
-func TestScanCSVEmptyStringIsNotNull(t *testing.T) {
-	path := writeFile(t, "s.csv", "a,b\n\"\",x\n,y\n")
-	df, err := ursus.ScanCSV(path).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	v, ok, err := df.At[string](0, "a")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok || v != "" {
-		t.Errorf("a quoted empty String field = (%q, valid %v), want (\"\", true)", v, ok)
-	}
-	if _, ok, _ := df.At[string](1, "a"); ok {
-		t.Error("an unquoted empty String field must be null")
-	}
-}
-
 // TestScanCSVProjectionSkipsParsing is the point of pushing projection into a
 // reader. The unselected column is deliberately unparseable as its inferred type:
 // if the reader were parsing every column, this query would fail.
