@@ -15,9 +15,9 @@
 //	go run ./internal/gen/api -tag v0.8.0 -dir <the checkout> > api/v0.8.0.txt
 //
 // and `make api`, which CI runs, lists the features the newest of them has and this
-// tree does not, and fails unless each is named, in backquotes, in a Breaks section
-// of the CHANGELOG's unreleased releases: ursus is on ZeroVer, a stable 1.0 not
-// expected yet, so a minor version may break, and every break is listed.
+// tree does not, and fails on any: since 2026-11-05 (step 494) the public API is
+// stable, so a release adds and never removes, renames or reshapes. Before that a
+// break passed if a Breaks section of the CHANGELOG's unreleased versions named it.
 //
 // apidiff and gorelease, which the scope named, never finish the root package: their
 // correspondence check computes method sets without end, past 4.5 GB in twenty
@@ -37,14 +37,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 )
 
 func main() {
 	dir := flag.String("dir", ".", "the module to list")
-	check := flag.Bool("check", false, "list the breaks since the newest api/*.txt and fail on one the CHANGELOG does not name")
+	check := flag.Bool("check", false, "list the features of the newest api/*.txt this tree no longer has, and fail on any")
 	tag := flag.String("tag", "", "head the list as the API at this tag, for api/<tag>.txt")
 	flag.Parse()
 	feats, err := features(*dir)
@@ -56,8 +55,8 @@ func main() {
 		w := bufio.NewWriter(os.Stdout)
 		if *tag != "" {
 			fmt.Fprintf(w, "# ursus's public API at %s, a feature a line: go run ./internal/gen/api in a checkout\n"+
-				"# of the tag (step 401). `make api` lists what it has and the tree does not, each a break\n"+
-				"# the CHANGELOG names.\n", *tag)
+				"# of the tag (step 401). `make api` lists what it has and the tree does not, and fails on any:\n"+
+				"# the API is stable (step 494).\n", *tag)
 		}
 		for _, f := range feats {
 			fmt.Fprintln(w, f)
@@ -72,8 +71,7 @@ func main() {
 }
 
 // checkBreaks reads the newest api/<tag>.txt under dir, lists what it has and feats
-// does not, and fails on one no Breaks section of the CHANGELOG's unreleased releases
-// names.
+// does not, and fails on any: the public API is stable.
 func checkBreaks(dir string, feats []string) error {
 	tag, old, err := newest(filepath.Join(dir, "api"))
 	if err != nil {
@@ -82,23 +80,12 @@ func checkBreaks(dir string, feats []string) error {
 	breaks := removed(old, feats)
 	added := len(removed(feats, old))
 	fmt.Printf("api: %d features, %d added and %d gone since %s\n", len(feats), added, len(breaks), tag)
-	log, err := os.ReadFile(filepath.Join(dir, "CHANGELOG.md"))
-	if err != nil {
-		return err
-	}
-	named := breaksNamed(string(log))
-	var missing []string
 	for _, b := range breaks {
-		ok := slices.ContainsFunc(names(b), func(n string) bool { return named[n] })
-		mark := "  "
-		if !ok {
-			mark, missing = "! ", append(missing, b)
-		}
-		fmt.Println(mark + b)
+		fmt.Println("! " + b)
 	}
-	if len(missing) > 0 {
-		return fmt.Errorf("%d breaks since %s that no Breaks section of an unreleased version names, marked !: "+
-			"name each in backquotes, Type.Member for a member", len(missing), tag)
+	if len(breaks) > 0 {
+		return fmt.Errorf("%d features of %s gone, marked !: the public API is stable, so put the better design "+
+			"beside the old one, never in its place", len(breaks), tag)
 	}
 	return nil
 }
@@ -157,80 +144,6 @@ func removed(old, cur []string) []string {
 		}
 	}
 	return out
-}
-
-var (
-	unreleased = regexp.MustCompile(`(?m)^## Unreleased`)
-	release    = regexp.MustCompile(`(?m)^## `)
-	section    = regexp.MustCompile(`(?m)^### `)
-	quoted     = regexp.MustCompile("`([^`]+)`")
-	word       = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?`)
-)
-
-// breaksNamed is every name, and Type.Member, in backquotes in a Breaks section of the
-// CHANGELOG's unreleased versions: `WithThreads(n)` names WithThreads,
-// `EngineStats.Held` names EngineStats.Held and EngineStats.
-func breaksNamed(log string) map[string]bool {
-	named := map[string]bool{}
-	for _, at := range unreleased.FindAllStringIndex(log, -1) {
-		rel := log[at[1]:]
-		if next := release.FindStringIndex(rel); next != nil {
-			rel = rel[:next[0]]
-		}
-		for _, s := range section.FindAllStringIndex(rel, -1) {
-			body := rel[s[1]:]
-			if !strings.HasPrefix(body, "Breaks") {
-				continue
-			}
-			if next := section.FindStringIndex(body); next != nil {
-				body = body[:next[0]]
-			}
-			for _, q := range quoted.FindAllStringSubmatch(body, -1) {
-				for _, w := range word.FindAllString(q[1], -1) {
-					named[w] = true
-					if t, _, ok := strings.Cut(w, "."); ok {
-						named[t] = true
-					}
-				}
-			}
-		}
-	}
-	return named
-}
-
-// names are what may name a feature's break in the CHANGELOG: its name; a member's
-// own name, its type's, or Type.Member, as v0.6.8 named `SinkNDJSON`; a constant's or a
-// variable's type, where it is this package's: the break of `ConcatMode` is its
-// constants'.
-func names(feat string) []string {
-	_, rest, _ := strings.Cut(feat, ", ")
-	kind, rest, _ := strings.Cut(rest, " ")
-	ident := func(s string) string {
-		s = strings.TrimLeft(s, "*[]")
-		return s[:strings.IndexFunc(s+" ", func(r rune) bool {
-			return r == ' ' || r == '(' || r == '[' || r == ',' || r == ')'
-		})]
-	}
-	switch kind {
-	case "method":
-		// method (*T) M(...)
-		recv, m, _ := strings.Cut(rest, ") ")
-		t := ident(strings.TrimPrefix(recv, "("))
-		return []string{t, ident(m), t + "." + ident(m)}
-	case "type":
-		t := ident(rest)
-		if _, member, ok := strings.Cut(rest, ", "); ok && !strings.HasPrefix(member, "embedded ") {
-			return []string{t, ident(member), t + "." + ident(member)}
-		}
-		return []string{t}
-	case "const", "var":
-		n, typ, _ := strings.Cut(rest, " ")
-		if t := ident(typ); t != "" && !strings.Contains(t, ".") && t != "=" {
-			return []string{n, t}
-		}
-		return []string{n}
-	}
-	return []string{ident(rest)}
 }
 
 // features lists the API of dir's public packages: every package of the module

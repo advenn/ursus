@@ -129,34 +129,6 @@ func TestABreakIsWhatACallerSees(t *testing.T) {
 	}
 }
 
-// TestABreakIsNamedInAnUnreleasedBreaksSection: a break is named by its name, its
-// type's or Type.Member, in backquotes, in a Breaks section of an unreleased version
-// alone: not in its Features, nor in a released version's Breaks.
-func TestABreakIsNamedInAnUnreleasedBreaksSection(t *testing.T) {
-	log := "# Changelog\n\n## Unreleased — toward v0.9\n\n### Breaks\n\n" +
-		"- **`Engine.Stats` reports more** (1), `WithThreads(n)` too.\n\n### Features\n\n- `NewThing`.\n\n" +
-		"## Unreleased — toward v0.8\n\n### Breaks\n\n- `Concat` and `ConcatMode`.\n\n" +
-		"## v0.7.0\n\n### Breaks\n\n- `Released`.\n"
-	named := breaksNamed(log)
-	for _, c := range []struct {
-		feat string
-		ok   bool
-	}{
-		{"pkg m, method (*Engine) Stats() EngineStats", true},
-		{"pkg m, func WithThreads(int) CollectOption", true},
-		{"pkg m, func Concat(...*LazyFrame) *LazyFrame", true},
-		{"pkg m, const ConcatStrict ConcatMode", true},
-		{"pkg m, type EngineStats struct, Held int64", false},
-		{"pkg m, func NewThing() int", false},
-		{"pkg m, func Released()", false},
-		{"pkg m, method (*Frame) Stats() int", false},
-	} {
-		if got := slices.ContainsFunc(names(c.feat), func(n string) bool { return named[n] }); got != c.ok {
-			t.Errorf("%q named %v, want %v (names %v)", c.feat, got, c.ok, names(c.feat))
-		}
-	}
-}
-
 // TestTheNewestTagIsByVersion: v0.10.0 is newer than v0.9.1.
 func TestTheNewestTagIsByVersion(t *testing.T) {
 	dir := t.TempDir()
@@ -174,9 +146,10 @@ func TestTheNewestTagIsByVersion(t *testing.T) {
 	}
 }
 
-// TestAnUnnamedBreakFails: a feature of the newest tag's that the tree does not have
-// fails the check until a Breaks section of an unreleased version names it.
-func TestAnUnnamedBreakFails(t *testing.T) {
+// TestAGoneFeatureFails: a feature of the newest tag's that the tree does not have
+// fails the check, whatever the CHANGELOG says; a changed signature is gone; a feature
+// added is not.
+func TestAGoneFeatureFails(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "api"), 0o755); err != nil {
 		t.Fatal(err)
@@ -185,19 +158,21 @@ func TestAnUnnamedBreakFails(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "api", "v0.1.0.txt"), []byte(old), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cur := []string{"pkg m, func Gone(string) int", "pkg m, func Kept()"}
+	log := "## Unreleased — toward v0.2\n\n### Breaks\n\n- `Gone` takes a string.\n"
+	if err := os.WriteFile(filepath.Join(dir, "CHANGELOG.md"), []byte(log), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	for _, c := range []struct {
-		log string
-		ok  bool
+		name string
+		cur  []string
+		ok   bool
 	}{
-		{"## Unreleased — toward v0.2\n\n### Features\n\n- `Gone` takes a string.\n", false},
-		{"## Unreleased — toward v0.2\n\n### Breaks\n\n- `Gone` takes a string.\n", true},
+		{"a changed signature, named in Breaks", []string{"pkg m, func Gone(string) int", "pkg m, func Kept()"}, false},
+		{"a removal", []string{"pkg m, func Kept()"}, false},
+		{"an addition", []string{"pkg m, func Gone(int) int", "pkg m, func Kept()", "pkg m, func New()"}, true},
 	} {
-		if err := os.WriteFile(filepath.Join(dir, "CHANGELOG.md"), []byte(c.log), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := checkBreaks(dir, cur); (err == nil) != c.ok {
-			t.Errorf("the break named in %q: %v", c.log, err)
+		if err := checkBreaks(dir, c.cur); (err == nil) != c.ok {
+			t.Errorf("%s: %v", c.name, err)
 		}
 	}
 }
