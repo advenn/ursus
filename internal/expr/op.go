@@ -201,6 +201,10 @@ const (
 	OpRadians
 	// OpCot, the cotangent, 1/tan (step 283), appended after the block it joins.
 	OpCot
+	// OpErf and OpErfc, the error function and its complement (step 488), appended
+	// after the cotangent; they widen as it does.
+	OpErf
+	OpErfc
 
 	unaryOpCount
 )
@@ -218,6 +222,7 @@ var unaryOpNames = [unaryOpCount]string{
 	OpSinh: "sinh", OpCosh: "cosh", OpTanh: "tanh",
 	OpArcSinh: "arcsinh", OpArcCosh: "arccosh", OpArcTanh: "arctanh",
 	OpDegrees: "degrees", OpRadians: "radians", OpCot: "cot",
+	OpErf: "erf", OpErfc: "erfc",
 }
 
 func (o UnaryOp) String() string {
@@ -240,7 +245,7 @@ func (o UnaryOp) IsNullPredicate() bool { return o == OpIsNull || o == OpIsNotNu
 // A range comparison over declaration order, like the classifiers above, which is
 // why that block is append-only.
 func (o UnaryOp) IsMath() bool {
-	return o >= OpSqrt && o <= OpLog1p || o >= OpSin && o <= OpCot
+	return o >= OpSqrt && o <= OpLog1p || o >= OpSin && o <= OpErfc
 }
 
 // IsNanPredicate reports whether the op tests a float property.

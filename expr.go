@@ -423,6 +423,19 @@ func (e Expr) Radians() Expr { return e.un(expr.OpRadians) }
 // near a multiple of pi/2 its relative error grows, its absolute error below 1e-30.
 func (e Expr) Cot() Expr { return e.un(expr.OpCot) }
 
+// Erf is the error function, and Erfc its complement, 1 - erf(x), computed apart so
+// that it keeps its precision where erf is near 1: Erfc(6) is 2.15e-17, where
+// 1 - Erf(6) is 0. The normal distribution's CDF at x is Erfc(-x/√2)/2. Polars'
+// `erf` and `erfc`.
+//
+// Both widen as Sqrt does, keeping Float32. Erf(±Inf) is ±1, Erfc(+Inf) is 0 and
+// Erfc(-Inf) 2; Erf(-0) is -0, and NaN is NaN. They are Go's math.Erf and math.Erfc,
+// within one ulp and four of Polars' glibc ones; a Float32's is the Float64 answer
+// rounded once, as Polars rounds it. Polars also takes a Boolean or a Decimal, as a
+// Float64; ursus refuses both, as it refuses their Sqrt: cast first.
+func (e Expr) Erf() Expr  { return e.un(expr.OpErf) }
+func (e Expr) Erfc() Expr { return e.un(expr.OpErfc) }
+
 // RoundMode is how Round breaks a tie, a value halfway between its two roundings.
 type RoundMode string
 

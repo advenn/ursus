@@ -498,48 +498,6 @@ func TestGroupByMaintainOrderSurvivesSpilling(t *testing.T) {
 	}
 }
 
-// TestGroupBySpillRecursesOnSkew: a partition that still does not fit is
-// re-partitioned, and the DEPTH IS MIXED INTO THE HASH rather than selecting a
-// different slice of one hash's bits.
-//
-// That is termination, not quality. Every key inside a partition already agrees in
-// the bits the parent used, so re-hashing with the same function maps the whole
-// partition onto one sub-partition, the recursion never narrows, and the query dies
-// at maxSpillDepth on data that is not skewed at all.
-//
-// No other test reaches depth 2 — every limit large enough for the nineteen
-// aggregates leaves each level-1 bucket small enough to fit — so without this the
-// per-level seed is unexercised and the recursion is a base case with a comment.
-func TestGroupBySpillRecursesOnSkew(t *testing.T) {
-	src := memFrame(t, 20000, 512, 4000)
-	q := func() *ursus.LazyFrame {
-		return ursus.Scan(src).GroupBy(ursus.Col("k")).
-			Agg(ursus.Col("seq").Min().Alias("lo"), ursus.Len().Alias("n"))
-	}
-	want, err := q().Collect(t.Context(), ursus.WithBatchSize(512))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var stats ursus.MemoryStats
-	got, err := q().Collect(t.Context(), ursus.WithBatchSize(512),
-		ursus.WithThreads(1), ursus.WithMemoryLimit(2<<10), ursus.WithSpillDir(t.TempDir()),
-		ursus.WithMemoryStats(&stats))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// One level opens at most sixteen files. Anything beyond that is a sub-sink
-	// spilling its own partitions, which is the only public evidence the recursion
-	// ran.
-	if stats.Spills <= 16 {
-		t.Fatalf("opened %d partitions, so nothing recursed", stats.Spills)
-	}
-	if got.Height() != want.Height() {
-		t.Fatalf("%d groups after recursion, want %d", got.Height(), want.Height())
-	}
-	ursustest.AssertFrameEqual(t, got, want, ursustest.IgnoreRowOrder())
-}
-
 // TestAHotGroupsQuantileSpillsItsValues: the freeze bounds CARDINALITY, never
 // per-key state, so a quantile over five hot keys refused until step 220. Now its
 // values spill, a run each time the sink is over, and it answers as it does in

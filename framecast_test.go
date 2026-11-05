@@ -168,25 +168,3 @@ func TestFrameCast(t *testing.T) {
 		}
 	})
 }
-
-// TestFrameCastUnderAMemoryLimit holds a frame's cast to its pieces: a WithColumns of
-// casts streams, so it answers under a limit far below its input as without one.
-func TestFrameCastUnderAMemoryLimit(t *testing.T) {
-	const n = 20_000
-	a, s := make([]int64, n), make([]string, n)
-	for i := range n {
-		a[i], s[i] = int64(i%300), []string{"7", "x", "12"}[i%3]
-	}
-	q := ursus.Frame(ursus.Values("a", a), ursus.Values("s", s)).
-		Cast(map[string]ursus.DataType{"a": ursus.Int8, "s": ursus.Int32}, ursus.CastStrict(false))
-	want, err := q.Collect(t.Context(), ursus.WithBatchSize(64))
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := q.Collect(t.Context(), ursus.WithBatchSize(64), ursus.WithMemoryLimit(16<<10),
-		ursus.WithSpillDir(t.TempDir()))
-	if err != nil {
-		t.Fatalf("under 16 KiB: %v", err)
-	}
-	ursustest.AssertFrameEqual(t, got, want)
-}

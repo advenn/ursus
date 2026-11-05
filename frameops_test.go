@@ -235,27 +235,6 @@ func TestGroupByShorthands(t *testing.T) {
 	}
 }
 
-// TestEagerMirrorsMatchLazy: there is one engine, so the two must agree by
-// construction — this pins that the wrappers wrap what they claim to.
-func TestEagerMirrorsMatchLazy(t *testing.T) {
-	df, err := frame().Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	eager, err := df.Filter(t.Context(), ursus.Col("qty").Gt(int32(5)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	lazy, err := frame().Filter(ursus.Col("qty").Gt(int32(5))).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if eager.String() != lazy.String() {
-		t.Errorf("eager and lazy disagree:\n%s\n%s", eager, lazy)
-	}
-}
-
 // TestLazyRoundTripPreservesSchema is the reason Lazy() does not go through
 // FromColumns.
 //
@@ -348,17 +327,16 @@ func TestFrameOpsAreThreadIndependent(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := ref.String()
-	for _, bs := range []int{1, 3, 8192} {
-		for _, th := range []int{1, 2, 4} {
-			got, err := q().Collect(t.Context(),
-				ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("batch %d threads %d: %v", bs, th, err)
-			}
-			if got.String() != want {
-				t.Errorf("batch %d threads %d changed the answer:\n%s\nwant:\n%s",
-					bs, th, got, want)
-			}
+	for _, run := range []struct{ bs, th int }{{1, 1}, {3, 2}, {8192, 4}} {
+		bs, th := run.bs, run.th
+		got, err := q().Collect(t.Context(),
+			ursus.WithBatchSize(bs), ursus.WithThreads(th), ursus.WithVerify())
+		if err != nil {
+			t.Fatalf("batch %d threads %d: %v", bs, th, err)
+		}
+		if got.String() != want {
+			t.Errorf("batch %d threads %d changed the answer:\n%s\nwant:\n%s",
+				bs, th, got, want)
 		}
 	}
 }

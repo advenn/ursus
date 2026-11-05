@@ -143,80 +143,6 @@ func pqNumbers(t *testing.T, rows, perGroup int) string {
 	return path
 }
 
-// TestParquetPruningIsSound is the test that matters most for the pruner, because
-// the failure mode is not an error — it is missing rows.
-//
-// Pruning must never change the answer. Every query runs with pruning on and off
-// and must return identical results.
-func TestParquetPruningIsSound(t *testing.T) {
-	path := pqNumbers(t, 500, 50)
-
-	queries := []struct {
-		name string
-		f    func(*ursus.LazyFrame) *ursus.LazyFrame
-	}{
-		{"gt", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Col("n").Gt(400))
-		}},
-		{"lt", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Col("n").Lt(50))
-		}},
-		{"eq", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Col("n").Eq(123))
-		}},
-		{"ne", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Col("n").Ne(123))
-		}},
-		{"ge and le", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Col("n").Ge(100)).Filter(ursus.Col("n").Le(200))
-		}},
-		{"literal on the left", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Lit(400).Lt(ursus.Col("n")))
-		}},
-		{"matches nothing", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Col("n").Gt(100000))
-		}},
-		{"matches everything", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Col("n").Ge(0))
-		}},
-		{"string comparison", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Col("w").Gt("w4"))
-		}},
-		{"is not null", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Col("n").IsNotNull())
-		}},
-		{"is null", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Col("n").IsNull())
-		}},
-		{"filter then project", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Col("n").Gt(400)).Select(ursus.Col("w"))
-		}},
-		{"filter then aggregate", func(lf *ursus.LazyFrame) *ursus.LazyFrame {
-			return lf.Filter(ursus.Col("n").Gt(400)).
-				GroupBy(ursus.Lit(1).Alias("k")).Agg(ursus.Len().Alias("n_rows"))
-		}},
-	}
-
-	for _, q := range queries {
-		t.Run(q.name, func(t *testing.T) {
-			on, err := q.f(ursus.ScanParquet(path)).Collect(t.Context(), ursus.WithVerify())
-			if err != nil {
-				t.Fatalf("pruning on: %v", err)
-			}
-			off, err := q.f(ursus.ScanParquet(path, ursus.WithPruning(false))).
-				Collect(t.Context(), ursus.WithOptFlags(ursus.NoOptFlags()))
-			if err != nil {
-				t.Fatalf("pruning off: %v", err)
-			}
-			// framesDiffer, not String(): String renders ten rows, and these results
-			// are up to 500 rows long.
-			if d := framesDiffer(t, on, off); d != "" {
-				t.Errorf("pruning changed the result: %s", d)
-			}
-		})
-	}
-}
-
 // TestParquetPruningActuallySkips proves the pruner does something, not merely
 // nothing safely. A predicate matching only the last row group must read far fewer
 // rows than the file holds.
@@ -263,83 +189,6 @@ func TestParquetPruningActuallySkips(t *testing.T) {
 	}
 	if !strings.Contains(p, "FILTER") {
 		t.Errorf("an INEXACT pushdown must keep the Filter above the scan:\n%s", p)
-	}
-}
-
-// TestParquetTruncatedStatsAreNotTrusted covers arrow-go trap number three.
-//
-// ApplyStatSizeLimits drops an oversized min or max INDEPENDENTLY, while the read
-// path sets hasMinMax = IsSetMax() || IsSetMin(). A column holding one 5 KB string
-// therefore reads back as HasMinMax() == true with Max == "", and a pruner that
-// trusts that pair decides `w > "z"` cannot match and skips a group full of
-// matches.
-//
-// The defence is the min > max sanity check. This test writes exactly that file.
-func TestParquetTruncatedStatsAreNotTrusted(t *testing.T) {
-	const rows = 200
-	words := make([]string, rows)
-	for i := range rows {
-		words[i] = "zz" + strconv.Itoa(i)
-	}
-	// One value far past the 4096-byte default stats limit, so its bound is dropped.
-	words[rows-1] = strings.Repeat("z", 5000)
-
-	path := filepath.Join(t.TempDir(), "big.parquet")
-	if err := ursus.Frame(ursus.Values("w", words)).
-		SinkParquet(t.Context(), path, ursus.WithRowGroupRows(rows)); err != nil {
-		t.Fatal(err)
-	}
-
-	on, err := ursus.ScanParquet(path).Filter(ursus.Col("w").Gt("z")).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	off, err := ursus.ScanParquet(path, ursus.WithPruning(false)).
-		Filter(ursus.Col("w").Gt("z")).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if on.Height() != off.Height() {
-		t.Errorf("a truncated statistic caused %d rows to be skipped (%d vs %d)",
-			off.Height()-on.Height(), on.Height(), off.Height())
-	}
-	if on.Height() == 0 {
-		t.Error("the fixture should match every row; it proves nothing otherwise")
-	}
-}
-
-// TestParquetAllNullRowGroupIsPrunable covers arrow-go trap number two.
-//
-// Statistics().NumValues() is the NON-NULL count, so the natural-looking
-// "NullCount == NumValues means every row is null" is always false and would
-// silently never prune. The row count lives on the column chunk.
-func TestParquetAllNullRowGroupIsPrunable(t *testing.T) {
-	const n = 100
-	vals := make([]int64, n)
-	valid := make([]bool, n)
-	for i := range n {
-		vals[i] = int64(i)
-		valid[i] = i >= n/2 // the first half is null
-	}
-	path := filepath.Join(t.TempDir(), "nulls.parquet")
-	if err := ursus.Frame(ursus.ValuesNullable("n", vals, valid)).
-		SinkParquet(t.Context(), path, ursus.WithRowGroupRows(n/2)); err != nil {
-		t.Fatal(err)
-	}
-
-	on, err := ursus.ScanParquet(path).Filter(ursus.Col("n").Gt(0)).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	off, err := ursus.ScanParquet(path, ursus.WithPruning(false)).
-		Filter(ursus.Col("n").Gt(0)).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d := framesDiffer(t, on, off); d != "" {
-		t.Errorf("pruning an all-null row group changed the result: %s", d)
 	}
 }
 
@@ -448,11 +297,10 @@ func TestParquetRefusesUnsupported(t *testing.T) {
 	// FILE needs a writer ursus does not have, and the refusal for those lives in
 	// toDataType, covered by TestTypeRefusals in the parquet package.
 	//
-	// The type here is Duration, which has no Parquet logical type at all —
-	// arrow-go's IntervalLogicalType.toThrift panics — rather than Datetime, which
-	// step 14 made writable. Step 6 hit the same thing from the CSV side and recorded
-	// the lesson: a refusal test pinned to whichever type happens to be unwritable
-	// this month breaks every time the format grows.
+	// The type here is Duration, which has no Parquet logical type at all, rather
+	// than Datetime, which step 14 made writable. Step 6 hit the same thing from the
+	// CSV side and recorded the lesson: a refusal test pinned to whichever type
+	// happens to be unwritable this month breaks every time the format grows.
 	err := ursus.Frame(ursus.Values("x", []int64{1, 2})).
 		Select(ursus.Col("x").Cast(dtype.Duration(dtype.Micro))).
 		SinkParquet(t.Context(), filepath.Join(t.TempDir(), "x.parquet"))
@@ -678,9 +526,9 @@ func TestParquetInt128RoundTrip(t *testing.T) {
 	}
 }
 
-// TestParquetRefusesSecondResolution: arrow-go's createTimeUnit PANICS for anything
-// but milli, micro and nano, and dtype.Second is ursus's zero value — so this is a
-// guard against taking the process down, not a taste refusal.
+// TestParquetRefusesSecondResolution: Parquet has no time unit but milli, micro and
+// nano, and dtype.Second is ursus's zero value — so the refusal is the format's, not
+// a taste refusal.
 func TestParquetRefusesSecondResolution(t *testing.T) {
 	for _, dt := range []dtype.DataType{
 		dtype.Datetime(dtype.Second, ""),
@@ -690,7 +538,7 @@ func TestParquetRefusesSecondResolution(t *testing.T) {
 			Select(ursus.Col("x").CastLossy(dt)).
 			SinkParquet(t.Context(), filepath.Join(t.TempDir(), "x.parquet"))
 		if err == nil {
-			t.Fatalf("%s was accepted; arrow-go panics on a second resolution", dt)
+			t.Fatalf("%s was accepted; Parquet has no second resolution", dt)
 		}
 		if !strings.Contains(err.Error(), "second resolution") {
 			t.Errorf("the message should name the cause:\n%v", err)

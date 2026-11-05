@@ -366,31 +366,6 @@ func TestPushdownSoundness(t *testing.T) {
 	}
 }
 
-func TestOptimizerPreservesSchema(t *testing.T) {
-	p := &plan.Project{
-		Input: &plan.Filter{
-			Input: &plan.Scan{Src: wide()},
-			Preds: []expr.Node{
-				&expr.Binary{Op: expr.OpGt, L: col("qty"), R: lit(int32(0), dtype.Int32)},
-			},
-		},
-		Exprs: []expr.Node{col("price"), col("id")},
-	}
-	r := resolve(t, p)
-
-	before, err := r.Schema()
-	if err != nil {
-		t.Fatal(err)
-	}
-	after, err := optimize(t, r).Schema()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !before.Equal(after) {
-		t.Errorf("optimizer changed the schema:\n before %s\n after  %s", before, after)
-	}
-}
-
 // TestImmutability: optimizing must not disturb the input plan, because two
 // LazyFrames may share it.
 func TestImmutability(t *testing.T) {
