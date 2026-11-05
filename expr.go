@@ -314,6 +314,19 @@ func (e Expr) Div[T Operand](v T) Expr { return e.bin(expr.OpDiv, lift(v)) }
 func (e Expr) FloorDiv[T Operand](v T) Expr { return e.bin(expr.OpFloorDiv, lift(v)) }
 func (e Expr) Mod[T Operand](v T) Expr      { return e.bin(expr.OpMod, lift(v)) }
 
+// TruncDiv divides, its quotient rounded toward zero, as Go's / and C's are: −7
+// TruncDiv 2 is −3, where FloorDiv gives −4. Polars 2.0's truncdiv. Its type is
+// FloorDiv's: two integers an integer, a float beside either a float, and an integer
+// divisor of zero a null. A float's is trunc(a/b), so −0.5 by 2 is −0 and 1 by 0 is
+// +Inf.
+//
+// It differs from Polars where FloorDiv does. MinInt64 by −1 wraps to MinInt64, as
+// Polars' does, but an Int128's is refused, as Int128 arithmetic is exact or refused,
+// where Polars wraps it. A Duration by an integer, which Polars 2.1 refuses, is its
+// ticks divided toward zero, as FloorDiv floors them. A Decimal, which Polars
+// divides at Decimal(38, s), is refused, as its FloorDiv is.
+func (e Expr) TruncDiv[T Operand](v T) Expr { return e.bin(expr.OpTruncDiv, lift(v)) }
+
 // Pow raises the receiver to the power v.
 //
 // The result is ALWAYS a float, for the same reason Div's is: 2**-1 is 0.5, and a

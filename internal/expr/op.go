@@ -47,6 +47,10 @@ const (
 	// OpPow's binding casts both sides to one.
 	OpArctan2
 
+	// Polars 2.0's truncdiv (step 489): division whose quotient rounds toward zero,
+	// as Go's / does, typed as OpFloorDiv is. Appended, as OpPow is.
+	OpTruncDiv
+
 	binaryOpCount
 )
 
@@ -55,7 +59,7 @@ var binaryOpNames = [binaryOpCount]string{
 	OpEq: "==", OpNe: "!=", OpLt: "<", OpLe: "<=", OpGt: ">", OpGe: ">=",
 	OpEqMissing: "<=>", OpNeMissing: "<!>",
 	OpAnd: "&", OpOr: "|", OpXor: "^",
-	OpPow: "**", OpArctan2: "arctan2",
+	OpPow: "**", OpArctan2: "arctan2", OpTruncDiv: "trunc_div",
 }
 
 func (o BinaryOp) String() string {
@@ -122,7 +126,7 @@ func (o BinaryOp) IsLogical() bool { return o >= OpAnd && o <= OpXor }
 // would be one constant away from wrong — and this file already carries the
 // post-mortem of that exact mistake under "There is deliberately no IsArithmetic".
 func (o BinaryOp) MayProduceNull(out dtype.DataType) bool {
-	if o != OpFloorDiv && o != OpMod {
+	if o != OpFloorDiv && o != OpMod && o != OpTruncDiv {
 		return false
 	}
 	// Int128 is included by IsInteger and is unreachable: arithI128 implements only
