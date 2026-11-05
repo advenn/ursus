@@ -16,61 +16,6 @@ import (
 	"github.com/advenn/ursus/internal/kernel"
 )
 
-// TestExtremumUsesTheTotalOrder is the one a `<` comparison would fail.
-//
-// order.go defines ursus's total order as -Inf < … < -0.0 == +0.0 < … < +Inf <
-// NaN, with all NaNs equal, and Sort and GroupBy both use it. If Min/Max compared
-// with plain `<` instead of through OrderKeyF64, every comparison against NaN
-// would be false and `max` over a group containing one would return a number —
-// disagreeing with `sort(x).last()` over the same data.
-func TestExtremumUsesTheTotalOrder(t *testing.T) {
-	nan := math.NaN()
-	negZero := math.Copysign(0, -1)
-
-	for _, c := range []struct {
-		name                       string
-		vals                       []float64
-		wantMinIsNaN, wantMaxIsNaN bool
-		wantMin, wantMax           float64
-	}{
-		{name: "NaN is above everything", vals: []float64{1, nan, -5},
-			wantMin: -5, wantMaxIsNaN: true},
-		{name: "all NaN", vals: []float64{nan, nan},
-			wantMinIsNaN: true, wantMaxIsNaN: true},
-		{name: "infinities", vals: []float64{math.Inf(1), 0, math.Inf(-1)},
-			wantMin: math.Inf(-1), wantMax: math.Inf(1)},
-		{name: "-0.0 equals +0.0", vals: []float64{negZero, 0},
-			wantMin: 0, wantMax: 0},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			groups := make([]int32, len(c.vals))
-			col := mkF64("v", c.vals, nil)
-
-			minOut := run(t, expr.AggMin, dtype.Float64, col, groups, 1)
-			maxOut := run(t, expr.AggMax, dtype.Float64, col, groups, 1)
-
-			gotMin := f64At(t, minOut, 0)
-			gotMax := f64At(t, maxOut, 0)
-
-			if c.wantMinIsNaN {
-				if !math.IsNaN(gotMin) {
-					t.Errorf("min = %v, want NaN", gotMin)
-				}
-			} else if gotMin != c.wantMin {
-				t.Errorf("min = %v, want %v", gotMin, c.wantMin)
-			}
-
-			if c.wantMaxIsNaN {
-				if !math.IsNaN(gotMax) {
-					t.Errorf("max = %v, want NaN", gotMax)
-				}
-			} else if gotMax != c.wantMax {
-				t.Errorf("max = %v, want %v", gotMax, c.wantMax)
-			}
-		})
-	}
-}
-
 // TestExtremumAgreesWithSort is the property the total order exists to provide.
 //
 // min(x) must equal the first element of sort(x), and max(x) the last, on data

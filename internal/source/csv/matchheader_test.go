@@ -10,7 +10,10 @@ import (
 )
 
 // TestMatchHeader: a later part's header maps onto the reference's columns by
-// name, or is refused naming both parts.
+// name, or is refused naming both parts. A header identical, missing a column or
+// holding an extra one is the root package's scan_byhand I7 cases; these are a
+// reordering with a column unread, the refusals' words, and the widths those cases
+// cannot reach.
 func TestMatchHeader(t *testing.T) {
 	wanted0 := []int{0, -1, 1} // a -> out 0, b skipped, c -> out 1
 	ref := []string{"a", "b", "c"}
@@ -22,10 +25,8 @@ func TestMatchHeader(t *testing.T) {
 		want   []int  // nil means refused
 		says   string // what the refusal must contain
 	}{
-		{"identical", ref, []string{"a", "b", "c"}, wanted0, wanted0, ""},
+		// b is not read, so the remapping has a column to skip as well as to move.
 		{"reordered", ref, []string{"c", "a", "b"}, wanted0, []int{1, 0, -1}, ""},
-		{"missing", ref, []string{"a", "b"}, wanted0, nil, "does not have the same columns"},
-		{"extra", ref, []string{"a", "b", "c", "d"}, wanted0, nil, "does not have the same columns"},
 		{"renamed", ref, []string{"a", "b", "x"}, wanted0, nil, "does not have the same columns"},
 		{"repeated in the part", ref, []string{"a", "a", "c"}, wanted0, nil, "repeats the column"},
 		{"repeated in the reference, reordered", []string{"a", "a"}, []string{"a", "a", "a"},

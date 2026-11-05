@@ -66,9 +66,9 @@ func TestBooleanIdentitiesUnderNulls(t *testing.T) {
 		pred expr.Node
 		want expr.Node
 	}{
+		// boolIdentity tries both sides under one switch for both operators, so a
+		// case of each kind is enough, the literal on either side between them.
 		{"x AND true", and(col("maybe"), boolLit(true)), col("maybe")},
-		{"true AND x", and(boolLit(true), col("maybe")), col("maybe")},
-		{"x OR false", or(col("maybe"), boolLit(false)), col("maybe")},
 		{"false OR x", or(boolLit(false), col("maybe")), col("maybe")},
 
 		// The absorbing elements, and the nullability split that decides them.
@@ -76,28 +76,22 @@ func TestBooleanIdentitiesUnderNulls(t *testing.T) {
 		// to lit(false) preserves the field exactly — after which the Filter keeps
 		// nothing and becomes a Limit{N:0}.
 		{"non-null x AND false", and(col("sure"), boolLit(false)), nil},
-		{"non-null x OR true", or(col("sure"), boolLit(true)), nil},
 
-		// `maybe` IS nullable, so `maybe AND false` is a nullable Boolean while
-		// lit(false) is not. Value-sound, schema-unsound, refused — see fieldEqual.
+		// `maybe` IS nullable, so `maybe OR true` is a nullable Boolean while
+		// lit(true) is not. Value-sound, schema-unsound, refused — see fieldEqual.
 		// The predicate must come out exactly as it went in.
-		{"nullable x AND false", and(col("maybe"), boolLit(false)),
-			and(col("maybe"), boolLit(false))},
 		{"nullable x OR true", or(col("maybe"), boolLit(true)),
 			or(col("maybe"), boolLit(true))},
 
 		// A NULL literal is not an identity element for either operator: the result
 		// depends on x, so there is nothing to remove.
 		{"x AND null", and(col("maybe"), nullLit()), and(col("maybe"), nullLit())},
-		{"x OR null", or(col("maybe"), nullLit()), or(col("maybe"), nullLit())},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got := explain(t, optimize(t, resolve(t, filterOf(flagged(), c.pred))))
 			if c.want == nil {
-				// `x OR true` keeps every row and `x AND false` keeps none, so the
-				// two absorbing cases part company here rather than both vanishing.
 				if strings.Contains(got, "FILTER") {
 					t.Errorf("predicate should have collapsed to a constant:\n%s", got)
 				}

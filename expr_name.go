@@ -34,6 +34,21 @@ func (n NameExpr) Prefix(p string) Expr { return n.e.Prefix(p) }
 
 func (n NameExpr) Suffix(s string) Expr { return n.e.Suffix(s) }
 
+// StripPrefix takes p off the start of the output name, once, where the name begins
+// with it, and StripSuffix takes s off its end, as Polars' name.strip_prefix and
+// strip_suffix (step 491): Col("a_x").Name().StripPrefix("a_") is x, and a name
+// without the affix is kept. The affix is bytes, as Polars compares them, and a name
+// that is all affix is stripped to "", as Polars strips it.
+func (n NameExpr) StripPrefix(p string) Expr {
+	return wrap(&expr.Rename{Child: n.e.node(), Label: "name.strip_prefix(" + quote(p) + ")",
+		Fn: func(s string) string { return strings.TrimPrefix(s, p) }})
+}
+
+func (n NameExpr) StripSuffix(s string) Expr {
+	return wrap(&expr.Rename{Child: n.e.node(), Label: "name.strip_suffix(" + quote(s) + ")",
+		Fn: func(x string) string { return strings.TrimSuffix(x, s) }})
+}
+
 // ToLower and ToUpper change the output name's case, every script's, as Polars'
 // name.to_lowercase and to_uppercase.
 func (n NameExpr) ToLower() Expr {

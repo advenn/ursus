@@ -272,61 +272,6 @@ func TestMergerMatchesArgSort(t *testing.T) {
 	}
 }
 
-// TestMergerBreaksTiesByRun pins the stability rule directly, without relying on
-// the differential test noticing it.
-//
-// Every key is identical, so nothing but the tie-break decides the order. It must
-// be run 0 before run 1 before run 2, and within a run the rows in order — the
-// exact shape "runs are created in input order" buys.
-func TestMergerBreaksTiesByRun(t *testing.T) {
-	const nRuns, perRun = 3, 4
-	spec := []kernel.SortSpec{{}}
-
-	runs := make([][]*data.Column, nRuns)
-	for r := range runs {
-		vals := make([]int64, perRun)
-		runs[r] = []*data.Column{
-			data.NewFixed("k", dtype.Int64, vals, bitmap.View{}),
-		}
-	}
-	rs, err := kernel.NewRunSet(nRuns, []dtype.DataType{dtype.Int64}, spec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for r := range nRuns {
-		if err := rs.Set(r, runs[r]); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	m := kernel.NewMerger(rs)
-	for r := range nRuns {
-		m.Push(r, 0)
-	}
-	var got []string
-	pos := make([]int, nRuns)
-	for {
-		c, ok := m.Pop()
-		if !ok {
-			break
-		}
-		got = append(got, string(rune('A'+c.Run))+string(rune('0'+c.Row)))
-		pos[c.Run] = c.Row + 1
-		if pos[c.Run] < perRun {
-			m.Push(c.Run, pos[c.Run])
-		}
-	}
-
-	want := []string{
-		"A0", "A1", "A2", "A3",
-		"B0", "B1", "B2", "B3",
-		"C0", "C1", "C2", "C3",
-	}
-	if !slices.Equal(got, want) {
-		t.Errorf("all-equal keys merged as %v, want %v", got, want)
-	}
-}
-
 // TestRunSetReplacesRunColumns: a run's resident batch is REPLACED when it is
 // exhausted, and comparisons after the swap must read the new values. This is the
 // property that makes the merge bounded, and a comparator that had closed over

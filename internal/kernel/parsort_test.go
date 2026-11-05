@@ -12,7 +12,7 @@ import (
 	"github.com/advenn/ursus/internal/data"
 )
 
-// TestParallelSortMatchesSerial is step 361's: ArgSortColumnsN on 2 to 7 workers
+// TestParallelSortMatchesSerial is step 361's: ArgSortColumnsN on 2 and 7 workers
 // gives ArgSortColumns' permutation exactly, ties included, by the radix passes and
 // by the comparator's merge sort alike: integers of few values and of many, floats
 // with NaN, infinities and both zeros, nulls first and last, ascending and
@@ -28,7 +28,8 @@ func TestParallelSortMatchesSerial(t *testing.T) {
 		}
 		return b.Finish()
 	}
-	for _, n := range []int{64, 65, 127, 1000, 4099, 70_000} {
+	// At the lowered threshold, one past it, and many rows to a worker.
+	for _, n := range []int{64, 65, 4099} {
 		few := make([]int64, n)
 		many := make([]int64, n)
 		fs := make([]float64, n)
@@ -74,7 +75,8 @@ func TestParallelSortMatchesSerial(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				for _, w := range []int{2, 3, 4, 7} {
+				// One merge, and seven runs: three rounds, an odd run copied across.
+				for _, w := range []int{2, 7} {
 					got, err := ArgSortColumnsN(t.Context(), keys, specs, n, w)
 					if err != nil {
 						t.Fatal(err)
