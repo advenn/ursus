@@ -132,15 +132,19 @@ changes is what Go asks for.
 | `.arr.sum()`, `.arr.sort()`, `.arr.eval(pl.element() * 2)`, `.arr.to_struct()`, `.arr.dot(b)` | `.Arr().Sum()`, `.Arr().Sort()`, `.Arr().Eval(ursus.Element().Mul(2), false)`, `.Arr().ToStruct()`, `.Arr().Dot(b)` (new in 0.6.7) |
 | `.reshape((-1, 3))`, `pl.concat_arr(a, b)` | `.Reshape(-1, 3)`, `ursus.ConcatArr(a, b)` (new in 0.6.7) |
 | `pl.arctan2(y, x)`, `.truediv(v)`, `.limit(n)`, `.pipe(f)` | `ursus.Arctan2(y, x)`, `.TrueDiv(v)`, `.Limit(n)`, `.Pipe(f)` (new in 0.6.7) |
+| `.erf()`, `.erfc()` | `.Erf()`, `.Erfc()` (new in 0.8) |
 | `.item()`, `.lower_bound()`, `.upper_bound()`, `.is_sorted()` | `.Item(false)`, `.LowerBound()`, `.UpperBound()`, `.IsSorted(false, false)` (new in 0.6.7) |
 | `.str.to_time("%H:%M")`, `.str.to_decimal(scale=2)`, `.dt.cast_time_unit("ms")` | `.Str().ToTime("%H:%M", true)`, `.Str().ToDecimal(2)`, `.Dt().CastTimeUnit(ursus.Milli)` (new in 0.6.7) |
 | `.meta.root_names()`, `.meta.output_name()`, `.meta.undo_aliases()`, `.meta.tree_format()` | `.Meta().RootNames()`, `.Meta().OutputName()`, `.Meta().UndoAliases()`, `.Meta().TreeFormat()` (new in 0.6.7) |
 | `.to_physical()`, `.reinterpret(signed=True)` | `.ToPhysical()`, `.Reinterpret(true)` (new in 0.6.7) |
+| `.truncdiv(v)` | `.TruncDiv(v)`, toward zero (new in 0.8) |
 | `.name.keep()`, `.name.to_uppercase()`, `.name.replace(p, v)`, `.name.prefix_fields("p_")`; `.struct.drop(["f"])` | `.Name().Keep()`, `.Name().ToUpper()`, `.Name().Replace(p, v, false)`, `.Name().PrefixFields("p_")`; `.Struct().Drop("f")` (new in 0.6.7) |
 | `.map_elements(f)`, `.map_batches(f)` | `.MapElements(name, type, f)`, `.MapBatches(name, type, f)`, with a Go function |
 | `df.map_rows(f)`, `df.map_columns(["a"], f)` | `df.MapRows(ctx, f)`, `df.MapColumns(ctx, []string{"a"}, f)` (new in 0.6.7) |
+| `.name.strip_prefix("a_")`, `.name.strip_suffix("_x")` | `.Name().StripPrefix("a_")`, `.Name().StripSuffix("_x")` (new in 0.8) |
 | `df.show(20)`, `lf.cache()` | `df.Show(20)`, `lf.Cache()` (new in 0.6.7) |
 | `df.write_parquet(f)`, `df.write_csv(f)` | `lf.WriteParquet(ctx, w)`, `lf.WriteCSV(ctx, w)`, to any `io.Writer` |
+| `pl.scan_lines(p, name="l", include_file_paths="path")`, `pl.read_lines(b)` | `ursus.ScanLines(p, ursus.WithLinesName("l"), ursus.WithLinesIncludeFilePaths("path"))`, `ursus.ScanLinesBytes(b, "b")` (new in 0.8) |
 | `pl.read_ndjson(p)`, `pl.scan_ndjson([p, q], infer_schema_length=n, ignore_errors=True)` | `ursus.ScanNDJSON(p)`, `ursus.ScanNDJSONFiles([]string{p, q}, ursus.WithInferSchemaLines(n), ursus.WithNDJSONIgnoreErrors(true))` (new in 0.6.7) |
 | `pl.scan_parquet("ds/", hive_schema={"g": pl.Int8}, include_file_paths="path")` | `ursus.ScanParquet("ds", ursus.WithHiveSchema(s), ursus.WithIncludeFilePaths("path"))`, a hive dataset's keys read from its directories (new in 0.6.7) |
 | `pl.scan_parquet(files, missing_columns="insert", extra_columns="ignore", cast_options=pl.ScanCastOptions(integer_cast="upcast"))` | `ursus.ScanParquetFiles(files, ursus.WithInsertMissingColumns(true), ursus.WithIgnoreExtraColumns(true), ursus.WithUpcastIntegers(true))` (new in 0.6.7) |

@@ -236,11 +236,7 @@ func TestDecimalRefusalsRecommendOnlyPossibleCasts(t *testing.T) {
 	cases := map[string]func() *ursus.LazyFrame{
 		"floordiv": sel(price.FloorDiv(price)),
 		"mod":      sel(price.Mod(price)),
-		"floor":    sel(price.Floor()),
-		"ceil":     sel(price.Ceil()),
-		"sign":     sel(price.Sign()),
 		"sqrt":     sel(price.Sqrt()),
-		"round":    sel(price.Round(1)),
 		"cast_i64": sel(price.Cast(dtype.Int64)),
 	}
 
@@ -263,7 +259,8 @@ func TestDecimalRefusalsRecommendOnlyPossibleCasts(t *testing.T) {
 	// scanned and none named a type, proves nothing either way.
 	//
 	// Every one of these refuses today. The six computing aggregates left this list
-	// when step 69 implemented them, which is the move this floor exists to force:
+	// when step 69 implemented them, and floor, ceil, sign and round when step 490
+	// did, which is the move this floor exists to force:
 	// an operation that starts working leaves the list on purpose, rather than
 	// quietly thinning the sweep.
 	if refused < len(cases) {

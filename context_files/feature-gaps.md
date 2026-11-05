@@ -101,6 +101,7 @@ differs from their input's, or scalars outside a group-by.
 | **String view layout** | Arrow's view types are converted on import | P2 |
 | **UInt128, Float16, Object, Unknown** | Float16 is widened to Float32 on import | P2 |
 | **Dictionary, run-end, union, ListView** in memory | decoded or refused on import | P2 |
+| built: **a Decimal's `round`, `floor`, `ceil` and `sign`,** Polars 2.0's, exact at its scale, Decimal(p+1, s) where digits are dropped, in step 490; `truncate` and `round_sig_figs` of one still refused | — |
 | `Expr.ToPhysical`, `Reinterpret`, `ShrinkDtype` | `Cast(dt.Physical())` works for temporal types only | P2 |
 | built: **a List, an Array or a Struct column as a key,** in step 344: the group-key encoder writes a list's length and each element tagged, and a struct's fields tagged, so `Unique`, `UniqueKeep`, `GroupBy`, `Over`, `Join`, `PartitionBy`, `RleID`, `Rle`, `Mode` and `HashRows` key them as Polars does, and a group-by of them spills; a mode of them without `maintainOrder` comes as its values first appear, having no order (found at step 289) | — |
 
@@ -185,6 +186,8 @@ differs from their input's, or scalars outside a group-by.
   `get`, `head`, `tail`, `slice`, `size`, `encode`, `decode` and `reinterpret`, with
   expressions where Polars takes them. `reinterpret` to an Array waits for the Array
   type. `Str()` now refuses a Binary, as Polars' `.str` does.
+- **`.name`:** `strip_prefix` and `strip_suffix` built in 0.8 (step 491), as
+  `Name().StripPrefix` and `StripSuffix`.
 
 ### 4.6 Top-level functions (P0/P1)
 
@@ -202,6 +205,7 @@ differs from their input's, or scalars outside a group-by.
     component expressions;
   - `first` and `last` as aggregates only;
   - `row_index` as a frame operation only.
+- **Built in 0.8:** `erf` and `erfc`, Polars 2.x's, as `Erf` and `Erfc` (step 488).
 
 ## 5. Computation and aggregation
 
@@ -213,6 +217,7 @@ differs from their input's, or scalars outside a group-by.
 | built: **holistic aggregates that spill:** `CorrSpearman`'s pairs in step 339, and `Mode`'s counts in step 340, an aggregate of its own, beside `Median`'s, `Quantile`'s and `NUnique`'s; `Implode`, whose answer is every value, is refused past the limit (found at step 287) | — |
 | built: **a non-aggregate in an aggregation,** in step 331: `Agg(Col("x"))`, `Agg(Col("x").Mul(2))` and a window in `Agg`, each group's values as a list, as Polars answers them; and a window inside an aggregate, `CumSum(false).Max()`, a group at a time. A mix of an aggregate and a row's value too, since step 336, the row below (found at step 329) | — |
 | built: **an aggregate inside an aggregate's input,** in step 336: `Col("a").Sub(Col("a").Mean()).Abs().Sum()` in a `Select`, an `Agg` and a window, the inner aggregate computed over the group and broadcast beneath the outer; in `Agg` a mix, `a - a.Mean()`, a list a group, and `a.Sum().Mean()` the sum; `SortBy` and `Gather` take an aggregate in their keys (found at step 279) | — |
+| built: **`truncdiv`,** Polars 2.0's division toward zero, as `TruncDiv`, in step 489 | — |
 | **Integers as bits:** built: `& \| ^ ~` of integers in step 278, the `bitwise_and/or/xor` aggregates in step 276. Polars has no shifts | — |
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
 | **Rolling:** weights; Polars' `random` rank; a rank by time over one partition past a memory limit, refused, as its walk keeps a window's values as floats. `map` and `rolling_rank_by` built at step 338, `RollingMap` and `RollingRankBy`. `skew`, `kurtosis`, `rank`, `rolling_cov` and `rolling_corr` built at step 284; an integer by, `"2i"` periods, at step 312; the generic `Expr.rolling(index_column)` at step 337, `Expr.Rolling`, in an aggregation not yet | P1 |
@@ -246,6 +251,7 @@ differs from their input's, or scalars outside a group-by.
 
 | missing or partial | prio |
 | --- | --- |
+| built: **lines,** Polars 2.x's `scan_lines` and `read_lines`, as `ScanLines` and NDJSON's spellings of it, in step 492 | — |
 | built: **JSON read,** in step 345: `ScanJSON` and `ScanJSONBytes`, Polars' `read_json`, each object made a line of NDJSON in place and read as step 334's NDJSON is, faster than Polars; schema overrides for both. NDJSON read and scanned in step 334; JSON and NDJSON written and sunk in step 333, each value in Polars' text | — |
 | built: **Arrow IPC,** in step 332: a file or a stream scanned, written and sunk, uncompressed, LZ4 or Zstandard, and a file's schema read; and a Parquet file's schema. Over arrow-go's IPC readers and writers | — |
 | **Hive partitioning:** built on read for Parquet in step 347, a directory read whole, its `key=value` directories typed columns, a filter on them skipping files, `include_file_paths`; `include_file_paths` for CSV and NDJSON in step 359; IPC's in step 360, a directory, a glob and a list, `internal/source/files`. **Partitioned writes** in step 367: `WithPartitionBy`, `WithPartitionIncludeKey` and `WithMaxRowsPerFile` for the four sinks, Polars' paths name for name | built |
