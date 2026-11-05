@@ -42,6 +42,12 @@ that stops when its request is cancelled.
 
 ### Features
 
+- **`ScanLines`** (492): a text file's lines as one String column, `line`, Polars
+  2.x's `scan_lines` and `read_lines`; `ScanLinesFiles`, `ScanLinesGlob`,
+  `ScanLinesBytes`, `ScanLinesFrom` of `LinesFile`s and `ScanLinesFS` as NDJSON's
+  are, `WithLinesName` and `WithLinesIncludeFilePaths`. Read as NDJSON is, in blocks
+  a part a thread; a "\r\n" end is a newline, an empty line a row, a last line
+  needs no newline, and text that is not UTF-8 is refused.
 - **`Name().StripPrefix` and `StripSuffix`** (491): the output name without an affix,
   taken off once where the name has it, Polars' `name.strip_prefix` and
   `strip_suffix`: `Col("a_x").Name().StripPrefix("a_")` is x.
