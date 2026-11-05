@@ -8,19 +8,19 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/ursustest"
 )
 
 // TestFrameConveniences is step 327: Polars' DataFrame corr, gather, row, item,
 // get_column_index, replace_column, drop_in_place, the horizontal reductions, fold,
-// to_series and to_struct, and a LazyFrame's columns, dtypes and width. Every answer
-// is Polars 1.44.1's.
+// to_series and to_struct, and a LazyFrame's columns, dtypes and width. The frames
+// corr, gather and the reductions answer are the frameconv group's, Polars 2.1.0's
+// (oracle_frameconv_test.go); here stay the refusals, the long parallel corr and
+// gather, differentials, and Go's own accessors.
 func TestFrameConveniences(t *testing.T) {
 	ctx := t.Context()
 	c := ursus.Col
 	df := dfOf(t, ursus.Values("a", []int64{1, 2, 3, 4}), ursus.Values("b", []float64{2, 4, 5, 9}),
 		ursus.Values("s", []string{"x", "y", "z", "w"}))
-	num := dfOf(t, ursus.Values("a", []int64{1, 2, 3, 4}), ursus.Values("b", []float64{2, 4, 5, 9}))
 	refused := func(t *testing.T, err error, want string) {
 		t.Helper()
 		if err == nil || !strings.Contains(err.Error(), want) {
@@ -29,98 +29,8 @@ func TestFrameConveniences(t *testing.T) {
 	}
 
 	t.Run("corr", func(t *testing.T) {
-		got, err := num.Corr(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// NumPy's own, to the bit, its sums here exact: divided by the row's deviation
-		// and then the column's, so the two sides of the diagonal differ.
-		exact := func(t *testing.T, got *ursus.DataFrame, names []string, want [][]float64) {
-			t.Helper()
-			for j, name := range names {
-				for i := range want {
-					v, _, err := got.At[float64](i, name)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if v != want[i][j] {
-						t.Errorf("corr row %d of %s: %v, want %v", i, name, v, want[i][j])
-					}
-				}
-			}
-		}
-		exact(t, got, []string{"a", "b"}, [][]float64{{1, 0.9647638212377321}, {0.9647638212377322, 1}})
-		ten, err := dfOf(t, ursus.Values("x", []float64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
-			ursus.Values("y", []float64{2, 3, 1, 5, 4, 8, 7, 6, 10, 9})).Corr(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		exact(t, ten, []string{"x", "y"}, [][]float64{{0.9999999999999999, 0.8909090909090909},
-			{0.8909090909090909, 0.9999999999999999}})
-		withNull, err := dfOf(t, ursus.ValuesNullable("a", []int64{1, 2, 0, 4}, []bool{true, true, false, true}),
-			ursus.Values("b", []float64{2, 4, 5, 9}), ursus.Values("c", []float64{1, 1, 1, 1})).Corr(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, cell := range []struct {
-			row  int
-			col  string
-			want float64
-		}{{0, "a", math.NaN()}, {1, "a", math.NaN()}, {1, "b", 1}, {2, "c", math.NaN()}, {1, "c", math.NaN()}} {
-			v, _, err := withNull.At[float64](cell.row, cell.col)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !(math.IsNaN(cell.want) && math.IsNaN(v)) && v != cell.want {
-				t.Errorf("corr row %d of %s: %v, want %v", cell.row, cell.col, v, cell.want)
-			}
-		}
-		_, err = df.Corr(ctx)
+		_, err := df.Corr(ctx)
 		refused(t, err, `"s"`)
-
-		// No rows, or one, is NaN throughout, as NumPy's is.
-		for _, rows := range []int{0, 1} {
-			few, err := num.Head(ctx, rows)
-			if err != nil {
-				t.Fatal(err)
-			}
-			got, err := few.Corr(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, name := range []string{"a", "b"} {
-				for i := range 2 {
-					if v, _, _ := got.At[float64](i, name); !math.IsNaN(v) {
-						t.Errorf("%d rows: corr row %d of %s is %v", rows, i, name, v)
-					}
-				}
-			}
-		}
-
-		// Clipped as NumPy clips: a's own correlation comes to 1.0000000000000002.
-		clip, err := dfOf(t, ursus.Values("a", []float64{0.1, 0.3, 5.6}), ursus.Values("b", []float64{1, 2, 4})).Corr(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v, _, _ := clip.At[float64](0, "a"); v != 1 {
-			t.Errorf("a's own correlation is %v, want 1", v)
-		}
-		if v, _, _ := clip.At[float64](1, "a"); math.Abs(v-0.954919108405064) > 1e-15 {
-			t.Errorf("a with b: %v, want 0.954919108405064", v)
-		}
-
-		// A Decimal is read, which Polars' to_numpy cannot hand NumPy; the answer is
-		// the floats'.
-		dec, err := ursus.Frame(ursus.Values("a", []float64{1, 2, 4}), ursus.Values("b", []int64{1, 2, 5})).
-			Select(c("a").Cast(ursus.Decimal(10, 2)), c("b")).Collect(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got, err := dec.Corr(ctx); err != nil {
-			t.Error(err)
-		} else if v, _, _ := got.At[float64](1, "a"); math.Abs(v-0.9958705948858223) > 1e-15 {
-			t.Errorf("a Decimal with b: %v, want 0.9958705948858223", v)
-		}
 
 		// A Bool is its trues, as NumPy reads it; and a frame of three spans, summed
 		// in parallel, agrees with Corr of two expressions, which skips no row here.
@@ -130,7 +40,7 @@ func TestFrameConveniences(t *testing.T) {
 			x[i], y[i], z[i] = math.Sin(float64(i)), math.Cos(float64(i)*0.7)+0.3*math.Sin(float64(i)), i%3 == 0
 		}
 		long := dfOf(t, ursus.Values("x", x), ursus.Values("y", y), ursus.Values("z", z))
-		got, err = long.Corr(ctx)
+		got, err := long.Corr(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -154,21 +64,8 @@ func TestFrameConveniences(t *testing.T) {
 	})
 
 	t.Run("gather", func(t *testing.T) {
-		got, err := df.Gather(ctx, []int{2, 0, -1}, false)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ursustest.AssertFrameEqual(t, got, dfOf(t, ursus.Values("a", []int64{3, 1, 4}),
-			ursus.Values("b", []float64{5, 2, 9}), ursus.Values("s", []string{"z", "x", "w"})))
-		_, err = df.Gather(ctx, []int{9}, false)
+		_, err := df.Gather(ctx, []int{9}, false)
 		refused(t, err, "out of bounds")
-		got, err = df.Gather(ctx, []int{9, 1}, true)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ursustest.AssertFrameEqual(t, got, dfOf(t, ursus.ValuesNullable("a", []int64{0, 2}, []bool{false, true}),
-			ursus.ValuesNullable("b", []float64{0, 4}, []bool{false, true}),
-			ursus.ValuesNullable("s", []string{"", "y"}, []bool{false, true})))
 
 		// A long gather, taken in chunks, every chunk of every column in parallel, and
 		// each column's chunks joined in order.
@@ -180,7 +77,7 @@ func TestFrameConveniences(t *testing.T) {
 			back[n-1-i], backText[n-1-i] = int64(i), strconv.Itoa(i)
 		}
 		long := dfOf(t, ursus.Values("i", ints), ursus.Values("t", texts), ursus.Values("j", ints))
-		got, err = long.Gather(ctx, idx, false)
+		got, err := long.Gather(ctx, idx, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -274,37 +171,6 @@ func TestFrameConveniences(t *testing.T) {
 			ursus.Field{Name: "a", Type: ursus.Int64, Nullable: true}, ursus.Field{Name: "b", Type: ursus.Float64, Nullable: true},
 			ursus.Field{Name: "s", Type: ursus.String, Nullable: true}) {
 			t.Errorf("the frame as a struct: %v, %s", st, st.DType())
-		}
-	})
-
-	t.Run("horizontal", func(t *testing.T) {
-		for _, tc := range []struct {
-			name string
-			got  func() (*ursus.Column, error)
-			want *ursus.Column
-		}{
-			{"sum", func() (*ursus.Column, error) { return num.SumHorizontal(ctx, true) },
-				ursus.Values("sum", []float64{3, 6, 8, 13})},
-			{"min", func() (*ursus.Column, error) { return num.MinHorizontal(ctx) },
-				ursus.Values("min", []float64{1, 2, 3, 4})},
-			{"max", func() (*ursus.Column, error) { return num.MaxHorizontal(ctx) },
-				ursus.Values("max", []float64{2, 4, 5, 9})},
-			// A null skipped, and with ignoreNulls false a row holding one null.
-			{"mean", func() (*ursus.Column, error) {
-				return dfOf(t, f64s("a", 1.0, nil), f64s("b", 3.0, nil)).MeanHorizontal(ctx, true)
-			}, f64s("mean", 2.0, nil)},
-			{"sum of a null, not ignored", func() (*ursus.Column, error) {
-				return dfOf(t, f64s("a", 1.0, 1.0), f64s("b", 2.0, nil)).SumHorizontal(ctx, false)
-			}, f64s("sum", 3.0, nil)},
-			{"fold", func() (*ursus.Column, error) {
-				return num.Fold(ctx, func(acc, x ursus.Expr) ursus.Expr { return acc.Add(x) })
-			}, ursus.Values("a", []float64{3, 6, 8, 13})},
-		} {
-			col, err := tc.got()
-			if err != nil {
-				t.Fatalf("%s: %v", tc.name, err)
-			}
-			ursustest.AssertFrameEqual(t, dfOf(t, col), dfOf(t, tc.want))
 		}
 	})
 

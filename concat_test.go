@@ -3,9 +3,9 @@ package ursus_test
 import (
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/internal/uerr"
@@ -24,27 +24,21 @@ func ab() (*ursus.LazyFrame, *ursus.LazyFrame) {
 	return a, b
 }
 
+// TestConcatPreservesOrder: the rows of Concat([a, b, a]), which the concat group
+// records, come alike at every batch size.
 func TestConcatPreservesOrder(t *testing.T) {
 	a, b := ab()
+	q := ursus.Concat([]*ursus.LazyFrame{a, b, a})
+	want, err := q.Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, bs := range []int{1, 2, 8192} {
-		df, err := ursus.Concat([]*ursus.LazyFrame{a, b, a}).
-			Collect(t.Context(), ursus.WithBatchSize(bs), ursus.WithVerify())
+		df, err := q.Collect(t.Context(), ursus.WithBatchSize(bs), ursus.WithVerify())
 		if err != nil {
 			t.Fatalf("bs=%d: %v", bs, err)
 		}
-		k, err := df.Column[int64]("k")
-		if err != nil {
-			t.Fatal(err)
-		}
-		got := make([]int64, df.Height())
-		for i := range df.Height() {
-			got[i], _ = k.Get(i)
-		}
-		// Every row of the first frame before every row of the second, and a frame
-		// used twice contributes twice.
-		if !slices.Equal(got, []int64{1, 2, 3, 1, 2}) {
-			t.Errorf("bs=%d order = %v, want [1 2 3 1 2]", bs, got)
-		}
+		t.Run("batch "+strconv.Itoa(bs), func(t *testing.T) { ursustest.AssertFrameEqual(t, df, want) })
 	}
 }
 
@@ -118,29 +112,8 @@ func TestConcatWidensNullability(t *testing.T) {
 	}
 }
 
-// TestConcatPromotesTypes: Int32 and Int64 stack as Int64, and the narrower side is
-// cast rather than reinterpreted.
-func TestConcatPromotesTypes(t *testing.T) {
-	small := ursus.Frame(ursus.Values("v", []int32{1, 2}))
-	big := ursus.Frame(ursus.Values("v", []int64{1 << 40}))
-
-	df, err := ursus.Concat([]*ursus.LazyFrame{small, big}).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := df.Schema().Field(0).Type; got != ursus.Int64 {
-		t.Fatalf("type = %s, want Int64", got)
-	}
-	v, err := df.Column[int64]("v")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := v.Get(2); got != 1<<40 {
-		t.Errorf("the wide value became %d — a reinterpret rather than a cast", got)
-	}
-}
-
-// TestConcatDiagonalColumnOrder: the union of the columns, with nulls in the gaps.
+// TestConcatDiagonalColumnOrder: the union of the columns, with nulls in the gaps,
+// whose cells the concat group records.
 //
 // Column order is FIRST APPEARANCE across the inputs. Anything derived from map
 // iteration would make the same query produce a different schema between runs,
@@ -152,30 +125,14 @@ func TestConcatDiagonalColumnOrder(t *testing.T) {
 
 	want := []string{"k", "v", "x"}
 	for range 20 {
-		df, err := ursus.Concat([]*ursus.LazyFrame{a, b}, ursus.WithConcatMode(ursus.ConcatDiagonal)).
-			Collect(t.Context(), ursus.WithVerify())
+		s, err := ursus.Concat([]*ursus.LazyFrame{a, b}, ursus.WithConcatMode(ursus.ConcatDiagonal)).
+			CollectSchema(t.Context())
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := df.Schema().Names(); !slices.Equal(got, want) {
+		if got := s.Names(); !slices.Equal(got, want) {
 			t.Fatalf("column order = %v, want %v — first appearance across the "+
 				"inputs, never map order", got, want)
-		}
-		if df.Height() != 2 {
-			t.Fatalf("height = %d, want 2", df.Height())
-		}
-		// A column a frame does not have is null for that frame's rows.
-		if _, ok, _ := df.At[float64](0, "x"); ok {
-			t.Error("frame a has no x, so its row must be null there")
-		}
-		if _, ok, _ := df.At[string](1, "v"); ok {
-			t.Error("frame b has no v, so its row must be null there")
-		}
-		// And a column both have is not null anywhere.
-		for i := range 2 {
-			if _, ok, _ := df.At[int64](i, "k"); !ok {
-				t.Errorf("k is present in both frames; row %d must not be null", i)
-			}
 		}
 	}
 }
@@ -286,94 +243,17 @@ func TestGoldenConcatPlan(t *testing.T) {
 // TestConcatModes is P5 of v0.6.7-scope.md (step 307): Polars' concat modes past
 // vertical and diagonal. The relaxed ones meet a column's types at Polars' supertype;
 // horizontal_extend pads a shorter frame; the align ones join on the columns every
-// frame has and sort by them. Every answer is Polars 1.44.1's but where a comment
-// says otherwise.
+// frame has and sort by them. Each mode's rows are the concat group's, Polars 2.1.0's
+// (oracle_concat_test.go); here stay the refusals and the eager form.
 func TestConcatModes(t *testing.T) {
 	ctx := t.Context()
 	mode := ursus.WithConcatMode
 	concat := func(m ursus.ConcatMode, fs ...*ursus.LazyFrame) *ursus.LazyFrame { return ursus.Concat(fs, mode(m)) }
 	frame := ursus.Frame
 	ab := func(a *ursus.Column, b ...string) *ursus.LazyFrame { return frame(a, ursus.Values("b", b)) }
-	at := func(y, m, d, h int) time.Time { return time.Date(y, time.Month(m), d, h, 0, 0, 0, time.UTC) }
 	ids := frame(ursus.Values("id", []int64{3, 1, 2}), ursus.Values("x", []int64{30, 10, 20}))
 	ys := frame(ursus.Values("id", []int64{2, 4, 1}), ursus.Values("y", []string{"b", "d", "a"}))
 	zs := frame(ursus.Values("id", []int64{1, 5}), ursus.Values("z", []float64{1.5, 5.5}))
-	for _, tc := range []struct {
-		name string
-		q    *ursus.LazyFrame
-		want *ursus.LazyFrame
-	}{
-		{"relaxed: an Int64 beside a Float64", concat(ursus.ConcatRelaxed, ab(ursus.Values("a", []int64{3}), "z"),
-			ab(ursus.Values("a", []float64{1.5}), "w")), ab(ursus.Values("a", []float64{3, 1.5}), "z", "w")},
-		{"relaxed: a number beside text", concat(ursus.ConcatRelaxed, ab(ursus.Values("a", []int64{3}), "z"),
-			ab(ursus.Values("a", []string{"t"}), "v")), ab(ursus.Values("a", []string{"3", "t"}), "z", "v")},
-		{"relaxed: a Boolean beside a number", concat(ursus.ConcatRelaxed, ab(ursus.Values("a", []int64{3}), "z"),
-			ab(ursus.Values("a", []bool{true}), "q")), ab(ursus.Values("a", []int64{3, 1}), "z", "q")},
-		{"relaxed: a Date beside a Datetime", concat(ursus.ConcatRelaxed,
-			frame(ursus.Values("a", []time.Time{at(2024, 1, 2, 0)})).WithColumns(ursus.Col("a").Cast(ursus.Date)),
-			frame(ursus.Values("a", []time.Time{at(2024, 1, 3, 4)})).WithColumns(ursus.Col("a").Cast(ursus.Datetime(ursus.Micro, "")))),
-			frame(ursus.Values("a", []time.Time{at(2024, 1, 2, 0), at(2024, 1, 3, 4)})).
-				WithColumns(ursus.Col("a").Cast(ursus.Datetime(ursus.Micro, "")))},
-		{"relaxed: an Int32 beside an Int64", concat(ursus.ConcatRelaxed, ab(ursus.Values("a", []int32{1, 2}), "x", "y"),
-			ab(ursus.Values("a", []int64{3}), "z")), ab(ursus.Values("a", []int64{1, 2, 3}), "x", "y", "z")},
-		{"diagonal relaxed", concat(ursus.ConcatDiagonalRelaxed, ab(ursus.Values("a", []int64{1}), "x"),
-			frame(ursus.Values("a", []float64{1.5}), ursus.Values("c", []float64{3.5}))),
-			frame(ursus.Values("a", []float64{1, 1.5}), ursus.ValuesNullable("b", []string{"x", ""}, []bool{true, false}),
-				ursus.ValuesNullable("c", []float64{0, 3.5}, []bool{false, true}))},
-		{"horizontal extend", concat(ursus.ConcatHorizontalExtend, frame(ursus.Values("a", []int64{1, 2, 3})),
-			frame(ursus.Values("b", []string{"x", "y"}))),
-			frame(ursus.Values("a", []int64{1, 2, 3}), ursus.ValuesNullable("b", []string{"x", "y", ""}, []bool{true, true, false}))},
-		{"horizontal extend of no rows", concat(ursus.ConcatHorizontalExtend, frame(ursus.Values("a", []int64{1, 2})),
-			frame(ursus.Values("b", []string{}))),
-			frame(ursus.Values("a", []int64{1, 2}), ursus.ValuesNullable("b", []string{"", ""}, []bool{false, false}))},
-		{"horizontal", concat(ursus.ConcatHorizontal, frame(ursus.Values("a", []int64{1, 2})), frame(ursus.Values("b", []string{"x", "y"}))),
-			frame(ursus.Values("a", []int64{1, 2}), ursus.Values("b", []string{"x", "y"}))},
-		{"align", concat(ursus.ConcatAlign, ids, ys, zs), frame(ursus.Values("id", []int64{1, 2, 3, 4, 5}),
-			ursus.ValuesNullable("x", []int64{10, 20, 30, 0, 0}, []bool{true, true, true, false, false}),
-			ursus.ValuesNullable("y", []string{"a", "b", "", "d", ""}, []bool{true, true, false, true, false}),
-			ursus.ValuesNullable("z", []float64{1.5, 0, 0, 0, 5.5}, []bool{true, false, false, false, true}))},
-		{"align inner", concat(ursus.ConcatAlignInner, ids, ys, zs), frame(ursus.Values("id", []int64{1}),
-			ursus.Values("x", []int64{10}), ursus.Values("y", []string{"a"}), ursus.Values("z", []float64{1.5}))},
-		{"align left", concat(ursus.ConcatAlignLeft, ids, ys, zs), frame(ursus.Values("id", []int64{1, 2, 3}),
-			ursus.Values("x", []int64{10, 20, 30}), ursus.ValuesNullable("y", []string{"a", "b", ""}, []bool{true, true, false}),
-			ursus.ValuesNullable("z", []float64{1.5, 0, 0}, []bool{true, false, false}))},
-		{"align right", concat(ursus.ConcatAlignRight, ids, ys, zs), frame(ursus.Values("id", []int64{1, 5}),
-			ursus.ValuesNullable("x", []int64{10, 0}, []bool{true, false}), ursus.ValuesNullable("y", []string{"a", ""}, []bool{true, false}),
-			ursus.Values("z", []float64{1.5, 5.5}))},
-		// Two keys, the second frame's in another order; the first frame's order wins.
-		{"align on two columns", concat(ursus.ConcatAlign,
-			frame(ursus.Values("k1", []int64{1, 1, 2}), ursus.Values("k2", []string{"a", "b", "a"}), ursus.Values("v", []int64{1, 2, 3})),
-			frame(ursus.Values("k2", []string{"a", "b"}), ursus.Values("k1", []int64{1, 1}), ursus.Values("w", []int64{10, 20}))),
-			frame(ursus.Values("k1", []int64{1, 1, 2}), ursus.Values("k2", []string{"a", "b", "a"}), ursus.Values("v", []int64{1, 2, 3}),
-				ursus.ValuesNullable("w", []int64{10, 20, 0}, []bool{true, true, false}))},
-		// Null keys match nothing and sort first, Polars' order: the second frame's
-		// row, which the first has none for, first.
-		{"align null keys", concat(ursus.ConcatAlign,
-			frame(ursus.ValuesNullable("id", []int64{1, 0}, []bool{true, false}), ursus.Values("x", []int64{1, 2})),
-			frame(ursus.ValuesNullable("id", []int64{0, 1}, []bool{false, true}), ursus.Values("y", []int64{3, 4}))),
-			frame(ursus.ValuesNullable("id", []int64{0, 0, 1}, []bool{false, false, true}),
-				ursus.ValuesNullable("x", []int64{0, 2, 1}, []bool{false, true, true}), ursus.ValuesNullable("y", []int64{3, 0, 4}, []bool{true, false, true}))},
-		{"align, a key twice", concat(ursus.ConcatAlign,
-			frame(ursus.Values("id", []int64{1, 1}), ursus.Values("x", []int64{1, 2})),
-			frame(ursus.Values("id", []int64{1}), ursus.Values("y", []int64{3}))),
-			frame(ursus.Values("id", []int64{1, 1}), ursus.Values("x", []int64{1, 2}), ursus.Values("y", []int64{3, 3}))},
-		{"align, keys of two widths", concat(ursus.ConcatAlign,
-			frame(ursus.Values("id", []int32{1, 2}), ursus.Values("x", []int64{1, 1})),
-			frame(ursus.Values("id", []int64{1, 2}), ursus.Values("y", []int64{3, 4}))),
-			frame(ursus.Values("id", []int64{1, 2}), ursus.Values("x", []int64{1, 1}), ursus.Values("y", []int64{3, 4}))},
-		// One frame is itself, unsorted, as Polars returns it.
-		{"align of one frame", concat(ursus.ConcatAlign, ids), ids},
-	} {
-		got, err := tc.q.Collect(ctx)
-		if err != nil {
-			t.Fatalf("%s: %v", tc.name, err)
-		}
-		want, err := tc.want.Collect(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Run(tc.name, func(t *testing.T) { ursustest.AssertFrameEqual(t, got, want) })
-	}
 
 	t.Run("refused", func(t *testing.T) {
 		for _, tc := range []struct {
@@ -389,8 +269,8 @@ func TestConcatModes(t *testing.T) {
 			// Polars: schema names differ.
 			{"relaxed: columns in another order", concat(ursus.ConcatRelaxed, ab(ursus.Values("a", []int64{1}), "x"),
 				frame(ursus.Values("b", []string{"y"}), ursus.Values("a", []int64{2}))), "frame 1"},
-			// Polars' horizontal pads, deprecated since 1.42.1 for this, which
-			// horizontal_extend keeps.
+			// Polars 2.1's horizontal refuses two heights too; its horizontal_extend
+			// pads, as ConcatHorizontalExtend does.
 			{"horizontal of two heights", concat(ursus.ConcatHorizontal, frame(ursus.Values("a", []int64{1, 2, 3})),
 				frame(ursus.Values("b", []string{"x", "y"}))), "frame 1 has 2 rows, frame 0 has 3"},
 			// Polars: 'align' strategy requires at least one common column.
