@@ -167,7 +167,13 @@ Each in `oracleDifferences` with its reason, all documented in feature-gaps.md �
 the correctly rounded float32 0.6931472 that Go's double rounded once gives
 (`castround_byhand/f32_libm`, rel:1e-6); Go's `pow` is a few ulps from glibc's
 (`math/pow_gen`, rel:1e-14); Polars' `is_sorted` reads a sorted Series' flag, which
-does not record where its nulls are (§2, exprodds).
+does not record where its nulls are (§2, exprodds). **The first CI run found glibc's
+`asinh` and `acosh` an ulp otherwise on GitHub's runner than on Debian's glibc 2.41:**
+27 values of the double ones moved between the two machines (`arccosh(2)` is
+1.3169578969248166 here and …168 there), so a recording of them holds on one machine
+only, as step 496 found of `describe`'s std. They are left out of the trig group's
+cases, as the std was; `TestTrigonometry` holds them, with every function there, to
+Go's math package.
 
 ## 5. Checks
 
