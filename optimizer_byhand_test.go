@@ -5,9 +5,9 @@ package ursus_test
 //
 // Every case runs twice — with the default rules, and with every rule off — and
 // both must equal an answer worked out by hand. Comparing the two runs against each
-// other is what TestPushdownSoundness does, and it is not enough on its own: a
-// defect in the RESOLVER is wrong in both runs identically, and they agree. W1
-// below is exactly that.
+// other is what optimizer_differential_test.go does, and it is not enough on its
+// own: a defect in the RESOLVER is wrong in both runs identically, and they agree.
+// W1 below is exactly that.
 
 import (
 	"cmp"
