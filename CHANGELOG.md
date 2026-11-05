@@ -166,6 +166,12 @@ that stops when its request is cancelled.
   2^63 against math/big, seconds, Decimal products and quotients against big.Rat with
   seeded values) or a differential; nineteen documented differences named, two
   findings left for the maintainer.
+- **Strings, lists, structs and enums from recorded oracles** (499): fifteen files
+  converted, `listns_test.go`'s 739 lines of null-against-empty by hand among them;
+  321 cases in fifteen groups, 58 generated, 1,611 lines gone. What Polars 2 has no
+  answer for is held to Go: a `List(Duration)` mean past int64 to `math/big`, a regex
+  replaced n times to `regexp`, a Datetime of seconds and a Date formatted with a
+  clock to `time`, `GetCategories` (removed from Polars 2) to the type's own list.
 - **The temporal wave converted** (498): `calendar_test.go`'s by-hand half,
   `tzreplace`, `components`, `daterange`, `csvdates`, `strtemporal`, `temporalagg`,
   `weeks`, `dtcombine`, `dtexact`, `timearith`, `businessdays_range` and
@@ -197,6 +203,14 @@ its section below lists them.
   below 1e13 and scientific outside, where a Float64's are 1e-5 and 1e16; both widths
   used the Float64 bounds, so `float32(9e15)` read `9000000000000000.0` where Polars
   writes `9e+15`.
+- **`Str().ToTitlecase` titlecases a digraph** (499): "ǆemal" was "Ǆemal" (U+01C4,
+  the upper case); it is "ǅemal" (U+01C5), Unicode's title mapping and Polars'. The
+  recorded oracle found it.
+- **`Str().ExtractGroups` of a null is a null Struct** (499), as Polars 2.1 gives it;
+  it was a Struct of null fields, which `SplitExact` and `SplitN` keep, as Polars does.
+- **An inclusive split has no trailing empty part** (499): `SplitInclusive(",")` of
+  "a,b," is `["a,", "b,"]`, and `SplitExact(",", 1, true)` of "a," is `{"a,", null}`,
+  as Polars splits them; each had an empty part after the last separator.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
