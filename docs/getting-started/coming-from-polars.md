@@ -137,6 +137,7 @@ changes is what Go asks for.
 | `.str.to_time("%H:%M")`, `.str.to_decimal(scale=2)`, `.dt.cast_time_unit("ms")` | `.Str().ToTime("%H:%M", true)`, `.Str().ToDecimal(2)`, `.Dt().CastTimeUnit(ursus.Milli)` (new in 0.6.7) |
 | `.meta.root_names()`, `.meta.output_name()`, `.meta.undo_aliases()`, `.meta.tree_format()` | `.Meta().RootNames()`, `.Meta().OutputName()`, `.Meta().UndoAliases()`, `.Meta().TreeFormat()` (new in 0.6.7) |
 | `.to_physical()`, `.reinterpret(signed=True)` | `.ToPhysical()`, `.Reinterpret(true)` (new in 0.6.7) |
+| `.truncdiv(v)` | `.TruncDiv(v)`, toward zero (new in 0.8) |
 | `.name.keep()`, `.name.to_uppercase()`, `.name.replace(p, v)`, `.name.prefix_fields("p_")`; `.struct.drop(["f"])` | `.Name().Keep()`, `.Name().ToUpper()`, `.Name().Replace(p, v, false)`, `.Name().PrefixFields("p_")`; `.Struct().Drop("f")` (new in 0.6.7) |
 | `.map_elements(f)`, `.map_batches(f)` | `.MapElements(name, type, f)`, `.MapBatches(name, type, f)`, with a Go function |
 | `df.map_rows(f)`, `df.map_columns(["a"], f)` | `df.MapRows(ctx, f)`, `df.MapColumns(ctx, []string{"a"}, f)` (new in 0.6.7) |
