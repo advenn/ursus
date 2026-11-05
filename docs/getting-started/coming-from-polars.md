@@ -144,6 +144,7 @@ changes is what Go asks for.
 | `.name.strip_prefix("a_")`, `.name.strip_suffix("_x")` | `.Name().StripPrefix("a_")`, `.Name().StripSuffix("_x")` (new in 0.8) |
 | `df.show(20)`, `lf.cache()` | `df.Show(20)`, `lf.Cache()` (new in 0.6.7) |
 | `df.write_parquet(f)`, `df.write_csv(f)` | `lf.WriteParquet(ctx, w)`, `lf.WriteCSV(ctx, w)`, to any `io.Writer` |
+| `pl.scan_lines(p, name="l", include_file_paths="path")`, `pl.read_lines(b)` | `ursus.ScanLines(p, ursus.WithLinesName("l"), ursus.WithLinesIncludeFilePaths("path"))`, `ursus.ScanLinesBytes(b, "b")` (new in 0.8) |
 | `pl.read_ndjson(p)`, `pl.scan_ndjson([p, q], infer_schema_length=n, ignore_errors=True)` | `ursus.ScanNDJSON(p)`, `ursus.ScanNDJSONFiles([]string{p, q}, ursus.WithInferSchemaLines(n), ursus.WithNDJSONIgnoreErrors(true))` (new in 0.6.7) |
 | `pl.scan_parquet("ds/", hive_schema={"g": pl.Int8}, include_file_paths="path")` | `ursus.ScanParquet("ds", ursus.WithHiveSchema(s), ursus.WithIncludeFilePaths("path"))`, a hive dataset's keys read from its directories (new in 0.6.7) |
 | `pl.scan_parquet(files, missing_columns="insert", extra_columns="ignore", cast_options=pl.ScanCastOptions(integer_cast="upcast"))` | `ursus.ScanParquetFiles(files, ursus.WithInsertMissingColumns(true), ursus.WithIgnoreExtraColumns(true), ursus.WithUpcastIntegers(true))` (new in 0.6.7) |
