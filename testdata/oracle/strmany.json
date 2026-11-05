@@ -1,0 +1,9136 @@
+{
+ "cases": [
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "the Cat sat",
+        "dog and cat",
+        "",
+        null,
+        "catcat dogs"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "contains_any",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "s",
+      "values": [
+       false,
+       true,
+       false,
+       null,
+       true
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "the Cat sat",
+        "dog and cat",
+        "",
+        null,
+        "catcat dogs"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "contains_any_ascii_ci",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "s",
+      "values": [
+       true,
+       true,
+       false,
+       null,
+       true
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "the Cat sat",
+        "dog and cat",
+        "",
+        null,
+        "catcat dogs"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "empty_pattern",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "s",
+      "values": [
+       true,
+       true,
+       true,
+       null,
+       true
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "\u00c9cole"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "only_ascii_is_ci",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "s",
+      "values": [
+       false
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "the Cat sat",
+        "dog and cat",
+        "",
+        null,
+        "catcat dogs"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "replace_many",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "the Cat sat",
+       "D and C",
+       "",
+       null,
+       "CC Ds"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "the Cat sat",
+        "dog and cat",
+        "",
+        null,
+        "catcat dogs"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "one_replacement",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "the Cat sat",
+       "X and X",
+       "",
+       null,
+       "XX Xs"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "the Cat sat",
+        "dog and cat",
+        "",
+        null,
+        "catcat dogs"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "replace_many_ascii_ci",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "the C sat",
+       "dog and C",
+       "",
+       null,
+       "CC dogs"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "abcd"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "ends_together",
+   "note": "the match ending first; of two ending together the one starting first",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "2d"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "abcd"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "ends_first",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "2bcd"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "abcd"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "leftmost_listed_first",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "1cd"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "ab"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "empty_pattern_between",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "-a-b-"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "the Cat sat",
+        "dog and cat",
+        "",
+        null,
+        "catcat dogs"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "extract_many",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(String)",
+      "name": "s",
+      "values": [
+       [],
+       [
+        "dog",
+        "cat"
+       ],
+       [],
+       null,
+       [
+        "cat",
+        "cat",
+        "dog"
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "aaaa"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "overlapping",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(String)",
+      "name": "s",
+      "values": [
+       [
+        "aa",
+        "aa",
+        "aa"
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "aaaa"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "not_overlapping",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(String)",
+      "name": "s",
+      "values": [
+       [
+        "aa",
+        "aa"
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "abcd"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "overlapping_by_their_ends",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(String)",
+      "name": "s",
+      "values": [
+       [
+        "b",
+        "abc",
+        "bc"
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "abcd"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "leftmost",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(String)",
+      "name": "s",
+      "values": [
+       [
+        "ab"
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "the Cat sat",
+        "dog and cat",
+        "",
+        null,
+        "catcat dogs"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "find_many",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(Uint32)",
+      "name": "s",
+      "values": [
+       [],
+       [
+        0,
+        8
+       ],
+       [],
+       null,
+       [
+        0,
+        3,
+        7
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "\u00e9a"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "find_many_in_bytes",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(Uint32)",
+      "name": "s",
+      "values": [
+       [
+        2
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "a=1",
+        "b=22",
+        null,
+        "x"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "extract_groups",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(k: String, v: String)",
+      "name": "s",
+      "values": [
+       {
+        "k": "a",
+        "v": "1"
+       },
+       {
+        "k": "b",
+        "v": "22"
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "a=1",
+        "b=22",
+        null,
+        "x"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "numbered_groups",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(1: String, 2: String)",
+      "name": "s",
+      "values": [
+       {
+        "1": "a",
+        "2": "1"
+       },
+       {
+        "1": "b",
+        "2": "22"
+       },
+       null,
+       {
+        "1": null,
+        "2": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "a,b,c",
+        "x",
+        null,
+        "a,,b",
+        ""
+       ]
+      }
+     ]
+    }
+   },
+   "name": "split_exact",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(field_0: String, field_1: String)",
+      "name": "s",
+      "values": [
+       {
+        "field_0": "a",
+        "field_1": "b"
+       },
+       {
+        "field_0": "x",
+        "field_1": null
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": ""
+       },
+       {
+        "field_0": "",
+        "field_1": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "a,b,c",
+        "x",
+        null,
+        "a,,b",
+        ""
+       ]
+      }
+     ]
+    }
+   },
+   "name": "split_exact_inclusive",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(field_0: String, field_1: String)",
+      "name": "s",
+      "values": [
+       {
+        "field_0": "a,",
+        "field_1": "b,"
+       },
+       {
+        "field_0": "x",
+        "field_1": null
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a,",
+        "field_1": ","
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "a,b,c",
+        "x",
+        null,
+        "a,,b",
+        ""
+       ]
+      }
+     ]
+    }
+   },
+   "name": "splitn",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(field_0: String, field_1: String)",
+      "name": "s",
+      "values": [
+       {
+        "field_0": "a",
+        "field_1": "b,c"
+       },
+       {
+        "field_0": "x",
+        "field_1": null
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": ",b"
+       },
+       {
+        "field_0": "",
+        "field_1": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "a,b"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "splitn_of_one",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(field_0: String)",
+      "name": "s",
+      "values": [
+       {
+        "field_0": "a,b"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "a,b"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "splitn_past_the_parts",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(field_0: String, field_1: String, field_2: String)",
+      "name": "s",
+      "values": [
+       {
+        "field_0": "a",
+        "field_1": "b",
+        "field_2": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "a,b,c",
+        "x",
+        null,
+        "a,,b",
+        ""
+       ]
+      }
+     ]
+    }
+   },
+   "name": "split_inclusive",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(String)",
+      "name": "s",
+      "values": [
+       [
+        "a,",
+        "b,",
+        "c"
+       ],
+       [
+        "x"
+       ],
+       null,
+       [
+        "a,",
+        ",",
+        "b"
+       ],
+       []
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "hello wORLD",
+        "o'neil-smith x",
+        "\u00c9COLE du monde",
+        "3rd place  two",
+        "hello_world foo.bar ABC-def \u01c6emal  x1y"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "titlecase",
+   "note": "a digraph's titlecase is its own letter, \u01c5",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "Hello World",
+       "O'Neil-Smith X",
+       "\u00c9cole Du Monde",
+       "3Rd Place  Two",
+       "Hello_World Foo.Bar Abc-Def \u01c5emal  X1Y"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "\ufb01",
+        "\u00e9",
+        "e\u0301"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "normal_forms",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "NFKC",
+      "values": [
+       2,
+       2,
+       2
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "NFD",
+      "values": [
+       3,
+       3,
+       3
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "NFC",
+      "values": [
+       3,
+       2,
+       2
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "NFKD",
+      "values": [
+       2,
+       3,
+       3
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        null,
+        "Bcbc",
+        "B  ",
+        "a",
+        " Acba",
+        null,
+        " c c Bccc",
+        "baBc",
+        "bBaBa",
+        " BAAA",
+        "AAa B",
+        "aBbbcbBB",
+        " babAAcA",
+        "cAcbcbb ",
+        "\ud835\udd18rsus",
+        "cbA  cbAA",
+        "bABcABBab",
+        "BA bBABcB",
+        "",
+        "AcaAacbc",
+        null,
+        " ",
+        " bB",
+        null,
+        null,
+        " ",
+        "BA",
+        "AcaacAAa",
+        "cbcabc ",
+        "A Ba AbAA",
+        null,
+        null,
+        "A",
+        "B AAa  ",
+        "BAcb",
+        "Ba ",
+        "BB AaaAb",
+        "BAB",
+        "bac A  ",
+        null,
+        "AAbAB",
+        "Baca",
+        " BA a",
+        "c",
+        "bBa",
+        " Bac bBba",
+        " cAcB AB",
+        "cBabAc",
+        " A   Abc",
+        "A",
+        " ",
+        "B",
+        "BBc",
+        " B aAbBcb",
+        "bac BA A",
+        "ca",
+        null,
+        "AcabcBab",
+        "b",
+        null,
+        "ABbbBA",
+        "b Aa",
+        "A",
+        " aABcbA",
+        "cbBc",
+        "AbcBBaAb",
+        "a,b",
+        "aaA bcaBa",
+        "AB",
+        null,
+        "ccaacbB",
+        " A",
+        "Bbba",
+        "AAcb",
+        " ABb AA ",
+        "bacB A",
+        null,
+        "BAbAAAca",
+        "cBB aA",
+        null,
+        null,
+        null,
+        "caBbAA B",
+        " baBbbB",
+        "BAcbcB ",
+        "aB",
+        "Ba AaBAB",
+        "A  ",
+        "BaA",
+        "c AaAA ",
+        "Bc Aa  ",
+        "\u00e9",
+        " cBcA",
+        "Ba A",
+        "Aa",
+        "bBbcc aAa",
+        "   bb",
+        "  cBABccB",
+        "BA  c c  ",
+        "B",
+        "AB",
+        "\"q\"",
+        "ca a cB",
+        "B abcbb ",
+        "Bbca",
+        "aBBABAcc",
+        "bBA ",
+        "ccaaAc B",
+        "a abAB",
+        "caacc",
+        "c bBbbA",
+        null,
+        " bB bB",
+        "A",
+        "Ab",
+        "Aa ",
+        "a ",
+        "Aba b ",
+        "cAA ",
+        " ",
+        null,
+        null,
+        "ccacaBbB ",
+        "Ac c",
+        "baAc aBbb",
+        "ab",
+        "bAbbBB",
+        "baaca",
+        "bbAaAcaaa",
+        "c  BAa",
+        "ca Baaa",
+        "  AbcAAa",
+        "ac ",
+        "cAAAA",
+        "ba",
+        "cc Ac",
+        "bba abb",
+        null,
+        "BABb",
+        "Bc",
+        "c A babaa",
+        "bB cAcB",
+        "ABaAcBB",
+        "bBB a",
+        "cBAaAAc",
+        "B",
+        "BbAc",
+        "bAccc",
+        "B aA",
+        "caA baA"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "many_gen",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "any",
+      "values": [
+       null,
+       true,
+       false,
+       true,
+       true,
+       null,
+       false,
+       true,
+       true,
+       false,
+       true,
+       true,
+       true,
+       true,
+       false,
+       false,
+       true,
+       true,
+       false,
+       true,
+       null,
+       false,
+       false,
+       null,
+       null,
+       false,
+       false,
+       true,
+       true,
+       true,
+       null,
+       null,
+       false,
+       true,
+       false,
+       true,
+       true,
+       true,
+       true,
+       null,
+       true,
+       true,
+       true,
+       false,
+       true,
+       true,
+       true,
+       true,
+       true,
+       false,
+       false,
+       false,
+       false,
+       true,
+       true,
+       true,
+       null,
+       true,
+       false,
+       null,
+       true,
+       true,
+       false,
+       true,
+       false,
+       true,
+       true,
+       true,
+       true,
+       null,
+       true,
+       false,
+       true,
+       false,
+       true,
+       true,
+       null,
+       true,
+       true,
+       null,
+       null,
+       null,
+       true,
+       true,
+       true,
+       true,
+       true,
+       false,
+       true,
+       true,
+       true,
+       false,
+       false,
+       true,
+       true,
+       true,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       true,
+       true,
+       true,
+       true,
+       false,
+       true,
+       true,
+       true,
+       false,
+       null,
+       false,
+       false,
+       false,
+       true,
+       true,
+       true,
+       false,
+       false,
+       null,
+       null,
+       true,
+       false,
+       true,
+       true,
+       false,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       false,
+       true,
+       false,
+       true,
+       null,
+       true,
+       false,
+       true,
+       false,
+       true,
+       true,
+       true,
+       false,
+       false,
+       false,
+       true,
+       true
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "any_ci",
+      "values": [
+       null,
+       true,
+       false,
+       true,
+       true,
+       null,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       false,
+       true,
+       true,
+       true,
+       false,
+       true,
+       null,
+       false,
+       false,
+       null,
+       null,
+       false,
+       true,
+       true,
+       true,
+       true,
+       null,
+       null,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       null,
+       true,
+       true,
+       true,
+       false,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       false,
+       false,
+       true,
+       true,
+       true,
+       true,
+       null,
+       true,
+       false,
+       null,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       null,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       null,
+       true,
+       true,
+       null,
+       null,
+       null,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       false,
+       true,
+       true,
+       true,
+       true,
+       false,
+       true,
+       true,
+       false,
+       true,
+       false,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       null,
+       false,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       false,
+       null,
+       null,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       null,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       false,
+       true,
+       true,
+       true,
+       true
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "rep",
+      "values": [
+       null,
+       "Bc2",
+       "B  ",
+       "3",
+       " Acb3",
+       null,
+       " c c Bccc",
+       "b3Bc",
+       "bB3B3",
+       " BAAA",
+       "AA3 B",
+       "3Bb2bBB",
+       " b3bAAcA",
+       "cAc2bb ",
+       "\ud835\udd18rsus",
+       "cbA  cbAA",
+       "b4c4B3b",
+       "BA bB4cB",
+       "",
+       "Ac3A3c2",
+       null,
+       " ",
+       " bB",
+       null,
+       null,
+       " ",
+       "BA",
+       "Ac33cAA3",
+       "c232 ",
+       "A B3 AbAA",
+       null,
+       null,
+       "A",
+       "B AA3  ",
+       "BAcb",
+       "B3 ",
+       "BB A33Ab",
+       "B4",
+       "b3c A  ",
+       null,
+       "AAb4",
+       "B3c3",
+       " BA 3",
+       "c",
+       "bB3",
+       " B3c bBb3",
+       " cAcB 4",
+       "cB3bAc",
+       " A   A2",
+       "A",
+       " ",
+       "B",
+       "BBc",
+       " B 3AbBcb",
+       "b3c BA A",
+       "c3",
+       null,
+       "Ac32B3b",
+       "b",
+       null,
+       "4bbBA",
+       "b A3",
+       "A",
+       " 34cbA",
+       "cbBc",
+       "A2BB3Ab",
+       "3,b",
+       "33A 23B3",
+       "4",
+       null,
+       "cc33cbB",
+       " A",
+       "Bbb3",
+       "AAcb",
+       " 4b AA ",
+       "b3cB A",
+       null,
+       "BAbAAAc3",
+       "cBB 3A",
+       null,
+       null,
+       null,
+       "c3BbAA B",
+       " b3BbbB",
+       "BAc2B ",
+       "3B",
+       "B3 A3B4",
+       "A  ",
+       "B3A",
+       "c A3AA ",
+       "Bc A3  ",
+       "\u00e9",
+       " cBcA",
+       "B3 A",
+       "A3",
+       "bB2c 3A3",
+       "   bb",
+       "  cB4ccB",
+       "BA  c c  ",
+       "B",
+       "4",
+       "\"q\"",
+       "c3 3 cB",
+       "B 32bb ",
+       "B23",
+       "3BB4Acc",
+       "bBA ",
+       "cc33Ac B",
+       "3 3b4",
+       "c33cc",
+       "c bBbbA",
+       null,
+       " bB bB",
+       "A",
+       "Ab",
+       "A3 ",
+       "3 ",
+       "Ab3 b ",
+       "cAA ",
+       " ",
+       null,
+       null,
+       "cc3c3BbB ",
+       "Ac c",
+       "b3Ac 3Bbb",
+       "3b",
+       "bAbbBB",
+       "b33c3",
+       "bbA3Ac333",
+       "c  BA3",
+       "c3 B333",
+       "  A2AA3",
+       "3c ",
+       "cAAAA",
+       "b3",
+       "cc Ac",
+       "bb3 3bb",
+       null,
+       "B4b",
+       "Bc",
+       "c A b3b33",
+       "bB cAcB",
+       "43AcBB",
+       "bBB 3",
+       "cBA3AAc",
+       "B",
+       "BbAc",
+       "bAccc",
+       "B 3A",
+       "c3A b3A"
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "rep_left",
+      "values": [
+       null,
+       "Bc2",
+       "B  ",
+       "3",
+       " Acb3",
+       null,
+       " c c Bccc",
+       "b3Bc",
+       "bB3B3",
+       " BAAA",
+       "AA3 B",
+       "3Bb2bBB",
+       " b1AAcA",
+       "cAc2bb ",
+       "\ud835\udd18rsus",
+       "cbA  cbAA",
+       "b4c4B1",
+       "BA bB4cB",
+       "",
+       "Ac3A3c2",
+       null,
+       " ",
+       " bB",
+       null,
+       null,
+       " ",
+       "BA",
+       "Ac33cAA3",
+       "c21c ",
+       "A B3 AbAA",
+       null,
+       null,
+       "A",
+       "B AA3  ",
+       "BAcb",
+       "B3 ",
+       "BB A33Ab",
+       "B4",
+       "b3c A  ",
+       null,
+       "AAb4",
+       "B3c3",
+       " BA 3",
+       "c",
+       "bB3",
+       " B3c bBb3",
+       " cAcB 4",
+       "cB1Ac",
+       " A   A2",
+       "A",
+       " ",
+       "B",
+       "BBc",
+       " B 3AbBcb",
+       "b3c BA A",
+       "c3",
+       null,
+       "Ac1cB1",
+       "b",
+       null,
+       "4bbBA",
+       "b A3",
+       "A",
+       " 34cbA",
+       "cbBc",
+       "A2BB3Ab",
+       "3,b",
+       "33A 23B3",
+       "4",
+       null,
+       "cc33cbB",
+       " A",
+       "Bbb3",
+       "AAcb",
+       " 4b AA ",
+       "b3cB A",
+       null,
+       "BAbAAAc3",
+       "cBB 3A",
+       null,
+       null,
+       null,
+       "c3BbAA B",
+       " b3BbbB",
+       "BAc2B ",
+       "3B",
+       "B3 A3B4",
+       "A  ",
+       "B3A",
+       "c A3AA ",
+       "Bc A3  ",
+       "\u00e9",
+       " cBcA",
+       "B3 A",
+       "A3",
+       "bB2c 3A3",
+       "   bb",
+       "  cB4ccB",
+       "BA  c c  ",
+       "B",
+       "4",
+       "\"q\"",
+       "c3 3 cB",
+       "B 1cbb ",
+       "B23",
+       "3BB4Acc",
+       "bBA ",
+       "cc33Ac B",
+       "3 14",
+       "c33cc",
+       "c bBbbA",
+       null,
+       " bB bB",
+       "A",
+       "Ab",
+       "A3 ",
+       "3 ",
+       "Ab3 b ",
+       "cAA ",
+       " ",
+       null,
+       null,
+       "cc3c3BbB ",
+       "Ac c",
+       "b3Ac 3Bbb",
+       "1",
+       "bAbbBB",
+       "b33c3",
+       "bbA3Ac333",
+       "c  BA3",
+       "c3 B333",
+       "  A2AA3",
+       "3c ",
+       "cAAAA",
+       "b3",
+       "cc Ac",
+       "bb3 1b",
+       null,
+       "B4b",
+       "Bc",
+       "c A b133",
+       "bB cAcB",
+       "43AcBB",
+       "bBB 3",
+       "cBA3AAc",
+       "B",
+       "BbAc",
+       "bAccc",
+       "B 3A",
+       "c3A b3A"
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "rep_ci",
+      "values": [
+       null,
+       "--",
+       "B  ",
+       "-",
+       " -cb-",
+       null,
+       " c c -cc",
+       "b--",
+       "bB-B-",
+       " B---",
+       "--- B",
+       "-Bb-bBB",
+       " b-b--c-",
+       "c-c-bb ",
+       "\ud835\udd18rsus",
+       "cb-  cb--",
+       "b---BB-b",
+       "B- bB--B",
+       "",
+       "-c---c-",
+       null,
+       " ",
+       " bB",
+       null,
+       null,
+       " ",
+       "B-",
+       "-c--c---",
+       "c--- ",
+       "- B- -b--",
+       null,
+       null,
+       "-",
+       "B ---  ",
+       "B-cb",
+       "B- ",
+       "BB ----b",
+       "B-B",
+       "b-c -  ",
+       null,
+       "--b-B",
+       "B-c-",
+       " B- -",
+       "c",
+       "bB-",
+       " B-c bBb-",
+       " c-cB -B",
+       "cB-b-c",
+       " -   --",
+       "-",
+       " ",
+       "B",
+       "B-",
+       " B --b-b",
+       "b-c B- -",
+       "c-",
+       null,
+       "-c--B-b",
+       "b",
+       null,
+       "-BbbB-",
+       "b --",
+       "-",
+       " ---b-",
+       "cb-",
+       "--BB--b",
+       "-,b",
+       "--- --B-",
+       "-B",
+       null,
+       "cc--cbB",
+       " -",
+       "Bbb-",
+       "--cb",
+       " -Bb -- ",
+       "b-cB -",
+       null,
+       "B-b---c-",
+       "cBB --",
+       null,
+       null,
+       null,
+       "c-Bb-- B",
+       " b-BbbB",
+       "B-c-B ",
+       "-B",
+       "B- --B-B",
+       "-  ",
+       "B--",
+       "c ---- ",
+       "- --  ",
+       "\u00e9",
+       " c--",
+       "B- -",
+       "--",
+       "bB-c ---",
+       "   bb",
+       "  cB--cB",
+       "B-  c c  ",
+       "B",
+       "-B",
+       "\"q\"",
+       "c- - cB",
+       "B --bb ",
+       "B--",
+       "-BB-B-cc",
+       "bB- ",
+       "cc---c B",
+       "- -b-B",
+       "c--cc",
+       "c bBbb-",
+       null,
+       " bB bB",
+       "-",
+       "-b",
+       "-- ",
+       "- ",
+       "-b- b ",
+       "c-- ",
+       " ",
+       null,
+       null,
+       "cc-c-BbB ",
+       "-c c",
+       "b--c -Bbb",
+       "-b",
+       "b-bbBB",
+       "b--c-",
+       "bb---c---",
+       "c  B--",
+       "c- B---",
+       "  -----",
+       "-c ",
+       "c----",
+       "b-",
+       "cc -c",
+       "bb- -bb",
+       null,
+       "B-Bb",
+       "-",
+       "c - b-b--",
+       "bB c-cB",
+       "-B--cBB",
+       "bBB -",
+       "cB----c",
+       "B",
+       "Bb-c",
+       "b-ccc",
+       "B --",
+       "c-- b--"
+      ]
+     },
+     {
+      "dtype": "List(String)",
+      "name": "ext",
+      "values": [
+       null,
+       [
+        "bc"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       null,
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "bc"
+       ],
+       [
+        "a"
+       ],
+       [
+        "bc"
+       ],
+       [],
+       [],
+       [
+        "AB",
+        "AB",
+        "a"
+       ],
+       [
+        "AB"
+       ],
+       [],
+       [
+        "a",
+        "a",
+        "bc"
+       ],
+       null,
+       [],
+       [],
+       null,
+       null,
+       [],
+       [],
+       [
+        "a",
+        "a",
+        "a"
+       ],
+       [
+        "bc",
+        "a",
+        "bc"
+       ],
+       [
+        "a"
+       ],
+       null,
+       null,
+       [],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "AB"
+       ],
+       [
+        "a"
+       ],
+       null,
+       [
+        "AB"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "AB"
+       ],
+       [
+        "a"
+       ],
+       [
+        "bc"
+       ],
+       [],
+       [],
+       [],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       null,
+       [
+        "a",
+        "bc",
+        "a"
+       ],
+       [],
+       null,
+       [
+        "AB"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a",
+        "AB"
+       ],
+       [],
+       [
+        "bc",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "bc",
+        "a",
+        "a"
+       ],
+       [
+        "AB"
+       ],
+       null,
+       [
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [],
+       [
+        "AB"
+       ],
+       [
+        "a"
+       ],
+       null,
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       null,
+       null,
+       null,
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "bc"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "AB"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "bc",
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "AB"
+       ],
+       [],
+       [],
+       [
+        "AB"
+       ],
+       [],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "a",
+        "bc"
+       ],
+       [
+        "bc",
+        "a"
+       ],
+       [
+        "a",
+        "AB"
+       ],
+       [],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "AB"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [],
+       null,
+       [],
+       [],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [],
+       null,
+       null,
+       [
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a",
+        "a",
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "a",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "a",
+        "a"
+       ],
+       [
+        "bc",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a",
+        "a"
+       ],
+       null,
+       [
+        "AB"
+       ],
+       [],
+       [
+        "a",
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "AB",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a"
+       ]
+      ]
+     },
+     {
+      "dtype": "List(String)",
+      "name": "ext_over",
+      "values": [
+       null,
+       [
+        "bc"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       null,
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "bc"
+       ],
+       [
+        "a",
+        "ab"
+       ],
+       [
+        "bc"
+       ],
+       [],
+       [],
+       [
+        "AB",
+        "AB",
+        "a",
+        "ab"
+       ],
+       [
+        "AB"
+       ],
+       [],
+       [
+        "a",
+        "a",
+        "bc"
+       ],
+       null,
+       [],
+       [],
+       null,
+       null,
+       [],
+       [],
+       [
+        "a",
+        "a",
+        "a"
+       ],
+       [
+        "bc",
+        "a",
+        "ab",
+        "bc"
+       ],
+       [
+        "a"
+       ],
+       null,
+       null,
+       [],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "AB"
+       ],
+       [
+        "a"
+       ],
+       null,
+       [
+        "AB"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "AB"
+       ],
+       [
+        "a",
+        "ab"
+       ],
+       [
+        "bc"
+       ],
+       [],
+       [],
+       [],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       null,
+       [
+        "a",
+        "ab",
+        "bc",
+        "a",
+        "ab"
+       ],
+       [],
+       null,
+       [
+        "AB"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a",
+        "AB"
+       ],
+       [],
+       [
+        "bc",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "bc",
+        "a",
+        "a"
+       ],
+       [
+        "AB"
+       ],
+       null,
+       [
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [],
+       [
+        "AB"
+       ],
+       [
+        "a"
+       ],
+       null,
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       null,
+       null,
+       null,
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "bc"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "AB"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "bc",
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "AB"
+       ],
+       [],
+       [],
+       [
+        "AB"
+       ],
+       [],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "a",
+        "ab",
+        "bc"
+       ],
+       [
+        "bc",
+        "a"
+       ],
+       [
+        "a",
+        "AB"
+       ],
+       [],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "ab",
+        "AB"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [],
+       null,
+       [],
+       [],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [],
+       null,
+       null,
+       [
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "a",
+        "ab"
+       ],
+       [],
+       [
+        "a",
+        "a",
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "a",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "a",
+        "a"
+       ],
+       [
+        "bc",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a",
+        "a",
+        "ab"
+       ],
+       null,
+       [
+        "AB"
+       ],
+       [],
+       [
+        "a",
+        "ab",
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "AB",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a"
+       ]
+      ]
+     },
+     {
+      "dtype": "List(String)",
+      "name": "ext_left",
+      "values": [
+       null,
+       [
+        "bc"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       null,
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "bc"
+       ],
+       [
+        "ab"
+       ],
+       [
+        "bc"
+       ],
+       [],
+       [],
+       [
+        "AB",
+        "AB",
+        "ab"
+       ],
+       [
+        "AB"
+       ],
+       [],
+       [
+        "a",
+        "a",
+        "bc"
+       ],
+       null,
+       [],
+       [],
+       null,
+       null,
+       [],
+       [],
+       [
+        "a",
+        "a",
+        "a"
+       ],
+       [
+        "bc",
+        "ab"
+       ],
+       [
+        "a"
+       ],
+       null,
+       null,
+       [],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "AB"
+       ],
+       [
+        "a"
+       ],
+       null,
+       [
+        "AB"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "AB"
+       ],
+       [
+        "ab"
+       ],
+       [
+        "bc"
+       ],
+       [],
+       [],
+       [],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       null,
+       [
+        "ab",
+        "ab"
+       ],
+       [],
+       null,
+       [
+        "AB"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a",
+        "AB"
+       ],
+       [],
+       [
+        "bc",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "bc",
+        "a",
+        "a"
+       ],
+       [
+        "AB"
+       ],
+       null,
+       [
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [],
+       [
+        "AB"
+       ],
+       [
+        "a"
+       ],
+       null,
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       null,
+       null,
+       null,
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "bc"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "AB"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "bc",
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "AB"
+       ],
+       [],
+       [],
+       [
+        "AB"
+       ],
+       [],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "ab"
+       ],
+       [
+        "bc",
+        "a"
+       ],
+       [
+        "a",
+        "AB"
+       ],
+       [],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "a",
+        "ab",
+        "AB"
+       ],
+       [
+        "a",
+        "a"
+       ],
+       [],
+       null,
+       [],
+       [],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [],
+       null,
+       null,
+       [
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "a",
+        "a"
+       ],
+       [
+        "ab"
+       ],
+       [],
+       [
+        "a",
+        "a",
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "a",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a",
+        "a",
+        "a"
+       ],
+       [
+        "bc",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a"
+       ],
+       [],
+       [
+        "a",
+        "ab"
+       ],
+       null,
+       [
+        "AB"
+       ],
+       [],
+       [
+        "ab",
+        "a",
+        "a"
+       ],
+       [],
+       [
+        "AB",
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a"
+       ],
+       [],
+       [],
+       [],
+       [
+        "a"
+       ],
+       [
+        "a",
+        "a"
+       ]
+      ]
+     },
+     {
+      "dtype": "List(Uint32)",
+      "name": "find",
+      "values": [
+       null,
+       [
+        2
+       ],
+       [],
+       [
+        0
+       ],
+       [
+        4
+       ],
+       null,
+       [],
+       [
+        1
+       ],
+       [
+        2,
+        4
+       ],
+       [],
+       [
+        2
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        2
+       ],
+       [
+        3
+       ],
+       [],
+       [],
+       [
+        1,
+        4,
+        7
+       ],
+       [
+        5
+       ],
+       [],
+       [
+        2,
+        4,
+        6
+       ],
+       null,
+       [],
+       [],
+       null,
+       null,
+       [],
+       [],
+       [
+        2,
+        3,
+        7
+       ],
+       [
+        1,
+        3,
+        4
+       ],
+       [
+        3
+       ],
+       null,
+       null,
+       [],
+       [
+        4
+       ],
+       [],
+       [
+        1
+       ],
+       [
+        4,
+        5
+       ],
+       [
+        1
+       ],
+       [
+        1
+       ],
+       null,
+       [
+        3
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        4
+       ],
+       [],
+       [
+        2
+       ],
+       [
+        2,
+        8
+       ],
+       [
+        6
+       ],
+       [
+        2
+       ],
+       [
+        6
+       ],
+       [],
+       [],
+       [],
+       [],
+       [
+        3
+       ],
+       [
+        1
+       ],
+       [
+        1
+       ],
+       null,
+       [
+        2,
+        3,
+        6
+       ],
+       [],
+       null,
+       [
+        0
+       ],
+       [
+        3
+       ],
+       [],
+       [
+        1,
+        2
+       ],
+       [],
+       [
+        1,
+        5
+       ],
+       [
+        0
+       ],
+       [
+        0,
+        1,
+        4,
+        6,
+        8
+       ],
+       [
+        0
+       ],
+       null,
+       [
+        2,
+        3
+       ],
+       [],
+       [
+        3
+       ],
+       [],
+       [
+        1
+       ],
+       [
+        1
+       ],
+       null,
+       [
+        7
+       ],
+       [
+        4
+       ],
+       null,
+       null,
+       null,
+       [
+        1
+       ],
+       [
+        2
+       ],
+       [
+        3
+       ],
+       [
+        0
+       ],
+       [
+        1,
+        4,
+        6
+       ],
+       [],
+       [
+        1
+       ],
+       [
+        3
+       ],
+       [
+        4
+       ],
+       [],
+       [],
+       [
+        1
+       ],
+       [
+        1
+       ],
+       [
+        2,
+        6,
+        8
+       ],
+       [],
+       [
+        4
+       ],
+       [],
+       [],
+       [
+        0
+       ],
+       [],
+       [
+        1,
+        3
+       ],
+       [
+        2,
+        3
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        0,
+        3
+       ],
+       [],
+       [
+        2,
+        3
+       ],
+       [
+        0,
+        2,
+        4
+       ],
+       [
+        1,
+        2
+       ],
+       [],
+       null,
+       [],
+       [],
+       [],
+       [
+        1
+       ],
+       [
+        0
+       ],
+       [
+        2
+       ],
+       [],
+       [],
+       null,
+       null,
+       [
+        2,
+        4
+       ],
+       [],
+       [
+        1,
+        5
+       ],
+       [
+        0
+       ],
+       [],
+       [
+        1,
+        2,
+        4
+       ],
+       [
+        3,
+        6,
+        7,
+        8
+       ],
+       [
+        5
+       ],
+       [
+        1,
+        4,
+        5,
+        6
+       ],
+       [
+        3,
+        7
+       ],
+       [
+        0
+       ],
+       [],
+       [
+        1
+       ],
+       [],
+       [
+        2,
+        4
+       ],
+       null,
+       [
+        1
+       ],
+       [],
+       [
+        5,
+        7,
+        8
+       ],
+       [],
+       [
+        0,
+        2
+       ],
+       [
+        4
+       ],
+       [
+        3
+       ],
+       [],
+       [],
+       [],
+       [
+        2
+       ],
+       [
+        1,
+        5
+       ]
+      ]
+     },
+     {
+      "dtype": "List(Uint32)",
+      "name": "find_over_ci",
+      "values": [
+       null,
+       [
+        0,
+        2
+       ],
+       [],
+       [
+        0
+       ],
+       [
+        1,
+        4
+       ],
+       null,
+       [
+        5
+       ],
+       [
+        1,
+        1,
+        1,
+        2
+       ],
+       [
+        2,
+        2,
+        2,
+        4
+       ],
+       [
+        2,
+        3,
+        4
+       ],
+       [
+        0,
+        1,
+        2
+       ],
+       [
+        0,
+        0,
+        0,
+        3
+       ],
+       [
+        2,
+        2,
+        2,
+        4,
+        5,
+        7
+       ],
+       [
+        1,
+        3
+       ],
+       [],
+       [
+        2,
+        7,
+        8
+       ],
+       [
+        1,
+        1,
+        1,
+        2,
+        4,
+        4,
+        4,
+        7,
+        7,
+        7
+       ],
+       [
+        1,
+        5,
+        5,
+        5,
+        6
+       ],
+       [],
+       [
+        0,
+        2,
+        3,
+        4,
+        6
+       ],
+       null,
+       [],
+       [],
+       null,
+       null,
+       [],
+       [
+        1
+       ],
+       [
+        0,
+        2,
+        3,
+        5,
+        6,
+        7
+       ],
+       [
+        1,
+        3,
+        3,
+        3,
+        4
+       ],
+       [
+        0,
+        3,
+        5,
+        5,
+        5,
+        7,
+        8
+       ],
+       null,
+       null,
+       [
+        0
+       ],
+       [
+        2,
+        3,
+        4
+       ],
+       [
+        1
+       ],
+       [
+        1
+       ],
+       [
+        3,
+        4,
+        5,
+        6,
+        6,
+        6
+       ],
+       [
+        1,
+        1,
+        1
+       ],
+       [
+        1,
+        4
+       ],
+       null,
+       [
+        0,
+        1,
+        1,
+        1,
+        3,
+        3,
+        3
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        2,
+        4
+       ],
+       [],
+       [
+        2
+       ],
+       [
+        2,
+        8
+       ],
+       [
+        2,
+        6,
+        6,
+        6
+       ],
+       [
+        2,
+        2,
+        2,
+        4
+       ],
+       [
+        1,
+        5,
+        5,
+        5,
+        6
+       ],
+       [
+        0
+       ],
+       [],
+       [],
+       [
+        1
+       ],
+       [
+        3,
+        4,
+        4,
+        4,
+        6
+       ],
+       [
+        1,
+        5,
+        7
+       ],
+       [
+        1
+       ],
+       null,
+       [
+        0,
+        2,
+        2,
+        2,
+        3,
+        6,
+        6,
+        6
+       ],
+       [],
+       null,
+       [
+        0,
+        0,
+        0,
+        5
+       ],
+       [
+        2,
+        3
+       ],
+       [
+        0
+       ],
+       [
+        1,
+        2,
+        2,
+        2,
+        3,
+        6
+       ],
+       [
+        2
+       ],
+       [
+        0,
+        0,
+        0,
+        1,
+        5,
+        6,
+        6,
+        6
+       ],
+       [
+        0
+       ],
+       [
+        0,
+        1,
+        2,
+        4,
+        6,
+        6,
+        6,
+        8
+       ],
+       [
+        0,
+        0,
+        0
+       ],
+       null,
+       [
+        2,
+        3
+       ],
+       [
+        1
+       ],
+       [
+        3
+       ],
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        1,
+        1,
+        5,
+        6
+       ],
+       [
+        1,
+        5
+       ],
+       null,
+       [
+        1,
+        1,
+        1,
+        3,
+        4,
+        5,
+        7
+       ],
+       [
+        4,
+        5
+       ],
+       null,
+       null,
+       null,
+       [
+        1,
+        1,
+        1,
+        4,
+        5
+       ],
+       [
+        2,
+        2,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        0,
+        0,
+        0
+       ],
+       [
+        1,
+        3,
+        4,
+        4,
+        4,
+        6,
+        6,
+        6
+       ],
+       [
+        0
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        2,
+        3,
+        4,
+        5
+       ],
+       [
+        0,
+        3,
+        4
+       ],
+       [],
+       [
+        2,
+        4
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        0,
+        1
+       ],
+       [
+        2,
+        6,
+        7,
+        8
+       ],
+       [],
+       [
+        4,
+        4,
+        4,
+        5
+       ],
+       [
+        1
+       ],
+       [],
+       [
+        0,
+        0,
+        0
+       ],
+       [],
+       [
+        1,
+        3
+       ],
+       [
+        2,
+        2,
+        2,
+        3
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        0,
+        0,
+        0,
+        3,
+        3,
+        3,
+        5
+       ],
+       [
+        2
+       ],
+       [
+        2,
+        3,
+        4
+       ],
+       [
+        0,
+        2,
+        2,
+        2,
+        4,
+        4,
+        4
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        6
+       ],
+       null,
+       [],
+       [
+        0
+       ],
+       [
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        1
+       ],
+       [
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        2
+       ],
+       [
+        1,
+        2
+       ],
+       [],
+       null,
+       null,
+       [
+        2,
+        4,
+        4,
+        4
+       ],
+       [
+        0
+       ],
+       [
+        1,
+        2,
+        5,
+        5,
+        5
+       ],
+       [
+        0,
+        0,
+        0
+       ],
+       [
+        1,
+        1,
+        1
+       ],
+       [
+        1,
+        2,
+        4
+       ],
+       [
+        2,
+        3,
+        4,
+        6,
+        7,
+        8
+       ],
+       [
+        4,
+        5
+       ],
+       [
+        1,
+        4,
+        5,
+        6
+       ],
+       [
+        2,
+        2,
+        2,
+        3,
+        5,
+        6,
+        7
+       ],
+       [
+        0
+       ],
+       [
+        1,
+        2,
+        3,
+        4
+       ],
+       [
+        1
+       ],
+       [
+        3
+       ],
+       [
+        2,
+        4,
+        4,
+        4
+       ],
+       null,
+       [
+        1,
+        1,
+        1
+       ],
+       [
+        0
+       ],
+       [
+        2,
+        5,
+        5,
+        5,
+        7,
+        8
+       ],
+       [
+        4
+       ],
+       [
+        0,
+        0,
+        0,
+        2,
+        3
+       ],
+       [
+        4
+       ],
+       [
+        2,
+        3,
+        4,
+        5
+       ],
+       [],
+       [
+        2
+       ],
+       [
+        1
+       ],
+       [
+        2,
+        3
+       ],
+       [
+        1,
+        2,
+        5,
+        6
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "b",
+        "baab,,b",
+        null,
+        "a",
+        "a,a,",
+        ",bbabba",
+        "aaa",
+        "b",
+        ",ba,b,,",
+        null,
+        "aa,a,a,",
+        ",aaa",
+        "a,,bb,b",
+        ",a,b",
+        ",baba,b",
+        "b",
+        "a,ab",
+        "a,bba",
+        "a,b,",
+        null,
+        "a,ab,a",
+        null,
+        ",bb",
+        "a,aa,,,",
+        ",,",
+        "aaa",
+        ",,b",
+        "bb",
+        "b,b",
+        "a,bb,a",
+        "abba,a,",
+        ",ab",
+        "ababb",
+        ",",
+        null,
+        "b",
+        ",,",
+        "baa,",
+        ",,,ba",
+        "aaaab",
+        "a,b",
+        "bbbb",
+        "b",
+        "a,b,",
+        "b",
+        "abaaaa",
+        "bb,ab",
+        "b,abbbb",
+        "baa",
+        "bb,,bba",
+        "abba",
+        ",b,bab,",
+        "a,,,,,",
+        "ab,,bab",
+        "a",
+        "a,,aa,",
+        "ba,ba,",
+        "b,,bb",
+        ",b,aa",
+        "abbab,b",
+        ",",
+        "b,a",
+        "ab",
+        ",abaa",
+        "abbbb",
+        "ba",
+        ",baab",
+        null,
+        "a,,b",
+        ",abab",
+        ",ba,ba,",
+        ",ab,ab",
+        null,
+        "aab,aa",
+        "aabaab",
+        "a,bbab,",
+        "b,,,ba,",
+        ",ba,a",
+        ",b,b",
+        "aaa,,a",
+        "b,b,b",
+        null,
+        ",",
+        "ab,aaaa",
+        "a,a,aa,",
+        "baa",
+        ",aaa",
+        ",a,bba,",
+        null,
+        ",a",
+        "a,",
+        "\u00e9",
+        ",",
+        "b,ab",
+        null,
+        "a,ab",
+        "aba",
+        ",a,a",
+        "bbbb",
+        "babbb,",
+        "aa,,b",
+        "b,ab",
+        "a",
+        "ba",
+        "aaa,a",
+        null,
+        ",,,bb,a",
+        "bb,b",
+        ",aa,,",
+        "a",
+        null,
+        "a,a,,",
+        "abbb",
+        ",b",
+        "bbbba,",
+        "b,ba,",
+        ",,ba,",
+        "aa,",
+        ",babaa,",
+        "ab,a",
+        "abb",
+        ",bbbb",
+        "ab",
+        null,
+        ",aaaba",
+        "ba,b,b,",
+        "b",
+        "b,a",
+        "\"q\"",
+        "aba,,a",
+        "abbbbb",
+        "a,,b,",
+        "abab",
+        ",",
+        "ba,,,b",
+        "ab,aa",
+        "bbbbab",
+        "bab,aa",
+        ",abb",
+        ",aa",
+        "b,,",
+        "\ud835\udd18rsus",
+        "b,bb",
+        "ba,,b",
+        null,
+        ",b,ab",
+        "abb",
+        null,
+        ",,b",
+        "bb"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "structs_gen",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(field_0: String, field_1: String, field_2: String)",
+      "name": "exact",
+      "values": [
+       {
+        "field_0": "b",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "baab",
+        "field_1": "",
+        "field_2": "b"
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "a",
+        "field_2": ""
+       },
+       {
+        "field_0": "",
+        "field_1": "bbabba",
+        "field_2": null
+       },
+       {
+        "field_0": "aaa",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "b",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "ba",
+        "field_2": "b"
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "aa",
+        "field_1": "a",
+        "field_2": "a"
+       },
+       {
+        "field_0": "",
+        "field_1": "aaa",
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "",
+        "field_2": "bb"
+       },
+       {
+        "field_0": "",
+        "field_1": "a",
+        "field_2": "b"
+       },
+       {
+        "field_0": "",
+        "field_1": "baba",
+        "field_2": "b"
+       },
+       {
+        "field_0": "b",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "ab",
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "bba",
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "b",
+        "field_2": ""
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "ab",
+        "field_2": "a"
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "bb",
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "aa",
+        "field_2": ""
+       },
+       {
+        "field_0": "",
+        "field_1": "",
+        "field_2": ""
+       },
+       {
+        "field_0": "aaa",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "",
+        "field_2": "b"
+       },
+       {
+        "field_0": "bb",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "b",
+        "field_1": "b",
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "bb",
+        "field_2": "a"
+       },
+       {
+        "field_0": "abba",
+        "field_1": "a",
+        "field_2": ""
+       },
+       {
+        "field_0": "",
+        "field_1": "ab",
+        "field_2": null
+       },
+       {
+        "field_0": "ababb",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "",
+        "field_2": null
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "b",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "",
+        "field_2": ""
+       },
+       {
+        "field_0": "baa",
+        "field_1": "",
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "",
+        "field_2": ""
+       },
+       {
+        "field_0": "aaaab",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "b",
+        "field_2": null
+       },
+       {
+        "field_0": "bbbb",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "b",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "b",
+        "field_2": ""
+       },
+       {
+        "field_0": "b",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "abaaaa",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "bb",
+        "field_1": "ab",
+        "field_2": null
+       },
+       {
+        "field_0": "b",
+        "field_1": "abbbb",
+        "field_2": null
+       },
+       {
+        "field_0": "baa",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "bb",
+        "field_1": "",
+        "field_2": "bba"
+       },
+       {
+        "field_0": "abba",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "b",
+        "field_2": "bab"
+       },
+       {
+        "field_0": "a",
+        "field_1": "",
+        "field_2": ""
+       },
+       {
+        "field_0": "ab",
+        "field_1": "",
+        "field_2": "bab"
+       },
+       {
+        "field_0": "a",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "",
+        "field_2": "aa"
+       },
+       {
+        "field_0": "ba",
+        "field_1": "ba",
+        "field_2": ""
+       },
+       {
+        "field_0": "b",
+        "field_1": "",
+        "field_2": "bb"
+       },
+       {
+        "field_0": "",
+        "field_1": "b",
+        "field_2": "aa"
+       },
+       {
+        "field_0": "abbab",
+        "field_1": "b",
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "",
+        "field_2": null
+       },
+       {
+        "field_0": "b",
+        "field_1": "a",
+        "field_2": null
+       },
+       {
+        "field_0": "ab",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "abaa",
+        "field_2": null
+       },
+       {
+        "field_0": "abbbb",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "ba",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "baab",
+        "field_2": null
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "",
+        "field_2": "b"
+       },
+       {
+        "field_0": "",
+        "field_1": "abab",
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "ba",
+        "field_2": "ba"
+       },
+       {
+        "field_0": "",
+        "field_1": "ab",
+        "field_2": "ab"
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "aab",
+        "field_1": "aa",
+        "field_2": null
+       },
+       {
+        "field_0": "aabaab",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "bbab",
+        "field_2": ""
+       },
+       {
+        "field_0": "b",
+        "field_1": "",
+        "field_2": ""
+       },
+       {
+        "field_0": "",
+        "field_1": "ba",
+        "field_2": "a"
+       },
+       {
+        "field_0": "",
+        "field_1": "b",
+        "field_2": "b"
+       },
+       {
+        "field_0": "aaa",
+        "field_1": "",
+        "field_2": "a"
+       },
+       {
+        "field_0": "b",
+        "field_1": "b",
+        "field_2": "b"
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "",
+        "field_2": null
+       },
+       {
+        "field_0": "ab",
+        "field_1": "aaaa",
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "a",
+        "field_2": "aa"
+       },
+       {
+        "field_0": "baa",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "aaa",
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "a",
+        "field_2": "bba"
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "a",
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "",
+        "field_2": null
+       },
+       {
+        "field_0": "\u00e9",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "",
+        "field_2": null
+       },
+       {
+        "field_0": "b",
+        "field_1": "ab",
+        "field_2": null
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "ab",
+        "field_2": null
+       },
+       {
+        "field_0": "aba",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "a",
+        "field_2": "a"
+       },
+       {
+        "field_0": "bbbb",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "babbb",
+        "field_1": "",
+        "field_2": null
+       },
+       {
+        "field_0": "aa",
+        "field_1": "",
+        "field_2": "b"
+       },
+       {
+        "field_0": "b",
+        "field_1": "ab",
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "ba",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "aaa",
+        "field_1": "a",
+        "field_2": null
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "",
+        "field_2": ""
+       },
+       {
+        "field_0": "bb",
+        "field_1": "b",
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "aa",
+        "field_2": ""
+       },
+       {
+        "field_0": "a",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "a",
+        "field_2": ""
+       },
+       {
+        "field_0": "abbb",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "b",
+        "field_2": null
+       },
+       {
+        "field_0": "bbbba",
+        "field_1": "",
+        "field_2": null
+       },
+       {
+        "field_0": "b",
+        "field_1": "ba",
+        "field_2": ""
+       },
+       {
+        "field_0": "",
+        "field_1": "",
+        "field_2": "ba"
+       },
+       {
+        "field_0": "aa",
+        "field_1": "",
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "babaa",
+        "field_2": ""
+       },
+       {
+        "field_0": "ab",
+        "field_1": "a",
+        "field_2": null
+       },
+       {
+        "field_0": "abb",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "bbbb",
+        "field_2": null
+       },
+       {
+        "field_0": "ab",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "aaaba",
+        "field_2": null
+       },
+       {
+        "field_0": "ba",
+        "field_1": "b",
+        "field_2": "b"
+       },
+       {
+        "field_0": "b",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "b",
+        "field_1": "a",
+        "field_2": null
+       },
+       {
+        "field_0": "\"q\"",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "aba",
+        "field_1": "",
+        "field_2": "a"
+       },
+       {
+        "field_0": "abbbbb",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "",
+        "field_2": "b"
+       },
+       {
+        "field_0": "abab",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "",
+        "field_2": null
+       },
+       {
+        "field_0": "ba",
+        "field_1": "",
+        "field_2": ""
+       },
+       {
+        "field_0": "ab",
+        "field_1": "aa",
+        "field_2": null
+       },
+       {
+        "field_0": "bbbbab",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "bab",
+        "field_1": "aa",
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "abb",
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "aa",
+        "field_2": null
+       },
+       {
+        "field_0": "b",
+        "field_1": "",
+        "field_2": ""
+       },
+       {
+        "field_0": "\ud835\udd18rsus",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "b",
+        "field_1": "bb",
+        "field_2": null
+       },
+       {
+        "field_0": "ba",
+        "field_1": "",
+        "field_2": "b"
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "b",
+        "field_2": "ab"
+       },
+       {
+        "field_0": "abb",
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": null,
+        "field_1": null,
+        "field_2": null
+       },
+       {
+        "field_0": "",
+        "field_1": "",
+        "field_2": "b"
+       },
+       {
+        "field_0": "bb",
+        "field_1": null,
+        "field_2": null
+       }
+      ]
+     },
+     {
+      "dtype": "Struct(field_0: String, field_1: String)",
+      "name": "incl",
+      "values": [
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": "baab,",
+        "field_1": ","
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": null
+       },
+       {
+        "field_0": "a,",
+        "field_1": "a,"
+       },
+       {
+        "field_0": ",",
+        "field_1": "bbabba"
+       },
+       {
+        "field_0": "aaa",
+        "field_1": null
+       },
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "ba,"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "aa,",
+        "field_1": "a,"
+       },
+       {
+        "field_0": ",",
+        "field_1": "aaa"
+       },
+       {
+        "field_0": "a,",
+        "field_1": ","
+       },
+       {
+        "field_0": ",",
+        "field_1": "a,"
+       },
+       {
+        "field_0": ",",
+        "field_1": "baba,"
+       },
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": "a,",
+        "field_1": "ab"
+       },
+       {
+        "field_0": "a,",
+        "field_1": "bba"
+       },
+       {
+        "field_0": "a,",
+        "field_1": "b,"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a,",
+        "field_1": "ab,"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "bb"
+       },
+       {
+        "field_0": "a,",
+        "field_1": "aa,"
+       },
+       {
+        "field_0": ",",
+        "field_1": ","
+       },
+       {
+        "field_0": "aaa",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": ","
+       },
+       {
+        "field_0": "bb",
+        "field_1": null
+       },
+       {
+        "field_0": "b,",
+        "field_1": "b"
+       },
+       {
+        "field_0": "a,",
+        "field_1": "bb,"
+       },
+       {
+        "field_0": "abba,",
+        "field_1": "a,"
+       },
+       {
+        "field_0": ",",
+        "field_1": "ab"
+       },
+       {
+        "field_0": "ababb",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": null
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": ","
+       },
+       {
+        "field_0": "baa,",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": ","
+       },
+       {
+        "field_0": "aaaab",
+        "field_1": null
+       },
+       {
+        "field_0": "a,",
+        "field_1": "b"
+       },
+       {
+        "field_0": "bbbb",
+        "field_1": null
+       },
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": "a,",
+        "field_1": "b,"
+       },
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": "abaaaa",
+        "field_1": null
+       },
+       {
+        "field_0": "bb,",
+        "field_1": "ab"
+       },
+       {
+        "field_0": "b,",
+        "field_1": "abbbb"
+       },
+       {
+        "field_0": "baa",
+        "field_1": null
+       },
+       {
+        "field_0": "bb,",
+        "field_1": ","
+       },
+       {
+        "field_0": "abba",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "b,"
+       },
+       {
+        "field_0": "a,",
+        "field_1": ","
+       },
+       {
+        "field_0": "ab,",
+        "field_1": ","
+       },
+       {
+        "field_0": "a",
+        "field_1": null
+       },
+       {
+        "field_0": "a,",
+        "field_1": ","
+       },
+       {
+        "field_0": "ba,",
+        "field_1": "ba,"
+       },
+       {
+        "field_0": "b,",
+        "field_1": ","
+       },
+       {
+        "field_0": ",",
+        "field_1": "b,"
+       },
+       {
+        "field_0": "abbab,",
+        "field_1": "b"
+       },
+       {
+        "field_0": ",",
+        "field_1": null
+       },
+       {
+        "field_0": "b,",
+        "field_1": "a"
+       },
+       {
+        "field_0": "ab",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "abaa"
+       },
+       {
+        "field_0": "abbbb",
+        "field_1": null
+       },
+       {
+        "field_0": "ba",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "baab"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a,",
+        "field_1": ","
+       },
+       {
+        "field_0": ",",
+        "field_1": "abab"
+       },
+       {
+        "field_0": ",",
+        "field_1": "ba,"
+       },
+       {
+        "field_0": ",",
+        "field_1": "ab,"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "aab,",
+        "field_1": "aa"
+       },
+       {
+        "field_0": "aabaab",
+        "field_1": null
+       },
+       {
+        "field_0": "a,",
+        "field_1": "bbab,"
+       },
+       {
+        "field_0": "b,",
+        "field_1": ","
+       },
+       {
+        "field_0": ",",
+        "field_1": "ba,"
+       },
+       {
+        "field_0": ",",
+        "field_1": "b,"
+       },
+       {
+        "field_0": "aaa,",
+        "field_1": ","
+       },
+       {
+        "field_0": "b,",
+        "field_1": "b,"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": null
+       },
+       {
+        "field_0": "ab,",
+        "field_1": "aaaa"
+       },
+       {
+        "field_0": "a,",
+        "field_1": "a,"
+       },
+       {
+        "field_0": "baa",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "aaa"
+       },
+       {
+        "field_0": ",",
+        "field_1": "a,"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "a"
+       },
+       {
+        "field_0": "a,",
+        "field_1": null
+       },
+       {
+        "field_0": "\u00e9",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": null
+       },
+       {
+        "field_0": "b,",
+        "field_1": "ab"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a,",
+        "field_1": "ab"
+       },
+       {
+        "field_0": "aba",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "a,"
+       },
+       {
+        "field_0": "bbbb",
+        "field_1": null
+       },
+       {
+        "field_0": "babbb,",
+        "field_1": null
+       },
+       {
+        "field_0": "aa,",
+        "field_1": ","
+       },
+       {
+        "field_0": "b,",
+        "field_1": "ab"
+       },
+       {
+        "field_0": "a",
+        "field_1": null
+       },
+       {
+        "field_0": "ba",
+        "field_1": null
+       },
+       {
+        "field_0": "aaa,",
+        "field_1": "a"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": ","
+       },
+       {
+        "field_0": "bb,",
+        "field_1": "b"
+       },
+       {
+        "field_0": ",",
+        "field_1": "aa,"
+       },
+       {
+        "field_0": "a",
+        "field_1": null
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a,",
+        "field_1": "a,"
+       },
+       {
+        "field_0": "abbb",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "b"
+       },
+       {
+        "field_0": "bbbba,",
+        "field_1": null
+       },
+       {
+        "field_0": "b,",
+        "field_1": "ba,"
+       },
+       {
+        "field_0": ",",
+        "field_1": ","
+       },
+       {
+        "field_0": "aa,",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "babaa,"
+       },
+       {
+        "field_0": "ab,",
+        "field_1": "a"
+       },
+       {
+        "field_0": "abb",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "bbbb"
+       },
+       {
+        "field_0": "ab",
+        "field_1": null
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "aaaba"
+       },
+       {
+        "field_0": "ba,",
+        "field_1": "b,"
+       },
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": "b,",
+        "field_1": "a"
+       },
+       {
+        "field_0": "\"q\"",
+        "field_1": null
+       },
+       {
+        "field_0": "aba,",
+        "field_1": ","
+       },
+       {
+        "field_0": "abbbbb",
+        "field_1": null
+       },
+       {
+        "field_0": "a,",
+        "field_1": ","
+       },
+       {
+        "field_0": "abab",
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": null
+       },
+       {
+        "field_0": "ba,",
+        "field_1": ","
+       },
+       {
+        "field_0": "ab,",
+        "field_1": "aa"
+       },
+       {
+        "field_0": "bbbbab",
+        "field_1": null
+       },
+       {
+        "field_0": "bab,",
+        "field_1": "aa"
+       },
+       {
+        "field_0": ",",
+        "field_1": "abb"
+       },
+       {
+        "field_0": ",",
+        "field_1": "aa"
+       },
+       {
+        "field_0": "b,",
+        "field_1": ","
+       },
+       {
+        "field_0": "\ud835\udd18rsus",
+        "field_1": null
+       },
+       {
+        "field_0": "b,",
+        "field_1": "bb"
+       },
+       {
+        "field_0": "ba,",
+        "field_1": ","
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": "b,"
+       },
+       {
+        "field_0": "abb",
+        "field_1": null
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": ",",
+        "field_1": ","
+       },
+       {
+        "field_0": "bb",
+        "field_1": null
+       }
+      ]
+     },
+     {
+      "dtype": "Struct(field_0: String, field_1: String)",
+      "name": "n2",
+      "values": [
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": "baab",
+        "field_1": ",b"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "a,"
+       },
+       {
+        "field_0": "",
+        "field_1": "bbabba"
+       },
+       {
+        "field_0": "aaa",
+        "field_1": null
+       },
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": "ba,b,,"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "aa",
+        "field_1": "a,a,"
+       },
+       {
+        "field_0": "",
+        "field_1": "aaa"
+       },
+       {
+        "field_0": "a",
+        "field_1": ",bb,b"
+       },
+       {
+        "field_0": "",
+        "field_1": "a,b"
+       },
+       {
+        "field_0": "",
+        "field_1": "baba,b"
+       },
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "ab"
+       },
+       {
+        "field_0": "a",
+        "field_1": "bba"
+       },
+       {
+        "field_0": "a",
+        "field_1": "b,"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "ab,a"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": "bb"
+       },
+       {
+        "field_0": "a",
+        "field_1": "aa,,,"
+       },
+       {
+        "field_0": "",
+        "field_1": ","
+       },
+       {
+        "field_0": "aaa",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": ",b"
+       },
+       {
+        "field_0": "bb",
+        "field_1": null
+       },
+       {
+        "field_0": "b",
+        "field_1": "b"
+       },
+       {
+        "field_0": "a",
+        "field_1": "bb,a"
+       },
+       {
+        "field_0": "abba",
+        "field_1": "a,"
+       },
+       {
+        "field_0": "",
+        "field_1": "ab"
+       },
+       {
+        "field_0": "ababb",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": ""
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": ","
+       },
+       {
+        "field_0": "baa",
+        "field_1": ""
+       },
+       {
+        "field_0": "",
+        "field_1": ",,ba"
+       },
+       {
+        "field_0": "aaaab",
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "b"
+       },
+       {
+        "field_0": "bbbb",
+        "field_1": null
+       },
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "b,"
+       },
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": "abaaaa",
+        "field_1": null
+       },
+       {
+        "field_0": "bb",
+        "field_1": "ab"
+       },
+       {
+        "field_0": "b",
+        "field_1": "abbbb"
+       },
+       {
+        "field_0": "baa",
+        "field_1": null
+       },
+       {
+        "field_0": "bb",
+        "field_1": ",bba"
+       },
+       {
+        "field_0": "abba",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": "b,bab,"
+       },
+       {
+        "field_0": "a",
+        "field_1": ",,,,"
+       },
+       {
+        "field_0": "ab",
+        "field_1": ",bab"
+       },
+       {
+        "field_0": "a",
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": ",aa,"
+       },
+       {
+        "field_0": "ba",
+        "field_1": "ba,"
+       },
+       {
+        "field_0": "b",
+        "field_1": ",bb"
+       },
+       {
+        "field_0": "",
+        "field_1": "b,aa"
+       },
+       {
+        "field_0": "abbab",
+        "field_1": "b"
+       },
+       {
+        "field_0": "",
+        "field_1": ""
+       },
+       {
+        "field_0": "b",
+        "field_1": "a"
+       },
+       {
+        "field_0": "ab",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": "abaa"
+       },
+       {
+        "field_0": "abbbb",
+        "field_1": null
+       },
+       {
+        "field_0": "ba",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": "baab"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": ",b"
+       },
+       {
+        "field_0": "",
+        "field_1": "abab"
+       },
+       {
+        "field_0": "",
+        "field_1": "ba,ba,"
+       },
+       {
+        "field_0": "",
+        "field_1": "ab,ab"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "aab",
+        "field_1": "aa"
+       },
+       {
+        "field_0": "aabaab",
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "bbab,"
+       },
+       {
+        "field_0": "b",
+        "field_1": ",,ba,"
+       },
+       {
+        "field_0": "",
+        "field_1": "ba,a"
+       },
+       {
+        "field_0": "",
+        "field_1": "b,b"
+       },
+       {
+        "field_0": "aaa",
+        "field_1": ",a"
+       },
+       {
+        "field_0": "b",
+        "field_1": "b,b"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": ""
+       },
+       {
+        "field_0": "ab",
+        "field_1": "aaaa"
+       },
+       {
+        "field_0": "a",
+        "field_1": "a,aa,"
+       },
+       {
+        "field_0": "baa",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": "aaa"
+       },
+       {
+        "field_0": "",
+        "field_1": "a,bba,"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": "a"
+       },
+       {
+        "field_0": "a",
+        "field_1": ""
+       },
+       {
+        "field_0": "\u00e9",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": ""
+       },
+       {
+        "field_0": "b",
+        "field_1": "ab"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "ab"
+       },
+       {
+        "field_0": "aba",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": "a,a"
+       },
+       {
+        "field_0": "bbbb",
+        "field_1": null
+       },
+       {
+        "field_0": "babbb",
+        "field_1": ""
+       },
+       {
+        "field_0": "aa",
+        "field_1": ",b"
+       },
+       {
+        "field_0": "b",
+        "field_1": "ab"
+       },
+       {
+        "field_0": "a",
+        "field_1": null
+       },
+       {
+        "field_0": "ba",
+        "field_1": null
+       },
+       {
+        "field_0": "aaa",
+        "field_1": "a"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": ",,bb,a"
+       },
+       {
+        "field_0": "bb",
+        "field_1": "b"
+       },
+       {
+        "field_0": "",
+        "field_1": "aa,,"
+       },
+       {
+        "field_0": "a",
+        "field_1": null
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": "a,,"
+       },
+       {
+        "field_0": "abbb",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": "b"
+       },
+       {
+        "field_0": "bbbba",
+        "field_1": ""
+       },
+       {
+        "field_0": "b",
+        "field_1": "ba,"
+       },
+       {
+        "field_0": "",
+        "field_1": ",ba,"
+       },
+       {
+        "field_0": "aa",
+        "field_1": ""
+       },
+       {
+        "field_0": "",
+        "field_1": "babaa,"
+       },
+       {
+        "field_0": "ab",
+        "field_1": "a"
+       },
+       {
+        "field_0": "abb",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": "bbbb"
+       },
+       {
+        "field_0": "ab",
+        "field_1": null
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": "aaaba"
+       },
+       {
+        "field_0": "ba",
+        "field_1": "b,b,"
+       },
+       {
+        "field_0": "b",
+        "field_1": null
+       },
+       {
+        "field_0": "b",
+        "field_1": "a"
+       },
+       {
+        "field_0": "\"q\"",
+        "field_1": null
+       },
+       {
+        "field_0": "aba",
+        "field_1": ",a"
+       },
+       {
+        "field_0": "abbbbb",
+        "field_1": null
+       },
+       {
+        "field_0": "a",
+        "field_1": ",b,"
+       },
+       {
+        "field_0": "abab",
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": ""
+       },
+       {
+        "field_0": "ba",
+        "field_1": ",,b"
+       },
+       {
+        "field_0": "ab",
+        "field_1": "aa"
+       },
+       {
+        "field_0": "bbbbab",
+        "field_1": null
+       },
+       {
+        "field_0": "bab",
+        "field_1": "aa"
+       },
+       {
+        "field_0": "",
+        "field_1": "abb"
+       },
+       {
+        "field_0": "",
+        "field_1": "aa"
+       },
+       {
+        "field_0": "b",
+        "field_1": ","
+       },
+       {
+        "field_0": "\ud835\udd18rsus",
+        "field_1": null
+       },
+       {
+        "field_0": "b",
+        "field_1": "bb"
+       },
+       {
+        "field_0": "ba",
+        "field_1": ",b"
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": "b,ab"
+       },
+       {
+        "field_0": "abb",
+        "field_1": null
+       },
+       {
+        "field_0": null,
+        "field_1": null
+       },
+       {
+        "field_0": "",
+        "field_1": ",b"
+       },
+       {
+        "field_0": "bb",
+        "field_1": null
+       }
+      ]
+     },
+     {
+      "dtype": "List(String)",
+      "name": "parts",
+      "values": [
+       [
+        "b"
+       ],
+       [
+        "baab,",
+        ",",
+        "b"
+       ],
+       null,
+       [
+        "a"
+       ],
+       [
+        "a,",
+        "a,"
+       ],
+       [
+        ",",
+        "bbabba"
+       ],
+       [
+        "aaa"
+       ],
+       [
+        "b"
+       ],
+       [
+        ",",
+        "ba,",
+        "b,",
+        ","
+       ],
+       null,
+       [
+        "aa,",
+        "a,",
+        "a,"
+       ],
+       [
+        ",",
+        "aaa"
+       ],
+       [
+        "a,",
+        ",",
+        "bb,",
+        "b"
+       ],
+       [
+        ",",
+        "a,",
+        "b"
+       ],
+       [
+        ",",
+        "baba,",
+        "b"
+       ],
+       [
+        "b"
+       ],
+       [
+        "a,",
+        "ab"
+       ],
+       [
+        "a,",
+        "bba"
+       ],
+       [
+        "a,",
+        "b,"
+       ],
+       null,
+       [
+        "a,",
+        "ab,",
+        "a"
+       ],
+       null,
+       [
+        ",",
+        "bb"
+       ],
+       [
+        "a,",
+        "aa,",
+        ",",
+        ","
+       ],
+       [
+        ",",
+        ","
+       ],
+       [
+        "aaa"
+       ],
+       [
+        ",",
+        ",",
+        "b"
+       ],
+       [
+        "bb"
+       ],
+       [
+        "b,",
+        "b"
+       ],
+       [
+        "a,",
+        "bb,",
+        "a"
+       ],
+       [
+        "abba,",
+        "a,"
+       ],
+       [
+        ",",
+        "ab"
+       ],
+       [
+        "ababb"
+       ],
+       [
+        ","
+       ],
+       null,
+       [
+        "b"
+       ],
+       [
+        ",",
+        ","
+       ],
+       [
+        "baa,"
+       ],
+       [
+        ",",
+        ",",
+        ",",
+        "ba"
+       ],
+       [
+        "aaaab"
+       ],
+       [
+        "a,",
+        "b"
+       ],
+       [
+        "bbbb"
+       ],
+       [
+        "b"
+       ],
+       [
+        "a,",
+        "b,"
+       ],
+       [
+        "b"
+       ],
+       [
+        "abaaaa"
+       ],
+       [
+        "bb,",
+        "ab"
+       ],
+       [
+        "b,",
+        "abbbb"
+       ],
+       [
+        "baa"
+       ],
+       [
+        "bb,",
+        ",",
+        "bba"
+       ],
+       [
+        "abba"
+       ],
+       [
+        ",",
+        "b,",
+        "bab,"
+       ],
+       [
+        "a,",
+        ",",
+        ",",
+        ",",
+        ","
+       ],
+       [
+        "ab,",
+        ",",
+        "bab"
+       ],
+       [
+        "a"
+       ],
+       [
+        "a,",
+        ",",
+        "aa,"
+       ],
+       [
+        "ba,",
+        "ba,"
+       ],
+       [
+        "b,",
+        ",",
+        "bb"
+       ],
+       [
+        ",",
+        "b,",
+        "aa"
+       ],
+       [
+        "abbab,",
+        "b"
+       ],
+       [
+        ","
+       ],
+       [
+        "b,",
+        "a"
+       ],
+       [
+        "ab"
+       ],
+       [
+        ",",
+        "abaa"
+       ],
+       [
+        "abbbb"
+       ],
+       [
+        "ba"
+       ],
+       [
+        ",",
+        "baab"
+       ],
+       null,
+       [
+        "a,",
+        ",",
+        "b"
+       ],
+       [
+        ",",
+        "abab"
+       ],
+       [
+        ",",
+        "ba,",
+        "ba,"
+       ],
+       [
+        ",",
+        "ab,",
+        "ab"
+       ],
+       null,
+       [
+        "aab,",
+        "aa"
+       ],
+       [
+        "aabaab"
+       ],
+       [
+        "a,",
+        "bbab,"
+       ],
+       [
+        "b,",
+        ",",
+        ",",
+        "ba,"
+       ],
+       [
+        ",",
+        "ba,",
+        "a"
+       ],
+       [
+        ",",
+        "b,",
+        "b"
+       ],
+       [
+        "aaa,",
+        ",",
+        "a"
+       ],
+       [
+        "b,",
+        "b,",
+        "b"
+       ],
+       null,
+       [
+        ","
+       ],
+       [
+        "ab,",
+        "aaaa"
+       ],
+       [
+        "a,",
+        "a,",
+        "aa,"
+       ],
+       [
+        "baa"
+       ],
+       [
+        ",",
+        "aaa"
+       ],
+       [
+        ",",
+        "a,",
+        "bba,"
+       ],
+       null,
+       [
+        ",",
+        "a"
+       ],
+       [
+        "a,"
+       ],
+       [
+        "\u00e9"
+       ],
+       [
+        ","
+       ],
+       [
+        "b,",
+        "ab"
+       ],
+       null,
+       [
+        "a,",
+        "ab"
+       ],
+       [
+        "aba"
+       ],
+       [
+        ",",
+        "a,",
+        "a"
+       ],
+       [
+        "bbbb"
+       ],
+       [
+        "babbb,"
+       ],
+       [
+        "aa,",
+        ",",
+        "b"
+       ],
+       [
+        "b,",
+        "ab"
+       ],
+       [
+        "a"
+       ],
+       [
+        "ba"
+       ],
+       [
+        "aaa,",
+        "a"
+       ],
+       null,
+       [
+        ",",
+        ",",
+        ",",
+        "bb,",
+        "a"
+       ],
+       [
+        "bb,",
+        "b"
+       ],
+       [
+        ",",
+        "aa,",
+        ","
+       ],
+       [
+        "a"
+       ],
+       null,
+       [
+        "a,",
+        "a,",
+        ","
+       ],
+       [
+        "abbb"
+       ],
+       [
+        ",",
+        "b"
+       ],
+       [
+        "bbbba,"
+       ],
+       [
+        "b,",
+        "ba,"
+       ],
+       [
+        ",",
+        ",",
+        "ba,"
+       ],
+       [
+        "aa,"
+       ],
+       [
+        ",",
+        "babaa,"
+       ],
+       [
+        "ab,",
+        "a"
+       ],
+       [
+        "abb"
+       ],
+       [
+        ",",
+        "bbbb"
+       ],
+       [
+        "ab"
+       ],
+       null,
+       [
+        ",",
+        "aaaba"
+       ],
+       [
+        "ba,",
+        "b,",
+        "b,"
+       ],
+       [
+        "b"
+       ],
+       [
+        "b,",
+        "a"
+       ],
+       [
+        "\"q\""
+       ],
+       [
+        "aba,",
+        ",",
+        "a"
+       ],
+       [
+        "abbbbb"
+       ],
+       [
+        "a,",
+        ",",
+        "b,"
+       ],
+       [
+        "abab"
+       ],
+       [
+        ","
+       ],
+       [
+        "ba,",
+        ",",
+        ",",
+        "b"
+       ],
+       [
+        "ab,",
+        "aa"
+       ],
+       [
+        "bbbbab"
+       ],
+       [
+        "bab,",
+        "aa"
+       ],
+       [
+        ",",
+        "abb"
+       ],
+       [
+        ",",
+        "aa"
+       ],
+       [
+        "b,",
+        ","
+       ],
+       [
+        "\ud835\udd18rsus"
+       ],
+       [
+        "b,",
+        "bb"
+       ],
+       [
+        "ba,",
+        ",",
+        "b"
+       ],
+       null,
+       [
+        ",",
+        "b,",
+        "ab"
+       ],
+       [
+        "abb"
+       ],
+       null,
+       [
+        ",",
+        ",",
+        "b"
+       ],
+       [
+        "bb"
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "991",
+        "1=",
+        "a",
+        "==",
+        null,
+        "1",
+        null,
+        "aa19b",
+        "a=a1=1",
+        "ab=",
+        null,
+        "=1a9",
+        null,
+        "9=9",
+        "1b1a=",
+        null,
+        "11=b=1",
+        "b",
+        null,
+        "11bb",
+        "1bbb=",
+        "ab",
+        "1b9",
+        "aa9aa",
+        "a9bab=",
+        "9=9",
+        "b91a1",
+        "a",
+        "1a",
+        "11",
+        "==ab9",
+        null,
+        "ba9=a",
+        "9b",
+        "=999",
+        "\u00e9",
+        "=a199",
+        "9=",
+        "1a9b19",
+        "ba1==a",
+        "a=a=",
+        "1=",
+        "1",
+        "b",
+        "9",
+        "b=",
+        "aaaa1=",
+        "a",
+        "91ba",
+        "b9a9=",
+        "91b1b",
+        "9",
+        "=b=",
+        "b9",
+        "=b9",
+        "aa",
+        "1",
+        "11a",
+        "aa1b9",
+        "a",
+        "ab=a",
+        "ab9=1",
+        "a",
+        "a1bba1",
+        null,
+        "=9",
+        "1a1",
+        "9",
+        "a",
+        "=b1=",
+        "9=9",
+        "b9b",
+        null,
+        "11a99=",
+        "9b9a",
+        "=b",
+        "ba99b1",
+        "99",
+        "91",
+        "9a",
+        "9",
+        "=b9",
+        "1",
+        "a,b",
+        "a199",
+        null,
+        "\"q\"",
+        "11=ba1",
+        " ",
+        "bbb9",
+        "a=1",
+        "ba9",
+        "=bb",
+        null,
+        "a9b",
+        "1aaab",
+        "991",
+        "bb91",
+        "=99199",
+        "=99ab",
+        "1",
+        "b9aab",
+        "ab11a1",
+        "=911b",
+        "1=1",
+        "11",
+        "19199a",
+        "9",
+        null,
+        "==1=1",
+        "ab=9=",
+        "=19",
+        "9",
+        "=",
+        "19ab9",
+        null,
+        "ab1a",
+        "a",
+        "11aa=",
+        "9b=1=",
+        "=",
+        "1a1",
+        "b9a",
+        "=9",
+        "=1bb",
+        "=9a",
+        "bbaa1b",
+        "=19",
+        "99=9",
+        "9199=b",
+        "9a=a",
+        "bbb1a",
+        "9=19b",
+        "9991=1",
+        "=ba",
+        "=aaaa",
+        "a1aaa",
+        "baa",
+        "a",
+        "1=aa",
+        "b",
+        "1=",
+        "baba=1",
+        "1",
+        "9b1b1a",
+        "=bb1",
+        "==",
+        "=",
+        "b=",
+        "1a"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "groups_gen",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(k: String, v: String)",
+      "name": "named",
+      "values": [
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": "b",
+        "v": "1"
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": "a",
+        "v": "1"
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": "ab",
+        "v": "9"
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       null,
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": "b",
+        "v": "1"
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": "baba",
+        "v": "1"
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       },
+       {
+        "k": null,
+        "v": null
+       }
+      ]
+     },
+     {
+      "dtype": "Struct(1: String, 2: String)",
+      "name": "num",
+      "values": [
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       null,
+       {
+        "1": null,
+        "2": null
+       },
+       null,
+       {
+        "1": "a",
+        "2": "1"
+       },
+       {
+        "1": "a",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       null,
+       {
+        "1": "a",
+        "2": "9"
+       },
+       null,
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "1"
+       },
+       null,
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       null,
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       {
+        "1": "a",
+        "2": "9"
+       },
+       {
+        "1": "a",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       null,
+       {
+        "1": "a",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "9"
+       },
+       {
+        "1": "a",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       {
+        "1": "b",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "1"
+       },
+       null,
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       null,
+       {
+        "1": "a",
+        "2": "9"
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "1"
+       },
+       null,
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       null,
+       {
+        "1": "a",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       {
+        "1": "b",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       null,
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       null,
+       {
+        "1": "b",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "1"
+       },
+       {
+        "1": "b",
+        "2": "9"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "a",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": "b",
+        "2": "1"
+       },
+       {
+        "1": "b",
+        "2": "1"
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       },
+       {
+        "1": null,
+        "2": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "33 BcBa'",
+        null,
+        "'",
+        " c'",
+        "Ba--c cc\u00e9c'-",
+        "a\u00e9Ba\u01c6cB--c",
+        "a,b",
+        null,
+        "'ccBa \u00e9\u01c6cc",
+        "\ud835\udd18rsus",
+        "-",
+        "B-3ac\u00e9---\u00e9a ",
+        "BBa3a333 ",
+        "c\u00e9",
+        null,
+        "\u01c6a-BaB-3BBB",
+        "\u00e9B\u01c6  B3\u01c6'",
+        "3aB33a3",
+        "Ba-a' ",
+        "- c",
+        null,
+        "c'",
+        " -c",
+        "3 aac   '",
+        "'BBc-Bc3 '-a",
+        "' ccBa'\u00e9",
+        "aB' -Bc-\u00e9",
+        "\u01c6  ",
+        "\u00e9a \u00e9",
+        "c",
+        null,
+        " c\u01c6aa",
+        "'",
+        " 3-aca\u00e9c",
+        "ac \u00e9",
+        "cc\u00e9'",
+        "\u00e93\u00e93-a'B",
+        "-\u00e9-",
+        null,
+        "a",
+        "B-",
+        "\u01c6a \u01c6\u01c6\u00e9a\u01c6",
+        "\u00e9",
+        "\u01c6'",
+        "3\u01c6c\u01c6-a3\u01c6-B",
+        "33\u00e9ca-3c'\u01c6",
+        "ac 'c",
+        "BB3'c-c\u01c6\u00e9c ",
+        "a3",
+        null,
+        "c \u01c6a B\u00e9 -",
+        "\"q\"",
+        "\u01c633",
+        "-B'3",
+        "B3cB3-\u00e93",
+        null,
+        "3cB\u00e9'\u00e9B\u00e9c'B",
+        " 3aB--''\u01c6c\u00e9",
+        "\u00e9\u00e9\u00e9",
+        "-\u01c63'BBa",
+        "-\u01c6-c33\u00e9-'B",
+        " ",
+        " ",
+        " \u00e9a",
+        "-\u00e9  B\u01c6a -c  ",
+        null,
+        "\u01c6a '\u00e9",
+        null,
+        "c-c'B",
+        "3a\u00e9\u01c63\u01c63c\u00e9\u00e9",
+        "-\u00e9'a3a\u00e9 ac-3",
+        null,
+        "' B3aBa",
+        "\u00e9'B3\u00e93",
+        "-c\u00e9'\u00e9c'",
+        " -a 3c3",
+        "'aaB3\u00e93\u01c6a'c'",
+        null,
+        "'-Bc'",
+        "B",
+        "'3'\u00e9\u00e9",
+        "-' -33a ",
+        "3 ''\u00e9c3-a'",
+        "\u00e9'3  3\u01c63B ",
+        null,
+        "3'B\u00e9",
+        "\u01c6-c-\u01c6B\u01c6",
+        "\u01c6aa Ba33\u01c6",
+        "a\u01c6' '-c",
+        "\u00e9",
+        "B\u01c6c--",
+        null,
+        "'a a3'3",
+        " -\u01c6 '3-",
+        "Bc",
+        null,
+        "\u00e9\u01c6\u01c6",
+        "3",
+        " -ca3'-\u01c6\u01c6\u01c6\u00e9a",
+        "3\u00e9-\u00e9\u00e9c'B",
+        "--",
+        "Ba",
+        "cB\u01c6ac '",
+        "'a",
+        " -aac'a",
+        "3\u01c6\u00e9B\u01c63",
+        "'",
+        "c ",
+        "\u00e9' 'a B \u01c6\u00e9'",
+        "Bc3\u00e9'\u01c6",
+        "'3 c\u01c6Baa'",
+        "3-\u00e9B\u01c6cBca",
+        "-3ca\u00e9ca\u00e9\u00e9ca",
+        "c'aB'3B\u01c6c-",
+        "a333''",
+        "'3aaB\u01c6c\u00e9-33",
+        " ",
+        "",
+        "c3'\u01c6-'\u01c6 -3BB",
+        "--\u01c63BBB-'a",
+        null,
+        " 3c\u00e933aa3",
+        "\u01c6- c- \u01c6",
+        "--c\u01c6\u00e9'\u01c6aa3 '",
+        " \u01c6-c3'3-",
+        "a B 3c",
+        "a",
+        "c",
+        "aB\u00e9\u01c63",
+        "\u01c6 ",
+        "\u01c6-'a-'3B ",
+        " -a3cc'B'cc",
+        "accBc",
+        " B",
+        "\u01c6  \u01c6-",
+        "'3a   c-\u01c6cc",
+        "-'cac ",
+        null,
+        " ",
+        null,
+        "'- '\u01c6B ",
+        "3ac'c",
+        "BB'BB3-",
+        null,
+        "- 'aB\u00e9aB'3a\u01c6",
+        "3",
+        "'",
+        "3 -\u01c6'\u00e9B\u00e9\u01c6",
+        "BBBca3B\u00e9-B\u00e9",
+        " c33a--B33 \u01c6"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "titlecase_gen",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "t",
+      "values": [
+       "33 Bcba'",
+       null,
+       "'",
+       " C'",
+       "Ba--C Cc\u00e9c'-",
+       "A\u00e9ba\u01c6cb--C",
+       "A,B",
+       null,
+       "'Ccba \u00c9\u01c6cc",
+       "\ud835\udd18rsus",
+       "-",
+       "B-3Ac\u00e9---\u00c9a ",
+       "Bba3A333 ",
+       "C\u00e9",
+       null,
+       "\u01c5a-Bab-3Bbb",
+       "\u00c9b\u01c6  B3\u01c5'",
+       "3Ab33A3",
+       "Ba-A' ",
+       "- C",
+       null,
+       "C'",
+       " -C",
+       "3 Aac   '",
+       "'Bbc-Bc3 '-A",
+       "' Ccba'\u00c9",
+       "Ab' -Bc-\u00c9",
+       "\u01c5  ",
+       "\u00c9a \u00c9",
+       "C",
+       null,
+       " C\u01c6aa",
+       "'",
+       " 3-Aca\u00e9c",
+       "Ac \u00c9",
+       "Cc\u00e9'",
+       "\u00c93\u00c93-A'B",
+       "-\u00c9-",
+       null,
+       "A",
+       "B-",
+       "\u01c5a \u01c5\u01c6\u00e9a\u01c6",
+       "\u00c9",
+       "\u01c5'",
+       "3\u01c5c\u01c6-A3\u01c5-B",
+       "33\u00c9ca-3C'\u01c5",
+       "Ac 'C",
+       "Bb3'C-C\u01c6\u00e9c ",
+       "A3",
+       null,
+       "C \u01c5a B\u00e9 -",
+       "\"Q\"",
+       "\u01c533",
+       "-B'3",
+       "B3Cb3-\u00c93",
+       null,
+       "3Cb\u00e9'\u00c9b\u00e9c'B",
+       " 3Ab--''\u01c5c\u00e9",
+       "\u00c9\u00e9\u00e9",
+       "-\u01c53'Bba",
+       "-\u01c5-C33\u00c9-'B",
+       " ",
+       " ",
+       " \u00c9a",
+       "-\u00c9  B\u01c6a -C  ",
+       null,
+       "\u01c5a '\u00c9",
+       null,
+       "C-C'B",
+       "3A\u00e9\u01c63\u01c53C\u00e9\u00e9",
+       "-\u00c9'A3A\u00e9 Ac-3",
+       null,
+       "' B3Aba",
+       "\u00c9'B3\u00c93",
+       "-C\u00e9'\u00c9c'",
+       " -A 3C3",
+       "'Aab3\u00c93\u01c5a'C'",
+       null,
+       "'-Bc'",
+       "B",
+       "'3'\u00c9\u00e9",
+       "-' -33A ",
+       "3 ''\u00c9c3-A'",
+       "\u00c9'3  3\u01c53B ",
+       null,
+       "3'B\u00e9",
+       "\u01c5-C-\u01c5b\u01c6",
+       "\u01c5aa Ba33\u01c5",
+       "A\u01c6' '-C",
+       "\u00c9",
+       "B\u01c6c--",
+       null,
+       "'A A3'3",
+       " -\u01c5 '3-",
+       "Bc",
+       null,
+       "\u00c9\u01c6\u01c6",
+       "3",
+       " -Ca3'-\u01c5\u01c6\u01c6\u00e9a",
+       "3\u00c9-\u00c9\u00e9c'B",
+       "--",
+       "Ba",
+       "Cb\u01c6ac '",
+       "'A",
+       " -Aac'A",
+       "3\u01c5\u00e9b\u01c63",
+       "'",
+       "C ",
+       "\u00c9' 'A B \u01c5\u00e9'",
+       "Bc3\u00c9'\u01c5",
+       "'3 C\u01c6baa'",
+       "3-\u00c9b\u01c6cbca",
+       "-3Ca\u00e9ca\u00e9\u00e9ca",
+       "C'Ab'3B\u01c6c-",
+       "A333''",
+       "'3Aab\u01c6c\u00e9-33",
+       " ",
+       "",
+       "C3'\u01c5-'\u01c5 -3Bb",
+       "--\u01c53Bbb-'A",
+       null,
+       " 3C\u00e933Aa3",
+       "\u01c5- C- \u01c5",
+       "--C\u01c6\u00e9'\u01c5aa3 '",
+       " \u01c5-C3'3-",
+       "A B 3C",
+       "A",
+       "C",
+       "Ab\u00e9\u01c63",
+       "\u01c5 ",
+       "\u01c5-'A-'3B ",
+       " -A3Cc'B'Cc",
+       "Accbc",
+       " B",
+       "\u01c5  \u01c5-",
+       "'3A   C-\u01c5cc",
+       "-'Cac ",
+       null,
+       " ",
+       null,
+       "'- '\u01c5b ",
+       "3Ac'C",
+       "Bb'Bb3-",
+       null,
+       "- 'Ab\u00e9ab'3A\u01c6",
+       "3",
+       "'",
+       "3 -\u01c5'\u00c9b\u00e9\u01c6",
+       "Bbbca3B\u00e9-B\u00e9",
+       " C33A--B33 \u01c5"
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "NFC",
+      "values": [
+       8,
+       null,
+       1,
+       3,
+       13,
+       12,
+       3,
+       null,
+       12,
+       8,
+       1,
+       14,
+       9,
+       3,
+       null,
+       12,
+       12,
+       7,
+       6,
+       3,
+       null,
+       2,
+       3,
+       9,
+       12,
+       9,
+       10,
+       4,
+       6,
+       1,
+       null,
+       6,
+       1,
+       9,
+       5,
+       5,
+       10,
+       4,
+       null,
+       1,
+       2,
+       13,
+       2,
+       3,
+       13,
+       12,
+       5,
+       13,
+       2,
+       null,
+       11,
+       3,
+       4,
+       4,
+       9,
+       null,
+       14,
+       13,
+       6,
+       8,
+       12,
+       1,
+       1,
+       4,
+       14,
+       null,
+       7,
+       null,
+       5,
+       15,
+       14,
+       null,
+       7,
+       8,
+       9,
+       7,
+       14,
+       null,
+       5,
+       1,
+       7,
+       8,
+       11,
+       12,
+       null,
+       5,
+       10,
+       11,
+       8,
+       2,
+       6,
+       null,
+       7,
+       8,
+       2,
+       null,
+       6,
+       1,
+       16,
+       11,
+       2,
+       2,
+       8,
+       2,
+       7,
+       9,
+       1,
+       2,
+       14,
+       8,
+       10,
+       11,
+       14,
+       11,
+       6,
+       13,
+       1,
+       0,
+       14,
+       11,
+       null,
+       10,
+       9,
+       15,
+       9,
+       6,
+       1,
+       1,
+       7,
+       3,
+       10,
+       11,
+       5,
+       2,
+       7,
+       12,
+       6,
+       null,
+       1,
+       null,
+       8,
+       5,
+       7,
+       null,
+       14,
+       1,
+       1,
+       13,
+       13,
+       13
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "NFD",
+      "values": [
+       8,
+       null,
+       1,
+       3,
+       14,
+       13,
+       3,
+       null,
+       13,
+       8,
+       1,
+       16,
+       9,
+       4,
+       null,
+       12,
+       13,
+       7,
+       6,
+       3,
+       null,
+       2,
+       3,
+       9,
+       12,
+       10,
+       11,
+       4,
+       8,
+       1,
+       null,
+       6,
+       1,
+       10,
+       6,
+       6,
+       12,
+       5,
+       null,
+       1,
+       2,
+       14,
+       3,
+       3,
+       13,
+       13,
+       5,
+       14,
+       2,
+       null,
+       12,
+       3,
+       4,
+       4,
+       10,
+       null,
+       17,
+       14,
+       9,
+       8,
+       13,
+       1,
+       1,
+       5,
+       15,
+       null,
+       8,
+       null,
+       5,
+       18,
+       16,
+       null,
+       7,
+       10,
+       11,
+       7,
+       15,
+       null,
+       5,
+       1,
+       9,
+       8,
+       12,
+       13,
+       null,
+       6,
+       10,
+       11,
+       8,
+       3,
+       6,
+       null,
+       7,
+       8,
+       2,
+       null,
+       7,
+       1,
+       17,
+       14,
+       2,
+       2,
+       8,
+       2,
+       7,
+       10,
+       1,
+       2,
+       16,
+       9,
+       10,
+       12,
+       17,
+       11,
+       6,
+       14,
+       1,
+       0,
+       14,
+       11,
+       null,
+       11,
+       9,
+       16,
+       9,
+       6,
+       1,
+       1,
+       8,
+       3,
+       10,
+       11,
+       5,
+       2,
+       7,
+       12,
+       6,
+       null,
+       1,
+       null,
+       8,
+       5,
+       7,
+       null,
+       15,
+       1,
+       1,
+       15,
+       15,
+       13
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "NFKC",
+      "values": [
+       8,
+       null,
+       1,
+       3,
+       13,
+       13,
+       3,
+       null,
+       13,
+       5,
+       1,
+       14,
+       9,
+       3,
+       null,
+       13,
+       14,
+       7,
+       6,
+       3,
+       null,
+       2,
+       3,
+       9,
+       12,
+       9,
+       10,
+       5,
+       6,
+       1,
+       null,
+       7,
+       1,
+       9,
+       5,
+       5,
+       10,
+       4,
+       null,
+       1,
+       2,
+       17,
+       2,
+       4,
+       16,
+       13,
+       5,
+       14,
+       2,
+       null,
+       12,
+       3,
+       5,
+       4,
+       9,
+       null,
+       14,
+       14,
+       6,
+       9,
+       13,
+       1,
+       1,
+       4,
+       15,
+       null,
+       8,
+       null,
+       5,
+       17,
+       14,
+       null,
+       7,
+       8,
+       9,
+       7,
+       15,
+       null,
+       5,
+       1,
+       7,
+       8,
+       11,
+       13,
+       null,
+       5,
+       13,
+       13,
+       9,
+       2,
+       7,
+       null,
+       7,
+       9,
+       2,
+       null,
+       8,
+       1,
+       19,
+       11,
+       2,
+       2,
+       9,
+       2,
+       7,
+       11,
+       1,
+       2,
+       15,
+       9,
+       11,
+       12,
+       14,
+       12,
+       6,
+       14,
+       1,
+       0,
+       16,
+       12,
+       null,
+       10,
+       11,
+       17,
+       10,
+       6,
+       1,
+       1,
+       8,
+       4,
+       11,
+       11,
+       5,
+       2,
+       9,
+       13,
+       6,
+       null,
+       1,
+       null,
+       9,
+       5,
+       7,
+       null,
+       15,
+       1,
+       1,
+       15,
+       13,
+       14
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "NFKD",
+      "values": [
+       8,
+       null,
+       1,
+       3,
+       14,
+       15,
+       3,
+       null,
+       15,
+       5,
+       1,
+       16,
+       9,
+       4,
+       null,
+       14,
+       17,
+       7,
+       6,
+       3,
+       null,
+       2,
+       3,
+       9,
+       12,
+       10,
+       11,
+       6,
+       8,
+       1,
+       null,
+       8,
+       1,
+       10,
+       6,
+       6,
+       12,
+       5,
+       null,
+       1,
+       2,
+       22,
+       3,
+       5,
+       19,
+       15,
+       5,
+       16,
+       2,
+       null,
+       14,
+       3,
+       6,
+       4,
+       10,
+       null,
+       17,
+       16,
+       9,
+       10,
+       15,
+       1,
+       1,
+       5,
+       17,
+       null,
+       10,
+       null,
+       5,
+       22,
+       16,
+       null,
+       7,
+       10,
+       11,
+       7,
+       17,
+       null,
+       5,
+       1,
+       9,
+       8,
+       12,
+       15,
+       null,
+       6,
+       16,
+       15,
+       10,
+       3,
+       8,
+       null,
+       7,
+       10,
+       2,
+       null,
+       11,
+       1,
+       23,
+       14,
+       2,
+       2,
+       10,
+       2,
+       7,
+       14,
+       1,
+       2,
+       18,
+       11,
+       12,
+       14,
+       17,
+       13,
+       6,
+       16,
+       1,
+       0,
+       18,
+       13,
+       null,
+       11,
+       13,
+       20,
+       11,
+       6,
+       1,
+       1,
+       10,
+       5,
+       12,
+       11,
+       5,
+       2,
+       11,
+       14,
+       6,
+       null,
+       1,
+       null,
+       10,
+       5,
+       7,
+       null,
+       17,
+       1,
+       1,
+       19,
+       15,
+       15
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "generator": "bench/scripts/oracle/strmany.py",
+ "polars": "2.1.0"
+}

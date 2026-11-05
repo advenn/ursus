@@ -214,8 +214,9 @@ func strMany(fn expr.CallFn, name string, c *data.Column, args []any) (*data.Col
 // strStruct is a string function whose answer is a Struct of out's fields:
 // extract_groups, each capture group of the first match, all null where none
 // matches; split_exact, the first n+1 parts, the rest dropped; and splitn, n parts,
-// the last holding the rest. A field is null where there is no part for it, and a
-// null string's fields are null, the Struct not, as Polars makes it.
+// the last holding the rest. A field is null where there is no part for it. A null
+// string is a null Struct under extract_groups and a Struct of null fields under the
+// splits, as Polars 2.1 makes them (step 499; every one was a Struct of nulls before).
 func strStruct(fn expr.CallFn, name string, out dtype.DataType, c *data.Column, args []any,
 	re *regexp.Regexp) (*data.Column, error) {
 
@@ -259,13 +260,15 @@ func strStruct(fn expr.CallFn, name string, out dtype.DataType, c *data.Column, 
 			}
 			continue
 		case expr.FnStrSplitExact:
-			// One part more than the fields, to drop what follows them. Polars splits
-			// an empty string inclusively into no parts.
-			switch {
-			case inclusive && s == "":
-			case inclusive:
+			// One part more than the fields, to drop what follows them. Inclusively,
+			// what follows the last separator is a part only where there is
+			// something, as Polars splits it: "" has no part and "a," one (step 499).
+			if inclusive {
 				parts = strings.SplitAfterN(s, by, k+1)
-			default:
+				if parts[len(parts)-1] == "" {
+					parts = parts[:len(parts)-1]
+				}
+			} else {
 				parts = strings.SplitN(s, by, k+1)
 			}
 		default: // splitn
@@ -283,12 +286,18 @@ func strStruct(fn expr.CallFn, name string, out dtype.DataType, c *data.Column, 
 	for j, f := range fields {
 		cols[j] = data.NewString(f.Name, vals[j], oks[j].Finish())
 	}
-	return data.NewStruct(name, cols, bitmap.AllSet(n)), nil
+	structValid := bitmap.AllSet(n)
+	if fn == expr.FnStrExtractGroups {
+		structValid = valid
+	}
+	return data.NewStruct(name, cols, structValid), nil
 }
 
-// titlecase is s with each letter that follows a character not a letter upper case
+// titlecase is s with each letter that follows a character not a letter title case
 // and every other letter lower case, as Polars' to_titlecase makes it: "3rd" is
-// "3Rd".
+// "3Rd". Title case is upper case but for the digraphs, whose title form is a letter
+// of its own: "ǆemal" is "ǅemal" (U+01C5), not "Ǆemal" (U+01C4), as Polars 2.1 and
+// Unicode's mapping have it (step 499).
 func titlecase(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
@@ -297,7 +306,7 @@ func titlecase(s string) string {
 		letter := unicode.IsLetter(r)
 		switch {
 		case letter && !prevLetter:
-			b.WriteRune(unicode.ToUpper(r))
+			b.WriteRune(unicode.ToTitle(r))
 		case letter:
 			b.WriteRune(unicode.ToLower(r))
 		default:
