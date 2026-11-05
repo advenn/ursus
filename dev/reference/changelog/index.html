@@ -3696,6 +3696,10 @@ that stops when its request is cancelled.</p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>Erf</code> and <code>Erfc</code></strong> (488): the error function and its complement, Polars' <code>erf</code>
+  and <code>erfc</code>, widening as <code>Sqrt</code> does; <code>Erfc</code> computed apart, so <code>Erfc(6)</code> is
+  2.15e-17 where 1 − <code>Erf(6)</code> is 0. Go's <code>math.Erf</code> and <code>math.Erfc</code>, within an ulp
+  and four of Polars'.</li>
 <li>
 <p><strong><code>Engine</code></strong> (395): the memory budget and spill directory its queries share.
   <code>NewEngine(WithEngineMemoryLimit(n), WithEngineSpillDir(dir))</code> makes one, a
