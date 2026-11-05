@@ -114,9 +114,9 @@ where it checks structure.
 
 | wave | area | files (the largest first) |
 | --- | --- | --- |
-| 497 | expressions and math | scalar_byhand, castround_byhand, castedges_byhand, castmore, exprodds, exprargs, fold, variadic, math, trig, bits, decimal_arith_byhand (big.Rat), int128exact |
+| 497 | expressions and math | scalar_byhand, castround_byhand, castedges_byhand, castmore, exprodds, exprargs, fold, variadic, math, trig, bits, decimal_arith_byhand (big.Rat), int128exact — done in step 497: 264 cases, 229 lines gone |
 | 498 | temporal | calendar (the by-hand half), tzreplace, components, daterange, csvdates, strtemporal, temporalagg, weeks, dtcombine, dtexact, timearith, businessdays_range, interpby — done in step 498: 260 cases, 905 lines gone |
-| 499 | strings, lists, structs, enums | listns, arrns, listeval, listmore, listset, liststruct, structfields, withfields, enum_byhand, expr_bin, expr_cat, strmany, strcodec, strsplit, strptime (Go's time) |
+| 499 | strings, lists, structs, enums | listns, arrns, listeval, listmore, listset, liststruct, structfields, withfields, enum_byhand, expr_bin, expr_cat, strmany, strcodec, strsplit, strptime (Go's time) — done in step 499: 321 cases, 1,611 lines gone |
 | 500 | aggregates and windows | aggwindow_byhand, aggstats, aggpair, agglists, argsort, hist, search, seq, modeagg, ewmmore, window172, windownest, rollingby, rollingoffset, rollingquantile, rollmap, exprroll, cumeval, topk_agg |
 | 501 | frames, joins, reshaping | join_byhand, joinorder, asofoptions, concat, pivot, dummies, unstack, unpivot, upsample, update, matchschema, frameagg, framecolumns, framerows, frameconv, framenulls, fill, intindex, dynamicopts, having, grouphead, generate — done in step 501: 482 cases, 2,213 lines gone |
 | 502 | I/O as text | io_byhand, csvread, csvskip, csvwrite, ndjsonread, jsonread, jsonwrite, ipcfiles, hive, hiveparent, filepaths, partitionwrite, database (values only) |

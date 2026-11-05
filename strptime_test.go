@@ -4,12 +4,15 @@ package ursus_test
 //
 // `v0.4-scope.md` item 19: Str().ToDate takes no format, so "09/02/2024" could not
 // be read as a date, and nothing formatted a date as anything but ISO 8601.
-// Strptime and Strftime take Polars' and chrono's strftime directives.
+// Strptime and Strftime take Polars' and chrono's strftime directives. Every parse
+// and format with a value is Polars 2.1.0's, recorded in the strptime group of
+// testdata/oracle and spelled in oracle_strptime_test.go since step 499, which took
+// this file's hand values. What Polars has not, a second unit and a Date formatted
+// with a clock, is held to Go's time below; the refusals stay.
 
 import (
 	"errors"
 	"math/rand/v2"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -25,66 +28,10 @@ func TestStrptime(t *testing.T) {
 		return ursus.Frame(ursus.Values("s", vals)).
 			Select(c("s").Str().Strptime(dt, format, strict).Alias("v")).Collect(t.Context())
 	}
-	cases := []struct {
-		name   string
-		vals   []string
-		dt     dtype.DataType
-		format string
-		want   []string // as ursus renders the parsed column
-	}{
-		{"day/month/year", []string{"09/02/2024", "29/02/2024", "1/3/2024"}, ursus.Date, "%d/%m/%Y",
-			[]string{"2024-02-09", "2024-02-29", "2024-03-01"}},
-		{"month names", []string{"Feb  9, 2024", "Dec 31, 1999"}, ursus.Date, "%b %e, %Y",
-			[]string{"2024-02-09", "1999-12-31"}},
-		{"day of year", []string{"2024-060", "2023-001"}, ursus.Date, "%Y-%j",
-			[]string{"2024-02-29", "2023-01-01"}},
-		{"a naive datetime with a fraction", []string{"2024-02-09 15:04:05.123456", "1969-12-31 23:59:59"},
-			dtype.Datetime(dtype.Micro, ""), "%Y-%m-%d %H:%M:%S%.f",
-			[]string{"2024-02-09T15:04:05.123456", "1969-12-31T23:59:59.000000"}},
-		{"an offset read into UTC", []string{"2024-02-09 15:04 +0530", "2024-02-09 15:04 -0100"},
-			dtype.Datetime(dtype.Second, "UTC"), "%Y-%m-%d %H:%M %z",
-			[]string{"2024-02-09T09:34:00Z", "2024-02-09T16:04:00Z"}},
-		{"an offset read into a naive datetime is its UTC wall clock", []string{"2024-02-09 15:04 +0530"},
-			dtype.Datetime(dtype.Second, ""), "%Y-%m-%d %H:%M %z",
-			[]string{"2024-02-09T09:34:00"}},
-		{"a zone's wall clock", []string{"2024-01-15 09:00", "2024-07-15 09:00"},
-			dtype.Datetime(dtype.Second, "America/New_York"), "%Y-%m-%d %H:%M",
-			[]string{"2024-01-15T09:00:00-05:00", "2024-07-15T09:00:00-04:00"}},
-		{"digits finer than the unit are dropped", []string{"2024-02-09 15:04:05.123999"},
-			dtype.Datetime(dtype.Milli, ""), "%Y-%m-%d %H:%M:%S%.6f",
-			[]string{"2024-02-09T15:04:05.123"}},
-		{"a 12-hour clock", []string{"12:05 AM", "12:05 PM", "07:30 pm"}, dtype.Time(dtype.Micro), "%I:%M %p",
-			[]string{"00:05:00.000000", "12:05:00.000000", "19:30:00.000000"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			df, err := parse(t, tc.vals, tc.dt, tc.format, true)
-			if err != nil {
-				t.Fatal(err)
-			}
-			typ, got := textOf(t, df, "v")
-			if typ != tc.dt.String() {
-				t.Errorf("type %s, want %s", typ, tc.dt)
-			}
-			if !slices.Equal(got, tc.want) {
-				t.Errorf("%v, want %v", got, tc.want)
-			}
-		})
-	}
-
 	t.Run("strict: a day that does not exist names the value", func(t *testing.T) {
 		_, err := parse(t, []string{"2024-02-09", "2023-02-29"}, ursus.Date, "%Y-%m-%d", true)
 		if !errors.Is(err, ursus.ErrValue) || !strings.Contains(err.Error(), `"2023-02-29"`) {
 			t.Errorf("want a value error naming 2023-02-29, got %v", err)
-		}
-	})
-	t.Run("not strict: what does not parse is null", func(t *testing.T) {
-		df, err := parse(t, []string{"2024-02-09", "2023-02-29", "nope", "2024-02-09 "}, ursus.Date, "%Y-%m-%d", false)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, got := textOf(t, df, "v"); !slices.Equal(got, []string{"2024-02-09", "∅", "∅", "∅"}) {
-			t.Errorf("%v", got)
 		}
 	})
 
@@ -110,37 +57,54 @@ func TestStrptime(t *testing.T) {
 	}
 }
 
+// TestStrptimeSecondUnitMatchesGoTime: Polars has no Datetime of seconds, so an
+// offset's text read into Datetime(s, UTC), and into a naive Datetime(s) as its UTC
+// wall clock, is held to Go's time.Parse over 300 generated instants of 1900 to 2100.
+func TestStrptimeSecondUnitMatchesGoTime(t *testing.T) {
+	c := ursus.Col
+	r := rand.New(rand.NewPCG(499, 113))
+	const layout, format = "2006-01-02 15:04:05 -0700", "%Y-%m-%d %H:%M:%S %z"
+	vals, want := make([]string, 300), make([]int64, 300)
+	for i := range vals {
+		at := time.Unix(r.Int64N(6311347200)-2208988800, 0) // 1900 to 2100
+		off := time.FixedZone("", (r.IntN(57)-28)*30*60)    // -14:00 to +14:00 by the half hour
+		vals[i] = at.In(off).Format(layout)
+		back, err := time.Parse(layout, vals[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+		want[i] = back.Unix()
+	}
+	for _, dt := range []dtype.DataType{dtype.Datetime(dtype.Second, "UTC"), dtype.Datetime(dtype.Second, "")} {
+		df, err := ursus.Frame(ursus.Values("s", vals)).
+			Select(c("s").Str().Strptime(dt, format, true).Alias("v")).Collect(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := df.Schema().Field(0).Type; got != dt {
+			t.Errorf("type %s, want %s", got, dt)
+		}
+		for i := range vals {
+			got, ok, err := df.At[int64](i, "v")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || got != want[i] {
+				t.Errorf("%s of %q = %d (ok=%v), want %d", dt, vals[i], got, ok, want[i])
+			}
+		}
+	}
+}
+
 func TestStrftime(t *testing.T) {
 	c := ursus.Col
 	at := time.Date(2024, 2, 9, 15, 4, 5, 123456000, time.UTC)
 	frame := ursus.Frame(ursus.Values("ts", []time.Time{at})).WithColumns(
 		c("ts").Cast(ursus.Date).Alias("day"),
-		c("ts").Cast(dtype.Datetime(dtype.Micro, "Asia/Tokyo")).Alias("tokyo"),
 		c("ts").Cast(dtype.Time(dtype.Micro)).Alias("clock"),
 		// Values gives a time.Time a UTC zone; this is the naive one.
 		c("ts").Cast(dtype.Datetime(dtype.Micro, "")).Alias("naive"),
 	)
-	cases := []struct {
-		name, col, format, want string
-	}{
-		{"a Date", "day", "%A, %e %B %Y", "Friday,  9 February 2024"},
-		{"a naive Datetime", "naive", "%d/%m/%y %I:%M:%S%.3f %p", "09/02/24 03:04:05.123 PM"},
-		{"a UTC Datetime has an offset", "ts", "%H:%M %z", "15:04 +0000"},
-		{"a zoned Datetime in its own wall clock", "tokyo", "%F %T %z %Z", "2024-02-10 00:04:05 +0900 JST"},
-		{"a Time", "clock", "%Hh%M", "15h04"},
-		{"a Date's time is midnight", "day", "%F %T", "2024-02-09 00:00:00"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			df, err := frame.Select(c(tc.col).Dt().Strftime(tc.format).Alias("s")).Collect(t.Context())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, got := textOf(t, df, "s"); !slices.Equal(got, []string{tc.want}) {
-				t.Errorf("%q, want %q", got, tc.want)
-			}
-		})
-	}
 	refusals := []struct{ name, col, format string }{
 		{"a date from a Time", "clock", "%Y-%m-%d"},
 		{"an offset from a naive Datetime", "naive", "%F %z"},
@@ -153,6 +117,33 @@ func TestStrftime(t *testing.T) {
 				t.Errorf("want a value error while planning, got %v", err)
 			}
 		})
+	}
+}
+
+// TestStrftimeOfADateWithAClockIsMidnight: a Date formatted with a time of day is its
+// midnight, which Polars 2.1 refuses ("cannot format Date with format '%F %T'"), held
+// to Go's time.Format over 300 generated dates of 1800 to 2200.
+func TestStrftimeOfADateWithAClockIsMidnight(t *testing.T) {
+	c := ursus.Col
+	r := rand.New(rand.NewPCG(499, 114))
+	vals, want := make([]time.Time, 300), make([]string, 300)
+	for i := range vals {
+		vals[i] = time.Date(1800+r.IntN(401), time.Month(1+r.IntN(12)), 1+r.IntN(28), 0, 0, 0, 0, time.UTC)
+		want[i] = vals[i].Format("2006-01-02 15:04:05 Mon 03PM")
+	}
+	df, err := ursus.Frame(ursus.Values("d", vals)).Select(c("d").Cast(ursus.Date).Dt().Strftime("%F %T %a %I%p").Alias("s")).
+		Collect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range vals {
+		got, _, err := df.At[string](i, "s")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want[i] {
+			t.Errorf("%s = %q, want %q", vals[i].Format("2006-01-02"), got, want[i])
+		}
 	}
 }
 
