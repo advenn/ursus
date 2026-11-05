@@ -31,7 +31,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[3]
 GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
           # step 499: strings, lists, structs and enums
           "listns", "arrns", "listeval", "listmore", "listset", "liststruct", "structfields", "withfields",
-          "enum_byhand", "expr_bin", "expr_cat", "strmany", "strcodec", "strsplit", "strptime"]
+          "enum_byhand", "expr_bin", "expr_cat", "strmany", "strcodec", "strsplit", "strptime",
+          # step 498, the temporal wave
+          "calendar", "tzreplace", "components", "daterange", "csvdates", "strtemporal", "temporalagg", "weeks",
+          "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby"]
 
 
 @dataclass

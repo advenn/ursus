@@ -166,6 +166,16 @@ that stops when its request is cancelled.
   answer for is held to Go: a `List(Duration)` mean past int64 to `math/big`, a regex
   replaced n times to `regexp`, a Datetime of seconds and a Date formatted with a
   clock to `time`, `GetCategories` (removed from Polars 2) to the type's own list.
+- **The temporal wave converted** (498): `calendar_test.go`'s by-hand half,
+  `tzreplace`, `components`, `daterange`, `csvdates`, `strtemporal`, `temporalagg`,
+  `weeks`, `dtcombine`, `dtexact`, `timearith`, `businessdays_range` and
+  `interpby_test.go`, 260 recorded cases in thirteen groups, 48 generated, 905 lines
+  gone; what Polars 2.1 has no answer for (a Time plus a Duration, the epoch's grid, two
+  patterns in one column, a zoned combine's day, `Duration(s)`) is held to Go's time
+  package. Four findings recorded and not asserted, for the maintainer: Polars 2.1
+  rounds a month by adding fourteen days, starts a `group_by_dynamic` day at 23:00
+  where midnight does not exist, combines a zoned Datetime's UTC date, and counts
+  business days back to an earlier date by numpy's rule.
 
 ### Fixed
 
