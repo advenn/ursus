@@ -73,6 +73,18 @@ func Unary(op expr.UnaryOp, name string, out dtype.DataType, c *data.Column) (*d
 		return nanPredicate(op, name, c, n)
 
 	case expr.OpNeg, expr.OpAbs, expr.OpSign, expr.OpFloor, expr.OpCeil:
+		// A Decimal's sign, floor and ceil are its value's, at its scale (step 490),
+		// into the type expr.DecimalRounded gives.
+		if c.DType().ID() == dtype.TypeDecimal {
+			switch op {
+			case expr.OpSign:
+				return decimalSign(name, out, c)
+			case expr.OpFloor:
+				return decimalRound("floor", name, out, c, 0, decFloor)
+			case expr.OpCeil:
+				return decimalRound("ceil", name, out, c, 0, decCeil)
+			}
+		}
 		// The TYPE-PRESERVING unary family: out == in for all five.
 		if (op == expr.OpNeg || op == expr.OpAbs) && c.DType().ID() == dtype.TypeDuration {
 			if err := durationNegates(op, c); err != nil {
@@ -242,8 +254,9 @@ func unaryI128(op expr.UnaryOp, name string, out dtype.DataType,
 		}
 	case expr.OpFloor, expr.OpCeil:
 		// The identity at 128 bits, same as at every narrower integer width.
-		// Decimal never arrives: ResolveUnary refuses floor/ceil for it, because the
-		// stored value is UNSCALED and flooring it would floor 1234 rather than 12.34.
+		// Decimal never arrives, nor at sign: Unary rounds it at its scale first,
+		// because the stored value is UNSCALED and flooring it here would floor 1234
+		// rather than 12.34.
 		copy(dst, v)
 	default:
 		return nil, uerr.Internalf("kernel: unaryI128 got %s", op)

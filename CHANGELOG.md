@@ -42,6 +42,11 @@ that stops when its request is cancelled.
 
 ### Features
 
+- **A Decimal's `Round`, `Floor`, `Ceil` and `Sign`** (490), refused until now:
+  exact, at its scale, as Polars 2.0 answers them. Where digits are dropped the type
+  is Decimal(p+1, s), for 9.99's 10.00; a row past 38 digits is refused. `Round`
+  takes its two modes, half away from zero by default, where Polars' default is
+  half to even.
 - **`TruncDiv`** (489): division whose quotient rounds toward zero, as Go's `/` does,
   Polars 2.0's `truncdiv`: −7 by 2 is −3, where `FloorDiv` gives −4. Typed as
   `FloorDiv`, a zero integer divisor a null; an Int128's MinInt128 by −1 is refused
