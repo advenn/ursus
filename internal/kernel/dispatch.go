@@ -618,7 +618,7 @@ func checkTemporalOverflow(op expr.BinaryOp, out dtype.DataType,
 	l, r *data.Column, n int, valid bitmap.View) error {
 
 	switch op {
-	case expr.OpAdd, expr.OpSub, expr.OpMul, expr.OpFloorDiv:
+	case expr.OpAdd, expr.OpSub, expr.OpMul, expr.OpFloorDiv, expr.OpTruncDiv:
 	default:
 		return nil
 	}
@@ -683,9 +683,9 @@ func overflowsI64(op expr.BinaryOp, a, b int64) bool {
 		}
 		p := a * b
 		return p/a != b
-	case expr.OpFloorDiv:
+	case expr.OpFloorDiv, expr.OpTruncDiv:
 		// Go defines MinInt64 / -1 as MinInt64 rather than trapping, and
-		// divIntScalar only guards a zero divisor.
+		// divIntScalar and divTruncIntScalar only guard a zero divisor.
 		return a == math.MinInt64 && b == -1
 	}
 	return false
@@ -724,6 +724,10 @@ func arithNum[T Integer](op expr.BinaryOp, name string, out dtype.DataType,
 	case expr.OpMod:
 		ok := bitmap.NewBuilder(n)
 		modIntScalar(dst, ok, lv, rv, valid)
+		valid = bitmap.And(valid, ok.Finish())
+	case expr.OpTruncDiv:
+		ok := bitmap.NewBuilder(n)
+		divTruncIntScalar(dst, ok, lv, rv, valid)
 		valid = bitmap.And(valid, ok.Finish())
 	default:
 		return nil, uerr.New(uerr.KindUnsupported, "",
@@ -791,6 +795,13 @@ func arithFloat[T ~float32 | ~float64](op expr.BinaryOp, name string, out dtype.
 		divFloatScalar(dst, lv, rv)
 		for i := range dst {
 			dst[i] = T(math.Floor(float64(dst[i])))
+		}
+	case expr.OpTruncDiv:
+		// The quotient toward zero, as Polars' truncdiv: trunc(a/b), total as the
+		// floor above is, so -0.5 by 2 is -0 and 1 by 0 is +Inf.
+		divFloatScalar(dst, lv, rv)
+		for i := range dst {
+			dst[i] = T(math.Trunc(float64(dst[i])))
 		}
 	case expr.OpPow:
 		// Pow only ever arrives here: resolveArithmetic gives it OpDiv's binding, so
@@ -860,7 +871,8 @@ func cmpI128(op expr.BinaryOp, l, r *data.Column, n int, out *bitmap.Builder) er
 // wrapped would be a sum that is silently wrong after all.
 //
 // `/` never arrives here: true division is a float, and resolveArithmetic casts both
-// sides first. `//` and `%` floor, as Int64's do, and a zero divisor is a null.
+// sides first. `//` and `%` floor, as Int64's do, TruncDiv truncates (step 489), and
+// a zero divisor is a null.
 //
 // Only + and - existed until step 100. Every integer Sum, Bool Sum and UInt64 Diff is
 // an Int128, so `Col("x").Sum().Mul(2)` was refused, and so was Int64 * UInt64,
@@ -883,7 +895,7 @@ func arithI128(op expr.BinaryOp, name string, out dtype.DataType,
 		return v[i]
 	}
 
-	partial := op == expr.OpFloorDiv || op == expr.OpMod
+	partial := op == expr.OpFloorDiv || op == expr.OpMod || op == expr.OpTruncDiv
 	var nonZero *bitmap.Builder
 	if partial {
 		nonZero = bitmap.NewBuilder(n)
@@ -908,15 +920,21 @@ func arithI128(op expr.BinaryOp, name string, out dtype.DataType,
 			v, ok = a.SubChecked(b)
 		case expr.OpMul:
 			v, ok = a.MulChecked(b)
-		case expr.OpFloorDiv, expr.OpMod:
+		case expr.OpFloorDiv, expr.OpMod, expr.OpTruncDiv:
 			nonZero.Append(!b.IsZero())
 			if b.IsZero() {
 				continue
 			}
 			var m i128.Int128
 			v, m, ok = a.DivMod(b)
-			if op == expr.OpMod {
+			switch {
+			case op == expr.OpMod:
 				v, ok = m, true
+			case op == expr.OpTruncDiv && ok && !m.IsZero() && (a.Sign() < 0) != (b.Sign() < 0):
+				// The floor of an inexact quotient of two signs is the truncated one
+				// less one. Min by -1 is refused below, as Int128's arithmetic is
+				// exact or refused, where Polars wraps it.
+				v = v.Add(i128.One)
 			}
 		default:
 			return nil, uerr.New(uerr.KindUnsupported, "",

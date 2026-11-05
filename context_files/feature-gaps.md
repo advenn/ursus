@@ -101,6 +101,7 @@ differs from their input's, or scalars outside a group-by.
 | **String view layout** | Arrow's view types are converted on import | P2 |
 | **UInt128, Float16, Object, Unknown** | Float16 is widened to Float32 on import | P2 |
 | **Dictionary, run-end, union, ListView** in memory | decoded or refused on import | P2 |
+| built: **a Decimal's `round`, `floor`, `ceil` and `sign`,** Polars 2.0's, exact at its scale, Decimal(p+1, s) where digits are dropped, in step 490; `truncate` and `round_sig_figs` of one still refused | — |
 | `Expr.ToPhysical`, `Reinterpret`, `ShrinkDtype` | `Cast(dt.Physical())` works for temporal types only | P2 |
 | built: **a List, an Array or a Struct column as a key,** in step 344: the group-key encoder writes a list's length and each element tagged, and a struct's fields tagged, so `Unique`, `UniqueKeep`, `GroupBy`, `Over`, `Join`, `PartitionBy`, `RleID`, `Rle`, `Mode` and `HashRows` key them as Polars does, and a group-by of them spills; a mode of them without `maintainOrder` comes as its values first appear, having no order (found at step 289) | — |
 
@@ -214,6 +215,7 @@ differs from their input's, or scalars outside a group-by.
 | built: **holistic aggregates that spill:** `CorrSpearman`'s pairs in step 339, and `Mode`'s counts in step 340, an aggregate of its own, beside `Median`'s, `Quantile`'s and `NUnique`'s; `Implode`, whose answer is every value, is refused past the limit (found at step 287) | — |
 | built: **a non-aggregate in an aggregation,** in step 331: `Agg(Col("x"))`, `Agg(Col("x").Mul(2))` and a window in `Agg`, each group's values as a list, as Polars answers them; and a window inside an aggregate, `CumSum(false).Max()`, a group at a time. A mix of an aggregate and a row's value too, since step 336, the row below (found at step 329) | — |
 | built: **an aggregate inside an aggregate's input,** in step 336: `Col("a").Sub(Col("a").Mean()).Abs().Sum()` in a `Select`, an `Agg` and a window, the inner aggregate computed over the group and broadcast beneath the outer; in `Agg` a mix, `a - a.Mean()`, a list a group, and `a.Sum().Mean()` the sum; `SortBy` and `Gather` take an aggregate in their keys (found at step 279) | — |
+| built: **`truncdiv`,** Polars 2.0's division toward zero, as `TruncDiv`, in step 489 | — |
 | **Integers as bits:** built: `& \| ^ ~` of integers in step 278, the `bitwise_and/or/xor` aggregates in step 276. Polars has no shifts | — |
 | **Aggregate odds and ends:** `agg_groups`. `has_nulls`, `is_empty`, `nan_min` and `nan_max` built in step 276 | P1 |
 | **Rolling:** weights; Polars' `random` rank; a rank by time over one partition past a memory limit, refused, as its walk keeps a window's values as floats. `map` and `rolling_rank_by` built at step 338, `RollingMap` and `RollingRankBy`. `skew`, `kurtosis`, `rank`, `rolling_cov` and `rolling_corr` built at step 284; an integer by, `"2i"` periods, at step 312; the generic `Expr.rolling(index_column)` at step 337, `Expr.Rolling`, in an aggregation not yet | P1 |
