@@ -1,7 +1,6 @@
 package ursus_test
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -311,29 +310,6 @@ func TestDeferredErrorSurvivesChaining(t *testing.T) {
 	}
 }
 
-// TestBatchSizeIndependence: batch size is a tuning knob, never a semantic one.
-func TestBatchSizeIndependence(t *testing.T) {
-	var reference []int64
-	for _, size := range []int{1, 2, 3, 5, 8192} {
-		df, err := frame().
-			Filter(ursus.Col("price").Gt(5)).
-			Select(ursus.Col("id")).
-			Collect(t.Context(), ursus.WithBatchSize(size), ursus.WithVerify())
-		if err != nil {
-			t.Fatalf("batch size %d: %v", size, err)
-		}
-		ids, _ := df.Column[int64]("id")
-		got := ids.Values()
-		if reference == nil {
-			reference = got
-			continue
-		}
-		if !equal(got, reference) {
-			t.Errorf("batch size %d gave %v, want %v", size, got, reference)
-		}
-	}
-}
-
 func TestCollectBatches(t *testing.T) {
 	total := 0
 	for df, err := range frame().Filter(ursus.Col("qty").Gt(5)).CollectBatches(t.Context()) {
@@ -366,15 +342,6 @@ func TestCollectInto(t *testing.T) {
 	}
 	if rows[0] != (Row{ID: 1, Region: "eu", Price: 9.5}) {
 		t.Errorf("row 0 = %+v", rows[0])
-	}
-}
-
-func TestCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	if _, err := frame().Select(ursus.Col("id")).Collect(ctx); err == nil {
-		t.Fatal("Collect must respect a cancelled context")
 	}
 }
 

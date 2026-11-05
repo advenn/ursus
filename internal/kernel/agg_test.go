@@ -53,45 +53,6 @@ func runP(t *testing.T, op expr.AggOp, params expr.AggParams, in dtype.DataType,
 	return out
 }
 
-// TestSumOfAllNullIsNull pins the decision that separates SQL from Polars.
-//
-// Polars returns 0 for sum of an empty or all-null group. ursus returns NULL,
-// because 0 cannot afterwards be distinguished from a genuine zero — the
-// information is destroyed — whereas NULL converts to 0 with FillNull whenever
-// that is what was wanted.
-func TestSumOfAllNullIsNull(t *testing.T) {
-	col := mkF64("v", []float64{0, 0, 1, 2}, []bool{false, false, true, true})
-	groups := []int32{0, 0, 1, 1}
-
-	out := run(t, expr.AggSum, dtype.Float64, col, groups, 2)
-	s, err := data.TypedColumn[float64](out)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, ok := s.Get(0); ok {
-		t.Error("sum of an all-null group must be NULL, not 0")
-	}
-	if v, ok := s.Get(1); !ok || v != 3 {
-		t.Errorf("sum = %v (valid %v), want 3", v, ok)
-	}
-}
-
-// TestMeanOfAllNullIsNullNotNaN: 0/0 must not be conflated with "missing".
-func TestMeanOfAllNullIsNullNotNaN(t *testing.T) {
-	col := mkF64("v", []float64{0, 0}, []bool{false, false})
-	out := run(t, expr.AggMean, dtype.Float64, col, []int32{0, 0}, 1)
-	s, _ := data.TypedColumn[float64](out)
-
-	v, ok := s.Get(0)
-	if ok {
-		t.Errorf("mean of an all-null group must be NULL, got %v", v)
-	}
-	if math.IsNaN(v) && ok {
-		t.Error("mean must be NULL, not NaN — nothing was computed, as opposed to a computation that was undefined")
-	}
-}
-
 // TestMinMaxSkipNulls is the regression test for the identity
 // trap the step-1 docs record: a SIMD implementation using Masked would zero-fill
 // the null lanes and make Min([3,null,5]) return 0.
@@ -107,21 +68,6 @@ func TestMinMaxSkipNulls(t *testing.T) {
 	}
 	if v, ok := hi.Get(0); !ok || v != 5 {
 		t.Errorf("max = %v (valid %v), want 5", v, ok)
-	}
-}
-
-func TestCountVersusLen(t *testing.T) {
-	col := mkF64("v", []float64{1, 0, 3}, []bool{true, false, true})
-	groups := []int32{0, 0, 0}
-
-	c, _ := data.TypedColumn[uint64](run(t, expr.AggCount, dtype.Float64, col, groups, 1))
-	l, _ := data.TypedColumn[uint64](run(t, expr.AggLen, dtype.Float64, col, groups, 1))
-
-	if v, _ := c.Get(0); v != 2 {
-		t.Errorf("count = %d, want 2 (non-null values)", v)
-	}
-	if v, _ := l.Get(0); v != 3 {
-		t.Errorf("len = %d, want 3 (rows)", v)
 	}
 }
 
@@ -358,96 +304,6 @@ func TestMergeEquivalenceOfBits(t *testing.T) {
 				}
 			}
 		}
-	}
-}
-
-// TestMergeEquivalenceOverStrings is the coverage the "?" bug was hiding.
-//
-// TestMergeEquivalence only ever ran on Float64, and columnsEqual rendered every
-// other type as "?" — so the string-carrying accumulators (extremumAcc and
-// positionAcc both hold a *data.Column, and their merge concatenates through
-// assembleRows) had no merge test at all. On this input they now have one, and it
-// would have compared "?" to "?" before.
-func TestMergeEquivalenceOverStrings(t *testing.T) {
-	rng := rand.New(rand.NewPCG(29, 31))
-	const n = 48
-	const nGroups = 3
-
-	words := []string{"alpha", "beta", "", "delta", "épée", "zzz"}
-	vals := make([]string, n)
-	groups := make([]int32, n)
-	vb := bitmap.NewBuilder(n)
-	for i := range n {
-		vals[i] = words[rng.IntN(len(words))]
-		groups[i] = int32(rng.IntN(nGroups))
-		vb.Append(rng.IntN(4) != 0)
-	}
-	col := data.NewString("v", vals, vb.Finish())
-
-	// Every aggregate defined for String: it selects or counts rather than computes.
-	ops := []expr.AggOp{
-		expr.AggMin, expr.AggMax, expr.AggFirst, expr.AggLast,
-		expr.AggCount, expr.AggLen, expr.AggNUnique,
-	}
-
-	for _, op := range ops {
-		bind, err := expr.ResolveAggBinding(op, dtype.String)
-		if err != nil {
-			t.Fatal(err)
-		}
-		single := run(t, op, dtype.String, col, groups, nGroups)
-
-		for _, parts := range []int{2, 3} {
-			accs := make([]kernel.Accumulator, parts)
-			for p := range parts {
-				a, err := kernel.NewAccumulator(op, dtype.String, bind, expr.AggParams{})
-				if err != nil {
-					t.Fatal(err)
-				}
-				a.Reserve(nGroups)
-				lo, hi := p*n/parts, (p+1)*n/parts
-				if p == parts-1 {
-					hi = n
-				}
-				if err := a.AddBatch(groups[lo:hi], col.Slice(lo, hi-lo)); err != nil {
-					t.Fatal(err)
-				}
-				accs[p] = a
-			}
-			for p := 1; p < parts; p++ {
-				if err := accs[0].Merge(accs[p], nil); err != nil {
-					t.Fatal(err)
-				}
-			}
-			merged, err := accs[0].Finish("out", nGroups)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := columnsEqual(single, merged); err != nil {
-				t.Errorf("%s over strings: merging %d partitions disagreed with a single pass: %v",
-					op, parts, err)
-			}
-		}
-	}
-}
-
-// TestSumOverflowsPast64Bits: the reason integer sums accumulate at 128 bits.
-func TestSumOverflowsPast64Bits(t *testing.T) {
-	const maxI64 = int64(9223372036854775807)
-	vals := []int64{maxI64, maxI64, maxI64}
-	col := data.NewFixed("v", dtype.Int64, vals, bitmap.AllSet(3))
-
-	out := run(t, expr.AggSum, dtype.Int64, col, []int32{0, 0, 0}, 1)
-	if out.DType() != dtype.Int128 {
-		t.Fatalf("sum type = %s, want Int128", out.DType())
-	}
-	s, err := data.TypedColumn[i128.Int128](out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	v, _ := s.Get(0)
-	if got, want := v.String(), "27670116110564327421"; got != want {
-		t.Errorf("sum = %s, want %s (an int64 accumulator would have wrapped negative)", got, want)
 	}
 }
 

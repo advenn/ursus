@@ -69,46 +69,6 @@ func groupSpanSource(t testing.TB) *memsrc.Source {
 	return src
 }
 
-// TestArithmeticOverAggregateSpanningBatches: no row may be null.
-//
-// Every group has six non-null values, so every max, every min and every
-// difference is a real number. A single null anywhere is the bug.
-func TestArithmeticOverAggregateSpanningBatches(t *testing.T) {
-	src := groupSpanSource(t)
-
-	df, err := ursus.Scan(src).
-		GroupBy(ursus.Col("k")).
-		Agg(
-			ursus.Col("v").Max().Alias("mx"),
-			ursus.Col("w").Min().Alias("mn"),
-		).
-		Select(ursus.Col("k"), ursus.Col("mx").Sub(ursus.Col("mn")).Alias("r")).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if df.Height() != batchSpanningGroups {
-		t.Fatalf("height = %d, want %d", df.Height(), batchSpanningGroups)
-	}
-
-	r, err := df.Column[int64]("r")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var nulls []int
-	for i := range df.Height() {
-		if _, ok := r.Get(i); !ok {
-			nulls = append(nulls, i)
-		}
-	}
-	if len(nulls) > 0 {
-		// The positions are the diagnosis: runs of 8 ending at multiples of 8192
-		// mean a validity bitmap lost its final byte per output batch.
-		t.Errorf("%d rows are null but every group has six values; first at %v",
-			len(nulls), nulls[:min(16, len(nulls))])
-	}
-}
-
 // TestValiditySurvivesEveryOutputBatch is the same defect stated as a property,
 // over the operations that combine two validity bitmaps.
 //

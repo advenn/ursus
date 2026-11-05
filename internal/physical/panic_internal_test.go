@@ -218,3 +218,82 @@ func TestParallelSinkWorkerPanicStopsConsuming(t *testing.T) {
 	}
 	settles(t, base)
 }
+
+// TestEachConcurrentlyReturnsAPanicAsAnError: a join's partitioned build and a
+// group-by's partitioned fold fan out through eachConcurrently (step 166). The fold's
+// routing goroutines had no guard of their own, so a panic in one ended the process;
+// here it is the call's error, and the other workers finish.
+func TestEachConcurrentlyReturnsAPanicAsAnError(t *testing.T) {
+	err := eachConcurrently(40, 4, func(i int) error {
+		if i == 17 {
+			var m map[string]int
+			m["x"] = 1 // a write to a nil map panics
+		}
+		return nil
+	})
+	var pe *uerr.PanicError
+	if !errors.As(err, &pe) {
+		t.Fatalf("a panic in a worker gave %v, not its PanicError", err)
+	}
+
+	five := errors.New("five")
+	err = eachConcurrently(10, 3, func(i int) error {
+		if i == 5 {
+			return five
+		}
+		return nil
+	})
+	if !errors.Is(err, five) {
+		t.Fatalf("a worker's error came back as %v", err)
+	}
+
+	var ran atomic.Int64
+	seen := make([]atomic.Bool, 100)
+	if err := eachConcurrently(len(seen), 7, func(i int) error {
+		if seen[i].Swap(true) {
+			t.Errorf("item %d ran twice", i)
+		}
+		ran.Add(1)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if ran.Load() != int64(len(seen)) {
+		t.Fatalf("%d of %d items ran", ran.Load(), len(seen))
+	}
+}
+
+// TestAPhysicalPiecesPanicReachesTheCaller (step 393): a panic in one of a sort's
+// pieces, a unique's ranges or its parts, each on a goroutine of its own, is raised
+// again in the caller as an internal error, where it ended the process.
+func TestAPhysicalPiecesPanicReachesTheCaller(t *testing.T) {
+	d := newUniqueKeys("unique", dtype.MustSchema(dtype.Of("k", dtype.Int64)), []int{0}, 4)
+	for name, run := range map[string]func(){
+		"eachPiece": func() {
+			eachPiece(1<<17, 4, func(lo, _ int) {
+				if lo > 0 {
+					panic("piece boom")
+				}
+			})
+		},
+		"eachRange": func() {
+			eachRange(100, 4, func(w, _, _ int) {
+				if w == 2 {
+					panic("piece boom")
+				}
+			})
+		},
+		"eachPart": func() {
+			d.eachPart(4, func(p int) {
+				if p == 1 {
+					panic("piece boom")
+				}
+			})
+		},
+	} {
+		err := uerr.GuardErr("unique", func() error { run(); return nil })
+		if !errors.Is(err, uerr.ErrInternal) || !strings.Contains(err.Error(), "piece boom") {
+			t.Fatalf("%s: want the piece's panic as an internal error, got %v", name, err)
+		}
+	}
+}

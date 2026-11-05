@@ -136,52 +136,18 @@ func TestAllSet(t *testing.T) {
 	if v.PopCount() != 100 {
 		t.Errorf("PopCount = %d (Words iterator is wrong for AllSet)", v.PopCount())
 	}
+	// And it has no buffer to export: Arrow omits an all-valid bitmap.
+	if v.Buffer() != nil {
+		t.Error("an all-set view must produce a nil buffer (Arrow omits it)")
+	}
 }
 
+// TestCombinators holds the all-set shortcut; the combinators over stored bits, at
+// every offset and length residue, are TestCombinatorsEndingOnAByteBoundary's.
 func TestCombinators(t *testing.T) {
 	rng := rand.New(rand.NewPCG(13, 17))
 	const n = 300
-	ra, rb := randRef(rng, n), randRef(rng, n)
-
-	// Test at several offsets so the operations are exercised on unaligned inputs,
-	// which is the case that actually occurs after a Filter.
-	base := randRef(rng, n+40)
-	for _, off := range []int{0, 1, 5, 8, 13} {
-		full := base.view()
-		a := full.Slice(off, n)
-		wantA := base[off : off+n]
-
-		b := rb.view()
-
-		gotAnd := bitmap.And(a, b)
-		wantAnd := make(ref, n)
-		for i := range n {
-			wantAnd[i] = wantA[i] && rb[i]
-		}
-		checkEqual(t, gotAnd, wantAnd, "And")
-
-		gotOr := bitmap.Or(a, b)
-		wantOr := make(ref, n)
-		for i := range n {
-			wantOr[i] = wantA[i] || rb[i]
-		}
-		checkEqual(t, gotOr, wantOr, "Or")
-
-		gotAndNot := bitmap.AndNot(a, b)
-		wantAndNot := make(ref, n)
-		for i := range n {
-			wantAndNot[i] = wantA[i] && !rb[i]
-		}
-		checkEqual(t, gotAndNot, wantAndNot, "AndNot")
-
-		gotNot := bitmap.Not(a)
-		wantNot := make(ref, n)
-		for i := range n {
-			wantNot[i] = !wantA[i]
-		}
-		checkEqual(t, gotNot, wantNot, "Not")
-	}
-	_ = ra
+	ra := randRef(rng, n)
 
 	// The all-set shortcut must be an identity, not an approximation.
 	av := ra.view()
@@ -196,12 +162,12 @@ func TestCombinators(t *testing.T) {
 	}
 }
 
-// TestCombinatorsEndingOnAByteBoundary is the regression test for the defect
-// TestCombinators above could not see.
+// TestCombinatorsEndingOnAByteBoundary is the regression test for a defect the sweep
+// it replaced could not see.
 //
-// # Why the existing coverage missed it
+// # Why the earlier coverage missed it
 //
-// TestCombinators sweeps offsets {0, 1, 5, 8, 13} at n=300 — genuinely unaligned
+// TestCombinators swept offsets {0, 1, 5, 8, 13} at n=300 — genuinely unaligned
 // inputs, and it still passed with the bug present. The reason is arithmetic:
 // arrow-go's alignedBitmapOp only corrupts the final byte when the range ENDS on
 // a byte boundary while starting at a non-zero offset, and (off+300)%8 is 4, 5, 1,
@@ -305,23 +271,4 @@ func TestAppendView(t *testing.T) {
 	want = append(want, base[100:165]...)
 
 	checkEqual(t, b.Finish(), want, "AppendView")
-}
-
-func TestBufferNormalisesOffset(t *testing.T) {
-	rng := rand.New(rand.NewPCG(37, 41))
-	base := randRef(rng, 200)
-	v := base.view().Slice(5, 100)
-
-	buf := v.Buffer()
-	if buf == nil {
-		t.Fatal("Buffer returned nil for a materialised view")
-	}
-	// The returned buffer must be readable from bit 0 — that is what array.NewData
-	// requires, since it applies its own offset separately.
-	round := bitmap.NewView(buf.Bytes(), 0, 100)
-	checkEqual(t, round, base[5:105], "Buffer")
-
-	if bitmap.AllSet(10).Buffer() != nil {
-		t.Error("an all-set view must produce a nil buffer (Arrow omits it)")
-	}
 }

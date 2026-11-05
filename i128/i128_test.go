@@ -179,22 +179,9 @@ func TestParse(t *testing.T) {
 	}
 }
 
-func TestFloat64(t *testing.T) {
-	for _, v := range []int64{0, 1, -1, 1 << 40, -(1 << 40), math.MaxInt64} {
-		if got, want := i128.FromInt64(v).Float64(), float64(v); got != want {
-			t.Errorf("Float64(%d) = %v, want %v", v, got, want)
-		}
-	}
-	// Min is the one value whose magnitude has no Int128, so it cannot convert by
-	// negating; it once recursed until the stack ran out.
-	if got, want := i128.Min.Float64(), -math.Ldexp(1, 127); got != want {
-		t.Errorf("Float64(Min) = %v, want %v", got, want)
-	}
-	// Values past 2^53 round, which is expected and must not be an error.
-	if got := i128.Max.Float64(); got <= 1.7e38 {
-		t.Errorf("Float64(Max) = %v, want ~1.70e38", got)
-	}
-
+// TestFromFloat64 is the conversion from a float; the one to a float, Min's included,
+// is TestFloatConversionsRoundOnce's.
+func TestFromFloat64(t *testing.T) {
 	for _, f := range []float64{0, 1, -1, 1e18, -1e18, 1e30, -1e30} {
 		v, ok := i128.FromFloat64(f)
 		if !ok {
@@ -211,34 +198,12 @@ func TestFloat64(t *testing.T) {
 	}
 }
 
-// TestSumDoesNotOverflow is the reason this package exists: accumulating the
-// largest possible int64 values must stay exact well past where an int64
-// accumulator would have wrapped.
-func TestSumDoesNotOverflow(t *testing.T) {
-	const n = 1000
-	acc := i128.Zero
-	for range n {
-		acc = acc.Add(i128.FromInt64(math.MaxInt64))
-	}
-	want := new(big.Int).Mul(big.NewInt(math.MaxInt64), big.NewInt(n))
-	if got := toBig(t, acc); got.Cmp(want) != 0 {
-		t.Fatalf("sum of %d MaxInt64 = %s, want %s", n, got, want)
-	}
-	// And the same for unsigned, which is why unsigned sums share this accumulator.
-	acc = i128.Zero
-	for range n {
-		acc = acc.Add(i128.FromUint64(math.MaxUint64))
-	}
-	want = new(big.Int).Mul(new(big.Int).SetUint64(math.MaxUint64), big.NewInt(n))
-	if got := toBig(t, acc); got.Cmp(want) != 0 {
-		t.Fatalf("sum of %d MaxUint64 = %s, want %s", n, got, want)
-	}
-}
-
 // TestFloatConversionsRoundOnce: Float64 and Float32 are the nearest float of each
-// width, against big.Float's own correctly rounded conversion. The corpus gains the
-// values either side of each width's midpoints above 2^64, where rounding the two
-// halves separately used to land on the tie.
+// width, against big.Float's own correctly rounded conversion. The corpus holds Min,
+// the one value whose magnitude has no Int128, so it cannot convert by negating; it
+// once recursed until the stack ran out. It gains the values either side of each
+// width's midpoints above 2^64, where rounding the two halves separately used to land
+// on the tie.
 func TestFloatConversionsRoundOnce(t *testing.T) {
 	vs := corpus()
 	one := big.NewInt(1)

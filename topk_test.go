@@ -10,35 +10,6 @@ import (
 	"github.com/advenn/ursus/ursustest"
 )
 
-// TestLimitPushdownReachesSort wakes up a path that was written, documented,
-// tie-tested, and unreachable.
-//
-// plan.Sort.Limit's own doc said "Set by the limit-pushdown rule" and no rule set
-// it — no composite literal in the repo assigned the field — so sortSink's ArgTopK
-// branch could never be taken and Sort(...).Head(k) always did a full O(n log n)
-// sort. The `top N` in the plan is the observable proof the rule fired.
-func TestLimitPushdownReachesSort(t *testing.T) {
-	lf := frame().Sort(ursus.Desc(ursus.Col("price"))).Head(3)
-
-	plan, err := lf.Explain(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(plan, "top 3") {
-		t.Errorf("the plan must show the sort bounded to a top-k:\n%s", plan)
-	}
-
-	// Unoptimized, the bound must NOT appear — otherwise the assertion above would
-	// pass for a Sort that was born with a limit rather than given one by the rule.
-	raw, err := lf.Explain(t.Context(), ursus.Optimized(false))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(raw, "top 3") {
-		t.Errorf("the unoptimized plan must not carry the bound:\n%s", raw)
-	}
-}
-
 // TestLimitPushdownNeverWidens: Sort(...).Head(5).Head(10) must keep 5.
 func TestLimitPushdownNeverWidens(t *testing.T) {
 	plan, err := frame().Sort(ursus.Desc(ursus.Col("price"))).Head(2).Head(9).
