@@ -1969,6 +1969,10 @@ changes is what Go asks for.</p>
 <td><code>lf.WriteParquet(ctx, w)</code>, <code>lf.WriteCSV(ctx, w)</code>, to any <code>io.Writer</code></td>
 </tr>
 <tr>
+<td><code>pl.scan_lines(p, name="l", include_file_paths="path")</code>, <code>pl.read_lines(b)</code></td>
+<td><code>ursus.ScanLines(p, ursus.WithLinesName("l"), ursus.WithLinesIncludeFilePaths("path"))</code>, <code>ursus.ScanLinesBytes(b, "b")</code> (new in 0.8)</td>
+</tr>
+<tr>
 <td><code>pl.read_ndjson(p)</code>, <code>pl.scan_ndjson([p, q], infer_schema_length=n, ignore_errors=True)</code></td>
 <td><code>ursus.ScanNDJSON(p)</code>, <code>ursus.ScanNDJSONFiles([]string{p, q}, ursus.WithInferSchemaLines(n), ursus.WithNDJSONIgnoreErrors(true))</code> (new in 0.6.7)</td>
 </tr>
