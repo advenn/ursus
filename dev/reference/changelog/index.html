@@ -3861,6 +3861,19 @@ that stops when its request is cancelled.</p>
   rounds a month by adding fourteen days, starts a <code>group_by_dynamic</code> day at 23:00
   where midnight does not exist, combines a zoned Datetime's UTC date, and counts
   business days back to an earlier date by numpy's rule.</li>
+<li><strong>The I/O wave converted</strong> (502): <code>io_byhand</code>, <code>csvread</code>, <code>csvskip</code>, <code>csvwrite</code>,
+  <code>ndjsonread</code>, <code>jsonread</code>, <code>jsonwrite</code>, <code>ipcfiles</code>, <code>hive</code>, <code>hiveparent</code>, <code>filepaths</code>,
+  <code>partitionwrite</code> and <code>database_test.go</code>, with <code>ipc_test.go</code>'s Polars-written
+  fixtures, 371 recorded cases in thirteen groups, 35 generated, 72 refusals, 1,106
+  lines gone. The format holds a written text now, so <code>write_csv</code>'s, <code>write_ndjson</code>'s
+  and <code>write_json</code>'s texts and a partitioned sink's file names are compared byte for
+  byte; every reader's and writer's options are the recording's, passed to ursus as
+  recorded; a refusal names its place beside its reason and is held to its kind; the
+  database group asks Polars through a DB-API connection for the Booleans, instants and
+  integers past Int64 SQLite cannot hold. Four findings recorded and not asserted, for
+  the maintainer: Polars 2.1 infers a column of only <code>NaN</code> as Float64, lands an offset
+  with seconds 30 s away on a CSV round trip, reads a non-object in a Struct column as
+  null under <code>ignore_errors</code>, and writes a bare newline for a frame of no columns.</li>
 <li><strong>The frames, joins and reshaping wave converted</strong> (501): <code>join_byhand</code>, <code>joinorder</code>,
   <code>asofoptions</code>, <code>concat</code>, <code>pivot</code>, <code>dummies</code>, <code>unstack</code>, <code>unpivot</code>, <code>upsample</code>,
   <code>update</code>, <code>matchschema</code>, <code>frameagg</code>, <code>framecolumns</code>, <code>framerows</code>, <code>frameconv</code>,
