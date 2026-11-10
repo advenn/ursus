@@ -212,7 +212,9 @@ and an Int128's ends cast to the same text.
 recorded again left the other recordings unchanged. `go test -run TestOracle .`: the
 175 cases pass or skip as named. `go test ./dtype/... ./internal/... ./selector/...`,
 `go test .` in full, `go vet ./...`, `go run ./internal/gen/api -check` (0 gone;
-nothing exported), `gofmt -l .` empty, all under `GOEXPERIMENT=simd GOAMD64=v3`.
+nothing exported), `gofmt -l .` empty, all under `GOEXPERIMENT=simd GOAMD64=v3`, on
+the branch and again on it merged with master's waves 500, 501 and 502, every group
+recorded again there to the same bytes.
 `TestEveryCitedTestExists` passes: no Go comment cites `TestNanCastsToTrue`, the one
 name gone. Teeth: the radix oracle's NaN made the least bites ("the radix sort and the
 Go oracle diverge at 0"); the select model taking a under a null mask bites; the
