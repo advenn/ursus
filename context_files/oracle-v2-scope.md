@@ -27,6 +27,26 @@ PASTED ones (219 of 231). The one recorded oracle today is
 output column each, written by `bench/scripts/oracle_expressions.py` under Polars
 1.44.1 and read by `oracle_test.go`.
 
+**After the waves** (step 504, 2026-11-10; [`step-504-as-built.md`](./step-504-as-built.md)
+§3). The inventory was a reading, which classed whole tests and counted the lines of a
+pasted case's inputs beside its answers; it cannot be run again. `internal/gen/testinventory`
+counts hand-typed lines in expected positions alone, so its column for the same tree
+(`cd48056`, master on 2026-11-05 before step 496) is the like-for-like "before":
+
+| | the inventory, 2026-11-05 | the classifier, same tree | after, step 504 |
+| --- | --- | --- | --- |
+| test functions | 1,626 | 1,629 | 1,573, 10 of them the classifier's own; `TestOracle` one of them |
+| lines of test code | | 107,554 in 541 files | 105,902 in 650 files, 6,324 of them in 107 oracle registries |
+| hand-typed expected-data lines | about 6,230 | 3,111 in 476 functions | 1,225 in 312 functions of 181 files, the baseline |
+| recorded groups, cases | 1, 46 | 1, 46 | 106, 2,598 (84 refusals) |
+| generated cases | 0 | 0 | 396 |
+| `testdata/oracle` | 24 KB | 24 KB | 9.3 MB |
+
+The classes (PASTED, HAND, GO-ORACLE, DIFFERENTIAL, STRUCTURAL) were not read again;
+the 1,225 lines left are pins of documented rules, ursus-only mechanisms, Go-API
+shapes, and tables in files no wave took, and CI's `build` job holds each function to
+its count.
+
 ## 2. The framework (step 496)
 
 **The format.** `testdata/oracle/<group>.json`, one file a group of cases:
@@ -121,10 +141,14 @@ where it checks structure.
 | 501 | frames, joins, reshaping | join_byhand, joinorder, asofoptions, concat, pivot, dummies, unstack, unpivot, upsample, update, matchschema, frameagg, framecolumns, framerows, frameconv, framenulls, fill, intindex, dynamicopts, having, grouphead, generate — done in step 501: 482 cases, 2,213 lines gone |
 | 502 | I/O as text | io_byhand, csvread, csvskip, csvwrite, ndjsonread, jsonread, jsonwrite, ipcfiles, hive, hiveparent, filepaths, partitionwrite, database (values only) — done in step 502: 371 cases, 1,106 lines gone |
 | 503 | the sub-packages' data values | dtype (supertype tables against Polars), expr/decimalagg, kernel's hand tables (castbool, caststring, intkeybits, radix, select, sumcarry, parse: Go oracles), source/hive TestInfer, selector — done in step 503: 175 cases, 171 hand-typed lines gone (the files 357 longer with their Go oracles) |
-| 504 | the count | the inventory's classifier run again, checked in as `internal/gen/testinventory`, with a test that fails on a new PASTED or HAND data table; the numbers in this scope updated |
+| 504 | the count | the inventory's classifier run again, checked in as `internal/gen/testinventory`, with a test that fails on a new PASTED or HAND data table; the numbers in this scope updated — done in step 504: the classifier and its baseline, 1,225 hand-typed lines in 312 functions against 3,111 on the same rules before step 496; `-check` in CI's `build` job; twenty-five findings in thirty-nine cases collected for the maintainer in feature-gaps.md §12 |
 
 ## 4. The rule from here
 
 A new test's expected data is a recorded case, a Go oracle or a differential. A pull
 request that adds a hand-typed table of data values is not merged. `make oracle`
-regenerates; `go test -run TestOracle .` checks.
+regenerates; `go test -run TestOracle .` checks. Since step 504 the rule is enforced
+by CI's `build` job: `go run ./internal/gen/testinventory -check` (`make
+testinventory`) fails on a test function holding more hand-typed expected values than
+`internal/gen/testinventory/baseline.txt` allows, or any in a function the baseline
+does not list; a count that falls is written down with `make testinventory-write`.
