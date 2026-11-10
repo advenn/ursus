@@ -6,30 +6,29 @@ import (
 	"github.com/advenn/ursus/dtype"
 )
 
-// TestEveryAggregateOverADecimalHasItsStatedType walks the whole AggOp space and
-// requires every op, over a Decimal, to resolve to the type step 69 committed to —
-// or to be refused for a reason stated here. A new op cannot arrive without saying
-// what it does to a Decimal.
+// TestEveryAggregateOverADecimalIsAccountedFor walks the whole AggOp space and
+// requires every op, over a Decimal, to be one of three things: refused for a reason
+// stated here, typed as it is over an Int64 (a count or an index ignores the input
+// type), or recorded — its type and its values are Polars 2.1.0's, in the decimalagg
+// group of testdata/oracle, spelled in oracle_decimalagg_test.go since step 503, which
+// took this test's table of types (step 69's rule: sum a Decimal(38, s), anything
+// else a Float64 read through the scaled float reader, or the input's own type). A
+// new op cannot arrive without saying what it does to a Decimal.
 //
-// The rule, measured against Polars, DuckDB and PyArrow:
-//
-//	select or count   the input type, or the count/index type as for any input
-//	sum               Decimal(38, s): exact, the precision all three return
-//	anything else     Float64, read through the scaled float reader
-//
-// The type is not the whole of it — a Float64 that is 100x too large is still a
-// Float64 — and TestFloatAggregatesOverADecimalReadTheScale in kernel checks the
-// values. This checks that nothing slips into a type nobody chose.
-func TestEveryAggregateOverADecimalHasItsStatedType(t *testing.T) {
+// Polars 2.1 refuses a bitwise aggregate of a Decimal, as this does (decimalagg/bitwise_and),
+// and answers any and all of one, true where a value is not zero, which this refuses
+// as step 69 chose (decimalagg/any_all, a finding of step 503, left to the maintainer).
+func TestEveryAggregateOverADecimalIsAccountedFor(t *testing.T) {
 	in := dtype.Decimal(10, 2)
 	sameAsForInt64 := "same as for Int64" // a count or an index ignores the input type
+	recorded := "recorded"                // the decimalagg group holds its type and values
 	want := map[string]string{
-		"sum":        "Decimal(38, 2)",
-		"mean":       "Float64",
-		"min":        "Decimal(10, 2)",
-		"max":        "Decimal(10, 2)",
-		"first":      "Decimal(10, 2)",
-		"last":       "Decimal(10, 2)",
+		"sum":        recorded,
+		"mean":       recorded,
+		"min":        recorded,
+		"max":        recorded,
+		"first":      recorded,
+		"last":       recorded,
 		"count":      sameAsForInt64,
 		"len":        sameAsForInt64,
 		"n_unique":   sameAsForInt64,
@@ -38,14 +37,14 @@ func TestEveryAggregateOverADecimalHasItsStatedType(t *testing.T) {
 		"arg_max":    sameAsForInt64,
 		"any":        "refused: Boolean only",
 		"all_true":   "refused: Boolean only",
-		"var":        "Float64",
-		"std":        "Float64",
-		"product":    "Float64",
-		"median":     "Float64",
-		"quantile":   "Float64",
-		"implode":    "List(Decimal(10, 2))",
-		"top_k":      "List(Decimal(10, 2))",
-		"bottom_k":   "List(Decimal(10, 2))",
+		"var":        recorded,
+		"std":        recorded,
+		"product":    recorded,
+		"median":     recorded,
+		"quantile":   recorded,
+		"implode":    recorded,
+		"top_k":      recorded,
+		"bottom_k":   recorded,
 		// Two inputs, as PairOf's struct, so a Decimal alone is not one; a pair of
 		// Decimals is Float64 for corr and cov, and min_by keeps its value's type.
 		"corr":   "refused: a pair of inputs",
@@ -53,32 +52,32 @@ func TestEveryAggregateOverADecimalHasItsStatedType(t *testing.T) {
 		"min_by": "refused: a pair of inputs",
 		"max_by": "refused: a pair of inputs",
 		// Step 276.
-		"skew":        "Float64",
-		"kurtosis":    "Float64",
+		"skew":        recorded,
+		"kurtosis":    recorded,
 		"bitwise_and": "refused: an integer or a Boolean",
 		"bitwise_or":  "refused: an integer or a Boolean",
 		"bitwise_xor": "refused: an integer or a Boolean",
-		"nan_min":     "Decimal(10, 2)",
+		"nan_min":     recorded,
 		// Step 277.
-		"entropy":       "Float64",
+		"entropy":       recorded,
 		"corr_spearman": "refused: a pair of inputs",
 		// Step 324: the bounds are the storage's, as Polars gives them.
-		"item":        "Decimal(10, 2)",
-		"lower_bound": "Int128",
-		"upper_bound": "Int128",
-		"is_sorted":   "Bool",
+		"item":        recorded,
+		"lower_bound": recorded,
+		"upper_bound": recorded,
+		"is_sorted":   recorded,
 		// Step 330: a pair, as min_by's.
 		"top_k_by":    "refused: a pair of inputs",
 		"bottom_k_by": "refused: a pair of inputs",
 		// Step 340: the values themselves, a list.
-		"mode": "List(Decimal(10, 2))",
+		"mode": recorded,
 	}
 
 	for i := range int(aggOpCount) {
 		op := AggOp(i)
 		w, ok := want[op.String()]
 		if !ok {
-			t.Errorf("%s: no stated type over a Decimal — add it to want", op)
+			t.Errorf("%s: not accounted for over a Decimal — add it to want, and to the decimalagg group", op)
 			continue
 		}
 		delete(want, op.String())
@@ -96,8 +95,6 @@ func TestEveryAggregateOverADecimalHasItsStatedType(t *testing.T) {
 			if err != nil || ref.Out != bind.Out {
 				t.Errorf("%s over %s is %s, over Int64 %s (%v)", op, in, bind.Out, ref.Out, err)
 			}
-		case bind.Out.String() != w:
-			t.Errorf("%s over %s = %s, want %s", op, in, bind.Out, w)
 		}
 	}
 	for name := range want {

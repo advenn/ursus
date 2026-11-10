@@ -120,7 +120,7 @@ where it checks structure.
 | 500 | aggregates and windows | aggwindow_byhand, aggstats, aggpair, agglists, argsort, hist, search, seq, modeagg, ewmmore, window172, windownest, rollingby, rollingoffset, rollingquantile, rollmap, exprroll, cumeval, topk_agg |
 | 501 | frames, joins, reshaping | join_byhand, joinorder, asofoptions, concat, pivot, dummies, unstack, unpivot, upsample, update, matchschema, frameagg, framecolumns, framerows, frameconv, framenulls, fill, intindex, dynamicopts, having, grouphead, generate |
 | 502 | I/O as text | io_byhand, csvread, csvskip, csvwrite, ndjsonread, jsonread, jsonwrite, ipcfiles, hive, hiveparent, filepaths, partitionwrite, database (values only) |
-| 503 | the sub-packages' data values | dtype (supertype tables against Polars), expr/decimalagg, kernel's hand tables (castbool, caststring, intkeybits, radix, select, sumcarry, parse: Go oracles), source/hive TestInfer, selector |
+| 503 | the sub-packages' data values | dtype (supertype tables against Polars), expr/decimalagg, kernel's hand tables (castbool, caststring, intkeybits, radix, select, sumcarry, parse: Go oracles), source/hive TestInfer, selector — done in step 503: 175 cases, 171 hand-typed lines gone (the files 357 longer with their Go oracles) |
 | 504 | the count | the inventory's classifier run again, checked in as `internal/gen/testinventory`, with a test that fails on a new PASTED or HAND data table; the numbers in this scope updated |
 
 ## 4. The rule from here
