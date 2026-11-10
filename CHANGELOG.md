@@ -230,6 +230,15 @@ that stops when its request is cancelled.
   near 1e9, gives a one-value group's raw entropy as 0.0, ends a rolling window at its
   offset plus the period where 1.44.1 ended it at the row, and keeps nulls in a
   `top_k` as its least values.
+- **No new hand-typed test values** (504): `internal/gen/testinventory` counts each
+  test function's hand-typed expected values, by go/parser, in a want's assignment or
+  case field, a literal compared with a value read from a frame, and a comparison
+  helper's or a want-taking helper's argument; `make testinventory`, which CI's build
+  job runs, fails a function above its count in `baseline.txt`, or a new one with any.
+  The suite holds 1,225 such lines in 312 functions, from 3,111 on the same rules
+  before step 496; 2,598 recorded cases in 106 groups replace the rest. The waves'
+  twenty-five findings, where Polars 2.1 answers otherwise and nothing says ursus
+  means to, are listed for the maintainer in `context_files/feature-gaps.md` §12.
 
 ### Fixed
 
