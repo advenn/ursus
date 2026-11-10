@@ -216,7 +216,8 @@ reference, and ursus currently passes **22/22 PDS-H (TPC-H) queries and 15/15 h2
 0.1, re-run at every step, and both suites at the published sizes in the report below; every answer ursus gave there
 validates. The unit tests' expected values are recorded, not typed: `make oracle` asks Polars 2.1.0 the suite's
 questions and writes its answers to [`testdata/oracle/`](./testdata/oracle/), and `go test -run TestOracle .`
-compares ursus against them, dtypes checked and floats to the bit.
+compares ursus against them, dtypes checked and floats to the bit, while `make testinventory`, which CI runs, fails a
+test that types more expected values by hand than its baseline allows.
 
 ---
 
