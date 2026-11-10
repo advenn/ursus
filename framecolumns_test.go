@@ -11,8 +11,9 @@ import (
 )
 
 // TestInsertColumn is C5 of v0.6.7-scope.md (step 302): Polars'
-// DataFrame.insert_column, of an expression or Go values. Every answer is Polars
-// 1.44.1's.
+// DataFrame.insert_column, of an expression or Go values. The frames are the
+// framecolumns group's, Polars 2.1.0's (oracle_framecolumns_test.go); here stay the
+// refusals and the eager form.
 func TestInsertColumn(t *testing.T) {
 	c := ursus.Col
 	lf := ursus.Frame(
@@ -20,27 +21,6 @@ func TestInsertColumn(t *testing.T) {
 		ursus.Values("b", []string{"x", "y", "z"}),
 		ursus.ValuesNullable("c", []float64{1.5, 0, 2.5}, []bool{true, false, true}),
 	)
-	for _, tc := range []struct {
-		name string
-		q    *ursus.LazyFrame
-		want string
-	}{
-		{"values at 1", lf.InsertColumn(1, ursus.Values("n", []int64{7, 8, 9})),
-			"a,n,b,c\n1,7,x,1.5\n2,8,y,\n3,9,z,2.5\n"},
-		{"an expression at 0", lf.InsertColumn(0, c("a").Mul(10).Alias("a10")),
-			"a10,a,b,c\n10,1,x,1.5\n20,2,y,\n30,3,z,2.5\n"},
-		{"at the width", lf.InsertColumn(3, c("a").Alias("z")), "a,b,c,z\n1,x,1.5,1\n2,y,,2\n3,z,2.5,3\n"},
-		{"at -1", lf.InsertColumn(-1, c("a").Alias("m1")), "a,b,m1,c\n1,x,1,1.5\n2,y,2,\n3,z,3,2.5\n"},
-		{"at -3", lf.InsertColumn(-3, c("a").Alias("m3")), "m3,a,b,c\n1,1,x,1.5\n2,2,y,\n3,3,z,2.5\n"},
-		// An aggregate and a literal are broadcast, as Polars' are.
-		{"an aggregate", lf.InsertColumn(1, c("a").Sum().Alias("s")), "a,s,b,c\n1,6,x,1.5\n2,6,y,\n3,6,z,2.5\n"},
-		{"a literal", lf.InsertColumn(1, ursus.Lit(int64(5)).Alias("five")),
-			"a,five,b,c\n1,5,x,1.5\n2,5,y,\n3,5,z,2.5\n"},
-	} {
-		if got := csvOf(t, tc.q); got != tc.want {
-			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)
-		}
-	}
 
 	t.Run("refused", func(t *testing.T) {
 		for _, tc := range []struct {

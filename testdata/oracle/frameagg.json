@@ -1,0 +1,6589 @@
+{
+ "cases": [
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        1,
+        2,
+        null,
+        4
+       ]
+      },
+      {
+       "dtype": "Int8",
+       "name": "i8",
+       "values": [
+        1,
+        2,
+        3,
+        4
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        1.5,
+        null,
+        2.5,
+        4.0
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true,
+        false,
+        true,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "p",
+        "q",
+        null,
+        "r"
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        20454,
+        20456,
+        null,
+        20461
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "t",
+       "values": [
+        1767247200000000,
+        null,
+        1767333600000000,
+        1767420000000000
+       ]
+      },
+      {
+       "dtype": "Duration(ns)",
+       "name": "u",
+       "values": [
+        3600000000000,
+        7200000000000,
+        null,
+        14400000000000
+       ]
+      },
+      {
+       "dtype": "List(String)",
+       "name": "l",
+       "values": [
+        [
+         "1"
+        ],
+        [
+         "2",
+         "3"
+        ],
+        [
+         "4"
+        ],
+        [
+         "5"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "sum",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       7
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "i8",
+      "values": [
+       10
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       8.0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "b",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "d",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "t",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Duration(ns)",
+      "name": "u",
+      "values": [
+       25200000000000
+      ]
+     },
+     {
+      "dtype": "List(String)",
+      "name": "l",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        1,
+        2,
+        null,
+        4
+       ]
+      },
+      {
+       "dtype": "Int8",
+       "name": "i8",
+       "values": [
+        1,
+        2,
+        3,
+        4
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        1.5,
+        null,
+        2.5,
+        4.0
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true,
+        false,
+        true,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "p",
+        "q",
+        null,
+        "r"
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        20454,
+        20456,
+        null,
+        20461
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "t",
+       "values": [
+        1767247200000000,
+        null,
+        1767333600000000,
+        1767420000000000
+       ]
+      },
+      {
+       "dtype": "Duration(ns)",
+       "name": "u",
+       "values": [
+        3600000000000,
+        7200000000000,
+        null,
+        14400000000000
+       ]
+      },
+      {
+       "dtype": "List(String)",
+       "name": "l",
+       "values": [
+        [
+         "1"
+        ],
+        [
+         "2",
+         "3"
+        ],
+        [
+         "4"
+        ],
+        [
+         "5"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "mean",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "i",
+      "values": [
+       2.3333333333333335
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "i8",
+      "values": [
+       2.5
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       2.6666666666666665
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "b",
+      "values": [
+       0.6666666666666666
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "d",
+      "values": [
+       1767484800000000
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "t",
+      "values": [
+       1767333600000000
+      ]
+     },
+     {
+      "dtype": "Duration(ns)",
+      "name": "u",
+      "values": [
+       8400000000000
+      ]
+     },
+     {
+      "dtype": "List(String)",
+      "name": "l",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        1,
+        2,
+        null,
+        4
+       ]
+      },
+      {
+       "dtype": "Int8",
+       "name": "i8",
+       "values": [
+        1,
+        2,
+        3,
+        4
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        1.5,
+        null,
+        2.5,
+        4.0
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true,
+        false,
+        true,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "p",
+        "q",
+        null,
+        "r"
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        20454,
+        20456,
+        null,
+        20461
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "t",
+       "values": [
+        1767247200000000,
+        null,
+        1767333600000000,
+        1767420000000000
+       ]
+      },
+      {
+       "dtype": "Duration(ns)",
+       "name": "u",
+       "values": [
+        3600000000000,
+        7200000000000,
+        null,
+        14400000000000
+       ]
+      },
+      {
+       "dtype": "List(String)",
+       "name": "l",
+       "values": [
+        [
+         "1"
+        ],
+        [
+         "2",
+         "3"
+        ],
+        [
+         "4"
+        ],
+        [
+         "5"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "median",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "i",
+      "values": [
+       2.0
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "i8",
+      "values": [
+       2.5
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       2.5
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "b",
+      "values": [
+       1.0
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "d",
+      "values": [
+       1767398400000000
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "t",
+      "values": [
+       1767333600000000
+      ]
+     },
+     {
+      "dtype": "Duration(ns)",
+      "name": "u",
+      "values": [
+       7200000000000
+      ]
+     },
+     {
+      "dtype": "List(String)",
+      "name": "l",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        1,
+        2,
+        null,
+        4
+       ]
+      },
+      {
+       "dtype": "Int8",
+       "name": "i8",
+       "values": [
+        1,
+        2,
+        3,
+        4
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        1.5,
+        null,
+        2.5,
+        4.0
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true,
+        false,
+        true,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "p",
+        "q",
+        null,
+        "r"
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        20454,
+        20456,
+        null,
+        20461
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "t",
+       "values": [
+        1767247200000000,
+        null,
+        1767333600000000,
+        1767420000000000
+       ]
+      },
+      {
+       "dtype": "Duration(ns)",
+       "name": "u",
+       "values": [
+        3600000000000,
+        7200000000000,
+        null,
+        14400000000000
+       ]
+      },
+      {
+       "dtype": "List(String)",
+       "name": "l",
+       "values": [
+        [
+         "1"
+        ],
+        [
+         "2",
+         "3"
+        ],
+        [
+         "4"
+        ],
+        [
+         "5"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "min",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Int8",
+      "name": "i8",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       1.5
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "b",
+      "values": [
+       false
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "p"
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "d",
+      "values": [
+       20454
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "t",
+      "values": [
+       1767247200000000
+      ]
+     },
+     {
+      "dtype": "Duration(ns)",
+      "name": "u",
+      "values": [
+       3600000000000
+      ]
+     },
+     {
+      "dtype": "List(String)",
+      "name": "l",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        1,
+        2,
+        null,
+        4
+       ]
+      },
+      {
+       "dtype": "Int8",
+       "name": "i8",
+       "values": [
+        1,
+        2,
+        3,
+        4
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        1.5,
+        null,
+        2.5,
+        4.0
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true,
+        false,
+        true,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "p",
+        "q",
+        null,
+        "r"
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        20454,
+        20456,
+        null,
+        20461
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "t",
+       "values": [
+        1767247200000000,
+        null,
+        1767333600000000,
+        1767420000000000
+       ]
+      },
+      {
+       "dtype": "Duration(ns)",
+       "name": "u",
+       "values": [
+        3600000000000,
+        7200000000000,
+        null,
+        14400000000000
+       ]
+      },
+      {
+       "dtype": "List(String)",
+       "name": "l",
+       "values": [
+        [
+         "1"
+        ],
+        [
+         "2",
+         "3"
+        ],
+        [
+         "4"
+        ],
+        [
+         "5"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "max",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       4
+      ]
+     },
+     {
+      "dtype": "Int8",
+      "name": "i8",
+      "values": [
+       4
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       4.0
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "b",
+      "values": [
+       true
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "r"
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "d",
+      "values": [
+       20461
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "t",
+      "values": [
+       1767420000000000
+      ]
+     },
+     {
+      "dtype": "Duration(ns)",
+      "name": "u",
+      "values": [
+       14400000000000
+      ]
+     },
+     {
+      "dtype": "List(String)",
+      "name": "l",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "rel:1e-15",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        1,
+        2,
+        null,
+        4
+       ]
+      },
+      {
+       "dtype": "Int8",
+       "name": "i8",
+       "values": [
+        1,
+        2,
+        3,
+        4
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        1.5,
+        null,
+        2.5,
+        4.0
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true,
+        false,
+        true,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "p",
+        "q",
+        null,
+        "r"
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        20454,
+        20456,
+        null,
+        20461
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "t",
+       "values": [
+        1767247200000000,
+        null,
+        1767333600000000,
+        1767420000000000
+       ]
+      },
+      {
+       "dtype": "Duration(ns)",
+       "name": "u",
+       "values": [
+        3600000000000,
+        7200000000000,
+        null,
+        14400000000000
+       ]
+      },
+      {
+       "dtype": "List(String)",
+       "name": "l",
+       "values": [
+        [
+         "1"
+        ],
+        [
+         "2",
+         "3"
+        ],
+        [
+         "4"
+        ],
+        [
+         "5"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "std",
+   "note": "a float var or std is Welford's one pass here, two passes in Polars: an ulp apart (\u00a79)",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "i",
+      "values": [
+       1.5275252316519465
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "i8",
+      "values": [
+       1.2909944487358056
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       1.2583057392117916
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "b",
+      "values": [
+       0.5773502691896258
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "d",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "t",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Duration(ns)",
+      "name": "u",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "List(String)",
+      "name": "l",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "rel:1e-15",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        1,
+        2,
+        null,
+        4
+       ]
+      },
+      {
+       "dtype": "Int8",
+       "name": "i8",
+       "values": [
+        1,
+        2,
+        3,
+        4
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        1.5,
+        null,
+        2.5,
+        4.0
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true,
+        false,
+        true,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "p",
+        "q",
+        null,
+        "r"
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        20454,
+        20456,
+        null,
+        20461
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "t",
+       "values": [
+        1767247200000000,
+        null,
+        1767333600000000,
+        1767420000000000
+       ]
+      },
+      {
+       "dtype": "Duration(ns)",
+       "name": "u",
+       "values": [
+        3600000000000,
+        7200000000000,
+        null,
+        14400000000000
+       ]
+      },
+      {
+       "dtype": "List(String)",
+       "name": "l",
+       "values": [
+        [
+         "1"
+        ],
+        [
+         "2",
+         "3"
+        ],
+        [
+         "4"
+        ],
+        [
+         "5"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "var",
+   "note": "a float var or std is Welford's one pass here, two passes in Polars: an ulp apart (\u00a79)",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "i",
+      "values": [
+       2.333333333333333
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "i8",
+      "values": [
+       1.6666666666666667
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       1.5833333333333333
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "b",
+      "values": [
+       0.33333333333333337
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "d",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "t",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Duration(ns)",
+      "name": "u",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "List(String)",
+      "name": "l",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "rel:1e-15",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        1,
+        2,
+        null,
+        4
+       ]
+      }
+     ]
+    }
+   },
+   "name": "var_ddof0",
+   "note": "a float var or std is Welford's one pass here, two passes in Polars: an ulp apart (\u00a79)",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "i",
+      "values": [
+       1.5555555555555554
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        1,
+        2,
+        null,
+        4
+       ]
+      },
+      {
+       "dtype": "Int8",
+       "name": "i8",
+       "values": [
+        1,
+        2,
+        3,
+        4
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        1.5,
+        null,
+        2.5,
+        4.0
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true,
+        false,
+        true,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "p",
+        "q",
+        null,
+        "r"
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        20454,
+        20456,
+        null,
+        20461
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "t",
+       "values": [
+        1767247200000000,
+        null,
+        1767333600000000,
+        1767420000000000
+       ]
+      },
+      {
+       "dtype": "Duration(ns)",
+       "name": "u",
+       "values": [
+        3600000000000,
+        7200000000000,
+        null,
+        14400000000000
+       ]
+      },
+      {
+       "dtype": "List(String)",
+       "name": "l",
+       "values": [
+        [
+         "1"
+        ],
+        [
+         "2",
+         "3"
+        ],
+        [
+         "4"
+        ],
+        [
+         "5"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "product",
+   "note": "a column a product does not take is of the Null type",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       8
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "i8",
+      "values": [
+       24
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       15.0
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "b",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "s",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "d",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "t",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "u",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "l",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        1,
+        2,
+        null,
+        4
+       ]
+      },
+      {
+       "dtype": "Int8",
+       "name": "i8",
+       "values": [
+        1,
+        2,
+        3,
+        4
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        1.5,
+        null,
+        2.5,
+        4.0
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true,
+        false,
+        true,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "p",
+        "q",
+        null,
+        "r"
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        20454,
+        20456,
+        null,
+        20461
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "t",
+       "values": [
+        1767247200000000,
+        null,
+        1767333600000000,
+        1767420000000000
+       ]
+      },
+      {
+       "dtype": "Duration(ns)",
+       "name": "u",
+       "values": [
+        3600000000000,
+        7200000000000,
+        null,
+        14400000000000
+       ]
+      },
+      {
+       "dtype": "List(String)",
+       "name": "l",
+       "values": [
+        [
+         "1"
+        ],
+        [
+         "2",
+         "3"
+        ],
+        [
+         "4"
+        ],
+        [
+         "5"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "quantile_nearest",
+   "note": "a Boolean's quantile is null, a Date's a Datetime",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "i",
+      "values": [
+       2.0
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "i8",
+      "values": [
+       3.0
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       2.5
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "b",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "d",
+      "values": [
+       1767398400000000
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "t",
+      "values": [
+       1767333600000000
+      ]
+     },
+     {
+      "dtype": "Duration(ns)",
+      "name": "u",
+      "values": [
+       7200000000000
+      ]
+     },
+     {
+      "dtype": "List(String)",
+      "name": "l",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        1,
+        2,
+        null,
+        4
+       ]
+      },
+      {
+       "dtype": "Int8",
+       "name": "i8",
+       "values": [
+        1,
+        2,
+        3,
+        4
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        1.5,
+        null,
+        2.5,
+        4.0
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true,
+        false,
+        true,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "p",
+        "q",
+        null,
+        "r"
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        20454,
+        20456,
+        null,
+        20461
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "t",
+       "values": [
+        1767247200000000,
+        null,
+        1767333600000000,
+        1767420000000000
+       ]
+      },
+      {
+       "dtype": "Duration(ns)",
+       "name": "u",
+       "values": [
+        3600000000000,
+        7200000000000,
+        null,
+        14400000000000
+       ]
+      },
+      {
+       "dtype": "List(String)",
+       "name": "l",
+       "values": [
+        [
+         "1"
+        ],
+        [
+         "2",
+         "3"
+        ],
+        [
+         "4"
+        ],
+        [
+         "5"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "null_count",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "i",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "i8",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "f",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "b",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "s",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "d",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "t",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "u",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "l",
+      "values": [
+       0
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": []
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": []
+      }
+     ]
+    }
+   },
+   "name": "empty_sum",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": []
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": []
+      }
+     ]
+    }
+   },
+   "name": "empty_mean",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "i",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": []
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": []
+      }
+     ]
+    }
+   },
+   "name": "empty_min",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": []
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": []
+      }
+     ]
+    }
+   },
+   "name": "empty_null_count",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "s",
+      "values": [
+       0
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": []
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": []
+      }
+     ]
+    }
+   },
+   "name": "empty_product",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "s",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "rel:1e-12",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        -7015,
+        1633,
+        -455,
+        -2519,
+        null,
+        -3356,
+        null,
+        -2507,
+        3132,
+        null,
+        2381,
+        4579,
+        4294,
+        null,
+        -5371,
+        -7569,
+        -3277,
+        1238,
+        9940,
+        6334,
+        -8922,
+        7112,
+        -9091,
+        6625,
+        -6240,
+        -1711,
+        -4529,
+        -3889,
+        -6072,
+        4545,
+        263,
+        -9233,
+        -2250,
+        -5059,
+        1,
+        8991,
+        -8205,
+        7745,
+        -517,
+        -1853,
+        -8296,
+        -4820,
+        -4184,
+        -1765,
+        -8615,
+        -8788,
+        635,
+        5890,
+        -1059,
+        2187,
+        -2432,
+        939,
+        -5550,
+        -7655,
+        -822,
+        8596,
+        -9002,
+        2476,
+        4734,
+        671,
+        7917,
+        -9239,
+        -7689,
+        7255,
+        -1524,
+        7211,
+        -8513,
+        4073,
+        -2656,
+        8269,
+        -6270,
+        -3235,
+        8184,
+        41,
+        -4403,
+        1174,
+        5959,
+        7864,
+        -6642,
+        -4346,
+        6271,
+        -513,
+        1610,
+        -115,
+        -6834,
+        4057,
+        -687,
+        null,
+        -9079,
+        -9585,
+        225,
+        7648,
+        514,
+        null,
+        -7331,
+        -1443,
+        -3007,
+        -1938,
+        6816,
+        7200,
+        5441,
+        -3175,
+        -2785,
+        -416,
+        -4963,
+        431,
+        -4140,
+        -7214,
+        -8698,
+        6359,
+        4982,
+        -6308,
+        -2920,
+        -6459,
+        -6366,
+        null,
+        -8918,
+        9741,
+        null,
+        2651,
+        null,
+        -9917,
+        4180,
+        -9441,
+        -696,
+        1075,
+        -1072,
+        -5895,
+        -8990,
+        -8384,
+        4341,
+        1256,
+        9963,
+        -2693,
+        -9451,
+        -6529,
+        -4394,
+        null,
+        -8236,
+        6084,
+        -6075,
+        null,
+        310,
+        8131,
+        2676,
+        -4383,
+        -4465,
+        5768,
+        -1,
+        null,
+        8772,
+        -8204,
+        -8209,
+        null,
+        -9995,
+        8186,
+        -3661,
+        6673,
+        3795,
+        3540,
+        9558,
+        -2791,
+        5756,
+        -720,
+        -4960,
+        9927,
+        -6413,
+        -6508,
+        -1386,
+        -7383,
+        8410,
+        -1473,
+        1045,
+        -4032,
+        0,
+        -735,
+        -7948,
+        -3476,
+        -8618,
+        2194,
+        -8589,
+        6680,
+        -6380,
+        9254,
+        1574,
+        7616,
+        null,
+        3021,
+        -5670,
+        -2651,
+        -5713,
+        -8872,
+        -9183,
+        -9869,
+        -12,
+        -8609,
+        3099,
+        4415,
+        -5795,
+        329
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        -109.28855815383474,
+        -520.9477668327671,
+        null,
+        997.0,
+        -830.679423657492,
+        -834.9712361977164,
+        -880.8163294403271,
+        null,
+        -854.5,
+        69.60090747904542,
+        157.59364706754036,
+        -218.12954364260383,
+        244.22298497612746,
+        -619.2254841267826,
+        -328.47597467320315,
+        -537.0165298028348,
+        -951.5,
+        -303.47319187664107,
+        734.4359686784887,
+        -385.37067444268905,
+        null,
+        -774.5,
+        930.1549962240299,
+        null,
+        592.0254411333278,
+        542.0970946634045,
+        862.0973467577742,
+        -494.6503042275137,
+        null,
+        251.399312247813,
+        -673.500816519113,
+        -758.9823007206492,
+        310.73913373310756,
+        325.3627299583893,
+        484.0,
+        366.89037499422443,
+        -739.431594733926,
+        627.0,
+        68.50212112065378,
+        -465.66271517631105,
+        -124.35592064214313,
+        -316.5,
+        465.0,
+        -649.4864118395907,
+        -805.6610735536726,
+        906.5,
+        758.057577744818,
+        -414.1504697472866,
+        -329.8151616951344,
+        229.83526440102196,
+        -54.01861847232033,
+        -867.3630328032087,
+        -436.77321906864415,
+        -606.2602508246091,
+        595.7015206466031,
+        null,
+        136.23168619585,
+        null,
+        -319.2902402328068,
+        147.79691101668618,
+        null,
+        903.8467875571125,
+        680.0179603830111,
+        -31.117002933506114,
+        898.3126722199884,
+        -843.4590127167282,
+        -127.62463136078145,
+        385.7598114570353,
+        -954.3045672713537,
+        291.21342323037766,
+        -10.936533053459698,
+        848.9999889919641,
+        -551.190519841583,
+        971.2559796380833,
+        291.1498363602252,
+        585.1906964403261,
+        -876.293906501694,
+        -944.0,
+        null,
+        277.5731035013521,
+        9.43406298669845,
+        -145.89959706551235,
+        -478.1839407998332,
+        -458.7643729774768,
+        -421.3081090259325,
+        972.6715057854128,
+        null,
+        502.92375270804223,
+        589.3638870737177,
+        null,
+        870.9530568257651,
+        610.3344715135768,
+        -731.0839475843369,
+        -997.8049260473463,
+        267.30690667414865,
+        -947.7066636524147,
+        -189.0,
+        null,
+        -810.7970299724632,
+        -673.43238074791,
+        -238.20619854136953,
+        -651.0535693177386,
+        -527.1712983421244,
+        null,
+        4.766202503413183,
+        337.29551534093025,
+        -957.4009398918466,
+        629.5,
+        19.60582445259672,
+        -678.0432551112035,
+        -507.93259553854233,
+        317.18219141069335,
+        null,
+        -149.0,
+        -35.69260616368547,
+        -967.1326816434743,
+        680.1975250752887,
+        null,
+        -761.6185207482886,
+        -479.56714199534406,
+        958.7116480216275,
+        675.2894884781672,
+        -67.35846096846478,
+        981.0,
+        null,
+        127.42096741965656,
+        137.42276379474447,
+        182.0879280267045,
+        557.2033468917436,
+        862.8782401102176,
+        311.9420172166567,
+        -193.79754163118696,
+        359.1643650169126,
+        null,
+        845.8229813788746,
+        227.1900021180113,
+        340.24710586744345,
+        -490.42677340293704,
+        986.7093457445505,
+        -850.1583775433999,
+        -408.78877437583094,
+        761.171830857774,
+        631.5,
+        -781.4015438936312,
+        -924.7013052632758,
+        null,
+        null,
+        -899.5,
+        420.34737901805306,
+        202.00949190873325,
+        561.5,
+        412.0302105048031,
+        207.2056192385885,
+        -270.52030571185924,
+        -631.4169550846523,
+        -103.22766893612732,
+        -163.04421136869723,
+        583.5,
+        446.6813031955264,
+        143.96810100336916,
+        265.1729107806957,
+        -94.39763427264757,
+        -796.5,
+        -362.695850836898,
+        -222.76514441069946,
+        857.7260915471807,
+        -734.4168927546593,
+        597.0,
+        -807.3062561762215,
+        775.1133298974248,
+        990.5779149810814,
+        null,
+        568.2466368109722,
+        -377.7845646569207,
+        89.46883698003057,
+        823.1488655598264,
+        null,
+        -614.0,
+        -746.562990265912,
+        -325.0,
+        -606.4504035391221,
+        -517.5,
+        null,
+        436.39526267373117,
+        -98.71371952582547,
+        null,
+        356.84152169023605,
+        51.10743563825008,
+        -362.5,
+        -260.81548329947134,
+        -678.1591096225843,
+        917.4774726965604,
+        164.43039736764604,
+        326.18571588612417,
+        -329.38161274434583,
+        null,
+        253.66172840901072,
+        -926.1237521892083,
+        648.7018310930662,
+        -495.371751232633
+       ]
+      },
+      {
+       "dtype": "Int32",
+       "name": "i32",
+       "values": [
+        -66,
+        null,
+        -65,
+        -92,
+        92,
+        20,
+        51,
+        -10,
+        -66,
+        -91,
+        34,
+        -90,
+        -13,
+        -6,
+        -21,
+        -48,
+        -77,
+        79,
+        19,
+        1,
+        28,
+        -5,
+        -17,
+        37,
+        55,
+        -3,
+        12,
+        -59,
+        -7,
+        -68,
+        70,
+        null,
+        -68,
+        null,
+        null,
+        1,
+        -16,
+        -58,
+        36,
+        65,
+        -47,
+        20,
+        34,
+        31,
+        -1,
+        -44,
+        -33,
+        77,
+        45,
+        69,
+        75,
+        39,
+        -54,
+        -42,
+        -26,
+        71,
+        47,
+        -17,
+        -37,
+        -22,
+        -35,
+        5,
+        -79,
+        -11,
+        83,
+        -75,
+        -40,
+        45,
+        20,
+        null,
+        -6,
+        99,
+        -2,
+        -82,
+        null,
+        55,
+        81,
+        34,
+        -84,
+        46,
+        null,
+        -41,
+        55,
+        -14,
+        -34,
+        97,
+        2,
+        -64,
+        -26,
+        90,
+        26,
+        -69,
+        -20,
+        -97,
+        -95,
+        20,
+        52,
+        -39,
+        70,
+        54,
+        87,
+        null,
+        25,
+        16,
+        9,
+        -76,
+        84,
+        -99,
+        -99,
+        -18,
+        14,
+        49,
+        82,
+        -74,
+        -21,
+        41,
+        85,
+        75,
+        81,
+        -36,
+        25,
+        -2,
+        null,
+        -33,
+        30,
+        -23,
+        -70,
+        95,
+        -27,
+        10,
+        59,
+        null,
+        29,
+        15,
+        -38,
+        29,
+        -32,
+        12,
+        -69,
+        null,
+        72,
+        7,
+        -2,
+        0,
+        -84,
+        54,
+        35,
+        69,
+        -20,
+        null,
+        26,
+        -50,
+        48,
+        -19,
+        -52,
+        -26,
+        null,
+        26,
+        -55,
+        -10,
+        -25,
+        null,
+        12,
+        -21,
+        82,
+        9,
+        -57,
+        80,
+        23,
+        6,
+        -46,
+        -1,
+        48,
+        12,
+        -62,
+        -19,
+        null,
+        -11,
+        4,
+        -87,
+        -60,
+        98,
+        null,
+        -3,
+        -76,
+        62,
+        -98,
+        32,
+        -59,
+        16,
+        -93,
+        38,
+        -52,
+        64,
+        -41,
+        57,
+        1,
+        -97,
+        90,
+        86
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_sum",
+   "note": "the Int128 sums here cast to Int64 on the Go side; the float sum is exact here, Polars' a few ulps off (\u00a79)",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       -204054
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       -4699.949606664322
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "i32",
+      "values": [
+       26
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        -7015,
+        1633,
+        -455,
+        -2519,
+        null,
+        -3356,
+        null,
+        -2507,
+        3132,
+        null,
+        2381,
+        4579,
+        4294,
+        null,
+        -5371,
+        -7569,
+        -3277,
+        1238,
+        9940,
+        6334,
+        -8922,
+        7112,
+        -9091,
+        6625,
+        -6240,
+        -1711,
+        -4529,
+        -3889,
+        -6072,
+        4545,
+        263,
+        -9233,
+        -2250,
+        -5059,
+        1,
+        8991,
+        -8205,
+        7745,
+        -517,
+        -1853,
+        -8296,
+        -4820,
+        -4184,
+        -1765,
+        -8615,
+        -8788,
+        635,
+        5890,
+        -1059,
+        2187,
+        -2432,
+        939,
+        -5550,
+        -7655,
+        -822,
+        8596,
+        -9002,
+        2476,
+        4734,
+        671,
+        7917,
+        -9239,
+        -7689,
+        7255,
+        -1524,
+        7211,
+        -8513,
+        4073,
+        -2656,
+        8269,
+        -6270,
+        -3235,
+        8184,
+        41,
+        -4403,
+        1174,
+        5959,
+        7864,
+        -6642,
+        -4346,
+        6271,
+        -513,
+        1610,
+        -115,
+        -6834,
+        4057,
+        -687,
+        null,
+        -9079,
+        -9585,
+        225,
+        7648,
+        514,
+        null,
+        -7331,
+        -1443,
+        -3007,
+        -1938,
+        6816,
+        7200,
+        5441,
+        -3175,
+        -2785,
+        -416,
+        -4963,
+        431,
+        -4140,
+        -7214,
+        -8698,
+        6359,
+        4982,
+        -6308,
+        -2920,
+        -6459,
+        -6366,
+        null,
+        -8918,
+        9741,
+        null,
+        2651,
+        null,
+        -9917,
+        4180,
+        -9441,
+        -696,
+        1075,
+        -1072,
+        -5895,
+        -8990,
+        -8384,
+        4341,
+        1256,
+        9963,
+        -2693,
+        -9451,
+        -6529,
+        -4394,
+        null,
+        -8236,
+        6084,
+        -6075,
+        null,
+        310,
+        8131,
+        2676,
+        -4383,
+        -4465,
+        5768,
+        -1,
+        null,
+        8772,
+        -8204,
+        -8209,
+        null,
+        -9995,
+        8186,
+        -3661,
+        6673,
+        3795,
+        3540,
+        9558,
+        -2791,
+        5756,
+        -720,
+        -4960,
+        9927,
+        -6413,
+        -6508,
+        -1386,
+        -7383,
+        8410,
+        -1473,
+        1045,
+        -4032,
+        0,
+        -735,
+        -7948,
+        -3476,
+        -8618,
+        2194,
+        -8589,
+        6680,
+        -6380,
+        9254,
+        1574,
+        7616,
+        null,
+        3021,
+        -5670,
+        -2651,
+        -5713,
+        -8872,
+        -9183,
+        -9869,
+        -12,
+        -8609,
+        3099,
+        4415,
+        -5795,
+        329
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        -109.28855815383474,
+        -520.9477668327671,
+        null,
+        997.0,
+        -830.679423657492,
+        -834.9712361977164,
+        -880.8163294403271,
+        null,
+        -854.5,
+        69.60090747904542,
+        157.59364706754036,
+        -218.12954364260383,
+        244.22298497612746,
+        -619.2254841267826,
+        -328.47597467320315,
+        -537.0165298028348,
+        -951.5,
+        -303.47319187664107,
+        734.4359686784887,
+        -385.37067444268905,
+        null,
+        -774.5,
+        930.1549962240299,
+        null,
+        592.0254411333278,
+        542.0970946634045,
+        862.0973467577742,
+        -494.6503042275137,
+        null,
+        251.399312247813,
+        -673.500816519113,
+        -758.9823007206492,
+        310.73913373310756,
+        325.3627299583893,
+        484.0,
+        366.89037499422443,
+        -739.431594733926,
+        627.0,
+        68.50212112065378,
+        -465.66271517631105,
+        -124.35592064214313,
+        -316.5,
+        465.0,
+        -649.4864118395907,
+        -805.6610735536726,
+        906.5,
+        758.057577744818,
+        -414.1504697472866,
+        -329.8151616951344,
+        229.83526440102196,
+        -54.01861847232033,
+        -867.3630328032087,
+        -436.77321906864415,
+        -606.2602508246091,
+        595.7015206466031,
+        null,
+        136.23168619585,
+        null,
+        -319.2902402328068,
+        147.79691101668618,
+        null,
+        903.8467875571125,
+        680.0179603830111,
+        -31.117002933506114,
+        898.3126722199884,
+        -843.4590127167282,
+        -127.62463136078145,
+        385.7598114570353,
+        -954.3045672713537,
+        291.21342323037766,
+        -10.936533053459698,
+        848.9999889919641,
+        -551.190519841583,
+        971.2559796380833,
+        291.1498363602252,
+        585.1906964403261,
+        -876.293906501694,
+        -944.0,
+        null,
+        277.5731035013521,
+        9.43406298669845,
+        -145.89959706551235,
+        -478.1839407998332,
+        -458.7643729774768,
+        -421.3081090259325,
+        972.6715057854128,
+        null,
+        502.92375270804223,
+        589.3638870737177,
+        null,
+        870.9530568257651,
+        610.3344715135768,
+        -731.0839475843369,
+        -997.8049260473463,
+        267.30690667414865,
+        -947.7066636524147,
+        -189.0,
+        null,
+        -810.7970299724632,
+        -673.43238074791,
+        -238.20619854136953,
+        -651.0535693177386,
+        -527.1712983421244,
+        null,
+        4.766202503413183,
+        337.29551534093025,
+        -957.4009398918466,
+        629.5,
+        19.60582445259672,
+        -678.0432551112035,
+        -507.93259553854233,
+        317.18219141069335,
+        null,
+        -149.0,
+        -35.69260616368547,
+        -967.1326816434743,
+        680.1975250752887,
+        null,
+        -761.6185207482886,
+        -479.56714199534406,
+        958.7116480216275,
+        675.2894884781672,
+        -67.35846096846478,
+        981.0,
+        null,
+        127.42096741965656,
+        137.42276379474447,
+        182.0879280267045,
+        557.2033468917436,
+        862.8782401102176,
+        311.9420172166567,
+        -193.79754163118696,
+        359.1643650169126,
+        null,
+        845.8229813788746,
+        227.1900021180113,
+        340.24710586744345,
+        -490.42677340293704,
+        986.7093457445505,
+        -850.1583775433999,
+        -408.78877437583094,
+        761.171830857774,
+        631.5,
+        -781.4015438936312,
+        -924.7013052632758,
+        null,
+        null,
+        -899.5,
+        420.34737901805306,
+        202.00949190873325,
+        561.5,
+        412.0302105048031,
+        207.2056192385885,
+        -270.52030571185924,
+        -631.4169550846523,
+        -103.22766893612732,
+        -163.04421136869723,
+        583.5,
+        446.6813031955264,
+        143.96810100336916,
+        265.1729107806957,
+        -94.39763427264757,
+        -796.5,
+        -362.695850836898,
+        -222.76514441069946,
+        857.7260915471807,
+        -734.4168927546593,
+        597.0,
+        -807.3062561762215,
+        775.1133298974248,
+        990.5779149810814,
+        null,
+        568.2466368109722,
+        -377.7845646569207,
+        89.46883698003057,
+        823.1488655598264,
+        null,
+        -614.0,
+        -746.562990265912,
+        -325.0,
+        -606.4504035391221,
+        -517.5,
+        null,
+        436.39526267373117,
+        -98.71371952582547,
+        null,
+        356.84152169023605,
+        51.10743563825008,
+        -362.5,
+        -260.81548329947134,
+        -678.1591096225843,
+        917.4774726965604,
+        164.43039736764604,
+        326.18571588612417,
+        -329.38161274434583,
+        null,
+        253.66172840901072,
+        -926.1237521892083,
+        648.7018310930662,
+        -495.371751232633
+       ]
+      },
+      {
+       "dtype": "Int32",
+       "name": "i32",
+       "values": [
+        -66,
+        null,
+        -65,
+        -92,
+        92,
+        20,
+        51,
+        -10,
+        -66,
+        -91,
+        34,
+        -90,
+        -13,
+        -6,
+        -21,
+        -48,
+        -77,
+        79,
+        19,
+        1,
+        28,
+        -5,
+        -17,
+        37,
+        55,
+        -3,
+        12,
+        -59,
+        -7,
+        -68,
+        70,
+        null,
+        -68,
+        null,
+        null,
+        1,
+        -16,
+        -58,
+        36,
+        65,
+        -47,
+        20,
+        34,
+        31,
+        -1,
+        -44,
+        -33,
+        77,
+        45,
+        69,
+        75,
+        39,
+        -54,
+        -42,
+        -26,
+        71,
+        47,
+        -17,
+        -37,
+        -22,
+        -35,
+        5,
+        -79,
+        -11,
+        83,
+        -75,
+        -40,
+        45,
+        20,
+        null,
+        -6,
+        99,
+        -2,
+        -82,
+        null,
+        55,
+        81,
+        34,
+        -84,
+        46,
+        null,
+        -41,
+        55,
+        -14,
+        -34,
+        97,
+        2,
+        -64,
+        -26,
+        90,
+        26,
+        -69,
+        -20,
+        -97,
+        -95,
+        20,
+        52,
+        -39,
+        70,
+        54,
+        87,
+        null,
+        25,
+        16,
+        9,
+        -76,
+        84,
+        -99,
+        -99,
+        -18,
+        14,
+        49,
+        82,
+        -74,
+        -21,
+        41,
+        85,
+        75,
+        81,
+        -36,
+        25,
+        -2,
+        null,
+        -33,
+        30,
+        -23,
+        -70,
+        95,
+        -27,
+        10,
+        59,
+        null,
+        29,
+        15,
+        -38,
+        29,
+        -32,
+        12,
+        -69,
+        null,
+        72,
+        7,
+        -2,
+        0,
+        -84,
+        54,
+        35,
+        69,
+        -20,
+        null,
+        26,
+        -50,
+        48,
+        -19,
+        -52,
+        -26,
+        null,
+        26,
+        -55,
+        -10,
+        -25,
+        null,
+        12,
+        -21,
+        82,
+        9,
+        -57,
+        80,
+        23,
+        6,
+        -46,
+        -1,
+        48,
+        12,
+        -62,
+        -19,
+        null,
+        -11,
+        4,
+        -87,
+        -60,
+        98,
+        null,
+        -3,
+        -76,
+        62,
+        -98,
+        32,
+        -59,
+        16,
+        -93,
+        38,
+        -52,
+        64,
+        -41,
+        57,
+        1,
+        -97,
+        90,
+        86
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_min",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       -9995
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       -997.8049260473463
+      ]
+     },
+     {
+      "dtype": "Int32",
+      "name": "i32",
+      "values": [
+       -99
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        -7015,
+        1633,
+        -455,
+        -2519,
+        null,
+        -3356,
+        null,
+        -2507,
+        3132,
+        null,
+        2381,
+        4579,
+        4294,
+        null,
+        -5371,
+        -7569,
+        -3277,
+        1238,
+        9940,
+        6334,
+        -8922,
+        7112,
+        -9091,
+        6625,
+        -6240,
+        -1711,
+        -4529,
+        -3889,
+        -6072,
+        4545,
+        263,
+        -9233,
+        -2250,
+        -5059,
+        1,
+        8991,
+        -8205,
+        7745,
+        -517,
+        -1853,
+        -8296,
+        -4820,
+        -4184,
+        -1765,
+        -8615,
+        -8788,
+        635,
+        5890,
+        -1059,
+        2187,
+        -2432,
+        939,
+        -5550,
+        -7655,
+        -822,
+        8596,
+        -9002,
+        2476,
+        4734,
+        671,
+        7917,
+        -9239,
+        -7689,
+        7255,
+        -1524,
+        7211,
+        -8513,
+        4073,
+        -2656,
+        8269,
+        -6270,
+        -3235,
+        8184,
+        41,
+        -4403,
+        1174,
+        5959,
+        7864,
+        -6642,
+        -4346,
+        6271,
+        -513,
+        1610,
+        -115,
+        -6834,
+        4057,
+        -687,
+        null,
+        -9079,
+        -9585,
+        225,
+        7648,
+        514,
+        null,
+        -7331,
+        -1443,
+        -3007,
+        -1938,
+        6816,
+        7200,
+        5441,
+        -3175,
+        -2785,
+        -416,
+        -4963,
+        431,
+        -4140,
+        -7214,
+        -8698,
+        6359,
+        4982,
+        -6308,
+        -2920,
+        -6459,
+        -6366,
+        null,
+        -8918,
+        9741,
+        null,
+        2651,
+        null,
+        -9917,
+        4180,
+        -9441,
+        -696,
+        1075,
+        -1072,
+        -5895,
+        -8990,
+        -8384,
+        4341,
+        1256,
+        9963,
+        -2693,
+        -9451,
+        -6529,
+        -4394,
+        null,
+        -8236,
+        6084,
+        -6075,
+        null,
+        310,
+        8131,
+        2676,
+        -4383,
+        -4465,
+        5768,
+        -1,
+        null,
+        8772,
+        -8204,
+        -8209,
+        null,
+        -9995,
+        8186,
+        -3661,
+        6673,
+        3795,
+        3540,
+        9558,
+        -2791,
+        5756,
+        -720,
+        -4960,
+        9927,
+        -6413,
+        -6508,
+        -1386,
+        -7383,
+        8410,
+        -1473,
+        1045,
+        -4032,
+        0,
+        -735,
+        -7948,
+        -3476,
+        -8618,
+        2194,
+        -8589,
+        6680,
+        -6380,
+        9254,
+        1574,
+        7616,
+        null,
+        3021,
+        -5670,
+        -2651,
+        -5713,
+        -8872,
+        -9183,
+        -9869,
+        -12,
+        -8609,
+        3099,
+        4415,
+        -5795,
+        329
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        -109.28855815383474,
+        -520.9477668327671,
+        null,
+        997.0,
+        -830.679423657492,
+        -834.9712361977164,
+        -880.8163294403271,
+        null,
+        -854.5,
+        69.60090747904542,
+        157.59364706754036,
+        -218.12954364260383,
+        244.22298497612746,
+        -619.2254841267826,
+        -328.47597467320315,
+        -537.0165298028348,
+        -951.5,
+        -303.47319187664107,
+        734.4359686784887,
+        -385.37067444268905,
+        null,
+        -774.5,
+        930.1549962240299,
+        null,
+        592.0254411333278,
+        542.0970946634045,
+        862.0973467577742,
+        -494.6503042275137,
+        null,
+        251.399312247813,
+        -673.500816519113,
+        -758.9823007206492,
+        310.73913373310756,
+        325.3627299583893,
+        484.0,
+        366.89037499422443,
+        -739.431594733926,
+        627.0,
+        68.50212112065378,
+        -465.66271517631105,
+        -124.35592064214313,
+        -316.5,
+        465.0,
+        -649.4864118395907,
+        -805.6610735536726,
+        906.5,
+        758.057577744818,
+        -414.1504697472866,
+        -329.8151616951344,
+        229.83526440102196,
+        -54.01861847232033,
+        -867.3630328032087,
+        -436.77321906864415,
+        -606.2602508246091,
+        595.7015206466031,
+        null,
+        136.23168619585,
+        null,
+        -319.2902402328068,
+        147.79691101668618,
+        null,
+        903.8467875571125,
+        680.0179603830111,
+        -31.117002933506114,
+        898.3126722199884,
+        -843.4590127167282,
+        -127.62463136078145,
+        385.7598114570353,
+        -954.3045672713537,
+        291.21342323037766,
+        -10.936533053459698,
+        848.9999889919641,
+        -551.190519841583,
+        971.2559796380833,
+        291.1498363602252,
+        585.1906964403261,
+        -876.293906501694,
+        -944.0,
+        null,
+        277.5731035013521,
+        9.43406298669845,
+        -145.89959706551235,
+        -478.1839407998332,
+        -458.7643729774768,
+        -421.3081090259325,
+        972.6715057854128,
+        null,
+        502.92375270804223,
+        589.3638870737177,
+        null,
+        870.9530568257651,
+        610.3344715135768,
+        -731.0839475843369,
+        -997.8049260473463,
+        267.30690667414865,
+        -947.7066636524147,
+        -189.0,
+        null,
+        -810.7970299724632,
+        -673.43238074791,
+        -238.20619854136953,
+        -651.0535693177386,
+        -527.1712983421244,
+        null,
+        4.766202503413183,
+        337.29551534093025,
+        -957.4009398918466,
+        629.5,
+        19.60582445259672,
+        -678.0432551112035,
+        -507.93259553854233,
+        317.18219141069335,
+        null,
+        -149.0,
+        -35.69260616368547,
+        -967.1326816434743,
+        680.1975250752887,
+        null,
+        -761.6185207482886,
+        -479.56714199534406,
+        958.7116480216275,
+        675.2894884781672,
+        -67.35846096846478,
+        981.0,
+        null,
+        127.42096741965656,
+        137.42276379474447,
+        182.0879280267045,
+        557.2033468917436,
+        862.8782401102176,
+        311.9420172166567,
+        -193.79754163118696,
+        359.1643650169126,
+        null,
+        845.8229813788746,
+        227.1900021180113,
+        340.24710586744345,
+        -490.42677340293704,
+        986.7093457445505,
+        -850.1583775433999,
+        -408.78877437583094,
+        761.171830857774,
+        631.5,
+        -781.4015438936312,
+        -924.7013052632758,
+        null,
+        null,
+        -899.5,
+        420.34737901805306,
+        202.00949190873325,
+        561.5,
+        412.0302105048031,
+        207.2056192385885,
+        -270.52030571185924,
+        -631.4169550846523,
+        -103.22766893612732,
+        -163.04421136869723,
+        583.5,
+        446.6813031955264,
+        143.96810100336916,
+        265.1729107806957,
+        -94.39763427264757,
+        -796.5,
+        -362.695850836898,
+        -222.76514441069946,
+        857.7260915471807,
+        -734.4168927546593,
+        597.0,
+        -807.3062561762215,
+        775.1133298974248,
+        990.5779149810814,
+        null,
+        568.2466368109722,
+        -377.7845646569207,
+        89.46883698003057,
+        823.1488655598264,
+        null,
+        -614.0,
+        -746.562990265912,
+        -325.0,
+        -606.4504035391221,
+        -517.5,
+        null,
+        436.39526267373117,
+        -98.71371952582547,
+        null,
+        356.84152169023605,
+        51.10743563825008,
+        -362.5,
+        -260.81548329947134,
+        -678.1591096225843,
+        917.4774726965604,
+        164.43039736764604,
+        326.18571588612417,
+        -329.38161274434583,
+        null,
+        253.66172840901072,
+        -926.1237521892083,
+        648.7018310930662,
+        -495.371751232633
+       ]
+      },
+      {
+       "dtype": "Int32",
+       "name": "i32",
+       "values": [
+        -66,
+        null,
+        -65,
+        -92,
+        92,
+        20,
+        51,
+        -10,
+        -66,
+        -91,
+        34,
+        -90,
+        -13,
+        -6,
+        -21,
+        -48,
+        -77,
+        79,
+        19,
+        1,
+        28,
+        -5,
+        -17,
+        37,
+        55,
+        -3,
+        12,
+        -59,
+        -7,
+        -68,
+        70,
+        null,
+        -68,
+        null,
+        null,
+        1,
+        -16,
+        -58,
+        36,
+        65,
+        -47,
+        20,
+        34,
+        31,
+        -1,
+        -44,
+        -33,
+        77,
+        45,
+        69,
+        75,
+        39,
+        -54,
+        -42,
+        -26,
+        71,
+        47,
+        -17,
+        -37,
+        -22,
+        -35,
+        5,
+        -79,
+        -11,
+        83,
+        -75,
+        -40,
+        45,
+        20,
+        null,
+        -6,
+        99,
+        -2,
+        -82,
+        null,
+        55,
+        81,
+        34,
+        -84,
+        46,
+        null,
+        -41,
+        55,
+        -14,
+        -34,
+        97,
+        2,
+        -64,
+        -26,
+        90,
+        26,
+        -69,
+        -20,
+        -97,
+        -95,
+        20,
+        52,
+        -39,
+        70,
+        54,
+        87,
+        null,
+        25,
+        16,
+        9,
+        -76,
+        84,
+        -99,
+        -99,
+        -18,
+        14,
+        49,
+        82,
+        -74,
+        -21,
+        41,
+        85,
+        75,
+        81,
+        -36,
+        25,
+        -2,
+        null,
+        -33,
+        30,
+        -23,
+        -70,
+        95,
+        -27,
+        10,
+        59,
+        null,
+        29,
+        15,
+        -38,
+        29,
+        -32,
+        12,
+        -69,
+        null,
+        72,
+        7,
+        -2,
+        0,
+        -84,
+        54,
+        35,
+        69,
+        -20,
+        null,
+        26,
+        -50,
+        48,
+        -19,
+        -52,
+        -26,
+        null,
+        26,
+        -55,
+        -10,
+        -25,
+        null,
+        12,
+        -21,
+        82,
+        9,
+        -57,
+        80,
+        23,
+        6,
+        -46,
+        -1,
+        48,
+        12,
+        -62,
+        -19,
+        null,
+        -11,
+        4,
+        -87,
+        -60,
+        98,
+        null,
+        -3,
+        -76,
+        62,
+        -98,
+        32,
+        -59,
+        16,
+        -93,
+        38,
+        -52,
+        64,
+        -41,
+        57,
+        1,
+        -97,
+        90,
+        86
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_max",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       9963
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       997.0
+      ]
+     },
+     {
+      "dtype": "Int32",
+      "name": "i32",
+      "values": [
+       99
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "rel:1e-12",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        -7015,
+        1633,
+        -455,
+        -2519,
+        null,
+        -3356,
+        null,
+        -2507,
+        3132,
+        null,
+        2381,
+        4579,
+        4294,
+        null,
+        -5371,
+        -7569,
+        -3277,
+        1238,
+        9940,
+        6334,
+        -8922,
+        7112,
+        -9091,
+        6625,
+        -6240,
+        -1711,
+        -4529,
+        -3889,
+        -6072,
+        4545,
+        263,
+        -9233,
+        -2250,
+        -5059,
+        1,
+        8991,
+        -8205,
+        7745,
+        -517,
+        -1853,
+        -8296,
+        -4820,
+        -4184,
+        -1765,
+        -8615,
+        -8788,
+        635,
+        5890,
+        -1059,
+        2187,
+        -2432,
+        939,
+        -5550,
+        -7655,
+        -822,
+        8596,
+        -9002,
+        2476,
+        4734,
+        671,
+        7917,
+        -9239,
+        -7689,
+        7255,
+        -1524,
+        7211,
+        -8513,
+        4073,
+        -2656,
+        8269,
+        -6270,
+        -3235,
+        8184,
+        41,
+        -4403,
+        1174,
+        5959,
+        7864,
+        -6642,
+        -4346,
+        6271,
+        -513,
+        1610,
+        -115,
+        -6834,
+        4057,
+        -687,
+        null,
+        -9079,
+        -9585,
+        225,
+        7648,
+        514,
+        null,
+        -7331,
+        -1443,
+        -3007,
+        -1938,
+        6816,
+        7200,
+        5441,
+        -3175,
+        -2785,
+        -416,
+        -4963,
+        431,
+        -4140,
+        -7214,
+        -8698,
+        6359,
+        4982,
+        -6308,
+        -2920,
+        -6459,
+        -6366,
+        null,
+        -8918,
+        9741,
+        null,
+        2651,
+        null,
+        -9917,
+        4180,
+        -9441,
+        -696,
+        1075,
+        -1072,
+        -5895,
+        -8990,
+        -8384,
+        4341,
+        1256,
+        9963,
+        -2693,
+        -9451,
+        -6529,
+        -4394,
+        null,
+        -8236,
+        6084,
+        -6075,
+        null,
+        310,
+        8131,
+        2676,
+        -4383,
+        -4465,
+        5768,
+        -1,
+        null,
+        8772,
+        -8204,
+        -8209,
+        null,
+        -9995,
+        8186,
+        -3661,
+        6673,
+        3795,
+        3540,
+        9558,
+        -2791,
+        5756,
+        -720,
+        -4960,
+        9927,
+        -6413,
+        -6508,
+        -1386,
+        -7383,
+        8410,
+        -1473,
+        1045,
+        -4032,
+        0,
+        -735,
+        -7948,
+        -3476,
+        -8618,
+        2194,
+        -8589,
+        6680,
+        -6380,
+        9254,
+        1574,
+        7616,
+        null,
+        3021,
+        -5670,
+        -2651,
+        -5713,
+        -8872,
+        -9183,
+        -9869,
+        -12,
+        -8609,
+        3099,
+        4415,
+        -5795,
+        329
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        -109.28855815383474,
+        -520.9477668327671,
+        null,
+        997.0,
+        -830.679423657492,
+        -834.9712361977164,
+        -880.8163294403271,
+        null,
+        -854.5,
+        69.60090747904542,
+        157.59364706754036,
+        -218.12954364260383,
+        244.22298497612746,
+        -619.2254841267826,
+        -328.47597467320315,
+        -537.0165298028348,
+        -951.5,
+        -303.47319187664107,
+        734.4359686784887,
+        -385.37067444268905,
+        null,
+        -774.5,
+        930.1549962240299,
+        null,
+        592.0254411333278,
+        542.0970946634045,
+        862.0973467577742,
+        -494.6503042275137,
+        null,
+        251.399312247813,
+        -673.500816519113,
+        -758.9823007206492,
+        310.73913373310756,
+        325.3627299583893,
+        484.0,
+        366.89037499422443,
+        -739.431594733926,
+        627.0,
+        68.50212112065378,
+        -465.66271517631105,
+        -124.35592064214313,
+        -316.5,
+        465.0,
+        -649.4864118395907,
+        -805.6610735536726,
+        906.5,
+        758.057577744818,
+        -414.1504697472866,
+        -329.8151616951344,
+        229.83526440102196,
+        -54.01861847232033,
+        -867.3630328032087,
+        -436.77321906864415,
+        -606.2602508246091,
+        595.7015206466031,
+        null,
+        136.23168619585,
+        null,
+        -319.2902402328068,
+        147.79691101668618,
+        null,
+        903.8467875571125,
+        680.0179603830111,
+        -31.117002933506114,
+        898.3126722199884,
+        -843.4590127167282,
+        -127.62463136078145,
+        385.7598114570353,
+        -954.3045672713537,
+        291.21342323037766,
+        -10.936533053459698,
+        848.9999889919641,
+        -551.190519841583,
+        971.2559796380833,
+        291.1498363602252,
+        585.1906964403261,
+        -876.293906501694,
+        -944.0,
+        null,
+        277.5731035013521,
+        9.43406298669845,
+        -145.89959706551235,
+        -478.1839407998332,
+        -458.7643729774768,
+        -421.3081090259325,
+        972.6715057854128,
+        null,
+        502.92375270804223,
+        589.3638870737177,
+        null,
+        870.9530568257651,
+        610.3344715135768,
+        -731.0839475843369,
+        -997.8049260473463,
+        267.30690667414865,
+        -947.7066636524147,
+        -189.0,
+        null,
+        -810.7970299724632,
+        -673.43238074791,
+        -238.20619854136953,
+        -651.0535693177386,
+        -527.1712983421244,
+        null,
+        4.766202503413183,
+        337.29551534093025,
+        -957.4009398918466,
+        629.5,
+        19.60582445259672,
+        -678.0432551112035,
+        -507.93259553854233,
+        317.18219141069335,
+        null,
+        -149.0,
+        -35.69260616368547,
+        -967.1326816434743,
+        680.1975250752887,
+        null,
+        -761.6185207482886,
+        -479.56714199534406,
+        958.7116480216275,
+        675.2894884781672,
+        -67.35846096846478,
+        981.0,
+        null,
+        127.42096741965656,
+        137.42276379474447,
+        182.0879280267045,
+        557.2033468917436,
+        862.8782401102176,
+        311.9420172166567,
+        -193.79754163118696,
+        359.1643650169126,
+        null,
+        845.8229813788746,
+        227.1900021180113,
+        340.24710586744345,
+        -490.42677340293704,
+        986.7093457445505,
+        -850.1583775433999,
+        -408.78877437583094,
+        761.171830857774,
+        631.5,
+        -781.4015438936312,
+        -924.7013052632758,
+        null,
+        null,
+        -899.5,
+        420.34737901805306,
+        202.00949190873325,
+        561.5,
+        412.0302105048031,
+        207.2056192385885,
+        -270.52030571185924,
+        -631.4169550846523,
+        -103.22766893612732,
+        -163.04421136869723,
+        583.5,
+        446.6813031955264,
+        143.96810100336916,
+        265.1729107806957,
+        -94.39763427264757,
+        -796.5,
+        -362.695850836898,
+        -222.76514441069946,
+        857.7260915471807,
+        -734.4168927546593,
+        597.0,
+        -807.3062561762215,
+        775.1133298974248,
+        990.5779149810814,
+        null,
+        568.2466368109722,
+        -377.7845646569207,
+        89.46883698003057,
+        823.1488655598264,
+        null,
+        -614.0,
+        -746.562990265912,
+        -325.0,
+        -606.4504035391221,
+        -517.5,
+        null,
+        436.39526267373117,
+        -98.71371952582547,
+        null,
+        356.84152169023605,
+        51.10743563825008,
+        -362.5,
+        -260.81548329947134,
+        -678.1591096225843,
+        917.4774726965604,
+        164.43039736764604,
+        326.18571588612417,
+        -329.38161274434583,
+        null,
+        253.66172840901072,
+        -926.1237521892083,
+        648.7018310930662,
+        -495.371751232633
+       ]
+      },
+      {
+       "dtype": "Int32",
+       "name": "i32",
+       "values": [
+        -66,
+        null,
+        -65,
+        -92,
+        92,
+        20,
+        51,
+        -10,
+        -66,
+        -91,
+        34,
+        -90,
+        -13,
+        -6,
+        -21,
+        -48,
+        -77,
+        79,
+        19,
+        1,
+        28,
+        -5,
+        -17,
+        37,
+        55,
+        -3,
+        12,
+        -59,
+        -7,
+        -68,
+        70,
+        null,
+        -68,
+        null,
+        null,
+        1,
+        -16,
+        -58,
+        36,
+        65,
+        -47,
+        20,
+        34,
+        31,
+        -1,
+        -44,
+        -33,
+        77,
+        45,
+        69,
+        75,
+        39,
+        -54,
+        -42,
+        -26,
+        71,
+        47,
+        -17,
+        -37,
+        -22,
+        -35,
+        5,
+        -79,
+        -11,
+        83,
+        -75,
+        -40,
+        45,
+        20,
+        null,
+        -6,
+        99,
+        -2,
+        -82,
+        null,
+        55,
+        81,
+        34,
+        -84,
+        46,
+        null,
+        -41,
+        55,
+        -14,
+        -34,
+        97,
+        2,
+        -64,
+        -26,
+        90,
+        26,
+        -69,
+        -20,
+        -97,
+        -95,
+        20,
+        52,
+        -39,
+        70,
+        54,
+        87,
+        null,
+        25,
+        16,
+        9,
+        -76,
+        84,
+        -99,
+        -99,
+        -18,
+        14,
+        49,
+        82,
+        -74,
+        -21,
+        41,
+        85,
+        75,
+        81,
+        -36,
+        25,
+        -2,
+        null,
+        -33,
+        30,
+        -23,
+        -70,
+        95,
+        -27,
+        10,
+        59,
+        null,
+        29,
+        15,
+        -38,
+        29,
+        -32,
+        12,
+        -69,
+        null,
+        72,
+        7,
+        -2,
+        0,
+        -84,
+        54,
+        35,
+        69,
+        -20,
+        null,
+        26,
+        -50,
+        48,
+        -19,
+        -52,
+        -26,
+        null,
+        26,
+        -55,
+        -10,
+        -25,
+        null,
+        12,
+        -21,
+        82,
+        9,
+        -57,
+        80,
+        23,
+        6,
+        -46,
+        -1,
+        48,
+        12,
+        -62,
+        -19,
+        null,
+        -11,
+        4,
+        -87,
+        -60,
+        98,
+        null,
+        -3,
+        -76,
+        62,
+        -98,
+        32,
+        -59,
+        16,
+        -93,
+        38,
+        -52,
+        64,
+        -41,
+        57,
+        1,
+        -97,
+        90,
+        86
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_mean",
+   "note": "ursus's float sum is exact, Polars' a few ulps off (\u00a79)",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "i",
+      "values": [
+       -1097.0645161290322
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       -26.70425912877456
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "i32",
+      "values": [
+       0.14130434782608695
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        -7015,
+        1633,
+        -455,
+        -2519,
+        null,
+        -3356,
+        null,
+        -2507,
+        3132,
+        null,
+        2381,
+        4579,
+        4294,
+        null,
+        -5371,
+        -7569,
+        -3277,
+        1238,
+        9940,
+        6334,
+        -8922,
+        7112,
+        -9091,
+        6625,
+        -6240,
+        -1711,
+        -4529,
+        -3889,
+        -6072,
+        4545,
+        263,
+        -9233,
+        -2250,
+        -5059,
+        1,
+        8991,
+        -8205,
+        7745,
+        -517,
+        -1853,
+        -8296,
+        -4820,
+        -4184,
+        -1765,
+        -8615,
+        -8788,
+        635,
+        5890,
+        -1059,
+        2187,
+        -2432,
+        939,
+        -5550,
+        -7655,
+        -822,
+        8596,
+        -9002,
+        2476,
+        4734,
+        671,
+        7917,
+        -9239,
+        -7689,
+        7255,
+        -1524,
+        7211,
+        -8513,
+        4073,
+        -2656,
+        8269,
+        -6270,
+        -3235,
+        8184,
+        41,
+        -4403,
+        1174,
+        5959,
+        7864,
+        -6642,
+        -4346,
+        6271,
+        -513,
+        1610,
+        -115,
+        -6834,
+        4057,
+        -687,
+        null,
+        -9079,
+        -9585,
+        225,
+        7648,
+        514,
+        null,
+        -7331,
+        -1443,
+        -3007,
+        -1938,
+        6816,
+        7200,
+        5441,
+        -3175,
+        -2785,
+        -416,
+        -4963,
+        431,
+        -4140,
+        -7214,
+        -8698,
+        6359,
+        4982,
+        -6308,
+        -2920,
+        -6459,
+        -6366,
+        null,
+        -8918,
+        9741,
+        null,
+        2651,
+        null,
+        -9917,
+        4180,
+        -9441,
+        -696,
+        1075,
+        -1072,
+        -5895,
+        -8990,
+        -8384,
+        4341,
+        1256,
+        9963,
+        -2693,
+        -9451,
+        -6529,
+        -4394,
+        null,
+        -8236,
+        6084,
+        -6075,
+        null,
+        310,
+        8131,
+        2676,
+        -4383,
+        -4465,
+        5768,
+        -1,
+        null,
+        8772,
+        -8204,
+        -8209,
+        null,
+        -9995,
+        8186,
+        -3661,
+        6673,
+        3795,
+        3540,
+        9558,
+        -2791,
+        5756,
+        -720,
+        -4960,
+        9927,
+        -6413,
+        -6508,
+        -1386,
+        -7383,
+        8410,
+        -1473,
+        1045,
+        -4032,
+        0,
+        -735,
+        -7948,
+        -3476,
+        -8618,
+        2194,
+        -8589,
+        6680,
+        -6380,
+        9254,
+        1574,
+        7616,
+        null,
+        3021,
+        -5670,
+        -2651,
+        -5713,
+        -8872,
+        -9183,
+        -9869,
+        -12,
+        -8609,
+        3099,
+        4415,
+        -5795,
+        329
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        -109.28855815383474,
+        -520.9477668327671,
+        null,
+        997.0,
+        -830.679423657492,
+        -834.9712361977164,
+        -880.8163294403271,
+        null,
+        -854.5,
+        69.60090747904542,
+        157.59364706754036,
+        -218.12954364260383,
+        244.22298497612746,
+        -619.2254841267826,
+        -328.47597467320315,
+        -537.0165298028348,
+        -951.5,
+        -303.47319187664107,
+        734.4359686784887,
+        -385.37067444268905,
+        null,
+        -774.5,
+        930.1549962240299,
+        null,
+        592.0254411333278,
+        542.0970946634045,
+        862.0973467577742,
+        -494.6503042275137,
+        null,
+        251.399312247813,
+        -673.500816519113,
+        -758.9823007206492,
+        310.73913373310756,
+        325.3627299583893,
+        484.0,
+        366.89037499422443,
+        -739.431594733926,
+        627.0,
+        68.50212112065378,
+        -465.66271517631105,
+        -124.35592064214313,
+        -316.5,
+        465.0,
+        -649.4864118395907,
+        -805.6610735536726,
+        906.5,
+        758.057577744818,
+        -414.1504697472866,
+        -329.8151616951344,
+        229.83526440102196,
+        -54.01861847232033,
+        -867.3630328032087,
+        -436.77321906864415,
+        -606.2602508246091,
+        595.7015206466031,
+        null,
+        136.23168619585,
+        null,
+        -319.2902402328068,
+        147.79691101668618,
+        null,
+        903.8467875571125,
+        680.0179603830111,
+        -31.117002933506114,
+        898.3126722199884,
+        -843.4590127167282,
+        -127.62463136078145,
+        385.7598114570353,
+        -954.3045672713537,
+        291.21342323037766,
+        -10.936533053459698,
+        848.9999889919641,
+        -551.190519841583,
+        971.2559796380833,
+        291.1498363602252,
+        585.1906964403261,
+        -876.293906501694,
+        -944.0,
+        null,
+        277.5731035013521,
+        9.43406298669845,
+        -145.89959706551235,
+        -478.1839407998332,
+        -458.7643729774768,
+        -421.3081090259325,
+        972.6715057854128,
+        null,
+        502.92375270804223,
+        589.3638870737177,
+        null,
+        870.9530568257651,
+        610.3344715135768,
+        -731.0839475843369,
+        -997.8049260473463,
+        267.30690667414865,
+        -947.7066636524147,
+        -189.0,
+        null,
+        -810.7970299724632,
+        -673.43238074791,
+        -238.20619854136953,
+        -651.0535693177386,
+        -527.1712983421244,
+        null,
+        4.766202503413183,
+        337.29551534093025,
+        -957.4009398918466,
+        629.5,
+        19.60582445259672,
+        -678.0432551112035,
+        -507.93259553854233,
+        317.18219141069335,
+        null,
+        -149.0,
+        -35.69260616368547,
+        -967.1326816434743,
+        680.1975250752887,
+        null,
+        -761.6185207482886,
+        -479.56714199534406,
+        958.7116480216275,
+        675.2894884781672,
+        -67.35846096846478,
+        981.0,
+        null,
+        127.42096741965656,
+        137.42276379474447,
+        182.0879280267045,
+        557.2033468917436,
+        862.8782401102176,
+        311.9420172166567,
+        -193.79754163118696,
+        359.1643650169126,
+        null,
+        845.8229813788746,
+        227.1900021180113,
+        340.24710586744345,
+        -490.42677340293704,
+        986.7093457445505,
+        -850.1583775433999,
+        -408.78877437583094,
+        761.171830857774,
+        631.5,
+        -781.4015438936312,
+        -924.7013052632758,
+        null,
+        null,
+        -899.5,
+        420.34737901805306,
+        202.00949190873325,
+        561.5,
+        412.0302105048031,
+        207.2056192385885,
+        -270.52030571185924,
+        -631.4169550846523,
+        -103.22766893612732,
+        -163.04421136869723,
+        583.5,
+        446.6813031955264,
+        143.96810100336916,
+        265.1729107806957,
+        -94.39763427264757,
+        -796.5,
+        -362.695850836898,
+        -222.76514441069946,
+        857.7260915471807,
+        -734.4168927546593,
+        597.0,
+        -807.3062561762215,
+        775.1133298974248,
+        990.5779149810814,
+        null,
+        568.2466368109722,
+        -377.7845646569207,
+        89.46883698003057,
+        823.1488655598264,
+        null,
+        -614.0,
+        -746.562990265912,
+        -325.0,
+        -606.4504035391221,
+        -517.5,
+        null,
+        436.39526267373117,
+        -98.71371952582547,
+        null,
+        356.84152169023605,
+        51.10743563825008,
+        -362.5,
+        -260.81548329947134,
+        -678.1591096225843,
+        917.4774726965604,
+        164.43039736764604,
+        326.18571588612417,
+        -329.38161274434583,
+        null,
+        253.66172840901072,
+        -926.1237521892083,
+        648.7018310930662,
+        -495.371751232633
+       ]
+      },
+      {
+       "dtype": "Int32",
+       "name": "i32",
+       "values": [
+        -66,
+        null,
+        -65,
+        -92,
+        92,
+        20,
+        51,
+        -10,
+        -66,
+        -91,
+        34,
+        -90,
+        -13,
+        -6,
+        -21,
+        -48,
+        -77,
+        79,
+        19,
+        1,
+        28,
+        -5,
+        -17,
+        37,
+        55,
+        -3,
+        12,
+        -59,
+        -7,
+        -68,
+        70,
+        null,
+        -68,
+        null,
+        null,
+        1,
+        -16,
+        -58,
+        36,
+        65,
+        -47,
+        20,
+        34,
+        31,
+        -1,
+        -44,
+        -33,
+        77,
+        45,
+        69,
+        75,
+        39,
+        -54,
+        -42,
+        -26,
+        71,
+        47,
+        -17,
+        -37,
+        -22,
+        -35,
+        5,
+        -79,
+        -11,
+        83,
+        -75,
+        -40,
+        45,
+        20,
+        null,
+        -6,
+        99,
+        -2,
+        -82,
+        null,
+        55,
+        81,
+        34,
+        -84,
+        46,
+        null,
+        -41,
+        55,
+        -14,
+        -34,
+        97,
+        2,
+        -64,
+        -26,
+        90,
+        26,
+        -69,
+        -20,
+        -97,
+        -95,
+        20,
+        52,
+        -39,
+        70,
+        54,
+        87,
+        null,
+        25,
+        16,
+        9,
+        -76,
+        84,
+        -99,
+        -99,
+        -18,
+        14,
+        49,
+        82,
+        -74,
+        -21,
+        41,
+        85,
+        75,
+        81,
+        -36,
+        25,
+        -2,
+        null,
+        -33,
+        30,
+        -23,
+        -70,
+        95,
+        -27,
+        10,
+        59,
+        null,
+        29,
+        15,
+        -38,
+        29,
+        -32,
+        12,
+        -69,
+        null,
+        72,
+        7,
+        -2,
+        0,
+        -84,
+        54,
+        35,
+        69,
+        -20,
+        null,
+        26,
+        -50,
+        48,
+        -19,
+        -52,
+        -26,
+        null,
+        26,
+        -55,
+        -10,
+        -25,
+        null,
+        12,
+        -21,
+        82,
+        9,
+        -57,
+        80,
+        23,
+        6,
+        -46,
+        -1,
+        48,
+        12,
+        -62,
+        -19,
+        null,
+        -11,
+        4,
+        -87,
+        -60,
+        98,
+        null,
+        -3,
+        -76,
+        62,
+        -98,
+        32,
+        -59,
+        16,
+        -93,
+        38,
+        -52,
+        64,
+        -41,
+        57,
+        1,
+        -97,
+        90,
+        86
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_median",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "i",
+      "values": [
+       -1458.0
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       -33.40480454859579
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "i32",
+      "values": [
+       -0.5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        -7015,
+        1633,
+        -455,
+        -2519,
+        null,
+        -3356,
+        null,
+        -2507,
+        3132,
+        null,
+        2381,
+        4579,
+        4294,
+        null,
+        -5371,
+        -7569,
+        -3277,
+        1238,
+        9940,
+        6334,
+        -8922,
+        7112,
+        -9091,
+        6625,
+        -6240,
+        -1711,
+        -4529,
+        -3889,
+        -6072,
+        4545,
+        263,
+        -9233,
+        -2250,
+        -5059,
+        1,
+        8991,
+        -8205,
+        7745,
+        -517,
+        -1853,
+        -8296,
+        -4820,
+        -4184,
+        -1765,
+        -8615,
+        -8788,
+        635,
+        5890,
+        -1059,
+        2187,
+        -2432,
+        939,
+        -5550,
+        -7655,
+        -822,
+        8596,
+        -9002,
+        2476,
+        4734,
+        671,
+        7917,
+        -9239,
+        -7689,
+        7255,
+        -1524,
+        7211,
+        -8513,
+        4073,
+        -2656,
+        8269,
+        -6270,
+        -3235,
+        8184,
+        41,
+        -4403,
+        1174,
+        5959,
+        7864,
+        -6642,
+        -4346,
+        6271,
+        -513,
+        1610,
+        -115,
+        -6834,
+        4057,
+        -687,
+        null,
+        -9079,
+        -9585,
+        225,
+        7648,
+        514,
+        null,
+        -7331,
+        -1443,
+        -3007,
+        -1938,
+        6816,
+        7200,
+        5441,
+        -3175,
+        -2785,
+        -416,
+        -4963,
+        431,
+        -4140,
+        -7214,
+        -8698,
+        6359,
+        4982,
+        -6308,
+        -2920,
+        -6459,
+        -6366,
+        null,
+        -8918,
+        9741,
+        null,
+        2651,
+        null,
+        -9917,
+        4180,
+        -9441,
+        -696,
+        1075,
+        -1072,
+        -5895,
+        -8990,
+        -8384,
+        4341,
+        1256,
+        9963,
+        -2693,
+        -9451,
+        -6529,
+        -4394,
+        null,
+        -8236,
+        6084,
+        -6075,
+        null,
+        310,
+        8131,
+        2676,
+        -4383,
+        -4465,
+        5768,
+        -1,
+        null,
+        8772,
+        -8204,
+        -8209,
+        null,
+        -9995,
+        8186,
+        -3661,
+        6673,
+        3795,
+        3540,
+        9558,
+        -2791,
+        5756,
+        -720,
+        -4960,
+        9927,
+        -6413,
+        -6508,
+        -1386,
+        -7383,
+        8410,
+        -1473,
+        1045,
+        -4032,
+        0,
+        -735,
+        -7948,
+        -3476,
+        -8618,
+        2194,
+        -8589,
+        6680,
+        -6380,
+        9254,
+        1574,
+        7616,
+        null,
+        3021,
+        -5670,
+        -2651,
+        -5713,
+        -8872,
+        -9183,
+        -9869,
+        -12,
+        -8609,
+        3099,
+        4415,
+        -5795,
+        329
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        -109.28855815383474,
+        -520.9477668327671,
+        null,
+        997.0,
+        -830.679423657492,
+        -834.9712361977164,
+        -880.8163294403271,
+        null,
+        -854.5,
+        69.60090747904542,
+        157.59364706754036,
+        -218.12954364260383,
+        244.22298497612746,
+        -619.2254841267826,
+        -328.47597467320315,
+        -537.0165298028348,
+        -951.5,
+        -303.47319187664107,
+        734.4359686784887,
+        -385.37067444268905,
+        null,
+        -774.5,
+        930.1549962240299,
+        null,
+        592.0254411333278,
+        542.0970946634045,
+        862.0973467577742,
+        -494.6503042275137,
+        null,
+        251.399312247813,
+        -673.500816519113,
+        -758.9823007206492,
+        310.73913373310756,
+        325.3627299583893,
+        484.0,
+        366.89037499422443,
+        -739.431594733926,
+        627.0,
+        68.50212112065378,
+        -465.66271517631105,
+        -124.35592064214313,
+        -316.5,
+        465.0,
+        -649.4864118395907,
+        -805.6610735536726,
+        906.5,
+        758.057577744818,
+        -414.1504697472866,
+        -329.8151616951344,
+        229.83526440102196,
+        -54.01861847232033,
+        -867.3630328032087,
+        -436.77321906864415,
+        -606.2602508246091,
+        595.7015206466031,
+        null,
+        136.23168619585,
+        null,
+        -319.2902402328068,
+        147.79691101668618,
+        null,
+        903.8467875571125,
+        680.0179603830111,
+        -31.117002933506114,
+        898.3126722199884,
+        -843.4590127167282,
+        -127.62463136078145,
+        385.7598114570353,
+        -954.3045672713537,
+        291.21342323037766,
+        -10.936533053459698,
+        848.9999889919641,
+        -551.190519841583,
+        971.2559796380833,
+        291.1498363602252,
+        585.1906964403261,
+        -876.293906501694,
+        -944.0,
+        null,
+        277.5731035013521,
+        9.43406298669845,
+        -145.89959706551235,
+        -478.1839407998332,
+        -458.7643729774768,
+        -421.3081090259325,
+        972.6715057854128,
+        null,
+        502.92375270804223,
+        589.3638870737177,
+        null,
+        870.9530568257651,
+        610.3344715135768,
+        -731.0839475843369,
+        -997.8049260473463,
+        267.30690667414865,
+        -947.7066636524147,
+        -189.0,
+        null,
+        -810.7970299724632,
+        -673.43238074791,
+        -238.20619854136953,
+        -651.0535693177386,
+        -527.1712983421244,
+        null,
+        4.766202503413183,
+        337.29551534093025,
+        -957.4009398918466,
+        629.5,
+        19.60582445259672,
+        -678.0432551112035,
+        -507.93259553854233,
+        317.18219141069335,
+        null,
+        -149.0,
+        -35.69260616368547,
+        -967.1326816434743,
+        680.1975250752887,
+        null,
+        -761.6185207482886,
+        -479.56714199534406,
+        958.7116480216275,
+        675.2894884781672,
+        -67.35846096846478,
+        981.0,
+        null,
+        127.42096741965656,
+        137.42276379474447,
+        182.0879280267045,
+        557.2033468917436,
+        862.8782401102176,
+        311.9420172166567,
+        -193.79754163118696,
+        359.1643650169126,
+        null,
+        845.8229813788746,
+        227.1900021180113,
+        340.24710586744345,
+        -490.42677340293704,
+        986.7093457445505,
+        -850.1583775433999,
+        -408.78877437583094,
+        761.171830857774,
+        631.5,
+        -781.4015438936312,
+        -924.7013052632758,
+        null,
+        null,
+        -899.5,
+        420.34737901805306,
+        202.00949190873325,
+        561.5,
+        412.0302105048031,
+        207.2056192385885,
+        -270.52030571185924,
+        -631.4169550846523,
+        -103.22766893612732,
+        -163.04421136869723,
+        583.5,
+        446.6813031955264,
+        143.96810100336916,
+        265.1729107806957,
+        -94.39763427264757,
+        -796.5,
+        -362.695850836898,
+        -222.76514441069946,
+        857.7260915471807,
+        -734.4168927546593,
+        597.0,
+        -807.3062561762215,
+        775.1133298974248,
+        990.5779149810814,
+        null,
+        568.2466368109722,
+        -377.7845646569207,
+        89.46883698003057,
+        823.1488655598264,
+        null,
+        -614.0,
+        -746.562990265912,
+        -325.0,
+        -606.4504035391221,
+        -517.5,
+        null,
+        436.39526267373117,
+        -98.71371952582547,
+        null,
+        356.84152169023605,
+        51.10743563825008,
+        -362.5,
+        -260.81548329947134,
+        -678.1591096225843,
+        917.4774726965604,
+        164.43039736764604,
+        326.18571588612417,
+        -329.38161274434583,
+        null,
+        253.66172840901072,
+        -926.1237521892083,
+        648.7018310930662,
+        -495.371751232633
+       ]
+      },
+      {
+       "dtype": "Int32",
+       "name": "i32",
+       "values": [
+        -66,
+        null,
+        -65,
+        -92,
+        92,
+        20,
+        51,
+        -10,
+        -66,
+        -91,
+        34,
+        -90,
+        -13,
+        -6,
+        -21,
+        -48,
+        -77,
+        79,
+        19,
+        1,
+        28,
+        -5,
+        -17,
+        37,
+        55,
+        -3,
+        12,
+        -59,
+        -7,
+        -68,
+        70,
+        null,
+        -68,
+        null,
+        null,
+        1,
+        -16,
+        -58,
+        36,
+        65,
+        -47,
+        20,
+        34,
+        31,
+        -1,
+        -44,
+        -33,
+        77,
+        45,
+        69,
+        75,
+        39,
+        -54,
+        -42,
+        -26,
+        71,
+        47,
+        -17,
+        -37,
+        -22,
+        -35,
+        5,
+        -79,
+        -11,
+        83,
+        -75,
+        -40,
+        45,
+        20,
+        null,
+        -6,
+        99,
+        -2,
+        -82,
+        null,
+        55,
+        81,
+        34,
+        -84,
+        46,
+        null,
+        -41,
+        55,
+        -14,
+        -34,
+        97,
+        2,
+        -64,
+        -26,
+        90,
+        26,
+        -69,
+        -20,
+        -97,
+        -95,
+        20,
+        52,
+        -39,
+        70,
+        54,
+        87,
+        null,
+        25,
+        16,
+        9,
+        -76,
+        84,
+        -99,
+        -99,
+        -18,
+        14,
+        49,
+        82,
+        -74,
+        -21,
+        41,
+        85,
+        75,
+        81,
+        -36,
+        25,
+        -2,
+        null,
+        -33,
+        30,
+        -23,
+        -70,
+        95,
+        -27,
+        10,
+        59,
+        null,
+        29,
+        15,
+        -38,
+        29,
+        -32,
+        12,
+        -69,
+        null,
+        72,
+        7,
+        -2,
+        0,
+        -84,
+        54,
+        35,
+        69,
+        -20,
+        null,
+        26,
+        -50,
+        48,
+        -19,
+        -52,
+        -26,
+        null,
+        26,
+        -55,
+        -10,
+        -25,
+        null,
+        12,
+        -21,
+        82,
+        9,
+        -57,
+        80,
+        23,
+        6,
+        -46,
+        -1,
+        48,
+        12,
+        -62,
+        -19,
+        null,
+        -11,
+        4,
+        -87,
+        -60,
+        98,
+        null,
+        -3,
+        -76,
+        62,
+        -98,
+        32,
+        -59,
+        16,
+        -93,
+        38,
+        -52,
+        64,
+        -41,
+        57,
+        1,
+        -97,
+        90,
+        86
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_null_count",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "i",
+      "values": [
+       14
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "f",
+      "values": [
+       24
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "i32",
+      "values": [
+       16
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "rel:1e-12",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        -7015,
+        1633,
+        -455,
+        -2519,
+        null,
+        -3356,
+        null,
+        -2507,
+        3132,
+        null,
+        2381,
+        4579,
+        4294,
+        null,
+        -5371,
+        -7569,
+        -3277,
+        1238,
+        9940,
+        6334,
+        -8922,
+        7112,
+        -9091,
+        6625,
+        -6240,
+        -1711,
+        -4529,
+        -3889,
+        -6072,
+        4545,
+        263,
+        -9233,
+        -2250,
+        -5059,
+        1,
+        8991,
+        -8205,
+        7745,
+        -517,
+        -1853,
+        -8296,
+        -4820,
+        -4184,
+        -1765,
+        -8615,
+        -8788,
+        635,
+        5890,
+        -1059,
+        2187,
+        -2432,
+        939,
+        -5550,
+        -7655,
+        -822,
+        8596,
+        -9002,
+        2476,
+        4734,
+        671,
+        7917,
+        -9239,
+        -7689,
+        7255,
+        -1524,
+        7211,
+        -8513,
+        4073,
+        -2656,
+        8269,
+        -6270,
+        -3235,
+        8184,
+        41,
+        -4403,
+        1174,
+        5959,
+        7864,
+        -6642,
+        -4346,
+        6271,
+        -513,
+        1610,
+        -115,
+        -6834,
+        4057,
+        -687,
+        null,
+        -9079,
+        -9585,
+        225,
+        7648,
+        514,
+        null,
+        -7331,
+        -1443,
+        -3007,
+        -1938,
+        6816,
+        7200,
+        5441,
+        -3175,
+        -2785,
+        -416,
+        -4963,
+        431,
+        -4140,
+        -7214,
+        -8698,
+        6359,
+        4982,
+        -6308,
+        -2920,
+        -6459,
+        -6366,
+        null,
+        -8918,
+        9741,
+        null,
+        2651,
+        null,
+        -9917,
+        4180,
+        -9441,
+        -696,
+        1075,
+        -1072,
+        -5895,
+        -8990,
+        -8384,
+        4341,
+        1256,
+        9963,
+        -2693,
+        -9451,
+        -6529,
+        -4394,
+        null,
+        -8236,
+        6084,
+        -6075,
+        null,
+        310,
+        8131,
+        2676,
+        -4383,
+        -4465,
+        5768,
+        -1,
+        null,
+        8772,
+        -8204,
+        -8209,
+        null,
+        -9995,
+        8186,
+        -3661,
+        6673,
+        3795,
+        3540,
+        9558,
+        -2791,
+        5756,
+        -720,
+        -4960,
+        9927,
+        -6413,
+        -6508,
+        -1386,
+        -7383,
+        8410,
+        -1473,
+        1045,
+        -4032,
+        0,
+        -735,
+        -7948,
+        -3476,
+        -8618,
+        2194,
+        -8589,
+        6680,
+        -6380,
+        9254,
+        1574,
+        7616,
+        null,
+        3021,
+        -5670,
+        -2651,
+        -5713,
+        -8872,
+        -9183,
+        -9869,
+        -12,
+        -8609,
+        3099,
+        4415,
+        -5795,
+        329
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        -109.28855815383474,
+        -520.9477668327671,
+        null,
+        997.0,
+        -830.679423657492,
+        -834.9712361977164,
+        -880.8163294403271,
+        null,
+        -854.5,
+        69.60090747904542,
+        157.59364706754036,
+        -218.12954364260383,
+        244.22298497612746,
+        -619.2254841267826,
+        -328.47597467320315,
+        -537.0165298028348,
+        -951.5,
+        -303.47319187664107,
+        734.4359686784887,
+        -385.37067444268905,
+        null,
+        -774.5,
+        930.1549962240299,
+        null,
+        592.0254411333278,
+        542.0970946634045,
+        862.0973467577742,
+        -494.6503042275137,
+        null,
+        251.399312247813,
+        -673.500816519113,
+        -758.9823007206492,
+        310.73913373310756,
+        325.3627299583893,
+        484.0,
+        366.89037499422443,
+        -739.431594733926,
+        627.0,
+        68.50212112065378,
+        -465.66271517631105,
+        -124.35592064214313,
+        -316.5,
+        465.0,
+        -649.4864118395907,
+        -805.6610735536726,
+        906.5,
+        758.057577744818,
+        -414.1504697472866,
+        -329.8151616951344,
+        229.83526440102196,
+        -54.01861847232033,
+        -867.3630328032087,
+        -436.77321906864415,
+        -606.2602508246091,
+        595.7015206466031,
+        null,
+        136.23168619585,
+        null,
+        -319.2902402328068,
+        147.79691101668618,
+        null,
+        903.8467875571125,
+        680.0179603830111,
+        -31.117002933506114,
+        898.3126722199884,
+        -843.4590127167282,
+        -127.62463136078145,
+        385.7598114570353,
+        -954.3045672713537,
+        291.21342323037766,
+        -10.936533053459698,
+        848.9999889919641,
+        -551.190519841583,
+        971.2559796380833,
+        291.1498363602252,
+        585.1906964403261,
+        -876.293906501694,
+        -944.0,
+        null,
+        277.5731035013521,
+        9.43406298669845,
+        -145.89959706551235,
+        -478.1839407998332,
+        -458.7643729774768,
+        -421.3081090259325,
+        972.6715057854128,
+        null,
+        502.92375270804223,
+        589.3638870737177,
+        null,
+        870.9530568257651,
+        610.3344715135768,
+        -731.0839475843369,
+        -997.8049260473463,
+        267.30690667414865,
+        -947.7066636524147,
+        -189.0,
+        null,
+        -810.7970299724632,
+        -673.43238074791,
+        -238.20619854136953,
+        -651.0535693177386,
+        -527.1712983421244,
+        null,
+        4.766202503413183,
+        337.29551534093025,
+        -957.4009398918466,
+        629.5,
+        19.60582445259672,
+        -678.0432551112035,
+        -507.93259553854233,
+        317.18219141069335,
+        null,
+        -149.0,
+        -35.69260616368547,
+        -967.1326816434743,
+        680.1975250752887,
+        null,
+        -761.6185207482886,
+        -479.56714199534406,
+        958.7116480216275,
+        675.2894884781672,
+        -67.35846096846478,
+        981.0,
+        null,
+        127.42096741965656,
+        137.42276379474447,
+        182.0879280267045,
+        557.2033468917436,
+        862.8782401102176,
+        311.9420172166567,
+        -193.79754163118696,
+        359.1643650169126,
+        null,
+        845.8229813788746,
+        227.1900021180113,
+        340.24710586744345,
+        -490.42677340293704,
+        986.7093457445505,
+        -850.1583775433999,
+        -408.78877437583094,
+        761.171830857774,
+        631.5,
+        -781.4015438936312,
+        -924.7013052632758,
+        null,
+        null,
+        -899.5,
+        420.34737901805306,
+        202.00949190873325,
+        561.5,
+        412.0302105048031,
+        207.2056192385885,
+        -270.52030571185924,
+        -631.4169550846523,
+        -103.22766893612732,
+        -163.04421136869723,
+        583.5,
+        446.6813031955264,
+        143.96810100336916,
+        265.1729107806957,
+        -94.39763427264757,
+        -796.5,
+        -362.695850836898,
+        -222.76514441069946,
+        857.7260915471807,
+        -734.4168927546593,
+        597.0,
+        -807.3062561762215,
+        775.1133298974248,
+        990.5779149810814,
+        null,
+        568.2466368109722,
+        -377.7845646569207,
+        89.46883698003057,
+        823.1488655598264,
+        null,
+        -614.0,
+        -746.562990265912,
+        -325.0,
+        -606.4504035391221,
+        -517.5,
+        null,
+        436.39526267373117,
+        -98.71371952582547,
+        null,
+        356.84152169023605,
+        51.10743563825008,
+        -362.5,
+        -260.81548329947134,
+        -678.1591096225843,
+        917.4774726965604,
+        164.43039736764604,
+        326.18571588612417,
+        -329.38161274434583,
+        null,
+        253.66172840901072,
+        -926.1237521892083,
+        648.7018310930662,
+        -495.371751232633
+       ]
+      },
+      {
+       "dtype": "Int32",
+       "name": "i32",
+       "values": [
+        -66,
+        null,
+        -65,
+        -92,
+        92,
+        20,
+        51,
+        -10,
+        -66,
+        -91,
+        34,
+        -90,
+        -13,
+        -6,
+        -21,
+        -48,
+        -77,
+        79,
+        19,
+        1,
+        28,
+        -5,
+        -17,
+        37,
+        55,
+        -3,
+        12,
+        -59,
+        -7,
+        -68,
+        70,
+        null,
+        -68,
+        null,
+        null,
+        1,
+        -16,
+        -58,
+        36,
+        65,
+        -47,
+        20,
+        34,
+        31,
+        -1,
+        -44,
+        -33,
+        77,
+        45,
+        69,
+        75,
+        39,
+        -54,
+        -42,
+        -26,
+        71,
+        47,
+        -17,
+        -37,
+        -22,
+        -35,
+        5,
+        -79,
+        -11,
+        83,
+        -75,
+        -40,
+        45,
+        20,
+        null,
+        -6,
+        99,
+        -2,
+        -82,
+        null,
+        55,
+        81,
+        34,
+        -84,
+        46,
+        null,
+        -41,
+        55,
+        -14,
+        -34,
+        97,
+        2,
+        -64,
+        -26,
+        90,
+        26,
+        -69,
+        -20,
+        -97,
+        -95,
+        20,
+        52,
+        -39,
+        70,
+        54,
+        87,
+        null,
+        25,
+        16,
+        9,
+        -76,
+        84,
+        -99,
+        -99,
+        -18,
+        14,
+        49,
+        82,
+        -74,
+        -21,
+        41,
+        85,
+        75,
+        81,
+        -36,
+        25,
+        -2,
+        null,
+        -33,
+        30,
+        -23,
+        -70,
+        95,
+        -27,
+        10,
+        59,
+        null,
+        29,
+        15,
+        -38,
+        29,
+        -32,
+        12,
+        -69,
+        null,
+        72,
+        7,
+        -2,
+        0,
+        -84,
+        54,
+        35,
+        69,
+        -20,
+        null,
+        26,
+        -50,
+        48,
+        -19,
+        -52,
+        -26,
+        null,
+        26,
+        -55,
+        -10,
+        -25,
+        null,
+        12,
+        -21,
+        82,
+        9,
+        -57,
+        80,
+        23,
+        6,
+        -46,
+        -1,
+        48,
+        12,
+        -62,
+        -19,
+        null,
+        -11,
+        4,
+        -87,
+        -60,
+        98,
+        null,
+        -3,
+        -76,
+        62,
+        -98,
+        32,
+        -59,
+        16,
+        -93,
+        38,
+        -52,
+        64,
+        -41,
+        57,
+        1,
+        -97,
+        90,
+        86
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_var",
+   "note": "a float var or std is Welford's one pass here, two passes in Polars: an ulp apart (\u00a79)",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "i",
+      "values": [
+       33372507.67149084
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       347619.3138103592
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "i32",
+      "values": [
+       2892.4498693276314
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "generator": "bench/scripts/oracle/frameagg.py",
+ "polars": "2.1.0"
+}
