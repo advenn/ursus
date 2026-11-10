@@ -3861,6 +3861,17 @@ that stops when its request is cancelled.</p>
   rounds a month by adding fourteen days, starts a <code>group_by_dynamic</code> day at 23:00
   where midnight does not exist, combines a zoned Datetime's UTC date, and counts
   business days back to an earlier date by numpy's rule.</li>
+<li><strong>The sub-packages' data values converted</strong> (503): <code>dtype</code>'s supertype tables,
+  <code>expr</code>'s Decimal aggregate types, hive's <code>TestInfer</code>, the selectors and the kernel's
+  cast values are asked at the root through the public API, 175 recorded cases in six
+  groups, 23 generated; the kernel's tables of a key bitmap's rule, a select's mask,
+  the radix sort, an Int128 sum's carries and a parse's edge bytes are held to
+  <code>math/big</code>, a row model and a stable sort of Go values over generated inputs; 171
+  hand-typed lines gone. Six findings recorded and not asserted, for the maintainer:
+  Polars 2.1 meets text, a Boolean, a Date and an instant beside a number where
+  <code>Promote</code> refuses, two time units at the coarser where it takes the finer, refuses
+  two Enums it meets at the String, casts a Decimal to a Boolean and answers a
+  Decimal's <code>any</code> and <code>all</code>, and reads a hive key of dates by its first value's layout.</li>
 <li><strong>The I/O wave converted</strong> (502): <code>io_byhand</code>, <code>csvread</code>, <code>csvskip</code>, <code>csvwrite</code>,
   <code>ndjsonread</code>, <code>jsonread</code>, <code>jsonwrite</code>, <code>ipcfiles</code>, <code>hive</code>, <code>hiveparent</code>, <code>filepaths</code>,
   <code>partitionwrite</code> and <code>database_test.go</code>, with <code>ipc_test.go</code>'s Polars-written
