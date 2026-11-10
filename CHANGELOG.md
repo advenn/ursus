@@ -182,6 +182,19 @@ that stops when its request is cancelled.
   rounds a month by adding fourteen days, starts a `group_by_dynamic` day at 23:00
   where midnight does not exist, combines a zoned Datetime's UTC date, and counts
   business days back to an earlier date by numpy's rule.
+- **The I/O wave converted** (502): `io_byhand`, `csvread`, `csvskip`, `csvwrite`,
+  `ndjsonread`, `jsonread`, `jsonwrite`, `ipcfiles`, `hive`, `hiveparent`, `filepaths`,
+  `partitionwrite` and `database_test.go`, with `ipc_test.go`'s Polars-written
+  fixtures, 371 recorded cases in thirteen groups, 35 generated, 72 refusals, 1,106
+  lines gone. The format holds a written text now, so `write_csv`'s, `write_ndjson`'s
+  and `write_json`'s texts and a partitioned sink's file names are compared byte for
+  byte; every reader's and writer's options are the recording's, passed to ursus as
+  recorded; a refusal names its place beside its reason and is held to its kind; the
+  database group asks Polars through a DB-API connection for the Booleans, instants and
+  integers past Int64 SQLite cannot hold. Four findings recorded and not asserted, for
+  the maintainer: Polars 2.1 infers a column of only `NaN` as Float64, lands an offset
+  with seconds 30 s away on a CSV round trip, reads a non-object in a Struct column as
+  null under `ignore_errors`, and writes a bare newline for a frame of no columns.
 - **The frames, joins and reshaping wave converted** (501): `join_byhand`, `joinorder`,
   `asofoptions`, `concat`, `pivot`, `dummies`, `unstack`, `unpivot`, `upsample`,
   `update`, `matchschema`, `frameagg`, `framecolumns`, `framerows`, `frameconv`,

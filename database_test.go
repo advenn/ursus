@@ -177,45 +177,27 @@ func dbCells(t *testing.T, db *sql.DB, query string) string {
 }
 
 // TestReadDatabase is step 353: Polars' read_database, through database/sql. A
-// column's type is its values', met as Polars meets them; every answer of a bare
-// driver's is Polars 1.44.1's reading SQLite's values through sqlite3, but where noted.
+// column's type is its values', met as Polars meets them. Each answer a Python value
+// can give is Polars 2.1.0's since step 502, recorded in testdata/oracle/database.json
+// through SQLite or a DB-API connection of rows, Booleans, instants and integers past
+// Int64 among them, and spelled in oracle_database_test.go; here stay the values a Go
+// driver gives and no Python value is, each typed by ursus's rule for a Go driver's
+// own types (feature-gaps.md §9, step 353), and an instant beside text, which Polars
+// refuses.
 func TestReadDatabase(t *testing.T) {
 	db := fakeDB(t)
-	utc := func(y int, m time.Month, d, h, mi, s, us int) time.Time {
-		return time.Date(y, m, d, h, mi, s, us*1000, time.UTC)
-	}
-	plus5 := time.FixedZone("", 5*3600)
 	bare := fakeCol{}
 	for _, tc := range []struct {
 		name string
 		res  fakeResult
 		want string
 	}{
-		{"integers", column(bare, int64(1), nil), "1 <nil> Int64"},
-		{"floats", column(bare, 1.5, nil), "1.5 <nil> Float64"},
-		{"text", column(bare, "a", nil), "a <nil> String"},
-		{"bytes", column(bare, []byte{1, 2}, nil), "[1 2] <nil> Binary"},
-		{"Booleans", column(bare, true, false), "true false Bool"},
-		{"an integer and a float", column(bare, int64(1), 2.5), "1 2.5 Float64"},
-		{"a large integer and a float", column(bare, int64(1<<53+1), 2.5), "9.007199254740992e+15 2.5 Float64"},
-		{"an integer and text", column(bare, int64(1), "a"), "1 a String"},
-		{"a float and text", column(bare, 2.5, "a"), "2.5 a String"},
-		{"bytes and text", column(bare, []byte{1}, "a"), "[1] [97] Binary"},
-		{"no value", column(bare, nil, nil), "<nil> <nil> Null"},
-		{"a null, then an integer", column(bare, nil, int64(1)), "<nil> 1 Int64"},
-		// Polars, the values built from Python's: [True, 2] is Int64, [True, "a"] text.
-		{"a Boolean and an integer", column(bare, true, int64(2)), "1 2 Int64"},
-		{"a Boolean and text", column(bare, true, "a"), "true a String"},
-		// Polars: a naive datetime is a Datetime(us), an aware one the instant in UTC.
-		{"an instant in UTC", column(bare, utc(2020, 1, 2, 3, 4, 5, 6)), "2020-01-02 03:04:05.000006 +0000 UTC Datetime(us)"},
-		{"an instant in a zone", column(bare, time.Date(2020, 1, 1, 0, 0, 0, 0, plus5)), "2019-12-31 19:00:00 +0000 UTC Datetime(us, UTC)"},
 		// Polars refuses a datetime among text, "could not append value"; it meets at
 		// text by Polars' supertype here, the instant's text ursus's cast's, a naive
 		// one's with no offset (step 422).
-		{"an instant and text", column(bare, utc(2020, 1, 2, 3, 4, 5, 6), "a"), "2020-01-02T03:04:05.000006 a String"},
-		// Polars: [1, 2**63] is an Int128.
+		{"an instant and text", column(bare, time.Date(2020, 1, 2, 3, 4, 5, 6000, time.UTC), "a"), "2020-01-02T03:04:05.000006 a String"},
+		// A Go uint64 is a Uint64; Polars reads a Python integer past Int64 as an Int128.
 		{"past an Int64", column(bare, uint64(math.MaxUint64)), "18446744073709551615 Uint64"},
-		{"an Int64 and past one", column(bare, int64(1), uint64(1<<63)), "1 9223372036854775808 Int128"},
 		{"a driver's own text", column(bare, myText("x")), "x String"},
 		{"a driver's own value", column(bare, myValuer{7}), "7 Int64"},
 		{"a driver's own struct", column(bare, myStruct{1, 2}), "{1 2} String"},
@@ -226,31 +208,6 @@ func TestReadDatabase(t *testing.T) {
 		if got := dbCells(t, db, q); got != tc.want {
 			t.Errorf("%s: %s, want %s", tc.name, got, tc.want)
 		}
-	}
-
-	// Every row's value types the column, where Polars reads 100: 150 integers and a
-	// float are Float64, as Polars' infer_schema_length=None reads them; by default it
-	// reads 1 for the float.
-	vals := make([]driver.Value, 151)
-	for i := range 150 {
-		vals[i] = int64(i)
-	}
-	vals[150] = 1.5
-	df, err := ursus.ReadDatabase(t.Context(), db, fake("a float after 150 integers", column(bare, vals...)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := cells(t, df.Lazy().Tail(1), "x"); got != "1.5 Float64" {
-		t.Errorf("a float after 150 integers: %s", got)
-	}
-
-	// Its arguments, as Polars' execute_options' parameters.
-	df, err = ursus.ReadDatabase(t.Context(), db, "args", 5, "p")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := cells(t, df.Lazy(), "a0") + " " + cells(t, df.Lazy(), "a1"); got != "5 Int64 p String" {
-		t.Errorf("arguments: %s", got)
 	}
 }
 
@@ -330,7 +287,9 @@ func TestReadDatabaseDriverTypes(t *testing.T) {
 	}
 }
 
-// TestReadDatabaseOverrides is WithDatabaseSchemaOverrides, Polars' schema_overrides.
+// TestReadDatabaseOverrides is WithDatabaseSchemaOverrides, Polars' schema_overrides,
+// where ursus answers otherwise than Polars on purpose (feature-gaps.md §9); the
+// overrides both answer alike are the oracle's.
 func TestReadDatabaseOverrides(t *testing.T) {
 	ctx := t.Context()
 	db := fakeDB(t)
@@ -348,9 +307,6 @@ func TestReadDatabaseOverrides(t *testing.T) {
 		to   ursus.DataType
 		want string
 	}{
-		{"an Int32", column(bare, int64(1)), ursus.Int32, "1 Int32"},
-		{"text of an integer and text", column(bare, int64(1), "a"), ursus.String, "1 a String"},
-		{"a float as a Decimal", column(bare, 1.25), ursus.Decimal(10, 2), "1.25 Decimal(10, 2)"},
 		// Polars refuses the first and nulls the second, its builder parsing no text;
 		// the cast parses both here.
 		{"text as a Date", column(bare, "2020-01-02"), ursus.Date, "2020-01-02 00:00:00 +0000 UTC Date"},
@@ -372,8 +328,6 @@ func TestReadDatabaseOverrides(t *testing.T) {
 		res  fakeResult
 		to   ursus.DataType
 	}{
-		// Polars: "could not append value: 3000000000 of type: i64".
-		{"past an Int32", column(bare, int64(3e9)), ursus.Int32},
 		// Polars truncates 1.5 to 1, as its cast does; ursus's casts are exact or
 		// refused (feature-gaps §9).
 		{"a float as an integer", column(bare, 1.5), ursus.Int64},
@@ -402,12 +356,6 @@ func TestReadDatabaseRefusals(t *testing.T) {
 		is    error
 		says  string
 	}{
-		// Polars: "failed to determine supertype of binary and i64".
-		{"bytes and an integer", fake("bytes and an integer", column(bare, []byte{1}, int64(1))), ursus.ErrType, "Binary"},
-		{"bytes, text and an integer", fake("bytes, text and an integer", column(bare, []byte{1}, "a", int64(1))), ursus.ErrType, "Int64"},
-		{"an instant and a Boolean", fake("an instant and a Boolean", column(bare, time.Now(), true)), ursus.ErrType, "Bool"},
-		// Polars: "column 'a' appears more than once in the query/result cursor".
-		{"a name twice", fake("a name twice", fakeResult{cols: []fakeCol{{name: "a"}, {name: "a"}}}), ursus.ErrSchema, "more than once"},
 		{"a broken result", fake("a broken result", fakeResult{cols: []fakeCol{{name: "x"}}, rows: [][]driver.Value{{int64(1)}}, err: broken}), broken, "reading the result"},
 		{"no such query", "no such query", ursus.ErrIO, "running the query"},
 		{"an instant past a Datetime", fake("an instant past a Datetime", column(bare, time.Date(300000, 1, 1, 0, 0, 0, 0, time.UTC))), ursus.ErrValue, "row 1"},
