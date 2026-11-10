@@ -11,7 +11,8 @@ package kernel_test
 // The targets are derived: every numeric type a String casts to. The strings are
 // every integer type's edges in several spellings, the midpoints between adjacent
 // floats of each width with a nudge either side too small for a float64 to see, the
-// overflow and underflow of each float width, and text that is not a number at all.
+// overflow and underflow of each float width, text that is not a number at all, and
+// 400 seeded strings over a number's bytes, some with one byte changed (step 503).
 // The oracles are big.Int and big.Rat, which share no code with the kernel.
 
 import (
@@ -19,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"math/rand/v2"
 	"regexp"
 	"strings"
 	"testing"
@@ -138,6 +140,53 @@ func parseStrings(t *testing.T) []string {
 	for _, s := range malformed {
 		add(s)
 	}
+	for _, s := range generatedNumberTexts(400) {
+		add(s)
+	}
+	return out
+}
+
+// generatedNumberTexts is n seeded strings over the bytes a number is written in
+// (step 503): a sign or none, up to 22 digits, a point and up to 22 more, an
+// exponent of up to three digits or none, each part there or not; and one string in
+// three then has a byte changed, inserted or dropped, among them a space, an
+// underscore and an x. The oracle answers each, as it does the listed ones.
+func generatedNumberTexts(n int) []string {
+	rng := rand.New(rand.NewPCG(503, 77))
+	const alphabet = "0123456789+-.eE _x"
+	digits := func(k int) string {
+		b := make([]byte, k)
+		for i := range b {
+			b[i] = '0' + byte(rng.IntN(10))
+		}
+		return string(b)
+	}
+	out := make([]string, 0, n)
+	for range n {
+		var b strings.Builder
+		b.WriteString([]string{"", "", "+", "-"}[rng.IntN(4)])
+		b.WriteString(digits(rng.IntN(23)))
+		if rng.IntN(2) == 0 {
+			b.WriteString("." + digits(rng.IntN(23)))
+		}
+		if rng.IntN(3) == 0 {
+			b.WriteString([]string{"e", "E"}[rng.IntN(2)] + []string{"", "+", "-"}[rng.IntN(3)] + digits(1+rng.IntN(3)))
+		}
+		s := []byte(b.String())
+		if rng.IntN(3) == 0 {
+			at := rng.IntN(len(s) + 1)
+			c := alphabet[rng.IntN(len(alphabet))]
+			switch op := rng.IntN(3); {
+			case op == 0 && at < len(s):
+				s[at] = c
+			case op == 1:
+				s = append(s[:at], append([]byte{c}, s[at:]...)...)
+			case at < len(s):
+				s = append(s[:at], s[at+1:]...)
+			}
+		}
+		out = append(out, string(s))
+	}
 	return out
 }
 
@@ -161,12 +210,39 @@ type parseWant struct {
 // optional exponent. No inf or nan — a Decimal has neither — no hex, no underscore.
 var decimalText = regexp.MustCompile(`^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$`)
 
+// farExponent reads a number whose exponent is past ten thousand either way, which
+// big.Rat may refuse to compute: its mantissa's sign and whether it is zero, and the
+// exponent's sign. Past it, a mantissa of at most 45 digits overflows every float and
+// every Decimal or underflows to zero.
+var farExponent = regexp.MustCompile(`^([+-]?)([0-9]+\.?[0-9]*|\.[0-9]+)[eE]([+-]?)0*([0-9]{5,})$`)
+
+// far is the oracle's answer for text farExponent matches, and whether it matches.
+func far(s string, dt dtype.DataType) (parseWant, bool) {
+	m := farExponent.FindStringSubmatch(s)
+	if m == nil || (len(m[4]) == 5 && m[4] <= "10000") {
+		return parseWant{}, false
+	}
+	switch {
+	case strings.Trim(m[2], "0.") == "":
+		return parseWant{i: new(big.Int), f: 0}, true // zero, at any exponent
+	case m[3] == "-":
+		return parseWant{i: new(big.Int), f: 0}, true // below every float's and Decimal's least
+	}
+	return parseWant{unrepresentable: true}, true
+}
+
 func oracle(s string, dt dtype.DataType) parseWant {
 	if dt.ID() == dtype.TypeDecimal {
 		// The unscaled value: the text's exact rational times 10^scale, rounded half
 		// away from zero, as Polars and DuckDB read it; past the precision, refused.
 		if !decimalText.MatchString(s) {
 			return parseWant{malformed: true}
+		}
+		if w, ok := far(s, dt); ok {
+			if w.i != nil {
+				return parseWant{i: w.i}
+			}
+			return w
 		}
 		r, ok := new(big.Rat).SetString(s)
 		if !ok {
@@ -201,6 +277,9 @@ func oracle(s string, dt dtype.DataType) parseWant {
 	// (step 77, dtype.ParseFloat), and until then this oracle skipped them.
 	if strings.ContainsAny(s, "_/xX") { // big.Rat reads fractions and prefixes; a float parse does not
 		return parseWant{malformed: true}
+	}
+	if w, ok := far(s, dt); ok {
+		return parseWant{f: w.f, unrepresentable: w.unrepresentable}
 	}
 	r, ok := new(big.Rat).SetString(s)
 	if !ok {

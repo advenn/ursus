@@ -19,45 +19,20 @@ func noFiles(t *testing.T) *dtype.Schema {
 	return s
 }
 
-// TestInfer: a partition key's values infer the type Polars 1.44.1 infers for them.
+// TestInfer: the type a partition key's values infer is Polars 2.1.0's, recorded in
+// the hive_infer group of testdata/oracle, each layout read through ScanParquet, and
+// spelled in oracle_hive_infer_test.go since step 503, which took this test's table of
+// twenty-five keys. What stays is ursus's own: a key of dates in five layouts, each
+// value read by its own pattern, as CSV dates are (feature-gaps §9), where Polars 2.1
+// reads every value by the first's and refuses the third (hive_infer/date_layouts_mixed,
+// a finding of step 503 pinned here until the maintainer decides); a key of no
+// values, which no directory can hold; and a date not asked for.
 func TestInfer(t *testing.T) {
-	for _, tc := range []struct {
-		vals []string
-		want string
-	}{
-		{[]string{"1", "-2", "007", "-0", "00"}, "Int64"},
-		{[]string{"9223372036854775808", "1"}, "Int128"},
-		{[]string{"-170141183460469231731687303715884105728"}, "Int128"},
-		{[]string{"1.5", "2"}, "Float64"},
-		{[]string{"2.5e3", "1e3", "inf", "-inf", "NaN", "1.", ".5", "-1.5E-3"}, "Float64"},
-		{[]string{"true", "FALSE", "True"}, "Bool"},
-		{[]string{"2024-01-02", "2024-1-2", "2024/01/02", "2024.01.02", "02-01-2024"}, "Date"},
-		{[]string{"2024-01-02 03:04:05", "2024-01-02T03:04", "2024-01-02 3:04", "2024/1/2 03:04:05",
-			"2024-01-02T03:04:05.123456789"}, "Datetime(us)"},
-		{[]string{"2024-01-02T03:04:05Z", "2024-01-02T03:04:05.5+0530", "2024-01-02 03:04:05+01:00"}, "Datetime(us, UTC)"},
-		// Text, each of these, where Polars too reads text.
-		{[]string{"+5"}, "String"},
-		{[]string{"nan"}, "String"},
-		{[]string{"0x10"}, "String"},
-		{[]string{"1_000"}, "String"},
-		{[]string{"1,5"}, "String"},
-		{[]string{"yes"}, "String"},
-		{[]string{"1.5e"}, "String"},
-		{[]string{"2024-01-02T03"}, "String"},
-		{[]string{"2024-13-01"}, "String"},
-		{[]string{"2024-02-30"}, "String"},
-		{[]string{"1", "x"}, "String"},
-		{[]string{"2024-01-02", "x"}, "String"},
-		{[]string{"true", "1"}, "String"},
-		{nil, "String"},
-		// 20240102 is a number, as Polars reads it; 24-01-02 is text, where Polars
-		// reads the year 2.
-		{[]string{"20240102"}, "Int64"},
-		{[]string{"24-01-02"}, "String"},
-	} {
-		if got := Infer(tc.vals, true).String(); got != tc.want {
-			t.Errorf("%q: %s, want %s", tc.vals, got, tc.want)
-		}
+	if got := Infer([]string{"2024-01-02", "2024-1-2", "2024/01/02", "2024.01.02", "02-01-2024"}, true); got != dtype.Date {
+		t.Errorf("five layouts of one date: %s, want Date", got)
+	}
+	if got := Infer(nil, true); got != dtype.String {
+		t.Errorf("no values: %s, want String", got)
 	}
 	// Without dates, a date is text.
 	if got := Infer([]string{"2024-01-02"}, false); got != dtype.String {

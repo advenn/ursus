@@ -1,0 +1,10009 @@
+{
+ "cases": [
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "numeric",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "id",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "price",
+      "values": [
+       1.5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "qty",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "integer",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "id",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "qty",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "float",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "price",
+      "values": [
+       1.5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "temporal",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Date",
+      "name": "when",
+      "values": [
+       19723
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "at",
+      "values": [
+       1704067200000000
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "string",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "Name",
+      "values": [
+       "a"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "boolean",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "ok",
+      "values": [
+       true
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "starts_with_p",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "price",
+      "values": [
+       1.5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "ends_with_e",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "Name",
+      "values": [
+       "a"
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "price",
+      "values": [
+       1.5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "contains_a",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "Name",
+      "values": [
+       "a"
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "at",
+      "values": [
+       1704067200000000
+      ]
+     },
+     {
+      "dtype": "Binary",
+      "name": "raw",
+      "values": [
+       "AQ=="
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "matches",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "id",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "ok",
+      "values": [
+       true
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "at",
+      "values": [
+       1704067200000000
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "first",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "id",
+      "values": [
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "last",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Binary",
+      "name": "raw",
+      "values": [
+       "AQ=="
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "by_index_0_last",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "id",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Binary",
+      "name": "raw",
+      "values": [
+       "AQ=="
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "by_name_as_written",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "qty",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "id",
+      "values": [
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "numeric_minus_id",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "price",
+      "values": [
+       1.5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "qty",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "not_numeric",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "Name",
+      "values": [
+       "a"
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "when",
+      "values": [
+       19723
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "ok",
+      "values": [
+       true
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "at",
+      "values": [
+       1704067200000000
+      ]
+     },
+     {
+      "dtype": "Binary",
+      "name": "raw",
+      "values": [
+       "AQ=="
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "numeric_and_starts_with_q",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "qty",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "numeric_or_string",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "id",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "Name",
+      "values": [
+       "a"
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "price",
+      "values": [
+       1.5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "qty",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "numeric_xor_integer",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "price",
+      "values": [
+       1.5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "numeric_exclude_id_nope",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "price",
+      "values": [
+       1.5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "qty",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "alpha",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "id",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "Name",
+      "values": [
+       "a"
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "price",
+      "values": [
+       1.5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "qty",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "when",
+      "values": [
+       19723
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "ok",
+      "values": [
+       true
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "at",
+      "values": [
+       1704067200000000
+      ]
+     },
+     {
+      "dtype": "Binary",
+      "name": "raw",
+      "values": [
+       "AQ=="
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "datetime",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Datetime(us)",
+      "name": "at",
+      "values": [
+       1704067200000000
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "date",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Date",
+      "name": "when",
+      "values": [
+       19723
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "binary",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Binary",
+      "name": "raw",
+      "values": [
+       "AQ=="
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "all_exclude_id_qty",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "Name",
+      "values": [
+       "a"
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "price",
+      "values": [
+       1.5
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "when",
+      "values": [
+       19723
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "ok",
+      "values": [
+       true
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "at",
+      "values": [
+       1704067200000000
+      ]
+     },
+     {
+      "dtype": "Binary",
+      "name": "raw",
+      "values": [
+       "AQ=="
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "all",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "id",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "Name",
+      "values": [
+       "a"
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "price",
+      "values": [
+       1.5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "qty",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "when",
+      "values": [
+       19723
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "ok",
+      "values": [
+       true
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "at",
+      "values": [
+       1704067200000000
+      ]
+     },
+     {
+      "dtype": "Binary",
+      "name": "raw",
+      "values": [
+       "AQ=="
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "by_dtype_int64_bool",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "id",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "qty",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "ok",
+      "values": [
+       true
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "expand_digit",
+   "note": "no column is named by digits: no names",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "name",
+      "values": []
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "expand_names_or_float",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "name",
+      "values": [
+       "id",
+       "price",
+       "qty"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "expand_names",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "name",
+      "values": [
+       "qty",
+       "id"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "id",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "Name",
+       "values": [
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "price",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "qty",
+       "values": [
+        2
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "when",
+       "values": [
+        19723
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "at",
+       "values": [
+        1704067200000000
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "raw",
+       "values": [
+        "AQ=="
+       ]
+      }
+     ]
+    }
+   },
+   "name": "numeric_doubled",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "id",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "price",
+      "values": [
+       3.0
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "qty",
+      "values": [
+       4
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int32",
+       "name": "a_1",
+       "values": [
+        -2060299764,
+        -418769020,
+        816374505,
+        -1432908148,
+        1328113322,
+        2029347751,
+        -482503898,
+        -498107194,
+        521490084,
+        668774578,
+        1058398540,
+        -1859660381,
+        -2147483648,
+        -1237693237,
+        -1764506433,
+        1404545697,
+        683464289,
+        -1746610343,
+        -1006509760,
+        -61511608,
+        1263158814,
+        838870285,
+        637886481,
+        1169354966,
+        -1,
+        -1529704770,
+        -1659972264,
+        1427464501,
+        0,
+        2108623956,
+        1488909247,
+        -731754047,
+        1596783508,
+        null,
+        1,
+        -200179892,
+        1927714361,
+        -430888421,
+        null,
+        1171225705,
+        551994884,
+        386657869,
+        null,
+        -1155853487,
+        -1961538831,
+        2147483647,
+        1838949703,
+        -299587045,
+        357906835,
+        -1220492803
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "b_2",
+       "values": [
+        null,
+        -881.7540761385367,
+        385.17507000289015,
+        -214.54625948218722,
+        886.0,
+        1.5e-310,
+        -0.5,
+        0.29,
+        2.5,
+        null,
+        1e-300,
+        -382.04656476379625,
+        -153.8390992699981,
+        -832.2847833549567,
+        123.456,
+        null,
+        356.5165104152077,
+        996.5,
+        -238.5,
+        -573.1374202022113,
+        437.5660361240773,
+        -976.5901614087536,
+        -831.6970523092932,
+        null,
+        null,
+        824.675786873913,
+        "-0.0",
+        1e+300,
+        -788.4636182007207,
+        -65.97640326705778,
+        null,
+        742.7591106753391,
+        992.6465413157948,
+        772.2281924567455,
+        0.5,
+        121.29372755334612,
+        null,
+        1.5,
+        1.7976931348623157e+308,
+        -12.823504865742166,
+        902.4354787660129,
+        "inf",
+        923.9191382333661,
+        -246.26726702808946,
+        "NaN",
+        -983.2973944613352,
+        null,
+        0.1,
+        263.0180682030409,
+        -641.7676346435237
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "Price",
+       "values": [
+        1.5,
+        143.74269672917512,
+        -197.65739976834368,
+        211.62346523744918,
+        -278.90674300933574,
+        1e-300,
+        809.9182218990725,
+        315.4725149783326,
+        null,
+        9007199254740994.0,
+        956.0657278205933,
+        -199.2799387030302,
+        -596.184329522061,
+        2.5,
+        -866.0,
+        -628.8504590164728,
+        -0.5,
+        123.456,
+        90.69095518344261,
+        -803.0,
+        981.4754067213216,
+        null,
+        null,
+        "-0.0",
+        null,
+        846.457874773618,
+        910.8271461842855,
+        null,
+        null,
+        5e-324,
+        "-inf",
+        "inf",
+        "NaN",
+        340.3400873091441,
+        982.0,
+        1e+300,
+        325.70371241616317,
+        -650.4742771692443,
+        817.6981256530748,
+        null,
+        323.5,
+        244.7026231066884,
+        1.0000000000000002,
+        0.29,
+        9007199254740992.0,
+        251.18010222622115,
+        -918.36487956573,
+        null,
+        710.2542768121273,
+        -452.7795066392664
+       ]
+      },
+      {
+       "dtype": "Uint8",
+       "name": "qty",
+       "values": [
+        23,
+        67,
+        16,
+        10,
+        107,
+        30,
+        163,
+        37,
+        121,
+        null,
+        61,
+        241,
+        85,
+        141,
+        null,
+        35,
+        182,
+        113,
+        null,
+        89,
+        47,
+        null,
+        25,
+        null,
+        null,
+        143,
+        224,
+        1,
+        238,
+        null,
+        167,
+        142,
+        140,
+        225,
+        234,
+        154,
+        219,
+        80,
+        255,
+        141,
+        null,
+        null,
+        151,
+        null,
+        154,
+        126,
+        206,
+        0,
+        null,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "note",
+       "values": [
+        "c",
+        "aacyb",
+        null,
+        "zb",
+        null,
+        null,
+        "yza",
+        "azzx",
+        "ycx",
+        "bczz",
+        "yxza",
+        "yyz",
+        "bzbzya",
+        null,
+        null,
+        "zcza",
+        "zba",
+        "xazbc",
+        "yxbb",
+        "xa",
+        "xzb",
+        "y",
+        null,
+        "c",
+        "ycz",
+        "yb",
+        "yccbb",
+        "bxx",
+        "yxbbca",
+        "\"q\"",
+        "yyz",
+        "\u00e9",
+        "aabc",
+        null,
+        "a",
+        null,
+        null,
+        "bxyz",
+        "cbcxz",
+        "zy",
+        null,
+        "bczyc",
+        "ca",
+        "zxbc",
+        "a,b",
+        "bx",
+        "ycxb",
+        null,
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true,
+        false,
+        true,
+        false,
+        null,
+        false,
+        false,
+        false,
+        true,
+        null,
+        true,
+        null,
+        false,
+        true,
+        true,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+        false,
+        null,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        null,
+        false,
+        null,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        null,
+        false,
+        true
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        9144,
+        1844,
+        23924,
+        11016,
+        16309,
+        15850,
+        26682,
+        null,
+        23850,
+        6011,
+        24094,
+        760,
+        10754,
+        16972,
+        -719162,
+        17845,
+        21545,
+        5214,
+        29553,
+        19753,
+        12258,
+        9481,
+        25243,
+        17092,
+        25696,
+        8851,
+        9230,
+        13662,
+        -3704,
+        3700,
+        13118,
+        null,
+        24516,
+        17734,
+        20047,
+        52,
+        17431,
+        699,
+        11195,
+        7065,
+        27869,
+        null,
+        28671,
+        -1,
+        -2961,
+        null,
+        2932896,
+        -3618,
+        19782,
+        27659
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "ts",
+       "values": [
+        171584190248061,
+        80504782764861,
+        551293916237082,
+        null,
+        1218939194608461,
+        2138493403030862,
+        null,
+        2174103911667481,
+        469282016094703,
+        1435675196934802,
+        null,
+        859798225265221,
+        -271869917252178,
+        2056618679288047,
+        -250244639741764,
+        -86400000000,
+        1025437097939380,
+        133456381904657,
+        276721174904655,
+        1834267877261759,
+        796618567597287,
+        -53498628565410,
+        589153540297771,
+        null,
+        null,
+        727530750185872,
+        null,
+        125534511569568,
+        739737092823947,
+        null,
+        -42495543108887,
+        989434025298000,
+        916120911011925,
+        1241438235702108,
+        251068387330034,
+        2023472830745727,
+        1678561792320490,
+        514164206468232,
+        null,
+        2090547788600346,
+        1522428114800750,
+        1387133883533552,
+        1930760635697493,
+        2031225525293772,
+        312142519456176,
+        1219696909618515,
+        163456511420868,
+        1457852767005894,
+        27661832920798,
+        250702284065610
+       ]
+      },
+      {
+       "dtype": "Duration(ms)",
+       "name": "span",
+       "values": [
+        -168407692,
+        -82590938,
+        40245391,
+        -151371000,
+        86400000,
+        -86400000,
+        124689644,
+        58143266,
+        146027622,
+        169278279,
+        1,
+        149464263,
+        -108918314,
+        -16644141,
+        39432204,
+        -67654732,
+        0,
+        101616682,
+        63803693,
+        -171568807,
+        null,
+        -80569343,
+        -40827669,
+        135091073,
+        null,
+        86399999,
+        38626443,
+        18798898,
+        -78106203,
+        -7351367,
+        -160461187,
+        20509323,
+        127018688,
+        158808259,
+        -104023804,
+        61228486,
+        -66932016,
+        36502731,
+        75763908,
+        137121193,
+        102022722,
+        76348152,
+        100681275,
+        44337910,
+        null,
+        -120550943,
+        null,
+        154498406,
+        -85299339,
+        73551721
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "clock",
+       "values": [
+        46471563500297,
+        34547902724779,
+        59033619074539,
+        83830029344634,
+        26466274720510,
+        70516371236110,
+        21841558047062,
+        45763614804370,
+        7698679598010,
+        53230485154040,
+        39058222528707,
+        70178512205357,
+        83251994131197,
+        28471728376823,
+        80327341549294,
+        19476814628761,
+        60479961332453,
+        20380613543486,
+        16641222423211,
+        3551484991496,
+        44895786957952,
+        49508697033626,
+        10754936363979,
+        59731058066645,
+        39724308343893,
+        63110883967537,
+        12109613900391,
+        21308161947805,
+        86265882434730,
+        18384101065083,
+        null,
+        80338455191258,
+        71243337566664,
+        null,
+        60480783808545,
+        69288164976752,
+        64518140543782,
+        30532008556892,
+        0,
+        45156254796141,
+        3723250000000,
+        45281741457487,
+        86399999999999,
+        null,
+        48198314966686,
+        77659125994842,
+        12515354727677,
+        32390012541569,
+        68868755884528,
+        null
+       ]
+      },
+      {
+       "dtype": "Decimal(12, 4)",
+       "name": "amt",
+       "values": [
+        "999999999999",
+        "464259670471",
+        "-438699228844",
+        "-562329521289",
+        "879748705345",
+        "-956329210611",
+        "460173201200",
+        "-505089281637",
+        "43330991936",
+        "-695755819438",
+        "205804242259",
+        "886104437397",
+        null,
+        null,
+        "-546194442095",
+        "-757474579877",
+        "-507057018113",
+        "-682755677481",
+        "-700841825950",
+        "77916360103",
+        "922644021861",
+        "549213331707",
+        "-362534035512",
+        "-593709681900",
+        "-986106165335",
+        "-803394607757",
+        "-677841267887",
+        "147873603570",
+        "546398112999",
+        null,
+        null,
+        "-457735501290",
+        "-999999999999",
+        "385424549601",
+        "-545727364462",
+        null,
+        "-911069293862",
+        "-1",
+        "-577043657004",
+        "646974194468",
+        "-503247923389",
+        "-152920355461",
+        "367494596331",
+        "-120345271045",
+        "1",
+        "-502458647264",
+        "-646351271468",
+        "363275960730",
+        "-161356691414",
+        "920052213795"
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "blob",
+       "values": [
+        "9Mg=",
+        "Hw==",
+        "Qg==",
+        "7FE=",
+        "C7WU",
+        null,
+        "3xOd9Q==",
+        "",
+        "+Uw=",
+        "",
+        "gw==",
+        "",
+        "WkyPlA==",
+        "iANCuw==",
+        "HQ==",
+        "",
+        "ty2I",
+        null,
+        "dA==",
+        "",
+        "Q+rTfQ==",
+        "51ZL",
+        "",
+        null,
+        "CYo=",
+        "Aoo0Ig==",
+        "LQ==",
+        "YBw=",
+        "kDed",
+        "lQ==",
+        "Z/4=",
+        "v8I=",
+        "kSg0",
+        "aGVsbG8=",
+        "lw==",
+        "fuT7",
+        "R2OlEg==",
+        "Mw==",
+        "IalnJA==",
+        "AP8=",
+        "+ErI",
+        "",
+        "Ng==",
+        "",
+        "O1j0",
+        "STb/ag==",
+        "",
+        "hj8=",
+        "G1I=",
+        "XCc="
+       ]
+      },
+      {
+       "dtype": "List(Int64)",
+       "name": "l",
+       "values": [
+        [
+         3797356582761302577,
+         9007199254740993,
+         -832880830650663189
+        ],
+        null,
+        [
+         7196593362349070989,
+         -7755050176042919448,
+         -1384180044029798436
+        ],
+        [
+         -2644470580090125087,
+         3797356582761302577,
+         -9223372036854775808,
+         -7437530996603701072
+        ],
+        [
+         8028873915774523883
+        ],
+        [
+         -4683274033228429109,
+         6154275271842535638
+        ],
+        null,
+        [],
+        [
+         5726174078110762305,
+         4038298865178483862,
+         -2661390501446625568,
+         -829229753929160360
+        ],
+        [
+         -9223372036854775808,
+         5268676009082756017,
+         3805514918798962495
+        ],
+        [
+         -8577971683209287571,
+         -9007199254740992
+        ],
+        [],
+        [
+         -8010324624387327277,
+         -2661390501446625568,
+         3797356582761302577
+        ],
+        [
+         9007199254740992,
+         -2661390501446625568,
+         -4694531598274983058
+        ],
+        [
+         -4694531598274983058
+        ],
+        [
+         1854743798946152487
+        ],
+        [
+         -9223372036854775808,
+         -8577971683209287571,
+         -832880830650663189,
+         5726174078110762305
+        ],
+        [
+         -4885936132615266485,
+         8633250406623994294
+        ],
+        [
+         -8577971683209287571
+        ],
+        [
+         -8010324624387327277,
+         1580180760754790723,
+         -829229753929160360,
+         5726174078110762305
+        ],
+        [
+         2404192364262955328
+        ],
+        [
+         -9223372036854775808,
+         4511648680789731328
+        ],
+        [
+         -7437530996603701072,
+         1,
+         -832880830650663189
+        ],
+        null,
+        [
+         -6146916329461782803,
+         400843797411918435
+        ],
+        [
+         -4694531598274983058
+        ],
+        [
+         -4683274033228429109,
+         7196593362349070989,
+         5369646996504480564
+        ],
+        [
+         5726174078110762305
+        ],
+        [
+         -6845893532434230013,
+         5268676009082756017
+        ],
+        [
+         -9223372036854775808,
+         -832880830650663189,
+         9007199254740992,
+         1
+        ],
+        [
+         -829229753929160360,
+         -5390386269465294143,
+         3805514918798962495,
+         5268676009082756017
+        ],
+        [
+         -6845893532434230013
+        ],
+        [
+         -832880830650663189,
+         9223372036854775807,
+         2194162895221875188
+        ],
+        [
+         -4683274033228429109
+        ],
+        [
+         8633250406623994294,
+         2741562170759309940,
+         4361667902058443051,
+         3153097925883853706
+        ],
+        [
+         2741562170759309940,
+         9007199254740993
+        ],
+        [
+         -4885936132615266485,
+         -2661390501446625568,
+         9223372036854775807,
+         1580180760754790723
+        ],
+        [
+         3153097925883853706
+        ],
+        [
+         677419074774700268,
+         2404192364262955328,
+         -829229753929160360
+        ],
+        [],
+        [
+         9007199254740992
+        ],
+        [],
+        [
+         5268676009082756017,
+         -9007199254740992,
+         -832880830650663189,
+         3805514918798962495
+        ],
+        [
+         2194162895221875188,
+         -2644470580090125087
+        ],
+        [
+         2194162895221875188,
+         -3058405450144297732,
+         4361667902058443051
+        ],
+        [
+         1667567996191035857,
+         8028873915774523883
+        ],
+        [
+         1854743798946152487,
+         -1,
+         9007199254740993
+        ],
+        [
+         -9007199254740992,
+         2021380998987695323,
+         -8010324624387327277,
+         3153097925883853706
+        ],
+        [
+         8028873915774523883,
+         1854743798946152487,
+         -1
+        ],
+        [
+         8028873915774523883,
+         -8577971683209287571
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_numeric",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int32",
+      "name": "a_1",
+      "values": [
+       -2060299764,
+       -418769020,
+       816374505,
+       -1432908148,
+       1328113322,
+       2029347751,
+       -482503898,
+       -498107194,
+       521490084,
+       668774578,
+       1058398540,
+       -1859660381,
+       -2147483648,
+       -1237693237,
+       -1764506433,
+       1404545697,
+       683464289,
+       -1746610343,
+       -1006509760,
+       -61511608,
+       1263158814,
+       838870285,
+       637886481,
+       1169354966,
+       -1,
+       -1529704770,
+       -1659972264,
+       1427464501,
+       0,
+       2108623956,
+       1488909247,
+       -731754047,
+       1596783508,
+       null,
+       1,
+       -200179892,
+       1927714361,
+       -430888421,
+       null,
+       1171225705,
+       551994884,
+       386657869,
+       null,
+       -1155853487,
+       -1961538831,
+       2147483647,
+       1838949703,
+       -299587045,
+       357906835,
+       -1220492803
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "b_2",
+      "values": [
+       null,
+       -881.7540761385367,
+       385.17507000289015,
+       -214.54625948218722,
+       886.0,
+       1.5e-310,
+       -0.5,
+       0.29,
+       2.5,
+       null,
+       1e-300,
+       -382.04656476379625,
+       -153.8390992699981,
+       -832.2847833549567,
+       123.456,
+       null,
+       356.5165104152077,
+       996.5,
+       -238.5,
+       -573.1374202022113,
+       437.5660361240773,
+       -976.5901614087536,
+       -831.6970523092932,
+       null,
+       null,
+       824.675786873913,
+       "-0.0",
+       1e+300,
+       -788.4636182007207,
+       -65.97640326705778,
+       null,
+       742.7591106753391,
+       992.6465413157948,
+       772.2281924567455,
+       0.5,
+       121.29372755334612,
+       null,
+       1.5,
+       1.7976931348623157e+308,
+       -12.823504865742166,
+       902.4354787660129,
+       "inf",
+       923.9191382333661,
+       -246.26726702808946,
+       "NaN",
+       -983.2973944613352,
+       null,
+       0.1,
+       263.0180682030409,
+       -641.7676346435237
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "Price",
+      "values": [
+       1.5,
+       143.74269672917512,
+       -197.65739976834368,
+       211.62346523744918,
+       -278.90674300933574,
+       1e-300,
+       809.9182218990725,
+       315.4725149783326,
+       null,
+       9007199254740994.0,
+       956.0657278205933,
+       -199.2799387030302,
+       -596.184329522061,
+       2.5,
+       -866.0,
+       -628.8504590164728,
+       -0.5,
+       123.456,
+       90.69095518344261,
+       -803.0,
+       981.4754067213216,
+       null,
+       null,
+       "-0.0",
+       null,
+       846.457874773618,
+       910.8271461842855,
+       null,
+       null,
+       5e-324,
+       "-inf",
+       "inf",
+       "NaN",
+       340.3400873091441,
+       982.0,
+       1e+300,
+       325.70371241616317,
+       -650.4742771692443,
+       817.6981256530748,
+       null,
+       323.5,
+       244.7026231066884,
+       1.0000000000000002,
+       0.29,
+       9007199254740992.0,
+       251.18010222622115,
+       -918.36487956573,
+       null,
+       710.2542768121273,
+       -452.7795066392664
+      ]
+     },
+     {
+      "dtype": "Uint8",
+      "name": "qty",
+      "values": [
+       23,
+       67,
+       16,
+       10,
+       107,
+       30,
+       163,
+       37,
+       121,
+       null,
+       61,
+       241,
+       85,
+       141,
+       null,
+       35,
+       182,
+       113,
+       null,
+       89,
+       47,
+       null,
+       25,
+       null,
+       null,
+       143,
+       224,
+       1,
+       238,
+       null,
+       167,
+       142,
+       140,
+       225,
+       234,
+       154,
+       219,
+       80,
+       255,
+       141,
+       null,
+       null,
+       151,
+       null,
+       154,
+       126,
+       206,
+       0,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "Decimal(12, 4)",
+      "name": "amt",
+      "values": [
+       "999999999999",
+       "464259670471",
+       "-438699228844",
+       "-562329521289",
+       "879748705345",
+       "-956329210611",
+       "460173201200",
+       "-505089281637",
+       "43330991936",
+       "-695755819438",
+       "205804242259",
+       "886104437397",
+       null,
+       null,
+       "-546194442095",
+       "-757474579877",
+       "-507057018113",
+       "-682755677481",
+       "-700841825950",
+       "77916360103",
+       "922644021861",
+       "549213331707",
+       "-362534035512",
+       "-593709681900",
+       "-986106165335",
+       "-803394607757",
+       "-677841267887",
+       "147873603570",
+       "546398112999",
+       null,
+       null,
+       "-457735501290",
+       "-999999999999",
+       "385424549601",
+       "-545727364462",
+       null,
+       "-911069293862",
+       "-1",
+       "-577043657004",
+       "646974194468",
+       "-503247923389",
+       "-152920355461",
+       "367494596331",
+       "-120345271045",
+       "1",
+       "-502458647264",
+       "-646351271468",
+       "363275960730",
+       "-161356691414",
+       "920052213795"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int32",
+       "name": "a_1",
+       "values": [
+        -2060299764,
+        -418769020,
+        816374505,
+        -1432908148,
+        1328113322,
+        2029347751,
+        -482503898,
+        -498107194,
+        521490084,
+        668774578,
+        1058398540,
+        -1859660381,
+        -2147483648,
+        -1237693237,
+        -1764506433,
+        1404545697,
+        683464289,
+        -1746610343,
+        -1006509760,
+        -61511608,
+        1263158814,
+        838870285,
+        637886481,
+        1169354966,
+        -1,
+        -1529704770,
+        -1659972264,
+        1427464501,
+        0,
+        2108623956,
+        1488909247,
+        -731754047,
+        1596783508,
+        null,
+        1,
+        -200179892,
+        1927714361,
+        -430888421,
+        null,
+        1171225705,
+        551994884,
+        386657869,
+        null,
+        -1155853487,
+        -1961538831,
+        2147483647,
+        1838949703,
+        -299587045,
+        357906835,
+        -1220492803
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "b_2",
+       "values": [
+        null,
+        -881.7540761385367,
+        385.17507000289015,
+        -214.54625948218722,
+        886.0,
+        1.5e-310,
+        -0.5,
+        0.29,
+        2.5,
+        null,
+        1e-300,
+        -382.04656476379625,
+        -153.8390992699981,
+        -832.2847833549567,
+        123.456,
+        null,
+        356.5165104152077,
+        996.5,
+        -238.5,
+        -573.1374202022113,
+        437.5660361240773,
+        -976.5901614087536,
+        -831.6970523092932,
+        null,
+        null,
+        824.675786873913,
+        "-0.0",
+        1e+300,
+        -788.4636182007207,
+        -65.97640326705778,
+        null,
+        742.7591106753391,
+        992.6465413157948,
+        772.2281924567455,
+        0.5,
+        121.29372755334612,
+        null,
+        1.5,
+        1.7976931348623157e+308,
+        -12.823504865742166,
+        902.4354787660129,
+        "inf",
+        923.9191382333661,
+        -246.26726702808946,
+        "NaN",
+        -983.2973944613352,
+        null,
+        0.1,
+        263.0180682030409,
+        -641.7676346435237
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "Price",
+       "values": [
+        1.5,
+        143.74269672917512,
+        -197.65739976834368,
+        211.62346523744918,
+        -278.90674300933574,
+        1e-300,
+        809.9182218990725,
+        315.4725149783326,
+        null,
+        9007199254740994.0,
+        956.0657278205933,
+        -199.2799387030302,
+        -596.184329522061,
+        2.5,
+        -866.0,
+        -628.8504590164728,
+        -0.5,
+        123.456,
+        90.69095518344261,
+        -803.0,
+        981.4754067213216,
+        null,
+        null,
+        "-0.0",
+        null,
+        846.457874773618,
+        910.8271461842855,
+        null,
+        null,
+        5e-324,
+        "-inf",
+        "inf",
+        "NaN",
+        340.3400873091441,
+        982.0,
+        1e+300,
+        325.70371241616317,
+        -650.4742771692443,
+        817.6981256530748,
+        null,
+        323.5,
+        244.7026231066884,
+        1.0000000000000002,
+        0.29,
+        9007199254740992.0,
+        251.18010222622115,
+        -918.36487956573,
+        null,
+        710.2542768121273,
+        -452.7795066392664
+       ]
+      },
+      {
+       "dtype": "Uint8",
+       "name": "qty",
+       "values": [
+        23,
+        67,
+        16,
+        10,
+        107,
+        30,
+        163,
+        37,
+        121,
+        null,
+        61,
+        241,
+        85,
+        141,
+        null,
+        35,
+        182,
+        113,
+        null,
+        89,
+        47,
+        null,
+        25,
+        null,
+        null,
+        143,
+        224,
+        1,
+        238,
+        null,
+        167,
+        142,
+        140,
+        225,
+        234,
+        154,
+        219,
+        80,
+        255,
+        141,
+        null,
+        null,
+        151,
+        null,
+        154,
+        126,
+        206,
+        0,
+        null,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "note",
+       "values": [
+        "c",
+        "aacyb",
+        null,
+        "zb",
+        null,
+        null,
+        "yza",
+        "azzx",
+        "ycx",
+        "bczz",
+        "yxza",
+        "yyz",
+        "bzbzya",
+        null,
+        null,
+        "zcza",
+        "zba",
+        "xazbc",
+        "yxbb",
+        "xa",
+        "xzb",
+        "y",
+        null,
+        "c",
+        "ycz",
+        "yb",
+        "yccbb",
+        "bxx",
+        "yxbbca",
+        "\"q\"",
+        "yyz",
+        "\u00e9",
+        "aabc",
+        null,
+        "a",
+        null,
+        null,
+        "bxyz",
+        "cbcxz",
+        "zy",
+        null,
+        "bczyc",
+        "ca",
+        "zxbc",
+        "a,b",
+        "bx",
+        "ycxb",
+        null,
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true,
+        false,
+        true,
+        false,
+        null,
+        false,
+        false,
+        false,
+        true,
+        null,
+        true,
+        null,
+        false,
+        true,
+        true,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+        false,
+        null,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        null,
+        false,
+        null,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        null,
+        false,
+        true
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        9144,
+        1844,
+        23924,
+        11016,
+        16309,
+        15850,
+        26682,
+        null,
+        23850,
+        6011,
+        24094,
+        760,
+        10754,
+        16972,
+        -719162,
+        17845,
+        21545,
+        5214,
+        29553,
+        19753,
+        12258,
+        9481,
+        25243,
+        17092,
+        25696,
+        8851,
+        9230,
+        13662,
+        -3704,
+        3700,
+        13118,
+        null,
+        24516,
+        17734,
+        20047,
+        52,
+        17431,
+        699,
+        11195,
+        7065,
+        27869,
+        null,
+        28671,
+        -1,
+        -2961,
+        null,
+        2932896,
+        -3618,
+        19782,
+        27659
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "ts",
+       "values": [
+        171584190248061,
+        80504782764861,
+        551293916237082,
+        null,
+        1218939194608461,
+        2138493403030862,
+        null,
+        2174103911667481,
+        469282016094703,
+        1435675196934802,
+        null,
+        859798225265221,
+        -271869917252178,
+        2056618679288047,
+        -250244639741764,
+        -86400000000,
+        1025437097939380,
+        133456381904657,
+        276721174904655,
+        1834267877261759,
+        796618567597287,
+        -53498628565410,
+        589153540297771,
+        null,
+        null,
+        727530750185872,
+        null,
+        125534511569568,
+        739737092823947,
+        null,
+        -42495543108887,
+        989434025298000,
+        916120911011925,
+        1241438235702108,
+        251068387330034,
+        2023472830745727,
+        1678561792320490,
+        514164206468232,
+        null,
+        2090547788600346,
+        1522428114800750,
+        1387133883533552,
+        1930760635697493,
+        2031225525293772,
+        312142519456176,
+        1219696909618515,
+        163456511420868,
+        1457852767005894,
+        27661832920798,
+        250702284065610
+       ]
+      },
+      {
+       "dtype": "Duration(ms)",
+       "name": "span",
+       "values": [
+        -168407692,
+        -82590938,
+        40245391,
+        -151371000,
+        86400000,
+        -86400000,
+        124689644,
+        58143266,
+        146027622,
+        169278279,
+        1,
+        149464263,
+        -108918314,
+        -16644141,
+        39432204,
+        -67654732,
+        0,
+        101616682,
+        63803693,
+        -171568807,
+        null,
+        -80569343,
+        -40827669,
+        135091073,
+        null,
+        86399999,
+        38626443,
+        18798898,
+        -78106203,
+        -7351367,
+        -160461187,
+        20509323,
+        127018688,
+        158808259,
+        -104023804,
+        61228486,
+        -66932016,
+        36502731,
+        75763908,
+        137121193,
+        102022722,
+        76348152,
+        100681275,
+        44337910,
+        null,
+        -120550943,
+        null,
+        154498406,
+        -85299339,
+        73551721
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "clock",
+       "values": [
+        46471563500297,
+        34547902724779,
+        59033619074539,
+        83830029344634,
+        26466274720510,
+        70516371236110,
+        21841558047062,
+        45763614804370,
+        7698679598010,
+        53230485154040,
+        39058222528707,
+        70178512205357,
+        83251994131197,
+        28471728376823,
+        80327341549294,
+        19476814628761,
+        60479961332453,
+        20380613543486,
+        16641222423211,
+        3551484991496,
+        44895786957952,
+        49508697033626,
+        10754936363979,
+        59731058066645,
+        39724308343893,
+        63110883967537,
+        12109613900391,
+        21308161947805,
+        86265882434730,
+        18384101065083,
+        null,
+        80338455191258,
+        71243337566664,
+        null,
+        60480783808545,
+        69288164976752,
+        64518140543782,
+        30532008556892,
+        0,
+        45156254796141,
+        3723250000000,
+        45281741457487,
+        86399999999999,
+        null,
+        48198314966686,
+        77659125994842,
+        12515354727677,
+        32390012541569,
+        68868755884528,
+        null
+       ]
+      },
+      {
+       "dtype": "Decimal(12, 4)",
+       "name": "amt",
+       "values": [
+        "999999999999",
+        "464259670471",
+        "-438699228844",
+        "-562329521289",
+        "879748705345",
+        "-956329210611",
+        "460173201200",
+        "-505089281637",
+        "43330991936",
+        "-695755819438",
+        "205804242259",
+        "886104437397",
+        null,
+        null,
+        "-546194442095",
+        "-757474579877",
+        "-507057018113",
+        "-682755677481",
+        "-700841825950",
+        "77916360103",
+        "922644021861",
+        "549213331707",
+        "-362534035512",
+        "-593709681900",
+        "-986106165335",
+        "-803394607757",
+        "-677841267887",
+        "147873603570",
+        "546398112999",
+        null,
+        null,
+        "-457735501290",
+        "-999999999999",
+        "385424549601",
+        "-545727364462",
+        null,
+        "-911069293862",
+        "-1",
+        "-577043657004",
+        "646974194468",
+        "-503247923389",
+        "-152920355461",
+        "367494596331",
+        "-120345271045",
+        "1",
+        "-502458647264",
+        "-646351271468",
+        "363275960730",
+        "-161356691414",
+        "920052213795"
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "blob",
+       "values": [
+        "9Mg=",
+        "Hw==",
+        "Qg==",
+        "7FE=",
+        "C7WU",
+        null,
+        "3xOd9Q==",
+        "",
+        "+Uw=",
+        "",
+        "gw==",
+        "",
+        "WkyPlA==",
+        "iANCuw==",
+        "HQ==",
+        "",
+        "ty2I",
+        null,
+        "dA==",
+        "",
+        "Q+rTfQ==",
+        "51ZL",
+        "",
+        null,
+        "CYo=",
+        "Aoo0Ig==",
+        "LQ==",
+        "YBw=",
+        "kDed",
+        "lQ==",
+        "Z/4=",
+        "v8I=",
+        "kSg0",
+        "aGVsbG8=",
+        "lw==",
+        "fuT7",
+        "R2OlEg==",
+        "Mw==",
+        "IalnJA==",
+        "AP8=",
+        "+ErI",
+        "",
+        "Ng==",
+        "",
+        "O1j0",
+        "STb/ag==",
+        "",
+        "hj8=",
+        "G1I=",
+        "XCc="
+       ]
+      },
+      {
+       "dtype": "List(Int64)",
+       "name": "l",
+       "values": [
+        [
+         3797356582761302577,
+         9007199254740993,
+         -832880830650663189
+        ],
+        null,
+        [
+         7196593362349070989,
+         -7755050176042919448,
+         -1384180044029798436
+        ],
+        [
+         -2644470580090125087,
+         3797356582761302577,
+         -9223372036854775808,
+         -7437530996603701072
+        ],
+        [
+         8028873915774523883
+        ],
+        [
+         -4683274033228429109,
+         6154275271842535638
+        ],
+        null,
+        [],
+        [
+         5726174078110762305,
+         4038298865178483862,
+         -2661390501446625568,
+         -829229753929160360
+        ],
+        [
+         -9223372036854775808,
+         5268676009082756017,
+         3805514918798962495
+        ],
+        [
+         -8577971683209287571,
+         -9007199254740992
+        ],
+        [],
+        [
+         -8010324624387327277,
+         -2661390501446625568,
+         3797356582761302577
+        ],
+        [
+         9007199254740992,
+         -2661390501446625568,
+         -4694531598274983058
+        ],
+        [
+         -4694531598274983058
+        ],
+        [
+         1854743798946152487
+        ],
+        [
+         -9223372036854775808,
+         -8577971683209287571,
+         -832880830650663189,
+         5726174078110762305
+        ],
+        [
+         -4885936132615266485,
+         8633250406623994294
+        ],
+        [
+         -8577971683209287571
+        ],
+        [
+         -8010324624387327277,
+         1580180760754790723,
+         -829229753929160360,
+         5726174078110762305
+        ],
+        [
+         2404192364262955328
+        ],
+        [
+         -9223372036854775808,
+         4511648680789731328
+        ],
+        [
+         -7437530996603701072,
+         1,
+         -832880830650663189
+        ],
+        null,
+        [
+         -6146916329461782803,
+         400843797411918435
+        ],
+        [
+         -4694531598274983058
+        ],
+        [
+         -4683274033228429109,
+         7196593362349070989,
+         5369646996504480564
+        ],
+        [
+         5726174078110762305
+        ],
+        [
+         -6845893532434230013,
+         5268676009082756017
+        ],
+        [
+         -9223372036854775808,
+         -832880830650663189,
+         9007199254740992,
+         1
+        ],
+        [
+         -829229753929160360,
+         -5390386269465294143,
+         3805514918798962495,
+         5268676009082756017
+        ],
+        [
+         -6845893532434230013
+        ],
+        [
+         -832880830650663189,
+         9223372036854775807,
+         2194162895221875188
+        ],
+        [
+         -4683274033228429109
+        ],
+        [
+         8633250406623994294,
+         2741562170759309940,
+         4361667902058443051,
+         3153097925883853706
+        ],
+        [
+         2741562170759309940,
+         9007199254740993
+        ],
+        [
+         -4885936132615266485,
+         -2661390501446625568,
+         9223372036854775807,
+         1580180760754790723
+        ],
+        [
+         3153097925883853706
+        ],
+        [
+         677419074774700268,
+         2404192364262955328,
+         -829229753929160360
+        ],
+        [],
+        [
+         9007199254740992
+        ],
+        [],
+        [
+         5268676009082756017,
+         -9007199254740992,
+         -832880830650663189,
+         3805514918798962495
+        ],
+        [
+         2194162895221875188,
+         -2644470580090125087
+        ],
+        [
+         2194162895221875188,
+         -3058405450144297732,
+         4361667902058443051
+        ],
+        [
+         1667567996191035857,
+         8028873915774523883
+        ],
+        [
+         1854743798946152487,
+         -1,
+         9007199254740993
+        ],
+        [
+         -9007199254740992,
+         2021380998987695323,
+         -8010324624387327277,
+         3153097925883853706
+        ],
+        [
+         8028873915774523883,
+         1854743798946152487,
+         -1
+        ],
+        [
+         8028873915774523883,
+         -8577971683209287571
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_temporal_or_boolean",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "ok",
+      "values": [
+       true,
+       false,
+       true,
+       false,
+       null,
+       false,
+       false,
+       false,
+       true,
+       null,
+       true,
+       null,
+       false,
+       true,
+       true,
+       false,
+       true,
+       true,
+       false,
+       true,
+       false,
+       true,
+       true,
+       false,
+       null,
+       false,
+       true,
+       true,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       null,
+       false,
+       null,
+       true,
+       true,
+       false,
+       false,
+       false,
+       true,
+       true,
+       null,
+       false,
+       true
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "d",
+      "values": [
+       9144,
+       1844,
+       23924,
+       11016,
+       16309,
+       15850,
+       26682,
+       null,
+       23850,
+       6011,
+       24094,
+       760,
+       10754,
+       16972,
+       -719162,
+       17845,
+       21545,
+       5214,
+       29553,
+       19753,
+       12258,
+       9481,
+       25243,
+       17092,
+       25696,
+       8851,
+       9230,
+       13662,
+       -3704,
+       3700,
+       13118,
+       null,
+       24516,
+       17734,
+       20047,
+       52,
+       17431,
+       699,
+       11195,
+       7065,
+       27869,
+       null,
+       28671,
+       -1,
+       -2961,
+       null,
+       2932896,
+       -3618,
+       19782,
+       27659
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "ts",
+      "values": [
+       171584190248061,
+       80504782764861,
+       551293916237082,
+       null,
+       1218939194608461,
+       2138493403030862,
+       null,
+       2174103911667481,
+       469282016094703,
+       1435675196934802,
+       null,
+       859798225265221,
+       -271869917252178,
+       2056618679288047,
+       -250244639741764,
+       -86400000000,
+       1025437097939380,
+       133456381904657,
+       276721174904655,
+       1834267877261759,
+       796618567597287,
+       -53498628565410,
+       589153540297771,
+       null,
+       null,
+       727530750185872,
+       null,
+       125534511569568,
+       739737092823947,
+       null,
+       -42495543108887,
+       989434025298000,
+       916120911011925,
+       1241438235702108,
+       251068387330034,
+       2023472830745727,
+       1678561792320490,
+       514164206468232,
+       null,
+       2090547788600346,
+       1522428114800750,
+       1387133883533552,
+       1930760635697493,
+       2031225525293772,
+       312142519456176,
+       1219696909618515,
+       163456511420868,
+       1457852767005894,
+       27661832920798,
+       250702284065610
+      ]
+     },
+     {
+      "dtype": "Duration(ms)",
+      "name": "span",
+      "values": [
+       -168407692,
+       -82590938,
+       40245391,
+       -151371000,
+       86400000,
+       -86400000,
+       124689644,
+       58143266,
+       146027622,
+       169278279,
+       1,
+       149464263,
+       -108918314,
+       -16644141,
+       39432204,
+       -67654732,
+       0,
+       101616682,
+       63803693,
+       -171568807,
+       null,
+       -80569343,
+       -40827669,
+       135091073,
+       null,
+       86399999,
+       38626443,
+       18798898,
+       -78106203,
+       -7351367,
+       -160461187,
+       20509323,
+       127018688,
+       158808259,
+       -104023804,
+       61228486,
+       -66932016,
+       36502731,
+       75763908,
+       137121193,
+       102022722,
+       76348152,
+       100681275,
+       44337910,
+       null,
+       -120550943,
+       null,
+       154498406,
+       -85299339,
+       73551721
+      ]
+     },
+     {
+      "dtype": "Time(ns)",
+      "name": "clock",
+      "values": [
+       46471563500297,
+       34547902724779,
+       59033619074539,
+       83830029344634,
+       26466274720510,
+       70516371236110,
+       21841558047062,
+       45763614804370,
+       7698679598010,
+       53230485154040,
+       39058222528707,
+       70178512205357,
+       83251994131197,
+       28471728376823,
+       80327341549294,
+       19476814628761,
+       60479961332453,
+       20380613543486,
+       16641222423211,
+       3551484991496,
+       44895786957952,
+       49508697033626,
+       10754936363979,
+       59731058066645,
+       39724308343893,
+       63110883967537,
+       12109613900391,
+       21308161947805,
+       86265882434730,
+       18384101065083,
+       null,
+       80338455191258,
+       71243337566664,
+       null,
+       60480783808545,
+       69288164976752,
+       64518140543782,
+       30532008556892,
+       0,
+       45156254796141,
+       3723250000000,
+       45281741457487,
+       86399999999999,
+       null,
+       48198314966686,
+       77659125994842,
+       12515354727677,
+       32390012541569,
+       68868755884528,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int32",
+       "name": "a_1",
+       "values": [
+        -2060299764,
+        -418769020,
+        816374505,
+        -1432908148,
+        1328113322,
+        2029347751,
+        -482503898,
+        -498107194,
+        521490084,
+        668774578,
+        1058398540,
+        -1859660381,
+        -2147483648,
+        -1237693237,
+        -1764506433,
+        1404545697,
+        683464289,
+        -1746610343,
+        -1006509760,
+        -61511608,
+        1263158814,
+        838870285,
+        637886481,
+        1169354966,
+        -1,
+        -1529704770,
+        -1659972264,
+        1427464501,
+        0,
+        2108623956,
+        1488909247,
+        -731754047,
+        1596783508,
+        null,
+        1,
+        -200179892,
+        1927714361,
+        -430888421,
+        null,
+        1171225705,
+        551994884,
+        386657869,
+        null,
+        -1155853487,
+        -1961538831,
+        2147483647,
+        1838949703,
+        -299587045,
+        357906835,
+        -1220492803
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "b_2",
+       "values": [
+        null,
+        -881.7540761385367,
+        385.17507000289015,
+        -214.54625948218722,
+        886.0,
+        1.5e-310,
+        -0.5,
+        0.29,
+        2.5,
+        null,
+        1e-300,
+        -382.04656476379625,
+        -153.8390992699981,
+        -832.2847833549567,
+        123.456,
+        null,
+        356.5165104152077,
+        996.5,
+        -238.5,
+        -573.1374202022113,
+        437.5660361240773,
+        -976.5901614087536,
+        -831.6970523092932,
+        null,
+        null,
+        824.675786873913,
+        "-0.0",
+        1e+300,
+        -788.4636182007207,
+        -65.97640326705778,
+        null,
+        742.7591106753391,
+        992.6465413157948,
+        772.2281924567455,
+        0.5,
+        121.29372755334612,
+        null,
+        1.5,
+        1.7976931348623157e+308,
+        -12.823504865742166,
+        902.4354787660129,
+        "inf",
+        923.9191382333661,
+        -246.26726702808946,
+        "NaN",
+        -983.2973944613352,
+        null,
+        0.1,
+        263.0180682030409,
+        -641.7676346435237
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "Price",
+       "values": [
+        1.5,
+        143.74269672917512,
+        -197.65739976834368,
+        211.62346523744918,
+        -278.90674300933574,
+        1e-300,
+        809.9182218990725,
+        315.4725149783326,
+        null,
+        9007199254740994.0,
+        956.0657278205933,
+        -199.2799387030302,
+        -596.184329522061,
+        2.5,
+        -866.0,
+        -628.8504590164728,
+        -0.5,
+        123.456,
+        90.69095518344261,
+        -803.0,
+        981.4754067213216,
+        null,
+        null,
+        "-0.0",
+        null,
+        846.457874773618,
+        910.8271461842855,
+        null,
+        null,
+        5e-324,
+        "-inf",
+        "inf",
+        "NaN",
+        340.3400873091441,
+        982.0,
+        1e+300,
+        325.70371241616317,
+        -650.4742771692443,
+        817.6981256530748,
+        null,
+        323.5,
+        244.7026231066884,
+        1.0000000000000002,
+        0.29,
+        9007199254740992.0,
+        251.18010222622115,
+        -918.36487956573,
+        null,
+        710.2542768121273,
+        -452.7795066392664
+       ]
+      },
+      {
+       "dtype": "Uint8",
+       "name": "qty",
+       "values": [
+        23,
+        67,
+        16,
+        10,
+        107,
+        30,
+        163,
+        37,
+        121,
+        null,
+        61,
+        241,
+        85,
+        141,
+        null,
+        35,
+        182,
+        113,
+        null,
+        89,
+        47,
+        null,
+        25,
+        null,
+        null,
+        143,
+        224,
+        1,
+        238,
+        null,
+        167,
+        142,
+        140,
+        225,
+        234,
+        154,
+        219,
+        80,
+        255,
+        141,
+        null,
+        null,
+        151,
+        null,
+        154,
+        126,
+        206,
+        0,
+        null,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "note",
+       "values": [
+        "c",
+        "aacyb",
+        null,
+        "zb",
+        null,
+        null,
+        "yza",
+        "azzx",
+        "ycx",
+        "bczz",
+        "yxza",
+        "yyz",
+        "bzbzya",
+        null,
+        null,
+        "zcza",
+        "zba",
+        "xazbc",
+        "yxbb",
+        "xa",
+        "xzb",
+        "y",
+        null,
+        "c",
+        "ycz",
+        "yb",
+        "yccbb",
+        "bxx",
+        "yxbbca",
+        "\"q\"",
+        "yyz",
+        "\u00e9",
+        "aabc",
+        null,
+        "a",
+        null,
+        null,
+        "bxyz",
+        "cbcxz",
+        "zy",
+        null,
+        "bczyc",
+        "ca",
+        "zxbc",
+        "a,b",
+        "bx",
+        "ycxb",
+        null,
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true,
+        false,
+        true,
+        false,
+        null,
+        false,
+        false,
+        false,
+        true,
+        null,
+        true,
+        null,
+        false,
+        true,
+        true,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+        false,
+        null,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        null,
+        false,
+        null,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        null,
+        false,
+        true
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        9144,
+        1844,
+        23924,
+        11016,
+        16309,
+        15850,
+        26682,
+        null,
+        23850,
+        6011,
+        24094,
+        760,
+        10754,
+        16972,
+        -719162,
+        17845,
+        21545,
+        5214,
+        29553,
+        19753,
+        12258,
+        9481,
+        25243,
+        17092,
+        25696,
+        8851,
+        9230,
+        13662,
+        -3704,
+        3700,
+        13118,
+        null,
+        24516,
+        17734,
+        20047,
+        52,
+        17431,
+        699,
+        11195,
+        7065,
+        27869,
+        null,
+        28671,
+        -1,
+        -2961,
+        null,
+        2932896,
+        -3618,
+        19782,
+        27659
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "ts",
+       "values": [
+        171584190248061,
+        80504782764861,
+        551293916237082,
+        null,
+        1218939194608461,
+        2138493403030862,
+        null,
+        2174103911667481,
+        469282016094703,
+        1435675196934802,
+        null,
+        859798225265221,
+        -271869917252178,
+        2056618679288047,
+        -250244639741764,
+        -86400000000,
+        1025437097939380,
+        133456381904657,
+        276721174904655,
+        1834267877261759,
+        796618567597287,
+        -53498628565410,
+        589153540297771,
+        null,
+        null,
+        727530750185872,
+        null,
+        125534511569568,
+        739737092823947,
+        null,
+        -42495543108887,
+        989434025298000,
+        916120911011925,
+        1241438235702108,
+        251068387330034,
+        2023472830745727,
+        1678561792320490,
+        514164206468232,
+        null,
+        2090547788600346,
+        1522428114800750,
+        1387133883533552,
+        1930760635697493,
+        2031225525293772,
+        312142519456176,
+        1219696909618515,
+        163456511420868,
+        1457852767005894,
+        27661832920798,
+        250702284065610
+       ]
+      },
+      {
+       "dtype": "Duration(ms)",
+       "name": "span",
+       "values": [
+        -168407692,
+        -82590938,
+        40245391,
+        -151371000,
+        86400000,
+        -86400000,
+        124689644,
+        58143266,
+        146027622,
+        169278279,
+        1,
+        149464263,
+        -108918314,
+        -16644141,
+        39432204,
+        -67654732,
+        0,
+        101616682,
+        63803693,
+        -171568807,
+        null,
+        -80569343,
+        -40827669,
+        135091073,
+        null,
+        86399999,
+        38626443,
+        18798898,
+        -78106203,
+        -7351367,
+        -160461187,
+        20509323,
+        127018688,
+        158808259,
+        -104023804,
+        61228486,
+        -66932016,
+        36502731,
+        75763908,
+        137121193,
+        102022722,
+        76348152,
+        100681275,
+        44337910,
+        null,
+        -120550943,
+        null,
+        154498406,
+        -85299339,
+        73551721
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "clock",
+       "values": [
+        46471563500297,
+        34547902724779,
+        59033619074539,
+        83830029344634,
+        26466274720510,
+        70516371236110,
+        21841558047062,
+        45763614804370,
+        7698679598010,
+        53230485154040,
+        39058222528707,
+        70178512205357,
+        83251994131197,
+        28471728376823,
+        80327341549294,
+        19476814628761,
+        60479961332453,
+        20380613543486,
+        16641222423211,
+        3551484991496,
+        44895786957952,
+        49508697033626,
+        10754936363979,
+        59731058066645,
+        39724308343893,
+        63110883967537,
+        12109613900391,
+        21308161947805,
+        86265882434730,
+        18384101065083,
+        null,
+        80338455191258,
+        71243337566664,
+        null,
+        60480783808545,
+        69288164976752,
+        64518140543782,
+        30532008556892,
+        0,
+        45156254796141,
+        3723250000000,
+        45281741457487,
+        86399999999999,
+        null,
+        48198314966686,
+        77659125994842,
+        12515354727677,
+        32390012541569,
+        68868755884528,
+        null
+       ]
+      },
+      {
+       "dtype": "Decimal(12, 4)",
+       "name": "amt",
+       "values": [
+        "999999999999",
+        "464259670471",
+        "-438699228844",
+        "-562329521289",
+        "879748705345",
+        "-956329210611",
+        "460173201200",
+        "-505089281637",
+        "43330991936",
+        "-695755819438",
+        "205804242259",
+        "886104437397",
+        null,
+        null,
+        "-546194442095",
+        "-757474579877",
+        "-507057018113",
+        "-682755677481",
+        "-700841825950",
+        "77916360103",
+        "922644021861",
+        "549213331707",
+        "-362534035512",
+        "-593709681900",
+        "-986106165335",
+        "-803394607757",
+        "-677841267887",
+        "147873603570",
+        "546398112999",
+        null,
+        null,
+        "-457735501290",
+        "-999999999999",
+        "385424549601",
+        "-545727364462",
+        null,
+        "-911069293862",
+        "-1",
+        "-577043657004",
+        "646974194468",
+        "-503247923389",
+        "-152920355461",
+        "367494596331",
+        "-120345271045",
+        "1",
+        "-502458647264",
+        "-646351271468",
+        "363275960730",
+        "-161356691414",
+        "920052213795"
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "blob",
+       "values": [
+        "9Mg=",
+        "Hw==",
+        "Qg==",
+        "7FE=",
+        "C7WU",
+        null,
+        "3xOd9Q==",
+        "",
+        "+Uw=",
+        "",
+        "gw==",
+        "",
+        "WkyPlA==",
+        "iANCuw==",
+        "HQ==",
+        "",
+        "ty2I",
+        null,
+        "dA==",
+        "",
+        "Q+rTfQ==",
+        "51ZL",
+        "",
+        null,
+        "CYo=",
+        "Aoo0Ig==",
+        "LQ==",
+        "YBw=",
+        "kDed",
+        "lQ==",
+        "Z/4=",
+        "v8I=",
+        "kSg0",
+        "aGVsbG8=",
+        "lw==",
+        "fuT7",
+        "R2OlEg==",
+        "Mw==",
+        "IalnJA==",
+        "AP8=",
+        "+ErI",
+        "",
+        "Ng==",
+        "",
+        "O1j0",
+        "STb/ag==",
+        "",
+        "hj8=",
+        "G1I=",
+        "XCc="
+       ]
+      },
+      {
+       "dtype": "List(Int64)",
+       "name": "l",
+       "values": [
+        [
+         3797356582761302577,
+         9007199254740993,
+         -832880830650663189
+        ],
+        null,
+        [
+         7196593362349070989,
+         -7755050176042919448,
+         -1384180044029798436
+        ],
+        [
+         -2644470580090125087,
+         3797356582761302577,
+         -9223372036854775808,
+         -7437530996603701072
+        ],
+        [
+         8028873915774523883
+        ],
+        [
+         -4683274033228429109,
+         6154275271842535638
+        ],
+        null,
+        [],
+        [
+         5726174078110762305,
+         4038298865178483862,
+         -2661390501446625568,
+         -829229753929160360
+        ],
+        [
+         -9223372036854775808,
+         5268676009082756017,
+         3805514918798962495
+        ],
+        [
+         -8577971683209287571,
+         -9007199254740992
+        ],
+        [],
+        [
+         -8010324624387327277,
+         -2661390501446625568,
+         3797356582761302577
+        ],
+        [
+         9007199254740992,
+         -2661390501446625568,
+         -4694531598274983058
+        ],
+        [
+         -4694531598274983058
+        ],
+        [
+         1854743798946152487
+        ],
+        [
+         -9223372036854775808,
+         -8577971683209287571,
+         -832880830650663189,
+         5726174078110762305
+        ],
+        [
+         -4885936132615266485,
+         8633250406623994294
+        ],
+        [
+         -8577971683209287571
+        ],
+        [
+         -8010324624387327277,
+         1580180760754790723,
+         -829229753929160360,
+         5726174078110762305
+        ],
+        [
+         2404192364262955328
+        ],
+        [
+         -9223372036854775808,
+         4511648680789731328
+        ],
+        [
+         -7437530996603701072,
+         1,
+         -832880830650663189
+        ],
+        null,
+        [
+         -6146916329461782803,
+         400843797411918435
+        ],
+        [
+         -4694531598274983058
+        ],
+        [
+         -4683274033228429109,
+         7196593362349070989,
+         5369646996504480564
+        ],
+        [
+         5726174078110762305
+        ],
+        [
+         -6845893532434230013,
+         5268676009082756017
+        ],
+        [
+         -9223372036854775808,
+         -832880830650663189,
+         9007199254740992,
+         1
+        ],
+        [
+         -829229753929160360,
+         -5390386269465294143,
+         3805514918798962495,
+         5268676009082756017
+        ],
+        [
+         -6845893532434230013
+        ],
+        [
+         -832880830650663189,
+         9223372036854775807,
+         2194162895221875188
+        ],
+        [
+         -4683274033228429109
+        ],
+        [
+         8633250406623994294,
+         2741562170759309940,
+         4361667902058443051,
+         3153097925883853706
+        ],
+        [
+         2741562170759309940,
+         9007199254740993
+        ],
+        [
+         -4885936132615266485,
+         -2661390501446625568,
+         9223372036854775807,
+         1580180760754790723
+        ],
+        [
+         3153097925883853706
+        ],
+        [
+         677419074774700268,
+         2404192364262955328,
+         -829229753929160360
+        ],
+        [],
+        [
+         9007199254740992
+        ],
+        [],
+        [
+         5268676009082756017,
+         -9007199254740992,
+         -832880830650663189,
+         3805514918798962495
+        ],
+        [
+         2194162895221875188,
+         -2644470580090125087
+        ],
+        [
+         2194162895221875188,
+         -3058405450144297732,
+         4361667902058443051
+        ],
+        [
+         1667567996191035857,
+         8028873915774523883
+        ],
+        [
+         1854743798946152487,
+         -1,
+         9007199254740993
+        ],
+        [
+         -9007199254740992,
+         2021380998987695323,
+         -8010324624387327277,
+         3153097925883853706
+        ],
+        [
+         8028873915774523883,
+         1854743798946152487,
+         -1
+        ],
+        [
+         8028873915774523883,
+         -8577971683209287571
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_matches_letter_digit",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int32",
+      "name": "a_1",
+      "values": [
+       -2060299764,
+       -418769020,
+       816374505,
+       -1432908148,
+       1328113322,
+       2029347751,
+       -482503898,
+       -498107194,
+       521490084,
+       668774578,
+       1058398540,
+       -1859660381,
+       -2147483648,
+       -1237693237,
+       -1764506433,
+       1404545697,
+       683464289,
+       -1746610343,
+       -1006509760,
+       -61511608,
+       1263158814,
+       838870285,
+       637886481,
+       1169354966,
+       -1,
+       -1529704770,
+       -1659972264,
+       1427464501,
+       0,
+       2108623956,
+       1488909247,
+       -731754047,
+       1596783508,
+       null,
+       1,
+       -200179892,
+       1927714361,
+       -430888421,
+       null,
+       1171225705,
+       551994884,
+       386657869,
+       null,
+       -1155853487,
+       -1961538831,
+       2147483647,
+       1838949703,
+       -299587045,
+       357906835,
+       -1220492803
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "b_2",
+      "values": [
+       null,
+       -881.7540761385367,
+       385.17507000289015,
+       -214.54625948218722,
+       886.0,
+       1.5e-310,
+       -0.5,
+       0.29,
+       2.5,
+       null,
+       1e-300,
+       -382.04656476379625,
+       -153.8390992699981,
+       -832.2847833549567,
+       123.456,
+       null,
+       356.5165104152077,
+       996.5,
+       -238.5,
+       -573.1374202022113,
+       437.5660361240773,
+       -976.5901614087536,
+       -831.6970523092932,
+       null,
+       null,
+       824.675786873913,
+       "-0.0",
+       1e+300,
+       -788.4636182007207,
+       -65.97640326705778,
+       null,
+       742.7591106753391,
+       992.6465413157948,
+       772.2281924567455,
+       0.5,
+       121.29372755334612,
+       null,
+       1.5,
+       1.7976931348623157e+308,
+       -12.823504865742166,
+       902.4354787660129,
+       "inf",
+       923.9191382333661,
+       -246.26726702808946,
+       "NaN",
+       -983.2973944613352,
+       null,
+       0.1,
+       263.0180682030409,
+       -641.7676346435237
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int32",
+       "name": "a_1",
+       "values": [
+        -2060299764,
+        -418769020,
+        816374505,
+        -1432908148,
+        1328113322,
+        2029347751,
+        -482503898,
+        -498107194,
+        521490084,
+        668774578,
+        1058398540,
+        -1859660381,
+        -2147483648,
+        -1237693237,
+        -1764506433,
+        1404545697,
+        683464289,
+        -1746610343,
+        -1006509760,
+        -61511608,
+        1263158814,
+        838870285,
+        637886481,
+        1169354966,
+        -1,
+        -1529704770,
+        -1659972264,
+        1427464501,
+        0,
+        2108623956,
+        1488909247,
+        -731754047,
+        1596783508,
+        null,
+        1,
+        -200179892,
+        1927714361,
+        -430888421,
+        null,
+        1171225705,
+        551994884,
+        386657869,
+        null,
+        -1155853487,
+        -1961538831,
+        2147483647,
+        1838949703,
+        -299587045,
+        357906835,
+        -1220492803
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "b_2",
+       "values": [
+        null,
+        -881.7540761385367,
+        385.17507000289015,
+        -214.54625948218722,
+        886.0,
+        1.5e-310,
+        -0.5,
+        0.29,
+        2.5,
+        null,
+        1e-300,
+        -382.04656476379625,
+        -153.8390992699981,
+        -832.2847833549567,
+        123.456,
+        null,
+        356.5165104152077,
+        996.5,
+        -238.5,
+        -573.1374202022113,
+        437.5660361240773,
+        -976.5901614087536,
+        -831.6970523092932,
+        null,
+        null,
+        824.675786873913,
+        "-0.0",
+        1e+300,
+        -788.4636182007207,
+        -65.97640326705778,
+        null,
+        742.7591106753391,
+        992.6465413157948,
+        772.2281924567455,
+        0.5,
+        121.29372755334612,
+        null,
+        1.5,
+        1.7976931348623157e+308,
+        -12.823504865742166,
+        902.4354787660129,
+        "inf",
+        923.9191382333661,
+        -246.26726702808946,
+        "NaN",
+        -983.2973944613352,
+        null,
+        0.1,
+        263.0180682030409,
+        -641.7676346435237
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "Price",
+       "values": [
+        1.5,
+        143.74269672917512,
+        -197.65739976834368,
+        211.62346523744918,
+        -278.90674300933574,
+        1e-300,
+        809.9182218990725,
+        315.4725149783326,
+        null,
+        9007199254740994.0,
+        956.0657278205933,
+        -199.2799387030302,
+        -596.184329522061,
+        2.5,
+        -866.0,
+        -628.8504590164728,
+        -0.5,
+        123.456,
+        90.69095518344261,
+        -803.0,
+        981.4754067213216,
+        null,
+        null,
+        "-0.0",
+        null,
+        846.457874773618,
+        910.8271461842855,
+        null,
+        null,
+        5e-324,
+        "-inf",
+        "inf",
+        "NaN",
+        340.3400873091441,
+        982.0,
+        1e+300,
+        325.70371241616317,
+        -650.4742771692443,
+        817.6981256530748,
+        null,
+        323.5,
+        244.7026231066884,
+        1.0000000000000002,
+        0.29,
+        9007199254740992.0,
+        251.18010222622115,
+        -918.36487956573,
+        null,
+        710.2542768121273,
+        -452.7795066392664
+       ]
+      },
+      {
+       "dtype": "Uint8",
+       "name": "qty",
+       "values": [
+        23,
+        67,
+        16,
+        10,
+        107,
+        30,
+        163,
+        37,
+        121,
+        null,
+        61,
+        241,
+        85,
+        141,
+        null,
+        35,
+        182,
+        113,
+        null,
+        89,
+        47,
+        null,
+        25,
+        null,
+        null,
+        143,
+        224,
+        1,
+        238,
+        null,
+        167,
+        142,
+        140,
+        225,
+        234,
+        154,
+        219,
+        80,
+        255,
+        141,
+        null,
+        null,
+        151,
+        null,
+        154,
+        126,
+        206,
+        0,
+        null,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "note",
+       "values": [
+        "c",
+        "aacyb",
+        null,
+        "zb",
+        null,
+        null,
+        "yza",
+        "azzx",
+        "ycx",
+        "bczz",
+        "yxza",
+        "yyz",
+        "bzbzya",
+        null,
+        null,
+        "zcza",
+        "zba",
+        "xazbc",
+        "yxbb",
+        "xa",
+        "xzb",
+        "y",
+        null,
+        "c",
+        "ycz",
+        "yb",
+        "yccbb",
+        "bxx",
+        "yxbbca",
+        "\"q\"",
+        "yyz",
+        "\u00e9",
+        "aabc",
+        null,
+        "a",
+        null,
+        null,
+        "bxyz",
+        "cbcxz",
+        "zy",
+        null,
+        "bczyc",
+        "ca",
+        "zxbc",
+        "a,b",
+        "bx",
+        "ycxb",
+        null,
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true,
+        false,
+        true,
+        false,
+        null,
+        false,
+        false,
+        false,
+        true,
+        null,
+        true,
+        null,
+        false,
+        true,
+        true,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+        false,
+        null,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        null,
+        false,
+        null,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        null,
+        false,
+        true
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        9144,
+        1844,
+        23924,
+        11016,
+        16309,
+        15850,
+        26682,
+        null,
+        23850,
+        6011,
+        24094,
+        760,
+        10754,
+        16972,
+        -719162,
+        17845,
+        21545,
+        5214,
+        29553,
+        19753,
+        12258,
+        9481,
+        25243,
+        17092,
+        25696,
+        8851,
+        9230,
+        13662,
+        -3704,
+        3700,
+        13118,
+        null,
+        24516,
+        17734,
+        20047,
+        52,
+        17431,
+        699,
+        11195,
+        7065,
+        27869,
+        null,
+        28671,
+        -1,
+        -2961,
+        null,
+        2932896,
+        -3618,
+        19782,
+        27659
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "ts",
+       "values": [
+        171584190248061,
+        80504782764861,
+        551293916237082,
+        null,
+        1218939194608461,
+        2138493403030862,
+        null,
+        2174103911667481,
+        469282016094703,
+        1435675196934802,
+        null,
+        859798225265221,
+        -271869917252178,
+        2056618679288047,
+        -250244639741764,
+        -86400000000,
+        1025437097939380,
+        133456381904657,
+        276721174904655,
+        1834267877261759,
+        796618567597287,
+        -53498628565410,
+        589153540297771,
+        null,
+        null,
+        727530750185872,
+        null,
+        125534511569568,
+        739737092823947,
+        null,
+        -42495543108887,
+        989434025298000,
+        916120911011925,
+        1241438235702108,
+        251068387330034,
+        2023472830745727,
+        1678561792320490,
+        514164206468232,
+        null,
+        2090547788600346,
+        1522428114800750,
+        1387133883533552,
+        1930760635697493,
+        2031225525293772,
+        312142519456176,
+        1219696909618515,
+        163456511420868,
+        1457852767005894,
+        27661832920798,
+        250702284065610
+       ]
+      },
+      {
+       "dtype": "Duration(ms)",
+       "name": "span",
+       "values": [
+        -168407692,
+        -82590938,
+        40245391,
+        -151371000,
+        86400000,
+        -86400000,
+        124689644,
+        58143266,
+        146027622,
+        169278279,
+        1,
+        149464263,
+        -108918314,
+        -16644141,
+        39432204,
+        -67654732,
+        0,
+        101616682,
+        63803693,
+        -171568807,
+        null,
+        -80569343,
+        -40827669,
+        135091073,
+        null,
+        86399999,
+        38626443,
+        18798898,
+        -78106203,
+        -7351367,
+        -160461187,
+        20509323,
+        127018688,
+        158808259,
+        -104023804,
+        61228486,
+        -66932016,
+        36502731,
+        75763908,
+        137121193,
+        102022722,
+        76348152,
+        100681275,
+        44337910,
+        null,
+        -120550943,
+        null,
+        154498406,
+        -85299339,
+        73551721
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "clock",
+       "values": [
+        46471563500297,
+        34547902724779,
+        59033619074539,
+        83830029344634,
+        26466274720510,
+        70516371236110,
+        21841558047062,
+        45763614804370,
+        7698679598010,
+        53230485154040,
+        39058222528707,
+        70178512205357,
+        83251994131197,
+        28471728376823,
+        80327341549294,
+        19476814628761,
+        60479961332453,
+        20380613543486,
+        16641222423211,
+        3551484991496,
+        44895786957952,
+        49508697033626,
+        10754936363979,
+        59731058066645,
+        39724308343893,
+        63110883967537,
+        12109613900391,
+        21308161947805,
+        86265882434730,
+        18384101065083,
+        null,
+        80338455191258,
+        71243337566664,
+        null,
+        60480783808545,
+        69288164976752,
+        64518140543782,
+        30532008556892,
+        0,
+        45156254796141,
+        3723250000000,
+        45281741457487,
+        86399999999999,
+        null,
+        48198314966686,
+        77659125994842,
+        12515354727677,
+        32390012541569,
+        68868755884528,
+        null
+       ]
+      },
+      {
+       "dtype": "Decimal(12, 4)",
+       "name": "amt",
+       "values": [
+        "999999999999",
+        "464259670471",
+        "-438699228844",
+        "-562329521289",
+        "879748705345",
+        "-956329210611",
+        "460173201200",
+        "-505089281637",
+        "43330991936",
+        "-695755819438",
+        "205804242259",
+        "886104437397",
+        null,
+        null,
+        "-546194442095",
+        "-757474579877",
+        "-507057018113",
+        "-682755677481",
+        "-700841825950",
+        "77916360103",
+        "922644021861",
+        "549213331707",
+        "-362534035512",
+        "-593709681900",
+        "-986106165335",
+        "-803394607757",
+        "-677841267887",
+        "147873603570",
+        "546398112999",
+        null,
+        null,
+        "-457735501290",
+        "-999999999999",
+        "385424549601",
+        "-545727364462",
+        null,
+        "-911069293862",
+        "-1",
+        "-577043657004",
+        "646974194468",
+        "-503247923389",
+        "-152920355461",
+        "367494596331",
+        "-120345271045",
+        "1",
+        "-502458647264",
+        "-646351271468",
+        "363275960730",
+        "-161356691414",
+        "920052213795"
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "blob",
+       "values": [
+        "9Mg=",
+        "Hw==",
+        "Qg==",
+        "7FE=",
+        "C7WU",
+        null,
+        "3xOd9Q==",
+        "",
+        "+Uw=",
+        "",
+        "gw==",
+        "",
+        "WkyPlA==",
+        "iANCuw==",
+        "HQ==",
+        "",
+        "ty2I",
+        null,
+        "dA==",
+        "",
+        "Q+rTfQ==",
+        "51ZL",
+        "",
+        null,
+        "CYo=",
+        "Aoo0Ig==",
+        "LQ==",
+        "YBw=",
+        "kDed",
+        "lQ==",
+        "Z/4=",
+        "v8I=",
+        "kSg0",
+        "aGVsbG8=",
+        "lw==",
+        "fuT7",
+        "R2OlEg==",
+        "Mw==",
+        "IalnJA==",
+        "AP8=",
+        "+ErI",
+        "",
+        "Ng==",
+        "",
+        "O1j0",
+        "STb/ag==",
+        "",
+        "hj8=",
+        "G1I=",
+        "XCc="
+       ]
+      },
+      {
+       "dtype": "List(Int64)",
+       "name": "l",
+       "values": [
+        [
+         3797356582761302577,
+         9007199254740993,
+         -832880830650663189
+        ],
+        null,
+        [
+         7196593362349070989,
+         -7755050176042919448,
+         -1384180044029798436
+        ],
+        [
+         -2644470580090125087,
+         3797356582761302577,
+         -9223372036854775808,
+         -7437530996603701072
+        ],
+        [
+         8028873915774523883
+        ],
+        [
+         -4683274033228429109,
+         6154275271842535638
+        ],
+        null,
+        [],
+        [
+         5726174078110762305,
+         4038298865178483862,
+         -2661390501446625568,
+         -829229753929160360
+        ],
+        [
+         -9223372036854775808,
+         5268676009082756017,
+         3805514918798962495
+        ],
+        [
+         -8577971683209287571,
+         -9007199254740992
+        ],
+        [],
+        [
+         -8010324624387327277,
+         -2661390501446625568,
+         3797356582761302577
+        ],
+        [
+         9007199254740992,
+         -2661390501446625568,
+         -4694531598274983058
+        ],
+        [
+         -4694531598274983058
+        ],
+        [
+         1854743798946152487
+        ],
+        [
+         -9223372036854775808,
+         -8577971683209287571,
+         -832880830650663189,
+         5726174078110762305
+        ],
+        [
+         -4885936132615266485,
+         8633250406623994294
+        ],
+        [
+         -8577971683209287571
+        ],
+        [
+         -8010324624387327277,
+         1580180760754790723,
+         -829229753929160360,
+         5726174078110762305
+        ],
+        [
+         2404192364262955328
+        ],
+        [
+         -9223372036854775808,
+         4511648680789731328
+        ],
+        [
+         -7437530996603701072,
+         1,
+         -832880830650663189
+        ],
+        null,
+        [
+         -6146916329461782803,
+         400843797411918435
+        ],
+        [
+         -4694531598274983058
+        ],
+        [
+         -4683274033228429109,
+         7196593362349070989,
+         5369646996504480564
+        ],
+        [
+         5726174078110762305
+        ],
+        [
+         -6845893532434230013,
+         5268676009082756017
+        ],
+        [
+         -9223372036854775808,
+         -832880830650663189,
+         9007199254740992,
+         1
+        ],
+        [
+         -829229753929160360,
+         -5390386269465294143,
+         3805514918798962495,
+         5268676009082756017
+        ],
+        [
+         -6845893532434230013
+        ],
+        [
+         -832880830650663189,
+         9223372036854775807,
+         2194162895221875188
+        ],
+        [
+         -4683274033228429109
+        ],
+        [
+         8633250406623994294,
+         2741562170759309940,
+         4361667902058443051,
+         3153097925883853706
+        ],
+        [
+         2741562170759309940,
+         9007199254740993
+        ],
+        [
+         -4885936132615266485,
+         -2661390501446625568,
+         9223372036854775807,
+         1580180760754790723
+        ],
+        [
+         3153097925883853706
+        ],
+        [
+         677419074774700268,
+         2404192364262955328,
+         -829229753929160360
+        ],
+        [],
+        [
+         9007199254740992
+        ],
+        [],
+        [
+         5268676009082756017,
+         -9007199254740992,
+         -832880830650663189,
+         3805514918798962495
+        ],
+        [
+         2194162895221875188,
+         -2644470580090125087
+        ],
+        [
+         2194162895221875188,
+         -3058405450144297732,
+         4361667902058443051
+        ],
+        [
+         1667567996191035857,
+         8028873915774523883
+        ],
+        [
+         1854743798946152487,
+         -1,
+         9007199254740993
+        ],
+        [
+         -9007199254740992,
+         2021380998987695323,
+         -8010324624387327277,
+         3153097925883853706
+        ],
+        [
+         8028873915774523883,
+         1854743798946152487,
+         -1
+        ],
+        [
+         8028873915774523883,
+         -8577971683209287571
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_by_index",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "b_2",
+      "values": [
+       null,
+       -881.7540761385367,
+       385.17507000289015,
+       -214.54625948218722,
+       886.0,
+       1.5e-310,
+       -0.5,
+       0.29,
+       2.5,
+       null,
+       1e-300,
+       -382.04656476379625,
+       -153.8390992699981,
+       -832.2847833549567,
+       123.456,
+       null,
+       356.5165104152077,
+       996.5,
+       -238.5,
+       -573.1374202022113,
+       437.5660361240773,
+       -976.5901614087536,
+       -831.6970523092932,
+       null,
+       null,
+       824.675786873913,
+       "-0.0",
+       1e+300,
+       -788.4636182007207,
+       -65.97640326705778,
+       null,
+       742.7591106753391,
+       992.6465413157948,
+       772.2281924567455,
+       0.5,
+       121.29372755334612,
+       null,
+       1.5,
+       1.7976931348623157e+308,
+       -12.823504865742166,
+       902.4354787660129,
+       "inf",
+       923.9191382333661,
+       -246.26726702808946,
+       "NaN",
+       -983.2973944613352,
+       null,
+       0.1,
+       263.0180682030409,
+       -641.7676346435237
+      ]
+     },
+     {
+      "dtype": "Uint8",
+      "name": "qty",
+      "values": [
+       23,
+       67,
+       16,
+       10,
+       107,
+       30,
+       163,
+       37,
+       121,
+       null,
+       61,
+       241,
+       85,
+       141,
+       null,
+       35,
+       182,
+       113,
+       null,
+       89,
+       47,
+       null,
+       25,
+       null,
+       null,
+       143,
+       224,
+       1,
+       238,
+       null,
+       167,
+       142,
+       140,
+       225,
+       234,
+       154,
+       219,
+       80,
+       255,
+       141,
+       null,
+       null,
+       151,
+       null,
+       154,
+       126,
+       206,
+       0,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "List(Int64)",
+      "name": "l",
+      "values": [
+       [
+        3797356582761302577,
+        9007199254740993,
+        -832880830650663189
+       ],
+       null,
+       [
+        7196593362349070989,
+        -7755050176042919448,
+        -1384180044029798436
+       ],
+       [
+        -2644470580090125087,
+        3797356582761302577,
+        -9223372036854775808,
+        -7437530996603701072
+       ],
+       [
+        8028873915774523883
+       ],
+       [
+        -4683274033228429109,
+        6154275271842535638
+       ],
+       null,
+       [],
+       [
+        5726174078110762305,
+        4038298865178483862,
+        -2661390501446625568,
+        -829229753929160360
+       ],
+       [
+        -9223372036854775808,
+        5268676009082756017,
+        3805514918798962495
+       ],
+       [
+        -8577971683209287571,
+        -9007199254740992
+       ],
+       [],
+       [
+        -8010324624387327277,
+        -2661390501446625568,
+        3797356582761302577
+       ],
+       [
+        9007199254740992,
+        -2661390501446625568,
+        -4694531598274983058
+       ],
+       [
+        -4694531598274983058
+       ],
+       [
+        1854743798946152487
+       ],
+       [
+        -9223372036854775808,
+        -8577971683209287571,
+        -832880830650663189,
+        5726174078110762305
+       ],
+       [
+        -4885936132615266485,
+        8633250406623994294
+       ],
+       [
+        -8577971683209287571
+       ],
+       [
+        -8010324624387327277,
+        1580180760754790723,
+        -829229753929160360,
+        5726174078110762305
+       ],
+       [
+        2404192364262955328
+       ],
+       [
+        -9223372036854775808,
+        4511648680789731328
+       ],
+       [
+        -7437530996603701072,
+        1,
+        -832880830650663189
+       ],
+       null,
+       [
+        -6146916329461782803,
+        400843797411918435
+       ],
+       [
+        -4694531598274983058
+       ],
+       [
+        -4683274033228429109,
+        7196593362349070989,
+        5369646996504480564
+       ],
+       [
+        5726174078110762305
+       ],
+       [
+        -6845893532434230013,
+        5268676009082756017
+       ],
+       [
+        -9223372036854775808,
+        -832880830650663189,
+        9007199254740992,
+        1
+       ],
+       [
+        -829229753929160360,
+        -5390386269465294143,
+        3805514918798962495,
+        5268676009082756017
+       ],
+       [
+        -6845893532434230013
+       ],
+       [
+        -832880830650663189,
+        9223372036854775807,
+        2194162895221875188
+       ],
+       [
+        -4683274033228429109
+       ],
+       [
+        8633250406623994294,
+        2741562170759309940,
+        4361667902058443051,
+        3153097925883853706
+       ],
+       [
+        2741562170759309940,
+        9007199254740993
+       ],
+       [
+        -4885936132615266485,
+        -2661390501446625568,
+        9223372036854775807,
+        1580180760754790723
+       ],
+       [
+        3153097925883853706
+       ],
+       [
+        677419074774700268,
+        2404192364262955328,
+        -829229753929160360
+       ],
+       [],
+       [
+        9007199254740992
+       ],
+       [],
+       [
+        5268676009082756017,
+        -9007199254740992,
+        -832880830650663189,
+        3805514918798962495
+       ],
+       [
+        2194162895221875188,
+        -2644470580090125087
+       ],
+       [
+        2194162895221875188,
+        -3058405450144297732,
+        4361667902058443051
+       ],
+       [
+        1667567996191035857,
+        8028873915774523883
+       ],
+       [
+        1854743798946152487,
+        -1,
+        9007199254740993
+       ],
+       [
+        -9007199254740992,
+        2021380998987695323,
+        -8010324624387327277,
+        3153097925883853706
+       ],
+       [
+        8028873915774523883,
+        1854743798946152487,
+        -1
+       ],
+       [
+        8028873915774523883,
+        -8577971683209287571
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int32",
+       "name": "a_1",
+       "values": [
+        -2060299764,
+        -418769020,
+        816374505,
+        -1432908148,
+        1328113322,
+        2029347751,
+        -482503898,
+        -498107194,
+        521490084,
+        668774578,
+        1058398540,
+        -1859660381,
+        -2147483648,
+        -1237693237,
+        -1764506433,
+        1404545697,
+        683464289,
+        -1746610343,
+        -1006509760,
+        -61511608,
+        1263158814,
+        838870285,
+        637886481,
+        1169354966,
+        -1,
+        -1529704770,
+        -1659972264,
+        1427464501,
+        0,
+        2108623956,
+        1488909247,
+        -731754047,
+        1596783508,
+        null,
+        1,
+        -200179892,
+        1927714361,
+        -430888421,
+        null,
+        1171225705,
+        551994884,
+        386657869,
+        null,
+        -1155853487,
+        -1961538831,
+        2147483647,
+        1838949703,
+        -299587045,
+        357906835,
+        -1220492803
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "b_2",
+       "values": [
+        null,
+        -881.7540761385367,
+        385.17507000289015,
+        -214.54625948218722,
+        886.0,
+        1.5e-310,
+        -0.5,
+        0.29,
+        2.5,
+        null,
+        1e-300,
+        -382.04656476379625,
+        -153.8390992699981,
+        -832.2847833549567,
+        123.456,
+        null,
+        356.5165104152077,
+        996.5,
+        -238.5,
+        -573.1374202022113,
+        437.5660361240773,
+        -976.5901614087536,
+        -831.6970523092932,
+        null,
+        null,
+        824.675786873913,
+        "-0.0",
+        1e+300,
+        -788.4636182007207,
+        -65.97640326705778,
+        null,
+        742.7591106753391,
+        992.6465413157948,
+        772.2281924567455,
+        0.5,
+        121.29372755334612,
+        null,
+        1.5,
+        1.7976931348623157e+308,
+        -12.823504865742166,
+        902.4354787660129,
+        "inf",
+        923.9191382333661,
+        -246.26726702808946,
+        "NaN",
+        -983.2973944613352,
+        null,
+        0.1,
+        263.0180682030409,
+        -641.7676346435237
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "Price",
+       "values": [
+        1.5,
+        143.74269672917512,
+        -197.65739976834368,
+        211.62346523744918,
+        -278.90674300933574,
+        1e-300,
+        809.9182218990725,
+        315.4725149783326,
+        null,
+        9007199254740994.0,
+        956.0657278205933,
+        -199.2799387030302,
+        -596.184329522061,
+        2.5,
+        -866.0,
+        -628.8504590164728,
+        -0.5,
+        123.456,
+        90.69095518344261,
+        -803.0,
+        981.4754067213216,
+        null,
+        null,
+        "-0.0",
+        null,
+        846.457874773618,
+        910.8271461842855,
+        null,
+        null,
+        5e-324,
+        "-inf",
+        "inf",
+        "NaN",
+        340.3400873091441,
+        982.0,
+        1e+300,
+        325.70371241616317,
+        -650.4742771692443,
+        817.6981256530748,
+        null,
+        323.5,
+        244.7026231066884,
+        1.0000000000000002,
+        0.29,
+        9007199254740992.0,
+        251.18010222622115,
+        -918.36487956573,
+        null,
+        710.2542768121273,
+        -452.7795066392664
+       ]
+      },
+      {
+       "dtype": "Uint8",
+       "name": "qty",
+       "values": [
+        23,
+        67,
+        16,
+        10,
+        107,
+        30,
+        163,
+        37,
+        121,
+        null,
+        61,
+        241,
+        85,
+        141,
+        null,
+        35,
+        182,
+        113,
+        null,
+        89,
+        47,
+        null,
+        25,
+        null,
+        null,
+        143,
+        224,
+        1,
+        238,
+        null,
+        167,
+        142,
+        140,
+        225,
+        234,
+        154,
+        219,
+        80,
+        255,
+        141,
+        null,
+        null,
+        151,
+        null,
+        154,
+        126,
+        206,
+        0,
+        null,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "note",
+       "values": [
+        "c",
+        "aacyb",
+        null,
+        "zb",
+        null,
+        null,
+        "yza",
+        "azzx",
+        "ycx",
+        "bczz",
+        "yxza",
+        "yyz",
+        "bzbzya",
+        null,
+        null,
+        "zcza",
+        "zba",
+        "xazbc",
+        "yxbb",
+        "xa",
+        "xzb",
+        "y",
+        null,
+        "c",
+        "ycz",
+        "yb",
+        "yccbb",
+        "bxx",
+        "yxbbca",
+        "\"q\"",
+        "yyz",
+        "\u00e9",
+        "aabc",
+        null,
+        "a",
+        null,
+        null,
+        "bxyz",
+        "cbcxz",
+        "zy",
+        null,
+        "bczyc",
+        "ca",
+        "zxbc",
+        "a,b",
+        "bx",
+        "ycxb",
+        null,
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true,
+        false,
+        true,
+        false,
+        null,
+        false,
+        false,
+        false,
+        true,
+        null,
+        true,
+        null,
+        false,
+        true,
+        true,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+        false,
+        null,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        null,
+        false,
+        null,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        null,
+        false,
+        true
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        9144,
+        1844,
+        23924,
+        11016,
+        16309,
+        15850,
+        26682,
+        null,
+        23850,
+        6011,
+        24094,
+        760,
+        10754,
+        16972,
+        -719162,
+        17845,
+        21545,
+        5214,
+        29553,
+        19753,
+        12258,
+        9481,
+        25243,
+        17092,
+        25696,
+        8851,
+        9230,
+        13662,
+        -3704,
+        3700,
+        13118,
+        null,
+        24516,
+        17734,
+        20047,
+        52,
+        17431,
+        699,
+        11195,
+        7065,
+        27869,
+        null,
+        28671,
+        -1,
+        -2961,
+        null,
+        2932896,
+        -3618,
+        19782,
+        27659
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "ts",
+       "values": [
+        171584190248061,
+        80504782764861,
+        551293916237082,
+        null,
+        1218939194608461,
+        2138493403030862,
+        null,
+        2174103911667481,
+        469282016094703,
+        1435675196934802,
+        null,
+        859798225265221,
+        -271869917252178,
+        2056618679288047,
+        -250244639741764,
+        -86400000000,
+        1025437097939380,
+        133456381904657,
+        276721174904655,
+        1834267877261759,
+        796618567597287,
+        -53498628565410,
+        589153540297771,
+        null,
+        null,
+        727530750185872,
+        null,
+        125534511569568,
+        739737092823947,
+        null,
+        -42495543108887,
+        989434025298000,
+        916120911011925,
+        1241438235702108,
+        251068387330034,
+        2023472830745727,
+        1678561792320490,
+        514164206468232,
+        null,
+        2090547788600346,
+        1522428114800750,
+        1387133883533552,
+        1930760635697493,
+        2031225525293772,
+        312142519456176,
+        1219696909618515,
+        163456511420868,
+        1457852767005894,
+        27661832920798,
+        250702284065610
+       ]
+      },
+      {
+       "dtype": "Duration(ms)",
+       "name": "span",
+       "values": [
+        -168407692,
+        -82590938,
+        40245391,
+        -151371000,
+        86400000,
+        -86400000,
+        124689644,
+        58143266,
+        146027622,
+        169278279,
+        1,
+        149464263,
+        -108918314,
+        -16644141,
+        39432204,
+        -67654732,
+        0,
+        101616682,
+        63803693,
+        -171568807,
+        null,
+        -80569343,
+        -40827669,
+        135091073,
+        null,
+        86399999,
+        38626443,
+        18798898,
+        -78106203,
+        -7351367,
+        -160461187,
+        20509323,
+        127018688,
+        158808259,
+        -104023804,
+        61228486,
+        -66932016,
+        36502731,
+        75763908,
+        137121193,
+        102022722,
+        76348152,
+        100681275,
+        44337910,
+        null,
+        -120550943,
+        null,
+        154498406,
+        -85299339,
+        73551721
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "clock",
+       "values": [
+        46471563500297,
+        34547902724779,
+        59033619074539,
+        83830029344634,
+        26466274720510,
+        70516371236110,
+        21841558047062,
+        45763614804370,
+        7698679598010,
+        53230485154040,
+        39058222528707,
+        70178512205357,
+        83251994131197,
+        28471728376823,
+        80327341549294,
+        19476814628761,
+        60479961332453,
+        20380613543486,
+        16641222423211,
+        3551484991496,
+        44895786957952,
+        49508697033626,
+        10754936363979,
+        59731058066645,
+        39724308343893,
+        63110883967537,
+        12109613900391,
+        21308161947805,
+        86265882434730,
+        18384101065083,
+        null,
+        80338455191258,
+        71243337566664,
+        null,
+        60480783808545,
+        69288164976752,
+        64518140543782,
+        30532008556892,
+        0,
+        45156254796141,
+        3723250000000,
+        45281741457487,
+        86399999999999,
+        null,
+        48198314966686,
+        77659125994842,
+        12515354727677,
+        32390012541569,
+        68868755884528,
+        null
+       ]
+      },
+      {
+       "dtype": "Decimal(12, 4)",
+       "name": "amt",
+       "values": [
+        "999999999999",
+        "464259670471",
+        "-438699228844",
+        "-562329521289",
+        "879748705345",
+        "-956329210611",
+        "460173201200",
+        "-505089281637",
+        "43330991936",
+        "-695755819438",
+        "205804242259",
+        "886104437397",
+        null,
+        null,
+        "-546194442095",
+        "-757474579877",
+        "-507057018113",
+        "-682755677481",
+        "-700841825950",
+        "77916360103",
+        "922644021861",
+        "549213331707",
+        "-362534035512",
+        "-593709681900",
+        "-986106165335",
+        "-803394607757",
+        "-677841267887",
+        "147873603570",
+        "546398112999",
+        null,
+        null,
+        "-457735501290",
+        "-999999999999",
+        "385424549601",
+        "-545727364462",
+        null,
+        "-911069293862",
+        "-1",
+        "-577043657004",
+        "646974194468",
+        "-503247923389",
+        "-152920355461",
+        "367494596331",
+        "-120345271045",
+        "1",
+        "-502458647264",
+        "-646351271468",
+        "363275960730",
+        "-161356691414",
+        "920052213795"
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "blob",
+       "values": [
+        "9Mg=",
+        "Hw==",
+        "Qg==",
+        "7FE=",
+        "C7WU",
+        null,
+        "3xOd9Q==",
+        "",
+        "+Uw=",
+        "",
+        "gw==",
+        "",
+        "WkyPlA==",
+        "iANCuw==",
+        "HQ==",
+        "",
+        "ty2I",
+        null,
+        "dA==",
+        "",
+        "Q+rTfQ==",
+        "51ZL",
+        "",
+        null,
+        "CYo=",
+        "Aoo0Ig==",
+        "LQ==",
+        "YBw=",
+        "kDed",
+        "lQ==",
+        "Z/4=",
+        "v8I=",
+        "kSg0",
+        "aGVsbG8=",
+        "lw==",
+        "fuT7",
+        "R2OlEg==",
+        "Mw==",
+        "IalnJA==",
+        "AP8=",
+        "+ErI",
+        "",
+        "Ng==",
+        "",
+        "O1j0",
+        "STb/ag==",
+        "",
+        "hj8=",
+        "G1I=",
+        "XCc="
+       ]
+      },
+      {
+       "dtype": "List(Int64)",
+       "name": "l",
+       "values": [
+        [
+         3797356582761302577,
+         9007199254740993,
+         -832880830650663189
+        ],
+        null,
+        [
+         7196593362349070989,
+         -7755050176042919448,
+         -1384180044029798436
+        ],
+        [
+         -2644470580090125087,
+         3797356582761302577,
+         -9223372036854775808,
+         -7437530996603701072
+        ],
+        [
+         8028873915774523883
+        ],
+        [
+         -4683274033228429109,
+         6154275271842535638
+        ],
+        null,
+        [],
+        [
+         5726174078110762305,
+         4038298865178483862,
+         -2661390501446625568,
+         -829229753929160360
+        ],
+        [
+         -9223372036854775808,
+         5268676009082756017,
+         3805514918798962495
+        ],
+        [
+         -8577971683209287571,
+         -9007199254740992
+        ],
+        [],
+        [
+         -8010324624387327277,
+         -2661390501446625568,
+         3797356582761302577
+        ],
+        [
+         9007199254740992,
+         -2661390501446625568,
+         -4694531598274983058
+        ],
+        [
+         -4694531598274983058
+        ],
+        [
+         1854743798946152487
+        ],
+        [
+         -9223372036854775808,
+         -8577971683209287571,
+         -832880830650663189,
+         5726174078110762305
+        ],
+        [
+         -4885936132615266485,
+         8633250406623994294
+        ],
+        [
+         -8577971683209287571
+        ],
+        [
+         -8010324624387327277,
+         1580180760754790723,
+         -829229753929160360,
+         5726174078110762305
+        ],
+        [
+         2404192364262955328
+        ],
+        [
+         -9223372036854775808,
+         4511648680789731328
+        ],
+        [
+         -7437530996603701072,
+         1,
+         -832880830650663189
+        ],
+        null,
+        [
+         -6146916329461782803,
+         400843797411918435
+        ],
+        [
+         -4694531598274983058
+        ],
+        [
+         -4683274033228429109,
+         7196593362349070989,
+         5369646996504480564
+        ],
+        [
+         5726174078110762305
+        ],
+        [
+         -6845893532434230013,
+         5268676009082756017
+        ],
+        [
+         -9223372036854775808,
+         -832880830650663189,
+         9007199254740992,
+         1
+        ],
+        [
+         -829229753929160360,
+         -5390386269465294143,
+         3805514918798962495,
+         5268676009082756017
+        ],
+        [
+         -6845893532434230013
+        ],
+        [
+         -832880830650663189,
+         9223372036854775807,
+         2194162895221875188
+        ],
+        [
+         -4683274033228429109
+        ],
+        [
+         8633250406623994294,
+         2741562170759309940,
+         4361667902058443051,
+         3153097925883853706
+        ],
+        [
+         2741562170759309940,
+         9007199254740993
+        ],
+        [
+         -4885936132615266485,
+         -2661390501446625568,
+         9223372036854775807,
+         1580180760754790723
+        ],
+        [
+         3153097925883853706
+        ],
+        [
+         677419074774700268,
+         2404192364262955328,
+         -829229753929160360
+        ],
+        [],
+        [
+         9007199254740992
+        ],
+        [],
+        [
+         5268676009082756017,
+         -9007199254740992,
+         -832880830650663189,
+         3805514918798962495
+        ],
+        [
+         2194162895221875188,
+         -2644470580090125087
+        ],
+        [
+         2194162895221875188,
+         -3058405450144297732,
+         4361667902058443051
+        ],
+        [
+         1667567996191035857,
+         8028873915774523883
+        ],
+        [
+         1854743798946152487,
+         -1,
+         9007199254740993
+        ],
+        [
+         -9007199254740992,
+         2021380998987695323,
+         -8010324624387327277,
+         3153097925883853706
+        ],
+        [
+         8028873915774523883,
+         1854743798946152487,
+         -1
+        ],
+        [
+         8028873915774523883,
+         -8577971683209287571
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_not_text_nor_binary",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int32",
+      "name": "a_1",
+      "values": [
+       -2060299764,
+       -418769020,
+       816374505,
+       -1432908148,
+       1328113322,
+       2029347751,
+       -482503898,
+       -498107194,
+       521490084,
+       668774578,
+       1058398540,
+       -1859660381,
+       -2147483648,
+       -1237693237,
+       -1764506433,
+       1404545697,
+       683464289,
+       -1746610343,
+       -1006509760,
+       -61511608,
+       1263158814,
+       838870285,
+       637886481,
+       1169354966,
+       -1,
+       -1529704770,
+       -1659972264,
+       1427464501,
+       0,
+       2108623956,
+       1488909247,
+       -731754047,
+       1596783508,
+       null,
+       1,
+       -200179892,
+       1927714361,
+       -430888421,
+       null,
+       1171225705,
+       551994884,
+       386657869,
+       null,
+       -1155853487,
+       -1961538831,
+       2147483647,
+       1838949703,
+       -299587045,
+       357906835,
+       -1220492803
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "b_2",
+      "values": [
+       null,
+       -881.7540761385367,
+       385.17507000289015,
+       -214.54625948218722,
+       886.0,
+       1.5e-310,
+       -0.5,
+       0.29,
+       2.5,
+       null,
+       1e-300,
+       -382.04656476379625,
+       -153.8390992699981,
+       -832.2847833549567,
+       123.456,
+       null,
+       356.5165104152077,
+       996.5,
+       -238.5,
+       -573.1374202022113,
+       437.5660361240773,
+       -976.5901614087536,
+       -831.6970523092932,
+       null,
+       null,
+       824.675786873913,
+       "-0.0",
+       1e+300,
+       -788.4636182007207,
+       -65.97640326705778,
+       null,
+       742.7591106753391,
+       992.6465413157948,
+       772.2281924567455,
+       0.5,
+       121.29372755334612,
+       null,
+       1.5,
+       1.7976931348623157e+308,
+       -12.823504865742166,
+       902.4354787660129,
+       "inf",
+       923.9191382333661,
+       -246.26726702808946,
+       "NaN",
+       -983.2973944613352,
+       null,
+       0.1,
+       263.0180682030409,
+       -641.7676346435237
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "Price",
+      "values": [
+       1.5,
+       143.74269672917512,
+       -197.65739976834368,
+       211.62346523744918,
+       -278.90674300933574,
+       1e-300,
+       809.9182218990725,
+       315.4725149783326,
+       null,
+       9007199254740994.0,
+       956.0657278205933,
+       -199.2799387030302,
+       -596.184329522061,
+       2.5,
+       -866.0,
+       -628.8504590164728,
+       -0.5,
+       123.456,
+       90.69095518344261,
+       -803.0,
+       981.4754067213216,
+       null,
+       null,
+       "-0.0",
+       null,
+       846.457874773618,
+       910.8271461842855,
+       null,
+       null,
+       5e-324,
+       "-inf",
+       "inf",
+       "NaN",
+       340.3400873091441,
+       982.0,
+       1e+300,
+       325.70371241616317,
+       -650.4742771692443,
+       817.6981256530748,
+       null,
+       323.5,
+       244.7026231066884,
+       1.0000000000000002,
+       0.29,
+       9007199254740992.0,
+       251.18010222622115,
+       -918.36487956573,
+       null,
+       710.2542768121273,
+       -452.7795066392664
+      ]
+     },
+     {
+      "dtype": "Uint8",
+      "name": "qty",
+      "values": [
+       23,
+       67,
+       16,
+       10,
+       107,
+       30,
+       163,
+       37,
+       121,
+       null,
+       61,
+       241,
+       85,
+       141,
+       null,
+       35,
+       182,
+       113,
+       null,
+       89,
+       47,
+       null,
+       25,
+       null,
+       null,
+       143,
+       224,
+       1,
+       238,
+       null,
+       167,
+       142,
+       140,
+       225,
+       234,
+       154,
+       219,
+       80,
+       255,
+       141,
+       null,
+       null,
+       151,
+       null,
+       154,
+       126,
+       206,
+       0,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "ok",
+      "values": [
+       true,
+       false,
+       true,
+       false,
+       null,
+       false,
+       false,
+       false,
+       true,
+       null,
+       true,
+       null,
+       false,
+       true,
+       true,
+       false,
+       true,
+       true,
+       false,
+       true,
+       false,
+       true,
+       true,
+       false,
+       null,
+       false,
+       true,
+       true,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       null,
+       false,
+       null,
+       true,
+       true,
+       false,
+       false,
+       false,
+       true,
+       true,
+       null,
+       false,
+       true
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "d",
+      "values": [
+       9144,
+       1844,
+       23924,
+       11016,
+       16309,
+       15850,
+       26682,
+       null,
+       23850,
+       6011,
+       24094,
+       760,
+       10754,
+       16972,
+       -719162,
+       17845,
+       21545,
+       5214,
+       29553,
+       19753,
+       12258,
+       9481,
+       25243,
+       17092,
+       25696,
+       8851,
+       9230,
+       13662,
+       -3704,
+       3700,
+       13118,
+       null,
+       24516,
+       17734,
+       20047,
+       52,
+       17431,
+       699,
+       11195,
+       7065,
+       27869,
+       null,
+       28671,
+       -1,
+       -2961,
+       null,
+       2932896,
+       -3618,
+       19782,
+       27659
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "ts",
+      "values": [
+       171584190248061,
+       80504782764861,
+       551293916237082,
+       null,
+       1218939194608461,
+       2138493403030862,
+       null,
+       2174103911667481,
+       469282016094703,
+       1435675196934802,
+       null,
+       859798225265221,
+       -271869917252178,
+       2056618679288047,
+       -250244639741764,
+       -86400000000,
+       1025437097939380,
+       133456381904657,
+       276721174904655,
+       1834267877261759,
+       796618567597287,
+       -53498628565410,
+       589153540297771,
+       null,
+       null,
+       727530750185872,
+       null,
+       125534511569568,
+       739737092823947,
+       null,
+       -42495543108887,
+       989434025298000,
+       916120911011925,
+       1241438235702108,
+       251068387330034,
+       2023472830745727,
+       1678561792320490,
+       514164206468232,
+       null,
+       2090547788600346,
+       1522428114800750,
+       1387133883533552,
+       1930760635697493,
+       2031225525293772,
+       312142519456176,
+       1219696909618515,
+       163456511420868,
+       1457852767005894,
+       27661832920798,
+       250702284065610
+      ]
+     },
+     {
+      "dtype": "Duration(ms)",
+      "name": "span",
+      "values": [
+       -168407692,
+       -82590938,
+       40245391,
+       -151371000,
+       86400000,
+       -86400000,
+       124689644,
+       58143266,
+       146027622,
+       169278279,
+       1,
+       149464263,
+       -108918314,
+       -16644141,
+       39432204,
+       -67654732,
+       0,
+       101616682,
+       63803693,
+       -171568807,
+       null,
+       -80569343,
+       -40827669,
+       135091073,
+       null,
+       86399999,
+       38626443,
+       18798898,
+       -78106203,
+       -7351367,
+       -160461187,
+       20509323,
+       127018688,
+       158808259,
+       -104023804,
+       61228486,
+       -66932016,
+       36502731,
+       75763908,
+       137121193,
+       102022722,
+       76348152,
+       100681275,
+       44337910,
+       null,
+       -120550943,
+       null,
+       154498406,
+       -85299339,
+       73551721
+      ]
+     },
+     {
+      "dtype": "Time(ns)",
+      "name": "clock",
+      "values": [
+       46471563500297,
+       34547902724779,
+       59033619074539,
+       83830029344634,
+       26466274720510,
+       70516371236110,
+       21841558047062,
+       45763614804370,
+       7698679598010,
+       53230485154040,
+       39058222528707,
+       70178512205357,
+       83251994131197,
+       28471728376823,
+       80327341549294,
+       19476814628761,
+       60479961332453,
+       20380613543486,
+       16641222423211,
+       3551484991496,
+       44895786957952,
+       49508697033626,
+       10754936363979,
+       59731058066645,
+       39724308343893,
+       63110883967537,
+       12109613900391,
+       21308161947805,
+       86265882434730,
+       18384101065083,
+       null,
+       80338455191258,
+       71243337566664,
+       null,
+       60480783808545,
+       69288164976752,
+       64518140543782,
+       30532008556892,
+       0,
+       45156254796141,
+       3723250000000,
+       45281741457487,
+       86399999999999,
+       null,
+       48198314966686,
+       77659125994842,
+       12515354727677,
+       32390012541569,
+       68868755884528,
+       null
+      ]
+     },
+     {
+      "dtype": "Decimal(12, 4)",
+      "name": "amt",
+      "values": [
+       "999999999999",
+       "464259670471",
+       "-438699228844",
+       "-562329521289",
+       "879748705345",
+       "-956329210611",
+       "460173201200",
+       "-505089281637",
+       "43330991936",
+       "-695755819438",
+       "205804242259",
+       "886104437397",
+       null,
+       null,
+       "-546194442095",
+       "-757474579877",
+       "-507057018113",
+       "-682755677481",
+       "-700841825950",
+       "77916360103",
+       "922644021861",
+       "549213331707",
+       "-362534035512",
+       "-593709681900",
+       "-986106165335",
+       "-803394607757",
+       "-677841267887",
+       "147873603570",
+       "546398112999",
+       null,
+       null,
+       "-457735501290",
+       "-999999999999",
+       "385424549601",
+       "-545727364462",
+       null,
+       "-911069293862",
+       "-1",
+       "-577043657004",
+       "646974194468",
+       "-503247923389",
+       "-152920355461",
+       "367494596331",
+       "-120345271045",
+       "1",
+       "-502458647264",
+       "-646351271468",
+       "363275960730",
+       "-161356691414",
+       "920052213795"
+      ]
+     },
+     {
+      "dtype": "List(Int64)",
+      "name": "l",
+      "values": [
+       [
+        3797356582761302577,
+        9007199254740993,
+        -832880830650663189
+       ],
+       null,
+       [
+        7196593362349070989,
+        -7755050176042919448,
+        -1384180044029798436
+       ],
+       [
+        -2644470580090125087,
+        3797356582761302577,
+        -9223372036854775808,
+        -7437530996603701072
+       ],
+       [
+        8028873915774523883
+       ],
+       [
+        -4683274033228429109,
+        6154275271842535638
+       ],
+       null,
+       [],
+       [
+        5726174078110762305,
+        4038298865178483862,
+        -2661390501446625568,
+        -829229753929160360
+       ],
+       [
+        -9223372036854775808,
+        5268676009082756017,
+        3805514918798962495
+       ],
+       [
+        -8577971683209287571,
+        -9007199254740992
+       ],
+       [],
+       [
+        -8010324624387327277,
+        -2661390501446625568,
+        3797356582761302577
+       ],
+       [
+        9007199254740992,
+        -2661390501446625568,
+        -4694531598274983058
+       ],
+       [
+        -4694531598274983058
+       ],
+       [
+        1854743798946152487
+       ],
+       [
+        -9223372036854775808,
+        -8577971683209287571,
+        -832880830650663189,
+        5726174078110762305
+       ],
+       [
+        -4885936132615266485,
+        8633250406623994294
+       ],
+       [
+        -8577971683209287571
+       ],
+       [
+        -8010324624387327277,
+        1580180760754790723,
+        -829229753929160360,
+        5726174078110762305
+       ],
+       [
+        2404192364262955328
+       ],
+       [
+        -9223372036854775808,
+        4511648680789731328
+       ],
+       [
+        -7437530996603701072,
+        1,
+        -832880830650663189
+       ],
+       null,
+       [
+        -6146916329461782803,
+        400843797411918435
+       ],
+       [
+        -4694531598274983058
+       ],
+       [
+        -4683274033228429109,
+        7196593362349070989,
+        5369646996504480564
+       ],
+       [
+        5726174078110762305
+       ],
+       [
+        -6845893532434230013,
+        5268676009082756017
+       ],
+       [
+        -9223372036854775808,
+        -832880830650663189,
+        9007199254740992,
+        1
+       ],
+       [
+        -829229753929160360,
+        -5390386269465294143,
+        3805514918798962495,
+        5268676009082756017
+       ],
+       [
+        -6845893532434230013
+       ],
+       [
+        -832880830650663189,
+        9223372036854775807,
+        2194162895221875188
+       ],
+       [
+        -4683274033228429109
+       ],
+       [
+        8633250406623994294,
+        2741562170759309940,
+        4361667902058443051,
+        3153097925883853706
+       ],
+       [
+        2741562170759309940,
+        9007199254740993
+       ],
+       [
+        -4885936132615266485,
+        -2661390501446625568,
+        9223372036854775807,
+        1580180760754790723
+       ],
+       [
+        3153097925883853706
+       ],
+       [
+        677419074774700268,
+        2404192364262955328,
+        -829229753929160360
+       ],
+       [],
+       [
+        9007199254740992
+       ],
+       [],
+       [
+        5268676009082756017,
+        -9007199254740992,
+        -832880830650663189,
+        3805514918798962495
+       ],
+       [
+        2194162895221875188,
+        -2644470580090125087
+       ],
+       [
+        2194162895221875188,
+        -3058405450144297732,
+        4361667902058443051
+       ],
+       [
+        1667567996191035857,
+        8028873915774523883
+       ],
+       [
+        1854743798946152487,
+        -1,
+        9007199254740993
+       ],
+       [
+        -9007199254740992,
+        2021380998987695323,
+        -8010324624387327277,
+        3153097925883853706
+       ],
+       [
+        8028873915774523883,
+        1854743798946152487,
+        -1
+       ],
+       [
+        8028873915774523883,
+        -8577971683209287571
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int32",
+       "name": "a_1",
+       "values": [
+        -2060299764,
+        -418769020,
+        816374505,
+        -1432908148,
+        1328113322,
+        2029347751,
+        -482503898,
+        -498107194,
+        521490084,
+        668774578,
+        1058398540,
+        -1859660381,
+        -2147483648,
+        -1237693237,
+        -1764506433,
+        1404545697,
+        683464289,
+        -1746610343,
+        -1006509760,
+        -61511608,
+        1263158814,
+        838870285,
+        637886481,
+        1169354966,
+        -1,
+        -1529704770,
+        -1659972264,
+        1427464501,
+        0,
+        2108623956,
+        1488909247,
+        -731754047,
+        1596783508,
+        null,
+        1,
+        -200179892,
+        1927714361,
+        -430888421,
+        null,
+        1171225705,
+        551994884,
+        386657869,
+        null,
+        -1155853487,
+        -1961538831,
+        2147483647,
+        1838949703,
+        -299587045,
+        357906835,
+        -1220492803
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "b_2",
+       "values": [
+        null,
+        -881.7540761385367,
+        385.17507000289015,
+        -214.54625948218722,
+        886.0,
+        1.5e-310,
+        -0.5,
+        0.29,
+        2.5,
+        null,
+        1e-300,
+        -382.04656476379625,
+        -153.8390992699981,
+        -832.2847833549567,
+        123.456,
+        null,
+        356.5165104152077,
+        996.5,
+        -238.5,
+        -573.1374202022113,
+        437.5660361240773,
+        -976.5901614087536,
+        -831.6970523092932,
+        null,
+        null,
+        824.675786873913,
+        "-0.0",
+        1e+300,
+        -788.4636182007207,
+        -65.97640326705778,
+        null,
+        742.7591106753391,
+        992.6465413157948,
+        772.2281924567455,
+        0.5,
+        121.29372755334612,
+        null,
+        1.5,
+        1.7976931348623157e+308,
+        -12.823504865742166,
+        902.4354787660129,
+        "inf",
+        923.9191382333661,
+        -246.26726702808946,
+        "NaN",
+        -983.2973944613352,
+        null,
+        0.1,
+        263.0180682030409,
+        -641.7676346435237
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "Price",
+       "values": [
+        1.5,
+        143.74269672917512,
+        -197.65739976834368,
+        211.62346523744918,
+        -278.90674300933574,
+        1e-300,
+        809.9182218990725,
+        315.4725149783326,
+        null,
+        9007199254740994.0,
+        956.0657278205933,
+        -199.2799387030302,
+        -596.184329522061,
+        2.5,
+        -866.0,
+        -628.8504590164728,
+        -0.5,
+        123.456,
+        90.69095518344261,
+        -803.0,
+        981.4754067213216,
+        null,
+        null,
+        "-0.0",
+        null,
+        846.457874773618,
+        910.8271461842855,
+        null,
+        null,
+        5e-324,
+        "-inf",
+        "inf",
+        "NaN",
+        340.3400873091441,
+        982.0,
+        1e+300,
+        325.70371241616317,
+        -650.4742771692443,
+        817.6981256530748,
+        null,
+        323.5,
+        244.7026231066884,
+        1.0000000000000002,
+        0.29,
+        9007199254740992.0,
+        251.18010222622115,
+        -918.36487956573,
+        null,
+        710.2542768121273,
+        -452.7795066392664
+       ]
+      },
+      {
+       "dtype": "Uint8",
+       "name": "qty",
+       "values": [
+        23,
+        67,
+        16,
+        10,
+        107,
+        30,
+        163,
+        37,
+        121,
+        null,
+        61,
+        241,
+        85,
+        141,
+        null,
+        35,
+        182,
+        113,
+        null,
+        89,
+        47,
+        null,
+        25,
+        null,
+        null,
+        143,
+        224,
+        1,
+        238,
+        null,
+        167,
+        142,
+        140,
+        225,
+        234,
+        154,
+        219,
+        80,
+        255,
+        141,
+        null,
+        null,
+        151,
+        null,
+        154,
+        126,
+        206,
+        0,
+        null,
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "note",
+       "values": [
+        "c",
+        "aacyb",
+        null,
+        "zb",
+        null,
+        null,
+        "yza",
+        "azzx",
+        "ycx",
+        "bczz",
+        "yxza",
+        "yyz",
+        "bzbzya",
+        null,
+        null,
+        "zcza",
+        "zba",
+        "xazbc",
+        "yxbb",
+        "xa",
+        "xzb",
+        "y",
+        null,
+        "c",
+        "ycz",
+        "yb",
+        "yccbb",
+        "bxx",
+        "yxbbca",
+        "\"q\"",
+        "yyz",
+        "\u00e9",
+        "aabc",
+        null,
+        "a",
+        null,
+        null,
+        "bxyz",
+        "cbcxz",
+        "zy",
+        null,
+        "bczyc",
+        "ca",
+        "zxbc",
+        "a,b",
+        "bx",
+        "ycxb",
+        null,
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "ok",
+       "values": [
+        true,
+        false,
+        true,
+        false,
+        null,
+        false,
+        false,
+        false,
+        true,
+        null,
+        true,
+        null,
+        false,
+        true,
+        true,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+        false,
+        null,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        null,
+        false,
+        null,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        null,
+        false,
+        true
+       ]
+      },
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        9144,
+        1844,
+        23924,
+        11016,
+        16309,
+        15850,
+        26682,
+        null,
+        23850,
+        6011,
+        24094,
+        760,
+        10754,
+        16972,
+        -719162,
+        17845,
+        21545,
+        5214,
+        29553,
+        19753,
+        12258,
+        9481,
+        25243,
+        17092,
+        25696,
+        8851,
+        9230,
+        13662,
+        -3704,
+        3700,
+        13118,
+        null,
+        24516,
+        17734,
+        20047,
+        52,
+        17431,
+        699,
+        11195,
+        7065,
+        27869,
+        null,
+        28671,
+        -1,
+        -2961,
+        null,
+        2932896,
+        -3618,
+        19782,
+        27659
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "ts",
+       "values": [
+        171584190248061,
+        80504782764861,
+        551293916237082,
+        null,
+        1218939194608461,
+        2138493403030862,
+        null,
+        2174103911667481,
+        469282016094703,
+        1435675196934802,
+        null,
+        859798225265221,
+        -271869917252178,
+        2056618679288047,
+        -250244639741764,
+        -86400000000,
+        1025437097939380,
+        133456381904657,
+        276721174904655,
+        1834267877261759,
+        796618567597287,
+        -53498628565410,
+        589153540297771,
+        null,
+        null,
+        727530750185872,
+        null,
+        125534511569568,
+        739737092823947,
+        null,
+        -42495543108887,
+        989434025298000,
+        916120911011925,
+        1241438235702108,
+        251068387330034,
+        2023472830745727,
+        1678561792320490,
+        514164206468232,
+        null,
+        2090547788600346,
+        1522428114800750,
+        1387133883533552,
+        1930760635697493,
+        2031225525293772,
+        312142519456176,
+        1219696909618515,
+        163456511420868,
+        1457852767005894,
+        27661832920798,
+        250702284065610
+       ]
+      },
+      {
+       "dtype": "Duration(ms)",
+       "name": "span",
+       "values": [
+        -168407692,
+        -82590938,
+        40245391,
+        -151371000,
+        86400000,
+        -86400000,
+        124689644,
+        58143266,
+        146027622,
+        169278279,
+        1,
+        149464263,
+        -108918314,
+        -16644141,
+        39432204,
+        -67654732,
+        0,
+        101616682,
+        63803693,
+        -171568807,
+        null,
+        -80569343,
+        -40827669,
+        135091073,
+        null,
+        86399999,
+        38626443,
+        18798898,
+        -78106203,
+        -7351367,
+        -160461187,
+        20509323,
+        127018688,
+        158808259,
+        -104023804,
+        61228486,
+        -66932016,
+        36502731,
+        75763908,
+        137121193,
+        102022722,
+        76348152,
+        100681275,
+        44337910,
+        null,
+        -120550943,
+        null,
+        154498406,
+        -85299339,
+        73551721
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "clock",
+       "values": [
+        46471563500297,
+        34547902724779,
+        59033619074539,
+        83830029344634,
+        26466274720510,
+        70516371236110,
+        21841558047062,
+        45763614804370,
+        7698679598010,
+        53230485154040,
+        39058222528707,
+        70178512205357,
+        83251994131197,
+        28471728376823,
+        80327341549294,
+        19476814628761,
+        60479961332453,
+        20380613543486,
+        16641222423211,
+        3551484991496,
+        44895786957952,
+        49508697033626,
+        10754936363979,
+        59731058066645,
+        39724308343893,
+        63110883967537,
+        12109613900391,
+        21308161947805,
+        86265882434730,
+        18384101065083,
+        null,
+        80338455191258,
+        71243337566664,
+        null,
+        60480783808545,
+        69288164976752,
+        64518140543782,
+        30532008556892,
+        0,
+        45156254796141,
+        3723250000000,
+        45281741457487,
+        86399999999999,
+        null,
+        48198314966686,
+        77659125994842,
+        12515354727677,
+        32390012541569,
+        68868755884528,
+        null
+       ]
+      },
+      {
+       "dtype": "Decimal(12, 4)",
+       "name": "amt",
+       "values": [
+        "999999999999",
+        "464259670471",
+        "-438699228844",
+        "-562329521289",
+        "879748705345",
+        "-956329210611",
+        "460173201200",
+        "-505089281637",
+        "43330991936",
+        "-695755819438",
+        "205804242259",
+        "886104437397",
+        null,
+        null,
+        "-546194442095",
+        "-757474579877",
+        "-507057018113",
+        "-682755677481",
+        "-700841825950",
+        "77916360103",
+        "922644021861",
+        "549213331707",
+        "-362534035512",
+        "-593709681900",
+        "-986106165335",
+        "-803394607757",
+        "-677841267887",
+        "147873603570",
+        "546398112999",
+        null,
+        null,
+        "-457735501290",
+        "-999999999999",
+        "385424549601",
+        "-545727364462",
+        null,
+        "-911069293862",
+        "-1",
+        "-577043657004",
+        "646974194468",
+        "-503247923389",
+        "-152920355461",
+        "367494596331",
+        "-120345271045",
+        "1",
+        "-502458647264",
+        "-646351271468",
+        "363275960730",
+        "-161356691414",
+        "920052213795"
+       ]
+      },
+      {
+       "dtype": "Binary",
+       "name": "blob",
+       "values": [
+        "9Mg=",
+        "Hw==",
+        "Qg==",
+        "7FE=",
+        "C7WU",
+        null,
+        "3xOd9Q==",
+        "",
+        "+Uw=",
+        "",
+        "gw==",
+        "",
+        "WkyPlA==",
+        "iANCuw==",
+        "HQ==",
+        "",
+        "ty2I",
+        null,
+        "dA==",
+        "",
+        "Q+rTfQ==",
+        "51ZL",
+        "",
+        null,
+        "CYo=",
+        "Aoo0Ig==",
+        "LQ==",
+        "YBw=",
+        "kDed",
+        "lQ==",
+        "Z/4=",
+        "v8I=",
+        "kSg0",
+        "aGVsbG8=",
+        "lw==",
+        "fuT7",
+        "R2OlEg==",
+        "Mw==",
+        "IalnJA==",
+        "AP8=",
+        "+ErI",
+        "",
+        "Ng==",
+        "",
+        "O1j0",
+        "STb/ag==",
+        "",
+        "hj8=",
+        "G1I=",
+        "XCc="
+       ]
+      },
+      {
+       "dtype": "List(Int64)",
+       "name": "l",
+       "values": [
+        [
+         3797356582761302577,
+         9007199254740993,
+         -832880830650663189
+        ],
+        null,
+        [
+         7196593362349070989,
+         -7755050176042919448,
+         -1384180044029798436
+        ],
+        [
+         -2644470580090125087,
+         3797356582761302577,
+         -9223372036854775808,
+         -7437530996603701072
+        ],
+        [
+         8028873915774523883
+        ],
+        [
+         -4683274033228429109,
+         6154275271842535638
+        ],
+        null,
+        [],
+        [
+         5726174078110762305,
+         4038298865178483862,
+         -2661390501446625568,
+         -829229753929160360
+        ],
+        [
+         -9223372036854775808,
+         5268676009082756017,
+         3805514918798962495
+        ],
+        [
+         -8577971683209287571,
+         -9007199254740992
+        ],
+        [],
+        [
+         -8010324624387327277,
+         -2661390501446625568,
+         3797356582761302577
+        ],
+        [
+         9007199254740992,
+         -2661390501446625568,
+         -4694531598274983058
+        ],
+        [
+         -4694531598274983058
+        ],
+        [
+         1854743798946152487
+        ],
+        [
+         -9223372036854775808,
+         -8577971683209287571,
+         -832880830650663189,
+         5726174078110762305
+        ],
+        [
+         -4885936132615266485,
+         8633250406623994294
+        ],
+        [
+         -8577971683209287571
+        ],
+        [
+         -8010324624387327277,
+         1580180760754790723,
+         -829229753929160360,
+         5726174078110762305
+        ],
+        [
+         2404192364262955328
+        ],
+        [
+         -9223372036854775808,
+         4511648680789731328
+        ],
+        [
+         -7437530996603701072,
+         1,
+         -832880830650663189
+        ],
+        null,
+        [
+         -6146916329461782803,
+         400843797411918435
+        ],
+        [
+         -4694531598274983058
+        ],
+        [
+         -4683274033228429109,
+         7196593362349070989,
+         5369646996504480564
+        ],
+        [
+         5726174078110762305
+        ],
+        [
+         -6845893532434230013,
+         5268676009082756017
+        ],
+        [
+         -9223372036854775808,
+         -832880830650663189,
+         9007199254740992,
+         1
+        ],
+        [
+         -829229753929160360,
+         -5390386269465294143,
+         3805514918798962495,
+         5268676009082756017
+        ],
+        [
+         -6845893532434230013
+        ],
+        [
+         -832880830650663189,
+         9223372036854775807,
+         2194162895221875188
+        ],
+        [
+         -4683274033228429109
+        ],
+        [
+         8633250406623994294,
+         2741562170759309940,
+         4361667902058443051,
+         3153097925883853706
+        ],
+        [
+         2741562170759309940,
+         9007199254740993
+        ],
+        [
+         -4885936132615266485,
+         -2661390501446625568,
+         9223372036854775807,
+         1580180760754790723
+        ],
+        [
+         3153097925883853706
+        ],
+        [
+         677419074774700268,
+         2404192364262955328,
+         -829229753929160360
+        ],
+        [],
+        [
+         9007199254740992
+        ],
+        [],
+        [
+         5268676009082756017,
+         -9007199254740992,
+         -832880830650663189,
+         3805514918798962495
+        ],
+        [
+         2194162895221875188,
+         -2644470580090125087
+        ],
+        [
+         2194162895221875188,
+         -3058405450144297732,
+         4361667902058443051
+        ],
+        [
+         1667567996191035857,
+         8028873915774523883
+        ],
+        [
+         1854743798946152487,
+         -1,
+         9007199254740993
+        ],
+        [
+         -9007199254740992,
+         2021380998987695323,
+         -8010324624387327277,
+         3153097925883853706
+        ],
+        [
+         8028873915774523883,
+         1854743798946152487,
+         -1
+        ],
+        [
+         8028873915774523883,
+         -8577971683209287571
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_contains_t_minus_integer",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "note",
+      "values": [
+       "c",
+       "aacyb",
+       null,
+       "zb",
+       null,
+       null,
+       "yza",
+       "azzx",
+       "ycx",
+       "bczz",
+       "yxza",
+       "yyz",
+       "bzbzya",
+       null,
+       null,
+       "zcza",
+       "zba",
+       "xazbc",
+       "yxbb",
+       "xa",
+       "xzb",
+       "y",
+       null,
+       "c",
+       "ycz",
+       "yb",
+       "yccbb",
+       "bxx",
+       "yxbbca",
+       "\"q\"",
+       "yyz",
+       "\u00e9",
+       "aabc",
+       null,
+       "a",
+       null,
+       null,
+       "bxyz",
+       "cbcxz",
+       "zy",
+       null,
+       "bczyc",
+       "ca",
+       "zxbc",
+       "a,b",
+       "bx",
+       "ycxb",
+       null,
+       "y",
+       "x"
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "ts",
+      "values": [
+       171584190248061,
+       80504782764861,
+       551293916237082,
+       null,
+       1218939194608461,
+       2138493403030862,
+       null,
+       2174103911667481,
+       469282016094703,
+       1435675196934802,
+       null,
+       859798225265221,
+       -271869917252178,
+       2056618679288047,
+       -250244639741764,
+       -86400000000,
+       1025437097939380,
+       133456381904657,
+       276721174904655,
+       1834267877261759,
+       796618567597287,
+       -53498628565410,
+       589153540297771,
+       null,
+       null,
+       727530750185872,
+       null,
+       125534511569568,
+       739737092823947,
+       null,
+       -42495543108887,
+       989434025298000,
+       916120911011925,
+       1241438235702108,
+       251068387330034,
+       2023472830745727,
+       1678561792320490,
+       514164206468232,
+       null,
+       2090547788600346,
+       1522428114800750,
+       1387133883533552,
+       1930760635697493,
+       2031225525293772,
+       312142519456176,
+       1219696909618515,
+       163456511420868,
+       1457852767005894,
+       27661832920798,
+       250702284065610
+      ]
+     },
+     {
+      "dtype": "Decimal(12, 4)",
+      "name": "amt",
+      "values": [
+       "999999999999",
+       "464259670471",
+       "-438699228844",
+       "-562329521289",
+       "879748705345",
+       "-956329210611",
+       "460173201200",
+       "-505089281637",
+       "43330991936",
+       "-695755819438",
+       "205804242259",
+       "886104437397",
+       null,
+       null,
+       "-546194442095",
+       "-757474579877",
+       "-507057018113",
+       "-682755677481",
+       "-700841825950",
+       "77916360103",
+       "922644021861",
+       "549213331707",
+       "-362534035512",
+       "-593709681900",
+       "-986106165335",
+       "-803394607757",
+       "-677841267887",
+       "147873603570",
+       "546398112999",
+       null,
+       null,
+       "-457735501290",
+       "-999999999999",
+       "385424549601",
+       "-545727364462",
+       null,
+       "-911069293862",
+       "-1",
+       "-577043657004",
+       "646974194468",
+       "-503247923389",
+       "-152920355461",
+       "367494596331",
+       "-120345271045",
+       "1",
+       "-502458647264",
+       "-646351271468",
+       "363275960730",
+       "-161356691414",
+       "920052213795"
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "generator": "bench/scripts/oracle/selector.py",
+ "polars": "2.1.0"
+}
