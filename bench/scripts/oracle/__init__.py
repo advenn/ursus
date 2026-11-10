@@ -41,7 +41,10 @@ GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
           # step 501, frames, joins and reshaping
           "join_byhand", "joinorder", "asofoptions", "concat", "pivot", "dummies", "unstack", "unpivot", "upsample", "update",
           "matchschema", "frameagg", "framecolumns", "framerows", "frameconv", "framenulls", "fill", "intindex", "dynamicopts",
-          "having", "grouphead", "generate"]
+          "having", "grouphead", "generate",
+          # step 500, aggregates and windows
+          "aggwindow_byhand", "aggstats", "aggpair", "agglists", "argsort", "hist", "search", "seq", "modeagg", "ewmmore",
+          "window172", "windownest", "rollingby", "rollingoffset", "rollingquantile", "rollmap", "exprroll", "cumeval", "topk_agg"]
 
 
 @dataclass

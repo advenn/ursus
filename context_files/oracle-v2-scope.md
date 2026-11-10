@@ -39,7 +39,7 @@ output column each, written by `bench/scripts/oracle_expressions.py` under Polar
    "params": {"window": 3, "ddof": 0},
    "want": {"columns": [...]} | {"error": {"polars": "<class>: <message>", "contains": "<ursus's phrase>"}},
    "order": "rows" | "set",
-   "float": "bits" | "rel:1e-9",
+   "float": "bits" | "rel:1e-9" | "rel:1e-12 abs:1e-15",
    "note": "why this case exists"
  }]}
 ```
@@ -117,7 +117,7 @@ where it checks structure.
 | 497 | expressions and math | scalar_byhand, castround_byhand, castedges_byhand, castmore, exprodds, exprargs, fold, variadic, math, trig, bits, decimal_arith_byhand (big.Rat), int128exact — done in step 497: 264 cases, 229 lines gone |
 | 498 | temporal | calendar (the by-hand half), tzreplace, components, daterange, csvdates, strtemporal, temporalagg, weeks, dtcombine, dtexact, timearith, businessdays_range, interpby — done in step 498: 260 cases, 905 lines gone |
 | 499 | strings, lists, structs, enums | listns, arrns, listeval, listmore, listset, liststruct, structfields, withfields, enum_byhand, expr_bin, expr_cat, strmany, strcodec, strsplit, strptime (Go's time) — done in step 499: 321 cases, 1,611 lines gone |
-| 500 | aggregates and windows | aggwindow_byhand, aggstats, aggpair, agglists, argsort, hist, search, seq, modeagg, ewmmore, window172, windownest, rollingby, rollingoffset, rollingquantile, rollmap, exprroll, cumeval, topk_agg |
+| 500 | aggregates and windows | aggwindow_byhand, aggstats, aggpair, agglists, argsort, hist, search, seq, modeagg, ewmmore, window172, windownest, rollingby, rollingoffset, rollingquantile, rollmap, exprroll, cumeval, topk_agg — done in step 500: 464 cases, 1,857 lines gone |
 | 501 | frames, joins, reshaping | join_byhand, joinorder, asofoptions, concat, pivot, dummies, unstack, unpivot, upsample, update, matchschema, frameagg, framecolumns, framerows, frameconv, framenulls, fill, intindex, dynamicopts, having, grouphead, generate — done in step 501: 482 cases, 2,213 lines gone |
 | 502 | I/O as text | io_byhand, csvread, csvskip, csvwrite, ndjsonread, jsonread, jsonwrite, ipcfiles, hive, hiveparent, filepaths, partitionwrite, database (values only) |
 | 503 | the sub-packages' data values | dtype (supertype tables against Polars), expr/decimalagg, kernel's hand tables (castbool, caststring, intkeybits, radix, select, sumcarry, parse: Go oracles), source/hive TestInfer, selector |

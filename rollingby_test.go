@@ -1,9 +1,9 @@
 package ursus_test
 
-// Step 177: rolling windows by time. The expected answers are Polars 1.44.1's, from
-// the bench's own environment:
-//
-//	df.select(pl.col("v").rolling_sum_by("t", "2h", min_samples=1, closed="right"))
+// Step 177: rolling windows by time. Their answers are Polars 2.1.0's since step 500,
+// recorded in the rollingby group of testdata/oracle and spelled in
+// oracle_rollingby_test.go, which took this file's tables. What stays asserts the
+// refusals, the names and the plan, and holds 400 random rows to a brute force.
 
 import (
 	"math"
@@ -29,127 +29,6 @@ func hoursFrame(hours []int, v []float64, ok []bool) *ursus.LazyFrame {
 		}
 	}
 	return ursus.Frame(ursus.Values("t", ts), ursus.ValuesNullable("v", v, ok))
-}
-
-func TestRollingByAnswersAsPolars(t *testing.T) {
-	c := ursus.Col
-	two := ursus.Every("2h")
-	frame := hoursFrame([]int{0, 1, 2, 4, 5, 9}, []float64{1, 2, 0, 4, 5, 6}, []bool{true, true, false, true, true, true})
-	for _, tc := range []struct {
-		name string
-		e    ursus.Expr
-		want string
-	}{
-		{"sum", c("v").RollingSumBy(c("t"), two), "1.0 3.0 2.0 4.0 9.0 6.0 "},
-		{"mean", c("v").RollingMeanBy(c("t"), two), "1.0 1.5 2.0 4.0 4.5 6.0 "},
-		{"min", c("v").RollingMinBy(c("t"), two), "1.0 1.0 2.0 4.0 4.0 6.0 "},
-		{"max", c("v").RollingMaxBy(c("t"), two), "1.0 2.0 2.0 4.0 5.0 6.0 "},
-		{"var", c("v").RollingVarBy(c("t"), two), "∅ 0.5 ∅ ∅ 0.5 ∅ "},
-		{"std", c("v").RollingStdBy(c("t"), ursus.Every("3h")), "∅ 0.7071067811865476 0.7071067811865476 ∅ 0.7071067811865476 ∅ "},
-		{"min_samples 2", c("v").RollingSumBy(c("t"), two, ursus.MinSamples(2)), "∅ 3.0 ∅ ∅ 9.0 ∅ "},
-		{"closed right", c("v").RollingSumBy(c("t"), two, ursus.WindowClosed(ursus.ClosedRight)), "1.0 3.0 2.0 4.0 9.0 6.0 "},
-		// Polars answers an empty window 0 here, under min_samples=1: [0, 1, 3, 0, 4, 0].
-		{"closed left", c("v").RollingSumBy(c("t"), two, ursus.WindowClosed(ursus.ClosedLeft)), "∅ 1.0 3.0 ∅ 4.0 ∅ "},
-		{"closed both", c("v").RollingSumBy(c("t"), two, ursus.WindowClosed(ursus.ClosedBoth)), "1.0 3.0 3.0 4.0 9.0 6.0 "},
-		{"closed none", c("v").RollingSumBy(c("t"), two, ursus.WindowClosed(ursus.ClosedNone)), "∅ 1.0 2.0 ∅ 4.0 ∅ "},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			df, err := frame.Select(tc.e).Collect(t.Context())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := rendered172(t, df, "v"); got != tc.want {
-				t.Errorf("%q, want %q", got, tc.want)
-			}
-		})
-	}
-
-	for _, tc := range []struct {
-		name  string
-		frame *ursus.LazyFrame
-		e     ursus.Expr
-		want  string
-	}{
-		{"integers: an exact sum, a float mean",
-			hoursFrame([]int{0, 1, 2, 4, 5, 9}, []float64{1, 2, 3, 4, 5, 6}, nil).Select(c("t"), c("v").Cast(ursus.Int64)),
-			c("v").RollingMeanBy(c("t"), two), "1.0 1.5 2.5 4.0 4.5 6.0 "},
-		{"by unsorted", hoursFrame([]int{2, 0, 1, 5}, []float64{1, 2, 3, 4}, nil),
-			c("v").RollingSumBy(c("t"), two), "4.0 2.0 5.0 4.0 "},
-		{"ties share a window, the later rows too", hoursFrame([]int{0, 0, 1}, []float64{1, 2, 3}, nil),
-			c("v").RollingSumBy(c("t"), ursus.Every("1h")), "3.0 3.0 3.0 "},
-		{"a null by is in no window",
-			ursus.Frame(ursus.ValuesNullable("t", []time.Time{time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), {},
-				time.Date(2024, 1, 1, 1, 0, 0, 0, time.UTC)}, []bool{true, false, true}), ursus.Values("v", []float64{1, 2, 3})),
-			c("v").RollingSumBy(c("t"), two), "1.0 ∅ 4.0 "},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			df, err := tc.frame.Select(tc.e).Collect(t.Context())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := rendered172(t, df, "v"); got != tc.want {
-				t.Errorf("%q, want %q", got, tc.want)
-			}
-		})
-	}
-
-	// Per partition: g=[a, a, b, b], t=[0, 1, 0, 1]h, v=[1, 2, 10, 20].
-	g := ursus.Values("g", []string{"a", "a", "b", "b"})
-	ts := []time.Time{time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2024, 1, 1, 1, 0, 0, 0, time.UTC),
-		time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2024, 1, 1, 1, 0, 0, 0, time.UTC)}
-	df, err := ursus.Frame(g, ursus.Values("t", ts), ursus.Values("v", []float64{1, 2, 10, 20})).
-		Select(c("v").RollingSumBy(c("t"), two).Over(c("g"))).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := rendered172(t, df, "v"); got != "1.0 3.0 10.0 30.0 " {
-		t.Errorf("over g: %q", got)
-	}
-
-	// Dates, and a calendar month.
-	days := func(ds ...int) []time.Time {
-		out := make([]time.Time, len(ds))
-		for i, d := range ds {
-			out[i] = time.Date(2024, 1, d, 0, 0, 0, 0, time.UTC)
-		}
-		return out
-	}
-	dated := ursus.Frame(ursus.Values("t", days(1, 2, 3, 5)), ursus.Values("v", []float64{1, 2, 3, 4})).
-		Select(c("t").Cast(dtype.Date), c("v"))
-	for period, want := range map[string]string{"2d": "1.0 3.0 5.0 4.0 ", "1mo": "1.0 3.0 6.0 10.0 "} {
-		df, err := dated.Select(c("v").RollingSumBy(c("t"), ursus.Every(period))).Collect(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := rendered172(t, df, "v"); got != want {
-			t.Errorf("dates by %s: %q, want %q", period, got, want)
-		}
-	}
-
-	// A calendar day across London's change of offset is not twenty-four hours.
-	london, err := time.LoadLocation("Europe/London")
-	if err != nil {
-		t.Skipf("no tzdata: %v", err)
-	}
-	zoned := ursus.Frame(ursus.Values("t", []time.Time{time.Date(2024, 3, 30, 12, 0, 0, 0, london),
-		time.Date(2024, 3, 31, 12, 0, 0, 0, london)}), ursus.Values("v", []float64{1, 2})).
-		Select(c("t").Cast(dtype.Datetime(dtype.Micro, "Europe/London")), c("v"))
-	for _, tc := range []struct {
-		name   string
-		period ursus.Interval
-		want   string
-	}{
-		{"1d", ursus.Every("1d"), "1.0 2.0 "},
-		{"24h", ursus.FromDuration(24 * time.Hour), "1.0 3.0 "},
-	} {
-		df, err := zoned.Select(c("v").RollingSumBy(c("t"), tc.period)).Collect(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := rendered172(t, df, "v"); got != tc.want {
-			t.Errorf("across the change, %s: %q, want %q", tc.name, got, tc.want)
-		}
-	}
 }
 
 func TestRollingByRefuses(t *testing.T) {
@@ -181,7 +60,8 @@ func TestRollingByRefuses(t *testing.T) {
 }
 
 // TestRollingByNamesAndRenders: named after its value; rendered as written; and two
-// periods, or two closings, in one Select are two answers.
+// periods, or two closings, in one Select are two answers (the values are the
+// rollingby group's names_three).
 func TestRollingByNamesAndRenders(t *testing.T) {
 	c := ursus.Col
 	lf := hoursFrame([]int{0, 1, 2}, []float64{1, 2, 3}, nil).Select(
@@ -196,11 +76,6 @@ func TestRollingByNamesAndRenders(t *testing.T) {
 	}
 	if got := strings.Join(df.Schema().Names(), ","); got != "one,two,both,v" {
 		t.Fatalf("named %s", got)
-	}
-	for name, want := range map[string]string{"one": "1.0 2.0 3.0 ", "two": "1.0 3.0 5.0 ", "both": "1.0 3.0 6.0 "} {
-		if got := rendered172(t, df, name); got != want {
-			t.Errorf("%s: %q, want %q", name, got, want)
-		}
 	}
 	plan, err := lf.Explain(t.Context())
 	if err != nil {
