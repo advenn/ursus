@@ -1,0 +1,2099 @@
+{
+ "cases": [
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4
+       ]
+      }
+     ]
+    }
+   },
+   "name": "ints",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=1/0.parquet",
+     "k=-2/1.parquet",
+     "k=007/2.parquet",
+     "k=-0/3.parquet",
+     "k=00/4.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       -2,
+       7,
+       0,
+       0
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "int128_past_int64",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=9223372036854775808/0.parquet",
+     "k=1/1.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1
+      ]
+     },
+     {
+      "dtype": "Int128",
+      "name": "k",
+      "values": [
+       "9223372036854775808",
+       "1"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "int128_min",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=-170141183460469231731687303715884105728/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Int128",
+      "name": "k",
+      "values": [
+       "-170141183460469231731687303715884105728"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "floats",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=1.5/0.parquet",
+     "k=2/1.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "k",
+      "values": [
+       1.5,
+       2.0
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+       ]
+      }
+     ]
+    }
+   },
+   "name": "float_forms",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2.5e3/0.parquet",
+     "k=1e3/1.parquet",
+     "k=inf/2.parquet",
+     "k=-inf/3.parquet",
+     "k=NaN/4.parquet",
+     "k=1./5.parquet",
+     "k=.5/6.parquet",
+     "k=-1.5E-3/7.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "k",
+      "values": [
+       2500.0,
+       1000.0,
+       "inf",
+       "-inf",
+       "NaN",
+       1.0,
+       0.5,
+       -0.0015
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1,
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "bools",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=true/0.parquet",
+     "k=FALSE/1.parquet",
+     "k=True/2.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "k",
+      "values": [
+       true,
+       false,
+       true
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "date_iso",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2024-01-02/0.parquet",
+     "k=2024-01-03/1.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "k",
+      "values": [
+       19724,
+       19725
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "date_short",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2024-1-2/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "k",
+      "values": [
+       19724
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "date_slashes",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2024%2F01%2F02/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "k",
+      "values": [
+       19724
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "date_dots",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2024.01.02/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "k",
+      "values": [
+       19724
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "date_dmy",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=02-01-2024/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "k",
+      "values": [
+       19724
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4
+       ]
+      }
+     ]
+    }
+   },
+   "name": "date_layouts_mixed",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2024-01-02/0.parquet",
+     "k=2024-1-2/1.parquet",
+     "k=2024%2F01%2F02/2.parquet",
+     "k=2024.01.02/3.parquet",
+     "k=02-01-2024/4.parquet"
+    ]
+   },
+   "want": {
+    "error": {
+     "contains": "",
+     "polars": "ComputeError: could not parse '2024/01/02' with pattern 'DateDMY'"
+    }
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4
+       ]
+      }
+     ]
+    }
+   },
+   "name": "datetimes",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2024-01-02 03:04:05/0.parquet",
+     "k=2024-01-02T03:04/1.parquet",
+     "k=2024-01-02 3:04/2.parquet",
+     "k=2024%2F1%2F2 03:04:05/3.parquet",
+     "k=2024-01-02T03:04:05.123456789/4.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "k",
+      "values": [
+       1704164645000000,
+       1704164640000000,
+       1704164640000000,
+       1704164645000000,
+       1704164645123456
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1,
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "datetimes_zoned",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2024-01-02T03:04:05Z/0.parquet",
+     "k=2024-01-02T03:04:05.5+0530/1.parquet",
+     "k=2024-01-02 03:04:05+01:00/2.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Datetime(us, UTC)",
+      "name": "k",
+      "values": [
+       1704164645000000,
+       1704144845500000,
+       1704161045000000
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_plus",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=+5/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "+5"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_nan_lower",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=nan/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "nan"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_hex",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=0x10/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "0x10"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_underscore",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=1_000/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "1_000"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_comma",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=1,5/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "1,5"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_yes",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=yes/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "yes"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_bare_exponent",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=1.5e/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "1.5e"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_hour_alone",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2024-01-02T03/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "2024-01-02T03"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_month_13",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2024-13-01/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "2024-13-01"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_feb_30",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2024-02-30/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "2024-02-30"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_int_beside_x",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=1/0.parquet",
+     "k=x/1.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "1",
+       "x"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_date_beside_x",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2024-01-02/0.parquet",
+     "k=x/1.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "2024-01-02",
+       "x"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_bool_beside_1",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=true/0.parquet",
+     "k=1/1.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "true",
+       "1"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "text_zoned_beside_naive",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2024-01-02T03:04:05Z/0.parquet",
+     "k=2024-01-02 03:04:05/1.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "2024-01-02T03:04:05Z",
+       "2024-01-02 03:04:05"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "int_like_a_date",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=20240102/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       20240102
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "two_digit_year",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=24-01-02/0.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "k",
+      "values": [
+       -718774
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_ints",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=4981/0.parquet",
+     "k=-1669/1.parquet",
+     "k=-3789/2.parquet",
+     "k=4591/3.parquet",
+     "k=-640/4.parquet",
+     "k=-3973/5.parquet",
+     "k=2379/6.parquet",
+     "k=-2527/7.parquet",
+     "k=-2531/8.parquet",
+     "k=-546/9.parquet",
+     "k=-2759/10.parquet",
+     "k=-510/11.parquet",
+     "k=-1336/12.parquet",
+     "k=4620/13.parquet",
+     "k=-128/14.parquet",
+     "k=720/15.parquet",
+     "k=-4703/16.parquet",
+     "k=241/17.parquet",
+     "k=4411/18.parquet",
+     "k=3844/19.parquet",
+     "k=-937/20.parquet",
+     "k=-1806/21.parquet",
+     "k=-3925/22.parquet",
+     "k=3449/23.parquet",
+     "k=-504/24.parquet",
+     "k=-3544/25.parquet",
+     "k=-2878/26.parquet",
+     "k=-182/27.parquet",
+     "k=-4827/28.parquet",
+     "k=4210/29.parquet",
+     "k=-391/30.parquet",
+     "k=-4421/31.parquet",
+     "k=3874/32.parquet",
+     "k=-439/33.parquet",
+     "k=-267/34.parquet",
+     "k=-4511/35.parquet",
+     "k=-2136/36.parquet",
+     "k=-4484/37.parquet",
+     "k=2781/38.parquet",
+     "k=2438/39.parquet",
+     "k=-2902/40.parquet",
+     "k=-4581/41.parquet",
+     "k=390/42.parquet",
+     "k=-1396/43.parquet",
+     "k=4673/44.parquet",
+     "k=-4898/45.parquet",
+     "k=1378/46.parquet",
+     "k=-2101/47.parquet",
+     "k=-2345/48.parquet",
+     "k=1196/49.parquet",
+     "k=-1345/50.parquet",
+     "k=2282/51.parquet",
+     "k=3614/52.parquet",
+     "k=4062/53.parquet",
+     "k=776/54.parquet",
+     "k=-662/55.parquet",
+     "k=-1359/56.parquet",
+     "k=1633/57.parquet",
+     "k=-4957/58.parquet",
+     "k=-1200/59.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       19,
+       20,
+       21,
+       22,
+       23,
+       24,
+       25,
+       26,
+       27,
+       28,
+       29,
+       30,
+       31,
+       32,
+       33,
+       34,
+       35,
+       36,
+       37,
+       38,
+       39,
+       40,
+       41,
+       42,
+       43,
+       44,
+       45,
+       46,
+       47,
+       48,
+       49,
+       50,
+       51,
+       52,
+       53,
+       54,
+       55,
+       56,
+       57,
+       58,
+       59
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       4981,
+       -1669,
+       -3789,
+       4591,
+       -640,
+       -3973,
+       2379,
+       -2527,
+       -2531,
+       -546,
+       -2759,
+       -510,
+       -1336,
+       4620,
+       -128,
+       720,
+       -4703,
+       241,
+       4411,
+       3844,
+       -937,
+       -1806,
+       -3925,
+       3449,
+       -504,
+       -3544,
+       -2878,
+       -182,
+       -4827,
+       4210,
+       -391,
+       -4421,
+       3874,
+       -439,
+       -267,
+       -4511,
+       -2136,
+       -4484,
+       2781,
+       2438,
+       -2902,
+       -4581,
+       390,
+       -1396,
+       4673,
+       -4898,
+       1378,
+       -2101,
+       -2345,
+       1196,
+       -1345,
+       2282,
+       3614,
+       4062,
+       776,
+       -662,
+       -1359,
+       1633,
+       -4957,
+       -1200
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_dates",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=2033-05-02/0.parquet",
+     "k=1976-04-17/1.parquet",
+     "k=1955-01-20/2.parquet",
+     "k=2020-05-22/3.parquet",
+     "k=1999-03-23/4.parquet",
+     "k=1965-04-30/5.parquet",
+     "k=2004-04-12/6.parquet",
+     "k=1985-07-04/7.parquet",
+     "k=1951-06-11/8.parquet",
+     "k=1955-10-29/9.parquet",
+     "k=2015-09-04/10.parquet",
+     "k=2009-08-23/11.parquet",
+     "k=2014-11-17/12.parquet",
+     "k=1966-07-16/13.parquet",
+     "k=2041-10-16/14.parquet",
+     "k=1969-09-26/15.parquet",
+     "k=2000-06-23/16.parquet",
+     "k=2001-01-22/17.parquet",
+     "k=2013-08-15/18.parquet",
+     "k=1970-01-30/19.parquet",
+     "k=1975-04-11/20.parquet",
+     "k=2015-07-17/21.parquet",
+     "k=1991-03-09/22.parquet",
+     "k=2028-05-02/23.parquet",
+     "k=2032-10-26/24.parquet",
+     "k=1965-02-07/25.parquet",
+     "k=1952-04-26/26.parquet",
+     "k=2015-07-31/27.parquet",
+     "k=1955-08-25/28.parquet",
+     "k=2048-01-08/29.parquet",
+     "k=1954-12-21/30.parquet",
+     "k=1997-07-09/31.parquet",
+     "k=1961-05-22/32.parquet",
+     "k=2049-03-19/33.parquet",
+     "k=2013-06-21/34.parquet",
+     "k=2004-05-16/35.parquet",
+     "k=2008-07-10/36.parquet",
+     "k=2005-09-13/37.parquet",
+     "k=2047-06-09/38.parquet",
+     "k=1951-12-10/39.parquet",
+     "k=2037-07-30/40.parquet",
+     "k=1957-12-02/41.parquet",
+     "k=1987-02-11/42.parquet",
+     "k=2033-07-06/43.parquet",
+     "k=2024-05-18/44.parquet",
+     "k=1965-01-22/45.parquet",
+     "k=2008-01-05/46.parquet",
+     "k=2006-12-03/47.parquet",
+     "k=1985-04-10/48.parquet",
+     "k=1997-06-22/49.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       19,
+       20,
+       21,
+       22,
+       23,
+       24,
+       25,
+       26,
+       27,
+       28,
+       29,
+       30,
+       31,
+       32,
+       33,
+       34,
+       35,
+       36,
+       37,
+       38,
+       39,
+       40,
+       41,
+       42,
+       43,
+       44,
+       45,
+       46,
+       47,
+       48,
+       49
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "k",
+      "values": [
+       23132,
+       2298,
+       -5460,
+       18404,
+       10673,
+       -1707,
+       12520,
+       5663,
+       -6779,
+       -5178,
+       16682,
+       14479,
+       16391,
+       -1265,
+       26221,
+       -97,
+       11131,
+       11344,
+       15932,
+       29,
+       1926,
+       16633,
+       7737,
+       21306,
+       22944,
+       -1789,
+       -6459,
+       16647,
+       -5243,
+       28496,
+       -5490,
+       10051,
+       -3146,
+       28932,
+       15877,
+       12554,
+       14070,
+       13039,
+       28283,
+       -6597,
+       24682,
+       -4413,
+       6250,
+       23197,
+       19861,
+       -1805,
+       13883,
+       13485,
+       5578,
+       10034
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52
+       ]
+      }
+     ]
+    }
+   },
+   "name": "gen_floats",
+   "order": "rows",
+   "params": {
+    "paths": [
+     "k=-204.59584281973093/0.parquet",
+     "k=-260.6649800354519/1.parquet",
+     "k=575.0483640616017/2.parquet",
+     "k=220.57053048540843/3.parquet",
+     "k=-675.3105311724164/4.parquet",
+     "k=95.44056897042219/5.parquet",
+     "k=811.9643374124614/6.parquet",
+     "k=124.48407479157777/7.parquet",
+     "k=-218.34108268686396/8.parquet",
+     "k=368.25363984211685/9.parquet",
+     "k=628.2784842385047/10.parquet",
+     "k=320.2299704676316/11.parquet",
+     "k=306.7221009612408/12.parquet",
+     "k=505.90764482466443/13.parquet",
+     "k=-257.53114933354686/14.parquet",
+     "k=127.94856028369418/15.parquet",
+     "k=-869.2542272523875/16.parquet",
+     "k=-687.9235639511653/17.parquet",
+     "k=956.5120411617941/18.parquet",
+     "k=253.75188416321384/19.parquet",
+     "k=553.6072552619405/20.parquet",
+     "k=-896.8043118753757/21.parquet",
+     "k=144.75056464327008/22.parquet",
+     "k=889.6873076661072/23.parquet",
+     "k=-203.42712929594973/24.parquet",
+     "k=163.0599714924233/25.parquet",
+     "k=843.3645497398338/26.parquet",
+     "k=355.06266106149064/27.parquet",
+     "k=-830.6238474746378/28.parquet",
+     "k=-612.9425981946808/29.parquet",
+     "k=-24.824059384954694/30.parquet",
+     "k=269.6708549357388/31.parquet",
+     "k=-501.8233363933946/32.parquet",
+     "k=790.3507698942108/33.parquet",
+     "k=51.05352937109228/34.parquet",
+     "k=-581.5063333961509/35.parquet",
+     "k=-402.08059870103136/36.parquet",
+     "k=-479.181928069194/37.parquet",
+     "k=896.1204734749069/38.parquet",
+     "k=855.5466831165224/39.parquet",
+     "k=700.2752657763463/40.parquet",
+     "k=-26.38076120044434/41.parquet",
+     "k=-77.46123564044854/42.parquet",
+     "k=491.74999830229467/43.parquet",
+     "k=22.293773546610396/44.parquet",
+     "k=-733.1090708138468/45.parquet",
+     "k=-53.850530585038996/46.parquet",
+     "k=-244.06312899187935/47.parquet",
+     "k=615.5230023151944/48.parquet",
+     "k=123.36591640752886/49.parquet",
+     "k=1e+300/50.parquet",
+     "k=-0.0/51.parquet",
+     "k=inf/52.parquet"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       19,
+       20,
+       21,
+       22,
+       23,
+       24,
+       25,
+       26,
+       27,
+       28,
+       29,
+       30,
+       31,
+       32,
+       33,
+       34,
+       35,
+       36,
+       37,
+       38,
+       39,
+       40,
+       41,
+       42,
+       43,
+       44,
+       45,
+       46,
+       47,
+       48,
+       49,
+       50,
+       51,
+       52
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "k",
+      "values": [
+       -204.59584281973093,
+       -260.6649800354519,
+       575.0483640616017,
+       220.57053048540843,
+       -675.3105311724164,
+       95.44056897042219,
+       811.9643374124614,
+       124.48407479157777,
+       -218.34108268686396,
+       368.25363984211685,
+       628.2784842385047,
+       320.2299704676316,
+       306.7221009612408,
+       505.90764482466443,
+       -257.53114933354686,
+       127.94856028369418,
+       -869.2542272523875,
+       -687.9235639511653,
+       956.5120411617941,
+       253.75188416321384,
+       553.6072552619405,
+       -896.8043118753757,
+       144.75056464327008,
+       889.6873076661072,
+       -203.42712929594973,
+       163.0599714924233,
+       843.3645497398338,
+       355.06266106149064,
+       -830.6238474746378,
+       -612.9425981946808,
+       -24.824059384954694,
+       269.6708549357388,
+       -501.8233363933946,
+       790.3507698942108,
+       51.05352937109228,
+       -581.5063333961509,
+       -402.08059870103136,
+       -479.181928069194,
+       896.1204734749069,
+       855.5466831165224,
+       700.2752657763463,
+       -26.38076120044434,
+       -77.46123564044854,
+       491.74999830229467,
+       22.293773546610396,
+       -733.1090708138468,
+       -53.850530585038996,
+       -244.06312899187935,
+       615.5230023151944,
+       123.36591640752886,
+       1e+300,
+       "-0.0",
+       "inf"
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "generator": "bench/scripts/oracle/hive_infer.py",
+ "polars": "2.1.0"
+}

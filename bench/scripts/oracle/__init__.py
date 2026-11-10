@@ -37,7 +37,9 @@ GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
           "enum_byhand", "expr_bin", "expr_cat", "strmany", "strcodec", "strsplit", "strptime",
           # step 498, the temporal wave
           "calendar", "tzreplace", "components", "daterange", "csvdates", "strtemporal", "temporalagg", "weeks",
-          "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby"]
+          "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby",
+          # step 503, the sub-packages' data values
+          "dtype", "decimalagg", "hive_infer", "selector", "castbool", "caststring"]
 
 
 @dataclass

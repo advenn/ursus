@@ -17,13 +17,17 @@ package kernel_test
 //
 // Both directions, and over every numeric type rather than a representative one:
 // the failure was in the type switch, so a single width would not have found it.
+// What this asserts is the agreement: the kernel performs every cast CanCast
+// promises, to the type promised, with a null carried through. The values — false
+// and true as 0 and 1, a number true where it is not zero, NaN and the infinities
+// true and -0 false — are Polars 2.1.0's, recorded in the castbool group of
+// testdata/oracle and asked through Cast by oracle_castbool_test.go since step 503,
+// which took this file's values, NaN's among them.
 
 import (
-	"math"
 	"testing"
 
 	"github.com/advenn/ursus/dtype"
-	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/kernel"
@@ -70,11 +74,6 @@ func TestBoolCastAgreesWithCanCast(t *testing.T) {
 			if got.IsValid(2) {
 				t.Error("a null bool became a value")
 			}
-			// false is 0 and true is 1, which is what every other engine does and what
-			// the String cast already renders.
-			if zero, one := numAt(t, got, 0), numAt(t, got, 1); zero != 0 || one != 1 {
-				t.Errorf("false/true cast to %v/%v, want 0/1", zero, one)
-			}
 		})
 	}
 
@@ -97,77 +96,14 @@ func TestBoolCastAgreesWithCanCast(t *testing.T) {
 			if !got.DType().IsBool() {
 				t.Fatalf("cast to Bool produced %s", got.DType())
 			}
-			vs := got.Bools()
-			if vs.Get(0) || !vs.Get(1) {
-				t.Errorf("0/1 cast to %v/%v, want false/true", vs.Get(0), vs.Get(1))
+			if !got.IsValid(0) || !got.IsValid(1) {
+				t.Error("a valid number became null")
 			}
 			if got.IsValid(2) {
 				t.Error("a null number became false rather than staying null")
 			}
 		})
 	}
-}
-
-// TestNanCastsToTrue pins the one value where "!= 0" is a choice rather than a
-// definition. NaN is not zero, so it is true — which is what C, SQL and Polars all
-// answer, and the alternative would make a cast the only place in the library where
-// NaN behaves like a null.
-func TestNanCastsToTrue(t *testing.T) {
-	for _, v := range []float64{math.NaN(), math.Inf(1), math.Inf(-1), math.Copysign(0, -1)} {
-		in := data.NewFixed("v", dtype.Float64, []float64{v}, bitmap.AllSet(1))
-		got, err := kernel.Cast("v", dtype.Bool, false, in)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// -0.0 == 0 is true in IEEE 754, so negative zero is FALSE — the one case
-		// where the bit pattern and the comparison disagree.
-		want := v != 0
-		if got := got.Bools().Get(0); got != want {
-			t.Errorf("%v cast to %v, want %v", v, got, want)
-		}
-	}
-}
-
-// numAt reads row i of any numeric column as a float64, so one assertion covers
-// eleven storage types.
-func numAt(t *testing.T, c *data.Column, i int) float64 {
-	t.Helper()
-	switch c.DType().ID() {
-	case dtype.TypeInt8:
-		return float64(mustVals[int8](t, c)[i])
-	case dtype.TypeInt16:
-		return float64(mustVals[int16](t, c)[i])
-	case dtype.TypeInt32:
-		return float64(mustVals[int32](t, c)[i])
-	case dtype.TypeInt64:
-		return float64(mustVals[int64](t, c)[i])
-	case dtype.TypeInt128:
-		return mustVals[i128.Int128](t, c)[i].Float64()
-	case dtype.TypeUint8:
-		return float64(mustVals[uint8](t, c)[i])
-	case dtype.TypeUint16:
-		return float64(mustVals[uint16](t, c)[i])
-	case dtype.TypeUint32:
-		return float64(mustVals[uint32](t, c)[i])
-	case dtype.TypeUint64:
-		return float64(mustVals[uint64](t, c)[i])
-	case dtype.TypeFloat32:
-		return float64(mustVals[float32](t, c)[i])
-	case dtype.TypeFloat64:
-		return mustVals[float64](t, c)[i]
-	default:
-		t.Fatalf("numAt does not handle %s", c.DType())
-		return 0
-	}
-}
-
-func mustVals[T data.Fixed](t *testing.T, c *data.Column) []T {
-	t.Helper()
-	v, err := data.Values[T](c)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return v
 }
 
 // TestDecimalCastDivergenceIsClosed is what the tripwire became.
@@ -190,7 +126,10 @@ func mustVals[T data.Fixed](t *testing.T, c *data.Column) []T {
 // Step 69 implemented the numeric pairs — exact or refused, in castdec.go — and
 // both sides moved together, so they left this list rather than reopening the
 // divergence; castdec_test.go asserts their VALUES, which agreement cannot. Bool is
-// what stays: a truth value is not an amount, in either direction.
+// what stays: a truth value is not an amount, in either direction. Polars 2.1
+// refuses a Boolean to a Decimal as this does (castbool/bool_to_decimal) and casts a
+// Decimal to a Boolean, true where it is not zero (castbool/decimal_to_bool, a
+// finding of step 503, left to the maintainer).
 func TestDecimalCastDivergenceIsClosed(t *testing.T) {
 	dec := dtype.Decimal(10, 2)
 	for _, c := range []struct{ from, to dtype.DataType }{

@@ -182,6 +182,17 @@ that stops when its request is cancelled.
   rounds a month by adding fourteen days, starts a `group_by_dynamic` day at 23:00
   where midnight does not exist, combines a zoned Datetime's UTC date, and counts
   business days back to an earlier date by numpy's rule.
+- **The sub-packages' data values converted** (503): `dtype`'s supertype tables,
+  `expr`'s Decimal aggregate types, hive's `TestInfer`, the selectors and the kernel's
+  cast values are asked at the root through the public API, 175 recorded cases in six
+  groups, 23 generated; the kernel's tables of a key bitmap's rule, a select's mask,
+  the radix sort, an Int128 sum's carries and a parse's edge bytes are held to
+  `math/big`, a row model and a stable sort of Go values over generated inputs; 171
+  hand-typed lines gone. Six findings recorded and not asserted, for the maintainer:
+  Polars 2.1 meets text, a Boolean, a Date and an instant beside a number where
+  `Promote` refuses, two time units at the coarser where it takes the finer, refuses
+  two Enums it meets at the String, casts a Decimal to a Boolean and answers a
+  Decimal's `any` and `all`, and reads a hive key of dates by its first value's layout.
 
 ### Fixed
 

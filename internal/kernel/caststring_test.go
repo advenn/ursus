@@ -30,39 +30,38 @@ import (
 	"github.com/advenn/ursus/internal/kernel"
 )
 
-// One integer of each sign: the narrower widths share formatInts and formatUints by
-// type parameter. A float's text is pinned against Polars by the root package's
+// The agreement: the kernel performs each cast to text CanCast promises, to a
+// String. The text — each width's edges, Uint64's above 2^53, Int128's past 2^64, a
+// Decimal's point and sign, a Boolean's word, and generated columns of each — is
+// Polars 2.1.0's, recorded in the caststring group of testdata/oracle and asked
+// through Cast by oracle_caststring_test.go since step 503, which took this test's
+// values. A float's text is pinned against Polars by the root package's
 // TestCastsAsPolars, and a Date's by the calendar tests that cast one to text.
 func TestCastToStringAgreesWithCanCast(t *testing.T) {
-	cases := []struct {
-		dt   dtype.DataType
-		col  func() *data.Column
-		want string
+	for _, c := range []struct {
+		dt  dtype.DataType
+		col func() *data.Column
 	}{
 		{dtype.Int64, func() *data.Column {
 			return data.NewFixed("v", dtype.Int64, []int64{math.MinInt64}, bitmap.AllSet(1))
-		}, "-9223372036854775808"},
-		// Above 2^53. This is the one the float64 detour got wrong.
+		}},
+		// Above 2^53: the one the float64 detour got wrong.
 		{dtype.Uint64, func() *data.Column {
 			return data.NewFixed("v", dtype.Uint64, []uint64{math.MaxUint64}, bitmap.AllSet(1))
-		}, "18446744073709551615"},
+		}},
 		// Int128 is what every integer Sum produces.
 		{dtype.Int128, func() *data.Column {
-			return data.NewFixed("v", dtype.Int128,
-				[]i128.Int128{{Hi: 1, Lo: 0}}, bitmap.AllSet(1))
-		}, "18446744073709551616"},
+			return data.NewFixed("v", dtype.Int128, []i128.Int128{{Hi: 1, Lo: 0}}, bitmap.AllSet(1))
+		}},
 		{dtype.Decimal(10, 2), func() *data.Column {
-			return data.NewFixed("v", dtype.Decimal(10, 2),
-				[]i128.Int128{i128.FromInt64(1234)}, bitmap.AllSet(1))
-		}, "12.34"},
+			return data.NewFixed("v", dtype.Decimal(10, 2), []i128.Int128{i128.FromInt64(1234)}, bitmap.AllSet(1))
+		}},
 		{dtype.Bool, func() *data.Column {
 			bits := bitmap.NewBuilder(1)
 			bits.Append(true)
 			return data.NewBool("v", bits.Finish(), bitmap.AllSet(1))
-		}, "true"},
-	}
-
-	for _, c := range cases {
+		}},
+	} {
 		t.Run(c.dt.String(), func(t *testing.T) {
 			if !dtype.CanCast(c.dt, dtype.String) {
 				t.Skipf("CanCast says no, so the kernel is free to refuse")
@@ -71,11 +70,8 @@ func TestCastToStringAgreesWithCanCast(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CanCast(%s, String) is true but the kernel refused: %v", c.dt, err)
 			}
-			if got.DType() != dtype.String {
-				t.Fatalf("result is %s, want String", got.DType())
-			}
-			if v := got.Strings().Get(0); v != c.want {
-				t.Errorf("%s formatted as %q, want %q", c.dt, v, c.want)
+			if got.DType() != dtype.String || got.Len() != 1 || !got.IsValid(0) {
+				t.Fatalf("result is %s of %d rows, valid %v; want one String", got.DType(), got.Len(), got.IsValid(0))
 			}
 		})
 	}
