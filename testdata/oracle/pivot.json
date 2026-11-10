@@ -1,0 +1,5336 @@
+{
+ "cases": [
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "one_value",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "y",
+      "values": [
+       1,
+       4,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       3,
+       2,
+       5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "two_values",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v_y",
+      "values": [
+       1,
+       4,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v_x",
+      "values": [
+       3,
+       2,
+       5
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "w_y",
+      "values": [
+       1.5,
+       4.5,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "w_x",
+      "values": [
+       null,
+       2.5,
+       5.5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "sort_columns",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       3,
+       2,
+       5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "y",
+      "values": [
+       1,
+       4,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "values_left_out",
+   "note": "Values left out are every other column: w",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v",
+      "values": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "y",
+      "values": [
+       1.5,
+       null,
+       null,
+       4.5,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "x",
+      "values": [
+       null,
+       2.5,
+       null,
+       null,
+       5.5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "x"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "agg_sum",
+   "note": "a cell of two values summed; the Int128 sum here cast to Polars' Int64",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       3
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "on",
+       "values": [
+        10,
+        null
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "null_on",
+   "note": "a null On value is a column named null",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "10",
+      "values": [
+       1,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "null",
+      "values": [
+       null,
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "several_on",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "{\"y\",\"p\"}",
+      "values": [
+       1,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "{\"x\",\"q\"}",
+      "values": [
+       null,
+       2,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "{\"x\",\"p\"}",
+      "values": [
+       3,
+       null,
+       5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "{\"y\",\"q\"}",
+      "values": [
+       null,
+       4,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "several_on_two_values",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v_{\"y\",\"p\"}",
+      "values": [
+       1,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v_{\"x\",\"q\"}",
+      "values": [
+       null,
+       2,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v_{\"x\",\"p\"}",
+      "values": [
+       3,
+       null,
+       5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v_{\"y\",\"q\"}",
+      "values": [
+       null,
+       4,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "w_{\"y\",\"p\"}",
+      "values": [
+       1.5,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "w_{\"x\",\"q\"}",
+      "values": [
+       null,
+       2.5,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "w_{\"x\",\"p\"}",
+      "values": [
+       null,
+       null,
+       5.5
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "w_{\"y\",\"q\"}",
+      "values": [
+       null,
+       4.5,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "several_on_sorted",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "{\"x\",\"p\"}",
+      "values": [
+       3,
+       null,
+       5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "{\"x\",\"q\"}",
+      "values": [
+       null,
+       2,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "{\"y\",\"p\"}",
+      "values": [
+       1,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "{\"y\",\"q\"}",
+      "values": [
+       null,
+       4,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "several_on_given",
+   "note": "the combinations given, a row of OnColumns a new column",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "{\"x\",\"p\"}",
+      "values": [
+       3,
+       null,
+       5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "{\"y\",\"q\"}",
+      "values": [
+       null,
+       4,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "given_subset",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       3,
+       2,
+       5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "given_reordered_never_held",
+   "note": "a value the frame never holds is a column of nulls; sort_columns is ignored beside on_columns",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "z",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "y",
+      "values": [
+       1,
+       4,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       3,
+       2,
+       5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "given_x_y_lazy",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       3,
+       2,
+       5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "y",
+      "values": [
+       1,
+       4,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "given_index_none_of_whose_values",
+   "note": "an index none of whose values is given is a row still",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "a",
+       "b"
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       1,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        null,
+        "x",
+        "x",
+        null,
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "given_null",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       3,
+       2,
+       5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "null",
+      "values": [
+       1,
+       4,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "given_none",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        1.5,
+        2.0,
+        1.5,
+        "NaN",
+        "-0.0",
+        1.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+       ]
+      }
+     ]
+    }
+   },
+   "name": "floats_nan_and_zeros",
+   "note": "NaN matches NaN and 0 matches -0, as a group-by keys them; the column is named by the value given",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "NaN",
+      "values": [
+       4
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "0.0",
+      "values": [
+       5
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "1.5",
+      "values": [
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        0.0,
+        "-0.0",
+        0.0
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3
+       ]
+      }
+     ]
+    }
+   },
+   "name": "floats_both_zeros",
+   "note": "both zeros given: each a column of both zeros' rows",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "0.0",
+      "values": [
+       3,
+       3
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "-0.0",
+      "values": [
+       3,
+       3
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b",
+        "a",
+        null
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "y",
+        "x",
+        "x",
+        "y",
+        "x"
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "p",
+       "values": [
+        "p",
+        "q",
+        "p",
+        "q",
+        "p"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "w",
+       "values": [
+        1.5,
+        2.5,
+        null,
+        4.5,
+        5.5
+       ]
+      },
+      {
+       "dtype": "Int32",
+       "name": "n",
+       "values": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "int64_given_for_int32",
+   "note": "OnColumns of another integer width are cast to the On column's",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "b",
+       "a",
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "2",
+      "values": [
+       null,
+       2.5,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "5",
+      "values": [
+       null,
+       null,
+       5.5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "none_len",
+   "note": "a cell none fall in is the aggregate of none",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "x",
+      "values": [
+       2,
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "y",
+      "values": [
+       0,
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "none_n_unique",
+   "note": "a cell none fall in is the aggregate of none",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "x",
+      "values": [
+       2,
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "y",
+      "values": [
+       0,
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "none_sum",
+   "note": "a cell none fall in is the aggregate of none",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       3,
+       0
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "y",
+      "values": [
+       0,
+       5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "none_first",
+   "note": "a cell none fall in is the aggregate of none",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       1,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "y",
+      "values": [
+       null,
+       5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "none_last",
+   "note": "a cell none fall in is the aggregate of none",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       2,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "y",
+      "values": [
+       null,
+       5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "none_min",
+   "note": "a cell none fall in is the aggregate of none",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       1,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "y",
+      "values": [
+       null,
+       5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "none_max",
+   "note": "a cell none fall in is the aggregate of none",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       2,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "y",
+      "values": [
+       null,
+       5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "none_mean",
+   "note": "a cell none fall in is the aggregate of none",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "x",
+      "values": [
+       1.5,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "y",
+      "values": [
+       null,
+       5.0
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "none_median",
+   "note": "a cell none fall in is the aggregate of none",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "x",
+      "values": [
+       1.5,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "y",
+      "values": [
+       null,
+       5.0
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "none_sum_fill_0",
+   "note": "Sum().FillNull(0) is Polars' sum of none",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       3,
+       0
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "y",
+      "values": [
+       0,
+       5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "none_no_agg",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "x",
+      "values": [
+       1,
+       null
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "y",
+      "values": [
+       null,
+       5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        9,
+        3,
+        0,
+        0,
+        3,
+        2,
+        1,
+        4,
+        8,
+        3,
+        4,
+        7,
+        4,
+        9,
+        3,
+        5,
+        5,
+        6,
+        null,
+        2,
+        9,
+        null,
+        7,
+        3,
+        9,
+        3,
+        9,
+        2,
+        4,
+        0,
+        9,
+        8,
+        6,
+        9,
+        2,
+        4,
+        9,
+        6,
+        4,
+        4,
+        null,
+        9,
+        0,
+        null,
+        2,
+        1,
+        3,
+        4,
+        5,
+        5,
+        null,
+        6,
+        4,
+        4,
+        3,
+        6,
+        8,
+        5,
+        0,
+        null,
+        null,
+        1,
+        8,
+        null,
+        8,
+        3,
+        8,
+        1,
+        7,
+        9,
+        5,
+        3,
+        null,
+        9,
+        null,
+        2,
+        4,
+        2,
+        3,
+        5,
+        9,
+        5,
+        9,
+        6,
+        0,
+        1,
+        0,
+        3,
+        6,
+        6,
+        9,
+        5,
+        null,
+        null,
+        6,
+        null,
+        7,
+        null,
+        1,
+        0,
+        8,
+        0,
+        1,
+        null,
+        9,
+        0,
+        7,
+        2,
+        8,
+        7,
+        5,
+        7,
+        4,
+        7,
+        7,
+        2,
+        6,
+        null,
+        3,
+        0,
+        null,
+        3,
+        0,
+        9,
+        0,
+        5,
+        3,
+        4,
+        6,
+        0,
+        null,
+        3,
+        5,
+        3,
+        7,
+        null,
+        4,
+        6,
+        5,
+        6,
+        2,
+        7,
+        9,
+        7,
+        8,
+        1,
+        9,
+        9,
+        4,
+        2,
+        null,
+        1,
+        7,
+        5,
+        1,
+        5,
+        5,
+        6,
+        2,
+        4,
+        null,
+        2,
+        3,
+        9,
+        3,
+        null,
+        null,
+        0,
+        6,
+        8,
+        null,
+        null,
+        2,
+        4,
+        1,
+        2,
+        5,
+        5,
+        5,
+        1,
+        9,
+        3,
+        2,
+        3,
+        4,
+        0,
+        6,
+        4,
+        7,
+        0,
+        4,
+        9,
+        3,
+        9,
+        4,
+        9,
+        1,
+        1,
+        9,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        null,
+        "b",
+        "d",
+        "d",
+        "a",
+        "b",
+        "b",
+        null,
+        "b",
+        "c",
+        "b",
+        null,
+        "d",
+        "d",
+        "c",
+        "c",
+        null,
+        "c",
+        "d",
+        "c",
+        "a",
+        "b",
+        "d",
+        "d",
+        "a",
+        "b",
+        "c",
+        "a",
+        "b",
+        "d",
+        "b",
+        "a",
+        "d",
+        "c",
+        "c",
+        "b",
+        "b",
+        "d",
+        "d",
+        "b",
+        "a",
+        "c",
+        "b",
+        "d",
+        "b",
+        "b",
+        "c",
+        null,
+        "c",
+        "b",
+        "b",
+        "b",
+        "c",
+        "c",
+        "c",
+        "d",
+        "b",
+        null,
+        null,
+        "b",
+        "a",
+        "d",
+        "d",
+        "c",
+        "c",
+        "d",
+        "b",
+        "a",
+        "d",
+        "a",
+        null,
+        "a",
+        "c",
+        "d",
+        null,
+        "a",
+        "a",
+        "a",
+        "d",
+        "b",
+        "a",
+        "c",
+        "d",
+        "b",
+        "d",
+        "b",
+        "b",
+        "b",
+        "d",
+        "d",
+        "d",
+        "b",
+        "a",
+        "a",
+        "d",
+        "c",
+        "d",
+        "b",
+        "c",
+        null,
+        "d",
+        "d",
+        "c",
+        null,
+        "b",
+        "a",
+        "b",
+        "b",
+        "c",
+        "b",
+        "c",
+        "c",
+        "a",
+        "d",
+        "d",
+        "d",
+        "a",
+        "a",
+        "b",
+        null,
+        "a",
+        null,
+        "c",
+        "b",
+        "a",
+        "a",
+        "c",
+        "d",
+        "c",
+        "d",
+        "b",
+        "b",
+        "a",
+        "d",
+        "b",
+        "a",
+        "c",
+        "d",
+        "b",
+        "b",
+        "d",
+        "a",
+        "c",
+        "d",
+        "a",
+        "a",
+        "d",
+        "c",
+        null,
+        "d",
+        "b",
+        "d",
+        "d",
+        "b",
+        "d",
+        "d",
+        "b",
+        "c",
+        "b",
+        "d",
+        "c",
+        "c",
+        "c",
+        "d",
+        "c",
+        "b",
+        "a",
+        null,
+        "b",
+        "b",
+        "b",
+        "b",
+        "b",
+        "b",
+        "d",
+        "b",
+        "d",
+        "c",
+        "b",
+        "a",
+        "b",
+        "d",
+        "b",
+        "b",
+        "b",
+        "b",
+        null,
+        "b",
+        "d",
+        "d",
+        "a",
+        null,
+        "b",
+        "a",
+        "a",
+        "b",
+        "a",
+        "d",
+        "c",
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "v",
+       "values": [
+        null,
+        -694.3282644211206,
+        471.29623163090696,
+        380.6945695218519,
+        null,
+        null,
+        482.96787858702714,
+        -793.9956617535522,
+        -74.0,
+        168.34976948693566,
+        99.60488009932237,
+        -202.11720336029452,
+        null,
+        463.4562540663992,
+        -364.3188516552833,
+        544.1857583393439,
+        -475.5849118386403,
+        134.06660244587238,
+        258.22488938054425,
+        -695.9398823295849,
+        174.84298694357858,
+        8.598742628708237,
+        220.5,
+        295.8745121504969,
+        -796.4877170362852,
+        -431.519487450164,
+        -28.993053977509135,
+        243.3873694792021,
+        378.4106537148716,
+        86.00354572157539,
+        -640.9130216880259,
+        -100.05741305172705,
+        -594.6120096108982,
+        -333.0,
+        927.7940433865585,
+        400.27184877516834,
+        888.2795127109011,
+        338.0,
+        970.6929798467986,
+        966.8516802351305,
+        -781.0872725628207,
+        140.0232907217012,
+        -672.5963706311215,
+        774.6931552824801,
+        896.0,
+        -958.2163557576869,
+        -481.0348343618924,
+        -400.29862633635196,
+        881.3501613180536,
+        -523.5,
+        -10.727155707999486,
+        -494.2946102462904,
+        -917.2453182138818,
+        192.36700334714055,
+        null,
+        770.3646537890561,
+        573.0735826510877,
+        630.9922812486238,
+        814.3604247562416,
+        257.3604523165832,
+        513.6718052535523,
+        301.13482346758383,
+        -88.83400165353783,
+        944.3474949769193,
+        309.4078703863722,
+        43.94454893279317,
+        -687.5,
+        95.2607296131896,
+        566.3421582126191,
+        null,
+        -723.107094996411,
+        407.0,
+        -787.9814859174485,
+        -395.0,
+        -852.197837050781,
+        -389.5,
+        682.9811403089088,
+        887.2690984493067,
+        978.9890975417786,
+        null,
+        null,
+        66.22624976141492,
+        227.48567305366078,
+        -825.7047631835076,
+        208.791969789306,
+        -173.70697550103523,
+        794.9623895923169,
+        778.0095698126997,
+        19.0,
+        612.0653979969491,
+        936.4619382906285,
+        876.3647263699297,
+        -596.4187785563702,
+        844.2133612295684,
+        810.4339261117266,
+        603.9929914973495,
+        -147.4951408228244,
+        -187.3942548927423,
+        -528.4667828976184,
+        340.8834118172956,
+        362.34123730806164,
+        -192.90194994020317,
+        571.1564251249338,
+        866.4511058197957,
+        105.1910554125459,
+        -728.2830490312195,
+        -743.1110592175862,
+        -129.21145427189344,
+        -878.6602475959339,
+        530.3346907736855,
+        null,
+        -307.3907236832074,
+        -996.2833852143868,
+        846.1493189377725,
+        344.65289613243544,
+        939.0,
+        -361.58514874278944,
+        -926.9610112416908,
+        205.51368238621535,
+        135.0,
+        452.89636104314604,
+        79.96248258358787,
+        374.83943311478197,
+        970.2635367001906,
+        -818.1947644045182,
+        992.8589521487866,
+        -41.84575083525317,
+        279.11617239651196,
+        -123.38974834771136,
+        179.4162093170046,
+        822.5,
+        -902.0,
+        null,
+        -520.8936982225933,
+        708.9489378236412,
+        -234.15182079680835,
+        926.0,
+        595.1879693664794,
+        238.51053988278863,
+        258.5227102630008,
+        -346.0160307307891,
+        -193.9089899018786,
+        -645.3233264876382,
+        -690.9258126983977,
+        -478.0,
+        null,
+        230.56839859472097,
+        -193.4131715435392,
+        27.983400501202595,
+        547.2996997289208,
+        -432.0,
+        -956.6031549803974,
+        868.9982502290056,
+        -321.9413116050416,
+        -377.97395623743296,
+        -444.67538656743136,
+        -303.3734388824847,
+        154.86380722988997,
+        -47.45783099823609,
+        741.3907052158027,
+        246.10850701228196,
+        -151.6008884581297,
+        451.61623765595505,
+        705.4741393483307,
+        -713.0432471156964,
+        -579.9911641593039,
+        null,
+        291.5,
+        -868.0550404750176,
+        27.717710052189204,
+        399.2545961322228,
+        -100.10794116486261,
+        null,
+        962.1036911735146,
+        null,
+        -997.8665248212612,
+        -750.8248779284719,
+        962.5,
+        43.0,
+        -963.9653068005505,
+        -751.2194108799459,
+        197.0,
+        -695.5,
+        -247.12609303224986,
+        777.1605049276657,
+        null,
+        988.0399266737379,
+        617.6014208134609,
+        -786.3129507504199,
+        null,
+        -178.50770174004958,
+        -62.074677246286114,
+        507.8812339733356,
+        343.55147837118693,
+        475.7057533655309,
+        -320.27877362067557,
+        127.55528491596647,
+        -976.4669573202747,
+        944.0,
+        261.58136233200685
+       ]
+      }
+     ]
+    }
+   },
+   "name": "pivot_gen_max",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       9,
+       3,
+       0,
+       2,
+       1,
+       4,
+       8,
+       7,
+       5,
+       6,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "null",
+      "values": [
+       -62.074677246286114,
+       79.96248258358787,
+       814.3604247562416,
+       null,
+       null,
+       27.983400501202595,
+       null,
+       -202.11720336029452,
+       630.9922812486238,
+       988.0399266737379,
+       866.4511058197957
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "a",
+      "values": [
+       343.55147837118693,
+       407.0,
+       -728.2830490312195,
+       887.2690984493067,
+       127.55528491596647,
+       682.9811403089088,
+       -100.05741305172705,
+       -193.9089899018786,
+       992.8589521487866,
+       -361.58514874278944,
+       844.2133612295684
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "b",
+      "values": [
+       970.2635367001906,
+       778.0095698126997,
+       794.9623895923169,
+       896.0,
+       482.96787858702714,
+       966.8516802351305,
+       573.0735826510877,
+       708.9489378236412,
+       876.3647263699297,
+       258.5227102630008,
+       822.5
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "c",
+      "values": [
+       944.0,
+       451.61623765595505,
+       374.83943311478197,
+       927.7940433865585,
+       571.1564251249338,
+       926.0,
+       309.4078703863722,
+       -307.3907236832074,
+       962.5,
+       154.86380722988997,
+       944.3474949769193
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "d",
+      "values": [
+       936.4619382906285,
+       978.9890975417786,
+       471.29623163090696,
+       939.0,
+       301.13482346758383,
+       970.6929798467986,
+       362.34123730806164,
+       868.9982502290056,
+       -444.67538656743136,
+       810.4339261117266,
+       774.6931552824801
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "rel:1e-12",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        9,
+        3,
+        0,
+        0,
+        3,
+        2,
+        1,
+        4,
+        8,
+        3,
+        4,
+        7,
+        4,
+        9,
+        3,
+        5,
+        5,
+        6,
+        null,
+        2,
+        9,
+        null,
+        7,
+        3,
+        9,
+        3,
+        9,
+        2,
+        4,
+        0,
+        9,
+        8,
+        6,
+        9,
+        2,
+        4,
+        9,
+        6,
+        4,
+        4,
+        null,
+        9,
+        0,
+        null,
+        2,
+        1,
+        3,
+        4,
+        5,
+        5,
+        null,
+        6,
+        4,
+        4,
+        3,
+        6,
+        8,
+        5,
+        0,
+        null,
+        null,
+        1,
+        8,
+        null,
+        8,
+        3,
+        8,
+        1,
+        7,
+        9,
+        5,
+        3,
+        null,
+        9,
+        null,
+        2,
+        4,
+        2,
+        3,
+        5,
+        9,
+        5,
+        9,
+        6,
+        0,
+        1,
+        0,
+        3,
+        6,
+        6,
+        9,
+        5,
+        null,
+        null,
+        6,
+        null,
+        7,
+        null,
+        1,
+        0,
+        8,
+        0,
+        1,
+        null,
+        9,
+        0,
+        7,
+        2,
+        8,
+        7,
+        5,
+        7,
+        4,
+        7,
+        7,
+        2,
+        6,
+        null,
+        3,
+        0,
+        null,
+        3,
+        0,
+        9,
+        0,
+        5,
+        3,
+        4,
+        6,
+        0,
+        null,
+        3,
+        5,
+        3,
+        7,
+        null,
+        4,
+        6,
+        5,
+        6,
+        2,
+        7,
+        9,
+        7,
+        8,
+        1,
+        9,
+        9,
+        4,
+        2,
+        null,
+        1,
+        7,
+        5,
+        1,
+        5,
+        5,
+        6,
+        2,
+        4,
+        null,
+        2,
+        3,
+        9,
+        3,
+        null,
+        null,
+        0,
+        6,
+        8,
+        null,
+        null,
+        2,
+        4,
+        1,
+        2,
+        5,
+        5,
+        5,
+        1,
+        9,
+        3,
+        2,
+        3,
+        4,
+        0,
+        6,
+        4,
+        7,
+        0,
+        4,
+        9,
+        3,
+        9,
+        4,
+        9,
+        1,
+        1,
+        9,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        null,
+        "b",
+        "d",
+        "d",
+        "a",
+        "b",
+        "b",
+        null,
+        "b",
+        "c",
+        "b",
+        null,
+        "d",
+        "d",
+        "c",
+        "c",
+        null,
+        "c",
+        "d",
+        "c",
+        "a",
+        "b",
+        "d",
+        "d",
+        "a",
+        "b",
+        "c",
+        "a",
+        "b",
+        "d",
+        "b",
+        "a",
+        "d",
+        "c",
+        "c",
+        "b",
+        "b",
+        "d",
+        "d",
+        "b",
+        "a",
+        "c",
+        "b",
+        "d",
+        "b",
+        "b",
+        "c",
+        null,
+        "c",
+        "b",
+        "b",
+        "b",
+        "c",
+        "c",
+        "c",
+        "d",
+        "b",
+        null,
+        null,
+        "b",
+        "a",
+        "d",
+        "d",
+        "c",
+        "c",
+        "d",
+        "b",
+        "a",
+        "d",
+        "a",
+        null,
+        "a",
+        "c",
+        "d",
+        null,
+        "a",
+        "a",
+        "a",
+        "d",
+        "b",
+        "a",
+        "c",
+        "d",
+        "b",
+        "d",
+        "b",
+        "b",
+        "b",
+        "d",
+        "d",
+        "d",
+        "b",
+        "a",
+        "a",
+        "d",
+        "c",
+        "d",
+        "b",
+        "c",
+        null,
+        "d",
+        "d",
+        "c",
+        null,
+        "b",
+        "a",
+        "b",
+        "b",
+        "c",
+        "b",
+        "c",
+        "c",
+        "a",
+        "d",
+        "d",
+        "d",
+        "a",
+        "a",
+        "b",
+        null,
+        "a",
+        null,
+        "c",
+        "b",
+        "a",
+        "a",
+        "c",
+        "d",
+        "c",
+        "d",
+        "b",
+        "b",
+        "a",
+        "d",
+        "b",
+        "a",
+        "c",
+        "d",
+        "b",
+        "b",
+        "d",
+        "a",
+        "c",
+        "d",
+        "a",
+        "a",
+        "d",
+        "c",
+        null,
+        "d",
+        "b",
+        "d",
+        "d",
+        "b",
+        "d",
+        "d",
+        "b",
+        "c",
+        "b",
+        "d",
+        "c",
+        "c",
+        "c",
+        "d",
+        "c",
+        "b",
+        "a",
+        null,
+        "b",
+        "b",
+        "b",
+        "b",
+        "b",
+        "b",
+        "d",
+        "b",
+        "d",
+        "c",
+        "b",
+        "a",
+        "b",
+        "d",
+        "b",
+        "b",
+        "b",
+        "b",
+        null,
+        "b",
+        "d",
+        "d",
+        "a",
+        null,
+        "b",
+        "a",
+        "a",
+        "b",
+        "a",
+        "d",
+        "c",
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "v",
+       "values": [
+        null,
+        -694.3282644211206,
+        471.29623163090696,
+        380.6945695218519,
+        null,
+        null,
+        482.96787858702714,
+        -793.9956617535522,
+        -74.0,
+        168.34976948693566,
+        99.60488009932237,
+        -202.11720336029452,
+        null,
+        463.4562540663992,
+        -364.3188516552833,
+        544.1857583393439,
+        -475.5849118386403,
+        134.06660244587238,
+        258.22488938054425,
+        -695.9398823295849,
+        174.84298694357858,
+        8.598742628708237,
+        220.5,
+        295.8745121504969,
+        -796.4877170362852,
+        -431.519487450164,
+        -28.993053977509135,
+        243.3873694792021,
+        378.4106537148716,
+        86.00354572157539,
+        -640.9130216880259,
+        -100.05741305172705,
+        -594.6120096108982,
+        -333.0,
+        927.7940433865585,
+        400.27184877516834,
+        888.2795127109011,
+        338.0,
+        970.6929798467986,
+        966.8516802351305,
+        -781.0872725628207,
+        140.0232907217012,
+        -672.5963706311215,
+        774.6931552824801,
+        896.0,
+        -958.2163557576869,
+        -481.0348343618924,
+        -400.29862633635196,
+        881.3501613180536,
+        -523.5,
+        -10.727155707999486,
+        -494.2946102462904,
+        -917.2453182138818,
+        192.36700334714055,
+        null,
+        770.3646537890561,
+        573.0735826510877,
+        630.9922812486238,
+        814.3604247562416,
+        257.3604523165832,
+        513.6718052535523,
+        301.13482346758383,
+        -88.83400165353783,
+        944.3474949769193,
+        309.4078703863722,
+        43.94454893279317,
+        -687.5,
+        95.2607296131896,
+        566.3421582126191,
+        null,
+        -723.107094996411,
+        407.0,
+        -787.9814859174485,
+        -395.0,
+        -852.197837050781,
+        -389.5,
+        682.9811403089088,
+        887.2690984493067,
+        978.9890975417786,
+        null,
+        null,
+        66.22624976141492,
+        227.48567305366078,
+        -825.7047631835076,
+        208.791969789306,
+        -173.70697550103523,
+        794.9623895923169,
+        778.0095698126997,
+        19.0,
+        612.0653979969491,
+        936.4619382906285,
+        876.3647263699297,
+        -596.4187785563702,
+        844.2133612295684,
+        810.4339261117266,
+        603.9929914973495,
+        -147.4951408228244,
+        -187.3942548927423,
+        -528.4667828976184,
+        340.8834118172956,
+        362.34123730806164,
+        -192.90194994020317,
+        571.1564251249338,
+        866.4511058197957,
+        105.1910554125459,
+        -728.2830490312195,
+        -743.1110592175862,
+        -129.21145427189344,
+        -878.6602475959339,
+        530.3346907736855,
+        null,
+        -307.3907236832074,
+        -996.2833852143868,
+        846.1493189377725,
+        344.65289613243544,
+        939.0,
+        -361.58514874278944,
+        -926.9610112416908,
+        205.51368238621535,
+        135.0,
+        452.89636104314604,
+        79.96248258358787,
+        374.83943311478197,
+        970.2635367001906,
+        -818.1947644045182,
+        992.8589521487866,
+        -41.84575083525317,
+        279.11617239651196,
+        -123.38974834771136,
+        179.4162093170046,
+        822.5,
+        -902.0,
+        null,
+        -520.8936982225933,
+        708.9489378236412,
+        -234.15182079680835,
+        926.0,
+        595.1879693664794,
+        238.51053988278863,
+        258.5227102630008,
+        -346.0160307307891,
+        -193.9089899018786,
+        -645.3233264876382,
+        -690.9258126983977,
+        -478.0,
+        null,
+        230.56839859472097,
+        -193.4131715435392,
+        27.983400501202595,
+        547.2996997289208,
+        -432.0,
+        -956.6031549803974,
+        868.9982502290056,
+        -321.9413116050416,
+        -377.97395623743296,
+        -444.67538656743136,
+        -303.3734388824847,
+        154.86380722988997,
+        -47.45783099823609,
+        741.3907052158027,
+        246.10850701228196,
+        -151.6008884581297,
+        451.61623765595505,
+        705.4741393483307,
+        -713.0432471156964,
+        -579.9911641593039,
+        null,
+        291.5,
+        -868.0550404750176,
+        27.717710052189204,
+        399.2545961322228,
+        -100.10794116486261,
+        null,
+        962.1036911735146,
+        null,
+        -997.8665248212612,
+        -750.8248779284719,
+        962.5,
+        43.0,
+        -963.9653068005505,
+        -751.2194108799459,
+        197.0,
+        -695.5,
+        -247.12609303224986,
+        777.1605049276657,
+        null,
+        988.0399266737379,
+        617.6014208134609,
+        -786.3129507504199,
+        null,
+        -178.50770174004958,
+        -62.074677246286114,
+        507.8812339733356,
+        343.55147837118693,
+        475.7057533655309,
+        -320.27877362067557,
+        127.55528491596647,
+        -976.4669573202747,
+        944.0,
+        261.58136233200685
+       ]
+      }
+     ]
+    }
+   },
+   "name": "pivot_gen_mean",
+   "note": "a mean of a few floats that nearly cancel: the summation order's last bits, exact here (\u00a79)",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       9,
+       3,
+       0,
+       2,
+       1,
+       4,
+       8,
+       7,
+       5,
+       6,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "null",
+      "values": [
+       -62.074677246286114,
+       79.96248258358787,
+       395.4359591433843,
+       null,
+       null,
+       -388.77029586290047,
+       null,
+       -202.11720336029452,
+       -189.23324186214248,
+       988.0399266737379,
+       7.126634384507327
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "a",
+      "values": [
+       -4.127972347378204,
+       407.0,
+       -773.2389067178689,
+       247.05215597616962,
+       -247.0497640904648,
+       -4.026048319999177,
+       -289.0287065258635,
+       -193.9089899018786,
+       992.8589521487866,
+       -361.58514874278944,
+       -103.97676509020333
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "b",
+      "values": [
+       41.88714977249837,
+       -111.93847981875481,
+       61.18300948059766,
+       -194.80716201827815,
+       -216.3184842238983,
+       600.2863828198763,
+       -40.177176824180776,
+       165.3908564599135,
+       1.5100859608653348,
+       -482.38292591045365,
+       19.721475016956205
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "c",
+      "values": [
+       -19.45104354783088,
+       -163.3794461375391,
+       374.83943311478197,
+       26.751090866281327,
+       21.3448211136577,
+       67.04056171108626,
+       -284.62618860478085,
+       -307.3907236832074,
+       613.5655423547031,
+       55.18022044268366,
+       251.61687689227557
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "d",
+      "values": [
+       361.40773389229,
+       198.98289208049508,
+       188.8834293400736,
+       380.0945563327106,
+       -502.4773112676303,
+       663.7332858197044,
+       136.7536178272619,
+       152.73858990502384,
+       -597.7501322479516,
+       364.34856252190184,
+       516.4590223315122
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        9,
+        3,
+        0,
+        0,
+        3,
+        2,
+        1,
+        4,
+        8,
+        3,
+        4,
+        7,
+        4,
+        9,
+        3,
+        5,
+        5,
+        6,
+        null,
+        2,
+        9,
+        null,
+        7,
+        3,
+        9,
+        3,
+        9,
+        2,
+        4,
+        0,
+        9,
+        8,
+        6,
+        9,
+        2,
+        4,
+        9,
+        6,
+        4,
+        4,
+        null,
+        9,
+        0,
+        null,
+        2,
+        1,
+        3,
+        4,
+        5,
+        5,
+        null,
+        6,
+        4,
+        4,
+        3,
+        6,
+        8,
+        5,
+        0,
+        null,
+        null,
+        1,
+        8,
+        null,
+        8,
+        3,
+        8,
+        1,
+        7,
+        9,
+        5,
+        3,
+        null,
+        9,
+        null,
+        2,
+        4,
+        2,
+        3,
+        5,
+        9,
+        5,
+        9,
+        6,
+        0,
+        1,
+        0,
+        3,
+        6,
+        6,
+        9,
+        5,
+        null,
+        null,
+        6,
+        null,
+        7,
+        null,
+        1,
+        0,
+        8,
+        0,
+        1,
+        null,
+        9,
+        0,
+        7,
+        2,
+        8,
+        7,
+        5,
+        7,
+        4,
+        7,
+        7,
+        2,
+        6,
+        null,
+        3,
+        0,
+        null,
+        3,
+        0,
+        9,
+        0,
+        5,
+        3,
+        4,
+        6,
+        0,
+        null,
+        3,
+        5,
+        3,
+        7,
+        null,
+        4,
+        6,
+        5,
+        6,
+        2,
+        7,
+        9,
+        7,
+        8,
+        1,
+        9,
+        9,
+        4,
+        2,
+        null,
+        1,
+        7,
+        5,
+        1,
+        5,
+        5,
+        6,
+        2,
+        4,
+        null,
+        2,
+        3,
+        9,
+        3,
+        null,
+        null,
+        0,
+        6,
+        8,
+        null,
+        null,
+        2,
+        4,
+        1,
+        2,
+        5,
+        5,
+        5,
+        1,
+        9,
+        3,
+        2,
+        3,
+        4,
+        0,
+        6,
+        4,
+        7,
+        0,
+        4,
+        9,
+        3,
+        9,
+        4,
+        9,
+        1,
+        1,
+        9,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "on",
+       "values": [
+        null,
+        "b",
+        "d",
+        "d",
+        "a",
+        "b",
+        "b",
+        null,
+        "b",
+        "c",
+        "b",
+        null,
+        "d",
+        "d",
+        "c",
+        "c",
+        null,
+        "c",
+        "d",
+        "c",
+        "a",
+        "b",
+        "d",
+        "d",
+        "a",
+        "b",
+        "c",
+        "a",
+        "b",
+        "d",
+        "b",
+        "a",
+        "d",
+        "c",
+        "c",
+        "b",
+        "b",
+        "d",
+        "d",
+        "b",
+        "a",
+        "c",
+        "b",
+        "d",
+        "b",
+        "b",
+        "c",
+        null,
+        "c",
+        "b",
+        "b",
+        "b",
+        "c",
+        "c",
+        "c",
+        "d",
+        "b",
+        null,
+        null,
+        "b",
+        "a",
+        "d",
+        "d",
+        "c",
+        "c",
+        "d",
+        "b",
+        "a",
+        "d",
+        "a",
+        null,
+        "a",
+        "c",
+        "d",
+        null,
+        "a",
+        "a",
+        "a",
+        "d",
+        "b",
+        "a",
+        "c",
+        "d",
+        "b",
+        "d",
+        "b",
+        "b",
+        "b",
+        "d",
+        "d",
+        "d",
+        "b",
+        "a",
+        "a",
+        "d",
+        "c",
+        "d",
+        "b",
+        "c",
+        null,
+        "d",
+        "d",
+        "c",
+        null,
+        "b",
+        "a",
+        "b",
+        "b",
+        "c",
+        "b",
+        "c",
+        "c",
+        "a",
+        "d",
+        "d",
+        "d",
+        "a",
+        "a",
+        "b",
+        null,
+        "a",
+        null,
+        "c",
+        "b",
+        "a",
+        "a",
+        "c",
+        "d",
+        "c",
+        "d",
+        "b",
+        "b",
+        "a",
+        "d",
+        "b",
+        "a",
+        "c",
+        "d",
+        "b",
+        "b",
+        "d",
+        "a",
+        "c",
+        "d",
+        "a",
+        "a",
+        "d",
+        "c",
+        null,
+        "d",
+        "b",
+        "d",
+        "d",
+        "b",
+        "d",
+        "d",
+        "b",
+        "c",
+        "b",
+        "d",
+        "c",
+        "c",
+        "c",
+        "d",
+        "c",
+        "b",
+        "a",
+        null,
+        "b",
+        "b",
+        "b",
+        "b",
+        "b",
+        "b",
+        "d",
+        "b",
+        "d",
+        "c",
+        "b",
+        "a",
+        "b",
+        "d",
+        "b",
+        "b",
+        "b",
+        "b",
+        null,
+        "b",
+        "d",
+        "d",
+        "a",
+        null,
+        "b",
+        "a",
+        "a",
+        "b",
+        "a",
+        "d",
+        "c",
+        "a"
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "v",
+       "values": [
+        null,
+        -694.3282644211206,
+        471.29623163090696,
+        380.6945695218519,
+        null,
+        null,
+        482.96787858702714,
+        -793.9956617535522,
+        -74.0,
+        168.34976948693566,
+        99.60488009932237,
+        -202.11720336029452,
+        null,
+        463.4562540663992,
+        -364.3188516552833,
+        544.1857583393439,
+        -475.5849118386403,
+        134.06660244587238,
+        258.22488938054425,
+        -695.9398823295849,
+        174.84298694357858,
+        8.598742628708237,
+        220.5,
+        295.8745121504969,
+        -796.4877170362852,
+        -431.519487450164,
+        -28.993053977509135,
+        243.3873694792021,
+        378.4106537148716,
+        86.00354572157539,
+        -640.9130216880259,
+        -100.05741305172705,
+        -594.6120096108982,
+        -333.0,
+        927.7940433865585,
+        400.27184877516834,
+        888.2795127109011,
+        338.0,
+        970.6929798467986,
+        966.8516802351305,
+        -781.0872725628207,
+        140.0232907217012,
+        -672.5963706311215,
+        774.6931552824801,
+        896.0,
+        -958.2163557576869,
+        -481.0348343618924,
+        -400.29862633635196,
+        881.3501613180536,
+        -523.5,
+        -10.727155707999486,
+        -494.2946102462904,
+        -917.2453182138818,
+        192.36700334714055,
+        null,
+        770.3646537890561,
+        573.0735826510877,
+        630.9922812486238,
+        814.3604247562416,
+        257.3604523165832,
+        513.6718052535523,
+        301.13482346758383,
+        -88.83400165353783,
+        944.3474949769193,
+        309.4078703863722,
+        43.94454893279317,
+        -687.5,
+        95.2607296131896,
+        566.3421582126191,
+        null,
+        -723.107094996411,
+        407.0,
+        -787.9814859174485,
+        -395.0,
+        -852.197837050781,
+        -389.5,
+        682.9811403089088,
+        887.2690984493067,
+        978.9890975417786,
+        null,
+        null,
+        66.22624976141492,
+        227.48567305366078,
+        -825.7047631835076,
+        208.791969789306,
+        -173.70697550103523,
+        794.9623895923169,
+        778.0095698126997,
+        19.0,
+        612.0653979969491,
+        936.4619382906285,
+        876.3647263699297,
+        -596.4187785563702,
+        844.2133612295684,
+        810.4339261117266,
+        603.9929914973495,
+        -147.4951408228244,
+        -187.3942548927423,
+        -528.4667828976184,
+        340.8834118172956,
+        362.34123730806164,
+        -192.90194994020317,
+        571.1564251249338,
+        866.4511058197957,
+        105.1910554125459,
+        -728.2830490312195,
+        -743.1110592175862,
+        -129.21145427189344,
+        -878.6602475959339,
+        530.3346907736855,
+        null,
+        -307.3907236832074,
+        -996.2833852143868,
+        846.1493189377725,
+        344.65289613243544,
+        939.0,
+        -361.58514874278944,
+        -926.9610112416908,
+        205.51368238621535,
+        135.0,
+        452.89636104314604,
+        79.96248258358787,
+        374.83943311478197,
+        970.2635367001906,
+        -818.1947644045182,
+        992.8589521487866,
+        -41.84575083525317,
+        279.11617239651196,
+        -123.38974834771136,
+        179.4162093170046,
+        822.5,
+        -902.0,
+        null,
+        -520.8936982225933,
+        708.9489378236412,
+        -234.15182079680835,
+        926.0,
+        595.1879693664794,
+        238.51053988278863,
+        258.5227102630008,
+        -346.0160307307891,
+        -193.9089899018786,
+        -645.3233264876382,
+        -690.9258126983977,
+        -478.0,
+        null,
+        230.56839859472097,
+        -193.4131715435392,
+        27.983400501202595,
+        547.2996997289208,
+        -432.0,
+        -956.6031549803974,
+        868.9982502290056,
+        -321.9413116050416,
+        -377.97395623743296,
+        -444.67538656743136,
+        -303.3734388824847,
+        154.86380722988997,
+        -47.45783099823609,
+        741.3907052158027,
+        246.10850701228196,
+        -151.6008884581297,
+        451.61623765595505,
+        705.4741393483307,
+        -713.0432471156964,
+        -579.9911641593039,
+        null,
+        291.5,
+        -868.0550404750176,
+        27.717710052189204,
+        399.2545961322228,
+        -100.10794116486261,
+        null,
+        962.1036911735146,
+        null,
+        -997.8665248212612,
+        -750.8248779284719,
+        962.5,
+        43.0,
+        -963.9653068005505,
+        -751.2194108799459,
+        197.0,
+        -695.5,
+        -247.12609303224986,
+        777.1605049276657,
+        null,
+        988.0399266737379,
+        617.6014208134609,
+        -786.3129507504199,
+        null,
+        -178.50770174004958,
+        -62.074677246286114,
+        507.8812339733356,
+        343.55147837118693,
+        475.7057533655309,
+        -320.27877362067557,
+        127.55528491596647,
+        -976.4669573202747,
+        944.0,
+        261.58136233200685
+       ]
+      }
+     ]
+    }
+   },
+   "name": "pivot_gen_given",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       9,
+       3,
+       0,
+       2,
+       1,
+       4,
+       8,
+       7,
+       5,
+       6,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "d",
+      "values": [
+       -395.0,
+       -520.8936982225933,
+       -192.90194994020317,
+       -346.0160307307891,
+       -976.4669573202747,
+       279.11617239651196,
+       -88.83400165353783,
+       -786.3129507504199,
+       -750.8248779284719,
+       -594.6120096108982,
+       258.22488938054425
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "b",
+      "values": [
+       -751.2194108799459,
+       -902.0,
+       -672.5963706311215,
+       -997.8665248212612,
+       -958.2163557576869,
+       99.60488009932237,
+       -687.5,
+       -743.1110592175862,
+       -523.5,
+       -868.0550404750176,
+       -579.9911641593039
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "z",
+      "values": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "b",
+       "values": [
+        3.5,
+        4.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "c",
+       "values": [
+        null,
+        6
+       ]
+      }
+     ]
+    }
+   },
+   "name": "transpose_header",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "column",
+      "values": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_0",
+      "values": [
+       1.0,
+       3.5,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_1",
+      "values": [
+       2.0,
+       4.5,
+       6.0
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "b",
+       "values": [
+        3.5,
+        4.5
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "c",
+       "values": [
+        null,
+        6
+       ]
+      }
+     ]
+    }
+   },
+   "name": "transpose_named",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Float64",
+      "name": "p",
+      "values": [
+       1.0,
+       3.5,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "q",
+      "values": [
+       2.0,
+       4.5,
+       6.0
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true,
+        false
+       ]
+      }
+     ]
+    }
+   },
+   "name": "transpose_mixed",
+   "note": "text beside a number or a Boolean is text",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "column_0",
+      "values": [
+       "1",
+       "x",
+       "true"
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "column_1",
+      "values": [
+       "3",
+       "y",
+       "false"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "transpose_bool_int",
+   "note": "a Boolean beside a number is the number",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "column_0",
+      "values": [
+       1,
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "id",
+       "values": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "col1",
+       "values": [
+        1,
+        3,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "col2",
+       "values": [
+        3,
+        4,
+        6
+       ]
+      }
+     ]
+    }
+   },
+   "name": "transpose_names_from",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "column",
+      "values": [
+       "col1",
+       "col2"
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       3
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "b",
+      "values": [
+       3,
+       4
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "c",
+      "values": [
+       2,
+       6
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        -2.6230232155899103,
+        -438.0,
+        -822.1519631297745,
+        -931.4334508007466,
+        -577.7198631324678,
+        -406.45448709844106,
+        777.6638915509229,
+        -610.0,
+        907.3716787521644,
+        215.81799878722745,
+        166.19594318135842,
+        -731.938509629132,
+        -289.75130409941573,
+        22.71142455613949,
+        510.45129885349775,
+        344.0606330589983,
+        null,
+        -359.07549072151585,
+        -993.3427225975187,
+        null,
+        388.3696607947652,
+        244.83286998262838,
+        -614.0,
+        null,
+        -455.2817835810215
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "b",
+       "values": [
+        141.39691047725455,
+        -766.5,
+        529.2272819152049,
+        869.3242829514213,
+        405.3617018166219,
+        -270.6907925006517,
+        115.0,
+        -226.30467452783182,
+        905.6079816699153,
+        821.3898628931602,
+        240.1149233606427,
+        605.7575752485047,
+        545.7962165085012,
+        null,
+        -821.7994194817835,
+        503.93244697310706,
+        -297.8934828217634,
+        -940.321717563699,
+        404.2316579074511,
+        null,
+        null,
+        -201.19689407569558,
+        null,
+        -806.3912956285286,
+        345.192391038413
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "i",
+       "values": [
+        null,
+        871928238354366739,
+        9007199254740993,
+        2534044751835895585,
+        -4635744669042884368,
+        -2845528241546343588,
+        1,
+        -289165094323353440,
+        9007199254740992,
+        -2151072046059212918,
+        -9007199254740992,
+        4660138833972772467,
+        -7879071207917213304,
+        -6142932476518187534,
+        5654314217438605723,
+        null,
+        -1,
+        -7755938795880558533,
+        -7032378854919056937,
+        -3531560336173714949,
+        9223372036854775807,
+        0,
+        -8465903484152175302,
+        -5688683449630842650,
+        1664410220888031032
+       ]
+      }
+     ]
+    }
+   },
+   "name": "transpose_gen",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "column",
+      "values": [
+       "a",
+       "b",
+       "i"
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_0",
+      "values": [
+       -2.6230232155899103,
+       141.39691047725455,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_1",
+      "values": [
+       -438.0,
+       -766.5,
+       8.719282383543667e+17
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_2",
+      "values": [
+       -822.1519631297745,
+       529.2272819152049,
+       9007199254740992.0
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_3",
+      "values": [
+       -931.4334508007466,
+       869.3242829514213,
+       2.534044751835896e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_4",
+      "values": [
+       -577.7198631324678,
+       405.3617018166219,
+       -4.635744669042885e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_5",
+      "values": [
+       -406.45448709844106,
+       -270.6907925006517,
+       -2.8455282415463434e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_6",
+      "values": [
+       777.6638915509229,
+       115.0,
+       1.0
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_7",
+      "values": [
+       -610.0,
+       -226.30467452783182,
+       -2.891650943233535e+17
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_8",
+      "values": [
+       907.3716787521644,
+       905.6079816699153,
+       9007199254740992.0
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_9",
+      "values": [
+       215.81799878722745,
+       821.3898628931602,
+       -2.1510720460592128e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_10",
+      "values": [
+       166.19594318135842,
+       240.1149233606427,
+       -9007199254740992.0
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_11",
+      "values": [
+       -731.938509629132,
+       605.7575752485047,
+       4.660138833972773e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_12",
+      "values": [
+       -289.75130409941573,
+       545.7962165085012,
+       -7.879071207917214e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_13",
+      "values": [
+       22.71142455613949,
+       null,
+       -6.142932476518188e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_14",
+      "values": [
+       510.45129885349775,
+       -821.7994194817835,
+       5.654314217438605e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_15",
+      "values": [
+       344.0606330589983,
+       503.93244697310706,
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_16",
+      "values": [
+       null,
+       -297.8934828217634,
+       -1.0
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_17",
+      "values": [
+       -359.07549072151585,
+       -940.321717563699,
+       -7.755938795880559e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_18",
+      "values": [
+       -993.3427225975187,
+       404.2316579074511,
+       -7.032378854919057e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_19",
+      "values": [
+       null,
+       null,
+       -3.531560336173715e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_20",
+      "values": [
+       388.3696607947652,
+       null,
+       9.223372036854776e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_21",
+      "values": [
+       244.83286998262838,
+       -201.19689407569558,
+       0.0
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_22",
+      "values": [
+       -614.0,
+       null,
+       -8.465903484152176e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_23",
+      "values": [
+       null,
+       -806.3912956285286,
+       -5.688683449630843e+18
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "column_24",
+      "values": [
+       -455.2817835810215,
+       345.192391038413,
+       1.664410220888031e+18
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "generator": "bench/scripts/oracle/pivot.py",
+ "polars": "2.1.0"
+}

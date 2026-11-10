@@ -151,9 +151,10 @@ func formatInts[T ~int8 | ~int16 | ~int32 | ~int64](c *data.Column, out []string
 
 // FloatText is a float as Polars casts one to text (step 325; it was Go's shortest
 // text, 2 and -0 and 1e-07): the shortest digits that read back as it at its width,
-// plain from 1e-5 to below 1e16, a whole number with ".0", and otherwise in
-// scientific notation with a signed exponent of no padding, "1e+16" and "1.5e-7";
-// NaN, inf and -inf.
+// plain from 1e-5 to below 1e16 for a Float64 and from 1e-6 to below 1e13 for a
+// Float32 (Polars' bounds differ by the width; the recorded oracle found it, step
+// 497), a whole number with ".0", and otherwise in scientific notation with a signed
+// exponent of no padding, "1e+16" and "1.5e-7"; NaN, inf and -inf.
 func FloatText(v float64, bits int) string { return string(AppendFloatText(nil, v, bits)) }
 
 // AppendFloatText appends FloatText's text of v to dst, one allocation a value at
@@ -168,7 +169,13 @@ func AppendFloatText(dst []byte, v float64, bits int) []byte {
 		return append(dst, "-inf"...)
 	}
 	start := len(dst)
-	if a := math.Abs(v); a == 0 || a >= 1e-5 && a < 1e16 {
+	// Each bound is the float of the width nearest its power of ten, as Polars reads
+	// the shortest digits' exponent: 1e13 as a float32 is 9999999827968, "1e+13".
+	lo, hi := 1e-5, 1e16
+	if bits == 32 {
+		lo, hi = float64(float32(1e-6)), float64(float32(1e13))
+	}
+	if a := math.Abs(v); a == 0 || a >= lo && a < hi {
 		dst = strconv.AppendFloat(dst, v, 'f', -1, bits)
 		if slices.Index(dst[start:], '.') < 0 {
 			dst = append(dst, ".0"...)

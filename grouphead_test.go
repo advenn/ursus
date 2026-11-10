@@ -10,48 +10,37 @@ import (
 
 // TestGroupHeadTail is G1 of v0.6.7-scope.md (step 308): Polars' group_by().head(n)
 // and tail(n), with maintain_order=True: the keys first, the groups in the order
-// each first appears, each group's rows in the frame's order. Every answer is Polars
-// 1.44.1's but where a comment says otherwise.
+// each first appears, each group's rows in the frame's order. The rows are the
+// grouphead group's, Polars 2.1.0's (oracle_grouphead_test.go); here stay head(0),
+// which is no rows here and a row of nulls a group in Polars, of how it is built
+// (feature-gaps.md §9), the keyless frame, one group, the refusals and the eager form.
 func TestGroupHeadTail(t *testing.T) {
 	ctx := t.Context()
 	c := ursus.Col
 	lf := ursus.Frame(i64s("v", 1, 2, 3, 4, 5, 6, 7), strs("k", "b", "a", "b", "a", "b", nil, "b"),
 		i64s("w", 10, 20, 30, 40, 50, 60, 70))
-	for _, tc := range []struct {
-		name string
-		q    *ursus.LazyFrame
-		want *ursus.LazyFrame
-	}{
-		{"head 2", lf.GroupBy(c("k")).Head(2),
-			ursus.Frame(strs("k", "b", "b", "a", "a", nil), i64s("v", 1, 3, 2, 4, 6), i64s("w", 10, 30, 20, 40, 60))},
-		{"tail 2", lf.GroupBy(c("k")).Tail(2),
-			ursus.Frame(strs("k", "b", "b", "a", "a", nil), i64s("v", 5, 7, 2, 4, 6), i64s("w", 50, 70, 20, 40, 60))},
-		{"head past a group's rows", lf.GroupBy(c("k")).Head(10),
-			ursus.Frame(strs("k", "b", "b", "b", "b", "a", "a", nil), i64s("v", 1, 3, 5, 7, 2, 4, 6),
-				i64s("w", 10, 30, 50, 70, 20, 40, 60))},
-		{"two keys", lf.WithColumns(c("v").Mod(2).Alias("j")).GroupBy(c("k"), c("j")).Head(1),
-			ursus.Frame(strs("k", "b", "a", nil), i64s("j", 1, 0, 0), i64s("v", 1, 2, 6), i64s("w", 10, 20, 60))},
-		// A key computed from v, named v, replaces it.
-		{"a computed key", lf.GroupBy(c("v").Mod(3)).Head(1),
-			ursus.Frame(i64s("v", 1, 2, 0), strs("k", "b", "a", "b"), i64s("w", 10, 20, 30))},
-		{"a computed key aliased", lf.GroupBy(c("v").Mod(3).Alias("m")).Tail(1),
-			ursus.Frame(i64s("m", 1, 2, 0), i64s("v", 7, 5, 6), strs("k", "b", "b", nil), i64s("w", 70, 50, 60))},
-		{"no rows", lf.Head(0).GroupBy(c("k")).Head(2), ursus.Frame(strs("k"), i64s("v"), i64s("w"))},
-		// Polars' head(0) is a row of nulls for each group, of how it is built.
-		{"head 0", lf.GroupBy(c("k")).Head(0), ursus.Frame(strs("k"), i64s("v"), i64s("w"))},
-		// No keys: the frame is one group.
-		{"no keys", lf.GroupBy().Tail(2), lf.Tail(2)},
-	} {
-		got, err := tc.q.Collect(ctx)
-		if err != nil {
-			t.Fatalf("%s: %v", tc.name, err)
-		}
-		want, err := tc.want.Collect(ctx)
+
+	t.Run("head 0", func(t *testing.T) {
+		got, err := lf.GroupBy(c("k")).Head(0).Collect(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Run(tc.name, func(t *testing.T) { ursustest.AssertFrameEqual(t, got, want) })
-	}
+		if got.Height() != 0 || strings.Join(got.Columns(), ",") != "k,v,w" {
+			t.Errorf("head 0: %d rows of %v, want none of k, v, w", got.Height(), got.Columns())
+		}
+	})
+
+	t.Run("no keys", func(t *testing.T) {
+		got, err := lf.GroupBy().Tail(2).Collect(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := lf.Tail(2).Collect(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ursustest.AssertFrameEqual(t, got, want)
+	})
 
 	t.Run("refused", func(t *testing.T) {
 		times := ursus.Frame(ursus.Values("t", []int64{1, 2, 3})).WithColumns(c("t").Cast(ursus.Date))

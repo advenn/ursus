@@ -29,12 +29,25 @@ ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 # The groups, in the order the runner writes them.
 GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
+          # step 497, expressions and math
+          "scalar_byhand", "castround_byhand", "castedges_byhand", "castmore", "exprodds", "exprargs", "fold", "variadic",
+          "math", "trig", "bits", "decimal_arith_byhand", "int128exact",
+          # step 499: strings, lists, structs and enums
+          "listns", "arrns", "listeval", "listmore", "listset", "liststruct", "structfields", "withfields",
+          "enum_byhand", "expr_bin", "expr_cat", "strmany", "strcodec", "strsplit", "strptime",
           # step 498, the temporal wave
           "calendar", "tzreplace", "components", "daterange", "csvdates", "strtemporal", "temporalagg", "weeks",
           "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby",
           # step 502, I/O as text
           "io_byhand", "csvread", "csvskip", "csvwrite", "ndjsonread", "jsonread", "jsonwrite", "ipcfiles", "hive",
-          "hiveparent", "filepaths", "partitionwrite", "database"]
+          "hiveparent", "filepaths", "partitionwrite", "database",
+          # step 501, frames, joins and reshaping
+          "join_byhand", "joinorder", "asofoptions", "concat", "pivot", "dummies", "unstack", "unpivot", "upsample", "update",
+          "matchschema", "frameagg", "framecolumns", "framerows", "frameconv", "framenulls", "fill", "intindex", "dynamicopts",
+          "having", "grouphead", "generate",
+          # step 500, aggregates and windows
+          "aggwindow_byhand", "aggstats", "aggpair", "agglists", "argsort", "hist", "search", "seq", "modeagg", "ewmmore",
+          "window172", "windownest", "rollingby", "rollingoffset", "rollingquantile", "rollmap", "exprroll", "cumeval", "topk_agg"]
 
 
 @dataclass

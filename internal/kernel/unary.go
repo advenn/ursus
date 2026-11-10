@@ -365,11 +365,11 @@ func unaryMath(op expr.UnaryOp, name string, out dtype.DataType,
 		}
 	case expr.OpLn:
 		for i, v := range src {
-			dst[i] = math.Log(v)
+			dst[i] = safeLog(v)
 		}
 	case expr.OpLog10:
 		for i, v := range src {
-			dst[i] = math.Log10(v)
+			dst[i] = safeLog10(v)
 		}
 	case expr.OpLog1p:
 		for i, v := range src {
