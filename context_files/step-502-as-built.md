@@ -214,4 +214,7 @@ whose directory is the null partition's, two writers on one file. `go test -run
 TestOracle .`: the 371 cases pass but the four findings, skipped as named. `go test .`
 in full (187 s), `go vet ./...`, `go run ./internal/gen/api -check` (0 gone; nothing
 exported added), `gofmt -l .` empty, all under `GOEXPERIMENT=simd GOAMD64=v3`.
-`TestEveryCitedTestExists` passes: no Go comment cites a removed name.
+`TestEveryCitedTestExists` passes: no Go comment cites a removed name. After master's
+waves 497 to 501 were merged in, the same again on the merged tree (`go test .` 209 s),
+and `make oracle` of every group, theirs and these, wrote the same bytes as are
+checked in.
