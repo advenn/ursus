@@ -38,6 +38,8 @@ GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
           # step 498, the temporal wave
           "calendar", "tzreplace", "components", "daterange", "csvdates", "strtemporal", "temporalagg", "weeks",
           "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby",
+          # step 503, the sub-packages' data values
+          "dtype", "decimalagg", "hive_infer", "selector", "castbool", "caststring",
           # step 502, I/O as text
           "io_byhand", "csvread", "csvskip", "csvwrite", "ndjsonread", "jsonread", "jsonwrite", "ipcfiles", "hive",
           "hiveparent", "filepaths", "partitionwrite", "database",

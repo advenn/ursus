@@ -2,8 +2,11 @@ package dtype_test
 
 import (
 	"errors"
+	"math/big"
+	"math/rand/v2"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/uerr"
@@ -144,63 +147,57 @@ func TestPredicatesAndPhysical(t *testing.T) {
 	}
 }
 
+// promoteTypes is every kind of type Promote meets, for the laws below.
+var promoteTypes = []dtype.DataType{
+	dtype.Int8, dtype.Int16, dtype.Int32, dtype.Int64, dtype.Int128,
+	dtype.Uint8, dtype.Uint16, dtype.Uint32, dtype.Uint64,
+	dtype.Float32, dtype.Float64, dtype.Decimal(10, 2),
+	dtype.Null, dtype.Bool, dtype.String, dtype.Enum("a"), dtype.Enum("b"),
+	dtype.Date, dtype.Datetime(dtype.Micro, ""), dtype.Datetime(dtype.Nano, "UTC"), dtype.Datetime(dtype.Micro, "UTC"),
+	dtype.Duration(dtype.Milli), dtype.Duration(dtype.Nano), dtype.Time(dtype.Nano),
+	dtype.List(dtype.Int64), dtype.Struct(dtype.Of("x", dtype.Int64)),
+}
+
+// TestPromote: the type two types meet at is Polars 2.1.0's, recorded in the dtype
+// group of testdata/oracle as the type When/Then/Otherwise gives its branches and
+// spelled in oracle_dtype_test.go since step 503, which took this test's table of
+// types. What stays are the laws of the meet and the refusals.
 func TestPromote(t *testing.T) {
-	cases := []struct {
-		a, b dtype.DataType
-		want dtype.DataType
-		ok   bool
-	}{
-		{dtype.Int64, dtype.Int64, dtype.Int64, true},
-		{dtype.Int8, dtype.Int64, dtype.Int64, true},
-		{dtype.Uint8, dtype.Uint32, dtype.Uint32, true},
-		{dtype.Float32, dtype.Float64, dtype.Float64, true},
-
-		// A null literal adopts the other operand's type.
-		{dtype.Null, dtype.Int32, dtype.Int32, true},
-		{dtype.Int32, dtype.Null, dtype.Int32, true},
-
-		// Mixed signedness widens to a signed type that holds both ranges.
-		{dtype.Int8, dtype.Uint8, dtype.Int16, true},
-		{dtype.Int64, dtype.Uint8, dtype.Int64, true},
-		{dtype.Int16, dtype.Uint32, dtype.Int64, true},
-
-		// Float widening is mantissa-aware: Float32 cannot hold every Int32.
-		{dtype.Float32, dtype.Int16, dtype.Float32, true},
-		{dtype.Float32, dtype.Int32, dtype.Float64, true},
-		{dtype.Float64, dtype.Int64, dtype.Float64, true},
-
-		// Uint64 with a signed type promotes to Int128, which holds both ranges
-		// losslessly. Before Int128 existed this was rejected outright, because the
-		// only 64-bit answers were to wrap or to lose precision above 2^53.
-		{dtype.Uint64, dtype.Int64, dtype.Int128, true},
-		{dtype.Int8, dtype.Uint64, dtype.Int128, true},
-
-		// Int128 absorbs every other integer type.
-		{dtype.Int128, dtype.Int64, dtype.Int128, true},
-		{dtype.Int128, dtype.Uint64, dtype.Int128, true},
-		{dtype.Int128, dtype.Int8, dtype.Int128, true},
-
-		// Non-numeric types promote only to themselves.
-		{dtype.String, dtype.Int64, dtype.Null, false},
-		{dtype.Bool, dtype.Int64, dtype.Null, false},
-		{dtype.String, dtype.String, dtype.String, true},
-		// An Enum and a String meet at the String, which holds both exactly (step 79);
-		// two Enums of different categories too.
-		{dtype.Enum("a"), dtype.String, dtype.String, true},
-		{dtype.Enum("a"), dtype.Enum("b"), dtype.String, true},
-		{dtype.Enum("a"), dtype.Int64, dtype.Null, false},
-		{dtype.Date, dtype.Datetime(dtype.Micro, ""), dtype.Null, false},
-	}
-	for _, c := range cases {
-		got, ok := dtype.Promote(c.a, c.b)
-		if ok != c.ok || (ok && got != c.want) {
-			t.Errorf("Promote(%s, %s) = (%s, %v), want (%s, %v)",
-				c.a, c.b, got, ok, c.want, c.ok)
+	for _, a := range promoteTypes {
+		// A type meets itself at itself.
+		if got, ok := dtype.Promote(a, a); !ok || got != a {
+			t.Errorf("Promote(%s, %s) = (%s, %v)", a, a, got, ok)
 		}
-		// Promotion must be commutative, or `a+b` and `b+a` get different types.
-		if rev, revOK := dtype.Promote(c.b, c.a); revOK != ok || rev != got {
-			t.Errorf("Promote is not commutative for (%s, %s): %s/%v vs %s/%v",
-				c.a, c.b, got, ok, rev, revOK)
+		// A null literal adopts the other operand's type.
+		if got, ok := dtype.Promote(dtype.Null, a); !ok || got != a {
+			t.Errorf("Promote(Null, %s) = (%s, %v), want %s", a, got, ok, a)
+		}
+		for _, b := range promoteTypes {
+			// Commutative, or `a+b` and `b+a` get different types.
+			got, ok := dtype.Promote(a, b)
+			if rev, revOK := dtype.Promote(b, a); revOK != ok || rev != got {
+				t.Errorf("Promote is not commutative for (%s, %s): %s/%v vs %s/%v", a, b, got, ok, rev, revOK)
+			}
+		}
+	}
+	// Two Enums of different categories meet at the String, which holds both exactly
+	// (step 79), where Polars 2.1 refuses them: dtype/when_enum_a_enum_b, a finding of
+	// step 503, pinned here until the maintainer decides.
+	if got, ok := dtype.Promote(dtype.Enum("a"), dtype.Enum("b")); !ok || got != dtype.String {
+		t.Errorf("Promote(Enum(a), Enum(b)) = (%s, %v), want String", got, ok)
+	}
+	// The refusals. Text, a Boolean, a Date and a Datetime beside a number, and a
+	// Date beside a Datetime, are refused here where Polars 2.1's supertype makes
+	// text, the number and the Datetime: recorded in the dtype group and left to the
+	// maintainer (step 503's record, Found). An Enum beside a number is refused in
+	// both.
+	for _, c := range [][2]dtype.DataType{
+		{dtype.String, dtype.Int64}, {dtype.Bool, dtype.Int64}, {dtype.Enum("a"), dtype.Int64},
+		{dtype.Date, dtype.Datetime(dtype.Micro, "")}, {dtype.Datetime(dtype.Nano, ""), dtype.Int64},
+		{dtype.List(dtype.Int64), dtype.Int64}, {dtype.Struct(dtype.Of("x", dtype.Int64)), dtype.String},
+	} {
+		if got, ok := dtype.Promote(c[0], c[1]); ok {
+			t.Errorf("Promote(%s, %s) = %s, want a refusal", c[0], c[1], got)
 		}
 	}
 }
@@ -281,124 +278,136 @@ func TestUnknownColumnMessage(t *testing.T) {
 	}
 }
 
-// TestFormatDecimal covers the cases where naive digit-slicing gets it wrong:
-// a value shorter than its own scale needs left-padding, and the sign must stay
-// outside the padding or -5 at scale 2 renders as "0.-05".
+// TestFormatDecimal holds FormatDecimal to math/big over the cases where naive
+// digit-slicing gets it wrong — a value shorter than its own scale needs
+// left-padding, and the sign must stay outside the padding or -5 at scale 2 renders
+// as "0.-05" — and over 300 seeded unscaled values of up to 39 digits at every scale
+// (step 503). The oracle is big.Rat's FloatString of unscaled/10^scale at the scale,
+// exact for every value here.
 func TestFormatDecimal(t *testing.T) {
-	cases := []struct {
+	type in struct {
 		unscaled string
 		scale    uint8
-		want     string
-	}{
-		{"1234", 2, "12.34"},
-		{"500", 2, "5.00"},
-		{"10000", 2, "100.00"},
-		{"0", 2, "0.00"},
-		{"5", 3, "0.005"},
-		{"5", 1, "0.5"},
-		{"-5", 2, "-0.05"},
-		{"-1234", 2, "-12.34"},
-		{"-500", 3, "-0.500"},
-		{"42", 0, "42"},
-		{"170141183460469231731687303715884105727", 38, "1.70141183460469231731687303715884105727"},
+	}
+	cases := []in{
+		{"1234", 2}, {"500", 2}, {"10000", 2}, {"0", 2}, {"5", 3}, {"5", 1}, {"-5", 2}, {"-1234", 2}, {"-500", 3},
+		{"42", 0}, {"170141183460469231731687303715884105727", 38}, {"-170141183460469231731687303715884105728", 38},
+		{"-1", 38}, {"1", 0}, {"0", 0}, {"-0", 2},
+	}
+	rng := rand.New(rand.NewPCG(503, 1))
+	for range 300 {
+		digits := 1 + rng.IntN(39)
+		b := make([]byte, digits)
+		for i := range b {
+			b[i] = '0' + byte(rng.IntN(10))
+		}
+		if digits > 1 && b[0] == '0' {
+			b[0] = '1' + byte(rng.IntN(9)) // an unscaled integer's text has no leading zero
+		}
+		s := string(b)
+		if rng.IntN(2) == 0 {
+			s = "-" + s
+		}
+		cases = append(cases, in{s, uint8(rng.IntN(39))})
 	}
 	for _, c := range cases {
-		if got := dtype.FormatDecimal(c.unscaled, c.scale); got != c.want {
-			t.Errorf("FormatDecimal(%q, %d) = %q, want %q", c.unscaled, c.scale, got, c.want)
+		u, ok := new(big.Int).SetString(c.unscaled, 10)
+		if !ok {
+			t.Fatalf("%q is not an integer", c.unscaled)
+		}
+		want := new(big.Rat).SetFrac(u, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(c.scale)), nil)).FloatString(int(c.scale))
+		if u.Sign() == 0 && strings.HasPrefix(c.unscaled, "-") {
+			want = "-" + want // big.Rat has no negative zero; the text keeps its sign
+		}
+		if got := dtype.FormatDecimal(c.unscaled, c.scale); got != want {
+			t.Errorf("FormatDecimal(%q, %d) = %q, want %q", c.unscaled, c.scale, got, want)
 		}
 	}
 }
 
-// TestPromoteTemporalUnits: two temporal columns of the same kind differing only in
-// resolution promote to the finer one, so no precision is silently discarded.
-//
-// Before step 15 this returned (Null, false) for every pair, which meant
-// `Col("ts").Gt(someTime)` failed on any column that was not nanosecond-UTC — a
-// time.Time literal always lifts to Datetime(ns, UTC) — and an as-of join between two
-// files written at different resolutions refused at plan time.
-//
-// TimeUnit.Finer's own doc has said "Used by type promotion" since step 2; until this
-// change its only caller was temporal ARITHMETIC, so `a - b` worked across units and
-// `a > b` did not.
+// TestPromoteTemporalUnits: two temporal columns of the same kind and zone differing
+// only in resolution promote to the finer one, so no precision is silently discarded,
+// `Col("ts").Gt(someTime)` works on a column that is not nanosecond-UTC — a time.Time
+// literal always lifts to Datetime(ns, UTC) — and an as-of join between two files
+// written at different resolutions resolves at plan time; before step 15 every such
+// pair was refused. Every pair of the four units, in every kind and in a zone, is held
+// to Go's time constants: the unit met at is the one whose tick is the shorter (step
+// 503). Polars 2.1 meets two units at the coarser, recorded in the dtype group and a
+// finding of step 503 left to the maintainer; this pins Promote's documented rule
+// meanwhile. A zone mismatch and a mismatch of kinds stay refused.
 func TestPromoteTemporalUnits(t *testing.T) {
+	tick := map[dtype.TimeUnit]time.Duration{
+		dtype.Second: time.Second, dtype.Milli: time.Millisecond, dtype.Micro: time.Microsecond, dtype.Nano: time.Nanosecond,
+	}
+	kinds := map[string]func(dtype.TimeUnit) dtype.DataType{
+		"naive":    func(u dtype.TimeUnit) dtype.DataType { return dtype.Datetime(u, "") },
+		"UTC":      func(u dtype.TimeUnit) dtype.DataType { return dtype.Datetime(u, "UTC") },
+		"Paris":    func(u dtype.TimeUnit) dtype.DataType { return dtype.Datetime(u, "Europe/Paris") },
+		"duration": dtype.Duration,
+		"time":     dtype.Time,
+	}
+	for name, kind := range kinds {
+		for u := range tick {
+			for v := range tick {
+				finer := u
+				if tick[v] < tick[u] {
+					finer = v
+				}
+				got, ok := dtype.Promote(kind(u), kind(v))
+				if !ok || got != kind(finer) {
+					t.Errorf("%s: Promote(%s, %s) = (%s, %v), want %s, the shorter tick", name, kind(u), kind(v), got, ok, kind(finer))
+				}
+				if exact, ok := dtype.PromoteExact(kind(u), kind(v)); !ok || exact != got {
+					t.Errorf("%s: PromoteExact(%s, %s) = (%s, %v), Promote %s", name, kind(u), kind(v), exact, ok, got)
+				}
+			}
+		}
+	}
 	for _, c := range []struct {
 		a, b dtype.DataType
-		want dtype.DataType
-		ok   bool
 		why  string
 	}{
-		// Same kind, same zone, different unit: the finer one wins.
-		{dtype.Datetime(dtype.Micro, "UTC"), dtype.Datetime(dtype.Nano, "UTC"),
-			dtype.Datetime(dtype.Nano, "UTC"), true, "ns is finer than us"},
-		{dtype.Datetime(dtype.Second, ""), dtype.Datetime(dtype.Milli, ""),
-			dtype.Datetime(dtype.Milli, ""), true, "naive, ms is finer"},
-		{dtype.Duration(dtype.Milli), dtype.Duration(dtype.Nano),
-			dtype.Duration(dtype.Nano), true, "durations too"},
-		{dtype.Time(dtype.Micro), dtype.Time(dtype.Nano),
-			dtype.Time(dtype.Nano), true, "and times"},
-
-		// A ZONE mismatch is not a resolution mismatch and stays refused.
-		{dtype.Datetime(dtype.Micro, "UTC"), dtype.Datetime(dtype.Micro, ""),
-			dtype.Null, false, "an instant is not a wall clock"},
-		{dtype.Datetime(dtype.Micro, "UTC"), dtype.Datetime(dtype.Micro, "Europe/Paris"),
-			dtype.Null, false, "the result's own zone would be undecidable"},
-		{dtype.Datetime(dtype.Micro, "UTC"), dtype.Datetime(dtype.Nano, "Europe/Paris"),
-			dtype.Null, false, "and a unit difference does not rescue it"},
-
-		// Different KINDS stay refused, including the one the table above pins.
-		{dtype.Date, dtype.Datetime(dtype.Micro, ""), dtype.Null, false,
-			"a date is not an instant until someone picks a zone for the midnight"},
-		{dtype.Duration(dtype.Nano), dtype.Datetime(dtype.Nano, ""), dtype.Null, false,
-			"a span is not an instant"},
-		{dtype.Time(dtype.Nano), dtype.Datetime(dtype.Nano, ""), dtype.Null, false,
-			"a wall clock is not an instant"},
-		{dtype.Datetime(dtype.Nano, ""), dtype.Int64, dtype.Null, false,
-			"a temporal type and a bare integer have no common meaning"},
+		// A ZONE mismatch is not a resolution mismatch.
+		{dtype.Datetime(dtype.Micro, "UTC"), dtype.Datetime(dtype.Micro, ""), "an instant is not a wall clock"},
+		{dtype.Datetime(dtype.Micro, "UTC"), dtype.Datetime(dtype.Micro, "Europe/Paris"), "the result's own zone would be undecidable"},
+		{dtype.Datetime(dtype.Micro, "UTC"), dtype.Datetime(dtype.Nano, "Europe/Paris"), "and a unit difference does not rescue it"},
+		// Different KINDS.
+		{dtype.Date, dtype.Datetime(dtype.Micro, ""), "a date is not an instant until someone picks a zone for the midnight"},
+		{dtype.Duration(dtype.Nano), dtype.Datetime(dtype.Nano, ""), "a span is not an instant"},
+		{dtype.Time(dtype.Nano), dtype.Datetime(dtype.Nano, ""), "a wall clock is not an instant"},
+		{dtype.Datetime(dtype.Nano, ""), dtype.Int64, "a temporal type and a bare integer have no common meaning"},
 	} {
-		t.Run(c.a.String()+"_"+c.b.String(), func(t *testing.T) {
-			got, ok := dtype.Promote(c.a, c.b)
-			if ok != c.ok || (ok && got != c.want) {
-				t.Errorf("Promote(%s, %s) = (%s, %v), want (%s, %v) — %s",
-					c.a, c.b, got, ok, c.want, c.ok, c.why)
-			}
-			// Commutative, or `a op b` and `b op a` get different types.
-			if rev, revOK := dtype.Promote(c.b, c.a); revOK != ok || rev != got {
-				t.Errorf("Promote is not commutative for (%s, %s): %s/%v vs %s/%v",
-					c.a, c.b, got, ok, rev, revOK)
-			}
-		})
+		if got, ok := dtype.Promote(c.a, c.b); ok {
+			t.Errorf("Promote(%s, %s) = %s, want a refusal — %s", c.a, c.b, got, c.why)
+		}
+		if _, ok := dtype.Promote(c.b, c.a); ok {
+			t.Errorf("Promote(%s, %s) resolves the other way round", c.b, c.a)
+		}
 	}
 }
 
-// TestPromoteExact: Promote, except where Promote's answer rounds one side — an
-// integer wider than 32 bits with a float — and every cast MeetHint recommends is
-// one CanCast permits.
+// TestPromoteExact holds PromoteExact to its rule over every pair of promoteTypes:
+// Promote's answer, except where that answer rounds one side — a float met by an
+// integer of 64 bits or more, or by a Decimal, neither of which a float holds exactly
+// — where it refuses, and every cast MeetHint then recommends is one CanCast permits.
+// The types it resolves are recorded in the dtype group as the type Unpivot melts
+// two columns to (step 503).
 func TestPromoteExact(t *testing.T) {
-	for _, tc := range []struct {
-		a, b dtype.DataType
-		want dtype.DataType
-		ok   bool
-	}{
-		{dtype.Int64, dtype.Float64, dtype.Null, false},
-		{dtype.Uint64, dtype.Float32, dtype.Null, false},
-		{dtype.Int128, dtype.Float64, dtype.Null, false},
-		{dtype.Int32, dtype.Float32, dtype.Float64, true},
-		{dtype.Uint32, dtype.Float64, dtype.Float64, true},
-		{dtype.Int16, dtype.Float32, dtype.Float32, true},
-		{dtype.Int64, dtype.Uint64, dtype.Int128, true},
-		{dtype.Float32, dtype.Float64, dtype.Float64, true},
-		{dtype.Datetime(dtype.Milli, ""), dtype.Datetime(dtype.Nano, ""), dtype.Datetime(dtype.Nano, ""), true},
-	} {
-		for _, pair := range [][2]dtype.DataType{{tc.a, tc.b}, {tc.b, tc.a}} {
-			got, ok := dtype.PromoteExact(pair[0], pair[1])
-			if ok != tc.ok || (ok && got != tc.want) {
-				t.Errorf("PromoteExact(%s, %s) = %s, %v; want %s, %v", pair[0], pair[1], got, ok, tc.want, tc.ok)
-			}
-		}
-		if !tc.ok {
-			h := dtype.MeetHint(tc.a, tc.b)
-			if !strings.Contains(h, "exactly") || !dtype.CanCast(tc.b, tc.a) {
-				t.Errorf("MeetHint(%s, %s) = %q", tc.a, tc.b, h)
+	inexact := func(d dtype.DataType) bool { return d.IsInteger() && d.BitWidth() >= 64 || d.ID() == dtype.TypeDecimal }
+	for _, a := range promoteTypes {
+		for _, b := range promoteTypes {
+			got, ok := dtype.PromoteExact(a, b)
+			meet, meets := dtype.Promote(a, b)
+			rounds := meets && meet.IsFloat() && (inexact(a) || inexact(b))
+			switch {
+			case rounds && ok:
+				t.Errorf("PromoteExact(%s, %s) = %s, want a refusal: the float rounds the integer", a, b, got)
+			case rounds:
+				if h := dtype.MeetHint(a, b); !strings.Contains(h, "exactly") || !dtype.CanCast(b, a) {
+					t.Errorf("MeetHint(%s, %s) = %q", a, b, h)
+				}
+			case ok != meets || got != meet:
+				t.Errorf("PromoteExact(%s, %s) = (%s, %v), Promote (%s, %v)", a, b, got, ok, meet, meets)
 			}
 		}
 	}

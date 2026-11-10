@@ -4,9 +4,12 @@ package kernel_test
 // comparator path it replaces — including tie order, which ArgSort's doc calls
 // load-bearing three times over. So the test is a differential rather than a set
 // of expected permutations: every radix-able dtype, every direction, every null
-// placement, checked row for row against NewComparator + ArgSort.
+// placement, checked row for row against NewComparator + ArgSort, and against a Go
+// oracle besides (step 503): slices.SortStableFunc over the rows by their values as
+// Go reads them, which shares no code with either.
 
 import (
+	"cmp"
 	"math"
 	"math/rand/v2"
 	"slices"
@@ -241,9 +244,10 @@ func TestRadixNullPartitionSubset(t *testing.T) {
 		[]kernel.SortSpec{{}, {NullsLast: true}}, n)
 }
 
-// assertAgrees is the whole point: ArgSortColumns and the comparator path must
-// produce IDENTICAL permutations, not merely equivalent orderings. Comparing the
-// permutations rather than the sorted values is what makes tie order observable.
+// assertAgrees is the whole point: ArgSortColumns, the comparator path and the Go
+// oracle must produce IDENTICAL permutations, not merely equivalent orderings.
+// Comparing the permutations rather than the sorted values is what makes tie order
+// observable.
 func assertAgrees(t *testing.T, cols []*data.Column, specs []kernel.SortSpec, n int) {
 	t.Helper()
 
@@ -252,11 +256,20 @@ func assertAgrees(t *testing.T, cols []*data.Column, specs []kernel.SortSpec, n 
 		t.Fatalf("ArgSortColumns: %v", err)
 	}
 
-	cmp, err := kernel.NewComparator(cols, specs)
+	byCmp, err := kernel.NewComparator(cols, specs)
 	if err != nil {
 		t.Fatalf("NewComparator: %v", err)
 	}
-	want := kernel.ArgSort(n, cmp)
+	if model := modelArgSort(t, cols, specs, n); !slices.Equal(got, model) {
+		for i := range model {
+			if got[i] != model[i] {
+				lo, hi := max(0, i-3), min(len(model), i+4)
+				t.Fatalf("the radix sort and the Go oracle diverge at %d\n got:    %v\n oracle: %v",
+					i, got[lo:hi], model[lo:hi])
+			}
+		}
+	}
+	want := kernel.ArgSort(n, byCmp)
 
 	if !slices.Equal(got, want) {
 		// Report the first divergence with its neighbourhood; a 500-element diff
@@ -271,4 +284,112 @@ func assertAgrees(t *testing.T, cols []*data.Column, specs []kernel.SortSpec, n 
 		}
 		t.Fatalf("permutations differ in length: %d vs %d", len(got), len(want))
 	}
+}
+
+// modelArgSort is the Go oracle: the rows in a stable order by each key in turn, a
+// key's values as data.Values and Bools read them, compared as Go compares them —
+// false below true, a float's NaN above every number and -0 equal to 0 (the total
+// order OrderKeyF64's doc states) — descending by the comparison reversed, and nulls
+// first or last whatever the direction (SortSpec's doc).
+func modelArgSort(t *testing.T, cols []*data.Column, specs []kernel.SortSpec, n int) []int32 {
+	t.Helper()
+	keys := make([]func(i, j int) int, len(cols))
+	for k, c := range cols {
+		keys[k] = modelCompare(t, c)
+	}
+	rows := make([]int32, n)
+	for i := range rows {
+		rows[i] = int32(i)
+	}
+	slices.SortStableFunc(rows, func(a, b int32) int {
+		i, j := int(a), int(b)
+		for k, c := range cols {
+			vi, vj := c.IsValid(i), c.IsValid(j)
+			switch {
+			case !vi && !vj:
+				continue
+			case !vi || !vj:
+				nullFirst := -1
+				if specs[k].NullsLast {
+					nullFirst = 1
+				}
+				if !vi {
+					return nullFirst
+				}
+				return -nullFirst
+			}
+			r := keys[k](i, j)
+			if specs[k].Descending {
+				r = -r
+			}
+			if r != 0 {
+				return r
+			}
+		}
+		return 0
+	})
+	return rows
+}
+
+// modelCompare compares two rows of c by their values, as Go reads them.
+func modelCompare(t *testing.T, c *data.Column) func(i, j int) int {
+	t.Helper()
+	switch c.DType().Physical().ID() {
+	case dtype.TypeBool:
+		b := c.Bools()
+		return func(i, j int) int {
+			x, y := 0, 0
+			if b.Get(i) {
+				x = 1
+			}
+			if b.Get(j) {
+				y = 1
+			}
+			return x - y
+		}
+	case dtype.TypeInt64:
+		return modelOrdered(mustValues[int64](t, c))
+	case dtype.TypeInt32:
+		return modelOrdered(mustValues[int32](t, c))
+	case dtype.TypeUint64:
+		return modelOrdered(mustValues[uint64](t, c))
+	case dtype.TypeUint8:
+		return modelOrdered(mustValues[uint8](t, c))
+	case dtype.TypeFloat64:
+		return modelFloats(mustValues[float64](t, c))
+	case dtype.TypeFloat32:
+		return modelFloats(mustValues[float32](t, c))
+	}
+	t.Fatalf("the oracle does not read a %s key", c.DType())
+	return nil
+}
+
+func modelOrdered[T cmp.Ordered](v []T) func(i, j int) int {
+	return func(i, j int) int { return cmp.Compare(v[i], v[j]) }
+}
+
+// modelFloats is cmp.Compare but for NaN, which it puts below every number and the
+// sort's total order above.
+func modelFloats[T float32 | float64](v []T) func(i, j int) int {
+	return func(i, j int) int {
+		x, y := v[i], v[j]
+		switch xn, yn := x != x, y != y; {
+		case xn && yn:
+			return 0
+		case xn:
+			return 1
+		case yn:
+			return -1
+		}
+		return cmp.Compare(x, y)
+	}
+}
+
+func mustValues[T data.Fixed](t *testing.T, c *data.Column) []T {
+	t.Helper()
+	v, err := data.Values[T](c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
 }
