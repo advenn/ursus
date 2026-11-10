@@ -11,8 +11,10 @@ import (
 	"github.com/advenn/ursus"
 )
 
-// TestWriteJSON is step 333: Polars' write_ndjson, write_json and sink_ndjson. The
-// text is Polars 1.44.1's, to the byte, of one frame holding every kind of value.
+// TestWriteJSON is step 333: Polars' write_ndjson, write_json and sink_ndjson. Each
+// text is Polars 2.1.0's since step 502, to the byte, recorded in testdata/oracle/
+// jsonwrite.json and spelled in oracle_jsonwrite_test.go; here stay the batches, the
+// sink's file, and a Binary column, which Polars 2.1 panics on where ursus refuses.
 func TestWriteJSON(t *testing.T) {
 	ctx := t.Context()
 	c := ursus.Col
@@ -41,58 +43,24 @@ func TestWriteJSON(t *testing.T) {
 			c("dec").Cast(ursus.Decimal(10, 2))).
 		HStack(ursus.FromRows([]nested{{L: []*int64{&one, nil}, St: &st{X: &x, Y: "p"}}, {L: []*int64{}}, {St: &st{Y: "q"}}}))
 
-	lines := []string{
-		`{"i":1,"f":1.0,"g":null,"s":"a\"b","b":true,"d":"2024-01-02","t":"2024-01-02 03:04:05.123456","tz":"2024-01-02T08:34:05.123456+05:30","du":"PT86403.000005S","tm":"03:04:05.000006","dec":"1.25","l":[1,null],"st":{"x":1,"y":"p"}}`,
-		`{"i":null,"f":null,"g":-0.0,"s":null,"b":null,"d":null,"t":null,"tz":null,"du":null,"tm":null,"dec":null,"l":[],"st":null}`,
-		`{"i":3,"f":1e+20,"g":1e-7,"s":"é\n</x>\\","b":false,"d":"0001-01-01","t":"2024-01-02 00:00:00","tz":"2024-07-02T08:34:05+05:30","du":"-PT0.5S","tm":"00:00:00","dec":"-3.50","l":null,"st":{"x":null,"y":"q"}}`,
-	}
 	var nd, js bytes.Buffer
 	if err := lf.WriteNDJSON(ctx, &nd); err != nil {
 		t.Fatal(err)
 	}
-	if want := strings.Join(lines, "\n") + "\n"; nd.String() != want {
-		t.Errorf("ndjson:\n%s\nwant:\n%s", nd.String(), want)
-	}
 	if err := lf.WriteJSON(ctx, &js); err != nil {
 		t.Fatal(err)
 	}
-	if want := "[" + strings.Join(lines, ",") + "]"; js.String() != want {
-		t.Errorf("json:\n%s\nwant:\n%s", js.String(), want)
+	if nd.Len() == 0 || js.Len() == 0 {
+		t.Fatalf("nothing written: %d and %d bytes", nd.Len(), js.Len())
 	}
 
 	// Batches of one row, encoded at once, write the same text.
-	nd.Reset()
-	js.Reset()
-	if err := lf.WriteNDJSON(ctx, &nd, ursus.WithBatchSize(1)); err != nil || nd.String() != strings.Join(lines, "\n")+"\n" {
-		t.Errorf("a row a batch: %v\n%s", err, nd.String())
+	var nd1, js1 bytes.Buffer
+	if err := lf.WriteNDJSON(ctx, &nd1, ursus.WithBatchSize(1)); err != nil || nd1.String() != nd.String() {
+		t.Errorf("a row a batch: %v\n%s", err, nd1.String())
 	}
-	if err := lf.WriteJSON(ctx, &js, ursus.WithBatchSize(1)); err != nil || js.String() != "["+strings.Join(lines, ",")+"]" {
-		t.Errorf("a row a batch, an array: %v\n%s", err, js.String())
-	}
-
-	// No rows: "[]", and nothing a line.
-	nd.Reset()
-	js.Reset()
-	if err := lf.Head(0).WriteNDJSON(ctx, &nd); err != nil || nd.Len() != 0 {
-		t.Errorf("no rows, ndjson: %v %q", err, nd.String())
-	}
-	if err := lf.Head(0).WriteJSON(ctx, &js); err != nil || js.String() != "[]" {
-		t.Errorf("no rows, json: %v %q", err, js.String())
-	}
-
-	// A year past 9999, and before 1: signed, as chrono writes it.
-	nd.Reset()
-	far := ursus.Frame(ursus.Values("d", []int32{2932897, -719529, -719528})).Select(c("d").Cast(ursus.Date))
-	if err := far.WriteNDJSON(ctx, &nd); err != nil ||
-		nd.String() != "{\"d\":\"+10000-01-01\"}\n{\"d\":\"-0001-12-31\"}\n{\"d\":\"0000-01-01\"}\n" {
-		t.Errorf("far years: %v %q", err, nd.String())
-	}
-
-	// No length is "P0D"; a minute of milliseconds "PT60S".
-	nd.Reset()
-	durs := ursus.Frame(ursus.Values("du", []int64{0, 60_000})).Select(c("du").Cast(ursus.Duration(ursus.Milli)))
-	if err := durs.WriteNDJSON(ctx, &nd); err != nil || nd.String() != "{\"du\":\"P0D\"}\n{\"du\":\"PT60S\"}\n" {
-		t.Errorf("durations: %v %q", err, nd.String())
+	if err := lf.WriteJSON(ctx, &js1, ursus.WithBatchSize(1)); err != nil || js1.String() != js.String() {
+		t.Errorf("a row a batch, an array: %v\n%s", err, js1.String())
 	}
 
 	// SinkNDJSON writes the file whole, or nothing.
@@ -101,7 +69,7 @@ func TestWriteJSON(t *testing.T) {
 	if err := lf.SinkNDJSON(ctx, path); err != nil {
 		t.Fatal(err)
 	}
-	if b, err := os.ReadFile(path); err != nil || string(b) != strings.Join(lines, "\n")+"\n" {
+	if b, err := os.ReadFile(path); err != nil || string(b) != nd.String() {
 		t.Errorf("sunk: %v\n%s", err, b)
 	}
 	if err := lf.Select(c("nope")).SinkNDJSON(ctx, filepath.Join(dir, "never.ndjson")); err == nil {
@@ -111,7 +79,7 @@ func TestWriteJSON(t *testing.T) {
 		t.Errorf("a failed sink left %v", left)
 	}
 
-	// Binary has no text, as Polars has none.
+	// Binary has no text, as Polars has none (it panics on one).
 	bin := ursus.Frame(strs("s", "x")).Select(c("s").Cast(ursus.Binary))
 	if err := bin.WriteNDJSON(ctx, &nd); err == nil || !strings.Contains(err.Error(), "Binary") {
 		t.Errorf("binary: %v", err)

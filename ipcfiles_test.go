@@ -1,17 +1,19 @@
 package ursus_test
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // TestScanIPCFiles is step 360: Polars' scan_ipc of several files, a glob, a list and
-// a hive directory, and include_file_paths. Every answer is Polars 1.44.1's.
+// a hive directory, and include_file_paths. Each answer is Polars 2.1.0's since step
+// 502, recorded in testdata/oracle/ipcfiles.json and spelled in oracle_ipcfiles_test.go;
+// here stay the serial and the blocked reading paths compared with each other, and a
+// filter on a key ruling a file out before it is opened.
 func TestScanIPCFiles(t *testing.T) {
 	ctx, c := t.Context(), ursus.Col
 	dir := t.TempDir()
@@ -37,42 +39,29 @@ func TestScanIPCFiles(t *testing.T) {
 	p1 := write("p1.arrow", ab([]int64{1, 2}, []string{"x", "y"}))
 	p2 := write("p2.arrow", ab([]int64{3}, []string{"z"}))
 	p3 := write("p3.arrow", ursus.Frame(ursus.Values("b", []string{"w"}), ursus.Values("a", []int64{4})))
-	p4 := write("p4.arrow", ursus.Frame(ursus.Values("a", []int64{5})))
-	p5 := write("p5.arrow", ursus.Frame(ursus.Values("a", []float64{1.5}), ursus.Values("b", []string{"q"})))
 	d := filepath.Join(dir, "d")
-	x := write("d/k=1/j=a/x.arrow", ursus.Frame(ursus.Values("a", []int64{1})))
-	y := write("d/k=2/j=b/y.arrow", ursus.Frame(ursus.Values("a", []int64{2})))
+	write("d/k=1/j=a/x.arrow", ursus.Frame(ursus.Values("a", []int64{1})))
+	write("d/k=2/j=b/y.arrow", ursus.Frame(ursus.Values("a", []int64{2})))
 
+	// One thread reads the files in turn, four at once.
 	for _, tc := range []struct {
 		name string
 		lf   *ursus.LazyFrame
-		col  string
-		want string
 	}{
-		{"a glob", ursus.ScanIPCGlob(filepath.Join(dir, "p[12].arrow")), "b", "x y z String"},
-		{"a list", ursus.ScanIPCFiles([]string{p2, p1}), "a", "3 1 2 Int64"},
-		{"by name", ursus.ScanIPCFiles([]string{p1, p3}), "b", "x y w String"},
-		{"by name, the other", ursus.ScanIPCFiles([]string{p1, p3}), "a", "1 2 4 Int64"},
-		{"a directory's keys", ursus.ScanIPC(d), "k", "1 2 Int64"},
-		{"its second key", ursus.ScanIPC(d), "j", "a b String"},
-		{"its columns", ursus.ScanIPC(d), "a", "1 2 Int64"},
-		{"a glob, no keys", ursus.ScanIPCGlob(filepath.Join(d, "**", "*.arrow")), "a", "1 2 Int64"},
-		{"a glob with keys", ursus.ScanIPCGlob(filepath.Join(d, "**", "*.arrow"), ursus.WithIPCHivePartitioning(true)), "k", "1 2 Int64"},
-		{"the paths", ursus.ScanIPC(d, ursus.WithIPCIncludeFilePaths("p")), "p", x + " " + y + " String"},
-		{"a filter on a key", ursus.ScanIPC(d).Filter(c("k").Eq(int64(2))), "a", "2 Int64"},
-		{"a key alone", ursus.ScanIPC(d).Select(c("k")), "k", "1 2 Int64"},
-		{"a key's type given", ursus.ScanIPC(d, ursus.WithIPCHiveSchema(ursus.MustSchema(ursus.Of("k", ursus.Int8)))), "k", "1 2 Int8"},
-		{"under a limit", ursus.ScanIPCGlob(filepath.Join(dir, "p[12].arrow")).Head(2), "a", "1 2 Int64"},
-		{"one file's path", ursus.ScanIPC(p1, ursus.WithIPCIncludeFilePaths("p")), "p", p1 + " " + p1 + " String"},
+		{"a glob", ursus.ScanIPCGlob(filepath.Join(dir, "p[12].arrow"))},
+		{"a list, by name", ursus.ScanIPCFiles([]string{p2, p1, p3})},
+		{"a directory's keys and paths", ursus.ScanIPC(d, ursus.WithIPCIncludeFilePaths("p"))},
+		{"a filter on a key", ursus.ScanIPC(d).Filter(c("k").Eq(int64(2)))},
 	} {
-		for _, th := range []int{1, 4} {
-			if got := cellsOn(t, tc.lf, tc.col, th); got != tc.want {
-				t.Errorf("%s, %d threads: %q, want %q", tc.name, th, got, tc.want)
-			}
+		one, err := tc.lf.Collect(ctx, ursus.WithThreads(1))
+		if err != nil {
+			t.Fatalf("%s, 1 thread: %v", tc.name, err)
 		}
-	}
-	if s, err := ursus.ScanIPC(d, ursus.WithIPCIncludeFilePaths("p")).CollectSchema(ctx); err != nil || strings.Join(s.Names(), ",") != "a,k,j,p" {
-		t.Errorf("the directory's schema: %v, %v", s, err)
+		four, err := tc.lf.Collect(ctx, ursus.WithThreads(4))
+		if err != nil {
+			t.Fatalf("%s, 4 threads: %v", tc.name, err)
+		}
+		ursustest.AssertFrameEqual(t, four, one)
 	}
 
 	// A filter on a key rules a file out before it is opened: a file that is no IPC
@@ -87,31 +76,12 @@ func TestScanIPCFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, th := range []int{1, 4} {
-		if got := cellsOn(t, ursus.ScanIPC(e).Filter(c("k").Lt(int64(3))), "a", th); got != "1 2 Int64" {
-			t.Errorf("a file ruled out, %d threads: %s", th, got)
+		df, err := ursus.ScanIPC(e).Filter(c("k").Lt(int64(3))).Collect(ctx, ursus.WithThreads(th))
+		if err != nil || df.Height() != 2 {
+			t.Errorf("a file ruled out, %d threads: %v, %v", th, df, err)
 		}
 		if _, err := ursus.ScanIPC(e).Collect(ctx, ursus.WithThreads(th)); err == nil {
 			t.Errorf("%d threads: the file not ruled out was read", th)
-		}
-	}
-
-	// Refused, as Polars refuses them.
-	for _, tc := range []struct {
-		name string
-		lf   *ursus.LazyFrame
-		says string
-	}{
-		// "did not find column b"
-		{"a column missing", ursus.ScanIPCFiles([]string{p1, p4}), `no column "b"`},
-		// "extra column in file outside of expected schema: b"
-		{"a column more", ursus.ScanIPCFiles([]string{p4, p1}), `a column "b"`},
-		// "data type mismatch for column a: incoming: Float64 != target: Int64"
-		{"another type", ursus.ScanIPCFiles([]string{p1, p5}), "Float64"},
-		// "column name for file paths "a" conflicts with column name from file"
-		{"a path column's name taken", ursus.ScanIPC(d, ursus.WithIPCIncludeFilePaths("k")), "file paths"},
-	} {
-		if _, err := tc.lf.Collect(ctx); !errors.Is(err, ursus.ErrSchema) || !strings.Contains(err.Error(), tc.says) {
-			t.Errorf("%s: %v, want an error saying %q", tc.name, err, tc.says)
 		}
 	}
 }
