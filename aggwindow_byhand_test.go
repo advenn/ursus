@@ -1,147 +1,37 @@
 package ursus_test
 
-// Aggregations and windows, against answers worked out by hand: audit.md §7.
-//
-// Each case is a silent wrong answer, a crash or a refusal that the audit measured,
-// answered under the rule this step chose for it — most of them the answer Polars
-// and DuckDB already agree on, and where they differ, ursus's own rule: an integer
-// mean is exact because an integer Sum is, and a variance is never negative.
+// Aggregations and windows, audit.md §7's cases: a silent wrong answer, a crash or a
+// refusal that the audit measured, each answered under the rule the step chose for it.
+// Their answers are Polars 2.1.0's since step 500, recorded in the aggwindow_byhand
+// group of testdata/oracle and spelled in oracle_aggwindow_byhand_test.go, which took
+// this file's hand answers. What stays here asserts structure and the refusals, and
+// holds to math/big what Polars has no right answer for: an integer mean past 2^53,
+// which Polars sums in float and rounds, and a median, a midpoint and a variance at
+// the ends of a float's range, which Polars 2.1 overflows to +Inf or NaN.
 
 import (
 	"errors"
 	"fmt"
 	"math"
-	"slices"
+	"math/big"
+	"math/rand/v2"
 	"strings"
 	"testing"
 
 	"github.com/advenn/ursus"
 )
 
-// knownAggDefects names each case that answers wrongly today, with what it answers.
-var knownAggDefects = map[string]string{}
-
 type aggCase struct {
 	name   string
 	got    *ursus.LazyFrame
-	want   *ursus.LazyFrame              // the hand answer, or
-	check  func(*ursus.DataFrame) string // a property of it, or nil with
+	check  func(*ursus.DataFrame) string // a property of the answer, or nil with
 	refuse []string                      // a value refusal naming these
 }
 
 func TestAggregationsAndWindowsByHand(t *testing.T) {
 	c := ursus.Col
-	f64 := func(name string, v ...float64) *ursus.LazyFrame { return ursus.Frame(ursus.Values(name, v)) }
-	one := func(lf *ursus.LazyFrame, e ursus.Expr) *ursus.LazyFrame { return lf.GroupBy().Agg(e) }
-	inf := math.Inf(1)
-	const big = 1<<53 + 1
-	gx := ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("x", []int64{1, 2, 3}))
-
 	cases := []aggCase{
-		// --- A1: ShiftFill's fill meets the column at a common type ---
-		{name: "A1 Int64 ShiftFill(1, 1.5)",
-			got:  ursus.Frame(ursus.Values("v", []int64{1, 2, 3})).Select(c("v").ShiftFill(1, 1.5)),
-			want: f64("v", 1.5, 1, 2)},
-		{name: "A1 Int32 ShiftFill(1, 0)",
-			got:  ursus.Frame(ursus.Values("v", []int32{1, 2, 3})).Select(c("v").ShiftFill(1, 0)),
-			want: ursus.Frame(ursus.Values("v", []int32{0, 1, 2}))},
-		{name: "control: Int64 ShiftFill(1, int64(-1))",
-			got:  ursus.Frame(ursus.Values("v", []int64{1, 2, 3})).Select(c("v").ShiftFill(1, int64(-1))),
-			want: ursus.Frame(ursus.Values("v", []int64{-1, 1, 2}))},
-
-		// --- A2: a quantile at an exact rank is that value; nothing overflows ---
-		{name: "A2 Quantile(0) of [-inf, 1, 2]",
-			got:  one(f64("v", -inf, 1, 2), c("v").Quantile(0, ursus.InterpLinear)),
-			want: f64("v", -inf)},
-		{name: "A2 Quantile(1) of [1, 2, inf]",
-			got:  one(f64("v", 1, 2, inf), c("v").Quantile(1, ursus.InterpLinear)),
-			want: f64("v", inf)},
-		{name: "A2 Median of [-1.7e308, 1.7e308]",
-			got:  one(f64("v", -1.7e308, 1.7e308), c("v").Median()),
-			want: f64("v", 0)},
-		{name: "A2 midpoint of [1e308, 1.5e308]",
-			got:  one(f64("v", 1e308, 1.5e308), c("v").Quantile(0.5, ursus.InterpMidpoint)),
-			want: f64("v", 1.25e308)},
-		{name: "A2 midpoint of [1.7e308, 1.7e308]",
-			got:  one(f64("v", 1.7e308, 1.7e308), c("v").Quantile(0.5, ursus.InterpMidpoint)),
-			want: f64("v", 1.7e308)},
-		{name: "control: Median of [1.7e308, 1.7e308]",
-			got:  one(f64("v", 1.7e308, 1.7e308), c("v").Median()),
-			want: f64("v", 1.7e308)},
-
-		// --- A3: PctChange computes in float, not at the column's width ---
-		{name: "A3 PctChange of UInt8 [3, 1, 255, 0]",
-			got: ursus.Frame(ursus.Values("v", []uint8{3, 1, 255, 0})).Select(c("v").PctChange(1)),
-			want: ursus.Frame(ursus.ValuesNullable("v", []float64{0, -2.0 / 3, 254, -1},
-				[]bool{false, true, true, true}))},
-		{name: "A3 PctChange of Int8 [100, -100, 50]",
-			got: ursus.Frame(ursus.Values("v", []int8{100, -100, 50})).Select(c("v").PctChange(1)),
-			want: ursus.Frame(ursus.ValuesNullable("v", []float64{0, -2, -1.5},
-				[]bool{false, true, true}))},
-
-		// --- A4: an integer mean divides an exact sum ---
-		// (2^53+1 + 2^53+2)/2 = 2^53+1.5, whose nearest float64 is 2^53+2. Summed in
-		// float64, 2^53+1 is already 2^53 and the mean comes out 2^53.
-		{name: "A4 group mean of [2^53+1, 2^53+2]",
-			got:  one(ursus.Frame(ursus.Values("v", []int64{big, big + 1})), c("v").Mean()),
-			want: f64("v", 1<<53+2)},
-		{name: "A4 window mean of [2^53+1, 2^53+2]",
-			got: ursus.Frame(ursus.Values("g", []int64{1, 1}), ursus.Values("v", []int64{big, big + 1})).
-				Select(c("v").Mean().Over(c("g"))),
-			want: f64("v", 1<<53+2, 1<<53+2)},
-		{name: "A4 list mean of [2^53+1, 2^53+2]",
-			got: ursus.Frame(ursus.Values("g", []int64{1, 1}), ursus.Values("v", []int64{big, big + 1})).
-				GroupBy(c("g")).Agg(c("v").Implode()).Select(c("v").List().Mean()),
-			want: f64("v", 1<<53+2)},
-
-		// --- A5: a variance that overflows is +Inf, never negative ---
-		{name: "A5 Var(0) of [1e308, -1e308]",
-			got:  one(f64("v", 1e308, -1e308), c("v").Var(0)),
-			want: f64("v", inf)},
-		{name: "A5 Std(0) of [1e308, -1e308]",
-			got:  one(f64("v", 1e308, -1e308), c("v").Std(0)),
-			want: f64("v", inf)},
-		{name: "control: Var(0) of [1e308, 1e308]",
-			got:  one(f64("v", 1e308, 1e308), c("v").Var(0)),
-			want: f64("v", 0)},
-
-		// --- A10: Sum of a Bool counts its trues ---
-		{name: "A10 Sum of [true, false, true, null]",
-			got: one(ursus.Frame(ursus.ValuesNullable("v", []bool{true, false, true, false},
-				[]bool{true, true, true, false})), c("v").Sum()),
-			want: ursus.Frame(ursus.Values("v", []int64{2})).Select(c("v").Cast(ursus.Int128))},
-		{name: "A10 grouped Sum of a Bool",
-			got: ursus.Frame(ursus.Values("g", []int64{1, 2, 1, 2}), ursus.Values("v", []bool{true, true, true, false})).
-				GroupBy(c("g")).Agg(c("v").Sum()).Sort(ursus.Asc(c("g"))),
-			want: ursus.Frame(ursus.Values("g", []int64{1, 2}), ursus.Values("v", []int64{2, 1})).
-				Select(c("g"), c("v").Cast(ursus.Int128))},
-		{name: "A10 CumSum of [true, null, true, false]",
-			got: ursus.Frame(ursus.ValuesNullable("v", []bool{true, false, true, false},
-				[]bool{true, false, true, true})).Select(c("v").CumSum(false)),
-			want: ursus.Frame(ursus.ValuesNullable("v", []int64{1, 0, 2, 2}, []bool{true, false, true, true})).
-				Select(c("v").Cast(ursus.Int128))},
-
-		// --- A13 ---
-		{name: "A13 Product of Int64 [3, 0, -5]",
-			got: one(ursus.Frame(ursus.Values("v", []int64{3, 0, -5})), c("v").Product()),
-			check: func(df *ursus.DataFrame) string {
-				v, ok, err := df.At[float64](0, "v")
-				if err != nil || !ok || v != 0 || math.Signbit(v) {
-					return fmt.Sprintf("product = %v (sign bit %v), want +0", v, math.Signbit(v))
-				}
-				return ""
-			}},
-		{name: "A13 CumProd of Int64 [3, 0, -5]",
-			got: ursus.Frame(ursus.Values("v", []int64{3, 0, -5})).Select(c("v").CumProd(false)),
-			check: func(df *ursus.DataFrame) string {
-				for i := range 3 {
-					v, _, _ := df.At[float64](i, "v")
-					if i > 0 && (v != 0 || math.Signbit(v)) {
-						return fmt.Sprintf("row %d = %v (sign bit %v), want +0", i, v, math.Signbit(v))
-					}
-				}
-				return ""
-			}},
+		// --- A13: a global aggregate of nothing is one row, no columns ---
 		{name: "A13 GroupBy().Agg() of nothing",
 			got:   ursus.Frame(ursus.Values("v", []int64{1, 2, 3})).GroupBy().Agg(),
 			check: oneEmptyRow},
@@ -163,54 +53,115 @@ func TestAggregationsAndWindowsByHand(t *testing.T) {
 		{name: "A14 IsBetween with Closed(99)",
 			got:    ursus.Frame(ursus.Values("v", []int64{1, 2, 3})).Select(c("v").IsBetween(1, 3, ursus.Closed(99))),
 			refuse: []string{"Closed"}},
-
-		// --- W1: a window reads the columns defined before it in its WithColumns ---
-		{name: "W1 a window over an earlier window",
-			got: gx.WithColumns(c("x").CumSum(false).Over(c("g")).Alias("a"), c("a").Max().Over(c("g")).Alias("m")),
-			want: ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("x", []int64{1, 2, 3}),
-				ursus.Values("a", []int64{1, 3, 3}), ursus.Values("m", []int64{3, 3, 3})).
-				Select(c("g"), c("x"), c("a").Cast(ursus.Int128), c("m").Cast(ursus.Int128))},
-		{name: "W1 a replaced column keeps its place",
-			got: ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("w", []int64{0, 0, 0}),
-				ursus.Values("x", []int64{1, 2, 3})).
-				WithColumns(c("x").Mul(10).Alias("w"), c("w").Sum().Over(c("g")).Alias("s")),
-			want: ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("w", []int64{10, 20, 30}),
-				ursus.Values("x", []int64{1, 2, 3}), ursus.Values("s", []int64{30, 30, 30})).
-				Select(c("g"), c("w"), c("x"), c("s").Cast(ursus.Int128))},
-		// A second window over a name defined after the first split: split twice.
-		{name: "W1 two splits, and expressions after each",
-			got: gx.WithColumns(c("x").Mul(10).Alias("w"), c("w").Sum().Over(c("g")).Alias("s"),
-				c("s").Add(c("w")).Alias("t"), c("t").Max().Over(c("g")).Alias("m"), c("m").Sub(c("t")).Alias("d")),
-			want: ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("x", []int64{1, 2, 3}),
-				ursus.Values("w", []int64{10, 20, 30}), ursus.Values("s", []int64{30, 30, 30}),
-				ursus.Values("t", []int64{40, 50, 60}), ursus.Values("m", []int64{50, 50, 60}),
-				ursus.Values("d", []int64{10, 0, 0})).
-				Select(c("g"), c("x"), c("w"), c("s").Cast(ursus.Int128), c("t").Cast(ursus.Int128),
-					c("m").Cast(ursus.Int128), c("d").Cast(ursus.Int128))},
-		{name: "control: an earlier column read outside the window",
-			got: gx.WithColumns(c("x").Mul(10).Alias("w"), c("w").Add(c("x").Sum().Over(c("g"))).Alias("s")),
-			want: ursus.Frame(ursus.Values("g", []string{"a", "a", "b"}), ursus.Values("x", []int64{1, 2, 3}),
-				ursus.Values("w", []int64{10, 20, 30}), ursus.Values("s", []int64{13, 23, 33})).
-				Select(c("g"), c("x"), c("w"), c("s").Cast(ursus.Int128))},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			wrong := aggWrong(t, tc)
-			why, known := knownAggDefects[tc.name]
-			switch {
-			case known && wrong == "":
-				t.Errorf("answers correctly now; delete it from knownAggDefects (%s)", why)
-			case known:
-				t.Logf("known defect (%s): %s", why, wrong)
-			case wrong != "":
+			if wrong := aggWrong(t, tc); wrong != "" {
 				t.Error(wrong)
 			}
 		})
 	}
-	for name := range knownAggDefects {
-		if !slices.ContainsFunc(cases, func(c aggCase) bool { return c.name == name }) {
-			t.Errorf("knownAggDefects names %q, which is not a case", name)
+}
+
+// TestIntegerMeanIsExact is A4: an integer mean divides an exact Int128 sum, so the
+// mean of [2^53+1, 2^53+2] is 2^53+1.5's nearest float, 2^53+2, where a float sum has
+// 2^53+1 as 2^53 already and Polars 2.1 answers 2^53. Held to math/big: the exact
+// rational mean, rounded once to float64, over the audit's pair and 200 rows of large
+// integers, as a group's, a window's and a list's mean.
+func TestIntegerMeanIsExact(t *testing.T) {
+	c := ursus.Col
+	const big53 = 1<<53 + 1
+	rng := rand.New(rand.NewPCG(500, 4))
+	n := 200
+	g, v := make([]int64, n), make([]int64, n)
+	for i := range n {
+		g[i] = int64(i % 5)
+		v[i] = rng.Int64N(1<<62) + 1<<53
+		if i%7 == 0 {
+			v[i] = -v[i]
+		}
+	}
+	exact := func(vals []int64) float64 {
+		sum := new(big.Int)
+		for _, x := range vals {
+			sum.Add(sum, big.NewInt(x))
+		}
+		f, _ := new(big.Rat).SetFrac(sum, big.NewInt(int64(len(vals)))).Float64()
+		return f
+	}
+	byGroup := map[int64][]int64{}
+	for i := range n {
+		byGroup[g[i]] = append(byGroup[g[i]], v[i])
+	}
+	frame := ursus.Frame(ursus.Values("g", g), ursus.Values("v", v))
+	pair := ursus.Frame(ursus.Values("g", []int64{0, 0}), ursus.Values("v", []int64{big53, big53 + 1}))
+	for name, tc := range map[string]struct {
+		q      *ursus.LazyFrame
+		groups map[int64][]int64
+	}{
+		"the pair's mean": {pair.GroupBy(c("g")).Agg(c("v").Mean()), map[int64][]int64{0: {big53, big53 + 1}}},
+		"a group's mean":  {frame.GroupBy(c("g")).Agg(c("v").Mean()).Sort(ursus.Asc(c("g"))), byGroup},
+		"a window's mean": {frame.Select(c("g"), c("v").Mean().Over(c("g"))).
+			GroupBy(c("g")).Agg(c("v").First()).Sort(ursus.Asc(c("g"))), byGroup},
+		"a list's mean": {frame.GroupBy(c("g")).Agg(c("v").Implode()).Sort(ursus.Asc(c("g"))).Select(c("g"), c("v").List().Mean()), byGroup},
+	} {
+		df := collect(t, tc.q)
+		keys, _ := df.Column[int64]("g")
+		means, _ := df.Column[float64]("v")
+		for i := range df.Height() {
+			k, _ := keys.Get(i)
+			got, _ := means.Get(i)
+			if want := exact(tc.groups[k]); math.Float64bits(got) != math.Float64bits(want) {
+				t.Errorf("%s, group %d: %v, want the exact %v", name, k, got, want)
+			}
+		}
+	}
+}
+
+// TestAggregatesAtTheFloatsEnds is A2 and A5: a quantile at an exact rank is that
+// value and nothing overflows, where Polars 2.1 answers +Inf for the median of
+// [-1.7e308, 1.7e308] (lo + (hi - lo)/2) and the midpoint of [1e308, 1.5e308]
+// ((lo + hi)/2), and NaN for the variance of [1e308, 1e308]. Held to math/big: the
+// exact midpoint and variance of pairs drawn across the float's range, rounded once
+// to float64, +Inf where the exact value is past it; a finite value within four ulps,
+// lo + (hi - lo)/2 rounding twice, and 0 and +Inf to the bit.
+func TestAggregatesAtTheFloatsEnds(t *testing.T) {
+	near := func(got, want float64) bool {
+		if want == 0 || math.IsInf(want, 0) {
+			return math.Float64bits(got) == math.Float64bits(want)
+		}
+		return math.Abs(got-want) <= 1e-15*math.Abs(want)
+	}
+	c := ursus.Col
+	rng := rand.New(rand.NewPCG(500, 5))
+	pairs := [][2]float64{{-1.7e308, 1.7e308}, {1e308, 1.5e308}, {1.7e308, 1.7e308}, {1e308, 1e308}, {1e308, -1e308}}
+	for range 60 {
+		a, b := rng.Float64()*1.7e308, rng.Float64()*1.7e308
+		if rng.IntN(2) == 0 {
+			a = -a
+		}
+		if rng.IntN(2) == 0 {
+			b = -b
+		}
+		pairs = append(pairs, [2]float64{a, b})
+	}
+	rat := func(f float64) *big.Rat { return new(big.Rat).SetFloat64(f) }
+	for _, p := range pairs {
+		df := collect(t, ursus.Frame(ursus.Values("v", []float64{p[0], p[1]})).GroupBy().Agg(
+			c("v").Median().Alias("median"), c("v").Quantile(0.5, ursus.InterpMidpoint).Alias("midpoint"), c("v").Var(0).Alias("var")))
+		mid, _ := new(big.Rat).Quo(new(big.Rat).Add(rat(p[0]), rat(p[1])), big.NewRat(2, 1)).Float64()
+		// The variance about the exact mean: ((a-m)^2 + (b-m)^2)/2 = (a-b)^2/4.
+		d := new(big.Rat).Sub(rat(p[0]), rat(p[1]))
+		variance, _ := new(big.Rat).Quo(new(big.Rat).Mul(d, d), big.NewRat(4, 1)).Float64()
+		for name, want := range map[string]float64{"median": mid, "midpoint": mid, "var": variance} {
+			got, ok, err := df.At[float64](0, name)
+			if err != nil || !ok {
+				t.Fatalf("%s of %v: %v, %v", name, p, ok, err)
+			}
+			if !near(got, want) {
+				t.Errorf("%s of %v: %v, want the exact %v", name, p, got, want)
+			}
 		}
 	}
 }
@@ -245,12 +196,5 @@ func aggWrong(t *testing.T, tc aggCase) string {
 		}
 		return err.Error()
 	}
-	if tc.check != nil {
-		return tc.check(df)
-	}
-	want, err := tc.want.Collect(t.Context())
-	if err != nil {
-		t.Fatalf("the hand answer: %v", err)
-	}
-	return framesDiffer(t, df, want)
+	return tc.check(df)
 }

@@ -8,6 +8,12 @@ import (
 	"github.com/advenn/ursus"
 )
 
+// M3 of v0.6.6-scope.md (steps 279 and 280): search_sorted and index_of, the peaks,
+// unique_counts and value_counts. Their answers are Polars 2.1.0's since step 500,
+// recorded in the search group of testdata/oracle and spelled in
+// oracle_search_test.go, which took this file's tables. What stays asserts the
+// refusals, and Hash's properties, its numbers being ursus's own.
+
 // searchFrame is Polars' frame: g [1, 1, 1, 2, 2, 2], a [1, 3, 3, 5, None, 9] and s
 // ["x", "y", "x", None, "x", "z"].
 func searchFrame() *ursus.LazyFrame {
@@ -16,115 +22,16 @@ func searchFrame() *ursus.LazyFrame {
 		ursus.ValuesNullable("s", []string{"x", "y", "x", "", "x", "z"}, []bool{true, true, true, false, true, true}))
 }
 
-// nullableInts is a column a of vals, a null where ok is false.
-func nullableInts(vals []int64, ok []bool) *ursus.LazyFrame {
-	return ursus.Frame(ursus.ValuesNullable("a", vals, ok))
-}
-
-// TestSearchSortedAndIndexOf is M3 of v0.6.6-scope.md (step 279). Every answer is
-// Polars 1.44.1's.
 func TestSearchSortedAndIndexOf(t *testing.T) {
-	c := ursus.Col
-	a := c("a")
 	lf := searchFrame()
-	for _, tc := range []struct {
-		name string
-		q    *ursus.LazyFrame
-		want string
-	}{
-		{"search_sorted", lf.Select(a.SearchSorted(3, ursus.SideAny, false)), "a\n1\n"},
-		{"to the right", lf.Select(a.SearchSorted(3, ursus.SideRight, false)), "a\n3\n"},
-		{"by group", lf.GroupBy(c("g")).Agg(a.SearchSorted(3, ursus.SideLeft, false)).Sort(ursus.Asc(c("g"))).Select(a), "a\n1\n0\n"},
-		{"descending", ursus.Frame(ursus.Values("a", []int64{5, 3, 3, 1})).Select(a.SearchSorted(3, ursus.SideLeft, true).Alias("l"),
-			a.SearchSorted(3, ursus.SideRight, true).Alias("r")), "l,r\n1,3\n"},
-		{"descending, more above than below", ursus.Frame(ursus.Values("a", []int64{9, 8, 7, 3, 1})).
-			Select(a.SearchSorted(4, ursus.SideLeft, true).Alias("l"), a.SearchSorted(7, ursus.SideRight, true).Alias("r")), "l,r\n3,3\n"},
-		{"descending, nulls first", nullableInts([]int64{0, 3, 2, 1}, []bool{false, true, true, true}).
-			Select(a.SearchSorted(2, ursus.SideLeft, true).Alias("l"), a.SearchSorted(2, ursus.SideRight, true).Alias("r")), "l,r\n2,3\n"},
-		{"NaN last", ursus.Frame(ursus.Values("a", []float64{1, 2, math.NaN()})).
-			Select(a.SearchSorted(math.NaN(), ursus.SideLeft, false).Alias("nan"), a.SearchSorted(3.0, ursus.SideLeft, false).Alias("three")),
-			"nan,three\n2,2\n"},
-		{"text", ursus.Frame(ursus.Values("a", []string{"a", "c", "e"})).Select(a.SearchSorted("d", ursus.SideLeft, false)), "a\n2\n"},
-		{"no rows", ursus.Frame(ursus.Values("a", []int64{1})).Filter(a.Gt(5)).Select(a.SearchSorted(3, ursus.SideLeft, false)), "a\n0\n"},
-		{"all null", nullableInts([]int64{0, 0}, []bool{false, false}).Select(a.SearchSorted(3, ursus.SideLeft, false)), "a\n2\n"},
-		{"index_of", lf.Select(a.IndexOf(3), c("s").IndexOf("x").Alias("s"), a.IndexOf(nil).Alias("n"), a.IndexOf(100).Alias("m")),
-			"a,s,n,m\n1,0,4,\n"},
-		{"index_of by group", lf.GroupBy(c("g")).Agg(a.IndexOf(3)).Sort(ursus.Asc(c("g"))).Select(a), "a\n1\n\n"},
-		{"index_of NaN and 0", ursus.Frame(ursus.Values("a", []float64{1, math.NaN(), math.Copysign(0, -1)})).
-			Select(a.IndexOf(math.NaN()).Alias("nan"), a.IndexOf(0.0).Alias("zero")), "nan,zero\n1,2\n"},
-		{"index_of a null where none is", ursus.Frame(ursus.Values("a", []int64{1, 2})).Select(a.IndexOf(nil)), "a\n\n"},
-	} {
-		if got := csvOf(t, tc.q); got != tc.want {
-			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)
-		}
-	}
-	// A null value, and 2, in Polars' columns of nulls first, last and none.
-	for _, tc := range []struct {
-		vals []int64
-		ok   []bool
-		want string // the null's any, left and right, then 2's left and right
-	}{
-		{[]int64{0, 1, 2, 3}, []bool{false, true, true, true}, "0,0,1,2,3"},
-		{[]int64{0, 0, 1, 2}, []bool{false, false, true, true}, "0,0,2,3,4"},
-		{[]int64{1, 2, 3, 0}, []bool{true, true, true, false}, "3,3,4,1,2"},
-		{[]int64{1, 2, 0, 0}, []bool{true, true, false, false}, "2,2,4,1,2"},
-		{[]int64{1, 2, 3}, []bool{true, true, true}, "0,0,0,1,2"},
-	} {
-		q := nullableInts(tc.vals, tc.ok).Select(a.SearchSorted(nil, ursus.SideAny, false).Alias("na"),
-			a.SearchSorted(nil, ursus.SideLeft, false).Alias("nl"), a.SearchSorted(nil, ursus.SideRight, false).Alias("nr"),
-			a.SearchSorted(2, ursus.SideLeft, false).Alias("l"), a.SearchSorted(2, ursus.SideRight, false).Alias("r"))
-		if got, want := csvOf(t, q), "na,nl,nr,l,r\n"+tc.want+"\n"; got != want {
-			t.Errorf("%v %v:\ngot  %q\nwant %q", tc.vals, tc.ok, got, want)
-		}
-	}
-	got, err := lf.Select(a.SearchSorted(3, ursus.SideAny, false).Alias("x"), a.IndexOf(3).Alias("y")).Collect(t.Context())
-	if err != nil || got.Schema().Field(0).Type != ursus.Uint32 || got.Schema().Field(1).Type != ursus.Uint32 {
-		t.Errorf("UInt32s: %v, %v", got, err)
-	}
-	if _, err := lf.Select(a.SearchSorted(3, "middle", false)).Collect(t.Context()); err == nil ||
+	if _, err := lf.Select(ursus.Col("a").SearchSorted(3, "middle", false)).Collect(t.Context()); err == nil ||
 		!strings.Contains(err.Error(), "not a side") {
 		t.Errorf("a side that is none: %v", err)
 	}
 }
 
-// TestPeaks: peak_max and peak_min, an end compared with its type's zero, as Polars
-// fills its shifts with 0. Every answer is Polars 1.44.1's.
 func TestPeaks(t *testing.T) {
-	c := ursus.Col
-	x := c("x")
-	both := func(lf *ursus.LazyFrame) string {
-		return csvOf(t, lf.Select(x.PeakMax().Alias("max"), x.PeakMin().Alias("min")))
-	}
-	floats := func(v ...float64) *ursus.LazyFrame { return ursus.Frame(ursus.Values("x", v)) }
-	ints := func(v ...int64) *ursus.LazyFrame { return ursus.Frame(ursus.Values("x", v)) }
-	for _, tc := range []struct {
-		name string
-		lf   *ursus.LazyFrame
-		want string
-	}{
-		{"Polars' column", ursus.Frame(ursus.ValuesNullable("x", []int64{1, 3, 2, 4, 4, 1, 5, 0, 2},
-			[]bool{true, true, true, true, true, true, true, false, true})),
-			"max,min\nfalse,false\ntrue,false\nfalse,true\nfalse,false\nfalse,false\nfalse,true\n,false\n,\n,false\n"},
-		{"NaN above every number", floats(1, math.NaN(), 2, 0.5, 3),
-			"max,min\nfalse,false\ntrue,false\nfalse,false\nfalse,true\ntrue,false\n"},
-		{"negatives", ints(-1, -2, -3), "max,min\nfalse,false\nfalse,false\nfalse,true\n"},
-		{"falling", ints(3, 2, 1), "max,min\ntrue,false\nfalse,false\nfalse,false\n"},
-		{"one value", ints(5), "max,min\ntrue,false\n"},
-		{"below zero", floats(-0.5, -1), "max,min\nfalse,false\nfalse,true\n"},
-		{"Booleans", ursus.Frame(ursus.Values("x", []bool{true, false})), "max,min\ntrue,false\nfalse,false\n"},
-		{"dates, against the epoch", ints(1, 3, 2).Select(x.Cast(ursus.Date)), "max,min\nfalse,false\ntrue,false\nfalse,false\n"},
-	} {
-		if got := both(tc.lf); got != tc.want {
-			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)
-		}
-	}
-	// A group's own peaks, over its rows: Polars' group_by gives [False, True,
-	// False] and [True, False, True], a list each.
-	groups := ursus.Frame(ursus.Values("g", []int64{1, 1, 1, 2, 2, 2}), ursus.Values("x", []int64{1, 3, 2, 3, 1, 2}))
-	if got := csvOf(t, groups.Select(x.PeakMax().Over(c("g")))); got != "x\nfalse\ntrue\nfalse\ntrue\nfalse\ntrue\n" {
-		t.Errorf("over g: %q", got)
-	}
-	if _, err := ursus.Frame(ursus.Values("x", []string{"a", "b"})).Select(x.PeakMax()).Collect(t.Context()); err == nil ||
+	if _, err := ursus.Frame(ursus.Values("x", []string{"a", "b"})).Select(ursus.Col("x").PeakMax()).Collect(t.Context()); err == nil ||
 		!strings.Contains(err.Error(), "no zero") {
 		t.Errorf("text: %v", err)
 	}
@@ -163,65 +70,10 @@ func TestHash(t *testing.T) {
 	}
 }
 
-// TestUniqueAndValueCounts is M3's second half (step 280). Every answer is Polars
-// 1.44.1's, but where its order is its hash table's: there the values come in the
-// order they first appear.
 func TestUniqueAndValueCounts(t *testing.T) {
 	c := ursus.Col
-	a, s := c("a"), c("s")
 	lf := searchFrame()
-	// A struct's fields, unnested in a Select of their own: a reshape and its unnest
-	// together are a selection of several columns, which the zipper refuses.
-	counts := func(lf *ursus.LazyFrame, e ursus.Expr) *ursus.LazyFrame {
-		return lf.Select(e.Alias("v")).Select(c("v").Struct().Field("*"))
-	}
-	text := func(e ursus.Expr) ursus.Expr { return e.Cast(ursus.String).FillNullWith("null") }
-	for _, tc := range []struct {
-		name string
-		q    *ursus.LazyFrame
-		want string
-	}{
-		{"unique_counts", lf.Select(a.UniqueCounts()), "a\n1\n2\n1\n1\n1\n"},
-		{"of text", lf.Select(s.UniqueCounts()), "s\n3\n1\n1\n1\n"},
-		{"NaN and the zeros", ursus.Frame(ursus.Values("f", []float64{1, math.NaN(), math.NaN(), math.Copysign(0, -1), 0})).
-			Select(c("f").UniqueCounts()), "f\n1\n2\n2\n"},
-		{"by group", lf.GroupBy(c("g")).Agg(s.UniqueCounts().List().Eval(text(ursus.Element())).List().Join("|")).
-			Sort(ursus.Asc(c("g"))).Select(s), "s\n2|1\n1|1|1\n"},
-		// Polars: [y: 1, x: 3, z: 1, None: 1], its hash table's order.
-		{"value_counts", counts(lf, s.ValueCounts(false, false)), "s,count\nx,3\ny,1\n,1\nz,1\n"},
-		{"sorted", counts(lf, s.ValueCounts(true, false)), "s,count\nx,3\ny,1\n,1\nz,1\n"},
-		{"ties as they first appear", counts(ursus.Frame(ursus.Values("s", []string{"b", "a", "c", "a", "c"})), s.ValueCounts(true, false)), "s,count\na,2\nc,2\nb,1\n"},
-		{"shares, named", counts(lf, s.ValueCounts(true, true, "n")),
-			"s,n\nx,0.5\ny,0.16666666666666666\n,0.16666666666666666\nz,0.16666666666666666\n"},
-		{"by group, sorted", lf.GroupBy(c("g")).Agg(s.ValueCounts(true, false).List().Eval(
-			ursus.ConcatStr(":", text(ursus.Element().Struct().Field("s")), ursus.Element().Struct().Field("count").Cast(ursus.String))).
-			List().Join("|")).Sort(ursus.Asc(c("g"))).Select(s), "s\nx:2|y:1\nnull:1|x:1|z:1\n"},
-	} {
-		if got := csvOf(t, tc.q); got != tc.want {
-			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)
-		}
-	}
-	// A group whose sorted order is not its first-seen one, sorted and in shares.
-	ba := ursus.Frame(ursus.Values("g", []int64{1, 1, 1}), ursus.Values("s", []string{"b", "a", "a"}))
-	sorted := ba.GroupBy(c("g")).Agg(s.ValueCounts(true, false).List().Eval(ursus.ConcatStr(":",
-		ursus.Element().Struct().Field("s"), ursus.Element().Struct().Field("count").Cast(ursus.String))).List().Join("|"))
-	if got := csvOf(t, sorted.Select(s)); got != "s\na:2|b:1\n" {
-		t.Errorf("a group sorted: %q", got)
-	}
-	shares := ba.GroupBy(c("g")).Agg(s.ValueCounts(true, true).List().Eval(ursus.ConcatStr(":",
-		ursus.Element().Struct().Field("s"), ursus.Element().Struct().Field("proportion").Cast(ursus.String))).List().Join("|"))
-	if got := csvOf(t, shares.Select(s)); got != "s\na:0.6666666666666666|b:0.3333333333333333\n" {
-		t.Errorf("a group's shares: %q", got)
-	}
-	got, err := lf.Select(s.ValueCounts(false, true)).Collect(t.Context())
-	if err != nil || got.Schema().Field(0).Type.String() != "Struct(s: String, proportion: Float64)" {
-		t.Errorf("a share's name and type: %v, %v", got, err)
-	}
-	got, err = lf.Select(a.UniqueCounts()).Collect(t.Context())
-	if err != nil || got.Schema().Field(0).Type != ursus.Uint32 {
-		t.Errorf("a UInt32: %v, %v", got, err)
-	}
-	if _, err := lf.Select(c("g"), s.ValueCounts(false, false)).Collect(t.Context()); err == nil || !strings.Contains(err.Error(), "length") {
+	if _, err := lf.Select(c("g"), c("s").ValueCounts(false, false)).Collect(t.Context()); err == nil || !strings.Contains(err.Error(), "length") {
 		t.Errorf("beside a column of another length: %v", err)
 	}
 }
