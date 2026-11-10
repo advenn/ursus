@@ -101,6 +101,18 @@ api-tag:
 	@test -n "$(TAG)" || { echo "usage: make api-tag TAG=vX.Y.Z"; exit 2; }
 	$(GO) run ./internal/gen/api -tag $(TAG) > api/$(TAG).txt
 
+# The test suite's hand-typed expected values (step 504): no test function may hold
+# more than internal/gen/testinventory/baseline.txt allows, or any if it is not listed;
+# CI's build job runs the same check. A test's expected data is a recorded oracle's
+# (make oracle), a Go oracle's or a differential's. testinventory-write rewrites the
+# baseline, after a count has fallen.
+.PHONY: testinventory testinventory-write
+testinventory:
+	$(GO) run ./internal/gen/testinventory -check
+
+testinventory-write:
+	$(GO) run ./internal/gen/testinventory -write
+
 # The recorded oracle (step 496): Polars 2.1.0's answers to the questions
 # bench/scripts/oracle asks, written to testdata/oracle/<group>.json, which TestOracle
 # in the root package compares ursus against (go test -run TestOracle .). Needs a

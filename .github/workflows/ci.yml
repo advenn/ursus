@@ -31,6 +31,10 @@ jobs:
       # No feature of the last tag's public API may be gone (steps 401, 494): make api.
       - name: the public API unchanged
         run: go run ./internal/gen/api -check
+      # No test function may hold more hand-typed expected values than
+      # internal/gen/testinventory/baseline.txt allows (step 504): make testinventory.
+      - name: no new hand-typed test values
+        run: go run ./internal/gen/testinventory -check
 
   test:
     runs-on: ubuntu-latest

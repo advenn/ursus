@@ -341,10 +341,11 @@ decide whether to keep or switch each one.
   the order each first appears, Polars' `maintain_order=True`, which is not its
   default (step 308).
 - `Concat`'s strict mode meets an Int32 and an Int64 at Int64, where Polars'
-  vertical refuses them; a relaxed mode meets an Int64 and a UInt64 at Int128, where
-  Polars' supertype is a Float64, and a Decimal and an integer at the Decimal wide
-  enough, where Polars' is a Decimal(38). `ConcatHorizontal` refuses frames of two
-  heights, which Polars 1.44.1 pads, deprecated since 1.42.1 for `horizontal_extend`.
+  vertical refuses them; a relaxed mode meets an Int64 and a UInt64 at Int128, as
+  Polars 2.1 does too (1.44.1's supertype was a Float64; step 503), and a Decimal and
+  an integer at the Decimal wide enough, where Polars' is a Decimal(38).
+  `ConcatHorizontal` refuses frames of two heights, which Polars 1.44.1 pads,
+  deprecated since 1.42.1 for `horizontal_extend`.
   `ConcatAlign` refuses a column in some frames but not every one, where Polars 1.44.1
   keeps the first frame's and drops the others' (its docs say it raises); its ties,
   rows of one key, are in each frame's order, frame by frame, where Polars' are its
@@ -497,9 +498,10 @@ decide whether to keep or switch each one.
   within an ulp of the true one, where Polars' float sums are a few ulps off.
 - `Arr()`'s functions answer as `List()`'s (step 342): an integer `Sum` is an Int128
   where Polars' `arr.sum` is an Int64, `NUnique` passes a null over where Polars
-  counts it, and `ToStruct` of a null array is a null struct where Polars gives a
-  struct of nulls. `Head`, `Tail` and `Slice` give a List, Polars' default; its
-  `as_array`, which panics on a null row in Polars 1.44.1, is `List().ToArray(n)`.
+  counts it, and `ToStruct` of a null array is a null struct, as Polars 2.1's is
+  (1.44.1 gave a struct of nulls; step 499). `Head`, `Tail` and `Slice` give a List,
+  Polars' default; its `as_array`, which panics on a null row in Polars 1.44.1, is
+  `List().ToArray(n)`.
 - NDJSON: a lone surrogate's escape reads as U+FFFD, where Polars reads a high one as
   NUL and refuses a low one; a number past a float's range, `1e400`, is ±Inf, which
   Polars refuses; a given schema of an Int8, an Int16, a UInt8, a UInt16, a Time, a
@@ -642,3 +644,123 @@ to decide:
 - `Int64.IsIn(1.5)` answers false, and `Cast(String → Date)` parses; 2.0 refuses
   both.
 - Parquet and Arrow map columns read as `List(Struct)`; 2.0's are its `Map` type.
+
+## 12. Found by the recorded oracle, for the maintainer
+
+Waves 496 to 503 of [`oracle-v2-scope.md`](./oracle-v2-scope.md) asked Polars 2.1.0
+the suite's questions. Where it answers otherwise than ursus and no line of §9 or §11
+says ursus means to, the case is recorded and skipped, `oracleFinding` in its group's
+registry or a `t.Skip` naming the finding, and nothing was decided: twenty-five
+findings in thirty-nine cases, collected by step 504 from the registries. Each is
+the maintainer's: a difference to document in §9, or a fix.
+
+**Types: where two types meet**
+
+- **Text, a Boolean, a Date or an instant beside a number** (`dtype/when_string_int64`,
+  `when_bool_int64`, `when_date_dt_us`, `when_dt_ns_int64`; step 503): ursus's `Promote`
+  refuses each, so a `When/Then/Otherwise` of the two columns is refused with a hint to
+  cast; Polars 2.1 meets a String and an Int64 at String, a Boolean and an Int64 at
+  Int64, a Date and a Datetime at the Datetime, and a Datetime(ns) and an Int64 at
+  Int64, its ticks. `dtype.Supertype`, a relaxed concat's meet, already answers the
+  first three as Polars does.
+- **Two time units** (`dtype/when_dt_us_utc_dt_ns_utc`, `when_dt_ms_dt_ns`,
+  `when_dur_ms_dur_ns`, `unpivot_dt_ms_dt_ns`; step 503): ursus meets them at the finer,
+  so no precision is dropped (`Promote`, `PromoteExact`, `TimeUnit.Finer`); Polars 2.1
+  at the coarser, a Datetime(us, UTC) beside a Datetime(ns, UTC) a Datetime(us, UTC),
+  ms beside ns ms, durations too, and an unpivot's value column likewise.
+- **Two Enums of different categories** (`dtype/when_enum_a_enum_b`; step 503): ursus
+  meets them at String (step 79); Polars 2.1 refuses them, "failed to determine
+  supertype of enum and enum".
+- **A fill past the column's type** (`fill/fill_past_the_type`; step 501):
+  `FillNullWith(5000)` of an Int8 column is an Int64 here, a weak literal that does not
+  fit falling back (fill.go); Polars 2.1's `fill_null(5000)` is an Int16, the narrowest
+  type that holds it.
+
+**Expressions and casts**
+
+- **A zero float remainder's sign** (`scalar_byhand/float_mod_zero_sign`; step 497):
+  ursus gives the divisor's sign, −0 for 4 % −2, as Python does; Polars 2.1's
+  `a - b*floor(a/b)` is +0.
+- **`ToDecimal`'s tie** (`castmore/to_decimal_ties`; step 497): ursus rounds half away
+  from zero, 0.005 to 0.01, and its doc says Polars does; Polars 2.1's `str.to_decimal`
+  rounds half to even, 0.00 (and 0.015 to 0.02, 2.5 to 2 at scale 0).
+- **A Decimal cast to a Boolean** (`castbool/decimal_to_bool`; step 503): refused here,
+  "a truth value is not an amount" (step 69); Polars 2.1 answers true where it is not
+  zero. A Boolean to a Decimal is refused by both.
+
+**Temporal**
+
+- **Rounding to a month** (`calendar/round_1mo`, `calendar/round_1mo_dates`; step 498):
+  ursus rounds to the nearer month boundary, a value halfway up (Round's doc), so noon
+  on 2024-02-15 is March and 2024-01-17 February; Polars 2.1 adds fourteen days and
+  truncates, so both round down.
+- **A dynamic group's day where midnight does not exist** (`calendar/midnight_gap_windows`;
+  step 498): ursus starts Santiago's 2024-09-08 at 01:00, where the day begins, as its
+  `Truncate` and Polars' own `truncate("1d")` do (step 145); Polars 2.1's
+  `group_by_dynamic` starts it at 23:00 on the 7th and puts 23:30 on the 7th in it.
+- **`Combine` of a zoned Datetime** (`dtcombine/combine_zoned_ny`; step 498): ursus reads
+  the day on the zone's wall clock, so 22:00 on 11 March in New York with 13:15 is the
+  11th (Combine's doc); Polars 2.1 reads it in UTC, the 12th.
+- **Business days counted backwards** (`components/business_day_count_reversed`; step
+  498): with the end before the start ursus counts minus the business days in [end,
+  start), 0 from a Monday back to the Saturday before (BusinessDayCount's doc); Polars
+  2.1 counts those in (end, start], numpy's `busday_count` rule, −1 there.
+- **A rolling window's end under an offset** (`rollingoffset/1mo_offset_m28d`,
+  `1mo_offset_m4w`; step 500): ursus ends a window at its row, as 1.44.1 did, so with
+  period 1mo and offset −28d Feb 28's window is [2]; Polars 2.1 ends it at its start
+  plus the period, (Jan 31, Feb 29], [2, 3].
+
+**Aggregates**
+
+- **The ends of a float's range** (`aggwindow_byhand/median_extremes`, `midpoint_huge`,
+  `var_alike_huge`; step 500): ursus answers the median of [−1.7e308, 1.7e308] 0, the
+  midpoint of [1e308, 1.5e308] 1.25e308 and the variance of [1e308, 1e308] 0, held to
+  big.Float; Polars 2.1 overflows to +Inf, +Inf and NaN.
+- **A skew of large values close together** (`aggstats/skew_near_1e9`,
+  `moments_far_2000`; step 500): ursus shifts by the first value and answers [1e9+1,
+  1e9+2, 1e9+4]'s skew as [1, 2, 4]'s, 0.38180177416060623, as 1.44.1 did; Polars 2.1
+  takes a float mean at 1e9 and answers 0.38180167858053743, seven digits lost, and two
+  thousand values near 1e9 7e-9 off in both moments.
+- **A one-value group's raw entropy** (`aggstats/entropy_raw_by_g`; step 500): ursus
+  answers −Σ x ln x, −5 ln 5 = −8.05 for [5]; Polars 2.1 answers 0.0 for one value.
+- **Nulls in a `TopK`** (`topk_agg/top_k_ints`, `bottom_k_ints`, `top_k_decimals`; step
+  500): ursus skips them, a shorter list and null when none (TopK's doc), as 1.44.1
+  did; Polars 2.1 keeps them as the least values, [7, null] of [7, null] and [null,
+  null] of three nulls.
+- **`Any` and `AllTrue` of a Decimal** (`decimalagg/any_all`; step 503): refused here,
+  "requires a Boolean operand", as the Decimal's cast to a Boolean is; Polars 2.1
+  answers `any` and `all`, true where a value is not zero.
+
+**Enums**
+
+- **`FillNullWith` of a value outside an Enum's categories** (`enum_byhand/fill_null_zzz`;
+  step 499): ursus answers a String column holding the value; Polars 2.1 keeps the null
+  and the Enum. Polars' answer loses the value silently, ursus's changes the type.
+
+**Frames and joins**
+
+- **The mean strategy of a fill** (`fill/fill_strategy_mean`, `fill/frame_fill_mean`;
+  step 501): ursus widens an Int32 or Int64 column to Float64 and fills the mean, 4.5;
+  Polars 2.1's `fill_null(strategy="mean")` keeps the integer type and fills the mean
+  truncated, 4. The six other strategies agree.
+- **`AsOfNearest`'s tie** (`asofoptions/nearest_tie_gen`; step 501): where the backward
+  and forward rows are equally far ursus takes the backward (asof.go: "ties going
+  backward"); Polars 2.1 the forward.
+
+**I/O**
+
+- **A CSV column of only `NaN`** (`io_byhand/control_only_nan_inferred`; step 502): ursus
+  infers String; Polars 2.1 infers Float64, as step 77's record says Polars did then.
+- **An offset with seconds through a CSV** (`io_byhand/i8_monrovia_1970_round_trips`;
+  step 502): ursus writes Monrovia's −00:44:30 instant in UTC and reads it back exactly
+  (I8, step 345); Polars 2.1 writes the wall clock with the offset rounded to −0045 and
+  reads back an instant 30 s away.
+- **A frame of no rows and no columns written to CSV** (`io_byhand/i22_no_rows_no_columns_written`;
+  step 502): ursus writes nothing (step 77); Polars 2.1 writes a bare newline.
+- **A non-object in an NDJSON Struct column under `ignore_errors`**
+  (`ndjsonread/ignored_in_a_struct`; step 502): ursus reads a struct of nulls, as Polars
+  1.44.1 did; Polars 2.1 reads a null.
+- **A hive key of dates in several layouts** (`hive_infer/date_layouts_mixed`; step
+  503): ursus types the key a Date, each value read by its own layout as CSV dates are
+  (§9 says so of CSV, not of a key); Polars 2.1 reads every value by the first's layout
+  and refuses the third, "could not parse '2024/01/02' with pattern 'DateDMY'".
