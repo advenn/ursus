@@ -1,0 +1,3048 @@
+{
+ "cases": [
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "a/b",
+        "c=d",
+        "e f",
+        "g%h",
+        "\u00fc",
+        ":x",
+        "",
+        null,
+        "#?&+",
+        "a/b"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "j",
+       "values": [
+        1,
+        1,
+        2,
+        2,
+        1,
+        1,
+        2,
+        2,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_hive_dataset",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "k",
+     "j"
+    ]
+   },
+   "want": {
+    "text": "k=#?&+/j=1/00000000.parquet\nk=%3Ax/j=1/00000000.parquet\nk=%C3%BC/j=1/00000000.parquet\nk=/j=2/00000000.parquet\nk=__HIVE_DEFAULT_PARTITION__/j=2/00000000.parquet\nk=a%2Fb/j=1/00000000.parquet\nk=a%2Fb/j=2/00000000.parquet\nk=c%3Dd/j=1/00000000.parquet\nk=e%20f/j=2/00000000.parquet\nk=g%25h/j=2/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "a/b",
+        "c=d",
+        "e f",
+        "g%h",
+        "\u00fc",
+        ":x",
+        "",
+        null,
+        "#?&+",
+        "a/b"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "j",
+       "values": [
+        1,
+        1,
+        2,
+        2,
+        1,
+        1,
+        2,
+        2,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_hive_dataset_read_back",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "k",
+     "j"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "a/b",
+       "c=d",
+       "e f",
+       "g%h",
+       "\u00fc",
+       ":x",
+       "",
+       null,
+       "#?&+",
+       "a/b"
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "j",
+      "values": [
+       1,
+       1,
+       2,
+       2,
+       1,
+       1,
+       2,
+       2,
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "a/b",
+        "c=d",
+        "e f",
+        "g%h",
+        "\u00fc",
+        ":x",
+        "",
+        null,
+        "#?&+",
+        "a/b"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "j",
+       "values": [
+        1,
+        1,
+        2,
+        2,
+        1,
+        1,
+        2,
+        2,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_files_columns",
+   "note": "a file of its own holds its keys",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "k",
+     "j"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "a/b"
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "j",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v",
+      "values": [
+       9
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "a/b",
+        "c=d",
+        "e f",
+        "g%h",
+        "\u00fc",
+        ":x",
+        "",
+        null,
+        "#?&+",
+        "a/b"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "j",
+       "values": [
+        1,
+        1,
+        2,
+        2,
+        1,
+        1,
+        2,
+        2,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_files_columns_without_keys",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "include_key": false,
+    "keys": [
+     "k",
+     "j"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "v",
+      "values": [
+       9
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "a/b",
+        "c=d",
+        "e f",
+        "g%h",
+        "\u00fc",
+        ":x",
+        "",
+        null,
+        "#?&+",
+        "a/b"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "j",
+       "values": [
+        1,
+        1,
+        2,
+        2,
+        1,
+        1,
+        2,
+        2,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+       ]
+      }
+     ]
+    }
+   },
+   "name": "without_keys_read_back",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "include_key": false,
+    "keys": [
+     "k",
+     "j"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "a/b",
+       "c=d",
+       "e f",
+       "g%h",
+       "\u00fc",
+       ":x",
+       "",
+       null,
+       "#?&+",
+       "a/b"
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "j",
+      "values": [
+       1,
+       1,
+       2,
+       2,
+       1,
+       1,
+       2,
+       2,
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a b/c",
+       "values": [
+        1
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_keys_name_escaped",
+   "note": "Polars writes the key's name as it is, a slash in it making a directory; ursus escapes it as a value (feature-gaps.md \u00a79)",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "include_key": false,
+    "keys": [
+     "a b/c"
+    ]
+   },
+   "want": {
+    "text": "a b/c=1/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        19724
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "naive",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(us, Asia/Tokyo)",
+       "name": "tz",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(ns)",
+       "name": "ns",
+       "values": [
+        1704164645123456000
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        "-0.0"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Decimal(5, 2)",
+       "name": "dec",
+       "values": [
+        "150"
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "tm",
+       "values": [
+        11045123456000
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_key_of_d",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "d"
+    ]
+   },
+   "want": {
+    "text": "d=2024-01-02/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        19724
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "naive",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(us, Asia/Tokyo)",
+       "name": "tz",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(ns)",
+       "name": "ns",
+       "values": [
+        1704164645123456000
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        "-0.0"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Decimal(5, 2)",
+       "name": "dec",
+       "values": [
+        "150"
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "tm",
+       "values": [
+        11045123456000
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_key_of_naive",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "naive"
+    ]
+   },
+   "want": {
+    "text": "naive=2024-01-02%2003%3A04%3A05.123456/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        19724
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "naive",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(us, Asia/Tokyo)",
+       "name": "tz",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(ns)",
+       "name": "ns",
+       "values": [
+        1704164645123456000
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        "-0.0"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Decimal(5, 2)",
+       "name": "dec",
+       "values": [
+        "150"
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "tm",
+       "values": [
+        11045123456000
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_key_of_tz",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "tz"
+    ]
+   },
+   "want": {
+    "text": "tz=2024-01-02%2012%3A04%3A05.123456+09%3A00/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        19724
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "naive",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(us, Asia/Tokyo)",
+       "name": "tz",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(ns)",
+       "name": "ns",
+       "values": [
+        1704164645123456000
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        "-0.0"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Decimal(5, 2)",
+       "name": "dec",
+       "values": [
+        "150"
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "tm",
+       "values": [
+        11045123456000
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_key_of_ns",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "ns"
+    ]
+   },
+   "want": {
+    "text": "ns=2024-01-02%2003%3A04%3A05.123456000/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        19724
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "naive",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(us, Asia/Tokyo)",
+       "name": "tz",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(ns)",
+       "name": "ns",
+       "values": [
+        1704164645123456000
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        "-0.0"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Decimal(5, 2)",
+       "name": "dec",
+       "values": [
+        "150"
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "tm",
+       "values": [
+        11045123456000
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_key_of_f",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "f"
+    ]
+   },
+   "want": {
+    "text": "f=-0.0/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        19724
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "naive",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(us, Asia/Tokyo)",
+       "name": "tz",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(ns)",
+       "name": "ns",
+       "values": [
+        1704164645123456000
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        "-0.0"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Decimal(5, 2)",
+       "name": "dec",
+       "values": [
+        "150"
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "tm",
+       "values": [
+        11045123456000
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_key_of_b",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "b"
+    ]
+   },
+   "want": {
+    "text": "b=true/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        19724
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "naive",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(us, Asia/Tokyo)",
+       "name": "tz",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(ns)",
+       "name": "ns",
+       "values": [
+        1704164645123456000
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        "-0.0"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Decimal(5, 2)",
+       "name": "dec",
+       "values": [
+        "150"
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "tm",
+       "values": [
+        11045123456000
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_key_of_dec",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "dec"
+    ]
+   },
+   "want": {
+    "text": "dec=1.50/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Date",
+       "name": "d",
+       "values": [
+        19724
+       ]
+      },
+      {
+       "dtype": "Datetime(us)",
+       "name": "naive",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(us, Asia/Tokyo)",
+       "name": "tz",
+       "values": [
+        1704164645123456
+       ]
+      },
+      {
+       "dtype": "Datetime(ns)",
+       "name": "ns",
+       "values": [
+        1704164645123456000
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        "-0.0"
+       ]
+      },
+      {
+       "dtype": "Bool",
+       "name": "b",
+       "values": [
+        true
+       ]
+      },
+      {
+       "dtype": "Decimal(5, 2)",
+       "name": "dec",
+       "values": [
+        "150"
+       ]
+      },
+      {
+       "dtype": "Time(ns)",
+       "name": "tm",
+       "values": [
+        11045123456000
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_key_of_tm",
+   "note": "Polars' path drops a time's fraction; ursus keeps it (feature-gaps.md \u00a79)",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "tm"
+    ]
+   },
+   "want": {
+    "text": "tm=03%3A04%3A05/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+       ]
+      }
+     ]
+    }
+   },
+   "name": "files_of_at_most_two_rows",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "k"
+    ],
+    "max_rows": 2
+   },
+   "want": {
+    "text": "k=1/00000000.parquet\nk=1/00000001.parquet\nk=1/00000002.parquet\nk=2/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+       ]
+      }
+     ]
+    }
+   },
+   "name": "files_of_at_most_two_rows_read_back",
+   "note": "a key's rows in their order across files, numbered on",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "k"
+    ],
+    "max_rows": 2
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2,
+       1,
+       1,
+       1,
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "path",
+      "values": [
+       "k=1/00000000.parquet",
+       "k=2/00000000.parquet",
+       "k=1/00000000.parquet",
+       "k=1/00000001.parquet",
+       "k=1/00000001.parquet",
+       "k=1/00000002.parquet",
+       "k=2/00000000.parquet"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+       ]
+      }
+     ]
+    }
+   },
+   "name": "files_of_at_most_three_rows_no_key",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "max_rows": 3
+   },
+   "want": {
+    "text": "00000000.parquet\n00000001.parquet\n00000002.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "k",
+       "values": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+       ]
+      }
+     ]
+    }
+   },
+   "name": "files_of_at_most_three_rows_no_key_read_back",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "max_rows": 3
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2,
+       1,
+       1,
+       1,
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "path",
+      "values": [
+       "00000000.parquet",
+       "00000000.parquet",
+       "00000000.parquet",
+       "00000001.parquet",
+       "00000001.parquet",
+       "00000001.parquet",
+       "00000002.parquet"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_csv_dataset",
+   "order": "rows",
+   "params": {
+    "format": "csv",
+    "keys": [
+     "k"
+    ]
+   },
+   "want": {
+    "text": "k=a/00000000.csv\nk=b/00000000.csv"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3
+       ]
+      }
+     ]
+    }
+   },
+   "name": "an_ipc_dataset",
+   "order": "rows",
+   "params": {
+    "format": "ipc",
+    "keys": [
+     "k"
+    ]
+   },
+   "want": {
+    "text": "k=a/00000000.ipc\nk=b/00000000.ipc"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3
+       ]
+      }
+     ]
+    }
+   },
+   "name": "an_ndjson_dataset",
+   "order": "rows",
+   "params": {
+    "format": "ndjson",
+    "keys": [
+     "k"
+    ]
+   },
+   "want": {
+    "text": "k=a/00000000.jsonl\nk=b/00000000.jsonl"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "b",
+        "a",
+        "b"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        1,
+        2,
+        3
+       ]
+      }
+     ]
+    }
+   },
+   "name": "an_unknown_key_refused",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "x"
+    ]
+   },
+   "want": {
+    "error": {
+     "contains": "",
+     "polars": "ColumnNotFoundError: unable to find column \"x\"; valid columns: [\"k\", \"v\"]"
+    }
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "",
+        null,
+        "a/b",
+        "::",
+        null,
+        "b?",
+        null,
+        "#&+",
+        null,
+        "\u00fc/",
+        "%%?",
+        "bb",
+        "/+",
+        "#%",
+        null,
+        "=b.",
+        "=",
+        " ",
+        "b. #",
+        "=",
+        null,
+        "%a?",
+        "a",
+        "%\u00fc",
+        "= =",
+        "%&ba",
+        "a.b%",
+        "?a?+",
+        ":.#",
+        "+?b",
+        "#",
+        "aa",
+        "&",
+        "%",
+        "%:?",
+        null,
+        "+&/&",
+        null,
+        "=a+",
+        "%%&%",
+        "/",
+        null,
+        ":",
+        "/ ",
+        " =//",
+        "=",
+        "\u00fc.=",
+        "a= ",
+        " ",
+        "&",
+        ".&:a",
+        "\u00fc/?+",
+        "+\u00fc&&",
+        "b%",
+        "\u00fc",
+        ".%=",
+        null,
+        "/&b.",
+        ".% /",
+        "%\u00fc",
+        "\u00fc.",
+        "?b#b",
+        null,
+        "?/b.",
+        ": a:",
+        "%",
+        " ",
+        "\u00fc",
+        ":#=+",
+        null,
+        "  . ",
+        "%%",
+        ":  ",
+        null,
+        "ba%?",
+        null,
+        "&a\u00fc",
+        "\u00fc",
+        "+",
+        "\u00fc&a",
+        ":",
+        "?",
+        ".b?%",
+        "&b ",
+        "\u00fcb?b",
+        ".",
+        ":.",
+        ".",
+        "a%",
+        "+%",
+        "#/ :",
+        " =",
+        "\u00fc:",
+        "\u00fc",
+        "/",
+        "a/ &",
+        ".",
+        "=/=b",
+        "?",
+        "a",
+        "&? :",
+        "# b",
+        "a\u00fc/&",
+        "+#\u00fc",
+        "b= ",
+        "//",
+        "a",
+        "&+%/",
+        null,
+        "+ ",
+        "%=a&",
+        "%&&",
+        "/",
+        "aa#",
+        "=/",
+        "#aa.",
+        "+&",
+        "%",
+        "=  ",
+        "?/a.",
+        ". ",
+        " ?",
+        "a+.\u00fc",
+        "%+  ",
+        "&= ",
+        "/",
+        "==\u00fc/",
+        "# ",
+        " ",
+        "a",
+        "/%",
+        null,
+        "=",
+        ".",
+        ": =",
+        "a?#",
+        null,
+        "b%",
+        "// ",
+        "+ b",
+        "a?",
+        null,
+        "b",
+        "+ ",
+        null,
+        "&b=",
+        "%&&",
+        "+",
+        "+",
+        ":ab="
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "j",
+       "values": [
+        0,
+        1,
+        2,
+        2,
+        1,
+        1,
+        2,
+        1,
+        1,
+        2,
+        1,
+        1,
+        0,
+        1,
+        2,
+        2,
+        1,
+        2,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        2,
+        0,
+        2,
+        1,
+        2,
+        2,
+        1,
+        1,
+        1,
+        0,
+        2,
+        0,
+        2,
+        2,
+        2,
+        2,
+        0,
+        1,
+        2,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        2,
+        0,
+        2,
+        0,
+        0,
+        2,
+        1,
+        0,
+        2,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        2,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        2,
+        1,
+        1,
+        1,
+        2,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2,
+        0,
+        0,
+        1,
+        1,
+        2,
+        2,
+        0,
+        1,
+        2,
+        1,
+        1,
+        1,
+        2,
+        1,
+        2,
+        0,
+        2,
+        2,
+        0,
+        0,
+        2,
+        1,
+        1,
+        2,
+        2,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        2,
+        1,
+        2,
+        2,
+        0,
+        1,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_hive_dataset_gen",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "k",
+     "j"
+    ]
+   },
+   "want": {
+    "text": "k=#%20/j=0/00000000.parquet\nk=#%20b/j=0/00000000.parquet\nk=#%25/j=1/00000000.parquet\nk=#%2F%20%3A/j=1/00000000.parquet\nk=#&+/j=1/00000000.parquet\nk=#/j=1/00000000.parquet\nk=#aa./j=2/00000000.parquet\nk=%20%20.%20/j=0/00000000.parquet\nk=%20%3D%2F%2F/j=1/00000000.parquet\nk=%20%3D/j=2/00000000.parquet\nk=%20/j=1/00000000.parquet\nk=%20/j=2/00000000.parquet\nk=%20?/j=2/00000000.parquet\nk=%25%25&%25/j=2/00000000.parquet\nk=%25%25/j=2/00000000.parquet\nk=%25%25?/j=1/00000000.parquet\nk=%25%3A?/j=1/00000000.parquet\nk=%25%3Da&/j=1/00000000.parquet\nk=%25%C3%BC/j=0/00000000.parquet\nk=%25%C3%BC/j=1/00000000.parquet\nk=%25&&/j=1/00000000.parquet\nk=%25&&/j=2/00000000.parquet\nk=%25&ba/j=0/00000000.parquet\nk=%25+%20%20/j=1/00000000.parquet\nk=%25/j=1/00000000.parquet\nk=%25/j=2/00000000.parquet\nk=%25a?/j=0/00000000.parquet\nk=%2F%20/j=0/00000000.parquet\nk=%2F%25/j=0/00000000.parquet\nk=%2F%2F%20/j=0/00000000.parquet\nk=%2F%2F/j=2/00000000.parquet\nk=%2F&b./j=2/00000000.parquet\nk=%2F+/j=0/00000000.parquet\nk=%2F/j=1/00000000.parquet\nk=%2F/j=2/00000000.parquet\nk=%3A#%3D+/j=0/00000000.parquet\nk=%3A%20%20/j=1/00000000.parquet\nk=%3A%20%3D/j=2/00000000.parquet\nk=%3A%20a%3A/j=1/00000000.parquet\nk=%3A%3A/j=2/00000000.parquet\nk=%3A.#/j=0/00000000.parquet\nk=%3A./j=1/00000000.parquet\nk=%3A/j=2/00000000.parquet\nk=%3Aab%3D/j=2/00000000.parquet\nk=%3D%20%20/j=2/00000000.parquet\nk=%3D%20%3D/j=0/00000000.parquet\nk=%3D%2F%3Db/j=0/00000000.parquet\nk=%3D%2F/j=1/00000000.parquet\nk=%3D%3D%C3%BC%2F/j=1/00000000.parquet\nk=%3D/j=1/00000000.parquet\nk=%3D/j=2/00000000.parquet\nk=%3Da+/j=0/00000000.parquet\nk=%3Db./j=2/00000000.parquet\nk=%C3%BC%2F/j=2/00000000.parquet\nk=%C3%BC%2F?+/j=0/00000000.parquet\nk=%C3%BC%3A/j=0/00000000.parquet\nk=%C3%BC&a/j=1/00000000.parquet\nk=%C3%BC.%3D/j=0/00000000.parquet\nk=%C3%BC./j=2/00000000.parquet\nk=%C3%BC/j=0/00000000.parquet\nk=%C3%BC/j=1/00000000.parquet\nk=%C3%BC/j=2/00000000.parquet\nk=%C3%BCb?b/j=2/00000000.parquet\nk=&%3D%20/j=2/00000000.parquet\nk=&+%25%2F/j=0/00000000.parquet\nk=&/j=0/00000000.parquet\nk=&/j=2/00000000.parquet\nk=&?%20%3A/j=2/00000000.parquet\nk=&a%C3%BC/j=1/00000000.parquet\nk=&b%20/j=1/00000000.parquet\nk=&b%3D/j=1/00000000.parquet\nk=+#%C3%BC/j=1/00000000.parquet\nk=+%20/j=0/00000000.parquet\nk=+%20/j=2/00000000.parquet\nk=+%20b/j=0/00000000.parquet\nk=+%25/j=2/00000000.parquet\nk=+%C3%BC&&/j=2/00000000.parquet\nk=+&%2F&/j=0/00000000.parquet\nk=+&/j=0/00000000.parquet\nk=+/j=0/00000000.parquet\nk=+/j=2/00000000.parquet\nk=+?b/j=2/00000000.parquet\nk=.%20/j=0/00000000.parquet\nk=.%25%20%2F/j=1/00000000.parquet\nk=.%25%3D/j=0/00000000.parquet\nk=.&%3Aa/j=0/00000000.parquet\nk=./j=1/00000000.parquet\nk=./j=2/00000000.parquet\nk=.b?%25/j=1/00000000.parquet\nk=/j=0/00000000.parquet\nk=?%2Fa./j=0/00000000.parquet\nk=?%2Fb./j=0/00000000.parquet\nk=?/j=0/00000000.parquet\nk=?/j=1/00000000.parquet\nk=?a?+/j=2/00000000.parquet\nk=?b#b/j=0/00000000.parquet\nk=__HIVE_DEFAULT_PARTITION__/j=0/00000000.parquet\nk=__HIVE_DEFAULT_PARTITION__/j=1/00000000.parquet\nk=__HIVE_DEFAULT_PARTITION__/j=2/00000000.parquet\nk=a%25/j=1/00000000.parquet\nk=a%2F%20&/j=0/00000000.parquet\nk=a%2Fb/j=2/00000000.parquet\nk=a%3D%20/j=0/00000000.parquet\nk=a%C3%BC%2F&/j=0/00000000.parquet\nk=a+.%C3%BC/j=1/00000000.parquet\nk=a.b%25/j=0/00000000.parquet\nk=a/j=1/00000000.parquet\nk=a/j=2/00000000.parquet\nk=a?#/j=2/00000000.parquet\nk=a?/j=0/00000000.parquet\nk=aa#/j=2/00000000.parquet\nk=aa/j=2/00000000.parquet\nk=b%25/j=0/00000000.parquet\nk=b%25/j=1/00000000.parquet\nk=b%3D%20/j=1/00000000.parquet\nk=b.%20#/j=0/00000000.parquet\nk=b/j=0/00000000.parquet\nk=b?/j=1/00000000.parquet\nk=ba%25?/j=0/00000000.parquet\nk=bb/j=1/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "",
+        null,
+        "a/b",
+        "::",
+        null,
+        "b?",
+        null,
+        "#&+",
+        null,
+        "\u00fc/",
+        "%%?",
+        "bb",
+        "/+",
+        "#%",
+        null,
+        "=b.",
+        "=",
+        " ",
+        "b. #",
+        "=",
+        null,
+        "%a?",
+        "a",
+        "%\u00fc",
+        "= =",
+        "%&ba",
+        "a.b%",
+        "?a?+",
+        ":.#",
+        "+?b",
+        "#",
+        "aa",
+        "&",
+        "%",
+        "%:?",
+        null,
+        "+&/&",
+        null,
+        "=a+",
+        "%%&%",
+        "/",
+        null,
+        ":",
+        "/ ",
+        " =//",
+        "=",
+        "\u00fc.=",
+        "a= ",
+        " ",
+        "&",
+        ".&:a",
+        "\u00fc/?+",
+        "+\u00fc&&",
+        "b%",
+        "\u00fc",
+        ".%=",
+        null,
+        "/&b.",
+        ".% /",
+        "%\u00fc",
+        "\u00fc.",
+        "?b#b",
+        null,
+        "?/b.",
+        ": a:",
+        "%",
+        " ",
+        "\u00fc",
+        ":#=+",
+        null,
+        "  . ",
+        "%%",
+        ":  ",
+        null,
+        "ba%?",
+        null,
+        "&a\u00fc",
+        "\u00fc",
+        "+",
+        "\u00fc&a",
+        ":",
+        "?",
+        ".b?%",
+        "&b ",
+        "\u00fcb?b",
+        ".",
+        ":.",
+        ".",
+        "a%",
+        "+%",
+        "#/ :",
+        " =",
+        "\u00fc:",
+        "\u00fc",
+        "/",
+        "a/ &",
+        ".",
+        "=/=b",
+        "?",
+        "a",
+        "&? :",
+        "# b",
+        "a\u00fc/&",
+        "+#\u00fc",
+        "b= ",
+        "//",
+        "a",
+        "&+%/",
+        null,
+        "+ ",
+        "%=a&",
+        "%&&",
+        "/",
+        "aa#",
+        "=/",
+        "#aa.",
+        "+&",
+        "%",
+        "=  ",
+        "?/a.",
+        ". ",
+        " ?",
+        "a+.\u00fc",
+        "%+  ",
+        "&= ",
+        "/",
+        "==\u00fc/",
+        "# ",
+        " ",
+        "a",
+        "/%",
+        null,
+        "=",
+        ".",
+        ": =",
+        "a?#",
+        null,
+        "b%",
+        "// ",
+        "+ b",
+        "a?",
+        null,
+        "b",
+        "+ ",
+        null,
+        "&b=",
+        "%&&",
+        "+",
+        "+",
+        ":ab="
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "j",
+       "values": [
+        0,
+        1,
+        2,
+        2,
+        1,
+        1,
+        2,
+        1,
+        1,
+        2,
+        1,
+        1,
+        0,
+        1,
+        2,
+        2,
+        1,
+        2,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        2,
+        0,
+        2,
+        1,
+        2,
+        2,
+        1,
+        1,
+        1,
+        0,
+        2,
+        0,
+        2,
+        2,
+        2,
+        2,
+        0,
+        1,
+        2,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        2,
+        0,
+        2,
+        0,
+        0,
+        2,
+        1,
+        0,
+        2,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        2,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        2,
+        1,
+        1,
+        1,
+        2,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2,
+        0,
+        0,
+        1,
+        1,
+        2,
+        2,
+        0,
+        1,
+        2,
+        1,
+        1,
+        1,
+        2,
+        1,
+        2,
+        0,
+        2,
+        2,
+        0,
+        0,
+        2,
+        1,
+        1,
+        2,
+        2,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        2,
+        1,
+        2,
+        2,
+        0,
+        1,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "v",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_hive_dataset_gen_read_back",
+   "order": "rows",
+   "params": {
+    "format": "parquet",
+    "keys": [
+     "k",
+     "j"
+    ]
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "k",
+      "values": [
+       "",
+       null,
+       "a/b",
+       "::",
+       null,
+       "b?",
+       null,
+       "#&+",
+       null,
+       "\u00fc/",
+       "%%?",
+       "bb",
+       "/+",
+       "#%",
+       null,
+       "=b.",
+       "=",
+       " ",
+       "b. #",
+       "=",
+       null,
+       "%a?",
+       "a",
+       "%\u00fc",
+       "= =",
+       "%&ba",
+       "a.b%",
+       "?a?+",
+       ":.#",
+       "+?b",
+       "#",
+       "aa",
+       "&",
+       "%",
+       "%:?",
+       null,
+       "+&/&",
+       null,
+       "=a+",
+       "%%&%",
+       "/",
+       null,
+       ":",
+       "/ ",
+       " =//",
+       "=",
+       "\u00fc.=",
+       "a= ",
+       " ",
+       "&",
+       ".&:a",
+       "\u00fc/?+",
+       "+\u00fc&&",
+       "b%",
+       "\u00fc",
+       ".%=",
+       null,
+       "/&b.",
+       ".% /",
+       "%\u00fc",
+       "\u00fc.",
+       "?b#b",
+       null,
+       "?/b.",
+       ": a:",
+       "%",
+       " ",
+       "\u00fc",
+       ":#=+",
+       null,
+       "  . ",
+       "%%",
+       ":  ",
+       null,
+       "ba%?",
+       null,
+       "&a\u00fc",
+       "\u00fc",
+       "+",
+       "\u00fc&a",
+       ":",
+       "?",
+       ".b?%",
+       "&b ",
+       "\u00fcb?b",
+       ".",
+       ":.",
+       ".",
+       "a%",
+       "+%",
+       "#/ :",
+       " =",
+       "\u00fc:",
+       "\u00fc",
+       "/",
+       "a/ &",
+       ".",
+       "=/=b",
+       "?",
+       "a",
+       "&? :",
+       "# b",
+       "a\u00fc/&",
+       "+#\u00fc",
+       "b= ",
+       "//",
+       "a",
+       "&+%/",
+       null,
+       "+ ",
+       "%=a&",
+       "%&&",
+       "/",
+       "aa#",
+       "=/",
+       "#aa.",
+       "+&",
+       "%",
+       "=  ",
+       "?/a.",
+       ". ",
+       " ?",
+       "a+.\u00fc",
+       "%+  ",
+       "&= ",
+       "/",
+       "==\u00fc/",
+       "# ",
+       " ",
+       "a",
+       "/%",
+       null,
+       "=",
+       ".",
+       ": =",
+       "a?#",
+       null,
+       "b%",
+       "// ",
+       "+ b",
+       "a?",
+       null,
+       "b",
+       "+ ",
+       null,
+       "&b=",
+       "%&&",
+       "+",
+       "+",
+       ":ab="
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "j",
+      "values": [
+       0,
+       1,
+       2,
+       2,
+       1,
+       1,
+       2,
+       1,
+       1,
+       2,
+       1,
+       1,
+       0,
+       1,
+       2,
+       2,
+       1,
+       2,
+       0,
+       1,
+       1,
+       0,
+       1,
+       1,
+       0,
+       0,
+       0,
+       2,
+       0,
+       2,
+       1,
+       2,
+       2,
+       1,
+       1,
+       1,
+       0,
+       2,
+       0,
+       2,
+       2,
+       2,
+       2,
+       0,
+       1,
+       2,
+       0,
+       0,
+       2,
+       0,
+       0,
+       0,
+       2,
+       0,
+       2,
+       0,
+       0,
+       2,
+       1,
+       0,
+       2,
+       0,
+       0,
+       0,
+       1,
+       1,
+       1,
+       0,
+       0,
+       0,
+       0,
+       2,
+       1,
+       1,
+       0,
+       0,
+       1,
+       1,
+       0,
+       1,
+       2,
+       1,
+       1,
+       1,
+       2,
+       2,
+       1,
+       2,
+       1,
+       2,
+       1,
+       2,
+       0,
+       1,
+       1,
+       0,
+       1,
+       0,
+       0,
+       2,
+       2,
+       0,
+       0,
+       1,
+       1,
+       2,
+       2,
+       0,
+       1,
+       2,
+       1,
+       1,
+       1,
+       2,
+       1,
+       2,
+       0,
+       2,
+       2,
+       0,
+       0,
+       2,
+       1,
+       1,
+       2,
+       2,
+       1,
+       0,
+       1,
+       1,
+       0,
+       0,
+       2,
+       1,
+       2,
+       2,
+       0,
+       1,
+       0,
+       0,
+       0,
+       2,
+       0,
+       0,
+       1,
+       1,
+       2,
+       2,
+       2,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       19,
+       20,
+       21,
+       22,
+       23,
+       24,
+       25,
+       26,
+       27,
+       28,
+       29,
+       30,
+       31,
+       32,
+       33,
+       34,
+       35,
+       36,
+       37,
+       38,
+       39,
+       40,
+       41,
+       42,
+       43,
+       44,
+       45,
+       46,
+       47,
+       48,
+       49,
+       50,
+       51,
+       52,
+       53,
+       54,
+       55,
+       56,
+       57,
+       58,
+       59,
+       60,
+       61,
+       62,
+       63,
+       64,
+       65,
+       66,
+       67,
+       68,
+       69,
+       70,
+       71,
+       72,
+       73,
+       74,
+       75,
+       76,
+       77,
+       78,
+       79,
+       80,
+       81,
+       82,
+       83,
+       84,
+       85,
+       86,
+       87,
+       88,
+       89,
+       90,
+       91,
+       92,
+       93,
+       94,
+       95,
+       96,
+       97,
+       98,
+       99,
+       100,
+       101,
+       102,
+       103,
+       104,
+       105,
+       106,
+       107,
+       108,
+       109,
+       110,
+       111,
+       112,
+       113,
+       114,
+       115,
+       116,
+       117,
+       118,
+       119,
+       120,
+       121,
+       122,
+       123,
+       124,
+       125,
+       126,
+       127,
+       128,
+       129,
+       130,
+       131,
+       132,
+       133,
+       134,
+       135,
+       136,
+       137,
+       138,
+       139,
+       140,
+       141,
+       142,
+       143,
+       144,
+       145,
+       146,
+       147,
+       148,
+       149
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "generator": "bench/scripts/oracle/partitionwrite.py",
+ "polars": "2.1.0"
+}

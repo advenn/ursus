@@ -14,45 +14,31 @@ import (
 // TestArrowIPC is step 332: Polars' Arrow IPC files and streams, read and written.
 // The fixtures in testdata/ipc are Polars 1.44.1's write_ipc and write_ipc_stream of
 // one frame, uncompressed, LZ4 and Zstandard: string views, a large list, a struct.
+// What Polars 2.1.0 reads from each is recorded since step 502 (testdata/oracle/
+// ipcfiles.json, the polars_ cases); here the four are read alike, and the schema
+// ReadIPCSchema gives.
 func TestArrowIPC(t *testing.T) {
 	ctx := t.Context()
 	c := ursus.Col
-	// The frame Polars wrote, as ursus reads it: its dates in days and its instants in
-	// microseconds, with no zone.
-	want := func(t *testing.T) *ursus.DataFrame {
-		t.Helper()
-		lf := ursus.Frame(i64s("i", 1, nil, 3), strs("s", "x", nil, "a longer string than twelve bytes"),
-			f64s("f", 1.5, 2.25, nil), ursus.ValuesNullable("b", []bool{true, false, false}, []bool{true, false, true}),
-			ursus.ValuesNullable("d", []int32{19724, 0, 10956}, []bool{true, false, true}),
-			ursus.ValuesNullable("t", []int64{1704164645000006, 0, 0}, []bool{true, false, true})).
-			Select(c("i"), c("s"), c("f"), c("b"), c("d").Cast(ursus.Date), c("t").Cast(ursus.Datetime(ursus.Micro, "")))
-		return collect(t, lf)
-	}
 
 	t.Run("Polars' files", func(t *testing.T) {
+		plain, err := ursus.ScanIPC(filepath.Join("testdata", "ipc", "polars_types.arrow")).Collect(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
 		for _, tc := range []struct {
 			name string
 			lf   *ursus.LazyFrame
 		}{
-			{"a file", ursus.ScanIPC(filepath.Join("testdata", "ipc", "polars_types.arrow"))},
 			{"LZ4", ursus.ScanIPC(filepath.Join("testdata", "ipc", "polars_types_lz4.arrow"))},
 			{"Zstandard", ursus.ScanIPC(filepath.Join("testdata", "ipc", "polars_types_zstd.arrow"))},
 			{"a stream", ursus.ScanIPCStream(filepath.Join("testdata", "ipc", "polars_types.arrows"))},
 		} {
-			got, err := tc.lf.Select(c("i"), c("s"), c("f"), c("b"), c("d"), c("t")).Collect(ctx)
+			got, err := tc.lf.Collect(ctx)
 			if err != nil {
 				t.Fatalf("%s: %v", tc.name, err)
 			}
-			ursustest.AssertFrameEqual(t, got, want(t))
-			// The list and the struct, by value.
-			rows, err := tc.lf.Select(c("l"), c("st")).Collect(ctx)
-			if err != nil {
-				t.Fatalf("%s: %v", tc.name, err)
-			}
-			if s := rows.String(); !strings.Contains(s, "[1, 2]") || !strings.Contains(s, "[]") ||
-				!strings.Contains(s, `{x: 1, y: "p"}`) || !strings.Contains(s, `{x: null, y: "q"}`) {
-				t.Errorf("%s: the list and the struct:\n%s", tc.name, s)
-			}
+			ursustest.AssertFrameEqual(t, got, plain)
 		}
 		s, err := ursus.ReadIPCSchema(filepath.Join("testdata", "ipc", "polars_types.arrow"))
 		if err != nil || strings.Join(s.Names(), " ") != "i s f b d t l st" || s.Field(6).Type != ursus.List(ursus.Int64) {

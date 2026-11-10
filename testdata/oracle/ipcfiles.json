@@ -1,0 +1,4099 @@
+{
+ "cases": [
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_glob",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "b",
+      "values": [
+       "x",
+       "y",
+       "z"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_list",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       3,
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "b",
+      "values": [
+       "z",
+       "x",
+       "y"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "by_name",
+   "note": "the second file's columns in another order",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       4
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "b",
+      "values": [
+       "x",
+       "y",
+       "w"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_directorys_keys",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "j",
+      "values": [
+       "a",
+       "b"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_glob_no_keys",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_glob_with_keys",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    },
+    "options": {
+     "hive_partitioning": true
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "j",
+      "values": [
+       "a",
+       "b"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "the_paths",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    },
+    "options": {
+     "include_file_paths": "p"
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "j",
+      "values": [
+       "a",
+       "b"
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "p",
+      "values": [
+       "k=1/j=a/x.arrow",
+       "k=2/j=b/y.arrow"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_filter_on_a_key",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "j",
+      "values": [
+       "b"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_key_alone",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_keys_type_given",
+   "note": "every key named: Polars refuses a key its hive_schema does not name, where ursus infers it (feature-gaps.md \u00a79)",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    },
+    "options": {
+     "hive_schema": [
+      [
+       "k",
+       "Int8"
+      ],
+      [
+       "j",
+       "String"
+      ]
+     ]
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Int8",
+      "name": "k",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "j",
+      "values": [
+       "a",
+       "b"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "under_a_limit",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "b",
+      "values": [
+       "x",
+       "y"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "one_files_path",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    },
+    "options": {
+     "include_file_paths": "p"
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "b",
+      "values": [
+       "x",
+       "y"
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "p",
+      "values": [
+       "p1.arrow",
+       "p1.arrow"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_column_missing",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    }
+   },
+   "want": {
+    "error": {
+     "contains": "no column \"b\"",
+     "polars": "ColumnNotFoundError: did not find column b, consider passing `missing_columns='insert'`"
+    }
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_column_more",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    }
+   },
+   "want": {
+    "error": {
+     "contains": "a column \"b\"",
+     "polars": "SchemaError: extra column in file outside of expected schema: b, hint: specify this column in the schema, or pass extra_columns='ignore' in scan options. File containing extra column: '<dir>/p1.arrow'."
+    }
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "another_type",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    }
+   },
+   "want": {
+    "error": {
+     "contains": "Float64",
+     "polars": "SchemaError: data type mismatch for column a: incoming: Float64 != target: Int64"
+    }
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "x",
+        "y"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        3
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "z"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "w"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        4
+       ]
+      }
+     ]
+    },
+    "f3": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5
+       ]
+      }
+     ]
+    },
+    "f4": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.5
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "b",
+       "values": [
+        "q"
+       ]
+      }
+     ]
+    },
+    "f5": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1
+       ]
+      }
+     ]
+    },
+    "f6": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_path_columns_name_taken",
+   "order": "rows",
+   "params": {
+    "files": {
+     "d/k=1/j=a/x.arrow": "f5",
+     "d/k=2/j=b/y.arrow": "f6",
+     "p1.arrow": "f0",
+     "p2.arrow": "f1",
+     "p3.arrow": "f2",
+     "p4.arrow": "f3",
+     "p5.arrow": "f4"
+    },
+    "options": {
+     "include_file_paths": "k"
+    }
+   },
+   "want": {
+    "error": {
+     "contains": "file paths",
+     "polars": "DuplicateError: column name for file paths \"k\" conflicts with column name from file"
+    }
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_file",
+   "note": "written by Polars 1.44.1: string views, a large list, a struct",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_types.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       1,
+       null,
+       3
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       null,
+       "a longer string than twelve bytes"
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       1.5,
+       2.25,
+       null
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "b",
+      "values": [
+       true,
+       null,
+       false
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "d",
+      "values": [
+       19724,
+       null,
+       10956
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "t",
+      "values": [
+       1704164645000006,
+       null,
+       0
+      ]
+     },
+     {
+      "dtype": "List(Int64)",
+      "name": "l",
+      "values": [
+       [
+        1,
+        2
+       ],
+       [],
+       null
+      ]
+     },
+     {
+      "dtype": "Struct(x: Int64, y: String)",
+      "name": "st",
+      "values": [
+       {
+        "x": 1,
+        "y": "p"
+       },
+       null,
+       {
+        "x": null,
+        "y": "q"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_file_lz4",
+   "note": "written by Polars 1.44.1: string views, a large list, a struct",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_types_lz4.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       1,
+       null,
+       3
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       null,
+       "a longer string than twelve bytes"
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       1.5,
+       2.25,
+       null
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "b",
+      "values": [
+       true,
+       null,
+       false
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "d",
+      "values": [
+       19724,
+       null,
+       10956
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "t",
+      "values": [
+       1704164645000006,
+       null,
+       0
+      ]
+     },
+     {
+      "dtype": "List(Int64)",
+      "name": "l",
+      "values": [
+       [
+        1,
+        2
+       ],
+       [],
+       null
+      ]
+     },
+     {
+      "dtype": "Struct(x: Int64, y: String)",
+      "name": "st",
+      "values": [
+       {
+        "x": 1,
+        "y": "p"
+       },
+       null,
+       {
+        "x": null,
+        "y": "q"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_file_zstd",
+   "note": "written by Polars 1.44.1: string views, a large list, a struct",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_types_zstd.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       1,
+       null,
+       3
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       null,
+       "a longer string than twelve bytes"
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       1.5,
+       2.25,
+       null
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "b",
+      "values": [
+       true,
+       null,
+       false
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "d",
+      "values": [
+       19724,
+       null,
+       10956
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "t",
+      "values": [
+       1704164645000006,
+       null,
+       0
+      ]
+     },
+     {
+      "dtype": "List(Int64)",
+      "name": "l",
+      "values": [
+       [
+        1,
+        2
+       ],
+       [],
+       null
+      ]
+     },
+     {
+      "dtype": "Struct(x: Int64, y: String)",
+      "name": "st",
+      "values": [
+       {
+        "x": 1,
+        "y": "p"
+       },
+       null,
+       {
+        "x": null,
+        "y": "q"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_stream",
+   "note": "written by Polars 1.44.1: string views, a large list, a struct",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_types.arrows"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       1,
+       null,
+       3
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       null,
+       "a longer string than twelve bytes"
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       1.5,
+       2.25,
+       null
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "b",
+      "values": [
+       true,
+       null,
+       false
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "d",
+      "values": [
+       19724,
+       null,
+       10956
+      ]
+     },
+     {
+      "dtype": "Datetime(us)",
+      "name": "t",
+      "values": [
+       1704164645000006,
+       null,
+       0
+      ]
+     },
+     {
+      "dtype": "List(Int64)",
+      "name": "l",
+      "values": [
+       [
+        1,
+        2
+       ],
+       [],
+       null
+      ]
+     },
+     {
+      "dtype": "Struct(x: Int64, y: String)",
+      "name": "st",
+      "values": [
+       {
+        "x": 1,
+        "y": "p"
+       },
+       null,
+       {
+        "x": null,
+        "y": "q"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "r",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        "-inf",
+        667.4642430164581,
+        null,
+        206.14488635879297,
+        null,
+        455.1667982071858,
+        580.1836729291963,
+        153.4597986227218,
+        185.8019193907669,
+        610.895438829375,
+        1e+300,
+        1e-300,
+        594.994102436011,
+        291.07185477277835,
+        null,
+        5e-324,
+        873.1185101279443,
+        777.0,
+        "-0.0",
+        -808.5256418543158,
+        null,
+        -520.2037373173753,
+        "NaN",
+        -375.8173679675334,
+        -879.9563903395806,
+        null,
+        2.675,
+        null,
+        0.5,
+        259.24230336763367
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "xca",
+        "bbzz",
+        "abcz",
+        "az",
+        "bzycyb",
+        "a,b",
+        "cc",
+        "bcxc",
+        "ay",
+        "yxc",
+        "xcbxb",
+        "ab",
+        null,
+        "",
+        "xy",
+        "cza",
+        "bb",
+        "bxx",
+        "zz",
+        "abbbbz",
+        null,
+        null,
+        null,
+        "cczyyb",
+        "xcyxy",
+        "ybyaz",
+        "cya",
+        null,
+        "xxy",
+        "zxbcya"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "r",
+       "values": [
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        9007199254740992.0,
+        null,
+        -917.9315384457374,
+        531.5,
+        -0.5,
+        -598.8482987306265,
+        -957.0709436803626,
+        1.7976931348623157e+308,
+        -651.242802866282,
+        null,
+        -783.5616631200705,
+        null,
+        -660.889002126911,
+        273.58935334692364,
+        891.3025064606297,
+        722.077705022182,
+        340.78317013362107,
+        null,
+        81.02234449504931,
+        -12.704773776480693,
+        464.1937294073414,
+        -504.39463040856583,
+        70.0,
+        -441.78149234502075,
+        855.7134750369946,
+        -768.7845088700062,
+        1.5e-310,
+        22.5004151352897,
+        0.1,
+        -661.8215355307707
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "aa",
+        "ababc",
+        "ayyyxb",
+        null,
+        "x",
+        "cyycca",
+        "z",
+        "xzxbb",
+        "z",
+        "za",
+        "\u00e9",
+        "cyaxcx",
+        "bc",
+        null,
+        "bzb",
+        "bx",
+        "b",
+        "bcyx",
+        null,
+        "xyab",
+        "abc",
+        "\ud835\udd18rsus",
+        "ababzy",
+        "caaxc",
+        "yya",
+        "bx",
+        "yb",
+        null,
+        "byyaxy",
+        "ccz"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "r",
+       "values": [
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        979.1513245874582,
+        null,
+        -548.0,
+        -838.4262945829071,
+        842.2057694390887,
+        -406.13997968839135,
+        374.0600496624538,
+        null,
+        9007199254740994.0,
+        -678.8345334575117,
+        -129.7606199878678,
+        123.456,
+        -705.1436532977915,
+        2.5,
+        -207.9518720475786,
+        -688.0,
+        null,
+        249.7648609268747,
+        null,
+        -757.7801299236055,
+        -130.0,
+        191.93610417773652,
+        -694.3810499047338,
+        -78.42740753502846,
+        null,
+        154.06686246198683,
+        204.07946502670347,
+        889.2771379345895,
+        "inf",
+        527.743787486713
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "\"q\"",
+        "ybcyy",
+        "ayczxx",
+        "byzzy",
+        "baacx",
+        "yayx",
+        "czza",
+        "yyxay",
+        "ayy",
+        "yby",
+        "b",
+        "zyaaba",
+        "azxzy",
+        "xyayb",
+        "c",
+        "b",
+        null,
+        null,
+        "abbzbx",
+        null,
+        "xb",
+        "zb",
+        "azc",
+        null,
+        "xxayzx",
+        "b",
+        "ba",
+        null,
+        null,
+        "acbx"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_directory_gen",
+   "order": "rows",
+   "params": {
+    "files": {
+     "g/k=0/p.arrow": "f0",
+     "g/k=1/p.arrow": "f1",
+     "g/k=2/p.arrow": "f2"
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "r",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       19,
+       20,
+       21,
+       22,
+       23,
+       24,
+       25,
+       26,
+       27,
+       28,
+       29,
+       30,
+       31,
+       32,
+       33,
+       34,
+       35,
+       36,
+       37,
+       38,
+       39,
+       40,
+       41,
+       42,
+       43,
+       44,
+       45,
+       46,
+       47,
+       48,
+       49,
+       50,
+       51,
+       52,
+       53,
+       54,
+       55,
+       56,
+       57,
+       58,
+       59,
+       60,
+       61,
+       62,
+       63,
+       64,
+       65,
+       66,
+       67,
+       68,
+       69,
+       70,
+       71,
+       72,
+       73,
+       74,
+       75,
+       76,
+       77,
+       78,
+       79,
+       80,
+       81,
+       82,
+       83,
+       84,
+       85,
+       86,
+       87,
+       88,
+       89
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       "-inf",
+       667.4642430164581,
+       null,
+       206.14488635879297,
+       null,
+       455.1667982071858,
+       580.1836729291963,
+       153.4597986227218,
+       185.8019193907669,
+       610.895438829375,
+       1e+300,
+       1e-300,
+       594.994102436011,
+       291.07185477277835,
+       null,
+       5e-324,
+       873.1185101279443,
+       777.0,
+       "-0.0",
+       -808.5256418543158,
+       null,
+       -520.2037373173753,
+       "NaN",
+       -375.8173679675334,
+       -879.9563903395806,
+       null,
+       2.675,
+       null,
+       0.5,
+       259.24230336763367,
+       9007199254740992.0,
+       null,
+       -917.9315384457374,
+       531.5,
+       -0.5,
+       -598.8482987306265,
+       -957.0709436803626,
+       1.7976931348623157e+308,
+       -651.242802866282,
+       null,
+       -783.5616631200705,
+       null,
+       -660.889002126911,
+       273.58935334692364,
+       891.3025064606297,
+       722.077705022182,
+       340.78317013362107,
+       null,
+       81.02234449504931,
+       -12.704773776480693,
+       464.1937294073414,
+       -504.39463040856583,
+       70.0,
+       -441.78149234502075,
+       855.7134750369946,
+       -768.7845088700062,
+       1.5e-310,
+       22.5004151352897,
+       0.1,
+       -661.8215355307707,
+       979.1513245874582,
+       null,
+       -548.0,
+       -838.4262945829071,
+       842.2057694390887,
+       -406.13997968839135,
+       374.0600496624538,
+       null,
+       9007199254740994.0,
+       -678.8345334575117,
+       -129.7606199878678,
+       123.456,
+       -705.1436532977915,
+       2.5,
+       -207.9518720475786,
+       -688.0,
+       null,
+       249.7648609268747,
+       null,
+       -757.7801299236055,
+       -130.0,
+       191.93610417773652,
+       -694.3810499047338,
+       -78.42740753502846,
+       null,
+       154.06686246198683,
+       204.07946502670347,
+       889.2771379345895,
+       "inf",
+       527.743787486713
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "xca",
+       "bbzz",
+       "abcz",
+       "az",
+       "bzycyb",
+       "a,b",
+       "cc",
+       "bcxc",
+       "ay",
+       "yxc",
+       "xcbxb",
+       "ab",
+       null,
+       "",
+       "xy",
+       "cza",
+       "bb",
+       "bxx",
+       "zz",
+       "abbbbz",
+       null,
+       null,
+       null,
+       "cczyyb",
+       "xcyxy",
+       "ybyaz",
+       "cya",
+       null,
+       "xxy",
+       "zxbcya",
+       "aa",
+       "ababc",
+       "ayyyxb",
+       null,
+       "x",
+       "cyycca",
+       "z",
+       "xzxbb",
+       "z",
+       "za",
+       "\u00e9",
+       "cyaxcx",
+       "bc",
+       null,
+       "bzb",
+       "bx",
+       "b",
+       "bcyx",
+       null,
+       "xyab",
+       "abc",
+       "\ud835\udd18rsus",
+       "ababzy",
+       "caaxc",
+       "yya",
+       "bx",
+       "yb",
+       null,
+       "byyaxy",
+       "ccz",
+       "\"q\"",
+       "ybcyy",
+       "ayczxx",
+       "byzzy",
+       "baacx",
+       "yayx",
+       "czza",
+       "yyxay",
+       "ayy",
+       "yby",
+       "b",
+       "zyaaba",
+       "azxzy",
+       "xyayb",
+       "c",
+       "b",
+       null,
+       null,
+       "abbzbx",
+       null,
+       "xb",
+       "zb",
+       "azc",
+       null,
+       "xxayzx",
+       "b",
+       "ba",
+       null,
+       null,
+       "acbx"
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "k",
+      "values": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "f0": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "r",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        "-inf",
+        667.4642430164581,
+        null,
+        206.14488635879297,
+        null,
+        455.1667982071858,
+        580.1836729291963,
+        153.4597986227218,
+        185.8019193907669,
+        610.895438829375,
+        1e+300,
+        1e-300,
+        594.994102436011,
+        291.07185477277835,
+        null,
+        5e-324,
+        873.1185101279443,
+        777.0,
+        "-0.0",
+        -808.5256418543158,
+        null,
+        -520.2037373173753,
+        "NaN",
+        -375.8173679675334,
+        -879.9563903395806,
+        null,
+        2.675,
+        null,
+        0.5,
+        259.24230336763367
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "xca",
+        "bbzz",
+        "abcz",
+        "az",
+        "bzycyb",
+        "a,b",
+        "cc",
+        "bcxc",
+        "ay",
+        "yxc",
+        "xcbxb",
+        "ab",
+        null,
+        "",
+        "xy",
+        "cza",
+        "bb",
+        "bxx",
+        "zz",
+        "abbbbz",
+        null,
+        null,
+        null,
+        "cczyyb",
+        "xcyxy",
+        "ybyaz",
+        "cya",
+        null,
+        "xxy",
+        "zxbcya"
+       ]
+      }
+     ]
+    },
+    "f1": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "r",
+       "values": [
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        9007199254740992.0,
+        null,
+        -917.9315384457374,
+        531.5,
+        -0.5,
+        -598.8482987306265,
+        -957.0709436803626,
+        1.7976931348623157e+308,
+        -651.242802866282,
+        null,
+        -783.5616631200705,
+        null,
+        -660.889002126911,
+        273.58935334692364,
+        891.3025064606297,
+        722.077705022182,
+        340.78317013362107,
+        null,
+        81.02234449504931,
+        -12.704773776480693,
+        464.1937294073414,
+        -504.39463040856583,
+        70.0,
+        -441.78149234502075,
+        855.7134750369946,
+        -768.7845088700062,
+        1.5e-310,
+        22.5004151352897,
+        0.1,
+        -661.8215355307707
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "aa",
+        "ababc",
+        "ayyyxb",
+        null,
+        "x",
+        "cyycca",
+        "z",
+        "xzxbb",
+        "z",
+        "za",
+        "\u00e9",
+        "cyaxcx",
+        "bc",
+        null,
+        "bzb",
+        "bx",
+        "b",
+        "bcyx",
+        null,
+        "xyab",
+        "abc",
+        "\ud835\udd18rsus",
+        "ababzy",
+        "caaxc",
+        "yya",
+        "bx",
+        "yb",
+        null,
+        "byyaxy",
+        "ccz"
+       ]
+      }
+     ]
+    },
+    "f2": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "r",
+       "values": [
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89
+       ]
+      },
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        979.1513245874582,
+        null,
+        -548.0,
+        -838.4262945829071,
+        842.2057694390887,
+        -406.13997968839135,
+        374.0600496624538,
+        null,
+        9007199254740994.0,
+        -678.8345334575117,
+        -129.7606199878678,
+        123.456,
+        -705.1436532977915,
+        2.5,
+        -207.9518720475786,
+        -688.0,
+        null,
+        249.7648609268747,
+        null,
+        -757.7801299236055,
+        -130.0,
+        191.93610417773652,
+        -694.3810499047338,
+        -78.42740753502846,
+        null,
+        154.06686246198683,
+        204.07946502670347,
+        889.2771379345895,
+        "inf",
+        527.743787486713
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "\"q\"",
+        "ybcyy",
+        "ayczxx",
+        "byzzy",
+        "baacx",
+        "yayx",
+        "czza",
+        "yyxay",
+        "ayy",
+        "yby",
+        "b",
+        "zyaaba",
+        "azxzy",
+        "xyayb",
+        "c",
+        "b",
+        null,
+        null,
+        "abbzbx",
+        null,
+        "xb",
+        "zb",
+        "azc",
+        null,
+        "xxayzx",
+        "b",
+        "ba",
+        null,
+        null,
+        "acbx"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_glob_gen",
+   "order": "rows",
+   "params": {
+    "files": {
+     "g/k=0/p.arrow": "f0",
+     "g/k=1/p.arrow": "f1",
+     "g/k=2/p.arrow": "f2"
+    }
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "r",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       19,
+       20,
+       21,
+       22,
+       23,
+       24,
+       25,
+       26,
+       27,
+       28,
+       29,
+       30,
+       31,
+       32,
+       33,
+       34,
+       35,
+       36,
+       37,
+       38,
+       39,
+       40,
+       41,
+       42,
+       43,
+       44,
+       45,
+       46,
+       47,
+       48,
+       49,
+       50,
+       51,
+       52,
+       53,
+       54,
+       55,
+       56,
+       57,
+       58,
+       59,
+       60,
+       61,
+       62,
+       63,
+       64,
+       65,
+       66,
+       67,
+       68,
+       69,
+       70,
+       71,
+       72,
+       73,
+       74,
+       75,
+       76,
+       77,
+       78,
+       79,
+       80,
+       81,
+       82,
+       83,
+       84,
+       85,
+       86,
+       87,
+       88,
+       89
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "f",
+      "values": [
+       "-inf",
+       667.4642430164581,
+       null,
+       206.14488635879297,
+       null,
+       455.1667982071858,
+       580.1836729291963,
+       153.4597986227218,
+       185.8019193907669,
+       610.895438829375,
+       1e+300,
+       1e-300,
+       594.994102436011,
+       291.07185477277835,
+       null,
+       5e-324,
+       873.1185101279443,
+       777.0,
+       "-0.0",
+       -808.5256418543158,
+       null,
+       -520.2037373173753,
+       "NaN",
+       -375.8173679675334,
+       -879.9563903395806,
+       null,
+       2.675,
+       null,
+       0.5,
+       259.24230336763367,
+       9007199254740992.0,
+       null,
+       -917.9315384457374,
+       531.5,
+       -0.5,
+       -598.8482987306265,
+       -957.0709436803626,
+       1.7976931348623157e+308,
+       -651.242802866282,
+       null,
+       -783.5616631200705,
+       null,
+       -660.889002126911,
+       273.58935334692364,
+       891.3025064606297,
+       722.077705022182,
+       340.78317013362107,
+       null,
+       81.02234449504931,
+       -12.704773776480693,
+       464.1937294073414,
+       -504.39463040856583,
+       70.0,
+       -441.78149234502075,
+       855.7134750369946,
+       -768.7845088700062,
+       1.5e-310,
+       22.5004151352897,
+       0.1,
+       -661.8215355307707,
+       979.1513245874582,
+       null,
+       -548.0,
+       -838.4262945829071,
+       842.2057694390887,
+       -406.13997968839135,
+       374.0600496624538,
+       null,
+       9007199254740994.0,
+       -678.8345334575117,
+       -129.7606199878678,
+       123.456,
+       -705.1436532977915,
+       2.5,
+       -207.9518720475786,
+       -688.0,
+       null,
+       249.7648609268747,
+       null,
+       -757.7801299236055,
+       -130.0,
+       191.93610417773652,
+       -694.3810499047338,
+       -78.42740753502846,
+       null,
+       154.06686246198683,
+       204.07946502670347,
+       889.2771379345895,
+       "inf",
+       527.743787486713
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "xca",
+       "bbzz",
+       "abcz",
+       "az",
+       "bzycyb",
+       "a,b",
+       "cc",
+       "bcxc",
+       "ay",
+       "yxc",
+       "xcbxb",
+       "ab",
+       null,
+       "",
+       "xy",
+       "cza",
+       "bb",
+       "bxx",
+       "zz",
+       "abbbbz",
+       null,
+       null,
+       null,
+       "cczyyb",
+       "xcyxy",
+       "ybyaz",
+       "cya",
+       null,
+       "xxy",
+       "zxbcya",
+       "aa",
+       "ababc",
+       "ayyyxb",
+       null,
+       "x",
+       "cyycca",
+       "z",
+       "xzxbb",
+       "z",
+       "za",
+       "\u00e9",
+       "cyaxcx",
+       "bc",
+       null,
+       "bzb",
+       "bx",
+       "b",
+       "bcyx",
+       null,
+       "xyab",
+       "abc",
+       "\ud835\udd18rsus",
+       "ababzy",
+       "caaxc",
+       "yya",
+       "bx",
+       "yb",
+       null,
+       "byyaxy",
+       "ccz",
+       "\"q\"",
+       "ybcyy",
+       "ayczxx",
+       "byzzy",
+       "baacx",
+       "yayx",
+       "czza",
+       "yyxay",
+       "ayy",
+       "yby",
+       "b",
+       "zyaaba",
+       "azxzy",
+       "xyayb",
+       "c",
+       "b",
+       null,
+       null,
+       "abbzbx",
+       null,
+       "xb",
+       "zb",
+       "azc",
+       null,
+       "xxayzx",
+       "b",
+       "ba",
+       null,
+       null,
+       "acbx"
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "generator": "bench/scripts/oracle/ipcfiles.py",
+ "polars": "2.1.0"
+}

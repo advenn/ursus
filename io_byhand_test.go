@@ -1,17 +1,17 @@
 package ursus_test
 
-// CSV and I/O, against answers worked out by hand: audit.md §5, I8–I10, I19, I21 and
-// I22, with S25 and S21's String casts, which share their parsers.
-//
-// Each case is a silent wrong answer or a refusal the audit measured, answered under
-// the rule this step chose for it — most of them Polars' and DuckDB's answers. Where
-// the two engines differ, the case says which ursus follows.
+// CSV and I/O, against answers worked out by hand: audit.md §5, I8–I10, I19, I21, I22
+// and I27, with S25 and S21's String casts, which share their parsers. Since step 502
+// each data answer is Polars 2.1.0's, recorded in testdata/oracle/io_byhand.json by
+// bench/scripts/oracle/io_byhand.py and spelled in oracle_io_byhand_test.go. What
+// stays here is a Go API's answer and the rule ursus alone has: i128.Parse's
+// overflow, and I22, a frame with rows and no columns refused by the writers, and one
+// with neither written as nothing, where Polars writes a bare newline.
 
 import (
 	"bytes"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -67,13 +67,6 @@ func ioEqual(t *testing.T, got, want *ursus.LazyFrame) string {
 	return framesDiffer(t, g, w)
 }
 
-// ioRefused collects lf and reports anything but a refusal of kind naming each of words.
-func ioRefused(t *testing.T, lf *ursus.LazyFrame, kind error, words ...string) string {
-	t.Helper()
-	df, err := lf.Collect(t.Context())
-	return refusal(df, err, kind, words...)
-}
-
 func refusal(df *ursus.DataFrame, err error, kind error, words ...string) string {
 	switch {
 	case err == nil && df != nil:
@@ -93,134 +86,9 @@ func refusal(df *ursus.DataFrame, err error, kind error, words ...string) string
 
 func TestIOByHand(t *testing.T) {
 	c := ursus.Col
-	read := func(text string, opts ...ursus.CSVOption) *ursus.LazyFrame {
-		return ursus.ScanCSVReader([]byte(text), "x.csv", opts...)
-	}
-	schema := func(name string, dt dtype.DataType) ursus.CSVOption {
-		return ursus.WithSchema(dtype.MustSchema(dtype.Of(name, dt)))
-	}
-	ints := func(name string, v []int64, valid ...bool) *ursus.LazyFrame {
-		if valid == nil {
-			return ursus.Frame(ursus.Values(name, v))
-		}
-		return ursus.Frame(ursus.ValuesNullable(name, v, valid))
-	}
-	strs := func(name string, v []string, valid ...bool) *ursus.LazyFrame {
-		if valid == nil {
-			return ursus.Frame(ursus.Values(name, v))
-		}
-		return ursus.Frame(ursus.ValuesNullable(name, v, valid))
-	}
-	// roundTrip writes lf and reads it back with its own schema.
-	roundTrip := func(t *testing.T, lf *ursus.LazyFrame) string {
-		text, err := csvText(t, lf)
-		if err != nil {
-			return "write: " + err.Error()
-		}
-		sc, err := lf.CollectSchema(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		return ioEqual(t, read(text, ursus.WithSchema(sc)), lf)
-	}
-	decimal := func(name string, scale uint8, unscaled ...string) *ursus.LazyFrame {
-		return ursus.Frame(i128Col(t, dtype.Decimal(10, scale), name, unscaled...))
-	}
+	ints := func(name string, v []int64) *ursus.LazyFrame { return ursus.Frame(ursus.Values(name, v)) }
 
 	cases := []ioCase{
-		// --- I8: an offset with seconds is written in UTC ---
-		// Amsterdam's offset was +00:19:32 until 1937 and Monrovia's −00:44:30 until
-		// 1972; "Z07:00" printed +00:19 and −00:44, naming instants 32 s and 30 s away.
-		{"I8 Amsterdam 1930 round-trips", func(t *testing.T) string {
-			return roundTrip(t, instants(t, "Europe/Amsterdam", dtype.Micro, "1929-12-31T23:40:28"))
-		}},
-		{"I8 Monrovia 1970 round-trips", func(t *testing.T) string {
-			return roundTrip(t, instants(t, "Africa/Monrovia", dtype.Micro, "1970-01-01T00:44:30"))
-		}},
-		{"control: Amsterdam 2024 keeps its local text", func(t *testing.T) string {
-			text, err := csvText(t, instants(t, "Europe/Amsterdam", dtype.Micro, "2024-01-01T12:00:00"))
-			// Polars' offset, +0100, since step 354; it was RFC 3339's +01:00.
-			if err != nil || !strings.Contains(text, "2024-01-01T13:00:00.000000+0100") {
-				return fmt.Sprintf("wrote %q, %v", text, err)
-			}
-			return ""
-		}},
-
-		// --- I9 / S25: one float grammar, without underscores or hex ---
-		{"I9 inference of 1_000 and 0x1p3", func(t *testing.T) string {
-			return ioEqual(t, read("a,b\n1_000,0x1p3\n"),
-				ursus.Frame(ursus.Values("a", []string{"1_000"}), ursus.Values("b", []string{"0x1p3"})))
-		}},
-		{"I9 a Float64 schema refuses 1_000", func(t *testing.T) string {
-			return ioRefused(t, read("a\n1_000\n", schema("a", dtype.Float64)), ursus.ErrValue, "1_000")
-		}},
-		{"S25 Cast(String→Float64) refuses 1_000 and 0x1p3", func(t *testing.T) string {
-			for _, s := range []string{"1_000", "0x1p3"} {
-				if w := ioRefused(t, strs("s", []string{s}).Select(c("s").Cast(ursus.Float64)), ursus.ErrValue, s); w != "" {
-					return s + ": " + w
-				}
-			}
-			return ""
-		}},
-		{"S25 CastLossy(String→Float64) of 0x1p3 is null", func(t *testing.T) string {
-			return ioEqual(t, strs("s", []string{"0x1p3"}).Select(c("s").CastLossy(ursus.Float64)),
-				ursus.Frame(ursus.ValuesNullable("s", []float64{0}, []bool{false})))
-		}},
-		{"control: the float grammar's ordinary forms", func(t *testing.T) string {
-			return ioEqual(t, strs("s", []string{"1e3", "+1.5", ".5", "5.", "-inf", "NaN", "-1E-2"}).Select(c("s").Cast(ursus.Float64)),
-				ursus.Frame(ursus.Values("s", []float64{1000, 1.5, 0.5, 5, math.Inf(-1), math.NaN(), -0.01})))
-		}},
-
-		// --- I10: a blank line in a one-column CSV is a null ---
-		{"I10 a blank line in a one-column Int64 CSV", func(t *testing.T) string {
-			return ioEqual(t, read("a\n1\n\n3\n"), ints("a", []int64{1, 0, 3}, true, false, true))
-		}},
-		{"I10 a blank line in a one-column String CSV", func(t *testing.T) string {
-			return ioEqual(t, read("a\nx\n\nz\n"), strs("a", []string{"x", "", "z"}, true, false, true))
-		}},
-		{"I10 a trailing blank line", func(t *testing.T) string {
-			return ioEqual(t, read("a\n1\n2\n\n"), ints("a", []int64{1, 2, 0}, true, true, false))
-		}},
-		{"I10 a blank line in a one-column CSV without a header", func(t *testing.T) string {
-			return ioEqual(t, read("1\n\n3\n", ursus.WithHasHeader(false)),
-				ints("column_1", []int64{1, 0, 3}, true, false, true))
-		}},
-		// A blank line in a two-column CSV was skipped; it is a record of nulls since
-		// step 357, as Polars reads it.
-		{"a blank line in a two-column CSV", func(t *testing.T) string {
-			return ioEqual(t, read("a,b\n1,2\n\n3,4\n"), ursus.Frame(
-				ursus.ValuesNullable("a", []int64{1, 0, 3}, []bool{true, false, true}),
-				ursus.ValuesNullable("b", []int64{2, 0, 4}, []bool{true, false, true})))
-		}},
-
-		// --- I19: Int128 and Decimal, read and parsed exactly ---
-		{"I19 inference of u64::MAX", func(t *testing.T) string {
-			return ioEqual(t, read("a\n18446744073709551615\n"),
-				ursus.Frame(i128Col(t, dtype.Int128, "a", "18446744073709551615")))
-		}},
-		{"I19 inference of 2^63 beside 1", func(t *testing.T) string {
-			return ioEqual(t, read("a\n9223372036854775808\n1\n"),
-				ursus.Frame(i128Col(t, dtype.Int128, "a", "9223372036854775808", "1")))
-		}},
-		{"I19 an Int128 schema", func(t *testing.T) string {
-			return ioEqual(t, read("a\n170141183460469231731687303715884105727\n-5\n", schema("a", dtype.Int128)),
-				ursus.Frame(i128Col(t, dtype.Int128, "a", "170141183460469231731687303715884105727", "-5")))
-		}},
-		{"I19 a Decimal(10, 2) schema rounds half away from zero", func(t *testing.T) string {
-			return ioEqual(t, read("a\n12.34\n1.235\n-1.235\n7\n", schema("a", dtype.Decimal(10, 2))),
-				decimal("a", 2, "1234", "124", "-124", "700"))
-		}},
-		{"I19 a Decimal past its precision is refused", func(t *testing.T) string {
-			return ioRefused(t, read("a\n123456789012\n", schema("a", dtype.Decimal(10, 2))), ursus.ErrValue, "123456789012")
-		}},
-		{"S21 Cast(String→Int128)", func(t *testing.T) string {
-			return ioEqual(t, strs("s", []string{"-170141183460469231731687303715884105728", "42"}).Select(c("s").Cast(ursus.Int128)),
-				ursus.Frame(i128Col(t, dtype.Int128, "s", "-170141183460469231731687303715884105728", "42")))
-		}},
-		{"S21 Cast(String→Decimal(10, 2))", func(t *testing.T) string {
-			return ioEqual(t, strs("s", []string{"1.235", "-0.5"}).Select(c("s").Cast(ursus.Decimal(10, 2))),
-				decimal("s", 2, "124", "-50"))
-		}},
 		{"I19 i128.Parse refuses an overflow", func(t *testing.T) string {
 			for _, s := range []string{"170141183460469231731687303715884105728", "-170141183460469231731687303715884105729",
 				"999999999999999999999999999999999999999999"} {
@@ -229,59 +97,6 @@ func TestIOByHand(t *testing.T) {
 				}
 			}
 			return ""
-		}},
-
-		// --- I21: a float is written so it reads back as a float ---
-		{"I21 a Float64 column round-trips as Float64", func(t *testing.T) string {
-			f := ursus.Frame(ursus.Values("f", []float64{1, 2.5, math.NaN(), math.Inf(1), math.Inf(-1)}))
-			text, err := csvText(t, f)
-			if err != nil {
-				return err.Error()
-			}
-			return ioEqual(t, read(text), f)
-		}},
-		{"I21 an integral Float64 column round-trips as Float64", func(t *testing.T) string {
-			f := ursus.Frame(ursus.Values("f", []float64{1, 2, -3}))
-			text, err := csvText(t, f)
-			if err != nil {
-				return err.Error()
-			}
-			return ioEqual(t, read(text), f)
-		}},
-		{"I21 the writer spells the specials as Polars does", func(t *testing.T) string {
-			text, err := csvText(t, ursus.Frame(ursus.Values("f", []float64{1, math.Inf(1), math.Inf(-1), math.NaN()})))
-			if want := "f\n1.0\ninf\n-inf\nNaN\n"; err != nil || text != want {
-				return fmt.Sprintf("wrote %q, %v; want %q", text, err, want)
-			}
-			return ""
-		}},
-		{"control: a Float32 column round-trips as Float64", func(t *testing.T) string {
-			text, err := csvText(t, ursus.Frame(ursus.Values("h", []float32{1.5, 2})))
-			if err != nil {
-				return err.Error()
-			}
-			return ioEqual(t, read(text), ursus.Frame(ursus.Values("h", []float64{1.5, 2})))
-		}},
-		{"control: a column of only NaN infers String", func(t *testing.T) string {
-			return ioEqual(t, read("a\nNaN\n"), strs("a", []string{"NaN"}))
-		}},
-
-		// --- I27: a null String and an empty one are written and read apart ---
-		// An unquoted empty field is null and a quoted "" is the empty string, as
-		// Polars reads and writes them. DuckDB reads both as null, which keeps the
-		// null and loses the empty string.
-		{"I27 a null String round-trips", func(t *testing.T) string {
-			f := ursus.Frame(ursus.ValuesNullable("s", []string{"", "", "x"}, []bool{true, false, true}),
-				ursus.Values("n", []int64{1, 2, 3}))
-			text, err := csvText(t, f)
-			if err != nil {
-				return err.Error()
-			}
-			return ioEqual(t, read(text), f)
-		}},
-		{"I27 an unquoted empty String field is null", func(t *testing.T) string {
-			return ioEqual(t, read("s,n\n,1\n\"\",2\n"),
-				ursus.Frame(ursus.ValuesNullable("s", []string{"", ""}, []bool{false, true}), ursus.Values("n", []int64{1, 2})))
 		}},
 
 		// --- I22: a frame with rows and no columns is refused by the writers ---
@@ -294,6 +109,8 @@ func TestIOByHand(t *testing.T) {
 			err := ints("a", []int64{1, 2, 3}).Select().WriteParquet(t.Context(), &b)
 			return refusal(nil, err, ursus.ErrValue, "3 rows")
 		}},
+		// Polars 2.1 writes a bare newline for it (the oracle's
+		// i22_no_rows_no_columns_written, a finding); nothing is written here.
 		{"I22 a frame with no rows and no columns writes an empty CSV", func(t *testing.T) string {
 			text, err := csvText(t, ints("a", []int64{1}).Filter(c("a").Gt(9)).Select())
 			if err != nil || text != "" {
