@@ -67,18 +67,45 @@ type oracleColumn struct {
 
 type oracleWant struct {
 	Columns []oracleColumn `json:"columns"`
-	Error   *struct {
-		Polars   string `json:"polars"`   // Polars' exception, its class and first line
-		Contains string `json:"contains"` // what ursus's refusal must name, if anything
+	// Text is a written answer (step 502): a CSV's or an NDJSON's text, or a
+	// dataset's file names, compared byte for byte with what in.written holds.
+	Text  *string `json:"text"`
+	Error *struct {
+		Polars   string        `json:"polars"`   // Polars' exception, its class and first line
+		Contains oraclePhrases `json:"contains"` // what ursus's refusal must name, if anything
 	} `json:"error"`
 }
 
+// oraclePhrases is what a refusal must name: a phrase, "" for none, or (step 502) a
+// list of phrases, each of which it names, the refusal's place beside its reason.
+type oraclePhrases []string
+
+func (p *oraclePhrases) UnmarshalJSON(b []byte) error {
+	var one string
+	if err := json.Unmarshal(b, &one); err == nil {
+		*p = nil
+		if one != "" {
+			*p = oraclePhrases{one}
+		}
+		return nil
+	}
+	var many []string
+	if err := json.Unmarshal(b, &many); err != nil {
+		return fmt.Errorf("contains is neither a phrase nor a list of them: %w", err)
+	}
+	*p = many
+	return nil
+}
+
 // oracleInputs is a case's input frames by name, df the usual one, and its params,
-// an input that is not a frame (step 498: a CSV's text).
+// an input that is not a frame (step 498: a CSV's text; step 502: a file's bytes, a
+// dataset's layout). failed holds a writer's refusal, which the registry cannot
+// return as a frame (in.written).
 type oracleInputs struct {
 	t      *testing.T
 	frames map[string]*ursus.LazyFrame
 	params map[string]any
+	failed *error
 }
 
 func (in oracleInputs) df() *ursus.LazyFrame { return in.frame("df") }
@@ -90,6 +117,48 @@ func (in oracleInputs) text(name string) string {
 		in.t.Fatalf("the case has no text param %q", name)
 	}
 	return v
+}
+
+// bytes is the case's param name as bytes: the param name_b64, base64 where the
+// bytes are not UTF-8 (a CSV read under utf8-lossy), else the text name.
+func (in oracleInputs) bytes(name string) []byte {
+	if v, ok := in.params[name+"_b64"].(string); ok {
+		b, err := base64.StdEncoding.DecodeString(v)
+		if err != nil {
+			in.t.Fatalf("the param %s_b64 is not base64: %v", name, err)
+		}
+		return b
+	}
+	return []byte(in.text(name))
+}
+
+// texts is the case's param name, an object of strings: a dataset's layout, each
+// file's relative path to its text or to the name of the input frame it holds.
+func (in oracleInputs) texts(name string) map[string]string {
+	obj, ok := in.params[name].(map[string]any)
+	if !ok {
+		in.t.Fatalf("the case has no object param %q", name)
+	}
+	out := make(map[string]string, len(obj))
+	for k, v := range obj {
+		s, ok := v.(string)
+		if !ok {
+			in.t.Fatalf("the param %s[%q] is not a string", name, k)
+		}
+		out[k] = s
+	}
+	return out
+}
+
+// written is a writer's answer as the registry's frame: one String column of one
+// row, text, compared byte for byte with the case's text want; a writer's refusal is
+// kept as the query's.
+func (in oracleInputs) written(text string, err error) *ursus.LazyFrame {
+	if err != nil {
+		*in.failed = err
+		return nil
+	}
+	return ursus.Frame(ursus.Values("text", []string{text}))
 }
 
 func (in oracleInputs) frame(name string) *ursus.LazyFrame {
@@ -131,12 +200,14 @@ var oracleGroups = map[string]map[string]oracleQuery{}
 // purpose: cells names the column and row of each value ursus gives instead, in the
 // format's own spelling (a float as a float64 or "NaN", an integer as an int, nil a
 // null); dtypes names a column whose type ursus gives otherwise; names a column ursus
-// names otherwise, the recorded name to ursus's. why cites the doc.
+// names otherwise, the recorded name to ursus's; text is the whole written text
+// ursus gives instead of a text want. why cites the doc.
 type oracleDifference struct {
 	why    string
 	cells  map[string]map[int]any
 	dtypes map[string]string
 	names  map[string]string
+	text   string
 }
 
 // oracleDifferences are the cases, as group/name, where ursus answers otherwise than
@@ -243,22 +314,43 @@ func TestOracle(t *testing.T) {
 // oracleRun asks ursus one case's question and compares with the recorded answer.
 func oracleRun(t *testing.T, tc oracleCase, q oracleQuery, diff oracleDifference) {
 	t.Helper()
-	in := oracleInputs{t: t, frames: map[string]*ursus.LazyFrame{}, params: tc.Params}
+	in := oracleInputs{t: t, frames: map[string]*ursus.LazyFrame{}, params: tc.Params, failed: new(error)}
 	for name, f := range tc.Inputs {
 		in.frames[name] = oracleBuild(t, f.Columns)
 	}
-	got, err := q(in).Collect(t.Context())
+	var got *ursus.DataFrame
+	lf := q(in)
+	err := *in.failed
+	if err == nil {
+		got, err = lf.Collect(t.Context())
+	}
 	if tc.Want.Error != nil {
 		if err == nil {
 			t.Fatalf("answered where Polars refused (%s):\n%v", tc.Want.Error.Polars, got)
 		}
-		if c := tc.Want.Error.Contains; c != "" && !strings.Contains(err.Error(), c) {
-			t.Fatalf("refused with %q, which does not name %q (Polars: %s)", err, c, tc.Want.Error.Polars)
+		for _, c := range tc.Want.Error.Contains {
+			if !strings.Contains(err.Error(), c) {
+				t.Fatalf("refused with %q, which does not name %q (Polars: %s)", err, c, tc.Want.Error.Polars)
+			}
 		}
 		return
 	}
 	if err != nil {
 		t.Fatalf("refused where Polars answers: %v", err)
+	}
+	if tc.Want.Text != nil {
+		want := *tc.Want.Text
+		if diff.text != "" {
+			want = diff.text
+		}
+		cell, err := got.ItemAt(0, "text")
+		if err != nil || got.Height() != 1 || got.Width() != 1 {
+			t.Fatalf("the registry did not answer with in.written: %v, %v", got, err)
+		}
+		if text, _ := cell.(string); text != want {
+			t.Fatalf("wrote\n%q\nwant\n%q", text, want)
+		}
+		return
 	}
 	want, err := oracleBuild(t, oracleDiffer(t, tc.Want.Columns, diff)).Collect(t.Context())
 	if err != nil {

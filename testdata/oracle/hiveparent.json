@@ -1,0 +1,282 @@
+{
+ "cases": [
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "..\\..\\..\\x"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "x",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_value",
+   "order": "rows",
+   "params": {
+    "key": "k"
+   },
+   "want": {
+    "error": {
+     "contains": "'..'",
+     "polars": "ComputeError: provided path 'k=..\\..\\..\\x/00000000.parquet' contained parent dir component '..'"
+    }
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "..\\..\\x",
+       "values": [
+        "v"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "x",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_keys_name",
+   "order": "rows",
+   "params": {
+    "key": "..\\..\\x"
+   },
+   "want": {
+    "error": {
+     "contains": "'..'",
+     "polars": "ComputeError: provided path '..\\..\\x=v/00000000.parquet' contained parent dir component '..'"
+    }
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "y\\..\\.."
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "x",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_value_of_a_second_key",
+   "order": "rows",
+   "params": {
+    "key": "k"
+   },
+   "want": {
+    "error": {
+     "contains": "'..'",
+     "polars": "ComputeError: provided path 'k=y\\..\\../00000000.parquet' contained parent dir component '..'"
+    }
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        "a\\b"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "x",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "a_backslash_written",
+   "note": "one segment: written as it is",
+   "order": "rows",
+   "params": {
+    "key": "k"
+   },
+   "want": {
+    "text": "k=a\\b/00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        ".."
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "x",
+       "values": [
+        0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "dotdot_alone_written",
+   "note": "k=.. is one segment, not a parent directory",
+   "order": "rows",
+   "params": {
+    "key": "k"
+   },
+   "want": {
+    "text": "k=../00000000.parquet"
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "k",
+       "values": [
+        null,
+        "",
+        "\\",
+        "a\\b",
+        "a\\..b",
+        "\\",
+        "x..",
+        "\\",
+        "a\\..b",
+        ".",
+        "a\\..b",
+        "a\\..b",
+        "x",
+        "..x",
+        "a\\..b",
+        "a\\b",
+        "...",
+        "...",
+        "..x",
+        "...",
+        "..x",
+        "\\",
+        "a\\\\b",
+        "...",
+        ".",
+        "...",
+        "..x",
+        "a\\..b",
+        "..x",
+        "a\\..b",
+        "a\\b",
+        "a\\b",
+        "...",
+        ".",
+        ".",
+        "...",
+        "\\",
+        "a\\..b",
+        "x",
+        "x"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "x",
+       "values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39
+       ]
+      }
+     ]
+    }
+   },
+   "name": "segments_gen",
+   "note": "no backslash-split part is '..', so every value is written",
+   "order": "rows",
+   "params": {
+    "key": "k"
+   },
+   "want": {
+    "text": "k=.../00000000.parquet\nk=..x/00000000.parquet\nk=./00000000.parquet\nk=/00000000.parquet\nk=\\/00000000.parquet\nk=__HIVE_DEFAULT_PARTITION__/00000000.parquet\nk=a\\..b/00000000.parquet\nk=a\\\\b/00000000.parquet\nk=a\\b/00000000.parquet\nk=x../00000000.parquet\nk=x/00000000.parquet"
+   }
+  }
+ ],
+ "generator": "bench/scripts/oracle/hiveparent.py",
+ "polars": "2.1.0"
+}
