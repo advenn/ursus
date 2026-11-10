@@ -2,11 +2,19 @@ package ursus_test
 
 import (
 	"math"
+	"math/big"
 	"strings"
 	"testing"
 
 	"github.com/advenn/ursus"
 )
+
+// M1 of v0.6.6-scope.md (steps 276 and 277): skew and kurtosis, the bitwise and small
+// aggregates, entropy, mode and Spearman's correlation. Their answers are Polars
+// 2.1.0's since step 500, recorded in the aggstats group of testdata/oracle and
+// spelled in oracle_aggstats_test.go, which took this file's tables. What stays
+// asserts the refusals, the four-thread merge, and holds to an exact big.Float the
+// moments of large values close together, which Polars 2.1 loses digits of.
 
 // statsFrame is Polars' frame: g [1, 1, 1, 1, 2, 2, 3], x [1, 2, 4, None, 3, 3, 5],
 // i [6, 3, 5, None, 12, 10, 7] and y [2, 1, 5, 7, None, 2, 1].
@@ -38,66 +46,59 @@ func nearFloats(got, want []float64) bool {
 	return true
 }
 
-// TestSkewAndKurtosis is M1 of v0.6.6-scope.md (step 276). Every answer is Polars
-// 1.44.1's, to a relative 1e-12: Polars computes the moments in two passes, ursus
-// online. A null and a NaN are both NaN to floatsOf, so the nulls are checked apart.
+// exactMoments is the biased skew and Pearson's kurtosis of xs in exact rationals,
+// rounded once from a 256-bit float: m3 / m2^1.5 and m4 / m2^2 about the exact mean.
+func exactMoments(xs []float64) (skew, kurtosis float64) {
+	n := big.NewRat(int64(len(xs)), 1)
+	sum := new(big.Rat)
+	for _, x := range xs {
+		sum.Add(sum, new(big.Rat).SetFloat64(x))
+	}
+	mean := new(big.Rat).Quo(sum, n)
+	m2, m3, m4 := new(big.Rat), new(big.Rat), new(big.Rat)
+	for _, x := range xs {
+		d := new(big.Rat).Sub(new(big.Rat).SetFloat64(x), mean)
+		d2 := new(big.Rat).Mul(d, d)
+		m2.Add(m2, d2)
+		m3.Add(m3, new(big.Rat).Mul(d2, d))
+		m4.Add(m4, new(big.Rat).Mul(d2, d2))
+	}
+	m2.Quo(m2, n)
+	m3.Quo(m3, n)
+	m4.Quo(m4, n)
+	f := func(r *big.Rat) *big.Float { return new(big.Float).SetPrec(256).SetRat(r) }
+	root := new(big.Float).SetPrec(256).Sqrt(f(m2))
+	skew, _ = new(big.Float).Quo(f(m3), new(big.Float).Mul(f(m2), root)).Float64()
+	kurtosis, _ = new(big.Float).Quo(f(m4), new(big.Float).Mul(f(m2), f(m2))).Float64()
+	return skew, kurtosis
+}
+
+// TestSkewAndKurtosis holds the moments of large values close together to their exact
+// rationals: 1e9+1, 1e9+2 and 1e9+4, whose skew is [1, 2, 4]'s, and two thousand values
+// near 1e9, where an unshifted running mean rounds and the skew is wrong in its ninth
+// digit; Polars 2.1 answers the first 0.38180167858053743 against 0.38180177416060623,
+// its float mean at 1e9 having lost seven digits. Then the merge of partial groups,
+// as a parallel group-by merges them, and the refusal of text.
 func TestSkewAndKurtosis(t *testing.T) {
 	c := ursus.Col
 	x := c("x")
-	lf := statsFrame()
-	byG := func(e ursus.Expr) *ursus.LazyFrame {
-		return lf.GroupBy(c("g")).Agg(e).Sort(ursus.Asc(c("g"))).Select(c("x"))
-	}
-	nan := math.NaN()
-	for _, tc := range []struct {
-		name   string
-		e      ursus.Expr
-		all    float64
-		groups []float64
-	}{
-		{"skew", x.Skew(true), 0, []float64{0.38180177416060623, nan, nan}},
-		{"skew, unbiased", x.Skew(false), 0, []float64{0.9352195295828243, nan, nan}},
-		{"kurtosis", x.Kurtosis(true, true), -0.96, []float64{-1.4999999999999996, nan, nan}},
-		{"kurtosis, Pearson's", x.Kurtosis(false, true), 2.04, []float64{1.5000000000000004, nan, nan}},
-		{"kurtosis, unbiased", x.Kurtosis(true, false), -0.29999999999999893, []float64{nan, nan, nan}},
-	} {
-		if got := floatsOf(t, lf.Select(tc.e)); !nearFloats(got, []float64{tc.all}) {
-			t.Errorf("%s: got %v, want %v", tc.name, got, tc.all)
-		}
-		if got := floatsOf(t, byG(tc.e)); !nearFloats(got, tc.groups) {
-			t.Errorf("%s by g: got %v, want %v", tc.name, got, tc.groups)
-		}
-	}
-	// Polars' nulls: the unbiased skew below 3 values, the unbiased kurtosis below 4.
-	nulls := byG(x.Skew(false).IsNull().Alias("x"))
-	if got := csvOf(t, nulls); got != "x\nfalse\ntrue\ntrue\n" {
-		t.Errorf("unbiased skew's nulls: %q", got)
-	}
-	if got := csvOf(t, byG(x.Kurtosis(true, false).IsNull().Alias("x"))); got != "x\ntrue\ntrue\ntrue\n" {
-		t.Errorf("unbiased kurtosis's nulls: %q", got)
-	}
-	if got := csvOf(t, byG(x.Skew(true).IsNull().Alias("x"))); got != "x\nfalse\nfalse\nfalse\n" {
-		t.Errorf("skew of one value is NaN, not null: %q", got)
-	}
-	if got := floatsOf(t, lf.Select(c("i").Skew(true))); !nearFloats(got, []float64{0.31101699785880416}) {
-		t.Errorf("skew of integers: %v", got)
-	}
-	// Large values close together: the shift keeps their spread's digits.
-	near := ursus.Frame(ursus.Values("x", []float64{1e9 + 1, 1e9 + 2, 1e9 + 4}))
-	if got := floatsOf(t, near.Select(x.Skew(true))); !nearFloats(got, []float64{0.38180177416060623}) {
-		t.Errorf("skew of 1e9+1, 1e9+2, 1e9+4: %v", got)
-	}
-	// Two thousand values near 1e9: unshifted, the running mean rounds and the skew is
-	// wrong in its ninth digit. The answers are the exact ones, in rationals.
 	far := make([]float64, 2000)
 	for i := range far {
 		far[i] = 1e9 + float64((i*i)%7) + float64(i%3)/4
 	}
-	if got := floatsOf(t, ursus.Frame(ursus.Values("x", far)).Select(x.Skew(true))); !nearFloats(got, []float64{0.2941145619267025}) {
-		t.Errorf("skew near 1e9: %v", got)
-	}
-	if got := floatsOf(t, ursus.Frame(ursus.Values("x", far)).Select(x.Kurtosis(false, true))); !nearFloats(got, []float64{1.8354638681151405}) {
-		t.Errorf("kurtosis near 1e9: %v", got)
+	for name, vals := range map[string][]float64{
+		"1e9+1, 1e9+2, 1e9+4":   {1e9 + 1, 1e9 + 2, 1e9 + 4},
+		"two thousand near 1e9": far,
+	} {
+		skew, kurtosis := exactMoments(vals)
+		got := floatsOf(t, ursus.Frame(ursus.Values("x", vals)).Select(x.Skew(true)))
+		if !nearFloats(got, []float64{skew}) {
+			t.Errorf("skew of %s: %v, want the exact %v", name, got, skew)
+		}
+		got = floatsOf(t, ursus.Frame(ursus.Values("x", vals)).Select(x.Kurtosis(false, true)))
+		if !nearFloats(got, []float64{kurtosis}) {
+			t.Errorf("kurtosis of %s: %v, want the exact %v", name, got, kurtosis)
+		}
 	}
 	// Merged from partial groups as a parallel group-by merges them.
 	many := make([]float64, 4000)
@@ -117,84 +118,16 @@ func TestSkewAndKurtosis(t *testing.T) {
 	if one.String() != four.String() {
 		t.Errorf("one thread and four disagree:\n%s\n%s", one, four)
 	}
-	// All null, and NaN.
-	null := ursus.Frame(ursus.ValuesNullable("x", []float64{0, 0}, []bool{false, false}))
-	if got := csvOf(t, null.Select(x.Skew(true), x.Kurtosis(true, true).Alias("k"))); got != "x,k\n,\n" {
-		t.Errorf("all null: %q", got)
-	}
-	withNaN := ursus.Frame(ursus.Values("x", []float64{1, math.NaN(), 3}))
-	if got := floatsOf(t, withNaN.Select(x.Skew(true))); !math.IsNaN(got[0]) {
-		t.Errorf("NaN: %v", got)
-	}
-	if _, err := lf.Select(c("g").Cast(ursus.String).Skew(true)).Collect(t.Context()); err == nil ||
+	if _, err := statsFrame().Select(c("g").Cast(ursus.String).Skew(true)).Collect(t.Context()); err == nil ||
 		!strings.Contains(err.Error(), "numeric") {
 		t.Errorf("of text: %v", err)
 	}
 }
 
-// TestBitwiseAndSmallAggregates: the bitwise reductions, has_nulls, is_empty,
-// nan_min and nan_max, approx_n_unique and dot. Every answer is Polars 1.44.1's.
+// TestBitwiseAndSmallAggregates: the bitwise reductions refuse a float and an Int128.
 func TestBitwiseAndSmallAggregates(t *testing.T) {
 	c := ursus.Col
 	lf := statsFrame()
-	byG := func(e ursus.Expr) *ursus.LazyFrame {
-		return lf.GroupBy(c("g")).Agg(e.Alias("r")).Sort(ursus.Asc(c("g"))).Select(c("r"))
-	}
-	for _, tc := range []struct {
-		name        string
-		e           ursus.Expr
-		all, groups string
-	}{
-		{"bitwise_and", c("i").BitwiseAnd(), "0", "0\n8\n7"},
-		{"bitwise_or", c("i").BitwiseOr(), "15", "7\n14\n7"},
-		{"bitwise_xor", c("i").BitwiseXor(), "1", "0\n6\n7"},
-		{"has_nulls", c("x").HasNulls(), "true", "true\nfalse\nfalse"},
-		{"is_empty", c("x").IsEmpty(), "false", "false\nfalse\nfalse"},
-		{"nan_min", c("x").NanMin(), "1.0", "1.0\n3.0\n5.0"},
-		{"approx_n_unique", c("i").ApproxNUnique(), "7", "4\n2\n1"},
-		{"dot", c("x").Dot(c("y")), "35.0", "24.0\n6.0\n5.0"},
-	} {
-		if got, want := csvOf(t, lf.Select(tc.e.Alias("r"))), "r\n"+tc.all+"\n"; got != want {
-			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, want)
-		}
-		if got, want := csvOf(t, byG(tc.e)), "r\n"+tc.groups+"\n"; got != want {
-			t.Errorf("%s by g:\ngot  %q\nwant %q", tc.name, got, want)
-		}
-	}
-	// Booleans, the input's integer type, nulls alone, an empty frame, NaN.
-	b := ursus.Frame(ursus.ValuesNullable("b", []bool{true, false, true, false}, []bool{true, true, true, false}))
-	if got := csvOf(t, b.Select(c("b").BitwiseAnd().Alias("a"), c("b").BitwiseOr().Alias("o"),
-		c("b").BitwiseXor().Alias("x"))); got != "a,o,x\nfalse,true,false\n" {
-		t.Errorf("Booleans: %q", got)
-	}
-	small := ursus.Frame(ursus.Values("v", []int64{1, 2, 3})).Select(c("v").Cast(ursus.Int8).Alias("a"),
-		c("v").Cast(ursus.Uint16).Alias("u"))
-	got, err := small.Select(c("a").BitwiseOr(), c("u").BitwiseXor()).Collect(t.Context())
-	if err != nil || got.Schema().Field(0).Type != ursus.Int8 || got.Schema().Field(1).Type != ursus.Uint16 {
-		t.Errorf("the input's type: %v, %v", got, err)
-	}
-	if got := csvOf(t, small.Select(c("a").BitwiseAnd().Alias("neg"))); got != "neg\n0\n" {
-		t.Errorf("Int8: %q", got)
-	}
-	nulls := ursus.Frame(ursus.ValuesNullable("i", []int64{0, 0}, []bool{false, false}))
-	if got := csvOf(t, nulls.Select(c("i").BitwiseAnd().Alias("a"), c("i").HasNulls().Alias("h"),
-		c("i").ApproxNUnique().Alias("n"), c("i").IsEmpty().Alias("e"))); got != "a,h,n,e\n,true,1,false\n" {
-		t.Errorf("all null: %q", got)
-	}
-	empty := ursus.Frame(ursus.Values("i", []int64{})).Filter(c("i").Gt(0))
-	if got := csvOf(t, empty.Select(c("i").BitwiseOr().Alias("o"), c("i").IsEmpty().Alias("e"),
-		c("i").ApproxNUnique().Alias("n"))); got != "o,e,n\n,true,0\n" {
-		t.Errorf("no rows: %q", got)
-	}
-	nan := ursus.Frame(ursus.Values("x", []float64{1, math.NaN(), 3}))
-	if got := csvOf(t, nan.Select(c("x").NanMin().Alias("nmin"), c("x").Min().Alias("min"),
-		c("x").NanMax().Alias("nmax"))); got != "nmin,min,nmax\nNaN,1.0,NaN\n" {
-		t.Errorf("NaN: %q", got)
-	}
-	ints := ursus.Frame(ursus.Values("a", []int64{1, 2}), ursus.Values("b", []int64{3, 4}))
-	if got := csvOf(t, ints.Select(c("a").Dot(c("b")))); got != "a\n11\n" {
-		t.Errorf("an integer dot: %q", got)
-	}
 	for name, e := range map[string]ursus.Expr{
 		"a float's bits": c("x").BitwiseAnd(),
 		"an Int128's":    c("i").Cast(ursus.Int128).BitwiseOr(),
@@ -205,105 +138,10 @@ func TestBitwiseAndSmallAggregates(t *testing.T) {
 	}
 }
 
-// TestEntropyModeSpearman is M1's second half (step 277): entropy, mode and
-// Spearman's correlation. Every answer is Polars 1.44.1's, the floats to a relative
-// 1e-12, but where noted.
+// TestEntropyModeSpearman: the refusals of M1's second half (step 277).
 func TestEntropyModeSpearman(t *testing.T) {
 	c := ursus.Col
-	x := c("x")
 	lf := statsFrame()
-	byG := func(e ursus.Expr) *ursus.LazyFrame {
-		return lf.GroupBy(c("g")).Agg(e.Alias("r")).Sort(ursus.Asc(c("g"))).Select(c("r"))
-	}
-	nan := math.NaN()
-	for _, tc := range []struct {
-		name   string
-		e      ursus.Expr
-		all    float64
-		groups []float64
-	}{
-		{"entropy", x.Entropy(math.E, true), 1.6920198079084638, []float64{0.9556998911125343, 0.6931471805599453, 0}},
-		{"entropy in bits", x.Entropy(2, true), 2.4410685859554375, []float64{1.3787834934861756, 1, 0}},
-		// Polars gives a one-value group's raw entropy as 0.0, where −5·ln 5 is −8.05;
-		// over the frame it is −Σ x·ln x, as here.
-		{"entropy, raw", x.Entropy(math.E, false), -21.570335099778614,
-			[]float64{-6.931471805599453, -6.591673732008658, -5 * math.Log(5)}},
-		{"spearman", ursus.CorrSpearman(x, c("y")), -0.05270462766947299, []float64{0.5, nan, nan}},
-	} {
-		if got := floatsOf(t, lf.Select(tc.e.Alias("r"))); !nearFloats(got, []float64{tc.all}) {
-			t.Errorf("%s: got %v, want %v", tc.name, got, tc.all)
-		}
-		if got := floatsOf(t, byG(tc.e)); !nearFloats(got, tc.groups) {
-			t.Errorf("%s by g: got %v, want %v", tc.name, got, tc.groups)
-		}
-	}
-	for _, tc := range []struct {
-		name string
-		q    *ursus.LazyFrame
-		want float64
-	}{
-		{"entropy of integers", lf.Select(c("i").Entropy(math.E, true)), 1.7016725572208458},
-		{"entropy of a zero", ursus.Frame(ursus.Values("x", []float64{0, 1, 3})).Select(x.Entropy(math.E, true)), nan},
-		{"entropy of a negative", ursus.Frame(ursus.Values("x", []float64{-1, 1, 3})).Select(x.Entropy(math.E, true)), nan},
-		{"entropy in base 1", lf.Select(x.Entropy(1, true)), math.Inf(1)},
-		{"spearman of ties", ursus.Frame(ursus.Values("a", []int64{1, 1, 2, 3, 3, 3}), ursus.Values("b", []int64{5, 6, 6, 7, 1, 1})).
-			Select(ursus.CorrSpearman(c("a"), c("b"))), -0.23836564731139806},
-		{"spearman of integers", ursus.Frame(ursus.Values("a", []int64{1, 2, 3, 4}), ursus.Values("b", []int64{1, 3, 2, 4})).
-			Select(ursus.CorrSpearman(c("a"), c("b"))), 0.8},
-		{"spearman of a constant", ursus.Frame(ursus.Values("a", []int64{1, 1, 1}), ursus.Values("b", []int64{1, 3, 2})).
-			Select(ursus.CorrSpearman(c("a"), c("b"))), nan},
-		// NaN ranks above every number.
-		{"spearman of a NaN", ursus.Frame(ursus.Values("a", []float64{1, nan, 2, 3}), ursus.Values("b", []float64{5, 6, 1, 7})).
-			Select(ursus.CorrSpearman(c("a"), c("b"))), 0.6},
-		{"spearman past nulls", ursus.Frame(ursus.ValuesNullable("a", []float64{1, 0, 2, 3}, []bool{true, false, true, true}),
-			ursus.ValuesNullable("b", []float64{5, 6, 0, 7}, []bool{true, true, false, true})).
-			Select(ursus.CorrSpearman(c("a"), c("b"))), 1},
-	} {
-		got := floatsOf(t, tc.q)
-		if len(got) != 1 || !(math.IsInf(tc.want, 1) && math.IsInf(got[0], 1) || nearFloats(got, []float64{tc.want})) {
-			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
-		}
-	}
-	got, err := lf.Select(x.Cast(ursus.Float32).Entropy(2, true)).Collect(t.Context())
-	if err != nil || got.Schema().Field(0).Type != ursus.Float32 {
-		t.Errorf("a Float32's entropy: %v, %v", got, err)
-	}
-	// ursus's rule: a group of no value is null; Polars' entropy of none is −0.
-	null := ursus.Frame(ursus.ValuesNullable("x", []float64{0, 0}, []bool{false, false}))
-	if got := csvOf(t, null.Select(x.Entropy(math.E, true))); got != "x\n\n" {
-		t.Errorf("entropy of none: %q", got)
-	}
-
-	// Mode: in a Select a column of its own length, sorted, or in first-seen order.
-	text := func(e ursus.Expr) ursus.Expr {
-		return e.Cast(ursus.String).FillNullWith("null")
-	}
-	for _, tc := range []struct {
-		name string
-		q    *ursus.LazyFrame
-		want string
-	}{
-		{"mode", lf.Select(x.Mode(false)), "x\n3.0\n"},
-		{"ties, sorted", ursus.Frame(ursus.Values("a", []int64{3, 1, 3, 1, 2})).Select(c("a").Mode(false)), "a\n1\n3\n"},
-		{"ties, as they come", ursus.Frame(ursus.Values("a", []int64{3, 1, 3, 1, 2})).Select(c("a").Mode(true)), "a\n3\n1\n"},
-		{"a null among them", ursus.Frame(ursus.ValuesNullable("a", []string{"b", "a", "b", "", ""}, []bool{true, true, true, false, false})).
-			Select(text(c("a").Mode(false))), "a\nnull\nb\n"},
-		{"NaN", ursus.Frame(ursus.Values("a", []float64{1, nan, nan})).Select(c("a").Mode(false)), "a\nNaN\n"},
-		{"zero and minus zero", ursus.Frame(ursus.Values("a", []float64{0, math.Copysign(0, -1), 1})).Select(c("a").Mode(false)), "a\n0.0\n"},
-		{"Booleans", ursus.Frame(ursus.Values("a", []bool{true, false, true})).Select(c("a").Mode(false)), "a\ntrue\n"},
-		{"no rows", ursus.Frame(ursus.Values("a", []int64{1})).Filter(c("a").Gt(5)).Select(c("a").Mode(false)), "a\n"},
-		{"its length", lf.Select(x.Mode(false).Len()), "x\n1\n"},
-		// A group's modes, a list: Polars' in first-seen order with maintain_order.
-		{"by g, as they come", lf.GroupBy(c("g")).Agg(c("i").Mode(true).List().Eval(text(ursus.Element())).List().Join("|")).
-			Sort(ursus.Asc(c("g"))).Select(c("i")), "i\n6|3|5|null\n12|10\n7\n"},
-		// Without it Polars' order is its hash table's, [1.0, 4.0, None, 2.0]; sorted here.
-		{"by g, sorted", lf.GroupBy(c("g")).Agg(x.Mode(false).List().Eval(text(ursus.Element())).List().Join("|")).
-			Sort(ursus.Asc(c("g"))).Select(c("x")), "x\nnull|1.0|2.0|4.0\n3.0\n5.0\n"},
-	} {
-		if got := csvOf(t, tc.q); got != tc.want {
-			t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.want)
-		}
-	}
 	for name, tc := range map[string]struct {
 		q    *ursus.LazyFrame
 		want string
@@ -311,7 +149,7 @@ func TestEntropyModeSpearman(t *testing.T) {
 		// Polars: "length 1 doesn't match the DataFrame height of 3".
 		"mode beside a column": {ursus.Frame(ursus.Values("a", []int64{3, 1, 3})).Select(c("a"), c("a").Mode(false).Alias("m")), "length"},
 		"entropy of Booleans":  {ursus.Frame(ursus.Values("b", []bool{true})).Select(c("b").Entropy(2, true)), "numeric"},
-		"spearman of text":     {lf.Select(ursus.CorrSpearman(c("g").Cast(ursus.String), x)), "numeric"},
+		"spearman of text":     {lf.Select(ursus.CorrSpearman(c("g").Cast(ursus.String), c("x"))), "numeric"},
 	} {
 		if _, err := tc.q.Collect(t.Context()); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: got %v, want an error naming %q", name, err, tc.want)

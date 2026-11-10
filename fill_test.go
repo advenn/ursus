@@ -2,8 +2,6 @@ package ursus_test
 
 import (
 	"errors"
-	"math"
-	"slices"
 	"strings"
 	"testing"
 
@@ -15,6 +13,12 @@ import (
 func nullable[T ursus.Literal](name string, vals []T, ok []bool) *ursus.Column {
 	return ursus.ValuesNullable(name, vals, ok)
 }
+
+// The fills' values are the fill group's, Polars 2.1.0's (oracle_fill_test.go): a
+// literal's fill, fill_nan, the forward and backward fills and their limits, the
+// strategies, a frame's fill_null, clip, is_close, diff and pct_change. What stays
+// here is what the weak-literal machinery promises of types and plans, and the
+// differentials.
 
 // TestWeakLiteralsDoNotWiden is the point of the weak-literal machinery.
 //
@@ -51,19 +55,6 @@ func TestWeakLiteralsDoNotWiden(t *testing.T) {
 	if s.Field(2).Type != ursus.Uint64 {
 		t.Errorf("u64 fill produced %s; ordinary promotion would give Int128",
 			s.Field(2).Type)
-	}
-
-	// And the values are right, not merely the types.
-	df, err := f.Select(ursus.Col("i32").FillNullWith(-1).Alias("v")).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, _, _ := df.At[int32](0, "v"); got != -1 {
-		t.Errorf("filled value = %d, want -1", got)
-	}
-	if got, _, _ := df.At[int32](1, "v"); got != 3 {
-		t.Errorf("unfilled value = %d, want 3", got)
 	}
 }
 
@@ -103,7 +94,9 @@ func TestStrongLiteralsStillWiden(t *testing.T) {
 
 // TestWeakLiteralThatDoesNotFit: falling back is right, truncating is not.
 // int8(5000) is -120, which is the silent wrong answer this whole mechanism
-// exists to avoid.
+// exists to avoid. Polars 2.1 widens to the narrowest type that holds the literal, an
+// Int16, where ursus falls back to Int64: the fill group's fill_past_the_type records
+// Polars' answer as a finding, so fill.go's rule is pinned here.
 func TestWeakLiteralThatDoesNotFit(t *testing.T) {
 	f := ursus.Frame(
 		nullable("i8", []int8{0, 3}, []bool{false, true}),
@@ -151,6 +144,7 @@ func TestWeakAndStrongDoNotShareATemporary(t *testing.T) {
 		t.Fatalf("weak=%s strong=%s, want Int32 and Int64 — they collapsed into one "+
 			"temporary", w.Type, s.Type)
 	}
+	// Both are the group's own maximum, 7, whatever the type.
 	if a, _, _ := df.At[int32](0, "weak"); a != 7 {
 		t.Errorf("weak max = %d, want 7", a)
 	}
@@ -171,78 +165,13 @@ func TestWeakAndStrongDoNotShareATemporary(t *testing.T) {
 	}
 }
 
-// TestFillNanLeavesNullsAlone pins the thing that looks accidental: IsNotNan on a
-// null row is NULL, and a null mask takes NEITHER branch, so a null keeps its null
-// and the fill value never lands on it.
-func TestFillNanLeavesNullsAlone(t *testing.T) {
-	f := ursus.Frame(nullable("f", []float64{1, 0, 0}, []bool{true, true, false}))
-	df, err := f.Select(
-		// 0/0 is NaN, which is a value; the third row is null, which is not.
-		ursus.Col("f").Div(ursus.Col("f")).FillNan(-1.0).Alias("v"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, _, _ := df.At[float64](0, "v"); got != 1 {
-		t.Errorf("row 0 = %v, want 1", got)
-	}
-	if got, _, _ := df.At[float64](1, "v"); got != -1 {
-		t.Errorf("row 1 (NaN) = %v, want -1", got)
-	}
-	if _, ok, _ := df.At[float64](2, "v"); ok {
-		t.Error("row 2 was null and must stay null; FillNan must not touch it")
-	}
-}
-
-// TestForwardAndBackwardFill, including the limit and the leading-null case.
-func TestForwardAndBackwardFill(t *testing.T) {
-	f := ursus.Frame(nullable("v",
-		[]int64{0, 1, 0, 0, 4, 0},
-		[]bool{false, true, false, false, true, false}))
-
-	df, err := f.Select(
-		ursus.Col("v").ForwardFill(0).Alias("ff"),
-		ursus.Col("v").ForwardFill(1).Alias("ff1"),
-		ursus.Col("v").BackwardFill(0).Alias("bf"),
-		ursus.Col("v").FillNull(ursus.FillForward).Alias("strategy"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	read := func(col string) []string {
-		out := make([]string, df.Height())
-		for i := range out {
-			if v, ok, _ := df.At[int64](i, col); ok {
-				out[i] = string(rune('0' + v))
-			} else {
-				out[i] = "-"
-			}
-		}
-		return out
-	}
-	// A leading run of nulls has nothing to carry, so it stays null.
-	if got, want := read("ff"), []string{"-", "1", "1", "1", "4", "4"}; !slices.Equal(got, want) {
-		t.Errorf("forward fill = %v, want %v", got, want)
-	}
-	// The limit stops the carry after one row.
-	if got, want := read("ff1"), []string{"-", "1", "1", "-", "4", "4"}; !slices.Equal(got, want) {
-		t.Errorf("forward fill limit 1 = %v, want %v", got, want)
-	}
-	if got, want := read("bf"), []string{"1", "1", "4", "4", "4", "-"}; !slices.Equal(got, want) {
-		t.Errorf("backward fill = %v, want %v", got, want)
-	}
-	if got, want := read("strategy"), read("ff"); !slices.Equal(got, want) {
-		t.Errorf("FillForward = %v, want the same as ForwardFill(0) %v", got, want)
-	}
-}
-
 // TestForwardFillLimitsAreNotCollapsed is the WinParams.args pin.
 //
 // Without an args case the limit lives nowhere in the rendering, so ForwardFill(1)
 // and ForwardFill(3) become one string, share one window temporary, and one
-// silently returns the other's answer. That is the third occurrence of this exact
-// shape — the quantile parameters in step 7, the partition keys in step 8.
+// silently returns the other's answer (the fill group's forward_fill_limits_1_and_3
+// holds the two answers). That is the third occurrence of this exact shape — the
+// quantile parameters in step 7, the partition keys in step 8.
 func TestForwardFillLimitsAreNotCollapsed(t *testing.T) {
 	f := ursus.Frame(nullable("v",
 		[]int64{0, 1, 0, 0, 0, 0},
@@ -257,21 +186,6 @@ func TestForwardFillLimitsAreNotCollapsed(t *testing.T) {
 	}
 	if !strings.Contains(pl, "forward_fill(1)") || !strings.Contains(pl, "forward_fill(3)") {
 		t.Fatalf("the limit must appear in the rendering:\n%s", pl)
-	}
-
-	df, err := f.Select(
-		ursus.Col("v").ForwardFill(1).Alias("a"),
-		ursus.Col("v").ForwardFill(3).Alias("b"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Row 3 is two nulls past the value: limit 1 gives up, limit 3 does not.
-	if _, ok, _ := df.At[int64](3, "a"); ok {
-		t.Error("limit 1 filled a row two nulls past the last value")
-	}
-	if v, ok, _ := df.At[int64](3, "b"); !ok || v != 1 {
-		t.Errorf("limit 3 row 3 = %v ok=%v, want 1 — the two limits collapsed", v, ok)
 	}
 }
 
@@ -325,11 +239,13 @@ func TestKeylessWindowMatchesGlobalAggregate(t *testing.T) {
 	}
 }
 
-// TestFillStrategies checks all seven against hand-computed answers.
+// TestFillStrategies: the seven strategies' types. The type is preserved for six;
+// only the mean widens, to Float64 (the fill group's fill_strategy_mean records
+// Polars 2.1 keeping the integer type, a finding).
 func TestFillStrategies(t *testing.T) {
 	f := ursus.Frame(nullable("v", []int32{0, 2, 0, 8}, []bool{false, true, false, true}))
 
-	df, err := f.Select(
+	s, err := f.Select(
 		ursus.Col("v").FillNull(ursus.FillZero).Alias("zero"),
 		ursus.Col("v").FillNull(ursus.FillOne).Alias("one"),
 		ursus.Col("v").FillNull(ursus.FillForward).Alias("fwd"),
@@ -337,70 +253,35 @@ func TestFillStrategies(t *testing.T) {
 		ursus.Col("v").FillNull(ursus.FillMin).Alias("min"),
 		ursus.Col("v").FillNull(ursus.FillMax).Alias("max"),
 		ursus.Col("v").FillNull(ursus.FillMean).Alias("mean"),
-	).Collect(t.Context(), ursus.WithVerify())
+	).CollectSchema(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	want := map[string][]int32{
-		"zero": {0, 2, 0, 8},
-		"one":  {1, 2, 1, 8},
-		"fwd":  {0, 2, 2, 8}, // row 0 has nothing to carry — checked as null below
-		"bwd":  {2, 2, 8, 8},
-		"min":  {2, 2, 2, 8},
-		"max":  {8, 2, 8, 8},
-	}
-	for col, vals := range want {
-		// The type is preserved for all six; only the mean widens.
-		fl, _ := df.Schema().ByName(col)
-		if fl.Type != ursus.Int32 {
+	for _, col := range []string{"zero", "one", "fwd", "bwd", "min", "max"} {
+		if fl, _ := s.ByName(col); fl.Type != ursus.Int32 {
 			t.Errorf("%s is %s, want Int32", col, fl.Type)
 		}
-		for i, w := range vals {
-			got, ok, _ := df.At[int32](i, col)
-			if col == "fwd" && i == 0 {
-				if ok {
-					t.Errorf("fwd row 0 = %d; a leading null has nothing to carry", got)
-				}
-				continue
-			}
-			if !ok || got != w {
-				t.Errorf("%s row %d = %d ok=%v, want %d", col, i, got, ok, w)
-			}
-		}
 	}
-	// A mean is a float even over an integer column.
-	if fl, _ := df.Schema().ByName("mean"); fl.Type != ursus.Float64 {
+	if fl, _ := s.ByName("mean"); fl.Type != ursus.Float64 {
 		t.Errorf("mean is %s, want Float64", fl.Type)
-	}
-	if got, _, _ := df.At[float64](0, "mean"); got != 5 {
-		t.Errorf("mean fill = %v, want 5", got)
 	}
 }
 
 // TestFrameFillNullRestrictsColumns: the no-subset form fills what the value can
-// fill, and Explain shows which columns those were rather than skipping silently.
+// fill (the fill group's frame_fill_null_0 holds the cells), and Explain shows which
+// columns those were rather than skipping silently.
 func TestFrameFillNullRestrictsColumns(t *testing.T) {
 	f := ursus.Frame(
 		nullable("i", []int32{0, 2}, []bool{false, true}),
 		nullable("f", []float64{0, 1.5}, []bool{false, true}),
 		nullable("s", []string{"", "b"}, []bool{false, true}),
 	)
-	df, err := f.FillNull(0).Collect(t.Context(), ursus.WithVerify())
+	// The types are unchanged, which is what the weak literal buys at frame level.
+	s, err := f.FillNull(0).CollectSchema(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _, _ := df.At[int32](0, "i"); got != 0 {
-		t.Errorf("i row 0 = %d, want 0", got)
-	}
-	if got, _, _ := df.At[float64](0, "f"); got != 0 {
-		t.Errorf("f row 0 = %v, want 0", got)
-	}
-	if _, ok, _ := df.At[string](0, "s"); ok {
-		t.Error("the String column must be left alone by an integer fill")
-	}
-	// The types are unchanged, which is what the weak literal buys at frame level.
-	if fl, _ := df.Schema().ByName("i"); fl.Type != ursus.Int32 {
+	if fl, _ := s.ByName("i"); fl.Type != ursus.Int32 {
 		t.Errorf("i became %s", fl.Type)
 	}
 
@@ -418,107 +299,10 @@ func TestFrameFillNullRestrictsColumns(t *testing.T) {
 	}
 }
 
-// TestClipSemantics: each edge case falls out of the conditional rather than being
-// coded, so each is worth pinning.
-func TestClipSemantics(t *testing.T) {
-	f := ursus.Frame(nullable("v",
-		[]float64{-5, 0, 5, 50, math.NaN()},
-		[]bool{true, true, true, true, true}))
-	df, err := f.Select(ursus.Col("v").Clip(0.0, 10.0).Alias("c")).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, want := range []float64{0, 0, 5, 10, math.NaN()} {
-		got, ok, _ := df.At[float64](i, "c")
-		if !ok {
-			t.Fatalf("row %d is null", i)
-		}
-		if math.Float64bits(got) != math.Float64bits(want) {
-			t.Errorf("clip row %d = %v, want %v", i, got, want)
-		}
-	}
-
-	// A null value clips to null: the comparisons are null, so it falls to Otherwise,
-	// the value itself.
-	g := ursus.Frame(nullable("v", []float64{0}, []bool{false}))
-	d2, err := g.Select(ursus.Col("v").Clip(0.0, 10.0).Alias("c")).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok, _ := d2.At[float64](0, "c"); ok {
-		t.Error("clipping a null must give null")
-	}
-
-	// Expr-valued bounds, which is what makes this sugar rather than a Call.
-	h := ursus.Frame(
-		ursus.Values("v", []int64{5, 5}),
-		ursus.Values("lo", []int64{0, 6}),
-		ursus.Values("hi", []int64{10, 10}),
-	)
-	d3, err := h.Select(
-		ursus.Col("v").Clip(ursus.Col("lo"), ursus.Col("hi")).Alias("c"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatalf("column-valued bounds: %v", err)
-	}
-	for i, want := range []int64{5, 6} {
-		if got, _, _ := d3.At[int64](i, "c"); got != want {
-			t.Errorf("row %d = %d, want %d", i, got, want)
-		}
-	}
-}
-
-// TestIsCloseHandlesTheInfinities: the equality prefix is what makes
-// IsClose(Inf, Inf) true — the tolerance term alone gives NaN <= x, which is false.
-func TestIsCloseHandlesTheInfinities(t *testing.T) {
-	f := ursus.Frame(
-		ursus.Values("a", []float64{1.0, 1.0, math.Inf(1), math.Inf(1), math.NaN(), 100}),
-		ursus.Values("b", []float64{1.0 + 1e-12, 2.0, math.Inf(1), math.Inf(-1), math.NaN(), 100.0000001}),
-	)
-	df, err := f.Select(
-		ursus.Col("a").IsClose(ursus.Col("b"), 1e-9, 0).Alias("c"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, want := range []bool{true, false, true, false, false, true} {
-		got, ok, _ := df.At[bool](i, "c")
-		if !ok {
-			t.Fatalf("row %d is null", i)
-		}
-		if got != want {
-			t.Errorf("is_close row %d = %v, want %v", i, got, want)
-		}
-	}
-}
-
-// TestDiffAndPctChange, including that the two shift mentions become ONE window.
+// TestDiffAndPctChange: the two shift mentions become ONE window (the fill group's
+// diff_and_pct_change holds the values).
 func TestDiffAndPctChange(t *testing.T) {
 	f := ursus.Frame(ursus.Values("v", []int64{10, 20, 40, 40}))
-	df, err := f.Select(
-		ursus.Col("v").Diff(1).Alias("d"),
-		ursus.Col("v").PctChange(1).Alias("p"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fl := df.Schema().Field(0); fl.Type != ursus.Int64 {
-		t.Errorf("Diff is %s, want the operand's own type", fl.Type)
-	}
-	if _, ok, _ := df.At[int64](0, "d"); ok {
-		t.Error("the first row has nothing to diff against and must be null")
-	}
-	for i, want := range []int64{10, 20, 0} {
-		if got, _, _ := df.At[int64](i+1, "d"); got != want {
-			t.Errorf("diff row %d = %d, want %d", i+1, got, want)
-		}
-	}
-	if got, _, _ := df.At[float64](1, "p"); got != 1 {
-		t.Errorf("pct_change row 1 = %v, want 1", got)
-	}
-
 	// One window temporary, not two: the dedup keys on the rendered expression.
 	pl, err := f.Select(ursus.Col("v").Diff(1).Alias("d")).Explain(t.Context())
 	if err != nil {
@@ -600,7 +384,8 @@ func TestFillIsBatchSizeInvariant(t *testing.T) {
 // FillNullWith(0) has preserved the type since step 11 and Clip did not, and both
 // read as "a Go scalar bound on a column".
 //
-// TestClipSemantics never asserted an output type, which is how it survived.
+// The clip tests of old never asserted an output type, which is how it survived;
+// the values are the fill group's clip cases now.
 func TestClipPreservesType(t *testing.T) {
 	f := ursus.Frame(ursus.Values("v", []int64{5}))
 	for _, c := range []struct {
@@ -636,77 +421,4 @@ func TestClipPreservesType(t *testing.T) {
 	if got := sch.Field(0).Type; got.ID() == ursus.Int8.ID() {
 		t.Errorf("clip(Int8, 0, 5000) stayed Int8, so 5000 was truncated to %s", got)
 	}
-
-	// And the VALUES still clip, so type preservation did not buy correctness away.
-	df, err := ursus.Frame(ursus.Values("v", []int32{-5, 5, 500})).
-		Select(ursus.Col("v").Clip(0, 100).Alias("c")).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, want := range []int32{0, 5, 100} {
-		if got, _, _ := df.At[int32](i, "c"); got != want {
-			t.Errorf("row %d = %d, want %d", i, got, want)
-		}
-	}
-}
-
-// TestAFrameFillsNullsByAStrategy: lf.FillNull(strategy) fills by the strategy, as
-// Polars 1.44.1's fill_null(strategy=) does on the same frame, where until step 249
-// it filled every null with the strategy's number: FillStrategy is a uint8, so it
-// satisfies Operand. FillZero, FillOne and FillMean leave the String and Bool
-// columns alone, as lf.FillNull(0) does, where Polars fills them with "" and false
-// or refuses them. Expr.FillNullWith(strategy) fills by it too.
-func TestAFrameFillsNullsByAStrategy(t *testing.T) {
-	ok := func(b ...bool) []bool { return b }
-	frame := ursus.Frame(
-		nullable("i", []int64{1, 0, 3}, ok(true, false, true)),
-		nullable("f", []float64{1.5, 0, 0}, ok(true, false, false)),
-		nullable("s", []string{"a", "", "c"}, ok(true, false, true)),
-		nullable("b", []bool{true, false, false}, ok(true, false, true)),
-	)
-	all := ok(true, true, true)
-	cases := []struct {
-		s    ursus.FillStrategy
-		want *ursus.LazyFrame
-	}{
-		{ursus.FillForward, ursus.Frame(nullable("i", []int64{1, 1, 3}, all), nullable("f", []float64{1.5, 1.5, 1.5}, all),
-			nullable("s", []string{"a", "a", "c"}, all), nullable("b", []bool{true, true, false}, all))},
-		{ursus.FillBackward, ursus.Frame(nullable("i", []int64{1, 3, 3}, all), nullable("f", []float64{1.5, 0, 0}, ok(true, false, false)),
-			nullable("s", []string{"a", "c", "c"}, all), nullable("b", []bool{true, false, false}, all))},
-		{ursus.FillMin, ursus.Frame(nullable("i", []int64{1, 1, 3}, all), nullable("f", []float64{1.5, 1.5, 1.5}, all),
-			nullable("s", []string{"a", "a", "c"}, all), nullable("b", []bool{true, false, false}, all))},
-		{ursus.FillMax, ursus.Frame(nullable("i", []int64{1, 3, 3}, all), nullable("f", []float64{1.5, 1.5, 1.5}, all),
-			nullable("s", []string{"a", "c", "c"}, all), nullable("b", []bool{true, true, false}, all))},
-		{ursus.FillZero, ursus.Frame(nullable("i", []int64{1, 0, 3}, all), nullable("f", []float64{1.5, 0, 0}, all),
-			nullable("s", []string{"a", "", "c"}, ok(true, false, true)), nullable("b", []bool{true, false, false}, ok(true, false, true)))},
-		{ursus.FillOne, ursus.Frame(nullable("i", []int64{1, 1, 3}, all), nullable("f", []float64{1.5, 1, 1}, all),
-			nullable("s", []string{"a", "", "c"}, ok(true, false, true)), nullable("b", []bool{true, false, false}, ok(true, false, true)))},
-		{ursus.FillMean, ursus.Frame(nullable("i", []float64{1, 2, 3}, all), nullable("f", []float64{1.5, 1.5, 1.5}, all),
-			nullable("s", []string{"a", "", "c"}, ok(true, false, true)), nullable("b", []bool{true, false, false}, ok(true, false, true)))},
-	}
-	for _, c := range cases {
-		got, err := frame.FillNull(c.s).Collect(t.Context())
-		if err != nil {
-			t.Fatalf("%s: %v", c.s, err)
-		}
-		want, err := c.want.Collect(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		ursustest.AssertFrameEqual(t, got, want)
-	}
-
-	// A subset, and the expression form.
-	got, err := frame.FillNull(ursus.FillForward, "i").
-		WithColumns(ursus.Col("f").FillNullWith(ursus.FillForward)).Select(ursus.Col("i", "f", "s")).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	want, err := ursus.Frame(nullable("i", []int64{1, 1, 3}, all), nullable("f", []float64{1.5, 1.5, 1.5}, all),
-		nullable("s", []string{"a", "", "c"}, ok(true, false, true))).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	ursustest.AssertFrameEqual(t, got, want)
 }

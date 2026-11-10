@@ -2,7 +2,6 @@ package ursus_test
 
 import (
 	"errors"
-	"math"
 	"strings"
 	"testing"
 
@@ -11,11 +10,10 @@ import (
 	"github.com/advenn/ursus/ursustest"
 )
 
-// TestPivotAnswersAsPolars: DataFrame.Pivot (step 229) against Polars 1.44.1's
-// DataFrame.pivot: rows in the order each index first appears, a null index a row;
-// columns in the order each On value first appears, or sorted; two value columns
-// named value_on; a null On value a column "null"; a cell of two values refused
-// without Agg and summed with it.
+// TestPivotAnswersAsPolars: DataFrame.Pivot (step 229) against Polars' pivot. Its
+// rows, columns and cells are the pivot group's, Polars 2.1.0's
+// (oracle_pivot_test.go); here stay the refusals: a cell of two values without Agg,
+// and the options a schema error names.
 func TestPivotAnswersAsPolars(t *testing.T) {
 	ctx := t.Context()
 	df, err := ursus.Frame(
@@ -27,49 +25,6 @@ func TestPivotAnswersAsPolars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	check := func(got *ursus.DataFrame, want ...*ursus.Column) {
-		t.Helper()
-		w, err := ursus.Frame(want...).Collect(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ursustest.AssertFrameEqual(t, got, w)
-	}
-	k := ursus.ValuesNullable("k", []string{"b", "a", ""}, []bool{true, true, false})
-
-	got, err := df.Pivot(ctx, ursus.PivotOptions{On: []string{"on"}, Index: []string{"k"}, Values: []string{"v"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	check(got, k, ursus.ValuesNullable("y", []int64{1, 4, 0}, []bool{true, true, false}),
-		ursus.Values("x", []int64{3, 2, 5}))
-
-	got, err = df.Pivot(ctx, ursus.PivotOptions{On: []string{"on"}, Index: []string{"k"}, Values: []string{"v", "w"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	check(got, k, ursus.ValuesNullable("v_y", []int64{1, 4, 0}, []bool{true, true, false}),
-		ursus.Values("v_x", []int64{3, 2, 5}),
-		ursus.ValuesNullable("w_y", []float64{1.5, 4.5, 0}, []bool{true, true, false}),
-		ursus.ValuesNullable("w_x", []float64{0, 2.5, 5.5}, []bool{false, true, true}))
-
-	got, err = df.Pivot(ctx, ursus.PivotOptions{On: []string{"on"}, Index: []string{"k"}, Values: []string{"v"},
-		SortColumns: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cols := strings.Join(got.Columns(), ","); cols != "k,x,y" {
-		t.Errorf("sorted, the columns are %s, want k,x,y", cols)
-	}
-
-	// Values left out are every other column: here w.
-	got, err = df.Pivot(ctx, ursus.PivotOptions{On: []string{"on"}, Index: []string{"k", "v"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cols := strings.Join(got.Columns(), ","); cols != "k,v,y,x" {
-		t.Errorf("with Values left out, the columns are %s, want k,v,y,x", cols)
-	}
 
 	dup, err := ursus.Frame(ursus.Values("k", []int64{1, 1}), ursus.Values("on", []string{"x", "x"}),
 		ursus.Values("v", []int64{1, 2})).Collect(ctx)
@@ -80,28 +35,6 @@ func TestPivotAnswersAsPolars(t *testing.T) {
 	if !errors.Is(err, uerr.ErrValue) || !strings.Contains(err.Error(), "Agg") {
 		t.Errorf("a cell of two values should be refused, asking for Agg: %v", err)
 	}
-	got, err = dup.Pivot(ctx, ursus.PivotOptions{On: []string{"on"}, Index: []string{"k"}, Values: []string{"v"},
-		Agg: ursus.Expr.Sum})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, err = got.Select(ctx, ursus.Col("k"), ursus.Col("x").Cast(ursus.Int64)); err != nil {
-		t.Fatal(err)
-	}
-	check(got, ursus.Values("k", []int64{1}), ursus.Values("x", []int64{3}))
-
-	nullOn, err := ursus.Frame(ursus.Values("k", []int64{1, 2}),
-		ursus.ValuesNullable("on", []int64{10, 0}, []bool{true, false}), ursus.Values("v", []int64{1, 2})).
-		Collect(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err = nullOn.Pivot(ctx, ursus.PivotOptions{On: []string{"on"}, Index: []string{"k"}, Values: []string{"v"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	check(got, ursus.Values("k", []int64{1, 2}), ursus.ValuesNullable("10", []int64{1, 0}, []bool{true, false}),
-		ursus.ValuesNullable("null", []int64{0, 2}, []bool{false, true}))
 
 	for name, o := range map[string]ursus.PivotOptions{
 		"no On column":       {On: []string{"nope"}, Index: []string{"k"}},
@@ -154,8 +87,7 @@ func strs(name string, vs ...any) *ursus.Column {
 	return ursus.ValuesNullable(name, vals, ok)
 }
 
-// pivotFrame is the frame of TestPivotSeveralOn and TestPivotOnColumns, the one
-// Polars was asked about.
+// pivotFrame is the frame of TestPivotRefusals, and of the pivot group's cases.
 func pivotFrame() *ursus.LazyFrame {
 	return ursus.Frame(
 		strs("k", "b", "a", "b", "a", nil),
@@ -166,174 +98,28 @@ func pivotFrame() *ursus.LazyFrame {
 	)
 }
 
-// assertPivot holds got to the columns want, each Polars 1.44.1's.
-func assertPivot(t *testing.T, name string, got *ursus.DataFrame, err error, want ...*ursus.Column) {
-	t.Helper()
-	if err != nil {
-		t.Fatalf("%s: %v", name, err)
-	}
-	w, err := ursus.Frame(want...).Collect(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Run(name, func(t *testing.T) { ursustest.AssertFrameEqual(t, got, w) })
-}
-
-// TestPivotSeveralOn is P1 of v0.6.7-scope.md (step 303): several On columns, each
-// new column named by their values together as Polars names it, {"y","p"}, text
-// quoted, and v_{"y","p"} for several value columns. Every answer is Polars 1.44.1's.
-func TestPivotSeveralOn(t *testing.T) {
+// TestPivotSeveralOnNamesANull is P1 of v0.6.7-scope.md (step 303): several On
+// columns name each new column by their values together, {"y","p"}, as Polars names
+// it; the pivot group records those. A combination holding a null is written null,
+// {null,"c"}, where Polars names the whole column "null" and then refuses a second
+// (feature-gaps.md §9): Polars has no answer, so the documented naming is pinned here.
+// Numbers are not quoted.
+func TestPivotSeveralOnNamesANull(t *testing.T) {
 	ctx := t.Context()
-	df, err := pivotFrame().Collect(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	k := strs("k", "b", "a", nil)
-	on := []string{"on", "p"}
-
-	got, err := df.Pivot(ctx, ursus.PivotOptions{On: on, Index: []string{"k"}, Values: []string{"v"}})
-	assertPivot(t, "one value", got, err, k, i64s(`{"y","p"}`, 1, nil, nil), i64s(`{"x","q"}`, nil, 2, nil),
-		i64s(`{"x","p"}`, 3, nil, 5), i64s(`{"y","q"}`, nil, 4, nil))
-
-	got, err = df.Pivot(ctx, ursus.PivotOptions{On: on, Index: []string{"k"}, Values: []string{"v", "w"}})
-	assertPivot(t, "two values", got, err, k,
-		i64s(`v_{"y","p"}`, 1, nil, nil), i64s(`v_{"x","q"}`, nil, 2, nil), i64s(`v_{"x","p"}`, 3, nil, 5),
-		i64s(`v_{"y","q"}`, nil, 4, nil),
-		f64s(`w_{"y","p"}`, 1.5, nil, nil), f64s(`w_{"x","q"}`, nil, 2.5, nil), f64s(`w_{"x","p"}`, nil, nil, 5.5),
-		f64s(`w_{"y","q"}`, nil, 4.5, nil))
-
-	got, err = df.Pivot(ctx, ursus.PivotOptions{On: on, Index: []string{"k"}, Values: []string{"v"}, SortColumns: true})
-	assertPivot(t, "sorted", got, err, k, i64s(`{"x","p"}`, 3, nil, 5), i64s(`{"x","q"}`, nil, 2, nil),
-		i64s(`{"y","p"}`, 1, nil, nil), i64s(`{"y","q"}`, nil, 4, nil))
-
-	// Lazily, the combinations given: a row of OnColumns a new column, its columns
-	// in any order.
-	got, err = pivotFrame().Pivot(ursus.PivotOptions{On: on, Index: []string{"k"}, Values: []string{"v"},
-		OnColumns: []*ursus.Column{strs("p", "p", "q"), strs("on", "x", "y")}}).Collect(ctx)
-	assertPivot(t, "lazy", got, err, k, i64s(`{"x","p"}`, 3, nil, 5), i64s(`{"y","q"}`, nil, 4, nil))
-
-	// A null among them is written null, where Polars names the whole column "null"
-	// and then refuses a second (feature-gaps.md §9). Numbers are not quoted.
 	nulls, err := ursus.Frame(i64s("k", 1, 1, 1), i64s("i", 1, nil, 2), strs("s", "a", "c", nil),
 		i64s("v", 1, 2, 3)).Collect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err = nulls.Pivot(ctx, ursus.PivotOptions{On: []string{"i", "s"}, Index: []string{"k"}, Values: []string{"v"}})
-	assertPivot(t, "nulls", got, err, i64s("k", 1), i64s(`{1,"a"}`, 1), i64s(`{null,"c"}`, 2), i64s(`{2,null}`, 3))
-}
-
-// TestPivotOnColumns is P1 of v0.6.7-scope.md (step 303): the new columns given, as
-// Polars' on_columns, lazily and eagerly. A given value the frame never holds is a
-// column of empty cells, one it holds and OnColumns does not is left out, its index
-// still a row; a null, NaN and -0 match as a group-by keys them. Every answer is
-// Polars 1.44.1's.
-func TestPivotOnColumns(t *testing.T) {
-	ctx := t.Context()
-	df, err := pivotFrame().Collect(ctx)
+	got, err := nulls.Pivot(ctx, ursus.PivotOptions{On: []string{"i", "s"}, Index: []string{"k"}, Values: []string{"v"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	k := strs("k", "b", "a", nil)
-	of := func(vs ...any) []*ursus.Column { return []*ursus.Column{strs("on", vs...)} }
-	opts := func(cols []*ursus.Column) ursus.PivotOptions {
-		return ursus.PivotOptions{On: []string{"on"}, Index: []string{"k"}, Values: []string{"v"}, OnColumns: cols}
-	}
-
-	got, err := df.Pivot(ctx, opts(of("x")))
-	assertPivot(t, "a subset", got, err, k, i64s("x", 3, 2, 5))
-	// Polars ignores sort_columns beside on_columns too.
-	o := opts(of("z", "y", "x"))
-	o.SortColumns = true
-	got, err = df.Pivot(ctx, o)
-	assertPivot(t, "reordered, z never held", got, err, k, i64s("z", nil, nil, nil), i64s("y", 1, 4, nil),
-		i64s("x", 3, 2, 5))
-	got, err = pivotFrame().Pivot(opts(of("x", "y"))).Collect(ctx)
-	assertPivot(t, "lazy", got, err, k, i64s("x", 3, 2, 5), i64s("y", 1, 4, nil))
-	got, err = pivotFrame().Pivot(opts(of("x"))).Collect(ctx)
-	assertPivot(t, "lazy, a subset", got, err, k, i64s("x", 3, 2, 5))
-	got, err = ursus.Frame(strs("k", "a", "b"), strs("on", "x", "y"), i64s("v", 1, 2)).Pivot(opts(of("x"))).Collect(ctx)
-	assertPivot(t, "an index none of whose values is given", got, err, strs("k", "a", "b"), i64s("x", 1, nil))
-	got, err = pivotFrame().WithColumns(ursus.When(ursus.Col("on").Eq(ursus.Lit("y"))).Then(ursus.Null(ursus.String)).
-		Otherwise(ursus.Col("on")).Alias("on")).Pivot(opts(of("x", nil))).Collect(ctx)
-	assertPivot(t, "a null given", got, err, k, i64s("x", 3, 2, 5), i64s("null", 1, 4, nil))
-	got, err = pivotFrame().Pivot(opts(of())).Collect(ctx)
-	assertPivot(t, "none given", got, err, k)
-
-	// NaN matches NaN and 0 matches -0, as Polars' ==v does; a column is named by
-	// the value given, as Polars writes a float, 0.0 (since step 325).
-	floats := ursus.Frame(i64s("k", 1, 1, 1, 1, 1, 1), f64s("f", 1.5, 2.0, 1.5, math.NaN(), math.Copysign(0, -1), 1.5),
-		i64s("v", 1, 2, 3, 4, 5, 6))
-	got, err = floats.Pivot(ursus.PivotOptions{On: []string{"f"}, Index: []string{"k"}, Values: []string{"v"},
-		Agg: ursus.Expr.First, OnColumns: []*ursus.Column{f64s("f", math.NaN(), 0.0, 1.5)}}).Collect(ctx)
-	assertPivot(t, "NaN and the zeros", got, err, i64s("k", 1), i64s("NaN", 4), i64s("0.0", 5), i64s("1.5", 1))
-	// Both zeros given: each a column, each of both zeros' rows, as Polars' are.
-	got, err = ursus.Frame(i64s("k", 1, 1, 2), f64s("f", 0.0, math.Copysign(0, -1), 0.0), i64s("v", 1, 2, 3)).
-		Pivot(ursus.PivotOptions{On: []string{"f"}, Index: []string{"k"}, Values: []string{"v"},
-			Agg:       func(e ursus.Expr) ursus.Expr { return e.Sum().Cast(ursus.Int64) },
-			OnColumns: []*ursus.Column{f64s("f", 0.0, math.Copysign(0, -1))}}).Collect(ctx)
-	assertPivot(t, "0 and -0 both given", got, err, i64s("k", 1, 2), i64s("0.0", 3, 3), i64s("-0.0", 3, 3))
-
-	// OnColumns of another integer width are cast to the On column's.
-	got, err = pivotFrame().WithColumns(ursus.Col("v").Cast(ursus.Int32).Alias("n")).
-		Pivot(ursus.PivotOptions{On: []string{"n"}, Index: []string{"k"}, Values: []string{"w"},
-			OnColumns: []*ursus.Column{i64s("n", 2, 5)}}).Collect(ctx)
-	assertPivot(t, "an Int64 given for an Int32", got, err, k, f64s("2", nil, 2.5, nil), f64s("5", nil, nil, 5.5))
-}
-
-// TestPivotCellsOfNone (step 303): a cell is Agg of the values that fall in it, so
-// one none fall in is Agg of none, as Polars 1.44.1 answers it: a count's 0, a
-// first's null. A sum of none is null here, Polars' 0 (feature-gaps.md §9), so
-// Sum().FillNull(0) is Polars' sum. Without Agg a cell of none is null. Until step
-// 303 every such cell was null.
-func TestPivotCellsOfNone(t *testing.T) {
-	ctx := t.Context()
-	df, err := ursus.Frame(i64s("k", 1, 1, 2), strs("on", "x", "x", "y"), i64s("v", 1, 2, 5)).Collect(ctx)
+	want, err := ursus.Frame(i64s("k", 1), i64s(`{1,"a"}`, 1), i64s(`{null,"c"}`, 2), i64s(`{2,null}`, 3)).Collect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	k := i64s("k", 1, 2)
-	for _, tc := range []struct {
-		name string
-		agg  func(ursus.Expr) ursus.Expr
-		x, y *ursus.Column
-	}{
-		{"len", ursus.Expr.Len, nil, nil},
-		{"n_unique", ursus.Expr.NUnique, nil, nil},
-		{"sum", ursus.Expr.Sum, i64s("x", 3, nil), i64s("y", nil, 5)},
-		{"sum, nulls 0", func(e ursus.Expr) ursus.Expr { return e.Sum().FillNull(0) }, i64s("x", 3, 0), i64s("y", 0, 5)},
-		{"first", ursus.Expr.First, i64s("x", 1, nil), i64s("y", nil, 5)},
-		{"last", ursus.Expr.Last, i64s("x", 2, nil), i64s("y", nil, 5)},
-		{"min", ursus.Expr.Min, i64s("x", 1, nil), i64s("y", nil, 5)},
-		{"max", ursus.Expr.Max, i64s("x", 2, nil), i64s("y", nil, 5)},
-		{"mean", ursus.Expr.Mean, f64s("x", 1.5, nil), f64s("y", nil, 5.0)},
-		{"median", ursus.Expr.Median, f64s("x", 1.5, nil), f64s("y", nil, 5.0)},
-	} {
-		got, err := df.Pivot(ctx, ursus.PivotOptions{On: []string{"on"}, Index: []string{"k"}, Values: []string{"v"}, Agg: tc.agg})
-		if err != nil {
-			t.Fatalf("%s: %v", tc.name, err)
-		}
-		if tc.x == nil {
-			// A count is a Uint64 here, Polars' UInt32 (§9): its values, 2 and 0, 0
-			// and 1.
-			if got, err = got.Select(ctx, ursus.Col("k"), ursus.Col("x").Cast(ursus.Int64), ursus.Col("y").Cast(ursus.Int64)); err != nil {
-				t.Fatal(err)
-			}
-			tc.x, tc.y = i64s("x", 2, 0), i64s("y", 0, 1)
-		} else if tc.name == "sum" || tc.name == "sum, nulls 0" {
-			// An integer sum is an Int128 here (§9).
-			if got, err = got.Select(ctx, ursus.Col("k"), ursus.Col("x").Cast(ursus.Int64), ursus.Col("y").Cast(ursus.Int64)); err != nil {
-				t.Fatal(err)
-			}
-		}
-		assertPivot(t, tc.name, got, nil, k, tc.x, tc.y)
-	}
-	got, err := df.Filter(ctx, ursus.Col("v").Ne(2))
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err = got.Pivot(ctx, ursus.PivotOptions{On: []string{"on"}, Index: []string{"k"}, Values: []string{"v"}})
-	assertPivot(t, "no Agg", got, err, k, i64s("x", 1, nil), i64s("y", nil, 5))
+	ursustest.AssertFrameEqual(t, got, want)
 }
 
 // TestPivotRefusals (step 303): what a pivot refuses, by its message, and the
@@ -443,10 +229,9 @@ func TestPivotUnderAMemoryLimit(t *testing.T) {
 	}
 }
 
-// TestTransposeAnswersAsPolars: DataFrame.Transpose (step 229) against Polars
-// 1.44.1: column j holds row j, every column cast to the type they meet at, text
-// beside a number text since step 320; a header column of the names; given column
-// names, and names from a column (step 320).
+// TestTransposeAnswersAsPolars: DataFrame.Transpose (step 229) against Polars'
+// transpose; its cells and types are the pivot group's, Polars 2.1.0's. Here stay the
+// refusals: one name for two rows, a List beside a number, and the namings.
 func TestTransposeAnswersAsPolars(t *testing.T) {
 	ctx := t.Context()
 	df, err := ursus.Frame(ursus.Values("a", []int64{1, 2}), ursus.Values("b", []float64{3.5, 4.5}),
@@ -454,58 +239,9 @@ func TestTransposeAnswersAsPolars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := df.Transpose(ctx, ursus.TransposeOptions{IncludeHeader: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want, err := ursus.Frame(ursus.Values("column", []string{"a", "b", "c"}),
-		ursus.ValuesNullable("column_0", []float64{1, 3.5, 0}, []bool{true, true, false}),
-		ursus.Values("column_1", []float64{2, 4.5, 6})).Collect(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ursustest.AssertFrameEqual(t, got, want)
-
-	got, err = df.Transpose(ctx, ursus.TransposeOptions{ColumnNames: []string{"p", "q"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cols := strings.Join(got.Columns(), ","); cols != "p,q" || got.Height() != 3 {
-		t.Errorf("named, the columns are %s over %d rows, want p,q over 3", cols, got.Height())
-	}
 	if _, err := df.Transpose(ctx, ursus.TransposeOptions{ColumnNames: []string{"p"}}); !errors.Is(err, uerr.ErrSchema) {
 		t.Errorf("one name for two rows should be refused: %v", err)
 	}
-
-	// Text beside a number or a Boolean is text, as Polars casts them; a Boolean
-	// beside a number is the number; a List beside one meets nothing.
-	mixed, err := ursus.Frame(ursus.Values("a", []int64{1, 3}), ursus.Values("s", []string{"x", "y"}),
-		ursus.Values("b", []bool{true, false})).Collect(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err = mixed.Transpose(ctx, ursus.TransposeOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want, err = ursus.Frame(ursus.Values("column_0", []string{"1", "x", "true"}),
-		ursus.Values("column_1", []string{"3", "y", "false"})).Collect(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ursustest.AssertFrameEqual(t, got, want)
-	got, err = mixed.Lazy().Select(ursus.Col("b"), ursus.Col("a")).Head(1).Collect(ctx)
-	if err == nil {
-		got, err = got.Transpose(ctx, ursus.TransposeOptions{})
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	want, err = ursus.Frame(ursus.Values("column_0", []int64{1, 1})).Collect(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ursustest.AssertFrameEqual(t, got, want)
 	listed, err := ursus.Frame(ursus.Values("a", []int64{1})).
 		WithColumns(ursus.ConcatList(ursus.Col("a")).Alias("l")).Collect(ctx)
 	if err != nil {
@@ -515,22 +251,11 @@ func TestTransposeAnswersAsPolars(t *testing.T) {
 		t.Errorf("a List beside an Int64 should be refused: %v", err)
 	}
 
-	// Names from a column, which is left out.
 	named, err := ursus.Frame(ursus.Values("id", []string{"a", "b", "c"}), ursus.Values("col1", []int64{1, 3, 2}),
 		ursus.Values("col2", []int64{3, 4, 6})).Collect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err = named.Transpose(ctx, ursus.TransposeOptions{IncludeHeader: true, ColumnNamesFrom: "id"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want, err = ursus.Frame(ursus.Values("column", []string{"col1", "col2"}), ursus.Values("a", []int64{1, 3}),
-		ursus.Values("b", []int64{3, 4}), ursus.Values("c", []int64{2, 6})).Collect(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ursustest.AssertFrameEqual(t, got, want)
 	for name, tc := range map[string]struct {
 		df   *ursus.DataFrame
 		o    ursus.TransposeOptions

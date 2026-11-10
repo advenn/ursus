@@ -193,6 +193,30 @@ that stops when its request is cancelled.
   `Promote` refuses, two time units at the coarser where it takes the finer, refuses
   two Enums it meets at the String, casts a Decimal to a Boolean and answers a
   Decimal's `any` and `all`, and reads a hive key of dates by its first value's layout.
+- **The frames, joins and reshaping wave converted** (501): `join_byhand`, `joinorder`,
+  `asofoptions`, `concat`, `pivot`, `dummies`, `unstack`, `unpivot`, `upsample`,
+  `update`, `matchschema`, `frameagg`, `framecolumns`, `framerows`, `frameconv`,
+  `framenulls`, `fill`, `intindex`, `dynamicopts`, `having`, `grouphead` and
+  `generate_test.go`, 482 recorded cases in twenty-two groups, 70 generated, 2,213
+  lines gone; a join's or a full update's unmatched tail, which Polars 2's streaming
+  engine appends in no promised order, is recorded in the order ursus promises. Three
+  findings recorded and not asserted, for the maintainer: a fill of 5000 into an Int8
+  column is an Int16 in Polars 2.1 and an Int64 here, the mean fill strategy keeps an
+  integer column's type there and widens it to Float64 here, and `AsOfNearest`'s tie
+  goes forward there and backward here.
+- **The aggregates and windows converted** (500): `aggwindow_byhand`, `aggstats`,
+  `aggpair`, `agglists`, `argsort`, `hist`, `search`, `seq`, `modeagg`, `ewmmore`,
+  `window172`, `windownest`, `rollingby`, `rollingoffset`, `rollingquantile`,
+  `rollmap`, `exprroll`, `cumeval` and `topk_agg_test.go`, 464 recorded cases in
+  nineteen groups, 63 generated, 1,857 lines gone; a recorded case may hold floats to
+  an absolute tolerance beside the relative (`"float": "rel:1e-12 abs:1e-15"`); what
+  Polars 2.1 answers wrongly is held to math/big: an integer mean past 2^53, a median
+  and a variance at the float's ends, the moments of values near 1e9. Five findings
+  recorded and not asserted, for the maintainer: Polars 2.1 overflows the median of
+  [-1.7e308, 1.7e308] and the variance of [1e308, 1e308], loses seven digits of a skew
+  near 1e9, gives a one-value group's raw entropy as 0.0, ends a rolling window at its
+  offset plus the period where 1.44.1 ended it at the row, and keeps nulls in a
+  `top_k` as its least values.
 
 ### Fixed
 
