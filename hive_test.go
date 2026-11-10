@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/internal/plan"
 	"github.com/advenn/ursus/internal/source/parquet"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // hivePart writes lf as a Parquet file at root/rel, its directories made.
@@ -50,8 +52,11 @@ func rowsOf(t *testing.T, q *ursus.LazyFrame) string {
 
 // TestHivePartitions is step 347: a directory of Parquet files read as one frame,
 // each key=value directory a column of the files beneath it, as Polars' scan_parquet
-// reads a hive dataset; and each file's path as a column. Every answer is Polars
-// 1.44.1's but where noted.
+// reads a hive dataset; and each file's path as a column. Each answer is Polars
+// 2.1.0's since step 502, recorded in testdata/oracle/hive.json and spelled in
+// oracle_hive_test.go; here stay the files a filter skips, what a directory holds that
+// is passed over (feature-gaps.md §9), and forty files on eight threads against their
+// Concat.
 func TestHivePartitions(t *testing.T) {
 	ctx := t.Context()
 	c := ursus.Col
@@ -61,37 +66,6 @@ func TestHivePartitions(t *testing.T) {
 	hivePart(t, root, "a=1/b=x/p0.parquet", v(1, 2))
 	hivePart(t, root, "a=2/b=y%20z/p0.parquet", v(3))
 	hivePart(t, root, "a=__HIVE_DEFAULT_PARTITION__/b=w/p0.parquet", v(4))
-	byV := func(q *ursus.LazyFrame) *ursus.LazyFrame { return q.Sort(ursus.Asc(c("v"))) }
-
-	t.Run("a directory", func(t *testing.T) {
-		// The keys after the files' columns, typed by their values, a value
-		// percent-decoded, Hive's default partition null.
-		if got := rowsOf(t, byV(ursus.ScanParquet(root))); got != "1,1,x 2,1,x 3,2,y z 4,<nil>,w {v: Int64, a: Int64, b: String!}" {
-			t.Errorf("%s", got)
-		}
-		// Only the keys, and a count.
-		if got := rowsOf(t, ursus.ScanParquet(root).Select(c("a"), c("b")).Sort(ursus.Asc(c("b")))); got != "<nil>,w 1,x 1,x 2,y z {a: Int64, b: String!}" {
-			t.Errorf("the keys alone: %s", got)
-		}
-		if got := rowsOf(t, ursus.ScanParquet(root).Select(ursus.Len())); got != "4 {len: Uint64!}" {
-			t.Errorf("a count: %s", got)
-		}
-	})
-
-	t.Run("hive schema and dates", func(t *testing.T) {
-		if got := schemaOf(t, ursus.ScanParquet(root, ursus.WithHiveSchema(mustSchema(ursus.Field{Name: "a", Type: ursus.Int8})))); got != "{v: Int64, a: Int8, b: String!}" {
-			t.Errorf("a given type: %s", got)
-		}
-		days := filepath.Join(dir, "days")
-		hivePart(t, days, "d=2024-01-02/p.parquet", v(1))
-		hivePart(t, days, "d=2024-01-03/p.parquet", v(2))
-		if got := rowsOf(t, byV(ursus.ScanParquet(days))); !strings.HasSuffix(got, "{v: Int64, d: Date!}") {
-			t.Errorf("dates: %s", got)
-		}
-		if got := schemaOf(t, ursus.ScanParquet(days, ursus.WithHiveDates(false))); got != "{v: Int64, d: String!}" {
-			t.Errorf("dates as text: %s", got)
-		}
-	})
 
 	t.Run("a filter on the keys skips files", func(t *testing.T) {
 		for _, threads := range []int{1, 8} {
@@ -109,107 +83,39 @@ func TestHivePartitions(t *testing.T) {
 				t.Errorf("%d threads: %d files read, %d skipped; want 1 and 2", threads, read, skipped)
 			}
 		}
-		// A key and a file's column at once; a key's text tested; a null key.
-		if got := rowsOf(t, byV(ursus.ScanParquet(root).Filter(c("a").Eq(int64(1)).And(c("v").Gt(int64(1)))))); got != "2,1,x {v: Int64, a: Int64, b: String!}" {
-			t.Errorf("a key and a column: %s", got)
-		}
-		lf := ursus.ScanParquet(root)
-		src := lf.Plan().(*plan.Scan).Src.(*parquet.Source)
-		if got := rowsOf(t, lf.Filter(c("b").Str().StartsWith("y"))); got != "3,2,y z {v: Int64, a: Int64, b: String!}" {
-			t.Errorf("a key's text: %s", got)
-		}
-		if read, skipped := src.FileStats(); read != 1 || skipped != 2 {
-			t.Errorf("a key's text: %d files read, %d skipped", read, skipped)
-		}
-		// A conjunct of keys the statistics' pruner reads no part of.
-		lf = ursus.ScanParquet(root)
-		src = lf.Plan().(*plan.Scan).Src.(*parquet.Source)
-		if got := rowsOf(t, lf.Filter(c("a").Add(int64(1)).Eq(int64(3)))); got != "3,2,y z {v: Int64, a: Int64, b: String!}" {
-			t.Errorf("a + 1 == 3: %s", got)
-		}
-		if read, skipped := src.FileStats(); read != 1 || skipped != 2 {
-			t.Errorf("a + 1 == 3: %d files read, %d skipped", read, skipped)
-		}
-		if got := rowsOf(t, ursus.ScanParquet(root).Filter(c("a").IsNull())); got != "4,<nil>,w {v: Int64, a: Int64, b: String!}" {
-			t.Errorf("a null key: %s", got)
-		}
-	})
-
-	t.Run("file paths", func(t *testing.T) {
-		got := rowsOf(t, byV(ursus.ScanParquet(root, ursus.WithIncludeFilePaths("path")).Select(c("v"), c("path"))))
-		want := []string{"1," + filepath.Join(root, "a=1", "b=x", "p0.parquet"), "2," + filepath.Join(root, "a=1", "b=x", "p0.parquet"),
-			"3," + filepath.Join(root, "a=2", "b=y%20z", "p0.parquet")}
-		if !strings.HasPrefix(got, strings.Join(want, " ")) {
-			t.Errorf("%s", got)
-		}
-		if s := schemaOf(t, ursus.ScanParquet(root, ursus.WithIncludeFilePaths("path"))); s != "{v: Int64, a: Int64, b: String!, path: String!}" {
-			t.Errorf("the path last: %s", s)
-		}
-		// Polars: "column name for file paths "a" conflicts with column name from file".
-		if _, err := ursus.ScanParquet(root, ursus.WithIncludeFilePaths("a")).Collect(ctx); err == nil {
-			t.Error("a path column named as a key")
-		}
-	})
-
-	t.Run("a key the files hold", func(t *testing.T) {
-		// Polars: the key's value replaces the file's, in the file's place and type.
-		x := filepath.Join(dir, "x")
-		hivePart(t, x, "a=1/p0.parquet", ursus.Frame(i64s("a", 9), i64s("v", 1)))
-		if got := rowsOf(t, ursus.ScanParquet(x)); got != "1,1 {a: Int64!, v: Int64}" {
-			t.Errorf("%s", got)
-		}
-		bad := filepath.Join(dir, "bad")
-		hivePart(t, bad, "a=x/p0.parquet", ursus.Frame(i64s("a", 9), i64s("v", 1)))
-		if _, err := ursus.ScanParquet(bad).Collect(ctx); err == nil {
-			t.Error("a=x read as the files' Int64")
-		}
-	})
-
-	t.Run("globs, files and lists", func(t *testing.T) {
-		// Off by default; on, every directory of the whole path counts.
-		glob := filepath.Join(root, "*", "*", "*.parquet")
-		if got := schemaOf(t, ursus.ScanParquetGlob(glob)); got != "{v: Int64}" {
-			t.Errorf("a glob: %s", got)
-		}
-		if got := rowsOf(t, byV(ursus.ScanParquetGlob(glob, ursus.WithHivePartitioning(true)))); got != "1,1,x 2,1,x 3,2,y z 4,<nil>,w {v: Int64, a: Int64, b: String!}" {
-			t.Errorf("a glob, hive: %s", got)
-		}
-		one := filepath.Join(root, "a=1", "b=x", "p0.parquet")
-		if got := schemaOf(t, ursus.ScanParquet(one)); got != "{v: Int64}" {
-			t.Errorf("a file: %s", got)
-		}
-		if got := schemaOf(t, ursus.ScanParquet(one, ursus.WithHivePartitioning(true))); got != "{v: Int64, a: Int64!, b: String!}" {
-			t.Errorf("a file, hive: %s", got)
-		}
-		if got := schemaOf(t, ursus.ScanParquet(root, ursus.WithHivePartitioning(false))); got != "{v: Int64}" {
-			t.Errorf("a directory, no hive: %s", got)
+		// A key's text tested, and a conjunct of keys the statistics' pruner reads no
+		// part of: each opens one file.
+		for name, pred := range map[string]ursus.Expr{
+			"a key's text": c("b").Str().StartsWith("y"),
+			"a + 1 == 3":   c("a").Add(int64(1)).Eq(int64(3)),
+		} {
+			lf := ursus.ScanParquet(root)
+			src := lf.Plan().(*plan.Scan).Src.(*parquet.Source)
+			if df, err := lf.Filter(pred).Collect(ctx); err != nil || df.Height() != 1 {
+				t.Errorf("%s: %v, %v", name, df, err)
+			}
+			if read, skipped := src.FileStats(); read != 1 || skipped != 2 {
+				t.Errorf("%s: %d files read, %d skipped", name, read, skipped)
+			}
 		}
 	})
 
 	t.Run("what a directory holds", func(t *testing.T) {
 		// A directory not key=value passes over; _SUCCESS, a .crc file and a
 		// hidden directory are passed over, where Polars reads the last two
-		// (feature-gaps §9); the root's own name is no key.
+		// (feature-gaps §9); the root's own name is no key. It reads as the same
+		// dataset without them.
 		d := filepath.Join(dir, "k=0", "m")
 		hivePart(t, d, "x/a=1/p0.parquet", v(1))
 		writeText(t, filepath.Join(d, "x", "a=1"), "_SUCCESS", "")
 		writeText(t, filepath.Join(d, "x", "a=1"), ".p0.parquet.crc", "junk")
 		hivePart(t, d, ".tmp/a=2/p0.parquet", v(2))
-		if got := rowsOf(t, ursus.ScanParquet(d)); got != "1,1 {v: Int64, a: Int64!}" {
-			t.Errorf("%s", got)
-		}
-		// Refused: keys apart, depths apart, no file.
-		for name, files := range map[string][]string{
-			"keys apart":   {"a=1/p.parquet", "b=2/p.parquet"},
-			"depths apart": {"a=1/b=2/p.parquet", "a=3/p.parquet"},
-		} {
-			r := filepath.Join(dir, strings.ReplaceAll(name, " ", "_"))
-			for _, f := range files {
-				hivePart(t, r, f, v(1))
-			}
-			if _, err := ursus.ScanParquet(r).Collect(ctx); err == nil || !strings.Contains(err.Error(), "partitioned by") {
-				t.Errorf("%s: %v", name, err)
-			}
+		clean := filepath.Join(dir, "clean")
+		hivePart(t, clean, "a=1/p0.parquet", v(1))
+		got, want := collect(t, ursus.ScanParquet(d)), collect(t, ursus.ScanParquet(clean))
+		ursustest.AssertFrameEqual(t, got, want)
+		if !slices.Equal(got.Columns(), []string{"v", "a"}) {
+			t.Errorf("the columns: %v", got.Columns())
 		}
 		empty := filepath.Join(dir, "empty")
 		if err := os.Mkdir(empty, 0o755); err != nil {
@@ -240,13 +146,4 @@ func TestHivePartitions(t *testing.T) {
 			}
 		}
 	})
-}
-
-func schemaOf(t *testing.T, lf *ursus.LazyFrame) string {
-	t.Helper()
-	s, err := lf.CollectSchema(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return s.String()
 }

@@ -8,49 +8,47 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // TestIncludeFilePaths is step 359: Polars' include_file_paths for CSV and NDJSON, a
 // String column of each row's file path after the files' columns, the path as given.
-// Every answer is Polars 1.44.1's.
+// Each answer is Polars 2.1.0's since step 502, recorded in testdata/oracle/
+// filepaths.json and spelled in oracle_filepaths_test.go; here stay bytes read under a
+// name of the caller's, the big files cut into blocks on four threads, and the path
+// column being no file's.
 func TestIncludeFilePaths(t *testing.T) {
 	ctx, c := t.Context(), ursus.Col
 	dir := t.TempDir()
-	p1, p2 := writeText(t, dir, "p1.csv", "a,b\n1,x\n2,y\n"), writeText(t, dir, "p2.csv", "a,b\n3,z\n")
-	n1, n2 := writeText(t, dir, "p1.ndjson", "{\"a\":1}\n{\"a\":2}\n"), writeText(t, dir, "p2.ndjson", "{\"a\":3}\n")
+	writeText(t, dir, "p1.csv", "a,b\n1,x\n2,y\n")
+	writeText(t, dir, "p2.csv", "a,b\n3,z\n")
 	csvPaths := ursus.WithCSVIncludeFilePaths("path")
 	jsonPaths := ursus.WithNDJSONIncludeFilePaths("path")
+
+	// Bytes read under a name: the name is the caller's here, "in-mem" in Polars.
 	for _, tc := range []struct {
 		name string
 		lf   *ursus.LazyFrame
-		col  string
 		want string
 	}{
-		{"a glob", ursus.ScanCSVGlob(filepath.Join(dir, "p*.csv"), csvPaths), "path", p1 + " " + p1 + " " + p2 + " String"},
-		{"its columns", ursus.ScanCSVGlob(filepath.Join(dir, "p*.csv"), csvPaths), "b", "x y z String"},
-		{"a list as given", ursus.ScanCSVFiles([]string{p1, dir + "/./p2.csv"}, csvPaths), "path", p1 + " " + p1 + " " + dir + "/./p2.csv String"},
-		{"one file", ursus.ScanCSV(p1, csvPaths), "path", p1 + " " + p1 + " String"},
-		{"the path alone", ursus.ScanCSVGlob(filepath.Join(dir, "p*.csv"), csvPaths).Select(c("path")), "path", p1 + " " + p1 + " " + p2 + " String"},
-		{"a filter on it", ursus.ScanCSVGlob(filepath.Join(dir, "p*.csv"), csvPaths).Filter(c("path").Eq(p2)), "a", "3 Int64"},
-		{"under a limit", ursus.ScanCSVGlob(filepath.Join(dir, "p*.csv"), csvPaths).Head(2), "path", p1 + " " + p1 + " String"},
-		{"bytes, their name", ursus.ScanCSVReader([]byte("a\n1\n"), "mem.csv", csvPaths), "path", "mem.csv String"},
-		{"a schema given", ursus.ScanCSV(p1, csvPaths, ursus.WithSchema(ursus.MustSchema(ursus.Of("a", ursus.Int64), ursus.Of("b", ursus.String)))), "path", p1 + " " + p1 + " String"},
-		{"NDJSON's glob", ursus.ScanNDJSONGlob(filepath.Join(dir, "p*.ndjson"), jsonPaths), "path", n1 + " " + n1 + " " + n2 + " String"},
-		{"NDJSON's columns", ursus.ScanNDJSONGlob(filepath.Join(dir, "p*.ndjson"), jsonPaths), "a", "1 2 3 Int64"},
-		{"NDJSON's path alone", ursus.ScanNDJSONFiles([]string{n2, n1}, jsonPaths).Select(c("path")), "path", n2 + " " + n1 + " " + n1 + " String"},
-		{"NDJSON's schema given", ursus.ScanNDJSON(n1, jsonPaths, ursus.WithNDJSONSchema(ursus.MustSchema(ursus.Of("a", ursus.Int32)))), "path", n1 + " " + n1 + " String"},
-		{"NDJSON's bytes", ursus.ScanNDJSONBytes([]byte("{\"a\":1}\n"), "mem.ndjson", jsonPaths), "path", "mem.ndjson String"},
+		{"bytes, their name", ursus.ScanCSVReader([]byte("a\n1\n"), "mem.csv", csvPaths), "mem.csv String"},
+		{"NDJSON's bytes", ursus.ScanNDJSONBytes([]byte("{\"a\":1}\n"), "mem.ndjson", jsonPaths), "mem.ndjson String"},
 	} {
-		for _, th := range []int{1, 4} {
-			if got := cellsOn(t, tc.lf, tc.col, th); got != tc.want {
-				t.Errorf("%s, %d threads: %q, want %q", tc.name, th, got, tc.want)
-			}
+		if got := cells(t, tc.lf, "path"); got != tc.want {
+			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
 		}
 	}
-	// The schema: the path column last.
-	if s, err := ursus.ScanCSVGlob(filepath.Join(dir, "p*.csv"), csvPaths).CollectSchema(ctx); err != nil || strings.Join(s.Names(), ",") != "a,b,path" {
-		t.Errorf("the schema: %v, %v", s, err)
+	// One thread reads the files in turn, four by blocks at once.
+	glob := ursus.ScanCSVGlob(filepath.Join(dir, "p*.csv"), csvPaths)
+	one, err := glob.Collect(ctx, ursus.WithThreads(1))
+	if err != nil {
+		t.Fatal(err)
 	}
+	four, err := glob.Collect(ctx, ursus.WithThreads(4))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, four, one)
 
 	// Files of many rows, cut into blocks on four threads: each row's path is its
 	// file's, a count a file.
@@ -83,17 +81,6 @@ func TestIncludeFilePaths(t *testing.T) {
 	} {
 		if _, err := lf.Collect(ctx); !errors.Is(err, ursus.ErrValue) && !errors.Is(err, ursus.ErrSchema) {
 			t.Errorf("a field past the files': %v", err)
-		}
-	}
-
-	// A name a column of the files has already is refused, as Polars refuses it:
-	// "column name for file paths "a" conflicts with column name from file".
-	for _, lf := range []*ursus.LazyFrame{
-		ursus.ScanCSV(p1, ursus.WithCSVIncludeFilePaths("a")),
-		ursus.ScanNDJSON(n1, ursus.WithNDJSONIncludeFilePaths("a")),
-	} {
-		if _, err := lf.Collect(ctx); !errors.Is(err, ursus.ErrSchema) || !strings.Contains(err.Error(), "file paths") {
-			t.Errorf("a name taken: %v", err)
 		}
 	}
 }

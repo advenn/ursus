@@ -130,6 +130,11 @@ def record(c: Case) -> dict:
         out["note"] = c.note
     try:
         got = c.query(**c.inputs)
+        if isinstance(got, (str, bytes)):
+            # A written answer (step 502): write_csv's or write_ndjson's text, or a
+            # dataset's file names, compared byte for byte.
+            out["want"] = {"text": got if isinstance(got, str) else got.decode("utf-8")}
+            return out
         if isinstance(got, pl.LazyFrame):
             got = got.collect()
         elif isinstance(got, pl.Series):
@@ -141,5 +146,7 @@ def record(c: Case) -> dict:
         out["want"] = encode_frame(got)
     except (pl.exceptions.PolarsError, TypeError, ValueError) as e:
         first = str(e).strip().splitlines()[0] if str(e).strip() else ""
+        # contains is a phrase, or (step 502) a list of them, each of which ursus's
+        # refusal names: its reason and its place.
         out["want"] = {"error": {"polars": f"{type(e).__name__}: {first}", "contains": c.contains}}
     return out

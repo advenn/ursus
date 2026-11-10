@@ -16,185 +16,16 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/ursustest"
 )
 
-// TestReadNDJSON is step 334: Polars' read_ndjson and scan_ndjson. Every answer is
-// Polars 1.44.1's.
+// TestReadNDJSON is step 334: Polars' read_ndjson and scan_ndjson. Each answer is
+// Polars 2.1.0's since step 502, recorded in testdata/oracle/ndjsonread.json and
+// spelled in oracle_ndjsonread_test.go; here stay the plans, the errors that name a
+// file and a line, and a file read in batches with its columns pushed down.
 func TestReadNDJSON(t *testing.T) {
 	ctx := t.Context()
 	c := ursus.Col
-	read := func(t *testing.T, text string, opts ...ursus.NDJSONOption) *ursus.DataFrame {
-		t.Helper()
-		got, err := ursus.ScanNDJSONBytes([]byte(text), "t.ndjson", opts...).Collect(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return got
-	}
-	schemaOf := func(df *ursus.DataFrame) string { return df.Schema().String() }
-
-	t.Run("a column a key", func(t *testing.T) {
-		got := read(t, "{\"a\":1,\"b\":\"x\",\"c\":1.5}\n{\"a\":2,\"b\":null,\"c\":2}\n{\"a\":null,\"b\":\"z\"}\n"+
-			"{\"a\":4,\"b\":\"w\",\"c\":3.25,\"d\":true}\n")
-		ursustest.AssertFrameEqual(t, got, dfOf(t, i64s("a", 1, 2, nil, 4), strs("b", "x", nil, "z", "w"),
-			f64s("c", 1.5, 2.0, nil, 3.25), ursus.ValuesNullable("d", []bool{false, false, false, true},
-				[]bool{false, false, false, true})))
-		// The keys in the order first seen; a key twice, its first value.
-		got = read(t, "{\"b\":1,\"a\":2}\n{\"a\":3,\"c\":4}\n{\"a\":5,\"a\":6}\n")
-		ursustest.AssertFrameEqual(t, got, dfOf(t, i64s("b", 1, nil, nil), i64s("a", 2, 3, 5), i64s("c", nil, 4, nil)))
-	})
-
-	t.Run("types met", func(t *testing.T) {
-		for _, tc := range []struct {
-			name, text, schema string
-		}{
-			{"integer then float", "{\"a\":1}\n{\"a\":2.5}\n", "{a: Float64}"},
-			{"integer and text", "{\"a\":1}\n{\"a\":\"x\"}\n", "{a: String}"},
-			{"a Boolean and text", "{\"a\":true}\n{\"a\":\"x\"}\n", "{a: String}"},
-			{"only nulls", "{\"a\":null}\n{\"a\":null}\n", "{a: Null}"},
-			{"a null then an integer", "{\"a\":null}\n{\"a\":1}\n", "{a: Int64}"},
-			{"past Int64", "{\"a\":9223372036854775807}\n{\"a\":18446744073709551615}\n", "{a: Int128}"},
-			{"an exponent", "{\"a\":1e3}\n", "{a: Float64}"},
-			{"a list of integers and a float", "{\"a\":[1,2.5]}\n", "{a: List(Float64)}"},
-			{"a list of integers and text", "{\"a\":[1,\"x\"]}\n", "{a: List(String)}"},
-			{"a list of objects", "{\"a\":[{\"x\":1},{\"y\":\"z\"}]}\n", "{a: List(Struct(x: Int64, y: String))}"},
-			{"two objects", "{\"s\":{\"x\":1}}\n{\"s\":{\"y\":\"q\"}}\n", "{s: Struct(x: Int64, y: String)}"},
-			{"a list and text", "{\"a\":\"s\"}\n{\"a\":[1]}\n", "{a: String}"},
-			{"text and an object", "{\"a\":{\"x\":1}}\n{\"a\":\"s\"}\n", "{a: String}"},
-			// An array's elements meet by rules of their own.
-			{"a float and an object", `{"a":[1.0,{"b":"q"}]}`, "{a: List(String)}"},
-			{"a float, a Boolean, an integer", `{"a":[2.5,true,1]}`, "{a: List(String)}"},
-			{"an object and a number", `{"a":[{"x":1},1]}`, "{a: List(String)}"},
-			{"objects", `{"a":[{"y":1},{"x":true},{"y":"s","z":null}]}`, "{a: List(Struct(y: String, x: Bool, z: Null))}"},
-			{"past Int64 and an integer", `{"a":[18446744073709551615,1]}`, "{a: List(String)}"},
-			{"past Int64 alone", `{"a":[18446744073709551615]}`, "{a: List(Int128)}"},
-			{"an empty list and a list", `{"a":[[],[1]]}`, "{a: List(List(Int64))}"},
-		} {
-			got := read(t, tc.text)
-			if s := schemaOf(got); s != tc.schema {
-				t.Errorf("%s: %s, want %s", tc.name, s, tc.schema)
-			}
-		}
-		// The text of a number beside text, as Polars writes it.
-		got := read(t, "{\"a\":1}\n{\"a\":\"x\"}\n{\"a\":2.5}\n{\"a\":true}\n")
-		ursustest.AssertFrameEqual(t, got, dfOf(t, ursus.Values("a", []string{"1", "x", "2.5", "true"})))
-		// A number as Rust prints it, an array or an object as JSON of Polars'
-		// spacing, its strings' quotes, newlines and carriage returns escaped and
-		// nothing else, its keys not at all.
-		got = read(t, `{"a":"s"}`+"\n"+`{"a":1.50}`+"\n"+`{"a":1e3}`+"\n"+`{"a":-0}`+"\n"+`{"a":1E-7}`+"\n"+
-			`{"a":-0.0}`+"\n"+`{"a":[1.0,{"b":"q\"\n\t\\"},null,true]}`+"\n"+`{"a":{"k\"":[]}}`+"\n"+
-			`{"a":12345678901234567890}`+"\n"+`{"a":  [ [ ] ,  { } ] }`+"\n")
-		ursustest.AssertFrameEqual(t, got, dfOf(t, ursus.Values("a", []string{"s", "1.5", "1000", "0", "0.0000001",
-			"-0", "[1, {\"b\": \"q\\\"\\n\t\\\"}, null, true]", "{\"k\"\": []}", "12345678901234567890", "[[], {}]"})))
-		got = read(t, `{"a":[1.0,{"b":"q"}]}`+"\n"+`{"a":[2.5,true,1]}`+"\n")
-		if rows, err := got.ToMaps(); err != nil || fmt.Sprint(rows) != `[map[a:[1 {"b": "q"}]] map[a:[2.5 true 1]]]` {
-			t.Errorf("elements as text: %v, %v", rows, err)
-		}
-		got = read(t, "{\"a\":[1,2.5]}\n{\"a\":[]}\n{\"a\":null}\n")
-		if s := got.String(); !strings.Contains(s, "[1, 2.5]") || !strings.Contains(s, "[]") || !strings.Contains(s, "null") {
-			t.Errorf("a list:\n%s", s)
-		}
-		got = read(t, "{\"s\":{\"x\":1}}\n{\"s\":{\"y\":\"q\"}}\n{\"s\":null}\n")
-		if s := got.String(); !strings.Contains(s, `{x: 1, y: null}`) || !strings.Contains(s, `{x: null, y: "q"}`) {
-			t.Errorf("a struct:\n%s", s)
-		}
-	})
-
-	t.Run("text", func(t *testing.T) {
-		got := read(t, "{\"a\":\"\\u00e9\\ud83d\\ude00\",\"b\":\"a\\\"b\\\\c\\n\"}\n  {\"a\" : \"x\" , \"b\":\"y\" }  \r\n\n")
-		ursustest.AssertFrameEqual(t, got, dfOf(t, ursus.Values("a", []string{"é😀", "x"}),
-			ursus.Values("b", []string{"a\"b\\c\n", "y"})))
-	})
-
-	t.Run("refused", func(t *testing.T) {
-		for _, tc := range []struct {
-			name, text, want string
-			opts             []ursus.NDJSONOption
-		}{
-			{"a Boolean and a number", "{\"a\":true}\n{\"a\":1}\n", "no type in common", nil},
-			{"an object and a number", "{\"s\":{\"x\":1}}\n{\"s\":5}\n", "no type in common", nil},
-			{"a later line's type", "{\"a\":1}\n{\"a\":\"x\"}\n", "cannot parse 'x' (a string) as Int64",
-				[]ursus.NDJSONOption{ursus.WithInferSchemaLines(1)}},
-			{"a line not an object", "[1,2]\n", "holds an array", nil},
-			{"a malformed line", "{\"a\":1}\n{\"a\":\n", "malformed JSON", nil},
-			{"a leading zero", "{\"a\":01}\n", "leading zero", nil},
-			{"a leading zero in a float's column", "{\"a\":1.5}\n{\"a\":-01.5}\n", "leading zero",
-				[]ursus.NDJSONOption{ursus.WithInferSchemaLines(1)}},
-			{"a key's types, by line", "{\"a\":1}\n\n{\"a\":true}\n", "at line 3, key a", nil},
-			{"a line's place, past a blank one", "{\"a\":1}\n \n{\"a\":\"x\"}\n", "at line 3, key a",
-				[]ursus.NDJSONOption{ursus.WithInferSchemaLines(1)}},
-			// Elements a Float64 inferred for, and a Boolean among them.
-			{"a Boolean among numbers", `{"a":[1,true,2.5]}`, "cannot parse 'true' (a Boolean) as Float64", nil},
-		} {
-			_, err := ursus.ScanNDJSONBytes([]byte(tc.text), "t.ndjson", tc.opts...).Collect(ctx)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("%s: %v, want an error saying %q", tc.name, err, tc.want)
-			}
-		}
-	})
-
-	t.Run("a schema given", func(t *testing.T) {
-		s, err := ursus.NewSchema(ursus.Field{Name: "a", Type: ursus.Float64}, ursus.Field{Name: "d", Type: ursus.Date})
-		if err != nil {
-			t.Fatal(err)
-		}
-		got := read(t, "{\"a\":1,\"b\":\"x\",\"d\":\"2024-01-02\"}\n{\"a\":2.5,\"d\":null}\n", ursus.WithNDJSONSchema(s))
-		want := collect(t, ursus.Frame(f64s("a", 1.0, 2.5), ursus.ValuesNullable("d", []int32{19724, 0}, []bool{true, false})).
-			Select(c("a"), c("d").Cast(ursus.Date)))
-		ursustest.AssertFrameEqual(t, got, want)
-
-		// Each type Polars reads, as it reads it; a value refused as the schema's
-		// type, without inference's hint.
-		s = mustSchema(ursus.Field{Name: "i", Type: ursus.Int32}, ursus.Field{Name: "u", Type: ursus.Uint64},
-			ursus.Field{Name: "f", Type: ursus.Float32}, ursus.Field{Name: "c", Type: dtype.Enum("a", "2024-01-02")})
-		got = read(t, `{"i":1,"u":1,"f":1,"c":"a"}`+"\n"+`{"i":300,"u":18446744073709551615,"f":300,"c":"2024-01-02"}`+"\n",
-			ursus.WithNDJSONSchema(s))
-		want = collect(t, ursus.Frame(ursus.Values("i", []int32{1, 300}), ursus.Values("u", []uint64{1, 18446744073709551615}),
-			ursus.Values("f", []float32{1, 300}), strs("c", "a", "2024-01-02")).Select(c("i"), c("u"), c("f"),
-			c("c").Cast(dtype.Enum("a", "2024-01-02"))))
-		ursustest.AssertFrameEqual(t, got, want)
-		for _, tc := range []struct{ text, want string }{
-			{`{"i":"a"}`, "cannot parse 'a' (a string) as Int32"},
-			{`{"i":3000000000}`, "cannot parse '3000000000' (a number) as Int32"},
-			{`{"u":-1}`, "cannot parse '-1' (a number) as Uint64"},
-		} {
-			_, err := ursus.ScanNDJSONBytes([]byte(`{"i":1}`+"\n"+tc.text+"\n"), "t.ndjson", ursus.WithNDJSONSchema(s)).Collect(ctx)
-			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "at line 2") ||
-				strings.Contains(err.Error(), "first lines") {
-				t.Errorf("%s: %v, want %q at line 2", tc.text, err, tc.want)
-			}
-		}
-	})
-
-	t.Run("errors ignored", func(t *testing.T) {
-		one := []ursus.NDJSONOption{ursus.WithInferSchemaLines(1), ursus.WithNDJSONIgnoreErrors(true)}
-		// Polars 1.44.1's answers, ignore_errors=True.
-		got := read(t, `{"a":1}`+"\n"+`{"a":"x"}`+"\n"+`{"a":2.5}`+"\n"+`{"a":3}`+"\n"+`{"a":[1]}`+"\n", one...)
-		ursustest.AssertFrameEqual(t, got, dfOf(t, i64s("a", 1, nil, nil, 3, nil)))
-		got = read(t, `{"b":true}`+"\n"+`{"b":1}`+"\n"+`{"b":"t"}`+"\n", one...)
-		ursustest.AssertFrameEqual(t, got, dfOf(t, ursus.ValuesNullable("b", []bool{true, false, false}, []bool{true, false, false})))
-		got = read(t, `{"a":[1,2]}`+"\n"+`{"a":[1,"x",{"y":1}]}`+"\n"+`{"a":"s"}`+"\n", one...)
-		if rows, err := got.ToMaps(); err != nil || fmt.Sprint(rows) != "[map[a:[1 2]] map[a:[1 <nil> <nil>]] map[a:<nil>]]" {
-			t.Errorf("a list: %v, %v", rows, err)
-		}
-		// A value that is not an object, in a Struct column, is one of no keys.
-		got = read(t, `{"o":{"x":1,"y":"q"}}`+"\n"+`{"o":5}`+"\n"+`{"o":null}`+"\n"+`{"o":{"x":"bad","y":"r"}}`+"\n", one...)
-		rows, err := got.ToMaps()
-		if err != nil || fmt.Sprint(rows) != "[map[o:map[x:1 y:q]] map[o:map[x:<nil> y:<nil>]] map[o:<nil>] map[o:map[x:<nil> y:r]]]" {
-			t.Errorf("a struct: %v, %v", rows, err)
-		}
-		date := mustSchema(ursus.Field{Name: "d", Type: ursus.Date})
-		got = read(t, `{"d":"2024-01-02"}`+"\n"+`{"d":"nope"}`+"\n", ursus.WithNDJSONSchema(date), ursus.WithNDJSONIgnoreErrors(true))
-		ursustest.AssertFrameEqual(t, got, collect(t, ursus.Frame(ursus.ValuesNullable("d", []int32{19724, 0},
-			[]bool{true, false})).Select(c("d").Cast(ursus.Date))))
-		// A line that is not JSON is refused all the same.
-		_, err = ursus.ScanNDJSONBytes([]byte(`{"a":1}`+"\n"+`{"a":`+"\n"), "t.ndjson", one...).Collect(ctx)
-		if err == nil || !strings.Contains(err.Error(), "malformed JSON") {
-			t.Errorf("malformed: %v", err)
-		}
-	})
 
 	t.Run("several files", func(t *testing.T) {
 		dir := t.TempDir()
@@ -208,15 +39,18 @@ func TestReadNDJSON(t *testing.T) {
 		a := write("a.ndjson", `{"a":1,"b":"x"}`+"\n"+`{"a":2,"b":"y"}`+"\n")
 		b := write("b.ndjson", `{"a":3,"b":"z","c":true}`+"\n"+`{"b":"w","a":4}`+"\n")
 		bad := write("c.ndjson", "\n"+`{"a":"text","b":"q"}`+"\n")
-		// Polars' answer: the first file's schema, a key a later file adds skipped.
-		want := dfOf(t, i64s("a", 1, 2, 3, 4), strs("b", "x", "y", "z", "w"))
+		// The three spellings of the two files read alike (the frame is the oracle's
+		// two_files case).
 		open := func(path string) func(context.Context) (io.ReadCloser, error) {
 			return func(context.Context) (io.ReadCloser, error) { return os.Open(path) }
 		}
+		want, err := ursus.ScanNDJSONFiles([]string{a, b}).Collect(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
 		for name, lf := range map[string]*ursus.LazyFrame{
-			"files": ursus.ScanNDJSONFiles([]string{a, b}),
-			"glob":  ursus.ScanNDJSONGlob(filepath.Join(dir, "[ab].ndjson")),
-			"from":  ursus.ScanNDJSONFrom([]ursus.NDJSONFile{{Name: "a", Open: open(a)}, {Name: "b", Open: open(b)}}),
+			"glob": ursus.ScanNDJSONGlob(filepath.Join(dir, "[ab].ndjson")),
+			"from": ursus.ScanNDJSONFrom([]ursus.NDJSONFile{{Name: "a", Open: open(a)}, {Name: "b", Open: open(b)}}),
 		} {
 			got, err := lf.Collect(ctx)
 			if err != nil {
@@ -227,7 +61,7 @@ func TestReadNDJSON(t *testing.T) {
 		if plan, err := ursus.ScanNDJSONFiles([]string{a, b}).Explain(ctx); err != nil || !strings.Contains(plan, "a.ndjson and 1 more") {
 			t.Errorf("the plan: %v\n%s", err, plan)
 		}
-		_, err := ursus.ScanNDJSONFiles([]string{a, bad}).Collect(ctx)
+		_, err = ursus.ScanNDJSONFiles([]string{a, bad}).Collect(ctx)
 		if err == nil || !strings.Contains(err.Error(), "cannot parse 'text' (a string) as Int64") ||
 			!strings.Contains(err.Error(), "at line 2 of "+bad+", key a") {
 			t.Errorf("a later file's error: %v", err)
@@ -240,12 +74,26 @@ func TestReadNDJSON(t *testing.T) {
 		}
 	})
 
+	t.Run("a schema's refusal", func(t *testing.T) {
+		// A value refused as a given schema's type names its line (the oracle's
+		// schema_refuses_ cases) and not inference's hint, which a schema does not need.
+		s := mustSchema(ursus.Field{Name: "i", Type: ursus.Int32})
+		_, err := ursus.ScanNDJSONBytes([]byte(`{"i":1}`+"\n"+`{"i":"a"}`+"\n"), "t.ndjson", ursus.WithNDJSONSchema(s)).Collect(ctx)
+		if err == nil || strings.Contains(err.Error(), "first lines") {
+			t.Errorf("a schema's refusal: %v", err)
+		}
+	})
+
 	t.Run("a file, in batches, its columns pushed down", func(t *testing.T) {
 		var b bytes.Buffer
+		var total int64
 		for i := range 5000 {
+			digits := strings.Repeat("1", 1+i%5)
 			b.WriteString("{\"i\":")
-			b.WriteString(strings.Repeat("1", 1+i%5))
+			b.WriteString(digits)
 			b.WriteString(",\"s\":\"v\",\"skip\":[1,2,3]}\n")
+			n, _ := strconv.ParseInt(digits, 10, 64)
+			total += n
 		}
 		path := filepath.Join(t.TempDir(), "rows.ndjson")
 		if err := os.WriteFile(path, b.Bytes(), 0o644); err != nil {
@@ -256,9 +104,8 @@ func TestReadNDJSON(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// 1000 rows each of 1, 11, 111, 1111 and 11111.
-		if v, err := got.ItemAt(0, "total"); err != nil || v == nil || fmt.Sprint(v) != "12345000" {
-			t.Errorf("the total: %v, %v", v, err)
+		if v, err := got.ItemAt(0, "total"); err != nil || v == nil || fmt.Sprint(v) != strconv.FormatInt(total, 10) {
+			t.Errorf("the total: %v, %v, want %d", v, err, total)
 		}
 		plan, err := lf.Explain(ctx)
 		if err != nil || !strings.Contains(plan, "ndjson") || strings.Contains(plan, "skip") {

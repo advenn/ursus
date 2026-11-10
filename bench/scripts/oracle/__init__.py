@@ -40,6 +40,9 @@ GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
           "dtcombine", "dtexact", "timearith", "businessdays_range", "interpby",
           # step 503, the sub-packages' data values
           "dtype", "decimalagg", "hive_infer", "selector", "castbool", "caststring",
+          # step 502, I/O as text
+          "io_byhand", "csvread", "csvskip", "csvwrite", "ndjsonread", "jsonread", "jsonwrite", "ipcfiles", "hive",
+          "hiveparent", "filepaths", "partitionwrite", "database",
           # step 501, frames, joins and reshaping
           "join_byhand", "joinorder", "asofoptions", "concat", "pivot", "dummies", "unstack", "unpivot", "upsample", "update",
           "matchschema", "frameagg", "framecolumns", "framerows", "frameconv", "framenulls", "fill", "intindex", "dynamicopts",
