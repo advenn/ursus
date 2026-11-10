@@ -3,15 +3,16 @@ package ursus_test
 // At what type is a join key compared? audit.md §4 and §11 item 6.
 //
 // Each side's key resolves against its own schema, and the two are compared in one
-// promoted type. These cases are every way that answer was wrong, each answered by
-// hand under the rule chosen for this step: a key meets the other side's at a type
-// that holds BOTH exactly, it is cast there strictly, and a pair with no such type
-// is refused at plan time with a cast the caller can write.
+// promoted type. These cases are every way that answer was wrong, under the rule
+// chosen for this step: a key meets the other side's at a type that holds BOTH
+// exactly, it is cast there strictly, and a pair with no such type is refused at plan
+// time with a cast the caller can write. The answers are the join_byhand group's,
+// Polars 2.1.0's (oracle_join_byhand_test.go); here stay the refusals and the spilled
+// right join, a differential against the same join in memory.
 
 import (
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -74,26 +75,12 @@ func TestJoinKeysByHand(t *testing.T) {
 	var stats ursus.MemoryStats
 	spill := []ursus.CollectOption{ursus.WithBatchSize(256), ursus.WithMemoryLimit(8 << 10),
 		ursus.WithSpillDir(t.TempDir()), ursus.WithMemoryStats(&stats)}
+	// Reading both sides keeps the filter above the join: pushed into the right side,
+	// it would shrink the build to one row, which never spills.
+	spilled := spillLeft.Join(spillRight, ursus.JoinOn(c("k1"), c("k2")), ursus.JoinHow(ursus.JoinRight)).
+		Filter(c("rv").Eq(-1).Or(c("lv").Eq(-12345))).Select(c("k1"), c("k2"), c("rv"))
 
 	cases := []joinCase{
-		// --- J1: as-of by-keys of different widths ---
-		{name: "J1 AsOfBy Int32 against Int64",
-			got: ursus.Frame(ursus.Values("k", []int64{10, 20}), ursus.Values("g", []int32{1, 2}),
-				ursus.Values("lv", []int64{0, 1})).
-				JoinAsOf(ursus.Frame(ursus.Values("k", []int64{5, 15}), ursus.Values("g", []int64{1, 2}),
-					ursus.Values("rv", []int64{100, 200})), ursus.AsOfOn(c("k")), ursus.AsOfBy(c("g"))).
-				Select(c("lv"), c("rv")),
-			want: ursus.Frame(ursus.Values("lv", []int64{0, 1}), ursus.Values("rv", []int64{100, 200}))},
-		// The other way round: the narrow by-key on the right, so each side's cast is
-		// what one of these two cases depends on.
-		{name: "J1 AsOfBy Int64 against Int32",
-			got: ursus.Frame(ursus.Values("k", []int64{10, 20}), ursus.Values("g", []int64{1, 2}),
-				ursus.Values("lv", []int64{0, 1})).
-				JoinAsOf(ursus.Frame(ursus.Values("k", []int64{5, 15}), ursus.Values("g", []int32{1, 2}),
-					ursus.Values("rv", []int64{100, 200})), ursus.AsOfOn(c("k")), ursus.AsOfBy(c("g"))).
-				Select(c("lv"), c("rv")),
-			want: ursus.Frame(ursus.Values("lv", []int64{0, 1}), ursus.Values("rv", []int64{100, 200}))},
-
 		// --- J2: a temporal key the finer unit cannot hold ---
 		{name: "J2 Datetime(ms) year 3000 against Datetime(ns), left join",
 			got: ursus.Frame(ticks("k", ms, []int64{y3000, 1000}, nil), ursus.Values("lv", []int64{0, 1})).
@@ -110,20 +97,9 @@ func TestJoinKeysByHand(t *testing.T) {
 					on, ursus.JoinNullsEqual(true)),
 			kind: ursus.ErrValue, refuse: []string{"k", "Datetime(ns)"}},
 
-		// --- J3: a spilled right join keeps the right key it coalesces ---
-		{name: "J3 spilled right join, key (1, null)",
-			got: spillLeft.Join(spillRight, ursus.JoinOn(c("k1"), c("k2")), ursus.JoinHow(ursus.JoinRight)).
-				// Reading both sides keeps the filter above the join: pushed into the
-				// right side, it would shrink the build to one row, which never spills.
-				Filter(c("rv").Eq(-1).Or(c("lv").Eq(-12345))).Select(c("k1"), c("k2"), c("rv")),
-			want: ursus.Frame(ursus.Values("k1", []int64{1}),
-				ursus.ValuesNullable("k2", []int64{0}, []bool{false}), ursus.Values("rv", []int64{-1})),
-			opts: spill, spills: &stats},
-		{name: "control: the same right join, in memory",
-			got: spillLeft.Join(spillRight, ursus.JoinOn(c("k1"), c("k2")), ursus.JoinHow(ursus.JoinRight)).
-				Filter(c("rv").Eq(-1).Or(c("lv").Eq(-12345))).Select(c("k1"), c("k2"), c("rv")),
-			want: ursus.Frame(ursus.Values("k1", []int64{1}),
-				ursus.ValuesNullable("k2", []int64{0}, []bool{false}), ursus.Values("rv", []int64{-1}))},
+		// --- J3: a spilled right join keeps the right key it coalesces: the same join
+		// in memory, whose answer the join_byhand group's right_join_null_key records.
+		{name: "J3 spilled right join, key (1, null)", got: spilled, want: spilled, opts: spill, spills: &stats},
 
 		// --- J5: Validate checks every left key ---
 		{name: "J5 1:m with unmatched duplicate left keys",
@@ -135,18 +111,6 @@ func TestJoinKeysByHand(t *testing.T) {
 				Join(ursus.Frame(ursus.Values("k", []int64{2})), on,
 					ursus.JoinNullsEqual(true), ursus.JoinValidate(ursus.ValidateOneToMany)),
 			kind: ursus.ErrValue, refuse: []string{"requires unique keys on the left side"}},
-		{name: "J5 control: duplicate null left keys, nulls not equal",
-			got: ursus.Frame(ursus.ValuesNullable("k", []int64{0, 0, 2}, []bool{false, false, true})).
-				Join(ursus.Frame(ursus.Values("k", []int64{2})), on, ursus.JoinValidate(ursus.ValidateOneToMany)),
-			want: ursus.Frame(ursus.Values("k", []int64{2}))},
-
-		// --- J6: a null as-of by-key matches nothing ---
-		{name: "J6 AsOfBy null by-keys",
-			got: ursus.Frame(ursus.Values("k", []int64{10}), ursus.ValuesNullable("g", []int64{0}, []bool{false})).
-				JoinAsOf(ursus.Frame(ursus.Values("k", []int64{5}), ursus.ValuesNullable("g", []int64{0}, []bool{false}),
-					ursus.Values("rv", []int64{100})), ursus.AsOfOn(c("k")), ursus.AsOfBy(c("g"))).
-				Select(c("k"), c("rv")),
-			want: ursus.Frame(ursus.Values("k", []int64{10}), ursus.ValuesNullable("rv", []int64{0}, []bool{false}))},
 
 		// --- J8: no type holds an Int64 and a Float64 exactly ---
 		{name: "J8 Int64 against Float64",
@@ -161,28 +125,6 @@ func TestJoinKeysByHand(t *testing.T) {
 			got: ursus.Frame(ursus.Values("id", []int64{1}), ursus.Values("a", []int64{p53 + 1}),
 				ursus.Values("b", []float64{1.5})).Unpivot(ursus.UnpivotOptions{On: []string{"a", "b"}}),
 			kind: ursus.ErrType, refuse: []string{"Int64", "Float64", "exactly"}},
-		{name: "control: Int32 against Float32 is exact",
-			got: ursus.Frame(ursus.Values("k", []int32{16777217, 3})).
-				Join(ursus.Frame(ursus.Values("k", []float32{16777216, 3})), on).Select(c("k").Cast(ursus.Int64)),
-			want: ursus.Frame(ursus.Values("k", []int64{3}))},
-		{name: "control: Int64 against Uint64 meets at Int128",
-			got: ursus.Frame(ursus.Values("k", []int64{-1, 1<<62 + 1})).
-				Join(ursus.Frame(ursus.Values("k", []uint64{math.MaxUint64, 1<<62 + 1})), on).Select(c("k").Cast(ursus.Int64)),
-			want: ursus.Frame(ursus.Values("k", []int64{1<<62 + 1}))},
-		{name: "control: Datetime(ms) against Datetime(ns), in range",
-			got: ursus.Frame(ticks("k", ms, []int64{1000, 2000}, nil), ursus.Values("lv", []int64{0, 1})).
-				Join(ursus.Frame(ticks("k", ns, []int64{2_000_000_000}, nil), ursus.Values("rv", []int64{9})), on).
-				Select(c("lv"), c("rv")),
-			want: ursus.Frame(ursus.Values("lv", []int64{1}), ursus.Values("rv", []int64{9}))},
-
-		// --- O6: a filter on the coalesced key runs at the key's type ---
-		// The output k is Int64, where 50000*50000 = 2.5e9 > 2e9. Pushed into the
-		// Int32 side unconverted, the product wraps negative and the row is lost.
-		{name: "O6 filter on a coalesced key of two widths",
-			got: ursus.Frame(ursus.Values("k", []int32{50000}), ursus.Values("lv", []int64{1})).
-				Join(ursus.Frame(ursus.Values("k", []int64{50000}), ursus.Values("rv", []int64{2})), on).
-				Filter(c("k").Mul(c("k")).Gt(int64(2_000_000_000))).Select(c("lv"), c("rv")),
-			want: ursus.Frame(ursus.Values("lv", []int64{1}), ursus.Values("rv", []int64{2}))},
 
 		// --- J10: the hint names a cast that fixes the mismatch ---
 		{name: "J10 UTC against naive Datetime",
@@ -212,6 +154,8 @@ func TestJoinKeysByHand(t *testing.T) {
 	}
 }
 
+// joinWrong runs a case, with its options, against its refusal or its want in
+// memory.
 func joinWrong(t *testing.T, tc joinCase) string {
 	df, err := tc.got.Collect(t.Context(), tc.opts...)
 	if tc.want == nil {
@@ -244,7 +188,7 @@ func joinWrong(t *testing.T, tc joinCase) string {
 	}
 	want, err := tc.want.Collect(t.Context())
 	if err != nil {
-		t.Fatalf("the hand answer: %v", err)
+		t.Fatalf("the answer in memory: %v", err)
 	}
 	return framesDiffer(t, df, want, ursustest.IgnoreRowOrder())
 }
