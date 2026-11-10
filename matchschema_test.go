@@ -8,9 +8,10 @@ import (
 	"github.com/advenn/ursus/ursustest"
 )
 
-// TestMatchToSchema is C2 of v0.6.7-scope.md (step 299): Polars' match_to_schema.
-// Every answer is Polars 1.44.1's on the same frame, but a computed fill, which
-// meets the schema's type here and keeps its own in Polars (feature-gaps.md §9).
+// TestMatchToSchema is C2 of v0.6.7-scope.md (step 299): Polars' match_to_schema. The
+// frames it gives are the matchschema group's, Polars 2.1.0's
+// (oracle_matchschema_test.go), a computed fill meeting the schema's type on both
+// sides (feature-gaps.md §9); here stay the refusals, the plan and the eager form.
 func TestMatchToSchema(t *testing.T) {
 	of := ursus.Of
 	lf := ursus.Frame(
@@ -26,50 +27,6 @@ func TestMatchToSchema(t *testing.T) {
 			Select(ursus.Col(name).Cast(from)).
 			MatchToSchema(ursus.MustSchema(of(name, to)), ursus.MatchOptions{
 				IntegerCast: ursus.MatchUpcast, FloatCast: ursus.MatchUpcast})
-	}
-
-	for _, tc := range []struct {
-		name  string
-		q     *ursus.LazyFrame
-		types string
-		csv   string
-	}{
-		{"insert, ignore and upcast", lf.MatchToSchema(s, upcast),
-			"a:String,b:Int64,c:Float64", "a,b,c\nx,1,\ny,2,\n"},
-		{"a fill", lf.MatchToSchema(s, ursus.MatchOptions{ExtraColumns: ursus.MatchIgnore,
-			IntegerCast: ursus.MatchUpcast, Columns: map[string]ursus.ColumnMatch{
-				"c": {Fill: ursus.Col("e").Cast(ursus.Float64).Mul(2.0)}}}),
-			"a:String,b:Int64,c:Float64", "a,b,c\nx,1,3.0\ny,2,5.0\n"},
-		{"reordered", lf.MatchToSchema(ursus.MustSchema(of("a", ursus.String), of("e", ursus.Float32),
-			of("b", ursus.Int32)), ursus.MatchOptions{}), "a:String,e:Float32,b:Int32", "a,e,b\nx,1.5,1\ny,2.5,2\n"},
-		{"a float upcast", lf.MatchToSchema(ursus.MustSchema(of("b", ursus.Int32), of("a", ursus.String),
-			of("e", ursus.Float64)), ursus.MatchOptions{FloatCast: ursus.MatchUpcast}),
-			"b:Int32,a:String,e:Float64", "b,a,e\n1,x,1.5\n2,y,2.5\n"},
-		{"an upcast for one column", lf.MatchToSchema(ursus.MustSchema(of("b", ursus.Int64), of("a", ursus.String),
-			of("e", ursus.Float32)), ursus.MatchOptions{Columns: map[string]ursus.ColumnMatch{
-			"b": {IntegerCast: ursus.MatchUpcast}}}), "b:Int64,a:String,e:Float32", "b,a,e\n1,x,1.5\n2,y,2.5\n"},
-		{"insert for one column", lf.MatchToSchema(s, ursus.MatchOptions{ExtraColumns: ursus.MatchIgnore,
-			IntegerCast: ursus.MatchUpcast, Columns: map[string]ursus.ColumnMatch{"c": {Missing: ursus.MatchInsert}}}),
-			"a:String,b:Int64,c:Float64", "a,b,c\nx,1,\ny,2,\n"},
-		{"UInt8 as Int16", one("u", ursus.Uint8, ursus.Int16), "u:Int16", "u\n1\n"},
-		{"UInt32 as Int64", one("u", ursus.Uint32, ursus.Int64), "u:Int64", "u\n1\n"},
-		{"Int64 as Int128", one("i", ursus.Int64, ursus.Int128), "i:Int128", "i\n1\n"},
-		{"a Null column", ursus.Frame(ursus.Values("k", []int64{1, 2})).
-			Select(ursus.Null(ursus.NullT).Alias("n")).
-			MatchToSchema(ursus.MustSchema(of("n", ursus.Int64)), ursus.MatchOptions{}), "n:Int64", "n\n\n\n"},
-		{"a List's element", ursus.Frame(ursus.Values("l", []string{"1,2", "3"})).
-			Select(ursus.Col("l").Str().Split(",").List().Eval(ursus.Element().Cast(ursus.Int32))).
-			MatchToSchema(ursus.MustSchema(of("l", ursus.List(ursus.Int64))),
-				ursus.MatchOptions{IntegerCast: ursus.MatchUpcast}), "l:List(Int64)", ""},
-	} {
-		if got := matchTypes(t, tc.q); got != tc.types {
-			t.Errorf("%s: types %s, want %s", tc.name, got, tc.types)
-		}
-		if tc.csv != "" {
-			if got := csvOf(t, tc.q); got != tc.csv {
-				t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.csv)
-			}
-		}
 	}
 
 	t.Run("refused", func(t *testing.T) {
@@ -138,47 +95,16 @@ func TestMatchToSchema(t *testing.T) {
 		}
 	})
 
-	t.Run("structs", func(t *testing.T) {
+	t.Run("structs refused", func(t *testing.T) {
 		st := func(fs ...ursus.Field) ursus.DataType { return ursus.StructOf(fs...) }
 		f := func(n string, d ursus.DataType) ursus.Field { return ursus.Field{Name: n, Type: d, Nullable: true} }
 		in := st(f("x", ursus.Int32), f("y", ursus.String))
-		// Two structs and a null one, as JSON reads them.
+		// Two structs and a null one, as JSON reads them; the fields matched are the
+		// matchschema group's struct cases.
 		ss := ursus.Frame(ursus.Values("j", []string{`{"x": 1, "y": "p"}`, `{"x": 2, "y": "q"}`, "null"})).
 			Select(ursus.Col("j").Str().JsonDecode(in).Alias("s"))
 		to := func(dt ursus.DataType, o ursus.MatchOptions) *ursus.LazyFrame {
 			return ss.MatchToSchema(ursus.MustSchema(of("s", dt)), o)
-		}
-		json := func(q *ursus.LazyFrame) *ursus.LazyFrame {
-			return q.Select(ursus.Col("s").Struct().JsonEncode())
-		}
-		for _, tc := range []struct {
-			name  string
-			q     *ursus.LazyFrame
-			types string
-			csv   string
-		}{
-			{"the same", to(in, ursus.MatchOptions{}), "s:Struct(x: Int32, y: String)", ""},
-			{"reordered", to(st(f("y", ursus.String), f("x", ursus.Int32)), ursus.MatchOptions{}),
-				"s:Struct(y: String, x: Int32)", "s\n\"{\"\"y\"\":\"\"p\"\",\"\"x\"\":1}\"\n\"{\"\"y\"\":\"\"q\"\",\"\"x\"\":2}\"\n\n"},
-			{"a field inserted", to(st(f("x", ursus.Int32), f("y", ursus.String), f("z", ursus.Float64)),
-				ursus.MatchOptions{MissingStructFields: ursus.MatchInsert}),
-				"s:Struct(x: Int32, y: String, z: Float64)",
-				"s\n\"{\"\"x\"\":1,\"\"y\"\":\"\"p\"\",\"\"z\"\":null}\"\n\"{\"\"x\"\":2,\"\"y\"\":\"\"q\"\",\"\"z\"\":null}\"\n\n"},
-			{"a field dropped", to(st(f("x", ursus.Int32)), ursus.MatchOptions{ExtraStructFields: ursus.MatchIgnore}),
-				"s:Struct(x: Int32)", "s\n\"{\"\"x\"\":1}\"\n\"{\"\"x\"\":2}\"\n\n"},
-			{"a field widened", to(st(f("x", ursus.Int64), f("y", ursus.String)),
-				ursus.MatchOptions{IntegerCast: ursus.MatchUpcast}), "s:Struct(x: Int64, y: String)",
-				"s\n\"{\"\"x\"\":1,\"\"y\"\":\"\"p\"\"}\"\n\"{\"\"x\"\":2,\"\"y\"\":\"\"q\"\"}\"\n\n"},
-		} {
-			if got := matchTypes(t, tc.q); got != tc.types {
-				t.Errorf("%s: types %s, want %s", tc.name, got, tc.types)
-			}
-			if tc.csv != "" {
-				// The third row is a null struct, and stays one: no {"x": null, ...}.
-				if got := csvOf(t, json(tc.q)); got != tc.csv {
-					t.Errorf("%s:\ngot  %q\nwant %q", tc.name, got, tc.csv)
-				}
-			}
 		}
 		for _, tc := range []struct {
 			name string
@@ -257,17 +183,4 @@ func TestMatchToSchemaUnderAMemoryLimit(t *testing.T) {
 		t.Fatalf("under 16 KiB: %v", err)
 	}
 	ursustest.AssertFrameEqual(t, got, want)
-}
-
-func matchTypes(t *testing.T, q *ursus.LazyFrame) string {
-	t.Helper()
-	s, err := q.CollectSchema(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	var out []string
-	for _, f := range s.All() {
-		out = append(out, f.Name+":"+f.Type.String())
-	}
-	return strings.Join(out, ",")
 }

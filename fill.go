@@ -81,8 +81,8 @@ func (e Expr) FillNullWith[T Operand](v T) Expr {
 // things all the way down — and since step 311 a null condition takes Otherwise, as
 // Polars' when does. So the condition is IsNotNan or IsNull, true on a null row,
 // which then keeps its null; the fill value never lands on it. Until step 311 a null
-// condition took neither branch, and IsNotNan alone did this, which is why
-// TestFillNanLeavesNullsAlone exists.
+// condition took neither branch, and IsNotNan alone did this, which is what the fill
+// group's fill_nan_leaves_nulls case (testdata/oracle/fill.json) holds.
 //
 // # Why the predicate is IsNotNan rather than IsNan
 //

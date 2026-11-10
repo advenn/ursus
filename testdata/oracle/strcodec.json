@@ -1,0 +1,5707 @@
+{
+ "cases": [
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "hi",
+        "\u00e9",
+        null,
+        ""
+       ]
+      }
+     ]
+    }
+   },
+   "name": "encode",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "hex",
+      "values": [
+       "6869",
+       "c3a9",
+       null,
+       ""
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "b64",
+      "values": [
+       "aGk=",
+       "w6k=",
+       null,
+       ""
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "6869",
+        "C3A9",
+        null,
+        "zz",
+        "abc"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "decode_hex",
+   "note": "upper case hex reads, odd or foreign digits do not",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Binary",
+      "name": "s",
+      "values": [
+       "aGk=",
+       "w6k=",
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "aGk=",
+        "w6k=",
+        null,
+        "!!",
+        "aGk"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "decode_base64",
+   "note": "base64 must be padded",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Binary",
+      "name": "s",
+      "values": [
+       "aGk=",
+       "w6k=",
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "ff",
+        "10",
+        "-1a",
+        "z",
+        null,
+        " 7",
+        "0x10"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "b",
+       "values": [
+        16,
+        2,
+        16,
+        36,
+        10,
+        10,
+        16
+       ]
+      }
+     ]
+    }
+   },
+   "name": "to_integer_base_16",
+   "note": "no space, 0x or underscore reads",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "s",
+      "values": [
+       255,
+       16,
+       -26,
+       null,
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "ff",
+        "10",
+        "-1a",
+        "z",
+        null,
+        " 7",
+        "0x10"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "b",
+       "values": [
+        16,
+        2,
+        16,
+        36,
+        10,
+        10,
+        16
+       ]
+      }
+     ]
+    }
+   },
+   "name": "to_integer_base_a_row",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "s",
+      "values": [
+       255,
+       2,
+       -26,
+       35,
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "127",
+        "128"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "to_integer_int8",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int8",
+      "name": "s",
+      "values": [
+       127,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "-1",
+        "200"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "to_integer_uint8",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint8",
+      "name": "s",
+      "values": [
+       null,
+       200
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "12",
+        "+5",
+        "1_000"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "to_integer_sign_not_underscore",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "s",
+      "values": [
+       12,
+       5,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "aaa",
+        "abab",
+        null
+       ]
+      }
+     ]
+    }
+   },
+   "name": "replace_n2",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "XXa",
+       "XbXb",
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "aaa",
+        "abab",
+        null
+       ]
+      }
+     ]
+    }
+   },
+   "name": "replace_n0",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "aaa",
+       "abab",
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "aaa",
+        "abab",
+        null
+       ]
+      }
+     ]
+    }
+   },
+   "name": "replace_n_minus_1",
+   "note": "every match",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "XXX",
+       "XbXb",
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "aaa",
+        "abab",
+        null
+       ]
+      }
+     ]
+    }
+   },
+   "name": "replace_regex_n1",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "X",
+       "Xbab",
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "aaa",
+        "abab",
+        null
+       ]
+      }
+     ]
+    }
+   },
+   "name": "replace_regex_group_n1",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "<a>aa",
+       "<a>bab",
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "a",
+       "values": [
+        "x",
+        null,
+        "z",
+        null
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "b",
+       "values": [
+        1,
+        2,
+        null,
+        null
+       ]
+      }
+     ]
+    }
+   },
+   "name": "concat_str_ignore_nulls",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "a",
+      "values": [
+       "x-1",
+       "2",
+       "z",
+       ""
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "a",
+       "values": [
+        "x",
+        null,
+        "z",
+        null
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "b",
+       "values": [
+        1,
+        2,
+        null,
+        null
+       ]
+      }
+     ]
+    }
+   },
+   "name": "concat_str_with_a_literal",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "b",
+      "values": [
+       "1!",
+       "2!",
+       "!",
+       "!"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "{\"a\": {\"b\": [1, 2, {\"c\": \"x\"}]}, \"d\": 3.5, \"e\": null, \"f\": true}",
+        "{\"a\": 1}",
+        null,
+        "not json"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_path_match",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "$.d",
+      "values": [
+       "3.5",
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "$.a.b[0]",
+      "values": [
+       "1",
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "$.a.b[2].c",
+      "values": [
+       "x",
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "$.a.b",
+      "values": [
+       "[1,2,{\"c\":\"x\"}]",
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "$.e",
+      "values": [
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "$.f",
+      "values": [
+       "true",
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "$.a",
+      "values": [
+       "{\"b\":[1,2,{\"c\":\"x\"}]}",
+       "1",
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "$['d']",
+      "values": [
+       "3.5",
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "$.zz",
+      "values": [
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "$.a.b[-1]",
+      "values": [
+       "{\"c\":\"x\"}",
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "$..c",
+      "values": [
+       "x",
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "[1e3, 1e15, 1e16, 1.5e-7, 0.00001, 1e-6, -0, 2.50, 1E2, 12345678901234567890, -9223372036854775809, 100000000000000000000]"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_path_numbers",
+   "note": "numbers reprinted, an integer that fits 64 bits and -0 as written",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "[1000.0,1000000000000000.0,1e+16,1.5e-7,0.00001,1e-6,-0.0,2.5,100.0,12345678901234567890,-9.223372036854776e+18,1e+20]"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "{\"a\": 1, \"b\": 0, \"a\": 2}"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_path_repeated_key",
+   "note": "of a repeated key the last value, in the first one's place",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "a",
+      "values": [
+       "2"
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "all",
+      "values": [
+       "{\"a\":2,\"b\":0}"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "{\"c\": \"q\\\"x\\n\\u0001\u00e9/\\u003c\"}"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_path_escapes",
+   "note": "only what JSON must is escaped",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "{\"c\":\"q\\\"x\\n\\u0001\u00e9/<\"}"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "{\"a\": {\"c\": 2}, \"c\": 1}",
+        "{\"a\": [{\"c\": 3}, {\"c\": 4}], \"b\": {\"c\": 5}}"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_path_recursive",
+   "note": "$..c is the first c found",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "1",
+       "3"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "{\"a\": 1, \"b\": \"x\"}",
+        "{}",
+        "{\"b\": \"y\", \"z\": [1]}",
+        null
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_struct",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(a: Int64, b: String)",
+      "name": "d",
+      "values": [
+       {
+        "a": 1,
+        "b": "x"
+       },
+       {
+        "a": null,
+        "b": null
+       },
+       {
+        "a": null,
+        "b": "y"
+       },
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "[1,2]",
+        "[]",
+        null,
+        "[3.5]"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_list",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(Int64)",
+      "name": "s",
+      "values": [
+       [
+        1,
+        2
+       ],
+       [],
+       null,
+       [
+        3
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "[1.9, -1.9, true, 9223372036854775808, 1e30, -3]"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_int64",
+   "note": "numbers and Booleans as each other; a number past its type's range null",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(Int64)",
+      "name": "s",
+      "values": [
+       [
+        1,
+        -1,
+        1,
+        null,
+        null,
+        -3
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "[300, -128]"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_int8",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(Int8)",
+      "name": "s",
+      "values": [
+       [
+        null,
+        -128
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "[-1, 255, 256]"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_uint8",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(Uint8)",
+      "name": "s",
+      "values": [
+       [
+        null,
+        255,
+        null
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "[18446744073709551615, 1.5, -1.5, -0.5, false]"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_uint64",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(Uint64)",
+      "name": "s",
+      "values": [
+       [
+        18446744073709551615,
+        1,
+        null,
+        0,
+        0
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "[1e300, true, 2]"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_float32",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(Float32)",
+      "name": "s",
+      "values": [
+       [
+        "inf",
+        1.0,
+        2.0
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "[true, 1.50, 1e16, -0, -0.0, 1.5e-7, 12345678901234567890123, \"x\"]"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_string",
+   "note": "numbers and Booleans as text",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(String)",
+      "name": "s",
+      "values": [
+       [
+        "true",
+        "1.5",
+        "10000000000000000",
+        "0",
+        "-0",
+        "0.00000015",
+        "12345678901234567890123",
+        "x"
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "5"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_scalar_as_list",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(Int64)",
+      "name": "s",
+      "values": [
+       [
+        5
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "[1, [2, 3]]"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_scalars_as_lists",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(List(Int64))",
+      "name": "s",
+      "values": [
+       [
+        [
+         1
+        ],
+        [
+         2,
+         3
+        ]
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "{\"a\": 1, \"a\": 2}"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_repeated_key",
+   "note": "the first value",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(a: Int64)",
+      "name": "s",
+      "values": [
+       {
+        "a": 1
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2,
+        3
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "b",
+       "values": [
+        10,
+        20,
+        30
+       ]
+      }
+     ]
+    }
+   },
+   "name": "implode_then_eval",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(Int64)",
+      "name": "a",
+      "values": [
+       [
+        2,
+        4,
+        6
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2,
+        3
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "b",
+       "values": [
+        10,
+        20,
+        30
+       ]
+      }
+     ]
+    }
+   },
+   "name": "fold_of_aggregates",
+   "note": "a literal 0 has its Go value's type here, Int64, where Polars' is an Int32 (\u00a79)",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int32",
+      "name": "f",
+      "values": [
+       36
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "b",
+        "yb",
+        "bzy",
+        "abyx",
+        "bzbbyb",
+        "xyayca",
+        null,
+        "cccb",
+        "yzcby",
+        "xa",
+        "z",
+        "zyxzac",
+        "z",
+        "zzb",
+        "zby",
+        "ab",
+        "zbcczy",
+        "aa",
+        "yxxx",
+        null,
+        "yybbbb",
+        "ayaya",
+        "\"q\"",
+        "yzbz",
+        "xz",
+        "aaa",
+        "ay",
+        "cacacz",
+        null,
+        null,
+        "x",
+        "yb",
+        null,
+        "xxca",
+        "xc",
+        "xzbcc",
+        "zza",
+        null,
+        "b",
+        "xazc",
+        null,
+        null,
+        "y",
+        null,
+        "bzazxb",
+        "byzxx",
+        "ay",
+        "cacza",
+        "xyyxy",
+        "xazab",
+        "zbxa",
+        "zbbc",
+        "aazb",
+        "zzac",
+        "cbxzx",
+        null,
+        "bzy",
+        "bcbaz",
+        null,
+        "xbb",
+        "ba",
+        "ya",
+        "cxy",
+        "z",
+        "yxc",
+        "axyy",
+        "x",
+        "aaz",
+        "cbxxa",
+        "bzzxx",
+        "xaycxc",
+        "b",
+        "bxczxc",
+        null,
+        "czycz",
+        "accya",
+        "bbza",
+        "xaza",
+        null,
+        "a,b",
+        "cbcxxx",
+        "byz",
+        "aaa",
+        "bzczb",
+        "zbxxx",
+        "xzx",
+        "byxycx",
+        "abyz",
+        "a",
+        "zz",
+        "bbyyya",
+        "zb",
+        "cc",
+        "zxxcxb",
+        null,
+        "zacx",
+        "azzxz",
+        "yyyzc",
+        "y",
+        " ",
+        "cyyabc",
+        "axc",
+        "axz",
+        "aaxz",
+        "azzy",
+        "abyzxz",
+        "cbzzaa",
+        null,
+        "bxyb",
+        "zay",
+        "cbybc",
+        "xaab",
+        "bcy",
+        "zacbcx",
+        "b",
+        null,
+        "xxzyaz",
+        "zycxbx",
+        "yxbcc",
+        "yb",
+        "xybax",
+        "byac",
+        "bab",
+        "acxc",
+        "yzaa",
+        "",
+        "x",
+        null,
+        "abaz",
+        "abax",
+        "\u00e9",
+        "byc",
+        "cccxyz",
+        "b",
+        "za",
+        "bccyba",
+        "caccza",
+        "xcbb",
+        "z",
+        "cyb",
+        "aacxa",
+        "zccx",
+        "zyb",
+        "caz",
+        "yx",
+        "yz",
+        "xybbzb",
+        null,
+        "babcxy",
+        "\ud835\udd18rsus"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "codec_gen",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "hex",
+      "values": [
+       "62",
+       "7962",
+       "627a79",
+       "61627978",
+       "627a62627962",
+       "787961796361",
+       null,
+       "63636362",
+       "797a636279",
+       "7861",
+       "7a",
+       "7a79787a6163",
+       "7a",
+       "7a7a62",
+       "7a6279",
+       "6162",
+       "7a6263637a79",
+       "6161",
+       "79787878",
+       null,
+       "797962626262",
+       "6179617961",
+       "227122",
+       "797a627a",
+       "787a",
+       "616161",
+       "6179",
+       "63616361637a",
+       null,
+       null,
+       "78",
+       "7962",
+       null,
+       "78786361",
+       "7863",
+       "787a626363",
+       "7a7a61",
+       null,
+       "62",
+       "78617a63",
+       null,
+       null,
+       "79",
+       null,
+       "627a617a7862",
+       "62797a7878",
+       "6179",
+       "6361637a61",
+       "7879797879",
+       "78617a6162",
+       "7a627861",
+       "7a626263",
+       "61617a62",
+       "7a7a6163",
+       "6362787a78",
+       null,
+       "627a79",
+       "626362617a",
+       null,
+       "786262",
+       "6261",
+       "7961",
+       "637879",
+       "7a",
+       "797863",
+       "61787979",
+       "78",
+       "61617a",
+       "6362787861",
+       "627a7a7878",
+       "786179637863",
+       "62",
+       "6278637a7863",
+       null,
+       "637a79637a",
+       "6163637961",
+       "62627a61",
+       "78617a61",
+       null,
+       "612c62",
+       "636263787878",
+       "62797a",
+       "616161",
+       "627a637a62",
+       "7a62787878",
+       "787a78",
+       "627978796378",
+       "6162797a",
+       "61",
+       "7a7a",
+       "626279797961",
+       "7a62",
+       "6363",
+       "7a7878637862",
+       null,
+       "7a616378",
+       "617a7a787a",
+       "7979797a63",
+       "79",
+       "20",
+       "637979616263",
+       "617863",
+       "61787a",
+       "6161787a",
+       "617a7a79",
+       "6162797a787a",
+       "63627a7a6161",
+       null,
+       "62787962",
+       "7a6179",
+       "6362796263",
+       "78616162",
+       "626379",
+       "7a6163626378",
+       "62",
+       null,
+       "78787a79617a",
+       "7a7963786278",
+       "7978626363",
+       "7962",
+       "7879626178",
+       "62796163",
+       "626162",
+       "61637863",
+       "797a6161",
+       "",
+       "78",
+       null,
+       "6162617a",
+       "61626178",
+       "c3a9",
+       "627963",
+       "63636378797a",
+       "62",
+       "7a61",
+       "626363796261",
+       "636163637a61",
+       "78636262",
+       "7a",
+       "637962",
+       "6161637861",
+       "7a636378",
+       "7a7962",
+       "63617a",
+       "7978",
+       "797a",
+       "787962627a62",
+       null,
+       "626162637879",
+       "f09d949872737573"
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "b64",
+      "values": [
+       "Yg==",
+       "eWI=",
+       "Ynp5",
+       "YWJ5eA==",
+       "YnpiYnli",
+       "eHlheWNh",
+       null,
+       "Y2NjYg==",
+       "eXpjYnk=",
+       "eGE=",
+       "eg==",
+       "enl4emFj",
+       "eg==",
+       "enpi",
+       "emJ5",
+       "YWI=",
+       "emJjY3p5",
+       "YWE=",
+       "eXh4eA==",
+       null,
+       "eXliYmJi",
+       "YXlheWE=",
+       "InEi",
+       "eXpieg==",
+       "eHo=",
+       "YWFh",
+       "YXk=",
+       "Y2FjYWN6",
+       null,
+       null,
+       "eA==",
+       "eWI=",
+       null,
+       "eHhjYQ==",
+       "eGM=",
+       "eHpiY2M=",
+       "enph",
+       null,
+       "Yg==",
+       "eGF6Yw==",
+       null,
+       null,
+       "eQ==",
+       null,
+       "Ynphenhi",
+       "Ynl6eHg=",
+       "YXk=",
+       "Y2FjemE=",
+       "eHl5eHk=",
+       "eGF6YWI=",
+       "emJ4YQ==",
+       "emJiYw==",
+       "YWF6Yg==",
+       "enphYw==",
+       "Y2J4eng=",
+       null,
+       "Ynp5",
+       "YmNiYXo=",
+       null,
+       "eGJi",
+       "YmE=",
+       "eWE=",
+       "Y3h5",
+       "eg==",
+       "eXhj",
+       "YXh5eQ==",
+       "eA==",
+       "YWF6",
+       "Y2J4eGE=",
+       "Ynp6eHg=",
+       "eGF5Y3hj",
+       "Yg==",
+       "Ynhjenhj",
+       null,
+       "Y3p5Y3o=",
+       "YWNjeWE=",
+       "YmJ6YQ==",
+       "eGF6YQ==",
+       null,
+       "YSxi",
+       "Y2JjeHh4",
+       "Ynl6",
+       "YWFh",
+       "YnpjemI=",
+       "emJ4eHg=",
+       "eHp4",
+       "Ynl4eWN4",
+       "YWJ5eg==",
+       "YQ==",
+       "eno=",
+       "YmJ5eXlh",
+       "emI=",
+       "Y2M=",
+       "enh4Y3hi",
+       null,
+       "emFjeA==",
+       "YXp6eHo=",
+       "eXl5emM=",
+       "eQ==",
+       "IA==",
+       "Y3l5YWJj",
+       "YXhj",
+       "YXh6",
+       "YWF4eg==",
+       "YXp6eQ==",
+       "YWJ5enh6",
+       "Y2J6emFh",
+       null,
+       "Ynh5Yg==",
+       "emF5",
+       "Y2J5YmM=",
+       "eGFhYg==",
+       "YmN5",
+       "emFjYmN4",
+       "Yg==",
+       null,
+       "eHh6eWF6",
+       "enljeGJ4",
+       "eXhiY2M=",
+       "eWI=",
+       "eHliYXg=",
+       "YnlhYw==",
+       "YmFi",
+       "YWN4Yw==",
+       "eXphYQ==",
+       "",
+       "eA==",
+       null,
+       "YWJheg==",
+       "YWJheA==",
+       "w6k=",
+       "Ynlj",
+       "Y2NjeHl6",
+       "Yg==",
+       "emE=",
+       "YmNjeWJh",
+       "Y2FjY3ph",
+       "eGNiYg==",
+       "eg==",
+       "Y3li",
+       "YWFjeGE=",
+       "emNjeA==",
+       "enli",
+       "Y2F6",
+       "eXg=",
+       "eXo=",
+       "eHliYnpi",
+       null,
+       "YmFiY3h5",
+       "8J2UmHJzdXM="
+      ]
+     },
+     {
+      "dtype": "Binary",
+      "name": "hex_back",
+      "values": [
+       "Yg==",
+       "eWI=",
+       "Ynp5",
+       "YWJ5eA==",
+       "YnpiYnli",
+       "eHlheWNh",
+       null,
+       "Y2NjYg==",
+       "eXpjYnk=",
+       "eGE=",
+       "eg==",
+       "enl4emFj",
+       "eg==",
+       "enpi",
+       "emJ5",
+       "YWI=",
+       "emJjY3p5",
+       "YWE=",
+       "eXh4eA==",
+       null,
+       "eXliYmJi",
+       "YXlheWE=",
+       "InEi",
+       "eXpieg==",
+       "eHo=",
+       "YWFh",
+       "YXk=",
+       "Y2FjYWN6",
+       null,
+       null,
+       "eA==",
+       "eWI=",
+       null,
+       "eHhjYQ==",
+       "eGM=",
+       "eHpiY2M=",
+       "enph",
+       null,
+       "Yg==",
+       "eGF6Yw==",
+       null,
+       null,
+       "eQ==",
+       null,
+       "Ynphenhi",
+       "Ynl6eHg=",
+       "YXk=",
+       "Y2FjemE=",
+       "eHl5eHk=",
+       "eGF6YWI=",
+       "emJ4YQ==",
+       "emJiYw==",
+       "YWF6Yg==",
+       "enphYw==",
+       "Y2J4eng=",
+       null,
+       "Ynp5",
+       "YmNiYXo=",
+       null,
+       "eGJi",
+       "YmE=",
+       "eWE=",
+       "Y3h5",
+       "eg==",
+       "eXhj",
+       "YXh5eQ==",
+       "eA==",
+       "YWF6",
+       "Y2J4eGE=",
+       "Ynp6eHg=",
+       "eGF5Y3hj",
+       "Yg==",
+       "Ynhjenhj",
+       null,
+       "Y3p5Y3o=",
+       "YWNjeWE=",
+       "YmJ6YQ==",
+       "eGF6YQ==",
+       null,
+       "YSxi",
+       "Y2JjeHh4",
+       "Ynl6",
+       "YWFh",
+       "YnpjemI=",
+       "emJ4eHg=",
+       "eHp4",
+       "Ynl4eWN4",
+       "YWJ5eg==",
+       "YQ==",
+       "eno=",
+       "YmJ5eXlh",
+       "emI=",
+       "Y2M=",
+       "enh4Y3hi",
+       null,
+       "emFjeA==",
+       "YXp6eHo=",
+       "eXl5emM=",
+       "eQ==",
+       "IA==",
+       "Y3l5YWJj",
+       "YXhj",
+       "YXh6",
+       "YWF4eg==",
+       "YXp6eQ==",
+       "YWJ5enh6",
+       "Y2J6emFh",
+       null,
+       "Ynh5Yg==",
+       "emF5",
+       "Y2J5YmM=",
+       "eGFhYg==",
+       "YmN5",
+       "emFjYmN4",
+       "Yg==",
+       null,
+       "eHh6eWF6",
+       "enljeGJ4",
+       "eXhiY2M=",
+       "eWI=",
+       "eHliYXg=",
+       "YnlhYw==",
+       "YmFi",
+       "YWN4Yw==",
+       "eXphYQ==",
+       "",
+       "eA==",
+       null,
+       "YWJheg==",
+       "YWJheA==",
+       "w6k=",
+       "Ynlj",
+       "Y2NjeHl6",
+       "Yg==",
+       "emE=",
+       "YmNjeWJh",
+       "Y2FjY3ph",
+       "eGNiYg==",
+       "eg==",
+       "Y3li",
+       "YWFjeGE=",
+       "emNjeA==",
+       "enli",
+       "Y2F6",
+       "eXg=",
+       "eXo=",
+       "eHliYnpi",
+       null,
+       "YmFiY3h5",
+       "8J2UmHJzdXM="
+      ]
+     },
+     {
+      "dtype": "Binary",
+      "name": "b64_back",
+      "values": [
+       "Yg==",
+       "eWI=",
+       "Ynp5",
+       "YWJ5eA==",
+       "YnpiYnli",
+       "eHlheWNh",
+       null,
+       "Y2NjYg==",
+       "eXpjYnk=",
+       "eGE=",
+       "eg==",
+       "enl4emFj",
+       "eg==",
+       "enpi",
+       "emJ5",
+       "YWI=",
+       "emJjY3p5",
+       "YWE=",
+       "eXh4eA==",
+       null,
+       "eXliYmJi",
+       "YXlheWE=",
+       "InEi",
+       "eXpieg==",
+       "eHo=",
+       "YWFh",
+       "YXk=",
+       "Y2FjYWN6",
+       null,
+       null,
+       "eA==",
+       "eWI=",
+       null,
+       "eHhjYQ==",
+       "eGM=",
+       "eHpiY2M=",
+       "enph",
+       null,
+       "Yg==",
+       "eGF6Yw==",
+       null,
+       null,
+       "eQ==",
+       null,
+       "Ynphenhi",
+       "Ynl6eHg=",
+       "YXk=",
+       "Y2FjemE=",
+       "eHl5eHk=",
+       "eGF6YWI=",
+       "emJ4YQ==",
+       "emJiYw==",
+       "YWF6Yg==",
+       "enphYw==",
+       "Y2J4eng=",
+       null,
+       "Ynp5",
+       "YmNiYXo=",
+       null,
+       "eGJi",
+       "YmE=",
+       "eWE=",
+       "Y3h5",
+       "eg==",
+       "eXhj",
+       "YXh5eQ==",
+       "eA==",
+       "YWF6",
+       "Y2J4eGE=",
+       "Ynp6eHg=",
+       "eGF5Y3hj",
+       "Yg==",
+       "Ynhjenhj",
+       null,
+       "Y3p5Y3o=",
+       "YWNjeWE=",
+       "YmJ6YQ==",
+       "eGF6YQ==",
+       null,
+       "YSxi",
+       "Y2JjeHh4",
+       "Ynl6",
+       "YWFh",
+       "YnpjemI=",
+       "emJ4eHg=",
+       "eHp4",
+       "Ynl4eWN4",
+       "YWJ5eg==",
+       "YQ==",
+       "eno=",
+       "YmJ5eXlh",
+       "emI=",
+       "Y2M=",
+       "enh4Y3hi",
+       null,
+       "emFjeA==",
+       "YXp6eHo=",
+       "eXl5emM=",
+       "eQ==",
+       "IA==",
+       "Y3l5YWJj",
+       "YXhj",
+       "YXh6",
+       "YWF4eg==",
+       "YXp6eQ==",
+       "YWJ5enh6",
+       "Y2J6emFh",
+       null,
+       "Ynh5Yg==",
+       "emF5",
+       "Y2J5YmM=",
+       "eGFhYg==",
+       "YmN5",
+       "emFjYmN4",
+       "Yg==",
+       null,
+       "eHh6eWF6",
+       "enljeGJ4",
+       "eXhiY2M=",
+       "eWI=",
+       "eHliYXg=",
+       "YnlhYw==",
+       "YmFi",
+       "YWN4Yw==",
+       "eXphYQ==",
+       "",
+       "eA==",
+       null,
+       "YWJheg==",
+       "YWJheA==",
+       "w6k=",
+       "Ynlj",
+       "Y2NjeHl6",
+       "Yg==",
+       "emE=",
+       "YmNjeWJh",
+       "Y2FjY3ph",
+       "eGNiYg==",
+       "eg==",
+       "Y3li",
+       "YWFjeGE=",
+       "emNjeA==",
+       "enli",
+       "Y2F6",
+       "eXg=",
+       "eXo=",
+       "eHliYnpi",
+       null,
+       "YmFiY3h5",
+       "8J2UmHJzdXM="
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "e2",
+        "14",
+        "-4j",
+        "-42",
+        "69",
+        "-7r",
+        "0",
+        "9a",
+        null,
+        "4",
+        null,
+        null,
+        "9o",
+        "-62",
+        "-10",
+        null,
+        "201",
+        "64",
+        "-8c",
+        "-30",
+        "-1210",
+        "-7",
+        "9q",
+        "-1f",
+        "8g",
+        "o",
+        "-2s",
+        "25",
+        "3h",
+        null,
+        "8n",
+        null,
+        null,
+        null,
+        "5h",
+        "127",
+        "-2f",
+        "82",
+        "41",
+        "2",
+        "-1",
+        "1e",
+        "-7",
+        "-86",
+        null,
+        null,
+        "-68",
+        "-1105",
+        "-154",
+        "-101022",
+        "-65",
+        "-88",
+        "-b4",
+        "4q",
+        "324",
+        null,
+        null,
+        "8q",
+        "x",
+        "367",
+        "7k",
+        null,
+        "-d4",
+        "-8l",
+        "-9",
+        null,
+        "4q",
+        "-201",
+        null,
+        "-c1",
+        "-58",
+        "-85",
+        "-73",
+        "-29",
+        "-542",
+        "-100222",
+        "-4a",
+        "-7a",
+        "40",
+        "an",
+        "-a",
+        "-56",
+        "344",
+        "179",
+        "9d",
+        "-78",
+        "-6",
+        "9a",
+        "92",
+        "bc",
+        "176",
+        "45",
+        "-13",
+        "b2",
+        "b",
+        "37",
+        "1u",
+        "12012",
+        "-1",
+        "1",
+        "-ed",
+        null,
+        "d8",
+        "c8",
+        "65",
+        "9q",
+        "422",
+        "325",
+        "5m",
+        "8r",
+        "6i",
+        "97",
+        "-7l",
+        "2030",
+        "69",
+        "-84",
+        "-131",
+        "-36",
+        "121",
+        "-5m",
+        "-c7",
+        "134",
+        "-59",
+        "-44",
+        "-101",
+        "88",
+        "-156",
+        "9f",
+        "1g",
+        "79",
+        null,
+        "1b",
+        "-21",
+        "21210",
+        "13",
+        "-39",
+        "8h",
+        "-37",
+        "62",
+        "3e",
+        "-6q",
+        "-6k",
+        "26",
+        "-8a",
+        "f9",
+        "8c",
+        "-5k",
+        "23",
+        "91",
+        "0"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "b",
+       "values": [
+        20,
+        10,
+        26,
+        15,
+        27,
+        34,
+        21,
+        20,
+        15,
+        12,
+        32,
+        33,
+        29,
+        32,
+        28,
+        8,
+        12,
+        26,
+        24,
+        27,
+        4,
+        19,
+        28,
+        34,
+        17,
+        26,
+        34,
+        15,
+        28,
+        8,
+        27,
+        2,
+        11,
+        22,
+        23,
+        14,
+        36,
+        29,
+        8,
+        32,
+        18,
+        19,
+        30,
+        33,
+        22,
+        29,
+        35,
+        6,
+        8,
+        3,
+        19,
+        29,
+        25,
+        35,
+        7,
+        35,
+        34,
+        33,
+        34,
+        8,
+        29,
+        30,
+        17,
+        28,
+        35,
+        14,
+        33,
+        10,
+        4,
+        23,
+        26,
+        24,
+        27,
+        28,
+        6,
+        3,
+        25,
+        17,
+        29,
+        27,
+        12,
+        30,
+        7,
+        11,
+        17,
+        10,
+        23,
+        16,
+        14,
+        26,
+        13,
+        20,
+        7,
+        24,
+        36,
+        14,
+        32,
+        3,
+        29,
+        16,
+        18,
+        32,
+        21,
+        21,
+        34,
+        27,
+        8,
+        7,
+        32,
+        30,
+        31,
+        30,
+        35,
+        4,
+        25,
+        10,
+        10,
+        30,
+        10,
+        25,
+        14,
+        10,
+        14,
+        16,
+        17,
+        16,
+        11,
+        18,
+        36,
+        34,
+        31,
+        33,
+        17,
+        3,
+        4,
+        36,
+        20,
+        11,
+        8,
+        27,
+        29,
+        28,
+        32,
+        21,
+        16,
+        27,
+        33,
+        30,
+        13,
+        23
+       ]
+      }
+     ]
+    }
+   },
+   "name": "to_integer_gen",
+   "note": "each value written in its row's base; read in base 16 too, where a digit past f is null",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "v",
+      "values": [
+       282,
+       14,
+       -123,
+       -62,
+       171,
+       -265,
+       0,
+       190,
+       null,
+       4,
+       null,
+       null,
+       285,
+       -194,
+       -28,
+       null,
+       289,
+       160,
+       -204,
+       -81,
+       -100,
+       -7,
+       278,
+       -49,
+       152,
+       24,
+       -96,
+       35,
+       101,
+       null,
+       239,
+       null,
+       null,
+       null,
+       132,
+       231,
+       -87,
+       234,
+       33,
+       2,
+       -1,
+       33,
+       -7,
+       -270,
+       null,
+       null,
+       -218,
+       -257,
+       -108,
+       -278,
+       -119,
+       -240,
+       -279,
+       166,
+       165,
+       null,
+       null,
+       290,
+       33,
+       247,
+       223,
+       null,
+       -225,
+       -245,
+       -9,
+       null,
+       158,
+       -201,
+       null,
+       -277,
+       -138,
+       -197,
+       -192,
+       -65,
+       -206,
+       -269,
+       -110,
+       -129,
+       116,
+       293,
+       -10,
+       -156,
+       179,
+       207,
+       166,
+       -78,
+       -6,
+       154,
+       128,
+       298,
+       266,
+       85,
+       -10,
+       266,
+       11,
+       49,
+       62,
+       140,
+       -1,
+       1,
+       -265,
+       null,
+       281,
+       260,
+       209,
+       269,
+       274,
+       166,
+       182,
+       267,
+       204,
+       277,
+       -266,
+       140,
+       159,
+       -84,
+       -131,
+       -96,
+       121,
+       -147,
+       -175,
+       134,
+       -79,
+       -68,
+       -290,
+       136,
+       -182,
+       177,
+       52,
+       247,
+       null,
+       44,
+       -35,
+       210,
+       7,
+       -117,
+       177,
+       -40,
+       50,
+       95,
+       -200,
+       -188,
+       70,
+       -178,
+       249,
+       228,
+       -185,
+       63,
+       118,
+       0
+      ]
+     },
+     {
+      "dtype": "Int64",
+      "name": "v16",
+      "values": [
+       226,
+       20,
+       null,
+       -66,
+       105,
+       null,
+       0,
+       154,
+       null,
+       4,
+       null,
+       null,
+       null,
+       -98,
+       -16,
+       null,
+       513,
+       100,
+       -140,
+       -48,
+       -4624,
+       -7,
+       null,
+       -31,
+       null,
+       null,
+       null,
+       37,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       295,
+       -47,
+       130,
+       65,
+       2,
+       -1,
+       30,
+       -7,
+       -134,
+       null,
+       null,
+       -104,
+       -4357,
+       -340,
+       -1052706,
+       -101,
+       -136,
+       -180,
+       null,
+       804,
+       null,
+       null,
+       null,
+       null,
+       871,
+       null,
+       null,
+       -212,
+       null,
+       -9,
+       null,
+       null,
+       -513,
+       null,
+       -193,
+       -88,
+       -133,
+       -115,
+       -41,
+       -1346,
+       -1049122,
+       -74,
+       -122,
+       64,
+       null,
+       -10,
+       -86,
+       836,
+       377,
+       157,
+       -120,
+       -6,
+       154,
+       146,
+       188,
+       374,
+       69,
+       -19,
+       178,
+       11,
+       55,
+       null,
+       73746,
+       -1,
+       1,
+       -237,
+       null,
+       216,
+       200,
+       101,
+       null,
+       1058,
+       805,
+       null,
+       null,
+       null,
+       151,
+       null,
+       8240,
+       105,
+       -132,
+       -305,
+       -54,
+       289,
+       null,
+       -199,
+       308,
+       -89,
+       -68,
+       -257,
+       136,
+       -342,
+       159,
+       null,
+       121,
+       null,
+       27,
+       -33,
+       135696,
+       19,
+       -57,
+       null,
+       -55,
+       98,
+       62,
+       null,
+       null,
+       38,
+       -138,
+       249,
+       140,
+       null,
+       35,
+       145,
+       0
+      ]
+     },
+     {
+      "dtype": "Int16",
+      "name": "v16bit",
+      "values": [
+       282,
+       14,
+       -123,
+       -62,
+       171,
+       -265,
+       0,
+       190,
+       null,
+       4,
+       null,
+       null,
+       285,
+       -194,
+       -28,
+       null,
+       289,
+       160,
+       -204,
+       -81,
+       -100,
+       -7,
+       278,
+       -49,
+       152,
+       24,
+       -96,
+       35,
+       101,
+       null,
+       239,
+       null,
+       null,
+       null,
+       132,
+       231,
+       -87,
+       234,
+       33,
+       2,
+       -1,
+       33,
+       -7,
+       -270,
+       null,
+       null,
+       -218,
+       -257,
+       -108,
+       -278,
+       -119,
+       -240,
+       -279,
+       166,
+       165,
+       null,
+       null,
+       290,
+       33,
+       247,
+       223,
+       null,
+       -225,
+       -245,
+       -9,
+       null,
+       158,
+       -201,
+       null,
+       -277,
+       -138,
+       -197,
+       -192,
+       -65,
+       -206,
+       -269,
+       -110,
+       -129,
+       116,
+       293,
+       -10,
+       -156,
+       179,
+       207,
+       166,
+       -78,
+       -6,
+       154,
+       128,
+       298,
+       266,
+       85,
+       -10,
+       266,
+       11,
+       49,
+       62,
+       140,
+       -1,
+       1,
+       -265,
+       null,
+       281,
+       260,
+       209,
+       269,
+       274,
+       166,
+       182,
+       267,
+       204,
+       277,
+       -266,
+       140,
+       159,
+       -84,
+       -131,
+       -96,
+       121,
+       -147,
+       -175,
+       134,
+       -79,
+       -68,
+       -290,
+       136,
+       -182,
+       177,
+       52,
+       247,
+       null,
+       44,
+       -35,
+       210,
+       7,
+       -117,
+       177,
+       -40,
+       50,
+       95,
+       -200,
+       -188,
+       70,
+       -178,
+       249,
+       228,
+       -185,
+       63,
+       118,
+       0
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "abbabb",
+        "abb",
+        "aaabba",
+        "aa",
+        "aabbaa",
+        "babbabb",
+        "bb",
+        "aaaa",
+        "bbab",
+        "a",
+        "aabaa",
+        "bbaaab",
+        "aababba",
+        null,
+        "aaaa",
+        "abaabba",
+        "aabab",
+        "",
+        null,
+        "aabaab",
+        "b",
+        "abaaaa",
+        "bb",
+        "bb",
+        "bbaaa",
+        "baab",
+        "ab",
+        "aaabbba",
+        "aaba",
+        "bbbaab",
+        "bbbb",
+        "abab",
+        "bbbb",
+        "aabab",
+        "aa",
+        "babbba",
+        "aa",
+        "bbb",
+        "aaa",
+        "\"q\"",
+        "aba",
+        "bbb",
+        "bab",
+        "abbba",
+        null,
+        "bbaabaa",
+        "a,b",
+        null,
+        "baabb",
+        "a",
+        "bbabbb",
+        "baaaaba",
+        "aaabbb",
+        "aaaaaaa",
+        "abaa",
+        "abbaa",
+        "bbb",
+        "aabbab",
+        null,
+        "abba",
+        "bbababa",
+        "bbb",
+        null,
+        "babaaab",
+        "ab",
+        null,
+        null,
+        "\ud835\udd18rsus",
+        "abaaaa",
+        "baaaabb",
+        "ababbb",
+        "aabb",
+        "b",
+        "a",
+        "a",
+        null,
+        "bb",
+        "a",
+        "a",
+        "ababab",
+        "baababa",
+        null,
+        "b",
+        null,
+        "abaa",
+        "abbaaa",
+        "bababab",
+        "abaabb",
+        "babbba",
+        "babbbb",
+        "ba",
+        "baaaaab",
+        "babbbaa",
+        null,
+        null,
+        "aaabaa",
+        "a",
+        "aaaba",
+        "bbab",
+        "bbbab",
+        "aaaa",
+        "aa",
+        null,
+        "ab",
+        "aabbbbb",
+        "ba",
+        "aaabaab",
+        "ab",
+        "bbb",
+        "bbabab",
+        null,
+        "bbab",
+        null,
+        "ba",
+        "b",
+        "b",
+        "bbabb",
+        "bbaba",
+        "bbbbbb",
+        "baaaab",
+        "abbbbbb",
+        "abbb",
+        "abb",
+        null,
+        "b",
+        "abbbabb",
+        "abbabba",
+        "aaabb",
+        "aaaba",
+        " ",
+        "bba",
+        "a",
+        "abb",
+        "bbb",
+        "abab",
+        "bbaaabb",
+        "bbbbab",
+        "b",
+        "bbbbbb",
+        "aab",
+        "abbaaa",
+        "b",
+        null,
+        "baabaa",
+        "bbb",
+        "aaabb",
+        "ab",
+        "abbbbb",
+        "b",
+        "bba"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "replace_n_gen",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "n1",
+      "values": [
+       "Xbbabb",
+       "Xbb",
+       "Xaabba",
+       "Xa",
+       "Xabbaa",
+       "bXbbabb",
+       "bb",
+       "Xaaa",
+       "bbXb",
+       "X",
+       "Xabaa",
+       "bbXaab",
+       "Xababba",
+       null,
+       "Xaaa",
+       "Xbaabba",
+       "Xabab",
+       "",
+       null,
+       "Xabaab",
+       "b",
+       "Xbaaaa",
+       "bb",
+       "bb",
+       "bbXaa",
+       "bXab",
+       "Xb",
+       "Xaabbba",
+       "Xaba",
+       "bbbXab",
+       "bbbb",
+       "Xbab",
+       "bbbb",
+       "Xabab",
+       "Xa",
+       "bXbbba",
+       "Xa",
+       "bbb",
+       "Xaa",
+       "\"q\"",
+       "Xba",
+       "bbb",
+       "bXb",
+       "Xbbba",
+       null,
+       "bbXabaa",
+       "X,b",
+       null,
+       "bXabb",
+       "X",
+       "bbXbbb",
+       "bXaaaba",
+       "Xaabbb",
+       "Xaaaaaa",
+       "Xbaa",
+       "Xbbaa",
+       "bbb",
+       "Xabbab",
+       null,
+       "Xbba",
+       "bbXbaba",
+       "bbb",
+       null,
+       "bXbaaab",
+       "Xb",
+       null,
+       null,
+       "\ud835\udd18rsus",
+       "Xbaaaa",
+       "bXaaabb",
+       "Xbabbb",
+       "Xabb",
+       "b",
+       "X",
+       "X",
+       null,
+       "bb",
+       "X",
+       "X",
+       "Xbabab",
+       "bXababa",
+       null,
+       "b",
+       null,
+       "Xbaa",
+       "Xbbaaa",
+       "bXbabab",
+       "Xbaabb",
+       "bXbbba",
+       "bXbbbb",
+       "bX",
+       "bXaaaab",
+       "bXbbbaa",
+       null,
+       null,
+       "Xaabaa",
+       "X",
+       "Xaaba",
+       "bbXb",
+       "bbbXb",
+       "Xaaa",
+       "Xa",
+       null,
+       "Xb",
+       "Xabbbbb",
+       "bX",
+       "Xaabaab",
+       "Xb",
+       "bbb",
+       "bbXbab",
+       null,
+       "bbXb",
+       null,
+       "bX",
+       "b",
+       "b",
+       "bbXbb",
+       "bbXba",
+       "bbbbbb",
+       "bXaaab",
+       "Xbbbbbb",
+       "Xbbb",
+       "Xbb",
+       null,
+       "b",
+       "Xbbbabb",
+       "Xbbabba",
+       "Xaabb",
+       "Xaaba",
+       " ",
+       "bbX",
+       "X",
+       "Xbb",
+       "bbb",
+       "Xbab",
+       "bbXaabb",
+       "bbbbXb",
+       "b",
+       "bbbbbb",
+       "Xab",
+       "Xbbaaa",
+       "b",
+       null,
+       "bXabaa",
+       "bbb",
+       "Xaabb",
+       "Xb",
+       "Xbbbbb",
+       "b",
+       "bbX"
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "n2",
+      "values": [
+       "XbbXbb",
+       "Xbb",
+       "XXabba",
+       "XX",
+       "XXbbaa",
+       "bXbbXbb",
+       "bb",
+       "XXaa",
+       "bbXb",
+       "X",
+       "XXbaa",
+       "bbXXab",
+       "XXbabba",
+       null,
+       "XXaa",
+       "XbXabba",
+       "XXbab",
+       "",
+       null,
+       "XXbaab",
+       "b",
+       "XbXaaa",
+       "bb",
+       "bb",
+       "bbXXa",
+       "bXXb",
+       "Xb",
+       "XXabbba",
+       "XXba",
+       "bbbXXb",
+       "bbbb",
+       "XbXb",
+       "bbbb",
+       "XXbab",
+       "XX",
+       "bXbbbX",
+       "XX",
+       "bbb",
+       "XXa",
+       "\"q\"",
+       "XbX",
+       "bbb",
+       "bXb",
+       "XbbbX",
+       null,
+       "bbXXbaa",
+       "X,b",
+       null,
+       "bXXbb",
+       "X",
+       "bbXbbb",
+       "bXXaaba",
+       "XXabbb",
+       "XXaaaaa",
+       "XbXa",
+       "XbbXa",
+       "bbb",
+       "XXbbab",
+       null,
+       "XbbX",
+       "bbXbXba",
+       "bbb",
+       null,
+       "bXbXaab",
+       "Xb",
+       null,
+       null,
+       "\ud835\udd18rsus",
+       "XbXaaa",
+       "bXXaabb",
+       "XbXbbb",
+       "XXbb",
+       "b",
+       "X",
+       "X",
+       null,
+       "bb",
+       "X",
+       "X",
+       "XbXbab",
+       "bXXbaba",
+       null,
+       "b",
+       null,
+       "XbXa",
+       "XbbXaa",
+       "bXbXbab",
+       "XbXabb",
+       "bXbbbX",
+       "bXbbbb",
+       "bX",
+       "bXXaaab",
+       "bXbbbXa",
+       null,
+       null,
+       "XXabaa",
+       "X",
+       "XXaba",
+       "bbXb",
+       "bbbXb",
+       "XXaa",
+       "XX",
+       null,
+       "Xb",
+       "XXbbbbb",
+       "bX",
+       "XXabaab",
+       "Xb",
+       "bbb",
+       "bbXbXb",
+       null,
+       "bbXb",
+       null,
+       "bX",
+       "b",
+       "b",
+       "bbXbb",
+       "bbXbX",
+       "bbbbbb",
+       "bXXaab",
+       "Xbbbbbb",
+       "Xbbb",
+       "Xbb",
+       null,
+       "b",
+       "XbbbXbb",
+       "XbbXbba",
+       "XXabb",
+       "XXaba",
+       " ",
+       "bbX",
+       "X",
+       "Xbb",
+       "bbb",
+       "XbXb",
+       "bbXXabb",
+       "bbbbXb",
+       "b",
+       "bbbbbb",
+       "XXb",
+       "XbbXaa",
+       "b",
+       null,
+       "bXXbaa",
+       "bbb",
+       "XXabb",
+       "Xb",
+       "Xbbbbb",
+       "b",
+       "bbX"
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "all",
+      "values": [
+       "XbbXbb",
+       "Xbb",
+       "XXXbbX",
+       "XX",
+       "XXbbXX",
+       "bXbbXbb",
+       "bb",
+       "XXXX",
+       "bbXb",
+       "X",
+       "XXbXX",
+       "bbXXXb",
+       "XXbXbbX",
+       null,
+       "XXXX",
+       "XbXXbbX",
+       "XXbXb",
+       "",
+       null,
+       "XXbXXb",
+       "b",
+       "XbXXXX",
+       "bb",
+       "bb",
+       "bbXXX",
+       "bXXb",
+       "Xb",
+       "XXXbbbX",
+       "XXbX",
+       "bbbXXb",
+       "bbbb",
+       "XbXb",
+       "bbbb",
+       "XXbXb",
+       "XX",
+       "bXbbbX",
+       "XX",
+       "bbb",
+       "XXX",
+       "\"q\"",
+       "XbX",
+       "bbb",
+       "bXb",
+       "XbbbX",
+       null,
+       "bbXXbXX",
+       "X,b",
+       null,
+       "bXXbb",
+       "X",
+       "bbXbbb",
+       "bXXXXbX",
+       "XXXbbb",
+       "XXXXXXX",
+       "XbXX",
+       "XbbXX",
+       "bbb",
+       "XXbbXb",
+       null,
+       "XbbX",
+       "bbXbXbX",
+       "bbb",
+       null,
+       "bXbXXXb",
+       "Xb",
+       null,
+       null,
+       "\ud835\udd18rsus",
+       "XbXXXX",
+       "bXXXXbb",
+       "XbXbbb",
+       "XXbb",
+       "b",
+       "X",
+       "X",
+       null,
+       "bb",
+       "X",
+       "X",
+       "XbXbXb",
+       "bXXbXbX",
+       null,
+       "b",
+       null,
+       "XbXX",
+       "XbbXXX",
+       "bXbXbXb",
+       "XbXXbb",
+       "bXbbbX",
+       "bXbbbb",
+       "bX",
+       "bXXXXXb",
+       "bXbbbXX",
+       null,
+       null,
+       "XXXbXX",
+       "X",
+       "XXXbX",
+       "bbXb",
+       "bbbXb",
+       "XXXX",
+       "XX",
+       null,
+       "Xb",
+       "XXbbbbb",
+       "bX",
+       "XXXbXXb",
+       "Xb",
+       "bbb",
+       "bbXbXb",
+       null,
+       "bbXb",
+       null,
+       "bX",
+       "b",
+       "b",
+       "bbXbb",
+       "bbXbX",
+       "bbbbbb",
+       "bXXXXb",
+       "Xbbbbbb",
+       "Xbbb",
+       "Xbb",
+       null,
+       "b",
+       "XbbbXbb",
+       "XbbXbbX",
+       "XXXbb",
+       "XXXbX",
+       " ",
+       "bbX",
+       "X",
+       "Xbb",
+       "bbb",
+       "XbXb",
+       "bbXXXbb",
+       "bbbbXb",
+       "b",
+       "bbbbbb",
+       "XXb",
+       "XbbXXX",
+       "b",
+       null,
+       "bXXbXX",
+       "bbb",
+       "XXXbb",
+       "Xb",
+       "Xbbbbb",
+       "b",
+       "bbX"
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "re1",
+      "values": [
+       "a_abb",
+       "a_",
+       "aaa_a",
+       "aa",
+       "aa_aa",
+       "_abbabb",
+       "_",
+       "aaaa",
+       "_ab",
+       "a",
+       "aa_aa",
+       "_aaab",
+       "aa_abba",
+       null,
+       "aaaa",
+       "a_aabba",
+       "aa_ab",
+       "",
+       null,
+       "aa_aab",
+       "_",
+       "a_aaaa",
+       "_",
+       "_",
+       "_aaa",
+       "_aab",
+       "a_",
+       "aaa_a",
+       "aa_a",
+       "_aab",
+       "_",
+       "a_ab",
+       "_",
+       "aa_ab",
+       "aa",
+       "_abbba",
+       "aa",
+       "_",
+       "aaa",
+       "\"q\"",
+       "a_a",
+       "_",
+       "_ab",
+       "a_a",
+       null,
+       "_aabaa",
+       "a,_",
+       null,
+       "_aabb",
+       "a",
+       "_abbb",
+       "_aaaaba",
+       "aaa_",
+       "aaaaaaa",
+       "a_aa",
+       "a_aa",
+       "_",
+       "aa_ab",
+       null,
+       "a_a",
+       "_ababa",
+       "_",
+       null,
+       "_abaaab",
+       "a_",
+       null,
+       null,
+       "\ud835\udd18rsus",
+       "a_aaaa",
+       "_aaaabb",
+       "a_abbb",
+       "aa_",
+       "_",
+       "a",
+       "a",
+       null,
+       "_",
+       "a",
+       "a",
+       "a_abab",
+       "_aababa",
+       null,
+       "_",
+       null,
+       "a_aa",
+       "a_aaa",
+       "_ababab",
+       "a_aabb",
+       "_abbba",
+       "_abbbb",
+       "_a",
+       "_aaaaab",
+       "_abbbaa",
+       null,
+       null,
+       "aaa_aa",
+       "a",
+       "aaa_a",
+       "_ab",
+       "_ab",
+       "aaaa",
+       "aa",
+       null,
+       "a_",
+       "aa_",
+       "_a",
+       "aaa_aab",
+       "a_",
+       "_",
+       "_abab",
+       null,
+       "_ab",
+       null,
+       "_a",
+       "_",
+       "_",
+       "_abb",
+       "_aba",
+       "_",
+       "_aaaab",
+       "a_",
+       "a_",
+       "a_",
+       null,
+       "_",
+       "a_abb",
+       "a_abba",
+       "aaa_",
+       "aaa_a",
+       " ",
+       "_a",
+       "a",
+       "a_",
+       "_",
+       "a_ab",
+       "_aaabb",
+       "_ab",
+       "_",
+       "_",
+       "aa_",
+       "a_aaa",
+       "_",
+       null,
+       "_aabaa",
+       "_",
+       "aaa_",
+       "a_",
+       "a_",
+       "_",
+       "_a"
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "cat",
+      "values": [
+       "abbabb/6",
+       "abb/3",
+       "aaabba/6",
+       "aa/2",
+       "aabbaa/6",
+       "babbabb/7",
+       "bb/2",
+       "aaaa/4",
+       "bbab/4",
+       "a/1",
+       "aabaa/5",
+       "bbaaab/6",
+       "aababba/7",
+       "",
+       "aaaa/4",
+       "abaabba/7",
+       "aabab/5",
+       "/0",
+       "",
+       "aabaab/6",
+       "b/1",
+       "abaaaa/6",
+       "bb/2",
+       "bb/2",
+       "bbaaa/5",
+       "baab/4",
+       "ab/2",
+       "aaabbba/7",
+       "aaba/4",
+       "bbbaab/6",
+       "bbbb/4",
+       "abab/4",
+       "bbbb/4",
+       "aabab/5",
+       "aa/2",
+       "babbba/6",
+       "aa/2",
+       "bbb/3",
+       "aaa/3",
+       "\"q\"/3",
+       "aba/3",
+       "bbb/3",
+       "bab/3",
+       "abbba/5",
+       "",
+       "bbaabaa/7",
+       "a,b/3",
+       "",
+       "baabb/5",
+       "a/1",
+       "bbabbb/6",
+       "baaaaba/7",
+       "aaabbb/6",
+       "aaaaaaa/7",
+       "abaa/4",
+       "abbaa/5",
+       "bbb/3",
+       "aabbab/6",
+       "",
+       "abba/4",
+       "bbababa/7",
+       "bbb/3",
+       "",
+       "babaaab/7",
+       "ab/2",
+       "",
+       "",
+       "\ud835\udd18rsus/5",
+       "abaaaa/6",
+       "baaaabb/7",
+       "ababbb/6",
+       "aabb/4",
+       "b/1",
+       "a/1",
+       "a/1",
+       "",
+       "bb/2",
+       "a/1",
+       "a/1",
+       "ababab/6",
+       "baababa/7",
+       "",
+       "b/1",
+       "",
+       "abaa/4",
+       "abbaaa/6",
+       "bababab/7",
+       "abaabb/6",
+       "babbba/6",
+       "babbbb/6",
+       "ba/2",
+       "baaaaab/7",
+       "babbbaa/7",
+       "",
+       "",
+       "aaabaa/6",
+       "a/1",
+       "aaaba/5",
+       "bbab/4",
+       "bbbab/5",
+       "aaaa/4",
+       "aa/2",
+       "",
+       "ab/2",
+       "aabbbbb/7",
+       "ba/2",
+       "aaabaab/7",
+       "ab/2",
+       "bbb/3",
+       "bbabab/6",
+       "",
+       "bbab/4",
+       "",
+       "ba/2",
+       "b/1",
+       "b/1",
+       "bbabb/5",
+       "bbaba/5",
+       "bbbbbb/6",
+       "baaaab/6",
+       "abbbbbb/7",
+       "abbb/4",
+       "abb/3",
+       "",
+       "b/1",
+       "abbbabb/7",
+       "abbabba/7",
+       "aaabb/5",
+       "aaaba/5",
+       " /1",
+       "bba/3",
+       "a/1",
+       "abb/3",
+       "bbb/3",
+       "abab/4",
+       "bbaaabb/7",
+       "bbbbab/6",
+       "b/1",
+       "bbbbbb/6",
+       "aab/3",
+       "abbaaa/6",
+       "b/1",
+       "",
+       "baabaa/6",
+       "bbb/3",
+       "aaabb/5",
+       "ab/2",
+       "abbbbb/6",
+       "b/1",
+       "bba/3"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "[-123, -946, null]",
+        "[null, 901, null, -682]",
+        "[246, 374]",
+        "[362, null, 276, null]",
+        "[207]",
+        "[]",
+        "[-254, -928, 538, -209]",
+        "[-711, null]",
+        "[]",
+        "[-409, 18]",
+        "[282, 84, 282, -834]",
+        "[null, -750, 180, 485]",
+        "[-981]",
+        null,
+        "[]",
+        "[-711, -815, 836, 377]",
+        "[]",
+        "[-663, 282, null, null]",
+        "[-821]",
+        "[null]",
+        "[68]",
+        null,
+        "[-685, -205, -110]",
+        "[737]",
+        "[-676, 137, 279]",
+        null,
+        "[-182, 379, 538]",
+        "[379, -871, 280, -729]",
+        "[-554]",
+        null,
+        "[-606, -789]",
+        "[-537, null, -991, null]",
+        "[331]",
+        "[-856, null, null]",
+        "[-767, -981]",
+        "[22]",
+        "[-64]",
+        null,
+        "[]",
+        "[364, 538, null]",
+        "[221, 246]",
+        "[-750, null]",
+        "[-366, -921]",
+        "[805]",
+        "[280, -209]",
+        "[180, -729]",
+        null,
+        "[855]",
+        "[-750, 364, -230, 891]",
+        "[-348, -856, -676]",
+        null,
+        "[493, -554, 356, 493]",
+        "[279]",
+        "[836, 504, 475]",
+        "[]",
+        "[901, -137]",
+        "[-205, 243]",
+        "[100, -946]",
+        "[950, -834, -537, 282]",
+        "[901, 826, 356]",
+        "[84, null, 276]",
+        "[448]",
+        "[891, null, null, 288]",
+        "[-691, 855, 374, null]",
+        "[-360, 228, -835]",
+        null,
+        "[-767, 965]",
+        null,
+        "[289]",
+        null,
+        "[null, 493]",
+        "[-729, -254]",
+        "[-123, -682]",
+        "[884, -423, -834]",
+        "[-230, -821, -234, -981]",
+        "[364]",
+        "[-682]",
+        "[592]",
+        "[]",
+        "[-792, 712]",
+        "[-344]",
+        "[]",
+        "[364, -409]",
+        null,
+        "[933, 22, -348, 280]",
+        "[]",
+        "[-137, null, 22]",
+        "[280, -907]",
+        "[null]",
+        "[null, null, 377, 364]",
+        "[]",
+        "[]",
+        "[332, -682, -170]",
+        "[884]",
+        "[901, -981]",
+        "[-360, -840, 826, -205]",
+        "[836, -871]",
+        "[493, 100, 276]",
+        "[-360, -348]",
+        "[null]",
+        "[243, 538]",
+        "[243, 282, 180, 289]",
+        "[322, 901, null, 493]",
+        "[-691, null]",
+        "[-946, 700]",
+        "[805, 84, 221]",
+        "[-990, -606, 100]",
+        "[]",
+        "[null, 448, -990, 448]",
+        "[843, -767, -554, 243]",
+        "[362, null, -234, 145]",
+        "[-834]",
+        "[356, -921]",
+        "[-835, 374, -297, 836]",
+        "[-170, 387, 855]",
+        "[891, 377, 379]",
+        "[]",
+        "[-656, 379]",
+        null,
+        "[null, -230, -656, -921]",
+        "[-348]",
+        "[490, null, -110, 387]",
+        "[282]",
+        "[]",
+        "[-789]",
+        "[-871, 331, null, -729]",
+        "[null, -981, 933, 485]",
+        "[null, 737, -606]",
+        "[-205, -145, -663, 57]",
+        null,
+        null,
+        null,
+        null,
+        "[22, -981, 415]",
+        "[22]",
+        "[84, -230]",
+        "[-734, 4, -750]",
+        "[-871, -670, -685, null]",
+        "[null]",
+        "[null, 84, 100, 332]",
+        "[-409, -990, -297, -789]",
+        "[737, 891, 207, -691]",
+        "[493, 415, -831]",
+        "[-946, -946, 475]",
+        "[538, null]",
+        "[-409, 374, 180, 100]",
+        "[]",
+        "[-729]",
+        "[null, -824, 737, 884]",
+        "[100, 4, 207]"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_gen",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "List(Int64)",
+      "name": "l",
+      "values": [
+       [
+        -123,
+        -946,
+        null
+       ],
+       [
+        null,
+        901,
+        null,
+        -682
+       ],
+       [
+        246,
+        374
+       ],
+       [
+        362,
+        null,
+        276,
+        null
+       ],
+       [
+        207
+       ],
+       [],
+       [
+        -254,
+        -928,
+        538,
+        -209
+       ],
+       [
+        -711,
+        null
+       ],
+       [],
+       [
+        -409,
+        18
+       ],
+       [
+        282,
+        84,
+        282,
+        -834
+       ],
+       [
+        null,
+        -750,
+        180,
+        485
+       ],
+       [
+        -981
+       ],
+       null,
+       [],
+       [
+        -711,
+        -815,
+        836,
+        377
+       ],
+       [],
+       [
+        -663,
+        282,
+        null,
+        null
+       ],
+       [
+        -821
+       ],
+       [
+        null
+       ],
+       [
+        68
+       ],
+       null,
+       [
+        -685,
+        -205,
+        -110
+       ],
+       [
+        737
+       ],
+       [
+        -676,
+        137,
+        279
+       ],
+       null,
+       [
+        -182,
+        379,
+        538
+       ],
+       [
+        379,
+        -871,
+        280,
+        -729
+       ],
+       [
+        -554
+       ],
+       null,
+       [
+        -606,
+        -789
+       ],
+       [
+        -537,
+        null,
+        -991,
+        null
+       ],
+       [
+        331
+       ],
+       [
+        -856,
+        null,
+        null
+       ],
+       [
+        -767,
+        -981
+       ],
+       [
+        22
+       ],
+       [
+        -64
+       ],
+       null,
+       [],
+       [
+        364,
+        538,
+        null
+       ],
+       [
+        221,
+        246
+       ],
+       [
+        -750,
+        null
+       ],
+       [
+        -366,
+        -921
+       ],
+       [
+        805
+       ],
+       [
+        280,
+        -209
+       ],
+       [
+        180,
+        -729
+       ],
+       null,
+       [
+        855
+       ],
+       [
+        -750,
+        364,
+        -230,
+        891
+       ],
+       [
+        -348,
+        -856,
+        -676
+       ],
+       null,
+       [
+        493,
+        -554,
+        356,
+        493
+       ],
+       [
+        279
+       ],
+       [
+        836,
+        504,
+        475
+       ],
+       [],
+       [
+        901,
+        -137
+       ],
+       [
+        -205,
+        243
+       ],
+       [
+        100,
+        -946
+       ],
+       [
+        950,
+        -834,
+        -537,
+        282
+       ],
+       [
+        901,
+        826,
+        356
+       ],
+       [
+        84,
+        null,
+        276
+       ],
+       [
+        448
+       ],
+       [
+        891,
+        null,
+        null,
+        288
+       ],
+       [
+        -691,
+        855,
+        374,
+        null
+       ],
+       [
+        -360,
+        228,
+        -835
+       ],
+       null,
+       [
+        -767,
+        965
+       ],
+       null,
+       [
+        289
+       ],
+       null,
+       [
+        null,
+        493
+       ],
+       [
+        -729,
+        -254
+       ],
+       [
+        -123,
+        -682
+       ],
+       [
+        884,
+        -423,
+        -834
+       ],
+       [
+        -230,
+        -821,
+        -234,
+        -981
+       ],
+       [
+        364
+       ],
+       [
+        -682
+       ],
+       [
+        592
+       ],
+       [],
+       [
+        -792,
+        712
+       ],
+       [
+        -344
+       ],
+       [],
+       [
+        364,
+        -409
+       ],
+       null,
+       [
+        933,
+        22,
+        -348,
+        280
+       ],
+       [],
+       [
+        -137,
+        null,
+        22
+       ],
+       [
+        280,
+        -907
+       ],
+       [
+        null
+       ],
+       [
+        null,
+        null,
+        377,
+        364
+       ],
+       [],
+       [],
+       [
+        332,
+        -682,
+        -170
+       ],
+       [
+        884
+       ],
+       [
+        901,
+        -981
+       ],
+       [
+        -360,
+        -840,
+        826,
+        -205
+       ],
+       [
+        836,
+        -871
+       ],
+       [
+        493,
+        100,
+        276
+       ],
+       [
+        -360,
+        -348
+       ],
+       [
+        null
+       ],
+       [
+        243,
+        538
+       ],
+       [
+        243,
+        282,
+        180,
+        289
+       ],
+       [
+        322,
+        901,
+        null,
+        493
+       ],
+       [
+        -691,
+        null
+       ],
+       [
+        -946,
+        700
+       ],
+       [
+        805,
+        84,
+        221
+       ],
+       [
+        -990,
+        -606,
+        100
+       ],
+       [],
+       [
+        null,
+        448,
+        -990,
+        448
+       ],
+       [
+        843,
+        -767,
+        -554,
+        243
+       ],
+       [
+        362,
+        null,
+        -234,
+        145
+       ],
+       [
+        -834
+       ],
+       [
+        356,
+        -921
+       ],
+       [
+        -835,
+        374,
+        -297,
+        836
+       ],
+       [
+        -170,
+        387,
+        855
+       ],
+       [
+        891,
+        377,
+        379
+       ],
+       [],
+       [
+        -656,
+        379
+       ],
+       null,
+       [
+        null,
+        -230,
+        -656,
+        -921
+       ],
+       [
+        -348
+       ],
+       [
+        490,
+        null,
+        -110,
+        387
+       ],
+       [
+        282
+       ],
+       [],
+       [
+        -789
+       ],
+       [
+        -871,
+        331,
+        null,
+        -729
+       ],
+       [
+        null,
+        -981,
+        933,
+        485
+       ],
+       [
+        null,
+        737,
+        -606
+       ],
+       [
+        -205,
+        -145,
+        -663,
+        57
+       ],
+       null,
+       null,
+       null,
+       null,
+       [
+        22,
+        -981,
+        415
+       ],
+       [
+        22
+       ],
+       [
+        84,
+        -230
+       ],
+       [
+        -734,
+        4,
+        -750
+       ],
+       [
+        -871,
+        -670,
+        -685,
+        null
+       ],
+       [
+        null
+       ],
+       [
+        null,
+        84,
+        100,
+        332
+       ],
+       [
+        -409,
+        -990,
+        -297,
+        -789
+       ],
+       [
+        737,
+        891,
+        207,
+        -691
+       ],
+       [
+        493,
+        415,
+        -831
+       ],
+       [
+        -946,
+        -946,
+        475
+       ],
+       [
+        538,
+        null
+       ],
+       [
+        -409,
+        374,
+        180,
+        100
+       ],
+       [],
+       [
+        -729
+       ],
+       [
+        null,
+        -824,
+        737,
+        884
+       ],
+       [
+        100,
+        4,
+        207
+       ]
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "first",
+      "values": [
+       "-123",
+       null,
+       "246",
+       "362",
+       "207",
+       null,
+       "-254",
+       "-711",
+       null,
+       "-409",
+       "282",
+       null,
+       "-981",
+       null,
+       null,
+       "-711",
+       null,
+       "-663",
+       "-821",
+       null,
+       "68",
+       null,
+       "-685",
+       "737",
+       "-676",
+       null,
+       "-182",
+       "379",
+       "-554",
+       null,
+       "-606",
+       "-537",
+       "331",
+       "-856",
+       "-767",
+       "22",
+       "-64",
+       null,
+       null,
+       "364",
+       "221",
+       "-750",
+       "-366",
+       "805",
+       "280",
+       "180",
+       null,
+       "855",
+       "-750",
+       "-348",
+       null,
+       "493",
+       "279",
+       "836",
+       null,
+       "901",
+       "-205",
+       "100",
+       "950",
+       "901",
+       "84",
+       "448",
+       "891",
+       "-691",
+       "-360",
+       null,
+       "-767",
+       null,
+       "289",
+       null,
+       null,
+       "-729",
+       "-123",
+       "884",
+       "-230",
+       "364",
+       "-682",
+       "592",
+       null,
+       "-792",
+       "-344",
+       null,
+       "364",
+       null,
+       "933",
+       null,
+       "-137",
+       "280",
+       null,
+       null,
+       null,
+       null,
+       "332",
+       "884",
+       "901",
+       "-360",
+       "836",
+       "493",
+       "-360",
+       null,
+       "243",
+       "243",
+       "322",
+       "-691",
+       "-946",
+       "805",
+       "-990",
+       null,
+       null,
+       "843",
+       "362",
+       "-834",
+       "356",
+       "-835",
+       "-170",
+       "891",
+       null,
+       "-656",
+       null,
+       null,
+       "-348",
+       "490",
+       "282",
+       null,
+       "-789",
+       "-871",
+       null,
+       null,
+       "-205",
+       null,
+       null,
+       null,
+       null,
+       "22",
+       "22",
+       "84",
+       "-734",
+       "-871",
+       null,
+       null,
+       "-409",
+       "737",
+       "493",
+       "-946",
+       "538",
+       "-409",
+       null,
+       "-729",
+       null,
+       "100"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "{\"a\": null, \"b\": \"zcbxa\"}",
+        "{\"a\": 7, \"b\": \"yxcaa\"}",
+        "{\"a\": -3, \"b\": \"caxb\"}",
+        "{\"a\": 0, \"b\": \"cazc\"}",
+        "{\"a\": -9, \"b\": \"\\u00e9\"}",
+        "{\"a\": -9, \"b\": \"cc\"}",
+        "{\"a\": 9, \"b\": \"yc\"}",
+        "{\"a\": -3, \"b\": \"zzc\"}",
+        "{\"a\": null, \"b\": \"ycb\"}",
+        "{\"a\": 3, \"b\": \"czzb\"}",
+        "{\"a\": 3, \"b\": \"ycb\"}",
+        "{\"a\": -1, \"b\": \"ba\"}",
+        "{\"a\": 0, \"b\": \"a\"}",
+        "{\"a\": -1, \"b\": \"yaxaa\"}",
+        "{\"a\": -3, \"b\": \"cbyxyb\"}",
+        "{\"a\": null, \"b\": \"ycaz\"}",
+        "{\"a\": null, \"b\": \"y\"}",
+        "{\"a\": 4, \"b\": \"aya\"}",
+        "{\"a\": null, \"b\": \"xb\"}",
+        "{\"a\": 9, \"b\": \"acb\"}",
+        "{\"a\": -1, \"b\": \"c\"}",
+        "{\"a\": 2, \"b\": \"yaa\"}",
+        "{\"a\": -1, \"b\": \"\\\"q\\\"\"}",
+        "{\"a\": null, \"b\": \"caz\"}",
+        "{\"a\": -4, \"b\": \"xzacb\"}",
+        "{\"a\": 7, \"b\": \"yy\"}",
+        "{\"a\": 2, \"b\": \"bc\"}",
+        "{\"a\": -8, \"b\": \"ybbb\"}",
+        "{\"a\": 9, \"b\": null}",
+        "{\"a\": 3, \"b\": \"z\"}",
+        "{\"a\": -7, \"b\": \"xb\"}",
+        "{\"a\": 4, \"b\": \"cx\"}",
+        "{\"a\": -7, \"b\": \"ccx\"}",
+        "{\"a\": -8, \"b\": \"za\"}",
+        "{\"a\": -9, \"b\": \"cb\"}",
+        "{\"a\": -2, \"b\": null}",
+        "{\"a\": 2, \"b\": \"aa\"}",
+        "{\"a\": -5, \"b\": \"zxxc\"}",
+        "{\"a\": null, \"b\": \"acayxa\"}",
+        "{\"a\": -4, \"b\": \"ccca\"}",
+        "{\"a\": 8, \"b\": \"azyaaz\"}",
+        "{\"a\": -2, \"b\": \"x\"}",
+        "{\"a\": -1, \"b\": \"zza\"}",
+        "{\"a\": 4, \"b\": \"zcccaz\"}",
+        "{\"a\": 9, \"b\": \"c\"}",
+        "{\"a\": 1, \"b\": \"b\"}",
+        "{\"a\": 6, \"b\": \"y\"}",
+        "{\"a\": -7, \"b\": \"z\"}",
+        "{\"a\": 7, \"b\": \"zxcxcz\"}",
+        "{\"a\": -8, \"b\": null}",
+        "{\"a\": 6, \"b\": \"aaxy\"}",
+        "{\"a\": -4, \"b\": \"yaaaz\"}",
+        "{\"a\": -3, \"b\": \"zxzzc\"}",
+        "{\"a\": 7, \"b\": \"y\"}",
+        "{\"a\": 9, \"b\": null}",
+        "{\"a\": null, \"b\": \"zzcbxy\"}",
+        "{\"a\": 0, \"b\": \"ab\"}",
+        "{\"a\": 5, \"b\": \"bcyaz\"}",
+        "{\"a\": 7, \"b\": \"axc\"}",
+        "{\"a\": 8, \"b\": null}",
+        "{\"a\": 7, \"b\": \"xa\"}",
+        "{\"a\": -6, \"b\": \"xyabb\"}",
+        "{\"a\": -4, \"b\": \"zzczbz\"}",
+        "{\"a\": -1, \"b\": \"bcxzc\"}",
+        "{\"a\": -1, \"b\": null}",
+        "{\"a\": -8, \"b\": \"zy\"}",
+        "{\"a\": 3, \"b\": \"ay\"}",
+        "{\"a\": -4, \"b\": \"axyx\"}",
+        "{\"a\": -9, \"b\": \"bcy\"}",
+        "{\"a\": 9, \"b\": \"yzbaxa\"}",
+        "{\"a\": 6, \"b\": \"y\"}",
+        "{\"a\": null, \"b\": \"azccxy\"}",
+        "{\"a\": -8, \"b\": null}",
+        "{\"a\": 8, \"b\": \"yxycxy\"}",
+        "{\"a\": 0, \"b\": \"zc\"}",
+        "{\"a\": 4, \"b\": \"bz\"}",
+        "{\"a\": -7, \"b\": \"xz\"}",
+        "{\"a\": -1, \"b\": \"baxaa\"}",
+        "{\"a\": 6, \"b\": \"bz\"}",
+        "{\"a\": -6, \"b\": \"ccazay\"}",
+        "{\"a\": -4, \"b\": \"cb\"}",
+        "{\"a\": 6, \"b\": \"zxaz\"}",
+        "{\"a\": 6, \"b\": \"bxcx\"}",
+        "{\"a\": -9, \"b\": \"xya\"}",
+        "{\"a\": 5, \"b\": \"zac\"}",
+        "{\"a\": 9, \"b\": \"cyz\"}",
+        "{\"a\": 1, \"b\": \"zbcc\"}",
+        "{\"a\": 7, \"b\": \"yxxa\"}",
+        "{\"a\": -2, \"b\": \"yx\"}",
+        "{\"a\": -7, \"b\": \"xzzax\"}",
+        "{\"a\": 8, \"b\": \"czxb\"}",
+        "{\"a\": 9, \"b\": \"aby\"}",
+        "{\"a\": 7, \"b\": \"aa\"}",
+        "{\"a\": -3, \"b\": \"yzc\"}",
+        "{\"a\": null, \"b\": \"zz\"}",
+        "{\"a\": 3, \"b\": \"acxcxb\"}",
+        "{\"a\": -6, \"b\": \"cyyazx\"}",
+        "{\"a\": 5, \"b\": \"byxxb\"}",
+        "{\"a\": 0, \"b\": \"czzza\"}",
+        "{\"a\": -8, \"b\": \"aazb\"}",
+        "{\"a\": 6, \"b\": \"b\"}",
+        null,
+        "{\"a\": 8, \"b\": \"cz\"}",
+        "{\"a\": -7, \"b\": \"zab\"}",
+        "{\"a\": -9, \"b\": \"bxxzz\"}",
+        "{\"a\": 1, \"b\": \"aax\"}",
+        "{\"a\": 1, \"b\": null}",
+        "{\"a\": 1, \"b\": \"xbc\"}",
+        "{\"a\": 5, \"b\": \"bax\"}",
+        "{\"a\": -4, \"b\": null}",
+        "{\"a\": -1, \"b\": \"bcaza\"}",
+        "{\"a\": -2, \"b\": \"zb\"}",
+        "{\"a\": -3, \"b\": null}",
+        "{\"a\": -5, \"b\": \"byczzx\"}",
+        "{\"a\": 1, \"b\": \"cz\"}",
+        "{\"a\": -9, \"b\": \"zx\"}",
+        "{\"a\": -1, \"b\": \"yccczy\"}",
+        "{\"a\": null, \"b\": \"axax\"}",
+        "{\"a\": 2, \"b\": \"a\"}",
+        "{\"a\": -7, \"b\": \"bcyaxc\"}",
+        "{\"a\": -3, \"b\": \"azbxx\"}",
+        "{\"a\": 1, \"b\": \"yzccax\"}",
+        "{\"a\": 4, \"b\": \"\\ud835\\udd18rsus\"}",
+        "{\"a\": 0, \"b\": \"cyzabz\"}",
+        "{\"a\": 4, \"b\": \"cbxc\"}",
+        "{\"a\": -9, \"b\": \"zba\"}",
+        "{\"a\": 7, \"b\": \"cbbzb\"}",
+        "{\"a\": 7, \"b\": \"zz\"}",
+        "{\"a\": -9, \"b\": \"bc\"}",
+        "{\"a\": 1, \"b\": \"xc\"}",
+        "{\"a\": -4, \"b\": \"xax\"}",
+        "{\"a\": -4, \"b\": null}",
+        "{\"a\": null, \"b\": \"z\"}",
+        "{\"a\": -3, \"b\": \"xazz\"}",
+        "{\"a\": -2, \"b\": \"bycxxa\"}",
+        "{\"a\": 7, \"b\": \"yayc\"}",
+        "{\"a\": -4, \"b\": \"ba\"}",
+        "{\"a\": 7, \"b\": \"acay\"}",
+        "{\"a\": -2, \"b\": \"bay\"}",
+        "{\"a\": -7, \"b\": \"ca\"}",
+        "{\"a\": -8, \"b\": \"b\"}",
+        "{\"a\": -9, \"b\": \"ayazzc\"}",
+        "{\"a\": 5, \"b\": \"b\"}",
+        "{\"a\": 8, \"b\": \"ab\"}",
+        "{\"a\": -3, \"b\": \"zba\"}",
+        "{\"a\": -4, \"b\": \"bzxacb\"}",
+        "{\"a\": -5, \"b\": null}",
+        "{\"a\": -8, \"b\": \"cx\"}",
+        "{\"a\": -9, \"b\": null}",
+        "{\"a\": 5, \"b\": \"xa\"}"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "json_decode_struct_gen",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Struct(a: Int64, b: String)",
+      "name": "d",
+      "values": [
+       {
+        "a": null,
+        "b": "zcbxa"
+       },
+       {
+        "a": 7,
+        "b": "yxcaa"
+       },
+       {
+        "a": -3,
+        "b": "caxb"
+       },
+       {
+        "a": 0,
+        "b": "cazc"
+       },
+       {
+        "a": -9,
+        "b": "\u00e9"
+       },
+       {
+        "a": -9,
+        "b": "cc"
+       },
+       {
+        "a": 9,
+        "b": "yc"
+       },
+       {
+        "a": -3,
+        "b": "zzc"
+       },
+       {
+        "a": null,
+        "b": "ycb"
+       },
+       {
+        "a": 3,
+        "b": "czzb"
+       },
+       {
+        "a": 3,
+        "b": "ycb"
+       },
+       {
+        "a": -1,
+        "b": "ba"
+       },
+       {
+        "a": 0,
+        "b": "a"
+       },
+       {
+        "a": -1,
+        "b": "yaxaa"
+       },
+       {
+        "a": -3,
+        "b": "cbyxyb"
+       },
+       {
+        "a": null,
+        "b": "ycaz"
+       },
+       {
+        "a": null,
+        "b": "y"
+       },
+       {
+        "a": 4,
+        "b": "aya"
+       },
+       {
+        "a": null,
+        "b": "xb"
+       },
+       {
+        "a": 9,
+        "b": "acb"
+       },
+       {
+        "a": -1,
+        "b": "c"
+       },
+       {
+        "a": 2,
+        "b": "yaa"
+       },
+       {
+        "a": -1,
+        "b": "\"q\""
+       },
+       {
+        "a": null,
+        "b": "caz"
+       },
+       {
+        "a": -4,
+        "b": "xzacb"
+       },
+       {
+        "a": 7,
+        "b": "yy"
+       },
+       {
+        "a": 2,
+        "b": "bc"
+       },
+       {
+        "a": -8,
+        "b": "ybbb"
+       },
+       {
+        "a": 9,
+        "b": null
+       },
+       {
+        "a": 3,
+        "b": "z"
+       },
+       {
+        "a": -7,
+        "b": "xb"
+       },
+       {
+        "a": 4,
+        "b": "cx"
+       },
+       {
+        "a": -7,
+        "b": "ccx"
+       },
+       {
+        "a": -8,
+        "b": "za"
+       },
+       {
+        "a": -9,
+        "b": "cb"
+       },
+       {
+        "a": -2,
+        "b": null
+       },
+       {
+        "a": 2,
+        "b": "aa"
+       },
+       {
+        "a": -5,
+        "b": "zxxc"
+       },
+       {
+        "a": null,
+        "b": "acayxa"
+       },
+       {
+        "a": -4,
+        "b": "ccca"
+       },
+       {
+        "a": 8,
+        "b": "azyaaz"
+       },
+       {
+        "a": -2,
+        "b": "x"
+       },
+       {
+        "a": -1,
+        "b": "zza"
+       },
+       {
+        "a": 4,
+        "b": "zcccaz"
+       },
+       {
+        "a": 9,
+        "b": "c"
+       },
+       {
+        "a": 1,
+        "b": "b"
+       },
+       {
+        "a": 6,
+        "b": "y"
+       },
+       {
+        "a": -7,
+        "b": "z"
+       },
+       {
+        "a": 7,
+        "b": "zxcxcz"
+       },
+       {
+        "a": -8,
+        "b": null
+       },
+       {
+        "a": 6,
+        "b": "aaxy"
+       },
+       {
+        "a": -4,
+        "b": "yaaaz"
+       },
+       {
+        "a": -3,
+        "b": "zxzzc"
+       },
+       {
+        "a": 7,
+        "b": "y"
+       },
+       {
+        "a": 9,
+        "b": null
+       },
+       {
+        "a": null,
+        "b": "zzcbxy"
+       },
+       {
+        "a": 0,
+        "b": "ab"
+       },
+       {
+        "a": 5,
+        "b": "bcyaz"
+       },
+       {
+        "a": 7,
+        "b": "axc"
+       },
+       {
+        "a": 8,
+        "b": null
+       },
+       {
+        "a": 7,
+        "b": "xa"
+       },
+       {
+        "a": -6,
+        "b": "xyabb"
+       },
+       {
+        "a": -4,
+        "b": "zzczbz"
+       },
+       {
+        "a": -1,
+        "b": "bcxzc"
+       },
+       {
+        "a": -1,
+        "b": null
+       },
+       {
+        "a": -8,
+        "b": "zy"
+       },
+       {
+        "a": 3,
+        "b": "ay"
+       },
+       {
+        "a": -4,
+        "b": "axyx"
+       },
+       {
+        "a": -9,
+        "b": "bcy"
+       },
+       {
+        "a": 9,
+        "b": "yzbaxa"
+       },
+       {
+        "a": 6,
+        "b": "y"
+       },
+       {
+        "a": null,
+        "b": "azccxy"
+       },
+       {
+        "a": -8,
+        "b": null
+       },
+       {
+        "a": 8,
+        "b": "yxycxy"
+       },
+       {
+        "a": 0,
+        "b": "zc"
+       },
+       {
+        "a": 4,
+        "b": "bz"
+       },
+       {
+        "a": -7,
+        "b": "xz"
+       },
+       {
+        "a": -1,
+        "b": "baxaa"
+       },
+       {
+        "a": 6,
+        "b": "bz"
+       },
+       {
+        "a": -6,
+        "b": "ccazay"
+       },
+       {
+        "a": -4,
+        "b": "cb"
+       },
+       {
+        "a": 6,
+        "b": "zxaz"
+       },
+       {
+        "a": 6,
+        "b": "bxcx"
+       },
+       {
+        "a": -9,
+        "b": "xya"
+       },
+       {
+        "a": 5,
+        "b": "zac"
+       },
+       {
+        "a": 9,
+        "b": "cyz"
+       },
+       {
+        "a": 1,
+        "b": "zbcc"
+       },
+       {
+        "a": 7,
+        "b": "yxxa"
+       },
+       {
+        "a": -2,
+        "b": "yx"
+       },
+       {
+        "a": -7,
+        "b": "xzzax"
+       },
+       {
+        "a": 8,
+        "b": "czxb"
+       },
+       {
+        "a": 9,
+        "b": "aby"
+       },
+       {
+        "a": 7,
+        "b": "aa"
+       },
+       {
+        "a": -3,
+        "b": "yzc"
+       },
+       {
+        "a": null,
+        "b": "zz"
+       },
+       {
+        "a": 3,
+        "b": "acxcxb"
+       },
+       {
+        "a": -6,
+        "b": "cyyazx"
+       },
+       {
+        "a": 5,
+        "b": "byxxb"
+       },
+       {
+        "a": 0,
+        "b": "czzza"
+       },
+       {
+        "a": -8,
+        "b": "aazb"
+       },
+       {
+        "a": 6,
+        "b": "b"
+       },
+       null,
+       {
+        "a": 8,
+        "b": "cz"
+       },
+       {
+        "a": -7,
+        "b": "zab"
+       },
+       {
+        "a": -9,
+        "b": "bxxzz"
+       },
+       {
+        "a": 1,
+        "b": "aax"
+       },
+       {
+        "a": 1,
+        "b": null
+       },
+       {
+        "a": 1,
+        "b": "xbc"
+       },
+       {
+        "a": 5,
+        "b": "bax"
+       },
+       {
+        "a": -4,
+        "b": null
+       },
+       {
+        "a": -1,
+        "b": "bcaza"
+       },
+       {
+        "a": -2,
+        "b": "zb"
+       },
+       {
+        "a": -3,
+        "b": null
+       },
+       {
+        "a": -5,
+        "b": "byczzx"
+       },
+       {
+        "a": 1,
+        "b": "cz"
+       },
+       {
+        "a": -9,
+        "b": "zx"
+       },
+       {
+        "a": -1,
+        "b": "yccczy"
+       },
+       {
+        "a": null,
+        "b": "axax"
+       },
+       {
+        "a": 2,
+        "b": "a"
+       },
+       {
+        "a": -7,
+        "b": "bcyaxc"
+       },
+       {
+        "a": -3,
+        "b": "azbxx"
+       },
+       {
+        "a": 1,
+        "b": "yzccax"
+       },
+       {
+        "a": 4,
+        "b": "\ud835\udd18rsus"
+       },
+       {
+        "a": 0,
+        "b": "cyzabz"
+       },
+       {
+        "a": 4,
+        "b": "cbxc"
+       },
+       {
+        "a": -9,
+        "b": "zba"
+       },
+       {
+        "a": 7,
+        "b": "cbbzb"
+       },
+       {
+        "a": 7,
+        "b": "zz"
+       },
+       {
+        "a": -9,
+        "b": "bc"
+       },
+       {
+        "a": 1,
+        "b": "xc"
+       },
+       {
+        "a": -4,
+        "b": "xax"
+       },
+       {
+        "a": -4,
+        "b": null
+       },
+       {
+        "a": null,
+        "b": "z"
+       },
+       {
+        "a": -3,
+        "b": "xazz"
+       },
+       {
+        "a": -2,
+        "b": "bycxxa"
+       },
+       {
+        "a": 7,
+        "b": "yayc"
+       },
+       {
+        "a": -4,
+        "b": "ba"
+       },
+       {
+        "a": 7,
+        "b": "acay"
+       },
+       {
+        "a": -2,
+        "b": "bay"
+       },
+       {
+        "a": -7,
+        "b": "ca"
+       },
+       {
+        "a": -8,
+        "b": "b"
+       },
+       {
+        "a": -9,
+        "b": "ayazzc"
+       },
+       {
+        "a": 5,
+        "b": "b"
+       },
+       {
+        "a": 8,
+        "b": "ab"
+       },
+       {
+        "a": -3,
+        "b": "zba"
+       },
+       {
+        "a": -4,
+        "b": "bzxacb"
+       },
+       {
+        "a": -5,
+        "b": null
+       },
+       {
+        "a": -8,
+        "b": "cx"
+       },
+       {
+        "a": -9,
+        "b": null
+       },
+       {
+        "a": 5,
+        "b": "xa"
+       }
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "b",
+      "values": [
+       "zcbxa",
+       "yxcaa",
+       "caxb",
+       "cazc",
+       "\u00e9",
+       "cc",
+       "yc",
+       "zzc",
+       "ycb",
+       "czzb",
+       "ycb",
+       "ba",
+       "a",
+       "yaxaa",
+       "cbyxyb",
+       "ycaz",
+       "y",
+       "aya",
+       "xb",
+       "acb",
+       "c",
+       "yaa",
+       "\"q\"",
+       "caz",
+       "xzacb",
+       "yy",
+       "bc",
+       "ybbb",
+       null,
+       "z",
+       "xb",
+       "cx",
+       "ccx",
+       "za",
+       "cb",
+       null,
+       "aa",
+       "zxxc",
+       "acayxa",
+       "ccca",
+       "azyaaz",
+       "x",
+       "zza",
+       "zcccaz",
+       "c",
+       "b",
+       "y",
+       "z",
+       "zxcxcz",
+       null,
+       "aaxy",
+       "yaaaz",
+       "zxzzc",
+       "y",
+       null,
+       "zzcbxy",
+       "ab",
+       "bcyaz",
+       "axc",
+       null,
+       "xa",
+       "xyabb",
+       "zzczbz",
+       "bcxzc",
+       null,
+       "zy",
+       "ay",
+       "axyx",
+       "bcy",
+       "yzbaxa",
+       "y",
+       "azccxy",
+       null,
+       "yxycxy",
+       "zc",
+       "bz",
+       "xz",
+       "baxaa",
+       "bz",
+       "ccazay",
+       "cb",
+       "zxaz",
+       "bxcx",
+       "xya",
+       "zac",
+       "cyz",
+       "zbcc",
+       "yxxa",
+       "yx",
+       "xzzax",
+       "czxb",
+       "aby",
+       "aa",
+       "yzc",
+       "zz",
+       "acxcxb",
+       "cyyazx",
+       "byxxb",
+       "czzza",
+       "aazb",
+       "b",
+       null,
+       "cz",
+       "zab",
+       "bxxzz",
+       "aax",
+       null,
+       "xbc",
+       "bax",
+       null,
+       "bcaza",
+       "zb",
+       null,
+       "byczzx",
+       "cz",
+       "zx",
+       "yccczy",
+       "axax",
+       "a",
+       "bcyaxc",
+       "azbxx",
+       "yzccax",
+       "\ud835\udd18rsus",
+       "cyzabz",
+       "cbxc",
+       "zba",
+       "cbbzb",
+       "zz",
+       "bc",
+       "xc",
+       "xax",
+       null,
+       "z",
+       "xazz",
+       "bycxxa",
+       "yayc",
+       "ba",
+       "acay",
+       "bay",
+       "ca",
+       "b",
+       "ayazzc",
+       "b",
+       "ab",
+       "zba",
+       "bzxacb",
+       null,
+       "cx",
+       null,
+       "xa"
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "generator": "bench/scripts/oracle/strcodec.py",
+ "polars": "2.1.0"
+}

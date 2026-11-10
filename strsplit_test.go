@@ -13,7 +13,11 @@ import (
 // splitFrame is the fixture the whole file shares. It carries the three cases that
 // a naive split collapses — an ordinary value, an EMPTY string, and a NULL — plus a
 // multi-byte value, a value with no separator in it, and one with adjacent
-// separators producing empty parts in the middle.
+// separators producing empty parts in the middle. What Split makes of each is the
+// oracle's strsplit/split: an empty string splits to [""], not to the empty list, and
+// a null to a null list, which differ only in a validity bit. The namespace fed, the
+// list exploded, filtered and grouped by, extract_all, pad_start, pad_end and zfill
+// are the group's other cases, spelled in oracle_strsplit_test.go since step 499.
 func splitFrame() *ursus.LazyFrame {
 	return ursus.Frame(
 		ursus.Values("id", []int64{0, 1, 2, 3, 4, 5}),
@@ -27,8 +31,7 @@ func splitFrame() *ursus.LazyFrame {
 // rows rather than on the rendered frame.
 //
 // The second return is validity, and it exists because it is the ONLY thing that
-// distinguishes an empty list from a null one — both leave the offset unmoved. A
-// helper that dropped it would make the central test of this file unwritable.
+// distinguishes an empty list from a null one — both leave the offset unmoved.
 func lists(t *testing.T, df *ursus.DataFrame, name string) ([][]string, []bool) {
 	t.Helper()
 	c, found := df.Batch().ByName(name)
@@ -54,52 +57,6 @@ func lists(t *testing.T, df *ursus.DataFrame, name string) ([][]string, []bool) 
 	return out, valid
 }
 
-// TestSplitDistinguishesEmptyFromNull is the load-bearing test of step 45.
-//
-// An empty list and a null list have IDENTICAL offsets; only the validity bit tells
-// them apart. So a test that checks lengths, or that reads the frame after an
-// Explode, passes whichever way round the kernel has it — Explode erases the
-// distinction by design. This one looks at the row.
-func TestSplitDistinguishesEmptyFromNull(t *testing.T) {
-	df, err := splitFrame().
-		WithColumns(ursus.Col("s").Str().Split(",").Alias("parts")).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	want := []struct {
-		vals  []string
-		valid bool
-	}{
-		{[]string{"a", "b"}, true},
-		{[]string{""}, true}, // NOT the empty list: strings.Split("", ",") is [""]
-		{[]string{"x"}, true},
-		{[]string{"p", "", "q"}, true},
-		{[]string{"é", "ü"}, true},
-		{nil, false}, // a null input is a NULL list
-	}
-
-	got, valid := lists(t, df, "parts")
-	if len(got) != len(want) {
-		t.Fatalf("got %d rows, want %d", len(got), len(want))
-	}
-	for i, w := range want {
-		if valid[i] != w.valid {
-			t.Errorf("row %d: valid = %v, want %v — an empty list and a null list "+
-				"have the same offsets, so this bit is the whole difference",
-				i, valid[i], w.valid)
-			continue
-		}
-		if !w.valid {
-			continue
-		}
-		if strings.Join(got[i], "\x00") != strings.Join(w.vals, "\x00") {
-			t.Errorf("row %d: got %q, want %q", i, got[i], w.vals)
-		}
-	}
-}
-
 // TestSplitIsBatchSizeInvariant is why listns_test.go runs its sweep: the child
 // offsets are relative to a batch's own child column, and concatenating two batches
 // has to shift the second's. Correct at 8192 and wrong at 2 is the signature.
@@ -120,90 +77,6 @@ func TestSplitIsBatchSizeInvariant(t *testing.T) {
 	}
 }
 
-// TestSplitFeedsTheListNamespace proves the output is a real List that the
-// consuming half already handles — not something that merely renders.
-//
-// Until this step every List column came out of a Parquet file, so the .list
-// namespace had never been handed one built in memory.
-func TestSplitFeedsTheListNamespace(t *testing.T) {
-	df, err := splitFrame().
-		WithColumns(
-			ursus.Col("s").Str().Split(",").List().Len().Alias("n"),
-			ursus.Col("s").Str().Split(",").List().Get(0).Alias("first"),
-			ursus.Col("s").Str().Split(",").List().Sort().List().Get(0).Alias("smallest"),
-		).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for i, want := range []struct {
-		n     uint32
-		first string
-		ok    bool
-	}{
-		{2, "a", true},
-		{1, "", true},
-		{1, "x", true},
-		{3, "p", true},
-		{2, "é", true},
-		{0, "", false},
-	} {
-		n, ok, err := df.At[uint32](i, "n")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if ok != want.ok || (want.ok && n != want.n) {
-			t.Errorf("row %d: len = %v (ok=%v), want %v (ok=%v)", i, n, ok, want.n, want.ok)
-		}
-		f, ok, err := df.At[string](i, "first")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if ok != want.ok || (want.ok && f != want.first) {
-			t.Errorf("row %d: first = %q (ok=%v), want %q", i, f, ok, want.first)
-		}
-	}
-
-	// The sorted-first of "p,,q" is the empty part, which is a value and not a null.
-	if v, ok, err := df.At[string](3, "smallest"); err != nil {
-		t.Fatal(err)
-	} else if !ok || v != "" {
-		t.Errorf("sorted first of [p,,q] = %q (ok=%v), want an empty string", v, ok)
-	}
-}
-
-// TestSplitThenExplode is the canonical composition, and it needs no change to
-// Explode: it reads the schema ResolveCall computed and finds List(String) there
-// exactly as it would from a Parquet read.
-//
-// Explode ERASES the empty-versus-null distinction — both become one null row — so
-// this test deliberately does not try to observe it here. That is what the first
-// test in this file is for.
-func TestSplitThenExplode(t *testing.T) {
-	df, err := splitFrame().
-		WithColumns(ursus.Col("s").Str().Split(",").Alias("part")).
-		Explode("part").
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 2 + 1 + 1 + 3 + 2 parts, plus one null row for the null input.
-	if df.Height() != 10 {
-		t.Fatalf("got %d rows, want 10:\n%s", df.Height(), df)
-	}
-	if v, ok, err := df.At[string](0, "part"); err != nil {
-		t.Fatal(err)
-	} else if !ok || v != "a" {
-		t.Errorf("first part = %q (ok=%v), want \"a\"", v, ok)
-	}
-	if _, ok, err := df.At[string](9, "part"); err != nil {
-		t.Fatal(err)
-	} else if ok {
-		t.Error("the null input should explode to a null row")
-	}
-}
-
 // TestSplitSurvivesTakeAndJoin covers the two operators that see a list they did
 // not read from a file.
 //
@@ -211,7 +84,8 @@ func TestSplitThenExplode(t *testing.T) {
 // unmatched left row null-pads every right column, and before Split there was no
 // way for one of those to be a List.
 func TestSplitSurvivesTakeAndJoin(t *testing.T) {
-	// Take: Filter after Split gathers through takeList.
+	// Take: Filter after Split gathers through takeList; the rows it keeps are the
+	// oracle's strsplit/split_then_filter.
 	df, err := splitFrame().
 		WithColumns(ursus.Col("s").Str().Split(",").Alias("parts")).
 		Filter(ursus.Col("id").Gt(int64(2))).
@@ -221,10 +95,6 @@ func TestSplitSurvivesTakeAndJoin(t *testing.T) {
 	}
 	if df.Height() != 3 {
 		t.Fatalf("got %d rows, want 3:\n%s", df.Height(), df)
-	}
-	got, _ := lists(t, df, "parts")
-	if strings.Join(got[0], "|") != "p||q" {
-		t.Errorf("after Filter the first row is %q, want [p,,q]", got[0])
 	}
 
 	// Join: a FULL join, and the kind matters. A left join gathers its right
@@ -256,29 +126,6 @@ func TestSplitSurvivesTakeAndJoin(t *testing.T) {
 	if nulls != 2 {
 		t.Errorf("got %d null lists, want 2 (one from the null input, one padded)\n%s",
 			nulls, joined)
-	}
-}
-
-// TestExtractAll covers the function that shares Split's builder. SplitN's fields
-// are strmany_test.go's.
-func TestExtractAll(t *testing.T) {
-	df, err := ursus.Frame(
-		ursus.Values("s", []string{"a,b,c", "one1two22three", "no-digits"}),
-	).WithColumns(
-		ursus.Col("s").Str().ExtractAll(`\d+`).Alias("nums"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	nums, valid := lists(t, df, "nums")
-	if strings.Join(nums[1], "|") != "1|22" {
-		t.Errorf("ExtractAll = %q, want [1, 22]", nums[1])
-	}
-	// No match is an EMPTY list, not a null one: the input was present and simply
-	// contained nothing matching.
-	if !valid[2] || len(nums[2]) != 0 {
-		t.Errorf("no match should be an empty list, got %q (valid=%v)", nums[2], valid[2])
 	}
 }
 
@@ -320,41 +167,6 @@ func TestStrScalarAdditionsMatchStdlib(t *testing.T) {
 	}
 }
 
-// TestPadAndZFill has no stdlib oracle, so the expectations are written out. ZFill
-// is the one worth reading: the sign stays in front of the zeros.
-func TestPadAndZFill(t *testing.T) {
-	in := []string{"5", "-5", "+5", "12345", "", "é"}
-	df, err := ursus.Frame(ursus.Values("s", in)).WithColumns(
-		ursus.Col("s").Str().PadStart(4, "0").Alias("ps"),
-		ursus.Col("s").Str().PadEnd(4, ".").Alias("pe"),
-		ursus.Col("s").Str().ZFill(4).Alias("z"),
-	).Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for i, want := range []struct{ ps, pe, z string }{
-		{"0005", "5...", "0005"},
-		{"00-5", "-5..", "-005"}, // PadStart pads before the sign; ZFill after it
-		{"00+5", "+5..", "+005"},
-		{"12345", "12345", "12345"}, // already wider: never truncate
-		{"0000", "....", "0000"},
-		{"000é", "é...", "000é"}, // runes, not bytes: é is two bytes and one char
-	} {
-		for _, c := range []struct{ col, want string }{
-			{"ps", want.ps}, {"pe", want.pe}, {"z", want.z},
-		} {
-			got, _, err := df.At[string](i, c.col)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got != c.want {
-				t.Errorf("%s(%q) = %q, want %q", c.col, in[i], got, c.want)
-			}
-		}
-	}
-}
-
 // TestStrNullsPropagateThroughTheNewFunctions — a null in is a null out, for every
 // one of them, which is the rule the namespace already holds to.
 func TestStrNullsPropagateThroughTheNewFunctions(t *testing.T) {
@@ -378,18 +190,5 @@ func TestStrNullsPropagateThroughTheNewFunctions(t *testing.T) {
 		} else if ok {
 			t.Errorf("%s(null) should be null", name)
 		}
-	}
-}
-
-// TestGroupByAList: a List column is a group key since step 344, element by element,
-// as Polars groups it; it was refused, GroupKeyEncoder having no arm for one, and
-// Split is the first way a user could arrive at one. Polars 1.44.1's groups.
-func TestGroupByAList(t *testing.T) {
-	q := splitFrame().
-		WithColumns(ursus.Col("s").Str().Split(",").Alias("parts")).
-		GroupBy(ursus.Col("parts")).MaintainOrder().
-		Agg(ursus.Len().Alias("n"))
-	if got := cells(t, q, "parts"); got != "[a b] [] [x] [p  q] [é ü] <nil> List(String)" {
-		t.Errorf("the groups: %s", got)
 	}
 }

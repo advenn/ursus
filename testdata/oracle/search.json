@@ -1,0 +1,4392 @@
+{
+ "cases": [
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3,
+        3,
+        5,
+        null,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y",
+        "x",
+        null,
+        "x",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_any",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "a",
+      "values": [
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3,
+        3,
+        5,
+        null,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y",
+        "x",
+        null,
+        "x",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_right",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "a",
+      "values": [
+       3
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3,
+        3,
+        5,
+        null,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y",
+        "x",
+        null,
+        "x",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_by_group",
+   "note": "one position a group; Polars 2.1 gives it as a list of one in an aggregation, so its first",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "g",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "a",
+      "values": [
+       1,
+       0
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        5,
+        3,
+        3,
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_descending",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "l",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "r",
+      "values": [
+       3
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        9,
+        8,
+        7,
+        3,
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_descending_more_above",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "l",
+      "values": [
+       3
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "r",
+      "values": [
+       3
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        null,
+        3,
+        2,
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_descending_nulls_first",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "l",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "r",
+      "values": [
+       3
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.0,
+        2.0,
+        "NaN"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_nan_last",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "nan",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "three",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "a",
+       "values": [
+        "a",
+        "c",
+        "e"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_text",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "a",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": []
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_no_rows",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "a",
+      "values": [
+       0
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        null,
+        null
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_all_null",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "a",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        null,
+        1,
+        2,
+        3
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_nulls_first_1",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "na",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "nl",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "nr",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "l",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "r",
+      "values": [
+       3
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        null,
+        null,
+        1,
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_nulls_first_2",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "na",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "nl",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "nr",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "l",
+      "values": [
+       3
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "r",
+      "values": [
+       4
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2,
+        3,
+        null
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_nulls_last_1",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "na",
+      "values": [
+       3
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "nl",
+      "values": [
+       3
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "nr",
+      "values": [
+       4
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "l",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "r",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2,
+        null,
+        null
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_nulls_last_2",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "na",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "nl",
+      "values": [
+       2
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "nr",
+      "values": [
+       4
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "l",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "r",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2,
+        3
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_no_nulls",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "na",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "nl",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "nr",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "l",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "r",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3,
+        3,
+        5,
+        null,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y",
+        "x",
+        null,
+        "x",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "index_of",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "a",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "s",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "n",
+      "values": [
+       4
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "m",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3,
+        3,
+        5,
+        null,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y",
+        "x",
+        null,
+        "x",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "index_of_by_group",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "g",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "a",
+      "values": [
+       1,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "a",
+       "values": [
+        1.0,
+        "NaN",
+        "-0.0"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "index_of_nan_and_zero",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "nan",
+      "values": [
+       1
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "zero",
+      "values": [
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "index_of_null_where_none",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "a",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "x",
+       "values": [
+        1,
+        3,
+        2,
+        4,
+        4,
+        1,
+        5,
+        null,
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "peaks_polars",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "max",
+      "values": [
+       false,
+       true,
+       false,
+       false,
+       false,
+       false,
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "min",
+      "values": [
+       false,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       null,
+       false
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "x",
+       "values": [
+        1.0,
+        "NaN",
+        2.0,
+        0.5,
+        3.0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "peaks_nan",
+   "note": "NaN above every number",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "max",
+      "values": [
+       false,
+       true,
+       false,
+       false,
+       true
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "min",
+      "values": [
+       false,
+       false,
+       false,
+       true,
+       false
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "x",
+       "values": [
+        -1,
+        -2,
+        -3
+       ]
+      }
+     ]
+    }
+   },
+   "name": "peaks_negatives",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "max",
+      "values": [
+       false,
+       false,
+       false
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "min",
+      "values": [
+       false,
+       false,
+       true
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "x",
+       "values": [
+        3,
+        2,
+        1
+       ]
+      }
+     ]
+    }
+   },
+   "name": "peaks_falling",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "max",
+      "values": [
+       true,
+       false,
+       false
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "min",
+      "values": [
+       false,
+       false,
+       false
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "x",
+       "values": [
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "name": "peaks_one",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "max",
+      "values": [
+       true
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "min",
+      "values": [
+       false
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "x",
+       "values": [
+        -0.5,
+        -1.0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "peaks_below_zero",
+   "note": "an end compared with its type's zero, as Polars fills its shifts with 0",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "max",
+      "values": [
+       false,
+       false
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "min",
+      "values": [
+       false,
+       true
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Bool",
+       "name": "x",
+       "values": [
+        true,
+        false
+       ]
+      }
+     ]
+    }
+   },
+   "name": "peaks_bools",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "max",
+      "values": [
+       true,
+       false
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "min",
+      "values": [
+       false,
+       false
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Date",
+       "name": "x",
+       "values": [
+        1,
+        3,
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "peaks_dates",
+   "note": "against the epoch",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "max",
+      "values": [
+       false,
+       true,
+       false
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "min",
+      "values": [
+       false,
+       false,
+       false
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "x",
+       "values": [
+        1,
+        3,
+        2,
+        3,
+        1,
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "name": "peak_max_over_g",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "x",
+      "values": [
+       false,
+       true,
+       false,
+       true,
+       false,
+       true
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3,
+        3,
+        5,
+        null,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y",
+        "x",
+        null,
+        "x",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "unique_counts",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       1,
+       1,
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3,
+        3,
+        5,
+        null,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y",
+        "x",
+        null,
+        "x",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "unique_counts_text",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "s",
+      "values": [
+       3,
+       1,
+       1,
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "f",
+       "values": [
+        1.0,
+        "NaN",
+        "NaN",
+        "-0.0",
+        0.0
+       ]
+      }
+     ]
+    }
+   },
+   "name": "unique_counts_nan_zeros",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "f",
+      "values": [
+       1,
+       2,
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3,
+        3,
+        5,
+        null,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y",
+        "x",
+        null,
+        "x",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "unique_counts_by_group",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "g",
+      "values": [
+       1,
+       2
+      ]
+     },
+     {
+      "dtype": "List(Uint32)",
+      "name": "s",
+      "values": [
+       [
+        2,
+        1
+       ],
+       [
+        1,
+        1,
+        1
+       ]
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3,
+        3,
+        5,
+        null,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y",
+        "x",
+        null,
+        "x",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "value_counts",
+   "note": "Polars' order is its hash table's",
+   "order": "set",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       "y",
+       "z",
+       null
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "count",
+      "values": [
+       3,
+       1,
+       1,
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3,
+        3,
+        5,
+        null,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y",
+        "x",
+        null,
+        "x",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "value_counts_sorted",
+   "note": "ties' order unspecified",
+   "order": "set",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       "y",
+       "z",
+       null
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "count",
+      "values": [
+       3,
+       1,
+       1,
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "b",
+        "a",
+        "c",
+        "a",
+        "c"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "value_counts_ties",
+   "order": "set",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "count",
+      "values": [
+       2,
+       1,
+       2
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3,
+        3,
+        5,
+        null,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y",
+        "x",
+        null,
+        "x",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "value_counts_shares_named",
+   "order": "set",
+   "want": {
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       "y",
+       "z",
+       null
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "n",
+      "values": [
+       0.5,
+       0.16666666666666666,
+       0.16666666666666666,
+       0.16666666666666666
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        1,
+        3,
+        3,
+        5,
+        null,
+        9
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "x",
+        "y",
+        "x",
+        null,
+        "x",
+        "z"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "value_counts_by_group_sorted",
+   "order": "set",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "g",
+      "values": [
+       1,
+       1,
+       2,
+       2,
+       2
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       "y",
+       "x",
+       "z",
+       null
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "count",
+      "values": [
+       2,
+       1,
+       1,
+       1,
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "b",
+        "a",
+        "a"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "value_counts_group_sorted",
+   "order": "set",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "g",
+      "values": [
+       1,
+       1
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "a",
+       "b"
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "count",
+      "values": [
+       2,
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        1,
+        1,
+        1
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "b",
+        "a",
+        "a"
+       ]
+      }
+     ]
+    }
+   },
+   "name": "value_counts_group_shares",
+   "order": "set",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "g",
+      "values": [
+       1,
+       1
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "a",
+       "b"
+      ]
+     },
+     {
+      "dtype": "Float64",
+      "name": "proportion",
+      "values": [
+       0.6666666666666666,
+       0.3333333333333333
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        -50,
+        -48,
+        -48,
+        -48,
+        -47,
+        -45,
+        -45,
+        -45,
+        -45,
+        -44,
+        -43,
+        -41,
+        -40,
+        -39,
+        -38,
+        -38,
+        -37,
+        -37,
+        -36,
+        -35,
+        -35,
+        -34,
+        -33,
+        -33,
+        -32,
+        -32,
+        -31,
+        -31,
+        -31,
+        -30,
+        -30,
+        -30,
+        -29,
+        -29,
+        -29,
+        -27,
+        -26,
+        -24,
+        -23,
+        -22,
+        -22,
+        -22,
+        -22,
+        -21,
+        -21,
+        -21,
+        -21,
+        -20,
+        -20,
+        -19,
+        -19,
+        -19,
+        -18,
+        -18,
+        -17,
+        -15,
+        -15,
+        -15,
+        -13,
+        -13,
+        -12,
+        -10,
+        -10,
+        -9,
+        -9,
+        -8,
+        -7,
+        -6,
+        -5,
+        -5,
+        -4,
+        -4,
+        -2,
+        -2,
+        0,
+        0,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        3,
+        3,
+        6,
+        6,
+        7,
+        7,
+        8,
+        8,
+        9,
+        9,
+        10,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        15,
+        17,
+        17,
+        18,
+        19,
+        19,
+        20,
+        20,
+        22,
+        23,
+        23,
+        27,
+        28,
+        29,
+        29,
+        30,
+        31,
+        31,
+        32,
+        32,
+        32,
+        33,
+        33,
+        33,
+        33,
+        35,
+        35,
+        37,
+        38,
+        39,
+        39,
+        42,
+        42,
+        42,
+        43,
+        44,
+        45,
+        45,
+        47,
+        47,
+        48,
+        49,
+        49,
+        50,
+        50,
+        50
+       ]
+      }
+     ]
+    }
+   },
+   "name": "search_sorted_gen",
+   "note": "a sorted column, nulls first",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "left_m50",
+      "values": [
+       5
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "right_m50",
+      "values": [
+       6
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "left_m7",
+      "values": [
+       71
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "right_m7",
+      "values": [
+       72
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "left_0",
+      "values": [
+       79
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "right_0",
+      "values": [
+       81
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "left_13",
+      "values": [
+       101
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "right_13",
+      "values": [
+       102
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "left_50",
+      "values": [
+       147
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "right_50",
+      "values": [
+       150
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "left_99",
+      "values": [
+       150
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "right_99",
+      "values": [
+       150
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "null_left",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "null_right",
+      "values": [
+       5
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "idx13",
+      "values": [
+       101
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "idx_null",
+      "values": [
+       0
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "idx99",
+      "values": [
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Float64",
+       "name": "x",
+       "values": [
+        6.923607488762297,
+        6.8557596900065505,
+        6.976003436740687,
+        -6.817269039396341,
+        -6.035379978559902,
+        -9.728350643889808,
+        -5.418130202002665,
+        1.221882391986922,
+        null,
+        8.690127052778372,
+        4.5143044817268745,
+        8.54416156476925,
+        -10.0,
+        4.691052977048438,
+        6.3308539583540195,
+        -9.564376735270981,
+        0.5686383592579798,
+        3.0438903045994063,
+        4.5518025685507695,
+        -2.812018743070639,
+        8.5,
+        4.765758145065668,
+        -8.530232434317647,
+        5.572940455489823,
+        -8.674522733163073,
+        3.0860525024861793,
+        8.006043477555206,
+        -2.9437471370460937,
+        null,
+        1.095398526177835,
+        9.786877493385308,
+        4.29520962895667,
+        null,
+        -2.386361391868137,
+        -1.7601877631134233,
+        -1.7118163261029515,
+        0.2609761850385457,
+        -5.632650153626404,
+        5.5,
+        5.6842561789203,
+        -9.980990467010976,
+        0.5440348022599188,
+        -5.549732617790372,
+        9.728924902591455,
+        null,
+        null,
+        0.2549054367579551,
+        -8.065377807182797,
+        7.1091494466372005,
+        -7.0022813064630345,
+        0.5,
+        7.811555859967314,
+        4.319963010244248,
+        -9.408347944374608,
+        9.970613687309132,
+        5.970906344019976,
+        -8.114637067057322,
+        0.3169726570972884,
+        null,
+        -3.936284476375005,
+        7.996882271765017,
+        8.69148560048566,
+        -4.784639659005938,
+        -7.305795683637715,
+        null,
+        -0.5864002238491537,
+        -4.932555660126477,
+        4.6653817566933675,
+        -5.953539347639669,
+        3.3182496699274537,
+        -0.9640069710451407,
+        6.5,
+        null,
+        1.602595259460406,
+        3.6867819294115414,
+        -6.083104606203859,
+        1.9325520831417222,
+        -8.48976366522715,
+        -7.059886095161367,
+        -4.653458196337132,
+        null,
+        7.5,
+        -4.051637919480111,
+        -1.2839229864912998,
+        null,
+        2.0119738430648546,
+        -8.854913259656353,
+        -1.8852536730022802,
+        5.163508087162512,
+        null,
+        -4.175787693897119,
+        -3.696021369959965,
+        -3.537778658002595,
+        -10.0,
+        8.5,
+        -5.984268115386307,
+        4.984518371897789,
+        -10.0,
+        null,
+        -8.410185031811325,
+        -5.661263838546276,
+        -7.0,
+        -4.481537692763437,
+        -9.5,
+        -1.5925690654469946,
+        -1.7751701493999654,
+        -9.77532528500705,
+        -2.166410614504752,
+        -9.148296164010304,
+        8.630264615296799,
+        -5.813632202058521,
+        6.1040775043578535,
+        6.415342107484761,
+        5.28987409421968,
+        -8.724824860961855,
+        -8.5,
+        6.965962191623099,
+        5.0,
+        -2.980965271312897,
+        8.397465125995044,
+        8.765567312449193,
+        -8.630673296271068,
+        1.7285167136125956,
+        2.699032069049812,
+        3.3302564202371485,
+        -4.2428531448374756,
+        null,
+        9.578641519952317,
+        9.422707467715789,
+        null,
+        -9.166808629041917,
+        9.137367543003478,
+        4.455528181533291,
+        8.0,
+        null,
+        -1.1835043102384883,
+        -3.8957213756657953,
+        3.5,
+        -7.8425044796714305,
+        -9.030333155442145,
+        null,
+        6.7930642466052475,
+        -9.255809700869184,
+        -8.200250299088017,
+        3.8259009980933474,
+        null,
+        -5.47694247307005,
+        -0.7046659156424244,
+        -5.5,
+        null
+       ]
+      }
+     ]
+    }
+   },
+   "name": "peaks_gen",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Bool",
+      "name": "max",
+      "values": [
+       true,
+       false,
+       true,
+       false,
+       true,
+       false,
+       false,
+       null,
+       null,
+       null,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       false,
+       false,
+       true,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       null,
+       false,
+       true,
+       false,
+       null,
+       false,
+       false,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       true,
+       false,
+       null,
+       null,
+       null,
+       null,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       false,
+       null,
+       null,
+       false,
+       false,
+       true,
+       false,
+       false,
+       null,
+       null,
+       false,
+       true,
+       false,
+       true,
+       false,
+       null,
+       null,
+       false,
+       true,
+       false,
+       true,
+       false,
+       false,
+       null,
+       null,
+       null,
+       false,
+       null,
+       null,
+       null,
+       false,
+       false,
+       null,
+       null,
+       false,
+       false,
+       true,
+       false,
+       true,
+       false,
+       true,
+       false,
+       null,
+       false,
+       true,
+       false,
+       true,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       false,
+       false,
+       true,
+       false,
+       false,
+       false,
+       true,
+       false,
+       false,
+       false,
+       true,
+       false,
+       null,
+       null,
+       false,
+       null,
+       false,
+       true,
+       false,
+       null,
+       null,
+       null,
+       false,
+       true,
+       false,
+       false,
+       null,
+       null,
+       false,
+       false,
+       null,
+       null,
+       false,
+       true,
+       false,
+       null
+      ]
+     },
+     {
+      "dtype": "Bool",
+      "name": "min",
+      "values": [
+       false,
+       true,
+       false,
+       true,
+       false,
+       true,
+       false,
+       false,
+       null,
+       false,
+       true,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       false,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       true,
+       false,
+       false,
+       null,
+       null,
+       null,
+       false,
+       null,
+       null,
+       null,
+       false,
+       false,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       true,
+       false,
+       null,
+       null,
+       false,
+       true,
+       false,
+       true,
+       false,
+       false,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       null,
+       null,
+       false,
+       false,
+       false,
+       null,
+       null,
+       false,
+       true,
+       false,
+       true,
+       false,
+       true,
+       false,
+       null,
+       null,
+       false,
+       true,
+       false,
+       true,
+       false,
+       false,
+       null,
+       false,
+       true,
+       false,
+       null,
+       false,
+       true,
+       false,
+       false,
+       null,
+       null,
+       false,
+       false,
+       true,
+       false,
+       true,
+       false,
+       null,
+       null,
+       null,
+       false,
+       true,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       true,
+       false,
+       true,
+       false,
+       false,
+       false,
+       true,
+       false,
+       false,
+       false,
+       true,
+       false,
+       false,
+       true,
+       false,
+       false,
+       false,
+       null,
+       null,
+       false,
+       null,
+       null,
+       null,
+       false,
+       true,
+       false,
+       null,
+       false,
+       true,
+       false,
+       false,
+       null,
+       null,
+       false,
+       true,
+       false,
+       false,
+       null,
+       null,
+       false,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        2,
+        2,
+        1,
+        2,
+        1,
+        1,
+        1,
+        3,
+        0,
+        0,
+        1,
+        0,
+        1,
+        2,
+        3,
+        0,
+        1,
+        1,
+        2,
+        3,
+        3,
+        0,
+        1,
+        3,
+        2,
+        3,
+        1,
+        2,
+        0,
+        0,
+        3,
+        0,
+        1,
+        3,
+        1,
+        1,
+        2,
+        1,
+        1,
+        2,
+        2,
+        0,
+        2,
+        0,
+        3,
+        1,
+        1,
+        3,
+        0,
+        2,
+        1,
+        1,
+        3,
+        0,
+        3,
+        0,
+        2,
+        1,
+        2,
+        3,
+        0,
+        1,
+        3,
+        1,
+        2,
+        3,
+        3,
+        3,
+        2,
+        0,
+        1,
+        1,
+        0,
+        0,
+        2,
+        3,
+        0,
+        3,
+        0,
+        2,
+        3,
+        3,
+        0,
+        1,
+        1,
+        2,
+        1,
+        0,
+        0,
+        2,
+        3,
+        2,
+        1,
+        0,
+        3,
+        2,
+        3,
+        3,
+        3,
+        0,
+        1,
+        2,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        3,
+        2,
+        2,
+        2,
+        3,
+        2,
+        1,
+        2,
+        2,
+        2,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        2,
+        0,
+        2,
+        2,
+        1,
+        0,
+        3,
+        0,
+        0,
+        3,
+        1,
+        3,
+        1,
+        2,
+        3,
+        2,
+        1,
+        1,
+        2,
+        0,
+        2,
+        2,
+        0
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "b",
+        "c",
+        "\"q\"",
+        "d",
+        "c",
+        "a",
+        "d",
+        "d",
+        "d",
+        "b",
+        "b",
+        "b",
+        "d",
+        "b",
+        "b",
+        "d",
+        "a",
+        "d",
+        null,
+        "b",
+        "c",
+        "a",
+        "a",
+        "d",
+        "a",
+        "a",
+        "d",
+        null,
+        "a",
+        "c",
+        "c",
+        "d",
+        "d",
+        "a",
+        "b",
+        "c",
+        "b",
+        "b",
+        "c",
+        "c",
+        "c",
+        "a",
+        "b",
+        "a",
+        null,
+        "d",
+        "c",
+        "c",
+        "a",
+        "a",
+        "b",
+        "b",
+        "c",
+        "b",
+        "d",
+        "d",
+        "b",
+        "d",
+        "c",
+        "d",
+        "b",
+        "c",
+        "c",
+        "d",
+        "b",
+        "d",
+        "b",
+        "a",
+        "a",
+        "c",
+        "a",
+        "a",
+        "",
+        "b",
+        "a",
+        "b",
+        "d",
+        null,
+        null,
+        "a",
+        "d",
+        "b",
+        "b",
+        "b",
+        "c",
+        "d",
+        "c",
+        "b",
+        "d",
+        "a",
+        "a",
+        null,
+        "d",
+        "b",
+        "c",
+        null,
+        "b",
+        null,
+        "b",
+        "b",
+        null,
+        "a",
+        "c",
+        "d",
+        "c",
+        "d",
+        "c",
+        "c",
+        "b",
+        "a",
+        null,
+        null,
+        "a",
+        "b",
+        "b",
+        "d",
+        "b",
+        "a",
+        "c",
+        "a",
+        "c",
+        "a",
+        "a,b",
+        "a",
+        "a",
+        "b",
+        "a",
+        "c",
+        null,
+        "d",
+        "c",
+        "b",
+        "c",
+        "\ud835\udd18rsus",
+        "b",
+        "c",
+        "b",
+        "a",
+        "a",
+        "d",
+        "d",
+        "a",
+        "b",
+        "d",
+        "c",
+        "b",
+        "b",
+        "c",
+        "d",
+        "a"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        0,
+        4,
+        1,
+        3,
+        1,
+        1,
+        3,
+        0,
+        3,
+        3,
+        0,
+        1,
+        2,
+        null,
+        4,
+        5,
+        5,
+        null,
+        0,
+        null,
+        4,
+        5,
+        1,
+        2,
+        2,
+        1,
+        1,
+        4,
+        null,
+        null,
+        3,
+        1,
+        5,
+        3,
+        5,
+        4,
+        2,
+        4,
+        2,
+        4,
+        4,
+        4,
+        5,
+        2,
+        4,
+        2,
+        null,
+        3,
+        null,
+        2,
+        5,
+        3,
+        1,
+        5,
+        1,
+        4,
+        1,
+        3,
+        1,
+        0,
+        null,
+        0,
+        1,
+        5,
+        0,
+        3,
+        4,
+        4,
+        0,
+        1,
+        1,
+        5,
+        0,
+        3,
+        null,
+        0,
+        2,
+        2,
+        5,
+        5,
+        5,
+        3,
+        null,
+        0,
+        3,
+        3,
+        5,
+        2,
+        3,
+        3,
+        5,
+        2,
+        3,
+        3,
+        0,
+        2,
+        5,
+        3,
+        0,
+        2,
+        2,
+        null,
+        1,
+        1,
+        3,
+        1,
+        4,
+        4,
+        1,
+        1,
+        3,
+        3,
+        3,
+        2,
+        4,
+        2,
+        0,
+        5,
+        3,
+        0,
+        4,
+        null,
+        0,
+        3,
+        2,
+        5,
+        2,
+        5,
+        3,
+        5,
+        4,
+        5,
+        1,
+        3,
+        null,
+        5,
+        1,
+        1,
+        5,
+        5,
+        0,
+        0,
+        4,
+        5,
+        1,
+        5,
+        3,
+        3,
+        0,
+        4
+       ]
+      }
+     ]
+    }
+   },
+   "name": "unique_counts_gen",
+   "order": "rows",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Uint32",
+      "name": "s",
+      "values": [
+       39,
+       31,
+       1,
+       31,
+       33,
+       12,
+       1,
+       1,
+       1
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        2,
+        2,
+        1,
+        2,
+        1,
+        1,
+        1,
+        3,
+        0,
+        0,
+        1,
+        0,
+        1,
+        2,
+        3,
+        0,
+        1,
+        1,
+        2,
+        3,
+        3,
+        0,
+        1,
+        3,
+        2,
+        3,
+        1,
+        2,
+        0,
+        0,
+        3,
+        0,
+        1,
+        3,
+        1,
+        1,
+        2,
+        1,
+        1,
+        2,
+        2,
+        0,
+        2,
+        0,
+        3,
+        1,
+        1,
+        3,
+        0,
+        2,
+        1,
+        1,
+        3,
+        0,
+        3,
+        0,
+        2,
+        1,
+        2,
+        3,
+        0,
+        1,
+        3,
+        1,
+        2,
+        3,
+        3,
+        3,
+        2,
+        0,
+        1,
+        1,
+        0,
+        0,
+        2,
+        3,
+        0,
+        3,
+        0,
+        2,
+        3,
+        3,
+        0,
+        1,
+        1,
+        2,
+        1,
+        0,
+        0,
+        2,
+        3,
+        2,
+        1,
+        0,
+        3,
+        2,
+        3,
+        3,
+        3,
+        0,
+        1,
+        2,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        3,
+        2,
+        2,
+        2,
+        3,
+        2,
+        1,
+        2,
+        2,
+        2,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        2,
+        0,
+        2,
+        2,
+        1,
+        0,
+        3,
+        0,
+        0,
+        3,
+        1,
+        3,
+        1,
+        2,
+        3,
+        2,
+        1,
+        1,
+        2,
+        0,
+        2,
+        2,
+        0
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "b",
+        "c",
+        "\"q\"",
+        "d",
+        "c",
+        "a",
+        "d",
+        "d",
+        "d",
+        "b",
+        "b",
+        "b",
+        "d",
+        "b",
+        "b",
+        "d",
+        "a",
+        "d",
+        null,
+        "b",
+        "c",
+        "a",
+        "a",
+        "d",
+        "a",
+        "a",
+        "d",
+        null,
+        "a",
+        "c",
+        "c",
+        "d",
+        "d",
+        "a",
+        "b",
+        "c",
+        "b",
+        "b",
+        "c",
+        "c",
+        "c",
+        "a",
+        "b",
+        "a",
+        null,
+        "d",
+        "c",
+        "c",
+        "a",
+        "a",
+        "b",
+        "b",
+        "c",
+        "b",
+        "d",
+        "d",
+        "b",
+        "d",
+        "c",
+        "d",
+        "b",
+        "c",
+        "c",
+        "d",
+        "b",
+        "d",
+        "b",
+        "a",
+        "a",
+        "c",
+        "a",
+        "a",
+        "",
+        "b",
+        "a",
+        "b",
+        "d",
+        null,
+        null,
+        "a",
+        "d",
+        "b",
+        "b",
+        "b",
+        "c",
+        "d",
+        "c",
+        "b",
+        "d",
+        "a",
+        "a",
+        null,
+        "d",
+        "b",
+        "c",
+        null,
+        "b",
+        null,
+        "b",
+        "b",
+        null,
+        "a",
+        "c",
+        "d",
+        "c",
+        "d",
+        "c",
+        "c",
+        "b",
+        "a",
+        null,
+        null,
+        "a",
+        "b",
+        "b",
+        "d",
+        "b",
+        "a",
+        "c",
+        "a",
+        "c",
+        "a",
+        "a,b",
+        "a",
+        "a",
+        "b",
+        "a",
+        "c",
+        null,
+        "d",
+        "c",
+        "b",
+        "c",
+        "\ud835\udd18rsus",
+        "b",
+        "c",
+        "b",
+        "a",
+        "a",
+        "d",
+        "d",
+        "a",
+        "b",
+        "d",
+        "c",
+        "b",
+        "b",
+        "c",
+        "d",
+        "a"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        0,
+        4,
+        1,
+        3,
+        1,
+        1,
+        3,
+        0,
+        3,
+        3,
+        0,
+        1,
+        2,
+        null,
+        4,
+        5,
+        5,
+        null,
+        0,
+        null,
+        4,
+        5,
+        1,
+        2,
+        2,
+        1,
+        1,
+        4,
+        null,
+        null,
+        3,
+        1,
+        5,
+        3,
+        5,
+        4,
+        2,
+        4,
+        2,
+        4,
+        4,
+        4,
+        5,
+        2,
+        4,
+        2,
+        null,
+        3,
+        null,
+        2,
+        5,
+        3,
+        1,
+        5,
+        1,
+        4,
+        1,
+        3,
+        1,
+        0,
+        null,
+        0,
+        1,
+        5,
+        0,
+        3,
+        4,
+        4,
+        0,
+        1,
+        1,
+        5,
+        0,
+        3,
+        null,
+        0,
+        2,
+        2,
+        5,
+        5,
+        5,
+        3,
+        null,
+        0,
+        3,
+        3,
+        5,
+        2,
+        3,
+        3,
+        5,
+        2,
+        3,
+        3,
+        0,
+        2,
+        5,
+        3,
+        0,
+        2,
+        2,
+        null,
+        1,
+        1,
+        3,
+        1,
+        4,
+        4,
+        1,
+        1,
+        3,
+        3,
+        3,
+        2,
+        4,
+        2,
+        0,
+        5,
+        3,
+        0,
+        4,
+        null,
+        0,
+        3,
+        2,
+        5,
+        2,
+        5,
+        3,
+        5,
+        4,
+        5,
+        1,
+        3,
+        null,
+        5,
+        1,
+        1,
+        5,
+        5,
+        0,
+        0,
+        4,
+        5,
+        1,
+        5,
+        3,
+        3,
+        0,
+        4
+       ]
+      }
+     ]
+    }
+   },
+   "name": "value_counts_gen",
+   "order": "set",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       null
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "count",
+      "values": [
+       19,
+       24,
+       19,
+       29,
+       20,
+       26,
+       13
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {
+    "df": {
+     "columns": [
+      {
+       "dtype": "Int64",
+       "name": "g",
+       "values": [
+        2,
+        2,
+        1,
+        2,
+        1,
+        1,
+        1,
+        3,
+        0,
+        0,
+        1,
+        0,
+        1,
+        2,
+        3,
+        0,
+        1,
+        1,
+        2,
+        3,
+        3,
+        0,
+        1,
+        3,
+        2,
+        3,
+        1,
+        2,
+        0,
+        0,
+        3,
+        0,
+        1,
+        3,
+        1,
+        1,
+        2,
+        1,
+        1,
+        2,
+        2,
+        0,
+        2,
+        0,
+        3,
+        1,
+        1,
+        3,
+        0,
+        2,
+        1,
+        1,
+        3,
+        0,
+        3,
+        0,
+        2,
+        1,
+        2,
+        3,
+        0,
+        1,
+        3,
+        1,
+        2,
+        3,
+        3,
+        3,
+        2,
+        0,
+        1,
+        1,
+        0,
+        0,
+        2,
+        3,
+        0,
+        3,
+        0,
+        2,
+        3,
+        3,
+        0,
+        1,
+        1,
+        2,
+        1,
+        0,
+        0,
+        2,
+        3,
+        2,
+        1,
+        0,
+        3,
+        2,
+        3,
+        3,
+        3,
+        0,
+        1,
+        2,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        3,
+        2,
+        2,
+        2,
+        3,
+        2,
+        1,
+        2,
+        2,
+        2,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        2,
+        0,
+        2,
+        2,
+        1,
+        0,
+        3,
+        0,
+        0,
+        3,
+        1,
+        3,
+        1,
+        2,
+        3,
+        2,
+        1,
+        1,
+        2,
+        0,
+        2,
+        2,
+        0
+       ]
+      },
+      {
+       "dtype": "String",
+       "name": "s",
+       "values": [
+        "b",
+        "c",
+        "\"q\"",
+        "d",
+        "c",
+        "a",
+        "d",
+        "d",
+        "d",
+        "b",
+        "b",
+        "b",
+        "d",
+        "b",
+        "b",
+        "d",
+        "a",
+        "d",
+        null,
+        "b",
+        "c",
+        "a",
+        "a",
+        "d",
+        "a",
+        "a",
+        "d",
+        null,
+        "a",
+        "c",
+        "c",
+        "d",
+        "d",
+        "a",
+        "b",
+        "c",
+        "b",
+        "b",
+        "c",
+        "c",
+        "c",
+        "a",
+        "b",
+        "a",
+        null,
+        "d",
+        "c",
+        "c",
+        "a",
+        "a",
+        "b",
+        "b",
+        "c",
+        "b",
+        "d",
+        "d",
+        "b",
+        "d",
+        "c",
+        "d",
+        "b",
+        "c",
+        "c",
+        "d",
+        "b",
+        "d",
+        "b",
+        "a",
+        "a",
+        "c",
+        "a",
+        "a",
+        "",
+        "b",
+        "a",
+        "b",
+        "d",
+        null,
+        null,
+        "a",
+        "d",
+        "b",
+        "b",
+        "b",
+        "c",
+        "d",
+        "c",
+        "b",
+        "d",
+        "a",
+        "a",
+        null,
+        "d",
+        "b",
+        "c",
+        null,
+        "b",
+        null,
+        "b",
+        "b",
+        null,
+        "a",
+        "c",
+        "d",
+        "c",
+        "d",
+        "c",
+        "c",
+        "b",
+        "a",
+        null,
+        null,
+        "a",
+        "b",
+        "b",
+        "d",
+        "b",
+        "a",
+        "c",
+        "a",
+        "c",
+        "a",
+        "a,b",
+        "a",
+        "a",
+        "b",
+        "a",
+        "c",
+        null,
+        "d",
+        "c",
+        "b",
+        "c",
+        "\ud835\udd18rsus",
+        "b",
+        "c",
+        "b",
+        "a",
+        "a",
+        "d",
+        "d",
+        "a",
+        "b",
+        "d",
+        "c",
+        "b",
+        "b",
+        "c",
+        "d",
+        "a"
+       ]
+      },
+      {
+       "dtype": "Int64",
+       "name": "a",
+       "values": [
+        0,
+        4,
+        1,
+        3,
+        1,
+        1,
+        3,
+        0,
+        3,
+        3,
+        0,
+        1,
+        2,
+        null,
+        4,
+        5,
+        5,
+        null,
+        0,
+        null,
+        4,
+        5,
+        1,
+        2,
+        2,
+        1,
+        1,
+        4,
+        null,
+        null,
+        3,
+        1,
+        5,
+        3,
+        5,
+        4,
+        2,
+        4,
+        2,
+        4,
+        4,
+        4,
+        5,
+        2,
+        4,
+        2,
+        null,
+        3,
+        null,
+        2,
+        5,
+        3,
+        1,
+        5,
+        1,
+        4,
+        1,
+        3,
+        1,
+        0,
+        null,
+        0,
+        1,
+        5,
+        0,
+        3,
+        4,
+        4,
+        0,
+        1,
+        1,
+        5,
+        0,
+        3,
+        null,
+        0,
+        2,
+        2,
+        5,
+        5,
+        5,
+        3,
+        null,
+        0,
+        3,
+        3,
+        5,
+        2,
+        3,
+        3,
+        5,
+        2,
+        3,
+        3,
+        0,
+        2,
+        5,
+        3,
+        0,
+        2,
+        2,
+        null,
+        1,
+        1,
+        3,
+        1,
+        4,
+        4,
+        1,
+        1,
+        3,
+        3,
+        3,
+        2,
+        4,
+        2,
+        0,
+        5,
+        3,
+        0,
+        4,
+        null,
+        0,
+        3,
+        2,
+        5,
+        2,
+        5,
+        3,
+        5,
+        4,
+        5,
+        1,
+        3,
+        null,
+        5,
+        1,
+        1,
+        5,
+        5,
+        0,
+        0,
+        4,
+        5,
+        1,
+        5,
+        3,
+        3,
+        0,
+        4
+       ]
+      }
+     ]
+    }
+   },
+   "name": "value_counts_by_group_gen",
+   "order": "set",
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "g",
+      "values": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       2,
+       2,
+       2,
+       2,
+       2,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "",
+       "a",
+       "b",
+       "c",
+       "d",
+       null,
+       "\"q\"",
+       "a",
+       "a,b",
+       "b",
+       "c",
+       "d",
+       null,
+       "a",
+       "b",
+       "c",
+       "d",
+       null,
+       "a",
+       "b",
+       "c",
+       "d",
+       "\ud835\udd18rsus",
+       null
+      ]
+     },
+     {
+      "dtype": "Uint32",
+      "name": "count",
+      "values": [
+       1,
+       11,
+       11,
+       6,
+       6,
+       2,
+       1,
+       6,
+       1,
+       9,
+       11,
+       14,
+       1,
+       9,
+       10,
+       8,
+       5,
+       6,
+       7,
+       9,
+       6,
+       6,
+       1,
+       3
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "generator": "bench/scripts/oracle/search.py",
+ "polars": "2.1.0"
+}

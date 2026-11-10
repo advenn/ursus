@@ -6,13 +6,18 @@ import (
 	"testing"
 
 	"github.com/advenn/ursus"
-	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/uerr"
 	"github.com/advenn/ursus/ursustest"
 )
 
 // unpivotFrame is two index columns and two value columns, with a null in the
-// second value column so the melted column's nullability is observable.
+// second value column so the melted column's nullability is observable. Its rows,
+// in ursus's row-major order (each row's columns together, then the next row's,
+// where Polars gives every row's first column, then every row's second: the step's
+// one deliberate divergence, feature-gaps.md §9), are the unpivot group's
+// (oracle_unpivot_test.go). Polars' order cannot be produced one batch at a time;
+// row-major can, and TestUnpivotIsBatchSizeInvariant is the other half of the
+// argument.
 func unpivotFrame() *ursus.LazyFrame {
 	return ursus.Frame(
 		ursus.Values("id", []int64{1, 2, 3}),
@@ -20,57 +25,6 @@ func unpivotFrame() *ursus.LazyFrame {
 		ursus.Values("jan", []int64{10, 30, 50}),
 		ursus.ValuesNullable("feb", []int64{20, 0, 60}, []bool{true, false, true}),
 	)
-}
-
-// TestUnpivotRowMajor pins the row order, which is the step's one deliberate
-// divergence from Polars.
-//
-// Polars stacks k frames vertically: every row's jan, then every row's feb. That
-// order cannot be produced one batch at a time — it would interleave differently at
-// different batch sizes. Row-major can, and TestUnpivotIsBatchSizeInvariant is the
-// other half of the argument.
-func TestUnpivotRowMajor(t *testing.T) {
-	df, err := unpivotFrame().
-		Unpivot(ursus.UnpivotOptions{On: []string{"jan", "feb"}}).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if df.Height() != 6 {
-		t.Fatalf("got %d rows, want 6 (3 rows x 2 melted columns)\n%s", df.Height(), df)
-	}
-
-	want := []struct {
-		id       int64
-		variable string
-		value    int64
-		valueOK  bool
-	}{
-		{1, "jan", 10, true},
-		{1, "feb", 20, true},
-		{2, "jan", 30, true},
-		{2, "feb", 0, false}, // the null survives the melt
-		{3, "jan", 50, true},
-		{3, "feb", 60, true},
-	}
-	for i, w := range want {
-		id, _, err := df.At[int64](i, "id")
-		if err != nil {
-			t.Fatal(err)
-		}
-		v, _, err := df.At[string](i, "variable")
-		if err != nil {
-			t.Fatal(err)
-		}
-		val, ok, err := df.At[int64](i, "value")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if id != w.id || v != w.variable || ok != w.valueOK || (w.valueOK && val != w.value) {
-			t.Errorf("row %d: (%d, %q, %v/%v), want (%d, %q, %v/%v)",
-				i, id, v, val, ok, w.id, w.variable, w.value, w.valueOK)
-		}
-	}
 }
 
 // TestUnpivotValueNullability. The value column is nullable if ANY melted column
@@ -130,36 +84,6 @@ func TestUnpivotIsBatchSizeInvariant(t *testing.T) {
 	}
 }
 
-// TestUnpivotPromotesTheValueType. Every melted column shares one value column, so
-// their types must promote — and the promoted type is what the schema declares, not
-// the first column's.
-func TestUnpivotPromotesTheValueType(t *testing.T) {
-	df, err := ursus.Frame(
-		ursus.Values("id", []int64{1}),
-		ursus.Values("small", []int32{7}),
-		ursus.Values("big", []int64{1 << 40}),
-	).Unpivot(ursus.UnpivotOptions{On: []string{"small", "big"}}).
-		Collect(t.Context(), ursus.WithVerify())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := df.Schema().Field(df.Schema().Len() - 1).Type; got != dtype.Int64 {
-		t.Errorf("value column is %s, want Int64 — Int32 and Int64 promote to Int64", got)
-	}
-	// The Int32 must be widened, not reinterpreted, and the Int64 must survive
-	// intact — a value past Int32's range is what shows a truncation.
-	if v, _, err := df.At[int64](0, "value"); err != nil {
-		t.Fatal(err)
-	} else if v != 7 {
-		t.Errorf("the Int32 melted to %d, want 7", v)
-	}
-	if v, _, err := df.At[int64](1, "value"); err != nil {
-		t.Fatal(err)
-	} else if v != 1<<40 {
-		t.Errorf("the Int64 melted to %d, want %d", v, int64(1)<<40)
-	}
-}
-
 // TestUnpivotIndexDefaultsToTheRest — and the contrast with naming it explicitly.
 func TestUnpivotIndexDefaultsToTheRest(t *testing.T) {
 	implicit, err := unpivotFrame().
@@ -190,9 +114,8 @@ func TestUnpivotIndexDefaultsToTheRest(t *testing.T) {
 // that only walks expressions — so without the arm, projection pushdown prunes the
 // very columns unpivot reads. Distinct.Subset has the arm for exactly this reason.
 func TestUnpivotKeepsItsColumnsAliveThroughPushdown(t *testing.T) {
-	lf := unpivotFrame().
-		Unpivot(ursus.UnpivotOptions{On: []string{"jan", "feb"}, Index: []string{"id"}}).
-		Select(ursus.Col("value"))
+	melted := unpivotFrame().Unpivot(ursus.UnpivotOptions{On: []string{"jan", "feb"}, Index: []string{"id"}})
+	lf := melted.Select(ursus.Col("value"))
 
 	df, err := lf.Collect(t.Context(), ursus.WithVerify())
 	if err != nil {
@@ -201,11 +124,16 @@ func TestUnpivotKeepsItsColumnsAliveThroughPushdown(t *testing.T) {
 	if df.Height() != 6 {
 		t.Fatalf("got %d rows, want 6\n%s", df.Height(), df)
 	}
-	if v, _, err := df.At[int64](0, "value"); err != nil {
+	// The value column alone is the whole melt's value column.
+	want, err := melted.Collect(t.Context())
+	if err != nil {
 		t.Fatal(err)
-	} else if v != 10 {
-		t.Errorf("first value is %d, want 10", v)
 	}
+	want, err = want.Select(t.Context(), ursus.Col("value"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, df, want)
 
 	// Projection pushdown prunes `region`: Unpivot has its arm, pushdownUnpivot,
 	// which keeps On and an explicit Index whole and nothing else. This asserted the
@@ -222,36 +150,10 @@ func TestUnpivotKeepsItsColumnsAliveThroughPushdown(t *testing.T) {
 // TestUnpivotWithoutOn is P2 of v0.6.7-scope.md (step 304): On left empty melts
 // every column not in Index, as Polars' on=None; with Index empty too, every column;
 // and with Index naming every column, nothing, no rows and a value column of the
-// Null type. Each answer is Polars 1.44.1's, its rows in ursus's order: each row's
-// columns together, where Polars gives every row's first column first (§9).
+// Null type. The rows are the unpivot group's; here stay the plan and the schemas.
 func TestUnpivotWithoutOn(t *testing.T) {
 	ctx := t.Context()
 	lf := ursus.Frame(ursus.Values("id", []int64{1, 2}), ursus.Values("a", []int64{3, 4}), ursus.Values("b", []int64{5, 6}))
-	for _, tc := range []struct {
-		name string
-		opts ursus.UnpivotOptions
-		want []*ursus.Column
-	}{
-		{"every column not in Index", ursus.UnpivotOptions{Index: []string{"id"}}, []*ursus.Column{
-			ursus.Values("id", []int64{1, 1, 2, 2}), ursus.Values("variable", []string{"a", "b", "a", "b"}),
-			ursus.Values("value", []int64{3, 5, 4, 6})}},
-		{"every column", ursus.UnpivotOptions{}, []*ursus.Column{
-			ursus.Values("variable", []string{"id", "a", "b", "id", "a", "b"}),
-			ursus.Values("value", []int64{1, 3, 5, 2, 4, 6})}},
-		{"named", ursus.UnpivotOptions{Index: []string{"id"}, VariableName: "col", ValueName: "val"}, []*ursus.Column{
-			ursus.Values("id", []int64{1, 1, 2, 2}), ursus.Values("col", []string{"a", "b", "a", "b"}),
-			ursus.Values("val", []int64{3, 5, 4, 6})}},
-	} {
-		got, err := lf.Unpivot(tc.opts).Collect(ctx)
-		if err != nil {
-			t.Fatalf("%s: %v", tc.name, err)
-		}
-		want, err := ursus.Frame(tc.want...).Collect(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Run(tc.name, func(t *testing.T) { ursustest.AssertFrameEqual(t, got, want) })
-	}
 
 	// The plan names what it melts, written out when Unpivot was called.
 	plan, err := lf.Unpivot(ursus.UnpivotOptions{Index: []string{"id"}}).Explain(ctx)
