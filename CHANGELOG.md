@@ -282,6 +282,21 @@ that stops when its request is cancelled.
   recorded. Six refusals ursus means, where Polars answers, are `TestCondRefusals`' and
   `TestDecimalGuards`', and two float extremes `TestAggregatesAtTheFloatsEnds`', held
   to math/big; those eight cases left the recordings.
+- **Random queries checked against themselves** (512): `qcheck/`, a module of its
+  own, draws tables (Int64, Int32, Float64, String, Bool and Date; 0 to 3,000 rows and
+  8191 to 8193; null rates 0 to 1; tame, wild and extreme values, NaN, ±0, each type's
+  ends, Unicode and long text) and a well-typed query over them from one seed: filters,
+  projections, group-bys on integer keys of mixed widths, sorts with a head or a slice,
+  inner, left, semi and anti joins on integer, text and NaN/±0 float keys, and their
+  expressions and aggregates. `qcheck self` runs each at one thread, batches of 8192
+  and the default flags, and again on 4 and 8 threads, in batches of 1 to 65,536 rows,
+  with the optimizer off and from tables cut into records, sampled pairwise, and
+  requires one answer to the bit, rows in order where the query promises an order and
+  as a multiset where not; a float sum on several threads may differ within an error
+  model, counted, and a canary fails the allowance as stale when it stops differing.
+  A mismatch is bisected to its factor, and every run is inside `fuzzcheck.Run`. Its
+  tests, the teeth and a seeded smoke run, and five minutes of `qcheck self` run in
+  the CI job `qcheck`, not a required check. It found the three below.
 - **Fuzz targets for NDJSON, JSON and Arrow IPC** (511): `FuzzObjectLines` holds a
   JSON document's split into lines to itself read in pieces and a byte at a time, and
   to `encoding/json`; `FuzzJSONDecode` holds `json_decode`'s and `json_path_match`'s
@@ -350,6 +365,29 @@ its section below lists them.
   refuses what arrow-go would trust with an `ErrIO` naming the input as corrupt. No
   well-formed file is refused. A Parquet footer's Arrow schema is read by the same
   walk.
+- **A Parquet dictionary index past its dictionary no longer ends the process**
+  (517): arrow-go made a slice of a data page's dictionary index before it checked the
+  index against the dictionary, 8 GiB for index 2^30 in a file of 128 bytes and a fatal
+  "out of memory" for a wider value or a larger index, in every chunk it decodes: a
+  nested column or a struct's field, INT96, a fixed-length or byte-array column, or one
+  whose footer lists an encoding ursus's own pages do not read. Such a page is refused
+  as corrupt before arrow-go decodes it, as ursus's own pages refused it, and the error
+  names the index, where a page of such a chunk that failed was reported as its row
+  group short of rows. CI's fuzz runs found it.
+- **A sort in small batches no longer allocates by the square of its batches** (512):
+  each output batch's gather made two arrays as long as every input batch the sort
+  kept, so sorting 8,191 rows in batches of one row allocated 2.3 GB in 400 ms; 23 MB
+  in 27 ms now; the as-of join's and the temporal streams' gathers go through the same
+  function. Found by `qcheck self`.
+- **A slice from the end, and a tail, in small batches** (512): after each batch it
+  read it recounted every batch it held in its memory account, so the last 4,000 of
+  8,193 rows in batches of one row allocated 6 GB in 12 s; 16 MB in 17 ms now. It
+  counts a batch as it comes and recounts once an eighth of what it holds has gone,
+  and before it decides to spill, so it spills where it did. Found by `qcheck self`.
+- **`NUnique` by many groups in small batches** (512): its table of group and value
+  grew its keys to the group count exactly before each batch, copying them all, so a
+  `NUnique` by 8,193 keys in batches of one row allocated 842 MB; 30 MB now, the keys
+  growing to twice what they held, as a slice's append does. Found by `qcheck self`.
 - **An Arrow IPC buffer declaring more than its input could hold is refused, not the
   end of the process** (511): arrow-go sizes a compressed buffer's decompression by
   the length the buffer declares, so a 1.7 KB LZ4 file declaring 2^40 bytes ended the
