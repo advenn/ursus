@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("d\n\"1,50\"\n\"-2,25\"\n")
+byte('\v')
+byte('\x00')

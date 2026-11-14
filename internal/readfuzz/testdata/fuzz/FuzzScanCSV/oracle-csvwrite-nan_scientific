@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("x\nNaN\ninf\n-0e0\n1.234567e6\n")
+uint32(0)

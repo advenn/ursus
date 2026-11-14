@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("x\nNaN\ninf\n-0.00\n1234567.00\n")
+byte('\x06')
+byte('\x00')
