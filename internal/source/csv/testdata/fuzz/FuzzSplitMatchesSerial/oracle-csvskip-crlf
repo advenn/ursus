@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("junk\r\na,b\r\n1,2\r\n")
+byte('\x01')
+byte('\x00')

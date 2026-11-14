@@ -79,15 +79,29 @@ func (d DataType) FromTime(t time.Time) (int64, bool) {
 	// Whole ticks per second, so the instant is sec*perSec plus the sub-second part.
 	// Only the multiply can leave int64, and it is checked rather than assumed.
 	perSec := nsPerSec / npt
-	if sec > math.MaxInt64/perSec || sec < math.MinInt64/perSec {
-		return 0, false
-	}
-	ticks := sec * perSec
 	sub := int64(t.Nanosecond()) / npt // Nanosecond() is in [0, 1e9), so this floors
-	if ticks > math.MaxInt64-sub {
+	if sec >= 0 {
+		if sec > math.MaxInt64/perSec {
+			return 0, false
+		}
+		ticks := sec * perSec
+		if ticks > math.MaxInt64-sub {
+			return 0, false
+		}
+		return ticks + sub, true
+	}
+	// Before the epoch the instant is (sec+1)*perSec less what the second lacks. Its
+	// least second's product is past int64 though the instant is not, so sec*perSec
+	// refused the type's first 0.85 s: 1677-09-21T00:12:43.145224192Z, its least
+	// nanosecond instant, rendered and did not read back (step 509).
+	if sec+1 < math.MinInt64/perSec {
 		return 0, false
 	}
-	return ticks + sub, true
+	ticks, rest := (sec+1)*perSec, perSec-sub
+	if ticks < math.MinInt64+rest {
+		return 0, false
+	}
+	return ticks - rest, true
 }
 
 // FromTimeBound converts an instant into a tick count the way FromTime does, but
