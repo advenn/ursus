@@ -438,3 +438,32 @@ func TestATimePastItsDayIsRefused(t *testing.T) {
 		return err
 	})
 }
+
+// TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt (step 510, F9 of its
+// record, left for the maintainer): a data page of a dictionary of two INT64 values
+// whose one RLE run says index 2^30, in a file of 128 bytes whose footer lists
+// DELTA_BINARY_PACKED, so arrow-go's column reader decodes the chunk and not the
+// reader's own pages. arrow-go's encoding.(*dictConverter[T]).ensure makes a slice
+// of index+1 values before checking the index against the dictionary: 8 GiB here,
+// and a fatal "out of memory" where the type is wider or the index is 2^31−1. It
+// answers an error after, so the read is refused, past every bound. The own pages
+// check each index first (pageChunk.indices).
+func TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt(t *testing.T) {
+	t.Skip("finding: arrow-go's dictConverter.ensure allocates by a dictionary index before checking it; " +
+		"a fix needs every chunk arrow-go decodes read through a page reader ursus checks (step 510, F9)")
+	dict := binary.LittleEndian.AppendUint64(binary.LittleEndian.AppendUint64(nil, 7), 9)
+	idx := binary.AppendUvarint([]byte{31}, 5<<1)
+	idx = binary.LittleEndian.AppendUint32(idx, 1<<30)
+	pages := []pqPage{
+		{typ: pqPageDict, values: 2, encoding: pqPlain, body: dict},
+		{typ: pqPageData, values: 5, encoding: pqRLEDict, body: idx},
+	}
+	b := pqForged{phys: pqInt64, rows: 5, pages: pages, encs: []int32{pqDeltaBinary}}.bytes()
+	fuzzcheck.Run(t, limits(len(b)), func() error {
+		df, err := ursus.ScanParquetBytes(b, "forged.parquet").Collect(t.Context())
+		if err == nil {
+			t.Errorf("index 2^30 of a dictionary of 2: read as %d rows, and no error", df.Height())
+		}
+		return nil
+	})
+}

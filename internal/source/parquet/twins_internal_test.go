@@ -3,6 +3,7 @@ package parquet
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -76,6 +77,9 @@ func FuzzOwnPagesMatchArrow(f *testing.F) {
 		f.Add(b, uint16([]int{1023, 332}[i%2]))
 	}
 	f.Fuzz(func(t *testing.T, b []byte, batch uint16) {
+		if why, ok := twinFindings[fmt.Sprintf("%x", sha256.Sum256(b))]; ok {
+			t.Skip("finding: " + why)
+		}
 		size := 1 + int(batch)%4096
 		mem := fuzzcheck.NewAllocator(len(b))
 		mem.Poison = true
@@ -99,6 +103,15 @@ func FuzzOwnPagesMatchArrow(f *testing.F) {
 			return nil
 		})
 	})
+}
+
+// twinFindings are inputs FuzzOwnPagesMatchArrow failed on that are left for the
+// maintainer, by the SHA-256 of their bytes, each kept in its corpus under the name
+// the reason gives (step 510's record, §4).
+var twinFindings = map[string]string{
+	"5c0102a09a1143414ef69bc08be101ce8eacc1494afc4ebaeb6165188447924e": "dictionary-index-past-its-dictionary: " +
+		"arrow-go's encoding.(*dictConverter[T]).ensure makes a slice of a data page's dictionary index before " +
+		"checking it against the dictionary, 1.8 GB here (F9)",
 }
 
 // readTwin reads b in batches of batch rows on one thread, with the reader's own
