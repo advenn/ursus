@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("[{\"a\":1}] x")
+uint16(3)
+uint16(64)
