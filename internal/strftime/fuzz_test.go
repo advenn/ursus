@@ -160,6 +160,12 @@ func determined(fm *Format, at time.Time) bool {
 		if wide && i+1 < len(fm.items) && digitFirst(fm.items[i+1]) {
 			return false
 		}
+		// %.f of a whole second writes nothing, and Parse takes a '.' after it as the
+		// fraction's (runsOn).
+		bare := it.spec == 'f' && it.dot && it.digit == 0 && at.Nanosecond() == 0
+		if bare && i+1 < len(fm.items) && fm.items[i+1].spec == 0 && fm.items[i+1].lit[0] == '.' {
+			return false
+		}
 	}
 	date := seen['Y'] || seen['m'] || seen['d'] || seen['j']
 	if date && !(seen['Y'] && (seen['m'] && seen['d'] && !seen['j'] || seen['j'] && !seen['m'] && !seen['d'])) {
@@ -260,7 +266,7 @@ func FuzzParse(f *testing.F) {
 			if err != nil {
 				t.Fatalf("Parse(%q, %q) = %+v, which Append refuses: %v", format, text, got, err)
 			}
-			if spaceDayRunsOn(fm, at, got.HasZone, out) {
+			if runsOn(fm, at, got.HasZone, out) {
 				return nil
 			}
 			back, err := fm.Parse(string(out))
@@ -272,23 +278,38 @@ func FuzzParse(f *testing.F) {
 	})
 }
 
-// spaceDayRunsOn is whether out, Append's text for at, has a day below 10 that %e wrote
-// as " 1" to " 9" directly before a digit. Parse reads %e as chrono and C's strptime
-// do, one space skipped and then up to two digits, so " 1" before "0" reads back as
-// day 10: the text is not read back as written, by ursus or by either of them. Found
-// by CI's fuzzing of step 509: "%Y%Y%y%y%e%Y%f" on "0000000000000100000".
-func spaceDayRunsOn(fm *Format, at time.Time, zone bool, out []byte) bool {
+// runsOn is whether Append's text for at, out, has a part that Parse, reading as
+// chrono does, runs past into the text after it, so out does not read back as
+// written, by ursus or by chrono. Three parts do:
+//   - a day below 10, which %e writes as " 1" to " 9", directly before a digit: Parse
+//     skips the space and takes up to two digits, as C's strptime does too;
+//   - a year outside 0000–9999, which %Y writes signed, directly before a digit: a
+//     signed year takes up to nine digits;
+//   - %.f of a whole second, which writes nothing, directly before a '.': the dot is
+//     taken as the fraction's.
+//
+// determined leaves out the same parts by the format; this finds them in the text.
+// Found by CI's fuzzing of step 509: "%Y%Y%y%y%e%Y%f" on "0000000000000100000" and
+// "%Y%Y%f" on "0000-0000000010".
+func runsOn(fm *Format, at time.Time, zone bool, out []byte) bool {
+	from := 0
 	for i, it := range fm.items {
-		if it.spec != 'e' {
-			continue
-		}
 		head, err := (&Format{items: fm.items[:i+1]}).Append(nil, at, zone)
-		if err != nil || len(head) >= len(out) || head[len(head)-2] != ' ' {
-			continue
+		if err != nil {
+			return false
 		}
-		if c := out[len(head)]; c >= '0' && c <= '9' {
-			return true
+		to := len(head)
+		if to < len(out) {
+			next, part := out[to], head[from:to]
+			digit := next >= '0' && next <= '9'
+			switch {
+			case it.spec == 'e' && part[0] == ' ' && digit,
+				it.spec == 'Y' && (part[0] == '-' || part[0] == '+') && digit,
+				it.spec == 'f' && it.dot && it.digit == 0 && len(part) == 0 && next == '.':
+				return true
+			}
 		}
+		from = to
 	}
 	return false
 }

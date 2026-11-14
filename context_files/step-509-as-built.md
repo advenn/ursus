@@ -74,10 +74,18 @@ a part named twice, a date that is not whole, and a day by %e or a year outside
 does: the plan's predicted first counterexample, "%Y past year 9999", is this, and
 Polars 2.1 refuses `+1000000102` by `%Y%m%d` too.
 
-`FuzzParse`'s round trip leaves out the same reading, by the text Append wrote
-(`spaceDayRunsOn`): a day below 10 that %e wrote as " 1" to " 9" directly before a
-digit, which Parse reads back as a two-digit day, as chrono and C's strptime do.
-strftime's package doc now says so.
+`FuzzParse`'s round trip leaves out the same readings, found in the text Append
+wrote (`runsOn`), and `determined` gains the third:
+- a day below 10 that %e wrote as " 1" to " 9" directly before a digit, read back as
+  a two-digit day, as chrono and C's strptime read it;
+- a year outside 0000–9999, written signed, directly before a digit, which the
+  signed year takes, up to nine digits;
+- %.f of a whole second, which writes nothing, directly before a literal '.', which
+  Parse takes as the fraction's dot and then wants digits: "%S%.f.x" reads "05.0.x"
+  and refuses "05.x", the text it writes back. chrono's %.f takes the dot likewise.
+
+strftime's package doc now says Parse reads a part as far as it can, and names the
+three.
 
 `FuzzScanCSVChunked` compares the two reads' errors with the line a read error is
 reported near left aside (`sameReadError`). klauspost's Zstandard decoder decodes
@@ -105,12 +113,16 @@ zero with any exponent as 0 (`TestParseDecimalExponentDoesNotWrap`), and finding
 extends that rule to the exponents past an int, not Polars'.
 
 Local fuzzing found nothing more: 11.3 million inputs over the 18 targets (§4), none
-failing. CI's first 30-second runs, on this step's pull request, found two failures,
-both in a target's comparison and not in the code it guards; each is kept as a seed
+failing. CI's 30-second runs, on this step's pull request, found three failures,
+each in a target's comparison and not in the code it guards; each is kept as a seed
 and §2 describes the rule each now follows:
 
 - `FuzzParse/ci-space-day-before-digit`: "%Y%Y%y%y%e%Y%f" on "0000000000000100000"
   reads day 1, which Append writes " 1" before the year "0000", read back as day 10.
+- `FuzzParse/ci-signed-year-before-digit`, on the second run: "%Y%Y%f" on
+  "0000-0000000010" reads year −1, written "-0001-0001000000000", read back as year
+  −100000. The third reading, `FuzzParse/probe-bare-fraction-before-dot`, was found
+  by probing the same rule by hand, before the fuzzer reached it.
 - `FuzzScanCSVChunked/ci-zstd-error-line`: a Zstandard stream with a corrupt second
   block, refused by both reads with klauspost's "compressed size too big", near line
   2 read whole and near line 1 read a byte or two at a time.
