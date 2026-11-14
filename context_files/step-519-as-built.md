@@ -165,7 +165,7 @@ Each mutation made in `walk.go`, its tests built and run under `prlimit
 
 ## 7. Checks
 
-On the branch, and again after master was merged in (steps 512 and 517):
+On the branch, and again after master was merged in (steps 512, 517 and 518):
 
 - `GOFLAGS=-p=1 GOMAXPROCS=4 GOEXPERIMENT=simd GOAMD64=v3`: `go test ./internal/...`
   ok; `go test .` in full, under the lock, ok.
