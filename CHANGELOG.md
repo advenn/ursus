@@ -264,6 +264,9 @@ that stops when its request is cancelled.
   a stream read in pieces, empty reads and a last one with `io.EOF` among them, to the
   bytes read whole. Their seeds include the 174 texts of Polars 2.1's recorded CSV
   cases. They found the four bugs fixed below.
+- **The fuzzer minimises a new input for 5 s, not 60** (516): `fuzz.yml` and `make
+  fuzz` pass `-fuzzminimizetime`, so a target that takes a millisecond an input spends
+  CI's 30 s fuzzing rather than minimising; set it with `FUZZMIN`.
 - **The twenty-five findings closed, their thirty-nine cases asserted again** (507):
   none is skipped. One was a bug, fixed (above); twenty-four are ursus's own rules,
   each documented in `context_files/feature-gaps.md` §9 with Polars 2.1's answer and
@@ -279,6 +282,18 @@ that stops when its request is cancelled.
   recorded. Six refusals ursus means, where Polars answers, are `TestCondRefusals`' and
   `TestDecimalGuards`', and two float extremes `TestAggregatesAtTheFloatsEnds`', held
   to math/big; those eight cases left the recordings.
+- **Fuzz targets for NDJSON, JSON and Arrow IPC** (511): `FuzzObjectLines` holds a
+  JSON document's split into lines to itself read in pieces and a byte at a time, and
+  to `encoding/json`; `FuzzJSONDecode` holds `json_decode`'s and `json_path_match`'s
+  parser to `json.Valid` and `json.Unmarshal`; `FuzzScanNDJSON` and `FuzzScanJSON` hold
+  each row read to `encoding/json`, by its column's type; `FuzzScanIPCFile` and
+  `FuzzScanIPCStream` read through a bounded allocator and hold each cell to arrow-go's
+  own arrays. readfuzz's targets run on an 8 MiB stack. Left for the maintainer, each
+  skipped by name: IPC metadata whose counts and offsets disagree with its bytes,
+  refused since step 519; a record of 2^40 rows of Null (529); klauspost's Zstandard
+  decoder allocates the window a frame declares, up to 512 MiB, from 17 bytes (528);
+  NDJSON inference types `[1, true]` and `[1, [2]]` as the reader then refuses, and an
+  integer past Int128 as an Int128.
 - **Fuzz targets for the Parquet reader, and a byte-flip sweep** (510):
   `FuzzScanParquet` reads any bytes through the public API with every page buffer
   from a bounded, poisoned allocator, and checks four threads, a read into zeroed
@@ -323,6 +338,9 @@ its section below lists them.
   and a null Struct is kept apart from a Struct of nulls (`ExtractGroups`, 499);
   Polars 2.1 reads a null too. `ScanJSON`, which reads each object as a line, follows.
   The recorded oracle found it (`ndjsonread/ignored_in_a_struct`).
+- **An NDJSON or JSON line nested deep is read in memory proportional to it** (511):
+  a 6 KB line of objects 999 deep allocated 4 GB and took 1.2 s, each level's type
+  written as text and built again; 4 MB and 13 ms now.
 - **A Parquet TIME past its day is refused** (510): a TIME holding a tick outside
   [0, 24h) was read as a Time as it lay, which renders as another time of day and
   sorts and compares as none; it is refused now as a corrupt value, inside a List or
