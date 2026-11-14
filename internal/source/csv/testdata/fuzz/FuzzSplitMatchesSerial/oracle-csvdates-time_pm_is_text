@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("x\n10:30 PM\n")
+byte('\x06')
+byte('\u0080')

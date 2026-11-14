@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("a,b\r")
+uint16(0)
+byte(',')
