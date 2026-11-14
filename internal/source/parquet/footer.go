@@ -38,17 +38,28 @@ type measured struct {
 	parquet.ReaderAtSeeker
 	from int64 // where tail begins in the file
 	tail []byte
+
+	// chunks holds where each column chunk begins, and the fewest bits a value of
+	// its column takes, once watchChunks has read them from the footer: a read from
+	// there is a chunk's, and its dictionary pages are counted (dictpages.go).
+	chunks map[int64]int
 }
 
-func (m *measured) ReadAt(p []byte, off int64) (int, error) {
+func (m *measured) ReadAt(p []byte, off int64) (n int, err error) {
 	if off >= m.from && off-m.from <= int64(len(m.tail)) {
-		n := copy(p, m.tail[off-m.from:])
+		n = copy(p, m.tail[off-m.from:])
 		if n < len(p) {
-			return n, io.EOF
+			err = io.EOF
 		}
-		return n, nil
+	} else {
+		n, err = m.ReaderAtSeeker.ReadAt(p, off)
 	}
-	return m.ReaderAtSeeker.ReadAt(p, off)
+	if bits, ok := m.chunks[off]; ok && n > 0 {
+		if e := countDictionaries(p[:n], bits); e != nil {
+			return n, e
+		}
+	}
+	return n, err
 }
 
 // measureFooter reads ra's footer and refuses one whose schema nests past
