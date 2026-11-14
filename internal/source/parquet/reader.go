@@ -5,6 +5,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/apache/arrow-go/v18/parquet/file"
 	"github.com/apache/arrow-go/v18/parquet/metadata"
 
@@ -212,6 +213,7 @@ type colPlan struct {
 type fileView struct {
 	name   string
 	pf     *file.Reader
+	mem    memory.Allocator // what pf's pages are read into
 	lay    fileLayout
 	consts []*data.Column // by field, the file's partition values and path; nil for none
 }
@@ -219,7 +221,8 @@ type fileView struct {
 // openColumn opens the chunk readers for one output column of the current file.
 func (r *reader) openColumn(rg *file.RowGroupReader,
 	rgMeta *metadata.RowGroupMetaData, p colPlan) (colReader, error) {
-	return openColumnIn(r.full, fileView{name: r.name, pf: r.pf, lay: r.lay, consts: r.src.constsOf(r.fileIdx - 1)},
+	return openColumnIn(r.full, fileView{name: r.name, pf: r.pf, mem: r.pages.alloc(), lay: r.lay,
+		consts: r.src.constsOf(r.fileIdx - 1)},
 		rg, rgMeta, p)
 }
 
@@ -261,7 +264,8 @@ func openColumnIn(full *dtype.Schema, fv fileView, rg *file.RowGroupReader,
 			}
 			return newOwnColReader(pr, desc, dt)
 		}
-		cr, err := rg.Column(ci)
+		// The chunk arrow-go decodes, its pages read through checkedPages (step 517).
+		cr, err := checkedColumn(rg, ci, fv.pf.MetaData().Schema.Column(ci), fv.mem, fv.pf.BufferPool())
 		if err != nil {
 			return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
 				"opening column %q of %s", f.Name, fv.name)
