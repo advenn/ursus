@@ -482,6 +482,9 @@ func readBatch(chunks []colReader, out *dtype.Schema, n, rgIndex int, name strin
 	cols := make([]*data.Column, len(chunks))
 	for i, c := range chunks {
 		cols[i] = c.finish(out.Field(i).Name)
+		if err := checkTimes(cols[i], name); err != nil {
+			return nil, 0, err
+		}
 	}
 	if keep != nil {
 		kept, err := compact(cols, marked, keep, rows, sel)
@@ -494,4 +497,42 @@ func readBatch(chunks []colReader, out *dtype.Schema, n, rgIndex int, name strin
 	}
 	b, err := data.NewBatch(out, cols)
 	return b, rows, err
+}
+
+// checkTimes refuses a Time a file holds outside its day (step 510). A Time is a time
+// of day, [0, 24h) in its unit (dtype), and the writer refuses any other
+// (writer.go); a file's TIME is a count it takes as it lies. A tick past midnight
+// read as a Time that renders as a time of day, 26:00 as 02:00:00, sorts after
+// 23:00:00 and equals no 02:00:00 (data.CheckTimeRange), so it is refused as the
+// corrupt value it is, an element of a List or a field of a Struct as well.
+func checkTimes(c *data.Column, file string) error {
+	switch c.DType().ID() {
+	case dtype.TypeTime:
+		perDay, ok := dtype.TicksPerDay(c.DType())
+		if !ok {
+			return nil
+		}
+		v, err := data.Values[int64](c)
+		if err != nil {
+			return nil // a column of nulls holds no ticks
+		}
+		for i, t := range v {
+			if (t < 0 || t >= perDay) && c.IsValid(i) {
+				return uerr.New(uerr.KindValue, "scan_parquet",
+					"column %q of %s holds the %s %d, outside [0, %d)", c.Name(), file, c.DType(), t, perDay).
+					Hint("the file is corrupt: a TIME counts from midnight and is less than a day")
+			}
+		}
+	case dtype.TypeList, dtype.TypeArray:
+		if ch := c.Child(); ch != nil {
+			return checkTimes(ch, file)
+		}
+	case dtype.TypeStruct:
+		for _, f := range c.Fields() {
+			if err := checkTimes(f, file); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

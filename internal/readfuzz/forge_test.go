@@ -82,8 +82,11 @@ const (
 	pqPageData = 0
 	pqPageDict = 2
 
+	pqTimeMicros = 8 // a converted_type
+
 	pqPlain       = 0
 	pqRLE         = 3
+	pqDeltaBinary = 5
 	pqDeltaLength = 6
 	pqRLEDict     = 8
 )
@@ -109,6 +112,7 @@ type pqForged struct {
 	groups int
 	chunk  int64   // the column chunk's total_compressed_size; zero is its bytes'
 	encs   []int32 // encodings the footer lists beside its pages', as a writer's own
+	conv   int32   // the column's converted_type, zero for none
 }
 
 func (f pqForged) bytes() []byte {
@@ -170,6 +174,9 @@ func (f pqForged) bytes() []byte {
 	w.i32(1, f.phys)
 	w.i32(3, 0) // REQUIRED
 	w.str(4, "v")
+	if f.conv != 0 {
+		w.i32(6, f.conv)
+	}
 	w.end()
 	w.i64(3, f.rows)
 	w.list(4, thriftStruct, max(f.groups, 1))

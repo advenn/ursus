@@ -309,6 +309,10 @@ its section below lists them.
   and a null Struct is kept apart from a Struct of nulls (`ExtractGroups`, 499);
   Polars 2.1 reads a null too. `ScanJSON`, which reads each object as a line, follows.
   The recorded oracle found it (`ndjsonread/ignored_in_a_struct`).
+- **A Parquet TIME past its day is refused** (510): a TIME holding a tick outside
+  [0, 24h) was read as a Time as it lay, which renders as another time of day and
+  sorts and compares as none; it is refused now as a corrupt value, inside a List or
+  a Struct as well, as the writer refuses one. CI's fuzz run found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
