@@ -195,7 +195,7 @@ func readLevels[P any](cr batchReader[P]) func(defs, reps []int16) (int, error) 
 			vals = make([]P, len(defs))
 		}
 		total, _, err := cr.ReadBatch(int64(len(defs)), vals[:len(defs)], defs, reps)
-		if err != nil {
+		if err := batchErr(cr, total, err); err != nil {
 			return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a column chunk")
 		}
 		return int(total), nil

@@ -210,7 +210,8 @@ func (r *parallelReader) openFirst(ctx context.Context) error {
 // openFile opens file r.fileIdx and makes it cur.
 func (r *parallelReader) openFile(ctx context.Context) error {
 	name := r.src.partName(r.fileIdx)
-	pf, closeFn, err := r.src.openFile(ctx, r.fileIdx, r.pages.alloc())
+	mem := r.pages.alloc()
+	pf, closeFn, err := r.src.openFile(ctx, r.fileIdx, mem)
 	if err != nil {
 		return err
 	}
@@ -227,7 +228,8 @@ func (r *parallelReader) openFile(ctx context.Context) error {
 		closeFn()
 		return err
 	}
-	f := &sharedFile{fileView: fileView{name: name, pf: pf, lay: lay, consts: r.src.constsOf(r.fileIdx)}, closeFn: closeFn}
+	f := &sharedFile{fileView: fileView{name: name, pf: pf, mem: mem, lay: lay, consts: r.src.constsOf(r.fileIdx)},
+		closeFn: closeFn}
 	f.refs.Store(1) // the issuer's own, dropped when it moves past the last row group
 	r.cur, r.rgIndex = f, -1
 	r.fileIdx++

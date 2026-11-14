@@ -134,6 +134,7 @@ func (v *lazyValid) appendDefs(defs []int16, maxDef int16) {
 // batchReader is the ReadBatch shape shared by every typed column chunk reader.
 type batchReader[P any] interface {
 	ReadBatch(batchSize int64, values []P, defLvls, repLvls []int16) (int64, int, error)
+	Err() error
 	Close() error
 }
 
@@ -201,7 +202,7 @@ func (c *fixedCol[P, T]) read(n int) (int, error) {
 	}
 
 	total, valuesRead, err := c.cr.ReadBatch(int64(n), vals, defs, nil)
-	if err != nil {
+	if err := batchErr(c.cr, total, err); err != nil {
 		return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a column chunk")
 	}
 	rows := int(total)
@@ -266,7 +267,7 @@ func (c *fixedCol[P, T]) readDirect(n int) (int, error) {
 		defs = c.defs[:n]
 	}
 	total, valuesRead, err := c.cr.ReadBatch(int64(n), vals, defs, nil)
-	if err != nil {
+	if err := batchErr(c.cr, total, err); err != nil {
 		return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a column chunk")
 	}
 	rows := int(total)
@@ -504,7 +505,7 @@ func (c *boolCol) read(n int) (int, error) {
 	}
 
 	total, valuesRead, err := c.cr.ReadBatch(int64(n), vals, defs, nil)
-	if err != nil {
+	if err := batchErr(c.cr, total, err); err != nil {
 		return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a boolean chunk")
 	}
 	rows := int(total)
