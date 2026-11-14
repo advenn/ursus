@@ -55,7 +55,11 @@ func (t *WordKeyTable) NBytes() int64 {
 	return int64(cap(t.slots))*8 + int64(cap(t.keys))*8 + int64(cap(t.hashes))*8
 }
 
-// Reserve sizes the table for n keys, as KeyTable.Reserve does.
+// Reserve sizes the table for n keys, as KeyTable.Reserve does. Past its capacity
+// the keys grow to n or twice what they held, as append grows: an accumulator
+// reserves its group count a batch at a time, and growing to n exactly copied every
+// key a batch, quadratic in batches of one row (step 512, found by qcheck: a NUnique
+// over 8,193 groups in batches of one row allocated 842 MB).
 func (t *WordKeyTable) Reserve(n int) {
 	want := 1
 	for want < n*maxLoadDen/maxLoadNum {
@@ -65,6 +69,7 @@ func (t *WordKeyTable) Reserve(n int) {
 		t.grow()
 	}
 	if cap(t.hashes) < n {
+		n = max(n, 2*cap(t.hashes))
 		k := make([]uint64, len(t.keys), t.words*n)
 		copy(k, t.keys)
 		t.keys = k
