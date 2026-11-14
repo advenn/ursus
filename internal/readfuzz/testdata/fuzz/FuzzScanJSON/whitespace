@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte(" \n [ {\"a\" :\n 1} ,\n\t{\"a\": 2}\r\n] \n")

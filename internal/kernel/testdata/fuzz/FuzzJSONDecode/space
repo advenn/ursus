@@ -1,0 +1,2 @@
+go test fuzz v1
+string(" \t\r\n[ 1 ,\n 2 ] \n")

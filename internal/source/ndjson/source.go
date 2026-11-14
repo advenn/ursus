@@ -292,31 +292,30 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 	return r, nil
 }
 
-// natural is the type a column of t is read in, which a cast then makes t: each type
-// inference gives as itself, a narrower integer as Int64, UInt64 as Int128, Float32
-// as Float64, and every type JSON has no word for as its text, which the cast parses:
-// a Date, a Datetime, a Time, a Decimal, an Enum.
-func natural(t dtype.DataType) dtype.DataType {
+// naturalID is the type a column of t is read in, which a cast then makes t, by its
+// ID: each type inference gives as itself, a narrower integer as Int64, UInt64 as
+// Int128, Float32 as Float64, an Array as a List, whose cast checks each row's width
+// (step 341), and every type JSON has no word for as its text, which the cast parses:
+// a Date, a Datetime, a Time, a Decimal, an Enum. A List's and a Struct's elements
+// are read in theirs. It builds no type: newBuilder asks it at each level of a type,
+// and building the natural type of each level's whole subtree cost a line nested a
+// thousand deep gigabytes (step 511).
+func naturalID(t dtype.DataType) dtype.TypeID {
 	switch {
 	case t.IsListLike():
-		// An Array is read as a List, and the cast checks each row's width (step 341).
-		return dtype.List(natural(t.Inner()))
+		return dtype.TypeList
 	case t.ID() == dtype.TypeStruct:
-		fs := make([]dtype.Field, len(t.Fields()))
-		for i, f := range t.Fields() {
-			fs[i] = dtype.Field{Name: f.Name, Type: natural(f.Type), Nullable: true}
-		}
-		return dtype.Struct(fs...)
+		return dtype.TypeStruct
 	case t.IsNull(), t == dtype.Bool, t == dtype.Int64, t == dtype.Int128, t == dtype.Float64, t == dtype.String:
-		return t
+		return t.ID()
 	case t.ID() == dtype.TypeUint64:
-		return dtype.Int128
+		return dtype.TypeInt128
 	case t.IsInteger():
-		return dtype.Int64
+		return dtype.TypeInt64
 	case t.IsFloat():
-		return dtype.Float64
+		return dtype.TypeFloat64
 	}
-	return dtype.String
+	return dtype.TypeString
 }
 
 // reader is one run's read of the stream: a block of lines at a time, the block cut
