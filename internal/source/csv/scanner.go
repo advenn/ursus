@@ -94,6 +94,14 @@ type scanner struct {
 	// fields (step 373). fill moves buf's bytes, and starts it over.
 	ends   uint64
 	endsTo int
+
+	// seek follows the record being read as its bytes arrive, to tell readRecord when
+	// parse can find its end (step 515). See readRecord.
+	seek recordEnd
+
+	// parsed is the bytes parse has looked at, and followed those seekEnd has, for a
+	// test that holds them to a multiple of the input (step 515).
+	parsed, followed int
 }
 
 // SetWidth says how many fields a record has. See width.
@@ -223,19 +231,38 @@ func (s *scanner) Next() bool {
 
 // readRecord parses one record, refilling as needed.
 //
-// The scan restarts from the record's first byte after every refill rather than
-// resuming mid-parse. That is O(record) extra work per refill, and a refill
-// happens once per buffer-full rather than once per record, so the total stays
-// linear — while removing the entire class of bug that comes from suspending and
-// resuming a quote-state machine across a buffer boundary.
+// parse reads a record from its first byte each time it is asked, rather than
+// resuming mid-parse, which removes the entire class of bug that comes from
+// suspending and resuming a quote-state machine across a buffer boundary. It is
+// asked again only when it can answer otherwise (step 515): a refill brings what one
+// read gives, not a buffer's worth, and a record arriving 1 KiB a read was parsed
+// from its first byte at each, quadratic in its length: 512 times its bytes at 1
+// MiB, a 16 MiB record some 17 s (step 509). parse is asked
+//
+//   - first, over what is held when the record starts, which is the whole record
+//     nearly always when the input is not a slow stream;
+//   - when seekEnd, following the record's new bytes from where it stopped, finds
+//     its end or an error parse reports in it, so a record whose end has arrived is
+//     returned without another read;
+//   - when the bytes held have doubled since parse last found no record, so that were
+//     seekEnd wrong, the record would still be read, at a cost linear in its length;
+//   - at the end of the input, and before fill refuses the record as too long.
+//
+// seekEnd looks at each byte of a record once, and the parses that find no record
+// hold at least twice the bytes of the one before, so they look at fewer than twice
+// the record's bytes: the total is linear. parse alone says where a record ends;
+// seekEnd only says when to ask it.
 func (s *scanner) readRecord() (bool, error) {
 	for {
-		if s.beg < s.end {
+		if held := s.end - s.beg; held > 0 && (s.eof || s.seek.parsed == 0 ||
+			held >= 2*s.seek.parsed || held == len(s.buf) && held >= s.maxRec ||
+			s.seekEnd(s.buf[s.beg:s.end])) {
 			n, nl, ok, err := s.parse(s.buf[s.beg:s.end], s.eof)
 			if err != nil {
 				return false, err
 			}
 			if ok {
+				s.parsed += n
 				// A scanner reading through a buffer never holds a record longer than
 				// the limit, which fill enforces. One over a whole block holds them
 				// all, so the record is measured: with its line end it must fit, and a
@@ -259,8 +286,14 @@ func (s *scanner) readRecord() (bool, error) {
 				// the buffer refills, and incrementing s.line inside it counted the
 				// newlines of every already-parsed field once per attempt.
 				s.line += nl
+				s.seek = recordEnd{}
 				return true, nil
 			}
+			s.parsed += held
+			if s.seek.state == seekDone {
+				s.seek.state = seekOff // seekEnd was wrong: the doubling alone asks parse
+			}
+			s.seek.parsed = held
 		}
 		if s.eof {
 			return false, nil // no complete record and nothing more is coming
@@ -268,6 +301,133 @@ func (s *scanner) readRecord() (bool, error) {
 		if err := s.fill(); err != nil {
 			return false, err
 		}
+	}
+}
+
+// recordEnd is where seekEnd stopped following a record: how many of its bytes it
+// has followed, in what state, and the bytes held when parse last found no record in
+// it, 0 before parse is asked.
+type recordEnd struct {
+	at, parsed int
+	state      uint8
+}
+
+// seekEnd's states, each the place in parse's reading of a record the next byte
+// falls at.
+const (
+	seekRecord  uint8 = iota // a record's first byte
+	seekCR                   // after a \r that is a record's first byte
+	seekField                // a field's first byte
+	seekBare                 // in an unquoted field
+	seekQuoted               // in a quoted field
+	seekQuote                // after a quote in a quoted field: its close, or half of two
+	seekQuoteCR              // after a closing quote and a \r
+	seekComment              // in a comment line
+	seekDone                 // the record ended, or met an error parse reports
+	seekOff                  // parse found no record where seekEnd said one ended
+)
+
+// seekEnd follows b, the record's bytes held, from where it last stopped, by parse's
+// rules, and reports whether parse would now find the record's end or an error in
+// it. It is parse with no fields kept, resumable since its state is a byte's place:
+// a quote opens a quoted field only at a field's first byte, as split.go's
+// recordEnd follows one, and a quote counted anywhere else would mislead it.
+//
+// parse tells a comment by its whole prefix, so until b holds as many bytes it is
+// asked at each read: it reads b as a record, and a comment prefix is short.
+func (s *scanner) seekEnd(b []byte) bool {
+	e := &s.seek
+	if e.state == seekOff {
+		return false
+	}
+	if e.state == seekRecord && len(s.comment) > 0 {
+		if len(b) < len(s.comment) {
+			return true
+		}
+		if bytes.HasPrefix(b, s.comment) {
+			e.state = seekComment
+		}
+	}
+	i, st := e.at, e.state
+	for i < len(b) && st < seekDone {
+		c := b[i]
+		switch st {
+		case seekRecord: // a blank line, as parse reads one, or a field
+			switch c {
+			case '\n':
+				i, st = i+1, seekDone
+			case '\r':
+				i, st = i+1, seekCR
+			default:
+				st = seekField
+			}
+		case seekCR:
+			if c == '\n' {
+				i, st = i+1, seekDone
+				break
+			}
+			st = s.seekFrom('\r') // the \r began a field, and c is read in it
+		case seekField:
+			i, st = i+1, s.seekFrom(c)
+		case seekBare: // unquotedEnd's rule: a separator or a line end ends it
+			j := wordEnd(b, i, s.sep)
+			switch {
+			case j == len(b):
+				i = j
+			case b[j] == '\n':
+				i, st = j+1, seekDone
+			default:
+				i, st = j+1, seekField
+			}
+		case seekQuoted:
+			j := bytes.IndexByte(b[i:], s.quote)
+			if j < 0 {
+				i = len(b)
+				break
+			}
+			i, st = i+j+1, seekQuote
+		case seekQuote: // quotedField's rule, in its order
+			switch {
+			case c == s.quote:
+				st = seekQuoted
+			case c == s.sep:
+				st = seekField
+			case c == '\n':
+				st = seekDone
+			case c == '\r':
+				st = seekQuoteCR
+			default:
+				st = seekDone // an error parse reports
+			}
+			i++
+		case seekQuoteCR:
+			i, st = i+1, seekDone // a \n ends the record, and else it is an error
+		case seekComment:
+			j := bytes.IndexByte(b[i:], '\n')
+			if j < 0 {
+				i = len(b)
+				break
+			}
+			i, st = i+j+1, seekDone
+		}
+	}
+	s.followed += i - e.at
+	e.at, e.state = i, st
+	return st == seekDone
+}
+
+// seekFrom is the state after c, a field's first byte: parse's order, a quote first,
+// then a line end, then a separator.
+func (s *scanner) seekFrom(c byte) uint8 {
+	switch {
+	case !s.noQuote && c == s.quote:
+		return seekQuoted
+	case c == '\n':
+		return seekDone
+	case c == s.sep:
+		return seekField
+	default:
+		return seekBare
 	}
 }
 
