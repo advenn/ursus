@@ -53,14 +53,25 @@ test-all: test-widths
 	@echo "=== GOEXPERIMENT off (scalar only) ==="
 	GOEXPERIMENT= $(GO) test -count=$(COUNT) $(PKGS)
 
-# The interval parser is the only place a user's text becomes arithmetic, and
-# FuzzEvery is the module's only fuzz target. `make test` already runs its SEED
-# corpus — go test does that for every fuzz target — which is the part that has to
-# be deterministic. This generates, so it is opt-in and out of the pre-merge gate.
+# Fuzzing (step 508). `make test` already runs every fuzz target's SEED corpus, as go
+# test does, which is the part that has to be deterministic. This generates inputs,
+# so it is opt-in and out of the pre-merge gate; CI's fuzz workflow runs each target
+# for 30 s. go test fuzzes one target of one package at a time:
+#
+#	make fuzz FUZZ=FuzzScanCSV PKG=./internal/readfuzz FUZZTIME=20s
+#
+# A failing input is written to $(PKG)/testdata/fuzz/$(FUZZ)/, where go test runs it
+# as a seed from then on. The defaults fuzz the interval parser, the first target.
+# `make fuzz-list` names every target, its package first.
+FUZZ     ?= FuzzEvery
+PKG      ?= ./dtype/
 FUZZTIME ?= 60s
-.PHONY: fuzz
+.PHONY: fuzz fuzz-list
 fuzz:
-	$(GO) test -run '^$$' -fuzz 'FuzzEvery' -fuzztime $(FUZZTIME) ./dtype/
+	$(GO) test -run '^$$' -fuzz '^$(FUZZ)$$' -fuzztime $(FUZZTIME) $(PKG)
+
+fuzz-list:
+	$(GO) run ./internal/gen/fuzzlist
 
 .PHONY: bench
 bench:

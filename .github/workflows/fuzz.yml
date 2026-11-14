@@ -1,0 +1,102 @@
+name: fuzz
+
+# Every fuzz target of the module, fuzzed for 30 seconds on a runner of its own
+# (step 508). The targets of the bug hunt judge each input through
+# internal/fuzzcheck: a hang, an allocation far past the input's size, a leaked
+# goroutine, ErrInternal or a panic in ursus's code fails it. A failing input is
+# written to <package>/testdata/fuzz/<target>/ and uploaded as an artifact; committed
+# there, go test runs it as a seed in every ci.yml leg from then on.
+#
+# It runs on a pull request that touches Go code, by hand, and nightly. It is not a
+# required check of master's protection: a check that a path filter skips never
+# reports, and a fuzz finding is a bug to fix in a PR of its own, not one to block
+# the PR that met it. The generated corpus of each target is kept in the cache
+# between runs, so the nightly run starts where the last one stopped.
+
+on:
+  pull_request:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '**/testdata/fuzz/**'
+      - '.github/workflows/fuzz.yml'
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: 'how long to fuzz each target (go test -fuzztime)'
+        default: '30s'
+  schedule:
+    - cron: '23 2 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # As ci.yml: the SIMD kernels, and the scalar codegen they assume.
+  GOEXPERIMENT: simd
+  GOAMD64: v3
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      targets: ${{ steps.list.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          check-latest: false
+      # Each func FuzzX(f *testing.F) of the files go list builds: make fuzz-list.
+      - name: the fuzz targets
+        id: list
+        run: |
+          targets=$(go run ./internal/gen/fuzzlist -json)
+          echo "$targets"
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+
+  fuzz:
+    needs: list
+    name: ${{ matrix.target }} (${{ matrix.pkg }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.list.outputs.targets) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          check-latest: false
+
+      - name: where go test keeps the generated corpus
+        id: corpus
+        run: echo "dir=$(go env GOCACHE)/fuzz" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.corpus.outputs.dir }}
+          key: fuzz-corpus-${{ matrix.id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: fuzz-corpus-${{ matrix.id }}-
+
+      - name: fuzz ${{ matrix.target }}
+        run: go test -run='^$' -fuzz="^${TARGET}\$" -fuzztime="${FUZZTIME}" "${PKG}"
+        env:
+          TARGET: ${{ matrix.target }}
+          PKG: ${{ matrix.pkg }}
+          FUZZTIME: ${{ inputs.fuzztime || '30s' }}
+
+      - name: the failing input
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: fuzz-${{ matrix.id }}
+          path: ${{ matrix.pkg }}/testdata/fuzz
+          if-no-files-found: warn
