@@ -3929,6 +3929,20 @@ that stops when its request is cancelled.</p>
   <code>make fuzz FUZZ=&lt;target&gt; PKG=&lt;package&gt; FUZZTIME=&lt;d&gt;</code> fuzzes one; <code>fuzz.yml</code> lists
   every target and fuzzes each for 30 s on a pull request touching Go code, by hand
   and nightly, uploading a failing input. It is not a required check.</li>
+<li><strong>Fuzz targets for the text parsers and the CSV reader</strong> (509): eighteen, each
+  against an oracle, not only "did not crash": <code>ParseFloat</code> and <code>NearestFloat</code> against
+  strconv; the temporal text's round trip and Polars' patterns against <code>time.Parse</code>;
+  the Int128's <code>Parse</code>, arithmetic and <code>ParseDecimal</code> against math/big; the CSV
+  reader's number parsers against strconv, its inference against its builders, its
+  scanner against <code>encoding/csv</code> (a quote in an unquoted field's middle, read as data,
+  the one named deviation), its vector field ends against a byte loop, and four
+  threads against one with blocks of 1 to 64 bytes; <code>Cast</code> from a String; strftime's
+  <code>Append</code> against <code>time.Format</code> and its <code>Parse</code> against <code>Append</code>. <code>FuzzScanCSV</code> reads
+  under options from 32 bits now, and holds one thread to four, the schema to the
+  frame's, <code>Count</code>, <code>Head(1)</code> and a <code>Select</code> to the frame; <code>FuzzScanCSVChunked</code> holds
+  a stream read in pieces, empty reads and a last one with <code>io.EOF</code> among them, to the
+  bytes read whole. Their seeds include the 174 texts of Polars 2.1's recorded CSV
+  cases. They found the four bugs fixed below.</li>
 <li><strong>The twenty-five findings closed, their thirty-nine cases asserted again</strong> (507):
   none is skipped. One was a bug, fixed (above); twenty-four are ursus's own rules,
   each documented in <code>context_files/feature-gaps.md</code> §9 with Polars 2.1's answer and
@@ -3971,13 +3985,28 @@ its section below lists them.</p>
 <li><strong>An inclusive split has no trailing empty part</strong> (499): <code>SplitInclusive(",")</code> of
   "a,b," is <code>["a,", "b,"]</code>, and <code>SplitExact(",", 1, true)</code> of "a," is <code>{"a,", null}</code>,
   as Polars splits them; each had an empty part after the last separator.</li>
-<li>
-<p><strong>An NDJSON value that is not an object, read into a Struct column under
+<li><strong>An NDJSON value that is not an object, read into a Struct column under
   <code>WithNDJSONIgnoreErrors</code>, is a null Struct</strong> (507): it was a Struct of null fields,
   as Polars 1.44.1 read it, where every other value a column cannot take is a null
   and a null Struct is kept apart from a Struct of nulls (<code>ExtractGroups</code>, 499);
   Polars 2.1 reads a null too. <code>ScanJSON</code>, which reads each object as a line, follows.
-  The recorded oracle found it (<code>ndjsonread/ignored_in_a_struct</code>).</p>
+  The recorded oracle found it (<code>ndjsonread/ignored_in_a_struct</code>).</li>
+<li><strong><code>"-nan"</code> and <code>"+nan"</code> read as NaN</strong> (509), as <code>ParseFloat</code>'s grammar says and
+  Polars' cast reads them: Go's strconv takes a sign before inf only, so a cast to a
+  float was a null, a CSV Float64 column refused one, and inference read it as text.</li>
+<li><strong>A Datetime's least second reads</strong> (509): converting an instant to ticks checked
+  the seconds' product before adding the fraction, and refused the first 0.85 s of a
+  nanosecond Datetime's range, 0.78 s of a microsecond's and 0.81 s of a
+  millisecond's, though each fits; the least nanosecond instant,
+  1677-09-21T00:12:43.145224192Z, was written to CSV and did not read back.</li>
+<li><strong>A Decimal's exponent of more digits than an int64 is a number</strong> (509): it was
+  refused as text that is no number, where its value is out of range, and a zero with
+  one, <code>0e9223372036854775808</code>, is 0, as one with a shorter exponent is. A strict cast
+  says "not representable" for it now, not "cannot parse".</li>
+<li>
+<p><strong>A <code>\r</code> that ends a CSV's input ends its line</strong> (509), as <code>encoding/csv</code> and
+  Polars 2.1 read it: <code>a,b\r</code> read the field <code>b\r</code>, <code>"a","b"\r</code> was refused, and a
+  last line of only <code>\r</code> was a value where it is a blank line.</p>
 </li>
 <li>
 <p><strong>A cancelled query no longer answers part of its input as the whole</strong> (394): a
