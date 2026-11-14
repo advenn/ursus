@@ -28,6 +28,17 @@
 // all. Narrowing the refusal from the file to the column keeps the guarantee that
 // mattered (nothing is silently missing: selecting it, or selecting everything,
 // still fails) without the collateral damage.
+//
+// # arrow-go's codec registry
+//
+// The package's init replaces four codecs of arrow-go's compress registry, which is
+// the process's, with its own: Snappy, gzip, Brotli and Zstandard decompress a page
+// to no more than the page declares, and refuse more as corrupt before allocating it
+// (codecs.go, step 520). So every reader of Parquet through arrow-go in a program
+// that imports ursus reads through them, ursus's or not. Each is a strict tightening
+// of the codec it replaces, which still encodes, streams and decodes into a nil
+// buffer for any caller but arrow-go's page reader, so every file written is as
+// before and every page arrow-go read before is read alike; codecs.go says where.
 package parquet
 
 import (
@@ -334,9 +345,10 @@ func toNode(f dtype.Field) (schema.Node, error) {
 			schema.NewTimeLogicalType(false, u), phys, -1, -1)
 
 	default:
-		// Duration stays refused ON PURPOSE rather than for lack of work: arrow-go's
-		// IntervalLogicalType.toThrift panics outright, so there is no route through
-		// this library at all. Enum is simply not written yet.
+		// Duration stays refused ON PURPOSE rather than for lack of work: Parquet has
+		// no Duration logical type, and its INTERVAL, of months, days and
+		// milliseconds, is another type, so there is no faithful route. Enum is simply
+		// not written yet.
 		return nil, uerr.New(uerr.KindUnsupported, "sink_parquet",
 			"cannot write column %q of type %s to Parquet", f.Name, f.Type).
 			Hint("supported: Bool, the integer and float types, Int128, Decimal, " +
@@ -402,10 +414,10 @@ func nestedNode(f dtype.Field) (schema.Node, error) {
 
 // parquetTimeUnit maps a ursus TimeUnit onto Parquet's three.
 //
-// Parquet has no SECOND resolution, and arrow-go's createTimeUnit does not return an
-// error for one — it PANICS. dtype.Second is ursus's zero value, so
-// `Datetime(Second, "")` is trivially constructible and would take the sink down.
-// This is the guard; the refusal below it is what the user sees instead.
+// Parquet has no SECOND resolution, and a unit it does not have must not reach the
+// schema builder. dtype.Second is ursus's zero value, so `Datetime(Second, "")` is
+// trivially constructible. This is the guard; the refusal below it is what the user
+// sees instead.
 func parquetTimeUnit(u dtype.TimeUnit) (schema.TimeUnitType, bool) {
 	switch u {
 	case dtype.Milli:
