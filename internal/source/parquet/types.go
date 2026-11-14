@@ -28,6 +28,17 @@
 // all. Narrowing the refusal from the file to the column keeps the guarantee that
 // mattered (nothing is silently missing: selecting it, or selecting everything,
 // still fails) without the collateral damage.
+//
+// # arrow-go's codec registry
+//
+// The package's init replaces four codecs of arrow-go's compress registry, which is
+// the process's, with its own: Snappy, gzip, Brotli and Zstandard decompress a page
+// to no more than the page declares, and refuse more as corrupt before allocating it
+// (codecs.go, step 520). So every reader of Parquet through arrow-go in a program
+// that imports ursus reads through them, ursus's or not. Each is a strict tightening
+// of the codec it replaces, which still encodes, streams and decodes into a nil
+// buffer for any caller but arrow-go's page reader, so every file written is as
+// before and every page arrow-go read before is read alike; codecs.go says where.
 package parquet
 
 import (

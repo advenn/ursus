@@ -95,8 +95,8 @@ type pageHeader struct {
 func readPageHeader(b []byte) (h pageHeader, ok bool) {
 	r := thriftReader{b: b}
 	i32 := func() (int, error) {
-		v, err := r.varint()
-		return int(int32(int64(v>>1) ^ -int64(v&1))), err
+		v, err := r.i32()
+		return int(v), err
 	}
 	var err error
 	h.typ = -1
