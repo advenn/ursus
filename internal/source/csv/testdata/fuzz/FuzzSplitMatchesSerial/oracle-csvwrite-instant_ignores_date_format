@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("t\n2020-01-02T03:04:05.123456\n")
+byte('\v')
+byte('\x00')

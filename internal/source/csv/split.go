@@ -275,6 +275,8 @@ func (sp *splitter) boundary(b []byte, atEOF bool, limit int) (cut, rows int, an
 			blank = 1
 		case b[pos] == '\r' && pos+1 < len(b) && b[pos+1] == '\n':
 			blank = 2
+		case b[pos] == '\r' && pos+1 == len(b) && atEOF:
+			blank = 1 // a \r that ends the input is a line end, as the scanner's
 		}
 		if blank > 0 {
 			pos += blank
@@ -351,6 +353,9 @@ func (sp *splitter) recordEnd(b []byte, pos int, atEOF bool) (int, recordState) 
 				}
 				if i+1 < len(b) && b[i+1] == '\n' {
 					return i + 2, recordWhole
+				}
+				if i+1 == len(b) { // a \r that ends the input, as the scanner's
+					return i + 1, recordWhole
 				}
 				return 0, recordOdd
 			default:

@@ -250,6 +250,20 @@ that stops when its request is cancelled.
   `make fuzz FUZZ=<target> PKG=<package> FUZZTIME=<d>` fuzzes one; `fuzz.yml` lists
   every target and fuzzes each for 30 s on a pull request touching Go code, by hand
   and nightly, uploading a failing input. It is not a required check.
+- **Fuzz targets for the text parsers and the CSV reader** (509): eighteen, each
+  against an oracle, not only "did not crash": `ParseFloat` and `NearestFloat` against
+  strconv; the temporal text's round trip and Polars' patterns against `time.Parse`;
+  the Int128's `Parse`, arithmetic and `ParseDecimal` against math/big; the CSV
+  reader's number parsers against strconv, its inference against its builders, its
+  scanner against `encoding/csv` (a quote in an unquoted field's middle, read as data,
+  the one named deviation), its vector field ends against a byte loop, and four
+  threads against one with blocks of 1 to 64 bytes; `Cast` from a String; strftime's
+  `Append` against `time.Format` and its `Parse` against `Append`. `FuzzScanCSV` reads
+  under options from 32 bits now, and holds one thread to four, the schema to the
+  frame's, `Count`, `Head(1)` and a `Select` to the frame; `FuzzScanCSVChunked` holds
+  a stream read in pieces, empty reads and a last one with `io.EOF` among them, to the
+  bytes read whole. Their seeds include the 174 texts of Polars 2.1's recorded CSV
+  cases. They found the four bugs fixed below.
 - **The twenty-five findings closed, their thirty-nine cases asserted again** (507):
   none is skipped. One was a bug, fixed (above); twenty-four are ursus's own rules,
   each documented in `context_files/feature-gaps.md` §9 with Polars 2.1's answer and
@@ -278,6 +292,15 @@ that stops when its request is cancelled.
   Zstandard decoder allocates the window a frame declares, up to 512 MiB, from 17
   bytes; NDJSON inference types `[1, true]` and `[1, [2]]` as the reader then refuses,
   and an integer past Int128 as an Int128.
+- **Fuzz targets for the Parquet reader, and a byte-flip sweep** (510):
+  `FuzzScanParquet` reads any bytes through the public API with every page buffer
+  from a bounded, poisoned allocator, and checks four threads, a read into zeroed
+  buffers, `Head`, `Select`, a `Filter` with pruning on and off, and `Count` against
+  the whole frame; `FuzzOwnPagesMatchArrow` checks the reader's own page decoding
+  against arrow-go's, batch for batch. Every byte of two files ursus wrote is
+  flipped and read, and ursus must read the original wherever pyarrow 25.0.1 does,
+  from DuckDB's and pyarrow's outcomes recorded once by
+  `bench/scripts/oracle/record_flips.py` into `testdata/oracle/flips`.
 
 ### Fixed
 
@@ -329,6 +352,44 @@ its section below lists them.
 - **An NDJSON or JSON line nested deep is read in memory proportional to it** (511):
   a 6 KB line of objects 999 deep allocated 4 GB and took 1.2 s, each level's type
   written as text and built again; 4 MB and 13 ms now.
+- **A Parquet page's header can no longer size its buffer past its column chunk**
+  (510): a page claiming 2^28 bytes in a file of 161 made arrow-go ask for 256 MiB
+  before reading a byte of it, and one claiming 2^26 compressed 64 MiB. A page is
+  bounded now by the largest column chunk the footer declares, and such a file is
+  refused as corrupt. The fuzz target found it, as D14 predicted.
+- **A Parquet column chunk claiming more bytes than its file no longer ends the
+  process** (510): arrow-go made a slice of the chunk's declared size before reading
+  it, and a claim of 2^40 bytes was a fatal "out of memory" that no recover catches.
+  The footer is refused as corrupt.
+- **A Parquet dictionary page claiming more values than its bytes hold no longer
+  ends the process** (510): arrow-go made a slice of the claim before decoding a
+  value, 48 GB for 2^31−1 in a page of 12 bytes, fatally, in every chunk it decodes:
+  a Boolean, INT96 or fixed-length column, a nested one, or one whose footer lists an
+  encoding ursus's own pages do not read. Such a page is refused as corrupt, as
+  ursus's own pages already refused it.
+- **A Parquet TIME past its day is refused** (510): a TIME holding a tick outside
+  [0, 24h) was read as a Time as it lay, which renders as another time of day and
+  sorts and compares as none; it is refused now as a corrupt value, inside a List or
+  a Struct as well, as the writer refuses one. CI's fuzz run found it.
+- **A Parquet footer's Arrow schema can no longer end the process** (510): it was read
+  by arrow-go's IPC reader, which made a slice of the children a field claims, 283 GB
+  from a file of 906 bytes, fatally. It is read now by a walk that checks every
+  offset and length against its bytes. The fuzz target found it.
+- **`"-nan"` and `"+nan"` read as NaN** (509), as `ParseFloat`'s grammar says and
+  Polars' cast reads them: Go's strconv takes a sign before inf only, so a cast to a
+  float was a null, a CSV Float64 column refused one, and inference read it as text.
+- **A Datetime's least second reads** (509): converting an instant to ticks checked
+  the seconds' product before adding the fraction, and refused the first 0.85 s of a
+  nanosecond Datetime's range, 0.78 s of a microsecond's and 0.81 s of a
+  millisecond's, though each fits; the least nanosecond instant,
+  1677-09-21T00:12:43.145224192Z, was written to CSV and did not read back.
+- **A Decimal's exponent of more digits than an int64 is a number** (509): it was
+  refused as text that is no number, where its value is out of range, and a zero with
+  one, `0e9223372036854775808`, is 0, as one with a shorter exponent is. A strict cast
+  says "not representable" for it now, not "cannot parse".
+- **A `\r` that ends a CSV's input ends its line** (509), as `encoding/csv` and
+  Polars 2.1 read it: `a,b\r` read the field `b\r`, `"a","b"\r` was refused, and a
+  last line of only `\r` was a value where it is a blank line.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

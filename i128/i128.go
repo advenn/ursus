@@ -16,6 +16,7 @@
 package i128
 
 import (
+	"errors"
 	"math"
 	"math/bits"
 	"strconv"
@@ -414,8 +415,11 @@ func ParseDecimal(s string, precision, scale int) (Int128, error) {
 	}
 	mant, exp := t, 0
 	if i := strings.IndexAny(t, "eE"); i >= 0 {
+		// An exponent of more digits than an int holds is a number still: Atoi gives
+		// it as the int's extreme, which the check below refuses as out of range, or
+		// reads as 0 for a zero. It was refused as no number (step 509).
 		e, err := strconv.Atoi(t[i+1:])
-		if err != nil {
+		if err != nil && !(errors.Is(err, strconv.ErrRange) && signedDigits(t[i+1:])) {
 			return syntax()
 		}
 		mant, exp = t[:i], e
@@ -477,6 +481,19 @@ func ParseDecimal(s string, precision, scale int) (Int128, error) {
 		v = v.Neg()
 	}
 	return v, nil
+}
+
+// signedDigits reports whether s is an optional sign and then digits, at least one.
+func signedDigits(s string) bool {
+	if s != "" && (s[0] == '-' || s[0] == '+') {
+		s = s[1:]
+	}
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return s != ""
 }
 
 // roundUpDigits adds one to a decimal digit string, which may grow a digit.

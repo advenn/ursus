@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("f\n1,5\n0,1\n1e+20\n")
+byte('\x03')
+byte('@')

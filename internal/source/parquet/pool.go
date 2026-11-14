@@ -6,6 +6,8 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/apache/arrow-go/v18/parquet"
+	"github.com/apache/arrow-go/v18/parquet/compress"
+	"github.com/apache/arrow-go/v18/parquet/metadata"
 )
 
 // pagePool is the memory.Allocator the files are read with: arrow-go's page readers
@@ -34,8 +36,21 @@ const (
 	maxPooled = 1 << maxClass
 )
 
-// pages is the pool every file of the process is read with.
-var pages = &pagePool{}
+// pages is the pool every file of the process is read with, unless a fuzz target
+// swapped it (ReadPagesWith).
+var pages memory.Allocator = &pagePool{}
+
+// ReadPagesWith has every file the process reads from now on decompress its pages into
+// buffers from mem in place of the pool, and returns what puts the pool back. It is
+// internal/readfuzz's hook (step 510): a bounded allocator there refuses a request
+// over its limit, and a poisoned one fills what it hands out and takes back with
+// 0xA5, so a reader that takes a length from its input before seeing the data, or a
+// buffer of the pool for zeroed, shows. Not for use while a read runs.
+func ReadPagesWith(mem memory.Allocator) (restore func()) {
+	was := pages
+	pages = mem
+	return func() { pages = was }
+}
 
 // readProps are the properties a file is opened with: the pool, or a scan's view of
 // it. GetStream still reads each column chunk into a slice of its own, 81 MB of q14's
@@ -43,8 +58,48 @@ var pages = &pagePool{}
 // decompression buffer, but with it a file whose row group claims more rows than its
 // chunks hold read as no rows and no error, and a read that failed mid-scan lost the
 // file's name: TestPanicsAreErrors and TestScanParquetFrom caught them (step 376).
+//
+// Its page limits are lowered once the footer is read (boundPages).
 func readProps(mem memory.Allocator) *parquet.ReaderProperties {
 	return parquet.NewReaderProperties(mem)
+}
+
+// minPageBound is the least boundPages lowers a page limit to: a margin for a writer
+// that counts a chunk's bytes short, as parquet-mr up to 1.2.8 left a dictionary
+// page's header out (PARQUET-816), and an allocation no file is too small for.
+const minPageBound = 1 << 20
+
+// boundPages lowers the largest page arrow-go reads from a file, compressed and
+// uncompressed, to the largest column chunk its footer declares (D14 of
+// v0.7.2-plan.md, step 510). arrow-go sizes a page's buffer by the page's header
+// before it reads a byte of the page, up to 64 MiB compressed and 256 MiB
+// uncompressed, its defaults: a header claiming 2^28 bytes in a file of 161 asked
+// for 256 MiB, and the pool keeps a buffer that size. A page lies inside its chunk,
+// so no page of a file holds more than its largest chunk; an uncompressed chunk's
+// pages are its bytes as they lie, so its compressed size bounds them too. A footer
+// can lie as well as a header, so this bounds what a forged header alone can ask.
+//
+// The limits are the file's and not each chunk's, because arrow-go takes them from
+// the file's properties as each page reader is made, and a file's row groups are
+// read at once by the parallel reader's workers. Set before any row group is read.
+func boundPages(props *parquet.ReaderProperties, md *metadata.FileMetaData) {
+	var comp, unc int64
+	for g := range md.NumRowGroups() {
+		rg := md.RowGroup(g)
+		for c := range rg.NumColumns() {
+			cc, err := rg.ColumnChunk(c)
+			if err != nil {
+				continue
+			}
+			u := cc.TotalUncompressedSize()
+			if cc.Compression() == compress.Codecs.Uncompressed {
+				u = min(u, cc.TotalCompressedSize())
+			}
+			comp, unc = max(comp, cc.TotalCompressedSize()), max(unc, u)
+		}
+	}
+	props.MaxCompressedPageSize = min(max(comp, minPageBound), parquet.DefaultMaxCompressedPageSize)
+	props.MaxUncompressedPageSize = min(max(unc, minPageBound), parquet.DefaultMaxUncompressedPageSize)
 }
 
 // class is the size class of a buffer of n bytes, or -1 for one the pool does not
