@@ -4105,10 +4105,18 @@ its section below lists them.</p>
   refused as text that is no number, where its value is out of range, and a zero with
   one, <code>0e9223372036854775808</code>, is 0, as one with a shorter exponent is. A strict cast
   says "not representable" for it now, not "cannot parse".</li>
-<li>
-<p><strong>A <code>\r</code> that ends a CSV's input ends its line</strong> (509), as <code>encoding/csv</code> and
+<li><strong>A <code>\r</code> that ends a CSV's input ends its line</strong> (509), as <code>encoding/csv</code> and
   Polars 2.1 read it: <code>a,b\r</code> read the field <code>b\r</code>, <code>"a","b"\r</code> was refused, and a
-  last line of only <code>\r</code> was a value where it is a blank line.</p>
+  last line of only <code>\r</code> was a value where it is a blank line.</li>
+<li>
+<p><strong>A Struct of no fields keeps its rows</strong> (518): a JSON or NDJSON object field
+  holding <code>{}</code>, Polars' <code>Struct({})</code>, failed the whole read with an internal error,
+  "batch declares 1 rows but its columns hold 0", as a struct took its length from its
+  first field. It reads now as a <code>Struct()</code> column, <code>{}</code> or null a row, as Polars 2.1
+  reads it, and keeps its rows through filters, sorts, joins, concatenation, group-by,
+  spilling and the IPC and JSON writers; an IPC file holding one reads, and it is a
+  key. Parquet and CSV refuse it cleanly, as Polars does. CI's fuzzing of <code>ScanJSON</code>
+  and <code>ScanNDJSON</code> found it.</p>
 </li>
 <li>
 <p><strong>A cancelled query no longer answers part of its input as the whole</strong> (394): a

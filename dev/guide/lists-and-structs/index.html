@@ -1958,6 +1958,14 @@ its expression:</p>
 </ul>
 <p>A struct is also how ursus gives several values a row: <code>SplitExact</code>, <code>ExtractGroups</code>,
 <code>ValueCounts</code> of an expression, and <code>Rle</code>.</p>
+<p><em>New in 0.8.</em> A struct of no fields, Polars' <code>Struct({})</code>, is what a JSON or NDJSON
+object field holding <code>{}</code> reads as: a row for each object, <code>{}</code> or null. It keeps its
+rows through filters, sorts, joins, concatenation, group-by, IPC and the JSON writers,
+and is a key, <code>{}</code> one group and null another. <code>Struct()</code> with no expression is
+refused, as Polars' <code>pl.struct()</code> is; <code>Str().JsonDecode(StructOf())</code> builds one, and
+<code>ToStruct</code> of a frame of no columns gives one, a row for each of the frame's. Parquet
+has no group of no columns, so writing one is refused, as Polars refuses it, and so is
+CSV, which holds no nested value.</p>
 <h2 id="lists-and-structs-as-keys">Lists and structs as keys<a class="headerlink" href="#lists-and-structs-as-keys" title="Permanent link">&para;</a></h2>
 <p><em>New in 0.6.7.</em> A List, an Array or a Struct is a key, of <code>GroupBy</code>, <code>Unique</code>, <code>Join</code>,
 <code>Over</code>, <code>PartitionBy</code>, <code>Mode</code>, <code>Rle</code> and <code>HashRows</code>, as Polars keys one: element by
