@@ -3958,6 +3958,19 @@ that stops when its request is cancelled.</p>
   recorded. Six refusals ursus means, where Polars answers, are <code>TestCondRefusals</code>' and
   <code>TestDecimalGuards</code>', and two float extremes <code>TestAggregatesAtTheFloatsEnds</code>', held
   to math/big; those eight cases left the recordings.</li>
+<li><strong>Fuzz targets for NDJSON, JSON and Arrow IPC</strong> (511): <code>FuzzObjectLines</code> holds a
+  JSON document's split into lines to itself read in pieces and a byte at a time, and
+  to <code>encoding/json</code>; <code>FuzzJSONDecode</code> holds <code>json_decode</code>'s and <code>json_path_match</code>'s
+  parser to <code>json.Valid</code> and <code>json.Unmarshal</code>; <code>FuzzScanNDJSON</code> and <code>FuzzScanJSON</code> hold
+  each row read to <code>encoding/json</code>, by its column's type; <code>FuzzScanIPCFile</code> and
+  <code>FuzzScanIPCStream</code> read through a bounded allocator and hold each cell to arrow-go's
+  own arrays. readfuzz's targets run on an 8 MiB stack. Left for the maintainer, each
+  skipped by name and kept as a seed: arrow-go sizes slices by an IPC schema's and a
+  record batch's declared lengths and recurses on a field among its descendants, each a
+  fatal error from an input of 2 KB; a record of 2^40 rows of Null; klauspost's
+  Zstandard decoder allocates the window a frame declares, up to 512 MiB, from 17
+  bytes; NDJSON inference types <code>[1, true]</code> and <code>[1, [2]]</code> as the reader then refuses,
+  and an integer past Int128 as an Int128.</li>
 <li><strong>Fuzz targets for the Parquet reader, and a byte-flip sweep</strong> (510):
   <code>FuzzScanParquet</code> reads any bytes through the public API with every page buffer
   from a bounded, poisoned allocator, and checks four threads, a read into zeroed
@@ -4000,6 +4013,22 @@ its section below lists them.</p>
   and a null Struct is kept apart from a Struct of nulls (<code>ExtractGroups</code>, 499);
   Polars 2.1 reads a null too. <code>ScanJSON</code>, which reads each object as a line, follows.
   The recorded oracle found it (<code>ndjsonread/ignored_in_a_struct</code>).</li>
+<li><strong>An Arrow IPC buffer declaring more than its input could hold is refused, not the
+  end of the process</strong> (511): arrow-go sizes a compressed buffer's decompression by
+  the length the buffer declares, so a 1.7 KB LZ4 file declaring 2^40 bytes ended the
+  program with "fatal error: runtime: out of memory". <code>ScanIPC</code>, <code>ScanIPCStream</code> and
+  their kin read through an allocator that grants no buffer past 32,768 times the
+  input's size, Zstandard's most, and refuse past it with an <code>ErrIO</code>.</li>
+<li><strong>An IPC stream's message is held to arrow-go's limits</strong> (511): arrow-go's
+  <code>ipc.NewReader</code> drops them, so a 2.7 KB stream declaring a 2^40-byte body ended the
+  program, and an IPC file read as a stream allocated 1.3 GB for the length its magic
+  spells. A message is no larger than 64 MiB of metadata and 256 MiB of body, or than
+  the stream where its size is known.</li>
+<li><strong><code>ReadIPCSchema</code> of a corrupt file is an error</strong> (511): a panic in arrow-go's
+  reading of the footer reached the caller; it is an <code>ErrIO</code> naming the file.</li>
+<li><strong>An NDJSON or JSON line nested deep is read in memory proportional to it</strong> (511):
+  a 6 KB line of objects 999 deep allocated 4 GB and took 1.2 s, each level's type
+  written as text and built again; 4 MB and 13 ms now.</li>
 <li><strong>A Parquet page's header can no longer size its buffer past its column chunk</strong>
   (510): a page claiming 2^28 bytes in a file of 161 made arrow-go ask for 256 MiB
   before reading a byte of it, and one claiming 2^26 compressed 64 MiB. A page is
