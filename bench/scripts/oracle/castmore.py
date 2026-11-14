@@ -6,6 +6,8 @@ in the Go test.
 
 from __future__ import annotations
 
+from decimal import ROUND_HALF_UP, Decimal
+
 import polars as pl
 
 from . import Case, case
@@ -26,6 +28,17 @@ def sel(*e: pl.Expr):
     return lambda df: df.select(*e)
 
 
+def python_half_up(df: pl.DataFrame) -> pl.DataFrame:
+    """str.to_decimal at scales 2 and 0 by Python's decimal, each tie rounded half away
+    from zero (ROUND_HALF_UP), as Decimal(38, s): the oracle of to_decimal_ties (step
+    507)."""
+    def at(scale: int) -> pl.Series:
+        q = Decimal(1).scaleb(-scale)
+        vals = [Decimal(v).quantize(q, rounding=ROUND_HALF_UP) for v in df["t"].to_list()]
+        return pl.Series(f"s{scale}", vals, dtype=pl.Decimal(38, scale))
+    return pl.DataFrame([at(2), at(0)])
+
+
 def cases() -> list[Case]:
     g = Gen(4974)
     times = g.times(120, name="t")
@@ -44,8 +57,9 @@ def cases() -> list[Case]:
         case("to_time_gen", text_times, sel(t.str.to_time("%H:%M:%S", strict=False))),
         case("to_decimal_2", TEXT_DECIMALS, sel(t.str.to_decimal(scale=2))),
         case("to_decimal_ties", pl.DataFrame({"t": ["0.005", "-0.005", "0.015", "0.025", "1.255", "1.245", "2.5", "3.5", "-2.5", "0.0050"]}),
-             sel(t.str.to_decimal(scale=2).alias("s2"), t.str.to_decimal(scale=0).alias("s0")),
-             note="Polars 2.1 rounds a tie half to even; ursus's ToDecimal half away from zero, as its doc says Polars does"),
+             python_half_up,
+             note="the want is Python's decimal, ROUND_HALF_UP, not Polars' (step 507): ToDecimal rounds a tie half away from "
+                  "zero, as its doc says and Round does by default; Polars 2.1's str.to_decimal rounds it half to even"),
         case("to_decimal_gen", text_decimals, sel(t.str.to_decimal(scale=2).alias("s2"), t.str.to_decimal(scale=4).alias("s4"))),
         case("cast_time_unit", TICKS, sel(v.cast(pl.Datetime("us")).dt.cast_time_unit("ms").alias("dt"),
                                           v.cast(pl.Duration("us")).dt.cast_time_unit("ms").alias("du"),

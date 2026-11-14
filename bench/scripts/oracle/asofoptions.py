@@ -29,6 +29,23 @@ def asof(**opts):
     return lambda left, right: left.join_asof(right, on="k", **opts).select("w")
 
 
+def nearest_ties_backward(tolerance: int):
+    """ursus's AsOfNearest spelled in Polars: the backward row and the forward row, each
+    as Polars' own backward and forward joins find them, the nearer taken and the
+    backward on a tie (asof.go: "whichever is closer, ties going backward"), then the
+    tolerance."""
+    def query(left: pl.DataFrame, right: pl.DataFrame) -> pl.DataFrame:
+        r = right.with_columns(c("k").alias("rk"))
+        back = left.join_asof(r, on="k").select(c("w").alias("wb"), (c("k") - c("rk")).alias("db"))
+        fwd = left.join_asof(r, on="k", strategy="forward").select(c("w").alias("wf"), (c("rk") - c("k")).alias("df"))
+        both = pl.concat([back, fwd], how="horizontal")
+        take_back = c("db").is_not_null() & (c("df").is_null() | (c("db") <= c("df")))
+        w = pl.when(take_back).then(c("wb")).otherwise(c("wf"))
+        dist = pl.when(take_back).then(c("db")).otherwise(c("df"))
+        return both.select(pl.when(dist <= tolerance).then(w).alias("w"))
+    return query
+
+
 def cases() -> list[Case]:
     g = Gen(5013)
     gl = g.frame(g.ints(150, pl.Int64, lo=0, hi=2000, null_rate=0, edges=False, name="k")).sort("k")
@@ -60,9 +77,9 @@ def cases() -> list[Case]:
              lambda left, right: left.join_asof(right, on="k", tolerance=5).rename({"w": "back"}).join_asof(
                  right, on="k", tolerance=5, strategy="forward").rename({"w": "fwd"}).select("back", "fwd"),
              note="backward and forward under one tolerance over sorted keys with repeats"),
-        case("nearest_tie_gen", {"left": gl, "right": gr},
-             lambda left, right: left.join_asof(right, on="k", tolerance=5, strategy="nearest").select("w"),
-             note="a finding: where the backward and forward rows are equally far, Polars 2.1 takes the forward one, ursus the "
-                  "backward (asof.go: ties going backward)"),
+        case("nearest_tie_gen", {"left": gl, "right": gr}, nearest_ties_backward(5),
+             note="spelled to ursus's documented rule (step 507): AsOfNearest takes whichever row is closer and the backward "
+                  "on a tie; Polars 2.1's nearest takes the forward, so it is asked as the nearer of its own backward and "
+                  "forward joins' rows, the backward on a tie, within the tolerance of 5"),
         case("join_where_gen", {"a": ga, "b": gb}, lambda a, b: a.join_where(b, c("x") < c("x_r"), suffix="_r"), order="set"),
     ]

@@ -36,11 +36,9 @@ func init() {
 		"eq_string_column":     sel(c("e").Eq(c("s"))),
 		"is_in":                sel(c("e").IsIn("lo", "zzz")),
 		"fill_null_lo":         sel(c("e").FillNullWith("lo")),
-		"fill_null_zzz": func(in oracleInputs) *ursus.LazyFrame {
-			in.t.Skip("finding: FillNullWith of a value outside the Enum's categories is a String column here, " +
-				"where Polars 2.1 keeps the null and the Enum; not in feature-gaps.md §9")
-			return nil
-		},
+		// Asked of Polars with the Enum cast to String first (step 507): a fill outside
+		// the categories is a String column here, where Polars 2.1 keeps the Enum.
+		"fill_null_zzz":      sel(c("e").FillNullWith("zzz")),
 		"concat_with_string": concat,
 
 		"sort_gen": func(in oracleInputs) *ursus.LazyFrame {

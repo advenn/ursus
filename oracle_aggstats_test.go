@@ -28,8 +28,10 @@ func init() {
 			x.IsEmpty().Alias("is_empty"), x.NanMin().Alias("nan_min"), i.ApproxNUnique().Cast(ursus.Int64).Alias("approx_n_unique"),
 			x.Dot(y).Alias("dot")}
 	}
-	inexact := "Polars 2.1 takes a float mean at 1e9 and loses seven digits of the skew (0.38180167858053743 of [1e9+1, 1e9+2, 1e9+4], " +
-		"whose skew is [1, 2, 4]'s 0.38180177416060623); ursus shifts by the first value; TestSkewAndKurtosis holds it to an exact big.Float"
+	// skew_near_1e9 and moments_far_2000 are asked of Polars as the moments of x less its
+	// first, and entropy_raw_by_g as -sum(x ln x) (step 507): ursus shifts the moments by
+	// the first value, and its raw entropy of one value is -x ln x, where Polars 2.1
+	// loses seven digits at 1e9 and answers 0.0 for one value.
 	entropies := map[string]ursus.Expr{
 		"entropy": x.Entropy(math.E, true), "entropy_bits": x.Entropy(2, true), "spearman": ursus.CorrSpearman(x, y),
 	}
@@ -39,8 +41,8 @@ func init() {
 		"kurtosis_unbiased_nulls_by_g": byG(x.Kurtosis(true, false).IsNull()),
 		"skew_one_value_not_null_by_g": byG(x.Skew(true).IsNull()),
 		"skew_ints":                    sel(i.Skew(true)),
-		"skew_near_1e9":                oracleFinding(inexact),
-		"moments_far_2000":             oracleFinding(inexact),
+		"skew_near_1e9":                sel(x.Skew(true)),
+		"moments_far_2000":             sel(x.Skew(true), x.Kurtosis(false, true).Alias("k")),
 		"moments_all_null":             sel(x.Skew(true), x.Kurtosis(true, true).Alias("k")),
 		"skew_nan":                     sel(x.Skew(true)),
 
@@ -54,7 +56,7 @@ func init() {
 		"dot_ints":       sel(c("a").Dot(c("b")).Cast(ursus.Int64)),
 
 		"entropy_raw_all":   sel(x.Entropy(math.E, false)),
-		"entropy_raw_by_g":  oracleFinding("Polars 2.1's raw entropy of a one-value group is 0.0, where -x ln x is -8.05 here"),
+		"entropy_raw_by_g":  byG(x.Entropy(math.E, false)),
 		"entropy_ints":      sel(i.Entropy(math.E, true)),
 		"entropy_zero":      sel(x.Entropy(math.E, true)),
 		"entropy_negative":  sel(x.Entropy(math.E, true)),

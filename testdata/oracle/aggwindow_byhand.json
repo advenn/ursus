@@ -172,68 +172,6 @@
        "dtype": "Float64",
        "name": "v",
        "values": [
-        -1.7e+308,
-        1.7e+308
-       ]
-      }
-     ]
-    }
-   },
-   "name": "median_extremes",
-   "note": "Polars 2.1 overflows to +Inf, lo + (hi - lo)/2; 0 here, held to big.Float in the Go test: a finding, skipped",
-   "order": "rows",
-   "want": {
-    "columns": [
-     {
-      "dtype": "Float64",
-      "name": "v",
-      "values": [
-       "inf"
-      ]
-     }
-    ]
-   }
-  },
-  {
-   "float": "bits",
-   "inputs": {
-    "df": {
-     "columns": [
-      {
-       "dtype": "Float64",
-       "name": "v",
-       "values": [
-        1e+308,
-        1.5e+308
-       ]
-      }
-     ]
-    }
-   },
-   "name": "midpoint_huge",
-   "note": "Polars 2.1 overflows to +Inf, (lo + hi)/2; 1.25e308 here, held to big.Float: a finding, skipped",
-   "order": "rows",
-   "want": {
-    "columns": [
-     {
-      "dtype": "Float64",
-      "name": "v",
-      "values": [
-       "inf"
-      ]
-     }
-    ]
-   }
-  },
-  {
-   "float": "bits",
-   "inputs": {
-    "df": {
-     "columns": [
-      {
-       "dtype": "Float64",
-       "name": "v",
-       "values": [
         1.7e+308,
         1.7e+308
        ]
@@ -430,7 +368,7 @@
     }
    },
    "name": "var_alike_huge",
-   "note": "Polars 2.1's sum of squares overflows and its variance is NaN; 0 here, held to big.Float: a finding, skipped",
+   "note": "spelled to ursus's documented rule (step 507): a float Var is one pass shifted by the first value (\u00a79), so two alike values are 0 however large; Polars' own sum of squares overflows to NaN, so it is asked the variance of the values less the first",
    "order": "rows",
    "want": {
     "columns": [
@@ -438,7 +376,7 @@
       "dtype": "Float64",
       "name": "v",
       "values": [
-       "NaN"
+       0.0
       ]
      }
     ]

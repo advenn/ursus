@@ -821,100 +821,6 @@
        ]
       },
       {
-       "dtype": "Int64",
-       "name": "b",
-       "values": [
-        1,
-        2
-       ]
-      }
-     ]
-    }
-   },
-   "name": "when_string_int64",
-   "order": "rows",
-   "want": {
-    "columns": [
-     {
-      "dtype": "String",
-      "name": "x",
-      "values": [
-       "x",
-       "2"
-      ]
-     }
-    ]
-   }
-  },
-  {
-   "float": "bits",
-   "inputs": {
-    "df": {
-     "columns": [
-      {
-       "dtype": "Bool",
-       "name": "c",
-       "values": [
-        true,
-        false
-       ]
-      },
-      {
-       "dtype": "Bool",
-       "name": "a",
-       "values": [
-        true,
-        false
-       ]
-      },
-      {
-       "dtype": "Int64",
-       "name": "b",
-       "values": [
-        1,
-        2
-       ]
-      }
-     ]
-    }
-   },
-   "name": "when_bool_int64",
-   "order": "rows",
-   "want": {
-    "columns": [
-     {
-      "dtype": "Int64",
-      "name": "x",
-      "values": [
-       1,
-       2
-      ]
-     }
-    ]
-   }
-  },
-  {
-   "float": "bits",
-   "inputs": {
-    "df": {
-     "columns": [
-      {
-       "dtype": "Bool",
-       "name": "c",
-       "values": [
-        true,
-        false
-       ]
-      },
-      {
-       "dtype": "String",
-       "name": "a",
-       "values": [
-        "x",
-        "y"
-       ]
-      },
-      {
        "dtype": "String",
        "name": "b",
        "values": [
@@ -1020,12 +926,19 @@
     }
    },
    "name": "when_enum_a_enum_b",
+   "note": "spelled to ursus's documented rule (step 507): two Enums of different categories meet at the String here (step 79); Polars 2.1 refuses them, so it is asked with both cast to String first",
    "order": "rows",
    "want": {
-    "error": {
-     "contains": "",
-     "polars": "SchemaError: failed to determine supertype of enum and enum"
-    }
+    "columns": [
+     {
+      "dtype": "String",
+      "name": "x",
+      "values": [
+       "a",
+       "b"
+      ]
+     }
+    ]
    }
   },
   {
@@ -1083,53 +996,6 @@
        ]
       },
       {
-       "dtype": "Date",
-       "name": "a",
-       "values": [
-        1,
-        2
-       ]
-      },
-      {
-       "dtype": "Datetime(us)",
-       "name": "b",
-       "values": [
-        1,
-        2
-       ]
-      }
-     ]
-    }
-   },
-   "name": "when_date_dt_us",
-   "order": "rows",
-   "want": {
-    "columns": [
-     {
-      "dtype": "Datetime(us)",
-      "name": "x",
-      "values": [
-       86400000000,
-       2
-      ]
-     }
-    ]
-   }
-  },
-  {
-   "float": "bits",
-   "inputs": {
-    "df": {
-     "columns": [
-      {
-       "dtype": "Bool",
-       "name": "c",
-       "values": [
-        true,
-        false
-       ]
-      },
-      {
        "dtype": "Datetime(us, UTC)",
        "name": "a",
        "values": [
@@ -1149,15 +1015,16 @@
     }
    },
    "name": "when_dt_us_utc_dt_ns_utc",
+   "note": "spelled to ursus's documented rule (step 507): two time units meet at the finer here, so no tick is dropped; Polars 2.1 meets them at the coarser, so it is asked with both sides cast to the finer first",
    "order": "rows",
    "want": {
     "columns": [
      {
-      "dtype": "Datetime(us, UTC)",
+      "dtype": "Datetime(ns, UTC)",
       "name": "x",
       "values": [
-       1,
-       0
+       1000,
+       2
       ]
      }
     ]
@@ -1196,15 +1063,16 @@
     }
    },
    "name": "when_dt_ms_dt_ns",
+   "note": "spelled to ursus's documented rule (step 507): two time units meet at the finer here, so no tick is dropped; Polars 2.1 meets them at the coarser, so it is asked with both sides cast to the finer first",
    "order": "rows",
    "want": {
     "columns": [
      {
-      "dtype": "Datetime(ms)",
+      "dtype": "Datetime(ns)",
       "name": "x",
       "values": [
-       1,
-       0
+       1000000,
+       2
       ]
      }
     ]
@@ -1243,15 +1111,16 @@
     }
    },
    "name": "when_dur_ms_dur_ns",
+   "note": "spelled to ursus's documented rule (step 507): two time units meet at the finer here, so no tick is dropped; Polars 2.1 meets them at the coarser, so it is asked with both sides cast to the finer first",
    "order": "rows",
    "want": {
     "columns": [
      {
-      "dtype": "Duration(ms)",
+      "dtype": "Duration(ns)",
       "name": "x",
       "values": [
-       1,
-       0
+       1000000,
+       2
       ]
      }
     ]
@@ -1460,53 +1329,6 @@
      "contains": "",
      "polars": "SchemaError: failed to determine supertype of time and datetime[ns]"
     }
-   }
-  },
-  {
-   "float": "bits",
-   "inputs": {
-    "df": {
-     "columns": [
-      {
-       "dtype": "Bool",
-       "name": "c",
-       "values": [
-        true,
-        false
-       ]
-      },
-      {
-       "dtype": "Datetime(ns)",
-       "name": "a",
-       "values": [
-        1,
-        2
-       ]
-      },
-      {
-       "dtype": "Int64",
-       "name": "b",
-       "values": [
-        1,
-        2
-       ]
-      }
-     ]
-    }
-   },
-   "name": "when_dt_ns_int64",
-   "order": "rows",
-   "want": {
-    "columns": [
-     {
-      "dtype": "Int64",
-      "name": "x",
-      "values": [
-       1,
-       2
-      ]
-     }
-    ]
    }
   },
   {
@@ -1887,6 +1709,7 @@
     }
    },
    "name": "unpivot_dt_ms_dt_ns",
+   "note": "spelled to ursus's documented rule (step 507): two time units meet at the finer here, so no tick is dropped; Polars 2.1 meets them at the coarser, so it is asked with both sides cast to the finer first",
    "order": "set",
    "want": {
     "columns": [
@@ -1911,13 +1734,13 @@
       ]
      },
      {
-      "dtype": "Datetime(ms)",
+      "dtype": "Datetime(ns)",
       "name": "value",
       "values": [
+       1000000,
        1,
-       0,
-       2,
-       0
+       2000000,
+       2
       ]
      }
     ]

@@ -4,7 +4,10 @@ its rows' values as a list.
 
 Polars 2.1 ends a window at its start plus the period, so an offset of -28d or -4w
 before a month's period runs past the row (Feb 28 - 28d + 1mo is Feb 29), where Polars
-1.44.1 ended it at the row, and ursus does: those cases are findings, skipped.
+1.44.1 ended it at the row, and ursus does, measuring a month as 28 days (RollingOptions'
+doc): those two cases are spelled to ursus's rule (step 507, feature-gaps §9), asked of
+Polars with a period as long as the offset, 28d or 4w, whose window ends at the row in
+Polars 2.1 too.
 """
 
 from __future__ import annotations
@@ -37,8 +40,12 @@ def cases() -> list[Case]:
         case("1mo_offset_m1mo", DAYS, roll("1mo", "-1mo"), note="minus the period, given: the default"),
         case("1mo_no_offset", DAYS, roll("1mo", "0d")),
         case("1mo_offset_m2d", DAYS, roll("1mo", "-2d")),
-        case("1mo_offset_m28d", DAYS, roll("1mo", "-28d"), note="Polars 2.1 ends Feb 28's window at Jan 31 + 1mo, Feb 29; at the row here: a finding"),
-        case("1mo_offset_m4w", DAYS, roll("1mo", "-4w"), note="as -28d: a finding"),
+        case("1mo_offset_m28d", DAYS, roll("28d", "-28d"),
+             note="spelled to ursus's documented rule (step 507): an offset as long as the period behind the row, a month "
+                  "measured as 28 days, ends the window at the row here, (t - 28d, t]; Polars 2.1 ends 1mo after -28d at its "
+                  "start plus a month, Feb 29 for Feb 28, so it is asked with a period of 28d, which ends at the row there too"),
+        case("1mo_offset_m4w", DAYS, roll("4w", "-4w"), note="spelled as 1mo_offset_m28d (step 507): (t - 4w, t] here, asked of "
+                                                          "Polars with a period of 4w"),
         case("1mo_offset_m40d", DAYS, roll("1mo", "-40d"), note="wholly behind"),
         case("3d_offset_m1d", DAYS, roll("3d", "-1d")),
         case("3d_offset_1d_closed_left", DAYS, roll("3d", "1d", "left")),

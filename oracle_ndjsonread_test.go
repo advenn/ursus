@@ -17,7 +17,6 @@ func init() {
 		return ursus.ScanNDJSONBytes([]byte(in.text("ndjson")), "t.ndjson", in.ndjsonOptions()...)
 	}
 	reg := map[string]oracleQuery{
-		"ignored_in_a_struct": oracleFinding("a value that is not an object, in a Struct column under ignore_errors, is a struct of nulls here and null in Polars 2.1"),
 		"two_files": func(in oracleInputs) *ursus.LazyFrame {
 			root := in.textFiles()
 			return ursus.ScanNDJSONFiles([]string{filepath.Join(root, "a.ndjson"), filepath.Join(root, "b.ndjson")}, in.ndjsonOptions()...)
@@ -33,7 +32,7 @@ func init() {
 		"line_not_an_object_refused", "malformed_line_refused", "leading_zero_refused", "leading_zero_in_floats_refused",
 		"keys_types_by_line_refused", "lines_place_past_a_blank_refused", "boolean_among_numbers_refused", "schema_given",
 		"schema_of_each_type", "schema_refuses_text_as_int32", "schema_refuses_past_int32", "schema_refuses_negative_uint64",
-		"ignored_in_integers", "ignored_in_booleans", "ignored_in_a_list", "ignored_under_a_schema", "malformed_refused_still",
+		"ignored_in_integers", "ignored_in_booleans", "ignored_in_a_list", "ignored_in_a_struct", "ignored_under_a_schema", "malformed_refused_still",
 		"round_trip_gen",
 	} {
 		reg[name] = read

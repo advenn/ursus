@@ -398,7 +398,7 @@
     }
    },
    "name": "1mo_offset_m28d",
-   "note": "Polars 2.1 ends Feb 28's window at Jan 31 + 1mo, Feb 29; at the row here: a finding",
+   "note": "spelled to ursus's documented rule (step 507): an offset as long as the period behind the row, a month measured as 28 days, ends the window at the row here, (t - 28d, t]; Polars 2.1 ends 1mo after -28d at its start plus a month, Feb 29 for Feb 28, so it is asked with a period of 28d, which ends at the row there too",
    "order": "rows",
    "want": {
     "columns": [
@@ -423,6 +423,9 @@
         1
        ],
        [
+        2
+       ],
+       [
         2,
         3
        ],
@@ -432,19 +435,11 @@
         4
        ],
        [
-        2,
-        3,
-        4
+        5
        ],
        [
         5,
-        6,
-        7
-       ],
-       [
-        5,
-        6,
-        7
+        6
        ],
        [
         5,
@@ -491,7 +486,7 @@
     }
    },
    "name": "1mo_offset_m4w",
-   "note": "as -28d: a finding",
+   "note": "spelled as 1mo_offset_m28d (step 507): (t - 4w, t] here, asked of Polars with a period of 4w",
    "order": "rows",
    "want": {
     "columns": [
@@ -516,6 +511,9 @@
         1
        ],
        [
+        2
+       ],
+       [
         2,
         3
        ],
@@ -525,19 +523,11 @@
         4
        ],
        [
-        2,
-        3,
-        4
+        5
        ],
        [
         5,
-        6,
-        7
-       ],
-       [
-        5,
-        6,
-        7
+        6
        ],
        [
         5,

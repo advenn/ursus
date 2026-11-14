@@ -243,7 +243,25 @@ func TestAnAggregateInsideAConditionalBroadcasts(t *testing.T) {
 	}
 }
 
+// TestCondRefusals: a condition that is not Boolean, and branches Promote finds no
+// common type for. Four of those Polars 2.1's when meets, where ursus refuses on
+// purpose and hints a cast (step 507, feature-gaps.md §9): text beside a number, a
+// Boolean beside a number, a Date beside a Datetime, and an instant beside an integer,
+// its ticks. They were the dtype group's recorded cases when_string_int64,
+// when_bool_int64, when_date_dt_us and when_dt_ns_int64.
 func TestCondRefusals(t *testing.T) {
+	cond, i := ursus.Col("c"), ursus.Col("i")
+	typed := func() *ursus.LazyFrame {
+		return ursus.Frame(ursus.Values("c", []bool{true, false}), ursus.Values("i", []int64{1, 2}),
+			ursus.Values("s", []string{"x", "y"})).
+			WithColumns(i.Cast(ursus.Date).Alias("d"), i.Cast(ursus.Datetime(ursus.Micro, "")).Alias("us"),
+				i.Cast(ursus.Datetime(ursus.Nano, "")).Alias("ns"), cond.Alias("b"))
+	}
+	branches := func(a, b string) func() *ursus.LazyFrame {
+		return func() *ursus.LazyFrame {
+			return typed().Select(ursus.When(cond).Then(ursus.Col(a)).Otherwise(ursus.Col(b)).Alias("x"))
+		}
+	}
 	cases := []struct {
 		name string
 		lf   func() *ursus.LazyFrame
@@ -256,6 +274,10 @@ func TestCondRefusals(t *testing.T) {
 			return cf().Select(
 				ursus.When(ursus.Col("score").Gt(0)).Then(ursus.Col("a")).Otherwise("text"))
 		}, "no common type"},
+		{"text beside a number", branches("s", "i"), "no common type: String and Int64"},
+		{"a Boolean beside a number", branches("b", "i"), "no common type: Bool and Int64"},
+		{"a Date beside a Datetime", branches("d", "us"), "no common type: Date and Datetime(us)"},
+		{"an instant beside its ticks", branches("ns", "i"), "no common type: Datetime(ns) and Int64"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

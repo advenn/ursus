@@ -53,6 +53,7 @@
     }
    },
    "name": "i8_monrovia_1970_round_trips",
+   "note": "spelled to ursus's documented rule (step 507, I8): an offset with seconds, Monrovia's -00:44:30, has no +hhmm spelling, so the instant is written in UTC and reads back exactly; Polars 2.1 writes the wall clock at -0045 and reads back an instant 30 s away, so it is asked to write the instant converted to UTC",
    "order": "rows",
    "params": {
     "options": {
@@ -67,7 +68,7 @@
       "dtype": "Datetime(us, Africa/Monrovia)",
       "name": "t",
       "values": [
-       2700000000
+       2670000000
       ]
      }
     ]
@@ -699,7 +700,7 @@
    "float": "bits",
    "inputs": {},
    "name": "control_only_nan_inferred",
-   "note": "a column of only NaN: Polars 2.1 infers Float64",
+   "note": "spelled to ursus's documented rule (step 507): inf and nan count as a float only beside a number, so a column of only NaN infers String here (ScanCSV's doc); Polars 2.1 infers Float64, so it is read there under a String override, which the Go side does not pass: ursus infers",
    "order": "rows",
    "params": {
     "csv": "a\nNaN\n"
@@ -707,7 +708,7 @@
    "want": {
     "columns": [
      {
-      "dtype": "Float64",
+      "dtype": "String",
       "name": "a",
       "values": [
        "NaN"
@@ -812,10 +813,10 @@
     }
    },
    "name": "i22_no_rows_no_columns_written",
-   "note": "a frame of no rows and no columns: Polars writes a bare newline",
+   "note": "spelled to ursus's documented rule (step 507, I22): a frame of no columns writes no header naming nothing, so one of no rows writes nothing (WriteCSV's doc); Polars 2.1 writes a bare newline, its empty header, so it is asked without a header",
    "order": "rows",
    "want": {
-    "text": "\n"
+    "text": ""
    }
   },
   {

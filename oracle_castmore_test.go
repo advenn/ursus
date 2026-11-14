@@ -19,12 +19,10 @@ func init() {
 		"to_time_no_format": sel(t.Str().ToTime("", true)),
 		"to_time_gen":       sel(t.Str().ToTime("%H:%M:%S", false)),
 		"to_decimal_2":      sel(t.Str().ToDecimal(2)),
-		"to_decimal_ties": func(in oracleInputs) *ursus.LazyFrame {
-			in.t.Skip("finding (step 497): ToDecimal rounds a tie half away from zero, 0.005 to 0.01, and its doc says Polars does; " +
-				"Polars 2.1's str.to_decimal rounds it half to even, 0.00; not in feature-gaps §9, the maintainer's to decide")
-			return nil
-		},
-		"to_decimal_gen": sel(t.Str().ToDecimal(2).Alias("s2"), t.Str().ToDecimal(4).Alias("s4")),
+		// Asked of Python's decimal, ROUND_HALF_UP (step 507): ToDecimal rounds a tie
+		// half away from zero, where Polars 2.1 rounds it half to even.
+		"to_decimal_ties": sel(t.Str().ToDecimal(2).Alias("s2"), t.Str().ToDecimal(0).Alias("s0")),
+		"to_decimal_gen":  sel(t.Str().ToDecimal(2).Alias("s2"), t.Str().ToDecimal(4).Alias("s4")),
 		"cast_time_unit": sel(v.Cast(dt).Dt().CastTimeUnit(ursus.Milli).Alias("dt"), v.Cast(du).Dt().CastTimeUnit(ursus.Milli).Alias("du"),
 			v.Cast(dt).Dt().CastTimeUnit(ursus.Nano).Alias("up")),
 		"cast_time_unit_gen": sel(v.Cast(dt).Dt().CastTimeUnit(ursus.Milli).Alias("dt_ms"), v.Cast(dt).Dt().CastTimeUnit(ursus.Nano).Alias("dt_ns"),

@@ -17,23 +17,22 @@ func init() {
 	agg := func(e ursus.Expr) oracleQuery {
 		return func(in oracleInputs) *ursus.LazyFrame { return in.df().GroupBy().Agg(e) }
 	}
-	overflow := "Polars 2.1 overflows at the ends of a float's range: the median of [-1.7e308, 1.7e308] and the midpoint of [1e308, 1.5e308] " +
-		"are +Inf there and the variance of [1e308, 1e308] NaN; 0, 1.25e308 and 0 here, which TestAggregatesAtTheFloatsEnds holds to big.Float"
+	// The median of [-1.7e308, 1.7e308] and the midpoint of [1e308, 1.5e308], which
+	// Polars 2.1 overflows to +Inf, are TestAggregatesAtTheFloatsEnds' since step 507,
+	// held to math/big; var_alike_huge is asked of Polars of the values less the first.
 	oracleGroups["aggwindow_byhand"] = map[string]oracleQuery{
 		"shift_fill_float":    sel(v.ShiftFill(1, 1.5)),
 		"shift_fill_int32":    sel(v.ShiftFill(1, 0)),
 		"shift_fill_int64":    sel(v.ShiftFill(1, int64(-1))),
 		"quantile_0_neg_inf":  agg(v.Quantile(0, ursus.InterpLinear)),
 		"quantile_1_inf":      agg(v.Quantile(1, ursus.InterpLinear)),
-		"median_extremes":     oracleFinding(overflow),
-		"midpoint_huge":       oracleFinding(overflow),
 		"midpoint_alike_huge": agg(v.Quantile(0.5, ursus.InterpMidpoint)),
 		"median_alike_huge":   agg(v.Median()),
 		"pct_change_u8":       sel(v.PctChange(1)),
 		"pct_change_i8":       sel(v.PctChange(1)),
 		"var_overflow":        agg(v.Var(0)),
 		"std_overflow":        agg(v.Std(0)),
-		"var_alike_huge":      oracleFinding(overflow),
+		"var_alike_huge":      agg(v.Var(0)),
 		"bool_sum":            agg(v.Sum().Cast(i64)),
 		"bool_sum_by_g": func(in oracleInputs) *ursus.LazyFrame {
 			return in.df().GroupBy(g).Agg(v.Sum().Cast(i64)).Sort(ursus.Asc(g))
