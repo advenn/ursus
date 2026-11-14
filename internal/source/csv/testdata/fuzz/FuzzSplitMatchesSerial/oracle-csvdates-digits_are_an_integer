@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("x\n20200102\n")
+byte('\a')
+byte('\u0080')

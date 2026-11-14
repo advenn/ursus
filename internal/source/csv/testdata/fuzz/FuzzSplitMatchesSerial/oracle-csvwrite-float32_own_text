@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("f32\n2.0\n1e-7\n0.1\n")
+byte('\t')
+byte('\x00')
