@@ -606,5 +606,5 @@ func (b *structBuilder) finish(name string) *data.Column {
 	for i, f := range b.fields {
 		cols[i] = f.finish(b.names[i])
 	}
-	return data.NewStruct(name, cols, b.valid.view())
+	return data.NewStructLen(name, b.valid.n, cols, b.valid.view())
 }

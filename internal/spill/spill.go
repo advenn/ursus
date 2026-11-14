@@ -753,7 +753,7 @@ func (r *Reader) getColumn(f dtype.Field, n int) (*data.Column, error) {
 		}
 		// NewStruct derives every field as nullable; the schema's type is the one
 		// the batch must carry.
-		return data.NewStruct(f.Name, cols, valid).WithDType(f.Type), nil
+		return data.NewStructLen(f.Name, n, cols, valid).WithDType(f.Type), nil
 
 	default:
 		return nil, uerr.Internalf("spill: unknown column kind %d", kind)

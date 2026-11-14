@@ -357,6 +357,14 @@ its section below lists them.
 - **A `\r` that ends a CSV's input ends its line** (509), as `encoding/csv` and
   Polars 2.1 read it: `a,b\r` read the field `b\r`, `"a","b"\r` was refused, and a
   last line of only `\r` was a value where it is a blank line.
+- **A Struct of no fields keeps its rows** (518): a JSON or NDJSON object field
+  holding `{}`, Polars' `Struct({})`, failed the whole read with an internal error,
+  "batch declares 1 rows but its columns hold 0", as a struct took its length from its
+  first field. It reads now as a `Struct()` column, `{}` or null a row, as Polars 2.1
+  reads it, and keeps its rows through filters, sorts, joins, concatenation, group-by,
+  spilling and the IPC and JSON writers; an IPC file holding one reads, and it is a
+  key. Parquet and CSV refuse it cleanly, as Polars does. CI's fuzzing of `ScanJSON`
+  and `ScanNDJSON` found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

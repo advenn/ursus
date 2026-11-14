@@ -222,11 +222,6 @@ func TestTypeRefusals(t *testing.T) {
 			kind: uerr.ErrUnsupported, says: "decimal(39, 0)",
 		},
 		{
-			name: "a struct with no fields",
-			at:   arrow.StructOf(),
-			kind: uerr.ErrUnsupported, says: "no fields",
-		},
-		{
 			name: "duplicate field names",
 			at:   arrow.StructOf(arrow.Field{Name: "a", Type: i64}, arrow.Field{Name: "a", Type: i64}),
 			kind: uerr.ErrUnsupported, says: `two fields named "a"`,
