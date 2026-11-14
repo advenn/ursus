@@ -324,6 +324,10 @@ its section below lists them.
   a Boolean, INT96 or fixed-length column, a nested one, or one whose footer lists an
   encoding ursus's own pages do not read. Such a page is refused as corrupt, as
   ursus's own pages already refused it.
+- **A Parquet TIME past its day is refused** (510): a TIME holding a tick outside
+  [0, 24h) was read as a Time as it lay, which renders as another time of day and
+  sorts and compares as none; it is refused now as a corrupt value, inside a List or
+  a Struct as well, as the writer refuses one. CI's fuzz run found it.
 - **A Parquet footer's Arrow schema can no longer end the process** (510): it was read
   by arrow-go's IPC reader, which made a slice of the children a field claims, 283 GB
   from a file of 906 bytes, fatally. It is read now by a walk that checks every

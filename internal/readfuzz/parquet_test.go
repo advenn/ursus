@@ -2,6 +2,7 @@ package readfuzz_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
@@ -367,4 +368,73 @@ func TestADictionaryPageClaimingMoreValuesThanItsBytesIsRefused(t *testing.T) {
 		read = append(read, df)
 	}
 	ursustest.AssertFrameEqual(t, read[1], read[0])
+}
+
+// TestATimePastItsDayIsRefused (step 510): a Parquet TIME holding a tick outside
+// [0, 24h), which FuzzOwnPagesMatchArrow's first CI run made of a fixture. The
+// reader built a Time column of it, and a Time is a time of day: data's boundary
+// check, on in the targets, called the batch ursus's own bug. It is refused now as
+// a corrupt value, read by the reader's own pages and, the footer listing an
+// encoding they do not read, by arrow-go's, and inside a List. Honest ticks read as
+// the same ticks cast to a Time.
+func TestATimePastItsDayIsRefused(t *testing.T) {
+	ctx := t.Context()
+	const day = 86_400_000_000
+	honest := []int64{0, 45_296_789_012, day - 1}
+	micro := ursus.Col("v").Cast(ursus.TimeOf(ursus.Micro))
+	want, err := ursus.Frame(ursus.Values("v", honest)).Select(micro).Collect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, encs := range [][]int32{nil, {pqDeltaBinary}} {
+		read := func(ticks []int64) (*ursus.DataFrame, error) {
+			b := pqForged{phys: pqInt64, rows: int64(len(ticks)), pages: []pqPage{pqInt64Page(ticks)},
+				encs: encs, conv: pqTimeMicros}.bytes()
+			return ursus.ScanParquetBytes(b, "time.parquet").Collect(ctx)
+		}
+		got, err := read(honest)
+		if err != nil {
+			t.Fatalf("listing %v, honest ticks: %v", encs, err)
+		}
+		ursustest.AssertFrameEqual(t, got, want)
+		for _, past := range [][]int64{{0, day}, {-1}, {day + 45_296_789_012}} {
+			// Inside Run, which fails an ErrInternal: data's boundary check, on in this
+			// binary, would otherwise answer for the reader.
+			fuzzcheck.Run(t, limits(1024), func() error {
+				df, err := read(past)
+				if err == nil {
+					t.Errorf("listing %v, the ticks %v: read as %d rows, and no error", encs, past, df.Height())
+				}
+				return err
+			})
+		}
+	}
+
+	lists := ursus.Frame(ursus.Values("v", honest)).Select(micro.Implode())
+	wantLists, err := lists.Collect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := lists.WriteParquet(ctx, &buf, ursus.WithCompression(compress.Codecs.Uncompressed)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ursus.ScanParquetBytes(buf.Bytes(), "lists.parquet").Collect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, got, wantLists)
+	tick := binary.LittleEndian.AppendUint64(nil, 45_296_789_012)
+	past := binary.LittleEndian.AppendUint64(nil, day+45_296_789_012)
+	if !bytes.Contains(buf.Bytes(), tick) {
+		t.Fatal("the List's file does not hold its tick as it lies")
+	}
+	b := bytes.ReplaceAll(buf.Bytes(), tick, past)
+	fuzzcheck.Run(t, limits(len(b)), func() error {
+		df, err := ursus.ScanParquetBytes(b, "lists.parquet").Collect(ctx)
+		if err == nil {
+			t.Errorf("a List holding a Time past its day: read as %d rows, and no error", df.Height())
+		}
+		return err
+	})
 }

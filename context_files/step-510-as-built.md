@@ -4,7 +4,8 @@
 444 of [`v0.7.2-plan.md`](./v0.7.2-plan.md) (M3; H4.5 parts 1 and 2, H2.9b), run on
 master's code before v0.8.0, as step 506 §3 says, on step 508's harness. D14 is
 decided (§3). Four allocations a forged file could make, three of them a fatal "out
-of memory" no recover catches, are fixed (§4).
+of memory" no recover catches, are fixed, and a TIME read past its day, which the
+first CI run found (§4).
 
 ## 1. What
 
@@ -14,7 +15,8 @@ of memory" no recover catches, are fixed (§4).
     `testdata/oracle/flips/`;
   - the findings' tests: `TestAPageClaimingMoreThanItsChunkIsRefusedBeforeItsBuffer`,
     `TestAChunkClaimingMoreThanItsFileIsRefused`,
-    `TestADictionaryPageClaimingMoreValuesThanItsBytesIsRefused`;
+    `TestADictionaryPageClaimingMoreValuesThanItsBytesIsRefused`,
+    `TestATimePastItsDayIsRefused`;
   - `forge_test.go`: a writer of Thrift's compact protocol and Parquet files of one
     column built whole, whose page headers or footer claim what their bytes do not
     hold. A larger claim takes more varint bytes, so a written file cannot be patched
@@ -29,7 +31,7 @@ of memory" no recover catches, are fixed (§4).
   - `ReadPagesWith`, the hook through which readfuzz swaps the page pool for a
     bounded, poisoned allocator. `pages` is a `memory.Allocator` now.
   - `boundPages` (D14, §3), `checkChunks`, `countDictionaries` with
-    `measured.watchChunks`;
+    `measured.watchChunks`, `checkTimes`;
   - `schemaFields`, a bounded walk of the footer's Arrow schema. arraysOf used arrow-go's
     IPC reader (§4).
 - **`bench/scripts/oracle/record_flips.py`**: records DuckDB's and pyarrow's outcome
@@ -43,7 +45,7 @@ of memory" no recover catches, are fixed (§4).
 | target | package | oracle | seeds | seed time |
 | --- | --- | --- | --- | --- |
 | `FuzzScanParquet` | `internal/readfuzz` | Run's outcomes. Every page buffer comes from a `fuzzcheck.Allocator` with `Poison` that refuses one request over 16 MiB + 16 bytes per input byte. If the whole frame reads on one thread, then: four threads give the same frame; a re-read into zeroed buffers gives the same frame; `Head(1)` is its first row; a `Select` of its last column is that column; a `Filter` with pruning off equals the same `Filter` of the frame in memory; with pruning on, the Filter's rows are a subsequence of those; and `Count` equals the height. `CollectSchema` equals the frame's schema, nullability included. Everything runs with `WithVerify`. | 32: the 10 `testdata/parquet` fixtures; a frame of seven types under each of the six codecs ursus writes, in row groups of 8; `tinyParquet`, `inflatedParquet` and half of it; 8 forged files (§4); 4 non-files; the fuzzer's crasher (§4, F2) | 0.09 s |
-| `FuzzOwnPagesMatchArrow` | `internal/source/parquet` | Twin readers: ursus's own page decoding (`ownPages`) against arrow-go's column reader. Each batch is rendered value by value through `ValueStr`, so a Categorical is compared by its values, not its codes. The fuzzer picks the batch size, and the same bounded, poisoned allocator is used. An input only one of the two reads is not judged: either may refuse a corruption the other does not check for. `API` is off. | 26: `writePagesFixture` at 120 rows in the nine layouts of `TestOwnPagesReadAsArrowGoDoes` (17 of the 19 seeds read both ways); the 10 fixtures; 7 forged files as corpus entries | 0.05 s |
+| `FuzzOwnPagesMatchArrow` | `internal/source/parquet` | Twin readers: ursus's own page decoding (`ownPages`) against arrow-go's column reader. Each batch is rendered value by value through `ValueStr`, so a Categorical is compared by its values, not its codes. The fuzzer picks the batch size, and the same bounded, poisoned allocator is used. An input only one of the two reads is not judged: either may refuse a corruption the other does not check for. `API` is off. | 27: `writePagesFixture` at 120 rows in the nine layouts of `TestOwnPagesReadAsArrowGoDoes` (17 of the 19 seeds read both ways); the 10 fixtures; 7 forged files as corpus entries; CI's input (F8) | 0.06 s |
 | `TestParquetByteFlipsAgainstDuckDBAndPyarrow` | `internal/readfuzz` | Each byte of two files ursus wrote is flipped (XOR 0x5A): H2's 300 rows of an Int64, a nullable Float64 and a String, one file uncompressed (5,484 bytes) and one with Snappy (3,180). Each flip is read inside Run. Where pyarrow 25.0.1 reads the original, ursus must not answer another frame. DuckDB 1.5.5 is recorded too (F5). ursus must read the original as both engines read it. | 8,664 flips | 1.0 s; every eighth offset under `-race` |
 
 Where the forged seeds come from: the plan's seeds, "a dictionary page claiming
@@ -107,6 +109,7 @@ it; nothing is excluded from it.
 | F5 | **The plan's 444 claim, and DuckDB.** DuckDB 1.5.5 reads a row group whose num_rows says 257 of its 300 rows as 257 rows, with no error, as ursus did before step 416; pyarrow 25.0.1 reads 300. H2's `flipdiff.py` had DuckDB read all 300 because it rewrote one path for every flip: DuckDB's external file cache, keyed by path and modification time, served the unflipped bytes. A first recording here showed the same thing: 293 offsets of the Snappy file changed between two runs | the num_rows byte, Snappy 3123, uncompressed 5427 | **recorded**: `record_flips.py` turns the cache off and writes a fresh path per flip, and two runs give identical output. 444's rule requires pyarrow's reading, not both engines'. Required, DuckDB would let step 416's bug back (§5, tooth G) |
 | F6 | ursus refuses five offsets per file that both engines read: step 416's checks of the file's num_rows and each chunk's num_values against the row group's | `ESS` in the tally | by design (416); not a failure |
 | F7 | arrow-go panics on corrupt footers and page headers: `schema.(*Schema).NumColumns`, `schema.getLogicalType`, a nil `DataPageHeader`'s `GetNumValues` | seen in the sweep and fuzzing | ursus refuses each cleanly, as KindIO "corrupt" (`corrupt`); Run logs them as tolerated |
+| F8 | A Parquet TIME holding a tick outside [0, 24h) was read as a Time as it lay. A Time is a time of day (dtype), and the writer refuses any other. Read in, 26:00 renders as 02:00:00, sorts after 23:00:00 and equals no 02:00:00 (data.CheckTimeRange's doc). data's boundary check, on in the targets, called the batch ursus's own bug (ErrInternal); it checks top-level columns only, so a Time inside a List read silently even there | found by **CI's first fuzz run** of `FuzzOwnPagesMatchArrow` (run 43634666391): a `writePagesFixture` seed's `tus` column, mutated, tick 116,548,294,544,194 µs at row 62. Kept unminimized, since CI's minimizing ran out of time, as `testdata/fuzz/FuzzOwnPagesMatchArrow/time-past-its-day` (47,669 bytes encoded) | **fixed**, a bug by ursus's own rule: `readBatch` refuses a Time outside its day as a corrupt value (KindValue), at the top level and inside a List, an Array or a Struct, through both decoders. `TestATimePastItsDayIsRefused` covers a forged TIME(MICROS) read both ways, and a List(Time) ursus wrote with one tick patched in place. The comparison was not too strict: the twins agreed, and the invariant fired on what both built. Arrow IPC's time64 import is step 511's, and is not checked here |
 
 Every fix is internal, adds nothing to the public API (`api -check`: 0 gone), and
 refuses only files that would otherwise end the process or allocate past their size.
@@ -134,6 +137,7 @@ from the copy, checked by md5. Never by git.
 | E | a fixed-width dictionary gather reads odd indices as even (`dict[id&^1]`) | `FuzzOwnPagesMatchArrow`, 6 seeds, "batch 0 differs"; `FuzzScanParquet` none, since it has no twin of arrow-go | **bites** (449) |
 | F | `watchChunks` not called | `TestADictionaryPageClaiming…`, `FuzzScanParquet`'s seed and the twin's corpus entry: fatal "out of memory" in `NewDictConverter` | **bites** |
 | G | step 416's row-count check not called | the flip sweep: "ursus_snappy.parquet, byte 3123 flipped: ursus answers another frame, where pyarrow reads the original (DuckDB: D)", and the uncompressed file's byte 5427. These are the plan's offsets | **bites** (444) |
+| H | `checkTimes` not called | CI's input: ErrInternal, "column "tus" (Time(us)) holds tick 116548294544194 at row 62"; `TestATimePast…`: ErrInternal for the flat TIME (Run fails it), and the List(Time) "read as 1 rows, and no error" | **bites** |
 
 ## 6. Local fuzzing
 
@@ -152,15 +156,19 @@ GOMAXPROCS=4 GOEXPERIMENT=simd GOAMD64=v3`:
 F3 and F4 were found by seeds written for the plan's edges, not by the fuzzer. F4 was
 found by the twin reading 448's forged dictionary with `ownPages` off.
 
+CI's fuzz workflow on the PR (run 43634666391) found F8 in `FuzzOwnPagesMatchArrow`,
+from the generated corpus of a 30-second run. After the fix, a local run of 20 s
+(`-fuzzminimizetime 1s`) executed 16,893 inputs and found nothing.
+
 ## 7. Checks
 
 After the last code edit, with `GOFLAGS=-p=1 GOMAXPROCS=4 GOEXPERIMENT=simd
 GOAMD64=v3`:
 
 - the touched packages: `./internal/readfuzz/` ok, 1.4 s; `./internal/source/parquet/`
-  ok, 5.1 s;
+  ok, 5.3 s;
 - `go test ./internal/...`: ok;
-- `go test .` in full: ok, 211 s;
+- `go test .` in full: ok, 223 s;
 - `GOEXPERIMENT=simd go vet ./...`: clean;
 - `go run ./internal/gen/levels`: ok;
 - `GOEXPERIMENT=simd go run ./internal/gen/api -check`: 2,481 features, 92 added and
