@@ -3,11 +3,13 @@ package ursus
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -236,7 +238,7 @@ func ScanIPCStreamFrom(streams []IPCStreamFile) *LazyFrame {
 			if err != nil {
 				return nil, uerr.Wrap(err, uerr.KindIO, "scan_ipc_stream", "opening %s", names[i])
 			}
-			return openIPCStream(names[i], rc)
+			return openIPCStream(names[i], rc, -1)
 		}
 	}
 	return scanIPCOpened("scan_ipc_stream", names, opens, describe(names), "", ipcScan{})
@@ -244,9 +246,13 @@ func ScanIPCStreamFrom(streams []IPCStreamFile) *LazyFrame {
 
 // ScanIPCStreamBytes reads an Arrow IPC stream from memory. New in 0.8.
 func ScanIPCStreamBytes(b []byte, name string) *LazyFrame {
-	return ScanIPCStreamFrom([]IPCStreamFile{{Name: name, Open: func(context.Context) (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(b)), nil
-	}}})
+	if name == "" {
+		name = "ipc stream 1"
+	}
+	open := func(context.Context) (array.RecordReader, error) {
+		return openIPCStream(name, io.NopCloser(bytes.NewReader(b)), int64(len(b)))
+	}
+	return scanIPCOpened("scan_ipc_stream", []string{name}, []recordOpener{open}, name, "", ipcScan{})
 }
 
 // fileNames are n files' names, kind and its place where one has none, or an error
@@ -285,13 +291,36 @@ func ScanIPCStream(path string) *LazyFrame {
 		if err != nil {
 			return nil, uerr.Wrap(err, uerr.KindIO, "scan_ipc_stream", "opening %s", path)
 		}
-		return openIPCStream(path, f)
+		size := int64(-1)
+		if info, err := f.Stat(); err == nil && info.Mode().IsRegular() {
+			size = info.Size()
+		}
+		return openIPCStream(path, f, size)
 	})
 }
 
-// openIPCStream reads name's IPC stream from rc, which it closes when released.
-func openIPCStream(name string, rc io.ReadCloser) (array.RecordReader, error) {
-	r, err := ipc.NewReader(rc)
+// openIPCStream reads name's IPC stream from rc, which it closes when released: of
+// size bytes, or -1 for a size not known. A message's metadata and body are allocated
+// before they are read, no larger than arrow-go's limits, 64 and 256 MiB, or than the
+// stream where its size is known; and a buffer no larger than the stream could hold
+// decompressed (arrowin.ReadMem).
+//
+// The reader is built from a message reader, which keeps the limits: ipc.NewReader
+// drops them (arrow-go v18.7.0's reader.go), and an 8 KB stream whose message
+// declared a body of 2^40 bytes ended the process, out of memory (step 511).
+func openIPCStream(name string, rc io.ReadCloser, size int64) (array.RecordReader, error) {
+	var in io.Reader = rc
+	var opts []ipc.Option
+	if size >= 0 {
+		limit := max(size, 1) // 0 is arrow-go's "no limit"
+		opts = append(opts, ipc.WithAllocator(arrowin.NewReadMem("scan_ipc_stream", size)),
+			ipc.WithMetadataSizeLimit(limit), ipc.WithBodySizeLimit(limit))
+	} else {
+		var mem *arrowin.ReadMem
+		in, mem = arrowin.NewStreamMem("scan_ipc_stream", rc)
+		opts = append(opts, ipc.WithAllocator(mem))
+	}
+	r, err := ipc.NewReaderFromMessageReader(ipc.NewMessageReader(in, opts...), opts...)
 	if err != nil {
 		rc.Close()
 		return nil, uerr.Wrap(err, uerr.KindIO, "scan_ipc_stream", "reading %s as an Arrow IPC stream", name).
@@ -328,9 +357,27 @@ func openIPCFile(op, path string) (*fileRecords, error) {
 }
 
 // openIPC reads name's IPC file from r, closing c, where it is not nil, when released
-// or refused.
-func openIPC(op, name string, r ipc.ReadAtSeeker, c io.Closer) (*fileRecords, error) {
-	fr, err := ipc.NewFileReader(r)
+// or refused. A buffer is allocated no larger than the file could hold decompressed
+// (arrowin.ReadMem). arrow-go panics on some corrupt footers, in its flatbuffers'
+// accessors: that is the file's error, and ReadIPCSchema, which no query recovers,
+// let it reach its caller (step 511).
+func openIPC(op, name string, r ipc.ReadAtSeeker, c io.Closer) (_ *fileRecords, err error) {
+	defer func() {
+		if v := recover(); v != nil {
+			if c != nil {
+				c.Close()
+			}
+			err = ipcCorrupt(v, op, name)
+		}
+	}()
+	size, err := r.Seek(0, io.SeekEnd)
+	if err != nil {
+		if c != nil {
+			c.Close()
+		}
+		return nil, uerr.Wrap(err, uerr.KindIO, op, "reading %s as an Arrow IPC file", name)
+	}
+	fr, err := ipc.NewFileReader(r, ipc.WithAllocator(arrowin.NewReadMem(op, size)))
 	if err != nil {
 		if c != nil {
 			c.Close()
@@ -339,6 +386,26 @@ func openIPC(op, name string, r ipc.ReadAtSeeker, c io.Closer) (*fileRecords, er
 			Hint("an IPC stream is ScanIPCStream's")
 	}
 	return &fileRecords{r: fr, f: c, refs: 1}, nil
+}
+
+// ipcCorrupt is v, a panic recovered opening name's IPC file, as the error of
+// whoever's code raised it, as Parquet's corrupt rules: arrow-go's, reading the
+// file, KindIO; ursus's own, ursus's bug.
+func ipcCorrupt(v any, op, name string) *uerr.Error {
+	e := uerr.Attributed(v, uerr.KindIO, op, "%s is corrupt, or uses something arrow-go cannot read", name)
+	var p *uerr.PanicError
+	if !errors.As(e, &p) {
+		return e
+	}
+	for _, fn := range p.Callers {
+		switch {
+		case strings.HasPrefix(fn, "github.com/apache/arrow-go/"):
+			return e
+		case strings.HasPrefix(fn, "github.com/advenn/ursus"):
+			return uerr.FromPanic(v, op)
+		}
+	}
+	return e
 }
 
 // fileRecords walks an IPC file's record batches as a RecordReader.
