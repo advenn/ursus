@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("x\n01/02/2020\n12/31/2021\n")
+byte('\x01')
+byte('\u0080')

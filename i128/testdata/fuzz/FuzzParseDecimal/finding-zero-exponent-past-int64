@@ -1,0 +1,4 @@
+go test fuzz v1
+string("0e9223372036854775808")
+byte('%')
+byte('\x02')

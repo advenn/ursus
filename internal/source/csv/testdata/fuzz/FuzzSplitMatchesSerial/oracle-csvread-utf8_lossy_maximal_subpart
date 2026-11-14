@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("a\n\xe2\x82A\n")
+byte('\n')
+byte('\x00')
