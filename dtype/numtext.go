@@ -1,6 +1,7 @@
 package dtype
 
 import (
+	"math"
 	"math/bits"
 	"strconv"
 	"strings"
@@ -28,6 +29,11 @@ func ParseFloat(s string, bits int) (float64, error) {
 	}
 	if !floatSyntax(s) {
 		return 0, &strconv.NumError{Func: "ParseFloat", Num: s, Err: strconv.ErrSyntax}
+	}
+	// strconv reads a sign before inf and infinity, not before nan: "-nan" was refused,
+	// though the grammar above has it and Polars' cast reads it as NaN (step 509).
+	if len(s) == 4 && (s[0] == '+' || s[0] == '-') && strings.EqualFold(s[1:], "nan") {
+		return math.NaN(), nil
 	}
 	return strconv.ParseFloat(s, bits)
 }

@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("f\n1.50e0\n1.00e-1\n1.00e20\n")
+byte('\x01')
+byte('\x00')
