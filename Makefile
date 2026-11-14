@@ -66,9 +66,11 @@ test-all: test-widths
 FUZZ     ?= FuzzEvery
 PKG      ?= ./dtype/
 FUZZTIME ?= 60s
+# Each new input is minimised for at most this long, as fuzz.yml does (step 516).
+FUZZMIN  ?= 5s
 .PHONY: fuzz fuzz-list
 fuzz:
-	$(GO) test -run '^$$' -fuzz '^$(FUZZ)$$' -fuzztime $(FUZZTIME) $(PKG)
+	$(GO) test -run '^$$' -fuzz '^$(FUZZ)$$' -fuzztime $(FUZZTIME) -fuzzminimizetime $(FUZZMIN) $(PKG)
 
 fuzz-list:
 	$(GO) run ./internal/gen/fuzzlist
