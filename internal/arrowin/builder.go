@@ -1026,5 +1026,5 @@ func (b *structBuilder) finish(name string) (*data.Column, error) {
 		}
 		cols[k] = c
 	}
-	return data.NewStruct(name, cols, b.valid.finish(b.n)), nil
+	return data.NewStructLen(name, b.n, cols, b.valid.finish(b.n)), nil
 }

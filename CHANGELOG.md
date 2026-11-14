@@ -398,6 +398,14 @@ its section below lists them.
   arrived or its bytes have doubled: 12 ms for that field. A record whose end has
   arrived is still returned without another read, and the records, errors and limits
   are the same.
+- **A Struct of no fields keeps its rows** (518): a JSON or NDJSON object field
+  holding `{}`, Polars' `Struct({})`, failed the whole read with an internal error,
+  "batch declares 1 rows but its columns hold 0", as a struct took its length from its
+  first field. It reads now as a `Struct()` column, `{}` or null a row, as Polars 2.1
+  reads it, and keeps its rows through filters, sorts, joins, concatenation, group-by,
+  spilling and the IPC and JSON writers; an IPC file holding one reads, and it is a
+  key. Parquet and CSV refuse it cleanly, as Polars does. CI's fuzzing of `ScanJSON`
+  and `ScanNDJSON` found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

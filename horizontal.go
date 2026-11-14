@@ -54,6 +54,10 @@ func ConcatStr(sep string, exprs ...Expr) Expr {
 // query is refused; alias one. The struct itself is never null: a row whose values
 // are all null is a struct of nulls, which StructExpr's doc tells apart from a null
 // struct. The answer is named after the first expression.
+//
+// With no expression it is refused, as Polars' pl.struct() refuses it. A Struct of no
+// fields, Polars' Struct({}), is what a JSON object field holding {} reads as, and
+// Col(name).Str().JsonDecode(StructOf()) builds one from {} texts.
 func Struct(exprs ...Expr) Expr {
 	if len(exprs) == 0 {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindSchema, "struct",

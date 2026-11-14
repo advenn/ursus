@@ -49,7 +49,9 @@ GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
           "having", "grouphead", "generate",
           # step 500, aggregates and windows
           "aggwindow_byhand", "aggstats", "aggpair", "agglists", "argsort", "hist", "search", "seq", "modeagg", "ewmmore",
-          "window172", "windownest", "rollingby", "rollingoffset", "rollingquantile", "rollmap", "exprroll", "cumeval", "topk_agg"]
+          "window172", "windownest", "rollingby", "rollingoffset", "rollingquantile", "rollmap", "exprroll", "cumeval", "topk_agg",
+          # step 518, a Struct of no fields
+          "emptystruct"]
 
 
 @dataclass

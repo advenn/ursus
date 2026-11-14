@@ -283,14 +283,11 @@ func typeOf(at arrow.DataType) (dtype.DataType, error) {
 // structOf maps a struct's fields. Every field is nullable, for the reason Schema
 // gives, and because data.NewStruct forces it — so a declared non-nullable field
 // would make the schema disagree with the column the builder produces.
+//
+// A struct of no fields is one (step 518), Polars' Struct({}), as an IPC file of a
+// JSON read of {} holds it: a struct column carries its own length since then, where
+// it took it from its first field and this refused one of none.
 func structOf(afs []arrow.Field, at arrow.DataType) (dtype.DataType, error) {
-	// data.NewStruct takes its length from its first field. A struct with none would
-	// report zero rows whatever its length, and as a frame's only column, an empty
-	// frame.
-	if len(afs) == 0 {
-		return dtype.Null, uerr.New(uerr.KindUnsupported, op,
-			"%s has no fields, and ursus cannot represent a struct without one", at)
-	}
 	fields := make([]dtype.Field, 0, len(afs))
 	seen := make(map[string]bool, len(afs))
 	for _, f := range afs {

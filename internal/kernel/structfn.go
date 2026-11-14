@@ -68,7 +68,7 @@ func StructCall(fn expr.CallFn, name string, c *data.Column, args []any) (*data.
 			}
 			fields[i] = f.Rename(to)
 		}
-		return data.NewStruct(name, fields, c.Validity()), nil
+		return data.NewStructLen(name, c.Len(), fields, c.Validity()), nil
 
 	case expr.FnStructSelectFields:
 		// The fields named, in their order, the struct's validity kept: a null struct
@@ -85,7 +85,7 @@ func StructCall(fn expr.CallFn, name string, c *data.Column, args []any) (*data.
 			}
 			fields[i] = f
 		}
-		return data.NewStruct(name, fields, c.Validity()), nil
+		return data.NewStructLen(name, c.Len(), fields, c.Validity()), nil
 
 	case expr.FnStructDropFields:
 		// The fields not named, in their order, the struct's validity kept: a null
@@ -105,7 +105,7 @@ func StructCall(fn expr.CallFn, name string, c *data.Column, args []any) (*data.
 				fields = append(fields, f)
 			}
 		}
-		return data.NewStruct(name, fields, c.Validity()), nil
+		return data.NewStructLen(name, c.Len(), fields, c.Validity()), nil
 
 	case expr.FnStructJSONEncode:
 		return JSONEncode(name, c)

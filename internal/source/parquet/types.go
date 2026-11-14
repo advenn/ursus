@@ -334,9 +334,10 @@ func toNode(f dtype.Field) (schema.Node, error) {
 			schema.NewTimeLogicalType(false, u), phys, -1, -1)
 
 	default:
-		// Duration stays refused ON PURPOSE rather than for lack of work: arrow-go's
-		// IntervalLogicalType.toThrift panics outright, so there is no route through
-		// this library at all. Enum is simply not written yet.
+		// Duration stays refused ON PURPOSE rather than for lack of work: Parquet has
+		// no Duration logical type, and its INTERVAL, of months, days and
+		// milliseconds, is another type, so there is no faithful route. Enum is simply
+		// not written yet.
 		return nil, uerr.New(uerr.KindUnsupported, "sink_parquet",
 			"cannot write column %q of type %s to Parquet", f.Name, f.Type).
 			Hint("supported: Bool, the integer and float types, Int128, Decimal, " +
@@ -356,7 +357,17 @@ func toNode(f dtype.Field) (schema.Node, error) {
 // list of structs, a struct holding either — is refused by name, as the reader
 // refuses to read it: a writer whose output its own reader rejects is worse than one
 // that says so.
+//
+// A Struct of no fields, at any depth, is refused first, as Polars refuses it (step
+// 518): it would be a group of no columns, which Parquet has not, and no leaf would
+// carry its rows.
 func nestedNode(f dtype.Field) (schema.Node, error) {
+	if holdsEmptyStruct(f.Type) {
+		return nil, uerr.New(uerr.KindUnsupported, "sink_parquet",
+			"cannot write column %q of type %s to Parquet: a Struct of no fields would be a group of no columns, "+
+				"which Parquet has not", f.Name, f.Type).
+			Hint("give the struct a field, or drop the column")
+	}
 	refuse := func() error {
 		return uerr.New(uerr.KindUnsupported, "sink_parquet",
 			"cannot write column %q of type %s to Parquet yet", f.Name, f.Type).
@@ -400,12 +411,31 @@ func nestedNode(f dtype.Field) (schema.Node, error) {
 	return schema.NewGroupNode(f.Name, parquet.Repetitions.Optional, fields, -1)
 }
 
+// holdsEmptyStruct reports whether dt is a Struct of no fields or holds one, in a
+// field or as a list's element.
+func holdsEmptyStruct(dt dtype.DataType) bool {
+	switch {
+	case dt.ID() == dtype.TypeStruct:
+		if len(dt.Fields()) == 0 {
+			return true
+		}
+		for _, f := range dt.Fields() {
+			if holdsEmptyStruct(f.Type) {
+				return true
+			}
+		}
+	case dt.IsListLike():
+		return holdsEmptyStruct(dt.Inner())
+	}
+	return false
+}
+
 // parquetTimeUnit maps a ursus TimeUnit onto Parquet's three.
 //
-// Parquet has no SECOND resolution, and arrow-go's createTimeUnit does not return an
-// error for one — it PANICS. dtype.Second is ursus's zero value, so
-// `Datetime(Second, "")` is trivially constructible and would take the sink down.
-// This is the guard; the refusal below it is what the user sees instead.
+// Parquet has no SECOND resolution, and a unit it does not have must not reach the
+// schema builder. dtype.Second is ursus's zero value, so `Datetime(Second, "")` is
+// trivially constructible. This is the guard; the refusal below it is what the user
+// sees instead.
 func parquetTimeUnit(u dtype.TimeUnit) (schema.TimeUnitType, bool) {
 	switch u {
 	case dtype.Milli:

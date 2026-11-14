@@ -290,7 +290,7 @@ func strStruct(fn expr.CallFn, name string, out dtype.DataType, c *data.Column, 
 	if fn == expr.FnStrExtractGroups {
 		structValid = valid
 	}
-	return data.NewStruct(name, cols, structValid), nil
+	return data.NewStructLen(name, n, cols, structValid), nil
 }
 
 // titlecase is s with each letter that follows a character not a letter title case

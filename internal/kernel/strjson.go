@@ -415,7 +415,7 @@ func jsonColumn(name string, dt dtype.DataType, vals []*jsonValue) (*data.Column
 			}
 			cols[k] = col
 		}
-		return data.NewStruct(name, cols, valid.Finish()), nil
+		return data.NewStructLen(name, n, cols, valid.Finish()), nil
 	case dt.ID() == dtype.TypeBool:
 		bits := bitmap.NewBuilder(n)
 		for _, v := range vals {
