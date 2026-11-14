@@ -265,6 +265,15 @@ that stops when its request is cancelled.
   recorded. Six refusals ursus means, where Polars answers, are `TestCondRefusals`' and
   `TestDecimalGuards`', and two float extremes `TestAggregatesAtTheFloatsEnds`', held
   to math/big; those eight cases left the recordings.
+- **Fuzz targets for the Parquet reader, and a byte-flip sweep** (510):
+  `FuzzScanParquet` reads any bytes through the public API with every page buffer
+  from a bounded, poisoned allocator, and checks four threads, a read into zeroed
+  buffers, `Head`, `Select`, a `Filter` with pruning on and off, and `Count` against
+  the whole frame; `FuzzOwnPagesMatchArrow` checks the reader's own page decoding
+  against arrow-go's, batch for batch. Every byte of two files ursus wrote is
+  flipped and read, and ursus must read the original wherever pyarrow 25.0.1 does,
+  from DuckDB's and pyarrow's outcomes recorded once by
+  `bench/scripts/oracle/record_flips.py` into `testdata/oracle/flips`.
 
 ### Fixed
 
