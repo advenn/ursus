@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"testing"
 
 	"github.com/klauspost/compress/gzip"
@@ -147,6 +148,20 @@ func csvOptions(opts uint32) (o []ursus.CSVOption, batch int) {
 
 // sameError: both nil, or both errors of the same text.
 func sameError(a, b error) bool { return fmt.Sprint(a) == fmt.Sprint(b) }
+
+// readNear is the line a read error is reported near. A compressed stream's error
+// surfaces when the decoder reaches the corrupt block, and klauspost's Zstandard
+// decoder decodes blocks ahead on goroutines of its own, so whether the text before
+// that block reached the scanner first depends on timing and on how the bytes
+// arrived: a stream read whole and read in chunks can report the same error near
+// different lines. Found by CI's fuzzing of step 509.
+var readNear = regexp.MustCompile(`reading near line [0-9]+`)
+
+// sameReadError is sameError, the line a read error is reported near aside.
+func sameReadError(a, b error) bool {
+	return readNear.ReplaceAllString(fmt.Sprint(a), "reading near line N") ==
+		readNear.ReplaceAllString(fmt.Sprint(b), "reading near line N")
+}
 
 // FuzzScanCSV: any bytes, read as a CSV file through the public API under options from
 // opts (csvOptions), are a frame or an error, inside fuzzcheck's limits, each read.
@@ -298,7 +313,7 @@ func FuzzScanCSVChunked(f *testing.F) {
 			}}).Collect(ctx)
 			return cerr
 		})
-		if !sameError(werr, cerr) {
+		if !sameReadError(werr, cerr) {
 			t.Fatalf("read whole: %v\nread in chunks: %v", werr, cerr)
 		}
 		if werr == nil {
