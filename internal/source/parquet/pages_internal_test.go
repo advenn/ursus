@@ -40,7 +40,7 @@ func present(nulls string, i int) bool {
 	return true
 }
 
-func pagesNode(t *testing.T, name string, rep parquet.Repetition, lt schema.LogicalType,
+func pagesNode(t testing.TB, name string, rep parquet.Repetition, lt schema.LogicalType,
 	pt parquet.Type) schema.Node {
 	t.Helper()
 	n, err := schema.NewPrimitiveNodeLogical(name, rep, lt, pt, -1, -1)
@@ -51,7 +51,7 @@ func pagesNode(t *testing.T, name string, rep parquet.Repetition, lt schema.Logi
 }
 
 // typed builds a column whose row i holds val(i), written through writer W.
-func typed[V any](t *testing.T, name string, optional bool, lt schema.LogicalType, pt parquet.Type,
+func typed[V any](t testing.TB, name string, optional bool, lt schema.LogicalType, pt parquet.Type,
 	nulls string, val func(i int) V,
 	wb func(cw file.ColumnChunkWriter, vals []V, defs []int16) error) pagesCol {
 	rep := parquet.Repetitions.Required
@@ -92,7 +92,7 @@ func writeBatch[W interface {
 
 // writePagesFixture writes rows rows of every type the reader decodes from its
 // pages, in row groups of 1,700, under props.
-func writePagesFixture(t *testing.T, path string, rows int, nulls string, props ...parquet.WriterProperty) {
+func writePagesFixture(t testing.TB, path string, rows int, nulls string, props ...parquet.WriterProperty) {
 	t.Helper()
 	words := []string{"AIR", "AIR REG", "DELIVER IN PERSON", "", "MAIL", "TRUCK", "é漢字", "x"}
 	opt, req := true, false
