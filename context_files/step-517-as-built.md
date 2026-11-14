@@ -221,8 +221,9 @@ GOAMD64=v3`:
 
 - the touched packages: `./internal/readfuzz/` ok, 1.7 s; `./internal/source/parquet/`
   ok, 6.5 s;
-- `go test ./internal/...`: ok, 28 packages, under the lock;
-- `go test .` in full: ok, 267 s, under the lock;
+- `go test ./internal/...`: ok, 28 packages, under the lock, and again once master
+  (steps 511 and 516, #66 and #67) was merged in;
+- `go test .` in full: ok, 267 s, under the lock; 208 s after the merge;
 - `GOEXPERIMENT=simd go vet ./...`: clean;
 - `go run ./internal/gen/levels`: ok;
 - `GOEXPERIMENT=simd go run ./internal/gen/api -check`: 2,481 features, 92 added and
