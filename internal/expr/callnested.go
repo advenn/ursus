@@ -88,13 +88,11 @@ func structCallOut(c *Call, in dtype.DataType) (dtype.DataType, error) {
 		// MatchToSchema's: a struct of the fields named, in their order, the others
 		// dropped. A null struct stays null, as a cast keeps it. No method of Polars'
 		// answers so; with_fields keeps every field, and field gives columns.
+		// No name at all is a struct of no fields, which keeps its rows since step 518:
+		// MatchToSchema's of a schema's Struct().
 		names, err := callFieldNames(c, "struct")
 		if err != nil {
 			return dtype.Null, err
-		}
-		if len(names) == 0 {
-			// A struct of no fields has no length of its own to keep.
-			return dtype.Null, uerr.New(uerr.KindSchema, "struct", "%s names no field", c.Fn)
 		}
 		have := make(map[string]dtype.DataType, len(in.Fields()))
 		for _, f := range in.Fields() {

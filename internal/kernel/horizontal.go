@@ -214,7 +214,7 @@ func structOf(name string, out dtype.DataType, ops []*data.Column, n int) (*data
 		}
 		children[i] = c.Rename(fields[i].Name)
 	}
-	return data.NewStruct(name, children, bitmap.AllSet(n)), nil
+	return data.NewStructLen(name, n, children, bitmap.AllSet(n)), nil
 }
 
 // withFields is struct.with_fields (step 171): the first operand's struct with each
@@ -250,7 +250,7 @@ func withFields(name string, out dtype.DataType, ops []*data.Column, n int) (*da
 		}
 		children[i] = c.Rename(f.Name)
 	}
-	return data.NewStruct(name, children, recv.Validity()), nil
+	return data.NewStructLen(name, n, children, recv.Validity()), nil
 }
 
 // stringTooLong refuses a String column longer than its 32-bit offsets reach.
