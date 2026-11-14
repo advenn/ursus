@@ -393,6 +393,15 @@ its section below lists them.
 - **A `\r` that ends a CSV's input ends its line** (509), as `encoding/csv` and
   Polars 2.1 read it: `a,b\r` read the field `b\r`, `"a","b"\r` was refused, and a
   last line of only `\r` was a value where it is a blank line.
+- **A long CSV record arriving in small reads is scanned in linear time** (515): the
+  scanner parsed a record from its first byte after every read, and a stream's read
+  brings what it brings, not a buffer's worth, so a record of 1 MiB sent 1 KiB a read
+  was parsed 1,024 times, 513 times its bytes; a quoted field of 2 MiB took 1.5 s. A
+  service reading CSV from a slow peer paid quadratic CPU for it. The scanner follows
+  each new byte once now and asks its parser again only when the record's end has
+  arrived or its bytes have doubled: 12 ms for that field. A record whose end has
+  arrived is still returned without another read, and the records, errors and limits
+  are the same.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
