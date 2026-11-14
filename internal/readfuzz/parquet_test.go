@@ -433,3 +433,35 @@ func TestATimePastItsDayIsRefused(t *testing.T) {
 		return err
 	})
 }
+
+// TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt (step 517): a data page
+// of a dictionary of two values whose indices say 2^30, in an RLE run and in a
+// bit-packed one, in each kind of column chunk arrow-go's column reader decodes
+// (pqIndexKinds). An index is checked against its dictionary before anything is sized
+// by it: each is refused as corrupt, an I/O error naming the index past its
+// dictionary, before the page is decoded, within the harness's bounds.
+//
+// What no reader refuses, each read as the PLAIN pages of the values its indices
+// pick: indices in the dictionary at a bit width wider than two values need; a
+// bit-packed run whose padding, past the page's last value, holds 2^30; and a
+// dictionary page, a page of its indices, and a PLAIN page after them, as a writer
+// whose dictionary grew too large falls back.
+func TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt(t *testing.T) {
+	t.Skip("finding: a dictionary index past its dictionary is not refused before it is read; " +
+		"a fix needs every chunk read through a page reader ursus checks (step 510)")
+	dict := binary.LittleEndian.AppendUint64(binary.LittleEndian.AppendUint64(nil, 7), 9)
+	idx := binary.AppendUvarint([]byte{31}, 5<<1)
+	idx = binary.LittleEndian.AppendUint32(idx, 1<<30)
+	pages := []pqPage{
+		{typ: pqPageDict, values: 2, encoding: pqPlain, body: dict},
+		{typ: pqPageData, values: 5, encoding: pqRLEDict, body: idx},
+	}
+	b := pqForged{phys: pqInt64, rows: 5, pages: pages, encs: []int32{pqDeltaBinary}}.bytes()
+	fuzzcheck.Run(t, limits(len(b)), func() error {
+		df, err := ursus.ScanParquetBytes(b, "forged.parquet").Collect(t.Context())
+		if err == nil {
+			t.Errorf("index 2^30 of a dictionary of 2: read as %d rows, and no error", df.Height())
+		}
+		return nil
+	})
+}
