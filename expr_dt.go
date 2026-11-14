@@ -278,8 +278,9 @@ func (d DtExpr) OffsetBy[T Span | Expr](by T) Expr {
 //
 // The grid is Truncate's, in both spellings, and nearer is measured in elapsed time:
 // the middle of February 2024 is 2024-02-15T12:00, and the middle of a 23-hour day
-// 11:30 after its start. A Time is refused, because it can round up to 24:00, which
-// it cannot hold.
+// 11:30 after its start. Polars 2.1 rounds a month otherwise, adding fourteen days
+// and truncating, so 2024-01-17 rounds down there and up here. A Time is refused,
+// because it can round up to 24:00, which it cannot hold.
 func (d DtExpr) Round[T Span](every T) Expr {
 	iv := span(every)
 	if err := iv.Err(); err != nil {

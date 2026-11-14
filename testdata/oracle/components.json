@@ -1844,7 +1844,7 @@
     }
    },
    "name": "business_day_count_reversed",
-   "note": "a finding: with the end before the start, Polars counts minus the business days in (end, start], numpy's rule, so a Monday back to the Saturday before is -1; ursus counts those in [end, start), 0 there (its doc)",
+   "note": "spelled to ursus's documented rule (step 507): with the end before the start, BusinessDayCount is minus the business days in [end, start), 0 from a Monday back to the Saturday before; Polars counts those in (end, start], numpy's rule, -1 there, so it is asked minus the count from end to start",
    "order": "rows",
    "want": {
     "columns": [
@@ -1852,9 +1852,9 @@
       "dtype": "Int32",
       "name": "s",
       "values": [
+       0,
+       0,
        -1,
-       0,
-       0,
        -1,
        -1,
        -5,

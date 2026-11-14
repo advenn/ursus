@@ -122,7 +122,9 @@ func TestIntegerMeanIsExact(t *testing.T) {
 // TestAggregatesAtTheFloatsEnds is A2 and A5: a quantile at an exact rank is that
 // value and nothing overflows, where Polars 2.1 answers +Inf for the median of
 // [-1.7e308, 1.7e308] (lo + (hi - lo)/2) and the midpoint of [1e308, 1.5e308]
-// ((lo + hi)/2), and NaN for the variance of [1e308, 1e308]. Held to math/big: the
+// ((lo + hi)/2), and NaN for the variance of [1e308, 1e308]; ursus's answer stands
+// (feature-gaps.md §9), and since step 507 this is the oracle of the first two, the
+// recorded cases median_extremes and midpoint_huge that were. Held to math/big: the
 // exact midpoint and variance of pairs drawn across the float's range, rounded once
 // to float64, +Inf where the exact value is past it; a finite value within four ulps,
 // lo + (hi - lo)/2 rounding twice, and 0 and +Inf to the bit.

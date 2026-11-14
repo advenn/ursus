@@ -5,8 +5,12 @@ one, so their last bits part. A mode's order over the frame is Polars' hash tabl
 so those cases are sets; by group, Polars' maintain_order gives the order the values
 first appear, and its list.sort the sorted order ursus gives without it.
 
-Not here: a one-value group's raw entropy, 0.0 in Polars 2.1 and −x·ln x here, which
-the Go registry skips as a finding; the four-thread merge and the refusals.
+Spelled to ursus's documented rules (step 507, feature-gaps §9): the moments of large
+values close together, which ursus takes of the values shifted by the first (Skew's
+doc) where Polars 2.1's float mean at 1e9 loses seven digits, asked of Polars as the
+moments of x less its first; and the raw entropy by group, −Σ x·ln x of every group
+here (Entropy's doc), where Polars 2.1 answers 0.0 for a group of one value, asked of
+Polars as that sum. Not here: the four-thread merge and the refusals.
 """
 
 from __future__ import annotations
@@ -62,8 +66,11 @@ SMALL = {
     "nan_min": x.nan_min(), "approx_n_unique": i.approx_n_unique().cast(pl.Int64), "dot": x.dot(y),
 }
 ZERO_SKEW = dict(float="rel:1e-12 abs:1e-15", note="symmetric values: exactly 0 in Polars' two passes, a rounding's 1e-16 in ursus's one")
-INEXACT = dict(float="rel:1e-12", note="Polars 2.1 takes a float mean at 1e9 and loses seven digits of the skew; ursus shifts by the first value: "
-                                      "a finding, skipped, held to an exact big.Float in the Go test")
+INEXACT = dict(float="rel:1e-12", note="spelled to ursus's documented rule (step 507): the moments are taken of the values shifted by the "
+                                      "first; Polars 2.1 takes a float mean at 1e9 and loses seven digits of the skew, so it is asked the "
+                                      "moments of x less its first; the Go test holds them to an exact big.Float besides; rel:1e-12, "
+                                      "Polars' two passes against ursus's one")
+SHIFTED = x - x.first()
 ENTROPIES = {"entropy": x.entropy(math.e, normalize=True), "entropy_bits": x.entropy(2, normalize=True),
              "spearman": pl.corr(x, y, method="spearman")}
 TOL = dict(float="rel:1e-12", note="Polars' two passes against ursus's one, merged: the last bits part")
@@ -88,8 +95,9 @@ def cases() -> list[Case]:
              note="the unbiased kurtosis below 4 values is null"),
         case("skew_one_value_not_null_by_g", STATS, by_g(x.skew(bias=True).is_null()), note="the skew of one value is NaN, not null"),
         case("skew_ints", STATS, sel(i.skew(bias=True)), **TOL),
-        case("skew_near_1e9", f64(1e9 + 1, 1e9 + 2, 1e9 + 4), sel(x.skew(bias=True)), **INEXACT),
-        case("moments_far_2000", far2000(), sel(x.skew(bias=True), x.kurtosis(fisher=False, bias=True).alias("k")), **INEXACT),
+        case("skew_near_1e9", f64(1e9 + 1, 1e9 + 2, 1e9 + 4), sel(SHIFTED.skew(bias=True)), **INEXACT),
+        case("moments_far_2000", far2000(), sel(SHIFTED.skew(bias=True), SHIFTED.kurtosis(fisher=False, bias=True).alias("k")),
+             **INEXACT),
         case("moments_all_null", typed([None, None], pl.Float64), sel(x.skew(bias=True), x.kurtosis(fisher=True, bias=True).alias("k"))),
         case("skew_nan", f64(1, nan, 3), sel(x.skew(bias=True))),
         # --- the bitwise and small aggregates ----------------------------------------------
@@ -111,8 +119,9 @@ def cases() -> list[Case]:
         *[case(f"{name}_all", STATS, sel(e.alias("r")), **TOL) for name, e in ENTROPIES.items()],
         *[case(f"{name}_by_g", STATS, by_g(e.alias("r")), **TOL) for name, e in ENTROPIES.items()],
         case("entropy_raw_all", STATS, sel(x.entropy(math.e, normalize=False)), **TOL),
-        case("entropy_raw_by_g", STATS, by_g(x.entropy(math.e, normalize=False)), float="rel:1e-12",
-             note="Polars 2.1's raw entropy of a one-value group is 0.0, where -x ln x is -8.05: a finding, skipped"),
+        case("entropy_raw_by_g", STATS, by_g((-(x * x.log()).sum()).alias("x")), float="rel:1e-12",
+             note="spelled to ursus's documented rule (step 507): the raw entropy is -sum(x ln x) of every group, -5 ln 5 for "
+                  "[5]; Polars 2.1's entropy answers 0.0 for one value, so it is asked the sum; rel:1e-12, a merge's last bits"),
         case("entropy_ints", STATS, sel(i.entropy(math.e, normalize=True)), **TOL),
         case("entropy_zero", f64(0, 1, 3), sel(x.entropy(math.e, normalize=True)), note="0 ln 0 is NaN"),
         case("entropy_negative", f64(-1, 1, 3), sel(x.entropy(math.e, normalize=True))),

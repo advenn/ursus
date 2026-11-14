@@ -21,10 +21,8 @@ func init() {
 	reg := map[string]oracleQuery{
 		"float_specials_to_bool": sel(c("f64").Cast(ursus.Bool), c("f32").Cast(ursus.Bool)),
 		"bool_to_decimal":        sel(b.Cast(ursus.Decimal(10, 2))),
-		// CanCast refuses a Decimal to a Boolean and the kernel with it
-		// (castbool_test.go's TestDecimalCastDivergenceIsClosed: a truth value is not
-		// an amount); Polars 2.1 casts one, true where it is not zero.
-		"decimal_to_bool":     oracleFinding("a Decimal cast to a Boolean is refused here; Polars 2.1 answers true where it is not zero"),
+		// A Decimal cast to a Boolean, which Polars 2.1 answers, is refused here on
+		// purpose (a truth value is not an amount): TestDecimalGuards (step 507).
 		"gen_numbers_to_bool": sel(ursus.All().Cast(ursus.Bool)),
 	}
 	var toNumbers []ursus.Expr

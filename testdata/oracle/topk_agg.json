@@ -93,7 +93,7 @@
     }
    },
    "name": "top_k_ints",
-   "note": "Polars 2.1 keeps nulls as the least: [7, null] and [null, null]; skipped here, a finding",
+   "note": "spelled to ursus's documented rule (step 507): TopK skips nulls, a shorter list and null when none; Polars 2.1 keeps them as the least values, [7, null] and [null, null], so it is asked of the values without their nulls, an empty list made null",
    "order": "rows",
    "want": {
     "columns": [
@@ -115,13 +115,9 @@
         5
        ],
        [
-        7,
-        null
+        7
        ],
-       [
-        null,
-        null
-       ]
+       null
       ]
      }
     ]
@@ -220,7 +216,7 @@
     }
    },
    "name": "bottom_k_ints",
-   "note": "as top_k_ints: a finding",
+   "note": "spelled to ursus's documented rule (step 507): TopK skips nulls, a shorter list and null when none; Polars 2.1 keeps them as the least values, [7, null] and [null, null], so it is asked of the values without their nulls, an empty list made null",
    "order": "rows",
    "want": {
     "columns": [
@@ -242,13 +238,9 @@
         5
        ],
        [
-        7,
-        null
+        7
        ],
-       [
-        null,
-        null
-       ]
+       null
       ]
      }
     ]
@@ -724,7 +716,7 @@
     }
    },
    "name": "top_k_decimals",
-   "note": "as top_k_ints: a finding",
+   "note": "spelled to ursus's documented rule (step 507): TopK skips nulls, a shorter list and null when none; Polars 2.1 keeps them as the least values, [7, null] and [null, null], so it is asked of the values without their nulls, an empty list made null",
    "order": "rows",
    "want": {
     "columns": [
@@ -744,17 +736,12 @@
        [
         "900",
         "500",
-        "100",
-        null
+        "100"
        ],
        [
-        "700",
-        null
+        "700"
        ],
-       [
-        null,
-        null
-       ]
+       null
       ]
      }
     ]

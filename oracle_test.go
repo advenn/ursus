@@ -11,8 +11,12 @@ package ursus_test
 // to NaN, -0 apart from 0) unless the case says why a tolerance, relative ("rel:1e-12"),
 // absolute ("abs:1e-15") or both.
 //
-// A case whose answer ursus gives on purpose otherwise is named in oracleDifferences
-// with its reason, and the test asserts ursus's documented answer instead.
+// A case whose answer ursus gives on purpose otherwise (feature-gaps.md §9) is asked
+// of Polars spelled so that Polars computes ursus's documented rule, or its want is
+// computed by Python's own semantics, each saying so in its note; or it is named in
+// oracleDifferences with its reason, and the test asserts ursus's documented answer
+// instead. Every case is asserted: a difference found and not meant is fixed, one
+// meant is documented, and none is skipped (step 507 closed the last 25 findings).
 //
 // The format's types are spelled as ursus prints them (dtype.DataType.String()); the
 // values are JSON: integers as numbers, an Int128 and a Decimal's unscaled integer as
@@ -180,17 +184,6 @@ func (in oracleInputs) eager(df *ursus.DataFrame, err error) *ursus.LazyFrame {
 
 // oracleQuery is ursus's spelling of one recorded question.
 type oracleQuery = func(in oracleInputs) *ursus.LazyFrame
-
-// oracleFinding is the registry's entry for a case recorded and not asserted: ursus
-// answers otherwise than Polars 2.1.0, the difference is documented nowhere, and it is
-// the maintainer's to decide (a wave's record lists it under Found). The test skips
-// it, naming the finding.
-func oracleFinding(what string) oracleQuery {
-	return func(in oracleInputs) *ursus.LazyFrame {
-		in.t.Skip("a finding, not asserted: " + what)
-		return nil
-	}
-}
 
 // oracleGroups is the registry: a group's name, as its JSON file is named, to its
 // cases' names and ursus's spelling of each. Each oracle_<group>_test.go fills its

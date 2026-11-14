@@ -287,7 +287,7 @@
     }
    },
    "name": "combine_zoned_ny",
-   "note": "a finding: 22:00 on the 11th in New York is 02:00 on the 12th in UTC; Polars combines the 12th, ursus the 11th, the day on New York's wall clock",
+   "note": "spelled to ursus's documented rule (step 507): Combine reads a zoned day on its wall clock, so 22:00 on the 11th in New York with 13:15 is the 11th; Polars reads the day in UTC, the 12th, so it is asked on the wall clock, the zone replaced by none, combined and put back",
    "order": "rows",
    "want": {
     "columns": [
@@ -295,7 +295,7 @@
       "dtype": "Datetime(ns, America/New_York)",
       "name": "ts",
       "values": [
-       1710263700000000000
+       1710177300000000000
       ]
      }
     ]

@@ -5,8 +5,10 @@ package ursus_test
 // each data answer is Polars 2.1.0's, recorded in testdata/oracle/io_byhand.json by
 // bench/scripts/oracle/io_byhand.py and spelled in oracle_io_byhand_test.go. What
 // stays here is a Go API's answer and the rule ursus alone has: i128.Parse's
-// overflow, and I22, a frame with rows and no columns refused by the writers, and one
-// with neither written as nothing, where Polars writes a bare newline.
+// overflow, and I22, a frame with rows and no columns refused by the writers. One with
+// neither is written as nothing, where Polars writes a bare newline: the recorded
+// i22_no_rows_no_columns_written asserts it since step 507, asked of Polars without a
+// header.
 
 import (
 	"bytes"
@@ -85,7 +87,6 @@ func refusal(df *ursus.DataFrame, err error, kind error, words ...string) string
 }
 
 func TestIOByHand(t *testing.T) {
-	c := ursus.Col
 	ints := func(name string, v []int64) *ursus.LazyFrame { return ursus.Frame(ursus.Values(name, v)) }
 
 	cases := []ioCase{
@@ -108,15 +109,6 @@ func TestIOByHand(t *testing.T) {
 			var b bytes.Buffer
 			err := ints("a", []int64{1, 2, 3}).Select().WriteParquet(t.Context(), &b)
 			return refusal(nil, err, ursus.ErrValue, "3 rows")
-		}},
-		// Polars 2.1 writes a bare newline for it (the oracle's
-		// i22_no_rows_no_columns_written, a finding); nothing is written here.
-		{"I22 a frame with no rows and no columns writes an empty CSV", func(t *testing.T) string {
-			text, err := csvText(t, ints("a", []int64{1}).Filter(c("a").Gt(9)).Select())
-			if err != nil || text != "" {
-				return fmt.Sprintf("wrote %q, %v", text, err)
-			}
-			return ""
 		}},
 	}
 

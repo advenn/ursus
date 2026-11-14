@@ -8,8 +8,9 @@ a slash in a value is percent-encoded on disk, as both readers decode it.
 The Go test's one key of five date layouts is five keys here, one a layout, and the
 five together a sixth, date_layouts_mixed: Polars 2.1 reads a key of dates by its
 first value's layout and refuses the third, where ursus reads each value by its own,
-as it reads CSV dates (feature-gaps §9 says so of CSV, not of a hive key): a finding
-of step 503, recorded and left to the maintainer.
+as it reads CSV dates (WithHiveDates' doc; feature-gaps §9). That case is spelled to
+ursus's rule (step 507): Polars reads the key as text and each value by the first of
+the date layouts it parses under, the year first or the day, split by '-', '/' or '.'.
 """
 
 from __future__ import annotations
@@ -38,6 +39,29 @@ def hive(name: str, vals: list[str], **opts) -> Case:
     return case(name, df, query, params={"paths": paths}, **opts)
 
 
+# The layouts ursus reads a date by, each value by its own (WithHiveDates' doc, as
+# WithTryParseDates' for CSV): the year first or the day, split by '-', '/' or '.'.
+DATE_LAYOUTS = [f"%Y{s}%m{s}%d" for s in "-/."] + [f"%d{s}%m{s}%Y" for s in "-/."]
+
+
+def hive_each_by_its_own(name: str, vals: list[str], **opts) -> Case:
+    """hive, the key read as text and then each value by the first date layout it
+    parses under: ursus's rule for a key of dates, spelled in Polars."""
+    paths = [f"k={v.replace('/', '%2F')}/{i}.parquet" for i, v in enumerate(vals)]
+    df = pl.DataFrame({"i": pl.Series(list(range(len(vals))), dtype=pl.Int64)})
+
+    def query(df: pl.DataFrame) -> pl.DataFrame:
+        with tempfile.TemporaryDirectory() as root:
+            for i, rel in enumerate(paths):
+                p = pathlib.Path(root) / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                df[i:i + 1].write_parquet(p)
+            out = pl.scan_parquet(root, hive_partitioning=True, hive_schema={"k": pl.String}).collect().sort("i")
+            return out.with_columns(pl.coalesce([pl.col("k").str.to_date(f, strict=False) for f in DATE_LAYOUTS]).alias("k"))
+
+    return case(name, df, query, params={"paths": paths}, **opts)
+
+
 def cases() -> list[Case]:
     g = Gen(5033)
     ints = [str(v) for v in g.ints(60, pl.Int64, lo=-5000, hi=5000, null_rate=0, edges=False).to_list()]
@@ -55,7 +79,10 @@ def cases() -> list[Case]:
         hive("date_slashes", ["2024/01/02"]),
         hive("date_dots", ["2024.01.02"]),
         hive("date_dmy", ["02-01-2024"]),
-        hive("date_layouts_mixed", ["2024-01-02", "2024-1-2", "2024/01/02", "2024.01.02", "02-01-2024"]),
+        hive_each_by_its_own("date_layouts_mixed", ["2024-01-02", "2024-1-2", "2024/01/02", "2024.01.02", "02-01-2024"],
+                             note="spelled to ursus's documented rule (step 507): each value of a key of dates is read by its "
+                                  "own layout, as CSV dates are, so five layouts are a Date; Polars 2.1 reads every value by the "
+                                  "first's and refuses 2024/01/02, so it reads the key as text and each value by the layouts"),
         hive("datetimes", ["2024-01-02 03:04:05", "2024-01-02T03:04", "2024-01-02 3:04", "2024/1/2 03:04:05",
                            "2024-01-02T03:04:05.123456789"]),
         hive("datetimes_zoned", ["2024-01-02T03:04:05Z", "2024-01-02T03:04:05.5+0530", "2024-01-02 03:04:05+01:00"]),

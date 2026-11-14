@@ -24,9 +24,9 @@ func noFiles(t *testing.T) *dtype.Schema {
 // spelled in oracle_hive_infer_test.go since step 503, which took this test's table of
 // twenty-five keys. What stays is ursus's own: a key of dates in five layouts, each
 // value read by its own pattern, as CSV dates are (feature-gaps §9), where Polars 2.1
-// reads every value by the first's and refuses the third (hive_infer/date_layouts_mixed,
-// a finding of step 503 pinned here until the maintainer decides); a key of no
-// values, which no directory can hold; and a date not asked for.
+// reads every value by the first's and refuses the third (hive_infer/date_layouts_mixed
+// asks Polars so since step 507; feature-gaps.md §9); a key of no values, which no
+// directory can hold; and a date not asked for.
 func TestInfer(t *testing.T) {
 	if got := Infer([]string{"2024-01-02", "2024-1-2", "2024/01/02", "2024.01.02", "02-01-2024"}, true); got != dtype.Date {
 		t.Errorf("five layouts of one date: %s, want Date", got)

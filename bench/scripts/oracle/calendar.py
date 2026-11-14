@@ -7,12 +7,14 @@ one form in the zone database.
 Not here, with the reason: the refusals, which the Go test keeps; Round by a
 time.Duration on a zoned column, the epoch's grid, which Polars' round has no spelling
 for (Go's time package is the oracle); and TestCalendarAgainstTheOracle's sweeps, a Go
-oracle already. Recorded and not asserted, two findings for the maintainer: round("1mo"),
-which Polars 2.1 answers by adding fourteen days and truncating, so the 17th of January
-rounds down, where ursus rounds to the nearer month and a value halfway up (Round's
-doc); and group_by_dynamic's day across Santiago's missing midnight, which Polars
-starts at 23:00 the day before, a day off its own truncate, where ursus starts it at
-01:00 (step 145).
+oracle already. Spelled to ursus's documented rules (step 507, feature-gaps §9):
+round("1mo"), which Polars 2.1 answers by adding fourteen days and truncating, so the
+17th of January rounds down, where ursus rounds to the nearer month and a value halfway
+up (Round's doc), asked of Polars as the nearer of truncate("1mo") and a month after it
+(round_month); and group_by_dynamic's day across Santiago's missing midnight, which
+Polars starts at 23:00 the day before, a day off its own truncate, where ursus starts
+it at 01:00 (step 145; GroupByDynamic's doc), asked of Polars as a group-by of
+truncate("1d").
 """
 
 from __future__ import annotations
@@ -26,6 +28,15 @@ from .dtmore import dates, dts, sel
 from .gen import Gen
 
 d, t = pl.col("d"), pl.col("t")
+
+
+def round_month(e: pl.Expr) -> pl.Expr:
+    """ursus's Round(Every("1mo")) spelled in Polars: the nearer of the month's start,
+    truncate("1mo"), and the next month's, a value exactly halfway up, nearer measured
+    in elapsed time (Round's doc)."""
+    lo = e.dt.truncate("1mo")
+    hi = lo.dt.offset_by("1mo")
+    return pl.when((e - lo) * 2 >= hi - lo).then(hi).otherwise(lo)
 
 
 def at(vals: list[datetime | None], zone: str) -> pl.DataFrame:
@@ -67,11 +78,13 @@ def cases() -> list[Case]:
         case("round_15m", dts([datetime(2024, 1, 1, 10, 7, 30), datetime(2024, 1, 1, 10, 7, 29, 999999), None], zone="UTC"),
              sel(d.dt.round("15m")), note="halfway rounds up, and only halfway"),
         case("round_1h_before_epoch", dts([datetime(1969, 12, 31, 23, 30), datetime(1969, 12, 31, 23, 29, 59)]), sel(d.dt.round("1h"))),
-        case("round_1mo", dts([datetime(2024, 2, 15, 12), datetime(2024, 2, 15, 11, 59, 59)], zone="UTC"), sel(d.dt.round("1mo")),
-             note="a finding: Polars adds fourteen days and truncates, so noon on the 15th of a 29-day February rounds down; "
-                  "ursus rounds to the nearer month, halfway up"),
-        case("round_1mo_dates", dates([(2024, 1, 16), (2024, 1, 17), (2023, 2, 15)]), sel(d.dt.round("1mo")),
-             note="a finding: the 17th of January rounds down in Polars, up here, to the nearer month"),
+        case("round_1mo", dts([datetime(2024, 2, 15, 12), datetime(2024, 2, 15, 11, 59, 59)], zone="UTC"), sel(round_month(d)),
+             note="spelled to ursus's documented rule (step 507): Round rounds to the nearer month, halfway up, so noon on the "
+                  "15th of a 29-day February is March; Polars' round adds fourteen days and truncates, so it is asked as the "
+                  "nearer of truncate and a month after it"),
+        case("round_1mo_dates", dates([(2024, 1, 16), (2024, 1, 17), (2023, 2, 15)]), sel(round_month(d)),
+             note="spelled as round_1mo (step 507): the 17th of January is nearer February, and the 15th of a 28-day February "
+                  "halfway, up; Polars' round takes both down"),
         case("round_1h_kolkata", dts([datetime(2024, 6, 1, 10, 47)], zone="Asia/Kolkata"), sel(d.dt.round("1h")),
              note="the wall clock's hour at +05:30"),
         # --- convert_time_zone -------------------------------------------------------------
@@ -87,9 +100,11 @@ def cases() -> list[Case]:
              note="October 2023 began at 01:00 in Asunción"),
         case("midnight_gap_windows",
              dts([datetime(2024, 9, 7, 12), datetime(2024, 9, 7, 23, 30), datetime(2024, 9, 8, 12)], zone="America/Santiago"),
-             lambda df: df.group_by_dynamic("d", every="1d").agg(pl.len().alias("n")),
-             note="a finding: Polars starts the 8th's window at 23:00 on the 7th, a day off its own truncate; "
-                  "ursus starts it at 01:00, where the day begins (step 145)"),
+             lambda df: df.group_by(d.dt.truncate("1d"), maintain_order=True).agg(pl.len().cast(pl.Int64).alias("n")),
+             note="spelled to ursus's documented rule (step 507): a dynamic group's day starts on truncate's grid, at 01:00 "
+                  "where Santiago's midnight is missing; Polars' group_by_dynamic starts it at 23:00 on the 7th, a day off its "
+                  "own truncate, so it is asked as a group-by of truncate('1d'), no window empty here; the count cast to Int64 "
+                  "on both sides, a Uint64 here and a UInt32 there"),
         # --- generated ---------------------------------------------------------------------
         case("offset_gen_dates", gen_dates, sel(
             d.dt.offset_by("1mo").alias("mo"), d.dt.offset_by("-1mo").alias("mo_back"), d.dt.offset_by("1y").alias("y"),

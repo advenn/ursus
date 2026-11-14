@@ -43,8 +43,9 @@ func init() {
 				JoinAsOf(r, on, ursus.AsOfTolerance(5), ursus.AsOfStrategyOpt(ursus.AsOfForward)).Rename(map[string]string{"w": "fwd"}).
 				Select(c("back"), c("fwd"))
 		},
-		"nearest_tie_gen": oracleFinding("AsOfNearest's tie: where the backward and forward rows are equally far, Polars 2.1 takes " +
-			"the forward one and ursus the backward (asof.go: \"ties going backward\"; TestAsOfNearestTiesBackward)"),
+		// Asked of Polars as the nearer of its backward and forward rows, the backward on
+		// a tie (step 507): Polars 2.1's own nearest takes the forward.
+		"nearest_tie_gen": asOf("k", ursus.AsOfTolerance(5), ursus.AsOfStrategyOpt(ursus.AsOfNearest)),
 		"join_where_gen": func(in oracleInputs) *ursus.LazyFrame {
 			return in.frame("a").JoinWhereSuffix(in.frame("b"), "_r", c("x").Lt(c("x_r")))
 		},

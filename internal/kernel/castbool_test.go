@@ -128,8 +128,8 @@ func TestBoolCastAgreesWithCanCast(t *testing.T) {
 // divergence; castdec_test.go asserts their VALUES, which agreement cannot. Bool is
 // what stays: a truth value is not an amount, in either direction. Polars 2.1
 // refuses a Boolean to a Decimal as this does (castbool/bool_to_decimal) and casts a
-// Decimal to a Boolean, true where it is not zero (castbool/decimal_to_bool, a
-// finding of step 503, left to the maintainer).
+// Decimal to a Boolean, true where it is not zero, where ursus refuses on purpose
+// (feature-gaps.md §9; the root's TestDecimalGuards asserts the refusal since step 507).
 func TestDecimalCastDivergenceIsClosed(t *testing.T) {
 	dec := dtype.Decimal(10, 2)
 	for _, c := range []struct{ from, to dtype.DataType }{

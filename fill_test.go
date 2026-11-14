@@ -95,8 +95,8 @@ func TestStrongLiteralsStillWiden(t *testing.T) {
 // TestWeakLiteralThatDoesNotFit: falling back is right, truncating is not.
 // int8(5000) is -120, which is the silent wrong answer this whole mechanism
 // exists to avoid. Polars 2.1 widens to the narrowest type that holds the literal, an
-// Int16, where ursus falls back to Int64: the fill group's fill_past_the_type records
-// Polars' answer as a finding, so fill.go's rule is pinned here.
+// Int16, where ursus falls back to Int64, its documented rule (feature-gaps.md §9): the
+// fill group's fill_past_the_type asks Polars with the column cast to Int64 (step 507).
 func TestWeakLiteralThatDoesNotFit(t *testing.T) {
 	f := ursus.Frame(
 		nullable("i8", []int8{0, 3}, []bool{false, true}),
@@ -240,8 +240,8 @@ func TestKeylessWindowMatchesGlobalAggregate(t *testing.T) {
 }
 
 // TestFillStrategies: the seven strategies' types. The type is preserved for six;
-// only the mean widens, to Float64 (the fill group's fill_strategy_mean records
-// Polars 2.1 keeping the integer type, a finding).
+// only the mean widens, to Float64, where Polars 2.1 keeps the integer type (the fill
+// group's fill_strategy_mean asks Polars of the column cast to Float64, step 507).
 func TestFillStrategies(t *testing.T) {
 	f := ursus.Frame(nullable("v", []int32{0, 2, 0, 8}, []bool{false, true, false, true}))
 

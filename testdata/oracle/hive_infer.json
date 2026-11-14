@@ -535,6 +535,7 @@
     }
    },
    "name": "date_layouts_mixed",
+   "note": "spelled to ursus's documented rule (step 507): each value of a key of dates is read by its own layout, as CSV dates are, so five layouts are a Date; Polars 2.1 reads every value by the first's and refuses 2024/01/02, so it reads the key as text and each value by the layouts",
    "order": "rows",
    "params": {
     "paths": [
@@ -546,10 +547,30 @@
     ]
    },
    "want": {
-    "error": {
-     "contains": "",
-     "polars": "ComputeError: could not parse '2024/01/02' with pattern 'DateDMY'"
-    }
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "i",
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ]
+     },
+     {
+      "dtype": "Date",
+      "name": "k",
+      "values": [
+       19724,
+       19724,
+       19724,
+       19724,
+       19724
+      ]
+     }
+    ]
    }
   },
   {
