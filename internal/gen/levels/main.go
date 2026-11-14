@@ -35,6 +35,10 @@ var levels = map[string]int{
 	"internal/strftime": 0, // stdlib only: strftime formats, compiled
 	"internal/gen":      0, // build tooling
 
+	// The fuzzing harness (step 508): uerr alone of ursus, so the internal tests of
+	// every package above uerr can use it, dtype's and i128's among them.
+	"internal/fuzzcheck": 1, // + uerr
+
 	"internal/bitmap": 5, // + arrowx
 
 	"dtype": 10, // + uerr. The public type system.
@@ -42,6 +46,10 @@ var levels = map[string]int{
 	// L20 — the two independent IRs over the type system.
 	"internal/data": 20, // + dtype, bitmap, arrowx, uerr — Column/Batch/Series
 	"internal/expr": 20, // + dtype, uerr — the expression IR
+
+	// The harness's half that turns on data's boundary checks, apart from it so that
+	// fuzzcheck stays below data (step 508).
+	"internal/fuzzcheck/invariants": 22, // + data
 
 	"internal/spill": 25, // + data, dtype, bitmap, arrowx — the run format
 	// Same level and the same shape as spill: both turn a Batch into a foreign
@@ -86,6 +94,9 @@ var levels = map[string]int{
 	"internal/memcheck": 80,
 	// The documentation site's examples: tests only, importing the root package.
 	"docs/examples": 80,
+	// The fuzz targets of the public API (step 508): tests only, importing the root
+	// package and the harness; its one file declares nothing.
+	"internal/readfuzz": 80,
 }
 
 func levelOf(rel string) (int, bool) {

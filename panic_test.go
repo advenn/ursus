@@ -749,6 +749,10 @@ var goroutineSites = map[string]string{
 	"internal/source/parquet/parallel.go issue 1": "TestParallelRowGroupPanicIsAnError",
 	"jsonwrite.go writeJSONCfg 1":                 "TestJSONWriterPanicIsAnError",
 	"jsonwrite.go writeJSONCfg 2":                 "TestJSONEncoderPanicIsAnError",
+	// The fuzzing harness's watchdog (step 508), not the engine's, panics on purpose: a
+	// call that hangs or allocates without end cannot be stopped from outside, so it
+	// ends the fuzz process, and the fuzzer records the input.
+	"internal/fuzzcheck/fuzzcheck.go watch 1": "TestAHangEndsTheProcess",
 }
 
 func TestEveryGoroutineIsCovered(t *testing.T) {
