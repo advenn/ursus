@@ -366,6 +366,8 @@ func (s *scanner) parse(b []byte, atEOF bool) (n, nl int, ok bool, err error) {
 		blank = 1
 	case b[0] == '\r' && len(b) > 1 && b[1] == '\n':
 		blank = 2
+	case b[0] == '\r' && len(b) == 1 && atEOF:
+		blank = 1 // a \r that ends the input is a line end, as below
 	}
 	if blank > 0 {
 		if s.width > 0 {
@@ -402,9 +404,11 @@ func (s *scanner) parse(b []byte, atEOF bool) (n, nl int, ok bool, err error) {
 		}
 
 		fieldEnd := i
-		// A \r immediately before the \n is a line terminator, not data. A lone \r
-		// elsewhere IS data, which is what encoding/csv does.
-		if i < len(b) && b[i] == '\n' && fieldEnd > start && b[fieldEnd-1] == '\r' {
+		// A \r immediately before the \n is a line terminator, not data, and so is one
+		// that ends the input, as encoding/csv and Polars read it: "a,b\r" was the
+		// field "b\r" (step 509). A lone \r elsewhere IS data, which is what
+		// encoding/csv does. At len(b) the input has ended, or parse returned above.
+		if (i == len(b) || b[i] == '\n') && fieldEnd > start && b[fieldEnd-1] == '\r' {
 			fieldEnd--
 		}
 		s.fields = append(s.fields, fieldRef{off: start, n: fieldEnd - start})
@@ -553,6 +557,9 @@ func (s *scanner) quotedField(b []byte, i int, atEOF bool, nlSoFar int) (consume
 		}
 		if i+1 < len(b) && b[i+1] == '\n' {
 			return i + 2, true, lines, nil
+		}
+		if i+1 == len(b) { // a \r that ends the input ends the record, as parse's
+			return i + 1, true, lines, nil
 		}
 		fallthrough
 	default:
