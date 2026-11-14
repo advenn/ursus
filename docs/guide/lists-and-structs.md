@@ -111,6 +111,15 @@ Methods for structs sit behind `Struct()`:
 A struct is also how ursus gives several values a row: `SplitExact`, `ExtractGroups`,
 `ValueCounts` of an expression, and `Rle`.
 
+*New in 0.8.* A struct of no fields, Polars' `Struct({})`, is what a JSON or NDJSON
+object field holding `{}` reads as: a row for each object, `{}` or null. It keeps its
+rows through filters, sorts, joins, concatenation, group-by, IPC and the JSON writers,
+and is a key, `{}` one group and null another. `Struct()` with no expression is
+refused, as Polars' `pl.struct()` is; `Str().JsonDecode(StructOf())` builds one, and
+`ToStruct` of a frame of no columns gives one, a row for each of the frame's. Parquet
+has no group of no columns, so writing one is refused, as Polars refuses it, and so is
+CSV, which holds no nested value.
+
 ## Lists and structs as keys
 
 *New in 0.6.7.* A List, an Array or a Struct is a key, of `GroupBy`, `Unique`, `Join`,
