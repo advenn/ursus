@@ -636,6 +636,9 @@ func oracleListFrame(t *testing.T, name string, dt dtype.DataType, vals []any) *
 func oracleStructFrame(t *testing.T, name string, dt dtype.DataType, vals []any) *ursus.LazyFrame {
 	t.Helper()
 	fields := dt.Fields()
+	if len(fields) == 0 {
+		return oracleEmptyStructFrame(t, name, dt, vals)
+	}
 	isnull := make([]bool, len(vals))
 	parts := make([]*ursus.LazyFrame, len(fields))
 	exprs := make([]ursus.Expr, len(fields))
@@ -658,6 +661,25 @@ func oracleStructFrame(t *testing.T, name string, dt dtype.DataType, vals []any)
 	nullC := oracleHelper + "null"
 	base := ursus.Frame(ursus.Values(nullC, isnull)).HStack(parts...)
 	return base.Select(ursus.When(ursus.Col(nullC)).Then(ursus.Null(dt)).Otherwise(ursus.Struct(exprs...)).Alias(name))
+}
+
+// oracleEmptyStructFrame builds a Struct of no fields (step 518), which Struct cannot,
+// needing an expression, as Polars' pl.struct does: each row's object, {}, as the JSON
+// text JsonDecode reads into the type, a null row a null text.
+func oracleEmptyStructFrame(t *testing.T, name string, dt dtype.DataType, vals []any) *ursus.LazyFrame {
+	t.Helper()
+	text := make([]string, len(vals))
+	ok := make([]bool, len(vals))
+	for r, v := range vals {
+		if v == nil {
+			continue
+		}
+		if obj, isObj := v.(map[string]any); !isObj || len(obj) != 0 {
+			t.Fatalf("%s row %d: %v is not the object of no fields", name, r, v)
+		}
+		text[r], ok[r] = "{}", true
+	}
+	return ursus.Frame(ursus.ValuesNullable(name, text, ok)).Select(ursus.Col(name).Str().JsonDecode(dt).Alias(name))
 }
 
 // oracleEach reads each value with read, a null as the zero value.
@@ -837,6 +859,9 @@ func oracleDType(t *testing.T, s string) dtype.DataType {
 		}
 		return dtype.Enum(cats...)
 	case "Struct":
+		if len(args) == 1 && args[0] == "" {
+			args = nil // Struct(): a struct of no fields (step 518)
+		}
 		fields := make([]dtype.Field, len(args))
 		for i, a := range args {
 			fname, rest := oracleQuotedPrefix(t, a)

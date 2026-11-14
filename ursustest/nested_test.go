@@ -9,6 +9,8 @@ package ursustest_test
 // before this file existed.
 
 import (
+	"math/rand/v2"
+	"slices"
 	"testing"
 
 	"github.com/advenn/ursus"
@@ -242,5 +244,46 @@ func TestASlicedListRendersOnlyItsRows(t *testing.T) {
 	head := frameFrom(t, ints("l", [][]*int64{row(5, 6), row(7)}))
 	if !didFail(func(tb testing.TB) { ursustest.AssertFrameEqual(tb, tail, head) }) {
 		t.Error("a sliced List compared equal to rows it does not hold")
+	}
+}
+
+// noFields builds a Struct of no fields, n rows long, null where valid is false.
+func noFields(name string, valid []bool) *data.Column {
+	b := bitmap.NewBuilder(len(valid))
+	for _, ok := range valid {
+		b.Append(ok)
+	}
+	return data.NewStructLen(name, len(valid), nil, b.Finish())
+}
+
+// TestAStructOfNoFieldsIsCompared (step 518): a Struct of no fields renders {} where it
+// is valid and null where it is not, so two frames of one compare equal exactly where
+// their rows' validities do. Each generated validity is held equal to itself, and
+// apart from itself with one row flipped and from itself one row longer.
+func TestAStructOfNoFieldsIsCompared(t *testing.T) {
+	r := rand.New(rand.NewPCG(518, 7))
+	for trial := range 20 {
+		n := 1 + r.IntN(40)
+		valid := make([]bool, n)
+		for i := range valid {
+			valid[i] = r.IntN(3) != 0
+		}
+		at := r.IntN(n)
+		flipped := slices.Clone(valid)
+		flipped[at] = !flipped[at]
+		longer := append(slices.Clone(valid), r.IntN(2) == 0)
+		got := frameFrom(t, noFields("a", valid))
+		if got.Height() != n {
+			t.Fatalf("trial %d: a frame of a Struct of no fields, %d rows, has %d", trial, n, got.Height())
+		}
+		if didFail(func(tb testing.TB) { ursustest.AssertFrameEqual(tb, got, frameFrom(t, noFields("a", valid))) }) {
+			t.Errorf("trial %d: a frame of a Struct of no fields is not equal to itself:\n%s", trial, got)
+		}
+		if !didFail(func(tb testing.TB) { ursustest.AssertFrameEqual(tb, got, frameFrom(t, noFields("a", flipped))) }) {
+			t.Errorf("trial %d: row %d's {} and null compared equal", trial, at)
+		}
+		if !didFail(func(tb testing.TB) { ursustest.AssertFrameEqual(tb, got, frameFrom(t, noFields("a", longer))) }) {
+			t.Errorf("trial %d: %d rows compared equal to %d", trial, n, n+1)
+		}
 	}
 }

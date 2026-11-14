@@ -367,7 +367,17 @@ func toNode(f dtype.Field) (schema.Node, error) {
 // list of structs, a struct holding either — is refused by name, as the reader
 // refuses to read it: a writer whose output its own reader rejects is worse than one
 // that says so.
+//
+// A Struct of no fields, at any depth, is refused first, as Polars refuses it (step
+// 518): it would be a group of no columns, which Parquet has not, and no leaf would
+// carry its rows.
 func nestedNode(f dtype.Field) (schema.Node, error) {
+	if holdsEmptyStruct(f.Type) {
+		return nil, uerr.New(uerr.KindUnsupported, "sink_parquet",
+			"cannot write column %q of type %s to Parquet: a Struct of no fields would be a group of no columns, "+
+				"which Parquet has not", f.Name, f.Type).
+			Hint("give the struct a field, or drop the column")
+	}
 	refuse := func() error {
 		return uerr.New(uerr.KindUnsupported, "sink_parquet",
 			"cannot write column %q of type %s to Parquet yet", f.Name, f.Type).
@@ -409,6 +419,25 @@ func nestedNode(f dtype.Field) (schema.Node, error) {
 		fields = append(fields, n)
 	}
 	return schema.NewGroupNode(f.Name, parquet.Repetitions.Optional, fields, -1)
+}
+
+// holdsEmptyStruct reports whether dt is a Struct of no fields or holds one, in a
+// field or as a list's element.
+func holdsEmptyStruct(dt dtype.DataType) bool {
+	switch {
+	case dt.ID() == dtype.TypeStruct:
+		if len(dt.Fields()) == 0 {
+			return true
+		}
+		for _, f := range dt.Fields() {
+			if holdsEmptyStruct(f.Type) {
+				return true
+			}
+		}
+	case dt.IsListLike():
+		return holdsEmptyStruct(dt.Inner())
+	}
+	return false
 }
 
 // parquetTimeUnit maps a ursus TimeUnit onto Parquet's three.
