@@ -257,7 +257,9 @@ type UnpivotOptions struct {
 //
 // Known elsewhere as melt. Every melted column shares one value column, so their
 // types must promote to a common one — an Int32 beside an Int64 gives an Int64, and
-// two types with no common one is an error naming both.
+// two types with no common one is an error naming both. Two units of one temporal
+// kind meet at the finer, so no tick is dropped, where Polars 2.1 meets them at the
+// coarser.
 //
 // # The row order is not Polars'
 //

@@ -17,7 +17,8 @@ import (
 //
 // Polars 2.1 refuses a bitwise aggregate of a Decimal, as this does (decimalagg/bitwise_and),
 // and answers any and all of one, true where a value is not zero, which this refuses
-// as step 69 chose (decimalagg/any_all, a finding of step 503, left to the maintainer).
+// as step 69 chose, on purpose (feature-gaps.md §9; the root's TestDecimalGuards
+// asserts the refusal since step 507).
 func TestEveryAggregateOverADecimalIsAccountedFor(t *testing.T) {
 	in := dtype.Decimal(10, 2)
 	sameAsForInt64 := "same as for Int64" // a count or an index ignores the input type

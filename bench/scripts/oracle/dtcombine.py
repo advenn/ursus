@@ -4,9 +4,10 @@ each, a null on either side null; a Datetime keeping its millisecond unit, asked
 Polars with time_unit="ms"; February's days in New York.
 
 Not here: the refusals (a skipped wall clock, a day past Datetime(ns)'s range, a Time
-or an Int64 as the day), which the Go test keeps. Recorded and not asserted, a finding
-for the maintainer: combine of a zoned Datetime, whose day Polars 2.1 reads in UTC,
-where ursus reads it on the zone's wall clock (Combine's doc).
+or an Int64 as the day), which the Go test keeps. Spelled to ursus's documented rule
+(step 507, feature-gaps §9): combine of a zoned Datetime, whose day Polars 2.1 reads in
+UTC, where ursus reads it on the zone's wall clock (Combine's doc), asked of Polars on
+the wall clock, its zone replaced by none, combined and put back.
 """
 
 from __future__ import annotations
@@ -43,9 +44,11 @@ def cases() -> list[Case]:
         case("combine_date", TS, sel(c("d").dt.combine(c("t")))),
         case("combine_datetime", TS, sel(c("ts").dt.combine(c("t")))),
         case("combine_datetime_ms", TS, sel(c("ms").dt.combine(c("t"), time_unit="ms")), note="a Datetime(ms) keeps its unit"),
-        case("combine_zoned_ny", ny(datetime(2024, 3, 11, 22)), sel(c("ts").dt.combine(time(13, 15), time_unit="ns")),
-             note="a finding: 22:00 on the 11th in New York is 02:00 on the 12th in UTC; Polars combines the 12th, ursus the 11th, "
-                  "the day on New York's wall clock"),
+        case("combine_zoned_ny", ny(datetime(2024, 3, 11, 22)),
+             sel(c("ts").dt.replace_time_zone(None).dt.combine(time(13, 15), time_unit="ns").dt.replace_time_zone("America/New_York")),
+             note="spelled to ursus's documented rule (step 507): Combine reads a zoned day on its wall clock, so 22:00 on the "
+                  "11th in New York with 13:15 is the 11th; Polars reads the day in UTC, the 12th, so it is asked on the wall "
+                  "clock, the zone replaced by none, combined and put back"),
         case("days_in_month_ny", ny(datetime(2024, 2, 29, 21)), sel(c("ts").dt.days_in_month()),
              note="February's 29 days in New York, at 21:00 on the 29th there, March 1 in UTC"),
         # --- generated ---------------------------------------------------------------------

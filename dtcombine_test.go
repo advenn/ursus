@@ -16,7 +16,8 @@ import (
 // oracle_dtcombine_test.go since step 498, which took this file's values. What stays
 // asserts the refusals, and holds to Go's time package the day a zoned Datetime
 // combines, read on its own wall clock (Combine's doc): Polars 2.1 reads it in UTC,
-// a finding, recorded as combine_zoned_ny and not asserted.
+// and the recorded combine_zoned_ny asks it on the wall clock (step 507; feature-gaps.md
+// §9).
 
 // nyWall is a one-row frame ts of the wall clock s in New York, Datetime(ns).
 func nyWall(t *testing.T, s string) *ursus.LazyFrame {

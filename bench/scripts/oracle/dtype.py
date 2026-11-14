@@ -6,7 +6,15 @@ columns to, asked as the type Polars' unpivot gives the value column. Each liter
 pair is the Go test's; the generated pairs carry values through the meet.
 
 Polars has no Datetime(s) and no Time(us), so those pairs stay in the Go test, and a
-pair ursus refuses on purpose (feature-gaps §9) stays there as a refusal.
+pair ursus refuses on purpose (feature-gaps §9) stays there as a refusal: text, a
+Boolean or an instant beside a number and a Date beside a Datetime, which Polars 2.1
+meets, are cond_test.go's TestCondRefusals since step 507.
+
+Spelled to ursus's documented rule (step 507, feature-gaps §9): two units of one
+temporal kind meet at the finer here (Promote, PromoteExact, TimeUnit.Finer), where
+Polars 2.1 meets them at the coarser, so those pairs ask Polars with both sides cast to
+the finer unit first; and two Enums of different categories meet at the String here
+(step 79), which Polars 2.1 refuses, so that pair asks it with both cast to String.
 """
 
 from __future__ import annotations
@@ -65,12 +73,24 @@ def melt(df: pl.DataFrame) -> pl.DataFrame:
     return df.unpivot(on=["a", "b"], index="k")
 
 
+def when_at(dt: pl.DataType):
+    """when, both branches cast to dt first: the type ursus meets them at."""
+    return lambda df: df.select(pl.when(pl.col("c")).then(pl.col("a").cast(dt)).otherwise(pl.col("b").cast(dt)).alias("x"))
+
+
+def melt_at(dt: pl.DataType):
+    """melt, both columns cast to dt first: the type ursus meets them at."""
+    return lambda df: df.with_columns(pl.col("a", "b").cast(dt)).unpivot(on=["a", "b"], index="k")
+
+
 def unpivot_pair(a: str, b: str) -> pl.DataFrame:
     ta, tb = TYPES[a], TYPES[b]
     return pl.DataFrame([pl.Series("k", [1, 2]), column("a", ta, two(ta)), column("b", tb, two(tb))])
 
 
-# Promote's table: the pairs the Go test held, each by name.
+# Promote's table: the pairs the Go test held, each by name. Four it refuses, which
+# Polars 2.1 meets, left at step 507 for cond_test.go's TestCondRefusals: a String or a
+# Boolean beside an Int64, a Date beside a Datetime(us), a Datetime(ns) beside an Int64.
 PROMOTE = [
     ("int64", "int64"), ("int8", "int64"), ("uint8", "uint32"), ("float32", "float64"),
     ("null", "int32"), ("int32", "null"),
@@ -78,14 +98,24 @@ PROMOTE = [
     ("float32", "int16"), ("float32", "int32"), ("float64", "int64"),
     ("uint64", "int64"), ("int8", "uint64"),
     ("int128", "int64"), ("int128", "uint64"), ("int128", "int8"),
-    ("string", "int64"), ("bool", "int64"), ("string", "string"),
+    ("string", "string"),
     ("enum_a", "string"), ("enum_a", "enum_b"), ("enum_a", "int64"),
-    ("date", "dt_us"),
     # The temporal table: units, zones and kinds.
     ("dt_us_utc", "dt_ns_utc"), ("dt_ms", "dt_ns"), ("dur_ms", "dur_ns"),
     ("dt_us_utc", "dt_us"), ("dt_us_utc", "dt_us_paris"), ("dt_us_utc", "dt_ns_paris"),
-    ("dur_ns", "dt_ns"), ("time", "dt_ns"), ("dt_ns", "int64"),
+    ("dur_ns", "dt_ns"), ("time", "dt_ns"),
 ]
+
+# The pairs ursus meets at another type than Polars 2.1 does, on purpose (feature-gaps
+# §9, step 507): each asked of Polars with both sides cast to ursus's type first.
+MEET_HERE = {
+    ("dt_us_utc", "dt_ns_utc"): "dt_ns_utc", ("dt_ms", "dt_ns"): "dt_ns", ("dur_ms", "dur_ns"): "dur_ns",
+    ("enum_a", "enum_b"): "string",
+}
+FINER = "spelled to ursus's documented rule (step 507): two time units meet at the finer here, so no tick is dropped; " \
+        "Polars 2.1 meets them at the coarser, so it is asked with both sides cast to the finer first"
+ENUMS = "spelled to ursus's documented rule (step 507): two Enums of different categories meet at the String here (step 79); " \
+        "Polars 2.1 refuses them, so it is asked with both cast to String first"
 
 # PromoteExact's table, the pairs it resolves; the three it refuses are §9's and stay
 # in the Go test.
@@ -100,9 +130,16 @@ def cases() -> list[Case]:
     n = 120
     out: list[Case] = []
     for a, b in PROMOTE:
-        out.append(case(f"when_{a}_{b}", pair(a, b), when))
+        if (a, b) in MEET_HERE:
+            at = MEET_HERE[(a, b)]
+            out.append(case(f"when_{a}_{b}", pair(a, b), when_at(TYPES[at]), note=ENUMS if at == "string" else FINER))
+        else:
+            out.append(case(f"when_{a}_{b}", pair(a, b), when))
     for a, b in PROMOTE_EXACT:
-        out.append(case(f"unpivot_{a}_{b}", unpivot_pair(a, b), melt, order="set"))
+        if (a, b) in MEET_HERE:
+            out.append(case(f"unpivot_{a}_{b}", unpivot_pair(a, b), melt_at(TYPES[MEET_HERE[(a, b)]]), order="set", note=FINER))
+        else:
+            out.append(case(f"unpivot_{a}_{b}", unpivot_pair(a, b), melt, order="set"))
 
     def gen_when(name: str, a: pl.Series, b: pl.Series) -> Case:
         return case(name, pl.DataFrame([g.bools(n, name="c"), a.alias("a"), b.alias("b")]), when)

@@ -3,11 +3,14 @@ forward_fill and backward_fill with a limit, the seven strategies, a frame's
 fill_null, clip, is_close, diff and pct_change. A frame's FillZero and FillOne leave a
 String or a Bool column alone here, where Polars' fill_null(strategy="zero") fills
 them with "" and false and its "one" is refused at frame level: those cases ask Polars
-of the numeric columns alone. Two findings are recorded and not asserted: a literal
-past the column's type widens to Int64 here and to the narrowest type that holds it
-in Polars, and the mean strategy keeps an integer column's type in Polars, the mean
-truncated, where it is a Float64 here. Not here: the types and plans the weak-literal
-machinery promises, which stay structural, and the differentials.
+of the numeric columns alone. Two cases are spelled to ursus's documented rules
+(step 507, feature-gaps §9): a literal past the column's type widens to Int64 here
+(FillNullWith's doc), where Polars widens to the narrowest type that holds it, so
+Polars is asked with the column cast to Int64 first; and the mean strategy makes a
+Float64 of an integer column here (FillMean's doc), where Polars keeps the integer
+type and fills the mean truncated, so Polars is asked with the column cast to Float64
+first. Not here: the types and plans the weak-literal machinery promises, which stay
+structural, and the differentials.
 """
 
 from __future__ import annotations
@@ -39,8 +42,10 @@ def cases() -> list[Case]:
     return [
         case("fill_null_with_minus_1_int32", pl.DataFrame({"i32": pl.Series([None, 3], dtype=pl.Int32)}), sel(c("i32").fill_null(-1)),
              note="a weak literal keeps the column's type"),
-        case("fill_past_the_type", pl.DataFrame({"i8": pl.Series([None, 3], dtype=pl.Int8)}), sel(c("i8").fill_null(5000)),
-             note="a finding: Polars widens to the narrowest type holding 5000, an Int16; ursus falls back to Int64"),
+        case("fill_past_the_type", pl.DataFrame({"i8": pl.Series([None, 3], dtype=pl.Int8)}), sel(c("i8").cast(pl.Int64).fill_null(5000)),
+             note="spelled to ursus's documented rule (step 507): a weak literal that does not fit falls back to Int64 here "
+                  "(FillNullWith's doc), where Polars widens to the narrowest type holding 5000, an Int16; so Polars is asked "
+                  "with the column cast to Int64 first"),
         case("fill_u32_with_minus_1", pl.DataFrame({"u32": pl.Series([None, 3], dtype=pl.UInt32)}), sel(c("u32").fill_null(-1)),
              note="a Uint32 cannot hold -1: an Int64, not 4294967295"),
         case("fill_nan_leaves_nulls", pl.DataFrame({"f": [1.0, 0.0, None]}), sel((c("f") / c("f")).fill_nan(-1.0).alias("v")),
@@ -51,8 +56,10 @@ def cases() -> list[Case]:
              sel(c("v").forward_fill(limit=1).alias("a"), c("v").forward_fill(limit=3).alias("b")),
              note="row 3 is two nulls past the value: limit 1 gives up, limit 3 does not"),
         case("fill_strategies", V32, sel(*[c("v").fill_null(strategy=s).alias(s) for s in STRATEGIES]), note="the type kept for all six"),
-        case("fill_strategy_mean", V32, sel(c("v").fill_null(strategy="mean").alias("mean")),
-             note="a finding: Polars keeps the Int32 and fills the mean truncated, ursus a Float64"),
+        case("fill_strategy_mean", V32, sel(c("v").cast(pl.Float64).fill_null(strategy="mean").alias("mean")),
+             note="spelled to ursus's documented rule (step 507): the mean strategy makes a Float64 of an integer column here "
+                  "(FillMean's doc), where Polars keeps the Int32 and fills the mean truncated; so Polars is asked with the "
+                  "column cast to Float64 first"),
         case("frame_fill_null_0", pl.DataFrame({"i": pl.Series([None, 2], dtype=pl.Int32), "f": [None, 1.5], "s": [None, "b"]}),
              lambda df: df.fill_null(0), note="the String column is left alone by an integer fill, the types unchanged"),
         case("clip_floats", pl.DataFrame({"v": [-5.0, 0.0, 5.0, 50.0, nan]}), sel(c("v").clip(0.0, 10.0).alias("c"))),
@@ -71,8 +78,10 @@ def cases() -> list[Case]:
              note="Polars fills the String with \"\" and the Bool with false, which this leaves alone: asked of the numbers"),
         case("frame_fill_one", FRAME, lambda df: df.with_columns(c("i", "f").fill_null(strategy="one")),
              note="Polars refuses the strategy at frame level: asked of the numbers"),
-        case("frame_fill_mean", FRAME, lambda df: df.with_columns(c("i", "f").fill_null(strategy="mean")),
-             note="a finding: Polars keeps the Int64 and fills the mean truncated, ursus a Float64"),
+        case("frame_fill_mean", FRAME, lambda df: df.with_columns(c("i").cast(pl.Float64)).with_columns(c("i", "f").fill_null(strategy="mean")),
+             note="spelled to ursus's documented rule (step 507): a frame's mean fill makes a Float64 of an integer column here "
+                  "(FillMean's doc), where Polars keeps the Int64 and fills the mean truncated; so Polars is asked with i cast to "
+                  "Float64 first, of the numbers, as frame_fill_zero is"),
         case("frame_fill_subset_and_expression", FRAME,
              lambda df: df.with_columns(c("i").fill_null(strategy="forward")).with_columns(c("f").fill_null(strategy="forward")).select("i", "f", "s")),
         case("fill_gen", gen, sel(*[c("v").fill_null(strategy=s).alias(s) for s in STRATEGIES], c("v").forward_fill(limit=2).alias("ff2"),

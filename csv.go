@@ -155,7 +155,9 @@ func csvOptions(opts []CSVOption) csv.Options {
 //
 // Nothing is read until Collect, except the sample inference needs — and not even
 // that if WithSchema is given. Projection reaches the reader, so selecting two
-// columns of a hundred parses two.
+// columns of a hundred parses two. Inference reads inf, infinity and nan as a float
+// only beside a number, so a column of only NaN is a String, where Polars 2.1 infers
+// a Float64.
 //
 // A file compressed by gzip, zlib or Zstandard is read as itself, known by its
 // first bytes whatever its name, as Polars reads one, and decompressed as it is
@@ -353,7 +355,10 @@ func WithDateFormat(f string) CSVWriteOption {
 // WithDatetimeFormat writes a Datetime in a strftime format, "%Y-%m-%d %H:%M", as
 // Polars' datetime_format, a zoned one on its zone's wall clock. The default is
 // 2024-01-02T03:04:05.123456, to the instant's unit, with its offset, +0900, where it
-// has a zone. A naive instant's format of a zone, %z or %Z, is refused. New in 0.6.7.
+// has a zone; an offset with seconds, a local mean time's, −00:44:30, has no +hhmm, so
+// such an instant is written in UTC and reads back exactly, where Polars 2.1 writes
+// −0045 and reads back an instant 30 s away. A naive instant's format of a zone, %z
+// or %Z, is refused. New in 0.6.7.
 func WithDatetimeFormat(f string) CSVWriteOption {
 	return func(o *csv.WriteOptions) { o.DatetimeFormat = f }
 }
@@ -466,7 +471,9 @@ func (lf *LazyFrame) SinkCSV(ctx context.Context, path string, opts ...CSVSinkOp
 	return nil
 }
 
-// WriteCSV runs the query and writes the result to w, streaming.
+// WriteCSV runs the query and writes the result to w, streaming. A result of no
+// columns has no header to write, so one of no rows writes nothing, where Polars 2.1
+// writes a bare newline, and one with rows is refused.
 //
 // It does not close w. Whoever opened it closes it — the only rule that works when
 // the destination might be os.Stdout.

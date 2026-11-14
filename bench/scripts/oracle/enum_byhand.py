@@ -52,8 +52,10 @@ def cases() -> list[Case]:
         case("eq_string_column", EFS, sel(c("e") == c("s")), note="met at the String, by value"),
         case("is_in", EF, sel(c("e").is_in(["lo", "zzz"]))),
         case("fill_null_lo", EF, sel(c("e").fill_null("lo")), note="a category fills and the Enum stays"),
-        case("fill_null_zzz", EF, sel(c("e").fill_null("zzz")),
-             note="Polars 2.1 keeps the null and the Enum; ursus answers a String column holding zzz"),
+        case("fill_null_zzz", EF, sel(c("e").cast(pl.String).fill_null("zzz")),
+             note="spelled to ursus's documented rule (step 507): a fill outside the Enum's categories meets the Enum at the "
+                  "String, a String column holding zzz (FillNullWith's doc); Polars 2.1 keeps the null and the Enum, so it is "
+                  "asked with the Enum cast to String first"),
         case("concat_with_string", {"top": EF.select("e"), "bottom": X}, lambda top, bottom: pl.concat([top, bottom], how="vertical_relaxed"),
              note="Polars' vertical refuses an Enum beside a String; its relaxed mode meets them at String, as Concat does here"),
         # --- generated -----------------------------------------------------------------

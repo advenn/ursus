@@ -6,7 +6,11 @@ earlier columns, which Polars spells as chained with_columns.
 
 Not here: A4, an integer mean past 2^53, where Polars sums in float and rounds
 (9007199254740992.0 of [2^53+1, 2^53+2]) and ursus divides the exact Int128 sum; the Go
-test holds it to math/big. Spelled around: an integer Sum is an Int128 here, so a
+test holds it to math/big. Nor, since step 507, the median of [-1.7e308, 1.7e308] and
+the midpoint of [1e308, 1.5e308], which Polars 2.1 overflows to +Inf and ursus answers
+exactly, 0 and 1.25e308 (feature-gaps §9): TestAggregatesAtTheFloatsEnds holds them to
+math/big. The variance of [1e308, 1e308] is asked of Polars of the values shifted by
+the first, as ursus's Var shifts them (§9), where Polars' own sum of squares overflows. Spelled around: an integer Sum is an Int128 here, so a
 Boolean's sum and cum_sum are cast to Int64 on both sides and the chained windows'
 sums on ursus's; Product is a Float64 here (feature-gaps.md §9), so Polars' is cast.
 """
@@ -59,10 +63,6 @@ def cases() -> list[Case]:
         # --- A2: a quantile at an exact rank is that value; nothing overflows ------------
         case("quantile_0_neg_inf", f64(-inf, 1, 2), sel(v.quantile(0, "linear"))),
         case("quantile_1_inf", f64(1, 2, inf), sel(v.quantile(1, "linear"))),
-        case("median_extremes", f64(-1.7e308, 1.7e308), sel(v.median()),
-             note="Polars 2.1 overflows to +Inf, lo + (hi - lo)/2; 0 here, held to big.Float in the Go test: a finding, skipped"),
-        case("midpoint_huge", f64(1e308, 1.5e308), sel(v.quantile(0.5, "midpoint")),
-             note="Polars 2.1 overflows to +Inf, (lo + hi)/2; 1.25e308 here, held to big.Float: a finding, skipped"),
         case("midpoint_alike_huge", f64(1.7e308, 1.7e308), sel(v.quantile(0.5, "midpoint"))),
         case("median_alike_huge", f64(1.7e308, 1.7e308), sel(v.median())),
         # --- A3: PctChange computes in float, not at the column's width -----------------
@@ -71,8 +71,10 @@ def cases() -> list[Case]:
         # --- A5: a variance that overflows is +Inf, never negative ----------------------
         case("var_overflow", f64(1e308, -1e308), sel(v.var(ddof=0))),
         case("std_overflow", f64(1e308, -1e308), sel(v.std(ddof=0))),
-        case("var_alike_huge", f64(1e308, 1e308), sel(v.var(ddof=0)),
-             note="Polars 2.1's sum of squares overflows and its variance is NaN; 0 here, held to big.Float: a finding, skipped"),
+        case("var_alike_huge", f64(1e308, 1e308), sel((v - v.first()).var(ddof=0).alias("v")),
+             note="spelled to ursus's documented rule (step 507): a float Var is one pass shifted by the first value (§9), "
+                  "so two alike values are 0 however large; Polars' own sum of squares overflows to NaN, so it is asked the "
+                  "variance of the values less the first"),
         # --- A10: Sum of a Bool counts its trues ---------------------------------------
         case("bool_sum", BOOLS, sel(v.sum().cast(pl.Int64)), note="an integer Sum is an Int128 here, Polars' a UInt32: both cast to Int64"),
         case("bool_sum_by_g", GBOOLS, lambda df: df.group_by("g").agg(v.sum().cast(pl.Int64)).sort("g"),

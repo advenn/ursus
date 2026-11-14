@@ -250,6 +250,21 @@ that stops when its request is cancelled.
   `make fuzz FUZZ=<target> PKG=<package> FUZZTIME=<d>` fuzzes one; `fuzz.yml` lists
   every target and fuzzes each for 30 s on a pull request touching Go code, by hand
   and nightly, uploading a failing input. It is not a required check.
+- **The twenty-five findings closed, their thirty-nine cases asserted again** (507):
+  none is skipped. One was a bug, fixed (above); twenty-four are ursus's own rules,
+  each documented in `context_files/feature-gaps.md` §9 with Polars 2.1's answer and
+  why ursus's stands, two of them in docs that said Polars answers so and were
+  corrected (`ToDecimal`'s tie, `RollingOptions.Offset`'s window end). Twenty-eight
+  recorded cases are asked of Polars spelled so that it computes ursus's documented
+  rule: both time units cast to the finer before a `when`, two Enums cast to String, a
+  fill's column cast to Int64 or Float64, the moments of x less its first, a `top_k` of
+  the values without their nulls, the nearer of an as-of join's backward and forward
+  rows with ties backward, a group-by of `truncate("1d")`, minus the business days
+  from end to start, and their kin, each saying so in its note; two have Python's own
+  answer, a float `%` and `decimal`'s ROUND_HALF_UP; the NDJSON case is asserted as
+  recorded. Six refusals ursus means, where Polars answers, are `TestCondRefusals`' and
+  `TestDecimalGuards`', and two float extremes `TestAggregatesAtTheFloatsEnds`', held
+  to math/big; those eight cases left the recordings.
 
 ### Fixed
 
@@ -279,6 +294,12 @@ its section below lists them.
 - **An inclusive split has no trailing empty part** (499): `SplitInclusive(",")` of
   "a,b," is `["a,", "b,"]`, and `SplitExact(",", 1, true)` of "a," is `{"a,", null}`,
   as Polars splits them; each had an empty part after the last separator.
+- **An NDJSON value that is not an object, read into a Struct column under
+  `WithNDJSONIgnoreErrors`, is a null Struct** (507): it was a Struct of null fields,
+  as Polars 1.44.1 read it, where every other value a column cannot take is a null
+  and a null Struct is kept apart from a Struct of nulls (`ExtractGroups`, 499);
+  Polars 2.1 reads a null too. `ScanJSON`, which reads each object as a line, follows.
+  The recorded oracle found it (`ndjsonread/ignored_in_a_struct`).
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

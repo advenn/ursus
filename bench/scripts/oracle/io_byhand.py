@@ -7,6 +7,14 @@ each under the param options, its read_csv arguments; a written text is the answ
 itself.
 Not here, with the reason: i128.Parse's overflow, a Go API; and I22's refusal of a frame
 with rows and no columns, an ursus rule (Polars writes a bare newline).
+
+Spelled to ursus's documented rules (step 507, feature-gaps §9): an instant whose
+offset has seconds is written in UTC here (I8), where Polars 2.1 writes the wall clock
+with the offset rounded to the minute, so Polars is asked to write it converted to UTC
+and read it back; a column of only NaN infers String here, where Polars 2.1 infers
+Float64, so Polars reads it under a String override, which the Go side does not pass;
+and a frame of no rows and no columns writes nothing here, no header naming nothing,
+where Polars 2.1 writes a bare newline, so Polars writes it without a header.
 """
 
 from __future__ import annotations
@@ -53,7 +61,13 @@ def cases() -> list[Case]:
         # --- I8: an offset with seconds is written in UTC --------------------------------
         rt("i8_amsterdam_1930_round_trips", zoned("Europe/Amsterdam", "1929-12-31T23:40:28"), schema_overrides={"t": ams},
            note="Amsterdam's offset was +00:19:32 until 1937: the instant is written in UTC and reads back"),
-        rt("i8_monrovia_1970_round_trips", zoned("Africa/Monrovia", "1970-01-01T00:44:30"), schema_overrides={"t": mon}),
+        case("i8_monrovia_1970_round_trips", zoned("Africa/Monrovia", "1970-01-01T00:44:30"),
+             lambda df: pl.read_csv(df.with_columns(pl.col("t").dt.convert_time_zone("UTC")).write_csv().encode(),
+                                    schema_overrides={"t": mon}),
+             params=with_options({}, {"schema_overrides": {"t": mon}}),
+             note="spelled to ursus's documented rule (step 507, I8): an offset with seconds, Monrovia's -00:44:30, has no "
+                  "+hhmm spelling, so the instant is written in UTC and reads back exactly; Polars 2.1 writes the wall clock "
+                  "at -0045 and reads back an instant 30 s away, so it is asked to write the instant converted to UTC"),
         wr("control_amsterdam_2024_text", zoned("Europe/Amsterdam", "2024-01-01T12:00:00")),
         # --- I9 / S25: one float grammar, without underscores or hex ---------------------
         csv_case("i9_inference_underscore_and_hex", "a,b\n1_000,0x1p3\n"),
@@ -81,13 +95,20 @@ def cases() -> list[Case]:
         rt("i21_integral_float64_round_trips", pl.DataFrame({"f": [1.0, 2.0, -3.0]})),
         wr("i21_specials_written", pl.DataFrame({"f": [1.0, inf, -inf, nan]})),
         rt("control_float32_round_trips_as_float64", pl.DataFrame({"h": pl.Series([1.5, 2.0], dtype=pl.Float32)})),
-        csv_case("control_only_nan_inferred", "a\nNaN\n", note="a column of only NaN: Polars 2.1 infers Float64"),
+        case("control_only_nan_inferred", {}, lambda: pl.read_csv(b"a\nNaN\n", schema_overrides={"a": pl.String}),
+             params={"csv": "a\nNaN\n"},
+             note="spelled to ursus's documented rule (step 507): inf and nan count as a float only beside a number, so a "
+                  "column of only NaN infers String here (ScanCSV's doc); Polars 2.1 infers Float64, so it is read there "
+                  "under a String override, which the Go side does not pass: ursus infers"),
         # --- I27: a null String and an empty one are written and read apart ---------------
         rt("i27_null_string_round_trips", pl.DataFrame({"s": ["", None, "x"], "n": [1, 2, 3]})),
         csv_case("i27_unquoted_empty_is_null", "s,n\n,1\n\"\",2\n"),
         # --- I22 -------------------------------------------------------------------------
-        case("i22_no_rows_no_columns_written", pl.DataFrame({"a": [1]}), lambda df: df.filter(pl.col("a") > 9).select().write_csv(),
-             note="a frame of no rows and no columns: Polars writes a bare newline"),
+        case("i22_no_rows_no_columns_written", pl.DataFrame({"a": [1]}),
+             lambda df: df.filter(pl.col("a") > 9).select().write_csv(include_header=False),
+             note="spelled to ursus's documented rule (step 507, I22): a frame of no columns writes no header naming nothing, "
+                  "so one of no rows writes nothing (WriteCSV's doc); Polars 2.1 writes a bare newline, its empty header, so it "
+                  "is asked without a header"),
         # --- generated -------------------------------------------------------------------
         rt("round_trip_gen", gen),
         wr("written_gen", plain, note="no field begins with a space, which ursus quotes and Polars writes bare (feature-gaps.md §9)"),
