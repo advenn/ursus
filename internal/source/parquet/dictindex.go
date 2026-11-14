@@ -2,7 +2,9 @@ package parquet
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/bits"
 	"sync"
@@ -131,7 +133,20 @@ func (c *checkedPages) Reset(r parquet.BufferedReader, nrows int64, codec compre
 // error, and the chunk's reader is not read again.
 func batchErr(cr interface{ Err() error }, total int64, err error) error {
 	if err == nil && total == 0 {
-		return cr.Err()
+		err = cr.Err()
+	}
+	return truncated(err)
+}
+
+// truncated is a page reader's error as a scan may return it, io.EOF made
+// io.ErrUnexpectedEOF (step 521). A page whose header is whole and none of whose
+// bytes is in its chunk is cut short, and io.ReadFull answers io.EOF for it, no byte
+// read; a scan answers io.EOF at its end, which the engine takes an error wrapping
+// for. Made io.ErrUnexpectedEOF, the error fails the read as cut short, where io.EOF
+// would end it at the rows before the page.
+func truncated(err error) error {
+	if errors.Is(err, io.EOF) {
+		return io.ErrUnexpectedEOF
 	}
 	return err
 }

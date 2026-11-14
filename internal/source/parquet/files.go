@@ -499,7 +499,9 @@ func (s *Source) openFile(ctx context.Context, i int, mem memory.Allocator) (_ *
 			err = corrupt(v, s.partName(i))
 		}
 	}()
-	// The footer's schema is measured before arrow-go recurses on it (step 423).
+	// The footer is walked before the file reader reads it: its schema's depth (step
+	// 423), its lists' counts (step 521) and its schema's children (step 533) are
+	// checked against its bytes first.
 	if ra, err = measureFooter(ra); err != nil {
 		if closer != nil {
 			closer.Close()
