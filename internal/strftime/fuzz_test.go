@@ -260,6 +260,9 @@ func FuzzParse(f *testing.F) {
 			if err != nil {
 				t.Fatalf("Parse(%q, %q) = %+v, which Append refuses: %v", format, text, got, err)
 			}
+			if spaceDayRunsOn(fm, at, got.HasZone, out) {
+				return nil
+			}
 			back, err := fm.Parse(string(out))
 			if err != nil || back != got {
 				t.Fatalf("Parse(%q, %q) = %+v, written %q, read back %+v, %v", format, text, got, out, back, err)
@@ -267,4 +270,25 @@ func FuzzParse(f *testing.F) {
 			return nil
 		})
 	})
+}
+
+// spaceDayRunsOn is whether out, Append's text for at, has a day below 10 that %e wrote
+// as " 1" to " 9" directly before a digit. Parse reads %e as chrono and C's strptime
+// do, one space skipped and then up to two digits, so " 1" before "0" reads back as
+// day 10: the text is not read back as written, by ursus or by either of them. Found
+// by CI's fuzzing of step 509: "%Y%Y%y%y%e%Y%f" on "0000000000000100000".
+func spaceDayRunsOn(fm *Format, at time.Time, zone bool, out []byte) bool {
+	for i, it := range fm.items {
+		if it.spec != 'e' {
+			continue
+		}
+		head, err := (&Format{items: fm.items[:i+1]}).Append(nil, at, zone)
+		if err != nil || len(head) >= len(out) || head[len(head)-2] != ' ' {
+			continue
+		}
+		if c := out[len(head)]; c >= '0' && c <= '9' {
+			return true
+		}
+	}
+	return false
 }

@@ -24,7 +24,9 @@
 //
 // Names are English. Parsing is strict about shape: a number takes at most its
 // width, a date must exist (no 30 February), and the whole input must be consumed.
-// A weekday name is read and not checked against the date.
+// A weekday name is read and not checked against the date. %e skips one space and
+// then reads up to two digits, as chrono and C's strptime do, so a day below 10 that
+// %e wrote directly before a digit does not read back as written.
 package strftime
 
 import (

@@ -74,6 +74,17 @@ a part named twice, a date that is not whole, and a day by %e or a year outside
 does: the plan's predicted first counterexample, "%Y past year 9999", is this, and
 Polars 2.1 refuses `+1000000102` by `%Y%m%d` too.
 
+`FuzzParse`'s round trip leaves out the same reading, by the text Append wrote
+(`spaceDayRunsOn`): a day below 10 that %e wrote as " 1" to " 9" directly before a
+digit, which Parse reads back as a two-digit day, as chrono and C's strptime do.
+strftime's package doc now says so.
+
+`FuzzScanCSVChunked` compares the two reads' errors with the line a read error is
+reported near left aside (`sameReadError`). klauspost's Zstandard decoder decodes
+blocks ahead on goroutines of its own, so whether the text before a corrupt block
+reached the scanner before the decoder's error did depends on timing and on how the
+bytes arrived. The error is the same; its "near line" is not.
+
 ## 3. Findings
 
 Four, each found by the targets' seeds before any fuzzing, each a bug, each fixed:
@@ -93,8 +104,18 @@ inputs above. Polars 2.1 refuses "0e9223372036854775807" as a Decimal; ursus rea
 zero with any exponent as 0 (`TestParseDecimalExponentDoesNotWrap`), and finding 3
 extends that rule to the exponents past an int, not Polars'.
 
-Fuzzing found nothing more: 11.3 million inputs over the 18 targets (§4), none
-failing. No finding is left for the maintainer, and no seed is skipped.
+Local fuzzing found nothing more: 11.3 million inputs over the 18 targets (§4), none
+failing. CI's first 30-second runs, on this step's pull request, found two failures,
+both in a target's comparison and not in the code it guards; each is kept as a seed
+and §2 describes the rule each now follows:
+
+- `FuzzParse/ci-space-day-before-digit`: "%Y%Y%y%y%e%Y%f" on "0000000000000100000"
+  reads day 1, which Append writes " 1" before the year "0000", read back as day 10.
+- `FuzzScanCSVChunked/ci-zstd-error-line`: a Zstandard stream with a corrupt second
+  block, refused by both reads with klauspost's "compressed size too big", near line
+  2 read whole and near line 1 read a byte or two at a time.
+
+No finding is left for the maintainer, and no seed is skipped.
 
 **Not built:**
 
