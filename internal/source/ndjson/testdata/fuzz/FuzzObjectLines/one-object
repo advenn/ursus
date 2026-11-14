@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("{\"a\":\n1,\r\n\"b\":[\n2]}")
+uint16(3)
+uint16(64)

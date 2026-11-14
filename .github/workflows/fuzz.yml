@@ -12,6 +12,11 @@ name: fuzz
 # reports, and a fuzz finding is a bug to fix in a PR of its own, not one to block
 # the PR that met it. The generated corpus of each target is kept in the cache
 # between runs, so the nightly run starts where the last one stopped.
+#
+# Each new input is minimised for at most 5 s (step 516). Go's default, 60 s, left a
+# target that takes a millisecond an input minimising for most of its 30 s: 40
+# inputs run in 20 s against 11,366 with 1 s (steps 510 and 511). A failing input is
+# still kept and fails as a seed; it may be a little larger.
 
 on:
   pull_request:
@@ -87,7 +92,7 @@ jobs:
           restore-keys: fuzz-corpus-${{ matrix.id }}-
 
       - name: fuzz ${{ matrix.target }}
-        run: go test -run='^$' -fuzz="^${TARGET}\$" -fuzztime="${FUZZTIME}" "${PKG}"
+        run: go test -run='^$' -fuzz="^${TARGET}\$" -fuzztime="${FUZZTIME}" -fuzzminimizetime=5s "${PKG}"
         env:
           TARGET: ${{ matrix.target }}
           PKG: ${{ matrix.pkg }}
