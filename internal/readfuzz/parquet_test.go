@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/arrow-go/v18/parquet/compress"
+	pqcompress "github.com/apache/arrow-go/v18/parquet/compress"
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/dtype"
@@ -62,8 +62,8 @@ func parquetSeeds(f *testing.F) [][]byte {
 	frame := ursus.Frame(ursus.ValuesNullable("i", i64, valid), ursus.Values("f", f64),
 		ursus.Values("s", s), ursus.Values("b", bl), ursus.Values("t", ts),
 		ursus.Values("x", bin), ursus.Values("n", i32))
-	for _, c := range []compress.Compression{compress.Codecs.Uncompressed, compress.Codecs.Snappy,
-		compress.Codecs.Gzip, compress.Codecs.Brotli, compress.Codecs.Zstd, compress.Codecs.Lz4Raw} {
+	for _, c := range []pqcompress.Compression{pqcompress.Codecs.Uncompressed, pqcompress.Codecs.Snappy,
+		pqcompress.Codecs.Gzip, pqcompress.Codecs.Brotli, pqcompress.Codecs.Zstd, pqcompress.Codecs.Lz4Raw} {
 		var buf bytes.Buffer
 		if err := frame.WriteParquet(f.Context(), &buf, ursus.WithCompression(c), ursus.WithRowGroupRows(8)); err != nil {
 			f.Fatal(err)
@@ -416,7 +416,7 @@ func TestATimePastItsDayIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
-	if err := lists.WriteParquet(ctx, &buf, ursus.WithCompression(compress.Codecs.Uncompressed)); err != nil {
+	if err := lists.WriteParquet(ctx, &buf, ursus.WithCompression(pqcompress.Codecs.Uncompressed)); err != nil {
 		t.Fatal(err)
 	}
 	got, err := ursus.ScanParquetBytes(buf.Bytes(), "lists.parquet").Collect(ctx)
