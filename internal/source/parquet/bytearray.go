@@ -43,6 +43,7 @@ type byteArrayCol struct {
 // FIXED_LEN_BYTE_ARRAY one through flbaAsBytes.
 type byteArrayReader interface {
 	ReadBatch(n int64, vals []parquet.ByteArray, defs, reps []int16) (int64, int, error)
+	Err() error
 	Close() error
 }
 
@@ -106,7 +107,7 @@ func (c *byteArrayCol) read(n int) (int, error) {
 			defs = c.defs[:n]
 		}
 		total, valuesRead, err := c.cr.ReadBatch(int64(n), c.vals[:n], defs, nil)
-		if err != nil {
+		if err := batchErr(c.cr, total, err); err != nil {
 			return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a byte-array chunk")
 		}
 		return c.take(int(total), valuesRead, defs), nil
@@ -120,7 +121,7 @@ func (c *byteArrayCol) read(n int) (int, error) {
 			defs = c.defs[rows:n]
 		}
 		total, valuesRead, err := ip.ReadBatchInPage(int64(n-rows), c.vals[:n-rows], defs, nil)
-		if err != nil {
+		if err := batchErr(c.cr, total, err); err != nil {
 			return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading a byte-array chunk")
 		}
 		if total == 0 {

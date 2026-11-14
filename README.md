@@ -218,7 +218,11 @@ reference, and ursus currently passes **22/22 PDS-H (TPC-H) queries and 15/15 h2
 validates. The unit tests' expected values are recorded, not typed: `make oracle` asks Polars 2.1.0 the suite's
 questions and writes its answers to [`testdata/oracle/`](./testdata/oracle/), and `go test -run TestOracle .`
 compares ursus against them, dtypes checked and floats to the bit, while `make testinventory`, which CI runs, fails a
-test that types more expected values by hand than its baseline allows.
+test that types more expected values by hand than its baseline allows. And random queries are checked against
+themselves: [`qcheck/`](./qcheck/), a module of its own, draws tables and a well-typed query from one seed and runs it
+on 1, 4 and 8 threads, in batches of 1 to 65,536 rows, with the optimizer on and off and from tables cut into records,
+requiring one answer to the bit (`cd qcheck && go run ./cmd/qcheck self -seed 1 -duration 20s`; CI runs it for five
+minutes).
 
 ---
 
