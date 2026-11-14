@@ -506,11 +506,20 @@ func (s *Source) openFile(ctx context.Context, i int, mem memory.Allocator) (_ *
 		}
 		return nil, nil, uerr.Annotate(err, "scan_parquet", s.partName(i))
 	}
-	r, err := file.NewParquetReader(ra, file.WithReadProps(readProps(mem)))
+	props := readProps(mem)
+	r, err := file.NewParquetReader(ra, file.WithReadProps(props))
 	if err == nil {
-		err = checkRowCounts(r.MetaData())
+		if err = checkRowCounts(r.MetaData()); err == nil {
+			err = checkChunks(r.MetaData())
+		}
 		if err != nil {
 			r.Close()
+		}
+	}
+	if err == nil {
+		boundPages(props, r.MetaData())
+		if m, ok := ra.(*measured); ok {
+			m.watchChunks(r.MetaData())
 		}
 	}
 	if err != nil {
@@ -557,6 +566,34 @@ func checkRowCounts(md *metadata.FileMetaData) error {
 	}
 	if total != md.NumRows {
 		return fmt.Errorf("corrupt: the file says %d rows, and its row groups hold %d", md.NumRows, total)
+	}
+	return nil
+}
+
+// checkChunks refuses a footer that places a column chunk outside the file (step
+// 510): arrow-go reads a chunk into a slice of its declared size, made before the
+// read finds the bytes missing (ReaderProperties.GetStream), so a chunk claiming
+// 2^40 bytes in a file of 162 asked the runtime for a terabyte, a fatal "out of
+// memory" no recover catches. A chunk begins at its first page, its dictionary's
+// where it has one, as arrow-go takes it.
+func checkChunks(md *metadata.FileMetaData) error {
+	size := md.GetSourceFileSize()
+	for g := range md.NumRowGroups() {
+		rg := md.RowGroup(g)
+		for c := range rg.NumColumns() {
+			cc, err := rg.ColumnChunk(c)
+			if err != nil {
+				return err
+			}
+			start, n := cc.DataPageOffset(), cc.TotalCompressedSize()
+			if d := cc.DictionaryPageOffset(); cc.HasDictionaryPage() && d > 0 && start > d {
+				start = d
+			}
+			if start < 0 || n < 0 || start > size || n > size-start {
+				return fmt.Errorf("corrupt: row group %d says its column %s is %d bytes from byte %d, "+
+					"in a file of %d", g, md.Schema.Column(c).Path(), n, start, size)
+			}
+		}
 	}
 	return nil
 }
