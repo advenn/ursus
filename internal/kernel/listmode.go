@@ -145,7 +145,7 @@ func listValueCounts(name string, out dtype.DataType, c *data.Column, args []any
 		}
 		count = data.NewFixed(fields[1].Name, dtype.Uint32, u, bitmap.AllSet(len(u)))
 	}
-	pairs := data.NewStruct(name, []*data.Column{values.Rename(fields[0].Name), count}, bitmap.AllSet(len(counts)))
+	pairs := data.NewStructLen(name, len(counts), []*data.Column{values.Rename(fields[0].Name), count}, bitmap.AllSet(len(counts)))
 	return data.NewList(name, offs, pairs, c.Validity()), nil
 }
 
@@ -177,7 +177,7 @@ func listRle(name string, out dtype.DataType, c *data.Column) (*data.Column, err
 		return nil, err
 	}
 	fields := out.Inner().Fields()
-	runs := data.NewStruct(name, []*data.Column{
+	runs := data.NewStructLen(name, len(lens), []*data.Column{
 		data.NewFixed(fields[0].Name, dtype.Uint32, lens, bitmap.AllSet(len(lens))),
 		values.Rename(fields[1].Name),
 	}, bitmap.AllSet(len(lens)))
