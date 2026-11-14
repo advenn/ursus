@@ -139,3 +139,28 @@ jobs:
       - run: go test -count=1 -run TestTextPastTwoGiB -v ./internal/arrowout/
         env:
           URSUS_BIG_STRINGS: '1'
+
+  qcheck:
+    # Random queries checked against themselves (step 512): qcheck/ is a module of
+    # its own, pure Go, which the root's ./... does not reach. Its tests, the teeth
+    # and a seeded smoke run among them, then five minutes of `qcheck self` from a
+    # seed this run's number sets, printed first so a finding can be run again with
+    # `qcheck self -seed <its seed> -cases 1`. Not a required check: the maintainer
+    # decides that.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: qcheck
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          cache-dependency-path: qcheck/go.sum
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+      - name: qcheck self for five minutes
+        run: go run ./cmd/qcheck self -seed ${{ github.run_number }}000000 -duration 5m

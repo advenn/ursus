@@ -46,6 +46,7 @@ type tailOp struct {
 	// that only tracks the operators it expects to be large is a budget that
 	// reports a number nobody can check.
 	mem    *execopt.Account
+	stale  int // held batches dropped since mem was last recounted
 	budget *execopt.Budget
 	dir    string // its run files' directory, once it has spilled
 	runs   int    // run files written, which names the next
@@ -99,21 +100,34 @@ func (t *tailOp) drain(ctx context.Context) error {
 			return err
 		}
 		t.hold(b)
-		if err := t.dropFront(); err != nil {
+		dropped, err := t.dropFront()
+		if err != nil {
 			return err
 		}
 
-		// The ring EVICTS, so accounting is recomputed rather than accumulated.
-		// What it holds is the last piece's batches.
-		t.mem.Release()
-		if last := t.last(); last != nil {
-			for _, held := range last.batches {
-				t.mem.Retain(held)
-			}
+		// What it holds is the last piece's batches. A batch added is retained as it
+		// comes, which is exact, since Retain holds each allocation once. The ring
+		// EVICTS, and a batch dropped is let go of only by recounting what is left:
+		// a view of an allocation that a batch still held shares cannot be let go
+		// of alone. So the account is recounted once the batches dropped since its
+		// last count reach an eighth of those held, counting at most that much too
+		// many in between, and recounted before it decides to spill, so it spills
+		// where it did. Recounting at every batch, until step 512, was quadratic in
+		// the batches held: the last 4,000 of 8,193 rows, in batches of one row,
+		// allocated 6 GB in 12 s (found by qcheck's self check).
+		t.mem.Retain(b)
+		t.stale += dropped
+		if t.stale > 0 && t.stale*8 >= t.heldBatches() {
+			t.recount()
 		}
 		if t.budget.Limit() > 0 && t.mem.Over() {
-			if err := t.spillHeld(ctx); err != nil {
-				return err
+			if t.stale > 0 {
+				t.recount()
+			}
+			if t.mem.Over() {
+				if err := t.spillHeld(ctx); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -154,18 +168,37 @@ func (t *tailOp) last() *tailPiece {
 	return nil
 }
 
+// heldBatches is how many batches it holds, the last piece's.
+func (t *tailOp) heldBatches() int {
+	if last := t.last(); last != nil {
+		return len(last.batches)
+	}
+	return 0
+}
+
+// recount sets the account to the batches held.
+func (t *tailOp) recount() {
+	t.mem.Release()
+	if last := t.last(); last != nil {
+		for _, held := range last.batches {
+			t.mem.Retain(held)
+		}
+	}
+	t.stale = 0
+}
+
 // dropFront drops whole runs, then whole held batches, from the front while the rest
-// still covers n.
-func (t *tailOp) dropFront() error {
+// still covers n, and says how many held batches it dropped.
+func (t *tailOp) dropFront() (dropped int, err error) {
 	for len(t.pieces) > 0 {
 		p := &t.pieces[0]
 		if p.run != "" {
 			if t.held-p.rows < t.n {
-				return nil
+				return dropped, nil
 			}
 			t.held -= p.rows
 			if err := os.Remove(p.run); err != nil {
-				return uerr.Wrap(err, uerr.KindIO, "tail", "removing spill run %s", p.run)
+				return dropped, uerr.Wrap(err, uerr.KindIO, "tail", "removing spill run %s", p.run)
 			}
 			t.pieces = t.pieces[1:]
 			continue
@@ -175,10 +208,11 @@ func (t *tailOp) dropFront() error {
 			p.rows -= p.batches[0].Rows()
 			p.batches[0] = nil
 			p.batches = p.batches[1:]
+			dropped++
 		}
-		return nil
+		return dropped, nil
 	}
-	return nil
+	return dropped, nil
 }
 
 // spillHeld writes the batches held to a run file, in order, and lets them go.
@@ -216,6 +250,7 @@ func (t *tailOp) spillHeld(ctx context.Context) error {
 	}
 	*last = tailPiece{run: path, rows: last.rows}
 	t.mem.Release()
+	t.stale = 0
 	t.budget.NoteSpill()
 	return nil
 }

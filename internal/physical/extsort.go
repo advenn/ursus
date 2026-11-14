@@ -65,26 +65,30 @@ func gatherRows(schema *dtype.Schema, srcs []*data.Batch, pick []rowRef) (*data.
 		return data.NewBatchRows(schema, nil, len(pick)), nil
 	}
 
-	selBySrc := make([][]int32, len(srcs))
+	// Each source the pick touches gets a slot, in the order first touched, so the
+	// work below is as long as the pick and not as long as srcs. A sort keeps every
+	// input batch as a source and gathers each output batch from them: in batches
+	// of one row, n sources and n gathers, and arrays as long as srcs made for each
+	// gather allocated n², 2.3 GB to sort 8,191 rows (step 512, found by qcheck).
+	slot, touched, err := sourceSlots(len(srcs), pick)
+	if err != nil {
+		return nil, err
+	}
+	selBySrc := make([][]int32, len(touched))
 	rank := make([]int32, len(pick))
 	for p, r := range pick {
-		if int(r.src) >= len(srcs) {
-			return nil, uerr.Internalf("physical: gather references source %d of %d",
-				r.src, len(srcs))
-		}
-		rank[p] = int32(len(selBySrc[r.src]))
-		selBySrc[r.src] = append(selBySrc[r.src], r.row)
+		s := slot[p]
+		rank[p] = int32(len(selBySrc[s]))
+		selBySrc[s] = append(selBySrc[s], r.row)
 	}
 
-	base := make([]int32, len(srcs))
-	parts := make([]*data.Batch, 0, len(srcs))
+	base := make([]int32, len(touched))
+	parts := make([]*data.Batch, 0, len(touched))
 	var acc int32
-	for i, sel := range selBySrc {
-		base[i] = acc
-		if len(sel) == 0 {
-			continue
-		}
+	for s, sel := range selBySrc {
+		base[s] = acc
 		acc += int32(len(sel))
+		i := touched[s]
 		cols := make([]*data.Column, srcs[i].NumCols())
 		for j, c := range srcs[i].Columns() {
 			g, err := kernel.Take(c, sel)
@@ -111,8 +115,8 @@ func gatherRows(schema *dtype.Schema, srcs []*data.Batch, pick []rowRef) (*data.
 		return nil, err
 	}
 	perm := make([]int32, len(pick))
-	for p, r := range pick {
-		perm[p] = base[r.src] + rank[p]
+	for p := range pick {
+		perm[p] = base[slot[p]] + rank[p]
 	}
 	cols := make([]*data.Column, cat.NumCols())
 	for i, c := range cat.Columns() {
@@ -121,6 +125,43 @@ func gatherRows(schema *dtype.Schema, srcs []*data.Batch, pick []rowRef) (*data.
 		}
 	}
 	return data.NewBatch(schema, cols)
+}
+
+// sourceSlots numbers the sources pick touches, in the order first touched:
+// slot[p] is pick[p]'s source's number, and touched[s] the source numbered s. Where
+// there are no more sources than picked rows, an array as long as the sources finds
+// each one's number; past that a map does, so the work is as long as the pick.
+func sourceSlots(nsrc int, pick []rowRef) (slot, touched []int32, err error) {
+	slot = make([]int32, len(pick))
+	var dense []int32 // a source's number plus one, 0 until it is touched
+	var sparse map[int32]int32
+	if nsrc <= len(pick) {
+		dense = make([]int32, nsrc)
+	} else {
+		sparse = make(map[int32]int32)
+	}
+	for p, r := range pick {
+		if r.src < 0 || int(r.src) >= nsrc {
+			return nil, nil, uerr.Internalf("physical: gather references source %d of %d", r.src, nsrc)
+		}
+		s, seen := int32(0), false
+		if dense != nil {
+			s, seen = dense[r.src]-1, dense[r.src] > 0
+		} else {
+			s, seen = sparse[r.src]
+		}
+		if !seen {
+			s = int32(len(touched))
+			touched = append(touched, r.src)
+			if dense != nil {
+				dense[r.src] = s + 1
+			} else {
+				sparse[r.src] = s
+			}
+		}
+		slot[p] = s
+	}
+	return slot, touched, nil
 }
 
 // --- runs ----------------------------------------------------------------------

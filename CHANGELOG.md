@@ -265,6 +265,21 @@ that stops when its request is cancelled.
   recorded. Six refusals ursus means, where Polars answers, are `TestCondRefusals`' and
   `TestDecimalGuards`', and two float extremes `TestAggregatesAtTheFloatsEnds`', held
   to math/big; those eight cases left the recordings.
+- **Random queries checked against themselves** (512): `qcheck/`, a module of its
+  own, draws tables (Int64, Int32, Float64, String, Bool and Date; 0 to 3,000 rows and
+  8191 to 8193; null rates 0 to 1; tame, wild and extreme values, NaN, ±0, each type's
+  ends, Unicode and long text) and a well-typed query over them from one seed: filters,
+  projections, group-bys on integer keys of mixed widths, sorts with a head or a slice,
+  inner, left, semi and anti joins on integer, text and NaN/±0 float keys, and their
+  expressions and aggregates. `qcheck self` runs each at one thread, batches of 8192
+  and the default flags, and again on 4 and 8 threads, in batches of 1 to 65,536 rows,
+  with the optimizer off and from tables cut into records, sampled pairwise, and
+  requires one answer to the bit, rows in order where the query promises an order and
+  as a multiset where not; a float sum on several threads may differ within an error
+  model, counted, and a canary fails the allowance as stale when it stops differing.
+  A mismatch is bisected to its factor, and every run is inside `fuzzcheck.Run`. Its
+  tests, the teeth and a seeded smoke run, and five minutes of `qcheck self` run in
+  the CI job `qcheck`, not a required check. It found the three below.
 
 ### Fixed
 
@@ -300,6 +315,20 @@ its section below lists them.
   and a null Struct is kept apart from a Struct of nulls (`ExtractGroups`, 499);
   Polars 2.1 reads a null too. `ScanJSON`, which reads each object as a line, follows.
   The recorded oracle found it (`ndjsonread/ignored_in_a_struct`).
+- **A sort in small batches no longer allocates by the square of its batches** (512):
+  each output batch's gather made two arrays as long as every input batch the sort
+  kept, so sorting 8,191 rows in batches of one row allocated 2.3 GB in 400 ms; 23 MB
+  in 27 ms now; the as-of join's and the temporal streams' gathers go through the same
+  function. Found by `qcheck self`.
+- **A slice from the end, and a tail, in small batches** (512): after each batch it
+  read it recounted every batch it held in its memory account, so the last 4,000 of
+  8,193 rows in batches of one row allocated 6 GB in 12 s; 16 MB in 17 ms now. It
+  counts a batch as it comes and recounts once an eighth of what it holds has gone,
+  and before it decides to spill, so it spills where it did. Found by `qcheck self`.
+- **`NUnique` by many groups in small batches** (512): its table of group and value
+  grew its keys to the group count exactly before each batch, copying them all, so a
+  `NUnique` by 8,193 keys in batches of one row allocated 842 MB; 30 MB now, the keys
+  growing to twice what they held, as a slice's append does. Found by `qcheck self`.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
