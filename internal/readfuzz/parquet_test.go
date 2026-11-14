@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -439,31 +440,80 @@ func TestATimePastItsDayIsRefused(t *testing.T) {
 	})
 }
 
-// TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt (step 510, F9 of its
-// record, left for the maintainer): a data page of a dictionary of two INT64 values
-// whose one RLE run says index 2^30, in a file of 128 bytes whose footer lists
-// DELTA_BINARY_PACKED, so arrow-go's column reader decodes the chunk and not the
-// reader's own pages. arrow-go's encoding.(*dictConverter[T]).ensure makes a slice
-// of index+1 values before checking the index against the dictionary: 8 GiB here,
-// and a fatal "out of memory" where the type is wider or the index is 2^31−1. It
-// answers an error after, so the read is refused, past every bound. The own pages
-// check each index first (pageChunk.indices).
+// TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt (step 517, F9 of step
+// 510's record): a data page of a dictionary of two values whose indices say 2^30,
+// in an RLE run and in a bit-packed one, in each kind of column chunk arrow-go's
+// column reader decodes (pqIndexKinds). arrow-go's
+// encoding.(*dictConverter[T]).ensure made a slice of index+1 values before it
+// checked the index against the dictionary: 8 GiB of a file of some 150 bytes for an
+// INT64, 12 GiB for an INT96, 24 GiB of slice headers for a FIXED_LEN_BYTE_ARRAY or a
+// BYTE_ARRAY, a fatal "out of memory". Each is refused now as corrupt, an I/O error,
+// before arrow-go decodes the page, within the harness's bounds, and the error says
+// so.
+//
+// What no reader refuses, each read as the PLAIN pages of the values its indices
+// pick: indices in the dictionary at a bit width wider than two values need; a
+// bit-packed run whose padding, past the page's last value, holds 2^30; and a
+// dictionary page, a page of its indices, and a PLAIN page after them, as a writer
+// whose dictionary grew too large falls back.
 func TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt(t *testing.T) {
-	t.Skip("finding: arrow-go's dictConverter.ensure allocates by a dictionary index before checking it; " +
-		"a fix needs every chunk arrow-go decodes read through a page reader ursus checks (step 510, F9)")
-	dict := binary.LittleEndian.AppendUint64(binary.LittleEndian.AppendUint64(nil, 7), 9)
-	idx := binary.AppendUvarint([]byte{31}, 5<<1)
-	idx = binary.LittleEndian.AppendUint32(idx, 1<<30)
-	pages := []pqPage{
-		{typ: pqPageDict, values: 2, encoding: pqPlain, body: dict},
-		{typ: pqPageData, values: 5, encoding: pqRLEDict, body: idx},
+	read := func(b []byte) (*ursus.DataFrame, error) {
+		return ursus.ScanParquetBytes(b, "forged.parquet").Collect(t.Context())
 	}
-	b := pqForged{phys: pqInt64, rows: 5, pages: pages, encs: []int32{pqDeltaBinary}}.bytes()
-	fuzzcheck.Run(t, limits(len(b)), func() error {
-		df, err := ursus.ScanParquetBytes(b, "forged.parquet").Collect(t.Context())
-		if err == nil {
-			t.Errorf("index 2^30 of a dictionary of 2: read as %d rows, and no error", df.Height())
-		}
-		return nil
-	})
+	for _, k := range pqIndexKinds() {
+		t.Run(k.name, func(t *testing.T) {
+			rle, packed := k.past()
+			for _, c := range []struct {
+				run string
+				b   []byte
+			}{{"an RLE run", rle}, {"a bit-packed run", packed}} {
+				fuzzcheck.Run(t, limits(len(c.b)), func() error {
+					df, err := read(c.b)
+					switch {
+					case err == nil:
+						t.Errorf("index 2^30 of a dictionary of 2, in %s: read as %d rows, and no error", c.run, df.Height())
+					case !errors.Is(err, ursus.ErrIO) || !strings.Contains(err.Error(), "past its dictionary"):
+						t.Errorf("index 2^30 of a dictionary of 2, in %s: %v, not an I/O error naming the index", c.run, err)
+					}
+					return err
+				})
+			}
+
+			want, err := read(k.file(k.plain(k.values[1])))
+			if err != nil {
+				t.Fatalf("the PLAIN page: %v", err)
+			}
+			var padded [8]uint32
+			for i := range padded {
+				padded[i] = 1 << 30
+				if i < k.present {
+					padded[i] = 1
+				}
+			}
+			for _, c := range []struct {
+				name string
+				b    []byte
+			}{
+				{"an RLE run of index 1", k.file(k.dict(), k.data(pqRLEDict, pqIndexRun(k.present, 1)))},
+				{"a bit-packed run of index 1, its padding 2^30", k.file(k.dict(), k.data(pqRLEDict, pqIndexPacked(padded)))},
+			} {
+				got, err := read(c.b)
+				if err != nil {
+					t.Errorf("%s: %v", c.name, err)
+					continue
+				}
+				ursustest.AssertFrameEqual(t, got, want)
+			}
+
+			fellBack, err := read(k.file(k.dict(), k.data(pqRLEDict, pqIndexRun(k.present, 1)), k.plain(k.values[0])))
+			if err != nil {
+				t.Fatalf("a page of indices and a PLAIN page after it: %v", err)
+			}
+			want, err = read(k.file(k.plain(k.values[1]), k.plain(k.values[0])))
+			if err != nil {
+				t.Fatalf("the PLAIN pages: %v", err)
+			}
+			ursustest.AssertFrameEqual(t, fellBack, want)
+		})
+	}
 }
