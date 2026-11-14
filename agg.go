@@ -130,7 +130,9 @@ func (e Expr) LastNonNull() Expr  { return e.Filter(e.IsNotNull()).Last() }
 // other counters it is never itself null.
 func (e Expr) NullCount() Expr { return e.agg(expr.AggNullCount) }
 
-// Any and AllTrue reduce a Boolean column.
+// Any and AllTrue reduce a Boolean column; a column of another type is refused, a
+// Decimal among them, whose truth Polars 2.1 reads as not zero: compare first,
+// Col("x").Gt(0).Any().
 //
 // AllTrue rather than All, because All is already the top-level selector for every
 // column and one name cannot mean both.
@@ -230,7 +232,9 @@ func pairAgg(op expr.AggOp, a, b Expr, p expr.AggParams) Expr {
 // that the question has no answer.
 //
 // Computed with Welford's algorithm, so a column of large near-equal values gives
-// the right answer rather than the zero (or negative) that E[x²]−E[x]² produces.
+// the right answer rather than the zero (or negative) that E[x²]−E[x]² produces;
+// two alike values at the end of the float's range, [1e308, 1e308], vary by 0, where
+// Polars 2.1's variance is NaN.
 //
 // A temporal column, a Duration included, is refused for now; Cast(Int64) gives
 // its ticks.
@@ -262,7 +266,10 @@ func (e Expr) Median() Expr { return e.agg(expr.AggMedian) }
 // either is NaN, as Polars'.
 //
 // The moments are kept online and merged pairwise, so a group-by runs N-ways; Polars
-// computes them in two passes, so the two agree to the last few bits.
+// computes them in two passes, so the two agree to the last few bits. Each group's
+// values are shifted by its first, so the moments of large values close together,
+// [1e9+1, 1e9+2, 1e9+4], are those of [1, 2, 4], where Polars 2.1's float mean at
+// 1e9 loses seven digits.
 func (e Expr) Skew(bias bool) Expr { return e.aggP(expr.AggSkew, expr.AggParams{Bias: bias}) }
 func (e Expr) Kurtosis(fisher, bias bool) Expr {
 	return e.aggP(expr.AggKurtosis, expr.AggParams{Fisher: fisher, Bias: bias})
@@ -509,6 +516,10 @@ func (e Expr) Dot(other Expr) Expr { return e.Mul(other).Sum() }
 // A quantile of instants or durations is one of them, truncated toward zero, as its
 // median is and as Polars' is: a Date's a Datetime(us), keeping a fraction of a day
 // (step 300; refused before).
+//
+// An interpolation between two finite values does not overflow: the median of
+// [-1.7e308, 1.7e308] is 0 and the midpoint of [1e308, 1.5e308] 1.25e308, where
+// Polars 2.1 answers +Inf for both.
 func (e Expr) Quantile(q float64, interp Interpolation) Expr {
 	if !(q >= 0 && q <= 1) { // written this way so NaN is rejected too
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "quantile",

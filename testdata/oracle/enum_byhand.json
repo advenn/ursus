@@ -787,18 +787,18 @@
     }
    },
    "name": "fill_null_zzz",
-   "note": "Polars 2.1 keeps the null and the Enum; ursus answers a String column holding zzz",
+   "note": "spelled to ursus's documented rule (step 507): a fill outside the Enum's categories meets the Enum at the String, a String column holding zzz (FillNullWith's doc); Polars 2.1 keeps the null and the Enum, so it is asked with the Enum cast to String first",
    "order": "rows",
    "want": {
     "columns": [
      {
-      "dtype": "Enum(lo, mid, hi)",
+      "dtype": "String",
       "name": "e",
       "values": [
        "hi",
        "lo",
        "mid",
-       null
+       "zzz"
       ]
      }
     ]

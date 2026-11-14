@@ -29,10 +29,8 @@ func init() {
 		// Asked of Polars as the floats' product: a Product is a Float64 for every
 		// number (feature-gaps §9), exact over these multiples of a quarter.
 		"product": agg(x.Product().Alias("product")),
-		// Polars 2.1 answers any and all of a Decimal, true where a value is not zero;
-		// Any and AllTrue take a Boolean alone (internal/expr.ResolveAggBinding: "compare
-		// first"), as a Decimal's cast to a Boolean is refused (castbool/decimal_to_bool).
-		"any_all":     oracleFinding("Any and AllTrue refuse a Decimal; Polars 2.1 answers any and all of one, true where a value is not zero"),
+		// Any and AllTrue of a Decimal, which Polars 2.1 answers, are refused here on
+		// purpose (they take a Boolean): TestDecimalGuards (step 507).
 		"bitwise_and": agg(x.BitwiseAnd().Alias("and")),
 		"median_quantile": agg(x.Median().Alias("median"), x.Quantile(0.75, ursus.InterpNearest).Alias("q75_nearest"),
 			x.Quantile(0.25, ursus.InterpLinear).Alias("q25_linear")),

@@ -36,7 +36,7 @@ func init() {
 	refused := func(q oracleQuery) oracleQuery { return oracleRefusedAs(ursus.ErrValue, q) }
 	oracleGroups["io_byhand"] = map[string]oracleQuery{
 		"i8_amsterdam_1930_round_trips":        roundTrip,
-		"i8_monrovia_1970_round_trips":         oracleFinding("Polars 2.1's round trip of Monrovia's -00:44:30 offset lands 30 s away; ursus writes the instant in UTC and reads it back exactly (I8)"),
+		"i8_monrovia_1970_round_trips":         roundTrip,
 		"control_amsterdam_2024_text":          write,
 		"i9_inference_underscore_and_hex":      read,
 		"i9_float64_schema_refuses_underscore": refused(read),
@@ -62,12 +62,20 @@ func init() {
 		"i21_integral_float64_round_trips":       roundTrip,
 		"i21_specials_written":                   write,
 		"control_float32_round_trips_as_float64": roundTrip,
-		"control_only_nan_inferred":              oracleFinding("a column of only NaN infers String here, Float64 in Polars 2.1"),
-		"i27_null_string_round_trips":            roundTrip,
-		"i27_unquoted_empty_is_null":             read,
-		"i22_no_rows_no_columns_written":         oracleFinding("a frame of no rows and no columns writes nothing here, a bare newline in Polars 2.1"),
-		"round_trip_gen":                         roundTrip,
-		"written_gen":                            write,
+		// Read here with no options: Polars is asked under a String override (step 507),
+		// as a column of only NaN infers String here and Float64 there.
+		"control_only_nan_inferred": func(in oracleInputs) *ursus.LazyFrame {
+			return ursus.ScanCSVReader(in.bytes("csv"), "x.csv")
+		},
+		"i27_null_string_round_trips": roundTrip,
+		"i27_unquoted_empty_is_null":  read,
+		"i22_no_rows_no_columns_written": func(in oracleInputs) *ursus.LazyFrame {
+			var b bytes.Buffer
+			err := in.df().Filter(c("a").Gt(9)).Select().WriteCSV(in.t.Context(), &b)
+			return in.written(b.String(), err)
+		},
+		"round_trip_gen": roundTrip,
+		"written_gen":    write,
 	}
 	oracleDifferences["io_byhand/i10_blank_line_no_header"] = oracleHeaderless(1)
 }

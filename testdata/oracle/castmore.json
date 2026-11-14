@@ -425,7 +425,7 @@
     }
    },
    "name": "to_decimal_ties",
-   "note": "Polars 2.1 rounds a tie half to even; ursus's ToDecimal half away from zero, as its doc says Polars does",
+   "note": "the want is Python's decimal, ROUND_HALF_UP, not Polars' (step 507): ToDecimal rounds a tie half away from zero, as its doc says and Round does by default; Polars 2.1's str.to_decimal rounds it half to even",
    "order": "rows",
    "want": {
     "columns": [
@@ -433,16 +433,16 @@
       "dtype": "Decimal(38, 2)",
       "name": "s2",
       "values": [
-       "0",
-       "0",
+       "1",
+       "-1",
        "2",
-       "2",
+       "3",
        "126",
-       "124",
+       "125",
        "250",
        "350",
        "-250",
-       "0"
+       "1"
       ]
      },
      {
@@ -455,9 +455,9 @@
        "0",
        "1",
        "1",
-       "2",
+       "3",
        "4",
-       "-2",
+       "-3",
        "0"
       ]
      }

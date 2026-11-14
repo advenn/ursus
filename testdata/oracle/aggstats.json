@@ -1156,7 +1156,7 @@
     }
    },
    "name": "skew_near_1e9",
-   "note": "Polars 2.1 takes a float mean at 1e9 and loses seven digits of the skew; ursus shifts by the first value: a finding, skipped, held to an exact big.Float in the Go test",
+   "note": "spelled to ursus's documented rule (step 507): the moments are taken of the values shifted by the first; Polars 2.1 takes a float mean at 1e9 and loses seven digits of the skew, so it is asked the moments of x less its first; the Go test holds them to an exact big.Float besides; rel:1e-12, Polars' two passes against ursus's one",
    "order": "rows",
    "want": {
     "columns": [
@@ -1164,7 +1164,7 @@
       "dtype": "Float64",
       "name": "x",
       "values": [
-       0.38180167858053743
+       0.3818017741606064
       ]
      }
     ]
@@ -3185,7 +3185,7 @@
     }
    },
    "name": "moments_far_2000",
-   "note": "Polars 2.1 takes a float mean at 1e9 and loses seven digits of the skew; ursus shifts by the first value: a finding, skipped, held to an exact big.Float in the Go test",
+   "note": "spelled to ursus's documented rule (step 507): the moments are taken of the values shifted by the first; Polars 2.1 takes a float mean at 1e9 and loses seven digits of the skew, so it is asked the moments of x less its first; the Go test holds them to an exact big.Float besides; rel:1e-12, Polars' two passes against ursus's one",
    "order": "rows",
    "want": {
     "columns": [
@@ -3193,14 +3193,14 @@
       "dtype": "Float64",
       "name": "x",
       "values": [
-       0.29411455996127844
+       0.2941145619267025
       ]
      },
      {
       "dtype": "Float64",
       "name": "k",
       "values": [
-       1.8354638666704124
+       1.8354638681151396
       ]
      }
     ]
@@ -4442,7 +4442,7 @@
     }
    },
    "name": "entropy_raw_by_g",
-   "note": "Polars 2.1's raw entropy of a one-value group is 0.0, where -x ln x is -8.05: a finding, skipped",
+   "note": "spelled to ursus's documented rule (step 507): the raw entropy is -sum(x ln x) of every group, -5 ln 5 for [5]; Polars 2.1's entropy answers 0.0 for one value, so it is asked the sum; rel:1e-12, a merge's last bits",
    "order": "rows",
    "want": {
     "columns": [
@@ -4461,7 +4461,7 @@
       "values": [
        -6.931471805599453,
        -6.591673732008658,
-       0.0
+       -8.047189562170502
       ]
      }
     ]

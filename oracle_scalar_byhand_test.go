@@ -45,16 +45,12 @@ func init() {
 		"replace_gen": sel(s.Str().Replace(`(a)(b)`, "$2$1", false).Alias("first"),
 			s.Str().ReplaceAll(`(a)(b)`, "<$1>", false).Alias("all"), s.Str().Replace("ab", "$1", true).Alias("lit")),
 
-		"floordiv_mod_col":   sel(a.FloorDiv(b).Alias("d"), a.Mod(b).Alias("m")),
-		"floordiv_mod_const": sel(a.FloorDiv(2).Alias("d"), a.Mod(-2).Alias("m")),
-		"float_mod":          sel(a.Mod(b).Alias("m")),
-		"float_mod_zero_sign": func(in oracleInputs) *ursus.LazyFrame {
-			in.t.Skip("finding (step 497): a zero float remainder takes the divisor's sign here, -0 for 4 % -2, " +
-				"where Polars' a - b*floor(a/b) is +0; not in feature-gaps §9, the maintainer's to decide")
-			return nil
-		},
-		"u8_floordiv_2": sel(a.FloorDiv(uint8(2))),
-		"by_zero_null":  sel(a.FloorDiv(b).Alias("d"), a.Mod(b).Alias("m")),
+		"floordiv_mod_col":    sel(a.FloorDiv(b).Alias("d"), a.Mod(b).Alias("m")),
+		"floordiv_mod_const":  sel(a.FloorDiv(2).Alias("d"), a.Mod(-2).Alias("m")),
+		"float_mod":           sel(a.Mod(b).Alias("m")),
+		"float_mod_zero_sign": sel(a.Mod(b).Alias("m")),
+		"u8_floordiv_2":       sel(a.FloorDiv(uint8(2))),
+		"by_zero_null":        sel(a.FloorDiv(b).Alias("d"), a.Mod(b).Alias("m")),
 		"floordiv_mod_gen": sel(a.FloorDiv(b).Alias("d"), a.Mod(b).Alias("m"), a.FloorDiv(3).Alias("d3"), a.Mod(-3).Alias("m3"),
 			f.FloorDiv(d).Alias("fd"), f.Mod(d).Alias("fm")),
 

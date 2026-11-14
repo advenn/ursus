@@ -3,12 +3,13 @@ to a Boolean (internal/kernel/castbool_test.go, step 503): false and true are 0 
 1, a null stays null, and a number is true where it is not zero, NaN and the
 infinities included, -0 not. The Go test keeps the agreement of CanCast and the
 kernel and the refusals of a Decimal either way; Polars 2.1 refuses a Boolean to a
-Decimal and casts a Decimal to a Boolean.
+Decimal and casts a Decimal to a Boolean, true where it is not zero, which ursus
+refuses on purpose (a truth value is not an amount, step 69; feature-gaps §9): that
+refusal is decimal_test.go's TestDecimalGuards since step 507, not a case here.
 """
 
 from __future__ import annotations
 
-import decimal
 import math
 
 import polars as pl
@@ -16,7 +17,6 @@ import polars as pl
 from . import Case, case
 from .gen import Gen
 
-D = decimal.Decimal
 NUMBERS: dict[str, pl.DataType] = {
     "int8": pl.Int8, "int16": pl.Int16, "int32": pl.Int32, "int64": pl.Int64, "int128": pl.Int128,
     "uint8": pl.UInt8, "uint16": pl.UInt16, "uint32": pl.UInt32, "uint64": pl.UInt64,
@@ -49,9 +49,6 @@ def cases() -> list[Case]:
              pl.DataFrame([pl.Series("f64", specials, dtype=pl.Float64), pl.Series("f32", specials, dtype=pl.Float32)]),
              lambda df: df.select(pl.col("f64").cast(pl.Boolean), pl.col("f32").cast(pl.Boolean))),
         case("bool_to_decimal", BOOLS, lambda df: df.select(pl.col("b").cast(pl.Decimal(10, 2)))),
-        case("decimal_to_bool",
-             frame("v", pl.Series([D("0.00"), D("1.00"), None, D("2.50"), D("-0.01")], dtype=pl.Decimal(10, 2))),
-             lambda df: df.select(pl.col("v").cast(pl.Boolean))),
         case("gen_bool_to_numbers", frame("b", g.bools(n)),
              lambda df: df.select(pl.col("b").cast(dt).alias(name) for name, dt in NUMBERS.items())),
         case("gen_numbers_to_bool",

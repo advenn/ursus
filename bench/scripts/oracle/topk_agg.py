@@ -4,8 +4,9 @@ ursus orders it, the largest first for top_k and the smallest for bottom_k.
 
 Polars 2.1 keeps nulls in a top_k as the least values, [7, null] of [7, null] and
 [null, null] of three nulls, where 1.44.1 skipped them, as ursus does (TopK's doc: a
-shorter list, null when none): the three cases over the column with nulls are
-findings, skipped; the generated case has none.
+shorter list, null when none): the three cases over the column with nulls are spelled
+to that rule (step 507, feature-gaps §9), asked of Polars of the values without their
+nulls, a group's empty list made null; the generated case has none.
 
 Not here: the refusals and the rank-window differential over 20,000 rows.
 """
@@ -44,6 +45,21 @@ def bottom(col: str, k: int):
     return lambda df: df.group_by("g").agg(c(col).bottom_k(k).sort(nulls_last=True).alias("top")).sort("g")
 
 
+def top_skipping_nulls(col: str, k: int):
+    return lambda df: df.group_by("g").agg(c(col).drop_nulls().top_k(k).sort(descending=True).alias("top")).sort("g").with_columns(
+        pl.when(c("top").list.len() > 0).then(c("top")).alias("top"))
+
+
+def bottom_skipping_nulls(col: str, k: int):
+    return lambda df: df.group_by("g").agg(c(col).drop_nulls().bottom_k(k).sort().alias("top")).sort("g").with_columns(
+        pl.when(c("top").list.len() > 0).then(c("top")).alias("top"))
+
+
+SKIPPED = ("spelled to ursus's documented rule (step 507): TopK skips nulls, a shorter list and null when none; Polars 2.1 keeps "
+           "them as the least values, [7, null] and [null, null], so it is asked of the values without their nulls, an empty "
+           "list made null")
+
+
 def cases() -> list[Case]:
     gen = Gen(5019)
     n = 160
@@ -51,12 +67,12 @@ def cases() -> list[Case]:
                        gen.strings(n, null_rate=0, edges=False, alphabet="abcxyz", maxlen=3, name="s"),
                        gen.ints(n, pl.Int64, lo=-30, hi=30, null_rate=0, name="i"))
     return [
-        case("top_k_ints", TK, top("i", 2), note="Polars 2.1 keeps nulls as the least: [7, null] and [null, null]; skipped here, a finding"),
-        case("bottom_k_ints", TK, bottom("i", 2), note="as top_k_ints: a finding"),
+        case("top_k_ints", TK, top_skipping_nulls("i", 2), note=SKIPPED),
+        case("bottom_k_ints", TK, bottom_skipping_nulls("i", 2), note=SKIPPED),
         case("top_k_floats_nan", TK, top("f", 2), note="NaN is the largest float"),
         case("top_k_strings", TK, top("s", 3)),
         case("bottom_k_dates", TK, bottom("d", 1)),
-        case("top_k_decimals", TK, top("dec", 5), note="as top_k_ints: a finding"),
+        case("top_k_decimals", TK, top_skipping_nulls("dec", 5), note=SKIPPED),
         # --- generated -----------------------------------------------------------------------------
         case("top_k_gen", gen_tk, lambda df: df.group_by("g").agg(
             c("f").top_k(3).sort(descending=True).alias("f3"), c("f").bottom_k(2).sort().alias("f_bottom2"),

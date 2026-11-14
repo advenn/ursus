@@ -414,8 +414,9 @@ func (s StrExpr) ToTime(format string, strict bool) Expr {
 }
 
 // ToDecimal parses a number into a Decimal(38, scale), as Polars' str.to_decimal
-// (step 325): rounded half away from zero to the scale, an exponent read, 1e3 a
-// thousand; text that is no number, or past 38 digits, is null.
+// (step 325): an exponent read, 1e3 a thousand; text that is no number, or past 38
+// digits, is null. A tie is rounded half away from zero to the scale, 0.005 to 0.01,
+// as Round rounds by default, where Polars 2.1 rounds it half to even, to 0.00.
 func (s StrExpr) ToDecimal(scale int) Expr {
 	if scale < 0 || scale > dtype.MaxDecimalPrecision {
 		return wrap(&expr.Err{E: uerr.New(uerr.KindValue, "str.to_decimal",

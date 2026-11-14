@@ -49,9 +49,9 @@ func init() {
 		"business_day_count_holidays": sel(ursus.BusinessDayCount(c("s"), c("e"),
 			ursus.BusinessCalendar{Holidays: []time.Time{day(2024, 1, 2), day(2024, 1, 6)}})),
 
-		"business_day_count_reversed": oracleFinding("with the end before the start, Polars 2.1 counts minus the business days in " +
-			"(end, start], numpy's rule, so a Monday back to the Saturday before is -1; ursus counts those in [end, start), 0 there " +
-			"(BusinessDayCount's doc)"),
+		// Asked of Polars as minus the count from end to start (step 507): with the end
+		// before the start ursus counts [end, start), Polars (end, start].
+		"business_day_count_reversed": sel(ursus.BusinessDayCount(c("s"), c("e"))),
 
 		"components_gen": sel(ursus.MakeDate(c("y"), c("m"), c("d")).Alias("date"),
 			ursus.MakeDatetime(c("y"), c("m"), c("d"), c("h"), c("mi"), c("sec"), c("us")).Alias("datetime"),

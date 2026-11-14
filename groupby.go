@@ -70,9 +70,12 @@ type RollingOptions struct {
 	// offset of none, a window wholly after its row, (t, t + Period].
 	//
 	// A window whose Offset is as long as Period, behind its row, ends at the row
-	// itself, as Polars' does, measuring a month as 28 days: so a period of "1mo"
-	// with an offset of "-1mo" ends at March 31 for March 31, where February 29 plus
-	// a month is March 29. Before step 313, Offset moved the window's end.
+	// itself, a month measured as 28 days: so a period of "1mo" with an offset of
+	// "-1mo" ends at March 31 for March 31, where February 29 plus a month is March
+	// 29, and one with an offset of "-28d" or "-4w" ends at its row too. Polars 1.44.1
+	// measured so; Polars 2.1 ends a window at its start plus the period unless the
+	// offset is the period's own length, so "-28d" before "1mo" ends February 28's
+	// window at February 29 there. Before step 313, Offset moved the window's end.
 	Offset Interval
 
 	// Closed says which end belongs to the window. The zero value is ClosedRight —
@@ -98,6 +101,10 @@ type RollingOptions struct {
 // is not in the output and a gap in a time series is invisible. A dynamic group
 // generates the whole grid between the first and last instant, so the gap is a row
 // with a zero in it. That is the entire reason this operator exists.
+//
+// The grid is Truncate's, so a day whose midnight its zone skips starts where the day
+// begins, 01:00 for Santiago's 2024-09-08, where Polars 2.1's group_by_dynamic starts
+// it at 23:00 the day before, a day off its own truncate.
 //
 // # The index must be sorted, and it is CHECKED
 //
