@@ -49,12 +49,12 @@
     }
    },
    "name": "fill_past_the_type",
-   "note": "a finding: Polars widens to the narrowest type holding 5000, an Int16; ursus falls back to Int64",
+   "note": "spelled to ursus's documented rule (step 507): a weak literal that does not fit falls back to Int64 here (FillNullWith's doc), where Polars widens to the narrowest type holding 5000, an Int16; so Polars is asked with the column cast to Int64 first",
    "order": "rows",
    "want": {
     "columns": [
      {
-      "dtype": "Int16",
+      "dtype": "Int64",
       "name": "i8",
       "values": [
        5000,
@@ -362,18 +362,18 @@
     }
    },
    "name": "fill_strategy_mean",
-   "note": "a finding: Polars keeps the Int32 and fills the mean truncated, ursus a Float64",
+   "note": "spelled to ursus's documented rule (step 507): the mean strategy makes a Float64 of an integer column here (FillMean's doc), where Polars keeps the Int32 and fills the mean truncated; so Polars is asked with the column cast to Float64 first",
    "order": "rows",
    "want": {
     "columns": [
      {
-      "dtype": "Int32",
+      "dtype": "Float64",
       "name": "mean",
       "values": [
-       5,
-       2,
-       5,
-       8
+       5.0,
+       2.0,
+       5.0,
+       8.0
       ]
      }
     ]
@@ -1256,17 +1256,17 @@
     }
    },
    "name": "frame_fill_mean",
-   "note": "a finding: Polars keeps the Int64 and fills the mean truncated, ursus a Float64",
+   "note": "spelled to ursus's documented rule (step 507): a frame's mean fill makes a Float64 of an integer column here (FillMean's doc), where Polars keeps the Int64 and fills the mean truncated; so Polars is asked with i cast to Float64 first, of the numbers, as frame_fill_zero is",
    "order": "rows",
    "want": {
     "columns": [
      {
-      "dtype": "Int64",
+      "dtype": "Float64",
       "name": "i",
       "values": [
-       1,
-       2,
-       3
+       1.0,
+       2.0,
+       3.0
       ]
      },
      {

@@ -181,16 +181,16 @@ func TestPromote(t *testing.T) {
 		}
 	}
 	// Two Enums of different categories meet at the String, which holds both exactly
-	// (step 79), where Polars 2.1 refuses them: dtype/when_enum_a_enum_b, a finding of
-	// step 503, pinned here until the maintainer decides.
+	// (step 79), where Polars 2.1 refuses them (feature-gaps.md §9): dtype/when_enum_a_enum_b
+	// asks Polars with both cast to String since step 507.
 	if got, ok := dtype.Promote(dtype.Enum("a"), dtype.Enum("b")); !ok || got != dtype.String {
 		t.Errorf("Promote(Enum(a), Enum(b)) = (%s, %v), want String", got, ok)
 	}
 	// The refusals. Text, a Boolean, a Date and a Datetime beside a number, and a
 	// Date beside a Datetime, are refused here where Polars 2.1's supertype makes
-	// text, the number and the Datetime: recorded in the dtype group and left to the
-	// maintainer (step 503's record, Found). An Enum beside a number is refused in
-	// both.
+	// text, the number and the Datetime, on purpose (feature-gaps.md §9; the root's
+	// TestCondRefusals asserts them through When since step 507). An Enum beside a
+	// number is refused in both.
 	for _, c := range [][2]dtype.DataType{
 		{dtype.String, dtype.Int64}, {dtype.Bool, dtype.Int64}, {dtype.Enum("a"), dtype.Int64},
 		{dtype.Date, dtype.Datetime(dtype.Micro, "")}, {dtype.Datetime(dtype.Nano, ""), dtype.Int64},
@@ -332,9 +332,9 @@ func TestFormatDecimal(t *testing.T) {
 // written at different resolutions resolves at plan time; before step 15 every such
 // pair was refused. Every pair of the four units, in every kind and in a zone, is held
 // to Go's time constants: the unit met at is the one whose tick is the shorter (step
-// 503). Polars 2.1 meets two units at the coarser, recorded in the dtype group and a
-// finding of step 503 left to the maintainer; this pins Promote's documented rule
-// meanwhile. A zone mismatch and a mismatch of kinds stay refused.
+// 503). Polars 2.1 meets two units at the coarser, where ursus's finer stands
+// (feature-gaps.md §9): the dtype group asks Polars with both cast to the finer since
+// step 507. A zone mismatch and a mismatch of kinds stay refused.
 func TestPromoteTemporalUnits(t *testing.T) {
 	tick := map[dtype.TimeUnit]time.Duration{
 		dtype.Second: time.Second, dtype.Milli: time.Millisecond, dtype.Micro: time.Microsecond, dtype.Nano: time.Nanosecond,

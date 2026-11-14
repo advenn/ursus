@@ -49,7 +49,7 @@ def cases() -> list[Case]:
                         g.ints(n, lo=-(1 << 50), hi=1 << 50, name="ms"), g.floats(n, -1e9, 1e9, edges=False, name="f"))
     # The end on or after the start: where the end is before it, Polars counts minus the
     # business days in (end, start], numpy's rule, and ursus those in [end, start), its
-    # doc's; a finding, pinned by business_day_count_reversed below.
+    # doc's (feature-gaps §9); business_day_count_reversed below asks it so (step 507).
     a = g.dates(n, date(2020, 1, 1), date(2030, 12, 31), edges=False, name="s").to_list()
     b = g.dates(n, date(2020, 1, 1), date(2030, 12, 31), edges=False, name="e").to_list()
     gen_bd = pl.DataFrame({"s": pl.Series("s", [None if None in (x, y) else min(x, y) for x, y in zip(a, b)], dtype=pl.Date),
@@ -90,9 +90,12 @@ def cases() -> list[Case]:
         case("business_day_count", BD, sel(pl.business_day_count("s", "e"))),
         case("business_day_count_mon_sat", BD, sel(pl.business_day_count("s", "e", week_mask=MON_SAT))),
         case("business_day_count_holidays", BD, sel(pl.business_day_count("s", "e", holidays=[date(2024, 1, 2), date(2024, 1, 6)]))),
-        case("business_day_count_reversed", reversed_ends, sel(pl.business_day_count("s", "e")),
-             note="a finding: with the end before the start, Polars counts minus the business days in (end, start], numpy's rule, "
-                  "so a Monday back to the Saturday before is -1; ursus counts those in [end, start), 0 there (its doc)"),
+        case("business_day_count_reversed", reversed_ends,
+             sel(pl.when(c("e") < c("s")).then(-pl.business_day_count("e", "s")).otherwise(pl.business_day_count("s", "e"))
+                 .alias("s")),
+             note="spelled to ursus's documented rule (step 507): with the end before the start, BusinessDayCount is minus the "
+                  "business days in [end, start), 0 from a Monday back to the Saturday before; Polars counts those in (end, start], "
+                  "numpy's rule, -1 there, so it is asked minus the count from end to start"),
         # --- generated ---------------------------------------------------------------------
         case("components_gen", gen_parts, sel(
             pl.date("y", "m", "d").alias("date"), pl.datetime("y", "m", "d", "h", "mi", "sec", "us").alias("datetime"),

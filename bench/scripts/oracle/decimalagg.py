@@ -6,9 +6,11 @@ variance and a product are exact in a Float64 and the comparison is by bits; ent
 alone takes Go's log against glibc's.
 
 Polars refuses a bitwise aggregate of a Decimal, as ursus does (bitwise_and), and
-answers any and all, true where a value is not zero, which ursus refuses (any_all, a
-finding of step 503). The Go test keeps its refusals of "a pair of inputs" and its
-walk of every aggregate, the mechanism.
+answers any and all, true where a value is not zero, which ursus refuses on purpose
+(Any and AllTrue take a Boolean, as a Decimal's cast to one is refused; feature-gaps
+§9): that refusal is decimal_test.go's TestDecimalGuards since step 507, not a case
+here. The Go test keeps its refusals of "a pair of inputs" and its walk of every
+aggregate, the mechanism.
 
 Two questions are asked around ursus's documented rules (feature-gaps.md §9): a
 Product is a Float64 for every number here, so Polars is asked the product of the
@@ -68,8 +70,6 @@ def cases() -> list[Case]:
         case("product", DF, agg(x.cast(pl.Float64).product().alias("product")),
              note="the floats' product: a Product is a Float64 for every number here (feature-gaps §9), "
                   "exact over these multiples of a quarter; Polars' Decimal(38, 2) product rounds"),
-        case("any_all", DF, agg(x.any().alias("any"), x.all().alias("all")),
-             note="Polars answers true where a value is not zero; ursus refuses a Decimal (Found)"),
         case("bitwise_and", DF, agg(x.bitwise_and().alias("and")), contains="requires an integer or a Boolean"),
         case("median_quantile", DF, agg(x.median().alias("median"), x.quantile(0.75, "nearest").alias("q75_nearest"),
                                         x.quantile(0.25, "linear").alias("q25_linear"))),

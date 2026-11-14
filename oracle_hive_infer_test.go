@@ -58,10 +58,9 @@ func init() {
 		reg[name] = scan
 	}
 	// Polars 2.1 reads a key of dates by its first value's layout and refuses the
-	// third; ursus reads each value by its own, as CSV dates (hive_test.go's TestInfer
-	// pins it).
-	reg["date_layouts_mixed"] = oracleFinding("a key of dates in five layouts is a Date here, each value read by its own; " +
-		"Polars 2.1 reads every value by the first's layout and refuses 2024/01/02")
+	// third; ursus reads each value by its own, as CSV dates, and Polars is asked so
+	// (step 507): the key as text, each value by the layouts.
+	reg["date_layouts_mixed"] = scan
 	oracleGroups["hive_infer"] = reg
 	// A date of a two-digit year is text here, where Polars reads 24-01-02 as the
 	// 24th of January of the year 2 (feature-gaps §9, step 347).

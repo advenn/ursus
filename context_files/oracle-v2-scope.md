@@ -152,3 +152,11 @@ by CI's `build` job: `go run ./internal/gen/testinventory -check` (`make
 testinventory`) fails on a test function holding more hand-typed expected values than
 `internal/gen/testinventory/baseline.txt` allows, or any in a function the baseline
 does not list; a count that falls is written down with `make testinventory-write`.
+
+Since step 507 no recorded case is skipped. Where ursus answers otherwise than Polars
+on purpose, by a rule of its own documented in `feature-gaps.md` §9, the case asks
+Polars spelled so that it computes that rule, or its want is Python's own semantics,
+either said in its note; a refusal ursus means is asserted by its kind and phrase in a
+root test; a value Polars cannot answer is held to a Go oracle; `oracleDifferences`
+names what none of these can spell. A difference ursus does not mean is fixed
+([`step-507-as-built.md`](./step-507-as-built.md)).

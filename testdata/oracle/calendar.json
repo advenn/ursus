@@ -500,7 +500,7 @@
     }
    },
    "name": "round_1mo",
-   "note": "a finding: Polars adds fourteen days and truncates, so noon on the 15th of a 29-day February rounds down; ursus rounds to the nearer month, halfway up",
+   "note": "spelled to ursus's documented rule (step 507): Round rounds to the nearer month, halfway up, so noon on the 15th of a 29-day February is March; Polars' round adds fourteen days and truncates, so it is asked as the nearer of truncate and a month after it",
    "order": "rows",
    "want": {
     "columns": [
@@ -508,7 +508,7 @@
       "dtype": "Datetime(us, UTC)",
       "name": "d",
       "values": [
-       1706745600000000,
+       1709251200000000,
        1706745600000000
       ]
      }
@@ -533,7 +533,7 @@
     }
    },
    "name": "round_1mo_dates",
-   "note": "a finding: the 17th of January rounds down in Polars, up here, to the nearer month",
+   "note": "spelled as round_1mo (step 507): the 17th of January is nearer February, and the 15th of a 28-day February halfway, up; Polars' round takes both down",
    "order": "rows",
    "want": {
     "columns": [
@@ -542,7 +542,7 @@
       "name": "d",
       "values": [
        19723,
-       19723,
+       19754,
        19417
       ]
      }
@@ -734,7 +734,7 @@
     }
    },
    "name": "midnight_gap_windows",
-   "note": "a finding: Polars starts the 8th's window at 23:00 on the 7th, a day off its own truncate; ursus starts it at 01:00, where the day begins (step 145)",
+   "note": "spelled to ursus's documented rule (step 507): a dynamic group's day starts on truncate's grid, at 01:00 where Santiago's midnight is missing; Polars' group_by_dynamic starts it at 23:00 on the 7th, a day off its own truncate, so it is asked as a group-by of truncate('1d'), no window empty here; the count cast to Int64 on both sides, a Uint64 here and a UInt32 there",
    "order": "rows",
    "want": {
     "columns": [
@@ -743,15 +743,15 @@
       "name": "d",
       "values": [
        1725681600000000,
-       1725764400000000
+       1725768000000000
       ]
      },
      {
-      "dtype": "Uint32",
+      "dtype": "Int64",
       "name": "n",
       "values": [
-       1,
-       2
+       2,
+       1
       ]
      }
     ]

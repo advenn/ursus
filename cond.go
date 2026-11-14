@@ -78,6 +78,11 @@ func (t ThenBuilder) When(pred Expr) WhenBuilder {
 // Cond{c1, v1, Cond{c2, v2, d}}. Nesting rather than a flat list is what keeps type
 // unification well-defined — promotion is pairwise, and folding a flat list would
 // make the result depend on an association order the user never chose.
+//
+// The branches meet by dtype.Promote: two units of one temporal kind at the finer,
+// two Enums, or an Enum and a String, at String; text, a Boolean or an instant beside
+// a number, and a Date beside a Datetime, are refused with a hint to cast, where
+// Polars 2.1's when meets each and meets two units at the coarser.
 func (t ThenBuilder) Otherwise[T Operand](v T) Expr {
 	out := lift(v)
 	for i := len(t.pairs) - 1; i >= 0; i-- {

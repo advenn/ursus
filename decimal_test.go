@@ -172,6 +172,29 @@ func TestDecimalGuards(t *testing.T) {
 			kind: uerr.ErrValue,
 			want: "value 12.34 at row 0 is not representable as Int64",
 		},
+		// A truth value is not an amount (step 69): a Decimal does not cast to a
+		// Boolean, and Any and AllTrue, which take a Boolean, refuse one. Polars 2.1
+		// answers all three, true where a value is not zero; ursus refuses on purpose
+		// (step 507, feature-gaps.md §9). They were the recorded cases
+		// castbool/decimal_to_bool and decimalagg/any_all.
+		{
+			name: "cast to Bool is refused: a truth value is not an amount",
+			lf:   func() *ursus.LazyFrame { return prices(t).Select(ursus.Col("price").Cast(dtype.Bool)) },
+			kind: uerr.ErrType,
+			want: "cannot cast Decimal(10, 2) to Bool",
+		},
+		{
+			name: "Any of a Decimal is refused",
+			lf:   func() *ursus.LazyFrame { return prices(t).Select(ursus.Col("price").Any()) },
+			kind: uerr.ErrType,
+			want: "requires a Boolean operand, got Decimal(10, 2)",
+		},
+		{
+			name: "AllTrue of a Decimal is refused",
+			lf:   func() *ursus.LazyFrame { return prices(t).Select(ursus.Col("price").AllTrue()) },
+			kind: uerr.ErrType,
+			want: "requires a Boolean operand, got Decimal(10, 2)",
+		},
 	}
 
 	for _, c := range cases {
