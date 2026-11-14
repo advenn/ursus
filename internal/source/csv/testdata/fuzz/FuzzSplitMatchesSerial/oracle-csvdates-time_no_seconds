@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("x\n10:30\n")
+byte('\x04')
+byte('\u0080')

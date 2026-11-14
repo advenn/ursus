@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("x\n0999-01-02\n")
+byte('\f')
+byte('\u0080')
