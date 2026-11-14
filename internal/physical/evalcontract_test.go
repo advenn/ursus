@@ -529,10 +529,11 @@ var contractCallArgs = map[expr.CallFn][]callArgSet{
 		{label: ",twice", args: []any{"p", "p"}},
 	},
 	// Both fields reordered, one, one that is not there, and two of one name (step
-	// 299).
+	// 299); none, a struct of no fields (step 518).
 	expr.FnStructSelectFields: {
 		{label: ",g,f", args: []any{"g", "f"}},
 		{label: ",f", args: []any{"f"}},
+		{label: ",none", args: []any{}},
 		{label: ",absent", args: []any{"nope"}},
 		{label: ",twice", args: []any{"f", "f"}},
 	},
