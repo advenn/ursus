@@ -107,12 +107,9 @@ func FuzzOwnPagesMatchArrow(f *testing.F) {
 
 // twinFindings are inputs FuzzOwnPagesMatchArrow failed on that are left for the
 // maintainer, by the SHA-256 of their bytes, each kept in its corpus under the name
-// the reason gives (step 510's record, §4).
-var twinFindings = map[string]string{
-	"5c0102a09a1143414ef69bc08be101ce8eacc1494afc4ebaeb6165188447924e": "dictionary-index-past-its-dictionary: " +
-		"a data page's dictionary index past its dictionary is not refused before it is read; " +
-		"left for the maintainer (step 510)",
-}
+// the reason gives (step 510's record, §4). None is left: step 517 fixed the one
+// there was.
+var twinFindings = map[string]string{}
 
 // readTwin reads b in batches of batch rows on one thread, with the reader's own
 // pages on or off, each batch rendered value by value.
