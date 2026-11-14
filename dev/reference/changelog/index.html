@@ -3918,6 +3918,17 @@ that stops when its request is cancelled.</p>
   before step 496; 2,598 recorded cases in 106 groups replace the rest. The waves'
   twenty-five findings, where Polars 2.1 answers otherwise and nothing says ursus
   means to, are listed for the maintainer in <code>context_files/feature-gaps.md</code> §12.</li>
+<li><strong>A fuzzing harness, and CI that fuzzes</strong> (508): <code>internal/fuzzcheck</code> fails a fuzz
+  input that hangs (a watchdog prints every goroutine's stack and ends the process,
+  which the fuzzer records), allocates past a bound (the change in
+  <code>/gc/heap/allocs:bytes</code>), leaves goroutines running a second after, answers
+  <code>ErrInternal</code>, or panics in ursus's own code whatever the error's kind; a panic in
+  arrow-go, Thrift or klauspost is logged. Its bounded allocator refuses one request
+  over 16 MiB plus 16 bytes a byte of input. <code>internal/readfuzz</code> holds the public
+  readers' targets, <code>FuzzScanCSV</code> first, with internal/data's boundary checks on.
+  <code>make fuzz FUZZ=&lt;target&gt; PKG=&lt;package&gt; FUZZTIME=&lt;d&gt;</code> fuzzes one; <code>fuzz.yml</code> lists
+  every target and fuzzes each for 30 s on a pull request touching Go code, by hand
+  and nightly, uploading a failing input. It is not a required check.</li>
 <li><strong>The twenty-five findings closed, their thirty-nine cases asserted again</strong> (507):
   none is skipped. One was a bug, fixed (above); twenty-four are ursus's own rules,
   each documented in <code>context_files/feature-gaps.md</code> §9 with Polars 2.1's answer and
