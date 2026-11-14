@@ -264,7 +264,7 @@ func encodeField(name string, t reflect.Type, l loc) (*Column, error) {
 		if err != nil {
 			return nil, err
 		}
-		return data.NewStruct(name, fields, bitmap.AllSet(l.rows)), nil
+		return data.NewStructLen(name, l.rows, fields, bitmap.AllSet(l.rows)), nil
 	}
 	return nil, uerr.New(uerr.KindType, "from_rows", "a %s has no column type", t).
 		Hint("a field is a number, a bool, a string, []byte, time.Time, time.Duration, a pointer to one, a slice, " +

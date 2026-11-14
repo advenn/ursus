@@ -291,12 +291,14 @@ func (d DataType) IsHashable() bool {
 		// A list of keys is one (step 344): its elements', in order.
 		return d.Inner().IsHashable() || d.Inner().IsNull()
 	case TypeStruct:
+		// A struct of no fields is a key too (step 518), {} one group and null
+		// another, as Polars keys one: its own validity is all its key holds.
 		for _, f := range d.Fields() {
 			if !f.Type.IsHashable() && !f.Type.IsNull() {
 				return false
 			}
 		}
-		return len(d.Fields()) > 0
+		return true
 	}
 	return d.IsOrdered()
 }

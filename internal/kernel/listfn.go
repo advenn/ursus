@@ -727,7 +727,7 @@ func listToStruct(name string, c *data.Column, args []any) (*data.Column, error)
 		}
 		fields[j] = f.Rename(field)
 	}
-	return data.NewStruct(name, fields, c.Validity()), nil
+	return data.NewStructLen(name, c.Len(), fields, c.Validity()), nil
 }
 
 // listArgs is each list's indices, a List(UInt32) (step 267): list.arg_sort, the
