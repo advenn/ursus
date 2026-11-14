@@ -76,7 +76,8 @@ func (t *IntKeyTable) Reserve(n int) {
 		t.grow()
 	}
 	if cap(t.keys) < n {
-		k := make([]int64, len(t.keys), n)
+		// Twice what they held at least, as WordKeyTable.Reserve grows its keys.
+		k := make([]int64, len(t.keys), max(n, 2*cap(t.keys)))
 		copy(k, t.keys)
 		t.keys = k
 	}
