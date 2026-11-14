@@ -271,4 +271,8 @@ GOAMD64=v3`:
   tests count none;
 - `gofmt -l .`: empty.
 
+And again once master (steps 515 and 518, #68 and #71) was merged in: `go test
+./internal/...` ok, 28 packages; `go test .` ok, 180 s, under the lock; vet, levels,
+api (0 gone), testinventory (1,225) and gofmt as above.
+
 The race detector and the widths are left to CI.
