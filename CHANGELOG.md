@@ -250,6 +250,20 @@ that stops when its request is cancelled.
   `make fuzz FUZZ=<target> PKG=<package> FUZZTIME=<d>` fuzzes one; `fuzz.yml` lists
   every target and fuzzes each for 30 s on a pull request touching Go code, by hand
   and nightly, uploading a failing input. It is not a required check.
+- **Fuzz targets for the text parsers and the CSV reader** (509): eighteen, each
+  against an oracle, not only "did not crash": `ParseFloat` and `NearestFloat` against
+  strconv; the temporal text's round trip and Polars' patterns against `time.Parse`;
+  the Int128's `Parse`, arithmetic and `ParseDecimal` against math/big; the CSV
+  reader's number parsers against strconv, its inference against its builders, its
+  scanner against `encoding/csv` (a quote in an unquoted field's middle, read as data,
+  the one named deviation), its vector field ends against a byte loop, and four
+  threads against one with blocks of 1 to 64 bytes; `Cast` from a String; strftime's
+  `Append` against `time.Format` and its `Parse` against `Append`. `FuzzScanCSV` reads
+  under options from 32 bits now, and holds one thread to four, the schema to the
+  frame's, `Count`, `Head(1)` and a `Select` to the frame; `FuzzScanCSVChunked` holds
+  a stream read in pieces, empty reads and a last one with `io.EOF` among them, to the
+  bytes read whole. Their seeds include the 174 texts of Polars 2.1's recorded CSV
+  cases. They found the four bugs fixed below.
 - **The twenty-five findings closed, their thirty-nine cases asserted again** (507):
   none is skipped. One was a bug, fixed (above); twenty-four are ursus's own rules,
   each documented in `context_files/feature-gaps.md` §9 with Polars 2.1's answer and
@@ -300,6 +314,21 @@ its section below lists them.
   and a null Struct is kept apart from a Struct of nulls (`ExtractGroups`, 499);
   Polars 2.1 reads a null too. `ScanJSON`, which reads each object as a line, follows.
   The recorded oracle found it (`ndjsonread/ignored_in_a_struct`).
+- **`"-nan"` and `"+nan"` read as NaN** (509), as `ParseFloat`'s grammar says and
+  Polars' cast reads them: Go's strconv takes a sign before inf only, so a cast to a
+  float was a null, a CSV Float64 column refused one, and inference read it as text.
+- **A Datetime's least second reads** (509): converting an instant to ticks checked
+  the seconds' product before adding the fraction, and refused the first 0.85 s of a
+  nanosecond Datetime's range, 0.78 s of a microsecond's and 0.81 s of a
+  millisecond's, though each fits; the least nanosecond instant,
+  1677-09-21T00:12:43.145224192Z, was written to CSV and did not read back.
+- **A Decimal's exponent of more digits than an int64 is a number** (509): it was
+  refused as text that is no number, where its value is out of range, and a zero with
+  one, `0e9223372036854775808`, is 0, as one with a shorter exponent is. A strict cast
+  says "not representable" for it now, not "cannot parse".
+- **A `\r` that ends a CSV's input ends its line** (509), as `encoding/csv` and
+  Polars 2.1 read it: `a,b\r` read the field `b\r`, `"a","b"\r` was refused, and a
+  last line of only `\r` was a value where it is a blank line.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

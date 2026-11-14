@@ -25,6 +25,13 @@
 // Names are English. Parsing is strict about shape: a number takes at most its
 // width, a date must exist (no 30 February), and the whole input must be consumed.
 // A weekday name is read and not checked against the date.
+//
+// Parse reads a part as far as it can, as chrono does, so three texts Append writes
+// do not read back as written: a day below 10 that %e wrote, with its space, directly
+// before a digit (%e skips one space and reads up to two digits, as C's strptime
+// does too); a year outside 0000–9999, written signed, directly before a digit (a
+// signed year reads up to nine digits); and %.f of a whole second, which writes
+// nothing, directly before a literal '.'.
 package strftime
 
 import (
