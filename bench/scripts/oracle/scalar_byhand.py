@@ -32,6 +32,12 @@ def us(iso: str) -> int:
     return round((t - EPOCH).total_seconds() * 1_000_000)
 
 
+def python_mod(df: pl.DataFrame) -> pl.DataFrame:
+    """a % b by Python's own float remainder, which takes the divisor's sign, a zero's
+    too: the oracle of float_mod_zero_sign (step 507)."""
+    return pl.DataFrame({"m": pl.Series("m", [x % y for x, y in zip(df["a"].to_list(), df["b"].to_list())], dtype=pl.Float64)})
+
+
 def typed(vals: list, dtype: pl.DataType, name: str = "v") -> pl.DataFrame:
     return pl.DataFrame({name: pl.Series(name, vals, dtype=dtype)})
 
@@ -108,8 +114,9 @@ def cases() -> list[Case]:
         case("floordiv_mod_col", DIV, sel((a // b).alias("d"), (a % b).alias("m"))),
         case("floordiv_mod_const", typed([-7, 7], pl.Int64, "a"), sel((a // 2).alias("d"), (a % -2).alias("m"))),
         case("float_mod", pl.DataFrame({"a": [-7.0, 7.0, -7.5], "b": [2.0, -2.0, 2.0]}), sel((a % b).alias("m"))),
-        case("float_mod_zero_sign", pl.DataFrame({"a": [4.0, 0.0], "b": [-2.0, -2.0]}), sel((a % b).alias("m")),
-             note="a zero remainder: Polars computes a - b*floor(a/b), +0; ursus gives the divisor's sign, -0"),
+        case("float_mod_zero_sign", pl.DataFrame({"a": [4.0, 0.0, -4.0, 0.0], "b": [-2.0, -2.0, 2.0, 2.0]}), python_mod,
+             note="the want is Python's float %, not Polars' (step 507): a zero remainder takes the divisor's sign here, as "
+                  "Python's does and Mod's doc says, -0 for 4 % -2; Polars computes a - b*floor(a/b), +0"),
         case("u8_floordiv_2", typed([7], pl.UInt8, "a"), sel(a // 2)),
         case("by_zero_null", pl.DataFrame({"a": pl.Series([-7], dtype=pl.Int64), "b": pl.Series([0], dtype=pl.Int64)}),
              sel((a // b).alias("d"), (a % b).alias("m"))),

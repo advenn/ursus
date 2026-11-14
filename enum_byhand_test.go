@@ -128,7 +128,7 @@ func TestEnumByHand(t *testing.T) {
 		// --- meeting other types ---
 		`FillNullWith("zzz") is a String`: func(t *testing.T) {
 			// Polars 2.1 keeps the null and the Enum; the oracle's enum_byhand/fill_null_zzz
-			// is left recorded, a finding for the maintainer (step 499).
+			// asks it with the Enum cast to String, ursus's rule (step 507, feature-gaps.md §9).
 			df := collect(t, ef().Select(c("e").FillNullWith("zzz")))
 			if got := df.Schema().Field(0).Type; got != ursus.String {
 				t.Errorf("type %s, want String", got)

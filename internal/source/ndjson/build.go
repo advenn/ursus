@@ -432,19 +432,10 @@ func strictKeys(rows *structBuilder, known map[string]bool) {
 
 func (b *structBuilder) decode(p *parser) error {
 	if p.s[p.pos] != '{' {
-		if !p.ignore {
-			return p.refuse(b.want)
-		}
-		// Polars' ignore_errors reads a value that is not an object as one with
-		// no keys: a row of nulls, not a null.
-		if err := p.skip(); err != nil {
-			return err
-		}
-		for _, f := range b.fields {
-			f.addNull()
-		}
-		b.valid.valid()
-		return nil
+		// Under ignore_errors a value that is not an object is a null struct, as
+		// every value its column cannot take is a null (step 507); a struct of
+		// nulls, which Polars 1.44.1 read, would claim an object of no keys.
+		return p.refuse(b.want)
 	}
 	if err := b.decodeFields(p); err != nil {
 		return err

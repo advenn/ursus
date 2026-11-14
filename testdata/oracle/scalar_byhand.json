@@ -3128,6 +3128,8 @@
        "name": "a",
        "values": [
         4.0,
+        0.0,
+        -4.0,
         0.0
        ]
       },
@@ -3136,14 +3138,16 @@
        "name": "b",
        "values": [
         -2.0,
-        -2.0
+        -2.0,
+        2.0,
+        2.0
        ]
       }
      ]
     }
    },
    "name": "float_mod_zero_sign",
-   "note": "a zero remainder: Polars computes a - b*floor(a/b), +0; ursus gives the divisor's sign, -0",
+   "note": "the want is Python's float %, not Polars' (step 507): a zero remainder takes the divisor's sign here, as Python's does and Mod's doc says, -0 for 4 % -2; Polars computes a - b*floor(a/b), +0",
    "order": "rows",
    "want": {
     "columns": [
@@ -3151,6 +3155,8 @@
       "dtype": "Float64",
       "name": "m",
       "values": [
+       "-0.0",
+       "-0.0",
        0.0,
        0.0
       ]

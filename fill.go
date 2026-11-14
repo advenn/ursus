@@ -53,7 +53,10 @@ func weaken(n expr.Node) expr.Node {
 //
 // If the value does not fit — FillNullWith(int64(5000)) on an Int8 column — the
 // type falls back to ordinary promotion rather than truncating, so the result is
-// an Int64 column holding 5000 rather than an Int8 column holding -120.
+// an Int64 column holding 5000 rather than an Int8 column holding -120; Polars 2.1
+// widens to the narrowest type that holds it, an Int16. So text outside an Enum's
+// categories fills a String column holding it, where Polars 2.1 keeps the null and
+// the Enum.
 //
 // # Cost
 //

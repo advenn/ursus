@@ -48,7 +48,9 @@ func WithHiveSchema(s *Schema) ParquetOption {
 }
 
 // WithHiveDates reads a partition key of dates or of instants as a Date or a
-// Datetime, as Polars' try_parse_hive_dates; on by default. New in 0.6.7.
+// Datetime, as Polars' try_parse_hive_dates; on by default. Each value is read by its
+// own layout, as CSV dates are, so 2024-01-02 beside 02-01-2024 is a Date, where
+// Polars 2.1 reads every value by the first's and refuses another. New in 0.6.7.
 func WithHiveDates(b bool) ParquetOption {
 	return func(o *parquet.Options) { o.Hive.NoDates = !b }
 }

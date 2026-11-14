@@ -255,6 +255,9 @@ func guardName(op, method string, fn func(string) string) func(string) string {
 //     unrepresentable.
 //   - From a String: the text parsed at the target's own width, by the same rules.
 //     "256" is not a Uint8, and text that is no number cannot be parsed at all.
+//
+// A Decimal and a Boolean do not cast to each other, either way: a truth value is not
+// an amount (step 69), where Polars 2.1 casts a Decimal to true where it is not zero.
 func (e Expr) Cast(to dtype.DataType) Expr {
 	return wrap(&expr.Cast{Child: e.node(), To: to, Strict: true})
 }
@@ -309,8 +312,9 @@ func (e Expr) Div[T Operand](v T) Expr { return e.bin(expr.OpDiv, lift(v)) }
 // FloorDiv FLOORS, toward negative infinity, for integers, floats and a Duration
 // alike: −7 // 2 is −4, not the −3 Go's / gives. Mod is its remainder, so
 // a == b*FloorDiv(a, b) + Mod(a, b) and Mod takes the divisor's sign: −7 % 2 is 1.
-// Both are Polars' and Python's rule. An integer divisor of zero is null; a float
-// one follows IEEE.
+// Both are Polars' and Python's rule. A float remainder of zero takes the divisor's
+// sign too, −0 for 4 % −2, as Python's does, where Polars 2.1's is +0. An integer
+// divisor of zero is null; a float one follows IEEE.
 func (e Expr) FloorDiv[T Operand](v T) Expr { return e.bin(expr.OpFloorDiv, lift(v)) }
 func (e Expr) Mod[T Operand](v T) Expr      { return e.bin(expr.OpMod, lift(v)) }
 

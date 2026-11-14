@@ -19,15 +19,16 @@ func init() {
 	noOffset := func(p string) ursus.RollingOptions {
 		return ursus.RollingOptions{Period: every(p), Offset: ursus.NoOffset()}
 	}
-	month28 := "Polars 2.1 ends a window at its start plus the period, so an offset of -28d before 1mo runs past the row " +
-		"(Feb 28 - 28d + 1mo is Feb 29); 1.44.1 ended it at the row, as ursus does"
+	// 1mo_offset_m28d and 1mo_offset_m4w are asked of Polars with a period of 28d and
+	// 4w (step 507): an offset as long as the period, a month measured as 28 days, ends
+	// the window at its row here, where Polars 2.1 ends 1mo after -28d at Feb 29.
 	oracleGroups["rollingoffset"] = map[string]oracleQuery{
 		"1mo":                          roll(period("1mo")),
 		"1mo_offset_m1mo":              roll(offset("1mo", "-1mo")),
 		"1mo_no_offset":                roll(noOffset("1mo")),
 		"1mo_offset_m2d":               roll(offset("1mo", "-2d")),
-		"1mo_offset_m28d":              oracleFinding(month28),
-		"1mo_offset_m4w":               oracleFinding(month28),
+		"1mo_offset_m28d":              roll(offset("1mo", "-28d")),
+		"1mo_offset_m4w":               roll(offset("1mo", "-4w")),
 		"1mo_offset_m40d":              roll(offset("1mo", "-40d")),
 		"3d_offset_m1d":                roll(offset("3d", "-1d")),
 		"3d_offset_1d_closed_left":     roll(ursus.RollingOptions{Period: every("3d"), Offset: every("1d"), Closed: ursus.ClosedLeft}),

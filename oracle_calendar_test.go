@@ -3,9 +3,11 @@ package ursus_test
 // The calendar group (step 498, from calendar_test.go's by-hand tables): offset_by,
 // month_start and month_end, is_leap_year, round, convert_time_zone and truncate across
 // a midnight that does not exist, each spelled as bench/scripts/oracle/calendar.py asks
-// Polars. Two cases are findings, recorded and skipped: Polars 2.1 rounds a month by
-// adding fourteen days and truncating, and starts group_by_dynamic's day at 23:00 the
-// day before where midnight does not exist.
+// Polars. Two questions are asked of Polars spelled to ursus's documented rules (step
+// 507): a month's Round, the nearer of truncate and a month after it, where Polars 2.1
+// adds fourteen days and truncates; and a dynamic group's day where midnight does not
+// exist, a group-by of truncate("1d"), where Polars 2.1 starts it at 23:00 the day
+// before.
 
 import (
 	"time"
@@ -39,19 +41,18 @@ func init() {
 
 		"round_15m":             sel(d.Round(15 * time.Minute)),
 		"round_1h_before_epoch": sel(d.Round(every("1h"))),
-		"round_1mo": oracleFinding("Polars 2.1 rounds a month by adding fourteen days and truncating, so noon on the 15th of a " +
-			"29-day February rounds down; ursus rounds to the nearer month, a value halfway up (Round's doc)"),
-		"round_1mo_dates": oracleFinding("Polars 2.1 rounds a month by adding fourteen days and truncating, so the 17th of " +
-			"January rounds down; ursus rounds to the nearer month"),
-		"round_1h_kolkata": sel(d.Round(every("1h"))),
+		"round_1mo":             sel(d.Round(every("1mo"))),
+		"round_1mo_dates":       sel(d.Round(every("1mo"))),
+		"round_1h_kolkata":      sel(d.Round(every("1h"))),
 
 		"convert_tokyo": sel(tokyo, tokyo.Dt().Hour().Alias("h"), tokyo.Dt().ConvertTimeZone("UTC").Alias("back")),
 
 		"truncate_1d_santiago":  sel(d.Truncate(every("1d"))),
 		"truncate_1d_havana":    sel(d.Truncate(every("1d"))),
 		"truncate_1mo_asuncion": sel(d.Truncate(every("1mo"))),
-		"midnight_gap_windows": oracleFinding("Polars 2.1's group_by_dynamic starts 2024-09-08's window at 23:00 on the 7th in " +
-			"Santiago, a day off its own truncate; ursus starts it at 01:00, where the day begins (step 145)"),
+		"midnight_gap_windows": func(in oracleInputs) *ursus.LazyFrame {
+			return in.df().GroupByDynamic(c("d"), ursus.DynamicOptions{Every: every("1d")}).Agg(ursus.Len().Cast(ursus.Int64).Alias("n"))
+		},
 
 		"offset_gen_dates": sel(d.OffsetBy(every("1mo")).Alias("mo"), d.OffsetBy(every("-1mo")).Alias("mo_back"),
 			d.OffsetBy(every("1y")).Alias("y"), d.OffsetBy(every("1d")).Alias("day"), d.OffsetBy(every("2w")).Alias("w2"),

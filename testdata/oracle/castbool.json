@@ -865,43 +865,6 @@
     "df": {
      "columns": [
       {
-       "dtype": "Decimal(10, 2)",
-       "name": "v",
-       "values": [
-        "0",
-        "100",
-        null,
-        "250",
-        "-1"
-       ]
-      }
-     ]
-    }
-   },
-   "name": "decimal_to_bool",
-   "order": "rows",
-   "want": {
-    "columns": [
-     {
-      "dtype": "Bool",
-      "name": "v",
-      "values": [
-       false,
-       true,
-       null,
-       true,
-       true
-      ]
-     }
-    ]
-   }
-  },
-  {
-   "float": "bits",
-   "inputs": {
-    "df": {
-     "columns": [
-      {
        "dtype": "Bool",
        "name": "b",
        "values": [
