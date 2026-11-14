@@ -4031,6 +4031,15 @@ its section below lists them.</p>
   and a null Struct is kept apart from a Struct of nulls (<code>ExtractGroups</code>, 499);
   Polars 2.1 reads a null too. <code>ScanJSON</code>, which reads each object as a line, follows.
   The recorded oracle found it (<code>ndjsonread/ignored_in_a_struct</code>).</li>
+<li><strong>A Parquet dictionary index past its dictionary no longer ends the process</strong>
+  (517): arrow-go made a slice of a data page's dictionary index before it checked the
+  index against the dictionary, 8 GiB for index 2^30 in a file of 128 bytes and a fatal
+  "out of memory" for a wider value or a larger index, in every chunk it decodes: a
+  nested column or a struct's field, INT96, a fixed-length or byte-array column, or one
+  whose footer lists an encoding ursus's own pages do not read. Such a page is refused
+  as corrupt before arrow-go decodes it, as ursus's own pages refused it, and the error
+  names the index, where a page of such a chunk that failed was reported as its row
+  group short of rows. CI's fuzz runs found it.</li>
 <li><strong>A sort in small batches no longer allocates by the square of its batches</strong> (512):
   each output batch's gather made two arrays as long as every input batch the sort
   kept, so sorting 8,191 rows in batches of one row allocated 2.3 GB in 400 ms; 23 MB
