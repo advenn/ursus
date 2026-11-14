@@ -264,6 +264,9 @@ that stops when its request is cancelled.
   a stream read in pieces, empty reads and a last one with `io.EOF` among them, to the
   bytes read whole. Their seeds include the 174 texts of Polars 2.1's recorded CSV
   cases. They found the four bugs fixed below.
+- **The fuzzer minimises a new input for 5 s, not 60** (516): `fuzz.yml` and `make
+  fuzz` pass `-fuzzminimizetime`, so a target that takes a millisecond an input spends
+  CI's 30 s fuzzing rather than minimising; set it with `FUZZMIN`.
 - **The twenty-five findings closed, their thirty-nine cases asserted again** (507):
   none is skipped. One was a bug, fixed (above); twenty-four are ursus's own rules,
   each documented in `context_files/feature-gaps.md` §9 with Polars 2.1's answer and
@@ -294,6 +297,19 @@ that stops when its request is cancelled.
   A mismatch is bisected to its factor, and every run is inside `fuzzcheck.Run`. Its
   tests, the teeth and a seeded smoke run, and five minutes of `qcheck self` run in
   the CI job `qcheck`, not a required check. It found the three below.
+- **Fuzz targets for NDJSON, JSON and Arrow IPC** (511): `FuzzObjectLines` holds a
+  JSON document's split into lines to itself read in pieces and a byte at a time, and
+  to `encoding/json`; `FuzzJSONDecode` holds `json_decode`'s and `json_path_match`'s
+  parser to `json.Valid` and `json.Unmarshal`; `FuzzScanNDJSON` and `FuzzScanJSON` hold
+  each row read to `encoding/json`, by its column's type; `FuzzScanIPCFile` and
+  `FuzzScanIPCStream` read through a bounded allocator and hold each cell to arrow-go's
+  own arrays. readfuzz's targets run on an 8 MiB stack. Left for the maintainer, each
+  skipped by name and kept as a seed: arrow-go sizes slices by an IPC schema's and a
+  record batch's declared lengths and recurses on a field among its descendants, each a
+  fatal error from an input of 2 KB; a record of 2^40 rows of Null; klauspost's
+  Zstandard decoder allocates the window a frame declares, up to 512 MiB, from 17
+  bytes; NDJSON inference types `[1, true]` and `[1, [2]]` as the reader then refuses,
+  and an integer past Int128 as an Int128.
 - **Fuzz targets for the Parquet reader, and a byte-flip sweep** (510):
   `FuzzScanParquet` reads any bytes through the public API with every page buffer
   from a bounded, poisoned allocator, and checks four threads, a read into zeroed
@@ -352,6 +368,22 @@ its section below lists them.
   grew its keys to the group count exactly before each batch, copying them all, so a
   `NUnique` by 8,193 keys in batches of one row allocated 842 MB; 30 MB now, the keys
   growing to twice what they held, as a slice's append does. Found by `qcheck self`.
+- **An Arrow IPC buffer declaring more than its input could hold is refused, not the
+  end of the process** (511): arrow-go sizes a compressed buffer's decompression by
+  the length the buffer declares, so a 1.7 KB LZ4 file declaring 2^40 bytes ended the
+  program with "fatal error: runtime: out of memory". `ScanIPC`, `ScanIPCStream` and
+  their kin read through an allocator that grants no buffer past 32,768 times the
+  input's size, Zstandard's most, and refuse past it with an `ErrIO`.
+- **An IPC stream's message is held to arrow-go's limits** (511): arrow-go's
+  `ipc.NewReader` drops them, so a 2.7 KB stream declaring a 2^40-byte body ended the
+  program, and an IPC file read as a stream allocated 1.3 GB for the length its magic
+  spells. A message is no larger than 64 MiB of metadata and 256 MiB of body, or than
+  the stream where its size is known.
+- **`ReadIPCSchema` of a corrupt file is an error** (511): a panic in arrow-go's
+  reading of the footer reached the caller; it is an `ErrIO` naming the file.
+- **An NDJSON or JSON line nested deep is read in memory proportional to it** (511):
+  a 6 KB line of objects 999 deep allocated 4 GB and took 1.2 s, each level's type
+  written as text and built again; 4 MB and 13 ms now.
 - **A Parquet page's header can no longer size its buffer past its column chunk**
   (510): a page claiming 2^28 bytes in a file of 161 made arrow-go ask for 256 MiB
   before reading a byte of it, and one claiming 2^26 compressed 64 MiB. A page is

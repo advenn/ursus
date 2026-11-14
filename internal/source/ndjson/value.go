@@ -9,6 +9,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
+	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/uerr"
 )
 
@@ -696,7 +697,7 @@ var errNull = errors.New("ndjson: a value read as a null")
 // refuse is the error for the value at p, which a column of type t does not take: the
 // value parsed whole, for its text, or the error it is malformed with; or errNull, the
 // value skipped, when the parser ignores such errors.
-func (p *parser) refuse(t string) error {
+func (p *parser) refuse(t dtype.DataType) error {
 	if p.ignore {
 		if err := p.skip(); err != nil {
 			return err
@@ -707,7 +708,7 @@ func (p *parser) refuse(t string) error {
 	if err != nil {
 		return err
 	}
-	return mismatch(v, t, !p.given)
+	return mismatch(v, t.String(), !p.given)
 }
 
 func (p *parser) hex4() (rune, bool) {
