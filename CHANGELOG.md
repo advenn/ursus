@@ -264,6 +264,9 @@ that stops when its request is cancelled.
   a stream read in pieces, empty reads and a last one with `io.EOF` among them, to the
   bytes read whole. Their seeds include the 174 texts of Polars 2.1's recorded CSV
   cases. They found the four bugs fixed below.
+- **The fuzzer minimises a new input for 5 s, not 60** (516): `fuzz.yml` and `make
+  fuzz` pass `-fuzzminimizetime`, so a target that takes a millisecond an input spends
+  CI's 30 s fuzzing rather than minimising; set it with `FUZZMIN`.
 - **The twenty-five findings closed, their thirty-nine cases asserted again** (507):
   none is skipped. One was a bug, fixed (above); twenty-four are ursus's own rules,
   each documented in `context_files/feature-gaps.md` §9 with Polars 2.1's answer and
