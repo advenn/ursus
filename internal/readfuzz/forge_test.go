@@ -433,14 +433,60 @@ func (k pqIndexKind) past() (rle, packed []byte) {
 		k.file(k.dict(), k.data(pqRLEDict, pqIndexPacked(ids)))
 }
 
+// pqFooterOf is file b's footer, the Thrift of its FileMetaData.
+func pqFooterOf(b []byte) []byte {
+	n := int(binary.LittleEndian.Uint32(b[len(b)-8:]))
+	return b[len(b)-8-n : len(b)-8]
+}
+
+// pqMagicless is a file of footer f after the first j bytes of the leading magic, f's
+// length and the magic after it. Below 4, j leaves the magic no room, as no writer
+// does, and arrow-go reads the footer all the same: its length is within the file's
+// less 8 (step 521).
+func pqMagicless(f []byte, j int) []byte {
+	b := append([]byte("PAR1")[:j:j], f...)
+	b = binary.LittleEndian.AppendUint32(b, uint32(len(f)))
+	return append(b, "PAR1"...)
+}
+
+// pqHiddenGroups is a file of no column chunk whose footer's list of row groups says
+// it holds a binary (step 521). To a walk by the types a list's header gives, its one
+// element is a binary of 25 bytes; arrow-go reads a list's elements as the types
+// parquet.thrift gives them, and to it the element is a row group whose first byte,
+// 0x19, the binary's length, begins its field 1, its list of column chunks, claiming
+// 10^8.
+func pqHiddenGroups() []byte {
+	var w thriftCompact
+	w.begin()
+	w.i32(1, 1) // version
+	w.list(2, thriftStruct, 2)
+	w.begin()
+	w.str(4, "schema")
+	w.i32(5, 1) // num_children
+	w.end()
+	w.begin()
+	w.i32(1, pqInt64)
+	w.i32(3, 0) // REQUIRED
+	w.str(4, "v")
+	w.end()
+	w.i64(3, 0) // num_rows
+	w.list(4, thriftBinary, 1)
+	group := binary.AppendUvarint([]byte{0x19, 0xf0 | thriftStruct}, 100_000_000)
+	w.b = append(append(w.b, group...), make([]byte, 1+0x19-len(group))...)
+	w.end()
+	return pqMagicless(w.b, 4)
+}
+
 // pqForgedSeeds are the forged files the Parquet target starts from, each honest
 // version among them: a data page claiming 2^28 bytes uncompressed, and one
 // claiming 2^26 compressed, arrow-go's limits (D14 of v0.7.2-plan.md); a dictionary
 // page claiming 2^31−1 values, read by the reader's own pages and, its footer listing
 // an encoding they do not read, by arrow-go's; a footer whose list of row groups
-// claims 10^8; a column chunk claiming 2^40 bytes; and step 517's, a dictionary
-// index of 2^30 in an RLE run and in a bit-packed one, in each kind of chunk
-// arrow-go decodes (pqIndexKinds).
+// claims 10^8; a column chunk claiming 2^40 bytes; step 517's, a dictionary index
+// of 2^30 in an RLE run and in a bit-packed one, in each kind of chunk arrow-go
+// decodes (pqIndexKinds); and step 521's, the footer of 10^8 row groups leaving the
+// leading magic no room, and a list of row groups said to hold a binary, hiding a
+// list of 10^8 column chunks in it (pqHiddenGroups).
 func pqForgedSeeds() [][]byte {
 	vals := []int64{3, 1, 4, 1, 5, 9, 2, 6}
 	page := pqInt64Page(vals)
@@ -452,6 +498,7 @@ func pqForgedSeeds() [][]byte {
 	dict := pqDictPages([]string{"ab", "cd"}, 5)
 	counted := append([]pqPage(nil), dict...)
 	counted[0].values = 1<<31 - 1
+	groups := pqForged{phys: pqInt64, rows: int64(len(vals)), pages: []pqPage{page}, groups: 100_000_000}.bytes()
 	seeds := [][]byte{
 		pqForged{phys: pqInt64, rows: int64(len(vals)), pages: []pqPage{page}}.bytes(),
 		claims(func(p *pqPage) { p.uncompressed = 1 << 28 }),
@@ -459,12 +506,12 @@ func pqForgedSeeds() [][]byte {
 		pqForged{phys: pqByteArray, rows: 5, pages: dict}.bytes(),
 		pqForged{phys: pqByteArray, rows: 5, pages: counted}.bytes(),
 		pqForged{phys: pqByteArray, rows: 5, pages: counted, encs: []int32{pqDeltaLength}}.bytes(),
-		pqForged{phys: pqInt64, rows: int64(len(vals)), pages: []pqPage{page}, groups: 100_000_000}.bytes(),
+		groups,
 		pqForged{phys: pqInt64, rows: int64(len(vals)), pages: []pqPage{page}, chunk: 1 << 40}.bytes(),
 	}
 	for _, k := range pqIndexKinds() {
 		rle, packed := k.past()
 		seeds = append(seeds, rle, packed)
 	}
-	return seeds
+	return append(seeds, pqMagicless(pqFooterOf(groups), 0), pqHiddenGroups())
 }

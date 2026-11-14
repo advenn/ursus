@@ -28,7 +28,99 @@ const maxSchemaDepth = 1_000
 // a real footer's do some ten deep, and a value past it is corrupt.
 const thriftDepth = 64
 
-var errFooter = errors.New("the footer is not Thrift's compact protocol")
+// A footer's lists, sized before arrow-go reads them (step 521).
+//
+// arrow-go's Thrift code makes each list of a footer a slice of the count its header
+// claims, make([]*RowGroup, 0, size), before it reads an element, and Thrift bounds
+// the count only by its message limit of 100 MB. So the walk reads every list arrow-go
+// reads, and refuses one claiming more elements than the bytes after its header hold,
+// each element taking a byte at least. It did not size a list against the bytes left,
+// and it did not see every list arrow-go reads: a footer of 78 bytes claiming 10^8 row
+// groups, too long to leave the file's leading magic room, was never walked (F12 of
+// step 521), and arrow-go asked for 1.5 GB before it refused it.
+//
+// Every list as arrow-go reads it: its generated reader takes a list's elements for
+// the type parquet.thrift gives them, whatever type the list's header says. A list of
+// row groups said to hold binaries is read as row groups, and a list of 10^8 column
+// chunks inside one is a list arrow-go makes a slice for, which a walk by the
+// header's types skips as the bytes of a binary. footerFields is where parquet.thrift
+// has a list: the structs that hold one, in a field of their own or of a struct they
+// hold, and how arrow-go reads each such field. A field it does not read so, another
+// field or one whose header gives it another type, it skips as its header says, as
+// the walk does (skip).
+
+// footerStruct is a struct of parquet.thrift as the walk reads it.
+type footerStruct uint8
+
+const (
+	plainStruct   footerStruct = iota // holds no list arrow-go reads, walked as its bytes say
+	schemaElement                     // holds no list; its num_children are kept (schemaDepth)
+	fileMetaData
+	rowGroup
+	columnChunk
+	columnMetaData
+	sizeStatistics
+	geospatialStatistics
+	columnCryptoMetaData
+	encryptionWithColumnKey
+)
+
+// footerField is a field arrow-go reads as a list, of elements of compact type elem,
+// or as a struct; of is the struct, or a list's elements' where they are structs.
+type footerField struct {
+	list bool
+	elem byte
+	of   footerStruct
+}
+
+// The compact protocol's types the walk reads.
+const (
+	thriftI32    = 5
+	thriftI64    = 6
+	thriftBinary = 8
+	thriftList   = 9
+	thriftStruct = 12
+)
+
+// footerFields is, for each footerStruct, its fields arrow-go v18.7.0 reads as lists
+// or as structs that hold one: every ReadListBegin of its parquet/internal/gen-go
+// reachable from FileMetaData, the page indexes', read apart, aside.
+var footerFields = [...]map[int16]footerField{
+	fileMetaData: {
+		2: {list: true, elem: thriftStruct, of: schemaElement}, // schema
+		4: {list: true, elem: thriftStruct, of: rowGroup},      // row_groups
+		5: {list: true, elem: thriftStruct},                    // key_value_metadata
+		7: {list: true, elem: thriftStruct},                    // column_orders
+	},
+	rowGroup: {
+		1: {list: true, elem: thriftStruct, of: columnChunk}, // columns
+		4: {list: true, elem: thriftStruct},                  // sorting_columns
+	},
+	columnChunk: {
+		3: {elem: thriftStruct, of: columnMetaData},       // meta_data
+		8: {elem: thriftStruct, of: columnCryptoMetaData}, // crypto_metadata
+	},
+	columnMetaData: {
+		2:  {list: true, elem: thriftI32},                  // encodings
+		3:  {list: true, elem: thriftBinary},               // path_in_schema
+		8:  {list: true, elem: thriftStruct},               // key_value_metadata
+		13: {list: true, elem: thriftStruct},               // encoding_stats
+		16: {elem: thriftStruct, of: sizeStatistics},       // size_statistics
+		17: {elem: thriftStruct, of: geospatialStatistics}, // geospatial_statistics
+	},
+	sizeStatistics: {
+		2: {list: true, elem: thriftI64}, // repetition_level_histogram
+		3: {list: true, elem: thriftI64}, // definition_level_histogram
+	},
+	geospatialStatistics:    {2: {list: true, elem: thriftI32}},                     // geospatial_types
+	columnCryptoMetaData:    {2: {elem: thriftStruct, of: encryptionWithColumnKey}}, // ENCRYPTION_WITH_COLUMN_KEY
+	encryptionWithColumnKey: {1: {list: true, elem: thriftBinary}},                  // path_in_schema
+}
+
+var (
+	errFooter     = errors.New("the footer is not Thrift's compact protocol")
+	errFooterList = errors.New("a list in the footer claims more elements than the bytes after it hold")
+)
 
 // measured is ra with its end, the footer and the 8 bytes after it, read once into
 // tail: arrow-go's two reads there are answered from it, so measuring the footer reads
@@ -63,12 +155,15 @@ func (m *measured) ReadAt(p []byte, off int64) (n int, err error) {
 }
 
 // measureFooter reads ra's footer and refuses one whose schema nests past
-// maxSchemaDepth, or that cannot be walked. A file too short or not ending in a plain
-// footer is left to arrow-go, which says what it is. It returns the reader arrow-go
-// is to read from.
+// maxSchemaDepth, or that cannot be walked, a list in it claiming more than its bytes
+// among them. A footer arrow-go does not read, a file too short, one not ending in a
+// plain footer or one whose footer is longer than the file less its last 8 bytes, is
+// left to arrow-go, which says what it is. Every other footer is walked, one leaving
+// the file's leading magic no room as well, which arrow-go reads all the same (F12 of
+// step 521). It returns the reader arrow-go is to read from.
 func measureFooter(ra parquet.ReaderAtSeeker) (parquet.ReaderAtSeeker, error) {
 	size, err := ra.Seek(0, io.SeekEnd)
-	if err != nil || size < 12 {
+	if err != nil || size <= 8 {
 		return ra, nil
 	}
 	if _, err := ra.Seek(0, io.SeekStart); err != nil {
@@ -83,8 +178,8 @@ func measureFooter(ra parquet.ReaderAtSeeker) (parquet.ReaderAtSeeker, error) {
 		return ra, nil // an encrypted footer's PARE, or no Parquet file
 	}
 	n := int64(binary.LittleEndian.Uint32(end))
-	if n <= 0 || n > size-12 {
-		return ra, nil
+	if n <= 0 || n > size-8 {
+		return ra, nil // as arrow-go's parseMetaData leaves it
 	}
 	tail := make([]byte, n+8)
 	if _, err := ra.ReadAt(tail[:n], size-8-n); err != nil && !errors.Is(err, io.EOF) {
@@ -93,7 +188,7 @@ func measureFooter(ra parquet.ReaderAtSeeker) (parquet.ReaderAtSeeker, error) {
 	copy(tail[n:], end)
 	depth, err := schemaDepth(tail[:n])
 	if err != nil {
-		return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "corrupt: reading the footer's schema")
+		return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "corrupt: walking the footer")
 	}
 	if depth > maxSchemaDepth {
 		return nil, uerr.New(uerr.KindUnsupported, "scan_parquet",
@@ -103,46 +198,17 @@ func measureFooter(ra parquet.ReaderAtSeeker) (parquet.ReaderAtSeeker, error) {
 }
 
 // schemaDepth is how deep a FileMetaData's schema nests, its leaf counted, the root
-// not: its second field, a list of SchemaElements, each a group's num_children, its
-// fifth field.
+// not, walking the whole of it (walk): its second field, a list of SchemaElements,
+// each a group's num_children, its fifth field.
 func schemaDepth(b []byte) (int, error) {
 	r := thriftReader{b: b}
-	children := []int32(nil)
-	err := r.fields(0, func(id int16, typ byte) (bool, error) {
-		if id != 2 || typ != 9 {
-			return false, nil
-		}
-		et, size, err := r.listHeader()
-		if err != nil || et != 12 {
-			return true, errFooter
-		}
-		for range size {
-			var kids int32
-			err := r.fields(1, func(id int16, typ byte) (bool, error) {
-				if id != 5 || typ != 5 {
-					return false, nil
-				}
-				v, err := r.varint()
-				kids = int32(int64(v>>1) ^ -int64(v&1))
-				return true, err
-			})
-			if err != nil {
-				return true, err
-			}
-			if kids < 0 {
-				return true, errFooter
-			}
-			children = append(children, kids)
-		}
-		return true, nil
-	})
-	if err != nil {
+	if err := r.walk(fileMetaData, 0); err != nil {
 		return 0, err
 	}
 	// Each element's depth is the groups it is within, the root's children at 1.
 	var open []int32 // each open group's children yet to come, the innermost last
 	deepest := 0
-	for _, kids := range children {
+	for _, kids := range r.kids {
 		deepest = max(deepest, len(open))
 		if len(open) > 0 {
 			open[len(open)-1]--
@@ -161,6 +227,59 @@ func schemaDepth(b []byte) (int, error) {
 type thriftReader struct {
 	b   []byte
 	pos int
+
+	kids []int32 // the schema's elements' num_children, an element's 0 where it says none
+
+	// onList, where it is set, is told where each list header the walk reads lies.
+	onList func(start, end int)
+}
+
+// walk moves past a struct of kind s, read as arrow-go reads it: a field footerFields
+// names for s, its header giving it the type arrow-go reads it as, is read as that,
+// a list's elements as parquet.thrift types them; any other field is skipped as its
+// header says (skip).
+func (r *thriftReader) walk(s footerStruct, depth int) error {
+	if depth > thriftDepth {
+		return errFooter
+	}
+	return r.fields(depth, func(id int16, typ byte) (bool, error) {
+		if s == schemaElement && id == 5 && typ == thriftI32 {
+			v, err := r.varint()
+			kids := int32(int64(v>>1) ^ -int64(v&1))
+			if err == nil && kids < 0 {
+				err = errFooter
+			}
+			r.kids[len(r.kids)-1] = kids
+			return true, err
+		}
+		var f footerField
+		ok := false
+		if int(s) < len(footerFields) {
+			f, ok = footerFields[s][id]
+		}
+		switch {
+		case ok && f.list && typ == thriftList:
+			if f.of == schemaElement {
+				r.kids = r.kids[:0] // a second schema is the one arrow-go keeps
+			}
+			_, size, err := r.listHeader()
+			for i := 0; i < size && err == nil; i++ {
+				switch {
+				case f.elem != thriftStruct:
+					err = r.skip(f.elem, depth+1, false)
+				case f.of == schemaElement:
+					r.kids = append(r.kids, 0)
+					fallthrough
+				default:
+					err = r.walk(f.of, depth+1)
+				}
+			}
+			return true, err
+		case ok && !f.list && typ == thriftStruct:
+			return true, r.walk(f.of, depth+1)
+		}
+		return false, nil
+	})
 }
 
 func (r *thriftReader) varint() (uint64, error) {
@@ -180,20 +299,27 @@ func (r *thriftReader) byte() (byte, error) {
 	return r.b[r.pos-1], nil
 }
 
+// listHeader reads a list's or a set's header: its elements' type and count. A count
+// past the bytes after the header is refused, an element taking one at least.
 func (r *thriftReader) listHeader() (byte, int, error) {
+	start := r.pos
 	h, err := r.byte()
 	if err != nil {
 		return 0, 0, err
 	}
-	size := int(h >> 4)
+	size := uint64(h >> 4)
 	if size == 15 {
-		v, err := r.varint()
-		if err != nil || v > uint64(len(r.b)) {
-			return 0, 0, errFooter // more elements than bytes to hold them
+		if size, err = r.varint(); err != nil {
+			return 0, 0, err
 		}
-		size = int(v)
 	}
-	return h & 0x0f, size, nil
+	if size > uint64(len(r.b)-r.pos) {
+		return 0, 0, errFooterList
+	}
+	if r.onList != nil {
+		r.onList(start, r.pos)
+	}
+	return h & 0x0f, int(size), nil
 }
 
 // fields walks a struct's fields at depth, handing each to visit, which reads its
@@ -267,8 +393,8 @@ func (r *thriftReader) skip(typ byte, depth int, field bool) error {
 	case 11:
 		var n uint64
 		if n, err = r.varint(); err == nil && n > 0 {
-			if n > uint64(len(r.b)) {
-				return errFooter
+			if n > uint64(len(r.b)-r.pos)/2 {
+				return errFooterList // an entry is two bytes at least
 			}
 			var kv byte
 			if kv, err = r.byte(); err == nil {

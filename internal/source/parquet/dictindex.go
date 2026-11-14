@@ -2,7 +2,9 @@ package parquet
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/bits"
 	"sync"
@@ -138,7 +140,22 @@ func (c *checkedPages) Reset(r parquet.BufferedReader, nrows int64, codec compre
 // would decode them with what it had: the read ends here instead.
 func batchErr(cr interface{ Err() error }, total int64, err error) error {
 	if err == nil && total == 0 {
-		return cr.Err()
+		err = cr.Err()
+	}
+	return truncated(err)
+}
+
+// truncated is a page reader's error as a scan may return it, io.EOF made
+// io.ErrUnexpectedEOF (F11 of step 521). arrow-go's page reader answers io.EOF for a
+// page whose header is whole and none of whose bytes is in its chunk
+// (serializedPageReader.decompress, io.ReadFull), the chunk ending there; and a scan
+// answers io.EOF at its end, which the engine takes an error wrapping for. The read
+// ended at the rows before the page, with no error: a dictionary page none of whose
+// bytes was there read as 0 rows of a row group of 5, and step 416's count of them,
+// which comes after, was never asked.
+func truncated(err error) error {
+	if errors.Is(err, io.EOF) {
+		return io.ErrUnexpectedEOF
 	}
 	return err
 }
