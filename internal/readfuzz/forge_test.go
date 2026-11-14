@@ -2,6 +2,7 @@ package readfuzz_test
 
 import (
 	"encoding/binary"
+	"slices"
 )
 
 // Forged Parquet files (step 510): what no writer makes, a page header or a footer
@@ -77,11 +78,14 @@ func (w *thriftCompact) list(id int16, et byte, n int) {
 // Parquet's enums, as format/parquet.thrift numbers them.
 const (
 	pqInt64     = 2
+	pqInt96     = 3
 	pqByteArray = 6
+	pqFixed     = 7 // FIXED_LEN_BYTE_ARRAY
 
 	pqPageData = 0
 	pqPageDict = 2
 
+	pqListType   = 3 // a group's converted_type
 	pqTimeMicros = 8 // a converted_type
 
 	pqPlain       = 0
@@ -101,18 +105,33 @@ type pqPage struct {
 	body         []byte
 }
 
-// pqForged is a file of one REQUIRED column "v" of physical type phys, its pages as
-// given, uncompressed, in one row group of rows rows. Its footer says what a writer
-// would of those pages, except that its list of row groups claims groups of them,
-// zero being one: the footer holds one either way.
+// Where a forged file's one leaf sits (step 517): the column "v" itself, the
+// element of a List "v" of the three-level layout (a REQUIRED group annotated LIST,
+// a REPEATED group "list", a REQUIRED leaf "element"), or the one field "x" of a
+// REQUIRED Struct "v". A leaf in a List has a repetition level and a definition
+// level, so its data pages begin with both, each RLE with its 4-byte length.
+const (
+	pqFlat = iota
+	pqInList
+	pqInStruct
+)
+
+// pqForged is a file of one column "v" of physical type phys, REQUIRED unless
+// optional, its leaf where nest puts it, its pages as given, uncompressed, in one
+// row group of rows rows. Its footer says what a writer would of those pages, except
+// that its list of row groups claims groups of them, zero being one: the footer
+// holds one either way.
 type pqForged struct {
-	phys   int32
-	rows   int64
-	pages  []pqPage
-	groups int
-	chunk  int64   // the column chunk's total_compressed_size; zero is its bytes'
-	encs   []int32 // encodings the footer lists beside its pages', as a writer's own
-	conv   int32   // the column's converted_type, zero for none
+	phys     int32
+	rows     int64
+	pages    []pqPage
+	groups   int
+	chunk    int64   // the column chunk's total_compressed_size; zero is its bytes'
+	encs     []int32 // encodings the footer lists beside its pages', as a writer's own
+	conv     int32   // the column's converted_type, zero for none
+	typeLen  int32   // a FIXED_LEN_BYTE_ARRAY's length
+	nest     int     // pqFlat, pqInList or pqInStruct
+	optional bool    // the leaf is OPTIONAL: a flat column's pages begin with its definition levels
 }
 
 func (f pqForged) bytes() []byte {
@@ -163,21 +182,66 @@ func (f pqForged) bytes() []byte {
 	encodings = append(encodings, f.encs...)
 
 	var w thriftCompact
+	// group writes a group's SchemaElement: its repetition, name, children and
+	// converted_type, zero for none; leaf writes the leaf's.
+	group := func(rep int32, name string, conv int32) {
+		w.begin()
+		w.i32(3, rep)
+		w.str(4, name)
+		w.i32(5, 1) // num_children
+		if conv != 0 {
+			w.i32(6, conv)
+		}
+		w.end()
+	}
+	leaf := func(name string) {
+		w.begin()
+		w.i32(1, f.phys)
+		if f.typeLen != 0 {
+			w.i32(2, f.typeLen)
+		}
+		if f.optional {
+			w.i32(3, 1) // OPTIONAL
+		} else {
+			w.i32(3, 0) // REQUIRED
+		}
+		w.str(4, name)
+		if f.conv != 0 {
+			w.i32(6, f.conv)
+		}
+		w.end()
+	}
+	path := []string{"v"}
 	w.begin()
 	w.i32(1, 1) // version
-	w.list(2, thriftStruct, 2)
-	w.begin()
-	w.str(4, "schema")
-	w.i32(5, 1) // num_children
-	w.end()
-	w.begin()
-	w.i32(1, f.phys)
-	w.i32(3, 0) // REQUIRED
-	w.str(4, "v")
-	if f.conv != 0 {
-		w.i32(6, f.conv)
+	switch f.nest {
+	case pqInList:
+		w.list(2, thriftStruct, 4)
+		w.begin()
+		w.str(4, "schema")
+		w.i32(5, 1) // num_children
+		w.end()
+		group(0, "v", pqListType)
+		group(2, "list", 0) // REPEATED
+		leaf("element")
+		path = []string{"v", "list", "element"}
+	case pqInStruct:
+		w.list(2, thriftStruct, 3)
+		w.begin()
+		w.str(4, "schema")
+		w.i32(5, 1) // num_children
+		w.end()
+		group(0, "v", 0)
+		leaf("x")
+		path = []string{"v", "x"}
+	default:
+		w.list(2, thriftStruct, 2)
+		w.begin()
+		w.str(4, "schema")
+		w.i32(5, 1) // num_children
+		w.end()
+		leaf("v")
 	}
-	w.end()
 	w.i64(3, f.rows)
 	w.list(4, thriftStruct, max(f.groups, 1))
 	w.begin() // the row group
@@ -190,9 +254,11 @@ func (f pqForged) bytes() []byte {
 	for _, e := range encodings {
 		w.zigzag(int64(e))
 	}
-	w.list(3, thriftBinary, 1)
-	w.uvarint(1)
-	w.b = append(w.b, 'v')
+	w.list(3, thriftBinary, len(path))
+	for _, p := range path {
+		w.uvarint(uint64(len(p)))
+		w.b = append(w.b, p...)
+	}
 	w.i32(4, 0) // UNCOMPRESSED
 	w.i64(5, f.rows)
 	w.i64(6, chunk) // total_uncompressed_size
@@ -244,12 +310,137 @@ func pqDictPages(dict []string, rows int) []pqPage {
 	}
 }
 
+// pqIndexKind is a kind of column chunk arrow-go's column reader decodes and the
+// reader's own pages do not (pages.go, ownable), for step 517's forged dictionary
+// indices: its file's shape, two values of its physical type as PLAIN lays them
+// out, the levels each of its data pages of pqIndexRows rows begins with, and how
+// many of those rows hold a value.
+type pqIndexKind struct {
+	name    string
+	shape   pqForged // its rows and pages are file's
+	values  [2][]byte
+	levels  []byte
+	present int
+}
+
+// pqIndexRows is the rows of each data page of a pqIndexKind's file.
+const pqIndexRows = 5
+
+// pqIndexKinds are the kinds: an INT64 whose footer lists an encoding the own pages
+// do not read, REQUIRED and OPTIONAL with a null among its rows; the element of a
+// List; the field of a Struct; INT96; FIXED_LEN_BYTE_ARRAY; and a BYTE_ARRAY whose
+// footer lists an encoding the own pages do not read.
+func pqIndexKinds() []pqIndexKind {
+	le64 := func(v uint64) []byte { return binary.LittleEndian.AppendUint64(nil, v) }
+	int96 := func(nanos uint64, day uint32) []byte { return binary.LittleEndian.AppendUint32(le64(nanos), day) }
+	text := func(s string) []byte { return append(binary.LittleEndian.AppendUint32(nil, uint32(len(s))), s...) }
+	// levels is one data page's levels, each an RLE level run of its 4-byte length.
+	levels := func(runs ...[]byte) []byte {
+		var b []byte
+		for _, r := range runs {
+			b = append(binary.LittleEndian.AppendUint32(b, uint32(len(r))), r...)
+		}
+		return b
+	}
+	all := func(level byte) []byte { return []byte{pqIndexRows << 1, level} } // one RLE run of the rows
+	// A null third row: one bit-packed group of definition levels, 1 1 0 1 1, and
+	// three of padding.
+	thirdNull := []byte{1<<1 | 1, 0b11011}
+	i64 := [2][]byte{le64(7), le64(9)}
+	return []pqIndexKind{
+		{name: "INT64, the footer listing DELTA_BINARY_PACKED",
+			shape: pqForged{phys: pqInt64, encs: []int32{pqDeltaBinary}}, values: i64, present: pqIndexRows},
+		{name: "an OPTIONAL INT64 with a null, the footer listing DELTA_BINARY_PACKED",
+			shape:  pqForged{phys: pqInt64, encs: []int32{pqDeltaBinary}, optional: true},
+			values: i64, levels: levels(thirdNull), present: pqIndexRows - 1},
+		{name: "the INT64 element of a List", shape: pqForged{phys: pqInt64, nest: pqInList}, values: i64,
+			levels: levels(all(0), all(1)), present: pqIndexRows},
+		{name: "the INT64 field of a Struct", shape: pqForged{phys: pqInt64, nest: pqInStruct}, values: i64,
+			present: pqIndexRows},
+		{name: "INT96", shape: pqForged{phys: pqInt96},
+			values: [2][]byte{int96(0, 2_440_588), int96(1, 2_440_589)}, present: pqIndexRows},
+		{name: "FIXED_LEN_BYTE_ARRAY(4)", shape: pqForged{phys: pqFixed, typeLen: 4},
+			values: [2][]byte{[]byte("abcd"), []byte("wxyz")}, present: pqIndexRows},
+		{name: "BYTE_ARRAY, the footer listing DELTA_LENGTH_BYTE_ARRAY",
+			shape:  pqForged{phys: pqByteArray, encs: []int32{pqDeltaLength}},
+			values: [2][]byte{text("ab"), text("cd")}, present: pqIndexRows},
+	}
+}
+
+// file is k's file of pages, pqIndexRows rows for each data page among them.
+func (k pqIndexKind) file(pages ...pqPage) []byte {
+	f := k.shape
+	f.pages = pages
+	for _, p := range pages {
+		if p.typ == pqPageData {
+			f.rows += pqIndexRows
+		}
+	}
+	return f.bytes()
+}
+
+// dict is a PLAIN dictionary page of k's two values.
+func (k pqIndexKind) dict() pqPage {
+	return pqPage{typ: pqPageDict, values: 2, encoding: pqPlain, body: append(slices.Clone(k.values[0]), k.values[1]...)}
+}
+
+// data is a data page of k's levels and then vals, encoded as enc.
+func (k pqIndexKind) data(enc int32, vals []byte) pqPage {
+	return pqPage{typ: pqPageData, values: pqIndexRows, encoding: enc, body: append(slices.Clone(k.levels), vals...)}
+}
+
+// plain is a PLAIN data page of k's levels and its value v in each row it has one.
+func (k pqIndexKind) plain(v []byte) pqPage {
+	var vals []byte
+	for range k.present {
+		vals = append(vals, v...)
+	}
+	return k.data(pqPlain, vals)
+}
+
+// pqIndexRun is a data page's dictionary indices: their bit width, 31, wider than a
+// dictionary of two needs, and one RLE run of n copies of idx.
+func pqIndexRun(n int, idx uint32) []byte {
+	return binary.LittleEndian.AppendUint32(binary.AppendUvarint([]byte{31}, uint64(n)<<1), idx)
+}
+
+// pqIndexPacked is a data page's dictionary indices: their bit width, 31, and one
+// bit-packed group of the eight ids, the least significant bit first.
+func pqIndexPacked(ids [8]uint32) []byte {
+	b := []byte{31, 1<<1 | 1}
+	var acc uint64
+	bits := 0
+	for _, id := range ids {
+		acc |= uint64(id) << bits
+		for bits += 31; bits >= 8; bits -= 8 {
+			b = append(b, byte(acc))
+			acc >>= 8
+		}
+	}
+	return b
+}
+
+// past are k's forged files of step 517: a dictionary of two values and a data
+// page whose indices say 2^30, in an RLE run, and in a bit-packed run at the last
+// row with a value.
+func (k pqIndexKind) past() (rle, packed []byte) {
+	var ids [8]uint32
+	for i := range k.present {
+		ids[i] = 1
+	}
+	ids[k.present-1] = 1 << 30
+	return k.file(k.dict(), k.data(pqRLEDict, pqIndexRun(k.present, 1<<30))),
+		k.file(k.dict(), k.data(pqRLEDict, pqIndexPacked(ids)))
+}
+
 // pqForgedSeeds are the forged files the Parquet target starts from, each honest
 // version among them: a data page claiming 2^28 bytes uncompressed, and one
 // claiming 2^26 compressed, arrow-go's limits (D14 of v0.7.2-plan.md); a dictionary
 // page claiming 2^31−1 values, read by the reader's own pages and, its footer listing
 // an encoding they do not read, by arrow-go's; a footer whose list of row groups
-// claims 10^8; a column chunk claiming 2^40 bytes.
+// claims 10^8; a column chunk claiming 2^40 bytes; and step 517's, a dictionary
+// index of 2^30 in an RLE run and in a bit-packed one, in each kind of chunk
+// arrow-go decodes (pqIndexKinds).
 func pqForgedSeeds() [][]byte {
 	vals := []int64{3, 1, 4, 1, 5, 9, 2, 6}
 	page := pqInt64Page(vals)
@@ -261,7 +452,7 @@ func pqForgedSeeds() [][]byte {
 	dict := pqDictPages([]string{"ab", "cd"}, 5)
 	counted := append([]pqPage(nil), dict...)
 	counted[0].values = 1<<31 - 1
-	return [][]byte{
+	seeds := [][]byte{
 		pqForged{phys: pqInt64, rows: int64(len(vals)), pages: []pqPage{page}}.bytes(),
 		claims(func(p *pqPage) { p.uncompressed = 1 << 28 }),
 		claims(func(p *pqPage) { p.compressed = 1 << 26 }),
@@ -271,4 +462,9 @@ func pqForgedSeeds() [][]byte {
 		pqForged{phys: pqInt64, rows: int64(len(vals)), pages: []pqPage{page}, groups: 100_000_000}.bytes(),
 		pqForged{phys: pqInt64, rows: int64(len(vals)), pages: []pqPage{page}, chunk: 1 << 40}.bytes(),
 	}
+	for _, k := range pqIndexKinds() {
+		rle, packed := k.past()
+		seeds = append(seeds, rle, packed)
+	}
+	return seeds
 }

@@ -263,7 +263,7 @@ func (e *fixedElems[P, T]) readLevels(defs, reps []int16) (int, error) {
 		e.vals = make([]P, len(defs))
 	}
 	total, _, err := e.cr.ReadBatch(int64(len(defs)), e.vals[:len(defs)], defs, reps)
-	if err != nil {
+	if err := batchErr(e.cr, total, err); err != nil {
 		return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
 			"reading a repeated column")
 	}
@@ -335,7 +335,7 @@ func (e *boolElems) readLevels(defs, reps []int16) (int, error) {
 		e.vals = make([]bool, len(defs))
 	}
 	total, _, err := e.cr.ReadBatch(int64(len(defs)), e.vals[:len(defs)], defs, reps)
-	if err != nil {
+	if err := batchErr(e.cr, total, err); err != nil {
 		return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
 			"reading a repeated boolean column")
 	}
@@ -392,7 +392,7 @@ func (e *byteArrayElems) readLevels(defs, reps []int16) (int, error) {
 		e.vals = make([]parquet.ByteArray, len(defs))
 	}
 	total, _, err := e.cr.ReadBatch(int64(len(defs)), e.vals[:len(defs)], defs, reps)
-	if err != nil {
+	if err := batchErr(e.cr, total, err); err != nil {
 		return 0, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
 			"reading a repeated byte-array column")
 	}
