@@ -846,17 +846,42 @@ func (a ListAccessor) Child() *Column { return a.child }
 // The type is DERIVED from the fields, for the reason NewList gives: a declared type
 // that disagreed with the columns actually holding the values would be a lie no
 // caller could detect.
+//
+// The struct's length is its first field's, or, with no field, its validity's: a
+// caller that may hold no field and does not build a validity of the struct's
+// length calls NewStructLen, which is told it.
 func NewStruct(name string, fields []*Column, valid bitmap.View) *Column {
-	n := 0
+	n := valid.Len()
 	if len(fields) > 0 {
 		n = fields[0].Len()
 	}
+	return NewStructLen(name, n, fields, valid)
+}
+
+// NewStructLen is NewStruct of n rows, the length given rather than read from a field.
+//
+// # A struct of no fields has rows
+//
+// Polars' Struct({}) is what a JSON object field holding {} reads as, one row per
+// object, {} or null. Its fields cannot say how many rows it has, having none, so the
+// length is the struct's own: NewStruct took it from fields[0], which made every
+// struct of no fields zero rows long whatever its frame's height, and a read of
+// {"a":{}} failed as a batch whose columns disagree (step 518). Every field must
+// still be n long.
+//
+// The fields are kept as a slice even when there are none, never nil: a nil one is
+// what data.NewNull's payload-free column has, which kernels read as all null
+// (IsPayloadFree), where a struct of no fields holds {} in every valid row.
+func NewStructLen(name string, n int, fields []*Column, valid bitmap.View) *Column {
 	fs := make([]dtype.Field, len(fields))
 	for i, f := range fields {
 		fs[i] = dtype.Field{Name: f.Name(), Type: f.DType(), Nullable: true}
 	}
 	if valid.Len() == 0 && n > 0 {
 		valid = bitmap.AllSet(n)
+	}
+	if fields == nil {
+		fields = []*Column{}
 	}
 	return &Column{
 		name:   name,

@@ -111,7 +111,7 @@ func listHist(name string, c *data.Column, args []any) (*data.Column, error) {
 		if category {
 			fields = append(fields, data.NewString("category", cats, all).WithDType(dtype.Categorical))
 		}
-		child = data.NewStruct(name, append(fields, child), all)
+		child = data.NewStructLen(name, len(counts), append(fields, child), all)
 	}
 	return data.NewList(name, outOffs, child, listValid), nil
 }

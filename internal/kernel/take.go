@@ -206,7 +206,7 @@ func takeStruct(c *data.Column, sel []int32, valid bitmap.View) (*data.Column, e
 		}
 		fields[i] = out
 	}
-	return data.NewStruct(c.Name(), fields, valid), nil
+	return data.NewStructLen(c.Name(), len(sel), fields, valid), nil
 }
 
 // concatStruct concatenates Struct columns field by field.
@@ -233,7 +233,7 @@ func concatStruct(parts []*data.Column, total int, valid bitmap.View) (*data.Col
 		}
 		fields[i] = out
 	}
-	return data.NewStruct(parts[0].Name(), fields, valid), nil
+	return data.NewStructLen(parts[0].Name(), total, fields, valid), nil
 }
 
 // NullIndex marks a gather slot that should produce a null.
@@ -301,14 +301,10 @@ func NullColumn(name string, dt dtype.DataType, n int) (*data.Column, error) {
 		// side of a left join, or in a conditional. It was NOT reachable through a
 		// comparison, which is how it hid — the twelve labels that looked like this
 		// defect were really the nested-equality one, and only the cast is left.
+		//
+		// A struct of no fields is n null rows of none (step 518): its height is its
+		// own, not a field's, so it needs no payload at all.
 		fields := dt.Fields()
-		if len(fields) == 0 {
-			// data.NewStruct takes its height from fields[0], so it cannot express
-			// n rows of a struct with no fields. Nothing produces one today.
-			return nil, uerr.New(uerr.KindUnsupported, "",
-				"cannot build a null column of %s: it has no fields to carry its "+
-					"height", dt)
-		}
 		cols := make([]*data.Column, len(fields))
 		for i, f := range fields {
 			c, err := NullColumn(f.Name, f.Type, n)
@@ -317,7 +313,7 @@ func NullColumn(name string, dt dtype.DataType, n int) (*data.Column, error) {
 			}
 			cols[i] = c
 		}
-		return data.NewStruct(name, cols, valid), nil
+		return data.NewStructLen(name, n, cols, valid), nil
 
 	default:
 		return nullFixed(name, dt, n, valid)
