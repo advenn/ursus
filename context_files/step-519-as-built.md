@@ -157,12 +157,15 @@ Each mutation made in `walk.go`, its tests built and run under `prlimit
 - **`FuzzScanParquet`** stopped once on a 283-byte file whose INT64 page holds fewer
   values than it declares: five of its eight rows are left unwritten, and read from
   the poisoned buffer, where a read into zeroed buffers gives zeros. The Parquet
-  reader's, with no Arrow schema in it; not kept here, for the Parquet steps.
+  reader's, with no Arrow schema in it, and still so after step 517 merged; not kept
+  here, for the Parquet steps.
 - arrow-go misreads its own IPC writing of dictionaries of runs, list views, unions
   and dictionaries, and of some nested types in unions and list views; `gen` makes
   dictionaries of text, views, leaves and views in a list or a struct.
 
 ## 7. Checks
+
+On the branch, and again after master was merged in (steps 512 and 517):
 
 - `GOFLAGS=-p=1 GOMAXPROCS=4 GOEXPERIMENT=simd GOAMD64=v3`: `go test ./internal/...`
   ok; `go test .` in full, under the lock, ok.
