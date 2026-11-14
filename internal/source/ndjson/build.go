@@ -27,11 +27,13 @@ type builder interface {
 }
 
 // newBuilder is a builder for a column of type t, one inference gives or any a given
-// schema declares: it builds the column in t's natural type, which a cast then makes
-// t, and refuses a value as one t cannot take.
+// schema declares: it builds the column in t's natural type (naturalID), which a cast
+// then makes t, and refuses a value as one t cannot take, naming t. The name is
+// written when a value is refused, not here: a type's text is as long as it is deep,
+// and writing each level's cost a line nested a thousand deep gigabytes (step 511).
 func newBuilder(t dtype.DataType) (builder, error) {
-	want := t.String()
-	switch natural(t).ID() {
+	want := t
+	switch naturalID(t) {
 	case dtype.TypeNull:
 		return &nullBuilder{want: want}, nil
 	case dtype.TypeBool:
@@ -156,7 +158,7 @@ func (v *nulls) view() bitmap.View {
 }
 
 type nullBuilder struct {
-	want string
+	want dtype.DataType
 	n    int
 }
 
@@ -168,7 +170,7 @@ func (b *nullBuilder) finish(name string) *data.Column {
 }
 
 type boolBuilder struct {
-	want  string
+	want  dtype.DataType
 	vals  *bitmap.Builder
 	valid nulls
 }
@@ -198,7 +200,7 @@ func (b *boolBuilder) finish(name string) *data.Column {
 }
 
 type intBuilder struct {
-	want  string
+	want  dtype.DataType
 	vals  []int64
 	valid nulls
 }
@@ -249,7 +251,7 @@ func parseInt64(text []byte) (int64, bool) {
 }
 
 type int128Builder struct {
-	want  string
+	want  dtype.DataType
 	vals  []i128.Int128
 	valid nulls
 }
@@ -279,7 +281,7 @@ func (b *int128Builder) finish(name string) *data.Column {
 }
 
 type floatBuilder struct {
-	want  string
+	want  dtype.DataType
 	vals  []float64
 	valid nulls
 }
@@ -331,7 +333,7 @@ func (b *stringBuilder) finish(name string) *data.Column {
 }
 
 type listBuilder struct {
-	want  string
+	want  dtype.DataType
 	elem  builder
 	offs  []int32
 	valid nulls
@@ -387,7 +389,7 @@ func (b *listBuilder) finish(name string) *data.Column {
 // structBuilder takes an object's keys as its fields, a key missing a null and one
 // it does not know skipped; of a key given twice, the first, as Polars reads it.
 type structBuilder struct {
-	want   string
+	want   dtype.DataType
 	names  []string
 	fields []builder
 	at     map[string]int
