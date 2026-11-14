@@ -279,6 +279,15 @@ that stops when its request is cancelled.
   recorded. Six refusals ursus means, where Polars answers, are `TestCondRefusals`' and
   `TestDecimalGuards`', and two float extremes `TestAggregatesAtTheFloatsEnds`', held
   to math/big; those eight cases left the recordings.
+- **Fuzz targets for the Parquet reader, and a byte-flip sweep** (510):
+  `FuzzScanParquet` reads any bytes through the public API with every page buffer
+  from a bounded, poisoned allocator, and checks four threads, a read into zeroed
+  buffers, `Head`, `Select`, a `Filter` with pruning on and off, and `Count` against
+  the whole frame; `FuzzOwnPagesMatchArrow` checks the reader's own page decoding
+  against arrow-go's, batch for batch. Every byte of two files ursus wrote is
+  flipped and read, and ursus must read the original wherever pyarrow 25.0.1 does,
+  from DuckDB's and pyarrow's outcomes recorded once by
+  `bench/scripts/oracle/record_flips.py` into `testdata/oracle/flips`.
 
 ### Fixed
 
@@ -314,6 +323,29 @@ its section below lists them.
   and a null Struct is kept apart from a Struct of nulls (`ExtractGroups`, 499);
   Polars 2.1 reads a null too. `ScanJSON`, which reads each object as a line, follows.
   The recorded oracle found it (`ndjsonread/ignored_in_a_struct`).
+- **A Parquet page's header can no longer size its buffer past its column chunk**
+  (510): a page claiming 2^28 bytes in a file of 161 made arrow-go ask for 256 MiB
+  before reading a byte of it, and one claiming 2^26 compressed 64 MiB. A page is
+  bounded now by the largest column chunk the footer declares, and such a file is
+  refused as corrupt. The fuzz target found it, as D14 predicted.
+- **A Parquet column chunk claiming more bytes than its file no longer ends the
+  process** (510): arrow-go made a slice of the chunk's declared size before reading
+  it, and a claim of 2^40 bytes was a fatal "out of memory" that no recover catches.
+  The footer is refused as corrupt.
+- **A Parquet dictionary page claiming more values than its bytes hold no longer
+  ends the process** (510): arrow-go made a slice of the claim before decoding a
+  value, 48 GB for 2^31−1 in a page of 12 bytes, fatally, in every chunk it decodes:
+  a Boolean, INT96 or fixed-length column, a nested one, or one whose footer lists an
+  encoding ursus's own pages do not read. Such a page is refused as corrupt, as
+  ursus's own pages already refused it.
+- **A Parquet TIME past its day is refused** (510): a TIME holding a tick outside
+  [0, 24h) was read as a Time as it lay, which renders as another time of day and
+  sorts and compares as none; it is refused now as a corrupt value, inside a List or
+  a Struct as well, as the writer refuses one. CI's fuzz run found it.
+- **A Parquet footer's Arrow schema can no longer end the process** (510): it was read
+  by arrow-go's IPC reader, which made a slice of the children a field claims, 283 GB
+  from a file of 906 bytes, fatally. It is read now by a walk that checks every
+  offset and length against its bytes. The fuzz target found it.
 - **`"-nan"` and `"+nan"` read as NaN** (509), as `ParseFloat`'s grammar says and
   Polars' cast reads them: Go's strconv takes a sign before inf only, so a cast to a
   float was a null, a CSV Float64 column refused one, and inference read it as text.
