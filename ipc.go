@@ -15,9 +15,11 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/arrowin"
+	"github.com/advenn/ursus/internal/arrowmeta"
 	"github.com/advenn/ursus/internal/arrowout"
 	"github.com/advenn/ursus/internal/data"
 	"github.com/advenn/ursus/internal/exec"
@@ -305,28 +307,45 @@ func ScanIPCStream(path string) *LazyFrame {
 // stream where its size is known; and a buffer no larger than the stream could hold
 // decompressed (arrowin.ReadMem).
 //
-// The reader is built from a message reader, which keeps the limits: ipc.NewReader
-// drops them (arrow-go v18.7.0's reader.go), and an 8 KB stream whose message
-// declared a body of 2^40 bytes ended the process, out of memory (step 511).
+// The messages are read by arrowmeta's reader, which keeps the limits, as arrow-go's
+// ipc.NewMessageReader does and ipc.NewReader does not (arrow-go v18.7.0's
+// reader.go: an 8 KB stream whose message declared a body of 2^40 bytes ended the
+// process, out of memory, step 511), and walks each message's metadata before
+// arrow-go reads it (step 519).
 func openIPCStream(name string, rc io.ReadCloser, size int64) (array.RecordReader, error) {
+	const op = "scan_ipc_stream"
 	var in io.Reader = rc
-	var opts []ipc.Option
+	var mem memory.Allocator
+	maxMeta, maxBody := int64(arrowmeta.DefaultMaxMetadata), int64(arrowmeta.DefaultMaxBody)
 	if size >= 0 {
-		limit := max(size, 1) // 0 is arrow-go's "no limit"
-		opts = append(opts, ipc.WithAllocator(arrowin.NewReadMem("scan_ipc_stream", size)),
-			ipc.WithMetadataSizeLimit(limit), ipc.WithBodySizeLimit(limit))
+		mem = arrowin.NewReadMem(op, size)
+		maxMeta, maxBody = max(size, 1), max(size, 1)
 	} else {
-		var mem *arrowin.ReadMem
-		in, mem = arrowin.NewStreamMem("scan_ipc_stream", rc)
-		opts = append(opts, ipc.WithAllocator(mem))
+		in, mem = arrowin.NewStreamMem(op, rc)
 	}
-	r, err := ipc.NewReaderFromMessageReader(ipc.NewMessageReader(in, opts...), opts...)
+	r, err := ipc.NewReaderFromMessageReader(arrowmeta.NewMessageReader(op, name, in, mem, maxMeta, maxBody),
+		ipc.WithAllocator(mem))
 	if err != nil {
 		rc.Close()
-		return nil, uerr.Wrap(err, uerr.KindIO, "scan_ipc_stream", "reading %s as an Arrow IPC stream", name).
+		if e := walkRefusal(err); e != nil {
+			return nil, e
+		}
+		return nil, uerr.Wrap(err, uerr.KindIO, op, "reading %s as an Arrow IPC stream", name).
 			Hint("an IPC file, Feather version 2, is ScanIPC's")
 	}
 	return &closingReader{RecordReader: r, close: rc.Close}, nil
+}
+
+// walkRefusal is the error of ursus's own in err, which arrow-go returned: arrowmeta's
+// refusal of a footer or message as corrupt, or ursus's allocator's of a buffer, each
+// of which says what it is and needs neither arrow-go's words around it nor a hint
+// that the input may be the other format; nil for none.
+func walkRefusal(err error) *uerr.Error {
+	var e *uerr.Error
+	if errors.As(err, &e) {
+		return e
+	}
+	return nil
 }
 
 // ReadIPCSchema is an Arrow IPC file's schema, read from its footer, as Polars'
@@ -361,26 +380,37 @@ func openIPCFile(op, path string) (*fileRecords, error) {
 // (arrowin.ReadMem). arrow-go panics on some corrupt footers, in its flatbuffers'
 // accessors: that is the file's error, and ReadIPCSchema, which no query recovers,
 // let it reach its caller (step 511).
+//
+// arrow-go reads the file through arrowmeta.File, which walks its footer here, and
+// each block's message as arrow-go reads it, before arrow-go trusts what they say
+// (step 519).
 func openIPC(op, name string, r ipc.ReadAtSeeker, c io.Closer) (_ *fileRecords, err error) {
+	closeIt := func() {
+		if c != nil {
+			c.Close()
+		}
+	}
 	defer func() {
 		if v := recover(); v != nil {
-			if c != nil {
-				c.Close()
-			}
+			closeIt()
 			err = ipcCorrupt(v, op, name)
 		}
 	}()
 	size, err := r.Seek(0, io.SeekEnd)
 	if err != nil {
-		if c != nil {
-			c.Close()
-		}
+		closeIt()
 		return nil, uerr.Wrap(err, uerr.KindIO, op, "reading %s as an Arrow IPC file", name)
 	}
-	fr, err := ipc.NewFileReader(r, ipc.WithAllocator(arrowin.NewReadMem(op, size)))
+	walked, err := arrowmeta.OpenFile(op, name, r, size)
 	if err != nil {
-		if c != nil {
-			c.Close()
+		closeIt()
+		return nil, err
+	}
+	fr, err := ipc.NewFileReader(walked, ipc.WithAllocator(arrowin.NewReadMem(op, size)))
+	if err != nil {
+		closeIt()
+		if e := walkRefusal(err); e != nil {
+			return nil, e
 		}
 		return nil, uerr.Wrap(err, uerr.KindIO, op, "reading %s as an Arrow IPC file", name).
 			Hint("an IPC stream is ScanIPCStream's")
@@ -447,6 +477,9 @@ func (f *fileRecords) Next() bool {
 	// The reader owns what RecordBatch returns until its next call: this one's own.
 	f.rec, f.err = f.r.RecordBatchAt(f.i)
 	f.i++
+	if e := walkRefusal(f.err); e != nil {
+		f.err = e
+	}
 	return f.err == nil
 }
 
