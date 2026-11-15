@@ -34,9 +34,16 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	base := s.rowBase() // first, so an empty batch does not leave it for the next
 	n := in.Rows()
 	if n == 0 {
 		return nil
+	}
+	if s.parallel {
+		s.placing = true
+	}
+	if s.placing {
+		s.placeRows(base)
 	}
 	if len(s.keys) == 0 && s.wholeOK() {
 		if err := s.consumeWhole(ctx, in, n); err != nil {
@@ -173,6 +180,11 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 		}
 	}
 	s.keep = keep
+	if s.floatKey && s.placing {
+		for _, r := range newRows {
+			s.firstAt = append(s.firstAt, base+int64(r))
+		}
+	}
 
 	if routed > 0 {
 		if err := s.route(in); err != nil {
@@ -232,6 +244,33 @@ func (s *hashAggSink) Consume(ctx context.Context, in *data.Batch) error {
 		}
 	}
 	return s.consumed(ctx, n)
+}
+
+// rowBase is the input position of the batch Consume is given: the parallel
+// driver's, which deals a worker every n-th batch, or this sink's count of the rows
+// before it, which after a fold counts the folded workers' too (step 523).
+func (s *hashAggSink) rowBase() int64 {
+	if s.placed {
+		s.placed = false
+		return s.next
+	}
+	return s.nRows
+}
+
+// placeNext is told the input position of the next batch's first row by the
+// parallel driver: see placedSink.
+func (s *hashAggSink) placeNext(row int64) { s.next, s.placed = row, true }
+
+// placeRows tells each accumulator that breaks a tie by row where this batch's rows
+// sit in the input: kernel.RowPlacer. A sink that is a parallel worker places every
+// batch, from its first and on past a turn to serial, and a serial one none: it
+// never merges, so its accumulators need keep no position.
+func (s *hashAggSink) placeRows(base int64) {
+	for _, a := range s.accs {
+		if p, ok := a.(kernel.RowPlacer); ok {
+			p.PlaceRows(base)
+		}
+	}
 }
 
 // wholeOK reports whether every accumulator takes a whole column, so a frame's
