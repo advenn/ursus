@@ -10,6 +10,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+
+	"github.com/advenn/ursus/internal/arrowmeta"
 )
 
 // sizesByArrow is arraysOf's answer as arrow-go's IPC reader gives it, as arraysOf
@@ -92,8 +94,9 @@ func arrowSchemas() []*arrow.Schema {
 }
 
 // TestTheFootersArrowSchemaIsReadAsArrowGoReadsIt: the walk of the footer's Arrow
-// schema (step 510) gives arraysOf what arrow-go's IPC reader gave it, on every
-// schema arrowSchemas builds, and refuses each of them cut short.
+// schema (step 510, arrowmeta's since step 519) gives arraysOf what arrow-go's IPC
+// reader gave it, on every schema arrowSchemas builds, and refuses each of them cut
+// short.
 //
 // Each schema is read as written, with the continuation marker, and without it, as
 // writers before Arrow 0.15 framed a message.
@@ -103,15 +106,9 @@ func TestTheFootersArrowSchemaIsReadAsArrowGoReadsIt(t *testing.T) {
 		raw := arrowSchemaBytes(t, s)
 		want := sizesByArrow(t, raw)
 		for _, framed := range [][]byte{raw, raw[4:]} {
-			fields, ok := schemaFields(framed)
+			got, ok := sizesOf(framed)
 			if !ok {
 				t.Fatalf("schema %d, %s: not read", i, s)
-			}
-			got := map[string]int{}
-			for _, f := range fields {
-				if f.size != 0 {
-					got[f.name] = f.size
-				}
 			}
 			if !maps.Equal(got, want) {
 				t.Errorf("schema %d, %s:\n walked %v\n arrow-go %v", i, s, got, want)
@@ -124,13 +121,13 @@ func TestTheFootersArrowSchemaIsReadAsArrowGoReadsIt(t *testing.T) {
 				arrays++
 			}
 		}
-		fields, _ := schemaFields(raw)
+		fields, _ := arrowmeta.SchemaFields(raw)
 		if len(fields) != len(s.Fields()) {
 			t.Errorf("schema %d: %d fields walked of %d", i, len(fields), len(s.Fields()))
 		}
 		n := int(binary.LittleEndian.Uint32(raw[4:])) + 8
 		for cut := range n {
-			if _, ok := schemaFields(raw[:cut]); ok && cut < n {
+			if _, ok := sizesOf(raw[:cut]); ok && cut < n {
 				// A message cut short of its length is refused by its length; the
 				// walk must never read past what it was given.
 				t.Fatalf("schema %d cut to %d of %d bytes read", i, cut, n)
@@ -153,29 +150,60 @@ func TestAFieldClaimingBillionsOfChildrenAllocatesNoneOfThem(t *testing.T) {
 		{Name: "c", Type: &arrow.DictionaryType{IndexType: arrow.PrimitiveTypes.Int32, ValueType: arrow.BinaryTypes.String}},
 	}, nil)
 	raw := arrowSchemaBytes(t, s)
-	honest, ok := schemaFields(raw)
-	if !ok {
-		t.Fatal("the honest schema is not read")
+	if got, ok := sizesOf(raw); !ok || !maps.Equal(got, sizesByArrow(t, raw)) {
+		t.Fatalf("the honest schema: %v, %v; arrow-go %v", got, ok, sizesByArrow(t, raw))
 	}
 
 	forged := bytes.Clone(raw)
-	b := flatbuf(forged[8:])
-	msg, _ := b.deref(0)
-	schema, _ := b.tableField(msg, 2)
-	vec, _ := b.refField(schema, 1)
-	field, _ := b.deref(vec + 4)
-	children, ok := b.refField(field, 5)
-	if !ok || children == 0 {
+	b := testFB(forged[8:])
+	msg := b.deref(0)
+	schema := b.refField(msg, 2)
+	vec := b.refField(schema, 1)
+	field := b.deref(vec + 4)
+	children := b.refField(field, 5)
+	if children == 0 {
 		t.Fatal("the FixedSizeList field holds no children to claim more of")
 	}
 	binary.LittleEndian.PutUint32(b[children:], 3_221_225_472)
 
 	before := allocatedBytes()
-	got, ok := schemaFields(forged)
+	got, ok := sizesOf(forged)
 	if grew := allocatedBytes() - before; grew > 1<<20 {
 		t.Errorf("walking the forged schema allocated %d bytes", grew)
 	}
-	if !ok || fmt.Sprint(got) != fmt.Sprint(honest) {
-		t.Errorf("the forged schema: %v, %v; the honest one %v", got, ok, honest)
+	if ok {
+		t.Errorf("the forged schema is read, as %v", got)
 	}
+}
+
+// testFB reads a flatbuffer this test wrote, to forge it: step 510's accessors, kept
+// apart from the walk they test. An offset or field it cannot follow is 0.
+type testFB []byte
+
+func (b testFB) u32(at int) int {
+	if at < 0 || at > len(b)-4 {
+		return 0
+	}
+	return int(binary.LittleEndian.Uint32(b[at:]))
+}
+
+// deref follows the offset at at.
+func (b testFB) deref(at int) int {
+	if off := b.u32(at); off != 0 {
+		return at + off
+	}
+	return 0
+}
+
+// refField follows table t's field i, an offset.
+func (b testFB) refField(t, i int) int {
+	vt := t - int(int32(uint32(b.u32(t))))
+	if vt < 0 || vt+4+2*i+2 > len(b) || 4+2*i >= int(binary.LittleEndian.Uint16(b[vt:])) {
+		return 0
+	}
+	off := int(binary.LittleEndian.Uint16(b[vt+4+2*i:]))
+	if off == 0 {
+		return 0
+	}
+	return b.deref(t + off)
 }

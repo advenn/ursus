@@ -5,11 +5,9 @@ import (
 	"fmt"
 )
 
-// A walk of an Arrow IPC input's flatbuffers metadata, for what is left of the finding
-// of step 511 the IPC targets skip: a record batch declaring more rows than its input
-// could hold, of columns that cost no input a row and that ursus holds a bit a row
-// of, a Struct of none but Null fields, say (oversized). A record of Null columns, or
-// of none, is read in constant space since step 529, and is not skipped.
+// A walk of an Arrow IPC input's flatbuffers metadata, for the finding of step 511
+// the IPC targets still skip: a record batch declaring more rows than its input
+// could hold of any type but Null (oversized).
 //
 // Step 519 walks every footer and message in ursus before arrow-go reads it
 // (internal/arrowmeta), and refuses a count past its buffer and a field among its own
@@ -102,19 +100,12 @@ func (b fbuf) past(start uint32, n, size int) bool {
 
 // The field ids of the tables walked (Schema.fbs, Message.fbs, File.fbs).
 const (
-	msgHeaderType, msgHeader, msgBodyLength, msgCustomMetadata = 1, 2, 3, 4
-	schemaFields, schemaCustomMetadata                         = 1, 2
-	fieldTypeType, fieldDictionary                             = 2, 4
-	fieldChildren, fieldCustomMetadata                         = 5, 6
-	batchLength, batchBuffers, batchVariadic                   = 0, 2, 4
-	dictData                                                   = 1
-	footerSchema, footerDictionaries, footerRecordBatches      = 1, 2, 3
-)
-
-// The view types' tags in a Field's type union (Schema.fbs).
-const (
-	typeBinaryView = 23
-	typeUtf8View   = 24
+	msgHeaderType, msgHeader, msgBodyLength               = 1, 2, 3
+	schemaFields, schemaCustomMetadata                    = 1, 2
+	fieldChildren                                         = 5
+	batchLength, batchVariadic                            = 0, 4
+	dictData                                              = 1
+	footerSchema, footerDictionaries, footerRecordBatches = 1, 2, 3
 )
 
 // The message headers walked.
@@ -145,11 +136,9 @@ func oversized(b []byte, file bool) string {
 	return ""
 }
 
-// walk is what a walk of one input knows: its size, and how many view columns its
-// schema has, for which arrow-go reads a record batch's variadic counts.
+// walk is what a walk of one input knows: its size.
 type walk struct {
 	input int
-	views int
 }
 
 // message is the metadata of the stream message at pos and where the next one starts,
@@ -188,158 +177,34 @@ func message(b fbuf, pos int) (meta fbuf, next int, ok bool) {
 	return meta, start + n + int(body), true
 }
 
-// message is oversized of one message's metadata.
+// message is oversized of one message's metadata: its record batch's, a dictionary
+// batch's among them.
 func (w *walk) message(meta fbuf) string {
-	root, ok := meta.u32(0)
-	if !ok {
-		return ""
-	}
-	if why := metadataOversized(meta, root, msgCustomMetadata, "a message"); why != "" {
-		return why
-	}
-	at, _ := meta.field(root, msgHeaderType)
-	kind, ok := meta.u8(at)
-	if !ok {
-		return ""
-	}
-	header, ok := meta.ref(root, msgHeader)
-	if !ok {
-		return ""
-	}
-	switch kind {
-	case headerSchema:
-		w.views = viewColumns(meta, header)
-		return schemaOversized(meta, header)
-	case headerRecord:
-		return w.batch(meta, header, w.views)
-	case headerDictionary:
-		if data, ok := meta.ref(header, dictData); ok {
-			return w.batch(meta, data, 0)
-		}
-	}
-	return ""
-}
-
-// viewColumns is how many columns of a view type the schema at schema has, nested
-// ones among them, but none dictionary-encoded, whose views are a dictionary batch's:
-// a record batch has a variadic count for each.
-func viewColumns(b fbuf, schema uint32) int {
-	start, n, ok := b.vector(schema, schemaFields)
-	if !ok || b.past(start, n, 4) {
-		return 0
-	}
-	return viewsIn(b, start, n, 0)
-}
-
-func viewsIn(b fbuf, start uint32, n, depth int) int {
-	views := 0
-	for i := 0; i < n && depth <= maxSchemaDepth; i++ {
-		f, ok := b.elem(start, i)
-		if !ok {
-			return views
-		}
-		at, _ := b.field(f, fieldTypeType)
-		_, dict := b.field(f, fieldDictionary)
-		if t, ok := b.u8(at); ok && !dict && (t == typeBinaryView || t == typeUtf8View) {
-			views++
-		}
-		if cs, cn, ok := b.vector(f, fieldChildren); ok && !b.past(cs, cn, 4) {
-			views += viewsIn(b, cs, cn, depth+1)
-		}
-	}
-	return views
-}
-
-// metadataOversized says whether the custom metadata at field id of the table at t,
-// of what, declares more key-values than its buffer holds offsets.
-func metadataOversized(b fbuf, t uint32, id int, what string) string {
-	if start, n, ok := b.vector(t, id); ok && b.past(start, n, 4) {
-		return fmt.Sprintf("%s's custom metadata declares %d key-values in %d bytes (metadataFromFB)", what, n, len(b))
-	}
-	return ""
-}
-
-func schemaOversized(b fbuf, schema uint32) string {
-	if why := metadataOversized(b, schema, schemaCustomMetadata, "a schema"); why != "" {
-		return why
-	}
-	start, n, ok := b.vector(schema, schemaFields)
-	if !ok {
-		return ""
-	}
-	if b.past(start, n, 4) {
-		return fmt.Sprintf("a schema declares %d fields in %d bytes (schemaFromFB)", n, len(b))
-	}
-	return fieldsOversized(b, start, n, 0)
-}
-
-// fieldsOversized walks n fields whose offsets start at start, depth levels down.
-func fieldsOversized(b fbuf, start uint32, n, depth int) string {
-	if depth > maxSchemaDepth {
-		return fmt.Sprintf("a schema nests past %d levels, or a field is its own descendant, "+
-			"deeper than the walk allows", maxSchemaDepth)
-	}
-	for i := range n {
-		f, ok := b.elem(start, i)
-		if !ok {
-			return ""
-		}
-		if why := metadataOversized(b, f, fieldCustomMetadata, "a field"); why != "" {
-			return why
-		}
-		cs, cn, ok := b.vector(f, fieldChildren)
-		if !ok {
-			continue
-		}
-		if b.past(cs, cn, 4) {
-			return fmt.Sprintf("a field declares %d children in %d bytes (fieldFromFB)", cn, len(b))
-		}
-		if why := fieldsOversized(b, cs, cn, depth+1); why != "" {
+	for _, r := range batchesOf(meta) {
+		if why := w.batch(r.b, r.t); why != "" {
 			return why
 		}
 	}
 	return ""
 }
 
-// maxSchemaDepth is the deepest schema oversized walks: arrow-go's fieldFromFB
-// recurses once a level, with no limit, so a field among its own descendants, which
-// an offset past 2^31 makes, overflows any stack, and a schema 16,000 deep the 8 MiB
-// the targets run on. TestScanIPCDeepSchema reads one 1,000 deep.
-const maxSchemaDepth = 2_000
-
-// batch says whether a record batch declares a view column more variadic buffers
-// than it has buffers, or more rows than the input holds of any type but Null: a row
-// of every other type costs a bit at least, and a Null column none, nor a record of
-// no columns, so a 600-byte stream declaring 2^40 rows had ursus copy batches of
-// them, and allocate, until the harness ended the process at four times its bound.
-// arrow-go reads a variadic count for each of views view columns, in the vector or
-// past its declared length.
-func (w *walk) batch(b fbuf, batch uint32, views int) string {
+// batch says whether a record batch declares more rows than the input holds of any
+// type but Null: a row of every other type costs a bit at least, and a Null column
+// none, nor a record of no columns, so a 600-byte stream declaring 2^40 rows had ursus
+// copy batches of them, and allocate, until the harness ended the process at four
+// times its bound.
+func (w *walk) batch(b fbuf, batch uint32) string {
 	if at, ok := b.field(batch, batchLength); ok {
 		if rows, ok := b.i64(at); ok && rows > 8*int64(w.input)+4096 {
 			return fmt.Sprintf("a record batch declares %d rows in an input of %d bytes, which only "+
 				"columns of no data, Null or none, can hold, and ursus copies", rows, w.input)
 		}
 	}
-	_, buffers, _ := b.vector(batch, batchBuffers)
-	start, n, ok := b.vector(batch, batchVariadic)
-	if !ok {
-		return ""
-	}
-	for i := range max(n, views) {
-		v, ok := b.i64(start + uint32(8*i))
-		if !ok {
-			break
-		}
-		if v < 0 || v > int64(buffers) {
-			return fmt.Sprintf("a record batch declares %d variadic buffers and has %d (loadCommon)", v, buffers)
-		}
-	}
 	return ""
 }
 
-// fileOversized is oversized of an IPC file: its footer's schema, and the message of
-// each block its footer lists.
+// fileOversized is oversized of an IPC file: the message of each block its footer
+// lists.
 func fileOversized(b fbuf) string {
 	if len(b) < 10 || string(b[len(b)-6:]) != "ARROW1" {
 		return ""
@@ -355,12 +220,6 @@ func fileOversized(b fbuf) string {
 		return ""
 	}
 	w := walk{input: len(b)}
-	if schema, ok := footer.ref(root, footerSchema); ok {
-		if why := schemaOversized(footer, schema); why != "" {
-			return why
-		}
-		w.views = viewColumns(footer, schema)
-	}
 	for _, id := range []int{footerDictionaries, footerRecordBatches} {
 		start, n, ok := footer.vector(root, id)
 		if !ok {
@@ -373,17 +232,6 @@ func fileOversized(b fbuf) string {
 			}
 			if why := w.message(meta); why != "" {
 				return why
-			}
-			if id != footerDictionaries {
-				continue
-			}
-			root, _ := meta.u32(0)
-			if h, ok := meta.ref(root, msgHeader); ok {
-				if data, ok := meta.ref(h, dictData); ok {
-					if why := w.batch(meta, data, 0); why != "" {
-						return why
-					}
-				}
 			}
 		}
 	}
@@ -416,7 +264,8 @@ func blockMessage(b, footer fbuf, at uint32) (fbuf, bool) {
 }
 
 // patchMeta is b, an IPC file or stream, with one length its metadata declares made
-// v, for the seeds of oversized's finding: what is "fields", a schema's fields;
+// v, for step 511's seeds of metadata past its buffer, which step 519's walk refuses:
+// what is "fields", a schema's fields;
 // "children", the first field with children's; "metadata", the schema's custom
 // metadata; or "variadic", the first record batch's first variadic count; or, v
 // unused, "cycle", the first field with children made its own child. It is nil where
