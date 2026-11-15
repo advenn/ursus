@@ -118,6 +118,43 @@ type hashAggSink struct {
 	// parallel is set on each of several workers: past the budget the sink asks the
 	// driver to go serial instead of freezing (step 91).
 	parallel bool
+
+	// --- rows, for a tie (step 523) ---------------------------------------------
+	// next is the input position of the next batch's first row, when placed: the
+	// parallel driver's, since a worker sees every n-th batch (rowBase).
+	next   int64
+	placed bool
+	// placing: this sink places its batches' rows (placeRows) and keeps its groups'
+	// first rows (firstAt), as a parallel worker does from its first batch.
+	placing bool
+	// floatKey: a key holds a float, so a group can hold rows of different key bits,
+	// -0.0 and +0.0, or NaNs, and its key is its first row's, as a serial sink keeps
+	// it. A parallel worker keeps the input position of each group's first row,
+	// firstAt, and a fold that meets a group whose first row a later-folded worker
+	// held takes that worker's key, a keyFix applied when the answer is built.
+	floatKey bool
+	firstAt  []int64
+	keyFixes []keyFix
+}
+
+// keyFix is a fold's correction of keys: group ids[j]'s key is row j of keys.
+type keyFix struct {
+	ids  []int32
+	keys *data.Batch
+}
+
+// hasFloat reports whether t is a float or holds one, as a Struct's field or a
+// List's or Array's element.
+func hasFloat(t dtype.DataType) bool {
+	if t.IsFloat() {
+		return true
+	}
+	for _, f := range t.Fields() {
+		if hasFloat(f.Type) {
+			return true
+		}
+	}
+	return t.Inner().ID() != dtype.TypeNull && hasFloat(t.Inner())
 }
 
 // aggSpec is one distinct inner aggregate: its op, its input expression, and the
@@ -240,6 +277,9 @@ func planAggregate(ctx context.Context, a *plan.Aggregate, opts Options) (Operat
 			parts:    make([]*partWriter, nParts),
 			pend:     make([][]int32, nParts),
 			ordered:  a.MaintainOrder,
+		}
+		for _, f := range keyFields {
+			s.floatKey = s.floatKey || hasFloat(f.Type)
 		}
 		// The spill schema is the input schema, plus the input ordinal when order is
 		// being maintained. __ord never reaches the sink's OUTPUT schema, which is
@@ -364,7 +404,7 @@ func (s *hashAggSink) releaseState() {
 	// The accumulators and the key table go with the account's claim on them. Kept,
 	// they stayed alive until the query ended, uncounted: a median or an implode
 	// holds every value of every group. firstSeen stays, for finishOrdered.
-	s.keyParts, s.accBytes = nil, 0
+	s.keyParts, s.keyFixes, s.firstAt, s.accBytes = nil, nil, nil, 0
 	s.ids, s.accs = s.ids.empty(), nil
 	s.mem.Release()
 }
@@ -398,7 +438,7 @@ func (s *hashAggSink) releaseState() {
 func (s *hashAggSink) residentResult(ctx context.Context) (*data.Batch, error) {
 	setSpillsCtx(ctx, s.spills)
 	nGroups := s.ids.Len()
-	keyParts, accs := s.keyParts, s.accs
+	keyParts, keyFixes, accs := s.keyParts, s.keyFixes, s.accs
 	s.releaseState()
 
 	// A GLOBAL aggregate emits exactly one row even over an empty input:
@@ -419,6 +459,9 @@ func (s *hashAggSink) residentResult(ctx context.Context) (*data.Batch, error) {
 		} else {
 			keys, err := kernel.ConcatOwned(s.keySchema, keyParts)
 			if err != nil {
+				return nil, err
+			}
+			if keys, err = fixKeys(s.keySchema, keys, keyFixes); err != nil {
 				return nil, err
 			}
 			cols = append(cols, keys.Columns()...)

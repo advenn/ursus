@@ -402,6 +402,15 @@ its section below lists them.
   dictionary page's count in a varint of 10 bytes, which ursus read otherwise than
   arrow-go and so did not check, no longer makes arrow-go allocate 21.5 GB; the fuzz
   target found it.
+- **An Arrow IPC file or stream with a Null column reads** (522): the format writes a
+  Null column as no buffer, arrow-go's IPC reader builds it as a Null array of no
+  buffers, and arrow-go's own validation, which ursus runs on every array it imports,
+  wanted one, so every IPC input holding a Null column at any depth was refused as
+  malformed: Polars' files, which write an all-null column as Null, pyarrow's, and
+  ursus's own `WriteIPC` and `WriteIPCStream` of a frame with one; records from
+  arrow-go's IPC reader handed to `ScanArrowRecords` or `ScanArrow` too. Such an
+  array is valid now, and every other array is validated as before. The Parquet reader
+  was not affected.
 - **A sort in small batches no longer allocates by the square of its batches** (512):
   each output batch's gather made two arrays as long as every input batch the sort
   kept, so sorting 8,191 rows in batches of one row allocated 2.3 GB in 400 ms; 23 MB
@@ -535,6 +544,14 @@ its section below lists them.
   no 02:00. It is refused now as a corrupt value, an `ErrValue` naming the column,
   the value and its row, inside a List or a Struct as well, as a Parquet TIME past
   its day is (510); a null's slot is not looked at. CI's fuzz run found it.
+- **A float Min or Max is the same at every thread count** (523): a parallel
+  group-by folded its workers' partial minimums in worker order, which is not row
+  order, so of −0.0 and +0.0, or of NaNs of two payloads, Min could answer a later
+  row's bits on four threads than on one; each keeps its row's position now, and Max
+  answers the latest of a tie as its doc's `Sort(...).Last()` does, where it answered
+  the first. Median, Quantile, TopK, BottomK, TopKBy and a float group key picked by
+  the same order and are the same at every thread count too; a spilled quantile is a
+  held one's. qcheck found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

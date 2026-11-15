@@ -29,7 +29,7 @@ func compareSpilled(a, b spilledValue) int {
 	if a.g != b.g {
 		return int(a.g) - int(b.g)
 	}
-	return compareTotalF64(a.v, b.v)
+	return compareStrictF64(a.v, b.v)
 }
 
 func (f *fakeSpill) Put(gids []int32, vals []float64) error {

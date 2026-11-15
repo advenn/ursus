@@ -1,8 +1,11 @@
 package arrowin
 
 import (
+	"slices"
+
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
@@ -90,17 +93,118 @@ func (c *Checker) Check(rec arrow.RecordBatch) error {
 }
 
 // validate refuses an array that was released or is internally inconsistent.
+//
+// # A Null array of no buffers
+//
+// The IPC format writes a Null column as a field node and no buffer, and arrow-go's
+// IPC reader builds it as a Null array of no buffers (loadNull), where its builders
+// and array.Validate give a Null array the one buffer the Null layout declares, which
+// must be nil. Validate refused the reader's, "expected at least 1 buffers for null,
+// got 0", and with it every IPC file and stream holding a Null column at any depth,
+// whoever wrote it (step 522). The two shapes hold the same data, so Validate is handed
+// a copy in which each such array holds the nil buffer (nullShaped). Every other
+// array, beside one or above it, is validated as it is: the copy keeps its type,
+// length, null count, offset, buffers, children and dictionary.
 func validate(arr arrow.Array) error {
 	// A released arrow-go array keeps its Go value and loses its data; DataType would
 	// dereference nil.
-	if d, ok := arr.Data().(*array.Data); !ok || d == nil {
+	d, ok := arr.Data().(*array.Data)
+	if !ok || d == nil {
 		return uerr.New(uerr.KindValue, op, "an Arrow array has no data").
 			Hint("it was probably released: Retain an array you keep past its owner's Release")
 	}
-	if err := array.Validate(arr); err != nil {
+	shaped, err := nullShaped(arr, d)
+	if err != nil {
+		return err
+	}
+	if shaped != arr {
+		defer shaped.Release()
+	}
+	if err := array.Validate(shaped); err != nil {
 		return uerr.Wrap(err, uerr.KindValue, op, "the Arrow data is malformed")
 	}
 	return nil
+}
+
+// nullShaped is arr, whose data is d, or, where a Null array of no buffer is in it,
+// arr itself among them, a copy of arr in which each holds the nil buffer, which its
+// caller releases. arrow-go built arr from the same buffers, so building the copy
+// does not panic where building arr did not; a panic is still the data's error.
+func nullShaped(arr arrow.Array, d *array.Data) (out arrow.Array, err error) {
+	s := shapeNulls(d)
+	if s == d {
+		return arr, nil
+	}
+	defer s.Release()
+	defer func() {
+		if v := recover(); v != nil {
+			out, err = nil, uerr.New(uerr.KindValue, op, "the Arrow data is malformed: %v", v)
+		}
+	}()
+	return array.MakeFromData(s), nil
+}
+
+// shapeNulls is d, or a copy of d in which every Null array of no buffer holds the nil
+// buffer, d itself among them, with a reference its caller releases. Only the arrays
+// on the path from d to such an array are copied, each as it is but for the child or
+// the dictionary copied beneath it; d is returned, and nothing allocated, where there
+// is none.
+func shapeNulls(d *array.Data) *array.Data {
+	var shaped []arrow.ArrayData // d's children, those copied in place
+	for i, c := range d.Children() {
+		cd, ok := c.(*array.Data)
+		if !ok || cd == nil {
+			continue
+		}
+		if s := shapeNulls(cd); s != cd {
+			if shaped == nil {
+				shaped = slices.Clone(d.Children())
+			}
+			shaped[i] = s
+		}
+	}
+	dict, _ := d.Dictionary().(*array.Data)
+	var shapedDict *array.Data
+	if dict != nil {
+		if s := shapeNulls(dict); s != dict {
+			shapedDict = s
+		}
+	}
+	empty := alwaysNull(d.DataType()) && len(d.Buffers()) == 0
+	if shaped == nil && shapedDict == nil && !empty {
+		return d
+	}
+	buffers := slices.Clone(d.Buffers())
+	if empty {
+		buffers = []*memory.Buffer{nil}
+	}
+	children := shaped
+	if children == nil {
+		children = slices.Clone(d.Children())
+	}
+	out := array.NewData(d.DataType(), d.Len(), buffers, children, d.NullN(), d.Offset())
+	for i, c := range shaped {
+		if c != d.Children()[i] {
+			c.Release() // out holds it
+		}
+	}
+	switch {
+	case shapedDict != nil:
+		out.SetDictionary(shapedDict)
+		shapedDict.Release()
+	case dict != nil:
+		out.SetDictionary(dict)
+	}
+	return out
+}
+
+// alwaysNull is whether dt has the Null layout, one buffer that is always nil: the
+// Null type, or an extension type stored as it.
+func alwaysNull(dt arrow.DataType) bool {
+	if ext, ok := dt.(arrow.ExtensionType); ok {
+		dt = ext.StorageType()
+	}
+	return dt.ID() == arrow.NULL
 }
 
 // Batch copies rows [lo, hi) of a record into an ursus batch whose columns are

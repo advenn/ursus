@@ -360,7 +360,7 @@ func arrowRead(b []byte, file bool) (out arrowed, err error) {
 		}
 		for j := range out.cols {
 			col := rec.Column(j)
-			if err := array.Validate(col); err != nil {
+			if err := validated(col); err != nil {
 				return out, err
 			}
 			for i := range int(rec.NumRows()) {
@@ -369,6 +369,45 @@ func arrowRead(b []byte, file bool) (out arrowed, err error) {
 		}
 		out.rows += int(rec.NumRows())
 	}
+}
+
+// validated is array.Validate of arr, every Null array in it that holds no buffer
+// given the one nil buffer arrow-go's Null layout declares: the IPC format writes a
+// Null column as no buffer, arrow-go's IPC reader builds it as none, and Validate wants
+// the one (step 522), the same data.
+func validated(arr arrow.Array) error {
+	d := nullBuffered(arr.Data())
+	defer d.Release()
+	a := array.MakeFromData(d)
+	defer a.Release()
+	return array.Validate(a)
+}
+
+// nullBuffered is a copy of d, a Null array of no buffer in it, d itself among them,
+// holding the one nil buffer; released by its caller.
+func nullBuffered(d arrow.ArrayData) arrow.ArrayData {
+	children := make([]arrow.ArrayData, len(d.Children()))
+	for i, c := range d.Children() {
+		children[i] = nullBuffered(c)
+	}
+	bufs := d.Buffers()
+	dt := d.DataType()
+	if ext, ok := dt.(arrow.ExtensionType); ok {
+		dt = ext.StorageType()
+	}
+	if dt.ID() == arrow.NULL && len(bufs) == 0 {
+		bufs = []*memory.Buffer{nil}
+	}
+	out := array.NewData(d.DataType(), d.Len(), bufs, children, d.NullN(), d.Offset())
+	for _, c := range children {
+		c.Release()
+	}
+	if dict, ok := d.Dictionary().(*array.Data); ok && dict != nil {
+		nd := nullBuffered(dict)
+		out.SetDictionary(nd)
+		nd.Release()
+	}
+	return out
 }
 
 // uncompared stands for a value the target does not compare.
@@ -390,6 +429,10 @@ func cellOf(arr arrow.Array, i int) any {
 		return nil
 	}
 	switch a := arr.(type) {
+	case *array.Null:
+		// Every value of a Null array is null, and arrow-go's IsNull, reading a
+		// bitmap it has none of, says otherwise.
+		return nil
 	case *array.Boolean:
 		return a.Value(i)
 	case *array.Int8:

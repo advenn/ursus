@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"cmp"
 	"math"
 
 	"github.com/advenn/ursus/dtype"
@@ -62,6 +63,58 @@ func OrderKeyF32(f float32) uint32 {
 		return ^b
 	}
 	return b | 1<<31
+}
+
+// StrictKeyF64 is the total order made strict: a uint64 for each float's bits, one
+// to one, whose unsigned order is OrderKeyF64's where that one has two values apart,
+// and where it has them equal puts -0.0 below +0.0 and NaNs in order of their bits.
+// So the k-th of a group's values is one bit pattern however the values arrived,
+// which an aggregate that picks a value and keeps no row needs, to answer alike at
+// every thread count: a quantile, TopK, and the values TopKBy orders a tie of its by
+// by (step 523). Min and Max keep the row they chose instead: see extremumNum.
+//
+// It is the classic key — the sign bit set on a positive float, every bit inverted
+// on a negative one, which orders -NaN < -Inf < … < -0 < +0 < … < +Inf < +NaN —
+// less the 2^52-1 keys of the negative NaNs, which wrap round to the top: -Inf is 0,
+// and every NaN is above +Inf, the positive by payload and then the negative.
+func StrictKeyF64(f float64) uint64 {
+	b := math.Float64bits(f)
+	if b>>63 != 0 {
+		b = ^b
+	} else {
+		b |= 1 << 63
+	}
+	return b - (1<<52 - 1)
+}
+
+// StrictF64 is the float whose StrictKeyF64 is k.
+func StrictF64(k uint64) float64 {
+	b := k + (1<<52 - 1)
+	if b>>63 != 0 {
+		return math.Float64frombits(b &^ (1 << 63))
+	}
+	return math.Float64frombits(^b)
+}
+
+// StrictKeyF32 is StrictKeyF64 for 32-bit floats: a Float32's NaN keeps its own
+// bits, which widening it to a float64 would not promise.
+func StrictKeyF32(f float32) uint32 {
+	b := math.Float32bits(f)
+	if b>>31 != 0 {
+		b = ^b
+	} else {
+		b |= 1 << 31
+	}
+	return b - (1<<23 - 1)
+}
+
+// compareStrictF64 and compareStrictF32 order two floats by their strict keys.
+func compareStrictF64(a, b float64) int {
+	return cmp.Compare(StrictKeyF64(a), StrictKeyF64(b))
+}
+
+func compareStrictF32(a, b float32) int {
+	return cmp.Compare(StrictKeyF32(a), StrictKeyF32(b))
 }
 
 // SortSpec describes one component of an ordering.
