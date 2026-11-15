@@ -13,6 +13,7 @@ package memsrc
 import (
 	"context"
 	"io"
+	"math"
 	"strconv"
 	"sync"
 
@@ -131,6 +132,12 @@ func (s *Source) Open(_ context.Context, spec source.ScanSpec) (source.BatchSour
 	size := spec.BatchSize
 	if size <= 0 {
 		size = defaultBatchSize
+	}
+	if spec.Whole && source.NoData(out) {
+		// Its batches as they are: a slice of nothing a row costs as much at any
+		// size, and a consumer that takes it whole is asking for no more of them
+		// (source.ScanSpec.Whole, step 529).
+		size = math.MaxInt
 	}
 	return &reader{parent: s, schema: out, batches: s.batches, size: size}, nil
 }
