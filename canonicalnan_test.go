@@ -7,12 +7,14 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/kernel"
 )
 
 // Step 530: a float aggregate whose answer is NaN by arithmetic answers one NaN,
@@ -469,7 +471,15 @@ func TestAFloatCorrelationMatrixThatIsNaNIsTheOneNaN(t *testing.T) {
 // one of its operands' that IEEE leaves to the machine; a literal on the left was
 // the right operand of a batch of many rows and the left of a batch of one, which
 // takes no side for the constant.
+//
+// Go's own emulation of vectors, GODEBUG=simd=0, adds a vector's first lane right
+// operand first and its second left first, so there a row's NaN follows its place in
+// its batch, two columns' as much as a literal's, and a NaN is compared as a NaN.
 func TestANaNLiteralInArithmeticIsTheSameInEveryBatch(t *testing.T) {
+	same := samePickBits
+	if !kernel.Accelerated() && kernel.VectorBits() > 0 {
+		same = sameBitsOrNaNs
+	}
 	lf := genNaNs(5301, 300, 8).frame()
 	c := ursus.Col
 	var exprs []ursus.Expr
@@ -489,12 +499,29 @@ func TestANaNLiteralInArithmeticIsTheSameInEveryBatch(t *testing.T) {
 	ref := collectPicks(t, q, pickReference)
 	for _, cf := range nanVariants() {
 		got := collectPicks(t, q, cf)
-		samePickBits(t, cf.String(), got, ref)
+		same(t, cf.String(), got, ref)
 		off, err := q.Collect(t.Context(), ursus.WithThreads(cf.threads), ursus.WithBatchSize(cf.batch),
 			ursus.WithOptFlags(ursus.NoOptFlags()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		samePickBits(t, cf.String()+" optimizer off", off, ref)
+		same(t, cf.String()+" optimizer off", off, ref)
+	}
+}
+
+// sameBitsOrNaNs is samePickBits with a NaN of any payload one NaN.
+func sameBitsOrNaNs(t *testing.T, what string, got, want *ursus.DataFrame) {
+	t.Helper()
+	if got.Height() != want.Height() || !slices.Equal(got.Columns(), want.Columns()) {
+		t.Fatalf("%s: %d rows of %v, want %d of %v", what, got.Height(), got.Columns(), want.Height(), want.Columns())
+	}
+	for j, name := range want.Columns() {
+		g, w := got.ColumnAt(j), want.ColumnAt(j)
+		for i := range want.Height() {
+			if nanCell(g, i) != nanCell(w, i) {
+				t.Errorf("%s: %q row %d is %s, the reference's %s", what, name, i, cellBits(g, i), cellBits(w, i))
+				break
+			}
+		}
 	}
 }
