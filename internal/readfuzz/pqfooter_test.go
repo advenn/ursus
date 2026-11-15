@@ -3,6 +3,7 @@ package readfuzz_test
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -235,5 +236,21 @@ func TestADictionaryIndexOfZeroBitsReadsAsIndexZero(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestARowGroupMissingAColumnChunkIsRefused(t *testing.T) {
+	ctx := t.Context()
+	b := corpusBytes(t, filepath.Join("testdata", "fuzz", "FuzzScanParquet", "row-group-of-no-column-chunks"))
+	lf := ursus.ScanParquetBytes(b, "chunks.parquet")
+	errs := map[string]error{}
+	for _, threads := range []int{1, 4} {
+		_, errs[fmt.Sprint("the read on ", threads, " threads")] = lf.Collect(ctx, ursus.WithThreads(threads))
+	}
+	_, errs["Count"] = lf.Count(ctx)
+	for what, err := range errs {
+		if err == nil || !errors.Is(err, ursus.ErrIO) || errors.Is(err, ursus.ErrInternal) {
+			t.Errorf("%s: %v, want an I/O error", what, err)
+		}
 	}
 }
