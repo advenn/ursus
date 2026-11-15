@@ -150,9 +150,12 @@ them is exact in any order. Nothing expected is typed:
   at `GOMAXPROCS` 1, 4 and 8, `GODEBUG=simd=0` and `simd=128`, and with the SIMD
   experiment off, so CI's legs read it as written. At `GOAMD64=v1`, where no a*b+c
   fuses, a skew's, a kurtosis's, a correlation's and two ewm columns' last bits differ
-  (60 aggregate cases, 2 window columns), so the bits are held under the build tag
-  `amd64.v3`, which the Makefile and CI set (`recordedBits`), and elsewhere each
-  case's NaNs and nulls only.
+  (60 aggregate cases, 2 window columns), so the bits are held under the build tags
+  `amd64.v3 && !race`, which the Makefile and CI's test legs build (`recordedBits`),
+  and elsewhere each case's NaNs and nulls only. The race detector was found to move
+  last bits too, on CI's first run: under `-race`, at v3, a Var's, a Std's and a
+  correlation's last bit differed from the recording (`400a827f179a5384` against
+  `…85`), its instrumentation leaving some products unfused; its NaNs and nulls held.
 - **Differentials.** The windows in every configuration against one thread in batches
   of 8192, and streamed past a memory limit against in memory.
 
