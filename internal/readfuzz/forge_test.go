@@ -2,8 +2,11 @@ package readfuzz_test
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
+	"math/bits"
 	"slices"
+	"strings"
 )
 
 // Forged Parquet files (step 510): what no writer makes, a page header or a footer
@@ -78,6 +81,7 @@ func (w *thriftCompact) list(id int16, et byte, n int) {
 
 // Parquet's enums, as format/parquet.thrift numbers them.
 const (
+	pqInt32     = 1
 	pqInt64     = 2
 	pqInt96     = 3
 	pqByteArray = 6
@@ -93,6 +97,7 @@ const (
 	pqRLE         = 3
 	pqDeltaBinary = 5
 	pqDeltaLength = 6
+	pqDeltaBytes  = 7 // DELTA_BYTE_ARRAY
 	pqRLEDict     = 8
 )
 
@@ -549,8 +554,10 @@ func pqUnclosedSchema(groups, leaves int) []byte {
 // hold more than they declare, and honest pages under each codec (pqCodecSeeds); and
 // step 521's, the footer of 10^8 row groups leaving the leading magic no room, and a
 // list of row groups said to hold a binary, hiding a list of 10^8 column chunks in it
-// (pqHiddenGroups); and step 533's, a schema's root claiming 2^31−1 children, a Struct
-// claiming as many, and a List whose root claims a child more than its tree holds.
+// (pqHiddenGroups); step 531's, each kind of delta-encoded page honest and with a
+// count of 0 (pqDeltaKinds); and step 533's, a schema's root claiming 2^31−1
+// children, a Struct claiming as many, and a List whose root claims a child more than
+// its tree holds.
 func pqForgedSeeds() [][]byte {
 	vals := []int64{3, 1, 4, 1, 5, 9, 2, 6}
 	page := pqInt64Page(vals)
@@ -587,6 +594,13 @@ func pqForgedSeeds() [][]byte {
 	}
 	seeds = append(seeds, pqCodecSeeds()...)
 	seeds = append(seeds, pqMagicless(pqFooterOf(groups), 0), pqHiddenGroups())
+	for _, k := range pqDeltaKinds() {
+		for _, c := range k.forged() {
+			if c.name == "honest" || c.name == "prefix lengths, honest" || strings.HasSuffix(c.name, "a count of 0") {
+				seeds = append(seeds, c.b)
+			}
+		}
+	}
 	for _, f := range []pqForged{
 		{nest: pqFlat, children: map[int]int32{0: math.MaxInt32}},
 		{nest: pqInStruct, children: map[int]int32{1: math.MaxInt32}},
@@ -596,4 +610,423 @@ func pqForgedSeeds() [][]byte {
 		seeds = append(seeds, f.bytes())
 	}
 	return seeds
+}
+
+// pqDeltaRun is a delta-packed run as DELTA_BINARY_PACKED lays it out, which a
+// DELTA_LENGTH_BYTE_ARRAY page's lengths and a DELTA_BYTE_ARRAY page's prefix and
+// suffix lengths take too (step 531): its header's claims, and its blocks as written.
+type pqDeltaRun struct {
+	block, minis, count uint64 // the header's block size, miniblocks a block, and count of values
+	first               int64
+	blocks              []pqDeltaBlock
+}
+
+// pqDeltaBlock is a block of a run: its least delta, its miniblocks' bit widths, and
+// the bodies of the miniblocks holding values, each padded to its full count, and how
+// many values each holds.
+type pqDeltaBlock struct {
+	least  int64
+	widths []byte
+	bodies [][]byte
+	held   []int
+}
+
+func (r pqDeltaRun) bytes() []byte {
+	b := binary.AppendUvarint(nil, r.block)
+	b = binary.AppendUvarint(b, r.minis)
+	b = binary.AppendUvarint(b, r.count)
+	b = binary.AppendVarint(b, r.first) // Go's varint is the format's zigzag
+	for _, k := range r.blocks {
+		b = binary.AppendVarint(b, k.least)
+		b = append(b, k.widths...)
+		for _, body := range k.bodies {
+			b = append(b, body...)
+		}
+	}
+	return b
+}
+
+// pqDeltaOf is vals delta-packed as the format lays them out, in blocks of block
+// values in minis miniblocks: each delta taken with wraparound, less its block's
+// least, at the width its miniblock's greatest takes, the least significant bit
+// first; a miniblock's values past the run's last are 0s, and a miniblock past them
+// has a width of 0 and no bytes.
+func pqDeltaOf(vals []int64, block, minis int) pqDeltaRun {
+	r := pqDeltaRun{block: uint64(block), minis: uint64(minis), count: uint64(len(vals))}
+	if len(vals) == 0 {
+		return r
+	}
+	r.first = vals[0]
+	per := block / minis
+	for at := 1; at < len(vals); at += block {
+		deltas := make([]int64, 0, block)
+		for i := at; i < min(at+block, len(vals)); i++ {
+			deltas = append(deltas, vals[i]-vals[i-1])
+		}
+		k := pqDeltaBlock{least: slices.Min(deltas), widths: make([]byte, minis)}
+		for m := 0; m*per < len(deltas); m++ {
+			held := deltas[m*per : min((m+1)*per, len(deltas))]
+			packed := make([]uint64, per)
+			var top uint64
+			for i, d := range held {
+				packed[i] = uint64(d - k.least)
+				top = max(top, packed[i])
+			}
+			k.widths[m] = byte(bits.Len64(top))
+			k.bodies = append(k.bodies, pqPack(packed, bits.Len64(top)))
+			k.held = append(k.held, len(held))
+		}
+		r.blocks = append(r.blocks, k)
+	}
+	return r
+}
+
+// pqPack lays vals out width bits each, the least significant bit first.
+func pqPack(vals []uint64, width int) []byte {
+	b := make([]byte, (len(vals)*width+7)/8)
+	for i, v := range vals {
+		for k := range width {
+			if v>>k&1 != 0 {
+				at := i*width + k
+				b[at/8] |= 1 << (at % 8)
+			}
+		}
+	}
+	return b
+}
+
+// cut is the length of run r cut short as how says: inside its last block's bit
+// widths, after the first; inside the bits of its last miniblock's values, at half
+// their bytes; or after them, inside the miniblock's padding.
+func (r pqDeltaRun) cut(how string) int {
+	full := r.bytes()
+	last := r.blocks[len(r.blocks)-1]
+	body := last.bodies[len(last.bodies)-1]
+	need := (last.held[len(last.held)-1]*int(last.widths[len(last.bodies)-1]) + 7) / 8
+	switch how {
+	case "widths":
+		at := len(full) - len(last.widths)
+		for _, b := range last.bodies {
+			at -= len(b)
+		}
+		return at + 1
+	case "values":
+		return len(full) - len(body) + need/2
+	case "padding":
+		return len(full) - len(body) + need
+	}
+	panic("cut: " + how)
+}
+
+// pqDeltaRows is the rows of a pqDeltaKind's page: 199 deltas after its first value,
+// a block of 128 and one of 71, whose last miniblock holds 7 values and pads 25, and
+// after which one holds none.
+const pqDeltaRows = 200
+
+// pqDeltaKind is a kind of column chunk arrow-go's column reader decodes a
+// delta-encoded data page of (step 531): its file's shape, the encoding of its page
+// of pqDeltaRows rows, the levels the page begins with, and the values of its rows
+// holding one, integers or strings.
+type pqDeltaKind struct {
+	name   string
+	shape  pqForged
+	enc    int32
+	levels []byte
+	ints   []int64
+	strs   []string
+	wide   bool // an INT32 whose deltas span more than 32 bits, forged honest only
+}
+
+// pqDeltaKinds are an INT64, REQUIRED and OPTIONAL with a null in seven rows; an
+// INT32, and one whose rows 40 and 41 are its least and greatest, so its deltas, taken
+// as an int64's, span more than 32 bits (deltapage.go); the INT64
+// element of a List; the INT64 field of a Struct; a BYTE_ARRAY under
+// DELTA_LENGTH_BYTE_ARRAY, REQUIRED and OPTIONAL; and one under DELTA_BYTE_ARRAY,
+// whose values share prefixes. Each footer lists its page's encoding, as a writer's
+// does: the reader's own pages read none of them.
+func pqDeltaKinds() []pqDeltaKind {
+	const rows = pqDeltaRows
+	// levels is a V1 page's levels, each RLE, its runs after their 4-byte length.
+	levels := func(runs ...[]byte) []byte {
+		var b []byte
+		for _, r := range runs {
+			b = append(binary.LittleEndian.AppendUint32(b, uint32(len(r))), r...)
+		}
+		return b
+	}
+	run := func(n int, level byte) []byte { return append(binary.AppendUvarint(nil, uint64(n)<<1), level) }
+	nulls := func(i int) bool { return i%7 != 3 }
+	var defs []byte // an OPTIONAL column's definition levels, a run each stretch of nulls or values
+	for i := 0; i < rows; {
+		j := i
+		for j < rows && nulls(j) == nulls(i) {
+			j++
+		}
+		defs = append(defs, run(j-i, map[bool]byte{true: 1}[nulls(i)])...)
+		i = j
+	}
+	// The integers spread over their type's range at a width that changes every 16
+	// rows, and an INT64's rows 40 and 41 its least and greatest, a delta 64 bits wide.
+	ints, int32s := make([]int64, rows), make([]int64, rows)
+	x := uint64(531)
+	for i := range ints {
+		x = x*6364136223846793005 + 1442695040888963407
+		ints[i], int32s[i] = int64(x)>>(i/16%64), int64(int32(x>>40))
+	}
+	ints[40], ints[41] = math.MinInt64, math.MaxInt64
+	span := slices.Clone(int32s)
+	span[40], span[41] = math.MinInt32, math.MaxInt32
+	words := []string{"", "a", "MAIL", "TRUCK", "é漢字", "DELIVER IN PERSON"}
+	strs, keys := make([]string, rows), make([]string, rows)
+	for i := range strs {
+		strs[i] = fmt.Sprint(words[i%len(words)], i*i%997)
+		keys[i] = fmt.Sprintf("key/%03d/%s", i/9, words[i%len(words)])
+	}
+	strs[13] = ""
+	some := func(vals []int64) []int64 {
+		var out []int64
+		for i, v := range vals {
+			if nulls(i) {
+				out = append(out, v)
+			}
+		}
+		return out
+	}
+	someStrs := func(vals []string) []string {
+		var out []string
+		for i, v := range vals {
+			if nulls(i) {
+				out = append(out, v)
+			}
+		}
+		return out
+	}
+	dbp, dlba, dba := []int32{pqDeltaBinary}, []int32{pqDeltaLength}, []int32{pqDeltaBytes}
+	return []pqDeltaKind{
+		{name: "INT64", shape: pqForged{phys: pqInt64, encs: dbp}, enc: pqDeltaBinary, ints: ints},
+		{name: "an OPTIONAL INT64 with nulls", shape: pqForged{phys: pqInt64, encs: dbp, optional: true},
+			enc: pqDeltaBinary, levels: levels(defs), ints: some(ints)},
+		{name: "INT32", shape: pqForged{phys: pqInt32, encs: dbp}, enc: pqDeltaBinary, ints: int32s},
+		{name: "an INT32 spanning its range", shape: pqForged{phys: pqInt32, encs: dbp}, enc: pqDeltaBinary,
+			ints: span, wide: true},
+		{name: "the INT64 element of a List", shape: pqForged{phys: pqInt64, encs: dbp, nest: pqInList},
+			enc: pqDeltaBinary, levels: levels(run(rows, 0), run(rows, 1)), ints: ints},
+		{name: "the INT64 field of a Struct", shape: pqForged{phys: pqInt64, encs: dbp, nest: pqInStruct},
+			enc: pqDeltaBinary, ints: ints},
+		{name: "BYTE_ARRAY, DELTA_LENGTH_BYTE_ARRAY", shape: pqForged{phys: pqByteArray, encs: dlba},
+			enc: pqDeltaLength, strs: strs},
+		{name: "an OPTIONAL BYTE_ARRAY with nulls, DELTA_LENGTH_BYTE_ARRAY",
+			shape: pqForged{phys: pqByteArray, encs: dlba, optional: true}, enc: pqDeltaLength,
+			levels: levels(defs), strs: someStrs(strs)},
+		{name: "BYTE_ARRAY, DELTA_BYTE_ARRAY", shape: pqForged{phys: pqByteArray, encs: dba}, enc: pqDeltaBytes,
+			strs: keys},
+	}
+}
+
+// present is the values of k's page, its rows that hold one.
+func (k pqDeltaKind) present() int { return len(k.ints) + len(k.strs) }
+
+// file is k's file of one data page.
+func (k pqDeltaKind) file(p pqPage) []byte {
+	f := k.shape
+	f.rows, f.pages = pqDeltaRows, []pqPage{p}
+	return f.bytes()
+}
+
+// plain is k's page of its values PLAIN.
+func (k pqDeltaKind) plain() pqPage {
+	body := slices.Clone(k.levels)
+	for _, v := range k.ints {
+		if k.shape.phys == pqInt32 {
+			body = binary.LittleEndian.AppendUint32(body, uint32(v))
+		} else {
+			body = binary.LittleEndian.AppendUint64(body, uint64(v))
+		}
+	}
+	for _, s := range k.strs {
+		body = append(binary.LittleEndian.AppendUint32(body, uint32(len(s))), s...)
+	}
+	return pqPage{typ: pqPageData, values: pqDeltaRows, encoding: pqPlain, body: body}
+}
+
+// runs are the values each of k's delta-packed runs packs, in the order its page
+// holds them, and the bytes after them: a DELTA_BINARY_PACKED page's integers; a
+// DELTA_LENGTH_BYTE_ARRAY page's lengths, then its strings; a DELTA_BYTE_ARRAY page's
+// lengths of the prefix each string shares with the one before, then of the suffix
+// after it, then the suffixes.
+func (k pqDeltaKind) runs() (runs [][]int64, tail []byte) {
+	switch k.enc {
+	case pqDeltaBinary:
+		return [][]int64{k.ints}, nil
+	case pqDeltaLength:
+		var lens []int64
+		for _, s := range k.strs {
+			lens, tail = append(lens, int64(len(s))), append(tail, s...)
+		}
+		return [][]int64{lens}, tail
+	}
+	var prefixes, suffixes []int64
+	prev := ""
+	for _, s := range k.strs {
+		p := 0
+		for p < min(len(s), len(prev)) && s[p] == prev[p] {
+			p++
+		}
+		prefixes, suffixes, tail = append(prefixes, int64(p)), append(suffixes, int64(len(s)-p)), append(tail, s[p:]...)
+		prev = s
+	}
+	return [][]int64{prefixes, suffixes}, tail
+}
+
+// pqDeltaForgery is a change to one run of a delta-encoded page (step 531): the
+// layout its values are packed in, a change to its header or its bit widths, or a
+// cut, the page ending inside the run; and whether the reader refuses the page, of n
+// values of which present are not null.
+type pqDeltaForgery struct {
+	name         string
+	block, minis int // the layout; zero is the one arrow-go and pyarrow write, 4 miniblocks of 32
+	change       func(r *pqDeltaRun, n, present int)
+	cut          string // "widths", "values" or "padding": pqDeltaRun.cut
+	pageValues   int32  // the page header's count of values, past its column chunk's; zero is the rows'
+	refused      func(n, present int) bool
+}
+
+// pqDeltaForgeries are the changes: layouts the format allows; a miniblock past the
+// last value giving a width of 255, which the format says readers must accept; each
+// field of the header wrong, a block of 31 values among them; a block in miniblocks
+// of 16 values and one of 64 values, which the format does not allow; a miniblock
+// holding values 65 bits wide; a count of 0, short by one, past the values by one,
+// past the page's values, and 2^40; and the page ending inside a block's bit widths,
+// inside a miniblock's values, and inside its padding. Then two runs the format allows
+// whose claims no page's bytes bound, which the reader refuses: one miniblock of 2^31
+// values 0 bits wide, and a page claiming 2^26 values, past its column chunk's, its
+// run one such miniblock of them all.
+func pqDeltaForgeries() []pqDeltaForgery {
+	yes := func(int, int) bool { return true }
+	no := func(int, int) bool { return false }
+	header := func(name string, change func(r *pqDeltaRun, n, present int)) pqDeltaForgery {
+		return pqDeltaForgery{name: name, change: change, refused: yes}
+	}
+	return []pqDeltaForgery{
+		{name: "honest", refused: no},
+		{name: "honest, one miniblock of 128", block: 128, minis: 1, refused: no},
+		{name: "honest, blocks of 256 in 8 miniblocks", block: 256, minis: 8, refused: no},
+		{name: "honest, a miniblock holding no value 255 bits wide", refused: no,
+			change: func(r *pqDeltaRun, _, _ int) {
+				last := &r.blocks[len(r.blocks)-1]
+				for m := len(last.bodies); m < len(last.widths); m++ {
+					last.widths[m] = 255
+				}
+			}},
+		header("a block of 31 values", func(r *pqDeltaRun, _, _ int) { r.block = 31 }),
+		header("a block of 0 values", func(r *pqDeltaRun, _, _ int) { r.block = 0 }),
+		header("a block of 2^32 values", func(r *pqDeltaRun, _, _ int) { r.block = 1 << 32 }),
+		{name: "blocks of 64 in 2 miniblocks", block: 64, minis: 2, refused: yes},
+		header("no miniblock", func(r *pqDeltaRun, _, _ int) { r.minis = 0 }),
+		header("3 miniblocks to a block of 128", func(r *pqDeltaRun, _, _ int) { r.minis = 3 }),
+		{name: "8 miniblocks of 16 values", block: 128, minis: 8, refused: yes},
+		header("256 miniblocks to a block of 128", func(r *pqDeltaRun, _, _ int) { r.minis = 256 }),
+		header("a miniblock 65 bits wide", func(r *pqDeltaRun, _, _ int) { r.blocks[0].widths[0] = 65 }),
+		header("a count of 0", func(r *pqDeltaRun, _, _ int) { r.count = 0 }),
+		header("a count one short", func(r *pqDeltaRun, _, present int) { r.count = uint64(present - 1) }),
+		{name: "a count one past the values", refused: func(n, present int) bool { return present+1 > n },
+			change: func(r *pqDeltaRun, _, present int) { r.count = uint64(present + 1) }},
+		header("a count one past the page's values", func(r *pqDeltaRun, n, _ int) { r.count = uint64(n + 1) }),
+		header("a count of 2^40", func(r *pqDeltaRun, _, _ int) { r.count = 1 << 40 }),
+		{name: "the page ending inside a block's bit widths", cut: "widths", refused: yes},
+		{name: "the page ending inside a miniblock's values", cut: "values", refused: yes},
+		{name: "the page ending inside a miniblock's padding", cut: "padding", refused: yes},
+		header("a miniblock of 2^31 values 0 bits wide", func(r *pqDeltaRun, _, _ int) {
+			r.block, r.minis, r.blocks = 1<<31, 1, []pqDeltaBlock{{widths: []byte{0}}}
+		}),
+		{name: "a page claiming 2^26 values, past its chunk's, in a miniblock 0 bits wide", pageValues: 1 << 26,
+			refused: yes, change: func(r *pqDeltaRun, _, _ int) {
+				r.block, r.minis, r.count, r.blocks = 1<<26, 1, 1<<26, []pqDeltaBlock{{widths: []byte{0}}}
+			}},
+	}
+}
+
+// pqDeltaCase is one forged file of a kind: its name, its bytes, whether the reader
+// refuses it, the forged run's count of values and values a miniblock, and whether it
+// is of a kind whose INT32 deltas span more than 32 bits.
+type pqDeltaCase struct {
+	name       string
+	b          []byte
+	refused    bool
+	count, per uint64
+	wide       bool
+}
+
+// forged are k's files of each forgery, applied to each of its runs: a
+// DELTA_BYTE_ARRAY page's prefix lengths and suffix lengths in turn. A kind forged
+// honest only has the first.
+func (k pqDeltaKind) forged() []pqDeltaCase {
+	vals, tail := k.runs()
+	var out []pqDeltaCase
+	forgeries := pqDeltaForgeries()
+	if k.wide {
+		forgeries = forgeries[:1]
+	}
+	for which := range vals {
+		for _, f := range forgeries {
+			runs := make([]pqDeltaRun, len(vals))
+			for i, v := range vals {
+				block, minis := 128, 4
+				if i == which && f.block != 0 {
+					block, minis = f.block, f.minis
+				}
+				runs[i] = pqDeltaOf(v, block, minis)
+			}
+			if f.change != nil {
+				f.change(&runs[which], pqDeltaRows, k.present())
+			}
+			body := slices.Clone(k.levels)
+			for i, r := range runs {
+				b := r.bytes()
+				if i == which && f.cut != "" {
+					b = b[:r.cut(f.cut)]
+				}
+				body = append(body, b...)
+				if i == which && f.cut != "" {
+					break // the page ends there
+				}
+			}
+			if f.cut == "" {
+				body = append(body, tail...)
+			}
+			name := f.name
+			if len(vals) > 1 {
+				name = []string{"prefix lengths, ", "suffix lengths, "}[which] + name
+			}
+			values := int32(pqDeltaRows)
+			if f.pageValues != 0 {
+				values = f.pageValues
+			}
+			var per uint64
+			if r := runs[which]; r.minis > 0 {
+				per = r.block / r.minis
+			}
+			out = append(out, pqDeltaCase{name: name, refused: f.refused(pqDeltaRows, k.present()),
+				b:     k.file(pqPage{typ: pqPageData, values: values, encoding: k.enc, body: body}),
+				count: runs[which].count, per: per, wide: k.wide})
+		}
+	}
+	return out
+}
+
+// pqSlug is s as a file name's part: lower case, each run of other than letters and
+// digits a hyphen.
+func pqSlug(s string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(s) {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+			dash = false
+		} else if !dash && b.Len() > 0 {
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	return strings.TrimSuffix(b.String(), "-")
 }
