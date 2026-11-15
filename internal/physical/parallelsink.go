@@ -52,6 +52,11 @@ type SinkFactory func() (Sink, error)
 // contiguous. Rather than weaken the contract, this driver is only used where the
 // merge does not depend on it — see aggCanParallelise, which declines
 // MaintainOrder and the four order-dependent aggregates outright.
+//
+// Or where it is told what order it needs: the dispatcher deals each batch with
+// the input position of its first row (placedSink), so that a state which keeps a
+// row, a float's Min or Max among values equal with different bits, or a float
+// key's first row, can break a tie by position in the merge (step 523).
 type parallelSink struct {
 	child Operator
 	sinks []Sink
@@ -81,6 +86,17 @@ var errWantSerial = errors.New("physical: the budget is reached; finish serially
 // serialSink is a sink that can be told it is alone again.
 type serialSink interface{ goSerial() }
 
+// placedSink is a sink told where in the input each batch it consumes begins, before
+// it consumes it: a worker is dealt every n-th batch, so only the dispatcher knows,
+// and an aggregate that breaks a tie by row needs to (step 523).
+type placedSink interface{ placeNext(row int64) }
+
+// dealt is a batch a worker is dealt, and the input position of its first row.
+type dealt struct {
+	b   *data.Batch
+	row int64
+}
+
 // discarder is a sink whose state can be dropped once it has been merged.
 type discarder interface{ discard() }
 
@@ -107,9 +123,9 @@ func (p *parallelSink) drain(parent context.Context) error {
 	defer cancel()
 
 	n := len(p.sinks)
-	jobs := make([]chan *data.Batch, n)
+	jobs := make([]chan dealt, n)
 	for i := range n {
-		jobs[i] = make(chan *data.Batch, parQueueDepth)
+		jobs[i] = make(chan dealt, parQueueDepth)
 	}
 
 	var (
@@ -134,7 +150,8 @@ func (p *parallelSink) drain(parent context.Context) error {
 			// fail cancels the dispatcher, so a worker that Goexits — and so stops
 			// draining its lane — cannot leave the dispatcher blocked sending into it.
 			goexitGuard(fail, func() {
-				for b := range jobs[i] {
+				placed, _ := p.sinks[i].(placedSink)
+				for d := range jobs[i] {
 					// Once anything has failed, drain without consuming. Draining
 					// rather than returning is because the dispatcher may already be
 					// blocked sending into this lane, and abandoning it would deadlock
@@ -146,7 +163,12 @@ func (p *parallelSink) drain(parent context.Context) error {
 					}
 					// Guarded: this is a worker goroutine, and a panic in it could be
 					// recovered by nothing else.
-					err := uerr.GuardErr("", func() error { return p.sinks[i].Consume(ctx, b) })
+					err := uerr.GuardErr("", func() error {
+						if placed != nil {
+							placed.placeNext(d.row)
+						}
+						return p.sinks[i].Consume(ctx, d.b)
+					})
 					if errors.Is(err, errWantSerial) {
 						serial.Store(true)
 						continue
@@ -163,6 +185,7 @@ func (p *parallelSink) drain(parent context.Context) error {
 	// parallel — the same split parallelOp makes, for the same reason: reading a
 	// batch is I/O, and the CPU work is what the workers do with it.
 	var dispatchErr error
+	var row int64 // the input position of the next batch's first row
 	for seq := 0; !serial.Load(); seq++ {
 		b, err := Pull(ctx, p.child)
 		if err != nil {
@@ -172,13 +195,14 @@ func (p *parallelSink) drain(parent context.Context) error {
 			break
 		}
 		select {
-		case jobs[seq%n] <- b:
+		case jobs[seq%n] <- dealt{b, row}:
 		case <-ctx.Done():
 			dispatchErr = ctx.Err()
 		}
 		if dispatchErr != nil {
 			break
 		}
+		row += int64(b.Rows())
 	}
 	for i := range jobs {
 		close(jobs[i])

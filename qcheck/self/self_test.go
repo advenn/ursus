@@ -40,6 +40,29 @@ func TestSelfSmoke(t *testing.T) {
 	}
 }
 
+// foundSeeds are cases that found a bug, each run again as it was found: a case's
+// tables and query are drawn from its seed alone.
+var foundSeeds = []struct {
+	seed uint64
+	why  string
+}{
+	{802018528, "step 523: a float Min on four threads took a later -0's place"},
+	{807010171, "step 523: a float Max, likewise, beside a Mean"},
+}
+
+// TestFoundSeedsFindNothing runs each found case again, which must find nothing.
+func TestFoundSeedsFindNothing(t *testing.T) {
+	for _, s := range foundSeeds {
+		rep := Run(Options{Seed: s.seed, Cases: 1})
+		if rep.Cases != 1 {
+			t.Errorf("seed %d (%s): %d cases ran", s.seed, s.why, rep.Cases)
+		}
+		for _, f := range rep.Findings {
+			t.Errorf("seed %d (%s): %v", s.seed, s.why, f)
+		}
+	}
+}
+
 // teeth runs cases from seed with the hooks set, and returns the report.
 func teeth(t *testing.T, cases int, c func(*gen.Case, model.Config, int, *Answer), i func(model.Config) error) *Report {
 	t.Helper()

@@ -32,6 +32,8 @@ import (
 // Taking them by the value makes the answer depend on no row order, so the
 // accumulator merges in any order and a group-by holding it keeps its workers, as
 // TopK's does, where an earlier-row rule would make it order-dependent, as MaxBy is.
+// A float value is ordered as TopK orders one, by its strict key, so two NaN values
+// of one by are no tie either (step 523).
 //
 // # Nulls
 //
@@ -296,9 +298,9 @@ func topKByValue[K any](value dtype.DataType, k int, top bool, cmpK func(a, b K)
 	case dtype.TypeUint64:
 		return topKByFixed[K, uint64](value, k, top, cmpK, keys, keepK, cmp.Compare[uint64]), nil
 	case dtype.TypeFloat32:
-		return topKByFixed[K, float32](value, k, top, cmpK, keys, keepK, func(x, y float32) int { return compareSignedZero(float64(x), float64(y)) }), nil
+		return topKByFixed[K, float32](value, k, top, cmpK, keys, keepK, compareStrictF32), nil
 	case dtype.TypeFloat64:
-		return topKByFixed[K, float64](value, k, top, cmpK, keys, keepK, compareSignedZero), nil
+		return topKByFixed[K, float64](value, k, top, cmpK, keys, keepK, compareStrictF64), nil
 	case dtype.TypeInt128:
 		return topKByFixed[K, i128.Int128](value, k, top, cmpK, keys, keepK, i128.Int128.Cmp), nil
 	}

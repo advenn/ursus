@@ -602,6 +602,16 @@ func midpoint(a, b float64) float64 {
 // average and leaves everything above it to its right, so the upper one is the
 // least of that. The answer is the sort's: the order statistics of a total order do
 // not depend on how they are found.
+//
+// # By the strict order
+//
+// The ranks are read by StrictKeyF64, the total order with its ties parted by bits:
+// -0.0 below +0.0, and NaNs by their bits. Under the total order alone two values it
+// calls equal could stand at a rank in either order, and which one quickselect left
+// there followed the order the values arrived in, which a parallel group-by's merge
+// decides: the median of a group of -0.0 and +0.0 was either (step 523). A strict
+// order has one value of each rank, so the answer is the same bits however the
+// values arrived, and a spilled group's, read back in the same order, is too.
 func quantileOf(v []float64, q float64, interp expr.Interpolation) float64 {
 	n := len(v)
 	if n == 1 {
@@ -611,13 +621,13 @@ func quantileOf(v []float64, q float64, interp expr.Interpolation) float64 {
 	selectNth(v, lo)
 	a, b := v[lo], v[lo]
 	if hi > lo {
-		b = minTotalF64(v[lo+1:])
+		b = minStrictF64(v[lo+1:])
 	}
 	return interpolate(a, b, frac, interp)
 }
 
-// selectNth reorders v so that v[k] is what sorting v under compareTotalF64 would
-// put there, with nothing after it smaller and nothing before it larger.
+// selectNth reorders v so that v[k] is what sorting v by StrictKeyF64 would put
+// there, with nothing after it smaller and nothing before it larger.
 //
 // Quickselect with a median-of-three pivot and a three-way partition, so a run of
 // equal values — common in real data — is settled in one pass rather than
@@ -627,19 +637,19 @@ func selectNth(v []float64, k int) {
 	lo, hi := 0, len(v)-1
 	for rounds := 2 * bits.Len(uint(len(v))); hi > lo; rounds-- {
 		if rounds == 0 {
-			slices.SortFunc(v[lo:hi+1], compareTotalF64)
+			slices.SortFunc(v[lo:hi+1], compareStrictF64)
 			return
 		}
-		pivot := medianOfThree(v[lo], v[lo+(hi-lo)/2], v[hi])
+		pivot := StrictKeyF64(medianOfThree(v[lo], v[lo+(hi-lo)/2], v[hi]))
 		// v[lo:lt] < pivot, v[lt:i] == pivot, v[gt+1:hi+1] > pivot.
 		lt, i, gt := lo, lo, hi
 		for i <= gt {
-			switch c := compareTotalF64(v[i], pivot); {
-			case c < 0:
+			switch x := StrictKeyF64(v[i]); {
+			case x < pivot:
 				v[lt], v[i] = v[i], v[lt]
 				lt++
 				i++
-			case c > 0:
+			case x > pivot:
 				v[i], v[gt] = v[gt], v[i]
 				gt--
 			default:
@@ -657,26 +667,26 @@ func selectNth(v []float64, k int) {
 	}
 }
 
-// medianOfThree is the middle of three values under compareTotalF64.
+// medianOfThree is the middle of three values by StrictKeyF64.
 func medianOfThree(a, b, c float64) float64 {
-	if compareTotalF64(a, b) > 0 {
+	if compareStrictF64(a, b) > 0 {
 		a, b = b, a
 	}
-	if compareTotalF64(b, c) > 0 {
+	if compareStrictF64(b, c) > 0 {
 		b = c
-		if compareTotalF64(a, b) > 0 {
+		if compareStrictF64(a, b) > 0 {
 			b = a
 		}
 	}
 	return b
 }
 
-// minTotalF64 is the least of v under compareTotalF64; v is not empty.
-func minTotalF64(v []float64) float64 {
-	m := v[0]
+// minStrictF64 is the least of v by StrictKeyF64; v is not empty.
+func minStrictF64(v []float64) float64 {
+	m, mk := v[0], StrictKeyF64(v[0])
 	for _, x := range v[1:] {
-		if compareTotalF64(x, m) < 0 {
-			m = x
+		if k := StrictKeyF64(x); k < mk {
+			m, mk = x, k
 		}
 	}
 	return m

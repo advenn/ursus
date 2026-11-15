@@ -543,6 +543,14 @@ its section below lists them.
   the read with "this is a bug in ursus", and one listing more could panic; both are
   refused as corrupt now, by the read and by `Count`. The fuzz runs of step 521 found
   it.
+- **A float Min or Max is the same at every thread count** (523): a parallel
+  group-by folded its workers' partial minimums in worker order, which is not row
+  order, so of −0.0 and +0.0, or of NaNs of two payloads, Min could answer a later
+  row's bits on four threads than on one; each keeps its row's position now, and Max
+  answers the latest of a tie as its doc's `Sort(...).Last()` does, where it answered
+  the first. Median, Quantile, TopK, BottomK, TopKBy and a float group key picked by
+  the same order and are the same at every thread count too; a spilled quantile is a
+  held one's. qcheck found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
