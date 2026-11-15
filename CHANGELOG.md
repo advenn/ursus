@@ -452,6 +452,16 @@ its section below lists them.
   spilling and the IPC and JSON writers; an IPC file holding one reads, and it is a
   key. Parquet and CSV refuse it cleanly, as Polars does. CI's fuzzing of `ScanJSON`
   and `ScanNDJSON` found it.
+- **A Parquet page whose bytes are missing is refused, not read as the end** (521): a
+  page whose header was whole and whose bytes were not in its column chunk ended the
+  read there with no error, so a file whose `Count` said 5 rows read as 0: the engine
+  took the page's error for the end of the input. The read is refused as corrupt now,
+  whichever reader decodes the chunk; `Count`, which reads only the footer, still
+  answers its rows, as pyarrow and DuckDB count them and refuse the read. CI's fuzz
+  runs found it.
+- **A corrupt Parquet Null column is refused, not an internal error** (521): a footer
+  giving a Null column a physical type no reader takes made the read fail with "this
+  is a bug in ursus"; it is refused as unsupported, as a column of any other type is.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
