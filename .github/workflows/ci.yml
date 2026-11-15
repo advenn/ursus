@@ -142,11 +142,13 @@ jobs:
 
   qcheck:
     # Random queries checked against themselves (step 512): qcheck/ is a module of
-    # its own, pure Go, which the root's ./... does not reach. Its tests, the teeth
-    # and a seeded smoke run among them, then five minutes of `qcheck self` from a
-    # seed this run's number sets, printed first so a finding can be run again with
-    # `qcheck self -seed <its seed> -cases 1`. Not a required check: the maintainer
-    # decides that.
+    # its own, pure Go, which the root's ./... does not reach. Its tests, the teeth,
+    # a seeded smoke run and the corpus's replay among them, then five minutes of
+    # `qcheck self` from a seed this run's number sets, printed first so a finding
+    # can be run again with `qcheck self -seed <its seed> -cases 1`. With -shrink it
+    # shrinks each finding, at most three (step 514), and the shrunk cases and their
+    # Go tests are uploaded as the qcheck-findings artifact. Not a required check:
+    # the maintainer decides that.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -163,17 +165,27 @@ jobs:
       - run: go vet ./...
       - run: go test -count=1 ./...
       - name: qcheck self for five minutes
-        run: go run ./cmd/qcheck self -seed ${{ github.run_number }}000000 -duration 5m
+        run: go run ./cmd/qcheck self -seed ${{ github.run_number }}000000 -duration 5m -shrink -shrink-dir qcheck-findings
+      - name: the shrunk findings
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qcheck-findings
+          path: qcheck/qcheck-findings
+          if-no-files-found: ignore
 
   qcheck-duckdb:
     # Random queries checked against DuckDB (step 513): qcheck's duck package links
     # duckdb-go v2.10505.0 (DuckDB 1.5.5), cgo and a prebuilt library of 131 MB,
     # behind the duckdb and duckdb_arrow tags, so it builds here, never on a laptop.
     # The module's DuckDB tests, its facts, the Arrow round trip, each translation
-    # rule against ursus, a smoke run and the comparator's teeth, then five minutes
-    # of `qcheck duck` from a seed this run's number sets, printed first so a finding
-    # can be run again with `qcheck duck -seed <its seed> -cases 1`. Not a required
-    # check: the maintainer decides that.
+    # rule against ursus, a smoke run and the comparator's teeth, the corpus's
+    # DuckDB cases and the emitted SQL, then five minutes of `qcheck duck` from a
+    # seed this run's number sets, printed first so a finding can be run again with
+    # `qcheck duck -seed <its seed> -cases 1`. With -shrink it shrinks each finding,
+    # at most three (step 514), and the shrunk cases, their Go tests and their SQL
+    # are uploaded as the qcheck-duckdb-findings artifact. Not a required check: the
+    # maintainer decides that.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -203,4 +215,11 @@ jobs:
       - run: go test -count=1 -v -tags "$TAGS" ./duck/
       - run: go test -count=1 -tags "$TAGS" ./compare/ ./sqlgen/
       - name: qcheck duck for five minutes
-        run: go run -tags "$TAGS" ./cmd/qcheck duck -seed ${{ github.run_number }}000000 -duration 5m
+        run: go run -tags "$TAGS" ./cmd/qcheck duck -seed ${{ github.run_number }}000000 -duration 5m -shrink -shrink-dir qcheck-findings
+      - name: the shrunk findings
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qcheck-duckdb-findings
+          path: qcheck/qcheck-findings
+          if-no-files-found: ignore

@@ -23,7 +23,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/bits"
 	"math/rand/v2"
 	"slices"
 	"strings"
@@ -316,33 +315,28 @@ func (cr *caseRun) comparison(ref, cfg model.Config) comparison {
 }
 
 // bisect finds the fewest factors of v that, changed alone in the reference, give a
-// mismatch: each single factor first, then pairs, and so on.
+// mismatch: each single factor first, then pairs, and so on (Bisect).
 func (cr *caseRun) bisect(want *Answer, ref, v model.Config) (model.Factor, string) {
-	diff := v.Diff(ref)
-	var subsets []model.Factor
-	for s := model.Factor(1); s <= diff; s++ {
-		if s&^diff == 0 {
-			subsets = append(subsets, s)
-		}
-	}
-	slices.SortStableFunc(subsets, func(a, b model.Factor) int {
-		return bits.OnesCount8(uint8(a)) - bits.OnesCount8(uint8(b))
-	})
-	for _, s := range subsets {
-		cfg := ref.With(v, s)
+	var detail string
+	f, _, found := Bisect(ref, v, func(cfg model.Config) bool {
 		got := cr.run(cfg)
 		if cr.failed {
-			return 0, ""
+			return true
 		}
-		if d := cr.comparison(ref, cfg).compare(want, got).diff; d != "" {
-			if cfg != v {
-				line, _, _ := strings.Cut(d, "\n")
-				return s, fmt.Sprintf("\nreproduced by %v alone: %s", cfg, line)
-			}
-			return s, ""
+		d := cr.comparison(ref, cfg).compare(want, got).diff
+		if d != "" && cfg != v {
+			line, _, _ := strings.Cut(d, "\n")
+			detail = fmt.Sprintf("\nreproduced by %v alone: %s", cfg, line)
 		}
+		return d != ""
+	})
+	switch {
+	case cr.failed:
+		return 0, ""
+	case !found:
+		return f, "\n(no subset of its factors reproduced it alone: flaky?)"
 	}
-	return diff, "\n(no subset of its factors reproduced it alone: flaky?)"
+	return f, detail
 }
 
 // run runs the query under cfg inside fuzzcheck.Run.
