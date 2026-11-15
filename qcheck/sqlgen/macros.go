@@ -26,12 +26,14 @@ var Macros = []string{
 	// u_fdiv floors a by a positive b, for the calendar's arithmetic.
 	`CREATE OR REPLACE MACRO u_fdiv(u_a, u_b) AS (u_a - ((u_a % u_b) + u_b) % u_b) // u_b`,
 
-	// u_fmod is ursus's float remainder (T-FLOAT-MOD): fmod, then the divisor added
-	// where the remainder's sign differs from it, a zero remainder signed as it.
+	// u_fmod is ursus's float remainder (T-FLOAT-MOD): C's fmod, which DuckDB's % on
+	// DOUBLE is, then the divisor added where the remainder's sign differs from it, a
+	// zero remainder signed as it. DuckDB's fmod() is not C's: it is x - y·floor(x/y),
+	// rounded, and NaN for an infinite y (TestDuckDBSemantics).
 	`CREATE OR REPLACE MACRO u_fmod(u_a, u_b) AS CASE
-		WHEN fmod(u_a, u_b) = 0 THEN (CASE WHEN u_b < 0 THEN CAST('-0.0' AS DOUBLE) ELSE CAST('0.0' AS DOUBLE) END)
-		WHEN (fmod(u_a, u_b) < 0) <> (u_b < 0) THEN fmod(u_a, u_b) + u_b
-		ELSE fmod(u_a, u_b) END`,
+		WHEN u_a % u_b = 0 THEN (CASE WHEN u_b < 0 THEN CAST('-0.0' AS DOUBLE) ELSE CAST('0.0' AS DOUBLE) END)
+		WHEN (u_a % u_b < 0) <> (u_b < 0) THEN u_a % u_b + u_b
+		ELSE u_a % u_b END`,
 
 	// u_fkey is a float as a key of the total order (T-KEY-ZERO): -0 as +0, and
 	// every NaN as one NaN, whatever its payload. Both zeros are named, so it holds
