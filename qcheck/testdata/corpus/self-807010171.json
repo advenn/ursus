@@ -1,0 +1,106 @@
+{
+  "format": 1,
+  "source": "self",
+  "mode": "differential",
+  "seed": 807010171,
+  "open": "step 523: a float Max on several threads keeps a later zero of the other sign, not the first of equal values",
+  "note": "found by the qcheck job of CI run 807, qcheck self -seed 807010171 -cases 1; reported first as the query's Mean, it is its Max",
+  "signature": {
+    "kind": "mismatch",
+    "what": "cell",
+    "op": "Max",
+    "type": "Float64"
+  },
+  "reference": {
+    "threads": 1,
+    "batch": 8192,
+    "records": 1
+  },
+  "config": {
+    "threads": 4,
+    "batch": 1,
+    "records": 1
+  },
+  "tables": [
+    {
+      "name": "t0",
+      "seed": 80131161779964471,
+      "rows": 5,
+      "columns": [
+        {
+          "name": "i64a",
+          "type": "Int64",
+          "values": [
+            0,
+            1,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "name": "f64b",
+          "type": "Float64",
+          "values": [
+            "0",
+            "-0",
+            "0",
+            "0",
+            "0"
+          ]
+        }
+      ]
+    }
+  ],
+  "query": {
+    "root": {
+      "op": "GroupBy",
+      "in": {
+        "op": "Scan",
+        "table": "t0"
+      },
+      "keys": [
+        {
+          "name": "k2",
+          "e": {
+            "type": "Int64",
+            "col": "i64a"
+          }
+        }
+      ],
+      "aggs": [
+        {
+          "name": "a5",
+          "e": {
+            "type": "Float64",
+            "x": {
+              "type": "Float64",
+              "col": "f64b"
+            },
+            "agg": "Max"
+          }
+        }
+      ]
+    }
+  },
+  "shrunk": {
+    "from": {
+      "tables": 2,
+      "rows": 16384,
+      "columns": 8,
+      "ops": 1,
+      "exprs": 14,
+      "factors": 5
+    },
+    "to": {
+      "tables": 1,
+      "rows": 5,
+      "columns": 2,
+      "ops": 1,
+      "exprs": 3,
+      "factors": 2
+    },
+    "runs": 855,
+    "seconds": 0.9
+  }
+}
