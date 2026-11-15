@@ -175,7 +175,7 @@ refuses a tree of each shape by that rule (`TestRefusalsAreRefused`).
 | `T-TEXT` | kernel/caststring.go formatToString: an integer as strconv's decimal, a Boolean as true or false | CAST AS VARCHAR, which writes both alike |
 | `T-SUM` | agg.go and feature-gaps §9: an integer's or a Boolean's Sum is an exact Int128, null for a group of no value | sum(CAST(x AS HUGEINT)), a Boolean through INTEGER |
 | `T-FLOAT-AGG` | kernel/aggsum.go sumAcc and aggwhole.go floatWhole: a float Sum adds the values in the rows' order from +0, Mean divides it | list_reduce over list(x ORDER BY __o) from +0: DuckDB's sum may add in any order |
-| `T-EXTREMUM` | kernel/aggminmax.go: float Min and Max take the total order, NaN above all, the first of equal values kept | list_reduce over list(x ORDER BY __o) keeping the first of equal values; other types min and max |
+| `T-EXTREMUM` | kernel/aggminmax.go: float Min and Max take the total order, NaN above all, Min the first of equal values kept and Max the last (step 523) | list_reduce over list(x ORDER BY __o) keeping the first of equal values for Min and the last for Max; other types min and max |
 | `T-MEAN-INT` | kernel/aggsum.go finishDecimal: an integer Mean is the exact sum divided once, rounded to the nearest float | u_imean: \|Σx\| // n and thirty digits of the remainder over n, read by DuckDB's exact parser; avg rounds twice |
 | `T-NUNIQUE` | feature-gaps §9 and kernel/aggcount.go: NUnique does not count null, and counts by grouping equality | count(DISTINCT u_fkey(x)) for a float |
 | `T-COUNT` | feature-gaps §9: Count, Len and NUnique are a Uint64 | CAST(count(...) AS UBIGINT) |
@@ -188,6 +188,9 @@ refuses a tree of each shape by that rule (`TestRefusalsAreRefused`).
 | `T-SLICE` | frameops.go Slice: a negative offset counts from the end, the window clipped to the frame; a negative length is to the end | row_number and count(*) OVER (), the window's bounds computed |
 | `T-ISIN-NULL` | not used: step 512's AST generates no IsIn | none |
 | `T-ORDER` | ast.Info: an answer whose order the query promises compares by position, any other as a multiset | an ordered answer ends ORDER BY __o |
+
+`T-EXTREMUM` follows step 523: a float Max keeps the last of equal values, as
+`Sort(...).Last()` does, and `u_fmax` with it.
 
 A literal is cast to its AST type from its text: an integer's decimal, a float's
 shortest digits, which DuckDB reads to the bits (a fact; `TestLiteralsKeepTheirBits`
@@ -212,7 +215,8 @@ Sum or Mean in the rows' order from +0 (T-FLOAT-AGG), as ursus's accumulator doe
 **Floats from arithmetic compare exactly** too, where the plan allowed an error
 model: each engine rounds each IEEE operation once and the SQL does the same
 operations, and over 75,078 cases none differed; an integer Mean is exact since
-`u_imean`, and a float Min or Max keeps the first of equal values as ursus does.
+`u_imean`, and a float Min keeps the first of equal values and a float Max the last,
+as ursus does since step 523.
 So the one allowance fired 2,105 times in the two green runs on CI, and nothing
 else may differ.
 

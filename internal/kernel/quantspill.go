@@ -26,10 +26,12 @@ import (
 // are.
 
 // ValueSpill holds values past a sink's budget, in runs, and gives them back ordered
-// by group and then by compareTotalF64. The kernel touches no file.
+// by group and then by StrictKeyF64, the order quantileOf reads ranks in, so a
+// spilled group answers the bits a held one does (step 523). The kernel touches no
+// file.
 type ValueSpill interface {
 	// Put adds values to the open run, opening one if none is. Within a run they come
-	// in order of group, then of compareTotalF64.
+	// in order of group, then of StrictKeyF64.
 	Put(gids []int32, vals []float64) error
 	// EndRun closes the open run, if there is one.
 	EndRun() error
@@ -65,7 +67,7 @@ func (a *quantileAcc) SpillValues(sp ValueSpill) (bool, error) {
 	}
 	held := false
 	for g, v := range a.vals {
-		slices.SortFunc(v, compareTotalF64)
+		slices.SortFunc(v, compareStrictF64)
 		for _, x := range v {
 			gids, vals = append(gids, int32(g)), append(vals, x)
 			if len(gids) == spillChunk {
