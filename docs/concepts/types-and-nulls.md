@@ -46,6 +46,11 @@ everywhere:
 A null's test is `IsNull`, a NaN's `IsNan`; `FillNull` and `FillNan` repair them, and
 `DropNulls` and `DropNans` drop their rows.
 
+A NaN keeps its bits through a filter, a sort or a pick such as `Min` or `First`. A
+float aggregate that computes its answer, `Sum`, `Mean`, `Std` and the like, and
+their rolling, cumulative and exponentially weighted kin, answers one NaN,
+`math.NaN()`'s bits, whatever NaNs it combined (*changed in 0.8*).
+
 ## Nulls in aggregates
 
 An aggregate skips nulls. `Count` counts the values that are there, `Len` the rows,

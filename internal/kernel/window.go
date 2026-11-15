@@ -465,6 +465,11 @@ func winCumFloat(fn expr.WinFnOp, params expr.WinParams, name string,
 			} else {
 				acc += src[row]
 			}
+			// A NaN running total is the one NaN (aggnan.go), made so as it is
+			// reached, where a pass over the answer cost a tenth of a cum_sum.
+			if acc != acc {
+				acc = nan64
+			}
 			vals[row] = acc
 			if exact && acc == 0 {
 				vals[row] = 0
@@ -475,11 +480,7 @@ func winCumFloat(fn expr.WinFnOp, params expr.WinParams, name string,
 
 	valid2 := seenBitmap(ok, n)
 	if out.ID() == dtype.TypeFloat32 {
-		narrow := make([]float32, n)
-		for i, v := range vals {
-			narrow[i] = float32(v)
-		}
-		return data.NewFixed(name, out, narrow, valid2), nil
+		return data.NewFixed(name, out, narrowOneNaN(vals), valid2), nil
 	}
 	return data.NewFixed(name, out, vals, valid2), nil
 }

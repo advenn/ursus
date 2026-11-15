@@ -136,7 +136,7 @@ func (a *coMomentAcc) Merge(other Accumulator, remap []int32) error {
 
 // Finish answers as Polars does. A correlation is never null: where it is undefined,
 // with no pairs, one, or a variable that does not vary, it is 0/0, NaN. A covariance
-// of ddof or fewer pairs is null, as Var is.
+// of ddof or fewer pairs is null, as Var is. A NaN answer is the one NaN (aggnan.go).
 func (a *coMomentAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
 	out := make([]float64, nGroups)
@@ -146,7 +146,7 @@ func (a *coMomentAcc) Finish(name string, nGroups int) (*data.Column, error) {
 			// answer, at most 1, is well within range.
 			out[i] = s.cxy / (math.Sqrt(s.m2x) * math.Sqrt(s.m2y))
 		}
-		return data.NewFixed(name, dtype.Float64, out, bitmap.AllSet(nGroups)), nil
+		return data.NewFixed(name, dtype.Float64, oneNaN(out), bitmap.AllSet(nGroups)), nil
 	}
 	seen := make([]bool, nGroups)
 	for i, s := range a.st[:nGroups] {
@@ -156,7 +156,7 @@ func (a *coMomentAcc) Finish(name string, nGroups int) (*data.Column, error) {
 		out[i] = s.cxy / float64(s.n-uint64(a.ddof))
 		seen[i] = true
 	}
-	return data.NewFixed(name, dtype.Float64, out, seenBitmap(seen, nGroups)), nil
+	return data.NewFixed(name, dtype.Float64, oneNaN(out), seenBitmap(seen, nGroups)), nil
 }
 
 func (a *coMomentAcc) NBytes() int64 { return int64(cap(a.st)) * int64(unsafe.Sizeof(coState{})) }
