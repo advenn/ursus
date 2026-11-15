@@ -157,7 +157,9 @@ func TestReadIPCSchemaRecovers(t *testing.T) {
 
 // TestOversizedPassesCleanInputs: the walk that skips oversized's finding skips no
 // well-formed input, so the IPC targets are not made vacuous by it: the Polars files,
-// the kitchen sink in each codec, a deep schema, and the patched seeds' original.
+// the kitchen sink in each codec, a deep schema, the patched seeds' original, and
+// records of Null columns and of none declaring 2^40 rows, which ursus reads in
+// constant space since step 529.
 // TestTheWalkPassesCleanInputs holds ursus's own walk, step 519's, so.
 func TestOversizedPassesCleanInputs(t *testing.T) {
 	for _, file := range []bool{true, false} {
@@ -181,6 +183,9 @@ func TestOversizedPassesCleanInputs(t *testing.T) {
 		inputs["a List 60 deep"] = writeIPC(t, file, deepRecord(t, 60))
 		inputs["1,000 integers"] = writeIPC(t, file, intRecord(t))
 		inputs["custom metadata"] = writeIPC(t, file, metadataRecord(t))
+		// Read since step 529 in constant space, whatever rows they declare.
+		inputs["2^40 rows of two Null columns"] = nullRecords(t, file, 2, []int64{1 << 40})
+		inputs["2^40 rows of no column"] = nullRecords(t, file, 0, []int64{1 << 40})
 		if len(paths) == 0 {
 			t.Fatalf("no %s files in testdata/ipc", ext)
 		}
@@ -240,6 +245,11 @@ func sameRead(a, b read) string {
 	case a.df.Height() != b.df.Height():
 		return fmt.Sprintf("%d rows, and %d", a.df.Height(), b.df.Height())
 	}
+	if nullFrame(a.df) {
+		// Its rows are a count, as many as 2^40 (step 529), and each frame's are all
+		// null: allNull.
+		return firstNonEmpty(allNull(a.df), allNull(b.df))
+	}
 	for i := range a.df.Height() {
 		x, err := a.df.Row(i)
 		if err != nil {
@@ -279,13 +289,30 @@ func checkIPC(t *testing.T, b []byte, r read, file bool) {
 	if r.df.Height() != got.rows {
 		t.Fatalf("ursus reads %d rows, and arrow-go %d", r.df.Height(), got.rows)
 	}
+	if nullFrame(r.df) {
+		// Every column Null, or none: ursus's are all null, which allNull asks of a
+		// column in constant time, where a row at a time is 2^40 of them for a record
+		// declaring so (step 529); and so are arrow-go's, Null arrays or cells held.
+		for j := range names {
+			for i := range got.cols[j] {
+				if want := got.cell(j, i); want != nil {
+					t.Fatalf("row %d, column %q (%s): ursus reads null, and arrow-go holds %#v",
+						i, names[j], r.df.Schema().Field(j).Type, want)
+				}
+			}
+		}
+		if why := allNull(r.df); why != "" {
+			t.Fatal(why)
+		}
+		return
+	}
 	for i := range got.rows {
 		row, err := r.df.Row(i)
 		if err != nil {
 			t.Fatalf("row %d: %v", i, err)
 		}
 		for j := range names {
-			if want := got.cols[j][i]; !sameValue(row[j], want) {
+			if want := got.cell(j, i); !sameValue(row[j], want) {
 				t.Fatalf("row %d, column %q (%s): ursus reads %#v, and arrow-go holds %#v",
 					i, names[j], r.df.Schema().Field(j).Type, row[j], want)
 			}
@@ -293,12 +320,68 @@ func checkIPC(t *testing.T, b []byte, r read, file bool) {
 	}
 }
 
-// arrowed is an IPC input as arrow-go reads it: its fields' names, its rows, and
-// each column's cells as cellOf gives them.
+// arrowed is an IPC input as arrow-go reads it: its fields' names, its rows, and each
+// column's cells as cellOf gives them, but a Null column's, or an extension's stored
+// as one, whose cells are all null whatever its length, held as null alone.
 type arrowed struct {
 	names []string
+	null  []bool
 	rows  int
 	cols  [][]any
+}
+
+// nullStored says whether t is the Null type, or an extension stored as it.
+func nullStored(t arrow.DataType) bool {
+	for {
+		ext, ok := t.(arrow.ExtensionType)
+		if !ok {
+			return t.ID() == arrow.NULL
+		}
+		t = ext.StorageType()
+	}
+}
+
+// cell is row i of column j, arrowed's cellOf.
+func (a arrowed) cell(j, i int) any {
+	if a.null[j] {
+		return nil
+	}
+	return a.cols[j][i]
+}
+
+// nullFrame says whether every column of df is Null, or it has none: a frame that is
+// its row count.
+func nullFrame(df *ursus.DataFrame) bool {
+	for _, f := range df.Schema().FieldSlice() {
+		if !f.Type.IsNull() {
+			return false
+		}
+	}
+	return true
+}
+
+// allNull says which column of df, if any, holds a value: "" for none.
+func allNull(df *ursus.DataFrame) string {
+	for j := range df.Width() {
+		c, err := df.ToSeries(j)
+		if err != nil {
+			return err.Error()
+		}
+		if c.Len() != df.Height() || c.NullCount() != c.Len() {
+			return fmt.Sprintf("column %q holds %d nulls of %d rows, in a frame of %d",
+				c.Name(), c.NullCount(), c.Len(), df.Height())
+		}
+	}
+	return ""
+}
+
+func firstNonEmpty(s ...string) string {
+	for _, x := range s {
+		if x != "" {
+			return x
+		}
+	}
+	return ""
 }
 
 // arrowRead reads b as arrow-go does, through the bounds ursus reads it under: an
@@ -348,6 +431,7 @@ func arrowRead(b []byte, file bool) (out arrowed, err error) {
 	}
 	for _, fd := range schema.Fields() {
 		out.names = append(out.names, fd.Name)
+		out.null = append(out.null, nullStored(fd.Type))
 	}
 	out.cols = make([][]any, len(out.names))
 	for {
@@ -362,6 +446,9 @@ func arrowRead(b []byte, file bool) (out arrowed, err error) {
 			col := rec.Column(j)
 			if err := validated(col); err != nil {
 				return out, err
+			}
+			if out.null[j] {
+				continue // every cell null, at any length: cell
 			}
 			for i := range int(rec.NumRows()) {
 				out.cols[j] = append(out.cols[j], cellOf(col, i))
@@ -615,6 +702,9 @@ func ipcSeeds(f *testing.F, file bool) [][]byte {
 	// reads one 1,000 deep.
 	seeds = append(seeds, writeIPC(f, file, deepRecord(f, 60)))
 	seeds = append(seeds, writeIPC(f, file, deepRecord(f, 70).NewSlice(0, 0)))
+	// Records of Null columns, and of none, declaring 2^40 rows, as arrow-go writes
+	// them: read in constant space since step 529, where oversized skipped them.
+	seeds = append(seeds, nullRecords(f, file, 2, []int64{1 << 40}), nullRecords(f, file, 0, []int64{3, 1 << 40}))
 	ints := intRecord(f)
 	plain := writeIPC(f, file, ints)
 	seeds = append(seeds, plain[:len(plain)/2], []byte("ARROW1\x00\x00"), nil)
