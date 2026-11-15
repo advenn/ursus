@@ -459,13 +459,16 @@ func columnData(c *data.Column, large bool) (arrow.ArrayData, error) {
 		return nil, err
 	}
 	n := c.Len()
+	if c.DType().ID() == dtype.TypeNull {
+		// Arrow's Null array carries no buffers at all and every row is null. Before
+		// the validity is shared: ursus holds a Null column's with no storage, and
+		// Buffer would make it, a bit a row (step 529).
+		return array.NewData(at, n, []*memory.Buffer{nil}, nil, n, 0), nil
+	}
 	valid := share(c.Validity().Buffer())
 	nulls := c.NullCount()
 
 	switch c.DType().ID() {
-	case dtype.TypeNull:
-		// Arrow's Null array carries no buffers at all and every row is null.
-		return array.NewData(at, n, []*memory.Buffer{nil}, nil, n, 0), nil
 
 	case dtype.TypeBool:
 		return array.NewData(at, n,

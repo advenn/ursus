@@ -394,6 +394,12 @@ type Options struct {
 	// Profiler, where set, measures each node as it runs (LazyFrame.Profile).
 	Profiler *Profiler
 
+	// Whole is set where the root holds a batch of only Null columns, or of none, in
+	// constant space whatever its rows: Collect's and Count's. Plan hands it on
+	// through the nodes that keep it so (passesWhole), and a scan below them asks its
+	// source for such batches whole (source.ScanSpec.Whole, step 529).
+	Whole bool
+
 	// opened is every source planning has opened so far; PlanRoot sets it, and
 	// closes them all if planning fails. See openedSources.
 	opened *openedSources
@@ -549,6 +555,7 @@ func Plan(ctx context.Context, n plan.Node, opts Options) (Operator, error) {
 
 // planNode is Plan of one node, its children planned by Plan.
 func planNode(ctx context.Context, n plan.Node, opts Options) (Operator, error) {
+	opts.Whole = opts.Whole && passesWhole(n)
 	switch t := n.(type) {
 	case *plan.Scan:
 		return planScan(ctx, t, opts)
@@ -645,6 +652,33 @@ func planNode(ctx context.Context, n plan.Node, opts Options) (Operator, error) 
 	}
 }
 
+// passesWhole says whether n's batches are its input's as they are, or cut, or
+// named otherwise, so that a Null column in them stays a length whatever their rows:
+// a scan, a projection of columns by name, a limit, a slice and a concatenation.
+// Every other operator computes on a batch's rows, and a scan below one cuts its
+// batches at BatchSize (Options.Whole).
+func passesWhole(n plan.Node) bool {
+	switch t := n.(type) {
+	case *plan.Scan, *plan.Limit, *plan.Slice, *plan.Union:
+		return true
+	case *plan.Project:
+		for _, e := range t.Exprs {
+			for {
+				a, ok := e.(*expr.Alias)
+				if !ok {
+					break
+				}
+				e = a.Child
+			}
+			if _, ok := e.(*expr.Col); !ok {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 func planScan(ctx context.Context, s *plan.Scan, opts Options) (Operator, error) {
 	op, ok := s.Src.(source.Openable)
 	if !ok {
@@ -662,6 +696,7 @@ func planScan(ctx context.Context, s *plan.Scan, opts Options) (Operator, error)
 		Predicate:  s.Predicate,
 		MaxRows:    s.MaxRows,
 		BatchSize:  opts.BatchSize,
+		Whole:      opts.Whole,
 		Threads:    opts.Threads,
 		ReadAhead:  readAhead(opts.Budget),
 		Pages:      opts.Budget.Pressure,

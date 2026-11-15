@@ -82,7 +82,20 @@ type ScanSpec struct {
 	Threads int
 
 	// BatchSize is the requested rows per batch. A source may return fewer.
+	//
+	// Operators rely on it: a filter's or a join's selection is an []int32, an
+	// expression allocates its answer a batch at a time, and a stream holds a batch
+	// at a time; so a source never returns more, but where Whole allows it.
 	BatchSize int
+
+	// Whole says the scan's batches reach only what holds a Null column in constant
+	// space, whatever its rows (step 529): a projection of columns by name, a limit,
+	// a slice and a concatenation, up to Collect's result or Count. A batch of only
+	// Null columns, or of none, may then hold any number of rows, past BatchSize: a
+	// record's, which an Arrow IPC stream may declare 2^40 of in 232 bytes and which
+	// cut at BatchSize was 2^27 batches. Set by the physical planner, never where any
+	// other operator is above the scan; a source may ignore it.
+	Whole bool
 
 	// ReadAhead is how many bytes of decoded batches a source may hold ahead of its
 	// consumer; 0 is the source's own default. The Parquet reader decodes several
@@ -108,6 +121,18 @@ type ScanSpec struct {
 	// conjunct once per dictionary value, to drop the rows that fail it before
 	// copying them (step 193).
 	Eval func(ctx context.Context, n expr.Node, b *data.Batch) (*data.Column, error)
+}
+
+// NoData says whether a batch of schema s holds nothing a row: its columns, if any,
+// are all of the Null type, each a length (bitmap.Zeros). Such a batch is what a
+// source may hand whole under ScanSpec.Whole (step 529).
+func NoData(s *dtype.Schema) bool {
+	for _, f := range s.All() {
+		if !f.Type.IsNull() {
+			return false
+		}
+	}
+	return true
 }
 
 // ReadSet returns the columns this scan must decode: Projection plus every column
