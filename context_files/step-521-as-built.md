@@ -10,8 +10,15 @@ guessed at: a list's count hidden in what a walk by the header's types reads as
 another type (§2.3). The brief called them F11 and F12; step 520's record already
 has an F11, so they are F12 and F13 here.
 
+Step 520 (#73, not yet merged) rewrote the Thrift reader the walk uses, so that it
+reads as Thrift's compact protocol does. It fixes neither finding. On its branch,
+origin/fix/parquet-codec-bound at d3b3952, F13's input still hit the watchdog at
+800,021,024 bytes, and F12's input still failed "Count is 5, and the file reads as 0
+rows". So this branch merges that branch in and builds both fixes on its reader.
+
 The fuzz runs of this step found four more inputs, none of them this step's (§4). Two
-are the Thrift decoding step 520 fixes. Two are older bugs that remain open: an
+are the Thrift decoding step 520 fixes, and they are kept here as seeds now that its
+reader is merged in. Two are older bugs that remain open: an
 UNCOMPRESSED page shorter than it declares reads memory it never wrote, and a corrupt
 Null column is an internal error.
 
@@ -220,7 +227,9 @@ at the watchdog. All pass now.
   row and compared by SHA-256. The only differences are the 10^8 row-group seed's
   error text, "walking the footer: a list … claims more elements", and the two new
   seeds, both refused. `twinSeeds`, 19 files read with the own pages on and off at
-  batches of 1,023 and 332, was identical.
+  batches of 1,023 and 332, was identical. After the merge, the same comparison
+  against step 520's branch gave the same result: 124 inputs here and 122 there,
+  step 520's codec seeds among them, and 126 identical reads.
 
 ## 4. The fuzz runs
 
@@ -244,8 +253,10 @@ Each run took the heavy lock, used the test binary under
 
   Both reproduce on master. Both belong to the Thrift-decoding family step 520 is
   fixing (its F11, a count in a 10-byte varint). With step 520's `footer.go` and
-  `dictpages.go` diff applied to a scratch copy of master, both replay to PASS. They
-  are not committed here and are kept for step 520 (§7).
+  `dictpages.go` diff applied to a scratch copy of master, both replay to PASS, and
+  they pass on this branch now that step 520's branch is merged in. They are kept as
+  seeds: `FuzzScanParquet/dictionary-count-varint-past-32-bits` and
+  `FuzzOwnPagesMatchArrow/dictionary-header-ended-by-a-stop-of-0x10`.
 - **This branch with step 520's Thrift decoding ported**, in a scratch tree. Two more
   inputs, neither caused by this step:
   - `FuzzScanParquet`, `7ac304015bdf360b`, 90 bytes: "row 0 differs, got
@@ -265,10 +276,15 @@ Each run took the heavy lock, used the test binary under
     has no level reader" (`colreader.go`, `newColReader`). It reproduces on master and
     on master with step 520.
 
+  Both still fail on this branch after the merge. They are not committed. They are
+  kept in `~/ursus-scratch-archive/step521-findings/`.
+
 ## 5. The teeth
 
 Each fix was broken in the tree, the step's tests were run under the cap, and the file
-was restored from a copy saved before (`cmp` clean each time):
+was restored from a copy saved before (`cmp` clean each time). This was done before the
+merge, and again after it on step 520's reader with the same failures; the figures
+below are from before:
 
 | broken | failed |
 | --- | --- |
@@ -285,17 +301,15 @@ All run after the last edit. The two Parquet packages ran first on their own:
 
 ## 7. Left
 
-- **Step 520 and this step both edit `thriftReader` in `footer.go`.** Step 520 makes
-  its decoding Thrift's: `varint`, `varint32`, `i32`, a stop at any type of 0, sizes
-  cut to 32 bits. This step adds the walk by `footerFields`, the count against the
-  bytes left in `listHeader` and the map, and `onList`. Whichever lands second keeps
-  both. The two inputs of §4's first run, kept for step 520 as
-  `FuzzScanParquet-bc6d3a00984e89e0` and `FuzzOwnPagesMatchArrow-7a1bdeb8b260452a`
-  in `~/ursus-scratch-archive/step521-findings/`, beside §4's other two, are
-  regression seeds for its decoding. Until step 520 lands, CI's fuzz workflow can find
-  them on any pull request: they come from the dictionary seed within a second.
+- **This branch holds step 520's branch, merged in**, so #73 lands with it or before
+  it. The conflicts were in `footer.go`'s `thriftReader`. They were resolved by
+  keeping step 520's decoding (`varint`, `varint32`, `i32`, a stop at any type of 0,
+  sizes cut to 32 bits) and adding this step's walk, its counts against the bytes
+  left, and `onList`. `pqForgedSeeds` holds both steps' seeds.
 - **An UNCOMPRESSED page shorter than it declares reads memory it never wrote** (§4,
-  `7ac304015bdf360b`). This is codec territory, step 520's neighbour. One fix is to
-  refuse an UNCOMPRESSED page whose compressed size is not its uncompressed size,
+  `7ac304015bdf360b`). This is codec territory, step 520's neighbour. On this branch
+  the fuzzer reaches it within a second, because the walk now passes footers that the
+  old reader refused. So CI's fuzz workflow may report it until it is fixed. One fix is
+  to refuse an UNCOMPRESSED page whose compressed size is not its uncompressed size,
   which every writer keeps equal.
 - **A corrupt Null column is an internal error** (§4, `bc1dbd675896f2b2`).
