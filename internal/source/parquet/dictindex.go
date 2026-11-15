@@ -13,6 +13,7 @@ import (
 	"github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/compress"
 	"github.com/apache/arrow-go/v18/parquet/file"
+	"github.com/apache/arrow-go/v18/parquet/metadata"
 	"github.com/apache/arrow-go/v18/parquet/schema"
 )
 
@@ -62,6 +63,7 @@ func checkedColumn(rg *file.RowGroupReader, ci int, desc *schema.Column, mem mem
 	if err != nil {
 		return nil, err
 	}
+	boundHeaders(pr, rg.MetaData(), ci)
 	pages := &checkedPages{PageReader: pr, maxDef: desc.MaxDefinitionLevel(), maxRep: desc.MaxRepetitionLevel(),
 		name: desc.Path()}
 	// Deprecated as "unsafe to use outside of this package"; it is what
@@ -69,6 +71,21 @@ func checkedColumn(rg *file.RowGroupReader, ci int, desc *schema.Column, mem mem
 	// that makes its own column readers. arrow-go is pinned (go.mod), so its removal
 	// would show as a build that fails.
 	return file.NewColumnReader(desc, pages, mem, pool), nil
+}
+
+// boundHeaders lowers the largest page header pr reads to its chunk's bytes, and to
+// no less than the page reader's first look at a header, 16 KiB (step 521). The page
+// reader reads a header by looking at 16 KiB of the chunk and, where the header does
+// not parse, at twice as much, up to 4 MiB, each look a buffer of its size. A header
+// lies inside its chunk, so a look past the chunk's bytes finds nothing more, and a
+// header that does not parse is refused at the first look that holds them.
+func boundHeaders(pr file.PageReader, rg *metadata.RowGroupMetaData, ci int) {
+	const firstLook, mostLook = 16 << 10, 4 << 20 // the page reader's defaultPageHeaderSize and defaultMaxPageHeaderSize
+	cc, err := rg.ColumnChunk(ci)
+	if err != nil {
+		return
+	}
+	pr.SetMaxPageHeaderSize(int(min(max(cc.TotalCompressedSize(), firstLook), mostLook)))
 }
 
 // checkedPages is a column chunk's page reader that refuses a dictionary-encoded data
