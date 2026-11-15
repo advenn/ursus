@@ -26,13 +26,10 @@ import (
 // hold its count fails the read. A PLAIN value takes at least valueBits, and a page
 // header that does not parse is left to arrow-go, which says what it is.
 //
-// An UNCOMPRESSED page holds its bytes as they lie, so its two sizes are one (step
-// 521). arrow-go reads its compressed size of bytes into a buffer of its uncompressed
-// size, and its codec for UNCOMPRESSED copies them in and answers the whole buffer:
-// a page claiming 3,072 bytes and holding none was read as 3,072 bytes of whatever
-// the buffer, a pool's, held before, a frame of another read's bytes and no error.
-// pyarrow 25.0.1 and DuckDB 1.5.5 refuse it. A page of an UNCOMPRESSED chunk whose
-// sizes differ fails the read, as no writer writes one.
+// An UNCOMPRESSED page holds its bytes as they lie, so its two sizes are one, and a
+// page whose uncompressed size is not its compressed one claims bytes it does not
+// hold (step 521). pyarrow 25.0.1 and DuckDB 1.5.5 refuse it. A page of an
+// UNCOMPRESSED chunk whose sizes differ fails the read, as no writer writes one.
 
 // chunkWatch is what a column chunk's pages are checked for: the fewest bits a value
 // of its column takes, and whether the chunk is UNCOMPRESSED.

@@ -129,17 +129,13 @@ func TestAFooterListClaimingMoreThanItsBytesIsRefused(t *testing.T) {
 	}
 }
 
-// TestAnUncompressedPageWhoseSizesDifferIsRefused (step 521, found by its fuzz
-// runs): an UNCOMPRESSED page holds its bytes as they lie, so its header's two sizes
-// are one. arrow-go read a page's compressed size of bytes into a buffer of its
-// uncompressed size, and its codec for UNCOMPRESSED answered the whole buffer, so a
-// page holding fewer bytes than it claims read the rest from whatever the buffer held:
-// FuzzScanParquet's input read 0xA5, the poisoned allocator's byte, as its values,
-// and no error. DuckDB 1.5.5 refuses every such page ("Page size mismatch"), and
-// pyarrow 25.0.1 one holding none ("Unexpected end of stream"). In each kind's file
-// of three pages, each page claiming 1 and 8 bytes more than it holds, and 1 fewer,
-// and holding none of its bytes, is refused now, read into poisoned buffers on one
-// thread and on four; the whole file reads as it did.
+// TestAnUncompressedPageWhoseSizesDifferIsRefused (step 521): an UNCOMPRESSED page
+// holds its bytes as they lie, so its header's two sizes are one, and a page whose
+// sizes differ is refused as corrupt. DuckDB 1.5.5 refuses every such
+// page ("Page size mismatch"), and pyarrow 25.0.1 one holding none ("Unexpected end
+// of stream"). In each kind's file of three pages, each page claiming 1 and 8 bytes
+// more than it holds, and 1 fewer, and holding none of its bytes, is refused, read
+// into poisoned buffers on one thread and on four; the whole file reads as it did.
 func TestAnUncompressedPageWhoseSizesDifferIsRefused(t *testing.T) {
 	ctx := t.Context()
 	read := func(b []byte, threads int) (*ursus.DataFrame, error) {
