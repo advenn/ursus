@@ -1,0 +1,1254 @@
+{
+ "files": {
+  "an-int32-spanning-its-range--honest.parquet": {
+   "error": "OSError: Unexpected end of stream: InitBlock EOF",
+   "pyarrow": "E",
+   "sha256": "73facd8dcb1014c1cd85bf64f22008980c4604d497c5aa4860c18b7e4e0052f0",
+   "twin": "an-int32-spanning-its-range--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--256-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: cannot have zero value per miniblock",
+   "pyarrow": "E",
+   "sha256": "cac9b9b925731ba18da3f14a6d49914d2102a081e1b454f9b848dcef2b0bd847",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--3-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 42",
+   "pyarrow": "E",
+   "sha256": "90f2518ee8819cca2a0f2fa63d006944e8a44823dea9af97190ce298b1f18ccb",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--8-miniblocks-of-16-values.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 16",
+   "pyarrow": "E",
+   "sha256": "a84603608ec1177dae73cd7725f08229ee35eb3d39d2da4cb0e9ee566a43999e",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--a-block-of-0-values.parquet": {
+   "error": "OSError: cannot have zero value per block",
+   "pyarrow": "E",
+   "sha256": "fd683263c0b5baccde7ea33cd341ce0cef45534b1282952b1849e67a660d09f3",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--a-block-of-2-32-values.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "dddfa2a843fe4c00f0ff988194b2061fc4c17bc230abd948c727595650544f87",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--a-block-of-31-values.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 31",
+   "pyarrow": "E",
+   "sha256": "93d9f7954a215ebe7c7d522eb65649bacfff30d9794f8f12872e1233cd8236f8",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--a-count-of-0.parquet": {
+   "error": "OSError: Expected to decode 171 values, but decoded 0 values.",
+   "pyarrow": "E",
+   "sha256": "559d755a7cc5bb0899f3b65b5929d414ef41588de4af90cd0464c7212aad4818",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--a-count-of-2-40.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "c351ecb88761678a3102df83fa020fdc64a083a1aba720fd3dab9df99ee9a244",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--a-count-one-past-the-page-s-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "a2ba169abdf89625b13015bedd2c381b2b533a7a2d30ad6ab8aba51629f85220",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--a-count-one-past-the-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "1b7bfa931fb8271fd8f7259f03089abdaa9430656a8c392b93a29da9680663d8",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--a-count-one-short.parquet": {
+   "error": "OSError: Expected to decode 171 values, but decoded 170 values.",
+   "pyarrow": "E",
+   "sha256": "479894894aaa41fd86b8d00efbae11f6c7398fc2655b4c295951410fad99e13f",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--a-miniblock-65-bits-wide.parquet": {
+   "error": "OSError: delta bit width larger than integer bit width",
+   "pyarrow": "E",
+   "sha256": "343c3d8005f9642faab6b6164a51bcacb804004ea0f0822656cea74c1ce3e005",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--a-miniblock-of-2-31-values-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "cd8c25185a58553d7bb468643d27c434fc3d543c416f6348ca9bd4aefaed5085",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--a-page-claiming-2-26-values-past-its-chunk-s-in-a-miniblock-0-bits-wide.parquet": {
+   "error": "OSError: Number of decoded rep / def levels do not match num_values in page header",
+   "pyarrow": "E",
+   "sha256": "0c551ef47e951b75411c3058c874bf291bfe3252cff40a645480d6fc1a2110c8",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--blocks-of-64-in-2-miniblocks.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 64",
+   "pyarrow": "E",
+   "sha256": "a8a8c781602d47af4c71f27679dce0bd015510ca8367d66549d60f6273519fbc",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--honest-a-miniblock-holding-no-value-255-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "f1658603a23271ea87f4dab7b7d8072636fe9253769fb30d98adde9f324282b7",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--honest-blocks-of-256-in-8-miniblocks.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "37995ded3f88508a242bb07ba4a7257b0587912bce0f6d2eae5f8acd44710e2b",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--honest-one-miniblock-of-128.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "4d596c817bcba379d5d1f064a8e8eca131146766f94ee1d0bfd06fe4749c17c4",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--honest.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "50f9c4290b631e36c62ed7a0b0fac825f786e88c85fba7cd83dbc4209c2e3c52",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--no-miniblock.parquet": {
+   "error": "OSError: cannot have zero miniblock per block",
+   "pyarrow": "E",
+   "sha256": "92cc35bf70080d6065a3db2d17239b438e34c0eade26b7866f5e8b682c3dafe1",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--the-page-ending-inside-a-block-s-bit-widths.parquet": {
+   "error": "OSError: Unexpected end of stream: Decode bit-width EOF",
+   "pyarrow": "E",
+   "sha256": "7846a59ee0af8f619181c4ba8b9a15be96c973750b02144bef9bbacdef6e6c79",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--the-page-ending-inside-a-miniblock-s-padding.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "66ff728efa39e805560eb0abdbe8a938e633c346bac639df701c2918a1bd8a53",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-byte-array-with-nulls-delta-length-byte-array--the-page-ending-inside-a-miniblock-s-values.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "3aa9d0b4989aa503381c8af1eae13e9d5aa15ec5d3ceaba26d2fb93b99094cf2",
+   "twin": "an-optional-byte-array-with-nulls-delta-length-byte-array--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--256-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: cannot have zero value per miniblock",
+   "pyarrow": "E",
+   "sha256": "1717bd3929a32cccad5e379fd92a7daacaf9638c7a8eed631bc4dd520c309a13",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--3-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 42",
+   "pyarrow": "E",
+   "sha256": "79ca4400d33d88ac78ee268de897a755796d30b63f21972f7ffc5b5b1b4ead7f",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--8-miniblocks-of-16-values.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 16",
+   "pyarrow": "E",
+   "sha256": "d016073887d54a83bef0a8fa61b6f453d6781a17d8c17dae07ce42264042a2e8",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--a-block-of-0-values.parquet": {
+   "error": "OSError: cannot have zero value per block",
+   "pyarrow": "E",
+   "sha256": "6d858cd8b79b833c87d925d875aceba73274b3da0aafb4cede7dbc579317caa4",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--a-block-of-2-32-values.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "0abc9ae146071f7e22a10e0a1143d8a14be9be948a94639bf3e6ad14331f6552",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--a-block-of-31-values.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 31",
+   "pyarrow": "E",
+   "sha256": "095aed34ad3148fd4d41e8e23bf642387c735af315fb0694d1034dccabbd1f2c",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--a-count-of-0.parquet": {
+   "error": "OSError: Number of values / definition_levels read did not match",
+   "pyarrow": "E",
+   "sha256": "3ace3aac2b733a0adda30a49d8c6ea6a62c7b767a1b2ef14dc0de6320131a4ff",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--a-count-of-2-40.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "c8145ba21f54cba75ba58d82c800c1fc995c25e03bd7a04c7fee718f95cca4c9",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--a-count-one-past-the-page-s-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "bd495a312c1c8f50acdda70abbdadbb310191e116aba9e6607c838eeaed09d55",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--a-count-one-past-the-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "b5ec4646709ed7df6397a2a38114cf0e40570d91a83f51b86a8b6f8ec99afecf",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--a-count-one-short.parquet": {
+   "error": "OSError: Number of values / definition_levels read did not match",
+   "pyarrow": "E",
+   "sha256": "328b8940735fca7a97999187bc5585cc4fd22f1bf9cd0378d9067b9b0d58d0ca",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--a-miniblock-65-bits-wide.parquet": {
+   "error": "OSError: delta bit width larger than integer bit width",
+   "pyarrow": "E",
+   "sha256": "c44795e3f5b5c52266da99ce858d9f0b69d320833c8ae4071e2c21ff4294d084",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--a-miniblock-of-2-31-values-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "7da1acf9a5ec935079e9fec56aa9ff9f61fb679186c17e61172c47d46edae5db",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--a-page-claiming-2-26-values-past-its-chunk-s-in-a-miniblock-0-bits-wide.parquet": {
+   "error": "OSError: Number of decoded rep / def levels do not match num_values in page header",
+   "pyarrow": "E",
+   "sha256": "f3f5c0e6c5039d73a05082da473301d8e5d6cdd585ed42517e86532a4c9bccb0",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--blocks-of-64-in-2-miniblocks.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 64",
+   "pyarrow": "E",
+   "sha256": "bd27e0cc386ee88e173e205bb4f295a6852ac0677bbab1cb79f35559b4915963",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--honest-a-miniblock-holding-no-value-255-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "3875fcb43b890893037485e17c1a612647a7a1dd5d7e1266a96e6221053ba129",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--honest-blocks-of-256-in-8-miniblocks.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "9ffef1e1e8e82078d954ca68ff3c6d6dd982705ed2219f6277c1d5bb493ad814",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--honest-one-miniblock-of-128.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "963f7ca6cae4d3eab81bbe2667ac9338a305c777fcc850b91168fe7077188978",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--honest.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "033dad8baa31ca083f07476682922a16ca0488dbc270c4410e06f447388d0bd7",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--no-miniblock.parquet": {
+   "error": "OSError: cannot have zero miniblock per block",
+   "pyarrow": "E",
+   "sha256": "5c8f5e41c4a013c940db2dd243895ab6439caa17ba9e0494a8299e2dc919dc0d",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--the-page-ending-inside-a-block-s-bit-widths.parquet": {
+   "error": "OSError: Unexpected end of stream: Decode bit-width EOF",
+   "pyarrow": "E",
+   "sha256": "2012969a19ce3f2c0a6d5ea4ad8b2e13cd223d4f50aa9a3d9b3c10702b2d4bec",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--the-page-ending-inside-a-miniblock-s-padding.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "1f423af3fd81c9cdb236f19ae7b1b9eb8181e33a6f0469e35633d4b820e372c2",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "an-optional-int64-with-nulls--the-page-ending-inside-a-miniblock-s-values.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "482b563a21737b4de6fbc4d4a449aadae0e0575a49e3a1d733eb29996a5efde9",
+   "twin": "an-optional-int64-with-nulls--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-256-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: cannot have zero value per miniblock",
+   "pyarrow": "E",
+   "sha256": "1f5a3acf2fa5831dfbd5887683167071a4cafb1b094da9bea364237f329d4d26",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-3-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 42",
+   "pyarrow": "E",
+   "sha256": "81764e35578876d86626f011bd15cc40caf573d198ddf958108975fded2d70b4",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-8-miniblocks-of-16-values.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 16",
+   "pyarrow": "E",
+   "sha256": "401957b1f1c34b7e45328592c9437e927c7d6920ead7e66e2dc69205414b8e9a",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-a-block-of-0-values.parquet": {
+   "error": "OSError: cannot have zero value per block",
+   "pyarrow": "E",
+   "sha256": "7da07d4ce7c30dca405dabcb11ba622906df733f0c02b7d18b6262db4afa70db",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-a-block-of-2-32-values.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "d27a71d81066a63ef7c4679fad9c8d29a2ce505df1225fd2c4997c0aa364de41",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-a-block-of-31-values.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 31",
+   "pyarrow": "E",
+   "sha256": "d7e95eece46b7732907fd46bfa71aaae5d3ff3446b9192c01fa51afe2bad12c1",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-a-count-of-0.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 5",
+   "pyarrow": "E",
+   "sha256": "ef8d93db542585916e0b5f8d58a066365f065fc9ba399d377a65ce009f230926",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-a-count-of-2-40.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "9966d98b7b74662e7cb98da45e826fa27e4cd584bdfc9bbc2713cd8f3e61c343",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-a-count-one-past-the-page-s-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "6d5f23711f21dd53f73ac68b17392054bcf0f1a2efeb61ece01ff7e6d89c1451",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-a-count-one-past-the-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "6d5f23711f21dd53f73ac68b17392054bcf0f1a2efeb61ece01ff7e6d89c1451",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-a-count-one-short.parquet": {
+   "error": "OSError: Expected to decode 200 values, but decoded 199 values.",
+   "pyarrow": "E",
+   "sha256": "d5bb30b969fae84080cf3138d1b97172878377872edad792107db1723ea87310",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-a-miniblock-65-bits-wide.parquet": {
+   "error": "OSError: delta bit width larger than integer bit width",
+   "pyarrow": "E",
+   "sha256": "e7297a7f5019937044b1707290f01292befac35a59221fd520db95d59bc3787c",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-a-miniblock-of-2-31-values-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "104090c354703f40e8ff7db65a967006f840a3b6624e3900e32713c7e6dddce9",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-a-page-claiming-2-26-values-past-its-chunk-s-in-a-miniblock-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "c5b38838891a53f0f9da3c4d3ac4785813741f7c941ed90897aa80dcf52ea611",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-blocks-of-64-in-2-miniblocks.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 64",
+   "pyarrow": "E",
+   "sha256": "afad91f22d043e3051ca722fa0191811ff8b539f5ba3e941ee64b7bbc408ff6b",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-honest-a-miniblock-holding-no-value-255-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "c695972a82ba273db12ac97510d603620e140601a41452dc87f2a43d79f3c0b5",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-honest-blocks-of-256-in-8-miniblocks.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "5e70532ec52e50164585f036bbcacb86011724dfeea1902494a4845575025f21",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-honest-one-miniblock-of-128.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "68b959cbc504a65432dd819b0050acf82a2722cba263d8b0af3316f6192554e2",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-honest.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "beee44a7cf9ee429d53bd3522438a36ac13a6dbc8a9ef3d8f83c6d8fd825d2f8",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-no-miniblock.parquet": {
+   "error": "OSError: cannot have zero miniblock per block",
+   "pyarrow": "E",
+   "sha256": "9eb8664eddb4d2a1a82c8fb7b025371c3f48b429d9c9a73a27159f6e77fccef1",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-the-page-ending-inside-a-block-s-bit-widths.parquet": {
+   "error": "OSError: Unexpected end of stream: Decode bit-width EOF",
+   "pyarrow": "E",
+   "sha256": "23a9ffb13073825f0d909b208eda514198245fd3e2648a58add4a10dd2a75c9b",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-the-page-ending-inside-a-miniblock-s-padding.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "442079ace9a580e26dcb8e41d42a2c669024774555bf502597805a2ec74471c7",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--prefix-lengths-the-page-ending-inside-a-miniblock-s-values.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "8999ed7eadb2b2401c3b8f7273912a7326ef0b5b61e2d4af8a01fb078ac9341a",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-256-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: cannot have zero value per miniblock",
+   "pyarrow": "E",
+   "sha256": "5ce0f25264975be9eca605b2fe9d8fa5cbb140ab4495dd014cd414ee36afccb0",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-3-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 42",
+   "pyarrow": "E",
+   "sha256": "79477dc5bb9ac08444603774ef8d4fc9613d1fb3e4c2383fbceaf61349d0473c",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-8-miniblocks-of-16-values.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 16",
+   "pyarrow": "E",
+   "sha256": "098a41a3ddc6b06f55262e61e65c521b825a69be4bb0af3f67d52beb3ba78088",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-a-block-of-0-values.parquet": {
+   "error": "OSError: cannot have zero value per block",
+   "pyarrow": "E",
+   "sha256": "cc82bcaced390d37e5fd03c127aabbf1aada2c33e8c975f59ac5ae7f5d69e771",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-a-block-of-2-32-values.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "b2617437aa60a7fe804dbd9948c87d2db642a9bed68c6203d665fefbadaa60e2",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-a-block-of-31-values.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 31",
+   "pyarrow": "E",
+   "sha256": "136071f6f17499e5aa36ee7f9e2f6fe7b19006d58397d56dfe69e08b09c3a33f",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-a-count-of-0.parquet": {
+   "error": "OSError: Unexpected end of stream: Read 0, expecting 200 from suffix decoder",
+   "pyarrow": "E",
+   "sha256": "b30a19c015c385a6c38d376881f99cc94017f3cb5c0adcd0356f462e812f410f",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-a-count-of-2-40.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "0ce8093c8741a760d8056451186b110d955768be98d84046ca0774036592c0c8",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-a-count-one-past-the-page-s-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "d04aead7392d717b68655bc2023e19a618f5c619a5d22badaca76d25a3d5ac53",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-a-count-one-past-the-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "d04aead7392d717b68655bc2023e19a618f5c619a5d22badaca76d25a3d5ac53",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-a-count-one-short.parquet": {
+   "error": "OSError: Unexpected end of stream: Read 199, expecting 200 from suffix decoder",
+   "pyarrow": "E",
+   "sha256": "e67862fa6000f6c861700168bf29861a2cad6696e1ee3a31595be8d8d68ee77e",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-a-miniblock-65-bits-wide.parquet": {
+   "error": "OSError: delta bit width larger than integer bit width",
+   "pyarrow": "E",
+   "sha256": "aa133e842a1eecd8a78065dd5d793427f1ddfa9b7f5ed5dc4092a6aa30e952e5",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-a-miniblock-of-2-31-values-0-bits-wide.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "570804e932a06573e73d201f5b252236ba4d99c85566ab6b324b27d5273e9dc8",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-a-page-claiming-2-26-values-past-its-chunk-s-in-a-miniblock-0-bits-wide.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "cbb8a6e7775d18121b3ed84c3f671770c947d529b86abdc40263fa3276ab63d3",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-blocks-of-64-in-2-miniblocks.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 64",
+   "pyarrow": "E",
+   "sha256": "9432377d0080b3e0859bec0e33af7b0e469cf4ef2da9428e5b8a5234a10f53f7",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-honest-a-miniblock-holding-no-value-255-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "a8abcd4a0a7a7c5cee72354faf749f0d0f4e1d7cb4affacba5e3ee0412cf4ad1",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-honest-blocks-of-256-in-8-miniblocks.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "9d4991a66fc76baa149210600980912ec2267ac96ecaef9b0fcd6cefe0effd0f",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-honest-one-miniblock-of-128.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "1bda96bc27ceb8eb35f98f03d3cb8e91ce4bbc965566ff5571a0381a0b2b4647",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-honest.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "beee44a7cf9ee429d53bd3522438a36ac13a6dbc8a9ef3d8f83c6d8fd825d2f8",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-no-miniblock.parquet": {
+   "error": "OSError: cannot have zero miniblock per block",
+   "pyarrow": "E",
+   "sha256": "17503b585407aa5f09d0a9fe8b71371dda48334f3bcbb06df6b7902e3b89a2b1",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-the-page-ending-inside-a-block-s-bit-widths.parquet": {
+   "error": "OSError: Unexpected end of stream: Decode bit-width EOF",
+   "pyarrow": "E",
+   "sha256": "0057539d0796c9f88c60c12d2957fbcbc1797c6adf9f189e37dcd93b5eed86f6",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-the-page-ending-inside-a-miniblock-s-padding.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "217af83dabed191a91874b0979fe562188f28491133d9ef209f45d26a376453f",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-byte-array--suffix-lengths-the-page-ending-inside-a-miniblock-s-values.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "5ff4189f26ccf2a0ace5147fb60662f1749e6767009da0bb2798e4af4680fdf9",
+   "twin": "byte-array-delta-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--256-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: cannot have zero value per miniblock",
+   "pyarrow": "E",
+   "sha256": "e0d2dfd38c00d5a672ed889737714bad3d8d207d2e38293727d0d973f028e4fa",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--3-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 42",
+   "pyarrow": "E",
+   "sha256": "fb2919f87425f66387c3813c1b7d58e2a6fafb87d5f5a44ec636c2e1be0ff4df",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--8-miniblocks-of-16-values.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 16",
+   "pyarrow": "E",
+   "sha256": "c2c00f9b6fd8572c2dec8d05822af2def83fbc5ef5240b84b04fe6cdd1a54d48",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--a-block-of-0-values.parquet": {
+   "error": "OSError: cannot have zero value per block",
+   "pyarrow": "E",
+   "sha256": "7423b24f1a4044f39d10f78adb2a5c24740ab624231201062fdcfe26393402fa",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--a-block-of-2-32-values.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "f4589cec1c2a6ae35c586c57634d9429ec0d6410314d0ba36f73dbef0b4b6605",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--a-block-of-31-values.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 31",
+   "pyarrow": "E",
+   "sha256": "8779c95cd4c8b970ca47bdf92b2db6e39a11dd8922696681d6e0eb1ed14cc555",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--a-count-of-0.parquet": {
+   "error": "OSError: Expected to decode 200 values, but decoded 0 values.",
+   "pyarrow": "E",
+   "sha256": "0fa0944e671727ce77e2a28f0e2f920e76e160dde543500cad00846d95dfb3a1",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--a-count-of-2-40.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "d060786f8be3abdf6f85fb75bbc51159af17aadcf2b8c397874d05c94d92a11d",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--a-count-one-past-the-page-s-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "40185146ad901b5f22d045740fd3a7c985e0f84a35eb4ea7e90b78c12a1f0e50",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--a-count-one-past-the-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "40185146ad901b5f22d045740fd3a7c985e0f84a35eb4ea7e90b78c12a1f0e50",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--a-count-one-short.parquet": {
+   "error": "OSError: Expected to decode 200 values, but decoded 199 values.",
+   "pyarrow": "E",
+   "sha256": "ad076ad2e8b97f637da8e8990240eb9d39828df869918249131ee5dc0423321e",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--a-miniblock-65-bits-wide.parquet": {
+   "error": "OSError: delta bit width larger than integer bit width",
+   "pyarrow": "E",
+   "sha256": "33b3a72dca882b3f1f02e6db12cb19b0f4947568f8ae4e2f202fb9dc7371e5a4",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--a-miniblock-of-2-31-values-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "ca0727666efd085b652a596fc04e793709e65ead7191c30c012bc7b149e16916",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--a-page-claiming-2-26-values-past-its-chunk-s-in-a-miniblock-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "fee54dc813fedc1634ee9b35f06d43610749489f7830f74aaf3b70addfaca8dc",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--blocks-of-64-in-2-miniblocks.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 64",
+   "pyarrow": "E",
+   "sha256": "580fec9cbc574de93686faf4fa584f2135f2e41f9cd56f8f912dfcc7a4e0f960",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--honest-a-miniblock-holding-no-value-255-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "397edeadc210e69156fc7a9f79dc1d94b11268c23139a9e1dbcefeeaa7994136",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--honest-blocks-of-256-in-8-miniblocks.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "7cb6f25205c0c205bf8256002a34dc25069bd1d77813774ea14756f4bdeb5053",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--honest-one-miniblock-of-128.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "e9ec98d34945f92572b0be20050108e302a4810658eed31eccdb20d71d19bf63",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--honest.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "a7ba5a6ef82963a95b189f3145a5ce4fefb2bb23a6a7e2ec7d211750f674adb9",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--no-miniblock.parquet": {
+   "error": "OSError: cannot have zero miniblock per block",
+   "pyarrow": "E",
+   "sha256": "1596a315309fe92f2a0079cdb11e1f7f486be24cca794991a64b8b1b7e11cf10",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--the-page-ending-inside-a-block-s-bit-widths.parquet": {
+   "error": "OSError: Unexpected end of stream: Decode bit-width EOF",
+   "pyarrow": "E",
+   "sha256": "ca2e7419888875ad5ea54c9734828a45d688880af98393cb0700db2532815fd6",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--the-page-ending-inside-a-miniblock-s-padding.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "69312913337d5618c87b96621caec3a95f60bd6b6cce593a8b3ba60786306c50",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "byte-array-delta-length-byte-array--the-page-ending-inside-a-miniblock-s-values.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "0f79f4462dab42a0623ed75793df697d248b28a726a7033611a6c544c2388e9e",
+   "twin": "byte-array-delta-length-byte-array--plain.parquet"
+  },
+  "int32--256-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: cannot have zero value per miniblock",
+   "pyarrow": "E",
+   "sha256": "3649fdd9eb2dee913ee04097cc19e3f40ea21b6ab3b8e52f679aae503dbbdcfa",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--3-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 42",
+   "pyarrow": "E",
+   "sha256": "6c083a059ad250a1bd266ab065b60ae84ebfac01589e32142818ec7127cbf380",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--8-miniblocks-of-16-values.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 16",
+   "pyarrow": "E",
+   "sha256": "f86c36702a5462d516e223ccc8329911bcbe72532234489094625064430d1011",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--a-block-of-0-values.parquet": {
+   "error": "OSError: cannot have zero value per block",
+   "pyarrow": "E",
+   "sha256": "93ce4c95ef5c0d4413c83c47c73febe71e872602d7baa48de9839aa44027f80b",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--a-block-of-2-32-values.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "4cc3482b4ef2a306e963b330b1d92f9aaa6a345fb0af64ff6ce3e6d3737916f3",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--a-block-of-31-values.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 31",
+   "pyarrow": "E",
+   "sha256": "51ecc3ee89e0000d3c717e54a41bbd9bba34839e96af2333009eebcbc11e3fca",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--a-count-of-0.parquet": {
+   "error": "OSError: Unexpected end of stream: Decoded values 0 does not match expected 200",
+   "pyarrow": "E",
+   "sha256": "405c6c381127c258cdddd83e4c096f36688f06663d10cc3d9ffb760e338b462e",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--a-count-of-2-40.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "05c8d2e6ba1cc3d23b5a00247134bf04d20214547f1e8ff749190081495aca00",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--a-count-one-past-the-page-s-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "78cec9de8bd677ca0e15346ba5cde868562f1eab75c059bd398a242c3a303172",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--a-count-one-past-the-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "78cec9de8bd677ca0e15346ba5cde868562f1eab75c059bd398a242c3a303172",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--a-count-one-short.parquet": {
+   "error": "OSError: Unexpected end of stream: Decoded values 199 does not match expected 200",
+   "pyarrow": "E",
+   "sha256": "2b41b8590961ada55260d5f7668a4e2b6ab0fe17473bacf35e95071feb666400",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--a-miniblock-65-bits-wide.parquet": {
+   "error": "OSError: delta bit width larger than integer bit width",
+   "pyarrow": "E",
+   "sha256": "0541440e8e57afa5d9199569fd3ea10b15109f6e4fba6cd1c805ca3622f6fff7",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--a-miniblock-of-2-31-values-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "a67a769e8341e081e9f9b0b8a452122a9d2cb0b638ffbea66efcf9cb6ee3fb65",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--a-page-claiming-2-26-values-past-its-chunk-s-in-a-miniblock-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "c142a9ac82e4f46a64e17302a8c5346167c6d3b10ccfb3328b93e6444f0d8d14",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--blocks-of-64-in-2-miniblocks.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 64",
+   "pyarrow": "E",
+   "sha256": "e4f0ac174db41a48510b74980f8fadffd702e0826af162820ad75640c3dc1432",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--honest-a-miniblock-holding-no-value-255-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "343753f9f48e8d1302d4f64a23a66a7dceeff35290ad8ff1249e9aa17a89f211",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--honest-blocks-of-256-in-8-miniblocks.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "2e2bb2095fb2b7762bf79a1cdff1e3a3e21d1943ec288707cc01e6d545275dfd",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--honest-one-miniblock-of-128.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "331c84e2e8b52e10500dc3c843229fbfe8c812598af90c0c210fbbdb56381eb1",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--honest.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "4b08e930a806dbcee8a69d54e7fcc253e5f58fd5ea463794f22926037bfb78e2",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--no-miniblock.parquet": {
+   "error": "OSError: cannot have zero miniblock per block",
+   "pyarrow": "E",
+   "sha256": "9ba89da5ee42e9a7b299c9dbd846c46fa73c760c77739755e8fb29d021cda5e4",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--the-page-ending-inside-a-block-s-bit-widths.parquet": {
+   "error": "OSError: Unexpected end of stream: Decode bit-width EOF",
+   "pyarrow": "E",
+   "sha256": "bf8faa7a477b0658411302aabeda9b403a5b40b0d342567a97a45bdd8fce705c",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--the-page-ending-inside-a-miniblock-s-padding.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "0905c257046edf60bce5700578d59e607552b1c69e3d684589eaa8f1cc6870f3",
+   "twin": "int32--plain.parquet"
+  },
+  "int32--the-page-ending-inside-a-miniblock-s-values.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "005f01c7f689decc62021042e4f217b6236e2fde0989c4945e13bb4331b2b47d",
+   "twin": "int32--plain.parquet"
+  },
+  "int64--256-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: cannot have zero value per miniblock",
+   "pyarrow": "E",
+   "sha256": "77786d72be7075e21bf0fc183419a79d47a90255f492f5b5a7aa4299a2689c96",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--3-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 42",
+   "pyarrow": "E",
+   "sha256": "d62b1cc6f2e1a6abf5346f672d7c602b8bf15936dfcf13041a8c98874349bc17",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--8-miniblocks-of-16-values.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 16",
+   "pyarrow": "E",
+   "sha256": "5e033514a84e0e18e9c2c0defb5685c2549b39c8c12bb2e33a13b35ec30bb3a9",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--a-block-of-0-values.parquet": {
+   "error": "OSError: cannot have zero value per block",
+   "pyarrow": "E",
+   "sha256": "90eaedd99ef367e6d01568d14ba4845969f802da2ae27ccfd72eb45e9be3aa77",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--a-block-of-2-32-values.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "d76819dcc689914032c9b5054366059702819ef07d098eaa20ce546fb2fbce83",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--a-block-of-31-values.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 31",
+   "pyarrow": "E",
+   "sha256": "c45cb303312450af18b09d5929badeae998a5e79267244b082694023249a774e",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--a-count-of-0.parquet": {
+   "error": "OSError: Unexpected end of stream: Decoded values 0 does not match expected 200",
+   "pyarrow": "E",
+   "sha256": "824f73a17e01ab522c8f501a663f16c20b2084f0cd4f1b641b188d43121f8cbe",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--a-count-of-2-40.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "1bd15f52eb16b2753fc7f6cb5b2c27e511290433a64209919d538ee8cb6c19a8",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--a-count-one-past-the-page-s-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "366b4ee2cd746698ea2be9301254cd01bc1c180769e971e28896767926e3e32c",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--a-count-one-past-the-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "366b4ee2cd746698ea2be9301254cd01bc1c180769e971e28896767926e3e32c",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--a-count-one-short.parquet": {
+   "error": "OSError: Unexpected end of stream: Decoded values 199 does not match expected 200",
+   "pyarrow": "E",
+   "sha256": "fb45491bda3a979d99f6ff44b444204167a2394c5863b9576867be6ce8ade678",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--a-miniblock-65-bits-wide.parquet": {
+   "error": "OSError: delta bit width larger than integer bit width",
+   "pyarrow": "E",
+   "sha256": "27b90672eb62082dec526bd023beefeb8bec5358ffdf3c5d303969c917483a62",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--a-miniblock-of-2-31-values-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "f9e7da898adc61db24f97b709183b4e0ee74c933c901c121beaf7b804880303d",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--a-page-claiming-2-26-values-past-its-chunk-s-in-a-miniblock-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "944dbe47f5951fac247669d8c954776ea21290ceb422637e9b998b7577c825e6",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--blocks-of-64-in-2-miniblocks.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 64",
+   "pyarrow": "E",
+   "sha256": "98a16e4eebb36f889f58545a174bd98790038e2ed4b6f3cc8de707a8c9795df2",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--honest-a-miniblock-holding-no-value-255-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "f31d7c722423832e211b56f1f8ff7e51acc09aba4ca9bb78a06c5fa62c808ce3",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--honest-blocks-of-256-in-8-miniblocks.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "39d54fafcb20f5b33f01ff5820c82d21f753f19780d20f1a22944cc6327bc996",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--honest-one-miniblock-of-128.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "e07baeb4b609234f6220f90e78a5f6847e9759aff3e71e343f8c66a2ca3df0d2",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--honest.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "fda6532f9750e3e578f3631938c8676b897ea72240bdcb0dd250f8f1daf2ce94",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--no-miniblock.parquet": {
+   "error": "OSError: cannot have zero miniblock per block",
+   "pyarrow": "E",
+   "sha256": "6ac748073aa22e101398790efc666c80967b47646f214b30c912273c3d618f84",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--the-page-ending-inside-a-block-s-bit-widths.parquet": {
+   "error": "OSError: Unexpected end of stream: Decode bit-width EOF",
+   "pyarrow": "E",
+   "sha256": "a207a8d10190738621b0f9a6b99f3fb0578e0542eb54e9443faf19c631482293",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--the-page-ending-inside-a-miniblock-s-padding.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "41bf4ad968e3ce445096371a4f524df1c099a415acb05c38151647048ac32364",
+   "twin": "int64--plain.parquet"
+  },
+  "int64--the-page-ending-inside-a-miniblock-s-values.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "2cc07d05f68a0a63ba581edd0add635a7305e655e39680867454eee16891add9",
+   "twin": "int64--plain.parquet"
+  },
+  "the-int64-element-of-a-list--256-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: cannot have zero value per miniblock",
+   "pyarrow": "E",
+   "sha256": "4eb0897ff1cc13a6107c047ab988f47db5910c180ea9529f230392cb4fccc645",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--3-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 42",
+   "pyarrow": "E",
+   "sha256": "ec6e189c900bf6090a5b6878eb7d997ce5d30a2b92d42a1590de5958c121a629",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--8-miniblocks-of-16-values.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 16",
+   "pyarrow": "E",
+   "sha256": "762911764ca6f2e4b5519873aa49502afe2822e0c92a3092b6e06a5072d9ab3f",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--a-block-of-0-values.parquet": {
+   "error": "OSError: cannot have zero value per block",
+   "pyarrow": "E",
+   "sha256": "f08d573c1d496bbbee6929ececdbd9f85bce6fe40f65e1124fc029ab8c77ca54",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--a-block-of-2-32-values.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "cfd382a6b13b408a3d2345662f9e3a699b986316acbab94eab0d41490f397e9b",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--a-block-of-31-values.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 31",
+   "pyarrow": "E",
+   "sha256": "cb01fbfc9a50cfb50b5ef5b787a52cb4a15edb949796cba0c413ab64ae9e2190",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--a-count-of-0.parquet": {
+   "error": "OSError: Unexpected end of stream: Decoded values 0 does not match expected 200",
+   "pyarrow": "E",
+   "sha256": "f4f7e4df8bd757e672d8700bd80802446bb89c542c777b5ef6b79c777bd5b777",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--a-count-of-2-40.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "fef046d77bb3076147dfdd280710440607244f919a24c3af5d93a6df0ffdf39a",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--a-count-one-past-the-page-s-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "012d4f686b4e01d54e53d20aaacb0b51c1218ec7a7e2f486bc3732052c3d73d8",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--a-count-one-past-the-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "012d4f686b4e01d54e53d20aaacb0b51c1218ec7a7e2f486bc3732052c3d73d8",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--a-count-one-short.parquet": {
+   "error": "OSError: Unexpected end of stream: Decoded values 199 does not match expected 200",
+   "pyarrow": "E",
+   "sha256": "54178e6e6114994b27be9f4f88a54bfd70eb2c115389d2b9040eaa40b1b81c51",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--a-miniblock-65-bits-wide.parquet": {
+   "error": "OSError: delta bit width larger than integer bit width",
+   "pyarrow": "E",
+   "sha256": "cd729038dcb5c75a58ca8169189fadcb4d352586c816b5a532e9fdc3ec865ce6",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--a-miniblock-of-2-31-values-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "c4829fc24f7cd4b705df001d1310900e7904b40d8c1dcfb8ebd798f8b53d06f5",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--a-page-claiming-2-26-values-past-its-chunk-s-in-a-miniblock-0-bits-wide.parquet": {
+   "error": "OSError: Number of decoded rep / def levels do not match num_values in page header",
+   "pyarrow": "E",
+   "sha256": "9c5cb21ba834539e7abc14a962e63e83371be4cf5fe184ab41f1e9223638edc1",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--blocks-of-64-in-2-miniblocks.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 64",
+   "pyarrow": "E",
+   "sha256": "194818a0184af6e5787575860b7333c3c6d46739cf34d0a963cdaacc36b11c7b",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--honest-a-miniblock-holding-no-value-255-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "6e18ab6ac4f0e80060cc064caf15c8dbfeb036d6cbf91462affdc2c04e5e486c",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--honest-blocks-of-256-in-8-miniblocks.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "cafd013617f27dc558f62e320376c405ece7b626c8326bda857003fc66b07b80",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--honest-one-miniblock-of-128.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "5e6f9029221d2a139cd187efe40d12875e122d073feb80b6e02e6ea950f4a64a",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--honest.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "19523352fc0f2f533fb538c35287ef578c54c3f4b0bf211e8c02c808dbd8feee",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--no-miniblock.parquet": {
+   "error": "OSError: cannot have zero miniblock per block",
+   "pyarrow": "E",
+   "sha256": "b1710e56613a5d55cd65f9cc9a7e8110892ad52cd6c400f6c621af00a8625807",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--the-page-ending-inside-a-block-s-bit-widths.parquet": {
+   "error": "OSError: Unexpected end of stream: Decode bit-width EOF",
+   "pyarrow": "E",
+   "sha256": "621bbc9843034d953435396f753282b2575a6d4e8c5dc3bd9ee97f997bb66bdf",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--the-page-ending-inside-a-miniblock-s-padding.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "f3f2d116b42781804cf625ceab2a74cc8762560605a80813d46324fe448cd8e6",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-element-of-a-list--the-page-ending-inside-a-miniblock-s-values.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "512a7c968b05c25b8333c9b724055c3ccedabf4e07aab941809bb10bad9e7df7",
+   "twin": "the-int64-element-of-a-list--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--256-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: cannot have zero value per miniblock",
+   "pyarrow": "E",
+   "sha256": "a0fe8e6b3846ade585126d60b193146f0819be41d8151ad32f7ae2f04f7a4ef9",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--3-miniblocks-to-a-block-of-128.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 42",
+   "pyarrow": "E",
+   "sha256": "19ee01265eae113f6660ee1df0f45ea1e59c3d6f712fdbcf700cafb4f07a0a38",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--8-miniblocks-of-16-values.parquet": {
+   "error": "OSError: the number of values in a miniblock must be multiple of 32, but it's 16",
+   "pyarrow": "E",
+   "sha256": "a942042c3a560b55577bc5ee3c525bda325284d45108326ac67d721c4cba5e3f",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--a-block-of-0-values.parquet": {
+   "error": "OSError: cannot have zero value per block",
+   "pyarrow": "E",
+   "sha256": "5ae1b614afc99e2faa1f096c370a91318e83e3ccc70e2422aced5cfba673d668",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--a-block-of-2-32-values.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "3cf6983b9a662ba10ab3a0d221d430bc769876fdf008443433fd0bb359ebedc7",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--a-block-of-31-values.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 31",
+   "pyarrow": "E",
+   "sha256": "64155a44b101faaee22d5c237e6acbc14df7c6d5be170427e98f2d20e54f4639",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--a-count-of-0.parquet": {
+   "error": "OSError: Unexpected end of stream: Decoded values 0 does not match expected 200",
+   "pyarrow": "E",
+   "sha256": "97318ad24236322287eb28f0b58eebd19ae3187a235d6924f8c5fb7a76be51d3",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--a-count-of-2-40.parquet": {
+   "error": "OSError: Unexpected end of stream: InitHeader EOF",
+   "pyarrow": "E",
+   "sha256": "b870ef536f186a46122b4e0c1162fa05c7cd2235d47483baff7d9c1e688c0586",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--a-count-one-past-the-page-s-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "304e9a638e7cc94d45fb407757120fb0b7f231011d4c7409163bc5e2afee794d",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--a-count-one-past-the-values.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "304e9a638e7cc94d45fb407757120fb0b7f231011d4c7409163bc5e2afee794d",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--a-count-one-short.parquet": {
+   "error": "OSError: Unexpected end of stream: Decoded values 199 does not match expected 200",
+   "pyarrow": "E",
+   "sha256": "0aef978cb9042b1c2b78a3bb24901012cc9f063ad8e56dec689585854a248782",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--a-miniblock-65-bits-wide.parquet": {
+   "error": "OSError: delta bit width larger than integer bit width",
+   "pyarrow": "E",
+   "sha256": "e898df360f864f76978727d6a5d4d4f89bcc5d0ac3dce38c7f01f7da95612f11",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--a-miniblock-of-2-31-values-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "44c509dd6e504456744209c8f91446553498af10835d580efb0c1e2121fd996a",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--a-page-claiming-2-26-values-past-its-chunk-s-in-a-miniblock-0-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "D",
+   "sha256": "3c105396911a9658674cb872fbdb0f0b715092e80f8cf4aaf5c10212ff2579f1",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--blocks-of-64-in-2-miniblocks.parquet": {
+   "error": "OSError: the number of values in a block must be multiple of 128, but it's 64",
+   "pyarrow": "E",
+   "sha256": "bba02fef08a2b7448b3af46ef71d5def687602faac61dbf38402ab8316e4b3ee",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--honest-a-miniblock-holding-no-value-255-bits-wide.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "37d4ce7224158dd2e305fc19f99e3bb84b7bd9ece9660d23fd0cfba540636ac0",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--honest-blocks-of-256-in-8-miniblocks.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "8e4163b86810bbead3736c5e5dbe20a98bd8af907c31855e5af671d9d4d3c724",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--honest-one-miniblock-of-128.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "f00269587550078a4924bde2659a8eaccc48104d318f9a46d09b33bfe7f93d58",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--honest.parquet": {
+   "error": "",
+   "pyarrow": "S",
+   "sha256": "5c34e4f4f2ab68c675f218aa1835d3915cb3e800610d6bd484064cdf986fd87d",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--no-miniblock.parquet": {
+   "error": "OSError: cannot have zero miniblock per block",
+   "pyarrow": "E",
+   "sha256": "81f81d5c4afc360245bb4cda9e7b71e6f082dbd7db13a65d31afbd57912e724c",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--the-page-ending-inside-a-block-s-bit-widths.parquet": {
+   "error": "OSError: Unexpected end of stream: Decode bit-width EOF",
+   "pyarrow": "E",
+   "sha256": "2c0c3300f31b72f8f19fff5c929f1795155d8151861eac56c7998decfb75693a",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--the-page-ending-inside-a-miniblock-s-padding.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "88f14097f768bf6641b8e2fe8cf7359802cb30e1f3e3a66b4c8aa424ee157f5c",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  },
+  "the-int64-field-of-a-struct--the-page-ending-inside-a-miniblock-s-values.parquet": {
+   "error": "OSError: Unexpected end of stream",
+   "pyarrow": "E",
+   "sha256": "12c6e6c4d77d7aba2dab59628339b8e24801c63eddba1ddbdf37953c9a80304c",
+   "twin": "the-int64-field-of-a-struct--plain.parquet"
+  }
+ },
+ "generator": "URSUS_DELTA_FORGERIES=<dir> go test -run TestDeltaPagesAgainstPyarrow ./internal/readfuzz, then bench/scripts/oracle/record_delta.py <dir>",
+ "pyarrow": "25.0.1"
+}

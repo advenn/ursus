@@ -566,6 +566,18 @@ its section below lists them.
   the first. Median, Quantile, TopK, BottomK, TopKBy and a float group key picked by
   the same order and are the same at every thread count too; a spilled quantile is a
   held one's. qcheck found it.
+- **A malformed delta-encoded Parquet page is refused, not hung on** (531): through
+  arrow-go's column reader, a DELTA_BINARY_PACKED page whose header counted fewer
+  values than a REQUIRED column's page holds hung the read forever, and an OPTIONAL
+  column's or a List's page read the values it was short of from whatever its buffer
+  held, with no error; a block of 2^32 values, or a DELTA_LENGTH_BYTE_ARRAY page counting
+  2^40 lengths, ended the process asking for gigabytes; a page cut short read as 0s.
+  Each delta-packed run of a DELTA_BINARY_PACKED, DELTA_LENGTH_BYTE_ARRAY or
+  DELTA_BYTE_ARRAY page is checked against the format before arrow-go decodes it, its
+  block size, miniblocks, count, bit widths and length, and a page that breaks it is
+  refused as corrupt, an `ErrIO`, as pyarrow refuses it, but for a count past the
+  page's values, which no writer writes and pyarrow reads; every delta page pyarrow
+  and arrow-go write reads as before. The fuzz runs of step 521 found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
