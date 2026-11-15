@@ -164,3 +164,43 @@ jobs:
       - run: go test -count=1 ./...
       - name: qcheck self for five minutes
         run: go run ./cmd/qcheck self -seed ${{ github.run_number }}000000 -duration 5m
+
+  qcheck-duckdb:
+    # Random queries checked against DuckDB (step 513): qcheck's duck package links
+    # duckdb-go v2.10505.0 (DuckDB 1.5.5), cgo and a prebuilt library of 131 MB,
+    # behind the duckdb and duckdb_arrow tags, so it builds here, never on a laptop.
+    # The module's DuckDB tests, its facts, the Arrow round trip, each translation
+    # rule against ursus, a smoke run and the comparator's teeth, then five minutes
+    # of `qcheck duck` from a seed this run's number sets, printed first so a finding
+    # can be run again with `qcheck duck -seed <its seed> -cases 1`. Not a required
+    # check: the maintainer decides that.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: qcheck
+    env:
+      CGO_ENABLED: '1'
+      TAGS: duckdb,duckdb_arrow
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          cache: false
+      # The duckdb bindings are large: the modules and the build cache are kept
+      # under a key of this job's own, which the pure-Go qcheck job, whose cache
+      # holds neither the bindings nor their cgo build, does not overwrite.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: qcheck-duckdb-${{ runner.os }}-${{ hashFiles('qcheck/go.sum') }}
+          restore-keys: qcheck-duckdb-${{ runner.os }}-
+      - run: go vet -tags "$TAGS" ./...
+      # Verbose, so the log holds the smoke run's counts and each tooth's.
+      - run: go test -count=1 -v -tags "$TAGS" ./duck/
+      - run: go test -count=1 -tags "$TAGS" ./compare/ ./sqlgen/
+      - name: qcheck duck for five minutes
+        run: go run -tags "$TAGS" ./cmd/qcheck duck -seed ${{ github.run_number }}000000 -duration 5m

@@ -452,7 +452,12 @@ func retype(e Expr) error {
 	var again Expr
 	var err error
 	switch e := e.(type) {
-	case *Col, *Lit:
+	case *Col:
+		return nil
+	case *Lit:
+		if v, ok := e.V.(int64); ok && !e.Null && !fits(v, e.T) {
+			return fmt.Errorf("a literal %d of %s, which does not hold it", v, e.T)
+		}
 		return nil
 	case *Bin:
 		again, err = NewBin(e.Op, e.L, e.R)

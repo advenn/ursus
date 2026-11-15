@@ -2,7 +2,9 @@
 // and go.mod gain nothing. Its path is under ursus's, not ursusqcheck as the plan
 // named it, because its runs go through internal/fuzzcheck, and Go lets a package
 // import an internal one only from under the internal directory's parent, by import
-// path (golang.org/issue/23970). Step 513 adds duckdb-go, behind a build tag.
+// path (golang.org/issue/23970). duckdb-go (step 513), v2.10505.0 as
+// bench/engines/go pins it, is cgo, and only package duck's files behind the
+// duckdb build tag import it: a build without the tag links none of it.
 module github.com/advenn/ursus/qcheck
 
 go 1.27
@@ -10,12 +12,20 @@ go 1.27
 require (
 	github.com/advenn/ursus v0.0.0
 	github.com/apache/arrow-go/v18 v18.7.0
+	github.com/duckdb/duckdb-go/v2 v2.10505.0
 )
 
 require (
 	github.com/andybalholm/brotli v1.2.2 // indirect
 	github.com/apache/thrift v0.24.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/duckdb/duckdb-go-bindings v0.10505.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/darwin-amd64 v0.10505.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/darwin-arm64 v0.10505.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/linux-amd64 v0.10505.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/linux-arm64 v0.10505.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/windows-amd64 v0.10505.0 // indirect
+	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/google/uuid v1.6.0 // indirect
