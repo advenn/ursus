@@ -186,6 +186,23 @@ func (b fb) i64(at uint32) int64          { return int64(binary.LittleEndian.Uin
 type walker struct {
 	b    fb
 	left int64 // the budget left
+	// zstd is where each buffer of a batch walked lies in its body, if the batch is
+	// compressed by Zstandard: its frames are checked once the body is read
+	// (checkZstd).
+	zstd zstdBuffers
+}
+
+// zstdBuffers is a Zstandard batch's buffers: what the batch is, and where each lies
+// in its body.
+type zstdBuffers struct {
+	what  string
+	spans []span
+}
+
+// span is a buffer of a batch, by its index, and its place in the batch's body.
+type span struct {
+	buf    uint32
+	off, n int64
 }
 
 func newWalker(b []byte) (*walker, error) {
@@ -625,6 +642,14 @@ func (w *walker) batch(at uint32, views int, body int64, what string) error {
 		}
 		if ok && w.b.u8(p) > 1 { // LZ4_FRAME, ZSTD
 			return w.fail("%s is compressed by codec %d, which Arrow does not have", what, w.b.u8(p))
+		}
+		if ok && w.b.u8(p) == 1 {
+			w.zstd.what = what
+			for i := range bn {
+				if off, n := w.b.i64(bs+16*i), w.b.i64(bs+16*i+8); n > 0 {
+					w.zstd.spans = append(w.zstd.spans, span{i, off, n})
+				}
+			}
 		}
 		if err := w.scalar(ct, 1, 1, "a compression method"); err != nil {
 			return err
