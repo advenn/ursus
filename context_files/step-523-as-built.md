@@ -242,6 +242,13 @@ top, every `go test` with `GOFLAGS=-p=1 GOMAXPROCS=4 GOEXPERIMENT=simd GOAMD64=v
 | `gofmt -l .` (the GOROOT's) | nothing |
 | the differential under `-race` | ok, 80 s |
 
+CI's `qcheck-duckdb` job (step 513, ursus against DuckDB) failed `T-EXTREMUM` on
+the first push: group k=2 holds +0 then −0, ursus's Max now answers −0, and the
+translation's `u_fmax` still kept the first of a tie, +0. `T-EXTREMUM` follows this
+step now: `u_fmax` keeps the last of equal values and `u_fmin` the first
+(`qcheck/sqlgen/macros.go`), and the rule's line and step 513's record say so. Step
+513 translates no TopK, Median or Quantile, so no other macro encoded a tie.
+
 The spilled test flaked once at its first limit: four threads in batches of seven over
 the many-groups frame held, by scheduling, 260 KiB against a limit of 256 KiB, its
 operators' share and not the group-by's. The limit is 512 KiB now, which still spills
