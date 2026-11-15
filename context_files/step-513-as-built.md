@@ -255,8 +255,9 @@ through DuckDB's Arrow types, as the laptop links no DuckDB. `TestDuckTeeth` (CI
 | a noisy cell an ulp off, ursus on one thread | 1, 1 | |
 
 Every break was found in every case it was applied to, and no case was reported
-that was not broken. The allowance's own two teeth hold its edges: past the bound
-on several threads, and within it on one.
+that was not broken. The allowance's own two teeth hold its edges: a change past
+the bound is found on several threads, and an ulp, which the bound would allow, is
+found where ursus ran on one thread.
 
 `TestRunTeeth`: an ErrInternal returned, and a panic, inside ursus's run in batches
 of 3 and 7 are each a `fuzzcheck` finding, every time (10 of 10 each).
