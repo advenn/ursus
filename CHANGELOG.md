@@ -42,8 +42,8 @@ took and left. No API is added, changed or removed.
   every `ScanIPC` reader, so 26:00 read as 02:00, which sorts after 23:00 and equals
   no 02:00. It is refused now as a corrupt value, an `ErrValue` naming the column,
   the value and its row, inside a List or a Struct as well; a null's slot is not
-  looked at. A Parquet TIME past its day is refused by the same rule (510), where it
-  was read as it lay, and inside a List or a Struct read with no error.
+  looked at. A Parquet TIME past its day is refused by the same rule (510): it was
+  read as it lay, and inside a List or a Struct with no error at all.
 
 ---
 
