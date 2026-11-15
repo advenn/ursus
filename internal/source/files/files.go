@@ -66,6 +66,20 @@ func (s *Source) Name() string     { return s.name }
 func (s *Source) Describe() string { return s.desc }
 func (s *Source) Caps() plan.Caps  { return plan.Caps{Projection: true} }
 
+// RowsOnly: a scan of no columns is its files' rows where each file's source answers
+// one so (step 370), as an IPC file's does: Count of a set of IPC files read the
+// cheapest column, and of a Null column's file that column, a batch at a time (step
+// 529). A scan of no columns reads none of the shared ones either.
+func (s *Source) RowsOnly(spec source.ScanSpec) bool {
+	for _, f := range s.files {
+		r, ok := f.Src.(source.RowsOnly)
+		if !ok || !r.RowsOnly(spec) {
+			return false
+		}
+	}
+	return true
+}
+
 // ClassifyPredicates reports a conjunct of the shared columns alone as Inexact: it
 // rules out whole files, judged on their values before any is opened (keep), and the
 // Filter above stays to judge the rows, as Parquet's partition keys are pruned.
@@ -451,6 +465,9 @@ func (r *reader) open(ctx context.Context, k, emitted int) (source.BatchSource, 
 	}
 	spec := r.spec
 	spec.Projection, spec.Predicate = r.read, nil
+	// A shared column is its file's value repeated a row at a time, so a batch
+	// holding one is cut as any other (source.ScanSpec.Whole).
+	spec.Whole = spec.Whole && len(r.read) == r.out.Len()
 	if spec.MaxRows > 0 {
 		spec.MaxRows -= emitted
 	}
