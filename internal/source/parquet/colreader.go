@@ -270,7 +270,7 @@ func newColReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataT
 		}
 		// No reader at all: arrow-go makes none for a physical type it does not know,
 		// which only a corrupt footer gives a column. It is refused below as a column
-		// of any other type is; it was an internal error (step 521).
+		// of any other type is; it was an internal error (F15 of step 521).
 	}
 
 	switch t := cr.(type) {

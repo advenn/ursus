@@ -26,8 +26,8 @@ import (
 // hold its count fails the read. A PLAIN value takes at least valueBits, and a page
 // header that does not parse is left to arrow-go, which says what it is.
 //
-// An UNCOMPRESSED page holds its bytes as they lie, so its two sizes are one (step
-// 521). arrow-go reads its compressed size of bytes into a buffer of its uncompressed
+// An UNCOMPRESSED page holds its bytes as they lie, so its two sizes are one (F14 of
+// step 521). arrow-go reads its compressed size of bytes into a buffer of its uncompressed
 // size, and its codec for UNCOMPRESSED copies them in and answers the whole buffer:
 // a page claiming 3,072 bytes and holding none was read as 3,072 bytes of whatever
 // the buffer, a pool's, held before, a frame of another read's bytes and no error.

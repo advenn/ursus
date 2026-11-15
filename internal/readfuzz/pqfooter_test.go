@@ -177,8 +177,8 @@ func TestAFooterListClaimingMoreThanItsBytesIsRefused(t *testing.T) {
 	}
 }
 
-// TestAnUncompressedPageWhoseSizesDifferIsRefused (step 521, found by its fuzz
-// runs): an UNCOMPRESSED page holds its bytes as they lie, so its header's two sizes
+// TestAnUncompressedPageWhoseSizesDifferIsRefused (F14 of step 521, found by its
+// fuzz runs and by step 519's): an UNCOMPRESSED page holds its bytes as they lie, so its header's two sizes
 // are one. arrow-go read a page's compressed size of bytes into a buffer of its
 // uncompressed size, and its codec for UNCOMPRESSED answered the whole buffer, so a
 // page holding fewer bytes than it claims read the rest from whatever the buffer held:

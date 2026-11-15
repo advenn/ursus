@@ -12,7 +12,7 @@ import (
 	"github.com/advenn/ursus/internal/uerr"
 )
 
-// TestAColumnWithNoReaderIsRefusedWhateverItsType (step 521): arrow-go makes no
+// TestAColumnWithNoReaderIsRefusedWhateverItsType (F15 of step 521): arrow-go makes no
 // column reader for a physical type it does not know, which only a corrupt footer
 // gives a column. FuzzOwnPagesMatchArrow's mutation of pyarrow_null_column.parquet
 // gave one to its Null column, and that was an internal error, "has no level

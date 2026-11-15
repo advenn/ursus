@@ -18,10 +18,15 @@ rows". So this branch merges that branch in and builds both fixes on its reader.
 
 The fuzz runs of this step found four more inputs, none of them caused by this step
 (§4). Two are the Thrift decoding step 520 fixes, and they are kept here as seeds now
-that its reader is merged in. The other two are older bugs, and they are fixed here
-too (§4a), because CI's fuzz workflow would have found them on this pull request.
-First, an UNCOMPRESSED page holding fewer bytes than it declares read the rest from
-memory it had not written. Second, a corrupt Null column was an internal error.
+that its reader is merged in. The other two are older bugs, fixed here too (§4a)
+because CI's fuzz workflow would have found them on this pull request:
+- **F14:** an UNCOMPRESSED page holding fewer bytes than it declares read the rest
+  from memory it had not written.
+- **F15:** a corrupt Null column was an internal error.
+
+Step 519's own fuzzing found F14 too: a 93-byte file whose INT64 page read 5 of its 8
+rows as poison. Step 519's CI found two more of F13's inputs. All three pass here and
+are kept as seeds (§4b).
 
 ## 1. F12: Count and the read disagree, silently
 
@@ -283,9 +288,9 @@ Each run took the heavy lock, used the test binary under
   them on this pull request, both are fixed here (§4a). Every input is kept in
   `~/ursus-scratch-archive/step521-findings/`.
 
-## 4a. The two older bugs, fixed
+## 4a. The two older bugs, fixed: F14 and F15
 
-- **An UNCOMPRESSED page whose two sizes differ is refused.** An UNCOMPRESSED page
+- **F14: an UNCOMPRESSED page whose two sizes differ is refused.** An UNCOMPRESSED page
   holds its bytes as they lie, so its compressed size and its uncompressed size are
   one, as every writer writes them. arrow-go reads a page's compressed size of bytes
   into a buffer of its uncompressed size, and its codec for UNCOMPRESSED copies them
@@ -301,7 +306,7 @@ Each run took the heavy lock, used the test binary under
   branch over 139 inputs, now with its codec fixtures (`testdata/parquet/codecs`).
   All 156 reads were identical. Step 510's forged pages that claim 2^28 and 2^26
   bytes are now refused by this check first, with a different message.
-- **A Null column with no reader is refused, not an internal error.** arrow-go makes
+- **F15: a Null column with no reader is refused, not an internal error.** arrow-go makes
   no column reader for a physical type it does not know, and only a corrupt footer
   gives a column one. The mutated `pyarrow_null_column.parquet` gave one to its Null
   column. `newColReader` refused a column of any other type with no reader as
@@ -320,6 +325,33 @@ Tests, failing first:
   and a Float64 column with no reader must each be refused with an Int32 column's
   error, their own type named.
 
+## 4b. Step 519's three inputs
+
+Each was replayed under the cap on master 65fc8b2 and on this branch. To find which
+fix covers each, the branch was also replayed with each fix broken in turn:
+
+| input | master | this branch | fails again with | so it is |
+| --- | --- | --- | --- | --- |
+| `FuzzScanParquet-1b90642d769d0719`, 93 bytes | "row 3 differs", poison read as values | PASS | F14's check off (F12's off: still PASS) | F14 |
+| `ci-440e8e5e13688644`, 77 bytes, `FuzzScanParquet` | runaway, 800,264,184 bytes | PASS | the bound back to the file less 12: 800,011,400 bytes | F13 |
+| `ci-c061c2feb23064c9`, 78 bytes, `FuzzOwnPagesMatchArrow` | runaway, 430,914,464 bytes | PASS | the bound back to the file less 12: runaway at 431,281,640 | F13 |
+
+- **`1b90642d769d0719` does not share F12's cause.** Its one page is UNCOMPRESSED and
+  claims 3,072 bytes uncompressed but 24 compressed. arrow-go copied the 24 bytes into
+  a buffer of 3,072 and decoded the whole buffer. That gave 3 of the 8 INT64 values
+  from the file and 5 from the buffer, which was poisoned. No `io.EOF` is involved:
+  the page reader read all 24 bytes it was asked for. It is F14, so the fix of §4a
+  covers it. pyarrow refuses it ("Unexpected end of stream"), and so does DuckDB
+  ("TProtocolException: Invalid data").
+- **The two footers leave no room for the leading magic.** One footer is 67 bytes, 2
+  bytes into its file, claiming 10^8 row groups. The other is 67 bytes, 3 bytes in,
+  claiming 53,862,656. Both are F13's first shape (§2.2).
+
+They are kept as seeds:
+- `FuzzScanParquet/uncompressed-page-of-24-bytes-claiming-3072`;
+- `FuzzScanParquet/footer-1e8-row-groups-2-bytes-into-its-file`;
+- `FuzzOwnPagesMatchArrow/footer-5e7-row-groups-3-bytes-into-its-file`.
+
 ## 5. The teeth
 
 Each fix was broken in the tree, the step's tests were run under the cap, and the file
@@ -334,8 +366,8 @@ below are from before:
 | `measureFooter` back to the file less 12 | the F13 seed (watchdog, 800,013,824 bytes); `FuzzScanParquet` on the offset-0 seed (800,012,384 bytes); `TestAFooterListClaimingMoreThanItsBytesIsRefused` (800,014,336); `TestMeasureFooterWalksEveryFooterArrowGoReads` |
 | list elements walked by the header's type | `TestFooterWalkReadsAListAsArrowGoDoes`, all 28 cases; `FuzzScanParquet` on `pqHiddenGroups` (800,006,144 bytes); `TestAFooterListClaimingMoreThanItsBytesIsRefused`; `TestFooterWalkDifferential`, 8,193 lists said to hold another type that arrow-go reads and the walk refused |
 | a list's count against the whole footer, not the bytes after it | `TestFooterWalkDifferential`, 2,904 lists claiming a byte past theirs, refused only by running out of bytes, not at the header |
-| the UNCOMPRESSED page check off (§4a) | `TestAnUncompressedPageWhoseSizesDifferIsRefused`, the fuzzer's input ("read as 8 rows, and no error") and all 10 kinds; `FuzzScanParquet` on its seed ("row 0 differs") |
-| a Null column with no reader an internal error again (§4a) | `TestAColumnWithNoReaderIsRefusedWhateverItsType`; `FuzzOwnPagesMatchArrow` on its seed |
+| F14's UNCOMPRESSED page check off (§4a) | `TestAnUncompressedPageWhoseSizesDifferIsRefused`, the fuzzer's input ("read as 8 rows, and no error") and all 10 kinds; `FuzzScanParquet` on its seed ("row 0 differs") |
+| F15's Null column with no reader an internal error again (§4a) | `TestAColumnWithNoReaderIsRefusedWhateverItsType`; `FuzzOwnPagesMatchArrow` on its seed |
 
 ## 6. Checks
 
