@@ -174,7 +174,7 @@ func (a *varAcc) Finish(name string, nGroups int) (*data.Column, error) {
 		out[i] = v
 		seen[i] = true
 	}
-	return data.NewFixed(name, dtype.Float64, out, seenBitmap(seen, nGroups)), nil
+	return data.NewFixed(name, dtype.Float64, oneNaN(out), seenBitmap(seen, nGroups)), nil
 }
 
 // --- product -------------------------------------------------------------------
@@ -238,7 +238,7 @@ func (a *productAcc) Merge(other Accumulator, remap []int32) error {
 // An integer or Decimal product of zero is +0. The float accumulator turns
 // 3 × 0 × −5 into −0, which an integer product cannot be, and which reads back as
 // a different value: it sorts before +0 in a total order, divides into −Inf, and
-// prints as -0.
+// prints as -0. A NaN product is the one NaN (aggnan.go).
 func (a *productAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	a.Reserve(nGroups)
 	if a.exact {
@@ -248,7 +248,7 @@ func (a *productAcc) Finish(name string, nGroups int) (*data.Column, error) {
 			}
 		}
 	}
-	return data.NewFixed(name, dtype.Float64, a.p[:nGroups],
+	return data.NewFixed(name, dtype.Float64, oneNaN(a.p[:nGroups]),
 		seenBitmap(a.seen, nGroups)), nil
 }
 

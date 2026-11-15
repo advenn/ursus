@@ -65,8 +65,12 @@ func (df *DataFrame) Corr(ctx context.Context) (_ *DataFrame, err error) {
 		out, _ := data.Values[float64](cols[i])
 		for b, j := range live {
 			// As NumPy divides: by the one deviation, then the other; then clipped,
-			// a NaN kept.
+			// a NaN kept, and that the one NaN a float aggregate answers (step 530).
 			x := cov[a*len(live)+b] / math.Sqrt(cov[b*len(live)+b]) / math.Sqrt(cov[a*len(live)+a])
+			if x != x {
+				out[j] = math.NaN()
+				continue
+			}
 			out[j] = max(-1, min(1, x))
 		}
 	}

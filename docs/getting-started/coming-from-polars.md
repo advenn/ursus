@@ -181,6 +181,9 @@ These are deliberate, and each is documented beside the method:
   `RoundHalfToEven` selects.
 - **`Max` and `Min` propagate NaN;** Polars' `max` ignores it, and its `nan_max`
   propagates it, as `NanMax` does here.
+- **A float sum that is NaN is `math.NaN()`,** and so are a mean, a variance and the
+  other aggregates that compute their answer: Polars' hands on the bits of the first
+  NaN it adds, so which NaN comes out follows the order of the values.
 - **A literal has its Go value's type:** `Col("a").Add(3)` of an `Int32` column is an
   `Int64`, since a Go integer constant is an `int`; write `int32(3)` to keep `Int32`.
   Polars' literals take the column's type, as a fill value's does here.
