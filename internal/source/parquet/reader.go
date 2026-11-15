@@ -262,6 +262,7 @@ func openColumnIn(full *dtype.Schema, fv fileView, rg *file.RowGroupReader,
 				return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
 					"opening column %q of %s", f.Name, fv.name)
 			}
+			boundHeaders(pr, rgMeta, ci)
 			return newOwnColReader(pr, desc, dt)
 		}
 		// The chunk arrow-go decodes, its pages read through checkedPages (step 517).
