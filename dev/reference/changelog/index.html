@@ -4235,15 +4235,27 @@ its section below lists them.</p>
   no 02:00. It is refused now as a corrupt value, an <code>ErrValue</code> naming the column,
   the value and its row, inside a List or a Struct as well, as a Parquet TIME past
   its day is (510); a null's slot is not looked at. CI's fuzz run found it.</li>
-<li>
-<p><strong>A float Min or Max is the same at every thread count</strong> (523): a parallel
+<li><strong>A float Min or Max is the same at every thread count</strong> (523): a parallel
   group-by folded its workers' partial minimums in worker order, which is not row
   order, so of −0.0 and +0.0, or of NaNs of two payloads, Min could answer a later
   row's bits on four threads than on one; each keeps its row's position now, and Max
   answers the latest of a tie as its doc's <code>Sort(...).Last()</code> does, where it answered
   the first. Median, Quantile, TopK, BottomK, TopKBy and a float group key picked by
   the same order and are the same at every thread count too; a spilled quantile is a
-  held one's. qcheck found it.</p>
+  held one's. qcheck found it.</li>
+<li>
+<p><strong>A malformed delta-encoded Parquet page is refused, not hung on</strong> (531): through
+  arrow-go's column reader, a DELTA_BINARY_PACKED page whose header counted fewer
+  values than a REQUIRED column's page holds hung the read forever, and an OPTIONAL
+  column's or a List's page read the values it was short of from whatever its buffer
+  held, with no error; a block of 2^32 values, or a DELTA_LENGTH_BYTE_ARRAY page counting
+  2^40 lengths, ended the process asking for gigabytes; a page cut short read as 0s.
+  Each delta-packed run of a DELTA_BINARY_PACKED, DELTA_LENGTH_BYTE_ARRAY or
+  DELTA_BYTE_ARRAY page is checked against the format before arrow-go decodes it, its
+  block size, miniblocks, count, bit widths and length, and a page that breaks it is
+  refused as corrupt, an <code>ErrIO</code>, as pyarrow refuses it, but for a count past the
+  page's values, which no writer writes and pyarrow reads; every delta page pyarrow
+  and arrow-go write reads as before. The fuzz runs of step 521 found it.</p>
 </li>
 <li>
 <p><strong>A cancelled query no longer answers part of its input as the whole</strong> (394): a
