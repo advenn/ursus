@@ -558,3 +558,48 @@ func TestMeasureFooterWalksEveryFooterArrowGoReads(t *testing.T) {
 		t.Errorf("a footer longer than its file less 8: arrow-go reads it")
 	}
 }
+
+// TestARowGroupOfAnotherCountOfChunksIsRefused (F19 of step 521): a row group holds a
+// chunk of each column of its schema. FuzzScanParquet's input listed none for a
+// schema of one, and the read failed as ursus's own bug, "maps to leaf 0, and the row
+// group has 0"; pyarrow 25.0.1 refuses it ("The file only has 0 columns"). everyList,
+// two columns, its chunks' crypto_metadata left out, which arrow-go reads a chunk's
+// metadata only with a key for, passes the footer's checks; with its row group
+// holding none of their chunks, one, or three, each is refused as corrupt.
+func TestARowGroupOfAnotherCountOfChunksIsRefused(t *testing.T) {
+	foot := everyList()
+	chunks := foot.fields[slices.IndexFunc(foot.fields, func(f tfield) bool { return f.id == 4 })].v.elems[0].fields[0].v
+	chunks.elems = slices.Clone(chunks.elems)
+	for i, c := range chunks.elems {
+		c.fields = slices.DeleteFunc(slices.Clone(c.fields), func(f tfield) bool { return f.id == 8 })
+		chunks.elems[i] = c
+	}
+	foot = foot.with([]int16{4, 0, 1}, chunks)
+	check := func(f tval) error {
+		md, err := metadata.NewFileMetaData(f.bytes(), nil)
+		if err != nil {
+			t.Fatalf("arrow-go does not read the footer: %v", err)
+		}
+		return checkRowCounts(md)
+	}
+	if err := check(foot); err != nil {
+		t.Fatalf("everyList: %v", err)
+	}
+	for _, n := range []int{0, 1, 3} {
+		var elems []tval
+		for i := range n {
+			elems = append(elems, chunks.elems[i%len(chunks.elems)])
+		}
+		f := foot.with([]int16{4, 0, 1}, tlist(thriftStruct, elems...))
+		func() {
+			defer func() {
+				if v := recover(); v != nil {
+					t.Errorf("a row group of %d chunks for 2 columns: a panic, %v", n, v)
+				}
+			}()
+			if err := check(f); err == nil {
+				t.Errorf("a row group of %d chunks for 2 columns: no error", n)
+			}
+		}()
+	}
+}

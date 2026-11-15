@@ -29,10 +29,14 @@ page of dictionary indices 0 bits wide read the wrong dictionary value with no e
 whenever a byte followed a run's header. Arrow-go takes that byte for the run's
 index. It is refused there now.
 
-The fifth and last fuzz run found two more (§4d). **F17** is fixed: a dictionary
-header that does not parse cost 8 MiB on each read. **F18** is left open: a
-DELTA_BINARY_PACKED page with a block of 31 values hangs arrow-go's decoder, on
-master too.
+The fifth fuzz run found two more (§4d). **F17** is fixed: a dictionary header that
+does not parse cost 8 MiB on each read. **F18** is left open: a DELTA_BINARY_PACKED
+page with a block of 31 values hangs arrow-go's decoder, on master too.
+
+The sixth run found **F19**, a row group with fewer column chunks than its schema has
+columns, which was an internal error on master; it is fixed (§4e). The same section
+shows that a CI input from PR #72, which ended a worker while it was being minimised,
+is F13's.
 
 Step 519's own fuzzing found F14 too: a 93-byte file whose INT64 page read 5 of its 8
 rows as poison. Step 519's CI found two more of F13's inputs. All three pass here and
@@ -441,6 +445,44 @@ each target. Both were replayed under the cap.
     the page, as step 517 checks a dictionary page's indices. The input is kept in
     `~/ursus-scratch-archive/step521-findings/`, not as a seed.
 
+## 4e. The sixth run, and PR #72's CI input
+
+This run was on the final code, after F17. Its `FuzzOwnPagesMatchArrow` ran the full
+20 s clean, 672,694 executions. Its `FuzzScanParquet` found `b56a73f3595cbd2a` after
+6 s.
+
+- **F19, fixed.** The footer's one row group lists no column chunk, and its schema
+  has one column. The read failed as ursus's own bug: "column "" maps to leaf 0, and
+  the row group has 0" (`checkEncodings`). This happens on master too.
+  - A footer whose row group lists more chunks than the schema has columns had
+    `checkRowCounts` ask the schema for a column it does not have, which panicked.
+  - pyarrow 25.0.1 refuses the file ("The file only has 0 columns"), and DuckDB 1.5.5
+    refuses its footer.
+  - **Fix.** `checkRowCounts` refuses a row group whose count of chunks is not the
+    schema's count of columns, as corrupt. Both the read and `Count` take that
+    refusal.
+  - **`TestARowGroupMissingAColumnChunkIsRefused`** (readfuzz, public API) reads the
+    input on 1 and 4 threads and runs `Count`; each must be an I/O error, not an
+    internal one.
+  - **`TestARowGroupOfAnotherCountOfChunksIsRefused`** (internal) takes `everyList`
+    without its chunks' crypto metadata, which passes. It gives the row group 0, 1 and
+    3 chunks for 2 columns, and each must be refused, without a panic.
+  - The input is kept as `FuzzScanParquet/row-group-of-no-column-chunks`.
+  - **Tooth.** With the check off, both tests failed, the 3-chunk case with a panic,
+    and so did the seed.
+  - The well-formed files' probe, run against current master (de826b9, step 519
+    merged), gave the same 156 reads.
+- **PR #72's input, `a0ab8b455da4b005`, is F13's, and is covered.** It is 34 bytes.
+  As CI saved it, it ends "PARP": the minimiser's last candidate, which the minimiser
+  had changed. Every version refuses it at once, as step 517 found with "PARA".
+  - With its last byte "1" again, its footer is 25 bytes, begins 1 byte into the
+    file, and claims 10^8 row groups. That is F13's first shape. Under the cap on
+    master de826b9, which has step 520's reader, it hit the watchdog at 800,174,824
+    bytes in `parquet.(*FileMetaData).ReadField4`. On this branch it passes.
+  - With F13's bound back to the file less 12, it hit the watchdog again, at
+    800,256,416 bytes.
+  - It is kept, its "1" restored, as `FuzzScanParquet/footer-1e8-row-groups-1-byte-into-its-file`.
+
 ## 5. The teeth
 
 Each fix was broken in the tree, the step's tests were run under the cap, and the file
@@ -457,6 +499,7 @@ below are from before:
 | a list's count against the whole footer, not the bytes after it | `TestFooterWalkDifferential`, 2,904 lists claiming a byte past theirs, refused only by running out of bytes, not at the header |
 | F14's UNCOMPRESSED page check off (§4a) | `TestAnUncompressedPageWhoseSizesDifferIsRefused`, the fuzzer's input ("read as 8 rows, and no error") and all 10 kinds; `FuzzScanParquet` on its seed ("row 0 differs") |
 | F17's header bound off (§4d) | `FuzzScanParquet` on its seed, 81.5 MiB |
+| F19's chunk count check off (§4e) | `TestARowGroupMissingAColumnChunkIsRefused`; `TestARowGroupOfAnotherCountOfChunksIsRefused`, 0 and 1 chunks and a panic at 3; `FuzzScanParquet` on its seed |
 | F16's zero-width check off (§4c) | `TestADictionaryIndexOfZeroBitsReadsAsIndexZero`, the 7 arrow-go kinds; `FuzzOwnPagesMatchArrow` on its seed |
 | F15's Null column with no reader an internal error again (§4a) | `TestAColumnWithNoReaderIsRefusedWhateverItsType`; `FuzzOwnPagesMatchArrow` on its seed |
 

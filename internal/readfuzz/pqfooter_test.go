@@ -3,6 +3,7 @@ package readfuzz_test
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -297,5 +298,27 @@ func TestADictionaryIndexOfZeroBitsReadsAsIndexZero(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestARowGroupMissingAColumnChunkIsRefused (F19 of step 521, found by its fuzz runs):
+// FuzzScanParquet's input, a footer whose one row group lists no column chunk for a
+// schema of one column, failed the read with ursus's own "this is a bug in ursus".
+// pyarrow 25.0.1 refuses it ("The file only has 0 columns"), and DuckDB 1.5.5 its
+// footer. Its read and its Count are refused now as corrupt, an I/O error, on one
+// thread and on four.
+func TestARowGroupMissingAColumnChunkIsRefused(t *testing.T) {
+	ctx := t.Context()
+	b := corpusBytes(t, filepath.Join("testdata", "fuzz", "FuzzScanParquet", "row-group-of-no-column-chunks"))
+	lf := ursus.ScanParquetBytes(b, "chunks.parquet")
+	errs := map[string]error{}
+	for _, threads := range []int{1, 4} {
+		_, errs[fmt.Sprint("the read on ", threads, " threads")] = lf.Collect(ctx, ursus.WithThreads(threads))
+	}
+	_, errs["Count"] = lf.Count(ctx)
+	for what, err := range errs {
+		if err == nil || !errors.Is(err, ursus.ErrIO) || errors.Is(err, ursus.ErrInternal) {
+			t.Errorf("%s: %v, want an I/O error", what, err)
+		}
 	}
 }

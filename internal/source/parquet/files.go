@@ -544,7 +544,8 @@ func (s *Source) openFile(ctx context.Context, i int, mem memory.Allocator) (_ *
 // not repeated and at least one where it is, and the file's against its row groups'.
 // A read takes a row group's count for its rows, and a count its sum, so a count
 // short of the columns' read short, with no error, and one past them counted rows
-// that are not there.
+// that are not there. It refuses a row group that does not hold a chunk of each
+// column of the schema too (F19 of step 521).
 func checkRowCounts(md *metadata.FileMetaData) error {
 	var total int64
 	for g := range md.NumRowGroups() {
@@ -554,6 +555,13 @@ func checkRowCounts(md *metadata.FileMetaData) error {
 			return fmt.Errorf("corrupt: row group %d says %d rows", g, rows)
 		}
 		total += rows
+		if n := rg.NumColumns(); n != md.Schema.NumColumns() {
+			// A row group holds a chunk of each column (F19 of step 521): one short of
+			// them failed the read later as ursus's own bug, and one past them asked the
+			// schema for a column it does not have.
+			return fmt.Errorf("corrupt: row group %d holds %d column chunks, and the schema has %d columns",
+				g, n, md.Schema.NumColumns())
+		}
 		for c := range rg.NumColumns() {
 			cc, err := rg.ColumnChunk(c)
 			if err != nil {

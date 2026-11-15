@@ -509,6 +509,11 @@ its section below lists them.
   failure up to 4 MiB, so a 102-byte file whose dictionary header did not parse cost
   8 MiB each time it was read. The looks stop at the column chunk's size now, at
   least 16 KiB. The fuzz runs of step 521 found it.
+- **A Parquet row group missing a column chunk is refused as corrupt** (521): a
+  footer whose row group listed fewer column chunks than its schema has columns failed
+  the read with "this is a bug in ursus", and one listing more could panic; both are
+  refused as corrupt now, by the read and by `Count`. The fuzz runs of step 521 found
+  it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
