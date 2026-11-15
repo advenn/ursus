@@ -152,6 +152,9 @@ that stops when its request is cancelled.
 
 ### Tests
 
+- **The CSV fuzz targets skip a Zstandard frame declaring a window past their bound**
+  (524), as the NDJSON and JSON targets do since step 511, whose finding it is and
+  which is the maintainer's to decide.
 - **Expected values are recorded, not typed** (496): `make oracle` asks Polars 2.1.0
   the suite's questions, from `bench/scripts/oracle/`, and writes the inputs and the
   answers to `testdata/oracle/<group>.json`, every type ursus has, several inputs, a
