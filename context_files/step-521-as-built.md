@@ -24,6 +24,11 @@ because CI's fuzz workflow would have found them on this pull request:
   from memory it had not written.
 - **F15:** a corrupt Null column was an internal error.
 
+The last fuzz run found **F16** (§4c). On master, through arrow-go's column reader, a
+page of dictionary indices 0 bits wide read the wrong dictionary value with no error
+whenever a byte followed a run's header. Arrow-go takes that byte for the run's
+index. It is refused there now.
+
 Step 519's own fuzzing found F14 too: a 93-byte file whose INT64 page read 5 of its 8
 rows as poison. Step 519's CI found two more of F13's inputs. All three pass here and
 are kept as seeds (§4b).
@@ -352,6 +357,47 @@ They are kept as seeds:
 - `FuzzScanParquet/footer-1e8-row-groups-2-bytes-into-its-file`;
 - `FuzzOwnPagesMatchArrow/footer-5e7-row-groups-3-bytes-into-its-file`.
 
+## 4c. F16: an index of 0 bits read as the byte after its run
+
+The fourth fuzz run, on the final code, ran `FuzzScanParquet` for its 20 s clean,
+774,154 executions. `FuzzOwnPagesMatchArrow` found `0ed62e1f827ad456` after 9 s:
+"batches of 1100: batch 0 differs". The reader's own pages read "00" in each row;
+arrow-go's column reader read "01".
+
+- **The file.** Its BYTE_ARRAY column has a dictionary of "00" and "01". Its data
+  page's indices are `00 30 01`: a bit width of 0, an RLE run of 24, and a stray
+  byte. pyarrow 25.0.1 reads "00" five times. DuckDB 1.5.5 refuses the file's
+  footer.
+- **Why it reached the readers only now.** On master and on step 520's branch, the
+  walk refused the footer ("not Thrift's compact protocol"). This branch's walk reads
+  it as arrow-go does, so both readers now read the page.
+- **The cause is arrow-go's.** An index of 0 bits is 0, and an RLE run of them
+  stores its value in no byte. arrow-go's `RleDecoder.Next` reads the value with
+  `BitReader.getAlignedUint8(0, …)`. That reads nothing and answers `raw[0]`: the
+  byte its buffer holds after the header, or 0 past the page's end. So a run
+  followed by a byte that is not 0 reads every value of the run as that index. The
+  byte can be a stray one, or the header of a run after it.
+- **It is on master too, with a clean file.** It reaches all 7 kinds of chunk
+  arrow-go decodes. A dictionary of two values and a page whose indices are one
+  0-bit run plus a stray 1 read the second value in every row. pyarrow and DuckDB
+  read the first. Step 517's `pastIndex` mirrored this read for the allocation:
+  "of width 0 it is 0, where arrow-go takes the byte after the header, which can grow
+  its dictionary by at most 256 values". It did not consider the values being wrong.
+- **The fix.** In `checkedPages`, `zeroWidthMisread` walks a 0-bit page's runs as
+  `pastIndex` does. It refuses the page where arrow-go would read a run's index as
+  anything other than 0. The reader's own pages read such a page as pyarrow does,
+  and are unchanged. A page arrow-go reads correctly, one run with nothing after it,
+  still reads. The well-formed files' probe (§3, §4a) gave the same 156 reads.
+- **Test: `TestADictionaryIndexOfZeroBitsReadsAsIndexZero`.** It covers each kind and
+  its own-pages variant. The indices are one run of 0 bits, alone, then with a stray
+  0, 1 or 255 after it, then two runs, then two runs and a stray 1. Each must read as
+  the PLAIN page of the dictionary's first value, which is the differential. Through
+  the own pages every variant must read. Through arrow-go's column reader each must
+  read so or be refused. The input is kept as the seed
+  `FuzzOwnPagesMatchArrow/dictionary-indices-of-0-bits-and-a-stray-byte`.
+- **Tooth.** With the check off, the test failed in all 7 arrow-go kinds and the
+  seed failed ("batch 0 differs").
+
 ## 5. The teeth
 
 Each fix was broken in the tree, the step's tests were run under the cap, and the file
@@ -367,6 +413,7 @@ below are from before:
 | list elements walked by the header's type | `TestFooterWalkReadsAListAsArrowGoDoes`, all 28 cases; `FuzzScanParquet` on `pqHiddenGroups` (800,006,144 bytes); `TestAFooterListClaimingMoreThanItsBytesIsRefused`; `TestFooterWalkDifferential`, 8,193 lists said to hold another type that arrow-go reads and the walk refused |
 | a list's count against the whole footer, not the bytes after it | `TestFooterWalkDifferential`, 2,904 lists claiming a byte past theirs, refused only by running out of bytes, not at the header |
 | F14's UNCOMPRESSED page check off (§4a) | `TestAnUncompressedPageWhoseSizesDifferIsRefused`, the fuzzer's input ("read as 8 rows, and no error") and all 10 kinds; `FuzzScanParquet` on its seed ("row 0 differs") |
+| F16's zero-width check off (§4c) | `TestADictionaryIndexOfZeroBitsReadsAsIndexZero`, the 7 arrow-go kinds; `FuzzOwnPagesMatchArrow` on its seed |
 | F15's Null column with no reader an internal error again (§4a) | `TestAColumnWithNoReaderIsRefusedWhateverItsType`; `FuzzOwnPagesMatchArrow` on its seed |
 
 ## 6. Checks

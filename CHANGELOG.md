@@ -487,6 +487,12 @@ its section below lists them.
   giving a Null column a physical type arrow-go does not know made the read fail with
   "this is a bug in ursus"; it is refused as unsupported, as a column of any other type
   is.
+- **A Parquet dictionary index of 0 bits is no longer read as another value** (521):
+  through arrow-go's column reader, a page whose dictionary indices are 0 bits wide,
+  each index 0, followed by any byte after a run's header read every row of the run
+  as the dictionary value that byte numbered, with no error, where pyarrow and DuckDB
+  read the first value. Such a page is refused there now; ursus's own pages read it
+  as pyarrow does. The fuzz runs of step 521 found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

@@ -216,6 +216,13 @@ func (c *checkedPages) check(p file.Page) error {
 	if c.maxDef > 0 {
 		values = presentValues(defs, packedDefs, bits.Len16(uint16(c.maxDef)), c.maxDef, n)
 	}
+	if width == 0 {
+		if b, ok := zeroWidthMisread(data[1:], values); ok {
+			return fmt.Errorf("corrupt: column %s: a data page's dictionary indices are 0 bits wide, each 0, and "+
+				"arrow-go would read the byte after a run's header, %d, as the run's index", c.name, b)
+		}
+		return nil
+	}
 	idx, ok := pastIndex(data[1:], width, values, c.dictN)
 	if !ok {
 		return nil
@@ -297,6 +304,46 @@ func presentValues(runs []byte, packed bool, width int, maxDef int16, n int) int
 	return hits + n - read
 }
 
+// zeroWidthMisread reports a run of a page's dictionary indices of 0 bits that
+// arrow-go reads as another index than 0, for the page's first n values, and the
+// byte it reads (F16 of step 521). An index of 0 bits is 0, as pyarrow 25.0.1 and
+// DuckDB 1.5.5 read it, and an RLE run of them stores its value in no byte; arrow-go's
+// RleDecoder.Next reads it with BitReader.getAlignedUint8(0, …), which reads nothing
+// and answers raw[0], the byte its buffer holds after the header, 0 past the page's
+// end. So a run followed by a byte that is not 0, a stray byte or the header of a
+// run after it, read every value of the run as that index: a page whose indices were
+// all 0 read the dictionary's second value, with no error, where the reader's own
+// pages read its first. Runs are walked as pastIndex walks them; a bit-packed run of
+// 0 bits holds no byte and reads as 0s.
+func zeroWidthMisread(b []byte, n int) (byte, bool) {
+	r := hybridRuns{b: b}
+	for at := 0; at < n; {
+		h, ok := r.header()
+		if !ok {
+			if r.pos >= len(r.b) {
+				return 0, false
+			}
+			continue
+		}
+		count := uint32(h >> 1)
+		if h&1 == 1 {
+			if count == 0 || count > math.MaxInt32/8 {
+				continue
+			}
+			at += min(int(count)*8, n-at)
+			continue
+		}
+		if count == 0 || count > math.MaxInt32 {
+			continue
+		}
+		if r.pos < len(r.b) && r.b[r.pos] != 0 {
+			return r.b[r.pos], true
+		}
+		at += int(count)
+	}
+	return 0, false
+}
+
 // pastIndex reads the dictionary indices of a page, runs of the hybrid encoding of
 // width bits, as arrow-go's dictionary decoder takes them for the page's first n
 // values, and returns the first at or past dictN.
@@ -304,9 +351,8 @@ func presentValues(runs []byte, packed bool, width int, maxDef int16, n int) int
 // Past a header arrow-go's RleDecoder.Next refuses, a zero count or one past what an
 // int32 holds, arrow-go fails the page on the values it came short of; this reads on
 // from where RleDecoder would, which checks more and never less. An RLE run's value
-// is the whole bytes it is stored in, unmasked, as arrow-go takes it; of width 0 it
-// is 0, where arrow-go takes the byte after the header, which can grow its
-// dictionary by at most 256 values. A bit-packed run's values past the page's end are
+// is the whole bytes it is stored in, unmasked, as arrow-go takes it; width 0 is
+// zeroWidthMisread's. A bit-packed run's values past the page's end are
 // 0, as arrow-go's bit reader gives them, and a bit-packed run wider than 32 bits is
 // an error there.
 func pastIndex(b []byte, width, n int, dictN int64) (idx uint64, past bool) {
