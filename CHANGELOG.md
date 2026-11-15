@@ -296,9 +296,9 @@ that stops when its request is cancelled.
   snippet; `qcheck self` and `qcheck duck` shrink up to three findings with `-shrink`,
   which CI uploads. `qcheck/testdata/corpus` holds shrunk cases and every test run
   replays them: one that fails must be marked open with the step that fixes it, and
-  one marked open must fail. Step 523's two findings are its first cases, 184 rows
-  and 16,384 shrunk to 6 and 5, with a third of their class that DuckDB found on
-  this step's CI, 79 rows shrunk to 5 there.
+  one marked open must fail. Its first cases are step 523's two findings, 184 rows
+  and 16,384 shrunk to 6 and 5, and a third of their class that DuckDB found on this
+  step's CI, 79 rows shrunk to 5 there: regressions, since step 523 fixed them.
 - **Random queries checked against DuckDB** (513): `qcheck duck` runs each of
   `qcheck self`'s queries in ursus, under a configuration its seed picks among
   threads, batch sizes, the optimizer off and tables cut into records, and as SQL in

@@ -23,7 +23,7 @@ nothing, and no dependency is added.
 | `compare` | +51 | a `Verdict` says what differs (`What`: count, columns, rows or a cell) and in which `Column`; a `Plan` names its two sides (`Want`, `Got`), "DuckDB" and "ursus" when empty, as before |
 | `duck` | (177) | `TestCorpusAgainstDuckDB`, `TestEmittedSQLRunsInDuckDB`, and `TestEmittedSettingsAreDuckDBs` behind the `duckdb` tag |
 | `cmd/qcheck` | 304 | `qcheck shrink`, and `-shrink` on `self` and `duck` |
-| `testdata/corpus` | 3 cases | the shrunk findings, marked open with step 523 (§6) |
+| `testdata/corpus` | 3 cases | the shrunk findings, regressions since step 523 fixed them (§6) |
 
 ## 2. A case is JSON
 
@@ -183,16 +183,18 @@ are replayed by package duck's `TestCorpusAgainstDuckDB` in the `qcheck-duckdb` 
 one so far, `duck-822025313` (§6). `TestTheRatchetBites` holds `Judge` to all four verdicts through
 the planted bug (§7).
 
-`qcheck shrink ... -corpus testdata/corpus -open "step N: …"` adds a case.
+`qcheck shrink ... -corpus testdata/corpus -open "step N: …"` adds a case; the mark
+comes out with the fix.
 
 ## 6. The shrunk findings
 
-Both of step 523's findings still fail on master (step 523's PR, #78, is not
-merged), so both are in the corpus **marked open with step 523**, and so is a third
-of their class that this PR's CI found. Once 523 merges they no longer fail, and
-`TestCorpus` (and package duck's `TestCorpusAgainstDuckDB`, for the third) fails them
-as stale: whichever of the two PRs merges second removes the three `open` lines, and
-the cases stay as regressions.
+Both of step 523's findings failed on master when they were shrunk, and went into
+the corpus **marked open with step 523**, with a third of their class that this
+PR's CI found. Step 523's PR (#78) then merged; with master merged in, `TestCorpus`
+failed the two self-check cases as stale, "marked open … but no longer fails … in 3
+runs", the ratchet's own tooth, and the three `open` marks are removed: the cases
+are **plain regressions** now, each note saying it was fixed by step 523. The third,
+a DuckDB case, is replayed by package duck's `TestCorpusAgainstDuckDB` on CI.
 
 | case | signature | before | after | factors | runs, time |
 | --- | --- | --- | --- | --- | --- |
@@ -203,10 +205,10 @@ the cases stay as regressions.
 
 All three failed alike three times of three after shrinking. The second was reported
 as the query's Mean; its signature says Max, as step 523 found. Each emitted test,
-built into a module of its own over this checkout, fails on master with -0 against
-+0 between the reference and four threads, and passes over step 523's branch (built
-read-only, as of 96cc3ee): the third is step 523's class too, its DuckDB answer the
-reference's. Its -4.78e170 is a divisor whose remainder is -0; the values pass then
+built into a module of its own, failed on master before step 523 with -0 against +0
+between the reference and four threads, and passed over step 523's branch (96cc3ee,
+built read-only before it merged): the third is step 523's class too, its DuckDB
+answer the reference's. Its -4.78e170 is a divisor whose remainder is -0; the values pass then
 tried no -1 for a float, and now does.
 
 ## 7. Tests

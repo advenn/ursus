@@ -3,8 +3,7 @@
   "source": "duck",
   "mode": "duck",
   "seed": 822025313,
-  "open": "step 523: a float Min on several threads keeps a later zero of the other sign, not the first of equal values",
-  "note": "found by PR #80's qcheck-duckdb job, qcheck duck -seed 822025313 -cases 1, and shrunk there by qcheck duck -shrink",
+  "note": "found by PR #80's qcheck-duckdb job, qcheck duck -seed 822025313 -cases 1, and shrunk there by qcheck duck -shrink; fixed by step 523, a regression since",
   "signature": {
     "kind": "mismatch",
     "what": "cell",
