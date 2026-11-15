@@ -136,6 +136,7 @@ func generated(t *testing.T, n int, each func(name string, b []byte, file bool, 
 // field node and no buffer, are among those read (step 522), files and streams both.
 func TestTheWalkPassesWhatArrowGoWrites(t *testing.T) {
 	inputs, asWritten, unread, dicts, views, bigEndian := 0, 0, 0, 0, 0, 0
+	nullFiles, nullStreams := 0, 0
 	generated(t, 300, func(name string, b []byte, file bool, rec arrow.RecordBatch) {
 		inputs++
 		want, err := readArrow(b, file)
@@ -175,13 +176,50 @@ func TestTheWalkPassesWhatArrowGoWrites(t *testing.T) {
 		if strings.Contains(name, "big-endian true") {
 			bigEndian++
 		}
+		if holdsNull(rec.Schema()) {
+			if file {
+				nullFiles++
+			} else {
+				nullStreams++
+			}
+		}
 	})
 	t.Logf("%d inputs: %d read back as written, %d refused by both; of those read, %d with a "+
-		"dictionary, %d with a view, %d big-endian", inputs, asWritten, unread, dicts, views, bigEndian)
-	if dicts == 0 || views == 0 || bigEndian == 0 || asWritten < inputs/2 {
-		t.Fatalf("of %d inputs, %d read back as written, %d hold a dictionary, %d a view, %d are big-endian",
-			inputs, asWritten, dicts, views, bigEndian)
+		"dictionary, %d with a view, %d big-endian, %d files and %d streams with a Null column",
+		inputs, asWritten, unread, dicts, views, bigEndian, nullFiles, nullStreams)
+	if dicts == 0 || views == 0 || bigEndian == 0 || nullFiles == 0 || nullStreams == 0 || asWritten < inputs/2 {
+		t.Fatalf("of %d inputs, %d read back as written, %d hold a dictionary, %d a view, %d are big-endian, "+
+			"%d files and %d streams a Null column", inputs, asWritten, dicts, views, bigEndian, nullFiles, nullStreams)
 	}
+}
+
+// holdsNull is whether a field of s is of the Null type, or holds one at any depth: a
+// Null column, which the format writes as a field node and no buffer (step 522).
+func holdsNull(s *arrow.Schema) bool {
+	var of func(dt arrow.DataType) bool
+	of = func(dt arrow.DataType) bool {
+		switch t := dt.(type) {
+		case *arrow.NullType:
+			return true
+		case *arrow.DictionaryType:
+			return of(t.ValueType)
+		case arrow.ExtensionType:
+			return of(t.StorageType())
+		case arrow.NestedType:
+			for _, f := range t.Fields() {
+				if of(f.Type) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for _, f := range s.Fields() {
+		if of(f.Type) {
+			return true
+		}
+	}
+	return false
 }
 
 // TestEveryBlockIsWalked: arrow-go reads each block's metadata of an IPC file in one
