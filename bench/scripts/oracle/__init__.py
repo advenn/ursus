@@ -51,7 +51,9 @@ GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
           "aggwindow_byhand", "aggstats", "aggpair", "agglists", "argsort", "hist", "search", "seq", "modeagg", "ewmmore",
           "window172", "windownest", "rollingby", "rollingoffset", "rollingquantile", "rollmap", "exprroll", "cumeval", "topk_agg",
           # step 518, a Struct of no fields
-          "emptystruct"]
+          "emptystruct",
+          # step 522, an Arrow IPC file with a Null column
+          "ipcnull"]
 
 
 @dataclass
