@@ -3,8 +3,7 @@
   "source": "self",
   "mode": "differential",
   "seed": 807010171,
-  "open": "step 523: a float Max on several threads keeps a later zero of the other sign, not the first of equal values",
-  "note": "found by the qcheck job of CI run 807, qcheck self -seed 807010171 -cases 1; reported first as the query's Mean, it is its Max",
+  "note": "found by the qcheck job of CI run 807, qcheck self -seed 807010171 -cases 1; reported first as the query's Mean, it is its Max; fixed by step 523, a regression since",
   "signature": {
     "kind": "mismatch",
     "what": "cell",
