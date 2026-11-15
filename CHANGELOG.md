@@ -387,6 +387,15 @@ its section below lists them.
   dictionary page's count in a varint of 10 bytes, which ursus read otherwise than
   arrow-go and so did not check, no longer makes arrow-go allocate 21.5 GB; the fuzz
   target found it.
+- **An Arrow IPC file or stream with a Null column reads** (522): the format writes a
+  Null column as no buffer, arrow-go's IPC reader builds it as a Null array of no
+  buffers, and arrow-go's own validation, which ursus runs on every array it imports,
+  wanted one, so every IPC input holding a Null column at any depth was refused as
+  malformed: Polars' files, which write an all-null column as Null, pyarrow's, and
+  ursus's own `WriteIPC` and `WriteIPCStream` of a frame with one; records from
+  arrow-go's IPC reader handed to `ScanArrowRecords` or `ScanArrow` too. Such an
+  array is valid now, and every other array is validated as before. The Parquet reader
+  was not affected.
 - **A sort in small batches no longer allocates by the square of its batches** (512):
   each output batch's gather made two arrays as long as every input batch the sort
   kept, so sorting 8,191 rows in batches of one row allocated 2.3 GB in 400 ms; 23 MB

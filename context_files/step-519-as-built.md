@@ -149,7 +149,9 @@ Each mutation made in `walk.go`, its tests built and run under `prlimit
   array of no buffers (`loadNull`), which its own `array.Validate`, which ursus's
   arrowin calls, refuses, "expected at least 1 buffers for null, got 0". ursus's own
   `WriteIPC` of a Null column does not read back, nor would a Polars file's. Not the
-  walk's; `everyType` leaves the column out.
+  walk's; `everyType` leaves the column out. **Fixed by
+  [step 522](./step-522-as-built.md):** a Null array of no buffers is given the nil
+  buffer before `array.Validate`, and `everyType` holds a Null column again.
 - **A footer may list one block many times.** Each is read, so a file whose footer
   lists one record batch thousands of times is read as thousands of batches: memory
   quadratic in the file's size, not linear. No writer does it; arrow-go and Polars
