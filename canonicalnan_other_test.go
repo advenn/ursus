@@ -1,4 +1,4 @@
-//go:build !amd64.v3
+//go:build !amd64.v3 || race
 
 package ursus_test
 
