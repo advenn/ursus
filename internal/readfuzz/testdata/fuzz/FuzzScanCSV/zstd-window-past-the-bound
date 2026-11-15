@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("(\xb5/\xfd\x04\x8520\x0400000")
+uint32(167772164)
