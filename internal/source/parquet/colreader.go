@@ -265,11 +265,12 @@ func newColReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataT
 		return newListReader(cr, desc, dt)
 	}
 	if dt.ID() == dtype.TypeNull {
-		levels, ok := levelsOf(cr)
-		if !ok {
-			return nil, uerr.Internalf("parquet: column %q of type Null has no level reader", name)
+		if levels, ok := levelsOf(cr); ok {
+			return &nullCol{levels: levels, closeCR: cr.Close}, nil
 		}
-		return &nullCol{levels: levels, closeCR: cr.Close}, nil
+		// No reader at all: arrow-go makes none for a physical type it does not know,
+		// which only a corrupt footer gives a column. It is refused below as a column
+		// of any other type is; it was an internal error (step 521).
 	}
 
 	switch t := cr.(type) {

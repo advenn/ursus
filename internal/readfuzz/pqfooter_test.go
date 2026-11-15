@@ -12,6 +12,7 @@ import (
 
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/internal/fuzzcheck"
+	"github.com/advenn/ursus/internal/source/parquet"
 )
 
 // corpusBytes is the first value of a fuzz corpus file, a []byte.
@@ -172,6 +173,71 @@ func TestAFooterListClaimingMoreThanItsBytesIsRefused(t *testing.T) {
 				}
 			}
 			return errors.Join(errSchema, errRead, errCount)
+		})
+	}
+}
+
+// TestAnUncompressedPageWhoseSizesDifferIsRefused (step 521, found by its fuzz
+// runs): an UNCOMPRESSED page holds its bytes as they lie, so its header's two sizes
+// are one. arrow-go read a page's compressed size of bytes into a buffer of its
+// uncompressed size, and its codec for UNCOMPRESSED answered the whole buffer, so a
+// page holding fewer bytes than it claims read the rest from whatever the buffer held:
+// FuzzScanParquet's input read 0xA5, the poisoned allocator's byte, as its values,
+// and no error. DuckDB 1.5.5 refuses every such page ("Page size mismatch"), and
+// pyarrow 25.0.1 one holding none ("Unexpected end of stream"). In each kind's file
+// of three pages, each page claiming 1 and 8 bytes more than it holds, and 1 fewer,
+// and holding none of its bytes, is refused now, read into poisoned buffers on one
+// thread and on four; the whole file reads as it did.
+func TestAnUncompressedPageWhoseSizesDifferIsRefused(t *testing.T) {
+	ctx := t.Context()
+	read := func(b []byte, threads int) (*ursus.DataFrame, error) {
+		mem := fuzzcheck.NewAllocator(len(b))
+		mem.Poison = true
+		defer parquet.ReadPagesWith(mem)()
+		return ursus.ScanParquetBytes(b, "uncompressed.parquet").Collect(ctx, ursus.WithThreads(threads))
+	}
+	b := corpusBytes(t, filepath.Join("testdata", "fuzz", "FuzzScanParquet", "uncompressed-page-of-no-bytes-claiming-3072"))
+	for _, threads := range []int{1, 4} {
+		if df, err := read(b, threads); err == nil {
+			t.Errorf("FuzzScanParquet's input, %d threads: read as %d rows, and no error", threads, df.Height())
+		}
+	}
+	var kinds []pqIndexKind
+	for _, k := range pqIndexKinds() {
+		kinds = append(kinds, k)
+		if k.shape.encs != nil {
+			own := k
+			own.name += ", read by the reader's own pages"
+			own.shape.encs = nil
+			kinds = append(kinds, own)
+		}
+	}
+	for _, k := range kinds {
+		t.Run(k.name, func(t *testing.T) {
+			pages := []pqPage{k.dict(), k.data(pqRLEDict, pqIndexRun(k.present, 1)), k.plain(k.values[0])}
+			for _, threads := range []int{1, 4} {
+				if _, err := read(k.file(pages...), threads); err != nil {
+					t.Fatalf("the whole file, %d threads: %v", threads, err)
+				}
+			}
+			for i, p := range pages {
+				n := int32(len(p.body))
+				for what, mut := range map[string]func(*pqPage){
+					"1 byte more than it holds":  func(q *pqPage) { q.uncompressed = n + 1 },
+					"8 bytes more than it holds": func(q *pqPage) { q.uncompressed = n + 8 },
+					"1 byte fewer than it holds": func(q *pqPage) { q.uncompressed = n - 1 },
+					"none of its bytes":          func(q *pqPage) { q.uncompressed, q.body = n, nil },
+				} {
+					ps := slices.Clone(pages)
+					mut(&ps[i])
+					for _, threads := range []int{1, 4} {
+						if df, err := read(k.file(ps...), threads); err == nil {
+							t.Errorf("page %d of %d claiming %s, %d threads: read as %d rows, and no error",
+								i+1, len(pages), what, threads, df.Height())
+						}
+					}
+				}
+			}
 		})
 	}
 }

@@ -131,10 +131,10 @@ type measured struct {
 	from int64 // where tail begins in the file
 	tail []byte
 
-	// chunks holds where each column chunk begins, and the fewest bits a value of
-	// its column takes, once watchChunks has read them from the footer: a read from
-	// there is a chunk's, and its dictionary pages are counted (dictpages.go).
-	chunks map[int64]int
+	// chunks holds where each column chunk begins, and what its pages are checked
+	// for, once watchChunks has read them from the footer: a read from there is a
+	// chunk's, and its page headers are checked (dictpages.go).
+	chunks map[int64]chunkWatch
 }
 
 func (m *measured) ReadAt(p []byte, off int64) (n int, err error) {
@@ -146,8 +146,8 @@ func (m *measured) ReadAt(p []byte, off int64) (n int, err error) {
 	} else {
 		n, err = m.ReaderAtSeeker.ReadAt(p, off)
 	}
-	if bits, ok := m.chunks[off]; ok && n > 0 {
-		if e := countDictionaries(p[:n], bits); e != nil {
+	if w, ok := m.chunks[off]; ok && n > 0 {
+		if e := countDictionaries(p[:n], w); e != nil {
 			return n, e
 		}
 	}

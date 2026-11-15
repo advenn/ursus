@@ -16,11 +16,12 @@ origin/fix/parquet-codec-bound at d3b3952, F13's input still hit the watchdog at
 800,021,024 bytes, and F12's input still failed "Count is 5, and the file reads as 0
 rows". So this branch merges that branch in and builds both fixes on its reader.
 
-The fuzz runs of this step found four more inputs, none of them this step's (§4). Two
-are the Thrift decoding step 520 fixes, and they are kept here as seeds now that its
-reader is merged in. Two are older bugs that remain open: an
-UNCOMPRESSED page shorter than it declares reads memory it never wrote, and a corrupt
-Null column is an internal error.
+The fuzz runs of this step found four more inputs, none of them caused by this step
+(§4). Two are the Thrift decoding step 520 fixes, and they are kept here as seeds now
+that its reader is merged in. The other two are older bugs, and they are fixed here
+too (§4a), because CI's fuzz workflow would have found them on this pull request.
+First, an UNCOMPRESSED page holding fewer bytes than it declares read the rest from
+memory it had not written. Second, a corrupt Null column was an internal error.
 
 ## 1. F12: Count and the read disagree, silently
 
@@ -276,8 +277,48 @@ Each run took the heavy lock, used the test binary under
     has no level reader" (`colreader.go`, `newColReader`). It reproduces on master and
     on master with step 520.
 
-  Both still fail on this branch after the merge. They are not committed. They are
-  kept in `~/ursus-scratch-archive/step521-findings/`.
+  Both still failed on this branch after the merge. A third run, on the merged
+  branch, found them again within a second (`a674bf96f2ddbbd7` and
+  `b8b1debba7d84dcd`). Since CI's 30 s runs, which are coverage-guided, would find
+  them on this pull request, both are fixed here (§4a). Every input is kept in
+  `~/ursus-scratch-archive/step521-findings/`.
+
+## 4a. The two older bugs, fixed
+
+- **An UNCOMPRESSED page whose two sizes differ is refused.** An UNCOMPRESSED page
+  holds its bytes as they lie, so its compressed size and its uncompressed size are
+  one, as every writer writes them. arrow-go reads a page's compressed size of bytes
+  into a buffer of its uncompressed size, and its codec for UNCOMPRESSED copies them
+  in and answers the whole buffer. The rest of the page is then whatever the buffer
+  held: an earlier page's bytes, or fresh memory, which the poisoned allocator fills
+  with 0xA5. The walk of a chunk's page headers that step 510 made
+  (`countDictionaries`, run as arrow-go reads the chunk) now refuses such a page in
+  an UNCOMPRESSED chunk: "corrupt: an uncompressed page of %d bytes says %d". This
+  follows DuckDB 1.5.5, which refuses every such page ("Page size mismatch"), and in
+  each case tried it is at least as strict as pyarrow 25.0.1. pyarrow refuses a page
+  holding none of its bytes ("Unexpected end of stream") and reads a page that claims
+  8 bytes more or fewer than it holds. The same probe was run against step 520's
+  branch over 139 inputs, now with its codec fixtures (`testdata/parquet/codecs`).
+  All 156 reads were identical. Step 510's forged pages that claim 2^28 and 2^26
+  bytes are now refused by this check first, with a different message.
+- **A Null column with no reader is refused, not an internal error.** arrow-go makes
+  no column reader for a physical type it does not know, and only a corrupt footer
+  gives a column one. The mutated `pyarrow_null_column.parquet` gave one to its Null
+  column. `newColReader` refused a column of any other type with no reader as
+  unsupported, but a Null column as ErrInternal, "has no level reader". It now
+  refuses a Null column with the same error as any other column.
+
+Tests, failing first:
+- **Seeds:** `FuzzScanParquet/uncompressed-page-of-no-bytes-claiming-3072` and
+  `FuzzOwnPagesMatchArrow/null-column-of-a-physical-type-arrow-go-does-not-know`.
+- **`TestAnUncompressedPageWhoseSizesDifferIsRefused`** (readfuzz, public API). It
+  reads the fuzzer's input, then each page of each kind's three-page file. Each page
+  is made to claim 1 and 8 bytes more than it holds, 1 fewer, and to hold none of its
+  bytes, and every variant must be refused. All reads go into poisoned buffers, on 1
+  and on 4 threads, and the whole file must still read.
+- **`TestAColumnWithNoReaderIsRefusedWhateverItsType`** (internal). A Null, a String
+  and a Float64 column with no reader must each be refused with an Int32 column's
+  error, their own type named.
 
 ## 5. The teeth
 
@@ -293,6 +334,8 @@ below are from before:
 | `measureFooter` back to the file less 12 | the F13 seed (watchdog, 800,013,824 bytes); `FuzzScanParquet` on the offset-0 seed (800,012,384 bytes); `TestAFooterListClaimingMoreThanItsBytesIsRefused` (800,014,336); `TestMeasureFooterWalksEveryFooterArrowGoReads` |
 | list elements walked by the header's type | `TestFooterWalkReadsAListAsArrowGoDoes`, all 28 cases; `FuzzScanParquet` on `pqHiddenGroups` (800,006,144 bytes); `TestAFooterListClaimingMoreThanItsBytesIsRefused`; `TestFooterWalkDifferential`, 8,193 lists said to hold another type that arrow-go reads and the walk refused |
 | a list's count against the whole footer, not the bytes after it | `TestFooterWalkDifferential`, 2,904 lists claiming a byte past theirs, refused only by running out of bytes, not at the header |
+| the UNCOMPRESSED page check off (§4a) | `TestAnUncompressedPageWhoseSizesDifferIsRefused`, the fuzzer's input ("read as 8 rows, and no error") and all 10 kinds; `FuzzScanParquet` on its seed ("row 0 differs") |
+| a Null column with no reader an internal error again (§4a) | `TestAColumnWithNoReaderIsRefusedWhateverItsType`; `FuzzOwnPagesMatchArrow` on its seed |
 
 ## 6. Checks
 
@@ -306,10 +349,9 @@ All run after the last edit. The two Parquet packages ran first on their own:
   keeping step 520's decoding (`varint`, `varint32`, `i32`, a stop at any type of 0,
   sizes cut to 32 bits) and adding this step's walk, its counts against the bytes
   left, and `onList`. `pqForgedSeeds` holds both steps' seeds.
-- **An UNCOMPRESSED page shorter than it declares reads memory it never wrote** (§4,
-  `7ac304015bdf360b`). This is codec territory, step 520's neighbour. On this branch
-  the fuzzer reaches it within a second, because the walk now passes footers that the
-  old reader refused. So CI's fuzz workflow may report it until it is fixed. One fix is
-  to refuse an UNCOMPRESSED page whose compressed size is not its uncompressed size,
-  which every writer keeps equal.
-- **A corrupt Null column is an internal error** (§4, `bc1dbd675896f2b2`).
+- **A V2 page in a compressed chunk that is marked not compressed** (`is_compressed`
+  false) is outside §4a's check, which looks only at UNCOMPRESSED chunks. arrow-go
+  reads such a page's uncompressed size of bytes straight from the chunk
+  (`readV2Unencrypted`). If the page claims more than it holds, those bytes run into
+  the next page's. They are the file's own bytes, misread, not memory left over, and
+  arrow-go refuses the read if they run past the chunk.

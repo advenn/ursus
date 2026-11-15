@@ -478,6 +478,15 @@ its section below lists them.
   reads is walked now, its lists read as arrow-go reads them, and a list claiming more
   elements than the bytes after it is refused as corrupt, at any depth. CI's fuzz runs
   found it.
+- **An uncompressed Parquet page whose two sizes differ is refused** (521): an
+  UNCOMPRESSED page holding fewer bytes than its header declares was read with the rest
+  taken from whatever its buffer held before, an earlier page's bytes or fresh memory,
+  and no error. Such a page is refused as corrupt, as DuckDB refuses it; no writer
+  writes one. The fuzz runs of step 521 found it.
+- **A corrupt Parquet Null column is refused, not an internal error** (521): a footer
+  giving a Null column a physical type arrow-go does not know made the read fail with
+  "this is a bug in ursus"; it is refused as unsupported, as a column of any other type
+  is.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
