@@ -125,6 +125,12 @@ func (o AggOp) IsCounting() bool {
 // are the same however the rows are shuffled, which is what lets a group-by run on
 // several workers and fold the partials together. These five are not.
 //
+// A float's minimum or maximum is the same value however the rows are shuffled,
+// but not always the same bits: of -0.0 and +0.0, or NaNs of two payloads, it is
+// the first or the last row's, as a stable sort puts them. Its accumulator keeps
+// that row's position, so the fold still answers it (step 523, kernel.RowPlacer);
+// a quantile and TopK order such values by their bits (kernel.StrictKeyF64).
+//
 //	First, Last     name a position outright
 //	ArgMin, ArgMax  report an INDEX, and kernel.argExtremumAcc.Merge shifts the
 //	                other accumulator's positions by this one's row count — which

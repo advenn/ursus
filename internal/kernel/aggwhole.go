@@ -281,19 +281,17 @@ func (a *extremumNum[T]) AddAll(col *data.Column) error {
 	}
 	valid := col.Validity()
 	best, seen := a.best[0], a.seen[0]
+	chose := -1 // the row of v now best, for a float's position
 	if a.keyed && valid.IsAllSet() {
 		switch v := any(v).(type) {
 		case []float64:
-			b, s := keyedExtreme(v, any(best).(float64), seen, a.max, OrderKeyF64)
-			a.best[0], a.seen[0] = any(b).(T), s
-			return nil
+			b, s, i := keyedExtreme(v, any(best).(float64), seen, a.max, OrderKeyF64)
+			best, seen, chose = any(b).(T), s, i
 		case []float32:
-			b, s := keyedExtreme(v, any(best).(float32), seen, a.max, OrderKeyF32)
-			a.best[0], a.seen[0] = any(b).(T), s
-			return nil
+			b, s, i := keyedExtreme(v, any(best).(float32), seen, a.max, OrderKeyF32)
+			best, seen, chose = any(b).(T), s, i
 		}
-	}
-	if a.ordered && valid.IsAllSet() {
+	} else if a.ordered && valid.IsAllSet() {
 		// An integer's, with no null: the comparison is the type's own.
 		for _, x := range v {
 			switch {
@@ -307,35 +305,38 @@ func (a *extremumNum[T]) AddAll(col *data.Column) error {
 		for i, x := range v {
 			switch {
 			case !valid.Get(i):
-			case !seen:
-				best, seen = x, true
-			case a.wins(x, best):
-				best = x
+			case !seen, a.replaces(x, best):
+				best, seen, chose = x, true, i
 			}
 		}
 	}
 	a.best[0], a.seen[0] = best, seen
+	if a.track && chose >= 0 && tieable(best) {
+		a.placeAt(0, a.base+int64(chose))
+	}
 	return nil
 }
 
-// keyedExtreme is the least, or with max the greatest, of best and v by key, the
-// first of equal keys kept, as lessFloat64's strict comparison keeps it: NaN the
-// greatest, -0 and +0 alike.
-func keyedExtreme[F float32 | float64, K uint32 | uint64](v []F, best F, seen, max bool, key func(F) K) (F, bool) {
+// keyedExtreme is the least, or with max the greatest, of best and v by key, and the
+// row of v it is, or -1 for best: the first of equal keys kept for the least and the
+// last for the greatest, as a stable sort puts them first and last (step 523). NaN is
+// the greatest, -0 and +0 alike.
+func keyedExtreme[F float32 | float64, K uint32 | uint64](v []F, best F, seen, max bool, key func(F) K) (F, bool, int) {
 	var bk K
 	if seen {
 		bk = key(best)
 	}
-	for _, x := range v {
+	chose := -1
+	for i, x := range v {
 		k := key(x)
 		switch {
 		case !seen:
-			best, bk, seen = x, k, true
-		case max && k > bk, !max && k < bk:
-			best, bk = x, k
+			best, bk, seen, chose = x, k, true, i
+		case max && k >= bk, !max && k < bk:
+			best, bk, chose = x, k, i
 		}
 	}
-	return best, seen
+	return best, seen, chose
 }
 
 // --- first and last ------------------------------------------------------------
