@@ -157,6 +157,7 @@ func TestReadIPCSchemaRefusesACorruptFooter(t *testing.T) {
 // TestOversizedPassesCleanInputs: the walk that skips oversized's finding skips no
 // well-formed input, so the IPC targets are not made vacuous by it: the Polars files,
 // the kitchen sink in each codec, a deep schema, and the patched seeds' original.
+// TestTheWalkPassesCleanInputs holds ursus's own walk, step 519's, so.
 func TestOversizedPassesCleanInputs(t *testing.T) {
 	for _, file := range []bool{true, false} {
 		ext := ".arrows"
@@ -541,7 +542,8 @@ func sameValue(got, want any) bool {
 // and Zstandard; schemas nested past and short of arrow-go's 64 levels; and inputs
 // whose declared lengths are past what they hold: a footer block's body, a message's
 // body and metadata, a buffer's length, and a compressed buffer's decompressed
-// length, each 2^40.
+// length, each 2^40; and the metadata's counts of fields, children, key-values and
+// variadic buffers, and a field its own child (patchMeta).
 func ipcSeeds(f *testing.F, file bool) [][]byte {
 	var seeds [][]byte
 	ext := ".arrows"
@@ -594,9 +596,9 @@ func ipcSeeds(f *testing.F, file bool) [][]byte {
 		// A compressed buffer's first eight bytes are its decompressed length.
 		seeds = append(seeds, patchNth(writeIPC(f, file, ints, codec), body, 0, huge))
 	}
-	// Lengths the metadata declares past its buffer, which oversized's finding
-	// skips: a schema's fields, a struct's children, the custom metadata of a
-	// schema, and a view column's variadic buffers; and a field its own child.
+	// Lengths the metadata declares past its buffer, which step 519's walk refuses:
+	// a schema's fields, a struct's children, the custom metadata of a schema, and a
+	// view column's variadic buffers; and a field its own child.
 	withMeta := writeIPC(f, file, metadataRecord(f))
 	sink0 := writeIPC(f, file, sink)
 	for _, p := range [][]byte{

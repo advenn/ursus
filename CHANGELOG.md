@@ -353,6 +353,52 @@ its section below lists them.
   and a null Struct is kept apart from a Struct of nulls (`ExtractGroups`, 499);
   Polars 2.1 reads a null too. `ScanJSON`, which reads each object as a line, follows.
   The recorded oracle found it (`ndjsonread/ignored_in_a_struct`).
+- **Arrow IPC input is checked against its bytes before it is read** (511, 519):
+  ursus walks every footer and message of a file or stream before arrow-go's reader
+  has it, each offset and length within its bytes, each count no more than the bytes
+  after it can hold, offsets forward, fields no deeper than 2,000, a record batch's
+  buffers within its body and its variadic buffers against its view columns; a
+  stream's message is no larger than 64 MiB of metadata and 256 MiB of body, or than
+  the stream where its size is known; and a compressed buffer is decompressed through
+  an allocator that grants none past 32,768 times the input's size, Zstandard's most.
+  Input that breaks them is refused by `ScanIPC`, `ScanIPCStream`, `ReadIPCSchema` and
+  their kin, an `ErrIO` naming it as corrupt. No well-formed file is refused. A
+  Parquet footer's Arrow schema is read by the same walk.
+- **A Parquet footer is checked against its file before it is read** (510, 521, 533):
+  a column chunk lies within its file; every footer is walked, one leaving no room
+  for the file's leading magic too, and each of its lists, at any depth and by the
+  element type the format gives, claims no more elements than the bytes after its
+  header hold; the schema is read as a tree, and an element claiming more children
+  than the elements after it, or a tree that does not close by its last element, as
+  pyarrow says "not enough elements", is refused; a row group holds a column chunk
+  for each of the schema's columns, no fewer and no more, by the read and by `Count`;
+  and the footer's Arrow schema is walked as an IPC message is (519). A footer that
+  breaks them is refused as corrupt, an `ErrIO`. Every footer ursus, pyarrow and the
+  fixtures' writers wrote reads as before. The fuzz targets found each.
+- **A Parquet page is checked against its header and its chunk before it is decoded**
+  (510, 517, 520, 521, 531), and one that breaks a check is refused as corrupt, an
+  `ErrIO`. Every page pyarrow, Polars, arrow-go and ursus write reads as before, and
+  an empty Brotli page after a page of bytes now reads. CI's fuzz runs found each:
+  - a page's declared size is no larger than the largest column chunk the footer
+    declares (510, as D14 predicted), and a page header that does not parse is looked
+    at no further than its chunk, at least 16 KiB (521);
+  - a dictionary page claims no more values than its bytes hold (510), its count read
+    as Thrift reads a varint, of up to 10 bytes (520);
+  - each dictionary index of a data page lies within its dictionary, and the error
+    names the index, where it named a row group short of rows (517);
+  - a page decompresses into the size its header declares and no further: a codec's
+    own claim, a Snappy length header or a Zstandard frame's size, is checked before
+    anything past the page is allocated, a page declaring no bytes is decoded as
+    none, and Brotli's window is held to the page (520);
+  - an UNCOMPRESSED page holds the bytes its header declares, as DuckDB requires
+    (521);
+  - a page of 0-bit dictionary indices with a byte after a run's header is read as
+    pyarrow and DuckDB read it, each row the dictionary's first value, by ursus's own
+    pages, and refused where they do not read its chunk (521);
+  - each delta-packed run of a DELTA_BINARY_PACKED, DELTA_LENGTH_BYTE_ARRAY or
+    DELTA_BYTE_ARRAY page is checked against the format, its block size, miniblocks,
+    count, bit widths and length, and refused where pyarrow refuses it, and where its
+    count is past the page's values, which no writer writes and pyarrow reads (531).
 - **A sort in small batches no longer allocates by the square of its batches** (512):
   each output batch's gather made two arrays as long as every input batch the sort
   kept, so sorting 8,191 rows in batches of one row allocated 2.3 GB in 400 ms; 23 MB

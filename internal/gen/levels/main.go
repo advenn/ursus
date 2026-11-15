@@ -39,6 +39,10 @@ var levels = map[string]int{
 	// every package above uerr can use it, dtype's and i128's among them.
 	"internal/fuzzcheck": 1, // + uerr
 
+	// Arrow IPC metadata walked before arrow-go reads it (step 519): uerr alone of
+	// ursus, so the root's IPC readers and Parquet's footer can both use it.
+	"internal/arrowmeta": 1, // + uerr
+
 	"internal/bitmap": 5, // + arrowx
 
 	"dtype": 10, // + uerr. The public type system.
