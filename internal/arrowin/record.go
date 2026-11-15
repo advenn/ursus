@@ -251,5 +251,31 @@ func column(name string, arr arrow.Array, dt dtype.DataType, lo, hi int) (*data.
 	if err := appendArrow(b, arr, lo, hi); err != nil {
 		return nil, within(err, "column %q", name)
 	}
-	return b.finish(name)
+	c, err := b.finish(name)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkTimes(c, lo); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// checkTimes refuses a Time the column holds outside its day, c the copy of an
+// array's rows from lo (step 525). A Time is a time of day, [0, 24h) in its unit
+// (dtype), as Arrow's columnar format says of its Time32 and Time64, and arrowout
+// refuses any other; nothing in arrow-go range-checks one. Read in, 26:00 renders as
+// 02:00:00, sorts after 23:00:00 and equals no 02:00:00, so it is refused as the
+// corrupt value it is, an element of a List or a field of a Struct as well, by the
+// rule the Parquet reader's checkTimes refuses one by (data.FindOutsideDay). A null
+// slot holds whatever it holds, and is not looked at.
+func checkTimes(c *data.Column, lo int) error {
+	o, ok := data.FindOutsideDay(c)
+	if !ok {
+		return nil
+	}
+	return uerr.New(uerr.KindValue, op,
+		"column %q holds the %s %d in row %d of its record, outside [0, %d)",
+		c.Name(), o.At.DType(), o.Tick, lo+o.Row, o.PerDay).
+		Hint("the data is corrupt: an Arrow time counts from midnight and is less than a day")
 }

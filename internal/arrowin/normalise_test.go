@@ -252,22 +252,60 @@ func TestMalformedDataIsRefused(t *testing.T) {
 		dtype.List(dtype.Int64), uerr.ErrValue, "")
 }
 
-// TestTimeIsWrappedIntoTheDay: arrow-go never range-checks a time, and every ursus
-// kernel assumes [0, 24h) — the invariant step 57 established and Cast enforces.
-func TestTimeIsWrappedIntoTheDay(t *testing.T) {
-	valid := []bool{true, true, true, false}
-	t32 := make1(t, array.NewData(arrow.FixedWidthTypes.Time32ms, 4,
-		[]*memory.Buffer{bitsOf(valid...), bytesOf([]int32{-1, 86_400_000, 90_000_000, -5})}, nil, 1, 0))
-	v, _ := data.Values[int64](convert(t, t32, dtype.Time(dtype.Milli)))
-	if fmt.Sprint(v) != "[86399999 0 3600000 0]" {
-		t.Errorf("time32[ms] became %v", v)
+// TestATimeOutsideItsDayIsRefused: arrow-go never range-checks a time, and a Time is a
+// time of day, [0, 24h) in its unit, which every ursus kernel assumes (step 57). One
+// outside it was wrapped into the day, 26:00 read as 02:00, which renders as a time
+// of day, sorts after 23:00 and equals no 02:00; it is refused as corrupt now, as
+// Parquet's checkTimes refuses one, naming the row of the array and the value, in a
+// List or a Struct as well (step 525). A null slot holds whatever it holds, and is not
+// judged. readfuzz's TestArrowTimesOutsideTheDay is the differential, through every
+// reader.
+func TestATimeOutsideItsDayIsRefused(t *testing.T) {
+	ms, ns := dtype.Time(dtype.Milli), dtype.Time(dtype.Nano)
+	t32 := func(vals []int32, valid ...bool) arrow.Array {
+		var vb *memory.Buffer
+		if valid != nil {
+			vb = bitsOf(valid...)
+		}
+		return make1(t, array.NewData(arrow.FixedWidthTypes.Time32ms, len(vals),
+			[]*memory.Buffer{vb, bytesOf(vals)}, nil, nulls(valid...), 0))
+	}
+	refused(t, "a time before midnight", t32([]int32{0, -1}), ms, uerr.ErrValue, "-1 in row 1 of its record")
+	refused(t, "the tick of the next midnight", t32([]int32{86_400_000}), ms, uerr.ErrValue, "86400000 in row 0")
+	refused(t, "26:00", t32([]int32{1, 2, 93_600_000}), ms, uerr.ErrValue, "93600000 in row 2")
+	refused(t, "a nanosecond before midnight",
+		make1(t, array.NewData(arrow.FixedWidthTypes.Time64ns, 1,
+			[]*memory.Buffer{nil, bytesOf([]int64{-86_400_000_000_001})}, nil, 0, 0)),
+		ns, uerr.ErrValue, "-86400000000001 in row 0")
+
+	// In a List, the row holding the element; in a Struct, the struct's row.
+	tms := arrow.FixedWidthTypes.Time32ms
+	list := make1(t, array.NewData(arrow.ListOf(tms), 3,
+		[]*memory.Buffer{nil, bytesOf([]int32{0, 2, 2, 4})},
+		[]arrow.ArrayData{t32([]int32{1, 2, 3, 93_600_000}).Data()}, 0, 0))
+	refused(t, "26:00 in a List", list, dtype.List(ms), uerr.ErrValue, "93600000 in row 2")
+	pair := dtype.Struct(dtype.Field{Name: "t", Type: ms, Nullable: true})
+	st := make1(t, array.NewData(arrow.StructOf(arrow.Field{Name: "t", Type: tms, Nullable: true}), 2,
+		[]*memory.Buffer{nil}, []arrow.ArrayData{t32([]int32{1, -1}).Data()}, 0, 0))
+	refused(t, "a time before midnight in a Struct", st, pair, uerr.ErrValue, "-1 in row 1")
+
+	// A window's row is the array's.
+	if _, err := arrowin.Column("c", t32([]int32{1, 2, 3, -1, 5}), ms, 2, 5); err == nil ||
+		!errors.Is(err, uerr.ErrValue) || !strings.Contains(err.Error(), "-1 in row 3") {
+		t.Errorf("a window of an array holding a time before midnight: %v", err)
 	}
 
-	t64 := make1(t, array.NewData(arrow.FixedWidthTypes.Time64ns, 1,
-		[]*memory.Buffer{nil, bytesOf([]int64{-86_400_000_000_001})}, nil, 0, 0))
-	if v, _ := data.Values[int64](convert(t, t64, dtype.Time(dtype.Nano))); v[0] != 86_399_999_999_999 {
-		t.Errorf("time64[ns] became %d", v[0])
+	// A null slot, a null list's range and a null struct's field are no value.
+	junk := t32([]int32{5, -5}, true, false)
+	col := convert(t, junk, ms)
+	if v, _ := data.Values[int64](col); col.IsValid(1) || v[0] != int64(junk.(*array.Time32).Value(0)) {
+		t.Errorf("a time with a null slot outside the day became %v", v)
 	}
+	convert(t, make1(t, array.NewData(arrow.ListOf(tms), 2,
+		[]*memory.Buffer{bitsOf(true, false), bytesOf([]int32{0, 1, 2})},
+		[]arrow.ArrayData{t32([]int32{1, -1}).Data()}, 1, 0)), dtype.List(ms))
+	convert(t, make1(t, array.NewData(arrow.StructOf(arrow.Field{Name: "t", Type: tms, Nullable: true}), 2,
+		[]*memory.Buffer{bitsOf(true, false)}, []arrow.ArrayData{t32([]int32{1, -1}).Data()}, 1, 0)), pair)
 }
 
 func TestDate64MustBeWholeDays(t *testing.T) {

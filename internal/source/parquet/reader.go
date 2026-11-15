@@ -509,35 +509,14 @@ func readBatch(chunks []colReader, out *dtype.Schema, n, rgIndex int, name strin
 // (writer.go); a file's TIME is a count it takes as it lies. A tick past midnight
 // read as a Time that renders as a time of day, 26:00 as 02:00:00, sorts after
 // 23:00:00 and equals no 02:00:00 (data.CheckTimeRange), so it is refused as the
-// corrupt value it is, an element of a List or a field of a Struct as well.
+// corrupt value it is, an element of a List or a field of a Struct as well, by the
+// rule Arrow import refuses one by (data.FindOutsideDay, step 525).
 func checkTimes(c *data.Column, file string) error {
-	switch c.DType().ID() {
-	case dtype.TypeTime:
-		perDay, ok := dtype.TicksPerDay(c.DType())
-		if !ok {
-			return nil
-		}
-		v, err := data.Values[int64](c)
-		if err != nil {
-			return nil // a column of nulls holds no ticks
-		}
-		for i, t := range v {
-			if (t < 0 || t >= perDay) && c.IsValid(i) {
-				return uerr.New(uerr.KindValue, "scan_parquet",
-					"column %q of %s holds the %s %d, outside [0, %d)", c.Name(), file, c.DType(), t, perDay).
-					Hint("the file is corrupt: a TIME counts from midnight and is less than a day")
-			}
-		}
-	case dtype.TypeList, dtype.TypeArray:
-		if ch := c.Child(); ch != nil {
-			return checkTimes(ch, file)
-		}
-	case dtype.TypeStruct:
-		for _, f := range c.Fields() {
-			if err := checkTimes(f, file); err != nil {
-				return err
-			}
-		}
+	o, ok := data.FindOutsideDay(c)
+	if !ok {
+		return nil
 	}
-	return nil
+	return uerr.New(uerr.KindValue, "scan_parquet",
+		"column %q of %s holds the %s %d, outside [0, %d)", o.At.Name(), file, o.At.DType(), o.Tick, o.PerDay).
+		Hint("the file is corrupt: a TIME counts from midnight and is less than a day")
 }
