@@ -546,6 +546,9 @@ func simplerValues(t model.Type, v Value) []Value {
 			if tr := math.Trunc(f); tr != f {
 				out = append(out, Value{F: tr})
 			}
+			if f < -1 {
+				out = append(out, Value{F: -1})
+			}
 			if f < 0 {
 				out = append(out, Value{F: -f})
 			}
