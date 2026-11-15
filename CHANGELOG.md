@@ -589,6 +589,18 @@ its section below lists them.
   refused as corrupt, an `ErrIO`, as pyarrow refuses it, but for a count past the
   page's values, which no writer writes and pyarrow reads; every delta page pyarrow
   and arrow-go write reads as before. The fuzz runs of step 521 found it.
+- **A read cut short is refused, not read as the end of its input** (534): every
+  operator ends its input on an error that wraps `io.EOF`, and a source's error that
+  wrapped it ended the query there, with the rows before it and no error. An Arrow IPC
+  file or stream whose compressed buffer decompresses short, which arrow-go panics on
+  with `io.EOF`, read as 0 rows, by `Collect` and by `Count`; so did a stream cut
+  where a message's length, metadata or body begins, a Parquet file whose `ReaderAt`
+  answers `io.EOF` inside a column chunk (its row groups before it read), and an
+  NDJSON, lines or CSV stream whose read fails with an error wrapping `io.EOF`. Each
+  is refused now, an `ErrIO` wrapping `io.ErrUnexpectedEOF`: a source's end is
+  `io.EOF` itself, and a scan reads any other error wrapping it as the source's. A
+  stream that ends between two messages, without its end marker, still reads, as
+  arrow-go and the format have it. Step 529's fuzzing found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

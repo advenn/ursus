@@ -133,13 +133,13 @@ func (m *messageReader) Message() (*ipc.Message, error) {
 	return m.msg, nil
 }
 
-// cut is err, what io.ReadFull answered reading part of the stream's message msg, a
-// byte of which was read: where the input ends there, io.EOF where none of the part
-// is read and io.ErrUnexpectedEOF otherwise, the stream's refusal, KindIO, wrapping
-// io.ErrUnexpectedEOF; any other error, the input's own, wrapped, any io.EOF in it
-// made io.ErrUnexpectedEOF (uerr.Truncated), as arrow-go's reader would take an error
-// wrapping io.EOF for the stream's end. Where no byte of a message is read, it is the
-// stream's error too, unless it is io.EOF itself.
+// cut is err, what io.ReadFull answered reading part of the stream's message msg,
+// as the read's error. Where the input ends inside the message, io.EOF where none of
+// the part is there and io.ErrUnexpectedEOF otherwise, it is the stream's refusal,
+// KindIO, wrapping io.ErrUnexpectedEOF. Any other error is the input's own, wrapped,
+// any io.EOF in it made io.ErrUnexpectedEOF (uerr.Truncated): arrow-go's reader would
+// take an error wrapping io.EOF for the stream's end, a stream's failing as the next
+// message begins among them.
 func (m *messageReader) cut(err error, msg int, part string) error {
 	if err != io.EOF && err != io.ErrUnexpectedEOF {
 		return fmt.Errorf("reading an IPC message's %s: %w", part, uerr.Truncated(err))

@@ -265,16 +265,19 @@ func openColumnIn(full *dtype.Schema, fv fileView, rg *file.RowGroupReader,
 		if desc := fv.pf.MetaData().Schema.Column(ci); ownable(rgMeta, ci, desc, dt) {
 			pr, err := rg.GetColumnPageReader(ci)
 			if err != nil {
-				return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
+				return nil, uerr.Wrap(uerr.Truncated(err), uerr.KindIO, "scan_parquet",
 					"opening column %q of %s", f.Name, fv.name)
 			}
 			boundHeaders(pr, rgMeta, ci)
 			return newOwnColReader(pr, desc, dt)
 		}
 		// The chunk arrow-go decodes, its pages read through checkedPages (step 517).
+		// arrow-go reads the chunk's first bytes opening it, and wraps the io.EOF of
+		// a ReaderAt short of them, which the engine took for the end of the scan: a
+		// file read as the row groups before it, with no error (step 534).
 		cr, err := checkedColumn(rg, ci, fv.pf.MetaData().Schema.Column(ci), fv.mem, fv.pf.BufferPool())
 		if err != nil {
-			return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
+			return nil, uerr.Wrap(uerr.Truncated(err), uerr.KindIO, "scan_parquet",
 				"opening column %q of %s", f.Name, fv.name)
 		}
 		return newColReader(cr, fv.pf.MetaData().Schema.Column(ci), dt)
