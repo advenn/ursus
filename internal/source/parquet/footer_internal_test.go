@@ -16,10 +16,12 @@ import (
 	"github.com/apache/arrow-go/v18/parquet/compress"
 	"github.com/apache/arrow-go/v18/parquet/file"
 	"github.com/apache/arrow-go/v18/parquet/metadata"
+	"github.com/apache/arrow-go/v18/parquet/schema"
 
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/internal/bitmap"
 	"github.com/advenn/ursus/internal/data"
+	"github.com/advenn/ursus/internal/uerr"
 )
 
 // The footer walk's tests (step 521): the walk against what writers write and
@@ -70,7 +72,9 @@ func (v tval) write(b []byte, field bool) []byte {
 		if !field {
 			b = append(b, v.typ)
 		}
-	case thriftI32, thriftI64:
+	case 3: // a byte, an IntType's bitWidth
+		b = append(b, byte(v.i))
+	case 4, thriftI32, thriftI64:
 		b = binary.AppendUvarint(b, zigzag(v.i))
 	case 7:
 		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(v.f))
@@ -104,6 +108,192 @@ func (v tval) write(b []byte, field bool) []byte {
 }
 
 func (v tval) bytes() []byte { return v.write(nil, false) }
+
+// tparse reads b, a struct in Thrift's compact protocol, as a tval, for a footer a
+// writer wrote to be changed with with and written again by bytes (step 533).
+func tparse(b []byte) (tval, error) {
+	r := tparser{b: b}
+	v, err := r.value(thriftStruct, false)
+	if err == nil && r.pos != len(b) {
+		err = fmt.Errorf("tparse: %d bytes after the struct", len(b)-r.pos)
+	}
+	return v, err
+}
+
+type tparser struct {
+	b   []byte
+	pos int
+}
+
+var errTparse = errors.New("tparse: the bytes end inside a value")
+
+func (r *tparser) next(n int) ([]byte, error) {
+	if n < 0 || n > len(r.b)-r.pos {
+		return nil, errTparse
+	}
+	r.pos += n
+	return r.b[r.pos-n : r.pos], nil
+}
+
+func (r *tparser) uvarint() (uint64, error) {
+	v, n := binary.Uvarint(r.b[r.pos:])
+	if n <= 0 {
+		return 0, errTparse
+	}
+	r.pos += n
+	return v, nil
+}
+
+// value reads a value of compact type typ; a Boolean field's value is in its type, an
+// element's a byte, 1 for true.
+func (r *tparser) value(typ byte, field bool) (tval, error) {
+	v := tval{typ: typ}
+	switch typ {
+	case 1, 2:
+		if !field {
+			b, err := r.next(1)
+			if err != nil {
+				return v, err
+			}
+			v.typ = 2 // false: Thrift reads 1 as true, anything else as false
+			if b[0] == 1 {
+				v.typ = 1
+			}
+		}
+	case 3:
+		b, err := r.next(1)
+		if err != nil {
+			return v, err
+		}
+		v.i = int64(int8(b[0]))
+	case 4, thriftI32, thriftI64:
+		u, err := r.uvarint()
+		if err != nil {
+			return v, err
+		}
+		v.i = int64(u>>1) ^ -int64(u&1)
+	case 7:
+		b, err := r.next(8)
+		if err != nil {
+			return v, err
+		}
+		v.f = math.Float64frombits(binary.LittleEndian.Uint64(b))
+	case thriftBinary:
+		n, err := r.uvarint()
+		if err != nil || n > uint64(len(r.b)) {
+			return v, errTparse
+		}
+		b, err := r.next(int(n))
+		v.s = string(b)
+		return v, err
+	case thriftList:
+		h, err := r.next(1)
+		if err != nil {
+			return v, err
+		}
+		v.et, v.elems = h[0]&0x0f, []tval{}
+		size := uint64(h[0] >> 4)
+		if size == 15 {
+			if size, err = r.uvarint(); err != nil {
+				return v, err
+			}
+		}
+		for range size {
+			e, err := r.value(v.et, false)
+			if err != nil {
+				return v, err
+			}
+			v.elems = append(v.elems, e)
+		}
+	case thriftStruct:
+		v.fields = []tfield{}
+		var last int16
+		for {
+			h, err := r.next(1)
+			if err != nil {
+				return v, err
+			}
+			if h[0]&0x0f == 0 {
+				return v, nil
+			}
+			id := last + int16(h[0]>>4)
+			if h[0]>>4 == 0 {
+				u, err := r.uvarint()
+				if err != nil {
+					return v, err
+				}
+				id = int16(int64(u>>1) ^ -int64(u&1))
+			}
+			last = id
+			f, err := r.value(h[0]&0x0f, true)
+			if err != nil {
+				return v, err
+			}
+			v.fields = append(v.fields, tfield{id, f})
+		}
+	default:
+		return v, fmt.Errorf("tparse: type %d, which no footer holds", typ)
+	}
+	return v, nil
+}
+
+// field is struct v's field id, and whether it has one.
+func (v tval) field(id int16) (tval, bool) {
+	for _, f := range v.fields {
+		if f.id == id {
+			return f.v, true
+		}
+	}
+	return tval{}, false
+}
+
+// schemaOf is footer v's schema, its list of SchemaElements, field 2.
+func schemaOf(t *testing.T, v tval) []tval {
+	t.Helper()
+	s, ok := v.field(2)
+	if !ok || s.typ != thriftList {
+		t.Fatalf("the footer has no schema")
+	}
+	return s.elems
+}
+
+// withChildren is footer v with its schema's element i claiming n children: its
+// num_children, field 5, set where it has one and added among its fields in order
+// where it has none.
+func withChildren(v tval, i int, n int64) tval {
+	s, _ := v.field(2)
+	el := s.elems[i]
+	el.fields = slices.Clone(el.fields)
+	j := slices.IndexFunc(el.fields, func(f tfield) bool { return f.id >= 5 })
+	switch {
+	case j < 0:
+		el.fields = append(el.fields, tf(5, ti32(n)))
+	case el.fields[j].id == 5:
+		el.fields[j].v = ti32(n)
+	default:
+		el.fields = slices.Insert(el.fields, j, tf(5, ti32(n)))
+	}
+	return v.with([]int16{2, int16(i)}, el)
+}
+
+// childrenOf is a SchemaElement's num_children, 0 where it says none.
+func childrenOf(el tval) int64 {
+	n, _ := el.field(5)
+	return n.i
+}
+
+// arrowReads is arrow-go's answer to footer f: what metadata.NewFileMetaData answers,
+// or the panic it raises, as v18.7.0 does on a schema schema.FromParquet refused,
+// whose error it drops, leaving the footer no schema.
+func arrowReads(f []byte) (err error) {
+	defer func() {
+		if v := recover(); v != nil {
+			err = fmt.Errorf("a panic: %v", v)
+		}
+	}()
+	_, err = metadata.NewFileMetaData(f, nil)
+	return err
+}
 
 // with is v with its value at path w: a struct's field by its id, a list's element
 // by its index.
@@ -358,14 +548,22 @@ func withHeader(f []byte, h [2]int, et byte, count uint64) []byte {
 // walk refuses, where arrow-go would make a slice of them first. And each list whose header says
 // its elements are of another type the walk passes, as arrow-go reads it, its
 // elements read as parquet.thrift types them.
+//
+// And its schema's elements (step 533): the footer read back (tparse) and written
+// again, the walk passes it and arrow-go reads it. Each element claiming a child
+// more than it does, the walk refuses, as arrow-go does, its tree no longer closing
+// within the elements; claiming one more than the elements after it, or 2^31−1, the
+// walk refuses at that element, where arrow-go would make a slice of them first.
 func TestFooterWalkDifferential(t *testing.T) {
 	stride := 1
 	if raceDetector {
 		stride = 7
 	}
 	footers := writersFooters(t)
-	var prefixes, lists int
-	defer func() { t.Logf("%d footers, %d prefixes, %d lists", len(footers), prefixes, lists) }()
+	var prefixes, lists, elements int
+	defer func() {
+		t.Logf("%d footers, %d prefixes, %d lists, %d schema elements", len(footers), prefixes, lists, elements)
+	}()
 	for name, f := range footers {
 		t.Run(name, func(t *testing.T) {
 			if _, err := metadata.NewFileMetaData(f, nil); err != nil {
@@ -414,6 +612,41 @@ func TestFooterWalkDifferential(t *testing.T) {
 						t.Errorf("the list at %d said to hold type %d, not %d: the walk answers %v, arrow-go %v",
 							h[0], other, et, err, errArrow)
 					}
+				}
+			}
+
+			v, err := tparse(f)
+			if err != nil {
+				t.Fatalf("reading the footer back: %v", err)
+			}
+			if _, err := schemaDepth(v.bytes()); err != nil {
+				t.Fatalf("the footer read back and written again: the walk refuses it: %v", err)
+			}
+			if err := arrowReads(v.bytes()); err != nil {
+				t.Fatalf("the footer read back and written again: arrow-go refuses it: %v", err)
+			}
+			elems := schemaOf(t, v)
+			if len(elems) == 0 {
+				t.Fatal("the footer's schema has no element")
+			}
+			for i, el := range elems {
+				elements++
+				claims, after := childrenOf(el), int64(len(elems)-1-i)
+				g := withChildren(v, i, claims+1).bytes()
+				_, err := schemaDepth(g)
+				if errArrow := arrowReads(g); !errors.Is(err, errSchemaOpen) && !errors.Is(err, errSchemaChildren) ||
+					errArrow == nil {
+					t.Errorf("schema element %d of %d claiming %d children, not %d: the walk answers %v, arrow-go %v",
+						i, len(elems), claims+1, claims, err, errArrow)
+				}
+				g = withChildren(v, i, after+1).bytes()
+				_, err = schemaDepth(g)
+				if errArrow := arrowReads(g); !errors.Is(err, errSchemaChildren) || errArrow == nil {
+					t.Errorf("schema element %d of %d claiming %d children, one past the elements after it: "+
+						"the walk answers %v, arrow-go %v", i, len(elems), after+1, err, errArrow)
+				}
+				if _, err := schemaDepth(withChildren(v, i, math.MaxInt32).bytes()); !errors.Is(err, errSchemaChildren) {
+					t.Errorf("schema element %d of %d claiming 2^31-1 children: the walk answers %v", i, len(elems), err)
 				}
 			}
 		})
@@ -602,4 +835,132 @@ func TestARowGroupOfAnotherCountOfChunksIsRefused(t *testing.T) {
 			}
 		}()
 	}
+}
+
+// schemaFooter is a footer of no row groups whose schema's elements claim kids
+// children each, the first the root: a group, one claiming any, has no type, and a
+// leaf, one claiming none, is a REQUIRED INT64, so that the tree is all arrow-go can
+// find wrong with it (step 533).
+func schemaFooter(kids []int64) tval {
+	var elems []tval
+	for i, k := range kids {
+		name := tf(4, tbin(fmt.Sprint("e", i)))
+		if k == 0 && i > 0 {
+			elems = append(elems, tstruct(tf(1, ti32(2)), tf(3, ti32(0)), name))
+		} else {
+			elems = append(elems, tstruct(name, tf(5, ti32(k))))
+		}
+	}
+	return tstruct(tf(1, ti32(2)), tf(2, tlist(thriftStruct, elems...)), tf(3, ti64(0)), tf(4, tlist(thriftStruct)))
+}
+
+// TestASchemaTreeIsReadAsArrowGoReadsIt (step 533): the walk's reading of a schema's
+// tree against arrow-go's schema.FromParquet, over random schemas of 1 to 12
+// elements, the root claiming 1 to 4 children and each other element 0 to 4, in
+// footers where the tree is all arrow-go can refuse (schemaFooter). The walk refuses
+// one as errSchemaChildren or errSchemaOpen exactly where arrow-go refuses it: a tree
+// that does not close within the elements, or an element claiming more than follow
+// it; and passes every other, elements after the root's tree among them, which
+// arrow-go and pyarrow 25.0.1 read past.
+func TestASchemaTreeIsReadAsArrowGoReadsIt(t *testing.T) {
+	seed := rand.Uint64()
+	t.Logf("schemas from seed %d", seed)
+	rng := rand.New(rand.NewPCG(seed, 533))
+	var refused, read, beyond int
+	for range 4_000 {
+		kids := make([]int64, 1+rng.IntN(12))
+		kids[0] = 1 + rng.Int64N(4)
+		for i := 1; i < len(kids); i++ {
+			if rng.IntN(2) == 0 {
+				kids[i] = rng.Int64N(5)
+			}
+		}
+		f := schemaFooter(kids).bytes()
+		_, err := schemaDepth(f)
+		errArrow := arrowReads(f)
+		switch {
+		case err != nil && !errors.Is(err, errSchemaChildren) && !errors.Is(err, errSchemaOpen):
+			t.Fatalf("children %v: the walk answers %v", kids, err)
+		case (err == nil) != (errArrow == nil):
+			t.Fatalf("children %v: the walk answers %v, arrow-go %v", kids, err, errArrow)
+		case err != nil:
+			refused++
+		default:
+			read++
+			if md, _ := metadata.NewFileMetaData(f, nil); nodes(md.Schema.Root()) < len(kids) {
+				beyond++
+			}
+		}
+	}
+	t.Logf("%d refused, %d read, %d of them with elements after the root's tree", refused, read, beyond)
+	if refused == 0 || read == 0 || beyond == 0 {
+		t.Errorf("%d refused, %d read, %d with elements after the root's tree: want some of each", refused, read, beyond)
+	}
+}
+
+// nodes is the nodes of arrow-go's tree under n, n counted.
+func nodes(n schema.Node) int {
+	g, ok := n.(*schema.GroupNode)
+	if !ok {
+		return 1
+	}
+	sum := 1
+	for i := range g.NumFields() {
+		sum += nodes(g.Field(i))
+	}
+	return sum
+}
+
+// TestASchemaTreeNotClosingIsRefusedBeforeArrowGoAllocates (step 533): the root and
+// 999 groups each claiming every element after it, then leaves, the last group's.
+// Each claim is within the elements after it, and the tree does not close: the group
+// above the last is owed a child more. arrow-go makes each group its slice of
+// interfaces, 16 bytes a child claimed, before it reads a child, by the square of the
+// elements; it allocated at least that sum, from a footer of 34 KB, and the walk
+// refuses the tree first, as one that does not close: measureFooter as corrupt. With
+// a group more, nested past maxSchemaDepth, it is refused for its depth, as before
+// step 533.
+func TestASchemaTreeNotClosingIsRefusedBeforeArrowGoAllocates(t *testing.T) {
+	const groups, leaves = 1_000, 2_000
+	chain := func(groups int) ([]int64, int64) {
+		kids := make([]int64, groups+leaves)
+		var claimed int64
+		for i := range groups {
+			kids[i] = int64(len(kids) - 1 - i)
+			claimed += kids[i]
+		}
+		return kids, claimed
+	}
+	measure := func(f []byte) error {
+		file := binary.LittleEndian.AppendUint32(append([]byte("PAR1"), f...), uint32(len(f)))
+		_, err := measureFooter(bytes.NewReader(append(file, "PAR1"...)))
+		return err
+	}
+	kids, claimed := chain(groups)
+	f := schemaFooter(kids).bytes()
+	depth, err := schemaDepth(f)
+	if !errors.Is(err, errSchemaOpen) || depth != groups {
+		t.Errorf("the walk answers depth %d and %v; want %d and the tree refused as not closing", depth, err, groups)
+	}
+	if err := measure(f); !errors.Is(err, uerr.ErrIO) || !errors.Is(err, errSchemaOpen) {
+		t.Errorf("measureFooter answers %v; want the footer refused as corrupt", err)
+	}
+	deeper, _ := chain(groups + 1)
+	if err := measure(schemaFooter(deeper).bytes()); !errors.Is(err, uerr.ErrUnsupported) {
+		t.Errorf("a group more, %d deep: measureFooter answers %v; want it refused for its depth", groups+1, err)
+	}
+	if raceDetector {
+		return
+	}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	errArrow := arrowReads(f)
+	runtime.ReadMemStats(&after)
+	got := after.TotalAlloc - before.TotalAlloc
+	if errArrow == nil || got < uint64(16*claimed) {
+		t.Errorf("arrow-go answers %v, allocating %d bytes; want it refused after %d, 16 a child claimed",
+			errArrow, got, 16*claimed)
+	}
+	t.Logf("a footer of %d bytes: arrow-go allocated %d bytes, %d a byte, before it refused it: %v",
+		len(f), got, got/uint64(len(f)), errArrow)
 }
