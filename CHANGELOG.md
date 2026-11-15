@@ -408,21 +408,15 @@ its section below lists them.
   and `ScanNDJSON` found it.
 - **A Parquet page whose bytes are missing is refused, not read as the end** (521): a
   page whose header was whole and whose bytes were not in its column chunk ended the
-  read there with no error, so a file whose `Count` said 5 rows read as 0. arrow-go
-  answers `io.EOF` for such a page, and the engine took the error for the end of the
-  input. The read is refused as corrupt now, through arrow-go's column reader and
-  ursus's own pages alike; `Count`, which reads only the footer, still answers its
-  rows, as pyarrow and DuckDB count them and refuse the read. CI's fuzz runs found it.
-- **A Parquet footer's lists are sized before arrow-go reads them** (521): arrow-go
-  makes a slice of the count each list of a footer claims before it reads an element,
-  and a footer of 78 bytes claiming 10^8 row groups made it allocate 763 MiB before
-  refusing the file. Step 423's walk of the footer did not reach a footer that left no
-  room for the file's leading magic, which arrow-go reads, and read a list by the type
-  its header gives, where arrow-go reads the type the format gives, so a list of row
-  groups said to hold a binary hid a list of 10^8 column chunks. Every footer arrow-go
-  reads is walked now, its lists read as arrow-go reads them, and a list claiming more
-  elements than the bytes after it is refused as corrupt, at any depth. CI's fuzz runs
-  found it.
+  read there with no error, so a file whose `Count` said 5 rows read as 0: the engine
+  took the page's error for the end of the input. The read is refused as corrupt now,
+  whichever reader decodes the chunk; `Count`, which reads only the footer, still
+  answers its rows, as pyarrow and DuckDB count them and refuse the read. CI's fuzz
+  runs found it.
+- **A corrupt Parquet Null column is refused, not an internal error** (521): a footer
+  giving a Null column a physical type arrow-go does not know made the read fail with
+  "this is a bug in ursus"; it is refused as unsupported, as a column of any other type
+  is.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
