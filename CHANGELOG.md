@@ -354,6 +354,17 @@ its section below lists them.
   and a null Struct is kept apart from a Struct of nulls (`ExtractGroups`, 499);
   Polars 2.1 reads a null too. `ScanJSON`, which reads each object as a line, follows.
   The recorded oracle found it (`ndjsonread/ignored_in_a_struct`).
+- **A forged Arrow IPC file or stream can no longer end the process through its
+  metadata** (519): arrow-go trusts every length an IPC footer or message declares,
+  so a file of 0.5 to 2 KB ended `ScanIPC`, `ScanIPCStream`, `ReadIPCSchema` and their
+  kin six ways, with "fatal error: runtime: out of memory" or "stack overflow": a
+  schema's fields, a field's children or a list of key-values declaring 2^31−1, a view
+  column's variadic buffers 2^40 in a record batch or a dictionary batch, and a field
+  its own child. ursus walks every footer and message before arrow-go reads it, each
+  offset, length and count against its bytes, and fields no deeper than 2,000, and
+  refuses what arrow-go would trust with an `ErrIO` naming the input as corrupt. No
+  well-formed file is refused. A Parquet footer's Arrow schema is read by the same
+  walk.
 - **A Parquet dictionary index past its dictionary no longer ends the process**
   (517): arrow-go made a slice of a data page's dictionary index before it checked the
   index against the dictionary, 8 GiB for index 2^30 in a file of 128 bytes and a fatal
