@@ -488,8 +488,9 @@ func randomColumn(rng *rand.Rand, name string, dt dtype.DataType, n int) *data.C
 
 // writersFooters are footers to walk: random files of ursus's writer; the files
 // pyarrow 25.0.1 wrote at random, testdata/oracle/footers
-// (bench/scripts/oracle/write_footers.py); the Parquet fixtures other engines wrote;
-// and everyList.
+// (bench/scripts/oracle/write_footers.py); the Parquet fixtures other engines wrote,
+// those in testdata/parquet's folders among them since step 533, Polars' and
+// pyarrow's under each codec and pyarrow's delta-encoded files; and everyList.
 func writersFooters(t *testing.T) map[string][]byte {
 	seed := rand.Uint64()
 	t.Logf("ursus's files from seed %d", seed)
@@ -499,7 +500,7 @@ func writersFooters(t *testing.T) map[string][]byte {
 		out[fmt.Sprint("ursus ", i)] = footerOf(t, ursusFile(t, rng))
 	}
 	var paths []string
-	for _, glob := range []string{"oracle/footers/*.parquet", "parquet/*.parquet"} {
+	for _, glob := range []string{"oracle/footers/*.parquet", "parquet/*.parquet", "parquet/*/*.parquet"} {
 		p, err := filepath.Glob(filepath.Join("..", "..", "..", "testdata", glob))
 		if err != nil || len(p) == 0 {
 			t.Fatalf("testdata/%s: %v, %d files", glob, err, len(p))
