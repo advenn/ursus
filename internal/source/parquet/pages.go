@@ -207,7 +207,7 @@ func (c *pageChunk) nextPage() (bool, error) {
 			return true, nil
 		}
 	}
-	if err := c.pr.Err(); err != nil {
+	if err := truncated(c.pr.Err()); err != nil {
 		return false, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "reading column %q", c.name)
 	}
 	return false, nil
