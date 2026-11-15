@@ -472,6 +472,48 @@ its section below lists them.
   spilling and the IPC and JSON writers; an IPC file holding one reads, and it is a
   key. Parquet and CSV refuse it cleanly, as Polars does. CI's fuzzing of `ScanJSON`
   and `ScanNDJSON` found it.
+- **A Parquet page whose bytes are missing is refused, not read as the end** (521): a
+  page whose header was whole and whose bytes were not in its column chunk ended the
+  read there with no error, so a file whose `Count` said 5 rows read as 0. arrow-go
+  answers `io.EOF` for such a page, and the engine took the error for the end of the
+  input. The read is refused as corrupt now, through arrow-go's column reader and
+  ursus's own pages alike; `Count`, which reads only the footer, still answers its
+  rows, as pyarrow and DuckDB count them and refuse the read. CI's fuzz runs found it.
+- **A Parquet footer's lists are sized before arrow-go reads them** (521): arrow-go
+  makes a slice of the count each list of a footer claims before it reads an element,
+  and a footer of 78 bytes claiming 10^8 row groups made it allocate 763 MiB before
+  refusing the file. Step 423's walk of the footer did not reach a footer that left no
+  room for the file's leading magic, which arrow-go reads, and read a list by the type
+  its header gives, where arrow-go reads the type the format gives, so a list of row
+  groups said to hold a binary hid a list of 10^8 column chunks. Every footer arrow-go
+  reads is walked now, its lists read as arrow-go reads them, and a list claiming more
+  elements than the bytes after it is refused as corrupt, at any depth. CI's fuzz runs
+  found it.
+- **An uncompressed Parquet page whose two sizes differ is refused** (521): an
+  UNCOMPRESSED page holding fewer bytes than its header declares was read with the rest
+  taken from whatever its buffer held before, an earlier page's bytes or fresh memory,
+  and no error. Such a page is refused as corrupt, as DuckDB refuses it; no writer
+  writes one. The fuzz runs of step 521 found it.
+- **A corrupt Parquet Null column is refused, not an internal error** (521): a footer
+  giving a Null column a physical type arrow-go does not know made the read fail with
+  "this is a bug in ursus"; it is refused as unsupported, as a column of any other type
+  is.
+- **A Parquet dictionary index of 0 bits is no longer read as another value** (521):
+  through arrow-go's column reader, a page whose dictionary indices are 0 bits wide,
+  each index 0, followed by any byte after a run's header read every row of the run
+  as the dictionary value that byte numbered, with no error, where pyarrow and DuckDB
+  read the first value. Such a page is refused there now; ursus's own pages read it
+  as pyarrow does. The fuzz runs of step 521 found it.
+- **A Parquet page header that does not parse costs no more than its chunk to
+  refuse** (521): arrow-go looks at a page header with a buffer it doubles at each
+  failure up to 4 MiB, so a 102-byte file whose dictionary header did not parse cost
+  8 MiB each time it was read. The looks stop at the column chunk's size now, at
+  least 16 KiB. The fuzz runs of step 521 found it.
+- **A Parquet row group missing a column chunk is refused as corrupt** (521): a
+  footer whose row group listed fewer column chunks than its schema has columns failed
+  the read with "this is a bug in ursus", and one listing more could panic; both are
+  refused as corrupt now, by the read and by `Count`. The fuzz runs of step 521 found
+  it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
