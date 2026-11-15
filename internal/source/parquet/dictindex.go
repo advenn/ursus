@@ -65,7 +65,10 @@ func checkedColumn(rg *file.RowGroupReader, ci int, desc *schema.Column, mem mem
 	}
 	boundHeaders(pr, rg.MetaData(), ci)
 	pages := &checkedPages{PageReader: pr, maxDef: desc.MaxDefinitionLevel(), maxRep: desc.MaxRepetitionLevel(),
-		name: desc.Path()}
+		name: desc.Path(), phys: desc.PhysicalType(), chunkValues: math.MaxInt64}
+	if cc, err := rg.MetaData().ColumnChunk(ci); err == nil {
+		pages.chunkValues = cc.NumValues()
+	}
 	// Deprecated as "unsafe to use outside of this package"; it is what
 	// RowGroupReader.Column runs, and file.Reader.BufferPool is exported for a reader
 	// that makes its own column readers. arrow-go is pinned (go.mod), so its removal
@@ -89,11 +92,14 @@ func boundHeaders(pr file.PageReader, rg *metadata.RowGroupMetaData, ci int) {
 }
 
 // checkedPages is a column chunk's page reader that refuses a dictionary-encoded data
-// page holding an index past its dictionary.
+// page holding an index past its dictionary, and a delta-encoded data page the format
+// does not allow (deltapage.go).
 type checkedPages struct {
 	file.PageReader
 	maxDef, maxRep int16
 	name           string
+	phys           parquet.Type // the column's physical type, which picks the column reader's decoder
+	chunkValues    int64        // the column chunk's values, as its footer gives them
 
 	dictN int64 // the dictionary's values, once dict
 	dict  bool  // the dictionary page has been read
@@ -111,7 +117,14 @@ func (c *checkedPages) Next() bool {
 	case *file.DictionaryPage:
 		c.dictN, c.dict = int64(p.NumValues()), true
 	case *file.DataPageV1, *file.DataPageV2:
-		if !dictEncoded(parquet.Encoding(p.Encoding())) {
+		e := parquet.Encoding(p.Encoding())
+		if deltaEncoded(e, c.phys) {
+			if c.err = c.checkDelta(p, e); c.err != nil {
+				return false
+			}
+			break
+		}
+		if !dictEncoded(e) {
 			break
 		}
 		if !c.dict {
@@ -177,42 +190,70 @@ func dictEncoded(e parquet.Encoding) bool {
 	return false
 }
 
-// check refuses data page p if an index the column reader would read of it is at or
-// past the dictionary's count. A page the column reader refuses before it decodes a
-// value, levels it cannot read, is left to it.
-func (c *checkedPages) check(p file.Page) error {
-	data, n := p.Data(), int(p.NumValues())
-	var defs []byte // the definition levels' runs, to their page's end, as arrow-go reads them
-	packedDefs := false
+// pageLevels is a data page as the column reader takes it apart: its values' bytes,
+// after its levels, and its definition levels' runs, to the page's end.
+type pageLevels struct {
+	data   []byte // the values' bytes
+	n      int    // the page's levels, its NumValues
+	defs   []byte // the definition levels' runs, to their page's end, as the column reader reads them
+	packed bool   // defs are the deprecated BIT_PACKED
+}
+
+// levels takes data page p apart as the column reader does. ok is false where the
+// column reader refuses the page's levels before it decodes a value; such a page is
+// left to it.
+func (c *checkedPages) levels(p file.Page) (l pageLevels, ok bool) {
+	l.data, l.n = p.Data(), int(p.NumValues())
 	switch q := p.(type) {
 	case *file.DataPageV1:
 		// initLevelDecodersV1: the repetition levels, then the definition levels,
 		// each where its column has them.
 		if c.maxRep > 0 {
-			k, _, _, ok := levelsV1(parquet.Encoding(q.RepetitionLevelEncoding()), c.maxRep, n, data)
+			k, _, _, ok := levelsV1(parquet.Encoding(q.RepetitionLevelEncoding()), c.maxRep, l.n, l.data)
 			if !ok {
-				return nil
+				return l, false
 			}
-			data = data[k:]
+			l.data = l.data[k:]
 		}
 		if c.maxDef > 0 {
-			k, runs, packed, ok := levelsV1(parquet.Encoding(q.DefinitionLevelEncoding()), c.maxDef, n, data)
+			k, runs, packed, ok := levelsV1(parquet.Encoding(q.DefinitionLevelEncoding()), c.maxDef, l.n, l.data)
 			if !ok {
-				return nil
+				return l, false
 			}
-			defs, packedDefs, data = runs, packed, data[k:]
+			l.defs, l.packed, l.data = runs, packed, l.data[k:]
 		}
 	case *file.DataPageV2:
 		// initLevelDecodersV2: the repetition levels' bytes, whatever the column,
 		// then the definition levels'; their decoder reads on to the page's end.
 		rl, dl := int(q.RepetitionLevelByteLen()), int(q.DefinitionLevelByteLen())
-		if rl < 0 || dl < 0 || rl+dl > len(data) {
-			return nil
+		if rl < 0 || dl < 0 || rl+dl > len(l.data) {
+			return l, false
 		}
-		defs, data = data[rl:], data[rl+dl:]
+		l.defs, l.data = l.data[rl:], l.data[rl+dl:]
 	default:
+		return l, false
+	}
+	return l, true
+}
+
+// present bounds the values of page l that are not null, the values the column reader
+// decodes of it (presentValues): its levels, where its column has no definition level.
+func (c *checkedPages) present(l pageLevels) int {
+	if c.maxDef == 0 {
+		return l.n
+	}
+	return presentValues(l.defs, l.packed, bits.Len16(uint16(c.maxDef)), c.maxDef, l.n)
+}
+
+// check refuses data page p if an index the column reader would read of it is at or
+// past the dictionary's count. A page the column reader refuses before it decodes a
+// value, levels it cannot read, is left to it.
+func (c *checkedPages) check(p file.Page) error {
+	l, ok := c.levels(p)
+	if !ok {
 		return nil
 	}
+	data := l.data
 	if len(data) == 0 {
 		return nil // no indices: the column reader reads none
 	}
@@ -220,10 +261,7 @@ func (c *checkedPages) check(p file.Page) error {
 	if width >= 64 {
 		return nil // the column reader refuses the width
 	}
-	values := n
-	if c.maxDef > 0 {
-		values = presentValues(defs, packedDefs, bits.Len16(uint16(c.maxDef)), c.maxDef, n)
-	}
+	values := c.present(l)
 	if width == 0 {
 		if b, ok := zeroWidthMisread(data[1:], values); ok {
 			return fmt.Errorf("corrupt: column %s: a data page's dictionary indices are 0 bits wide, each 0, "+
@@ -498,7 +536,8 @@ func packedMax(b []byte, width, n int) (m uint64, ok bool) {
 
 // packedCount counts the values equal to want among the first n bit-packed width
 // bits each, from 1 to 16, least significant bit first, in b, and how many of the n
-// lie whole in b; it stops at the first that does not.
+// lie whole in b; it stops at the first that does not. Values of 1 bit, an OPTIONAL
+// column's levels, are counted by their bits set, eight bytes a load.
 func packedCount(b []byte, width, n int, want int16) (hits, read int) {
 	if width == 0 {
 		if want == 0 {
@@ -507,6 +546,25 @@ func packedCount(b []byte, width, n int, want int16) (hits, read int) {
 		return 0, n
 	}
 	n = min(n, len(b)*8/width)
+	if width == 1 {
+		ones, i := 0, 0
+		for ; (i+8)*8 <= n; i += 8 {
+			ones += bits.OnesCount64(binary.LittleEndian.Uint64(b[i:]))
+		}
+		for ; (i+1)*8 <= n; i++ {
+			ones += bits.OnesCount8(b[i])
+		}
+		if r := n - i*8; r > 0 {
+			ones += bits.OnesCount8(b[i] & (1<<r - 1))
+		}
+		switch want {
+		case 1:
+			return ones, n
+		case 0:
+			return n - ones, n
+		}
+		return 0, n
+	}
 	mask := uint64(1)<<width - 1
 	per := 57 / width
 	bit := 0
