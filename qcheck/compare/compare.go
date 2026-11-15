@@ -23,6 +23,20 @@ type Plan struct {
 	// Threads is whether ursus ran on several threads: a noisy cell may then differ
 	// within its bound. Otherwise it compares exactly.
 	Threads bool
+	// Want and Got name the two answers in a Diff: "DuckDB" and "ursus" when empty.
+	// Step 514's shrinker compares ursus with itself, "reference" and "variant".
+	Want, Got string
+}
+
+func (p Plan) names() (want, got string) {
+	want, got = p.Want, p.Got
+	if want == "" {
+		want = "DuckDB"
+	}
+	if got == "" {
+		got = "ursus"
+	}
+	return want, got
 }
 
 // NewPlan is the plan of q, a bounded query, whose noisy columns bounds names,
@@ -39,7 +53,19 @@ func NewPlan(q *ast.Query, bounds map[string]ast.Bound, tables map[string]*model
 type Verdict struct {
 	Diff  string         // "" when the answers agree
 	Fired map[string]int // the allowances that fired, by kind
+	// What differs, when Diff does: one of the Diff* kinds below; and Column, the
+	// column of the first differing cell, for DiffCell.
+	What   string
+	Column string
 }
+
+// What a Verdict's Diff found: step 514's shrinker keeps it in a case's signature.
+const (
+	DiffCount   = "count"   // a Count's number, or a Count against a frame
+	DiffColumns = "columns" // the answers' columns
+	DiffRows    = "rows"    // how many rows
+	DiffCell    = "cell"    // a cell
+)
 
 const eps = 0x1p-52
 
@@ -47,22 +73,23 @@ const eps = 0x1p-52
 // a refusal: the runner reports those.
 func Compare(want, got *Answer, p Plan) Verdict {
 	v := Verdict{Fired: map[string]int{}}
+	wn, gn := p.names()
 	if want.IsCount != got.IsCount {
-		v.Diff = "one answer is a Count and the other a frame"
+		v.Diff, v.What = "one answer is a Count and the other a frame", DiffCount
 		return v
 	}
 	if want.IsCount {
 		if want.Count != got.Count {
-			v.Diff = fmt.Sprintf("Count: ursus %d, DuckDB %d", got.Count, want.Count)
+			v.Diff, v.What = fmt.Sprintf("Count: %s %d, %s %d", gn, got.Count, wn, want.Count), DiffCount
 		}
 		return v
 	}
 	if !slices.Equal(want.Names, got.Names) {
-		v.Diff = fmt.Sprintf("columns: ursus %v, DuckDB %v", got.Names, want.Names)
+		v.Diff, v.What = fmt.Sprintf("columns: %s %v, %s %v", gn, got.Names, wn, want.Names), DiffColumns
 		return v
 	}
 	if want.Rows != got.Rows {
-		v.Diff = fmt.Sprintf("rows: ursus %d, DuckDB %d", got.Rows, want.Rows)
+		v.Diff, v.What = fmt.Sprintf("rows: %s %d, %s %d", gn, got.Rows, wn, want.Rows), DiffRows
 		return v
 	}
 	var exact, loose []int
@@ -86,14 +113,14 @@ func Compare(want, got *Answer, p Plan) Verdict {
 	for r := range want.Rows {
 		for _, j := range exact {
 			if want.Cells[j][wi[r]] != got.Cells[j][gi[r]] {
-				v.Diff = rowDiff(want, got, wi[r], gi[r], j, p.Ordered)
+				v.Diff, v.What, v.Column = p.rowDiff(want, got, wi[r], gi[r], j), DiffCell, want.Names[j]
 				return v
 			}
 		}
 		for _, j := range loose {
 			ok, fired := p.within(want, got, wi[r], gi[r], j)
 			if !ok {
-				v.Diff = rowDiff(want, got, wi[r], gi[r], j, p.Ordered)
+				v.Diff, v.What, v.Column = p.rowDiff(want, got, wi[r], gi[r], j), DiffCell, want.Names[j]
 				return v
 			}
 			if fired != "" {
@@ -215,12 +242,14 @@ func cell(a *Answer, name string, r int) string {
 }
 
 // rowDiff describes a differing row: the column, and both rows.
-func rowDiff(want, got *Answer, wr, gr, j int, ordered bool) string {
+func (p Plan) rowDiff(want, got *Answer, wr, gr, j int) string {
 	how := "row"
-	if !ordered {
+	if !p.Ordered {
 		how = "row, in the rows' canonical order,"
 	}
-	return fmt.Sprintf("%s %d differs in column %q: ursus %s, DuckDB %s\n  DuckDB: %s\n  ursus:  %s", how, wr,
-		want.Names[j], show(got.Cells[j][gr], got.Types[j]), show(want.Cells[j][wr], want.Types[j]),
-		want.Row(wr), got.Row(gr))
+	wn, gn := p.names()
+	w := max(len(wn), len(gn)) + 1
+	return fmt.Sprintf("%s %d differs in column %q: %s %s, %s %s\n  %-*s %s\n  %-*s %s", how, wr,
+		want.Names[j], gn, show(got.Cells[j][gr], got.Types[j]), wn, show(want.Cells[j][wr], want.Types[j]),
+		w, wn+":", want.Row(wr), w, gn+":", got.Row(gr))
 }

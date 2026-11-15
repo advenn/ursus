@@ -1,0 +1,100 @@
+{
+  "format": 1,
+  "source": "duck",
+  "mode": "duck",
+  "seed": 822025313,
+  "note": "found by PR #80's qcheck-duckdb job, qcheck duck -seed 822025313 -cases 1, and shrunk there by qcheck duck -shrink; fixed by step 523, a regression since",
+  "signature": {
+    "kind": "mismatch",
+    "what": "cell",
+    "op": "Min",
+    "type": "Float64"
+  },
+  "config": {
+    "threads": 4,
+    "batch": 1,
+    "records": 1
+  },
+  "tables": [
+    {
+      "name": "t0",
+      "seed": 3936354082876469813,
+      "rows": 5,
+      "columns": [
+        {
+          "name": "f64f",
+          "type": "Float64",
+          "values": [
+            "0",
+            "1",
+            "0",
+            "0",
+            "-4.776218453982342e+170"
+          ]
+        }
+      ]
+    }
+  ],
+  "query": {
+    "root": {
+      "op": "GroupBy",
+      "in": {
+        "op": "Select",
+        "in": {
+          "op": "Scan",
+          "table": "t0"
+        },
+        "cols": [
+          {
+            "name": "x3",
+            "e": {
+              "type": "Float64",
+              "bin": "Mod",
+              "l": {
+                "type": "Float64",
+                "col": "f64f"
+              },
+              "r": {
+                "type": "Float64",
+                "col": "f64f"
+              }
+            }
+          }
+        ]
+      },
+      "aggs": [
+        {
+          "name": "a4",
+          "e": {
+            "type": "Float64",
+            "x": {
+              "type": "Float64",
+              "col": "x3"
+            },
+            "agg": "Min"
+          }
+        }
+      ]
+    }
+  },
+  "shrunk": {
+    "from": {
+      "tables": 1,
+      "rows": 79,
+      "columns": 6,
+      "ops": 4,
+      "exprs": 29,
+      "factors": 5
+    },
+    "to": {
+      "tables": 1,
+      "rows": 5,
+      "columns": 1,
+      "ops": 2,
+      "exprs": 5,
+      "factors": 2
+    },
+    "runs": 266,
+    "seconds": 1.1
+  }
+}
