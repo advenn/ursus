@@ -121,6 +121,9 @@ one, and keeps its input as a seed.
   `finding-schema-fields-2e31`, `finding-field-children-2e31`,
   `finding-schema-metadata-2e31`, `finding-variadic-buffers-2e40`,
   `finding-dictionary-variadic-buffers`, `finding-field-its-own-child`.
+  **Fixed by [step 519](./step-519-as-built.md):** `internal/arrowmeta` walks every
+  footer and message before arrow-go reads it, and the six are refused as corrupt;
+  `oversized` skips the 2^40 rows alone.
 - **A record batch of 2^40 rows of no data.** A Null column holds no buffer, nor does
   a record of no columns, so arrow-go's validation passes any length; a 557-byte stream
   declaring 2^40 rows had arrowsrc copy batches of 8,192 nulls, allocating, until the

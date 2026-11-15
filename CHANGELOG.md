@@ -354,6 +354,17 @@ its section below lists them.
   and a null Struct is kept apart from a Struct of nulls (`ExtractGroups`, 499);
   Polars 2.1 reads a null too. `ScanJSON`, which reads each object as a line, follows.
   The recorded oracle found it (`ndjsonread/ignored_in_a_struct`).
+- **A forged Arrow IPC file or stream can no longer end the process through its
+  metadata** (519): arrow-go trusts every length an IPC footer or message declares,
+  so a file of 0.5 to 2 KB ended `ScanIPC`, `ScanIPCStream`, `ReadIPCSchema` and their
+  kin six ways, with "fatal error: runtime: out of memory" or "stack overflow": a
+  schema's fields, a field's children or a list of key-values declaring 2^31−1, a view
+  column's variadic buffers 2^40 in a record batch or a dictionary batch, and a field
+  its own child. ursus walks every footer and message before arrow-go reads it, each
+  offset, length and count against its bytes, and fields no deeper than 2,000, and
+  refuses what arrow-go would trust with an `ErrIO` naming the input as corrupt. No
+  well-formed file is refused. A Parquet footer's Arrow schema is read by the same
+  walk.
 - **A Parquet dictionary index past its dictionary no longer ends the process**
   (517): arrow-go made a slice of a data page's dictionary index before it checked the
   index against the dictionary, 8 GiB for index 2^30 in a file of 128 bytes and a fatal
@@ -363,6 +374,19 @@ its section below lists them.
   as corrupt before arrow-go decodes it, as ursus's own pages refused it, and the error
   names the index, where a page of such a chunk that failed was reported as its row
   group short of rows. CI's fuzz runs found it.
+- **A Parquet page decompresses to no more than it declares** (520): a page's codec
+  could allocate what its own header claimed before arrow-go compared the output with
+  the page, 1.2 GB for a Zstandard frame in a page of 15 bytes, 1 GiB for a Snappy
+  length header, and a page declaring no bytes had gzip or Brotli read its whole
+  stream; a Brotli stream of 14 bytes made a ring buffer of 16 MiB for a page of 40.
+  Such a page is refused as corrupt, an I/O error, before anything past it is
+  allocated. To do it, importing ursus replaces arrow-go's Snappy, gzip, Brotli and
+  Zstandard codecs, in arrow-go's registry, with ones that refuse only what a page does
+  not declare and otherwise decode and encode as before; an empty Brotli page after a
+  page of bytes, which arrow-go refused, reads. CI's fuzz run found it. And a
+  dictionary page's count in a varint of 10 bytes, which ursus read otherwise than
+  arrow-go and so did not check, no longer makes arrow-go allocate 21.5 GB; the fuzz
+  target found it.
 - **A sort in small batches no longer allocates by the square of its batches** (512):
   each output batch's gather made two arrays as long as every input batch the sort
   kept, so sorting 8,191 rows in batches of one row allocated 2.3 GB in 400 ms; 23 MB
