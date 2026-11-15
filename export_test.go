@@ -48,6 +48,13 @@ func Press(e *Engine, n int64) (release func()) {
 	return b.Leave
 }
 
+// CutWholeBatches makes Collect and Count ask for every batch cut at the batch size,
+// as before step 529, until restore is called: the differential's reference.
+func CutWholeBatches() (restore func()) {
+	cutWhole.Store(true)
+	return func() { cutWhole.Store(false) }
+}
+
 // SetDefaultEngine replaces DefaultEngine for a test; the returned function restores
 // it.
 func SetDefaultEngine(e *Engine) (restore func()) {

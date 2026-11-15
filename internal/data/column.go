@@ -908,7 +908,9 @@ func (c *Column) Field(name string) (*Column, bool) {
 }
 
 // NewNull builds an all-null column of the given type and length. It carries no
-// payload buffer, which makes a typed null literal free.
+// payload buffer, which makes a typed null literal free, and no validity bitmap
+// either: bitmap.Zeros is the all-clear form, which has no storage (step 529). A
+// column of n nulls is its type and n, whatever n is, as a Null column is in Polars.
 func NewNull(name string, dt dtype.DataType, n int) *Column {
 	return &Column{name: name, dt: dt, len: n, valid: bitmap.Zeros(n)}
 }

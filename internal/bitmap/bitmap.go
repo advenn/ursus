@@ -31,6 +31,7 @@ package bitmap
 import (
 	"encoding/binary"
 	"math/bits"
+	"sync/atomic"
 
 	"github.com/apache/arrow-go/v18/arrow/bitutil"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -44,11 +45,24 @@ import (
 // "no nulls". Arrow allows omitting the validity buffer entirely when null_count
 // is zero, and representing that as the zero value keeps the common no-nulls path
 // allocation-free and branch-predictable.
+//
+// # All clear has no storage either (step 529)
+//
+// Zeros, n bits all clear, is the other form with no buffer: the validity of a
+// column of nulls, a Null column's above all. It held a bit a row, so a Null column
+// of 2^40 rows, which an Arrow IPC stream of 232 bytes declares, needed 128 GiB to
+// say what its type says already; Polars holds one in constant space. Every reader
+// of a View is a method or a function of this package, so each knows both forms;
+// RawBits, the one way to the bytes, hands over none for either.
 type View struct {
-	buf    []byte // nil means "all bits set"
+	buf    []byte // nil means no storage: all set, or all clear at offset clearOffset
 	offset int    // bit offset of bit 0 of this view within buf
 	length int    // number of bits in this view
 }
+
+// clearOffset is the offset of the all-clear form, which has no buffer: the all-set
+// form's is always 0.
+const clearOffset = -1
 
 // AllSet returns a view of n bits, all set, with no backing storage.
 func AllSet(n int) View { return View{length: n} }
@@ -70,12 +84,16 @@ func (v View) Len() int { return v.length }
 // IsAllSet reports whether the view is the no-storage all-set form. It does NOT
 // scan; a materialised bitmap that happens to be all ones returns false. Use it
 // to take a fast path, never to decide correctness.
-func (v View) IsAllSet() bool { return v.buf == nil }
+func (v View) IsAllSet() bool { return v.buf == nil && v.offset == 0 }
+
+// IsAllClear reports whether the view is the no-storage all-clear form, Zeros'. Like
+// IsAllSet it does not scan: a fast path, never a decision.
+func (v View) IsAllClear() bool { return v.buf == nil && v.offset == clearOffset }
 
 // Get returns bit i, where i is relative to this view.
 func (v View) Get(i int) bool {
 	if v.buf == nil {
-		return true
+		return v.offset == 0
 	}
 	return bitutil.BitIsSet(v.buf, v.offset+i)
 }
@@ -83,6 +101,9 @@ func (v View) Get(i int) bool {
 // CountSet returns the number of set bits, i.e. the valid count.
 func (v View) CountSet() int {
 	if v.buf == nil {
+		if v.offset == clearOffset {
+			return 0
+		}
 		return v.length
 	}
 	return bitutil.CountSetBits(v.buf, v.offset, v.length)
@@ -98,15 +119,21 @@ func (v View) Slice(offset, length int) View {
 		panic("bitmap: Slice out of range")
 	}
 	if v.buf == nil {
-		return View{length: length}
+		return View{offset: v.offset, length: length} // either form, unchanged
 	}
 	return View{buf: v.buf, offset: v.offset + offset, length: length}
 }
 
 // RawBits exposes the backing buffer and this view's bit offset together, so a
 // word-at-a-time kernel can use them without being able to forget the offset.
-// Returns (nil, 0) for the all-set form.
-func (v View) RawBits() (buf []byte, bitOffset int) { return v.buf, v.offset }
+// Returns (nil, 0) for either form with no storage, all set or all clear: a caller
+// asks IsAllSet which, never the nil.
+func (v View) RawBits() (buf []byte, bitOffset int) {
+	if v.buf == nil {
+		return nil, 0
+	}
+	return v.buf, v.offset
+}
 
 // IsByteAligned reports whether the view starts on a byte boundary.
 //
@@ -128,10 +155,13 @@ func (v View) Words(yield func(w uint64, nbits int) bool) {
 		return
 	}
 	if v.buf == nil {
+		clear := v.offset == clearOffset
 		for remaining > 0 {
 			n := min(remaining, 64)
 			w := ^uint64(0)
-			if n < 64 {
+			if clear {
+				w = 0
+			} else if n < 64 {
 				w = (uint64(1) << uint(n)) - 1
 			}
 			if !yield(w, n) {
@@ -191,17 +221,19 @@ func (v View) word(pos, n int) uint64 {
 }
 
 // AppendSetPositions appends to dst every position, relative to the views, where a is
-// set and b is too. A b with no storage is all set. Both views must have the same
-// length.
+// set and b is too. Both views must have the same length.
 //
 // A word at a time: a run of unset bits costs one test, and a set bit one
 // TrailingZeros. It is how a filter's mask becomes a selection.
 func AppendSetPositions(dst []int32, a, b View) []int32 {
+	if a.IsAllClear() || b.IsAllClear() {
+		return dst
+	}
 	n := a.length
 	for rel := 0; rel < n; rel += 64 {
 		k := min(64, n-rel)
 		w := a.wordRel(rel, k)
-		if b.buf != nil {
+		if !b.IsAllSet() {
 			w &= b.wordRel(rel, k)
 		}
 		for w != 0 {
@@ -212,10 +244,13 @@ func AppendSetPositions(dst []int32, a, b View) []int32 {
 	return dst
 }
 
-// wordRel is word at a position relative to the view, with the no-storage form's
-// all-ones.
+// wordRel is word at a position relative to the view, with the no-storage forms'
+// all-ones and all-zeros.
 func (v View) wordRel(rel, n int) uint64 {
 	if v.buf == nil {
+		if v.offset == clearOffset {
+			return 0
+		}
 		return maskLow(^uint64(0), n)
 	}
 	return v.word(v.offset+rel, n)
@@ -246,15 +281,19 @@ func (v View) PopCount() int {
 //
 // This is the operation behind null propagation for every total binary kernel:
 // `valid_out = valid_a AND valid_b`. It is deliberately cheap in the common case
-// where at least one side has no nulls.
+// where at least one side has no nulls, and in the case where one side is all null.
 func And(a, b View) View {
 	if a.length != b.length {
 		panic("bitmap: And length mismatch")
 	}
 	switch {
-	case a.buf == nil:
+	case a.IsAllClear():
+		return a
+	case b.IsAllClear():
 		return b
-	case b.buf == nil:
+	case a.IsAllSet():
+		return b
+	case b.IsAllSet():
 		return a
 	}
 	return zip(a, b, func(x, y uint64) uint64 { return x & y })
@@ -283,11 +322,14 @@ func And(a, b View) View {
 //
 // Words and AppendBits already exist precisely because "offset handling is a
 // solved problem rather than a recurring bug" — this is that claim being cashed.
+//
+// Each operand is read through wordRel, so either may be a form with no storage,
+// though the combinators answer those without a loop.
 func zip(a, b View, op func(x, y uint64) uint64) View {
 	out := NewBuilder(a.length)
 	for pos := 0; pos < a.length; {
 		n := min(a.length-pos, 64)
-		out.AppendBits(op(a.word(a.offset+pos, n), b.word(b.offset+pos, n)), n)
+		out.AppendBits(op(a.wordRel(pos, n), b.wordRel(pos, n)), n)
 		pos += n
 	}
 	return out.Finish()
@@ -298,17 +340,13 @@ func AndMulti(vs ...View) View {
 	var acc View
 	first := true
 	for _, v := range vs {
-		if v.buf == nil {
-			if first {
-				acc, first = v, false
-			}
-			continue
-		}
 		if first {
 			acc, first = v, false
 			continue
 		}
-		acc = And(acc, v)
+		if !v.IsAllSet() {
+			acc = And(acc, v)
+		}
 	}
 	return acc
 }
@@ -318,8 +356,13 @@ func Or(a, b View) View {
 	if a.length != b.length {
 		panic("bitmap: Or length mismatch")
 	}
-	if a.buf == nil || b.buf == nil {
+	switch {
+	case a.IsAllSet() || b.IsAllSet():
 		return AllSet(a.length) // one side is all-set, so the result is
+	case a.IsAllClear():
+		return b
+	case b.IsAllClear():
+		return a
 	}
 	return zip(a, b, func(x, y uint64) uint64 { return x | y })
 }
@@ -329,21 +372,24 @@ func AndNot(a, b View) View {
 	if a.length != b.length {
 		panic("bitmap: AndNot length mismatch")
 	}
-	if b.buf == nil {
-		return Zeros(a.length) // NOT all-set is all-clear
+	switch {
+	case b.IsAllSet() || a.IsAllClear():
+		return Zeros(a.length) // NOT all-set is all-clear, and so is anything AND it
+	case b.IsAllClear():
+		return a
+	case a.IsAllSet():
+		return Not(b)
 	}
-	ab := a
-	if ab.buf == nil {
-		ab = materialise(a)
-	}
-	return zip(ab, b, func(x, y uint64) uint64 { return x &^ y })
+	return zip(a, b, func(x, y uint64) uint64 { return x &^ y })
 }
 
 // Not returns the complement of v.
 func Not(v View) View {
-	src := v
-	if src.buf == nil {
-		src = materialise(v)
+	switch {
+	case v.IsAllSet():
+		return Zeros(v.length)
+	case v.IsAllClear():
+		return AllSet(v.length)
 	}
 	// Our own loop for the same reason zip has one: this took bitutil.InvertBitmap,
 	// whose neighbours in that file carry the trailing-byte defect zip documents.
@@ -352,29 +398,36 @@ func Not(v View) View {
 	out := NewBuilder(v.length)
 	for pos := 0; pos < v.length; {
 		n := min(v.length-pos, 64)
-		out.AppendBits(^src.word(src.offset+pos, n), n)
+		out.AppendBits(^v.word(v.offset+pos, n), n)
 		pos += n
 	}
 	return out.Finish()
 }
 
-// Zeros returns a materialised all-clear bitmap of n bits.
+// Zeros returns n bits, all clear, with no storage (step 529): the all-clear form,
+// which allocates nothing at any n. It was a materialised bitmap of zeros, a bit a
+// row of a column that is all null.
 func Zeros(n int) View {
-	buf := arrowx.NewBuffer(int(bitutil.BytesForBits(int64(n))))
-	return NewView(buf.Bytes(), 0, n)
+	if MaterialiseZeros.Load() {
+		return NewView(arrowx.NewBuffer(int(bitutil.BytesForBits(int64(n)))).Bytes(), 0, n)
+	}
+	return View{offset: clearOffset, length: n}
 }
 
-// materialise turns the all-set form into a real buffer of ones.
-func materialise(v View) View {
-	buf := arrowx.NewBuffer(int(bitutil.BytesForBits(int64(v.length))))
-	bitutil.SetBitsTo(buf.Bytes(), 0, int64(v.length), true)
-	return NewView(buf.Bytes(), 0, v.length)
-}
+// MaterialiseZeros makes Zeros allocate its bits, as it did before step 529: the
+// reference of the differential that holds every answer the same with the all-clear
+// form and without it. Set by a test, never during a query.
+var MaterialiseZeros atomic.Bool
 
 // Buffer returns the view's storage as an Arrow buffer for handing to array.NewData,
-// materialising the all-set form if necessary. Returns nil for an all-set view,
+// materialising the all-clear form if necessary. Returns nil for an all-set view,
 // which is what Arrow expects when null_count is zero.
 func (v View) Buffer() *memory.Buffer {
+	if v.IsAllClear() {
+		// Arrow has no form of all null without a buffer but the Null type's, so
+		// the bits are made here, and only here: zeroed by the allocator.
+		return arrowx.NewBuffer(int(bitutil.BytesForBits(int64(v.length))))
+	}
 	if v.buf == nil {
 		return nil
 	}
