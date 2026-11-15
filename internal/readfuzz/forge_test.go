@@ -9,7 +9,7 @@ import (
 // claiming what the bytes do not hold. A claim larger than the field it replaces
 // takes more varint bytes, so a written file cannot be patched in place; these are
 // built whole, with a writer of Thrift's compact protocol and a file of one REQUIRED
-// column, uncompressed, in one row group.
+// column, uncompressed unless a codec is given (step 520), in one row group.
 
 // The compact protocol's types, as they are written in a field's header.
 const (
@@ -103,6 +103,8 @@ type pqPage struct {
 	uncompressed int32 // the header's sizes; zero is the body's length
 	compressed   int32
 	body         []byte
+	empty        bool   // the header declares 0 bytes uncompressed, whatever uncompressed says (step 520)
+	count        []byte // a dictionary header's count as written, in place of values' varint (step 520)
 }
 
 // Where a forged file's one leaf sits (step 517): the column "v" itself, the
@@ -117,7 +119,7 @@ const (
 )
 
 // pqForged is a file of one column "v" of physical type phys, REQUIRED unless
-// optional, its leaf where nest puts it, its pages as given, uncompressed, in one
+// optional, its leaf where nest puts it, its pages as given, under codec, in one
 // row group of rows rows. Its footer says what a writer would of those pages, except
 // that its list of row groups claims groups of them, zero being one: the footer
 // holds one either way.
@@ -132,12 +134,14 @@ type pqForged struct {
 	typeLen  int32   // a FIXED_LEN_BYTE_ARRAY's length
 	nest     int     // pqFlat, pqInList or pqInStruct
 	optional bool    // the leaf is OPTIONAL: a flat column's pages begin with its definition levels
+	codec    int32   // the chunk's codec, zero for UNCOMPRESSED: each page's body is as it compresses (step 520)
 }
 
 func (f pqForged) bytes() []byte {
 	b := []byte("PAR1")
 	start := int64(len(b))
 	dataAt, dictAt := int64(-1), int64(-1)
+	var unc int64 // the chunk's bytes uncompressed: its headers and what each declares
 	for _, p := range f.pages {
 		at := int64(len(b))
 		size := func(claim int32) int32 {
@@ -146,14 +150,23 @@ func (f pqForged) bytes() []byte {
 			}
 			return claim
 		}
+		declared := size(p.uncompressed)
+		if p.empty {
+			declared = 0
+		}
 		var h thriftCompact
 		h.begin()
 		h.i32(1, p.typ)
-		h.i32(2, size(p.uncompressed))
+		h.i32(2, declared)
 		h.i32(3, size(p.compressed))
 		if p.typ == pqPageDict {
 			h.sub(7)
-			h.i32(1, p.values)
+			if p.count != nil {
+				h.field(1, thriftI32)
+				h.b = append(h.b, p.count...)
+			} else {
+				h.i32(1, p.values)
+			}
 			h.i32(2, p.encoding)
 			h.end()
 			if dictAt < 0 {
@@ -173,8 +186,12 @@ func (f pqForged) bytes() []byte {
 		h.end()
 		b = append(b, h.b...)
 		b = append(b, p.body...)
+		unc += int64(len(h.b)) + int64(declared)
 	}
 	chunk := int64(len(b)) - start
+	if f.codec == 0 {
+		unc = chunk
+	}
 	encodings := []int32{pqPlain, pqRLE}
 	if dictAt >= 0 {
 		encodings = append(encodings, pqRLEDict)
@@ -259,9 +276,9 @@ func (f pqForged) bytes() []byte {
 		w.uvarint(uint64(len(p)))
 		w.b = append(w.b, p...)
 	}
-	w.i32(4, 0) // UNCOMPRESSED
+	w.i32(4, f.codec)
 	w.i64(5, f.rows)
-	w.i64(6, chunk) // total_uncompressed_size
+	w.i64(6, unc) // total_uncompressed_size
 	if f.chunk != 0 {
 		w.i64(7, f.chunk) // total_compressed_size
 	} else {
@@ -440,7 +457,10 @@ func (k pqIndexKind) past() (rle, packed []byte) {
 // read, by arrow-go's; a footer whose list of row groups
 // claims 10^8; a column chunk claiming 2^40 bytes; and step 517's, a dictionary
 // index of 2^30 in an RLE run and in a bit-packed one, in each kind of chunk
-// arrow-go decodes (pqIndexKinds).
+// arrow-go decodes (pqIndexKinds); and step 520's, a dictionary page's count in a
+// varint of 10 bytes, read by each decoder (pqLongCounts), pages whose codecs'
+// streams claim or hold more than they declare, and honest pages under each codec
+// (pqCodecSeeds).
 func pqForgedSeeds() [][]byte {
 	vals := []int64{3, 1, 4, 1, 5, 9, 2, 6}
 	page := pqInt64Page(vals)
@@ -466,5 +486,13 @@ func pqForgedSeeds() [][]byte {
 		rle, packed := k.past()
 		seeds = append(seeds, rle, packed)
 	}
-	return seeds
+	past, _ := pqLongCounts()
+	for _, encs := range [][]int32{nil, {pqDeltaLength}} {
+		for _, count := range past {
+			pages := pqDictPages([]string{"ab", "cd"}, 5)
+			pages[0].count = count
+			seeds = append(seeds, pqForged{phys: pqByteArray, rows: 5, pages: pages, encs: encs}.bytes())
+		}
+	}
+	return append(seeds, pqCodecSeeds()...)
 }
