@@ -13,6 +13,40 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.7.3
+
+Three fixes backported from master by step 532, each with its master step number
+below; [`step-532-as-built.md`](./context_files/step-532-as-built.md) says what each
+took and left. No API is added, changed or removed.
+
+### Fixed
+
+- **A Struct of no fields keeps its rows** (518): a JSON or NDJSON object field
+  holding `{}`, Polars' `Struct({})`, failed the whole read with an internal error,
+  "batch declares 1 rows but its columns hold 0", as a struct took its length from its
+  first field. It reads now as a `Struct()` column, `{}` or null a row, as Polars 2.1
+  reads it, and keeps its rows through filters, sorts, joins carrying it,
+  concatenation, a group-by's values, `Unique`, spilling and the IPC and JSON writers;
+  an IPC file holding one reads. Parquet and CSV refuse it cleanly, as Polars does, and
+  so does a group-by, a join or a window keyed on it, as before.
+- **An Arrow IPC file or stream with a Null column reads** (522): the format writes a
+  Null column as no buffer, arrow-go's IPC reader builds it as a Null array of no
+  buffers, and arrow-go's own validation, which ursus runs on every array it imports,
+  wanted one, so every IPC input holding a Null column at any depth was refused as
+  malformed: Polars' files, which write an all-null column as Null, pyarrow's, and
+  ursus's own `WriteIPC` and `WriteIPCStream` of a frame with one; records from
+  arrow-go's IPC reader handed to `ScanArrowRecords` or `ScanArrow` too. Such an
+  array is valid now, and every other array is validated as before.
+- **An Arrow time past its day is refused, not wrapped** (525): a Time32 or Time64
+  outside [0, 24h) was wrapped into the day by `ScanArrowRecords`, `ScanArrow` and
+  every `ScanIPC` reader, so 26:00 read as 02:00, which sorts after 23:00 and equals
+  no 02:00. It is refused now as a corrupt value, an `ErrValue` naming the column,
+  the value and its row, inside a List or a Struct as well; a null's slot is not
+  looked at. A Parquet TIME past its day is refused by the same rule (510): it was
+  read as it lay, and inside a List or a Struct with no error at all.
+
+---
+
 ## v0.7.2 — 2026-11-02
 
 Everything since `v0.7.1` (2026-10-30): steps 410–436, the bug hunt

@@ -3,6 +3,7 @@ package arrowin_test
 import (
 	"bytes"
 	"errors"
+	"math/rand/v2"
 	"strings"
 	"testing"
 
@@ -230,5 +231,53 @@ func TestCheckerRefusals(t *testing.T) {
 	}
 	if err := arrowin.NewChecker(want).Check(live); err != nil {
 		t.Errorf("the live record itself was refused: %v", err)
+	}
+}
+
+// TestAStructOfNoFieldsKeepsItsRows (step 518): an Arrow struct of no fields, which
+// Polars writes for a JSON read of {}, imports as a Struct() of its rows, each null
+// where arrow-go's array says, over a window of it as well as the whole; and Arrow
+// export hands back the same rows. It was refused, as ursus took a struct's length
+// from its first field.
+func TestAStructOfNoFieldsKeepsItsRows(t *testing.T) {
+	r := rand.New(rand.NewPCG(518, 3))
+	at := arrow.StructOf()
+	dt, err := arrowin.Type(at, arrow.Metadata{})
+	if err != nil || dt != dtype.Struct() {
+		t.Fatalf("an Arrow struct of no fields maps to %s, %v", dt, err)
+	}
+	for trial := range 10 {
+		n := 1 + r.IntN(200)
+		b := array.NewStructBuilder(memory.DefaultAllocator, at)
+		for range n {
+			b.Append(r.IntN(3) != 0)
+		}
+		arr := b.NewArray()
+		b.Release()
+		lo := r.IntN(n)
+		hi := lo + r.IntN(n-lo+1)
+		for _, w := range [][2]int{{0, n}, {lo, hi}} {
+			c, err := arrowin.Column("a", arr, dt, w[0], w[1])
+			if err != nil {
+				t.Fatalf("trial %d, rows [%d, %d): %v", trial, w[0], w[1], err)
+			}
+			if c.Len() != w[1]-w[0] || c.DType() != dt {
+				t.Fatalf("trial %d, rows [%d, %d): a %s of %d rows", trial, w[0], w[1], c.DType(), c.Len())
+			}
+			for i := range c.Len() {
+				if c.IsValid(i) != arr.IsValid(w[0]+i) {
+					t.Fatalf("trial %d: row %d is valid %v here, %v in Arrow", trial, w[0]+i, c.IsValid(i), arr.IsValid(w[0]+i))
+				}
+			}
+			back, err := arrowout.Column(c)
+			if err != nil {
+				t.Fatalf("trial %d: exporting: %v", trial, err)
+			}
+			if back.Len() != c.Len() || back.NullN() != c.NullCount() {
+				t.Errorf("trial %d: exported as %d rows, %d null, from %d and %d", trial, back.Len(), back.NullN(), c.Len(), c.NullCount())
+			}
+			back.Release()
+		}
+		arr.Release()
 	}
 }

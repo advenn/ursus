@@ -23,6 +23,10 @@
 // Import normalises all four: a null row is empty, zeroed, and null in every field
 // beneath it, which is the shape the Parquet reader and kernel.Take already produce.
 // See builder.go.
+//
+// Where arrow-go is looser than Arrow itself, a value the format rules out is refused,
+// not normalised: a Date64 that is not a whole number of days, and a Time32 or Time64
+// outside its day (checkTimes, step 525), which a guess would turn into another time.
 package arrowin
 
 import (
@@ -284,14 +288,11 @@ func typeOf(at arrow.DataType) (dtype.DataType, error) {
 // structOf maps a struct's fields. Every field is nullable, for the reason Schema
 // gives, and because data.NewStruct forces it — so a declared non-nullable field
 // would make the schema disagree with the column the builder produces.
+//
+// A struct of no fields is one (step 518), Polars' Struct({}), as an IPC file of a
+// JSON read of {} holds it: a struct column carries its own length since then, where
+// it took it from its first field and this refused one of none.
 func structOf(afs []arrow.Field, at arrow.DataType) (dtype.DataType, error) {
-	// data.NewStruct takes its length from its first field. A struct with none would
-	// report zero rows whatever its length, and as a frame's only column, an empty
-	// frame.
-	if len(afs) == 0 {
-		return dtype.Null, uerr.New(uerr.KindUnsupported, op,
-			"%s has no fields, and ursus cannot represent a struct without one", at)
-	}
 	fields := make([]dtype.Field, 0, len(afs))
 	seen := make(map[string]bool, len(afs))
 	for _, f := range afs {

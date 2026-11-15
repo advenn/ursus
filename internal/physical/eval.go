@@ -94,7 +94,7 @@ func Eval(ctx context.Context, n expr.Node, b *data.Batch) (*data.Column, error)
 			for i, f := range old {
 				fields[i] = f.Rename(t.Fields(f.Name()))
 			}
-			c = data.NewStruct(c.Name(), fields, c.Validity())
+			c = data.NewStructLen(c.Name(), c.Len(), fields, c.Validity())
 		}
 		return c.Rename(t.Name(c.Name())), nil
 

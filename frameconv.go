@@ -500,9 +500,10 @@ func (df *DataFrame) ToSeries(i int) (*Column, error) {
 }
 
 // ToStruct is the frame as one Struct column named name, a field a column, as Polars'
-// to_struct; no row of it null.
+// to_struct; no row of it null. A frame of no columns gives a Struct of no fields, a
+// row for each of the frame's.
 func (df *DataFrame) ToStruct(name string) *Column {
-	return data.NewStruct(name, df.batch.Columns(), bitmap.View{})
+	return data.NewStructLen(name, df.Height(), df.batch.Columns(), bitmap.View{})
 }
 
 // Columns, DTypes and Width are the lazy frame's column names, their types, and how

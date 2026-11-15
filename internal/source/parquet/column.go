@@ -1256,8 +1256,9 @@ func (c *structCol) finish(name string) *data.Column {
 	} else {
 		valid = bitmap.AllSet(c.rows)
 	}
+	rows := c.rows
 	c.rows = 0
-	return data.NewStruct(name, fields, valid)
+	return data.NewStructLen(name, rows, fields, valid)
 }
 
 func (c *structCol) close() error {
