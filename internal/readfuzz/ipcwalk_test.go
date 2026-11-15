@@ -105,11 +105,11 @@ type cleanInput struct {
 }
 
 // cleanInputs are the IPC inputs the walk must pass, for file and stream both:
-// testdata/ipc's files, Polars 1.44.1's (the repository records no Polars 2.1 IPC
-// bytes); step 511's kitchen sink in each codec, a List 60 deep, 1,000 integers and
-// custom metadata, as arrow-go writes them; arrow-go's big-endian writing of the
-// kitchen sink's fixed-width columns; and what ursus's own writer writes of a frame of
-// every type it has, in each codec.
+// testdata/ipc's files, Polars 1.44.1's, and Polars 2.1's and pyarrow 25.0.1's with
+// Null columns (step 522); step 511's kitchen sink in each codec, a List 60 deep,
+// 1,000 integers and custom metadata, as arrow-go writes them; arrow-go's big-endian
+// writing of the kitchen sink's fixed-width columns; and what ursus's own writer
+// writes of a frame of every type it has, in each codec.
 func cleanInputs(t *testing.T) []cleanInput {
 	t.Helper()
 	var out []cleanInput
@@ -158,10 +158,10 @@ func cleanInputs(t *testing.T) []cleanInput {
 
 // everyType is sink read by ursus, with a column of each of ursus's types the kitchen
 // sink's Arrow types do not read as, that ursus writes to Arrow: an Int128, a
-// Categorical, and a struct of a list, text and a Categorical. An Enum has no Arrow
-// type in ursus yet; and a Null column ursus writes, as any IPC file's, it refuses to
-// read back: arrow-go's IPC reader makes a Null array of no buffers, which its own
-// array.Validate, which ursus calls, refuses (a finding of step 519, left).
+// Categorical, a struct of a list, text and a Categorical, a Null column and a struct
+// of a Null field. An Enum has no Arrow type in ursus yet. The Null columns read back
+// since step 522: arrow-go's IPC reader makes a Null array of no buffers, which its own
+// array.Validate, which ursus calls, refused (a finding of step 519).
 func everyType(t *testing.T, sink arrow.RecordBatch) *ursus.DataFrame {
 	t.Helper()
 	c := ursus.Col
@@ -169,6 +169,8 @@ func everyType(t *testing.T, sink arrow.RecordBatch) *ursus.DataFrame {
 		c("i64").Cast(ursus.Int128).Alias("int128"),
 		c("utf8").Cast(ursus.Categorical).Alias("categorical"),
 		ursus.Struct(c("list"), c("utf8").Alias("text"), c("utf8").Cast(ursus.Categorical).Alias("cat")).Alias("nested"),
+		ursus.Null(ursus.NullT).Alias("null"),
+		ursus.Struct(ursus.Null(ursus.NullT).Alias("z"), c("i64")).Alias("null_field"),
 	).Collect(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -233,7 +235,7 @@ func TestTheWalkPassesCleanInputs(t *testing.T) {
 		if r.schemaErr != nil || r.err != nil {
 			t.Fatalf("%s (file %v) is refused: %v", in.name, in.file, firstErr(r.schemaErr, r.err))
 		}
-		if r.df.Height() == 0 && !strings.Contains(in.name, "polars") {
+		if r.df.Height() == 0 && !strings.Contains(in.name, "polars") && !strings.Contains(in.name, "_empty") {
 			t.Fatalf("%s (file %v): no rows read", in.name, in.file)
 		}
 		checkIPC(t, in.b, r, in.file)
