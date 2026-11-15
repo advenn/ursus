@@ -54,7 +54,9 @@ var Macros = []string{
 	`CREATE OR REPLACE MACRO u_fless(u_a, u_b) AS (NOT isnan(u_a)) AND (isnan(u_b) OR u_fkey(u_a) < u_fkey(u_b))`,
 
 	// The float aggregates over a list in the rows' order (T-FLOAT-AGG, T-EXTREMUM):
-	// a sum from +0, as ursus's accumulator starts; a group of no value null.
+	// a sum from +0, as ursus's accumulator starts; a group of no value null. Of
+	// values the order calls equal, -0 and +0 or two NaNs, Min keeps the first and
+	// Max the last, as a stable Sort(...).First() and .Last() put them (step 523).
 	`CREATE OR REPLACE MACRO u_fsum(u_l) AS CASE WHEN len(u_l) = 0 THEN NULL
 		ELSE list_reduce(u_l, lambda u_a, u_b: u_a + u_b, CAST('0.0' AS DOUBLE)) END`,
 	`CREATE OR REPLACE MACRO u_fmean(u_l) AS CASE WHEN len(u_l) = 0 THEN NULL
@@ -62,7 +64,7 @@ var Macros = []string{
 	`CREATE OR REPLACE MACRO u_fmin(u_l) AS CASE WHEN len(u_l) = 0 THEN NULL
 		ELSE list_reduce(u_l, lambda u_a, u_b: CASE WHEN u_fless(u_b, u_a) THEN u_b ELSE u_a END) END`,
 	`CREATE OR REPLACE MACRO u_fmax(u_l) AS CASE WHEN len(u_l) = 0 THEN NULL
-		ELSE list_reduce(u_l, lambda u_a, u_b: CASE WHEN u_fless(u_a, u_b) THEN u_b ELSE u_a END) END`,
+		ELSE list_reduce(u_l, lambda u_a, u_b: CASE WHEN u_fless(u_b, u_a) THEN u_a ELSE u_b END) END`,
 
 	// u_imean is an integer Mean as ursus answers it (T-MEAN-INT): the double
 	// nearest the exact Σx/n, which kernel/aggsum.go's finishDecimal rounds once.
