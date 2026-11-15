@@ -12,6 +12,7 @@ import (
 
 	"github.com/advenn/ursus/internal/fuzzcheck"
 	"github.com/advenn/ursus/internal/fuzzcheck/invariants"
+	"github.com/advenn/ursus/internal/zstdframe"
 )
 
 // limits bounds one read of an input that is n bytes once decompressed: ten seconds,
@@ -43,7 +44,7 @@ func inflated(b []byte) (n int, ok bool) {
 		defer zr.Close()
 		r = zr
 	case bytes.HasPrefix(b, []byte{0x28, 0xb5, 0x2f, 0xfd}):
-		zr, err := zstd.NewReader(bytes.NewReader(b), zstd.WithDecoderConcurrency(1))
+		zr, err := zstdframe.NewReader(bytes.NewReader(b), zstd.WithDecoderConcurrency(1))
 		if err != nil {
 			return len(b), true
 		}

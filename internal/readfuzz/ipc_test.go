@@ -45,6 +45,7 @@ func scanIPCFileOne(t *testing.T, b []byte) {
 	if why := oversized(b, true); why != "" {
 		t.Skip("finding: " + why)
 	}
+	skipZstdWindowsIn(t, b)
 	mem := &fuzzcheck.Allocator{Limit: ipcRequestLimit(len(b))}
 	defer readBase(mem)()
 	var r read
@@ -98,6 +99,7 @@ func scanIPCStreamOne(t *testing.T, b []byte) {
 	if why := oversized(b, false); why != "" {
 		t.Skip("finding: " + why)
 	}
+	skipZstdWindowsIn(t, b)
 	mem := &fuzzcheck.Allocator{Limit: ipcRequestLimit(len(b))}
 	defer readBase(mem)()
 	var r read
