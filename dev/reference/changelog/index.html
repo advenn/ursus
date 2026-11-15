@@ -3831,6 +3831,9 @@ that stops when its request is cancelled.</p>
 </ul>
 <h3 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>The CSV fuzz targets skip a Zstandard frame declaring a window past their bound</strong>
+  (524), as the NDJSON and JSON targets do since step 511, whose finding it is and
+  which is the maintainer's to decide.</li>
 <li><strong>Expected values are recorded, not typed</strong> (496): <code>make oracle</code> asks Polars 2.1.0
   the suite's questions, from <code>bench/scripts/oracle/</code>, and writes the inputs and the
   answers to <code>testdata/oracle/&lt;group&gt;.json</code>, every type ursus has, several inputs, a
