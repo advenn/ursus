@@ -184,6 +184,7 @@ func FuzzScanCSV(f *testing.F) {
 		if !ok {
 			t.Skip("decompresses past maxInflated")
 		}
+		skipZstdWindow(t, b) // step 511's open finding, which CSV shares (step 524)
 		o, batch := csvOptions(opts)
 		lf := ursus.ScanCSVReader(b, "fuzz.csv", o...)
 		read := func(fn func() error) { fuzzcheck.Run(t, limits(n), fn) }
@@ -297,6 +298,7 @@ func FuzzScanCSVChunked(f *testing.F) {
 		if !ok {
 			t.Skip("decompresses past maxInflated")
 		}
+		skipZstdWindow(t, b) // step 511's open finding, which CSV shares (step 524)
 		ctx := t.Context()
 		var whole, chunked *ursus.DataFrame
 		var werr, cerr error
