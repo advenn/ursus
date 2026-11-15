@@ -7,7 +7,9 @@ plugged in where [`step-512-as-built.md`](./step-512-as-built.md) §7 and
 seed and a query of up to four operations over tables of up to 8,193 rows, reduced
 by hand. Now `qcheck shrink` reduces it: the two findings of step 523 went from 184
 rows and four operations, and from two tables of 8,192 rows, to six and five rows
-in 0.2 and 0.9 seconds (§6).
+in 0.2 and 0.9 seconds, and this PR's first `qcheck-duckdb` run shrank a third of
+their class, found against DuckDB, from 79 rows and four operations to five rows
+and two (§6).
 
 ## 1. What
 
@@ -21,7 +23,7 @@ nothing, and no dependency is added.
 | `compare` | +51 | a `Verdict` says what differs (`What`: count, columns, rows or a cell) and in which `Column`; a `Plan` names its two sides (`Want`, `Got`), "DuckDB" and "ursus" when empty, as before |
 | `duck` | (177) | `TestCorpusAgainstDuckDB`, `TestEmittedSQLRunsInDuckDB`, and `TestEmittedSettingsAreDuckDBs` behind the `duckdb` tag |
 | `cmd/qcheck` | 304 | `qcheck shrink`, and `-shrink` on `self` and `duck` |
-| `testdata/corpus` | 2 cases | the shrunk findings, marked open with step 523 (§6) |
+| `testdata/corpus` | 3 cases | the shrunk findings, marked open with step 523 (§6) |
 
 ## 2. A case is JSON
 
@@ -96,7 +98,7 @@ runs passes until a whole round keeps no step or the budget is spent:
 7. **values:** each column's values simplified: the whole column to 0 or to its first
    value; each distinct value everywhere it is, so rows that share a key keep sharing
    one; then, in a table of at most 64 rows, each value toward 0 (0, half, ±1, its
-   absolute value), a float to +0, 1 or its integer part, text to "", its first rune
+   absolute value), a float to +0, 1, -1 or its integer part, text to "", its first rune
    or its first half, false, or the column's first other value.
 
 **Each step must** pass `ast.Check`, keep inner and left joins under 10,000 matches
@@ -177,28 +179,35 @@ with its signature (a finding over threads may fail only most of the time), and
 - a case not marked that passes, and one marked open that fails, hold.
 
 A file must be named for its case, and a case must name a signature. DuckDB cases
-are replayed by package duck's `TestCorpusAgainstDuckDB` in the `qcheck-duckdb` job;
-there are none yet. `TestTheRatchetBites` holds `Judge` to all four verdicts through
+are replayed by package duck's `TestCorpusAgainstDuckDB` in the `qcheck-duckdb` job:
+one so far, `duck-822025313` (§6). `TestTheRatchetBites` holds `Judge` to all four verdicts through
 the planted bug (§7).
 
 `qcheck shrink ... -corpus testdata/corpus -open "step N: …"` adds a case.
 
 ## 6. The shrunk findings
 
-Both of step 523's findings still fail on master (step 523's PR is not merged), so
-both are in the corpus **marked open with step 523**. Once 523 merges they no longer
-fail and `TestCorpus` fails them as stale: whichever of the two PRs merges second
-removes the two `open` lines, and the cases stay as regressions.
+Both of step 523's findings still fail on master (step 523's PR, #78, is not
+merged), so both are in the corpus **marked open with step 523**, and so is a third
+of their class that this PR's CI found. Once 523 merges they no longer fail, and
+`TestCorpus` (and package duck's `TestCorpusAgainstDuckDB`, for the third) fails them
+as stale: whichever of the two PRs merges second removes the three `open` lines, and
+the cases stay as regressions.
 
 | case | signature | before | after | factors | runs, time |
 | --- | --- | --- | --- | --- | --- |
 | `self-802018528` (PR #72's qcheck job) | `mismatch cell Min Float64` | 1 table, 184 rows, 4 columns; 4 ops (filter, join, group-by, its aggregations), 12 expression nodes; 4 factors | 1 table, 6 rows, 2 columns (`f64b` holding 1, -0 and four +0, `boolc`); 3 ops, `Filter(boolc)`, an inner join with itself on `f64b` keeping the left's order, a keyless `Min(f64b)`; 3 nodes | threads 4, batch 3 | 273, 0.2 s |
 | `self-807010171` (CI run 807's qcheck job) | `mismatch cell Max Float64` | 2 tables, 16,384 rows, 8 columns; 1 op, a group-by on three keys with four aggregations; 14 nodes; 5 factors | 1 table, 5 rows, 2 columns (`i64a` 0 and 1, `f64b` one -0 among +0s); 1 op, `GroupBy(i64a).Agg(Max(f64b))`; 3 nodes | threads 4, batch 1 | 855, 0.9 s |
 
-Both failed alike three times of three after shrinking. The second was reported as
-the query's Mean; its signature says Max, as step 523 found. Each emitted test,
-built into a module of its own over this checkout, fails on master with the -0
-against +0 the finding reported.
+| `duck-822025313` (this PR's first `qcheck-duckdb` run, 33,610 cases; shrunk there by `qcheck duck -shrink`) | `mismatch cell Min Float64` | 1 table, 79 rows, 6 columns; 4 ops, a `WithColumns`, a `Select`, a group-by of four aggregations, a `WithColumns`; 29 nodes; 5 factors | 1 table, 5 rows, 1 column (`f64f` 0, 1, 0, 0, -4.78e170); 2 ops, `Select(f64f.Mod(f64f))` then a keyless `Min`, whose input holds NaN, +0 and -0; 5 nodes | threads 4, batch 1 | 266, 1.1 s |
+
+All three failed alike three times of three after shrinking. The second was reported
+as the query's Mean; its signature says Max, as step 523 found. Each emitted test,
+built into a module of its own over this checkout, fails on master with -0 against
++0 between the reference and four threads, and passes over step 523's branch (built
+read-only, as of 96cc3ee): the third is step 523's class too, its DuckDB answer the
+reference's. Its -4.78e170 is a divisor whose remainder is -0; the values pass then
+tried no -1 for a float, and now does.
 
 ## 7. Tests
 
@@ -260,6 +269,13 @@ ci.yml: the `qcheck` and `qcheck-duckdb` jobs run their five minutes with `-shri
 `qcheck-findings` and `qcheck-duckdb-findings` artifacts (`if-no-files-found:
 ignore`). The `qcheck` job's `go test ./...` now runs the shrinker's tests and the
 corpus's replay.
+
+The jobs' runs on this PR, each from its run's seed:
+
+| commit | job | the tests | the five minutes |
+| --- | --- | --- | --- |
+| 4332183 | `qcheck` | ok (shrink 10.1 s) | `self` from 822,000,000: 16,253 cases, no finding |
+| 4332183 | `qcheck-duckdb` | ok: the settings, the corpus (no DuckDB case yet), 30 or more emitted scripts against `Load` | `duck` from 822,000,000: 33,610 cases, one finding, seed 822,025,313, shrunk by `-shrink` in 1.1 s and uploaded (§6) |
 
 ## 9. Not done
 
