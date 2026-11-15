@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/apache/arrow-go/v18/parquet"
+	"github.com/apache/arrow-go/v18/parquet/compress"
 	"github.com/apache/arrow-go/v18/parquet/metadata"
 	"github.com/apache/arrow-go/v18/parquet/schema"
 )
@@ -24,10 +25,25 @@ import (
 // the chunk's page headers, and a dictionary page whose uncompressed bytes cannot
 // hold its count fails the read. A PLAIN value takes at least valueBits, and a page
 // header that does not parse is left to arrow-go, which says what it is.
+//
+// An UNCOMPRESSED page holds its bytes as they lie, so its two sizes are one (F14 of
+// step 521). arrow-go reads its compressed size of bytes into a buffer of its uncompressed
+// size, and its codec for UNCOMPRESSED copies them in and answers the whole buffer:
+// a page claiming 3,072 bytes and holding none was read as 3,072 bytes of whatever
+// the buffer, a pool's, held before, a frame of another read's bytes and no error.
+// pyarrow 25.0.1 and DuckDB 1.5.5 refuse it. A page of an UNCOMPRESSED chunk whose
+// sizes differ fails the read, as no writer writes one.
 
-// watchChunks has m count the dictionary pages of each column chunk md places.
+// chunkWatch is what a column chunk's pages are checked for: the fewest bits a value
+// of its column takes, and whether the chunk is UNCOMPRESSED.
+type chunkWatch struct {
+	bits  int
+	plain bool
+}
+
+// watchChunks has m check the page headers of each column chunk md places.
 func (m *measured) watchChunks(md *metadata.FileMetaData) {
-	m.chunks = make(map[int64]int)
+	m.chunks = make(map[int64]chunkWatch)
 	for g := range md.NumRowGroups() {
 		rg := md.RowGroup(g)
 		for c := range rg.NumColumns() {
@@ -39,7 +55,8 @@ func (m *measured) watchChunks(md *metadata.FileMetaData) {
 			if d := cc.DictionaryPageOffset(); cc.HasDictionaryPage() && d > 0 && start > d {
 				start = d
 			}
-			m.chunks[start] = valueBits(md.Schema.Column(c))
+			m.chunks[start] = chunkWatch{bits: valueBits(md.Schema.Column(c)),
+				plain: cc.Compression() == compress.Codecs.Uncompressed}
 		}
 	}
 }
@@ -62,14 +79,18 @@ func valueBits(c *schema.Column) int {
 
 // countDictionaries walks b, a column chunk's bytes, a page at a time, and refuses
 // a dictionary page whose uncompressed bytes cannot hold the values its header
-// counts, each of bits bits.
-func countDictionaries(b []byte, bits int) error {
+// counts, each of w.bits bits, and, in an UNCOMPRESSED chunk, a page whose two sizes
+// differ.
+func countDictionaries(b []byte, w chunkWatch) error {
 	for pos := 0; pos < len(b); {
 		h, ok := readPageHeader(b[pos:])
 		if !ok {
 			return nil
 		}
-		if h.typ == pageDictionary && int64(h.values)*int64(bits) > int64(h.uncompressed)*8 {
+		if w.plain && h.compressed != h.uncompressed {
+			return fmt.Errorf("corrupt: an uncompressed page of %d bytes says %d", h.compressed, h.uncompressed)
+		}
+		if h.typ == pageDictionary && int64(h.values)*int64(w.bits) > int64(h.uncompressed)*8 {
 			return fmt.Errorf("corrupt: a dictionary page of %d bytes says %d values", h.uncompressed, h.values)
 		}
 		if h.compressed < 0 || h.compressed > len(b)-pos-h.size {
