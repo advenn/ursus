@@ -1,0 +1,117 @@
+{
+  "format": 1,
+  "source": "self",
+  "mode": "differential",
+  "seed": 802018528,
+  "open": "step 523: a float Min on several threads keeps a later zero of the other sign, not the first of equal values",
+  "note": "found by PR #72's qcheck job, qcheck self -seed 802018528 -cases 1",
+  "signature": {
+    "kind": "mismatch",
+    "what": "cell",
+    "op": "Min",
+    "type": "Float64"
+  },
+  "reference": {
+    "threads": 1,
+    "batch": 8192,
+    "records": 1
+  },
+  "config": {
+    "threads": 4,
+    "batch": 3,
+    "records": 1
+  },
+  "tables": [
+    {
+      "name": "t0",
+      "seed": 2341511471241200868,
+      "rows": 6,
+      "columns": [
+        {
+          "name": "f64b",
+          "type": "Float64",
+          "values": [
+            "1",
+            "0",
+            "0",
+            "-0",
+            "0",
+            "0"
+          ]
+        },
+        {
+          "name": "boolc",
+          "type": "Bool",
+          "values": [
+            true,
+            false,
+            false,
+            true,
+            false,
+            true
+          ]
+        }
+      ]
+    }
+  ],
+  "query": {
+    "root": {
+      "op": "GroupBy",
+      "in": {
+        "op": "Join",
+        "left": {
+          "op": "Filter",
+          "in": {
+            "op": "Scan",
+            "table": "t0"
+          },
+          "pred": {
+            "type": "Bool",
+            "col": "boolc"
+          }
+        },
+        "right": {
+          "op": "Scan",
+          "table": "t0"
+        },
+        "how": "Inner",
+        "left_on": "f64b",
+        "right_on": "f64b",
+        "maintain_order": true
+      },
+      "aggs": [
+        {
+          "name": "a4",
+          "e": {
+            "type": "Float64",
+            "x": {
+              "type": "Float64",
+              "col": "f64b"
+            },
+            "agg": "Min"
+          }
+        }
+      ]
+    }
+  },
+  "shrunk": {
+    "from": {
+      "tables": 1,
+      "rows": 184,
+      "columns": 4,
+      "ops": 4,
+      "exprs": 12,
+      "factors": 4
+    },
+    "to": {
+      "tables": 1,
+      "rows": 6,
+      "columns": 2,
+      "ops": 3,
+      "exprs": 3,
+      "factors": 2
+    },
+    "runs": 273,
+    "seconds": 0.2
+  }
+}
