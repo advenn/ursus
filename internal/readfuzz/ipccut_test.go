@@ -30,27 +30,49 @@ import (
 // structs of two int64s, a buffer's offset in its body and its length.
 const batchBuffers, batchCompression = 2, 3
 
-// TestAnIPCInputCutShortIsRefusedOrReadAsArrowGoReadsIt: the two findings are refused,
-// by Collect and by Count, each with an ErrIO the engine does not take for the end;
-// and every IPC file and stream in testdata/ipc, and the record cutRecord in each
-// codec as arrow-go writes a file and a stream of it, cut after each of its bytes, is
-// refused so, or read as arrow-go reads the same bytes (ipcCutRead). A stream cut
-// between two messages ends there for arrow-go, which takes a stream's end marker to
-// be optional, as the format does, and so for ursus; one cut inside a message is
-// refused by ursus, where arrow-go reads one cut where a message, its metadata or
-// its body begins as ending there.
+// TestAnIPCInputCutShortIsRefusedOrReadAsArrowGoReadsIt: every IPC file and stream in
+// testdata/ipc, and the record cutRecord in each codec as arrow-go writes a file and a
+// stream of it, cut after each of its bytes, is refused, by Collect and by Count, or
+// read as arrow-go reads the same bytes (ipcCutRead). A file cut anywhere has lost its
+// footer, and is refused. A stream cut between two messages, where its framing walked
+// (messageStarts) begins one, ends there for arrow-go, which takes a stream's end
+// marker to be optional, as the format does, and so for ursus. A stream cut inside a
+// message, its end marker's among them, is refused.
 func TestAnIPCInputCutShortIsRefusedOrReadAsArrowGoReadsIt(t *testing.T) {
 	reads, cuts := 0, 0
 	for _, in := range ipcCutInputs(t) {
+		starts := messageStarts(in.b)
 		for k := 0; k < len(in.b); k += flipStride {
 			cuts++
-			if ipcCutRead(t, fmt.Sprintf("%s (file %v) cut after %d of its %d bytes", in.name, in.file, k, len(in.b)),
-				in.b[:k], in.file) {
-				reads++
+			what := fmt.Sprintf("%s (file %v) cut after %d of its %d bytes", in.name, in.file, k, len(in.b))
+			if !ipcCutRead(t, what, in.b[:k], in.file) {
+				continue
+			}
+			reads++
+			switch {
+			case in.file:
+				t.Errorf("%s: read, a file without its footer", what)
+			case !starts[k]:
+				t.Errorf("%s: read, a stream cut inside a message", what)
 			}
 		}
 	}
 	t.Logf("%d cuts, %d of them read as arrow-go reads them, the others refused", cuts, reads)
+}
+
+// messageStarts are where the messages of b, an IPC stream, begin as its framing
+// walked gives them (message): each message's, its end marker's, and b's end.
+func messageStarts(b []byte) map[int]bool {
+	starts := map[int]bool{len(b): true}
+	for pos := 0; pos < len(b); {
+		starts[pos] = true
+		_, next, ok := message(b, pos)
+		if !ok {
+			break
+		}
+		pos = next
+	}
+	return starts
 }
 
 // TestAnIPCBufferCutShortIsRefusedOrReadAsArrowGoReadsIt: inside a record, where a
