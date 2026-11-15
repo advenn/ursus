@@ -37,6 +37,13 @@ took and left. No API is added, changed or removed.
   ursus's own `WriteIPC` and `WriteIPCStream` of a frame with one; records from
   arrow-go's IPC reader handed to `ScanArrowRecords` or `ScanArrow` too. Such an
   array is valid now, and every other array is validated as before.
+- **An Arrow time past its day is refused, not wrapped** (525): a Time32 or Time64
+  outside [0, 24h) was wrapped into the day by `ScanArrowRecords`, `ScanArrow` and
+  every `ScanIPC` reader, so 26:00 read as 02:00, which sorts after 23:00 and equals
+  no 02:00. It is refused now as a corrupt value, an `ErrValue` naming the column,
+  the value and its row, inside a List or a Struct as well; a null's slot is not
+  looked at. A Parquet TIME past its day is refused by the same rule (510), where it
+  was read as it lay, and inside a List or a Struct read with no error.
 
 ---
 

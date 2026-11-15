@@ -23,6 +23,10 @@
 // Import normalises all four: a null row is empty, zeroed, and null in every field
 // beneath it, which is the shape the Parquet reader and kernel.Take already produce.
 // See builder.go.
+//
+// Where arrow-go is looser than Arrow itself, a value the format rules out is refused,
+// not normalised: a Date64 that is not a whole number of days, and a Time32 or Time64
+// outside its day (checkTimes, step 525), which a guess would turn into another time.
 package arrowin
 
 import (
