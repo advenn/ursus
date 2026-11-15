@@ -11,7 +11,7 @@ and the two answers must agree. The shrinker is step 514's.
 The SQL computes **ursus's** answer: where ursus answers differently from DuckDB by
 a documented rule of its own, the translation follows the rule and names it (step
 506 §1: DuckDB, like Polars, is a list of capabilities, not ursus's
-specification). Over 47,284 cases compared on CI, the finder found no bug in ursus:
+specification). Over 75,078 cases compared on CI, the finder found no bug in ursus:
 its findings were qcheck's own, two in DuckDB 1.5.5, and one translation that
 rounded twice (§8).
 
@@ -209,11 +209,12 @@ ursus ran on several threads: |Δ| ≤ 2·n·eps·Σ|x| for a Sum and 2·eps·Σ
 for a Mean, the critic's error model with `ast.Bounded`'s Σ|x| and n, the larger
 Σ|x| of the two answers. On one thread it compares exactly: the SQL adds a float
 Sum or Mean in the rows' order from +0 (T-FLOAT-AGG), as ursus's accumulator does.
-**Floats from arithmetic compare exactly** too, where the brief allowed the error
+**Floats from arithmetic compare exactly** too, where the plan allowed an error
 model: each engine rounds each IEEE operation once and the SQL does the same
-operations, and over 47,284 cases none differed; an integer Mean is exact since
+operations, and over 75,078 cases none differed; an integer Mean is exact since
 `u_imean`, and a float Min or Max keeps the first of equal values as ursus does.
-So the one allowance fired 2,364 times on CI and nothing else may differ.
+So the one allowance fired 2,105 times in the two green runs on CI, and nothing
+else may differ.
 
 **Outcomes.** A refusal by ursus where DuckDB answered is a `refused` finding; an
 error from DuckDB a `sql` finding (sqlgen's bug, or DuckDB's); ErrInternal, a panic,
@@ -226,7 +227,7 @@ k records meet DuckDB over a run, always under `WithMemoryLimit(0)`.
 
 **Anti-vacuity:** each frame operation's rows, from DuckDB's count of every node in
 an agreeing query; an operation fed rows 20 times that answered rows in under a
-twentieth of them fails `vacuous`, step 512's thresholds. In the green run Filter
+twentieth of them fails `vacuous`, step 512's thresholds. In seed 806,000,000's run Filter
 answered rows in 7,639 of 15,075 nodes fed them, an inner join 639 of 1,528, Slice
 1,978 of 3,277.
 
@@ -238,7 +239,24 @@ mismatch in each case broken and in no other; DuckDB is ursus at the reference,
 through DuckDB's Arrow types, as the laptop links no DuckDB. `TestDuckTeeth` (CI,
 120 cases a break) breaks DuckDB's own answers the same way.
 
-TEETH
+| break | local: applied, found | CI, on DuckDB: applied, found |
+| --- | --- | --- |
+| the last row lost | 71, 71 | 59, 59 |
+| a value made null | 68, 68 | 56, 56 |
+| a null made a value | 57, 57 | |
+| two rows of an ordered answer swapped | 40, 40 | 31, 31 |
+| a float an ulp off | 21, 21 | 17, 17 |
+| -0 made +0 | 5, 5 | |
+| NaN made a number | 3, 3 | |
+| text edited | 12, 12 | 12, 12 |
+| an integer one more | 67, 67 | 56, 56 |
+| a Count one more | 15, 15 | 11, 11 |
+| a noisy cell 1e-6 relative + 1e-3 off, past its bound | 4, 4 | |
+| a noisy cell an ulp off, ursus on one thread | 1, 1 | |
+
+Every break was found in every case it was applied to, and no case was reported
+that was not broken. The allowance's own two teeth hold its edges: past the bound
+on several threads, and within it on one.
 
 `TestRunTeeth`: an ErrInternal returned, and a panic, inside ursus's run in batches
 of 3 and 7 are each a `fuzzcheck` finding, every time (10 of 10 each).
@@ -263,7 +281,17 @@ build cache are kept by `actions/cache` under a key of its own,
 cache holds neither the bindings nor their cgo build, does not overwrite it. Not a
 required check: the maintainer decides that.
 
-RUNS
+The job's runs on this PR, each from its run's seed:
+
+| commit | seed | cases compared | findings | the allowance fired |
+| --- | --- | --- | --- | --- |
+| 257fdd5 | — | — | the facts failed: text read after its record was freed, `fmod()` | — |
+| af20102 | 804,000,000 | 22,513 of 22,546 | 39: 33 `sql` (finding 1), 1 mismatch (finding 2), 5 (finding 4) | 1,312 |
+| 15513ef | 806,000,000 | 24,738 | none | 1,052 |
+| 43ae125 | 808,000,000 | 27,827 | none | 1,053 |
+
+About 5,000 cases a minute: with the cache warm, the tests, the cgo links and five
+minutes of `qcheck duck` take about six minutes of the job's 30.
 
 ## 8. Findings
 
@@ -297,4 +325,14 @@ with no line of ursus changed by this branch; and `FuzzOwnPagesMatchArrow`, step
 
 ## 10. Checks
 
-CHECKS
+- **Local**, with `GOFLAGS=-p=1 GOMAXPROCS=4 GOEXPERIMENT=simd GOAMD64=v3`, the
+  heavy ones under the shared lock, after the last code edit: `cd qcheck && go vet
+  ./... && go test ./...` (ok; the DuckDB tests skip without the tag, and
+  `TestTranslationRulesAgainstUrsus` runs); `go test ./internal/...` (29 packages
+  ok); `GOEXPERIMENT=simd go vet ./...`; `go run ./internal/gen/levels` (ok);
+  `GOEXPERIMENT=simd go run ./internal/gen/api -check` (0 gone); `go run
+  ./internal/gen/testinventory -check` (1,225 lines, the baseline's; it skips
+  `qcheck/`, a directory with a `go.mod`); `gofmt -l .` (nothing). No root code
+  changed, so `go test .` in full was not run.
+- **CI:** the `qcheck-duckdb` job green on 15513ef and 43ae125 (§7); the PR's other
+  jobs in its description.
