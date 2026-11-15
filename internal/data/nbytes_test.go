@@ -76,7 +76,10 @@ func TestNBytesCountsEveryPayloadSlot(t *testing.T) {
 		t.Fatal("a String column reported zero bytes")
 	}
 
-	valid := bitmap.Zeros(3)
+	// Built, so materialised: bitmap.Zeros has no storage since step 529.
+	vb := bitmap.NewBuilder(3)
+	vb.AppendMany(false, 3)
+	valid := vb.Finish()
 	nullable := data.NewString("s", []string{"alpha", "beta", "gamma"}, valid)
 	if nullable.NBytes() <= plain.NBytes() {
 		t.Errorf("a materialised validity bitmap was not counted: %d vs %d",
@@ -90,23 +93,23 @@ func TestNBytesCountsEveryPayloadSlot(t *testing.T) {
 		t.Error("the all-set validity form was charged for storage it does not have")
 	}
 
-	// A payload-free null column costs its validity bitmap and nothing else.
+	// A payload-free null column costs nothing at all, at any length (step 529).
 	//
-	// Worth pinning precisely, because "which makes a typed null literal free" is
-	// almost but not quite what NewNull does: the payload really is absent, but
-	// bitmap.Zeros materialises n bits. For the length-1 literal that motivated it
-	// that is one byte; for a thousand rows it is 128, and a reader of that comment
-	// could reasonably expect zero.
-	null := data.NewNull("n", dtype.Int64, 1000)
+	// "Which makes a typed null literal free" was almost but not quite what NewNull
+	// did: the payload was absent, but bitmap.Zeros materialised n bits, 128 bytes
+	// for a thousand rows and 128 GiB for the 2^40 a 232-byte IPC stream declares.
+	// Zeros is now the all-clear form, which has no storage, as the all-set form
+	// has none.
+	for _, n := range []int{1, 1000, 1 << 40} {
+		for _, dt := range []dtype.DataType{dtype.Null, dtype.Int64} {
+			if got := data.NewNull("n", dt, n).NBytes(); got != 0 {
+				t.Errorf("NewNull of %d rows of %s holds %d bytes", n, dt, got)
+			}
+		}
+	}
 	dense := data.NewFixed("n", dtype.Int64, make([]int64, 1000), bitmap.Zeros(1000))
-	if null.NBytes() == 0 {
-		t.Error("NewNull reported zero: its validity bitmap is materialised, not all-set")
-	}
-	if null.NBytes() >= dense.NBytes()/8 {
-		t.Errorf("a payload-free column is not much cheaper than a real one: %d vs %d",
-			null.NBytes(), dense.NBytes())
-	}
-	if got := data.NewNull("n", dtype.Int64, 1).NBytes(); got > 64 {
-		t.Errorf("a length-1 typed null literal costs %d bytes", got)
+	if got, payload := dense.NBytes(), data.NewFixed("n", dtype.Int64, make([]int64, 1000),
+		bitmap.AllSet(1000)).NBytes(); got != payload {
+		t.Errorf("a column of nulls is charged %d bytes, and its payload alone %d", got, payload)
 	}
 }

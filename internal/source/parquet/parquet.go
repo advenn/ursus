@@ -268,7 +268,7 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 		if !s.RowsOnly(spec) {
 			return nil, uerr.Internalf("scan_parquet: a scan of no columns with a predicate")
 		}
-		return &rowsReader{src: s, out: out, size: batchSize, left: spec.MaxRows}, nil
+		return &rowsReader{src: s, out: out, size: batchSize, left: spec.MaxRows, whole: spec.Whole}, nil
 	}
 	// Predicates arrive only as ClassifyPredicates claimed them, which Prune gates.
 	df := newDictFilter(spec.Predicate, out, spec.Eval, spec.MaxRows)
