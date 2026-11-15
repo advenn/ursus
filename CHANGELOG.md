@@ -538,6 +538,12 @@ its section below lists them.
   the read with "this is a bug in ursus", and one listing more could panic; both are
   refused as corrupt now, by the read and by `Count`. The fuzz runs of step 521 found
   it.
+- **An Arrow time past its day is refused, not wrapped** (525): a Time32 or Time64
+  outside [0, 24h) was wrapped into the day by `ScanArrowRecords`, `ScanArrow` and
+  every `ScanIPC` reader, so 26:00 read as 02:00, which sorts after 23:00 and equals
+  no 02:00. It is refused now as a corrupt value, an `ErrValue` naming the column,
+  the value and its row, inside a List or a Struct as well, as a Parquet TIME past
+  its day is (510); a null's slot is not looked at. CI's fuzz run found it.
 - **A float Min or Max is the same at every thread count** (523): a parallel
   group-by folded its workers' partial minimums in worker order, which is not row
   order, so of −0.0 and +0.0, or of NaNs of two payloads, Min could answer a later
