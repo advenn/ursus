@@ -200,7 +200,8 @@ func (s *Source) Open(ctx context.Context, spec source.ScanSpec) (source.BatchSo
 	if size <= 0 {
 		size = defaultBatchSize
 	}
-	return &reader{src: s, full: full, out: out, cols: cols, size: size, max: spec.MaxRows}, nil
+	return &reader{src: s, full: full, out: out, cols: cols, size: size, max: spec.MaxRows,
+		whole: spec.Whole && source.NoData(out)}, nil
 }
 
 // reader copies one window of the current record per Next.
@@ -213,6 +214,9 @@ type reader struct {
 	full, out *dtype.Schema
 	cols      []int
 	size, max int
+	// whole: a batch is the rest of its record, where the scan's columns are Null or
+	// none and its consumer takes it so (source.ScanSpec.Whole, step 529).
+	whole bool
 
 	mu      sync.Mutex
 	rr      array.RecordReader
@@ -288,7 +292,10 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 		r.rec, r.cur = rec, 0
 	}
 
-	n := min(r.size, int(r.rec.NumRows())-r.cur)
+	n := int(r.rec.NumRows()) - r.cur
+	if !r.whole {
+		n = min(n, r.size)
+	}
 	if r.max > 0 {
 		n = min(n, r.max-r.emitted)
 	}

@@ -425,6 +425,17 @@ its section below lists them.
   arrow-go's IPC reader handed to `ScanArrowRecords` or `ScanArrow` too. Such an
   array is valid now, and every other array is validated as before. The Parquet reader
   was not affected.
+- **A Null column, and a frame of no columns, hold no memory a row** (529): a column
+  of nulls held a bitmap of zeros, a bit a row, and every scan was cut into batches of
+  8,192 rows, so an Arrow IPC stream of a few hundred bytes declaring 2^40 rows of a
+  Null column, or of none, had `Collect` ask for 128 GiB and `Count` allocate about
+  200 GB over two minutes, where Polars holds such a column in constant space. A
+  column of nulls is its type and its length now, and a query collected or counted
+  through projections of columns, `Head`, `Slice` and `Concat` reads a batch of only
+  Null columns, or of none, whole: `Count` of 2^27 Null rows takes 61 µs where it took
+  22 ms, `Collect` 43 µs where it took 93 ms, each allocating 10 kB where they
+  allocated 25 and 66 MB. `Count` of IPC files no longer reads a column. Answers do not
+  change, and every other operation still reads such a frame a batch at a time.
 - **A sort in small batches no longer allocates by the square of its batches** (512):
   each output batch's gather made two arrays as long as every input batch the sort
   kept, so sorting 8,191 rows in batches of one row allocated 2.3 GB in 400 ms; 23 MB
@@ -566,6 +577,18 @@ its section below lists them.
   the first. Median, Quantile, TopK, BottomK, TopKBy and a float group key picked by
   the same order and are the same at every thread count too; a spilled quantile is a
   held one's. qcheck found it.
+- **A malformed delta-encoded Parquet page is refused, not hung on** (531): through
+  arrow-go's column reader, a DELTA_BINARY_PACKED page whose header counted fewer
+  values than a REQUIRED column's page holds hung the read forever, and an OPTIONAL
+  column's or a List's page read the values it was short of from whatever its buffer
+  held, with no error; a block of 2^32 values, or a DELTA_LENGTH_BYTE_ARRAY page counting
+  2^40 lengths, ended the process asking for gigabytes; a page cut short read as 0s.
+  Each delta-packed run of a DELTA_BINARY_PACKED, DELTA_LENGTH_BYTE_ARRAY or
+  DELTA_BYTE_ARRAY page is checked against the format before arrow-go decodes it, its
+  block size, miniblocks, count, bit widths and length, and a page that breaks it is
+  refused as corrupt, an `ErrIO`, as pyarrow refuses it, but for a count past the
+  page's values, which no writer writes and pyarrow reads; every delta page pyarrow
+  and arrow-go write reads as before. The fuzz runs of step 521 found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

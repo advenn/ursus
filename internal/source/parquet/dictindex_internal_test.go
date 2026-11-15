@@ -290,6 +290,9 @@ func genRuns(rng *rand.Rand, vals []uint64, width int, bounds *[]int) []byte {
 func pack(vals []uint64, width int) []byte {
 	b := make([]byte, (len(vals)*width+7)/8)
 	for i, v := range vals {
+		if v == 0 {
+			continue
+		}
 		for k := range width {
 			if v>>k&1 != 0 {
 				at := i*width + k

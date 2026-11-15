@@ -5,9 +5,11 @@ import (
 	"fmt"
 )
 
-// A walk of an Arrow IPC input's flatbuffers metadata, for the finding of step 511
-// the IPC targets still skip: a record batch declaring more rows than its input
-// could hold of any type but Null (oversized).
+// A walk of an Arrow IPC input's flatbuffers metadata, for what is left of the finding
+// of step 511 the IPC targets skip: a record batch declaring more rows than its input
+// could hold, of columns that cost no input a row and that ursus holds a bit a row
+// of, a Struct of none but Null fields, say (oversized). A record of Null columns, or
+// of none, is read in constant space since step 529, and is not skipped.
 //
 // Step 511's walk here also found what arrow-go sized a slice by past its buffer, and
 // a field among its own descendants, which ended the process; step 519 walks every
@@ -103,7 +105,7 @@ func (b fbuf) past(start uint32, n, size int) bool {
 const (
 	msgHeaderType, msgHeader, msgBodyLength               = 1, 2, 3
 	schemaFields, schemaCustomMetadata                    = 1, 2
-	fieldChildren                                         = 5
+	fieldTypeType, fieldDictionary, fieldChildren         = 2, 4, 5
 	batchLength, batchVariadic                            = 0, 4
 	dictData                                              = 1
 	footerSchema, footerDictionaries, footerRecordBatches = 1, 2, 3
@@ -115,6 +117,39 @@ const (
 	headerDictionary = 2
 	headerRecord     = 3
 )
+
+// typeNull is the Null type's tag in Schema.fbs's Type union.
+const typeNull = 1
+
+// nullOnly says whether the schema at s holds only columns of the Null type, not
+// dictionary-encoded, or none: a record of which ursus holds as its row count (step
+// 529), however many rows it declares.
+func nullOnly(b fbuf, s uint32) bool {
+	start, n, ok := b.vector(s, schemaFields)
+	if !ok {
+		return true // no fields
+	}
+	if b.past(start, n, 4) {
+		return false
+	}
+	for i := range n {
+		f, ok := b.elem(start, i)
+		if !ok {
+			return false
+		}
+		at, ok := b.field(f, fieldTypeType)
+		if !ok {
+			return false
+		}
+		if tag, ok := b.u8(at); !ok || tag != typeNull {
+			return false
+		}
+		if _, ok := b.field(f, fieldDictionary); ok {
+			return false
+		}
+	}
+	return true
+}
 
 // oversized names what in b, an IPC file or stream, the targets skip as the finding
 // left for the maintainer, "" for nothing: a walk of its metadata, which stops quietly
@@ -129,6 +164,10 @@ func oversized(b []byte, file bool) string {
 		if !ok {
 			return ""
 		}
+		if s, ok := schemaOf(meta); ok && !w.schema {
+			// arrow-go reads a stream as its first schema message's columns.
+			w.schema, w.nullOnly = true, nullOnly(meta, s)
+		}
 		if why := w.message(meta); why != "" {
 			return why
 		}
@@ -137,9 +176,25 @@ func oversized(b []byte, file bool) string {
 	return ""
 }
 
-// walk is what a walk of one input knows: its size.
+// walk is what a walk of one input knows: its size, and whether its schema, once
+// read, holds only Null columns or none.
 type walk struct {
-	input int
+	input    int
+	schema   bool
+	nullOnly bool
+}
+
+// schemaOf is the schema a message's metadata holds, false for another message.
+func schemaOf(meta fbuf) (uint32, bool) {
+	root, ok := meta.u32(0)
+	if !ok {
+		return 0, false
+	}
+	at, _ := meta.field(root, msgHeaderType)
+	if kind, ok := meta.u8(at); !ok || kind != headerSchema {
+		return 0, false
+	}
+	return meta.ref(root, msgHeader)
 }
 
 // message is the metadata of the stream message at pos and where the next one starts,
@@ -181,7 +236,14 @@ func message(b fbuf, pos int) (meta fbuf, next int, ok bool) {
 // message is oversized of one message's metadata: its record batch's, a dictionary
 // batch's among them.
 func (w *walk) message(meta fbuf) string {
+	root, _ := meta.u32(0)
+	at, _ := meta.field(root, msgHeaderType)
+	kind, _ := meta.u8(at)
 	for _, r := range batchesOf(meta) {
+		if kind == headerRecord && w.schema && w.nullOnly {
+			// Read in constant space since step 529, whatever it declares.
+			continue
+		}
 		if why := w.batch(r.b, r.t); why != "" {
 			return why
 		}
@@ -190,15 +252,18 @@ func (w *walk) message(meta fbuf) string {
 }
 
 // batch says whether a record batch declares more rows than the input holds of any
-// type but Null: a row of every other type costs a bit at least, and a Null column
-// none, nor a record of no columns, so a 600-byte stream declaring 2^40 rows had ursus
-// copy batches of them, and allocate, until the harness ended the process at four
-// times its bound.
+// type with a buffer: a row of such a type costs a bit at least, and a Null column
+// none, nor a Struct of Null fields or a FixedSizeList of Null, so a 600-byte stream
+// declaring 2^40 rows had ursus copy batches of them, and allocate, until the harness
+// ended the process at four times its bound. ursus holds a record of only Null
+// columns, or of none, as its row count since step 529, and message lets one
+// through; it still builds a validity bit a row of a Struct, a FixedSizeList and the
+// rest, which are skipped, and so is a dictionary batch.
 func (w *walk) batch(b fbuf, batch uint32) string {
 	if at, ok := b.field(batch, batchLength); ok {
 		if rows, ok := b.i64(at); ok && rows > 8*int64(w.input)+4096 {
 			return fmt.Sprintf("a record batch declares %d rows in an input of %d bytes, which only "+
-				"columns of no data, Null or none, can hold, and ursus copies", rows, w.input)
+				"columns of no data can hold, and ursus holds a bit a row of one not Null", rows, w.input)
 		}
 	}
 	return ""
@@ -221,6 +286,10 @@ func fileOversized(b fbuf) string {
 		return ""
 	}
 	w := walk{input: len(b)}
+	if s, ok := footer.ref(root, footerSchema); ok {
+		// arrow-go reads a file as its footer's columns.
+		w.schema, w.nullOnly = true, nullOnly(footer, s)
+	}
 	for _, id := range []int{footerDictionaries, footerRecordBatches} {
 		start, n, ok := footer.vector(root, id)
 		if !ok {
