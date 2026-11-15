@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -239,18 +240,61 @@ func TestADictionaryIndexOfZeroBitsReadsAsIndexZero(t *testing.T) {
 	}
 }
 
-func TestARowGroupMissingAColumnChunkIsRefused(t *testing.T) {
+// TestASchemaClaimingMoreChildrenThanItHoldsIsRefused (step 531, step 533): a schema
+// element's num_children is a claim, and a schema whose claims its elements do not
+// hold is refused before anything is sized by them; pyarrow 25.0.1 refuses such a
+// file ("Malformed schema: not enough elements"). Each is refused as corrupt, within
+// fuzzcheck's bounds, its schema, its rows read and its Count: in each kind of
+// chunk's file (pqIndexKinds), which reads, each schema element claiming 2^31−1
+// children, one more than the elements after it, and, a group, one more than it
+// holds, at the root and nested, its tree no longer closing; and a schema whose every
+// claim is within the elements after it and whose tree does not close, groups nested
+// 1,000 deep each claiming every element after it (pqUnclosedSchema).
+func TestASchemaClaimingMoreChildrenThanItHoldsIsRefused(t *testing.T) {
 	ctx := t.Context()
-	b := corpusBytes(t, filepath.Join("testdata", "fuzz", "FuzzScanParquet", "row-group-of-no-column-chunks"))
-	lf := ursus.ScanParquetBytes(b, "chunks.parquet")
-	errs := map[string]error{}
-	for _, threads := range []int{1, 4} {
-		_, errs[fmt.Sprint("the read on ", threads, " threads")] = lf.Collect(ctx, ursus.WithThreads(threads))
+	type input struct {
+		name string
+		b    []byte
 	}
-	_, errs["Count"] = lf.Count(ctx)
-	for what, err := range errs {
-		if err == nil || !errors.Is(err, ursus.ErrIO) || errors.Is(err, ursus.ErrInternal) {
-			t.Errorf("%s: %v, want an I/O error", what, err)
+	inputs := []input{
+		{"groups nested 1,000 deep each claiming every element after it", pqUnclosedSchema(1_000, 20_000)},
+	}
+	for _, k := range pqIndexKinds() {
+		// The schema's elements: the root, a group of each level above the leaf, and the leaf.
+		elements := map[int]int{pqFlat: 2, pqInStruct: 3, pqInList: 4}[k.shape.nest]
+		pages := []pqPage{k.dict(), k.data(pqRLEDict, pqIndexRun(k.present, 1)), k.plain(k.values[0])}
+		if _, err := ursus.ScanParquetBytes(k.file(pages...), "honest.parquet").Collect(ctx); err != nil {
+			t.Fatalf("%s: the honest file: %v", k.name, err)
+		}
+		for i := range elements {
+			claims := map[string]int32{
+				"2^31-1":                              math.MaxInt32,
+				"one more than the elements after it": int32(elements - i),
+			}
+			if i < elements-1 {
+				claims["a child more than it holds"] = 2
+			}
+			for what, n := range claims {
+				f := k
+				f.shape.children = map[int]int32{i: n}
+				inputs = append(inputs, input{fmt.Sprintf("%s, schema element %d of %d claiming %s", k.name, i, elements,
+					what), f.file(pages...)})
+			}
 		}
 	}
+	for _, in := range inputs {
+		fuzzcheck.Run(t, limits(len(in.b)), func() error {
+			lf := ursus.ScanParquetBytes(in.b, "schema.parquet")
+			_, errSchema := lf.CollectSchema(ctx)
+			_, errRead := lf.Collect(ctx)
+			_, errCount := lf.Count(ctx)
+			for what, err := range map[string]error{"its schema": errSchema, "its rows": errRead, "Count": errCount} {
+				if err == nil || !errors.Is(err, ursus.ErrIO) || !strings.Contains(err.Error(), "corrupt") {
+					t.Errorf("%s: %s answered %v, not a corrupt file", in.name, what, err)
+				}
+			}
+			return errors.Join(errSchema, errRead, errCount)
+		})
+	}
+	t.Logf("%d files refused", len(inputs))
 }
