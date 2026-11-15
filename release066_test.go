@@ -52,6 +52,11 @@ func TestV066UnderAMemoryLimit(t *testing.T) {
 	// A group-by over the 2,000 keys: its states sit at 16 KiB's edge.
 	byKey := map[string]bool{"M1, the bits and odds": true, "M3, unique_counts": true, "M1, spearman by k": true,
 		"M1, mode by k": true}
+	// Since step 523 a float NanMin keeps the row of a zero or NaN it picks, so its
+	// group-by holds a little more: at 64 KiB "the bits and odds" sat at the edge and
+	// failed on CI's scalar-only leg holding 64.2 KiB (step 527). It still spills at 80
+	// KiB; "unique_counts" stops spilling past 64, so the limit is per query.
+	byKeyLimit := map[string]int64{"M1, the bits and odds": 80 << 10}
 	for name, q := range map[string]*ursus.LazyFrame{
 		"G1, a literal range": frame.WithColumns(ursus.IntRange(ursus.Lit(int64(0)), ursus.Lit(int64(n)), 1).Alias("i")),
 		// The frame's side of the stack is a batch in hand while Len() counts, charged
@@ -85,6 +90,9 @@ func TestV066UnderAMemoryLimit(t *testing.T) {
 			limit := small
 			if byKey[name] {
 				limit = groups
+			}
+			if l, ok := byKeyLimit[name]; ok {
+				limit = l
 			}
 			got, st, err := limited(t, q, limit)
 			if err != nil {
