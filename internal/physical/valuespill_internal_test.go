@@ -18,15 +18,19 @@ type gv struct {
 	v float64
 }
 
+// compareGV is the order a value spill gives values back in: by group, then by the
+// value's strict key, which tells -0 from +0 and one NaN from another (step 523), so
+// it is 0 only for the same bits.
 func compareGV(a, b gv) int {
 	return cmp.Or(cmp.Compare(a.g, b.g),
-		cmp.Compare(kernel.OrderKeyF64(a.v), kernel.OrderKeyF64(b.v)))
+		cmp.Compare(kernel.StrictKeyF64(a.v), kernel.StrictKeyF64(b.v)))
 }
 
 // spillRuns puts n runs of up to 40 values each, each in order, and returns them all.
 func spillRuns(t *testing.T, s *valueSpill, rng *rand.Rand, n int) []gv {
 	t.Helper()
-	pool := []float64{math.NaN(), 0, math.Copysign(0, -1), math.Inf(1), math.Inf(-1), 1, 2}
+	pool := []float64{math.NaN(), math.Float64frombits(0xFFF8000000000000), 0, math.Copysign(0, -1),
+		math.Inf(1), math.Inf(-1), 1, 2}
 	var all []gv
 	for range n {
 		run := make([]gv, 1+rng.IntN(40))
