@@ -266,12 +266,21 @@ func TestDuckDBSemantics(t *testing.T) {
 			zero, negZero := 0.0, math.Copysign(0, -1)
 			check(t, "1/0, -1/0, 0/0, 1/-0", got, []any{1 / zero, -1 / zero, zero / zero, 1 / negZero})
 		}},
-		{"fmod is C's fmod, of a zero divisor NaN (T-FLOAT-MOD)", func(t *testing.T) {
+		{"% on DOUBLE is C's fmod, of a zero divisor NaN (T-FLOAT-MOD)", func(t *testing.T) {
 			pairs := [][2]float64{{-7.5, 2}, {7.5, -2}, {1, 0}, {math.Copysign(0, -1), 1}, {5, math.Inf(1)},
-				{math.Inf(1), 2}, {-4, 2}, {1e300, 3}}
+				{math.Inf(1), 2}, {-4, 2}, {1e300, 3}, {0.1, 3}}
 			for _, p := range pairs {
-				got := one(t, d, "SELECT fmod("+sqlgen.Float(p[0])+", "+sqlgen.Float(p[1])+")")
-				check(t, fmt.Sprintf("fmod(%v, %v)", p[0], p[1]), got, []any{math.Mod(p[0], p[1])})
+				got := one(t, d, "SELECT "+sqlgen.Float(p[0])+" % "+sqlgen.Float(p[1]))
+				check(t, fmt.Sprintf("%v %% %v", p[0], p[1]), got, []any{math.Mod(p[0], p[1])})
+			}
+		}},
+		{"fmod() is x - y·floor(x/y), not C's fmod, so u_fmod uses % (T-FLOAT-MOD)", func(t *testing.T) {
+			pairs := [][2]float64{{-7.5, 2}, {7.5, -2}, {math.Copysign(0, -1), 1}, {5, math.Inf(1)}, {-4, 2}, {1e300, 3}}
+			for _, p := range pairs {
+				x, y := p[0], p[1]
+				got := one(t, d, "SELECT fmod("+sqlgen.Float(x)+", "+sqlgen.Float(y)+")")
+				// The conversion keeps Go from fusing the product and the difference.
+				check(t, fmt.Sprintf("fmod(%v, %v)", x, y), got, []any{x - float64(y*math.Floor(x/y))})
 			}
 		}},
 		{"u_fmod is ursus's float remainder (T-FLOAT-MOD)", func(t *testing.T) {

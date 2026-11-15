@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -102,12 +103,14 @@ func value(a arrow.Array, i int) any {
 		return v.Value(i)
 	case *array.Boolean:
 		return v.Value(i)
+	// Text is cloned: arrow-go's Value aliases the record's buffer, which DuckDB
+	// frees with the record.
 	case *array.String:
-		return v.Value(i)
+		return strings.Clone(v.Value(i))
 	case *array.LargeString:
-		return v.Value(i)
+		return strings.Clone(v.Value(i))
 	case *array.StringView:
-		return v.Value(i)
+		return strings.Clone(v.Value(i))
 	case *array.Date32:
 		return int64(v.Value(i))
 	case *array.Decimal128:
