@@ -283,7 +283,7 @@ func strStruct(fn expr.CallFn, name string, out dtype.DataType, c *data.Column, 
 	for j, f := range fields {
 		cols[j] = data.NewString(f.Name, vals[j], oks[j].Finish())
 	}
-	return data.NewStruct(name, cols, bitmap.AllSet(n)), nil
+	return data.NewStructLen(name, n, cols, bitmap.AllSet(n)), nil
 }
 
 // titlecase is s with each letter that follows a character not a letter upper case

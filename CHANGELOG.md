@@ -13,6 +13,25 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.7.3
+
+Three fixes backported from master by step 532, each with its master step number
+below; [`step-532-as-built.md`](./context_files/step-532-as-built.md) says what each
+took and left. No API is added, changed or removed.
+
+### Fixed
+
+- **A Struct of no fields keeps its rows** (518): a JSON or NDJSON object field
+  holding `{}`, Polars' `Struct({})`, failed the whole read with an internal error,
+  "batch declares 1 rows but its columns hold 0", as a struct took its length from its
+  first field. It reads now as a `Struct()` column, `{}` or null a row, as Polars 2.1
+  reads it, and keeps its rows through filters, sorts, joins carrying it,
+  concatenation, a group-by's values, `Unique`, spilling and the IPC and JSON writers;
+  an IPC file holding one reads. Parquet and CSV refuse it cleanly, as Polars does, and
+  so does a group-by, a join or a window keyed on it, as before.
+
+---
+
 ## v0.7.2 — 2026-11-02
 
 Everything since `v0.7.1` (2026-10-30): steps 410–436, the bug hunt
