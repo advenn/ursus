@@ -11,28 +11,6 @@ import (
 	"github.com/advenn/ursus/internal/fuzzcheck"
 )
 
-// corpusBytes is the first value of a fuzz corpus file, a []byte.
-func corpusBytes(t *testing.T, path string) []byte {
-	t.Helper()
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	lines := strings.Split(string(raw), "\n")
-	if len(lines) < 2 || lines[0] != "go test fuzz v1" {
-		t.Fatalf("%s is not a fuzz corpus file", path)
-	}
-	v, ok := strings.CutPrefix(lines[1], "[]byte(")
-	if v, ok = strings.CutSuffix(v, ")"); !ok {
-		t.Fatalf("%s: its first value is not a []byte", path)
-	}
-	s, err := strconv.Unquote(v)
-	if err != nil {
-		t.Fatalf("%s: %v", path, err)
-	}
-	return []byte(s)
-}
-
 // TestAPageWhoseBytesAreMissingIsRefused (step 521): a page whose header is whole and
 // whose bytes stop short at its column chunk's end. The engine takes an error that is
 // io.EOF for the end of the scan, so the chunk's error for bytes that are not there
