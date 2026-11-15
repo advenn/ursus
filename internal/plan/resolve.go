@@ -125,7 +125,9 @@ func resolveScan(ctx context.Context, s *Scan) (Node, error) {
 	}
 	full, err := s.Src.Schema(ctx)
 	if err != nil {
-		return nil, uerr.Wrap(err, uerr.KindIO, "scan",
+		// No error of a source's wraps io.EOF, which the engine takes for the end of
+		// an input (step 534): a stream failing as its schema is read is cut short.
+		return nil, uerr.Wrap(uerr.Truncated(err), uerr.KindIO, "scan",
 			"reading schema from %s source", s.Src.Name())
 	}
 	c := *s
