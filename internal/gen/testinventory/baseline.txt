@@ -128,7 +128,6 @@ internal/arrowin/normalise_test.go	TestANullListOwnsNothing	1
 internal/arrowin/normalise_test.go	TestANullStructHidesItsFields	1
 internal/arrowin/normalise_test.go	TestDate64MustBeWholeDays	1
 internal/arrowin/normalise_test.go	TestNullSlotsAreCanonical	1
-internal/arrowin/normalise_test.go	TestTimeIsWrappedIntoTheDay	2
 internal/arrowout/arrowout_test.go	TestReleaseIsInert	1
 internal/arrowout/arrowout_test.go	TestSlicedColumnsExportCorrectly	1
 internal/arrowout/arrowout_test.go	TestStringSliceKeepsAbsoluteOffsets	1
