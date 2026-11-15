@@ -1,0 +1,1877 @@
+{
+ "cases": [
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_null_file",
+   "note": "written by Polars 2.1.0 (record_ipcnull.py)",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_null.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       null,
+       "y",
+       "",
+       "z"
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null,
+       [
+        null,
+        null,
+        null
+       ],
+       [
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       },
+       {
+        "y": null,
+        "z": null
+       },
+       {
+        "y": 5,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "arr",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ],
+       [
+        null,
+        null
+       ],
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_null_stream",
+   "note": "written by Polars 2.1.0 (record_ipcnull.py)",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_null.arrows"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       null,
+       "y",
+       "",
+       "z"
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null,
+       [
+        null,
+        null,
+        null
+       ],
+       [
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       },
+       {
+        "y": null,
+        "z": null
+       },
+       {
+        "y": 5,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "arr",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ],
+       [
+        null,
+        null
+       ],
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_null_lz4_file",
+   "note": "written by Polars 2.1.0 (record_ipcnull.py)",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_null_lz4.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       null,
+       "y",
+       "",
+       "z"
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null,
+       [
+        null,
+        null,
+        null
+       ],
+       [
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       },
+       {
+        "y": null,
+        "z": null
+       },
+       {
+        "y": 5,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "arr",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ],
+       [
+        null,
+        null
+       ],
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_null_lz4_stream",
+   "note": "written by Polars 2.1.0 (record_ipcnull.py)",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_null_lz4.arrows"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       null,
+       "y",
+       "",
+       "z"
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null,
+       [
+        null,
+        null,
+        null
+       ],
+       [
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       },
+       {
+        "y": null,
+        "z": null
+       },
+       {
+        "y": 5,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "arr",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ],
+       [
+        null,
+        null
+       ],
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_null_zstd_file",
+   "note": "written by Polars 2.1.0 (record_ipcnull.py)",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_null_zstd.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       null,
+       "y",
+       "",
+       "z"
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null,
+       [
+        null,
+        null,
+        null
+       ],
+       [
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       },
+       {
+        "y": null,
+        "z": null
+       },
+       {
+        "y": 5,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "arr",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ],
+       [
+        null,
+        null
+       ],
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_null_zstd_stream",
+   "note": "written by Polars 2.1.0 (record_ipcnull.py)",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_null_zstd.arrows"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       null,
+       "y",
+       "",
+       "z"
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null,
+       [
+        null,
+        null,
+        null
+       ],
+       [
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       },
+       {
+        "y": null,
+        "z": null
+       },
+       {
+        "y": 5,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "arr",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ],
+       [
+        null,
+        null
+       ],
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_null_empty_file",
+   "note": "written by Polars 2.1.0 (record_ipcnull.py)",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_null_empty.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": []
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": []
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": []
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": []
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": []
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "arr",
+      "values": []
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_null_empty_stream",
+   "note": "written by Polars 2.1.0 (record_ipcnull.py)",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_null_empty.arrows"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": []
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": []
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": []
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": []
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": []
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "arr",
+      "values": []
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_null_only_file",
+   "note": "written by Polars 2.1.0 (record_ipcnull.py)",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_null_only.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_null_only_stream",
+   "note": "written by Polars 2.1.0 (record_ipcnull.py)",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_null_only.arrows"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "polars_null_batches_file",
+   "note": "written by Polars 2.1.0 (record_ipcnull.py)",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/polars_null_batches.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "String",
+      "name": "s",
+      "values": [
+       "x",
+       null,
+       "y",
+       "",
+       "z"
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null,
+       [
+        null,
+        null,
+        null
+       ],
+       [
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       },
+       {
+        "y": null,
+        "z": null
+       },
+       {
+        "y": 5,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "arr",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ],
+       [
+        null,
+        null
+       ],
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "pyarrow_null_file",
+   "note": "written by pyarrow 25.0.1 (record_ipcnull.py); its map cast to the List(Struct) ursus reads",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/pyarrow_null.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "ll",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "fsl",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "List(Struct(key: String, value: Null))",
+      "name": "m",
+      "values": [
+       [
+        {
+         "key": "k",
+         "value": null
+        }
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "d",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "pyarrow_null_stream",
+   "note": "written by pyarrow 25.0.1 (record_ipcnull.py); its map cast to the List(Struct) ursus reads",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/pyarrow_null.arrows"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "ll",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "fsl",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "List(Struct(key: String, value: Null))",
+      "name": "m",
+      "values": [
+       [
+        {
+         "key": "k",
+         "value": null
+        }
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "d",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "pyarrow_null_lz4_file",
+   "note": "written by pyarrow 25.0.1 (record_ipcnull.py); its map cast to the List(Struct) ursus reads",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/pyarrow_null_lz4.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "ll",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "fsl",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "List(Struct(key: String, value: Null))",
+      "name": "m",
+      "values": [
+       [
+        {
+         "key": "k",
+         "value": null
+        }
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "d",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "pyarrow_null_lz4_stream",
+   "note": "written by pyarrow 25.0.1 (record_ipcnull.py); its map cast to the List(Struct) ursus reads",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/pyarrow_null_lz4.arrows"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "ll",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "fsl",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "List(Struct(key: String, value: Null))",
+      "name": "m",
+      "values": [
+       [
+        {
+         "key": "k",
+         "value": null
+        }
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "d",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "pyarrow_null_zstd_file",
+   "note": "written by pyarrow 25.0.1 (record_ipcnull.py); its map cast to the List(Struct) ursus reads",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/pyarrow_null_zstd.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "ll",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "fsl",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "List(Struct(key: String, value: Null))",
+      "name": "m",
+      "values": [
+       [
+        {
+         "key": "k",
+         "value": null
+        }
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "d",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "pyarrow_null_zstd_stream",
+   "note": "written by pyarrow 25.0.1 (record_ipcnull.py); its map cast to the List(Struct) ursus reads",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/pyarrow_null_zstd.arrows"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "ll",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "fsl",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "List(Struct(key: String, value: Null))",
+      "name": "m",
+      "values": [
+       [
+        {
+         "key": "k",
+         "value": null
+        }
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "d",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "pyarrow_null_empty_file",
+   "note": "written by pyarrow 25.0.1 (record_ipcnull.py); its map cast to the List(Struct) ursus reads",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/pyarrow_null_empty.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": []
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": []
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": []
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "ll",
+      "values": []
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": []
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "fsl",
+      "values": []
+     },
+     {
+      "dtype": "List(Struct(key: String, value: Null))",
+      "name": "m",
+      "values": []
+     },
+     {
+      "dtype": "Null",
+      "name": "d",
+      "values": []
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "pyarrow_null_empty_stream",
+   "note": "written by pyarrow 25.0.1 (record_ipcnull.py); its map cast to the List(Struct) ursus reads",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/pyarrow_null_empty.arrows"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": []
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": []
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": []
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "ll",
+      "values": []
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": []
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "fsl",
+      "values": []
+     },
+     {
+      "dtype": "List(Struct(key: String, value: Null))",
+      "name": "m",
+      "values": []
+     },
+     {
+      "dtype": "Null",
+      "name": "d",
+      "values": []
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "pyarrow_null_batches_file",
+   "note": "written by pyarrow 25.0.1 (record_ipcnull.py); its map cast to the List(Struct) ursus reads",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/pyarrow_null_batches.arrow"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "ll",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "fsl",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "List(Struct(key: String, value: Null))",
+      "name": "m",
+      "values": [
+       [
+        {
+         "key": "k",
+         "value": null
+        }
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "d",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "float": "bits",
+   "inputs": {},
+   "name": "pyarrow_null_batches_stream",
+   "note": "written by pyarrow 25.0.1 (record_ipcnull.py); its map cast to the List(Struct) ursus reads",
+   "order": "rows",
+   "params": {
+    "path": "testdata/ipc/pyarrow_null_batches.arrows"
+   },
+   "want": {
+    "columns": [
+     {
+      "dtype": "Int64",
+      "name": "a",
+      "values": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "n",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "l",
+      "values": [
+       [
+        null
+       ],
+       [],
+       null
+      ]
+     },
+     {
+      "dtype": "List(Null)",
+      "name": "ll",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Struct(z: Null, y: Int64)",
+      "name": "st",
+      "values": [
+       {
+        "y": 1,
+        "z": null
+       },
+       null,
+       {
+        "y": 3,
+        "z": null
+       }
+      ]
+     },
+     {
+      "dtype": "Array(Null, 2)",
+      "name": "fsl",
+      "values": [
+       [
+        null,
+        null
+       ],
+       null,
+       [
+        null,
+        null
+       ]
+      ]
+     },
+     {
+      "dtype": "List(Struct(key: String, value: Null))",
+      "name": "m",
+      "values": [
+       [
+        {
+         "key": "k",
+         "value": null
+        }
+       ],
+       null,
+       []
+      ]
+     },
+     {
+      "dtype": "Null",
+      "name": "d",
+      "values": [
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "generator": "bench/scripts/oracle/ipcnull.py",
+ "polars": "2.1.0"
+}
