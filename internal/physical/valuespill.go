@@ -27,9 +27,10 @@ import (
 //
 // The kernel puts each run already in order, a group at a time, so a run is written
 // as it comes, and read back through the external sort's merge on (gid, the second
-// column), any later column carried. That merge orders a float by OrderKeyF64, the
-// quantile's own order: NaN last, and −0 and +0 alike; and bytes as bytes, which is
-// all n_unique's count needs.
+// column), any later column carried. That merge orders a float by OrderKeyF64: NaN
+// last, and −0 and +0 alike, which is all a Spearman's ranks need; a quantile's
+// values by their strict keys, as Uint64s; and bytes as bytes, which is all
+// n_unique's count needs.
 //
 // # Runs are merged as they gather
 //
@@ -312,11 +313,15 @@ func (s *groupRuns) chunk() int {
 	return s.batch
 }
 
-// valueSpill is kernel.ValueSpill: a quantile's values, a Float64 a row.
+// valueSpill is kernel.ValueSpill: a quantile's values, a row each, as their strict
+// keys (kernel.StrictKeyF64), a Uint64, so that the merge orders them as the
+// quantile reads ranks. Merged as Float64, by the total order, two values it calls
+// equal, -0.0 and +0.0 or two NaNs, came back in the order of the runs that held
+// them, and a spilled median picked between them by that (step 523).
 type valueSpill struct{ groupRuns }
 
 func newValueSpill(ctx context.Context, budget *execopt.Budget, batch int, prefix string) *valueSpill {
-	return &valueSpill{newGroupRuns(ctx, budget, batch, prefix, dtype.NotNull("v", dtype.Float64))}
+	return &valueSpill{newGroupRuns(ctx, budget, batch, prefix, dtype.NotNull("v", dtype.Uint64))}
 }
 
 func (s *valueSpill) take(acc kernel.Accumulator) error {
@@ -325,17 +330,21 @@ func (s *valueSpill) take(acc kernel.Accumulator) error {
 }
 
 func (s *valueSpill) Put(gids []int32, vals []float64) error {
+	keys := make([]uint64, len(vals))
+	for i, v := range vals {
+		keys[i] = kernel.StrictKeyF64(v)
+	}
 	return s.write(data.NewBatchRows(s.schema, []*data.Column{
 		data.NewFixed("gid", dtype.Int32, gids, bitmap.View{}),
-		data.NewFixed("v", dtype.Float64, vals, bitmap.View{}),
+		data.NewFixed("v", dtype.Uint64, keys, bitmap.View{}),
 	}, len(gids)))
 }
 
 func (s *valueSpill) Ordered(fn func(gid int32, v float64) error) error {
 	return s.each(func(b *data.Batch) error {
-		gids, vals := data.MustValues[int32](b.Column(0)), data.MustValues[float64](b.Column(1))
+		gids, keys := data.MustValues[int32](b.Column(0)), data.MustValues[uint64](b.Column(1))
 		for i, g := range gids {
-			if err := fn(g, vals[i]); err != nil {
+			if err := fn(g, kernel.StrictF64(keys[i])); err != nil {
 				return err
 			}
 		}
