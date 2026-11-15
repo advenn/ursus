@@ -509,6 +509,68 @@ func TestDuckDBSemantics(t *testing.T) {
 				check(t, fmt.Sprintf("u_f2i at %d bits", bits), got, want)
 			}
 		}},
+		{"u_imean is the double nearest Σx/n, as ursus's integer Mean (T-MEAN-INT)", func(t *testing.T) {
+			type sn struct {
+				s *big.Int
+				n int64
+			}
+			cases := []sn{{big.NewInt(0), 3}, {big.NewInt(-7), 2}, {big.NewInt(7), 2}, {big.NewInt(1), 3}, {big.NewInt(-1), 3},
+				{new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 54), big.NewInt(1)), 2}, // a midpoint, ties to even
+				{new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 54), big.NewInt(3)), 2},
+				{new(big.Int).Mul(big.NewInt(math.MaxInt64), big.NewInt(2)), 2}, {new(big.Int).Mul(big.NewInt(math.MinInt64), big.NewInt(3)), 3},
+				{new(big.Int).Mul(big.NewInt(math.MaxInt64), big.NewInt(8193)), 8193}}
+			r := rand.New(rand.NewPCG(513, 4))
+			for range 300 {
+				n := int64(1 + r.IntN(16384))
+				v := new(big.Int).Mul(big.NewInt(int64(r.Uint64())), big.NewInt(n))
+				v.Add(v, big.NewInt(int64(r.IntN(int(n)))-n/2))
+				if r.IntN(3) == 0 {
+					v = big.NewInt(int64(r.IntN(2_000_001)) - 1_000_000)
+				}
+				cases = append(cases, sn{v, n})
+			}
+			var sel []string
+			var want []any
+			for _, c := range cases {
+				sel = append(sel, fmt.Sprintf("u_imean(CAST('%s' AS HUGEINT), CAST('%d' AS BIGINT))", c.s, c.n))
+				f, _ := new(big.Rat).SetFrac(c.s, big.NewInt(c.n)).Float64()
+				want = append(want, f)
+			}
+			for i := 0; i < len(sel); i += 50 {
+				j := min(i+50, len(sel))
+				check(t, fmt.Sprintf("u_imean, cases %d to %d", i, j), one(t, d, "SELECT "+strings.Join(sel[i:j], ", ")), want[i:j])
+			}
+		}},
+		{"DuckDB drops TRY_CAST's null where the cast is compared with a constant, so T-CAST-RANGE uses u_irange", func(t *testing.T) {
+			xs := []int64{-351887289613166473, 23229, 1105936727514926853, 5}
+			ss := []string{"300", "5", "x", "-129"}
+			tab := table("tc", col{"x", model.Int64, []any{xs[0], xs[1], xs[2], xs[3]}}, col{"s", model.String, []any{ss[0], ss[1], ss[2], ss[3]}})
+			rec := WithRID(tab.Rec)
+			defer rec.Release()
+			if err := d.Register("u_tc", rec); err != nil {
+				t.Fatal(err)
+			}
+			var cast, dropped, ranged, text []any
+			for i, x := range xs {
+				in := x >= math.MinInt32 && x <= math.MaxInt32
+				dropped = append(dropped, x > 18988) // the uncast comparison: DuckDB's answer
+				if in {
+					cast, ranged = append(cast, x), append(ranged, x > 18988)
+				} else {
+					cast, ranged = append(cast, nil), append(ranged, nil)
+				}
+				if v, err := strconv.ParseInt(ss[i], 10, 8); err == nil {
+					text = append(text, v > 5)
+				} else {
+					text = append(text, nil)
+				}
+			}
+			q := func(e string) []any { return column(t, d, "SELECT "+e+` FROM "u_tc" ORDER BY "__rid"`) }
+			check(t, "TRY_CAST(x AS INTEGER)", q(`TRY_CAST("x" AS INTEGER)`), cast)
+			check(t, "TRY_CAST(x AS INTEGER) > 18988, the null dropped", q(`TRY_CAST("x" AS INTEGER) > CAST('18988' AS INTEGER)`), dropped)
+			check(t, "u_irange(x) > 18988", q(`CAST(u_irange("x", CAST('-2147483648' AS BIGINT), CAST('2147483647' AS BIGINT)) AS INTEGER) > CAST('18988' AS INTEGER)`), ranged)
+			check(t, "TRY_CAST(s AS TINYINT) > 5", q(`TRY_CAST("s" AS TINYINT) > CAST('5' AS TINYINT)`), text)
+		}},
 		{"sum of BIGINT is exact past int64, exported as Decimal128(38, 0); count as Int64 (T-SUM, T-COUNT)", func(t *testing.T) {
 			rs, schema := rows(t, d, "SELECT sum(x), count(*) FROM (VALUES (CAST('9223372036854775807' AS BIGINT)), "+
 				"(CAST('9223372036854775807' AS BIGINT))) AS v(x)")

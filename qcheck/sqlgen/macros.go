@@ -64,6 +64,22 @@ var Macros = []string{
 	`CREATE OR REPLACE MACRO u_fmax(u_l) AS CASE WHEN len(u_l) = 0 THEN NULL
 		ELSE list_reduce(u_l, lambda u_a, u_b: CASE WHEN u_fless(u_a, u_b) THEN u_b ELSE u_a END) END`,
 
+	// u_imean is an integer Mean as ursus answers it (T-MEAN-INT): the double
+	// nearest the exact Σx/n, which kernel/aggsum.go's finishDecimal rounds once.
+	// |Σx| // n, then thirty digits of its remainder over n, are read by DuckDB's
+	// exact float parser: a mean of n ≤ 2^14 values is a dyadic midpoint only where
+	// its digits end within them, and otherwise lies further than 10^-30 from one.
+	// avg, and a sum cast to DOUBLE then divided, round twice.
+	`CREATE OR REPLACE MACRO u_imean(u_s, u_n) AS CASE WHEN u_s IS NULL OR u_n = 0 THEN NULL
+		ELSE CAST((CASE WHEN u_s < 0 THEN '-' ELSE '' END) || CAST(abs(u_s) // u_n AS VARCHAR) || '.'
+			|| lpad(CAST(((abs(u_s) % u_n) * CAST('1000000000000000000000000000000' AS HUGEINT)) // u_n AS VARCHAR), 30, '0')
+		AS DOUBLE) END`,
+
+	// u_irange is an integer where it is in [lo, hi], else null (T-CAST-RANGE): a
+	// CASE, as DuckDB 1.5.5 drops TRY_CAST's null where the cast is compared with a
+	// constant, comparing the uncast value (TestDuckDBSemantics).
+	`CREATE OR REPLACE MACRO u_irange(u_x, u_lo, u_hi) AS CASE WHEN u_x >= u_lo AND u_x <= u_hi THEN u_x END`,
+
 	// u_f2i is a float as a BIGINT where it is an integer in [lo, hi), else null
 	// (T-CAST-EXACT). NaN fails x < hi, DuckDB's NaN being above everything.
 	`CREATE OR REPLACE MACRO u_f2i(u_x, u_lo, u_hi) AS CASE WHEN u_x >= u_lo AND u_x < u_hi AND u_x = trunc(u_x) THEN CAST(u_x AS BIGINT) END`,
