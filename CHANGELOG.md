@@ -282,6 +282,18 @@ that stops when its request is cancelled.
   recorded. Six refusals ursus means, where Polars answers, are `TestCondRefusals`' and
   `TestDecimalGuards`', and two float extremes `TestAggregatesAtTheFloatsEnds`', held
   to math/big; those eight cases left the recordings.
+- **Random queries checked against DuckDB** (513): `qcheck duck` runs each of
+  `qcheck self`'s queries in ursus, under a configuration its seed picks among
+  threads, batch sizes, the optimizer off and tables cut into records, and as SQL in
+  DuckDB 1.5.5 in the same process (duckdb-go v2.10505.0, a cgo build behind the
+  `duckdb` tag, so the root module gains nothing). The SQL computes ursus's answer:
+  46 translation rules each name the doc or documented difference they follow,
+  wrapping integers, flooring division, comparing floats by IEEE and keying them by
+  the total order, ursus's parse and text rules, a float sum in the rows' order and
+  an integer mean rounded once; 45 DuckDB facts are held to Go oracles. Answers
+  compare cell by cell, exactly but for a float sum on several threads, within an
+  error model; every ursus run is inside `fuzzcheck.Run`. It runs for five minutes in
+  the CI job `qcheck-duckdb`, not a required check, and found no bug in ursus.
 - **Random queries checked against themselves** (512): `qcheck/`, a module of its
   own, draws tables (Int64, Int32, Float64, String, Bool and Date; 0 to 3,000 rows and
   8191 to 8193; null rates 0 to 1; tame, wild and extreme values, NaN, ±0, each type's

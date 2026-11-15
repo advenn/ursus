@@ -122,7 +122,8 @@ func show(cell string, dt dtype.DataType) string {
 			}
 			return fmt.Sprint(int64(binary.LittleEndian.Uint64(b)))
 		case 16:
-			lo, hi := binary.LittleEndian.Uint64(b), int64(binary.LittleEndian.Uint64(b[8:]))
+			// i128.Int128 is struct{ Hi int64; Lo uint64 }, Hi first in memory.
+			hi, lo := int64(binary.LittleEndian.Uint64(b)), binary.LittleEndian.Uint64(b[8:])
 			v := new(big.Int).Lsh(big.NewInt(hi), 64)
 			return v.Add(v, new(big.Int).SetUint64(lo)).String()
 		}
