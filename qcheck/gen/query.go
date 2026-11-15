@@ -539,7 +539,10 @@ func (g *qgen) sample(c ast.Column) *ast.Lit {
 	return nil
 }
 
-func intLit(t model.Type, v int64) *ast.Lit { return &ast.Lit{T: t, V: v} }
+// intLit is v as a literal of t, wrapped to t's width as a Go conversion wraps
+// it: a FloorDiv by 243 of an Int8 key is by int8(243), -13, which is what build
+// hands ursus and what Query.Go can print (step 513 found 243 typed Int8).
+func intLit(t model.Type, v int64) *ast.Lit { return &ast.Lit{T: t, V: wrap(v, t.Bits())} }
 
 // lit draws a literal of type t: tame mostly, an extreme sometimes, a typed null
 // rarely.
