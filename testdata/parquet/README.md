@@ -32,8 +32,8 @@ encoding arrow-go decodes for integers; and `f`, FIXED_LEN_BYTE_ARRAY(4), plain.
 
 `pyarrow_flba_delta.parquet` — pyarrow 25, `compression='none', use_dictionary=False,
 column_encoding={"f": "DELTA_BYTE_ARRAY"}`: `f`, FIXED_LEN_BYTE_ARRAY(4), "abcd",
-"efgh", "ijkl", "mnop", under an encoding arrow-go does not decode for that type and
-panics on. `parquetaudit_test.go` reads both (step 119).
+"efgh", "ijkl", "mnop", under an encoding arrow-go does not decode for that type.
+`parquetaudit_test.go` reads both (step 119).
 
 `pyarrow_small_pages.parquet` — pyarrow 25, `compression='none', data_page_size=256,
 use_dictionary=['dict'], write_batch_size=50`: 3,000 rows of two String columns, `dict`
@@ -52,3 +52,13 @@ is the same frame from `write_ipc(path, compression='uncompressed')`.
 written with `store_schema=False`, then an `ARROW:schema` added by hand that calls `a`
 a fixed-size list of 3. PyArrow refuses it ("Expected all lists to be of size=3") and
 Polars 1.44.1 panics; `array_test.go` checks ursus refuses it by name (step 341).
+
+`codecs/` — the same frame of 500 rows under every codec two writers write, for step
+520's check that ursus's bounded codecs read every file as arrow-go's own read it
+(`internal/source/parquet`'s `TestEveryParquetFileReadsAsWithArrowGosCodecs`): `i`
+Int64 with nulls, `f` Float64, `s` a String of 50 values in a dictionary, `l`
+List(Int64) with null lists and null elements, and `b` Boolean, in pages of 512 bytes.
+`pyarrow_<codec>.parquet` and `pyarrow_<codec>_v2.parquet` are pyarrow 25.0.1's, V1 and
+V2 data pages; `polars_<codec>.parquet` Polars 2.1.0's; each of Snappy, gzip, Brotli,
+Zstandard and LZ4_RAW (`lz4`). `bench/scripts/oracle/record_codecs.py` writes them,
+run once under each writer.
