@@ -65,8 +65,8 @@ func planOf(c *gen.Case) Plan {
 	return p
 }
 
-// columns are a's columns of the kind: "exact" (neither noisy, a bound nor an
-// integer Mean), "noisy" or "meanint".
+// columns are a's columns of the kind: "exact" (neither noisy nor a bound) or
+// "noisy".
 func columns(a *Answer, p Plan, kind string) []int {
 	abs := map[string]bool{}
 	for _, b := range p.Bounds {
@@ -81,8 +81,6 @@ func columns(a *Answer, p Plan, kind string) []int {
 			continue
 		case noisy:
 			k = "noisy"
-		case p.MeanInt[name]:
-			k = "meanint"
 		default:
 			k = "exact"
 		}
@@ -110,9 +108,7 @@ func isFloat(t model.Type, c string) bool { return t == model.Float64 && c != ""
 // A break changes an engine's answer, or reports it does not apply to it.
 type break_ struct {
 	name string
-	// allowed: the comparator must let the change through, counting its allowance.
-	allowed string
-	fn      func(c *gen.Case, p Plan, a *Answer) bool
+	fn   func(c *gen.Case, p Plan, a *Answer) bool
 }
 
 var breaks = []break_{
@@ -251,38 +247,16 @@ var breaks = []break_{
 		}
 		return ok
 	}},
-	{name: "an integer Mean below 2^39 an ulp off", fn: func(c *gen.Case, p Plan, a *Answer) bool {
-		r, j, ok := firstCell(a, columns(a, p, "meanint"), func(t model.Type, c string) bool {
-			return c != "" && math.Abs(Float(c)) < meanIntFrom/2 && !math.IsNaN(Float(c))
-		})
-		if ok {
-			a.Cells[j][r] = FloatCell(math.Nextafter(Float(a.Cells[j][r]), math.Inf(1)))
-		}
-		return ok
-	}},
-	{name: "an integer Mean past 2^39 an ulp off", allowed: FiredMeanInt, fn: func(c *gen.Case, p Plan, a *Answer) bool {
-		r, j, ok := firstCell(a, columns(a, p, "meanint"), func(t model.Type, c string) bool {
-			return c != "" && math.Abs(Float(c)) >= meanIntFrom && !math.IsInf(Float(c), 0)
-		})
-		if ok {
-			a.Cells[j][r] = FloatCell(math.Nextafter(Float(a.Cells[j][r]), math.Inf(1)))
-		}
-		return ok
-	}},
 }
 
 // TestComparatorTeeth breaks the engine's answers, each break over the run's
 // cases where it applies, and holds the comparator to finding every one, a
-// mismatch in that case, and to letting through, counted, the one allowed.
+// mismatch in that case and in no other.
 func TestComparatorTeeth(t *testing.T) {
 	for _, br := range breaks {
 		t.Run(strings.ReplaceAll(br.name, " ", "_"), func(t *testing.T) {
 			applied := map[uint64]bool{}
-			cases := 150
-			if br.allowed != "" {
-				cases = 600 // an integer Mean past 2^39 is rare
-			}
-			rep := run(t, cases, func(c *gen.Case, a *Answer) {
+			rep := run(t, 150, func(c *gen.Case, a *Answer) {
 				if br.fn(c, planOf(c), a) {
 					applied[c.Seed] = true
 				}
@@ -300,20 +274,14 @@ func TestComparatorTeeth(t *testing.T) {
 				t.Fatalf("the break applied to no case")
 			}
 			for seed := range applied {
-				if br.allowed == "" && !found[seed] {
+				if !found[seed] {
 					t.Errorf("seed %d: the break was not found", seed)
-				}
-				if br.allowed != "" && found[seed] {
-					t.Errorf("seed %d: the allowed change was reported", seed)
 				}
 			}
 			for seed := range found {
 				if !applied[seed] {
 					t.Errorf("seed %d: a mismatch where nothing was broken", seed)
 				}
-			}
-			if br.allowed != "" && rep.Allowed[br.allowed] < len(applied) {
-				t.Errorf("allowance %s fired %d times for %d changes", br.allowed, rep.Allowed[br.allowed], len(applied))
 			}
 		})
 	}

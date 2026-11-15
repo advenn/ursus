@@ -46,7 +46,7 @@ func exactCols(a *compare.Answer, p compare.Plan) []int {
 	}
 	var out []int
 	for j, name := range a.Names {
-		if !abs[name] && p.Bounds[name] == (ast.Bound{}) && !p.MeanInt[name] {
+		if !abs[name] && p.Bounds[name] == (ast.Bound{}) {
 			out = append(out, j)
 		}
 	}
@@ -178,5 +178,29 @@ func TestDuckTeeth(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// foundSeeds are the cases whose findings the record lists (step-513-as-built.md
+// §6), each run alone: every one must now agree.
+var foundSeeds = []uint64{
+	804000458,                                             // an Int8 FloorDiv by 243: gen's literal outside its type
+	804000121,                                             // TRY_CAST's null dropped in a comparison
+	804002697, 804006513, 804011153, 804013588, 804018440, // an integer Mean rounded twice
+}
+
+// TestDuckFound runs the cases the qcheck-duckdb job found, each alone.
+func TestDuckFound(t *testing.T) {
+	d := open(t)
+	for _, seed := range foundSeeds {
+		rep := compare.Run(compare.Options{Seed: seed, Cases: 1, Engine: d})
+		for _, f := range rep.Findings {
+			if f.Kind != compare.KindVacuous {
+				t.Error(f)
+			}
+		}
+		if rep.Compared != 1 {
+			t.Errorf("seed %d: not compared", seed)
+		}
 	}
 }

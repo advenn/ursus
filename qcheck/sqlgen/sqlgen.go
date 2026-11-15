@@ -577,6 +577,12 @@ func floatRange(t model.Type) (lo, hi string) {
 	return lo, hi
 }
 
+// intRange is t's least and greatest values, as BIGINT literals.
+func intRange(t model.Type) string {
+	bits := t.Bits()
+	return fmt.Sprintf("CAST('%d' AS BIGINT), CAST('%d' AS BIGINT)", int64(-1)<<(bits-1), int64(1)<<(bits-1)-1)
+}
+
 // convert is a Cast or a CastLossy.
 func (b *builder) convert(e *ast.Cast) string {
 	from, to := e.X.Type(), e.To
@@ -604,11 +610,11 @@ func (b *builder) convert(e *ast.Cast) string {
 			return "CAST(u_f2i(" + x + ", " + lo + ", " + hi + ") AS " + Type(to) + ")"
 		case from.IsSignedInt() && to.IsSignedInt():
 			b.fire(TCastRange)
-			return "TRY_CAST(" + x + " AS " + Type(to) + ")"
+			return "CAST(u_irange(" + x + ", " + intRange(to) + ") AS " + Type(to) + ")"
 		case from == model.Int64 && to == model.Date:
 			b.fire(TCastRange)
 			b.fire(TDateDays)
-			return "TRY_CAST(" + x + " AS INTEGER)"
+			return "CAST(u_irange(" + x + ", " + intRange(model.Int32) + ") AS INTEGER)"
 		}
 		b.refuse(RCastStrict, "a lossy cast of %s to %s", from, to)
 	}
@@ -680,7 +686,7 @@ func (b *builder) agg(a *ast.Agg) string {
 			return "u_fmean(" + orderedList(x) + ")"
 		case xt.IsSignedInt():
 			b.fire(TMeanInt)
-			return "(CAST(sum(CAST(" + x + " AS HUGEINT)) AS DOUBLE) / CAST(count(" + x + ") AS DOUBLE))"
+			return "u_imean(sum(CAST(" + x + " AS HUGEINT)), count(" + x + "))"
 		}
 		b.refuse(RMeanBool, "Mean of %s", xt)
 	case ast.Min, ast.Max:

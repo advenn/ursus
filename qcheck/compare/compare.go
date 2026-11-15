@@ -11,11 +11,9 @@ import (
 	"github.com/advenn/ursus/qcheck/model"
 )
 
-// The comparator's allowances, as Verdict.Fired names them.
-const (
-	FiredNoisy   = "noisy"    // a noisy cell within its bound, ursus on several threads
-	FiredMeanInt = "mean-int" // an integer Mean an ulp apart past 2^39 (T-MEAN-INT)
-)
+// FiredNoisy is the comparator's one allowance, as Verdict.Fired names it: a noisy
+// cell within its bound, ursus on several threads.
+const FiredNoisy = "noisy"
 
 // Plan is how two answers to one query compare.
 type Plan struct {
@@ -25,8 +23,6 @@ type Plan struct {
 	// Threads is whether ursus ran on several threads: a noisy cell may then differ
 	// within its bound. Otherwise it compares exactly.
 	Threads bool
-	// MeanInt are the columns that hold an integer Mean.
-	MeanInt map[string]bool
 }
 
 // NewPlan is the plan of q, a bounded query, whose noisy columns bounds names,
@@ -36,41 +32,7 @@ func NewPlan(q *ast.Query, bounds map[string]ast.Bound, tables map[string]*model
 	if err != nil {
 		return Plan{}, err
 	}
-	return Plan{Ordered: info.Ordered, Bounds: bounds, Threads: threads > 1, MeanInt: meanInts(q.Root)}, nil
-}
-
-// meanInts are the columns of f that hold an integer Mean of a group-by: carried by
-// name through the row-wise operations, a Select's pass-through or alias, and a
-// join's left side, and lost where a WithColumns replaces them.
-func meanInts(f ast.Frame) map[string]bool {
-	out := map[string]bool{}
-	switch f := f.(type) {
-	case *ast.Scan:
-	case *ast.Filter, *ast.Sort, *ast.Head, *ast.Slice:
-		return meanInts(f.Inputs()[0])
-	case *ast.Select:
-		in := meanInts(f.In)
-		for _, n := range f.Cols {
-			if c, ok := n.E.(*ast.Col); ok && in[c.Name] {
-				out[n.Name] = true
-			}
-		}
-	case *ast.WithColumns:
-		out = meanInts(f.In)
-		for _, n := range f.Cols {
-			delete(out, n.Name)
-		}
-	case *ast.GroupBy:
-		for _, n := range f.Aggs {
-			if a := n.E.(*ast.Agg); a.Op == ast.Mean && a.X.Type().IsSignedInt() {
-				out[n.Name] = true
-			}
-		}
-	case *ast.Join:
-		// The right side is a scan, maybe filtered: it holds no aggregate.
-		out = meanInts(f.L)
-	}
-	return out
+	return Plan{Ordered: info.Ordered, Bounds: bounds, Threads: threads > 1}, nil
 }
 
 // Verdict is one comparison's outcome.
@@ -80,9 +42,6 @@ type Verdict struct {
 }
 
 const eps = 0x1p-52
-
-// meanIntFrom is the magnitude from which an integer Mean may be an ulp apart.
-const meanIntFrom = 0x1p39
 
 // Compare compares ursus's answer, got, against the engine's, want. Neither may be
 // a refusal: the runner reports those.
@@ -114,7 +73,7 @@ func Compare(want, got *Answer, p Plan) Verdict {
 	for j, name := range want.Names {
 		switch {
 		case skip[name]:
-		case p.Bounds[name] != (ast.Bound{}) || p.MeanInt[name]:
+		case p.Bounds[name] != (ast.Bound{}):
 			loose = append(loose, j)
 		default:
 			exact = append(exact, j)
@@ -208,13 +167,6 @@ func (p Plan) within(want, got *Answer, wr, gr, j int) (ok bool, fired string) {
 	}
 	fw, fg := Float(w), Float(g)
 	name := want.Names[j]
-	if p.MeanInt[name] {
-		big := math.Abs(fw) >= meanIntFrom || math.Abs(fg) >= meanIntFrom
-		if big && !math.IsNaN(fw) && !math.IsNaN(fg) && (math.Nextafter(fw, fg) == fg) {
-			return true, FiredMeanInt
-		}
-		return false, ""
-	}
 	if !p.Threads {
 		return false, ""
 	}
