@@ -25,6 +25,9 @@ type rowsReader struct {
 	out  *dtype.Schema
 	size int
 	left int // rows MaxRows leaves; 0 unlimited
+	// whole: a batch is the rest of a file's rows, its consumer taking a batch of no
+	// columns at any size (source.ScanSpec.Whole, step 529).
+	whole bool
 
 	mu    sync.Mutex
 	k     int   // the next file
@@ -53,7 +56,10 @@ func (r *rowsReader) Next(ctx context.Context) (_ *data.Batch, err error) {
 		closer()
 		r.k++
 	}
-	n := int(min(r.rows, int64(r.size)))
+	n := int(r.rows)
+	if !r.whole {
+		n = int(min(r.rows, int64(r.size)))
+	}
 	if r.left > 0 {
 		n = min(n, r.left)
 		r.left -= n

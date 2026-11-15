@@ -3,6 +3,7 @@ package ursus
 import (
 	"context"
 	"iter"
+	"sync/atomic"
 	"time"
 
 	"github.com/advenn/ursus/dtype"
@@ -318,7 +319,15 @@ type collectCfg struct {
 	budget     *execopt.Budget
 	profiler   *physical.Profiler // Profile's, measuring each node; nil otherwise
 	query      *query             // its figures for the engine's hook, from finish
+	// whole is set by Collect and Count, which hold a batch of only Null columns in
+	// constant space whatever its rows (physical.Options.Whole, step 529).
+	whole bool
 }
+
+// cutWhole makes Collect and Count ask for batches cut at the batch size whatever
+// they hold, as before step 529: the reference of the differential that holds every
+// answer the same either way. Set by a test, never during a query.
+var cutWhole atomic.Bool
 
 // WithBatchSize sets the rows per batch. Results must not depend on it; the test
 // suite varies it precisely to check that.
@@ -748,6 +757,7 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 		Fewer:     !cfg.threadsSet,
 		Budget:    cfg.budget,
 		Profiler:  cfg.profiler,
+		Whole:     cfg.whole,
 	})
 	if err != nil || cfg.query == nil || cfg.query.hook == nil {
 		return root, err
@@ -790,6 +800,7 @@ func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (df *Da
 	defer cfg.end(ctx, "collect", &err)
 	cfg = newCollectCfg(opts)
 	defer cfg.done()
+	cfg.whole = !cutWhole.Load()
 	root, err := lf.compile(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -851,6 +862,7 @@ func (lf *LazyFrame) Count(ctx context.Context, opts ...CollectOption) (n int64,
 	// Its rows are all a count needs: a projection of no columns above the query,
 	// so a scan reads none (step 370).
 	rows := &LazyFrame{node: &plan.Project{Input: lf.node}}
+	cfg.whole = !cutWhole.Load()
 	root, err := rows.compile(ctx, cfg)
 	if err != nil {
 		return 0, err
