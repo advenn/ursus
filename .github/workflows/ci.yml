@@ -199,6 +199,8 @@ jobs:
           key: qcheck-duckdb-${{ runner.os }}-${{ hashFiles('qcheck/go.sum') }}
           restore-keys: qcheck-duckdb-${{ runner.os }}-
       - run: go vet -tags "$TAGS" ./...
-      - run: go test -count=1 -tags "$TAGS" ./duck/ ./compare/ ./sqlgen/
+      # Verbose, so the log holds the smoke run's counts and each tooth's.
+      - run: go test -count=1 -v -tags "$TAGS" ./duck/
+      - run: go test -count=1 -tags "$TAGS" ./compare/ ./sqlgen/
       - name: qcheck duck for five minutes
         run: go run -tags "$TAGS" ./cmd/qcheck duck -seed ${{ github.run_number }}000000 -duration 5m
