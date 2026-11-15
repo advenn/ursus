@@ -505,8 +505,19 @@ below are from before:
 
 ## 6. Checks
 
-All run after the last edit. The two Parquet packages ran first on their own:
-`./internal/source/parquet` 17.4 s and `./internal/readfuzz` 2.4 s, both ok.
+All were run after the last edit, on the branch merged with master de826b9 (steps 519
+and 520).
+
+- **The seventh fuzz run**, under the lock and the cap: `FuzzScanParquet` ran its 20 s
+  clean, 864,992 executions, and `FuzzOwnPagesMatchArrow` ran its 20 s clean, 636,571.
+- `go test ./internal/...`: ok, 29 packages.
+- `go test .` in full, under the lock: ok, 178.5 s.
+- `GOEXPERIMENT=simd go vet ./...`: clean.
+- `go run ./internal/gen/levels`: ok.
+- `GOEXPERIMENT=simd go run ./internal/gen/api -check`: 2,481 features, 92 added, 0
+  gone since v0.7.2.
+- `go run ./internal/gen/testinventory -check`: ok, 1,225 lines, the baseline's.
+- `$(go env GOROOT)/bin/gofmt -l .`: printed nothing.
 
 ## 7. Left
 
