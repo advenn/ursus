@@ -278,6 +278,11 @@ The jobs' runs on this PR, each from its run's seed:
 | --- | --- | --- | --- |
 | 4332183 | `qcheck` | ok (shrink 10.1 s) | `self` from 822,000,000: 16,253 cases, no finding |
 | 4332183 | `qcheck-duckdb` | ok: the settings, the corpus (no DuckDB case yet), 30 or more emitted scripts against `Load` | `duck` from 822,000,000: 33,610 cases, one finding, seed 822,025,313, shrunk by `-shrink` in 1.1 s and uploaded (§6) |
+| c8ee3d6 (step 523 merged in, the marks removed) | `qcheck` | ok (shrink 9.5 s; the corpus's two self cases pass) | `self` from 825,000,000: 15,584 cases, no finding |
+| c8ee3d6 | `qcheck-duckdb` | ok: `duck-822025313` replayed, unmarked, and passes against DuckDB | `duck` from 825,000,000: 24,984 cases, no finding |
+
+Every other job of run 825 (c8ee3d6), the race job and the fuzz workflow's targets
+among them, passed.
 
 ## 9. Not done
 
