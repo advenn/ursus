@@ -727,7 +727,10 @@ func (b *blockReader) next() ([]byte, error) {
 		}
 		n, err := b.r.Read(buf[len(buf):cap(buf)])
 		buf = buf[:len(buf)+n]
-		if errors.Is(err, io.EOF) {
+		// The end is io.EOF itself, as io.Reader has it. An error wrapping it is the
+		// stream's failure, a network reader's say, and was taken for the end: the
+		// lines before it read as the whole (step 534).
+		if err == io.EOF {
 			b.eof = true
 		} else if err != nil {
 			return nil, err
@@ -790,7 +793,7 @@ func (l *lineReader) next() ([]byte, bool, error) {
 		}
 		n, err := l.r.Read(l.buf[l.end:])
 		l.end += n
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF { // io.EOF itself, as blockReader's next
 			l.eof = true
 		} else if err != nil {
 			return nil, false, err

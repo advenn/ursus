@@ -116,6 +116,7 @@ func (s *stage) Close() error { return errors.Join(s.op.Close(), s.child.Close()
 type scanOp struct {
 	src    source.BatchSource
 	schema *dtype.Schema
+	name   string // the source's, plan.Source's Name
 }
 
 func (s *scanOp) Schema() *dtype.Schema { return s.schema }
@@ -127,6 +128,9 @@ func (s *scanOp) Next(ctx context.Context) (*data.Batch, error) {
 			return nil, err
 		}
 		b, err := s.src.Next(ctx)
+		if err != nil && err != io.EOF && errors.Is(err, io.EOF) {
+			return nil, s.cut(err)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -135,6 +139,26 @@ func (s *scanOp) Next(ctx context.Context) (*data.Batch, error) {
 		}
 		return b, nil
 	}
+}
+
+// cut is err, a source's error that wraps io.EOF and is not io.EOF itself, as the
+// scan's: the source's failure, a read cut short inside a record, a message or a
+// compressed stream, its io.EOF made io.ErrUnexpectedEOF (uerr.Truncated), and an
+// ErrIO where it was none of ursus's errors (step 534).
+//
+// A source's end is io.EOF itself (source.BatchSource), and every operator above a
+// scan ends its input on errors.Is(err, io.EOF), as the engine's own errors keep it
+// out of what they wrap, spill's among them. A source's error wrapping io.EOF ended
+// the scan there instead, and the query answered the rows before it with no error, as
+// an IPC buffer whose bytes decompress short did (step 534). The sources keep io.EOF
+// out of their errors, each where its readers answer one; this is the rule's one
+// place, for any a source misses, and any source added later.
+func (s *scanOp) cut(err error) error {
+	err = uerr.Truncated(err)
+	if _, ok := err.(*uerr.Error); ok {
+		return err
+	}
+	return uerr.Wrap(err, uerr.KindIO, "scan", "reading %s source", s.name)
 }
 
 // --- filter ------------------------------------------------------------------
@@ -646,7 +670,7 @@ func planScan(ctx context.Context, s *plan.Scan, opts Options) (Operator, error)
 	spec.Projection = noColumns(s, spec)
 	src, err := op.Open(ctx, spec)
 	if err != nil {
-		return nil, uerr.Wrap(err, uerr.KindIO, "scan", "opening %s source", s.Src.Name())
+		return nil, uerr.Wrap(uerr.Truncated(err), uerr.KindIO, "scan", "opening %s source", s.Src.Name())
 	}
 	opts.opened.add(src)
 
@@ -661,11 +685,11 @@ func planScan(ctx context.Context, s *plan.Scan, opts Options) (Operator, error)
 	got := src.Schema()
 	if !got.Equal(want) {
 		return &stage{
-			child: &scanOp{src: src, schema: got},
+			child: &scanOp{src: src, schema: got, name: s.Src.Name()},
 			op:    newTrimOp(want),
 		}, nil
 	}
-	return &scanOp{src: src, schema: want}, nil
+	return &scanOp{src: src, schema: want, name: s.Src.Name()}, nil
 }
 
 // noColumns is the projection a scan opens its source with: its own, but where it
