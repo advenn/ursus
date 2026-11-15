@@ -118,6 +118,17 @@ scalar kernels alike); a literal on the right; a subtraction or division by a li
 on either side, which keep their order; `Lit + Lit`, folded through the kernel. These
 hand the payload on per row and stay as they are.
 
+**Under Go's emulation of vectors, `GODEBUG=simd=0`, they do not.** CI's `test (0)`
+failed the literal test on the first push: Go's emulated two-lane `Float64s.Add`
+hands its first lane the right operand's NaN and its second the left's (a probe of
+`addF64SIMD` over rows of NaN A plus NaN B: `fffc…05 7ff8…01 fffc…05 …` emulated,
+`7ff8…01` in every row natively), so a row's NaN follows its place in its batch, two
+columns' as much as a literal's. That is the toolchain's emulation, a test setting,
+not ursus's arithmetic: the native widths (128, 256, 512) and the scalar build hand on
+the left operand's in every row. The test compares a NaN as a NaN where the vectors
+are emulated (`!kernel.Accelerated() && kernel.VectorBits() > 0`), and to the bit
+everywhere else.
+
 ## 5. The tests and their oracles
 
 `canonicalnan_test.go`, over frames generated from a seed (`genNaNs`): a key `g` whose
