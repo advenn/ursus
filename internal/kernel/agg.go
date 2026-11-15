@@ -131,11 +131,11 @@ func NewAccumulator(op expr.AggOp, in dtype.DataType, bind expr.AggBinding,
 		// A minimum whose order puts NaN first, so a NaN wins it, as Polars' nan_min.
 		switch in.Physical().ID() {
 		case dtype.TypeFloat64:
-			return &extremumNum[float64]{out: bind.Out, less: func(a, b float64) bool {
+			return &extremumNum[float64]{out: bind.Out, ties: true, less: func(a, b float64) bool {
 				return math.IsNaN(a) && !math.IsNaN(b) || !math.IsNaN(b) && lessFloat64(a, b)
 			}}, nil
 		case dtype.TypeFloat32:
-			return &extremumNum[float32]{out: bind.Out, less: func(a, b float32) bool {
+			return &extremumNum[float32]{out: bind.Out, ties: true, less: func(a, b float32) bool {
 				x, y := float64(a), float64(b)
 				return math.IsNaN(x) && !math.IsNaN(y) || !math.IsNaN(y) && lessFloat32(a, b)
 			}}, nil
@@ -226,6 +226,17 @@ func NewAccumulator(op expr.AggOp, in dtype.DataType, bind expr.AggBinding,
 		return nil, uerr.New(uerr.KindUnsupported, "agg",
 			"aggregate %s is not implemented", op)
 	}
+}
+
+// RowPlacer is an accumulator whose answer, of values its order calls equal, is a
+// particular row's: a float's Min, Max and NanMin, whose -0.0 and +0.0, or NaNs, are
+// equal and differ in their bits (step 523). AddBatch breaks such a tie by arrival,
+// and Merge by the input position of each partial state's row, which PlaceRows gives
+// it: the position of the next batch's first row, the rows of AddBatch's and
+// AddAll's column after it in order. A caller that never merges need not call it; a
+// parallel group-by, whose workers are dealt batches round-robin, must.
+type RowPlacer interface {
+	PlaceRows(base int64)
 }
 
 // --- merging under a remap ----------------------------------------------------

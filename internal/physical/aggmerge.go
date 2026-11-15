@@ -21,6 +21,7 @@ func (s *hashAggSink) goSerial() { s.parallel = false }
 // released by Merge, and Close still runs.
 func (s *hashAggSink) discard() {
 	s.ids, s.accs, s.keyParts, s.firstSeen = s.ids.empty(), nil, nil, nil
+	s.firstAt, s.keyFixes = nil, nil
 }
 
 // recharge measures the accumulator state again and charges the difference, and
@@ -33,7 +34,7 @@ func (s *hashAggSink) recharge() int64 {
 	for _, a := range s.accs {
 		acc += a.NBytes()
 	}
-	acc += int64(cap(s.firstSeen))*8 + s.ids.NBytes()
+	acc += int64(cap(s.firstSeen))*8 + int64(cap(s.firstAt))*8 + s.ids.NBytes()
 	s.mem.RetainBytes(acc - s.accBytes)
 	s.accBytes = acc
 	return acc
@@ -78,8 +79,12 @@ func (s *hashAggSink) Merge(other Sink) error {
 	// first, purely because a Go map cannot be indexed by value. A chunk at a time
 	// since step 160, which gives ids in the same order.
 	nOther := o.ids.Len()
+	if err := s.firstRowsHeld(o); err != nil {
+		return err
+	}
 	remap := make([]int32, nOther)
 	var newRows []int32 // o's row index, for keys this sink has never seen
+	var fix firstRows   // groups whose first row o held, for a float key
 	var (
 		oids     [kernel.ManyChunk]int32
 		ids      [kernel.ManyChunk]int32
@@ -95,8 +100,12 @@ func (s *hashAggSink) Merge(other Sink) error {
 			if inserted[j] {
 				newRows = append(newRows, oids[j])
 			}
+			s.firstRow(o, oids[j], ids[j], inserted[j], &fix)
 			remap[lo+j] = ids[j]
 		}
+	}
+	if err := s.fixFirstRows(o, fix); err != nil {
+		return err
 	}
 
 	// The key VALUES of the groups only o saw. This is the piece joinBuildSink.Merge
@@ -145,6 +154,96 @@ func (s *hashAggSink) Merge(other Sink) error {
 	return nil
 }
 
+// --- a float key's first row (step 523) -----------------------------------------
+//
+// A group of a float key holds rows whose keys the order calls equal, -0.0 and +0.0
+// or NaNs of different payloads, and its key is its first row's, as a serial sink
+// takes it from the batch that made the group. A fold inserts each key of the sink
+// it folds that this one lacks and keeps its own for the rest, so a group whose
+// first row a later-folded worker held kept a later row's bits: GroupBy(x) answered
+// -0 on eight threads where one thread answered +0. So each worker keeps the input
+// position of each group's first row, and the fold takes the key of whichever row is
+// the earlier, as hashAggSink.keyFixes, applied by fixKeys.
+
+// firstRows is a fold's groups whose first row the folded sink held: this sink's
+// ids and the folded sink's, ascending in the latter.
+type firstRows struct{ ids, from []int32 }
+
+// firstRowsHeld checks that both sinks kept their groups' first rows, where a float
+// key needs them: every worker does, and every sink a fold has merged into.
+func (s *hashAggSink) firstRowsHeld(o *hashAggSink) error {
+	if !s.floatKey {
+		return nil
+	}
+	if len(s.firstAt) != s.ids.Len() || len(o.firstAt) != o.ids.Len() || len(o.keyFixes) > 0 {
+		return uerr.Internalf("physical: a float key's first rows are not held: %d of %d groups and %d of %d",
+			len(s.firstAt), s.ids.Len(), len(o.firstAt), o.ids.Len())
+	}
+	return nil
+}
+
+// firstRow notes that o's group oid is this sink's id: a new group's first row, or
+// one o held before this sink's, in fix.
+func (s *hashAggSink) firstRow(o *hashAggSink, oid, id int32, inserted bool, fix *firstRows) {
+	if !s.floatKey {
+		return
+	}
+	at := o.firstAt[oid]
+	switch {
+	case inserted:
+		s.firstAt = append(s.firstAt, at)
+	case at < s.firstAt[id]:
+		s.firstAt[id] = at
+		fix.ids, fix.from = append(fix.ids, id), append(fix.from, oid)
+	}
+}
+
+// fixFirstRows keeps, for the groups in fix, o's keys, to be applied by fixKeys.
+func (s *hashAggSink) fixFirstRows(o *hashAggSink, fix firstRows) error {
+	if len(fix.ids) == 0 {
+		return nil
+	}
+	keys, err := o.takeKeys(fix.from, s.keySchema)
+	if err != nil {
+		return err
+	}
+	s.keyFixes = append(s.keyFixes, keyFix{ids: fix.ids, keys: keys})
+	s.mem.Retain(keys)
+	return nil
+}
+
+// fixKeys is keys, a group's a row in id order, with fixes applied in turn: a later
+// fix of a group is of a still earlier row.
+func fixKeys(schema *dtype.Schema, keys *data.Batch, fixes []keyFix) (*data.Batch, error) {
+	if len(fixes) == 0 {
+		return keys, nil
+	}
+	parts := []*data.Batch{keys}
+	idx := make([]int32, keys.Rows())
+	for i := range idx {
+		idx[i] = int32(i)
+	}
+	at := int32(keys.Rows())
+	for _, f := range fixes {
+		for j, id := range f.ids {
+			idx[id] = at + int32(j)
+		}
+		at += int32(f.keys.Rows())
+		parts = append(parts, f.keys)
+	}
+	all, err := kernel.Concat(schema, parts)
+	if err != nil {
+		return nil, err
+	}
+	cols := make([]*data.Column, all.NumCols())
+	for i := range cols {
+		if cols[i], err = kernel.Take(all.Column(i), idx); err != nil {
+			return nil, err
+		}
+	}
+	return data.NewBatch(schema, cols)
+}
+
 // fewAggRows is the most rows a group-by's input holds, by the sources' counts, for it
 // to build one sink where the caller gave no WithThreads (step 396).
 const fewAggRows = 32_768
@@ -161,7 +260,12 @@ const fewAggRows = 32_768
 // Sink.Merge's contract is that `other` consumed a LATER portion of the input, and
 // parallelSink's round-robin dispatcher does not satisfy it: worker 0 holds batches
 // 0, N, 2N…, so worker 1's batch 1 precedes worker 0's batch N. So the aggregate
-// may only run in parallel when its answer does not depend on order at all.
+// may only run in parallel when its answer does not depend on order at all, or
+// when it keeps the input positions its answer depends on: a float's Min, Max and
+// NanMin pick among values equal with different bits, -0 and +0 or NaNs, by row,
+// and a float key is its group's first row's, so each keeps that row's position,
+// which the dispatcher deals with each batch, and the fold breaks a tie by it
+// (step 523).
 //
 //	MaintainOrder      firstSeen holds per-sink input ordinals, and two sinks that
 //	                   saw interleaved portions numbered their rows independently.
@@ -380,6 +484,10 @@ func (s *hashAggSink) mergeShare(ws []*hashAggSink, routed [][][]int32, p int) e
 		if len(share) == 0 {
 			continue
 		}
+		if err := s.firstRowsHeld(o); err != nil {
+			return err
+		}
+		var fix firstRows
 		dst, newRows = dst[:0], newRows[:0]
 		for lo := 0; lo < len(share); lo += kernel.ManyChunk {
 			chunk := share[lo:min(lo+kernel.ManyChunk, len(share))]
@@ -389,7 +497,11 @@ func (s *hashAggSink) mergeShare(ws []*hashAggSink, routed [][][]int32, p int) e
 				if inserted[j] {
 					newRows = append(newRows, oid)
 				}
+				s.firstRow(o, oid, ids[j], inserted[j], &fix)
 			}
+		}
+		if err := s.fixFirstRows(o, fix); err != nil {
+			return err
 		}
 		// Sparse: the worker's other groups are other partitions', and a dense remap
 		// would walk them all, for every partition.

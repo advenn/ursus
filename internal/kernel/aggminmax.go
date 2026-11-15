@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/advenn/ursus/dtype"
@@ -49,6 +50,17 @@ import (
 // everything and -0.0 equals +0.0 — the order order.go documents and Sort uses,
 // which is what makes `min(x)` and `sort(x).first()` agree. Using `<` here would
 // make max over a column containing NaN return a number.
+//
+// # And a tie is a row, for a float
+//
+// Values the order calls equal can differ in their bits: -0.0 and +0.0, and NaNs of
+// different payloads. Sort is stable, so sort(x).first() is the EARLIEST of a tie of
+// least values and sort(x).last() the LATEST of a tie of greatest ones, and Min and
+// Max answer those bits: Min keeps the first of equal values it is given, Max the
+// last. A parallel group-by merges partial states that saw rows dealt round-robin,
+// in worker order, which is not row order, so a float's state also keeps the input
+// position of the row it chose, and Merge breaks a tie by it (step 523: Min answered
+// +0 on four threads where one answered -0).
 
 // lessOrdered is the comparison for integers, where Go's < is already the total
 // order. Floats do NOT use it; see lessFloat64.
@@ -86,9 +98,9 @@ func newExtremum(in, out dtype.DataType, max bool) (Accumulator, error) {
 	case dtype.TypeUint64:
 		return &extremumNum[uint64]{out: out, max: max, less: lessOrdered[uint64], ordered: true}, nil
 	case dtype.TypeFloat32:
-		return &extremumNum[float32]{out: out, max: max, less: lessFloat32, keyed: true}, nil
+		return &extremumNum[float32]{out: out, max: max, less: lessFloat32, keyed: true, ties: true}, nil
 	case dtype.TypeFloat64:
-		return &extremumNum[float64]{out: out, max: max, less: lessFloat64, keyed: true}, nil
+		return &extremumNum[float64]{out: out, max: max, less: lessFloat64, keyed: true, ties: true}, nil
 	case dtype.TypeInt128:
 		return &extremumI128{out: out, max: max}, nil
 	default:
@@ -107,6 +119,19 @@ type extremumNum[T data.Primitive] struct {
 	// key's, lessFloat64's or lessFloat32's. AddAll compares either in place (step
 	// 372).
 	ordered, keyed bool
+	// ties: T is a float, whose equal values can differ in their bits, so Max keeps
+	// the last of equal values it is given, where Min keeps the first (step 523).
+	ties bool
+	// track: rows are placed (PlaceRows), and at holds each group's chosen row's
+	// input position, base plus its index in the batch, so Merge can break a tie by
+	// row. Only where the value is a zero or a NaN (tieable): two equal values of
+	// different bits are two zeros or two NaNs, and two equal numbers else are the
+	// same bits, either row's, so their position goes unread and is not written,
+	// and at is not made until a zero or a NaN is chosen. A serial group-by never
+	// merges and never places, and keeps no position.
+	track bool
+	at    []int64
+	base  int64
 
 	best []T
 	seen []bool
@@ -116,14 +141,50 @@ func (a *extremumNum[T]) Reserve(n int) {
 	var zero T
 	a.best = Extend(a.best, n, zero)
 	a.seen = Extend(a.seen, n, false)
+	if a.at != nil {
+		a.at = Extend(a.at, n, 0)
+	}
 }
 
-// wins reports whether x should replace the current best.
+// PlaceRows sets the input position of the next batch's first row, and from the
+// first call keeps positions: see RowPlacer. A caller places every batch from the
+// first, so no group was chosen before positions were kept.
+func (a *extremumNum[T]) PlaceRows(base int64) {
+	a.base = base
+	a.track = a.ties
+}
+
+// tieable reports whether x is a value an equal one can differ from in its bits: a
+// zero, or a NaN.
+func tieable[T data.Primitive](x T) bool { return x == 0 || x != x }
+
+// placeAt keeps group g's position, making at at its first use.
+func (a *extremumNum[T]) placeAt(g int, pos int64) { a.makeAt()[g] = pos }
+
+// makeAt is at, made at the length and capacity of best if it is not yet.
+func (a *extremumNum[T]) makeAt() []int64 {
+	if a.at == nil {
+		a.at = make([]int64, len(a.best), cap(a.best))
+	}
+	return a.at
+}
+
+// wins reports whether x is strictly better than cur.
 func (a *extremumNum[T]) wins(x, cur T) bool {
 	if a.max {
 		return a.less(cur, x)
 	}
 	return a.less(x, cur)
+}
+
+// replaces reports whether x, the later of the two in the input, takes cur's place:
+// when it wins, and for a float's Max when the two are equal too, the latest of a
+// tie being the one a stable sort puts last.
+func (a *extremumNum[T]) replaces(x, cur T) bool {
+	if a.max && a.ties {
+		return !a.less(x, cur)
+	}
+	return a.wins(x, cur)
 }
 
 func (a *extremumNum[T]) AddBatch(groups []int32, col *data.Column) error {
@@ -133,6 +194,50 @@ func (a *extremumNum[T]) AddBatch(groups []int32, col *data.Column) error {
 		return err
 	}
 	valid := col.Validity()
+	if a.ties {
+		// A float's: Max takes an equal value, Min does not, each with the row's
+		// position where positions are kept.
+		best, seen, less, at, base := a.best, a.seen, a.less, a.at, a.base
+		switch {
+		case a.max && a.track:
+			for i, g := range groups {
+				if x := v[i]; valid.Get(i) && (!seen[g] || !less(x, best[g])) {
+					best[g], seen[g] = x, true
+					if tieable(x) {
+						if at == nil {
+							at = a.makeAt()
+						}
+						at[g] = base + int64(i)
+					}
+				}
+			}
+		case a.max:
+			for i, g := range groups {
+				if valid.Get(i) && (!seen[g] || !less(v[i], best[g])) {
+					best[g], seen[g] = v[i], true
+				}
+			}
+		case a.track:
+			for i, g := range groups {
+				if x := v[i]; valid.Get(i) && (!seen[g] || less(x, best[g])) {
+					best[g], seen[g] = x, true
+					if tieable(x) {
+						if at == nil {
+							at = a.makeAt()
+						}
+						at[g] = base + int64(i)
+					}
+				}
+			}
+		default:
+			for i, g := range groups {
+				if valid.Get(i) && (!seen[g] || less(v[i], best[g])) {
+					best[g], seen[g] = v[i], true
+				}
+			}
+		}
+		return nil
+	}
 	for i, g := range groups {
 		if !valid.Get(i) {
 			continue // nulls are skipped, as in every other aggregate
@@ -153,17 +258,46 @@ func (a *extremumNum[T]) Merge(other Accumulator, remap []int32) error {
 	if !ok {
 		return uerr.Internalf("kernel: cannot merge %T into %T", other, a)
 	}
+	// Either both keep positions, or the one that does not has chosen nothing: a
+	// partition of a fold, or a worker dealt no batch.
+	if a.ties && a.track != o.track {
+		switch {
+		case !o.track && !slices.Contains(o.seen, true):
+		case !a.track && !slices.Contains(a.seen, true):
+			a.track = true
+		default:
+			return uerr.Internalf("kernel: a float's %T merged with one that kept no rows", a)
+		}
+	}
 	a.Reserve(mergeCap(remap, len(o.seen)))
+	// o's group src takes the place of this one's group dst when its value wins, or
+	// for a float when the two are equal and its row is the earlier for Min, the
+	// later for Max. The rows decide, not which state is folded into which: a
+	// parallel group-by deals batches round-robin and folds its workers in worker
+	// order, so a later worker can hold the earlier row. Without positions, as a
+	// test merges, the state folded into keeps a tie.
+	//
+	// Of a float's values only two zeros or two NaNs are equal with different bits,
+	// so only those are a tie, found inline, where asking less both ways was two
+	// calls a group; two equal numbers else are the same bits, whichever is kept.
 	mergeEach(remap, len(o.seen), func(dst, src int) {
 		if !o.seen[src] {
 			return
 		}
-		if !a.seen[dst] {
-			a.best[dst], a.seen[dst] = o.best[src], true
-			return
+		x := o.best[src]
+		if a.seen[dst] {
+			cur := a.best[dst]
+			if a.track && (x == 0 && cur == 0 || x != x && cur != cur) {
+				if (o.at[src] < a.at[dst]) == a.max { // o's row is not the one to keep
+					return
+				}
+			} else if !a.wins(x, cur) {
+				return
+			}
 		}
-		if a.wins(o.best[src], a.best[dst]) {
-			a.best[dst] = o.best[src]
+		a.best[dst], a.seen[dst] = x, true
+		if a.track && tieable(x) {
+			a.placeAt(dst, o.at[src])
 		}
 	})
 	return nil
@@ -176,7 +310,7 @@ func (a *extremumNum[T]) Finish(name string, nGroups int) (*data.Column, error) 
 
 func (a *extremumNum[T]) NBytes() int64 {
 	w := int64(a.out.Physical().BitWidth() / 8)
-	return int64(cap(a.best))*w + int64(cap(a.seen))
+	return int64(cap(a.best))*w + int64(cap(a.seen)) + int64(cap(a.at))*8
 }
 
 // --- strings and binary --------------------------------------------------------
