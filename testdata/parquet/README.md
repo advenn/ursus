@@ -62,3 +62,15 @@ List(Int64) with null lists and null elements, and `b` Boolean, in pages of 512 
 V2 data pages; `polars_<codec>.parquet` Polars 2.1.0's; each of Snappy, gzip, Brotli,
 Zstandard and LZ4_RAW (`lz4`). `bench/scripts/oracle/record_codecs.py` writes them,
 run once under each writer.
+
+`delta/` — pyarrow 25.0.1, `bench/scripts/oracle/write_delta.py`: one table of 500 rows
+written three times, `pyarrow_delta_v1.parquet` (V1 pages, uncompressed) and
+`pyarrow_delta_v2_zstd.parquet` (V2 pages, Zstandard) with every column under a delta
+encoding, and `pyarrow_plain.parquet`, its PLAIN twin: INT64 and INT32 under
+DELTA_BINARY_PACKED spanning their types' ranges, with nulls and without, a date, a
+timestamp and a UInt32; strings and binaries under DELTA_LENGTH_BYTE_ARRAY and
+DELTA_BYTE_ARRAY; a List(Int64) and a Struct of an Int64 and a String, in row groups
+of 200 rows and pages of 256 bytes. readfuzz's
+`TestPyarrowDeltaFilesReadAsTheirPlainTwin` reads each as its twin, so step 531's
+check of delta-packed runs refuses no page pyarrow writes. Polars 2.1.0 writes no
+delta encoding.
