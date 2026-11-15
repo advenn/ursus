@@ -217,7 +217,8 @@ here.
 ## 9. Checks
 
 After the last edit, on the branch off `de826b9` (PR #72, step 519, merged), and again
-after master was merged in (step 521, PR #75; a conflict in this index only):
+after master was merged in, twice (step 521, PR #75, and step 513, PR #74; a conflict
+in the index only each time):
 
 - `GOFLAGS=-p=1 GOMAXPROCS=4 GOEXPERIMENT=simd GOAMD64=v3`: `go test ./internal/...`
   ok; `go test .` in full, under the lock, ok (207 s).
