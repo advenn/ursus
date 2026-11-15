@@ -212,7 +212,9 @@ past its page's declared size before arrow-go compares the lengths. Not F9, and 
 fixed here: a fix bounds each codec's output at the page's declared size, which means
 codecs ursus registers in arrow-go's `compress` registry or a check of each page's
 codec header beside `countDictionaries`, a design of its own. Until then fuzz.yml can
-find this class again.
+find this class again. **Fixed in step 520** ([record](./step-520-as-built.md)):
+ursus's codecs in arrow-go's registry decode a page into the buffer it declares and
+refuse more.
 
 ## 8. Checks
 

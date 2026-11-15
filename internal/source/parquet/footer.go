@@ -122,8 +122,8 @@ func schemaDepth(b []byte) (int, error) {
 				if id != 5 || typ != 5 {
 					return false, nil
 				}
-				v, err := r.varint()
-				kids = int32(int64(v>>1) ^ -int64(v&1))
+				var err error
+				kids, err = r.i32()
 				return true, err
 			})
 			if err != nil {
@@ -157,19 +157,47 @@ func schemaDepth(b []byte) (int, error) {
 	return deepest, nil
 }
 
-// thriftReader reads Thrift's compact protocol.
+// thriftReader reads Thrift's compact protocol as Apache Thrift's TCompactProtocol
+// reads it, which arrow-go reads a footer and a page header with: where it reads a
+// value, this reads the same value, and where it reads past a struct, this does too.
+// A walk that read otherwise checked a value arrow-go does not read (step 520, F11 of
+// its record): a dictionary page's count written in a varint of 10 bytes, which
+// binary.Uvarint calls an overflow and Thrift reads, cut to 32 bits, as 896,532,479,
+// was not counted, and arrow-go made a slice of it.
 type thriftReader struct {
 	b   []byte
 	pos int
 }
 
+// varint reads a varint as Thrift's readVarint64 does: up to 10 bytes, the bits past
+// 64 dropped; a tenth byte that says another follows is an error.
 func (r *thriftReader) varint() (uint64, error) {
-	v, n := binary.Uvarint(r.b[r.pos:])
-	if n <= 0 {
-		return 0, errFooter
+	var v uint64
+	for i := range 10 {
+		if r.pos >= len(r.b) {
+			return 0, errFooter
+		}
+		b := r.b[r.pos]
+		r.pos++
+		v |= uint64(b&0x7f) << (7 * i)
+		if b&0x80 == 0 {
+			return v, nil
+		}
 	}
-	r.pos += n
-	return v, nil
+	return 0, errFooter
+}
+
+// varint32 is a varint cut to its low 32 bits, as Thrift's readVarint32 reads an
+// i16's, an i32's, a list's size, a map's and a binary's length.
+func (r *thriftReader) varint32() (int32, error) {
+	v, err := r.varint()
+	return int32(v), err
+}
+
+// i32 reads an i32 as Thrift's ReadI32 does: zigzag of varint32's 32 bits.
+func (r *thriftReader) i32() (int32, error) {
+	n, err := r.varint32()
+	return int32(uint32(n)>>1) ^ -(n & 1), err
 }
 
 func (r *thriftReader) byte() (byte, error) {
@@ -187,8 +215,8 @@ func (r *thriftReader) listHeader() (byte, int, error) {
 	}
 	size := int(h >> 4)
 	if size == 15 {
-		v, err := r.varint()
-		if err != nil || v > uint64(len(r.b)) {
+		v, err := r.varint32()
+		if err != nil || v < 0 || int(v) > len(r.b) {
 			return 0, 0, errFooter // more elements than bytes to hold them
 		}
 		size = int(v)
@@ -205,16 +233,16 @@ func (r *thriftReader) fields(depth int, visit func(id int16, typ byte) (bool, e
 		if err != nil {
 			return err
 		}
-		if h == 0 {
-			return nil
+		if h&0x0f == 0 {
+			return nil // STOP, whatever its high bits, as Thrift reads it
 		}
 		typ, id := h&0x0f, last+int16(h>>4)
 		if h>>4 == 0 {
-			v, err := r.varint()
+			v, err := r.i32()
 			if err != nil {
 				return err
 			}
-			id = int16(int64(v>>1) ^ -int64(v&1))
+			id = int16(v)
 		}
 		last = id
 		read, err := visit(id, typ)
@@ -249,8 +277,8 @@ func (r *thriftReader) skip(typ byte, depth int, field bool) error {
 			err = errFooter
 		}
 	case 8:
-		var n uint64
-		if n, err = r.varint(); err == nil && n > uint64(len(r.b)-r.pos) {
+		var n int32
+		if n, err = r.varint32(); err == nil && (n < 0 || int(n) > len(r.b)-r.pos) {
 			err = errFooter
 		}
 		r.pos += int(n)
@@ -265,9 +293,9 @@ func (r *thriftReader) skip(typ byte, depth int, field bool) error {
 			}
 		}
 	case 11:
-		var n uint64
-		if n, err = r.varint(); err == nil && n > 0 {
-			if n > uint64(len(r.b)) {
+		var n int32
+		if n, err = r.varint32(); err == nil && n != 0 {
+			if n < 0 || int(n) > len(r.b) {
 				return errFooter
 			}
 			var kv byte
