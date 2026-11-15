@@ -555,14 +555,11 @@ func unitIs(u arrow.TimeUnit, dt dtype.DataType) bool {
 	return err == nil && got == dt.TimeUnit()
 }
 
+// times copies a time's ticks as they lie. Nothing in arrow-go range-checks a time,
+// and one outside [0, 24h) is refused once the column is built (checkTimes, step
+// 525), wherever it sits; it was wrapped into the day here, "as Cast does", which no
+// Cast does: a strict Cast refuses one.
 func times(arr arrow.Array, dt dtype.DataType) (func([]int64, int, int) error, error) {
-	perDay, ok := dtype.TicksPerDay(dt)
-	if !ok {
-		return nil, uerr.Internalf("arrow: %s has no ticks per day", dt)
-	}
-	// Wrapped into [0, 24h), as Cast does: nothing in arrow-go range-checks a time,
-	// and every ursus kernel assumes the range.
-	wrap := func(v int64) int64 { return (v%perDay + perDay) % perDay }
 	switch a := arr.(type) {
 	case *array.Time32:
 		if t, ok := a.DataType().(*arrow.Time32Type); !ok || !unitIs(t.Unit, dt) {
@@ -571,7 +568,7 @@ func times(arr arrow.Array, dt dtype.DataType) (func([]int64, int, int) error, e
 		v := a.Values()
 		return func(dst []int64, lo, hi int) error {
 			for i := lo; i < hi; i++ {
-				dst[i-lo] = wrap(int64(v[i]))
+				dst[i-lo] = int64(v[i])
 			}
 			return nil
 		}, nil
@@ -579,13 +576,7 @@ func times(arr arrow.Array, dt dtype.DataType) (func([]int64, int, int) error, e
 		if t, ok := a.DataType().(*arrow.Time64Type); !ok || !unitIs(t.Unit, dt) {
 			return nil, mismatch(arr, dt)
 		}
-		v := a.Values()
-		return func(dst []int64, lo, hi int) error {
-			for i := lo; i < hi; i++ {
-				dst[i-lo] = wrap(int64(v[i]))
-			}
-			return nil
-		}, nil
+		return same[int64, arrow.Time64](a, dt)
 	}
 	return nil, mismatch(arr, dt)
 }
