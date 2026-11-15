@@ -493,6 +493,11 @@ its section below lists them.
   as the dictionary value that byte numbered, with no error, where pyarrow and DuckDB
   read the first value. Such a page is refused there now; ursus's own pages read it
   as pyarrow does. The fuzz runs of step 521 found it.
+- **A Parquet page header that does not parse costs no more than its chunk to
+  refuse** (521): arrow-go looks at a page header with a buffer it doubles at each
+  failure up to 4 MiB, so a 102-byte file whose dictionary header did not parse cost
+  8 MiB each time it was read. The looks stop at the column chunk's size now, at
+  least 16 KiB. The fuzz runs of step 521 found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

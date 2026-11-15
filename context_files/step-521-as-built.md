@@ -24,10 +24,15 @@ because CI's fuzz workflow would have found them on this pull request:
   from memory it had not written.
 - **F15:** a corrupt Null column was an internal error.
 
-The last fuzz run found **F16** (§4c). On master, through arrow-go's column reader, a
+A later fuzz run found **F16** (§4c). On master, through arrow-go's column reader, a
 page of dictionary indices 0 bits wide read the wrong dictionary value with no error
 whenever a byte followed a run's header. Arrow-go takes that byte for the run's
 index. It is refused there now.
+
+The fifth and last fuzz run found two more (§4d). **F17** is fixed: a dictionary
+header that does not parse cost 8 MiB on each read. **F18** is left open: a
+DELTA_BINARY_PACKED page with a block of 31 values hangs arrow-go's decoder, on
+master too.
 
 Step 519's own fuzzing found F14 too: a 93-byte file whose INT64 page read 5 of its 8
 rows as poison. Step 519's CI found two more of F13's inputs. All three pass here and
@@ -398,6 +403,44 @@ arrow-go's column reader read "01".
 - **Tooth.** With the check off, the test failed in all 7 arrow-go kinds and the
   seed failed ("batch 0 differs").
 
+## 4d. F17 and F18, from the fifth run
+
+The fifth run, on the final code with origin/master merged in, found one input in
+each target. Both were replayed under the cap.
+
+- **F17, fixed.** `FuzzScanParquet`, `0ffc32c5ae40d70c`: "allocated 85,386,496 bytes
+  (81.4 MiB) in one call, over the bound of 64.1 MiB".
+  - On master it passes, because the walk refuses its footer. On step 520's branch it
+    passes too.
+  - The file's dictionary page header does not parse. arrow-go reads that header out
+    of turn (`GetDictionaryPage`) on each read of the file. Its `readPageHeader` looks
+    at 16 KiB of the chunk and, at each failure, at twice as much, up to 4 MiB, each
+    look a buffer of its size. That comes to about 8 MiB a read, and the target's
+    eight reads of one input total 81 MiB.
+  - **Fix.** `boundHeaders` lowers each page reader's largest header to its chunk's
+    bytes, and to no less than arrow-go's first look of 16 KiB, through
+    `PageReader.SetMaxPageHeaderSize`. A header lies inside its chunk, so a look past
+    the chunk's bytes finds nothing more. It covers `checkedColumn` and the own pages'
+    page reader.
+  - pyarrow refuses the file ("Dictionary page must be before data page"), and so does
+    DuckDB ("Invalid data").
+  - The well-formed files' probe gave the same 156 reads.
+  - The input is kept as the seed
+    `FuzzScanParquet/dictionary-header-that-does-not-parse-looked-at-to-4mib`.
+  - **Tooth.** With the bound off, the seed failed again, at 81.5 MiB.
+- **F18, left open.** `FuzzOwnPagesMatchArrow`, `3194fa9b880f15d1`: "hang: no answer
+  after 10s", on master as well.
+  - Its INT64 chunk's footer lists DELTA_BINARY_PACKED, so arrow-go's column reader
+    decodes it. The data page's DELTA_BINARY_PACKED header gives a block of 31
+    values. arrow-go's decoder then answers 0 values and no error forever, and
+    `columnChunkReader.readBatch`, which loops while the page has values, never ends.
+  - pyarrow refuses the page ("the number of values in a block must be multiple of
+    128, but it's 31"), and so does DuckDB ("invalid block sizes for
+    DELTA_BINARY_PACKED").
+  - A fix would check a DELTA page's header in `checkedPages` before arrow-go decodes
+    the page, as step 517 checks a dictionary page's indices. The input is kept in
+    `~/ursus-scratch-archive/step521-findings/`, not as a seed.
+
 ## 5. The teeth
 
 Each fix was broken in the tree, the step's tests were run under the cap, and the file
@@ -413,6 +456,7 @@ below are from before:
 | list elements walked by the header's type | `TestFooterWalkReadsAListAsArrowGoDoes`, all 28 cases; `FuzzScanParquet` on `pqHiddenGroups` (800,006,144 bytes); `TestAFooterListClaimingMoreThanItsBytesIsRefused`; `TestFooterWalkDifferential`, 8,193 lists said to hold another type that arrow-go reads and the walk refused |
 | a list's count against the whole footer, not the bytes after it | `TestFooterWalkDifferential`, 2,904 lists claiming a byte past theirs, refused only by running out of bytes, not at the header |
 | F14's UNCOMPRESSED page check off (§4a) | `TestAnUncompressedPageWhoseSizesDifferIsRefused`, the fuzzer's input ("read as 8 rows, and no error") and all 10 kinds; `FuzzScanParquet` on its seed ("row 0 differs") |
+| F17's header bound off (§4d) | `FuzzScanParquet` on its seed, 81.5 MiB |
 | F16's zero-width check off (§4c) | `TestADictionaryIndexOfZeroBitsReadsAsIndexZero`, the 7 arrow-go kinds; `FuzzOwnPagesMatchArrow` on its seed |
 | F15's Null column with no reader an internal error again (§4a) | `TestAColumnWithNoReaderIsRefusedWhateverItsType`; `FuzzOwnPagesMatchArrow` on its seed |
 
@@ -428,6 +472,10 @@ All run after the last edit. The two Parquet packages ran first on their own:
   keeping step 520's decoding (`varint`, `varint32`, `i32`, a stop at any type of 0,
   sizes cut to 32 bits) and adding this step's walk, its counts against the bytes
   left, and `onList`. `pqForgedSeeds` holds both steps' seeds.
+- **F18** (§4d): a DELTA_BINARY_PACKED page whose block size is not a multiple of 128
+  hangs arrow-go's column reader, on master too. CI's fuzz workflow, which is
+  advisory and not a required check, may report it on any pull request until it is
+  fixed.
 - **A V2 page in a compressed chunk that is marked not compressed** (`is_compressed`
   false) is outside §4a's check, which looks only at UNCOMPRESSED chunks. arrow-go
   reads such a page's uncompressed size of bytes straight from the chunk
