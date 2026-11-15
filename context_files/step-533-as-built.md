@@ -45,8 +45,9 @@ type 13, which arrow-go reads as a `SchemaElement` whatever the header says (ste
 The element is the root: its name "schema", and `num_children` in a varint of 6 bytes,
 `90 90 90 90 90 00`, which Thrift's `readVarint32` cuts to 32 bits, 33,818,640, zigzag
 16,909,320. A slice of 16,909,320 interfaces is 270,549,120 bytes, 258.0 MiB. v18.7.0's
-`initSchema` drops `FromParquet`'s error, so the footer is left with no schema, and
-`initColumnOrders` panics on it, the panic fuzzcheck tolerated.
+`NewFileMetaData` drops the error `initSchema` hands it from `FromParquet`, so the
+footer is left with no schema, and `initColumnOrders` panics on it, the panic
+fuzzcheck tolerated.
 
 pyarrow 25.0.1 refuses the file: "Malformed schema: not enough elements". arrow-go's
 main (v18.9.0-rc0, commit fc5d5ce5) has the same `FromParquet`, byte for byte (§6), so
@@ -142,7 +143,9 @@ scan_parquet: corrupt: walking the footer: the schema's elements end before its 
 - **`TestFooterWalkDifferential`, extended** (`internal/source/parquet`). The oracle is
   arrow-go itself, over every footer step 521 walks: 25 random files of ursus's writer,
   pyarrow 25.0.1's in `testdata/oracle/footers`, the fixtures in `testdata/parquet`,
-  and `everyList`; 48 footers and 283 schema elements in the run recorded. Each footer
+  and `everyList`; and, new here, the fixtures in `testdata/parquet`'s folders, Polars'
+  and pyarrow's under each codec and pyarrow's delta-encoded files of step 531. 66
+  footers and 478 schema elements in the run recorded. Each footer
   is read back with `tparse`, a reader of the compact protocol into the test's `tval`,
   and written again; the walk passes it and arrow-go reads it. Then, for each element:
   claiming a child more than it does, the walk refuses it, as `errSchemaOpen` or
