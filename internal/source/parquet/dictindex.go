@@ -146,7 +146,7 @@ func batchErr(cr interface{ Err() error }, total int64, err error) error {
 }
 
 // truncated is a page reader's error as a scan may return it, io.EOF made
-// io.ErrUnexpectedEOF (F11 of step 521). arrow-go's page reader answers io.EOF for a
+// io.ErrUnexpectedEOF (F12 of step 521). arrow-go's page reader answers io.EOF for a
 // page whose header is whole and none of whose bytes is in its chunk
 // (serializedPageReader.decompress, io.ReadFull), the chunk ending there; and a scan
 // answers io.EOF at its end, which the engine takes an error wrapping for. The read

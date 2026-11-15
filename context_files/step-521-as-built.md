@@ -2,19 +2,20 @@
 
 **Parquet's Count and read agree, and a footer's lists are sized before they are
 read.** CI's fuzz run 43649609407 on PR #71, step 517 already on master, found two
-Parquet bugs, both through the public API on master 65fc8b2. F11: a file whose `Count`
-was 5 read as 0 rows, with no error. F12: a footer of 78 bytes made arrow-go allocate
-763 MiB before it was refused. Both are fixed. F11's cause was older than step 517:
-ursus's own page reader had had it since step 192. F12 had a relative the brief
+Parquet bugs, both through the public API on master 65fc8b2. F12: a file whose `Count`
+was 5 read as 0 rows, with no error. F13: a footer of 78 bytes made arrow-go allocate
+763 MiB before it was refused. Both are fixed. F12's cause was older than step 517:
+ursus's own page reader had had it since step 192. F13 had a relative the brief
 guessed at: a list's count hidden in what a walk by the header's types reads as
-another type (§2.3).
+another type (§2.3). The brief called them F11 and F12; step 520's record already
+has an F11, so they are F12 and F13 here.
 
 The fuzz runs of this step found four more inputs, none of them this step's (§4). Two
 are the Thrift decoding step 520 fixes. Two are older bugs that remain open: an
 UNCOMPRESSED page shorter than it declares reads memory it never wrote, and a corrupt
 Null column is an internal error.
 
-## 1. F11: Count and the read disagree, silently
+## 1. F12: Count and the read disagree, silently
 
 ### 1.1 The file
 
@@ -75,7 +76,7 @@ Under ursus's rule a forged file is a refusal; nothing promised it would read. T
 fuzz target already allows this: where the whole frame does not read, `Count` is not
 compared with it.
 
-## 2. F12: a 78-byte footer allocates 763 MiB before it is refused
+## 2. F13: a 78-byte footer allocates 763 MiB before it is refused
 
 ### 2.1 The file
 
@@ -159,14 +160,14 @@ slice it makes before it reads one.
 ## 3. The tests
 
 Failing first. On master, `TestAPageWhoseBytesAreMissingIsRefused` failed in all 10 of
-its kinds, and the F11 seed failed with "Count is 5, and the file reads as 0 rows".
-`TestAFooterListClaimingMoreThanItsBytesIsRefused` failed at 763 MiB. The F12 seed died
+its kinds, and the F12 seed failed with "Count is 5, and the file reads as 0 rows".
+`TestAFooterListClaimingMoreThanItsBytesIsRefused` failed at 763 MiB. The F13 seed died
 at the watchdog. All pass now.
 
 - **The seeds**: CI's two inputs, under the names above. `pqForgedSeeds`, and through
   it `FuzzScanParquet`'s seed corpus, gains the 10^8 row-group footer at offset 0 and
   `pqHiddenGroups`.
-- **`TestAPageWhoseBytesAreMissingIsRefused`** (readfuzz, public API). It reads F11's
+- **`TestAPageWhoseBytesAreMissingIsRefused`** (readfuzz, public API). It reads F12's
   input on 1 and on 4 threads, which must be refused, with an error that is not
   `io.EOF`. Then it builds a file of three pages for each of step 517's seven kinds of
   chunk that arrow-go decodes, and for the three of them that the own pages read once
@@ -177,7 +178,7 @@ at the watchdog. All pass now.
   read, with `Count` equal to its height, and a cut file's `Count`, which comes from
   the same footer, must be the whole file's or an error.
 - **`TestAFooterListClaimingMoreThanItsBytesIsRefused`** (readfuzz, public API). Its
-  inputs are F12's, `pqHiddenGroups`, and the 10^8 footer placed 0, 1, 2 and 3 bytes
+  inputs are F13's, `pqHiddenGroups`, and the 10^8 footer placed 0, 1, 2 and 3 bytes
   into its file. Each runs under `fuzzcheck.Run` with readfuzz's limits, 64 MiB plus
   1 KiB per byte. `CollectSchema`, `Collect` and `Count` must each be an `ErrIO`.
 - **`TestFooterWalkDifferential`** (internal) tests the walk against arrow-go's own
@@ -271,9 +272,9 @@ was restored from a copy saved before (`cmp` clean each time):
 
 | broken | failed |
 | --- | --- |
-| `batchErr` returns the reader's error as is | the F11 seed ("Count is 5, and the file reads as 0 rows"); `TestAPageWhoseBytesAreMissingIsRefused`, F11's input and the 7 arrow-go kinds |
+| `batchErr` returns the reader's error as is | the F12 seed ("Count is 5, and the file reads as 0 rows"); `TestAPageWhoseBytesAreMissingIsRefused`, F12's input and the 7 arrow-go kinds |
 | `pageChunk.nextPage` wraps `Err()` as is | `TestAPageWhoseBytesAreMissingIsRefused`, the 3 own-pages kinds |
-| `measureFooter` back to the file less 12 | the F12 seed (watchdog, 800,013,824 bytes); `FuzzScanParquet` on the offset-0 seed (800,012,384 bytes); `TestAFooterListClaimingMoreThanItsBytesIsRefused` (800,014,336); `TestMeasureFooterWalksEveryFooterArrowGoReads` |
+| `measureFooter` back to the file less 12 | the F13 seed (watchdog, 800,013,824 bytes); `FuzzScanParquet` on the offset-0 seed (800,012,384 bytes); `TestAFooterListClaimingMoreThanItsBytesIsRefused` (800,014,336); `TestMeasureFooterWalksEveryFooterArrowGoReads` |
 | list elements walked by the header's type | `TestFooterWalkReadsAListAsArrowGoDoes`, all 28 cases; `FuzzScanParquet` on `pqHiddenGroups` (800,006,144 bytes); `TestAFooterListClaimingMoreThanItsBytesIsRefused`; `TestFooterWalkDifferential`, 8,193 lists said to hold another type that arrow-go reads and the walk refused |
 | a list's count against the whole footer, not the bytes after it | `TestFooterWalkDifferential`, 2,904 lists claiming a byte past theirs, refused only by running out of bytes, not at the header |
 

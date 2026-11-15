@@ -36,7 +36,7 @@ const thriftDepth = 64
 // reads, and refuses one claiming more elements than the bytes after its header hold,
 // each element taking a byte at least. It did not size a list against the bytes left,
 // and it did not see every list arrow-go reads: a footer of 78 bytes claiming 10^8 row
-// groups, too long to leave the file's leading magic room, was never walked (F12 of
+// groups, too long to leave the file's leading magic room, was never walked (F13 of
 // step 521), and arrow-go asked for 1.5 GB before it refused it.
 //
 // Every list as arrow-go reads it: its generated reader takes a list's elements for
@@ -159,7 +159,7 @@ func (m *measured) ReadAt(p []byte, off int64) (n int, err error) {
 // among them. A footer arrow-go does not read, a file too short, one not ending in a
 // plain footer or one whose footer is longer than the file less its last 8 bytes, is
 // left to arrow-go, which says what it is. Every other footer is walked, one leaving
-// the file's leading magic no room as well, which arrow-go reads all the same (F12 of
+// the file's leading magic no room as well, which arrow-go reads all the same (F13 of
 // step 521). It returns the reader arrow-go is to read from.
 func measureFooter(ra parquet.ReaderAtSeeker) (parquet.ReaderAtSeeker, error) {
 	size, err := ra.Seek(0, io.SeekEnd)

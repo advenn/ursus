@@ -36,7 +36,7 @@ func corpusBytes(t *testing.T, path string) []byte {
 	return []byte(s)
 }
 
-// TestAPageWhoseBytesAreMissingIsRefused (F11 of step 521): a page whose header is
+// TestAPageWhoseBytesAreMissingIsRefused (F12 of step 521): a page whose header is
 // whole and whose bytes stop short at its column chunk's end. arrow-go's page reader
 // answers io.EOF where none of a page's bytes is there, which the reader handed on
 // as the chunk's error (batchErr, step 517; the reader's own pages since step 192),
@@ -128,7 +128,7 @@ func TestAPageWhoseBytesAreMissingIsRefused(t *testing.T) {
 	}
 }
 
-// TestAFooterListClaimingMoreThanItsBytesIsRefused (F12 of step 521): arrow-go makes
+// TestAFooterListClaimingMoreThanItsBytesIsRefused (F13 of step 521): arrow-go makes
 // each list of a Parquet footer a slice of the count its header claims before it
 // reads an element, a count Thrift bounds only by its 100 MB message limit, and
 // step 423's walk of the footer is to refuse a count past its bytes first. It walked

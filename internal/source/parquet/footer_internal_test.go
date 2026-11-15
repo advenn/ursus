@@ -128,17 +128,20 @@ func (v tval) with(path []int16, w tval) tval {
 	panic(fmt.Sprintf("tval: nothing at %v", path))
 }
 
-// lists is every list in v and where it is, its field's id last.
-func (v tval) lists(path []int16, out map[string][]int16) {
+// lists is where each list in v is, its field's id last, by the fields to it: of
+// the lists a field holds in each element of a list, the first element's.
+func (v tval) lists(path []int16, fields string, out map[string][]int16) {
 	switch v.typ {
 	case thriftList:
-		out[fmt.Sprint(path)] = slices.Clone(path)
+		if _, ok := out[fields]; !ok {
+			out[fields] = slices.Clone(path)
+		}
 		for i, e := range v.elems {
-			e.lists(append(path, int16(i)), out)
+			e.lists(append(path, int16(i)), fields+"[]", out)
 		}
 	case thriftStruct:
 		for _, f := range v.fields {
-			f.v.lists(append(path, f.id), out)
+			f.v.lists(append(path, f.id), fmt.Sprint(fields, ".", f.id), out)
 		}
 	}
 }
@@ -459,12 +462,10 @@ func hidden(id int16, et byte, el tval, count uint64) []byte {
 func TestFooterWalkReadsAListAsArrowGoDoes(t *testing.T) {
 	foot := everyList()
 	at := map[string][]int16{}
-	foot.lists(nil, at)
+	foot.lists(nil, "", at)
 	var paths [][]int16
 	for _, p := range at {
-		if !slices.Equal(p[:min(len(p), 4)], []int16{4, 0, 1, 1}) { // the second column chunk's are the first's
-			paths = append(paths, p)
-		}
+		paths = append(paths, p)
 	}
 	slices.SortFunc(paths, slices.Compare)
 	named := 0
@@ -476,8 +477,7 @@ func TestFooterWalkReadsAListAsArrowGoDoes(t *testing.T) {
 		}
 	}
 	if len(paths) != named {
-		t.Fatalf("everyList holds %d lists apart from its second column chunk's, and footerFields names %d",
-			len(paths), named)
+		t.Fatalf("everyList holds %d lists by the fields to them, and footerFields names %d", len(paths), named)
 	}
 	for _, path := range paths {
 		list := foot
@@ -524,7 +524,7 @@ func TestFooterWalkReadsAListAsArrowGoDoes(t *testing.T) {
 	}
 }
 
-// TestMeasureFooterWalksEveryFooterArrowGoReads (F12 of step 521): measureFooter
+// TestMeasureFooterWalksEveryFooterArrowGoReads (F13 of step 521): measureFooter
 // walks every footer arrow-go reads, one leaving the leading magic no room too, the
 // footer begun 0 to 3 bytes into its file: the walk passes everyList there, and arrow-go
 // reads it; its row groups claiming 10^8, the walk refuses it, where it left it
