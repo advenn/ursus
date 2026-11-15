@@ -1,6 +1,7 @@
 package readfuzz_test
 
 import (
+	"encoding/binary"
 	"errors"
 	"slices"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/internal/fuzzcheck"
 	"github.com/advenn/ursus/internal/source/parquet"
+	"github.com/advenn/ursus/ursustest"
 )
 
 // TestAPageWhoseBytesAreMissingIsRefused (step 521): a page whose header is whole and
@@ -178,6 +180,58 @@ func TestAnUncompressedPageWhoseSizesDifferIsRefused(t *testing.T) {
 								i+1, len(pages), what, threads, df.Height())
 						}
 					}
+				}
+			}
+		})
+	}
+}
+
+// TestADictionaryIndexOfZeroBitsReadsAsIndexZero (step 521): a data page's dictionary
+// indices 0 bits wide are each 0, and an RLE run of them stores its value in no byte,
+// so a byte after the run's header, a stray one or the header of a run after it, is
+// no index of it. pyarrow 25.0.1 and DuckDB 1.5.5 read index 0 there, as the reader's
+// own pages do. In each kind's file of a dictionary and such a page, the indices one
+// run of 0 bits, then a stray byte of 0, 1 or 255, or two runs, each reads as the page
+// without them reads, the PLAIN page of the dictionary's first value: through the own
+// pages always, through arrow-go's column reader as that or refused.
+func TestADictionaryIndexOfZeroBitsReadsAsIndexZero(t *testing.T) {
+	ctx := t.Context()
+	read := func(b []byte) (*ursus.DataFrame, error) {
+		return ursus.ScanParquetBytes(b, "zero.parquet").Collect(ctx)
+	}
+	var kinds []pqIndexKind
+	own := map[string]bool{}
+	for _, k := range pqIndexKinds() {
+		kinds = append(kinds, k)
+		if k.shape.encs != nil {
+			o := k
+			o.name += ", read by the reader's own pages"
+			o.shape.encs = nil
+			kinds = append(kinds, o)
+			own[o.name] = true
+		}
+	}
+	for _, k := range kinds {
+		t.Run(k.name, func(t *testing.T) {
+			want, err := read(k.file(k.dict(), k.plain(k.values[0])))
+			if err != nil {
+				t.Fatalf("the PLAIN page: %v", err)
+			}
+			run := func(n int) []byte { return binary.AppendUvarint(nil, uint64(n)<<1) }
+			for what, idx := range map[string][]byte{
+				"one run":                      slices.Concat([]byte{0}, run(k.present)),
+				"one run and a stray 0":        slices.Concat([]byte{0}, run(k.present), []byte{0}),
+				"one run and a stray 1":        slices.Concat([]byte{0}, run(k.present), []byte{1}),
+				"one run and a stray 255":      slices.Concat([]byte{0}, run(k.present), []byte{255}),
+				"two runs":                     slices.Concat([]byte{0}, run(2), run(k.present-2)),
+				"two runs and a stray 1 after": slices.Concat([]byte{0}, run(2), run(k.present-2), []byte{1}),
+			} {
+				got, err := read(k.file(k.dict(), k.data(pqRLEDict, idx)))
+				switch {
+				case err != nil && own[k.name]:
+					t.Errorf("%s, by the reader's own pages: %v", what, err)
+				case err == nil:
+					ursustest.AssertFrameEqual(t, got, want)
 				}
 			}
 		})

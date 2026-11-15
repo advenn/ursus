@@ -207,6 +207,13 @@ func (c *checkedPages) check(p file.Page) error {
 	if c.maxDef > 0 {
 		values = presentValues(defs, packedDefs, bits.Len16(uint16(c.maxDef)), c.maxDef, n)
 	}
+	if width == 0 {
+		if b, ok := zeroWidthMisread(data[1:], values); ok {
+			return fmt.Errorf("corrupt: column %s: a data page's dictionary indices are 0 bits wide, each 0, "+
+				"but a run of them is followed by a byte, %d, that it does not hold", c.name, b)
+		}
+		return nil
+	}
 	idx, ok := pastIndex(data[1:], width, values, c.dictN)
 	if !ok {
 		return nil
@@ -286,6 +293,44 @@ func presentValues(runs []byte, packed bool, width int, maxDef int16, n int) int
 		}
 	}
 	return hits + n - read
+}
+
+// zeroWidthMisread reports a run of a page's dictionary indices of 0 bits, among
+// those of the page's first n values, followed by a byte that is not 0, and that
+// byte (step 521). An index of 0 bits is 0, as pyarrow 25.0.1, DuckDB 1.5.5 and the
+// reader's own pages read it, and an RLE run of them stores its value in no byte. A
+// byte after the run's header that is not 0, a stray byte or the header of a run
+// after it, is one a decoder could take for the run's value, every value of the run
+// then another index than 0; the page is refused rather than read two ways. Runs are
+// walked as pastIndex walks them; a bit-packed run of 0 bits holds no byte and reads
+// as 0s.
+func zeroWidthMisread(b []byte, n int) (byte, bool) {
+	r := hybridRuns{b: b}
+	for at := 0; at < n; {
+		h, ok := r.header()
+		if !ok {
+			if r.pos >= len(r.b) {
+				return 0, false
+			}
+			continue
+		}
+		count := uint32(h >> 1)
+		if h&1 == 1 {
+			if count == 0 || count > math.MaxInt32/8 {
+				continue
+			}
+			at += min(int(count)*8, n-at)
+			continue
+		}
+		if count == 0 || count > math.MaxInt32 {
+			continue
+		}
+		if r.pos < len(r.b) && r.b[r.pos] != 0 {
+			return r.b[r.pos], true
+		}
+		at += int(count)
+	}
+	return 0, false
 }
 
 // pastIndex reads the dictionary indices of a page, runs of the hybrid encoding of
