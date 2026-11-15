@@ -321,8 +321,13 @@ func TestAFloatPickIsTheSameSpilled(t *testing.T) {
 	for _, shape := range []struct {
 		name         string
 		rows, groups int
-		limit        int64 // low enough to spill, high enough for the hottest group
-	}{{"few groups", 1500, 41, 64 << 10}, {"many groups", 6000, 2000, 512 << 10}} {
+		// limit is low enough that the group-by spills, which collectPicks asserts, and
+		// high enough for the hottest group and the batches in flight at 4 and 8
+		// threads, which vary with scheduling: 512 KiB for "many groups" failed on CI
+		// with the query holding 513.8 KiB (step 526). "few groups" spills at 96 KiB
+		// and not at 128 KiB; "many groups" still spills at 2 MiB.
+		limit int64
+	}{{"few groups", 1500, 41, 80 << 10}, {"many groups", 6000, 2000, 2 << 20}} {
 		lf := genPicks(523, shape.rows, shape.groups).frame()
 		q := func(ordered bool) *ursus.LazyFrame {
 			return pickQuery(lf, []string{"g"}, ordered, orderFreeAggs())
