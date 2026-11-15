@@ -44,22 +44,23 @@ func SelectionFromMask(mask *data.Column) ([]int32, error) {
 // gathers need.
 func Take(c *data.Column, sel []int32) (*data.Column, error) {
 	n := len(sel)
-	outValid := takeValidity(c, sel)
-
-	switch {
 	// Gathering from a column whose TYPE says there are no values. Every output row
 	// is null whichever input row it names, so there is nothing to index and the
 	// selection's own nulls make no difference — this is nullFixed's argument
-	// below, on the other side of the same wall.
+	// below, on the other side of the same wall. Before the validity is gathered,
+	// which would read the selection a row at a time for nothing (step 529).
 	//
 	// Without it, `Select(ursus.Null(ursus.NullT))` failed. Not an exotic spelling:
 	// cond.go recommends it, and a literal evaluates to a LENGTH-1 column, so
 	// broadcasting it to the batch height is a Take and every use of an untyped
 	// null went through here. It surfaced as "take is not implemented for Null"
 	// after Explain had printed the plan cleanly.
-	case c.DType().IsNull():
+	if c.DType().IsNull() {
 		return data.NewNull(c.Name(), c.DType(), n), nil
+	}
+	outValid := takeValidity(c, sel)
 
+	switch {
 	case c.DType().ID() == dtype.TypeBool:
 		bits := c.Bools()
 		out := bitmap.NewBuilder(n)
@@ -259,9 +260,14 @@ const NullIndex = int32(-1)
 // The rule this establishes: data.NewNull is for a column that is the ANSWER;
 // NullColumn is for a column that is an OPERAND.
 func NullColumn(name string, dt dtype.DataType, n int) (*data.Column, error) {
-	valid := bitmap.Zeros(n)
+	valid := bitmap.Zeros(n) // no storage (step 529): the payload is the operand's
 
 	switch {
+	case dt.IsNull():
+		// A Null column is all an operand of Null needs: there is no payload a
+		// kernel could read of one.
+		return data.NewNull(name, dt, n), nil
+
 	case dt.ID() == dtype.TypeBool:
 		return data.NewBool(name, bitmap.Zeros(n), valid), nil
 
@@ -585,12 +591,23 @@ func concatColumn(parts []*data.Column, total int) (*data.Column, error) {
 func concatColumnN(parts []*data.Column, total int, spread data.Spread) (*data.Column, error) {
 	first := parts[0]
 
+	if first.DType().IsNull() {
+		// Nothing but nulls, and no payload to join (audit.md J12): a Null column
+		// in any frame failed every Collect that concatenated batches. Its rows are
+		// a count, so the parts' validity is not read either: it was built a bit a
+		// row, 128 GiB for a Collect of 2^40 rows (step 529).
+		return data.NewNull(first.Name(), first.DType(), total), nil
+	}
+
 	// Parts with every row valid make a column that says so, with no bitmap: a
 	// built one had every bit set and did not say it, so each kernel after a
 	// Collect of several batches read a bit a row where it could have read none
-	// (step 321).
+	// (step 321). Parts with every row null likewise, in the all-clear form.
 	outValid := bitmap.AllSet(total)
-	if slices.ContainsFunc(parts, func(p *data.Column) bool { return !p.Validity().IsAllSet() }) {
+	switch {
+	case !slices.ContainsFunc(parts, func(p *data.Column) bool { return !p.Validity().IsAllClear() }):
+		outValid = bitmap.Zeros(total)
+	case slices.ContainsFunc(parts, func(p *data.Column) bool { return !p.Validity().IsAllSet() }):
 		valid := bitmap.NewBuilder(total)
 		for _, p := range parts {
 			valid.AppendView(p.Validity())
@@ -599,10 +616,6 @@ func concatColumnN(parts []*data.Column, total int, spread data.Spread) (*data.C
 	}
 
 	switch {
-	case first.DType().IsNull():
-		// Nothing but nulls, and no payload to join (audit.md J12): a Null column
-		// in any frame failed every Collect that concatenated batches.
-		return data.NewNull(first.Name(), first.DType(), total), nil
 	case first.DType().ID() == dtype.TypeBool:
 		bits := bitmap.NewBuilder(total)
 		for _, p := range parts {

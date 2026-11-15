@@ -437,6 +437,17 @@ its section below lists them.
   arrow-go's IPC reader handed to `ScanArrowRecords` or `ScanArrow` too. Such an
   array is valid now, and every other array is validated as before. The Parquet reader
   was not affected.
+- **A Null column, and a frame of no columns, hold no memory a row** (529): a column
+  of nulls held a bitmap of zeros, a bit a row, and every scan was cut into batches of
+  8,192 rows, so an Arrow IPC stream of a few hundred bytes declaring 2^40 rows of a
+  Null column, or of none, had `Collect` ask for 128 GiB and `Count` allocate about
+  200 GB over two minutes, where Polars holds such a column in constant space. A
+  column of nulls is its type and its length now, and a query collected or counted
+  through projections of columns, `Head`, `Slice` and `Concat` reads a batch of only
+  Null columns, or of none, whole: `Count` of 2^27 Null rows takes 61 µs where it took
+  22 ms, `Collect` 43 µs where it took 93 ms, each allocating 10 kB where they
+  allocated 25 and 66 MB. `Count` of IPC files no longer reads a column. Answers do not
+  change, and every other operation still reads such a frame a batch at a time.
 - **A sort in small batches no longer allocates by the square of its batches** (512):
   each output batch's gather made two arrays as long as every input batch the sort
   kept, so sorting 8,191 rows in batches of one row allocated 2.3 GB in 400 ms; 23 MB
