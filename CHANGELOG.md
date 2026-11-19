@@ -566,6 +566,17 @@ its section below lists them.
   the row's NaN in a batch of many rows and the literal's in a batch of one, as a
   constant on the left was added as the right operand. A NaN constant is broadcast
   now, as in a batch of one.
+- **A Parquet schema claiming more children than it holds is refused before arrow-go
+  sizes by it** (533): arrow-go makes each group of a footer's schema a slice of the
+  children it claims before it reads one, so a file of 125 bytes whose root claimed
+  16,909,320 children allocated 258 MiB, and one claiming 2^31−1 ended the process.
+  The footer's walk reads the schema as a tree first, and a schema with an element
+  claiming more children than the elements after it, or whose tree does not close by
+  its last element, as pyarrow says "not enough elements", is refused as corrupt, an
+  `ErrIO`; groups nested a thousand deep, each claiming every element after it, cost
+  arrow-go memory by the square of the elements and are refused too. Every footer
+  ursus, pyarrow and the fixtures' writers wrote reads as before. The fuzz runs of
+  step 531 found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
