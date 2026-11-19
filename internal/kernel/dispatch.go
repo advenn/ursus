@@ -282,12 +282,18 @@ func divByConst[T ~float32 | ~float64](op expr.BinaryOp, dst, lv, rv []T, n int)
 
 // constSide finds the constant of lv and rv, one of them a single value and the
 // other n, and reports whether it is the left.
+//
+// A NaN constant is none (step 530): it broadcasts, as a batch of one row does,
+// where no side is the constant. Of two NaNs a sum or a product hands on one
+// operand's payload, and byConst adds and multiplies a constant on the left as the
+// right operand, so Lit(NaN).Add(x) answered a NaN row's payload in a batch of many
+// rows and the literal's in a batch of one.
 func constSide[T Numeric](lv, rv []T, n int) (a []T, s T, left, ok bool) {
 	switch {
 	case n == 1:
-	case len(rv) == 1 && len(lv) == n:
+	case len(rv) == 1 && len(lv) == n && rv[0] == rv[0]:
 		return lv, rv[0], false, true
-	case len(lv) == 1 && len(rv) == n:
+	case len(lv) == 1 && len(rv) == n && lv[0] == lv[0]:
 		return rv, lv[0], true, true
 	}
 	return nil, s, false, false

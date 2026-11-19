@@ -33,12 +33,20 @@ func sides[T data.Primitive](dt dtype.DataType, vs []T, c T, left bool) (one, ma
 // subtracted, multiplied and divided, NaN, the infinities and both zeros among
 // them, answer bit for bit what the constant copied to a column answers; an Int64's
 // and an Int8's, which wrap, added, subtracted and multiplied, too. None allocates
-// more than the two columns' answer does.
+// more than the two columns' answer does, but a NaN constant, which is broadcast
+// (step 530): the column holds NaNs of other payloads, and of two NaNs the answer's
+// payload is the left operand's only where the operands keep their sides.
 func TestAConstantIsReadOnce(t *testing.T) {
 	rng := rand.New(rand.NewPCG(400, 1))
 	const n = 1_000
 	all := bitmap.AllSet(n)
 	fs := randFloats(rng, n)
+	payloads := []uint64{0xFFF8000000000000, 0x7FF8DEADBEEF0001, 0x7FF4000000000003}
+	for i := range fs {
+		if rng.IntN(20) == 0 {
+			fs[i] = math.Float64frombits(payloads[rng.IntN(len(payloads))])
+		}
+	}
 	is, i8s := make([]int64, n), make([]int8, n)
 	for i := range n {
 		is[i] = int64(rng.Uint64())
@@ -46,7 +54,8 @@ func TestAConstantIsReadOnce(t *testing.T) {
 	}
 	for _, left := range []bool{false, true} {
 		for _, op := range []expr.BinaryOp{expr.OpAdd, expr.OpSub, expr.OpMul, expr.OpDiv} {
-			for _, c := range []float64{2, -0.5, 0, math.Copysign(0, -1), math.NaN(), math.Inf(1), math.Inf(-1), 1e-310} {
+			for _, c := range []float64{2, -0.5, 0, math.Copysign(0, -1), math.NaN(),
+				math.Float64frombits(0xFFFC000000000005), math.Inf(1), math.Inf(-1), 1e-310} {
 				one, many := sides(dtype.Float64, fs, c, left)
 				got, err := arithFloat[float64](op, "y", dtype.Float64, one[0], one[1], n, all)
 				if err != nil {
@@ -62,8 +71,10 @@ func TestAConstantIsReadOnce(t *testing.T) {
 						t.Fatalf("%v %s %v, left %v: row %d is %v, broadcast %v", fs[i], op, c, left, i, g[i], w[i])
 					}
 				}
-				allocs(t, op, left, func() { arithFloat[float64](op, "y", dtype.Float64, one[0], one[1], n, all) },
-					func() { arithFloat[float64](op, "y", dtype.Float64, many[0], many[1], n, all) })
+				if !math.IsNaN(c) {
+					allocs(t, op, left, func() { arithFloat[float64](op, "y", dtype.Float64, one[0], one[1], n, all) },
+						func() { arithFloat[float64](op, "y", dtype.Float64, many[0], many[1], n, all) })
+				}
 			}
 		}
 		for _, op := range []expr.BinaryOp{expr.OpAdd, expr.OpSub, expr.OpMul} {

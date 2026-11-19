@@ -398,15 +398,13 @@ func rollingFloat(fn expr.WinFnOp, ddof int, name string, out dtype.DataType, co
 			res[row], ok[row] = v, answered
 		}
 	})
+	// A NaN of the arithmetic, a sum that overflowed both ways, is the one NaN too
+	// (aggnan.go), as nonFinite's is.
 	valid32 := seenBitmap(ok, len(ok))
 	if out == dtype.Float32 {
-		f32 := make([]float32, len(res))
-		for i, v := range res {
-			f32[i] = float32(v)
-		}
-		return data.NewFixed(name, out, f32, valid32), nil
+		return data.NewFixed(name, out, narrowOneNaN(res), valid32), nil
 	}
-	return data.NewFixed(name, out, res, valid32), nil
+	return data.NewFixed(name, out, oneNaN(res), valid32), nil
 }
 
 // rollingAnswer is fn over a window's state. A variance of no more values than ddof

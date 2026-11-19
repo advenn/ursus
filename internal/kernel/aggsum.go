@@ -229,14 +229,12 @@ func (a *sumAcc) Finish(name string, nGroups int) (*data.Column, error) {
 		}
 		return data.NewFixed(name, a.bind.Out, out, valid), nil
 	}
+	// A NaN total is the one NaN, whichever NaNs were added in whatever order
+	// (aggnan.go).
 	if a.bind.Out == dtype.Float32 {
-		out := make([]float32, nGroups)
-		for i := range nGroups {
-			out[i] = float32(a.f[i])
-		}
-		return data.NewFixed(name, a.bind.Out, out, valid), nil
+		return data.NewFixed(name, a.bind.Out, narrowOneNaN(a.f[:nGroups]), valid), nil
 	}
-	return data.NewFixed(name, a.bind.Out, a.f[:nGroups], valid), nil
+	return data.NewFixed(name, a.bind.Out, oneNaN(a.f[:nGroups]), valid), nil
 }
 
 // durationSumOverflow refuses a group total that no longer fits the output type.
@@ -437,15 +435,12 @@ func (a *meanAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	}
 	valid := vb.Finish()
 
+	// A NaN mean is the one NaN (aggnan.go).
 	switch a.bind.Out {
 	case dtype.Float32:
-		f32 := make([]float32, nGroups)
-		for i := range nGroups {
-			f32[i] = float32(out[i])
-		}
-		return data.NewFixed(name, a.bind.Out, f32, valid), nil
+		return data.NewFixed(name, a.bind.Out, narrowOneNaN(out), valid), nil
 	}
-	return data.NewFixed(name, a.bind.Out, out, valid), nil
+	return data.NewFixed(name, a.bind.Out, oneNaN(out), valid), nil
 }
 
 // finishExact divides an exact 128-bit sum by the count.

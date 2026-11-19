@@ -89,13 +89,9 @@ func (a *entropyAcc) Finish(name string, nGroups int) (*data.Column, error) {
 	}
 	valid := seenBitmap(seen, nGroups)
 	if a.out == dtype.Float32 {
-		narrow := make([]float32, nGroups)
-		for i, v := range out {
-			narrow[i] = float32(v)
-		}
-		return data.NewFixed(name, dtype.Float32, narrow, valid), nil
+		return data.NewFixed(name, dtype.Float32, narrowOneNaN(out), valid), nil
 	}
-	return data.NewFixed(name, dtype.Float64, out, valid), nil
+	return data.NewFixed(name, dtype.Float64, oneNaN(out), valid), nil
 }
 
 func (a *entropyAcc) NBytes() int64 { return int64(cap(a.n))*8 + int64(cap(a.s))*8 + int64(cap(a.t))*8 }
@@ -168,13 +164,13 @@ func (a *spearmanAcc) Finish(name string, nGroups int) (*data.Column, error) {
 		if err := a.finishSpilled(out); err != nil {
 			return nil, err
 		}
-		return data.NewFixed(name, dtype.Float64, out, bitmap.AllSet(nGroups)), nil
+		return data.NewFixed(name, dtype.Float64, oneNaN(out), bitmap.AllSet(nGroups)), nil
 	}
 	var rk ranker
 	for g := range nGroups {
 		out[g] = rk.spearman(a.xs[g], a.ys[g])
 	}
-	return data.NewFixed(name, dtype.Float64, out, bitmap.AllSet(nGroups)), nil
+	return data.NewFixed(name, dtype.Float64, oneNaN(out), bitmap.AllSet(nGroups)), nil
 }
 
 func (a *spearmanAcc) NBytes() int64 {
