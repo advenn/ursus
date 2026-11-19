@@ -63,7 +63,11 @@ const (
 // overflow needs 2^63 maximum-magnitude rows, i.e. it cannot happen.
 //
 // A FLOAT sum accumulates in Float64 even when it returns Float32, because naive
-// float32 accumulation stops making progress past ~2^24 elements.
+// float32 accumulation stops making progress past ~2^24 elements. A float sum that is
+// NaN is math.NaN()'s bits, float32(math.NaN())'s in a Float32, whichever NaNs it
+// added in whatever order (step 530), as is every aggregate that computes its answer
+// from the values: Mean, Var, Std, Skew, Kurtosis, Product, Entropy, Corr, Cov and
+// CorrSpearman. Min, Max and the other picks keep their value's bits.
 //
 // A BOOL sums as 0 and 1, so its sum counts the trues, as an Int128. Count counts
 // the non-null rows, falses included.

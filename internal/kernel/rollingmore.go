@@ -255,17 +255,15 @@ func momentAnswer(fn expr.WinFnOp, params expr.WinParams, q *momentQueue) (float
 	return v, has
 }
 
-// floatsOut is a float answer a row, as a Float64 or a Float32, null where !ok.
+// floatsOut is a float answer a row, as a Float64 or a Float32, null where !ok: a
+// rolling moment's, pair's, rank's, or a walked window's. Each is by arithmetic, so
+// a NaN is the one NaN (aggnan.go).
 func floatsOut(name string, out dtype.DataType, res []float64, ok []bool) *data.Column {
 	valid := seenBitmap(ok, len(ok))
 	if out == dtype.Float32 {
-		f32 := make([]float32, len(res))
-		for i, v := range res {
-			f32[i] = float32(v)
-		}
-		return data.NewFixed(name, out, f32, valid)
+		return data.NewFixed(name, out, narrowOneNaN(res), valid)
 	}
-	return data.NewFixed(name, out, res, valid)
+	return data.NewFixed(name, out, oneNaN(res), valid)
 }
 
 // rollingRank answers each row with its own value's rank among its window's values,
