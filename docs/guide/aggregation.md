@@ -27,6 +27,15 @@ Every aggregate skips nulls. A mean is over the values that are there, and a gro
 with no values sums to null, not 0. An integer sum is an `Int128`, so it cannot
 overflow: cast it to `Int64` if you want Polars' type.
 
+A float aggregate that computes its answer from the values, `Sum`, `Mean`, `Std`,
+`Var`, `Product`, `Skew`, `Kurtosis`, `Entropy`, `Corr`, `Cov` and `CorrSpearman`,
+answers `math.NaN()`'s bits wherever it answers a NaN, from a NaN among the values or
+from its arithmetic, as +Inf plus −Inf, and `float32(math.NaN())`'s in a `Float32`,
+whichever NaNs the group held and however many threads added them. `Min`, `Max`,
+`Median`, `Quantile` and the other picks answer one of the group's values, its own
+bits. *Changed in 0.8:* a sum handed on the bits of one of its NaNs, which one
+depending on the order of the additions.
+
 Counting has several forms, each one value per group:
 
 --8<-- "Example_aggCounting.md"

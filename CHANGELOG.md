@@ -42,6 +42,21 @@ that stops when its request is cancelled.
   one. Alone, a query runs on all of them as before. `WithThreads(n)` runs a query on
   n, as it did.
 
+### Changed
+
+- **A float aggregate that is NaN is the one NaN** (530): `Sum`, `Mean`, `Var`,
+  `Std`, `Skew`, `Kurtosis`, `Product`, `Entropy`, `Corr`, `Cov` and `CorrSpearman`,
+  their rolling, cumulative and exponentially weighted kin, the list and horizontal
+  sums and means, and a frame's `Corr` answer `math.NaN()`'s bits wherever they answer
+  a NaN, and `float32(math.NaN())`'s in a Float32, whichever NaNs they combined. They
+  handed on the payload of the first NaN operand of their arithmetic, so the bits
+  followed the order of the additions: a parallel group-by answered another NaN on
+  four threads than on one, and a serial one answered one of its inputs' NaNs, which
+  this changes too. The maintainer approved that change, so that an answer is the same
+  bits however its rows were added; `math.NaN()` is the NaN ursus already made where it
+  made one. `Min`, `Max`, `Median`, `Quantile`, `TopK` and the other picks answer one
+  of their values, its bits kept. Step 523 listed it.
+
 ### Features
 
 - **`ScanLines`** (492): a text file's lines as one String column, `line`, Polars
@@ -598,6 +613,11 @@ its section below lists them.
   the first. Median, Quantile, TopK, BottomK, TopKBy and a float group key picked by
   the same order and are the same at every thread count too; a spilled quantile is a
   held one's. qcheck found it.
+- **A NaN literal in arithmetic answers the same bits in every batch** (530):
+  `Lit(NaN).Add(x)` or `.Mul(x)` over a row holding a NaN of another payload answered
+  the row's NaN in a batch of many rows and the literal's in a batch of one, as a
+  constant on the left was added as the right operand. A NaN constant is broadcast
+  now, as in a batch of one.
 - **A malformed delta-encoded Parquet page is refused, not hung on** (531): through
   arrow-go's column reader, a DELTA_BINARY_PACKED page whose header counted fewer
   values than a REQUIRED column's page holds hung the read forever, and an OPTIONAL
