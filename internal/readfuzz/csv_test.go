@@ -178,76 +178,79 @@ func FuzzScanCSV(f *testing.F) {
 		6 << 21, 1<<2 | '\t'<<24, 1<<2 | 0xff<<24, 1<<2 | '"'<<24, 1<<2 | '\n'<<24} {
 		f.Add(seeds[(3+i)%len(seeds)], opts)
 	}
-	f.Fuzz(func(t *testing.T, raw []byte, opts uint32) {
-		b := compress(t, raw, opts)
-		n, ok := inflated(b)
-		if !ok {
-			t.Skip("decompresses past maxInflated")
-		}
-		skipZstdWindow(t, b) // step 511's open finding, which CSV shares (step 524)
-		o, batch := csvOptions(opts)
-		lf := ursus.ScanCSVReader(b, "fuzz.csv", o...)
-		read := func(fn func() error) { fuzzcheck.Run(t, limits(n), fn) }
-		ctx := t.Context()
+	f.Fuzz(scanCSVOne)
+}
 
-		var schema *ursus.Schema
-		var serr error
-		read(func() error { schema, serr = lf.CollectSchema(ctx); return serr })
-		var one, four *ursus.DataFrame
-		var err1, err4 error
-		read(func() error {
-			one, err1 = lf.Collect(ctx, ursus.WithThreads(1), ursus.WithVerify(), ursus.WithBatchSize(batch))
-			return err1
-		})
-		read(func() error {
-			four, err4 = lf.Collect(ctx, ursus.WithThreads(4), ursus.WithVerify(), ursus.WithBatchSize(batch))
-			return err4
-		})
-		if !sameError(err1, err4) {
-			t.Fatalf("on one thread: %v\non four: %v", err1, err4)
-		}
-		if err1 != nil {
-			return
-		}
-		ursustest.AssertFrameEqual(t, four, one)
-		if serr != nil {
-			t.Fatalf("the frame is read, and its schema is not: %v", serr)
-		}
-		ursustest.AssertSchemaEqual(t, schema, one.Schema(), ursustest.CheckNullability())
+// scanCSVOne is FuzzScanCSV's check of one input, raw under opts.
+func scanCSVOne(t *testing.T, raw []byte, opts uint32) {
+	b := compress(t, raw, opts)
+	skipZstdWindow(t, b)
+	n, ok := inflated(b)
+	if !ok {
+		t.Skip("decompresses past maxInflated")
+	}
+	o, batch := csvOptions(opts)
+	lf := ursus.ScanCSVReader(b, "fuzz.csv", o...)
+	read := func(fn func() error) { fuzzcheck.Run(t, limits(n), fn) }
+	ctx := t.Context()
 
-		var count int64
-		var cerr error
-		read(func() error { count, cerr = lf.Count(ctx); return cerr })
-		if cerr != nil || count != int64(one.Height()) {
-			t.Fatalf("Count = %d, %v; the frame has %d rows", count, cerr, one.Height())
-		}
-		var head *ursus.DataFrame
-		var herr error
-		read(func() error { head, herr = lf.Head(1).Collect(ctx); return herr })
-		if herr != nil {
-			t.Fatalf("Head(1): %v", herr)
-		}
-		first, err := one.Head(ctx, 1)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ursustest.AssertFrameEqual(t, head, first)
-		if one.Width() == 0 {
-			return
-		}
-		name := one.Columns()[one.Width()-1]
-		var sel *ursus.DataFrame
-		var selErr error
-		read(func() error { sel, selErr = lf.Select(ursus.Col(name)).Collect(ctx); return selErr })
-		if selErr != nil {
-			t.Fatalf("Select(%q): %v", name, selErr)
-		}
-		col, err := one.Select(ctx, ursus.Col(name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		ursustest.AssertFrameEqual(t, sel, col)
+	var schema *ursus.Schema
+	var serr error
+	read(func() error { schema, serr = lf.CollectSchema(ctx); return serr })
+	var one, four *ursus.DataFrame
+	var err1, err4 error
+	read(func() error {
+		one, err1 = lf.Collect(ctx, ursus.WithThreads(1), ursus.WithVerify(), ursus.WithBatchSize(batch))
+		return err1
 	})
+	read(func() error {
+		four, err4 = lf.Collect(ctx, ursus.WithThreads(4), ursus.WithVerify(), ursus.WithBatchSize(batch))
+		return err4
+	})
+	if !sameError(err1, err4) {
+		t.Fatalf("on one thread: %v\non four: %v", err1, err4)
+	}
+	if err1 != nil {
+		return
+	}
+	ursustest.AssertFrameEqual(t, four, one)
+	if serr != nil {
+		t.Fatalf("the frame is read, and its schema is not: %v", serr)
+	}
+	ursustest.AssertSchemaEqual(t, schema, one.Schema(), ursustest.CheckNullability())
+
+	var count int64
+	var cerr error
+	read(func() error { count, cerr = lf.Count(ctx); return cerr })
+	if cerr != nil || count != int64(one.Height()) {
+		t.Fatalf("Count = %d, %v; the frame has %d rows", count, cerr, one.Height())
+	}
+	var head *ursus.DataFrame
+	var herr error
+	read(func() error { head, herr = lf.Head(1).Collect(ctx); return herr })
+	if herr != nil {
+		t.Fatalf("Head(1): %v", herr)
+	}
+	first, err := one.Head(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, head, first)
+	if one.Width() == 0 {
+		return
+	}
+	name := one.Columns()[one.Width()-1]
+	var sel *ursus.DataFrame
+	var selErr error
+	read(func() error { sel, selErr = lf.Select(ursus.Col(name)).Collect(ctx); return selErr })
+	if selErr != nil {
+		t.Fatalf("Select(%q): %v", name, selErr)
+	}
+	col, err := one.Select(ctx, ursus.Col(name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ursustest.AssertFrameEqual(t, sel, col)
 }
 
 // scheduled serves b in reads sized by schedule's bytes in turn, the low seven bits
@@ -294,11 +297,11 @@ func FuzzScanCSVChunked(f *testing.F) {
 	}
 	f.Add([]byte("a,b\n1,2\n3,4\n"), bytes.Repeat([]byte{0}, 120))
 	f.Fuzz(func(t *testing.T, b, schedule []byte) {
+		skipZstdWindow(t, b)
 		n, ok := inflated(b)
 		if !ok {
 			t.Skip("decompresses past maxInflated")
 		}
-		skipZstdWindow(t, b) // step 511's open finding, which CSV shares (step 524)
 		ctx := t.Context()
 		var whole, chunked *ursus.DataFrame
 		var werr, cerr error
