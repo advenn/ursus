@@ -259,4 +259,15 @@ its format, and posted nowhere:
 
 After the last edit, with `GOFLAGS=-p=1 GOMAXPROCS=4 GOEXPERIMENT=simd GOAMD64=v3`:
 
-CHECKS
+All pass, run after merging origin/master 3627942 (steps 528 and 531):
+
+| check | outcome |
+| --- | --- |
+| `go test ./internal/...` | ok, 82 s |
+| `go test -timeout 40m .` in full, under the lock | ok, 282 s |
+| `cd qcheck && go vet ./... && go test ./...` | ok, 89 s |
+| `GOEXPERIMENT=simd go vet ./...` | clean |
+| `go run ./internal/gen/levels` | ok |
+| `GOEXPERIMENT=simd go run ./internal/gen/api -check` | 2,481 features, 92 added and 0 gone since v0.7.2 |
+| `go run ./internal/gen/testinventory -check` | 1,223 lines, the baseline |
+| `$(go env GOROOT)/bin/gofmt -l .` | prints nothing |
