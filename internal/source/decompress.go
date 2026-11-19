@@ -8,7 +8,8 @@ import (
 
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zlib"
-	"github.com/klauspost/compress/zstd"
+
+	"github.com/advenn/ursus/internal/zstdframe"
 )
 
 // Compressed input (step 346).
@@ -19,6 +20,10 @@ import (
 // the read's serial part, so it is klauspost's, which arrow-go's Parquet uses too:
 // its gzip inflates 1.3 times as fast as the standard library's, and its Zstandard
 // decoder decodes blocks ahead on goroutines of its own.
+//
+// A Zstandard frame declaring a window past 128 MiB is refused, as the reference
+// decoder and Polars refuse it by default (internal/zstdframe, step 528): klauspost's
+// decoder would allocate the whole window before it decoded a block.
 
 // Decompressed is rc's bytes, decompressed where they begin as a gzip, a zlib or a
 // Zstandard stream does, and rc's own otherwise. Closing it closes rc.
@@ -46,7 +51,7 @@ func Decompressed(rc io.ReadCloser) (io.ReadCloser, error) {
 		}
 		return &decompressing{r: zr, close: func() error { zr.Close(); return rc.Close() }}, nil
 	case bytes.HasPrefix(head, []byte{0x28, 0xb5, 0x2f, 0xfd}):
-		zr, err := zstd.NewReader(io.MultiReader(bytes.NewReader(head), rc))
+		zr, err := zstdframe.NewReader(io.MultiReader(bytes.NewReader(head), rc))
 		if err != nil {
 			rc.Close()
 			return nil, err

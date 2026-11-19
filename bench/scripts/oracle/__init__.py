@@ -53,7 +53,9 @@ GROUPS = ["expressions", "format", "numodds", "rollmore", "dtmore",
           # step 518, a Struct of no fields
           "emptystruct",
           # step 522, an Arrow IPC file with a Null column
-          "ipcnull"]
+          "ipcnull",
+          # step 528, a Zstandard frame's window
+          "zstdwindow"]
 
 
 @dataclass
