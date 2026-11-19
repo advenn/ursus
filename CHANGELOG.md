@@ -566,17 +566,18 @@ its section below lists them.
   the row's NaN in a batch of many rows and the literal's in a batch of one, as a
   constant on the left was added as the right operand. A NaN constant is broadcast
   now, as in a batch of one.
-- **A Parquet schema claiming more children than it holds is refused before arrow-go
-  sizes by it** (533): arrow-go makes each group of a footer's schema a slice of the
-  children it claims before it reads one, so a file of 125 bytes whose root claimed
-  16,909,320 children allocated 258 MiB, and one claiming 2^31−1 ended the process.
-  The footer's walk reads the schema as a tree first, and a schema with an element
-  claiming more children than the elements after it, or whose tree does not close by
-  its last element, as pyarrow says "not enough elements", is refused as corrupt, an
-  `ErrIO`; groups nested a thousand deep, each claiming every element after it, cost
-  arrow-go memory by the square of the elements and are refused too. Every footer
-  ursus, pyarrow and the fixtures' writers wrote reads as before. The fuzz runs of
-  step 531 found it.
+- **A read cut short is refused, not read as the end of its input** (534): every
+  operator ends its input on an error that wraps `io.EOF`, and a source's error that
+  wrapped it ended the query there, with the rows before it and no error. An Arrow IPC
+  file or stream whose compressed buffer decompresses short read as 0 rows, by
+  `Collect` and by `Count`; so did a stream cut where a message's length, metadata or
+  body begins, a Parquet file whose `ReaderAt` answers `io.EOF` inside a column chunk
+  (its row groups before it read), and an NDJSON, lines or CSV stream whose read
+  fails with an error wrapping `io.EOF`. Each is refused now, an `ErrIO` wrapping
+  `io.ErrUnexpectedEOF`: a source's end is `io.EOF` itself, and a scan reads any other
+  error wrapping it as the source's. A stream that ends between two messages, without
+  its end marker, still reads, as arrow-go and the format have it. Step 529's fuzzing
+  found it.
 
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no

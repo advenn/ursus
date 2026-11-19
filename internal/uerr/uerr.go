@@ -19,6 +19,7 @@ package uerr
 import (
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strconv"
 	"strings"
@@ -232,6 +233,47 @@ func Annotate(err error, op, node string) error {
 	}
 	return err
 }
+
+// Truncated is err, met reading inside a record, a message or a compressed stream,
+// with the io.EOF in its chain made io.ErrUnexpectedEOF (step 534). There io.EOF
+// means the input was cut short, not that it ended, and every consumer in the engine
+// takes io.EOF, or any error wrapping it, for the end of its input: a read whose error
+// wrapped io.EOF answered the rows before it, with no error.
+//
+// io.EOF itself becomes io.ErrUnexpectedEOF. An *Error, and a recovered panic, keep
+// everything but the io.EOF in their causes: kind, op, message, hints, where it
+// panicked. Any other error keeps its text and answers errors.Is for every target but
+// io.EOF as it did, and io.ErrUnexpectedEOF too. nil, and an error not wrapping io.EOF,
+// are returned as they are.
+func Truncated(err error) error {
+	switch {
+	case err == nil || !errors.Is(err, io.EOF):
+		return err
+	case err == io.EOF:
+		return io.ErrUnexpectedEOF
+	}
+	switch e := err.(type) {
+	case *Error:
+		c := *e
+		c.Hints = slices.Clone(e.Hints)
+		c.Err = Truncated(e.Err)
+		return &c
+	case *PanicError:
+		c := *e
+		c.Value = Truncated(e.Value.(error)) // an error, as Unwrap found io.EOF through it
+		return &c
+	}
+	return &truncation{err}
+}
+
+// truncation is an error wrapping io.EOF as Truncated makes it.
+type truncation struct{ err error }
+
+func (t *truncation) Error() string { return t.err.Error() }
+
+func (t *truncation) Unwrap() error { return io.ErrUnexpectedEOF }
+
+func (t *truncation) Is(target error) bool { return target != io.EOF && errors.Is(t.err, target) }
 
 // UnknownColumn is the single most common error in a dataframe library, so it has
 // a dedicated constructor that always produces the full diagnostic.

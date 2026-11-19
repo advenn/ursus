@@ -67,12 +67,20 @@ func (m *messageReader) Release() {
 }
 
 // Message reads the next message, which is valid until the one after; io.EOF at the
-// stream's end. An end of the input where a message would begin, or within one, is an
-// error wrapping what io.ReadFull answered, io.EOF where it read nothing, as arrow-go's
-// is: its reader takes that for the stream's end.
+// stream's end. An end of the input where a message would begin is an error wrapping
+// io.EOF, as arrow-go's message reader answers: the format makes a stream's end
+// marker optional, so a stream may end there.
+//
+// An end within a message, once a byte of it is read, is the stream's refusal,
+// KindIO, an error wrapping io.ErrUnexpectedEOF (cut): a stream cut where a part of a
+// message would begin, its length after the continuation marker, its metadata or its
+// body, is refused, not read as the messages before it (step 534).
 func (m *messageReader) Message() (*ipc.Message, error) {
-	if _, err := io.ReadFull(m.r, m.header[:]); err != nil {
+	msg := m.read + 1
+	if _, err := io.ReadFull(m.r, m.header[:]); err == io.EOF {
 		return nil, fmt.Errorf("reading an IPC message's length: %w", err)
+	} else if err != nil {
+		return nil, m.cut(err, msg, "length")
 	}
 	var n int32
 	switch v := binary.LittleEndian.Uint32(m.header[:]); v {
@@ -80,7 +88,7 @@ func (m *messageReader) Message() (*ipc.Message, error) {
 		return nil, io.EOF
 	case continuation:
 		if _, err := io.ReadFull(m.r, m.header[:]); err != nil {
-			return nil, fmt.Errorf("reading an IPC message's length: %w", err)
+			return nil, m.cut(err, msg, "length")
 		}
 		if n = int32(binary.LittleEndian.Uint32(m.header[:])); n == 0 {
 			return nil, io.EOF
@@ -96,7 +104,7 @@ func (m *messageReader) Message() (*ipc.Message, error) {
 	}
 	meta := make([]byte, n)
 	if _, err := io.ReadFull(m.r, meta); err != nil {
-		return nil, fmt.Errorf("reading an IPC message's metadata: %w", err)
+		return nil, m.cut(err, msg, "metadata")
 	}
 	bodyLen, zstd, err := m.walk(meta)
 	if err != nil {
@@ -111,7 +119,7 @@ func (m *messageReader) Message() (*ipc.Message, error) {
 	}
 	defer body.Release()
 	if _, err := io.ReadFull(m.r, body.Bytes()); err != nil {
-		return nil, fmt.Errorf("reading an IPC message's body: %w", err)
+		return nil, m.cut(err, msg, "body")
 	}
 	if err := checkZstd(body.Bytes(), zstd, m.op, m.name, fmt.Sprintf("in its message %d", m.read)); err != nil {
 		return nil, err
@@ -123,6 +131,19 @@ func (m *messageReader) Message() (*ipc.Message, error) {
 	defer mb.Release()
 	m.msg = ipc.NewMessage(mb, body)
 	return m.msg, nil
+}
+
+// cut is err, what io.ReadFull answered reading part of the stream's message msg,
+// as the read's error. Where the input ends inside the message, io.EOF where none of
+// the part is there and io.ErrUnexpectedEOF otherwise, it is the stream's refusal,
+// KindIO, wrapping io.ErrUnexpectedEOF. Any other error is the input's own, wrapped,
+// any io.EOF in it made io.ErrUnexpectedEOF (uerr.Truncated), so that it is not taken
+// for the stream's end, which an error wrapping io.EOF where a message begins is.
+func (m *messageReader) cut(err error, msg int, part string) error {
+	if err != io.EOF && err != io.ErrUnexpectedEOF {
+		return fmt.Errorf("reading an IPC message's %s: %w", part, uerr.Truncated(err))
+	}
+	return uerr.Wrap(io.ErrUnexpectedEOF, uerr.KindIO, m.op, "%s ends inside its message %d, in its %s", m.name, msg, part)
 }
 
 // allocate is a body of n bytes from the reader's allocator, whose refusal, raised as
