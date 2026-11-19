@@ -141,6 +141,10 @@ type pqForged struct {
 	nest     int     // pqFlat, pqInList or pqInStruct
 	optional bool    // the leaf is OPTIONAL: a flat column's pages begin with its definition levels
 	codec    int32   // the chunk's codec, zero for UNCOMPRESSED: each page's body is as it compresses (step 520)
+
+	// children are num_children claims by a schema element's place in the footer's
+	// list, the root 0, in place of what the elements hold, a leaf's none (step 533).
+	children map[int]int32
 }
 
 func (f pqForged) bytes() []byte {
@@ -205,13 +209,32 @@ func (f pqForged) bytes() []byte {
 	encodings = append(encodings, f.encs...)
 
 	var w thriftCompact
-	// group writes a group's SchemaElement: its repetition, name, children and
-	// converted_type, zero for none; leaf writes the leaf's.
+	// children writes the num_children of the schema's next element, n of a group, or
+	// what f.children claims for it.
+	el := 0
+	children := func(n int32) {
+		if c, ok := f.children[el]; ok {
+			n = c
+		}
+		if n != 0 {
+			w.i32(5, n)
+		}
+		el++
+	}
+	// root writes the schema's root, of one child; group writes a group's
+	// SchemaElement: its repetition, name, child and converted_type, zero for none;
+	// leaf writes the leaf's.
+	root := func() {
+		w.begin()
+		w.str(4, "schema")
+		children(1)
+		w.end()
+	}
 	group := func(rep int32, name string, conv int32) {
 		w.begin()
 		w.i32(3, rep)
 		w.str(4, name)
-		w.i32(5, 1) // num_children
+		children(1)
 		if conv != 0 {
 			w.i32(6, conv)
 		}
@@ -229,6 +252,7 @@ func (f pqForged) bytes() []byte {
 			w.i32(3, 0) // REQUIRED
 		}
 		w.str(4, name)
+		children(0)
 		if f.conv != 0 {
 			w.i32(6, f.conv)
 		}
@@ -240,29 +264,20 @@ func (f pqForged) bytes() []byte {
 	switch f.nest {
 	case pqInList:
 		w.list(2, thriftStruct, 4)
-		w.begin()
-		w.str(4, "schema")
-		w.i32(5, 1) // num_children
-		w.end()
+		root()
 		group(0, "v", pqListType)
 		group(2, "list", 0) // REPEATED
 		leaf("element")
 		path = []string{"v", "list", "element"}
 	case pqInStruct:
 		w.list(2, thriftStruct, 3)
-		w.begin()
-		w.str(4, "schema")
-		w.i32(5, 1) // num_children
-		w.end()
+		root()
 		group(0, "v", 0)
 		leaf("x")
 		path = []string{"v", "x"}
 	default:
 		w.list(2, thriftStruct, 2)
-		w.begin()
-		w.str(4, "schema")
-		w.i32(5, 1) // num_children
-		w.end()
+		root()
 		leaf("v")
 	}
 	w.i64(3, f.rows)
@@ -500,6 +515,37 @@ func pqHiddenGroups() []byte {
 	return pqMagicless(w.b, 4)
 }
 
+// pqUnclosedSchema is a file of no row groups whose schema does not close (step 533):
+// the root and groups−1 groups each claiming every element after it, each the next's
+// parent, then leaves REQUIRED INT64 leaves, the last group's children. Each claim is
+// within the elements after it, and the group above the last is owed a child more.
+// arrow-go makes each group a slice of the children it claims before it reads one,
+// 16 bytes a child, by the square of the elements, and refuses the schema only when it
+// runs out of them.
+func pqUnclosedSchema(groups, leaves int) []byte {
+	n := groups + leaves
+	var w thriftCompact
+	w.begin()
+	w.i32(1, 1) // version
+	w.list(2, thriftStruct, n)
+	for i := range groups {
+		w.begin()
+		w.str(4, "g")
+		w.i32(5, int32(n-1-i)) // num_children
+		w.end()
+	}
+	for range leaves {
+		w.begin()
+		w.i32(1, pqInt64)
+		w.str(4, "v")
+		w.end()
+	}
+	w.i64(3, 0)                // num_rows
+	w.list(4, thriftStruct, 0) // row_groups
+	w.end()
+	return pqMagicless(w.b, 4)
+}
+
 // pqForgedSeeds are the forged files the Parquet target starts from, each honest
 // version among them: a data page claiming 2^28 bytes uncompressed, and one
 // claiming 2^26 compressed, arrow-go's limits (D14 of v0.7.2-plan.md); a dictionary
@@ -512,8 +558,10 @@ func pqHiddenGroups() []byte {
 // hold more than they declare, and honest pages under each codec (pqCodecSeeds); and
 // step 521's, the footer of 10^8 row groups leaving the leading magic no room, and a
 // list of row groups said to hold a binary, hiding a list of 10^8 column chunks in it
-// (pqHiddenGroups); and step 531's, each kind of delta-encoded page honest and with
-// F18's count of 0 (pqDeltaKinds).
+// (pqHiddenGroups); step 531's, each kind of delta-encoded page honest and with F18's
+// count of 0 (pqDeltaKinds); and step 533's, a schema's root claiming 2^31−1
+// children, a Struct claiming as many, and a List whose root claims a child more than
+// its tree holds.
 func pqForgedSeeds() [][]byte {
 	vals := []int64{3, 1, 4, 1, 5, 9, 2, 6}
 	page := pqInt64Page(vals)
@@ -556,6 +604,14 @@ func pqForgedSeeds() [][]byte {
 				seeds = append(seeds, c.b)
 			}
 		}
+	}
+	for _, f := range []pqForged{
+		{nest: pqFlat, children: map[int]int32{0: math.MaxInt32}},
+		{nest: pqInStruct, children: map[int]int32{1: math.MaxInt32}},
+		{nest: pqInList, children: map[int]int32{0: 2}},
+	} {
+		f.phys, f.rows, f.pages = pqInt64, int64(len(vals)), []pqPage{page}
+		seeds = append(seeds, f.bytes())
 	}
 	return seeds
 }
