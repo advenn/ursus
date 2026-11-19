@@ -182,7 +182,11 @@ func (s ScanSpec) ReadSet(full *dtype.Schema) []string {
 type BatchSource interface {
 	Schema() *dtype.Schema
 
-	// Next returns the next batch, or (nil, io.EOF) when the stream is exhausted.
+	// Next returns the next batch, or (nil, io.EOF) when the stream is exhausted:
+	// io.EOF itself, as io.Reader's end is. Any other error wrapping io.EOF is the
+	// source's failure, which the scan reads as one (step 534), its io.EOF made
+	// io.ErrUnexpectedEOF; a source keeps io.EOF out of its errors where it can say
+	// what was cut short (uerr.Truncated).
 	// An empty non-nil batch is allowed and is not end-of-stream.
 	Next(ctx context.Context) (*data.Batch, error)
 

@@ -1,7 +1,6 @@
 package ndjson
 
 import (
-	"errors"
 	"io"
 
 	"github.com/advenn/ursus/internal/uerr"
@@ -66,7 +65,7 @@ func (o *objectLines) Read(p []byte) (int, error) {
 		switch {
 		case bad != nil:
 			o.err = bad
-		case errors.Is(err, io.EOF):
+		case err == io.EOF: // the end is io.EOF itself, as io.Reader has it; an error wrapping it is the stream's (step 534)
 			o.err = o.end()
 		case err != nil:
 			o.err = err
