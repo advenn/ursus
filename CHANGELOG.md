@@ -150,8 +150,29 @@ that stops when its request is cancelled.
   `PartitionBy`, `ToDummies`, `Corr` and their kin, and the JSON and CSV writers,
   take a share as the queries do, where each took every thread.
 
+### Changed
+
+- **A Zstandard frame's window is capped at 128 MiB** (528), the reference decoder's
+  default limit (libzstd's `ZSTD_WINDOWLOG_LIMIT_DEFAULT`), which Polars keeps
+  through it: a CSV, NDJSON or JSON stream, or an Arrow IPC buffer, whose frame
+  declares a larger window is refused, an `ErrIO` naming the limit. klauspost's
+  decoder made the whole window a frame declares, up to 512 MiB, before it decoded a
+  block, so 17 bytes cost 514 MiB, and a 4.7 KB IPC file 513 MiB; an IPC window past
+  512 MiB was arrow-go's panic. This refuses files ursus read before, which Polars
+  refuses: those zstd writes in its `--long` modes past 27, of a file larger than 128
+  MiB or of its standard input. Decompress one first, with `zstd -d --long=31`. A
+  Parquet page is not held to it: Polars 2.1 and pyarrow read any window there, and
+  ursus decodes a page into its own buffer, making no window.
+
 ### Tests
 
+- **A Zstandard frame's window, past and below the cap** (528): the `zstdwindow`
+  oracle group records Polars 2.1.0 reading the zstd CLI's streams of windows from 1
+  to 512 MiB and pyarrow's IPC and Parquet files declaring 128 and 256 MiB; the fuzz
+  targets check a frame past the cap as a refusal within their bounds, through every
+  reader, and skip one below it whose window passes their bound, 16 MiB, which a
+  test reads within a bound of its window. The bound was 32 MiB, and a frame of 32
+  MiB, which a reader decompresses twice, allocated 69 MiB against the targets' 64.
 - **The CSV fuzz targets skip a Zstandard frame declaring a window past their bound**
   (524), as the NDJSON and JSON targets do since step 511, whose finding it is and
   which is the maintainer's to decide.

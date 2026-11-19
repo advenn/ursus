@@ -69,6 +69,11 @@ many fields alone, whose extra fields it drops.
 known by its first bytes whatever its name, as Polars reads one:
 `ScanCSV("sales.csv.gz")`. It is decompressed as it is read, never held whole, and
 parsed in parallel as a plain file is. NDJSON and JSON files are read so too.
+*Changed in 0.8:* a Zstandard frame may declare a window of 128 MiB at most, the
+reference decoder's limit, libzstd's default, which Polars keeps through it; one
+declaring more is refused, naming the limit. zstd writes one only in its `--long`
+modes past 27, of a file larger than 128 MiB or of its standard input: decompress
+such a file first, with `zstd -d --long=31`.
 
 `ScanCSVGlob(pattern)` reads every file a pattern matches as one frame, in their
 names' order, and `ScanCSVFiles(paths)` a list. *New in 0.6.7:* a pattern's `**`
@@ -183,6 +188,9 @@ compressed buffers, which Polars writes. `WriteIPC(ctx, w)`, `WriteIPCStream(ctx
 and `SinkIPC(ctx, path)` write them, uncompressed as Polars' are by default, or with
 `WithIPCCompression(ursus.IPCLZ4)` or `IPCZstd`. `ReadIPCSchema(path)` and
 `ReadParquetSchema(ctx, path)` read a file's schema from its footer alone.
+*Changed in 0.8:* an IPC buffer's Zstandard frame may declare a window of 128 MiB at
+most, as a compressed CSV's may, and as Polars reads one; a Parquet page's, which
+Polars 2.1 and pyarrow read whatever it declares, is not held to it.
 
 *New in 0.6.7:* several IPC files as one frame, as Polars' `scan_ipc` reads them.
 `ScanIPCFiles(paths)` reads a list and `ScanIPCGlob(pattern)` a glob's matches, as
