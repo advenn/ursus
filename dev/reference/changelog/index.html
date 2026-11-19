@@ -4351,6 +4351,18 @@ its section below lists them.</p>
   refused as corrupt, an <code>ErrIO</code>, as pyarrow refuses it, but for a count past the
   page's values, which no writer writes and pyarrow reads; every delta page pyarrow
   and arrow-go write reads as before. The fuzz runs of step 521 found it.</li>
+<li><strong>A read cut short is refused, not read as the end of its input</strong> (534): every
+  operator ends its input on an error that wraps <code>io.EOF</code>, and a source's error that
+  wrapped it ended the query there, with the rows before it and no error. An Arrow IPC
+  file or stream whose compressed buffer decompresses short, which arrow-go panics on
+  with <code>io.EOF</code>, read as 0 rows, by <code>Collect</code> and by <code>Count</code>; so did a stream cut
+  where a message's length, metadata or body begins, a Parquet file whose <code>ReaderAt</code>
+  answers <code>io.EOF</code> inside a column chunk (its row groups before it read), and an
+  NDJSON, lines or CSV stream whose read fails with an error wrapping <code>io.EOF</code>. Each
+  is refused now, an <code>ErrIO</code> wrapping <code>io.ErrUnexpectedEOF</code>: a source's end is
+  <code>io.EOF</code> itself, and a scan reads any other error wrapping it as the source's. A
+  stream that ends between two messages, without its end marker, still reads, as
+  arrow-go and the format have it. Step 529's fuzzing found it.</li>
 <li>
 <p><strong>A Parquet schema claiming more children than it holds is refused before arrow-go
   sizes by it</strong> (533): arrow-go makes each group of a footer's schema a slice of the
