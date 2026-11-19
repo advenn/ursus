@@ -161,7 +161,9 @@ func csvOptions(opts []CSVOption) csv.Options {
 //
 // A file compressed by gzip, zlib or Zstandard is read as itself, known by its
 // first bytes whatever its name, as Polars reads one, and decompressed as it is
-// read; so is every CSV, NDJSON and JSON scan's stream. New in 0.6.7.
+// read; so is every CSV, NDJSON and JSON scan's stream. New in 0.6.7. A Zstandard
+// frame declaring a window past 128 MiB, the reference decoder's limit, is refused,
+// as Polars refuses it (changed in 0.8).
 //
 //	df, err := ursus.ScanCSV("sales.csv").
 //	    Filter(ursus.Col("qty").Gt(10)).

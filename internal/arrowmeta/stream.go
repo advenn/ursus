@@ -109,7 +109,7 @@ func (m *messageReader) Message() (*ipc.Message, error) {
 	if _, err := io.ReadFull(m.r, meta); err != nil {
 		return nil, m.cut(err, msg, "metadata")
 	}
-	bodyLen, err := m.walk(meta)
+	bodyLen, zstd, err := m.walk(meta)
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +123,9 @@ func (m *messageReader) Message() (*ipc.Message, error) {
 	defer body.Release()
 	if _, err := io.ReadFull(m.r, body.Bytes()); err != nil {
 		return nil, m.cut(err, msg, "body")
+	}
+	if err := checkZstd(body.Bytes(), zstd, m.op, m.name, fmt.Sprintf("in its message %d", m.read)); err != nil {
+		return nil, err
 	}
 	if m.msg != nil {
 		m.msg.Release()
@@ -157,14 +160,14 @@ func (m *messageReader) allocate(n int) (b *memory.Buffer, err error) {
 }
 
 // walk walks one message's metadata against what the stream has said, and is its
-// body's length.
-func (m *messageReader) walk(meta []byte) (body int64, err error) {
+// body's length and where its Zstandard buffers lie in the body, if it has any.
+func (m *messageReader) walk(meta []byte) (body int64, zstd zstdBuffers, err error) {
 	defer uerr.Catch(&err, m.op)
 	m.read++
 	where := fmt.Sprintf("in its message %d", m.read)
 	w, err := newWalker(meta)
 	if err != nil {
-		return 0, corruptInput(err, m.op, m.name, where)
+		return 0, zstdBuffers{}, corruptInput(err, m.op, m.name, where)
 	}
 	kind, header, body, err := w.message()
 	if err == nil && body < 0 {
@@ -174,9 +177,9 @@ func (m *messageReader) walk(meta []byte) (body int64, err error) {
 		err = m.walkHeader(w, kind, header, body)
 	}
 	if err != nil {
-		return 0, corruptInput(err, m.op, m.name, where)
+		return 0, zstdBuffers{}, corruptInput(err, m.op, m.name, where)
 	}
-	return body, nil
+	return body, w.zstd, nil
 }
 
 func (m *messageReader) walkHeader(w *walker, kind messageType, header uint32, body int64) error {
