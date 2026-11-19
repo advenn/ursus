@@ -3,6 +3,7 @@ package parquet
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/apache/arrow-go/v18/parquet"
@@ -27,6 +28,29 @@ const maxSchemaDepth = 1_000
 // thriftDepth bounds how deeply one value of a footer may nest in structs and lists:
 // a real footer's do some ten deep, and a value past it is corrupt.
 const thriftDepth = 64
+
+// A footer's schema, its children counted before arrow-go sizes by them (step 533).
+//
+// arrow-go's schema.FromParquet builds the tree from the root down, and makes each
+// group a slice of the num_children it claims, make([]Node, 0, num_children), before
+// it reads a child; it finds a schema short of elements only once it runs out of them.
+// A file of 125 bytes whose root claimed some 17 million children cost 258 MiB (F20 of
+// step 531), and a root claiming 2^31−1 ends the process asking for 32 GiB. So the
+// walk reads the schema's elements as FromParquet does, the root and then each group's
+// children in order, and refuses as corrupt a schema whose tree:
+//   - has an element claiming more children than the elements after it
+//     (errSchemaChildren), at the root or nested;
+//   - does not close by the list's end, a group still owed children when the elements
+//     run out (errSchemaOpen): pyarrow 25.0.1's "Malformed schema: not enough
+//     elements", and arrow-go's. Groups nested a thousand deep, each claiming every
+//     element after it, pass the first bound, and arrow-go allocated by the square of
+//     the elements for them: 324 MiB from a file of 125 KiB, its leaves 6 bytes each.
+//
+// A tree that closes holds an element for each child its groups claim, so arrow-go's
+// slices add up to its elements. Elements after the root's tree closes are read by
+// neither arrow-go nor pyarrow, which take the tree for the schema, and the walk leaves
+// them too: it bounds only what FromParquet reads. A schema nested past maxSchemaDepth
+// is refused for that, as before, whatever its tree.
 
 // A footer's lists, sized before arrow-go reads them (step 521).
 //
@@ -120,6 +144,9 @@ var footerFields = [...]map[int16]footerField{
 var (
 	errFooter     = errors.New("the footer is not Thrift's compact protocol")
 	errFooterList = errors.New("a list in the footer claims more elements than the bytes after it hold")
+
+	errSchemaChildren = errors.New("a schema element claims more children than the elements after it")
+	errSchemaOpen     = errors.New("the schema's elements end before its groups' children do")
 )
 
 // measured is ra with its end, the footer and the 8 bytes after it, read once into
@@ -156,7 +183,8 @@ func (m *measured) ReadAt(p []byte, off int64) (n int, err error) {
 
 // measureFooter reads ra's footer and refuses one whose schema nests past
 // maxSchemaDepth, or that cannot be walked, a list in it claiming more than its bytes
-// among them. A footer arrow-go does not read, a file too short, one not ending in a
+// among them, or whose schema's tree arrow-go would size a slice by before it found it
+// short of elements (step 533). A footer arrow-go does not read, a file too short, one not ending in a
 // plain footer or one whose footer is longer than the file less its last 8 bytes, is
 // left to arrow-go, which says what it is. Every other footer is walked, one leaving
 // the file's leading magic no room as well, which arrow-go reads all the same (F13 of
@@ -187,19 +215,22 @@ func measureFooter(ra parquet.ReaderAtSeeker) (parquet.ReaderAtSeeker, error) {
 	}
 	copy(tail[n:], end)
 	depth, err := schemaDepth(tail[:n])
-	if err != nil {
-		return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "corrupt: walking the footer")
-	}
 	if depth > maxSchemaDepth {
 		return nil, uerr.New(uerr.KindUnsupported, "scan_parquet",
 			"a column is nested deeper than %d levels", maxSchemaDepth)
+	}
+	if err != nil {
+		return nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet", "corrupt: walking the footer")
 	}
 	return &measured{ReaderAtSeeker: ra, from: size - 8 - n, tail: tail}, nil
 }
 
 // schemaDepth is how deep a FileMetaData's schema nests, its leaf counted, the root
 // not, walking the whole of it (walk): its second field, a list of SchemaElements,
-// each a group's num_children, its fifth field.
+// each a group's num_children, its fifth field. A footer the walk cannot read is
+// errFooter or errFooterList, and its depth 0; a schema whose tree claims more children
+// than it holds is errSchemaChildren or errSchemaOpen (step 533), with its depth, which
+// measureFooter judges first.
 func schemaDepth(b []byte) (int, error) {
 	r := thriftReader{b: b}
 	if err := r.walk(fileMetaData, 0); err != nil {
@@ -208,10 +239,18 @@ func schemaDepth(b []byte) (int, error) {
 	// Each element's depth is the groups it is within, the root's children at 1.
 	var open []int32 // each open group's children yet to come, the innermost last
 	deepest := 0
-	for _, kids := range r.kids {
+	var bad error
+	tree := true // the element is in the root's tree, which FromParquet reads
+	for i, kids := range r.kids {
+		if i > 0 && len(open) == 0 {
+			tree = false // the root's tree closed before it
+		}
 		deepest = max(deepest, len(open))
 		if len(open) > 0 {
 			open[len(open)-1]--
+		}
+		if after := len(r.kids) - 1 - i; tree && bad == nil && int(kids) > after {
+			bad = fmt.Errorf("%w: element %d of %d claims %d", errSchemaChildren, i, len(r.kids), kids)
 		}
 		if kids > 0 {
 			open = append(open, kids)
@@ -220,7 +259,10 @@ func schemaDepth(b []byte) (int, error) {
 			open = open[:len(open)-1]
 		}
 	}
-	return deepest, nil
+	if tree && bad == nil && len(open) > 0 {
+		bad = fmt.Errorf("%w: %d of its groups still owed children after its %d elements", errSchemaOpen, len(open), len(r.kids))
+	}
+	return deepest, bad
 }
 
 // thriftReader reads Thrift's compact protocol as Apache Thrift's TCompactProtocol
