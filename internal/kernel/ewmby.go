@@ -137,7 +137,7 @@ func winEwmBy(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Dat
 			e.step(&st, int(r))
 		}
 	})
-	return floatsAs(name, out, e.res, seenBitmap(e.ok, len(e.ok))), nil
+	return aggFloatsAs(name, out, e.res, seenBitmap(e.ok, len(e.ok))), nil
 }
 
 // halfPow is 0.5^r for r >= 0, rounded once: glibc's pow(0.5, r), which Polars'

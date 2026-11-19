@@ -31,7 +31,8 @@ import (
 //     value's is null where pandas answers NaN.
 //
 // A NaN is a value, not a gap: it makes the running value NaN from there on, as
-// IEEE arithmetic would. pandas reads NaN as missing.
+// IEEE arithmetic would, and that NaN is the one NaN (aggnan.go). pandas reads NaN
+// as missing.
 func winEwm(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataType,
 	col *data.Column, seg Segments) (*data.Column, error) {
 
@@ -48,7 +49,7 @@ func winEwm(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.DataT
 			e.step(&st, int(row))
 		}
 	})
-	return floatsAs(name, out, e.res, seenBitmap(e.ok, len(e.ok))), nil
+	return aggFloatsAs(name, out, e.res, seenBitmap(e.ok, len(e.ok))), nil
 }
 
 // EwmState is what an ewm function keeps between the rows of one partition, so a
@@ -78,7 +79,7 @@ func EwmNext(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Data
 		for row := range col.Len() {
 			e.step(st, row)
 		}
-		return floatsAs(name, out, e.res, seenBitmap(e.ok, len(e.ok))), nil
+		return aggFloatsAs(name, out, e.res, seenBitmap(e.ok, len(e.ok))), nil
 	}
 	e, err := newEwmRun(fn, params, col)
 	if err != nil {
@@ -87,7 +88,7 @@ func EwmNext(fn expr.WinFnOp, params expr.WinParams, name string, out dtype.Data
 	for row := range col.Len() {
 		e.step(st, row)
 	}
-	return floatsAs(name, out, e.res, seenBitmap(e.ok, len(e.ok))), nil
+	return aggFloatsAs(name, out, e.res, seenBitmap(e.ok, len(e.ok))), nil
 }
 
 // ewmRun is one ewm function over one column: its parameters, its input, and its

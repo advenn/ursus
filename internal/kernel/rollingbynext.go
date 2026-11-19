@@ -339,6 +339,10 @@ func RollingByNext(fn expr.WinFnOp, params expr.WinParams, name string, out dtyp
 		}
 		st.toBase, st.pendAt = st.to, int64(len(st.deque))
 		return res.Rename(name), nil
+	case rbFloat:
+		// A sum, mean, var or std, by arithmetic: a NaN is the one NaN (aggnan.go). A
+		// quantile is one of its values, its bits kept.
+		return aggFloatsAs(name, out, fres, seenBitmap(ok, n)), nil
 	}
 	return floatsAs(name, out, fres, seenBitmap(ok, n)), nil
 }
