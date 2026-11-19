@@ -571,9 +571,8 @@ func TestAFloatGroupKeyIsTheSameAtEveryThreadCount(t *testing.T) {
 // -0, and a product's sign is its factors', in any order. qcheck's seed 807010171
 // looked like a Mean's -0 against +0; it was the same query's Max, a pick, and this
 // holds the sums to the bit over zeros of either sign. Over NaNs of several payloads
-// their answer is NaN at every thread count, but which payload is the arithmetic's
-// order's, as the last bits of a sum are (step 512's float-threads rule), so there a
-// NaN is compared as a NaN.
+// their answer is NaN, the one NaN since step 530, so the same bits too: before, which
+// payload came out was the arithmetic's order's.
 func TestAFloatSumOfZerosIsTheSameAtEveryThreadCount(t *testing.T) {
 	c := ursus.Col
 	var aggs []ursus.Expr
@@ -588,35 +587,7 @@ func TestAFloatSumOfZerosIsTheSameAtEveryThreadCount(t *testing.T) {
 		ref := collectPicks(t, pickQuery(lf, keys, false, aggs), pickReference)
 		for _, cf := range pickVariants() {
 			got := collectPicks(t, pickQuery(lf, keys, cf.ordered, aggs), cf)
-			sameSumBits(t, fmt.Sprintf("keys %v %v", keys, cf), got, ref)
+			samePickBits(t, fmt.Sprintf("keys %v %v", keys, cf), got, ref)
 		}
 	}
-}
-
-// sameSumBits is samePickBits with a NaN of any payload one NaN, in the columns of
-// the NaN-holding inputs.
-func sameSumBits(t *testing.T, what string, got, want *ursus.DataFrame) {
-	t.Helper()
-	if got.Height() != want.Height() || !slices.Equal(got.Columns(), want.Columns()) {
-		t.Fatalf("%s: %d rows of %v, want %d of %v", what, got.Height(), got.Columns(), want.Height(), want.Columns())
-	}
-	for j, name := range want.Columns() {
-		g, w := got.ColumnAt(j), want.ColumnAt(j)
-		nan := strings.HasSuffix(name, "n64")
-		for i := range want.Height() {
-			gb, wb := cellBits(g, i), cellBits(w, i)
-			if nan && isNaNCell(g, i) && isNaNCell(w, i) {
-				continue
-			}
-			if gb != wb {
-				t.Errorf("%s: %q row %d is %s, the reference's %s", what, name, i, gb, wb)
-				break
-			}
-		}
-	}
-}
-
-// isNaNCell reports whether a Float64 cell is a NaN.
-func isNaNCell(c *ursus.Column, i int) bool {
-	return c.IsValid(i) && c.DType().ID() == dtype.TypeFloat64 && math.IsNaN(data.MustValues[float64](c)[i])
 }

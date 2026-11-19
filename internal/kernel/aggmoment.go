@@ -135,7 +135,7 @@ func (a *momentAcc) Finish(name string, nGroups int) (*data.Column, error) {
 		out[i] = v
 		ok.Append(true)
 	}
-	return data.NewFixed(name, dtype.Float64, out, ok.Finish()), nil
+	return data.NewFixed(name, dtype.Float64, oneNaN(out), ok.Finish()), nil
 }
 
 func (a *momentAcc) NBytes() int64 { return int64(cap(a.st)) * int64(unsafe.Sizeof(momentState{})) }
