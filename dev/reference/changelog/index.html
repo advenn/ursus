@@ -4339,8 +4339,7 @@ its section below lists them.</p>
   the row's NaN in a batch of many rows and the literal's in a batch of one, as a
   constant on the left was added as the right operand. A NaN constant is broadcast
   now, as in a batch of one.</li>
-<li>
-<p><strong>A malformed delta-encoded Parquet page is refused, not hung on</strong> (531): through
+<li><strong>A malformed delta-encoded Parquet page is refused, not hung on</strong> (531): through
   arrow-go's column reader, a DELTA_BINARY_PACKED page whose header counted fewer
   values than a REQUIRED column's page holds hung the read forever, and an OPTIONAL
   column's or a List's page read the values it was short of from whatever its buffer
@@ -4351,7 +4350,19 @@ its section below lists them.</p>
   block size, miniblocks, count, bit widths and length, and a page that breaks it is
   refused as corrupt, an <code>ErrIO</code>, as pyarrow refuses it, but for a count past the
   page's values, which no writer writes and pyarrow reads; every delta page pyarrow
-  and arrow-go write reads as before. The fuzz runs of step 521 found it.</p>
+  and arrow-go write reads as before. The fuzz runs of step 521 found it.</li>
+<li>
+<p><strong>A Parquet schema claiming more children than it holds is refused before arrow-go
+  sizes by it</strong> (533): arrow-go makes each group of a footer's schema a slice of the
+  children it claims before it reads one, so a file of 125 bytes whose root claimed
+  16,909,320 children allocated 258 MiB, and one claiming 2^31−1 ended the process.
+  The footer's walk reads the schema as a tree first, and a schema with an element
+  claiming more children than the elements after it, or whose tree does not close by
+  its last element, as pyarrow says "not enough elements", is refused as corrupt, an
+  <code>ErrIO</code>; groups nested a thousand deep, each claiming every element after it, cost
+  arrow-go memory by the square of the elements and are refused too. Every footer
+  ursus, pyarrow and the fixtures' writers wrote reads as before. The fuzz runs of
+  step 531 found it.</p>
 </li>
 <li>
 <p><strong>A cancelled query no longer answers part of its input as the whole</strong> (394): a
