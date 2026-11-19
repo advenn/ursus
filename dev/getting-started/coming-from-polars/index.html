@@ -2061,6 +2061,9 @@ changes is what Go asks for.</p>
   <code>RoundHalfToEven</code> selects.</li>
 <li><strong><code>Max</code> and <code>Min</code> propagate NaN;</strong> Polars' <code>max</code> ignores it, and its <code>nan_max</code>
   propagates it, as <code>NanMax</code> does here.</li>
+<li><strong>A float sum that is NaN is <code>math.NaN()</code>,</strong> and so are a mean, a variance and the
+  other aggregates that compute their answer: Polars' hands on the bits of the first
+  NaN it adds, so which NaN comes out follows the order of the values.</li>
 <li><strong>A literal has its Go value's type:</strong> <code>Col("a").Add(3)</code> of an <code>Int32</code> column is an
   <code>Int64</code>, since a Go integer constant is an <code>int</code>; write <code>int32(3)</code> to keep <code>Int32</code>.
   Polars' literals take the column's type, as a fill value's does here.</li>

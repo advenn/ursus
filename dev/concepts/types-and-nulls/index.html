@@ -1829,6 +1829,10 @@ everywhere:</p>
 </span></code></pre></div>
 <p>A null's test is <code>IsNull</code>, a NaN's <code>IsNan</code>; <code>FillNull</code> and <code>FillNan</code> repair them, and
 <code>DropNulls</code> and <code>DropNans</code> drop their rows.</p>
+<p>A NaN keeps its bits through a filter, a sort or a pick such as <code>Min</code> or <code>First</code>. A
+float aggregate that computes its answer, <code>Sum</code>, <code>Mean</code>, <code>Std</code> and the like, and
+their rolling, cumulative and exponentially weighted kin, answers one NaN,
+<code>math.NaN()</code>'s bits, whatever NaNs it combined (<em>changed in 0.8</em>).</p>
 <h2 id="nulls-in-aggregates">Nulls in aggregates<a class="headerlink" href="#nulls-in-aggregates" title="Permanent link">&para;</a></h2>
 <p>An aggregate skips nulls. <code>Count</code> counts the values that are there, <code>Len</code> the rows,
 and a mean is the sum of the values over their count, not over the rows:</p>

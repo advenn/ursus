@@ -1465,6 +1465,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#features" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1487,7 +1498,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed" class="md-nav__link">
+  <a href="#changed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1559,7 +1570,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_1" class="md-nav__link">
+  <a href="#changed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -2604,6 +2615,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#features" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2626,7 +2648,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed" class="md-nav__link">
+  <a href="#changed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -2698,7 +2720,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_1" class="md-nav__link">
+  <a href="#changed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -3740,6 +3762,21 @@ that stops when its request is cancelled.</p>
   one. Alone, a query runs on all of them as before. <code>WithThreads(n)</code> runs a query on
   n, as it did.</li>
 </ul>
+<h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>A float aggregate that is NaN is the one NaN</strong> (530): <code>Sum</code>, <code>Mean</code>, <code>Var</code>,
+  <code>Std</code>, <code>Skew</code>, <code>Kurtosis</code>, <code>Product</code>, <code>Entropy</code>, <code>Corr</code>, <code>Cov</code> and <code>CorrSpearman</code>,
+  their rolling, cumulative and exponentially weighted kin, the list and horizontal
+  sums and means, and a frame's <code>Corr</code> answer <code>math.NaN()</code>'s bits wherever they answer
+  a NaN, and <code>float32(math.NaN())</code>'s in a Float32, whichever NaNs they combined. They
+  handed on the payload of the first NaN operand of their arithmetic, so the bits
+  followed the order of the additions: a parallel group-by answered another NaN on
+  four threads than on one, and a serial one answered one of its inputs' NaNs, which
+  this changes too. The maintainer approved that change, so that an answer is the same
+  bits however its rows were added; <code>math.NaN()</code> is the NaN ursus already made where it
+  made one. <code>Min</code>, <code>Max</code>, <code>Median</code>, <code>Quantile</code>, <code>TopK</code> and the other picks answer one
+  of their values, its bits kept. Step 523 listed it.</li>
+</ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong><code>ScanLines</code></strong> (492): a text file's lines as one String column, <code>line</code>, Polars
@@ -3851,7 +3888,7 @@ that stops when its request is cancelled.</p>
   <code>PartitionBy</code>, <code>ToDummies</code>, <code>Corr</code> and their kin, and the JSON and CSV writers,
   take a share as the queries do, where each took every thread.</li>
 </ul>
-<h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
+<h3 id="changed_1">Changed<a class="headerlink" href="#changed_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A Zstandard frame's window is capped at 128 MiB</strong> (528), the reference decoder's
   default limit (libzstd's <code>ZSTD_WINDOWLOG_LIMIT_DEFAULT</code>), which Polars keeps
@@ -4297,6 +4334,11 @@ its section below lists them.</p>
   the first. Median, Quantile, TopK, BottomK, TopKBy and a float group key picked by
   the same order and are the same at every thread count too; a spilled quantile is a
   held one's. qcheck found it.</li>
+<li><strong>A NaN literal in arithmetic answers the same bits in every batch</strong> (530):
+  <code>Lit(NaN).Add(x)</code> or <code>.Mul(x)</code> over a row holding a NaN of another payload answered
+  the row's NaN in a batch of many rows and the literal's in a batch of one, as a
+  constant on the left was added as the right operand. A NaN constant is broadcast
+  now, as in a batch of one.</li>
 <li>
 <p><strong>A malformed delta-encoded Parquet page is refused, not hung on</strong> (531): through
   arrow-go's column reader, a DELTA_BINARY_PACKED page whose header counted fewer
@@ -4409,7 +4451,7 @@ diffs the API against it strictly from step 436 on.</p>
   differed from the in-memory answer in its last bits, in up to 81% of its rows. Its
   state is carried from batch to batch now, centred windows included.</li>
 </ul>
-<h3 id="changed_1">Changed<a class="headerlink" href="#changed_1" title="Permanent link">&para;</a></h3>
+<h3 id="changed_2">Changed<a class="headerlink" href="#changed_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>A join past its deepest split names what holds the memory</strong> (426): it blamed "a
   single join key" when the query's other operators held the limit, and names them and

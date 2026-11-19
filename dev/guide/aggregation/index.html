@@ -1773,6 +1773,14 @@ expression once per group: one row per group comes out, its keys and its aggrega
 <p>Every aggregate skips nulls. A mean is over the values that are there, and a group
 with no values sums to null, not 0. An integer sum is an <code>Int128</code>, so it cannot
 overflow: cast it to <code>Int64</code> if you want Polars' type.</p>
+<p>A float aggregate that computes its answer from the values, <code>Sum</code>, <code>Mean</code>, <code>Std</code>,
+<code>Var</code>, <code>Product</code>, <code>Skew</code>, <code>Kurtosis</code>, <code>Entropy</code>, <code>Corr</code>, <code>Cov</code> and <code>CorrSpearman</code>,
+answers <code>math.NaN()</code>'s bits wherever it answers a NaN, from a NaN among the values or
+from its arithmetic, as +Inf plus −Inf, and <code>float32(math.NaN())</code>'s in a <code>Float32</code>,
+whichever NaNs the group held and however many threads added them. <code>Min</code>, <code>Max</code>,
+<code>Median</code>, <code>Quantile</code> and the other picks answer one of the group's values, its own
+bits. <em>Changed in 0.8:</em> a sum handed on the bits of one of its NaNs, which one
+depending on the order of the additions.</p>
 <p>Counting has several forms, each one value per group:</p>
 <div class="language-go highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nx">df</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sales</span><span class="p">().</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="nx">GroupBy</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"product"</span><span class="p">)).</span>
