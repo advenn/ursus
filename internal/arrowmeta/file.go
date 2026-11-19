@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"strconv"
+	"sync"
 	"sync/atomic"
 
 	"github.com/advenn/ursus/internal/uerr"
@@ -23,7 +24,10 @@ import (
 // each block's message as arrow-go reads it, in the bytes it hands arrow-go, before
 // arrow-go has them. arrow-go reads a block's metadata in one ReadAt of exactly the
 // block's offset and metadata length (fileBlock.NewMessage, through a SectionReader),
-// which is how File knows it; TestEveryBlockIsWalked holds arrow-go to that.
+// which is how File knows it; TestEveryBlockIsWalked holds arrow-go to that. It reads
+// the block's body in the next, at the offset past the metadata and of the body's
+// length, where File walks the frames of the batch's Zstandard buffers (checkZstd);
+// TestEveryZstdBodyIsChecked holds arrow-go to that.
 
 // magic ends an IPC file.
 var magic = []byte("ARROW1")
@@ -47,7 +51,20 @@ type File struct {
 	schema *Schema
 	blocks map[int64][]block // by offset
 
-	walked atomic.Int64 // block messages walked, for TestEveryBlockIsWalked
+	// zstd is a Zstandard batch's buffers by the offset of its block's body, as the
+	// last walk of the block's metadata found them: a zstdBody.
+	zstd sync.Map
+
+	walked  atomic.Int64 // block messages walked, for TestEveryBlockIsWalked
+	checked atomic.Int64 // Zstandard bodies checked, for TestEveryZstdBodyIsChecked
+}
+
+// zstdBody is a block's body of a Zstandard batch: its length, the batch's buffers,
+// and the block's offset.
+type zstdBody struct {
+	n   int64
+	z   zstdBuffers
+	off int64
 }
 
 // block is a footer's block: its metadata's length, its body's, and whether it is a
@@ -147,6 +164,15 @@ func (f *File) ReadAt(p []byte, off int64) (n int, err error) {
 			}
 		}
 	}
+	if v, ok := f.zstd.Load(off); ok {
+		if zb := v.(zstdBody); zb.n == int64(len(p)) {
+			f.checked.Add(1)
+			where := "in the block at byte " + strconv.FormatInt(zb.off, 10)
+			if zerr := checkZstd(p, zb.z, f.op, f.name, where); zerr != nil {
+				return 0, zerr
+			}
+		}
+	}
 	return n, err
 }
 
@@ -178,6 +204,11 @@ func (f *File) walkBlock(p []byte, b block, off int64) (err error) {
 	}
 	if err != nil {
 		return f.corrupt(err, "in the message of "+what+" at byte "+strconv.FormatInt(off, 10))
+	}
+	if body := off + int64(b.meta); len(w.zstd.spans) > 0 {
+		f.zstd.Store(body, zstdBody{n: b.body, z: w.zstd, off: off})
+	} else {
+		f.zstd.Delete(body)
 	}
 	return nil
 }
