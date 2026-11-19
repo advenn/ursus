@@ -35,6 +35,10 @@ var levels = map[string]int{
 	"internal/strftime": 0, // stdlib only: strftime formats, compiled
 	"internal/gen":      0, // build tooling
 
+	// A Zstandard frame's window held to 128 MiB (step 528): klauspost alone, so the text
+	// readers' decompression and arrowmeta's IPC walk can both use it.
+	"internal/zstdframe": 0,
+
 	// The fuzzing harness (step 508): uerr alone of ursus, so the internal tests of
 	// every package above uerr can use it, dtype's and i128's among them.
 	"internal/fuzzcheck": 1, // + uerr
