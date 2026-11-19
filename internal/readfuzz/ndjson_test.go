@@ -20,6 +20,7 @@ import (
 	"github.com/advenn/ursus/dtype"
 	"github.com/advenn/ursus/i128"
 	"github.com/advenn/ursus/internal/fuzzcheck"
+	"github.com/advenn/ursus/internal/zstdframe"
 )
 
 // The targets here run on a stack of 8 MiB, not Go's 1 GiB, so that a parser that
@@ -48,11 +49,11 @@ func FuzzScanNDJSON(f *testing.F) {
 
 // scanNDJSONOne is FuzzScanNDJSON's check of one input.
 func scanNDJSONOne(t *testing.T, b []byte) {
+	skipZstdWindow(t, b)
 	n, ok := inflated(b)
 	if !ok {
 		t.Skip("decompresses past maxInflated")
 	}
-	skipZstdWindow(t, b)
 	var r read
 	fuzzcheck.Run(t, limits(n), func() error {
 		return r.of(t, ursus.ScanNDJSONBytes(b, "fuzz.ndjson"))
@@ -84,11 +85,11 @@ func FuzzScanJSON(f *testing.F) {
 
 // scanJSONOne is FuzzScanJSON's check of one input.
 func scanJSONOne(t *testing.T, b []byte) {
+	skipZstdWindow(t, b)
 	n, ok := inflated(b)
 	if !ok {
 		t.Skip("decompresses past maxInflated")
 	}
-	skipZstdWindow(t, b)
 	var r read
 	fuzzcheck.Run(t, limits(n), func() error {
 		return r.of(t, ursus.ScanJSONBytes(b, "fuzz.json"))
@@ -145,50 +146,62 @@ func TestScanJSONDeep(t *testing.T) {
 }
 
 // maxZstdWindow is the largest window a Zstandard input's frame may declare and be
-// read inside the targets' allocation bound.
-const maxZstdWindow = 32 << 20
+// read inside the targets' allocation bound: a text reader decompresses its stream
+// twice, inferring the schema and reading the rows, and klauspost's decoder makes the
+// window and 1 MiB each time.
+const maxZstdWindow = 16 << 20
 
-// skipZstdWindow skips b, a Zstandard stream whose first frame declares a window past
-// maxZstdWindow: a finding of step 511, left for the maintainer. klauspost's decoder
-// allocates the whole window the frame declares, up to its MaxWindowSize of 512 MiB,
-// before it has decoded a block ((*history).ensureBlockRing, zstd/history.go), so 17
-// bytes made the NDJSON, JSON and CSV readers allocate 514 MiB. The reference
-// decoder, and Polars through it, refuse a window past 128 MiB by default;
-// zstd.WithDecoderMaxWindow in internal/source.Decompressed would match it, and refuse
-// files ursus reads today.
+// skipZstdWindow skips b, a Zstandard stream a frame of which declares a window past
+// maxZstdWindow and up to the 128 MiB ursus reads (step 528): klauspost's decoder
+// makes the whole window a frame declares before it decodes a block, and has no way to
+// grow it as its output arrives (internal/zstdframe), so a few bytes cost a window
+// that passes the targets' allocation bound, rightly. Only the frames the readers
+// reach count: those up to the first past 128 MiB, which they refuse without making
+// its window. TestZstdWindowBelowTheCap reads the kept inputs it skips within a bound
+// of their windows; a frame past 128 MiB is a refusal the targets check.
 func skipZstdWindow(t *testing.T, b []byte) {
-	if w := zstdWindow(b); w > maxZstdWindow {
-		t.Skipf("finding: a Zstandard frame declaring a window of %d bytes is allocated it before a block is decoded", w)
+	if w := zstdWindowRead(b); w > maxZstdWindow {
+		t.Skipf("a Zstandard frame declaring a window of %d bytes, which the readers make whole", w)
 	}
 }
 
-// zstdWindow is the window the first frame of b declares, if b begins as a Zstandard
-// frame does (RFC 8878 §3.1.1.1), else 0: its Window_Descriptor, or a single
-// segment's Frame_Content_Size.
-func zstdWindow(b []byte) uint64 {
-	if !bytes.HasPrefix(b, []byte{0x28, 0xb5, 0x2f, 0xfd}) || len(b) < 6 {
+// zstdWindowRead is the largest window a frame of b, a Zstandard stream if it begins
+// as one, declares among those a reader decodes: the frames up to the first declaring
+// a window past zstdframe.MaxWindow, which is refused.
+func zstdWindowRead(b []byte) uint64 {
+	if !bytes.HasPrefix(b, []byte{0x28, 0xb5, 0x2f, 0xfd}) {
 		return 0
 	}
-	fhd, pos := b[4], 5
-	single := fhd>>5&1 == 1
-	if !single {
-		exp, mant := uint64(b[pos]>>3), uint64(b[pos]&7)
-		base := uint64(1) << (10 + exp)
-		return base + base/8*mant
+	var largest uint64
+	for _, w := range zstdframe.Windows(b) {
+		if w > zstdframe.MaxWindow {
+			break
+		}
+		largest = max(largest, w)
 	}
-	pos += []int{0, 1, 2, 4}[fhd&3] // the dictionary's ID
-	size := []int{1, 2, 4, 8}[fhd>>6]
-	if len(b) < pos+size {
-		return 0
+	return largest
+}
+
+// skipZstdWindowsIn skips b, an Arrow IPC input, whose Zstandard frames, wherever a
+// frame's magic number begins one in b, declare windows of up to 128 MiB that add up
+// past maxZstdWindow: arrow-go decompresses a buffer through klauspost's decoder,
+// which makes its window as the text readers' does (skipZstdWindow), once a batch.
+// A frame past 128 MiB is refused before arrow-go reads it, and is not counted.
+func skipZstdWindowsIn(t *testing.T, b []byte) {
+	var sum uint64
+	for i := 0; ; i++ {
+		j := bytes.Index(b[i:], []byte{0x28, 0xb5, 0x2f, 0xfd})
+		if j < 0 {
+			break
+		}
+		i += j
+		if ws := zstdframe.Windows(b[i:]); len(ws) > 0 && ws[0] <= zstdframe.MaxWindow {
+			sum += ws[0]
+		}
 	}
-	var fcs uint64
-	for i := size - 1; i >= 0; i-- {
-		fcs = fcs<<8 | uint64(b[pos+i])
+	if sum > maxZstdWindow {
+		t.Skipf("Zstandard frames declaring windows of %d bytes, which klauspost's decoder makes whole", sum)
 	}
-	if size == 2 {
-		fcs += 256
-	}
-	return fcs
 }
 
 // read is a scan's outcome: its schema, or the error inferring it; then its frame,
