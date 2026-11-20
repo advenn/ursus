@@ -959,6 +959,7 @@ type pqDeltaCase struct {
 	refused    bool
 	count, per uint64
 	wide       bool
+	enc        int32 // its kind's encoding
 }
 
 // forged are k's files of each forgery, applied to each of its runs: a
@@ -1012,7 +1013,7 @@ func (k pqDeltaKind) forged() []pqDeltaCase {
 			}
 			out = append(out, pqDeltaCase{name: name, refused: f.refused(pqDeltaRows, k.present()),
 				b:     k.file(pqPage{typ: pqPageData, values: values, encoding: k.enc, body: body}),
-				count: runs[which].count, per: per, wide: k.wide})
+				count: runs[which].count, per: per, wide: k.wide, enc: k.enc})
 		}
 	}
 	return out

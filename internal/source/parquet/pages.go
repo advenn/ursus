@@ -106,6 +106,9 @@ type pageChunk struct {
 
 	// The chunk's dictionary: PLAIN fixed-width values, or the offsets and
 	// characters of BYTE_ARRAY ones. Copied, since a page's bytes are reused.
+	// hasDict is whether the chunk has read its dictionary page: one of no value,
+	// which arrow-go v18.9.0 writes for a chunk of only nulls, leaves dictFixed nil.
+	hasDict   bool
 	dictN     int
 	dictFixed []byte
 	dictOffs  []int32
@@ -182,7 +185,7 @@ func (c *pageChunk) nextPage() (bool, error) {
 		case parquet.Encodings.Plain:
 			c.dict, c.plain = false, data
 		case parquet.Encodings.PlainDict, parquet.Encodings.RLEDict:
-			if c.dictOffs == nil && c.dictFixed == nil {
+			if !c.hasDict {
 				return false, c.corrupt("a page refers to a dictionary the chunk does not have")
 			}
 			if len(data) == 0 {
@@ -226,7 +229,7 @@ func (c *pageChunk) readDictionary(p *file.DictionaryPage) error {
 	if n < 0 {
 		return c.corrupt("a dictionary of %d values", n)
 	}
-	c.dictN = n
+	c.dictN, c.hasDict = n, true
 	if c.size > 0 {
 		if n*c.size > len(data) {
 			return c.corrupt("a dictionary page ends inside its values")

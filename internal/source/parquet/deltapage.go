@@ -38,6 +38,11 @@ import (
 // cannot decode, reading the lengths it did not get as 0: a miniblock 65 bits wide
 // read as other strings, with no error.
 //
+// arrow-go v18.9.0 checks the block size and the miniblocks, refusing F18's block of
+// 31, and a count past the page's values, but not a count short of them: a REQUIRED
+// column's page counting 0 of its 5 values still hangs its column reader there, and
+// an OPTIONAL one's reads 0 values and no error (step 538). So the check stays.
+//
 // So checkedPages reads each delta-packed run of a data page arrow-go decodes before
 // arrow-go does, as its decoder reads it, and refuses the page as corrupt where:
 //   - the block size is not a positive multiple of 128 that 32 bits hold, as arrow-go
