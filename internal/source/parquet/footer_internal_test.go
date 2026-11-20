@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/parquet/compress"
@@ -548,7 +549,9 @@ func withHeader(f []byte, h [2]int, et byte, count uint64) []byte {
 // refuses at its header, as arrow-go does once it has read them; claiming 10^8, the
 // walk refuses, where arrow-go would make a slice of them first. And each list whose header says
 // its elements are of another type the walk passes, as arrow-go reads it, its
-// elements read as parquet.thrift types them.
+// elements read as parquet.thrift types them; or as arrow-go refuses it since
+// v18.9.0 (step 538), whose Thrift, v0.25.0, holds a list's count to the bytes after
+// its header at the least an element of the type its header gives takes.
 //
 // And its schema's elements (step 533): the footer read back (tparse) and written
 // again, the walk passes it and arrow-go reads it. Each element claiming a child
@@ -609,7 +612,7 @@ func TestFooterWalkDifferential(t *testing.T) {
 					g := withHeader(f, h, other, count)
 					_, err := schemaDepth(g)
 					_, errArrow := metadata.NewFileMetaData(g, nil)
-					if err != nil || errArrow != nil {
+					if err != nil || errArrow != nil && !strings.Contains(errArrow.Error(), "bytes, only") {
 						t.Errorf("the list at %d said to hold type %d, not %d: the walk answers %v, arrow-go %v",
 							h[0], other, et, err, errArrow)
 					}
@@ -691,8 +694,10 @@ func hidden(id int16, et byte, el tval, count uint64) []byte {
 // TestFooterWalkReadsAListAsArrowGoDoes (step 521): each list of everyList replaced
 // by one hiding the list again, claiming 10^8 elements, from a walk by the types its
 // header gives (hidden): the walk refuses each, reading the element as arrow-go does.
-// Claiming 10^5, arrow-go reads the hidden list: it allocates 4 bytes an element of
-// it at least, its slice, made before it reads one, and the walk refuses that too.
+// Claiming 10^5, the walk refuses that too. arrow-go v18.7.0 read the hidden list,
+// allocating 4 bytes an element of it at least, its slice, made before it read one
+// (F13); v18.9.0's Thrift, v0.25.0, holds the count to the bytes after the list's
+// header and refuses it, allocating less (step 538).
 func TestFooterWalkReadsAListAsArrowGoDoes(t *testing.T) {
 	foot := everyList()
 	at := map[string][]int16{}
@@ -746,13 +751,14 @@ func TestFooterWalkReadsAListAsArrowGoDoes(t *testing.T) {
 			}
 			var before, after runtime.MemStats
 			runtime.ReadMemStats(&before)
-			metadata.NewFileMetaData(f, nil)
+			_, errArrow := metadata.NewFileMetaData(f, nil)
 			runtime.ReadMemStats(&after)
-			if got := after.TotalAlloc - before.TotalAlloc; got < 4*count {
+			if got := after.TotalAlloc - before.TotalAlloc; got >= 4*count || errArrow == nil {
 				t.Errorf("the list at %v hiding itself again, claiming %d: arrow-go allocated %d bytes reading it, "+
-					"and does not read the hidden list", path, count, got)
+					"and answered %v", path, count, got, errArrow)
 			} else {
-				t.Logf("the list at %v hiding itself again, claiming %d: arrow-go allocated %d bytes", path, count, got)
+				t.Logf("the list at %v hiding itself again, claiming %d: arrow-go allocated %d bytes and answered %v",
+					path, count, got, errArrow)
 			}
 		}
 	}

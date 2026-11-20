@@ -275,6 +275,65 @@ func TestOwnPagesReadAsArrowGoDoes(t *testing.T) {
 	}
 }
 
+// TestOwnPagesReadADictionaryOfNoValue (step 538): a dictionary-encoded chunk of only
+// nulls whose dictionary page holds no value and whose data page no index, as
+// arrow-go v18.9.0's writer writes one where its pages are compressed, and pyarrow
+// 25.0.1's in testdata/oracle/footers/pyarrow-03.parquet, a Float64 of two nulls. The
+// own pages took a fixed-width column's dictionary of no value for none, its copy a
+// nil slice, and refused the chunk as referring to a dictionary it does not have;
+// arrow-go's column reader reads it, the oracle, batch for batch.
+func TestOwnPagesReadADictionaryOfNoValue(t *testing.T) {
+	written := filepath.Join(t.TempDir(), "nulls.parquet")
+	writePagesFixture(t, written, 4000, "all", parquet.WithDataPageVersion(parquet.DataPageV1),
+		parquet.WithDictionaryDefault(true), parquet.WithCompression(compress.Codecs.Zstd))
+	for _, path := range []string{written, filepath.Join("..", "..", "..", "testdata", "oracle", "footers",
+		"pyarrow-03.parquet")} {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			pf, err := file.OpenParquetFile(path, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer pf.Close()
+			// The premise: a fixed-width chunk read from its pages, whose dictionary
+			// page holds no value.
+			sc := pf.MetaData().Schema
+			full, err := openSource(t, path).Schema(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			empty := 0
+			for ci := range sc.NumColumns() {
+				if sc.Column(ci).PhysicalType() == parquet.Types.ByteArray ||
+					!ownable(pf.MetaData().RowGroup(0), ci, sc.Column(ci), full.Field(ci).Type) {
+					continue
+				}
+				pr, err := pf.RowGroup(0).GetColumnPageReader(ci)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for pr.Next() {
+					if d, ok := pr.Page().(*file.DictionaryPage); ok && d.NumValues() == 0 {
+						empty++
+					}
+				}
+			}
+			if empty == 0 {
+				t.Fatal("no fixed-width chunk read from its pages holds a dictionary page of no value")
+			}
+
+			own, theirs := readAllPages(t, path, 1024, true), readAllPages(t, path, 1024, false)
+			if len(own) != len(theirs) {
+				t.Fatalf("%d batches read from pages, %d through arrow-go", len(own), len(theirs))
+			}
+			for i := range own {
+				if own[i] != theirs[i] {
+					t.Fatalf("batch %d differs\npages:\n%.2000s\narrow-go:\n%.2000s", i, own[i], theirs[i])
+				}
+			}
+		})
+	}
+}
+
 // checkOwned requires want of the file's columns to be read from their pages.
 func checkOwned(t *testing.T, path string, want int) {
 	t.Helper()
