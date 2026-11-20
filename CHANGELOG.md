@@ -17,12 +17,100 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.8
+## v0.8.0 — 2026-11-20
 
-Steps 392–407, so far, after 0.7's 375–391; step 408 was 0.7's report.
-[`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
-service**, small queries, many at once, memory a service can predict, and a query
-that stops when its request is cancelled.
+Everything since `v0.7.0` (2026-10-29) on master: steps 392–407 and 486–534, and
+the 0.7 line's fixes since. [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the
+scope: **ursus inside a Go service**, small queries, many at once, memory a service
+can predict, and a query that stops when its request is cancelled. Then the public API
+was made stable (494): from this release on, a release adds, and never renames,
+removes or reshapes. Then the tests' expected values were recorded from Polars 2.1
+(496–504), and a bug hunt fuzzed the parsers and readers and checked random queries
+against themselves and DuckDB (508–534). `api/v0.8.0.txt` lists its 2,481 features,
+92 more than v0.7.2's and none gone. Step 536 checked the whole.
+
+### Where it ends
+
+- **Against Polars 2.1.0,** each suite in one job on one of CI's four-vCPU runners
+  ([`v0.8-report.md`](./context_files/v0.8-report.md)): h2o at ten million rows in
+  2.30 times Polars' time over Parquet and 1.64 over CSV, PDS-H at SF=1 in 2.32 and at
+  SF=0.1 in 1.68. Beside Polars 1.44.1 on the same kind of runner, 1.31, 1.18, 1.91 and
+  1.79: Polars 2.1 is the faster, and the gap is its work, not a change in ursus's.
+- **Against v0.7.2,** on the same runners: the suites in 0.92 to 0.99 of its time; a
+  1,000-row query in 0.35 to 0.74 of it on all threads, a 10,000-row one in 0.47 to
+  0.92; sixty-four 10,000-row group-bys at once answer 2.3 times its queries a second,
+  on 66 goroutines where it started 465; the 10,000-row group-by allocates 66 kB where it
+  allocated 358. At 1,000 and 10,000 rows ursus answers in 0.05 to 0.73 of the time
+  Polars takes from Python.
+- **Every answer matches DuckDB's,** ursus's, v0.7.2's and Polars': PDS-H's 22 at both
+  scales and h2o's 15 over Parquet and over CSV.
+- **Built:** every goroutine recovering, a cancelled query stopping, and one budget for
+  a process's queries (A1–A3, 393–395); a small query on one thread, threads shared,
+  less allocated, a small join's keys and a zone loaded once (B1–B5, 396–400); the API
+  listed and checked, errors a caller reads, a hook for each query, and the inputs a
+  service has (C1–C4, 401–405); a guide for a service (D1, 406); the stable API (494);
+  five features (488–492); the tests' values recorded from Polars 2.1 (496–504); the
+  bug hunt's fuzzing and random queries (508–516) and its fixes (507, 509–534).
+
+### What a v0.7.x user can trip on
+
+From v0.7.0 or v0.7.1, read v0.7.2's list below too. Each entry says what to do.
+
+- **Queries share their engine's memory budget and threads** (395, 397; Breaks
+  below): a query given no `WithMemoryLimit` or `WithThreads` may spill, or run on
+  fewer threads, beside others where it did not alone, and an unordered group-by's row
+  order can move with them; answers do not change. To keep a query's budget or
+  threads its own, as in 0.7, give it `WithMemoryLimit(n)` or `WithThreads(n)`; to
+  keep a set of queries apart, an engine of their own (`NewEngine`, `WithEngine`).
+- **A Zstandard frame declaring a window past 128 MiB is refused** (528), an `ErrIO`
+  naming the limit: a CSV, NDJSON or JSON stream, or an Arrow IPC buffer, that zstd
+  wrote in a `--long` mode past 27. Decompress it first, with `zstd -d --long=31`, or
+  write it without `--long`.
+- **A float aggregate that is NaN is `math.NaN()`'s bits** (530), whichever NaNs it
+  combined, where it handed on its first NaN operand's: `Sum`, `Mean`, `Var`, `Std`
+  and the rest under Changed below. A program that reads a NaN's payload reads it from
+  the values, with a filter or a pick such as `First` or `Min`, which keep a value's
+  bits.
+- **A float `Max` of a tie answers the last tied row's bits** (523), as
+  `Sort().Last()` does, where it answered the first's; `Min` the first's, as
+  `Sort().First()`. This shows only in the sign of a zero, −0.0 against +0.0, and in a
+  NaN's payload, and it is the same at every thread count now. A program that reads
+  either from a `Max` expects the last row's.
+- **An Arrow time past its day is refused** (525), an `ErrValue` naming the column,
+  the value and its row, where `ScanArrowRecords`, `ScanArrow` and the IPC readers
+  wrapped it into the day, 26:00 to 02:00; a Parquet TIME past its day so too (510).
+  v0.7.3 has it too. Write a span past a day as a Duration.
+- **A read cut short is an error** (534), an `ErrIO` wrapping
+  `io.ErrUnexpectedEOF`, where it read as the rows before it: an Arrow IPC file or
+  stream that decompresses short or is cut inside a message, a Parquet `ReaderAt`
+  answering `io.EOF` inside a column chunk, an NDJSON, lines or CSV stream failing
+  with an error that wraps `io.EOF`. A `ReaderAt` or stream of yours ends with
+  `io.EOF` itself, not an error wrapping it.
+- **Input that answered wrongly, or ended the process, is refused as corrupt** (510,
+  511, 517, 519–521, 531, 533), an `ErrIO`: a Parquet footer, schema, page or
+  dictionary, or an Arrow IPC footer, message or buffer, whose counts and lengths
+  disagree with its bytes. A well-formed file is not refused: one that is, is damaged,
+  and is written again from its source. An IPC stream
+  whose size is not known holds a message to 64 MiB of metadata and 256 MiB of body
+  (511), arrow-go's own limits: write record batches of fewer rows.
+- **Answers that were wrong are corrected:**
+  - `Clip`, `ClipLower` and `ClipUpper` are named after their value, where they were
+    named after the bound, `literal` or the bound's column (496): select the column
+    by the value's name, or alias it;
+  - `Ln` and `Log10` of a subnormal (497); a Float32 cast to text, `9e+15` where it
+    was `9000000000000000.0` (497); `ToTitlecase` of a digraph (499);
+  - a null where a Struct of null fields was: `ExtractGroups` of a null (499), and an
+    NDJSON value that is not an object read into a Struct under
+    `WithNDJSONIgnoreErrors` (507). Test it with `IsNull`, not its fields;
+  - an inclusive split has no empty part after a last separator (499);
+  - `"-nan"` and `"+nan"` read as NaN (509), so a CSV column holding them is inferred
+    a Float64 where it was text: `WithSchemaOverrides` keeps it a String;
+  - a `\r` ending a CSV's input ends its line (509).
+- **Importing ursus replaces arrow-go's Parquet codecs** (520), Snappy, gzip, Brotli
+  and Zstandard, in arrow-go's registry, for the whole process: a page that
+  decompresses past what it declares is refused, and every other decodes and encodes
+  as before. A program that reads Parquet through arrow-go itself, beside ursus, sees
+  such a page refused there too.
 
 ### Breaks
 
@@ -44,6 +132,17 @@ that stops when its request is cancelled.
 
 ### Changed
 
+- **A Zstandard frame's window is capped at 128 MiB** (528), the reference decoder's
+  default limit (libzstd's `ZSTD_WINDOWLOG_LIMIT_DEFAULT`), which Polars keeps
+  through it: a CSV, NDJSON or JSON stream, or an Arrow IPC buffer, whose frame
+  declares a larger window is refused, an `ErrIO` naming the limit. klauspost's
+  decoder made the whole window a frame declares, up to 512 MiB, before it decoded a
+  block, so 17 bytes cost 514 MiB, and a 4.7 KB IPC file 513 MiB; an IPC window past
+  512 MiB was arrow-go's panic. This refuses files ursus read before, which Polars
+  refuses: those zstd writes in its `--long` modes past 27, of a file larger than 128
+  MiB or of its standard input. Decompress one first, with `zstd -d --long=31`. A
+  Parquet page is not held to it: Polars 2.1 and pyarrow read any window there, and
+  ursus decodes a page into its own buffer, making no window.
 - **A float aggregate that is NaN is the one NaN** (530): `Sum`, `Mean`, `Var`,
   `Std`, `Skew`, `Kurtosis`, `Product`, `Entropy`, `Corr`, `Cov` and `CorrSpearman`,
   their rolling, cumulative and exponentially weighted kin, the list and horizontal
@@ -165,232 +264,11 @@ that stops when its request is cancelled.
   `PartitionBy`, `ToDummies`, `Corr` and their kin, and the JSON and CSV writers,
   take a share as the queries do, where each took every thread.
 
-### Changed
-
-- **A Zstandard frame's window is capped at 128 MiB** (528), the reference decoder's
-  default limit (libzstd's `ZSTD_WINDOWLOG_LIMIT_DEFAULT`), which Polars keeps
-  through it: a CSV, NDJSON or JSON stream, or an Arrow IPC buffer, whose frame
-  declares a larger window is refused, an `ErrIO` naming the limit. klauspost's
-  decoder made the whole window a frame declares, up to 512 MiB, before it decoded a
-  block, so 17 bytes cost 514 MiB, and a 4.7 KB IPC file 513 MiB; an IPC window past
-  512 MiB was arrow-go's panic. This refuses files ursus read before, which Polars
-  refuses: those zstd writes in its `--long` modes past 27, of a file larger than 128
-  MiB or of its standard input. Decompress one first, with `zstd -d --long=31`. A
-  Parquet page is not held to it: Polars 2.1 and pyarrow read any window there, and
-  ursus decodes a page into its own buffer, making no window.
-
-### Tests
-
-- **A Zstandard frame's window, past and below the cap** (528): the `zstdwindow`
-  oracle group records Polars 2.1.0 reading the zstd CLI's streams of windows from 1
-  to 512 MiB and pyarrow's IPC and Parquet files declaring 128 and 256 MiB; the fuzz
-  targets check a frame past the cap as a refusal within their bounds, through every
-  reader, and skip one below it whose window passes their bound, 16 MiB, which a
-  test reads within a bound of its window. The bound was 32 MiB, and a frame of 32
-  MiB, which a reader decompresses twice, allocated 69 MiB against the targets' 64.
-- **The CSV fuzz targets skip a Zstandard frame declaring a window past their bound**
-  (524), as the NDJSON and JSON targets do since step 511, whose finding it is and
-  which is the maintainer's to decide.
-- **Expected values are recorded, not typed** (496): `make oracle` asks Polars 2.1.0
-  the suite's questions, from `bench/scripts/oracle/`, and writes the inputs and the
-  answers to `testdata/oracle/<group>.json`, every type ursus has, several inputs, a
-  whole answer frame, a refusal, an unordered answer; `TestOracle` compares ursus
-  against them, dtypes checked and floats to the bit, and a difference ursus means is
-  named with its reason in `oracleDifferences`. CI regenerates the recordings and
-  fails on one that is not Polars'. Three files converted first: `numodds_test.go`,
-  `rollmore_test.go` and `dtmore_test.go`, 305 hand-typed lines of values gone.
-- **The expressions-and-math wave converted** (497): thirteen files, `scalar_byhand`
-  to `int128exact`, 264 recorded cases in thirteen groups, 72 generated, 229 hand-typed
-  lines gone; what Polars 2.1 has no spelling for is a Go oracle (an Int64 Sum past
-  2^63 against math/big, seconds, Decimal products and quotients against big.Rat with
-  seeded values) or a differential; nineteen documented differences named, two
-  findings left for the maintainer.
-- **Strings, lists, structs and enums from recorded oracles** (499): fifteen files
-  converted, `listns_test.go`'s 739 lines of null-against-empty by hand among them;
-  321 cases in fifteen groups, 58 generated, 1,611 lines gone. What Polars 2 has no
-  answer for is held to Go: a `List(Duration)` mean past int64 to `math/big`, a regex
-  replaced n times to `regexp`, a Datetime of seconds and a Date formatted with a
-  clock to `time`, `GetCategories` (removed from Polars 2) to the type's own list.
-- **The temporal wave converted** (498): `calendar_test.go`'s by-hand half,
-  `tzreplace`, `components`, `daterange`, `csvdates`, `strtemporal`, `temporalagg`,
-  `weeks`, `dtcombine`, `dtexact`, `timearith`, `businessdays_range` and
-  `interpby_test.go`, 260 recorded cases in thirteen groups, 48 generated, 905 lines
-  gone; what Polars 2.1 has no answer for (a Time plus a Duration, the epoch's grid, two
-  patterns in one column, a zoned combine's day, `Duration(s)`) is held to Go's time
-  package. Four findings recorded and not asserted, for the maintainer: Polars 2.1
-  rounds a month by adding fourteen days, starts a `group_by_dynamic` day at 23:00
-  where midnight does not exist, combines a zoned Datetime's UTC date, and counts
-  business days back to an earlier date by numpy's rule.
-- **The sub-packages' data values converted** (503): `dtype`'s supertype tables,
-  `expr`'s Decimal aggregate types, hive's `TestInfer`, the selectors and the kernel's
-  cast values are asked at the root through the public API, 175 recorded cases in six
-  groups, 23 generated; the kernel's tables of a key bitmap's rule, a select's mask,
-  the radix sort, an Int128 sum's carries and a parse's edge bytes are held to
-  `math/big`, a row model and a stable sort of Go values over generated inputs; 171
-  hand-typed lines gone. Six findings recorded and not asserted, for the maintainer:
-  Polars 2.1 meets text, a Boolean, a Date and an instant beside a number where
-  `Promote` refuses, two time units at the coarser where it takes the finer, refuses
-  two Enums it meets at the String, casts a Decimal to a Boolean and answers a
-  Decimal's `any` and `all`, and reads a hive key of dates by its first value's layout.
-- **The I/O wave converted** (502): `io_byhand`, `csvread`, `csvskip`, `csvwrite`,
-  `ndjsonread`, `jsonread`, `jsonwrite`, `ipcfiles`, `hive`, `hiveparent`, `filepaths`,
-  `partitionwrite` and `database_test.go`, with `ipc_test.go`'s Polars-written
-  fixtures, 371 recorded cases in thirteen groups, 35 generated, 72 refusals, 1,106
-  lines gone. The format holds a written text now, so `write_csv`'s, `write_ndjson`'s
-  and `write_json`'s texts and a partitioned sink's file names are compared byte for
-  byte; every reader's and writer's options are the recording's, passed to ursus as
-  recorded; a refusal names its place beside its reason and is held to its kind; the
-  database group asks Polars through a DB-API connection for the Booleans, instants and
-  integers past Int64 SQLite cannot hold. Four findings recorded and not asserted, for
-  the maintainer: Polars 2.1 infers a column of only `NaN` as Float64, lands an offset
-  with seconds 30 s away on a CSV round trip, reads a non-object in a Struct column as
-  null under `ignore_errors`, and writes a bare newline for a frame of no columns.
-- **The frames, joins and reshaping wave converted** (501): `join_byhand`, `joinorder`,
-  `asofoptions`, `concat`, `pivot`, `dummies`, `unstack`, `unpivot`, `upsample`,
-  `update`, `matchschema`, `frameagg`, `framecolumns`, `framerows`, `frameconv`,
-  `framenulls`, `fill`, `intindex`, `dynamicopts`, `having`, `grouphead` and
-  `generate_test.go`, 482 recorded cases in twenty-two groups, 70 generated, 2,213
-  lines gone; a join's or a full update's unmatched tail, which Polars 2's streaming
-  engine appends in no promised order, is recorded in the order ursus promises. Three
-  findings recorded and not asserted, for the maintainer: a fill of 5000 into an Int8
-  column is an Int16 in Polars 2.1 and an Int64 here, the mean fill strategy keeps an
-  integer column's type there and widens it to Float64 here, and `AsOfNearest`'s tie
-  goes forward there and backward here.
-- **The aggregates and windows converted** (500): `aggwindow_byhand`, `aggstats`,
-  `aggpair`, `agglists`, `argsort`, `hist`, `search`, `seq`, `modeagg`, `ewmmore`,
-  `window172`, `windownest`, `rollingby`, `rollingoffset`, `rollingquantile`,
-  `rollmap`, `exprroll`, `cumeval` and `topk_agg_test.go`, 464 recorded cases in
-  nineteen groups, 63 generated, 1,857 lines gone; a recorded case may hold floats to
-  an absolute tolerance beside the relative (`"float": "rel:1e-12 abs:1e-15"`); what
-  Polars 2.1 answers wrongly is held to math/big: an integer mean past 2^53, a median
-  and a variance at the float's ends, the moments of values near 1e9. Five findings
-  recorded and not asserted, for the maintainer: Polars 2.1 overflows the median of
-  [-1.7e308, 1.7e308] and the variance of [1e308, 1e308], loses seven digits of a skew
-  near 1e9, gives a one-value group's raw entropy as 0.0, ends a rolling window at its
-  offset plus the period where 1.44.1 ended it at the row, and keeps nulls in a
-  `top_k` as its least values.
-- **No new hand-typed test values** (504): `internal/gen/testinventory` counts each
-  test function's hand-typed expected values, by go/parser, in a want's assignment or
-  case field, a literal compared with a value read from a frame, and a comparison
-  helper's or a want-taking helper's argument; `make testinventory`, which CI's build
-  job runs, fails a function above its count in `baseline.txt`, or a new one with any.
-  The suite holds 1,225 such lines in 312 functions, from 3,111 on the same rules
-  before step 496; 2,598 recorded cases in 106 groups replace the rest. The waves'
-  twenty-five findings, where Polars 2.1 answers otherwise and nothing says ursus
-  means to, are listed for the maintainer in `context_files/feature-gaps.md` §12.
-- **A fuzzing harness, and CI that fuzzes** (508): `internal/fuzzcheck` fails a fuzz
-  input that hangs (a watchdog prints every goroutine's stack and ends the process,
-  which the fuzzer records), allocates past a bound (the change in
-  `/gc/heap/allocs:bytes`), leaves goroutines running a second after, answers
-  `ErrInternal`, or panics in ursus's own code whatever the error's kind; a panic in
-  arrow-go, Thrift or klauspost is logged. Its bounded allocator refuses one request
-  over 16 MiB plus 16 bytes a byte of input. `internal/readfuzz` holds the public
-  readers' targets, `FuzzScanCSV` first, with internal/data's boundary checks on.
-  `make fuzz FUZZ=<target> PKG=<package> FUZZTIME=<d>` fuzzes one; `fuzz.yml` lists
-  every target and fuzzes each for 30 s on a pull request touching Go code, by hand
-  and nightly, uploading a failing input. It is not a required check.
-- **Fuzz targets for the text parsers and the CSV reader** (509): eighteen, each
-  against an oracle, not only "did not crash": `ParseFloat` and `NearestFloat` against
-  strconv; the temporal text's round trip and Polars' patterns against `time.Parse`;
-  the Int128's `Parse`, arithmetic and `ParseDecimal` against math/big; the CSV
-  reader's number parsers against strconv, its inference against its builders, its
-  scanner against `encoding/csv` (a quote in an unquoted field's middle, read as data,
-  the one named deviation), its vector field ends against a byte loop, and four
-  threads against one with blocks of 1 to 64 bytes; `Cast` from a String; strftime's
-  `Append` against `time.Format` and its `Parse` against `Append`. `FuzzScanCSV` reads
-  under options from 32 bits now, and holds one thread to four, the schema to the
-  frame's, `Count`, `Head(1)` and a `Select` to the frame; `FuzzScanCSVChunked` holds
-  a stream read in pieces, empty reads and a last one with `io.EOF` among them, to the
-  bytes read whole. Their seeds include the 174 texts of Polars 2.1's recorded CSV
-  cases. They found the four bugs fixed below.
-- **The fuzzer minimises a new input for 5 s, not 60** (516): `fuzz.yml` and `make
-  fuzz` pass `-fuzzminimizetime`, so a target that takes a millisecond an input spends
-  CI's 30 s fuzzing rather than minimising; set it with `FUZZMIN`.
-- **The twenty-five findings closed, their thirty-nine cases asserted again** (507):
-  none is skipped. One was a bug, fixed (above); twenty-four are ursus's own rules,
-  each documented in `context_files/feature-gaps.md` §9 with Polars 2.1's answer and
-  why ursus's stands, two of them in docs that said Polars answers so and were
-  corrected (`ToDecimal`'s tie, `RollingOptions.Offset`'s window end). Twenty-eight
-  recorded cases are asked of Polars spelled so that it computes ursus's documented
-  rule: both time units cast to the finer before a `when`, two Enums cast to String, a
-  fill's column cast to Int64 or Float64, the moments of x less its first, a `top_k` of
-  the values without their nulls, the nearer of an as-of join's backward and forward
-  rows with ties backward, a group-by of `truncate("1d")`, minus the business days
-  from end to start, and their kin, each saying so in its note; two have Python's own
-  answer, a float `%` and `decimal`'s ROUND_HALF_UP; the NDJSON case is asserted as
-  recorded. Six refusals ursus means, where Polars answers, are `TestCondRefusals`' and
-  `TestDecimalGuards`', and two float extremes `TestAggregatesAtTheFloatsEnds`', held
-  to math/big; those eight cases left the recordings.
-- **qcheck shrinks a finding to a minimal case and emits its test** (514): `qcheck
-  shrink` takes a case's file, or a seed's finding, to the smallest case that fails
-  the same way, its signature the kind and the differing column's operation and type
-  or the error's class: the fewest configuration factors, ddmin on rows, operations,
-  aggregations and columns dropped, expressions and values simplified, each step
-  well-typed, within 2,000 runs or 120 s, every query inside `fuzzcheck.Run`. It
-  writes the case as JSON, a Go test in package `ursus_test` that holds the failing
-  configuration to the reference over the shrunk rows, DuckDB's SQL and a Polars
-  snippet; `qcheck self` and `qcheck duck` shrink up to three findings with `-shrink`,
-  which CI uploads. `qcheck/testdata/corpus` holds shrunk cases and every test run
-  replays them: one that fails must be marked open with the step that fixes it, and
-  one marked open must fail. Its first cases are step 523's two findings, 184 rows
-  and 16,384 shrunk to 6 and 5, and a third of their class that DuckDB found on this
-  step's CI, 79 rows shrunk to 5 there: regressions, since step 523 fixed them.
-- **Random queries checked against DuckDB** (513): `qcheck duck` runs each of
-  `qcheck self`'s queries in ursus, under a configuration its seed picks among
-  threads, batch sizes, the optimizer off and tables cut into records, and as SQL in
-  DuckDB 1.5.5 in the same process (duckdb-go v2.10505.0, a cgo build behind the
-  `duckdb` tag, so the root module gains nothing). The SQL computes ursus's answer:
-  46 translation rules each name the doc or documented difference they follow,
-  wrapping integers, flooring division, comparing floats by IEEE and keying them by
-  the total order, ursus's parse and text rules, a float sum in the rows' order and
-  an integer mean rounded once; 45 DuckDB facts are held to Go oracles. Answers
-  compare cell by cell, exactly but for a float sum on several threads, within an
-  error model; every ursus run is inside `fuzzcheck.Run`. It runs for five minutes in
-  the CI job `qcheck-duckdb`, not a required check, and found no bug in ursus.
-- **Random queries checked against themselves** (512): `qcheck/`, a module of its
-  own, draws tables (Int64, Int32, Float64, String, Bool and Date; 0 to 3,000 rows and
-  8191 to 8193; null rates 0 to 1; tame, wild and extreme values, NaN, ±0, each type's
-  ends, Unicode and long text) and a well-typed query over them from one seed: filters,
-  projections, group-bys on integer keys of mixed widths, sorts with a head or a slice,
-  inner, left, semi and anti joins on integer, text and NaN/±0 float keys, and their
-  expressions and aggregates. `qcheck self` runs each at one thread, batches of 8192
-  and the default flags, and again on 4 and 8 threads, in batches of 1 to 65,536 rows,
-  with the optimizer off and from tables cut into records, sampled pairwise, and
-  requires one answer to the bit, rows in order where the query promises an order and
-  as a multiset where not; a float sum on several threads may differ within an error
-  model, counted, and a canary fails the allowance as stale when it stops differing.
-  A mismatch is bisected to its factor, and every run is inside `fuzzcheck.Run`. Its
-  tests, the teeth and a seeded smoke run, and five minutes of `qcheck self` run in
-  the CI job `qcheck`, not a required check. It found the three below.
-- **Fuzz targets for NDJSON, JSON and Arrow IPC** (511): `FuzzObjectLines` holds a
-  JSON document's split into lines to itself read in pieces and a byte at a time, and
-  to `encoding/json`; `FuzzJSONDecode` holds `json_decode`'s and `json_path_match`'s
-  parser to `json.Valid` and `json.Unmarshal`; `FuzzScanNDJSON` and `FuzzScanJSON` hold
-  each row read to `encoding/json`, by its column's type; `FuzzScanIPCFile` and
-  `FuzzScanIPCStream` read through a bounded allocator and hold each cell to arrow-go's
-  own arrays. readfuzz's targets run on an 8 MiB stack. Left for the maintainer, each
-  skipped by name and kept as a seed: arrow-go sizes slices by an IPC schema's and a
-  record batch's declared lengths and recurses on a field among its descendants, each a
-  fatal error from an input of 2 KB; a record of 2^40 rows of Null; klauspost's
-  Zstandard decoder allocates the window a frame declares, up to 512 MiB, from 17
-  bytes; NDJSON inference types `[1, true]` and `[1, [2]]` as the reader then refuses,
-  and an integer past Int128 as an Int128.
-- **Fuzz targets for the Parquet reader, and a byte-flip sweep** (510):
-  `FuzzScanParquet` reads any bytes through the public API with every page buffer
-  from a bounded, poisoned allocator, and checks four threads, a read into zeroed
-  buffers, `Head`, `Select`, a `Filter` with pruning on and off, and `Count` against
-  the whole frame; `FuzzOwnPagesMatchArrow` checks the reader's own page decoding
-  against arrow-go's, batch for batch. Every byte of two files ursus wrote is
-  flipped and read, and ursus must read the original wherever pyarrow 25.0.1 does,
-  from DuckDB's and pyarrow's outcomes recorded once by
-  `bench/scripts/oracle/record_flips.py` into `testdata/oracle/flips`.
-
 ### Fixed
 
-All three are in v0.7.1 too.
-
-Every fix of v0.7.2 is in 0.8 too, forward-ported from `release-0.7` by #33 to #37:
-its section below lists them.
+Every fix of the 0.7 line is in v0.8.0 too: v0.7.1's three were made here (393, 394)
+and are the last below; v0.7.2's were forward-ported from `release-0.7` by #33 to #37,
+and its section lists them; v0.7.3's three are steps 518, 522 and 525 below.
 
 - **`Clip`, `ClipLower` and `ClipUpper` are named after their value** (496): the
   answer was named after the bound, `literal` for a Go number and `lo` for `Col("lo")`,
@@ -653,7 +531,6 @@ its section below lists them.
   arrow-go memory by the square of the elements and are refused too. Every footer
   ursus, pyarrow and the fixtures' writers wrote reads as before. The fuzz runs of
   step 531 found it.
-
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
   error: a count of a CSV file cancelled partway was an empty frame. A query whose
@@ -668,6 +545,271 @@ its section below lists them.
   nothing, so a bug in one ended the program that asked, a service with every request
   it served. Each panic is an internal error from the call now, as one anywhere else
   in a query is, naming the line that panicked.
+
+### Tests
+
+- **A Zstandard frame's window, past and below the cap** (528): the `zstdwindow`
+  oracle group records Polars 2.1.0 reading the zstd CLI's streams of windows from 1
+  to 512 MiB and pyarrow's IPC and Parquet files declaring 128 and 256 MiB; the fuzz
+  targets check a frame past the cap as a refusal within their bounds, through every
+  reader, and skip one below it whose window passes their bound, 16 MiB, which a
+  test reads within a bound of its window. The bound was 32 MiB, and a frame of 32
+  MiB, which a reader decompresses twice, allocated 69 MiB against the targets' 64.
+- **The CSV fuzz targets skip a Zstandard frame declaring a window past their bound**
+  (524), as the NDJSON and JSON targets do since step 511, whose finding it is and
+  which is the maintainer's to decide.
+- **Expected values are recorded, not typed** (496): `make oracle` asks Polars 2.1.0
+  the suite's questions, from `bench/scripts/oracle/`, and writes the inputs and the
+  answers to `testdata/oracle/<group>.json`, every type ursus has, several inputs, a
+  whole answer frame, a refusal, an unordered answer; `TestOracle` compares ursus
+  against them, dtypes checked and floats to the bit, and a difference ursus means is
+  named with its reason in `oracleDifferences`. CI regenerates the recordings and
+  fails on one that is not Polars'. Three files converted first: `numodds_test.go`,
+  `rollmore_test.go` and `dtmore_test.go`, 305 hand-typed lines of values gone.
+- **The expressions-and-math wave converted** (497): thirteen files, `scalar_byhand`
+  to `int128exact`, 264 recorded cases in thirteen groups, 72 generated, 229 hand-typed
+  lines gone; what Polars 2.1 has no spelling for is a Go oracle (an Int64 Sum past
+  2^63 against math/big, seconds, Decimal products and quotients against big.Rat with
+  seeded values) or a differential; nineteen documented differences named, two
+  findings left for the maintainer.
+- **Strings, lists, structs and enums from recorded oracles** (499): fifteen files
+  converted, `listns_test.go`'s 739 lines of null-against-empty by hand among them;
+  321 cases in fifteen groups, 58 generated, 1,611 lines gone. What Polars 2 has no
+  answer for is held to Go: a `List(Duration)` mean past int64 to `math/big`, a regex
+  replaced n times to `regexp`, a Datetime of seconds and a Date formatted with a
+  clock to `time`, `GetCategories` (removed from Polars 2) to the type's own list.
+- **The temporal wave converted** (498): `calendar_test.go`'s by-hand half,
+  `tzreplace`, `components`, `daterange`, `csvdates`, `strtemporal`, `temporalagg`,
+  `weeks`, `dtcombine`, `dtexact`, `timearith`, `businessdays_range` and
+  `interpby_test.go`, 260 recorded cases in thirteen groups, 48 generated, 905 lines
+  gone; what Polars 2.1 has no answer for (a Time plus a Duration, the epoch's grid, two
+  patterns in one column, a zoned combine's day, `Duration(s)`) is held to Go's time
+  package. Four findings recorded and not asserted, for the maintainer: Polars 2.1
+  rounds a month by adding fourteen days, starts a `group_by_dynamic` day at 23:00
+  where midnight does not exist, combines a zoned Datetime's UTC date, and counts
+  business days back to an earlier date by numpy's rule.
+- **The sub-packages' data values converted** (503): `dtype`'s supertype tables,
+  `expr`'s Decimal aggregate types, hive's `TestInfer`, the selectors and the kernel's
+  cast values are asked at the root through the public API, 175 recorded cases in six
+  groups, 23 generated; the kernel's tables of a key bitmap's rule, a select's mask,
+  the radix sort, an Int128 sum's carries and a parse's edge bytes are held to
+  `math/big`, a row model and a stable sort of Go values over generated inputs; 171
+  hand-typed lines gone. Six findings recorded and not asserted, for the maintainer:
+  Polars 2.1 meets text, a Boolean, a Date and an instant beside a number where
+  `Promote` refuses, two time units at the coarser where it takes the finer, refuses
+  two Enums it meets at the String, casts a Decimal to a Boolean and answers a
+  Decimal's `any` and `all`, and reads a hive key of dates by its first value's layout.
+- **The I/O wave converted** (502): `io_byhand`, `csvread`, `csvskip`, `csvwrite`,
+  `ndjsonread`, `jsonread`, `jsonwrite`, `ipcfiles`, `hive`, `hiveparent`, `filepaths`,
+  `partitionwrite` and `database_test.go`, with `ipc_test.go`'s Polars-written
+  fixtures, 371 recorded cases in thirteen groups, 35 generated, 72 refusals, 1,106
+  lines gone. The format holds a written text now, so `write_csv`'s, `write_ndjson`'s
+  and `write_json`'s texts and a partitioned sink's file names are compared byte for
+  byte; every reader's and writer's options are the recording's, passed to ursus as
+  recorded; a refusal names its place beside its reason and is held to its kind; the
+  database group asks Polars through a DB-API connection for the Booleans, instants and
+  integers past Int64 SQLite cannot hold. Four findings recorded and not asserted, for
+  the maintainer: Polars 2.1 infers a column of only `NaN` as Float64, lands an offset
+  with seconds 30 s away on a CSV round trip, reads a non-object in a Struct column as
+  null under `ignore_errors`, and writes a bare newline for a frame of no columns.
+- **The frames, joins and reshaping wave converted** (501): `join_byhand`, `joinorder`,
+  `asofoptions`, `concat`, `pivot`, `dummies`, `unstack`, `unpivot`, `upsample`,
+  `update`, `matchschema`, `frameagg`, `framecolumns`, `framerows`, `frameconv`,
+  `framenulls`, `fill`, `intindex`, `dynamicopts`, `having`, `grouphead` and
+  `generate_test.go`, 482 recorded cases in twenty-two groups, 70 generated, 2,213
+  lines gone; a join's or a full update's unmatched tail, which Polars 2's streaming
+  engine appends in no promised order, is recorded in the order ursus promises. Three
+  findings recorded and not asserted, for the maintainer: a fill of 5000 into an Int8
+  column is an Int16 in Polars 2.1 and an Int64 here, the mean fill strategy keeps an
+  integer column's type there and widens it to Float64 here, and `AsOfNearest`'s tie
+  goes forward there and backward here.
+- **The aggregates and windows converted** (500): `aggwindow_byhand`, `aggstats`,
+  `aggpair`, `agglists`, `argsort`, `hist`, `search`, `seq`, `modeagg`, `ewmmore`,
+  `window172`, `windownest`, `rollingby`, `rollingoffset`, `rollingquantile`,
+  `rollmap`, `exprroll`, `cumeval` and `topk_agg_test.go`, 464 recorded cases in
+  nineteen groups, 63 generated, 1,857 lines gone; a recorded case may hold floats to
+  an absolute tolerance beside the relative (`"float": "rel:1e-12 abs:1e-15"`); what
+  Polars 2.1 answers wrongly is held to math/big: an integer mean past 2^53, a median
+  and a variance at the float's ends, the moments of values near 1e9. Five findings
+  recorded and not asserted, for the maintainer: Polars 2.1 overflows the median of
+  [-1.7e308, 1.7e308] and the variance of [1e308, 1e308], loses seven digits of a skew
+  near 1e9, gives a one-value group's raw entropy as 0.0, ends a rolling window at its
+  offset plus the period where 1.44.1 ended it at the row, and keeps nulls in a
+  `top_k` as its least values.
+- **No new hand-typed test values** (504): `internal/gen/testinventory` counts each
+  test function's hand-typed expected values, by go/parser, in a want's assignment or
+  case field, a literal compared with a value read from a frame, and a comparison
+  helper's or a want-taking helper's argument; `make testinventory`, which CI's build
+  job runs, fails a function above its count in `baseline.txt`, or a new one with any.
+  The suite holds 1,225 such lines in 312 functions, from 3,111 on the same rules
+  before step 496; 2,598 recorded cases in 106 groups replace the rest. The waves'
+  twenty-five findings, where Polars 2.1 answers otherwise and nothing says ursus
+  means to, are listed for the maintainer in `context_files/feature-gaps.md` §12.
+- **A fuzzing harness, and CI that fuzzes** (508): `internal/fuzzcheck` fails a fuzz
+  input that hangs (a watchdog prints every goroutine's stack and ends the process,
+  which the fuzzer records), allocates past a bound (the change in
+  `/gc/heap/allocs:bytes`), leaves goroutines running a second after, answers
+  `ErrInternal`, or panics in ursus's own code whatever the error's kind; a panic in
+  arrow-go, Thrift or klauspost is logged. Its bounded allocator refuses one request
+  over 16 MiB plus 16 bytes a byte of input. `internal/readfuzz` holds the public
+  readers' targets, `FuzzScanCSV` first, with internal/data's boundary checks on.
+  `make fuzz FUZZ=<target> PKG=<package> FUZZTIME=<d>` fuzzes one; `fuzz.yml` lists
+  every target and fuzzes each for 30 s on a pull request touching Go code, by hand
+  and nightly, uploading a failing input. It is not a required check.
+- **Fuzz targets for the text parsers and the CSV reader** (509): eighteen, each
+  against an oracle, not only "did not crash": `ParseFloat` and `NearestFloat` against
+  strconv; the temporal text's round trip and Polars' patterns against `time.Parse`;
+  the Int128's `Parse`, arithmetic and `ParseDecimal` against math/big; the CSV
+  reader's number parsers against strconv, its inference against its builders, its
+  scanner against `encoding/csv` (a quote in an unquoted field's middle, read as data,
+  the one named deviation), its vector field ends against a byte loop, and four
+  threads against one with blocks of 1 to 64 bytes; `Cast` from a String; strftime's
+  `Append` against `time.Format` and its `Parse` against `Append`. `FuzzScanCSV` reads
+  under options from 32 bits now, and holds one thread to four, the schema to the
+  frame's, `Count`, `Head(1)` and a `Select` to the frame; `FuzzScanCSVChunked` holds
+  a stream read in pieces, empty reads and a last one with `io.EOF` among them, to the
+  bytes read whole. Their seeds include the 174 texts of Polars 2.1's recorded CSV
+  cases. They found the four bugs fixed below.
+- **The fuzzer minimises a new input for 5 s, not 60** (516): `fuzz.yml` and `make
+  fuzz` pass `-fuzzminimizetime`, so a target that takes a millisecond an input spends
+  CI's 30 s fuzzing rather than minimising; set it with `FUZZMIN`.
+- **The twenty-five findings closed, their thirty-nine cases asserted again** (507):
+  none is skipped. One was a bug, fixed (above); twenty-four are ursus's own rules,
+  each documented in `context_files/feature-gaps.md` §9 with Polars 2.1's answer and
+  why ursus's stands, two of them in docs that said Polars answers so and were
+  corrected (`ToDecimal`'s tie, `RollingOptions.Offset`'s window end). Twenty-eight
+  recorded cases are asked of Polars spelled so that it computes ursus's documented
+  rule: both time units cast to the finer before a `when`, two Enums cast to String, a
+  fill's column cast to Int64 or Float64, the moments of x less its first, a `top_k` of
+  the values without their nulls, the nearer of an as-of join's backward and forward
+  rows with ties backward, a group-by of `truncate("1d")`, minus the business days
+  from end to start, and their kin, each saying so in its note; two have Python's own
+  answer, a float `%` and `decimal`'s ROUND_HALF_UP; the NDJSON case is asserted as
+  recorded. Six refusals ursus means, where Polars answers, are `TestCondRefusals`' and
+  `TestDecimalGuards`', and two float extremes `TestAggregatesAtTheFloatsEnds`', held
+  to math/big; those eight cases left the recordings.
+- **qcheck shrinks a finding to a minimal case and emits its test** (514): `qcheck
+  shrink` takes a case's file, or a seed's finding, to the smallest case that fails
+  the same way, its signature the kind and the differing column's operation and type
+  or the error's class: the fewest configuration factors, ddmin on rows, operations,
+  aggregations and columns dropped, expressions and values simplified, each step
+  well-typed, within 2,000 runs or 120 s, every query inside `fuzzcheck.Run`. It
+  writes the case as JSON, a Go test in package `ursus_test` that holds the failing
+  configuration to the reference over the shrunk rows, DuckDB's SQL and a Polars
+  snippet; `qcheck self` and `qcheck duck` shrink up to three findings with `-shrink`,
+  which CI uploads. `qcheck/testdata/corpus` holds shrunk cases and every test run
+  replays them: one that fails must be marked open with the step that fixes it, and
+  one marked open must fail. Its first cases are step 523's two findings, 184 rows
+  and 16,384 shrunk to 6 and 5, and a third of their class that DuckDB found on this
+  step's CI, 79 rows shrunk to 5 there: regressions, since step 523 fixed them.
+- **Random queries checked against DuckDB** (513): `qcheck duck` runs each of
+  `qcheck self`'s queries in ursus, under a configuration its seed picks among
+  threads, batch sizes, the optimizer off and tables cut into records, and as SQL in
+  DuckDB 1.5.5 in the same process (duckdb-go v2.10505.0, a cgo build behind the
+  `duckdb` tag, so the root module gains nothing). The SQL computes ursus's answer:
+  46 translation rules each name the doc or documented difference they follow,
+  wrapping integers, flooring division, comparing floats by IEEE and keying them by
+  the total order, ursus's parse and text rules, a float sum in the rows' order and
+  an integer mean rounded once; 45 DuckDB facts are held to Go oracles. Answers
+  compare cell by cell, exactly but for a float sum on several threads, within an
+  error model; every ursus run is inside `fuzzcheck.Run`. It runs for five minutes in
+  the CI job `qcheck-duckdb`, not a required check, and found no bug in ursus.
+- **Random queries checked against themselves** (512): `qcheck/`, a module of its
+  own, draws tables (Int64, Int32, Float64, String, Bool and Date; 0 to 3,000 rows and
+  8191 to 8193; null rates 0 to 1; tame, wild and extreme values, NaN, ±0, each type's
+  ends, Unicode and long text) and a well-typed query over them from one seed: filters,
+  projections, group-bys on integer keys of mixed widths, sorts with a head or a slice,
+  inner, left, semi and anti joins on integer, text and NaN/±0 float keys, and their
+  expressions and aggregates. `qcheck self` runs each at one thread, batches of 8192
+  and the default flags, and again on 4 and 8 threads, in batches of 1 to 65,536 rows,
+  with the optimizer off and from tables cut into records, sampled pairwise, and
+  requires one answer to the bit, rows in order where the query promises an order and
+  as a multiset where not; a float sum on several threads may differ within an error
+  model, counted, and a canary fails the allowance as stale when it stops differing.
+  A mismatch is bisected to its factor, and every run is inside `fuzzcheck.Run`. Its
+  tests, the teeth and a seeded smoke run, and five minutes of `qcheck self` run in
+  the CI job `qcheck`, not a required check. It found the three below.
+- **Fuzz targets for NDJSON, JSON and Arrow IPC** (511): `FuzzObjectLines` holds a
+  JSON document's split into lines to itself read in pieces and a byte at a time, and
+  to `encoding/json`; `FuzzJSONDecode` holds `json_decode`'s and `json_path_match`'s
+  parser to `json.Valid` and `json.Unmarshal`; `FuzzScanNDJSON` and `FuzzScanJSON` hold
+  each row read to `encoding/json`, by its column's type; `FuzzScanIPCFile` and
+  `FuzzScanIPCStream` read through a bounded allocator and hold each cell to arrow-go's
+  own arrays. readfuzz's targets run on an 8 MiB stack. Left for the maintainer, each
+  skipped by name and kept as a seed: arrow-go sizes slices by an IPC schema's and a
+  record batch's declared lengths and recurses on a field among its descendants, each a
+  fatal error from an input of 2 KB; a record of 2^40 rows of Null; klauspost's
+  Zstandard decoder allocates the window a frame declares, up to 512 MiB, from 17
+  bytes; NDJSON inference types `[1, true]` and `[1, [2]]` as the reader then refuses,
+  and an integer past Int128 as an Int128.
+- **Fuzz targets for the Parquet reader, and a byte-flip sweep** (510):
+  `FuzzScanParquet` reads any bytes through the public API with every page buffer
+  from a bounded, poisoned allocator, and checks four threads, a read into zeroed
+  buffers, `Head`, `Select`, a `Filter` with pruning on and off, and `Count` against
+  the whole frame; `FuzzOwnPagesMatchArrow` checks the reader's own page decoding
+  against arrow-go's, batch for batch. Every byte of two files ursus wrote is
+  flipped and read, and ursus must read the original wherever pyarrow 25.0.1 does,
+  from DuckDB's and pyarrow's outcomes recorded once by
+  `bench/scripts/oracle/record_flips.py` into `testdata/oracle/flips`.
+
+### Known limitations
+
+As v0.7.0's, except:
+
+- **Measured and left, of 0.8's scope:**
+  - `Collect` concatenates its answer's batches into one, a third of a small filter's
+    bytes and half a join's, and a top-k concatenates its keys to compare them (400);
+  - a join of several integer keys under a caller's limit encodes them as bytes in its
+    streaming build, where one integer key is keyed by the integer (398);
+  - a process that ends during a query leaves its spill files, in an `ursus-*`
+    directory under the spill directory, and nothing sweeps them.
+- **Left for the maintainer by the bug hunt,** each skipped by name in the fuzz
+  targets:
+  - NDJSON inference types a value as the reader then refuses: an array of a number
+    and a Boolean, a list beside another value, an integer past Int128 (511);
+  - an Arrow IPC record batch may declare more rows than its bytes hold where a
+    column needs a validity bit a row, a Struct of Null fields or a FixedSizeList of
+    Null, and ursus allocates that bit a row (529).
+- **Wanted, not built** (506): SQL in DuckDB's dialect; Parquet complete, nested
+  columns at any depth, maps, field IDs, page indexes and bloom filters; Apache
+  Iceberg tables.
+
+---
+
+## v0.7.3 — 2026-11-20
+
+Everything since `v0.7.2` (2026-11-02): three of master's fixes, steps 518, 522 and
+525, backported by step 532 and released by step 535, on the 0.7 line; v0.8.0 has them
+too. No API is added, changed or removed: `api/v0.7.3.txt` lists v0.7.2's 2,389
+features. The tag is on the branch `release-0.7`, off master. The crash guards for
+untrusted input and the other fixes of master's bug hunt are not in it: a service
+reading Parquet, Arrow IPC or compressed text it did not write moves to v0.8.0.
+
+### Fixed
+
+- **A Struct of no fields keeps its rows** (518): a JSON or NDJSON object field
+  holding `{}`, Polars' `Struct({})`, failed the whole read with an internal error,
+  "batch declares 1 rows but its columns hold 0", as a struct took its length from its
+  first field. It reads now as a `Struct()` column, `{}` or null a row, as Polars 2.1
+  reads it, and keeps its rows through filters, sorts, joins carrying it,
+  concatenation, a group-by's values, `Unique`, spilling and the IPC and JSON writers;
+  an IPC file holding one reads. Parquet and CSV refuse it cleanly, as Polars does, and
+  so does a group-by, a join or a window keyed on it, as before.
+- **An Arrow IPC file or stream with a Null column reads** (522): the format writes a
+  Null column as no buffer, arrow-go's IPC reader builds it as a Null array of no
+  buffers, and arrow-go's own validation, which ursus runs on every array it imports,
+  wanted one, so every IPC input holding a Null column at any depth was refused as
+  malformed: Polars' files, which write an all-null column as Null, pyarrow's, and
+  ursus's own `WriteIPC` and `WriteIPCStream` of a frame with one; records from
+  arrow-go's IPC reader handed to `ScanArrowRecords` or `ScanArrow` too. Such an
+  array is valid now, and every other array is validated as before.
+- **An Arrow time past its day is refused, not wrapped** (525): a Time32 or Time64
+  outside [0, 24h) was wrapped into the day by `ScanArrowRecords`, `ScanArrow` and
+  every `ScanIPC` reader, so 26:00 read as 02:00, which sorts after 23:00 and equals
+  no 02:00. It is refused now as a corrupt value, an `ErrValue` naming the column,
+  the value and its row, inside a List or a Struct as well; a null's slot is not
+  looked at. A Parquet TIME past its day is refused by the same rule (510): it was
+  read as it lay, and inside a List or a Struct with no error at all.
 
 ## v0.7.2 — 2026-11-02
 

@@ -86,7 +86,7 @@ many files they have spilled, for a gauge.
 ## Data the service carries
 
 Every reader takes an `fs.FS` too: `ScanCSVFS`, `ScanParquetFS`, `ScanNDJSONFS`,
-`ScanJSONFS`, `ScanIPCFS` and `ScanIPCStreamFS`. So the data a service embeds in its
+`ScanJSONFS`, `ScanLinesFS`, `ScanIPCFS` and `ScanIPCStreamFS`. So the data a service embeds in its
 binary reads as a file does:
 
 ```go
