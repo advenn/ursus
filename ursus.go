@@ -29,6 +29,30 @@
 //  9. No row index: row order is a property, not a label space.
 //  10. Null is not NaN, and both are handled explicitly everywhere.
 //
+// # In a service
+//
+// A LazyFrame and a DataFrame are never changed, so one built once may be run, or
+// read, by any number of goroutines at once. The queries of a process share a memory
+// budget, half the memory it may use, and its threads, GOMAXPROCS: an Engine's,
+// DefaultEngine's unless WithEngine names another, and WithMemoryLimit and WithThreads
+// give one query its own. A query runs under the context it is given: once that is
+// cancelled, or its deadline passes, the call returns the context's error within some
+// tens of milliseconds, never a part of the answer as the whole. A failure of ursus's
+// own is an *Error, which errors.As reads; a panic in a query is one too, KindInternal,
+// so no query ends the process. The guide's "ursus in a service" shows each.
+//
+// Input a service did not write, a client's upload say, is checked before anything is
+// sized by it: a Parquet footer, schema, page header and dictionary, an Arrow IPC
+// footer, message and buffer, the nesting of a JSON value and of a Parquet column, a
+// thousand levels at most, and a Zstandard frame's window, 128 MiB at most. What
+// breaks its format is refused with an error, ErrIO for a corrupt file, rather than
+// read wrongly or allowed to end the process, and the readers are fuzzed for it in
+// CI. Two things stay the service's to bound: the size of what it accepts, as a
+// compressed input decompresses to many times its bytes, and how long a query may
+// take, by its context's deadline. The CHANGELOG's known limitations name what is
+// still open, an Arrow IPC record batch declaring more rows than its bytes hold among
+// it.
+//
 // # Building
 //
 // ursus requires Go 1.27. GOEXPERIMENT=simd is optional: it switches on the SIMD
