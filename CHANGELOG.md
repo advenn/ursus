@@ -13,7 +13,7 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.7.3
+## v0.7.3 — 2026-11-20
 
 Three fixes backported from master by step 532, each with its master step number
 below; [`step-532-as-built.md`](./context_files/step-532-as-built.md) says what each
