@@ -1,0 +1,131 @@
+name: qcheck-nightly
+
+# Random queries, run long and unattended (step 537). ci.yml's qcheck jobs run five
+# minutes on each pull request; this runs each finder for most of an hour every night,
+# so a finding needs no session to be found, only to be fixed. Each job starts from
+# a seed this run's id sets, printed first, so a finding can be run again with
+# `qcheck <self|duck> -seed <its seed> -cases 1`. With -shrink, each job shrinks at
+# most three findings (step 514), and the shrunk cases, their Go tests and, for
+# DuckDB, their SQL are uploaded as an artifact. GitHub mails the repository's owner
+# when a scheduled run fails. Not a required check.
+#
+# - self: the same queries against themselves across threads, batch sizes, the
+#   optimizer and records (step 512);
+# - self-race: the same, built with the race detector, which ursus's parallel
+#   operators answer to (plan step 474's "H6 under race");
+# - duck: the queries against DuckDB 1.5.5 (step 513), cgo, never on a laptop.
+
+on:
+  schedule:
+    - cron: '41 3 * * *'
+  # A pull request that edits this file runs each finder for two minutes, so the
+  # workflow is checked before it reaches master; a scheduled or dispatched run is
+  # the long one.
+  pull_request:
+    paths:
+      - '.github/workflows/qcheck-nightly.yml'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'how long each finder starts cases for (qcheck -duration)'
+        default: '45m'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qcheck-nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GOEXPERIMENT: simd
+  GOAMD64: v3
+  GOTOOLCHAIN: local
+  DURATION: ${{ github.event_name == 'pull_request' && '2m' || inputs.duration || '45m' }}
+  RACE_DURATION: ${{ github.event_name == 'pull_request' && '2m' || '30m' }}
+
+jobs:
+  self:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    defaults:
+      run:
+        working-directory: qcheck
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          cache-dependency-path: qcheck/go.sum
+      - name: qcheck self
+        run: go run ./cmd/qcheck self -seed ${{ github.run_id }}000000 -duration "$DURATION" -shrink -shrink-dir qcheck-findings
+      - name: the shrunk findings
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qcheck-nightly-self-findings
+          path: qcheck/qcheck-findings
+          if-no-files-found: ignore
+
+  self-race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    defaults:
+      run:
+        working-directory: qcheck
+    env:
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          cache-dependency-path: qcheck/go.sum
+      # The race detector runs code some ten times slower, so this finder starts
+      # fewer cases in the same time; 30 minutes (RACE_DURATION) keeps the job inside
+      # its timeout.
+      - name: qcheck self, race detector on
+        run: go run -race ./cmd/qcheck self -seed ${{ github.run_id }}500000 -duration "$RACE_DURATION" -shrink -shrink-dir qcheck-findings
+      - name: the shrunk findings
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qcheck-nightly-race-findings
+          path: qcheck/qcheck-findings
+          if-no-files-found: ignore
+
+  duck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    defaults:
+      run:
+        working-directory: qcheck
+    env:
+      CGO_ENABLED: '1'
+      TAGS: duckdb,duckdb_arrow
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          cache: false
+      # The same cache key as ci.yml's qcheck-duckdb job, which holds the large
+      # duckdb bindings and their cgo build.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: qcheck-duckdb-${{ runner.os }}-${{ hashFiles('qcheck/go.sum') }}
+          restore-keys: qcheck-duckdb-${{ runner.os }}-
+      - name: qcheck duck
+        run: go run -tags "$TAGS" ./cmd/qcheck duck -seed ${{ github.run_id }}000000 -duration "$DURATION" -shrink -shrink-dir qcheck-findings
+      - name: the shrunk findings
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qcheck-nightly-duck-findings
+          path: qcheck/qcheck-findings
+          if-no-files-found: ignore
