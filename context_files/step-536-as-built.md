@@ -137,6 +137,12 @@ so the gap is wider against it than the 0.7 report's; a query's ratio to v0.7.2 
 by a quarter between CI runs, so only a suite's is read; on four vCPUs a 10,000-row join
 on all threads takes 1.4 times its time on one (step 396's rule for a join).
 
+### Merged with master
+
+Step 537 (#91, the nightly qcheck workflow) merged into master while this branch was
+open; master was merged in, its CHANGELOG line moved into v0.8.0's Tests and the
+index's rows kept, its row on top as the newest.
+
 ## 3. Tests and their oracles
 
 No test changes and no library code but comments. The report's answers are held to
