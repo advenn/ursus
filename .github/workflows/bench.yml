@@ -111,7 +111,7 @@ jobs:
         if: ${{ inputs.baseline != '' }}
         run: |
           mkdir -p "$RUNNER_TEMP/base" bin-base
-          git archive "$BASELINE" | tar -x -C "$RUNNER_TEMP/base"
+          git -C "$GITHUB_WORKSPACE" archive "$BASELINE" | tar -x -C "$RUNNER_TEMP/base"
           (cd "$RUNNER_TEMP/base/bench/engines/go" && go build -o "$GITHUB_WORKSPACE/bench/bin-base/runner" ./cmd/runner)
 
       - name: generate
@@ -209,7 +209,7 @@ jobs:
           (cd micro && go build -o ../out/svcprobe ./svcprobe)
           if [ -n "$BASELINE" ]; then
             mkdir -p "$RUNNER_TEMP/base"
-            git archive "$BASELINE" | tar -x -C "$RUNNER_TEMP/base"
+            git -C "$GITHUB_WORKSPACE" archive "$BASELINE" | tar -x -C "$RUNNER_TEMP/base"
             cp -r micro/svcprobe "$RUNNER_TEMP/base/bench/micro/"
             (cd "$RUNNER_TEMP/base/bench/micro" && go build -tags ursus07 -o "$GITHUB_WORKSPACE/bench/out/svcprobe-base" ./svcprobe)
           fi
