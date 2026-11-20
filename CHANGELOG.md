@@ -19,8 +19,8 @@ Step numbers below point at those records.
 
 ## v0.8.0 — 2026-11-20
 
-Everything since `v0.7.0` (2026-10-29) on master: steps 392–407 and 486–534, and
-the 0.7 line's fixes since. [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the
+Everything since `v0.7.0` (2026-10-29) on master: steps 392–407, 486–534 and 537,
+and the 0.7 line's fixes since. [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the
 scope: **ursus inside a Go service**, small queries, many at once, memory a service
 can predict, and a query that stops when its request is cancelled. Then the public API
 was made stable (494): from this release on, a release adds, and never renames,
@@ -473,6 +473,9 @@ and its section lists them; v0.7.3's three are steps 518, 522 and 525 below.
 
 ### Tests
 
+- **Random queries run every night** (537): `qcheck-nightly.yml` runs `qcheck self`,
+  `qcheck self` under the race detector and `qcheck duck` for most of an hour each,
+  and uploads each finding shrunk to a minimal case with its Go test.
 - **A Zstandard frame's window, past and below the cap** (528): the `zstdwindow`
   oracle group records Polars 2.1.0 reading the zstd CLI's streams of windows from 1
   to 512 MiB and pyarrow's IPC and Parquet files declaring 128 and 256 MiB; the fuzz
