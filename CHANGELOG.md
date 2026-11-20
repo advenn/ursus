@@ -192,6 +192,9 @@ that stops when its request is cancelled.
 
 ### Tests
 
+- **Random queries run every night** (537): `qcheck-nightly.yml` runs `qcheck self`,
+  `qcheck self` under the race detector and `qcheck duck` for most of an hour each,
+  and uploads each finding shrunk to a minimal case with its Go test.
 - **A Zstandard frame's window, past and below the cap** (528): the `zstdwindow`
   oracle group records Polars 2.1.0 reading the zstd CLI's streams of windows from 1
   to 512 MiB and pyarrow's IPC and Parquet files declaring 128 and 256 MiB; the fuzz
