@@ -3904,6 +3904,9 @@ that stops when its request is cancelled.</p>
 </ul>
 <h3 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>Random queries run every night</strong> (537): <code>qcheck-nightly.yml</code> runs <code>qcheck self</code>,
+  <code>qcheck self</code> under the race detector and <code>qcheck duck</code> for most of an hour each,
+  and uploads each finding shrunk to a minimal case with its Go test.</li>
 <li><strong>A Zstandard frame's window, past and below the cap</strong> (528): the <code>zstdwindow</code>
   oracle group records Polars 2.1.0 reading the zstd CLI's streams of windows from 1
   to 512 MiB and pyarrow's IPC and Parquet files declaring 128 and 256 MiB; the fuzz
