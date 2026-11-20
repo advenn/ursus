@@ -169,6 +169,14 @@ footer and the needed column chunks travel:
 `ScanCSVFrom` takes a stream the same way, and the writers take any `io.Writer`, an
 upload included.
 
+*New in 0.8:* `ScanIPCFrom` reads Arrow IPC files you open as `ScanParquetFrom` does,
+through a `ReadAt` over each file's size, and `ScanIPCStreamFrom` IPC streams you open,
+a reader each; `ScanIPCBytes` and `ScanIPCStreamBytes` read either from memory. And
+every format reads from an `fs.FS`: `ScanCSVFS`, `ScanParquetFS`, `ScanNDJSONFS`,
+`ScanJSONFS`, `ScanLinesFS`, `ScanIPCFS` and `ScanIPCStreamFS`, so data a program
+embeds, a test's `fstest.MapFS` or a zip archive reads as files do; see
+[ursus in a service](services.md#data-the-service-carries).
+
 ## Arrow
 
 `df.Record()` exports a frame as an Arrow record without copying, and
@@ -226,6 +234,13 @@ its text; and `WithNDJSONIgnoreErrors(true)` reads a value its column cannot tak
 null, as Polars' `ignore_errors`. An error names the line and the key. A file is read
 in blocks, each cut into a part a thread and the parts parsed at once, and only the
 columns a query uses are built.
+
+*New in 0.8:* `ScanLines(path)` reads a text file's lines as one String column,
+`line`, as Polars 2's `scan_lines` and `read_lines`: a row a line, without its newline
+or a `\r` before it, an empty line an empty row, and text that is not UTF-8 refused.
+It is read as NDJSON is, in blocks a part a thread, and has NDJSON's forms:
+`ScanLinesFiles`, `ScanLinesGlob`, `ScanLinesBytes`, `ScanLinesFrom` and `ScanLinesFS`;
+`WithLinesName` names the column and `WithLinesIncludeFilePaths` adds each row's file.
 
 *New in 0.6.7:* `ScanJSON(path)` reads a JSON file of an array of objects, a row an
 object, or of one object, one row, as Polars' `read_json`, and `ScanJSONBytes(b, name)`

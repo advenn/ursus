@@ -17,12 +17,99 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.8
+## v0.8.0 — 2026-11-20
 
-Steps 392–407, so far, after 0.7's 375–391; step 408 was 0.7's report.
-[`v0.8-scope.md`](./context_files/v0.8-scope.md) set the scope: **ursus inside a Go
-service**, small queries, many at once, memory a service can predict, and a query
-that stops when its request is cancelled.
+Everything since `v0.7.0` (2026-10-29) on master: steps 392–407 and 486–534, and
+the 0.7 line's fixes since. [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the
+scope: **ursus inside a Go service**, small queries, many at once, memory a service
+can predict, and a query that stops when its request is cancelled. Then the public API
+was made stable (494): from this release on, a release adds, and never renames,
+removes or reshapes. Then the tests' expected values were recorded from Polars 2.1
+(496–504), and a bug hunt fuzzed the parsers and readers and checked random queries
+against themselves and DuckDB (508–534). `api/v0.8.0.txt` lists its 2,481 features,
+92 more than v0.7.2's and none gone. Step 536 checked the whole.
+
+### Where it ends
+
+- **Against Polars 2.1.0,** each suite in one job on one of CI's four-vCPU runners
+  ([`v0.8-report.md`](./context_files/v0.8-report.md)): h2o at ten million rows in
+  2.30 times Polars' time over Parquet and 1.64 over CSV, PDS-H at SF=1 in 2.32 and at
+  SF=0.1 in 1.68. Beside Polars 1.44.1 on the same kind of runner, 1.31, 1.18, 1.91 and
+  1.79: Polars 2.1 is the faster, and the gap is its work, not a change in ursus's.
+- **Against v0.7.2,** on the same runners: the suites in 0.92 to 0.99 of its time; a
+  1,000-row query in 0.35 to 0.74 of it on all threads, a 10,000-row one in 0.47 to
+  0.92; sixty-four 10,000-row group-bys at once answer 2.3 times its queries a second,
+  on 66 goroutines where it started 465; the 10,000-row group-by allocates 66 kB where it
+  allocated 358. At 1,000 and 10,000 rows ursus answers in 0.05 to 0.73 of the time
+  Polars takes from Python.
+- **Every answer matches DuckDB's,** ursus's, v0.7.2's and Polars': PDS-H's 22 at both
+  scales and h2o's 15 over Parquet and over CSV.
+- **Built:** every goroutine recovering, a cancelled query stopping, and one budget for
+  a process's queries (A1–A3, 393–395); a small query on one thread, threads shared,
+  less allocated, a small join's keys and a zone loaded once (B1–B5, 396–400); the API
+  listed and checked, errors a caller reads, a hook for each query, and the inputs a
+  service has (C1–C4, 401–405); a guide for a service (D1, 406); the stable API (494);
+  five features (488–492); the tests' values recorded from Polars 2.1 (496–504); the
+  bug hunt's fuzzing and random queries (508–516) and its fixes (507, 509–534).
+
+### What a v0.7.x user can trip on
+
+From v0.7.0 or v0.7.1, read v0.7.2's list below too. Each entry says what to do.
+
+- **Queries share their engine's memory budget and threads** (395, 397; Breaks
+  below): a query given no `WithMemoryLimit` or `WithThreads` may spill, or run on
+  fewer threads, beside others where it did not alone, and an unordered group-by's row
+  order can move with them; answers do not change. To keep a query's budget or
+  threads its own, as in 0.7, give it `WithMemoryLimit(n)` or `WithThreads(n)`; to
+  keep a set of queries apart, an engine of their own (`NewEngine`, `WithEngine`).
+- **A Zstandard frame declaring a window past 128 MiB is refused** (528), an `ErrIO`
+  naming the limit: a CSV, NDJSON or JSON stream, or an Arrow IPC buffer, that zstd
+  wrote in a `--long` mode past 27. Decompress it first, with `zstd -d --long=31`, or
+  write it without `--long`.
+- **A float aggregate that is NaN is `math.NaN()`'s bits** (530), whichever NaNs it
+  combined, where it handed on its first NaN operand's: `Sum`, `Mean`, `Var`, `Std`
+  and the rest under Changed below. A program that reads a NaN's payload reads it from
+  the values, with a filter or a pick such as `First` or `Min`, which keep a value's
+  bits.
+- **A float `Max` of a tie answers the last tied row's bits** (523), as
+  `Sort().Last()` does, where it answered the first's; `Min` the first's, as
+  `Sort().First()`. This shows only in the sign of a zero, −0.0 against +0.0, and in a
+  NaN's payload, and it is the same at every thread count now. A program that reads
+  either from a `Max` expects the last row's.
+- **An Arrow time past its day is refused** (525), an `ErrValue` naming the column,
+  the value and its row, where `ScanArrowRecords`, `ScanArrow` and the IPC readers
+  wrapped it into the day, 26:00 to 02:00; a Parquet TIME past its day so too (510).
+  v0.7.3 has it too. Write a span past a day as a Duration.
+- **A read cut short is an error** (534), an `ErrIO` wrapping
+  `io.ErrUnexpectedEOF`, where it read as the rows before it: an Arrow IPC file or
+  stream that decompresses short or is cut inside a message, a Parquet `ReaderAt`
+  answering `io.EOF` inside a column chunk, an NDJSON, lines or CSV stream failing
+  with an error that wraps `io.EOF`. A `ReaderAt` or stream of yours ends with
+  `io.EOF` itself, not an error wrapping it.
+- **Crafted Parquet and Arrow IPC input is refused as corrupt** (510, 511, 517,
+  519–521, 531, 533), an `ErrIO`: a Parquet footer, schema, page or dictionary, or an
+  Arrow IPC footer, message or buffer, whose counts and lengths disagree with its
+  bytes. A well-formed file is not refused: one that is, is damaged, and is written
+  again from its source. An IPC stream whose size is not known holds a message to
+  64 MiB of metadata and 256 MiB of body (511): write record batches of fewer rows.
+- **Answers that were wrong are corrected:**
+  - `Clip`, `ClipLower` and `ClipUpper` are named after their value, where they were
+    named after the bound, `literal` or the bound's column (496): select the column
+    by the value's name, or alias it;
+  - `Ln` and `Log10` of a subnormal (497); a Float32 cast to text, `9e+15` where it
+    was `9000000000000000.0` (497); `ToTitlecase` of a digraph (499);
+  - a null where a Struct of null fields was: `ExtractGroups` of a null (499), and an
+    NDJSON value that is not an object read into a Struct under
+    `WithNDJSONIgnoreErrors` (507). Test it with `IsNull`, not its fields;
+  - an inclusive split has no empty part after a last separator (499);
+  - `"-nan"` and `"+nan"` read as NaN (509), so a CSV column holding them is inferred
+    a Float64 where it was text: `WithSchemaOverrides` keeps it a String;
+  - a `\r` ending a CSV's input ends its line (509).
+- **Importing ursus replaces arrow-go's Parquet codecs** (520), Snappy, gzip, Brotli
+  and Zstandard, in arrow-go's registry, for the whole process: a page that
+  decompresses past what it declares is refused, and every other decodes and encodes
+  as before. A program that reads Parquet through arrow-go itself, beside ursus, sees
+  such a page refused there too.
 
 ### Breaks
 
@@ -44,6 +131,17 @@ that stops when its request is cancelled.
 
 ### Changed
 
+- **A Zstandard frame's window is capped at 128 MiB** (528), the reference decoder's
+  default limit (libzstd's `ZSTD_WINDOWLOG_LIMIT_DEFAULT`), which Polars keeps
+  through it: a CSV, NDJSON or JSON stream, or an Arrow IPC buffer, whose frame
+  declares a larger window is refused, an `ErrIO` naming the limit. klauspost's
+  decoder made the whole window a frame declares, up to 512 MiB, before it decoded a
+  block, so 17 bytes cost 514 MiB, and a 4.7 KB IPC file 513 MiB. This refuses files
+  ursus read before, which Polars refuses: those zstd writes in its `--long` modes
+  past 27, of a file larger than 128 MiB or of its standard input. Decompress one
+  first, with `zstd -d --long=31`. A Parquet page is not held to it: Polars 2.1 and
+  pyarrow read any window there, and ursus decodes a page into its own buffer, making
+  no window.
 - **A float aggregate that is NaN is the one NaN** (530): `Sum`, `Mean`, `Var`,
   `Std`, `Skew`, `Kurtosis`, `Product`, `Entropy`, `Corr`, `Cov` and `CorrSpearman`,
   their rolling, cumulative and exponentially weighted kin, the list and horizontal
@@ -165,19 +263,213 @@ that stops when its request is cancelled.
   `PartitionBy`, `ToDummies`, `Corr` and their kin, and the JSON and CSV writers,
   take a share as the queries do, where each took every thread.
 
-### Changed
+### Fixed
 
-- **A Zstandard frame's window is capped at 128 MiB** (528), the reference decoder's
-  default limit (libzstd's `ZSTD_WINDOWLOG_LIMIT_DEFAULT`), which Polars keeps
-  through it: a CSV, NDJSON or JSON stream, or an Arrow IPC buffer, whose frame
-  declares a larger window is refused, an `ErrIO` naming the limit. klauspost's
-  decoder made the whole window a frame declares, up to 512 MiB, before it decoded a
-  block, so 17 bytes cost 514 MiB, and a 4.7 KB IPC file 513 MiB. This refuses files
-  ursus read before, which Polars refuses: those zstd writes in its `--long` modes
-  past 27, of a file larger than 128 MiB or of its standard input. Decompress one
-  first, with `zstd -d --long=31`. A Parquet page is not held to it: Polars 2.1 and
-  pyarrow read any window there, and ursus decodes a page into its own buffer, making
-  no window.
+Every fix of the 0.7 line is in v0.8.0 too: v0.7.1's three were made here (393, 394)
+and are the last below; v0.7.2's were forward-ported from `release-0.7` by #33 to #37,
+and its section lists them; v0.7.3's three are steps 518, 522 and 525 below.
+
+- **`Clip`, `ClipLower` and `ClipUpper` are named after their value** (496): the
+  answer was named after the bound, `literal` for a Go number and `lo` for `Col("lo")`,
+  where Polars' clip keeps the value's name. Every test had aliased it; the recorded
+  oracle found it.
+- **`Ln` and `Log10` of a subnormal** (497): Go's amd64 `math.Log` misreads a
+  subnormal, so `Ln(5e-324)` was −709.09, ln(2^-1022), where it is −744.44, and
+  `Log10` −307.95 for −323.31; the test against `math.Log` itself could not see it,
+  the recorded oracle did. A subnormal is scaled into the normal range first, within
+  two ulps of the correctly rounded answer.
+- **A Float32 cast to text uses Polars' Float32 bounds** (497): plain from 1e-6 to
+  below 1e13 and scientific outside, where a Float64's are 1e-5 and 1e16; both widths
+  used the Float64 bounds, so `float32(9e15)` read `9000000000000000.0` where Polars
+  writes `9e+15`.
+- **`Str().ToTitlecase` titlecases a digraph** (499): "ǆemal" was "Ǆemal" (U+01C4,
+  the upper case); it is "ǅemal" (U+01C5), Unicode's title mapping and Polars'. The
+  recorded oracle found it.
+- **`Str().ExtractGroups` of a null is a null Struct** (499), as Polars 2.1 gives it;
+  it was a Struct of null fields, which `SplitExact` and `SplitN` keep, as Polars does.
+- **An inclusive split has no trailing empty part** (499): `SplitInclusive(",")` of
+  "a,b," is `["a,", "b,"]`, and `SplitExact(",", 1, true)` of "a," is `{"a,", null}`,
+  as Polars splits them; each had an empty part after the last separator.
+- **An NDJSON value that is not an object, read into a Struct column under
+  `WithNDJSONIgnoreErrors`, is a null Struct** (507): it was a Struct of null fields,
+  as Polars 1.44.1 read it, where every other value a column cannot take is a null
+  and a null Struct is kept apart from a Struct of nulls (`ExtractGroups`, 499);
+  Polars 2.1 reads a null too. `ScanJSON`, which reads each object as a line, follows.
+  The recorded oracle found it (`ndjsonread/ignored_in_a_struct`).
+- **Arrow IPC input is checked against its bytes before it is read** (511, 519):
+  ursus walks every footer and message of a file or stream before arrow-go's reader
+  has it, each offset and length within its bytes, each count no more than the bytes
+  after it can hold, offsets forward, fields no deeper than 2,000, a record batch's
+  buffers within its body and its variadic buffers against its view columns; a
+  stream's message is no larger than 64 MiB of metadata and 256 MiB of body, or than
+  the stream where its size is known; and a compressed buffer is decompressed through
+  an allocator that grants none past 32,768 times the input's size, Zstandard's most.
+  Input that breaks them is refused by `ScanIPC`, `ScanIPCStream`, `ReadIPCSchema` and
+  their kin, an `ErrIO` naming it as corrupt. No well-formed file is refused. A
+  Parquet footer's Arrow schema is read by the same walk.
+- **A Parquet footer is checked against its file before it is read** (510, 521, 533):
+  a column chunk lies within its file; every footer is walked, one leaving no room
+  for the file's leading magic too, and each of its lists, at any depth and by the
+  element type the format gives, claims no more elements than the bytes after its
+  header hold; the schema is read as a tree, and an element claiming more children
+  than the elements after it, or a tree that does not close by its last element, as
+  pyarrow says "not enough elements", is refused; a row group holds a column chunk
+  for each of the schema's columns, no fewer and no more, by the read and by `Count`;
+  and the footer's Arrow schema is walked as an IPC message is (519). A footer that
+  breaks them is refused as corrupt, an `ErrIO`. Every footer ursus, pyarrow and the
+  fixtures' writers wrote reads as before. The fuzz targets found each.
+- **A Parquet page is checked against its header and its chunk before it is decoded**
+  (510, 517, 520, 521, 531), and one that breaks a check is refused as corrupt, an
+  `ErrIO`. Every page pyarrow, Polars, arrow-go and ursus write reads as before, and
+  an empty Brotli page after a page of bytes now reads. CI's fuzz runs found each:
+  - a page's declared size is no larger than the largest column chunk the footer
+    declares (510, as D14 predicted), and a page header that does not parse is looked
+    at no further than its chunk, at least 16 KiB (521);
+  - a dictionary page claims no more values than its bytes hold (510), its count read
+    as Thrift reads a varint, of up to 10 bytes (520);
+  - each dictionary index of a data page lies within its dictionary, and the error
+    names the index, where it named a row group short of rows (517);
+  - a page decompresses into the size its header declares and no further: a codec's
+    own claim, a Snappy length header or a Zstandard frame's size, is checked before
+    anything past the page is allocated, a page declaring no bytes is decoded as
+    none, and Brotli's window is held to the page (520);
+  - an UNCOMPRESSED page holds the bytes its header declares, as DuckDB requires
+    (521);
+  - a page of 0-bit dictionary indices with a byte after a run's header is read as
+    pyarrow and DuckDB read it, each row the dictionary's first value, by ursus's own
+    pages, and refused where they do not read its chunk (521);
+  - each delta-packed run of a DELTA_BINARY_PACKED, DELTA_LENGTH_BYTE_ARRAY or
+    DELTA_BYTE_ARRAY page is checked against the format, its block size, miniblocks,
+    count, bit widths and length, and refused where pyarrow refuses it, and where its
+    count is past the page's values, which no writer writes and pyarrow reads (531).
+- **An Arrow IPC file or stream with a Null column reads** (522): the format writes a
+  Null column as no buffer, arrow-go's IPC reader builds it as a Null array of no
+  buffers, and arrow-go's own validation, which ursus runs on every array it imports,
+  wanted one, so every IPC input holding a Null column at any depth was refused as
+  malformed: Polars' files, which write an all-null column as Null, pyarrow's, and
+  ursus's own `WriteIPC` and `WriteIPCStream` of a frame with one; records from
+  arrow-go's IPC reader handed to `ScanArrowRecords` or `ScanArrow` too. Such an
+  array is valid now, and every other array is validated as before. The Parquet reader
+  was not affected.
+- **A Null column, and a frame of no columns, hold no memory a row** (529): a column
+  of nulls held a bitmap of zeros, a bit a row, and every scan was cut into batches of
+  8,192 rows, so an Arrow IPC stream of a few hundred bytes declaring 2^40 rows of a
+  Null column, or of none, had `Collect` ask for 128 GiB and `Count` allocate about
+  200 GB over two minutes, where Polars holds such a column in constant space. A
+  column of nulls is its type and its length now, and a query collected or counted
+  through projections of columns, `Head`, `Slice` and `Concat` reads a batch of only
+  Null columns, or of none, whole: `Count` of 2^27 Null rows takes 61 µs where it took
+  22 ms, `Collect` 43 µs where it took 93 ms, each allocating 10 kB where they
+  allocated 25 and 66 MB. `Count` of IPC files no longer reads a column. Answers do not
+  change, and every other operation still reads such a frame a batch at a time.
+- **A sort in small batches no longer allocates by the square of its batches** (512):
+  each output batch's gather made two arrays as long as every input batch the sort
+  kept, so sorting 8,191 rows in batches of one row allocated 2.3 GB in 400 ms; 23 MB
+  in 27 ms now; the as-of join's and the temporal streams' gathers go through the same
+  function. Found by `qcheck self`.
+- **A slice from the end, and a tail, in small batches** (512): after each batch it
+  read it recounted every batch it held in its memory account, so the last 4,000 of
+  8,193 rows in batches of one row allocated 6 GB in 12 s; 16 MB in 17 ms now. It
+  counts a batch as it comes and recounts once an eighth of what it holds has gone,
+  and before it decides to spill, so it spills where it did. Found by `qcheck self`.
+- **`NUnique` by many groups in small batches** (512): its table of group and value
+  grew its keys to the group count exactly before each batch, copying them all, so a
+  `NUnique` by 8,193 keys in batches of one row allocated 842 MB; 30 MB now, the keys
+  growing to twice what they held, as a slice's append does. Found by `qcheck self`.
+- **An NDJSON or JSON line nested deep is read in memory proportional to it** (511):
+  a 6 KB line of objects 999 deep allocated 4 GB and took 1.2 s, each level's type
+  written as text and built again; 4 MB and 13 ms now.
+- **A Parquet TIME past its day is refused** (510): a TIME holding a tick outside
+  [0, 24h) was read as a Time as it lay, which renders as another time of day and
+  sorts and compares as none; it is refused now as a corrupt value, inside a List or
+  a Struct as well, as the writer refuses one. CI's fuzz run found it.
+- **`"-nan"` and `"+nan"` read as NaN** (509), as `ParseFloat`'s grammar says and
+  Polars' cast reads them: Go's strconv takes a sign before inf only, so a cast to a
+  float was a null, a CSV Float64 column refused one, and inference read it as text.
+- **A Datetime's least second reads** (509): converting an instant to ticks checked
+  the seconds' product before adding the fraction, and refused the first 0.85 s of a
+  nanosecond Datetime's range, 0.78 s of a microsecond's and 0.81 s of a
+  millisecond's, though each fits; the least nanosecond instant,
+  1677-09-21T00:12:43.145224192Z, was written to CSV and did not read back.
+- **A Decimal's exponent of more digits than an int64 is a number** (509): it was
+  refused as text that is no number, where its value is out of range, and a zero with
+  one, `0e9223372036854775808`, is 0, as one with a shorter exponent is. A strict cast
+  says "not representable" for it now, not "cannot parse".
+- **A `\r` that ends a CSV's input ends its line** (509), as `encoding/csv` and
+  Polars 2.1 read it: `a,b\r` read the field `b\r`, `"a","b"\r` was refused, and a
+  last line of only `\r` was a value where it is a blank line.
+- **A long CSV record arriving in small reads is scanned in linear time** (515): the
+  scanner parsed a record from its first byte after every read, and a stream's read
+  brings what it brings, not a buffer's worth, so a record of 1 MiB sent 1 KiB a read
+  was parsed 1,024 times, 513 times its bytes; a quoted field of 2 MiB took 1.5 s. A
+  service reading CSV from a slow peer paid quadratic CPU for it. The scanner follows
+  each new byte once now and asks its parser again only when the record's end has
+  arrived or its bytes have doubled: 12 ms for that field. A record whose end has
+  arrived is still returned without another read, and the records, errors and limits
+  are the same.
+- **A Struct of no fields keeps its rows** (518): a JSON or NDJSON object field
+  holding `{}`, Polars' `Struct({})`, failed the whole read with an internal error,
+  "batch declares 1 rows but its columns hold 0", as a struct took its length from its
+  first field. It reads now as a `Struct()` column, `{}` or null a row, as Polars 2.1
+  reads it, and keeps its rows through filters, sorts, joins, concatenation, group-by,
+  spilling and the IPC and JSON writers; an IPC file holding one reads, and it is a
+  key. Parquet and CSV refuse it cleanly, as Polars does. CI's fuzzing of `ScanJSON`
+  and `ScanNDJSON` found it.
+- **A Parquet page whose bytes are missing is refused, not read as the end** (521): a
+  page whose header was whole and whose bytes were not in its column chunk ended the
+  read there with no error, so a file whose `Count` said 5 rows read as 0: the engine
+  took the page's error for the end of the input. The read is refused as corrupt now,
+  whichever reader decodes the chunk; `Count`, which reads only the footer, still
+  answers its rows, as pyarrow and DuckDB count them and refuse the read. CI's fuzz
+  runs found it.
+- **A corrupt Parquet Null column is refused, not an internal error** (521): a footer
+  giving a Null column a physical type no reader takes made the read fail with "this
+  is a bug in ursus"; it is refused as unsupported, as a column of any other type is.
+- **An Arrow time past its day is refused, not wrapped** (525): a Time32 or Time64
+  outside [0, 24h) was wrapped into the day by `ScanArrowRecords`, `ScanArrow` and
+  every `ScanIPC` reader, so 26:00 read as 02:00, which sorts after 23:00 and equals
+  no 02:00. It is refused now as a corrupt value, an `ErrValue` naming the column,
+  the value and its row, inside a List or a Struct as well, as a Parquet TIME past
+  its day is (510); a null's slot is not looked at. CI's fuzz run found it.
+- **A float Min or Max is the same at every thread count** (523): a parallel
+  group-by folded its workers' partial minimums in worker order, which is not row
+  order, so of −0.0 and +0.0, or of NaNs of two payloads, Min could answer a later
+  row's bits on four threads than on one; each keeps its row's position now, and Max
+  answers the latest of a tie as its doc's `Sort(...).Last()` does, where it answered
+  the first. Median, Quantile, TopK, BottomK, TopKBy and a float group key picked by
+  the same order and are the same at every thread count too; a spilled quantile is a
+  held one's. qcheck found it.
+- **A NaN literal in arithmetic answers the same bits in every batch** (530):
+  `Lit(NaN).Add(x)` or `.Mul(x)` over a row holding a NaN of another payload answered
+  the row's NaN in a batch of many rows and the literal's in a batch of one, as a
+  constant on the left was added as the right operand. A NaN constant is broadcast
+  now, as in a batch of one.
+- **A read cut short is refused, not read as the end of its input** (534): every
+  operator ends its input on an error that wraps `io.EOF`, and a source's error that
+  wrapped it ended the query there, with the rows before it and no error. An Arrow IPC
+  file or stream whose compressed buffer decompresses short read as 0 rows, by
+  `Collect` and by `Count`; so did a stream cut where a message's length, metadata or
+  body begins, a Parquet file whose `ReaderAt` answers `io.EOF` inside a column chunk
+  (its row groups before it read), and an NDJSON, lines or CSV stream whose read
+  fails with an error wrapping `io.EOF`. Each is refused now, an `ErrIO` wrapping
+  `io.ErrUnexpectedEOF`: a source's end is `io.EOF` itself, and a scan reads any other
+  error wrapping it as the source's. A stream that ends between two messages, without
+  its end marker, still reads, as arrow-go and the format have it. Step 529's fuzzing
+  found it.
+- **A cancelled query no longer answers part of its input as the whole** (394): a
+  query cancelled while it read could return the rows read before the cancel, and no
+  error: a count of a CSV file cancelled partway was an empty frame. A query whose
+  context is cancelled before it finishes now returns the cancellation, from
+  `Collect`, `CollectBatches`, `Count` and the writers.
+- **A cancelled sort or join stops promptly** (394): a sort of ten million rows came
+  back 400 ms and more after its cancel, and a join's build 100 to 170; now some tens
+  of milliseconds at most.
+- **A panic on one of a query's goroutines no longer ends the process** (393): a
+  sort's and a unique's parallel pieces, first-seen keys, a text sort, a Spearman
+  rank, and `PartitionBy`, `ToDummies` and `Corr`, started goroutines that recovered
+  nothing, so a bug in one ended the program that asked, a service with every request
+  it served. Each panic is an internal error from the call now, as one anywhere else
+  in a query is, naming the line that panicked.
 
 ### Tests
 
@@ -384,86 +676,49 @@ that stops when its request is cancelled.
   from DuckDB's and pyarrow's outcomes recorded once by
   `bench/scripts/oracle/record_flips.py` into `testdata/oracle/flips`.
 
+### Known limitations
+
+As v0.7.0's, except:
+
+- **Measured and left, of 0.8's scope:**
+  - `Collect` concatenates its answer's batches into one, a third of a small filter's
+    bytes and half a join's, and a top-k concatenates its keys to compare them (400);
+  - a join of several integer keys under a caller's limit encodes them as bytes in its
+    streaming build, where one integer key is keyed by the integer (398);
+  - a process that ends during a query leaves its spill files, in an `ursus-*`
+    directory under the spill directory, and nothing sweeps them.
+- **Left for the maintainer by the bug hunt,** each skipped by name in the fuzz
+  targets:
+  - NDJSON inference types a value as the reader then refuses: an array of a number
+    and a Boolean, a list beside another value, an integer past Int128 (511);
+  - an Arrow IPC record batch may declare more rows than its bytes hold where a
+    column needs a validity bit a row, a Struct of Null fields or a FixedSizeList of
+    Null, and ursus allocates that bit a row (529).
+- **Wanted, not built** (506): SQL in DuckDB's dialect; Parquet complete, nested
+  columns at any depth, maps, field IDs, page indexes and bloom filters; Apache
+  Iceberg tables.
+
+---
+
+## v0.7.3 — 2026-11-20
+
+Everything since `v0.7.2` (2026-11-02): three of master's fixes, steps 518, 522 and
+525, backported by step 532 and released by step 535, on the 0.7 line; v0.8.0 has them
+too. No API is added, changed or removed: `api/v0.7.3.txt` lists v0.7.2's 2,389
+features. The tag is on the branch `release-0.7`, off master. The crash guards for
+untrusted input and the other fixes of master's bug hunt are not in it: a service
+reading Parquet, Arrow IPC or compressed text it did not write moves to v0.8.0.
+
 ### Fixed
 
-All three are in v0.7.1 too.
-
-Every fix of v0.7.2 is in 0.8 too, forward-ported from `release-0.7` by #33 to #37:
-its section below lists them.
-
-- **`Clip`, `ClipLower` and `ClipUpper` are named after their value** (496): the
-  answer was named after the bound, `literal` for a Go number and `lo` for `Col("lo")`,
-  where Polars' clip keeps the value's name. Every test had aliased it; the recorded
-  oracle found it.
-- **`Ln` and `Log10` of a subnormal** (497): Go's amd64 `math.Log` misreads a
-  subnormal, so `Ln(5e-324)` was −709.09, ln(2^-1022), where it is −744.44, and
-  `Log10` −307.95 for −323.31; the test against `math.Log` itself could not see it,
-  the recorded oracle did. A subnormal is scaled into the normal range first, within
-  two ulps of the correctly rounded answer.
-- **A Float32 cast to text uses Polars' Float32 bounds** (497): plain from 1e-6 to
-  below 1e13 and scientific outside, where a Float64's are 1e-5 and 1e16; both widths
-  used the Float64 bounds, so `float32(9e15)` read `9000000000000000.0` where Polars
-  writes `9e+15`.
-- **`Str().ToTitlecase` titlecases a digraph** (499): "ǆemal" was "Ǆemal" (U+01C4,
-  the upper case); it is "ǅemal" (U+01C5), Unicode's title mapping and Polars'. The
-  recorded oracle found it.
-- **`Str().ExtractGroups` of a null is a null Struct** (499), as Polars 2.1 gives it;
-  it was a Struct of null fields, which `SplitExact` and `SplitN` keep, as Polars does.
-- **An inclusive split has no trailing empty part** (499): `SplitInclusive(",")` of
-  "a,b," is `["a,", "b,"]`, and `SplitExact(",", 1, true)` of "a," is `{"a,", null}`,
-  as Polars splits them; each had an empty part after the last separator.
-- **An NDJSON value that is not an object, read into a Struct column under
-  `WithNDJSONIgnoreErrors`, is a null Struct** (507): it was a Struct of null fields,
-  as Polars 1.44.1 read it, where every other value a column cannot take is a null
-  and a null Struct is kept apart from a Struct of nulls (`ExtractGroups`, 499);
-  Polars 2.1 reads a null too. `ScanJSON`, which reads each object as a line, follows.
-  The recorded oracle found it (`ndjsonread/ignored_in_a_struct`).
-- **Arrow IPC input is checked against its bytes before it is read** (511, 519):
-  ursus walks every footer and message of a file or stream before arrow-go's reader
-  has it, each offset and length within its bytes, each count no more than the bytes
-  after it can hold, offsets forward, fields no deeper than 2,000, a record batch's
-  buffers within its body and its variadic buffers against its view columns; a
-  stream's message is no larger than 64 MiB of metadata and 256 MiB of body, or than
-  the stream where its size is known; and a compressed buffer is decompressed through
-  an allocator that grants none past 32,768 times the input's size, Zstandard's most.
-  Input that breaks them is refused by `ScanIPC`, `ScanIPCStream`, `ReadIPCSchema` and
-  their kin, an `ErrIO` naming it as corrupt. No well-formed file is refused. A
-  Parquet footer's Arrow schema is read by the same walk.
-- **A Parquet footer is checked against its file before it is read** (510, 521, 533):
-  a column chunk lies within its file; every footer is walked, one leaving no room
-  for the file's leading magic too, and each of its lists, at any depth and by the
-  element type the format gives, claims no more elements than the bytes after its
-  header hold; the schema is read as a tree, and an element claiming more children
-  than the elements after it, or a tree that does not close by its last element, as
-  pyarrow says "not enough elements", is refused; a row group holds a column chunk
-  for each of the schema's columns, no fewer and no more, by the read and by `Count`;
-  and the footer's Arrow schema is walked as an IPC message is (519). A footer that
-  breaks them is refused as corrupt, an `ErrIO`. Every footer ursus, pyarrow and the
-  fixtures' writers wrote reads as before. The fuzz targets found each.
-- **A Parquet page is checked against its header and its chunk before it is decoded**
-  (510, 517, 520, 521, 531), and one that breaks a check is refused as corrupt, an
-  `ErrIO`. Every page pyarrow, Polars, arrow-go and ursus write reads as before, and
-  an empty Brotli page after a page of bytes now reads. CI's fuzz runs found each:
-  - a page's declared size is no larger than the largest column chunk the footer
-    declares (510, as D14 predicted), and a page header that does not parse is looked
-    at no further than its chunk, at least 16 KiB (521);
-  - a dictionary page claims no more values than its bytes hold (510), its count read
-    as Thrift reads a varint, of up to 10 bytes (520);
-  - each dictionary index of a data page lies within its dictionary, and the error
-    names the index, where it named a row group short of rows (517);
-  - a page decompresses into the size its header declares and no further: a codec's
-    own claim, a Snappy length header or a Zstandard frame's size, is checked before
-    anything past the page is allocated, a page declaring no bytes is decoded as
-    none, and Brotli's window is held to the page (520);
-  - an UNCOMPRESSED page holds the bytes its header declares, as DuckDB requires
-    (521);
-  - a page of 0-bit dictionary indices with a byte after a run's header is read as
-    pyarrow and DuckDB read it, each row the dictionary's first value, by ursus's own
-    pages, and refused where they do not read its chunk (521);
-  - each delta-packed run of a DELTA_BINARY_PACKED, DELTA_LENGTH_BYTE_ARRAY or
-    DELTA_BYTE_ARRAY page is checked against the format, its block size, miniblocks,
-    count, bit widths and length, and refused where pyarrow refuses it, and where its
-    count is past the page's values, which no writer writes and pyarrow reads (531).
+- **A Struct of no fields keeps its rows** (518): a JSON or NDJSON object field
+  holding `{}`, Polars' `Struct({})`, failed the whole read with an internal error,
+  "batch declares 1 rows but its columns hold 0", as a struct took its length from its
+  first field. It reads now as a `Struct()` column, `{}` or null a row, as Polars 2.1
+  reads it, and keeps its rows through filters, sorts, joins carrying it,
+  concatenation, a group-by's values, `Unique`, spilling and the IPC and JSON writers;
+  an IPC file holding one reads. Parquet and CSV refuse it cleanly, as Polars does, and
+  so does a group-by, a join or a window keyed on it, as before.
 - **An Arrow IPC file or stream with a Null column reads** (522): the format writes a
   Null column as no buffer, arrow-go's IPC reader builds it as a Null array of no
   buffers, and arrow-go's own validation, which ursus runs on every array it imports,
@@ -471,128 +726,14 @@ its section below lists them.
   malformed: Polars' files, which write an all-null column as Null, pyarrow's, and
   ursus's own `WriteIPC` and `WriteIPCStream` of a frame with one; records from
   arrow-go's IPC reader handed to `ScanArrowRecords` or `ScanArrow` too. Such an
-  array is valid now, and every other array is validated as before. The Parquet reader
-  was not affected.
-- **A Null column, and a frame of no columns, hold no memory a row** (529): a column
-  of nulls held a bitmap of zeros, a bit a row, and every scan was cut into batches of
-  8,192 rows, so an Arrow IPC stream of a few hundred bytes declaring 2^40 rows of a
-  Null column, or of none, had `Collect` ask for 128 GiB and `Count` allocate about
-  200 GB over two minutes, where Polars holds such a column in constant space. A
-  column of nulls is its type and its length now, and a query collected or counted
-  through projections of columns, `Head`, `Slice` and `Concat` reads a batch of only
-  Null columns, or of none, whole: `Count` of 2^27 Null rows takes 61 µs where it took
-  22 ms, `Collect` 43 µs where it took 93 ms, each allocating 10 kB where they
-  allocated 25 and 66 MB. `Count` of IPC files no longer reads a column. Answers do not
-  change, and every other operation still reads such a frame a batch at a time.
-- **A sort in small batches no longer allocates by the square of its batches** (512):
-  each output batch's gather made two arrays as long as every input batch the sort
-  kept, so sorting 8,191 rows in batches of one row allocated 2.3 GB in 400 ms; 23 MB
-  in 27 ms now; the as-of join's and the temporal streams' gathers go through the same
-  function. Found by `qcheck self`.
-- **A slice from the end, and a tail, in small batches** (512): after each batch it
-  read it recounted every batch it held in its memory account, so the last 4,000 of
-  8,193 rows in batches of one row allocated 6 GB in 12 s; 16 MB in 17 ms now. It
-  counts a batch as it comes and recounts once an eighth of what it holds has gone,
-  and before it decides to spill, so it spills where it did. Found by `qcheck self`.
-- **`NUnique` by many groups in small batches** (512): its table of group and value
-  grew its keys to the group count exactly before each batch, copying them all, so a
-  `NUnique` by 8,193 keys in batches of one row allocated 842 MB; 30 MB now, the keys
-  growing to twice what they held, as a slice's append does. Found by `qcheck self`.
-- **An NDJSON or JSON line nested deep is read in memory proportional to it** (511):
-  a 6 KB line of objects 999 deep allocated 4 GB and took 1.2 s, each level's type
-  written as text and built again; 4 MB and 13 ms now.
-- **A Parquet TIME past its day is refused** (510): a TIME holding a tick outside
-  [0, 24h) was read as a Time as it lay, which renders as another time of day and
-  sorts and compares as none; it is refused now as a corrupt value, inside a List or
-  a Struct as well, as the writer refuses one. CI's fuzz run found it.
-- **`"-nan"` and `"+nan"` read as NaN** (509), as `ParseFloat`'s grammar says and
-  Polars' cast reads them: Go's strconv takes a sign before inf only, so a cast to a
-  float was a null, a CSV Float64 column refused one, and inference read it as text.
-- **A Datetime's least second reads** (509): converting an instant to ticks checked
-  the seconds' product before adding the fraction, and refused the first 0.85 s of a
-  nanosecond Datetime's range, 0.78 s of a microsecond's and 0.81 s of a
-  millisecond's, though each fits; the least nanosecond instant,
-  1677-09-21T00:12:43.145224192Z, was written to CSV and did not read back.
-- **A Decimal's exponent of more digits than an int64 is a number** (509): it was
-  refused as text that is no number, where its value is out of range, and a zero with
-  one, `0e9223372036854775808`, is 0, as one with a shorter exponent is. A strict cast
-  says "not representable" for it now, not "cannot parse".
-- **A `\r` that ends a CSV's input ends its line** (509), as `encoding/csv` and
-  Polars 2.1 read it: `a,b\r` read the field `b\r`, `"a","b"\r` was refused, and a
-  last line of only `\r` was a value where it is a blank line.
-- **A long CSV record arriving in small reads is scanned in linear time** (515): the
-  scanner parsed a record from its first byte after every read, and a stream's read
-  brings what it brings, not a buffer's worth, so a record of 1 MiB sent 1 KiB a read
-  was parsed 1,024 times, 513 times its bytes; a quoted field of 2 MiB took 1.5 s. A
-  service reading CSV from a slow peer paid quadratic CPU for it. The scanner follows
-  each new byte once now and asks its parser again only when the record's end has
-  arrived or its bytes have doubled: 12 ms for that field. A record whose end has
-  arrived is still returned without another read, and the records, errors and limits
-  are the same.
-- **A Struct of no fields keeps its rows** (518): a JSON or NDJSON object field
-  holding `{}`, Polars' `Struct({})`, failed the whole read with an internal error,
-  "batch declares 1 rows but its columns hold 0", as a struct took its length from its
-  first field. It reads now as a `Struct()` column, `{}` or null a row, as Polars 2.1
-  reads it, and keeps its rows through filters, sorts, joins, concatenation, group-by,
-  spilling and the IPC and JSON writers; an IPC file holding one reads, and it is a
-  key. Parquet and CSV refuse it cleanly, as Polars does. CI's fuzzing of `ScanJSON`
-  and `ScanNDJSON` found it.
-- **A Parquet page whose bytes are missing is refused, not read as the end** (521): a
-  page whose header was whole and whose bytes were not in its column chunk ended the
-  read there with no error, so a file whose `Count` said 5 rows read as 0: the engine
-  took the page's error for the end of the input. The read is refused as corrupt now,
-  whichever reader decodes the chunk; `Count`, which reads only the footer, still
-  answers its rows, as pyarrow and DuckDB count them and refuse the read. CI's fuzz
-  runs found it.
-- **A corrupt Parquet Null column is refused, not an internal error** (521): a footer
-  giving a Null column a physical type no reader takes made the read fail with "this
-  is a bug in ursus"; it is refused as unsupported, as a column of any other type is.
+  array is valid now, and every other array is validated as before.
 - **An Arrow time past its day is refused, not wrapped** (525): a Time32 or Time64
   outside [0, 24h) was wrapped into the day by `ScanArrowRecords`, `ScanArrow` and
   every `ScanIPC` reader, so 26:00 read as 02:00, which sorts after 23:00 and equals
   no 02:00. It is refused now as a corrupt value, an `ErrValue` naming the column,
-  the value and its row, inside a List or a Struct as well, as a Parquet TIME past
-  its day is (510); a null's slot is not looked at. CI's fuzz run found it.
-- **A float Min or Max is the same at every thread count** (523): a parallel
-  group-by folded its workers' partial minimums in worker order, which is not row
-  order, so of −0.0 and +0.0, or of NaNs of two payloads, Min could answer a later
-  row's bits on four threads than on one; each keeps its row's position now, and Max
-  answers the latest of a tie as its doc's `Sort(...).Last()` does, where it answered
-  the first. Median, Quantile, TopK, BottomK, TopKBy and a float group key picked by
-  the same order and are the same at every thread count too; a spilled quantile is a
-  held one's. qcheck found it.
-- **A NaN literal in arithmetic answers the same bits in every batch** (530):
-  `Lit(NaN).Add(x)` or `.Mul(x)` over a row holding a NaN of another payload answered
-  the row's NaN in a batch of many rows and the literal's in a batch of one, as a
-  constant on the left was added as the right operand. A NaN constant is broadcast
-  now, as in a batch of one.
-- **A read cut short is refused, not read as the end of its input** (534): every
-  operator ends its input on an error that wraps `io.EOF`, and a source's error that
-  wrapped it ended the query there, with the rows before it and no error. An Arrow IPC
-  file or stream whose compressed buffer decompresses short read as 0 rows, by
-  `Collect` and by `Count`; so did a stream cut where a message's length, metadata or
-  body begins, a Parquet file whose `ReaderAt` answers `io.EOF` inside a column chunk
-  (its row groups before it read), and an NDJSON, lines or CSV stream whose read
-  fails with an error wrapping `io.EOF`. Each is refused now, an `ErrIO` wrapping
-  `io.ErrUnexpectedEOF`: a source's end is `io.EOF` itself, and a scan reads any other
-  error wrapping it as the source's. A stream that ends between two messages, without
-  its end marker, still reads, as arrow-go and the format have it. Step 529's fuzzing
-  found it.
-
-- **A cancelled query no longer answers part of its input as the whole** (394): a
-  query cancelled while it read could return the rows read before the cancel, and no
-  error: a count of a CSV file cancelled partway was an empty frame. A query whose
-  context is cancelled before it finishes now returns the cancellation, from
-  `Collect`, `CollectBatches`, `Count` and the writers.
-- **A cancelled sort or join stops promptly** (394): a sort of ten million rows came
-  back 400 ms and more after its cancel, and a join's build 100 to 170; now some tens
-  of milliseconds at most.
-- **A panic on one of a query's goroutines no longer ends the process** (393): a
-  sort's and a unique's parallel pieces, first-seen keys, a text sort, a Spearman
-  rank, and `PartitionBy`, `ToDummies` and `Corr`, started goroutines that recovered
-  nothing, so a bug in one ended the program that asked, a service with every request
-  it served. Each panic is an internal error from the call now, as one anywhere else
-  in a query is, naming the line that panicked.
+  the value and its row, inside a List or a Struct as well; a null's slot is not
+  looked at. A Parquet TIME past its day is refused by the same rule (510): it was
+  read as it lay, and inside a List or a Struct with no error at all.
 
 ## v0.7.2 — 2026-11-02
 

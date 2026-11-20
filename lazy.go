@@ -789,6 +789,16 @@ func (lf *LazyFrame) compile(ctx context.Context, cfg collectCfg) (physical.Oper
 // Under a limit you give with WithMemoryLimit or WithEngineMemoryLimit, or none,
 // Collect is not checked and holds whatever it is asked to, as it always has.
 //
+// # Cancellation
+//
+// The query runs under ctx. Once ctx is cancelled, or its deadline passes, before the
+// query is done, Collect returns ctx's error, which errors.Is matches to
+// context.Canceled or context.DeadlineExceeded, and is not an *Error: never the rows
+// read before the cancel as the whole answer (step 394). The call returns within some tens of
+// milliseconds of the cancel, a sort's or a join's build among it, as each looks at
+// ctx as it goes; a Go function the query calls, MapElements' say, finishes the call
+// it is in first. CollectBatches, Count and the writers answer a cancel so too.
+//
 // # A panic is an error
 //
 // Every entry point that runs a query recovers a panic in it and returns it as
@@ -815,6 +825,8 @@ func (lf *LazyFrame) Collect(ctx context.Context, opts ...CollectOption) (df *Da
 // CollectBatches streams the result without materialising the whole frame.
 //
 // Breaking out of the loop tears the operator tree down, so an early exit is safe.
+// Once ctx is cancelled, the loop's last yield is ctx's error, as Collect returns it:
+// a batch before it is part of the answer, never the whole of it.
 //
 // A panic while planning, or in any operator, is an error yielded like any other.
 // A panic in the loop BODY is the caller's own and propagates as it would from any
