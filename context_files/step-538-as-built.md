@@ -15,7 +15,7 @@ here with ursus's check switched off), and the Null column not at all. The other
 reproduce on v18.9.0 as on main.
 
 **No workaround is retired.** Each of the twelve either still guards something
-v18.9.0 does not fix, or makes a refusal arrow-go no longer makes, or gives the error
+v18.9.0 does not fix, or makes a refusal arrow-go does not make, or gives the error
 its finding's test requires, which arrow-go's own refusal does not; each is cheap
 where it stays, and none uses an API the release deprecates beyond what step 517
 already used (`file.NewColumnReader`, still needed by the 0-bit index and delta
@@ -24,7 +24,9 @@ checks). Section 3 has the table.
 The upgrade brought one **ursus bug** to light, fixed: the reader's own pages refused
 a fixed-width column chunk whose dictionary page holds no value, which v18.9.0's
 writer, and so `WriteParquet`, writes for a dictionary-encoded column of only nulls
-when its pages are compressed. `TestParquetRoundTrip` failed on the bump alone. And
+when its pages are compressed. `TestParquetRoundTrip` failed on the bump alone; and
+pyarrow writes one too, so `testdata/oracle/footers/pyarrow-03.parquet` is refused on
+master and by every release, whatever arrow-go. And
 it brought **two Parquet pages ursus read that arrow-go now refuses**, which ursus
 cannot read without a delta decoder of its own (section 5): an INT32
 DELTA_BINARY_PACKED page whose deltas span more than 32 bits, as arrow-go v18.7.0's
