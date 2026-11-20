@@ -33,7 +33,12 @@ import (
 // one miniblock of 128 values a block, and in blocks of 256; a miniblock past the last
 // value giving a width of 255; and, in an OPTIONAL column, a count one past the
 // values that are not null and within the page's, its extra value in the padding.
-func TestAMalformedDeltaPageIsRefusedNotHungOn(t *testing.T) {
+//
+// The decoder refuses two files the check passes, as an I/O error (step 538,
+// decoderRefuses): an INT32 spanning its range, its deltas packed 33 bits wide, which
+// pyarrow 25.0.1 fails too; and a DELTA_LENGTH_BYTE_ARRAY page's count one past its
+// values, its length in the padding negative, which pyarrow reads.
+func TestAMalformedDeltaPageIsRefused(t *testing.T) {
 	read := func(b []byte) (*ursus.DataFrame, error) {
 		return ursus.ScanParquetBytes(b, "forged.parquet").Collect(t.Context())
 	}
@@ -49,9 +54,13 @@ func TestAMalformedDeltaPageIsRefusedNotHungOn(t *testing.T) {
 			encoding := map[int32]string{pqDeltaBinary: "DELTA_BINARY_PACKED", pqDeltaLength: "DELTA_LENGTH_BYTE_ARRAY",
 				pqDeltaBytes: "DELTA_BYTE_ARRAY"}[k.enc]
 			for _, c := range k.forged() {
+				why := decoderRefuses(c)
 				fuzzcheck.Run(t, limits(len(c.b)), func() error {
 					df, err := read(c.b)
 					switch {
+					case why != "" && !errors.Is(err, ursus.ErrIO):
+						t.Errorf("%s: %v, not an I/O error, where the decoder refuses %s", c.name, err, why)
+					case why != "":
 					case c.refused && err == nil:
 						t.Errorf("%s: read as %d rows, and no error", c.name, df.Height())
 					case c.refused && (!errors.Is(err, ursus.ErrIO) || !strings.Contains(err.Error(), "corrupt: column") ||
@@ -199,12 +208,26 @@ func TestDeltaPagesAgainstPyarrow(t *testing.T) {
 	t.Logf("%d forged files: (reader, pyarrow) outcomes:%s", len(forged), lines)
 }
 
+// decoderRefuses is why the decoder refuses forged file c, which the check passes
+// (step 538); empty for the others.
+func decoderRefuses(c pqDeltaCase) string {
+	switch {
+	case c.wide:
+		return "an INT32's deltas packed wider than 32 bits, past INT32's range"
+	case c.enc == pqDeltaLength && c.name == "a count one past the values" && !c.refused:
+		return "a DELTA_LENGTH_BYTE_ARRAY page's count one past its values, its length in the padding negative"
+	}
+	return ""
+}
+
 // deltaDisagreement is why the reader answers ours of forged file c and pyarrow
 // 25.0.1 theirs, where the two are known to answer apart; empty elsewhere.
 //
-//   - An INT32's deltas spanning more than 32 bits: arrow-go's writer takes an INT32's
-//     deltas as an int64's and packs them 33 or 34 bits wide, and arrow-go reads them
-//     back; pyarrow fails the page ("Unexpected end of stream").
+//   - A count one past the values of a DELTA_LENGTH_BYTE_ARRAY page, within the
+//     page's and the last miniblock's padding, which the format allows: the decoder
+//     decodes each of the count's lengths at once and refuses a negative one, here
+//     the length in the padding (step 538); pyarrow decodes as many as the page's
+//     levels ask for, and reads the file.
 //   - A miniblock of more values than its run's count and than 65,536: the reader
 //     refuses it, as a miniblock 0 bits wide holds its values in no byte, and its
 //     bytes do not bound them (deltapage.go); pyarrow decodes into its output and
@@ -214,10 +237,13 @@ func TestDeltaPagesAgainstPyarrow(t *testing.T) {
 //     is sized by it; pyarrow decodes as many values as the page's levels ask for,
 //     and reads the file. A count past 32 bits pyarrow refuses too, reading the
 //     header's fields as 32 bits.
+//
+// An INT32's deltas packed 33 or 34 bits wide, past INT32's range, which pyarrow fails
+// ("Unexpected end of stream"), the reader refuses (step 538): they agree.
 func deltaDisagreement(c pqDeltaCase, ours, theirs string) string {
 	switch {
-	case c.wide && ours == "S" && theirs == "E":
-		return "an INT32's deltas packed wider than 32 bits, as arrow-go's writer packs them"
+	case ours == "E" && theirs == "S" && decoderRefuses(c) != "":
+		return decoderRefuses(c)
 	case ours != "E" || theirs == "E":
 	case c.per > max(c.count, 1<<16):
 		return "a miniblock of more values than its count and than 65,536"

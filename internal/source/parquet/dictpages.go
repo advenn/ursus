@@ -12,13 +12,13 @@ import (
 // A dictionary page's count, checked against its bytes before it is decoded (step
 // 510).
 //
-// arrow-go's column reader decodes a dictionary page into a slice it makes of the
-// count the page's header claims (encoding.NewDictConverter), before it has read a
-// value. A count of 2^31−1 in a page of 12 bytes made a slice of 48 GB, a fatal "out
-// of memory" no recover catches, from a file of 124 bytes, in every chunk arrow-go
-// decodes: a Boolean, INT96 or FIXED_LEN_BYTE_ARRAY column, a nested one, one whose
-// footer lists an encoding the reader's own pages do not read. The reader's own
-// pages check the count (readDictionary), and those chunks cannot reach it.
+// A dictionary page's header claims its count of values, and a count is a claim: a
+// page of a few bytes can say billions. The reader's own pages check the count
+// (readDictionary); the chunks arrow-go's column reader decodes, a Boolean, INT96 or
+// FIXED_LEN_BYTE_ARRAY column, a nested one, one whose footer lists an encoding the
+// own pages do not read, are checked here, and a page whose bytes cannot hold its
+// count is refused as corrupt before anything is sized by it, so a file is refused
+// whichever reader its chunks take (step 538).
 //
 // arrow-go reads a chunk whole, with one read at its first byte, through the file's
 // ReaderAt, which is measured (footer.go): so a read there, once it returns, walks

@@ -44,6 +44,15 @@ that stops when its request is cancelled.
 
 ### Changed
 
+- **arrow-go v18.9.0** (538): ursus reads and writes Parquet and Arrow IPC with
+  arrow-go v18.9.0, from v18.7.0, and the Thrift v0.25.0, klauspost/compress v1.20.3
+  and golang.org/x/text v0.43.0 it requires. Two Parquet pages ursus read arrow-go
+  now refuses, an `ErrIO` with its reason, and ursus with it: an INT32
+  DELTA_BINARY_PACKED page whose deltas span more than 32 bits, where consecutive
+  values differ by more than 2^31, which pyarrow refuses too; and an OPTIONAL
+  column's DELTA_LENGTH_BYTE_ARRAY page counting more lengths than its values, which
+  the format allows, no writer is known to write, and pyarrow reads. ursus's own
+  checks of crafted input are as they were.
 - **A float aggregate that is NaN is the one NaN** (530): `Sum`, `Mean`, `Var`,
   `Std`, `Skew`, `Kurtosis`, `Product`, `Entropy`, `Corr`, `Cov` and `CorrSpearman`,
   their rolling, cumulative and exponentially weighted kin, the list and horizontal
@@ -390,6 +399,13 @@ All three are in v0.7.1 too.
 
 Every fix of v0.7.2 is in 0.8 too, forward-ported from `release-0.7` by #33 to #37:
 its section below lists them.
+
+- **A Parquet column chunk whose dictionary holds no value reads** (538): the reader's
+  own pages took a fixed-width column's dictionary page of no value for none and
+  refused the chunk as corrupt, "a page refers to a dictionary the chunk does not
+  have". arrow-go v18.9.0, and so `WriteParquet`, writes one for a dictionary-encoded
+  column of only nulls whose pages are compressed: such a file of ursus's own would
+  not have read back.
 
 - **`Clip`, `ClipLower` and `ClipUpper` are named after their value** (496): the
   answer was named after the bound, `literal` for a Go number and `lo` for `Col("lo")`,

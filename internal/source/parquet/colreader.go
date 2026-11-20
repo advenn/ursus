@@ -71,8 +71,10 @@ func checkEncodings(rg *metadata.RowGroupMetaData, col int, name string) error {
 	return nil
 }
 
-// decodable is whether arrow-go v18.7.0 decodes encoding e on physical type t
-// (parquet/internal/encoding/typed_encoder.go). Every other pairing reaches a panic.
+// decodable is whether the column reader decodes encoding e on physical type t
+// (parquet/internal/encoding/typed_encoder.go); every other pairing is refused here.
+// ALP on FLOAT and DOUBLE, which a newer arrow-go decodes, allowedEncodings leaves
+// out: such a column is refused as before (step 538).
 //
 // It used to check one pairing, BYTE_STREAM_SPLIT, and that one wrongly: the
 // integers decode it. FIXED_LEN_BYTE_ARRAY under DELTA_BYTE_ARRAY, which

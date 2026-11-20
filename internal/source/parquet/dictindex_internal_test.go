@@ -42,7 +42,7 @@ func TestCheckedPagesRefuseAnIndexPastTheDictionary(t *testing.T) {
 	pool := &sync.Pool{New: func() any { return memory.NewResizableBuffer(memory.DefaultAllocator) }}
 	cols := []*schema.Column{indexColumn(t, parquet.Repetitions.Required, false),
 		indexColumn(t, parquet.Repetitions.Optional, false), indexColumn(t, parquet.Repetitions.Optional, true)}
-	var refused, grown, kept, cases int
+	var refused, farRefused, kept, cases int
 	for i := range 2_000 {
 		desc := cols[rng.IntN(len(cols))]
 		pg := genIndexPage(rng, desc)
@@ -55,6 +55,9 @@ func TestCheckedPagesRefuseAnIndexPastTheDictionary(t *testing.T) {
 		if past {
 			refused++
 		}
+		if pg.wellFormed && pg.reachableFar && theirs.err != nil {
+			farRefused++
+		}
 		switch {
 		case ours.grew:
 			t.Errorf("%s: read through checkedPages, it allocated %d bytes", label, ours.alloc)
@@ -65,19 +68,19 @@ func TestCheckedPagesRefuseAnIndexPastTheDictionary(t *testing.T) {
 		case pg.wellFormed && past != pg.reachablePast:
 			t.Errorf("%s: an index arrow-go reads is past the dictionary: %v; checkedPages refused it: %v (%v)",
 				label, pg.reachablePast, past, ours.err)
-		case pg.wellFormed && theirs.grew != pg.reachableFar:
-			t.Errorf("%s: an index the oracle reads is 2^20 or more: %v; the oracle's dictionary grew: %v (%v)",
-				label, pg.reachableFar, theirs.grew, theirs.err)
+		case pg.wellFormed && pg.reachablePast && theirs.err == nil:
+			t.Errorf("%s: an index arrow-go reads is past the dictionary, and its own read answered no error", label)
 		}
 		if pg.wellFormed && !past {
 			kept++
 		}
 	}
 	// The generator's own reach: pages of each outcome.
-	t.Logf("of %d pages, %d refused, %d grew the oracle's dictionary, %d well formed and read", cases, refused, grown, kept)
-	if refused < cases/10 || grown < cases/10 || kept < cases/4 {
-		t.Errorf("of %d pages, %d refused, %d grew arrow-go's dictionary, %d well formed and read", cases, refused,
-			grown, kept)
+	t.Logf("of %d pages, %d refused, %d of an index 2^20 or more refused by arrow-go's own read, "+
+		"%d well formed and read", cases, refused, farRefused, kept)
+	if refused < cases/10 || farRefused < cases/10 || kept < cases/4 {
+		t.Errorf("of %d pages, %d refused, %d of an index 2^20 or more refused by arrow-go's own read, %d well "+
+			"formed and read", cases, refused, farRefused, kept)
 	}
 }
 
