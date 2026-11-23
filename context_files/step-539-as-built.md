@@ -91,10 +91,44 @@ its cases over many more types and functions:
 These three checks now run on the core generator's cases. Every generator must still
 find nothing and cover every operation.
 
+## Against DuckDB, on CI (2026-11-23)
+
+The PR's `qcheck-duckdb` job ran the wide cases against DuckDB for the first time,
+and four rounds of CI fixed what it found:
+- **Loading.** `duck.WithRID` handed DuckDB a Datetime, a Duration and a Time as
+  DuckDB's own types: a Duration as an INTERVAL, and a zoned or millisecond Datetime
+  as microseconds in UTC. It now hands each over as an Int64 of its ticks, as T-TICKS
+  says. This took the DuckDB smoke from 53 findings to 2.
+- **Text.** `u_todtext` and `u_tstext` multiplied the INTEGER 1000000000 by 3600,
+  which overflowed INT32. They multiply in BIGINT now.
+- **Decimal products.** DuckDB multiplies DECIMALs of 18 digits or fewer in an
+  int64, and DECIMAL(12, 4) squared overflowed. Each operand is widened to
+  DECIMAL(38) at its own scale first.
+- **The rule tests.** `duck/rules_wide_test.go` gives each of the 23 T- rules a case
+  at its edges, where ursus and DuckDB must agree. The test tables now take the wide
+  types. The X- rules have no DuckDB test: they are not translated, and the
+  maintainer said on 2026-11-23 that DuckDB's dialect is mirrored only for what
+  ursus has.
+- **The found seeds** in `self` and `duck` replay with the generator that found
+  them. Step 523's two had silently become wide cases.
+- **The smokes** run each generator. The DuckDB smoke compares nine in ten of the
+  core generator's cases and three in four of the wide generator's: the X- rules
+  exclude about one in six of the wide cases (336 of 400 compared, 0 findings).
+
+The five-minute `qcheck self` run also found a real case, seed 874020098. A
+Datetime(ms) cast to Time(us) was refused with the optimizer off alone. Step 542
+fixed the cast and documented the rule behind the rest: a value the query discards
+may not be computed, so its error may not be raised. The self check now allows such
+a refusal only where the reference answered, the variant refused with ErrValue, and
+the difference bisects to the optimizer alone, the variant's off
+(`discarded`, `TestDiscardedIsNarrow`). Each allowance is counted in the report.
+
 ## Checks
 
 - `cd qcheck && go vet ./... && go test ./...`, under `CGO_ENABLED=0`: all seven
   packages pass, before and after master (arrow-go v18.9.0) was merged in.
+- The changes of 2026-11-23's afternoon ran on CI only. The maintainer was away from
+  home and asked that the laptop be kept quiet.
 - Wide smoke: 400 cases, 4,065 runs, 1,200 comparisons, 0 findings.
 - `TestRunAgainstUrsus`, wide: 1,000 cases, 842 compared, 0 findings.
 - The translation against DuckDB itself, under the duckdb tags, is CI's
