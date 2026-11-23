@@ -307,11 +307,9 @@ func ScanIPCStream(path string) *LazyFrame {
 // size is known; and a buffer no larger than the stream could hold decompressed
 // (arrowin.ReadMem).
 //
-// The messages are read by arrowmeta's reader, which keeps the limits, as arrow-go's
-// ipc.NewMessageReader does and ipc.NewReader does not (arrow-go v18.7.0's
-// reader.go: an 8 KB stream whose message declared a body of 2^40 bytes ended the
-// process, out of memory, step 511), and walks each message's metadata before
-// arrow-go reads it (step 519).
+// The messages are read by arrowmeta's reader, which refuses a message declaring more
+// than those limits before anything is sized by it (step 511), and walks each
+// message's metadata before it is decoded (step 519).
 func openIPCStream(name string, rc io.ReadCloser, size int64) (array.RecordReader, error) {
 	const op = "scan_ipc_stream"
 	var in io.Reader = rc

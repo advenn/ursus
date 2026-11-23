@@ -30,7 +30,7 @@ import (
 // DELTA_BYTE_ARRAY, V1 and V2, their definition levels RLE or, in V1, BIT_PACKED;
 // each run in blocks of 128 to 1,024 values in miniblocks of 32 to 1,024, or now and
 // then one miniblock of 65,536, the most past a run's count, its deltas 0 to 64 bits
-// wide, an INT32's past 32 as arrow-go's writer packs them, and in a third of the
+// wide, an INT32's wrapped at 32 bits (step 538), and in a third of the
 // pages the miniblocks holding no value giving any width. Most pages are then forged
 // once, in one run: its block size or its miniblocks wrong, or a layout the format
 // does not allow, blocks of a multiple of 32 values not one of 128 or miniblocks of
@@ -46,7 +46,8 @@ import (
 //   - where it does not refuse it, the read answers what arrow-go's own read
 //     answers, values, levels and error alike;
 //   - where the page is honest, or forged only where the format allows, the read
-//     answers the generator's values and levels.
+//     answers the generator's values and levels; but for a count past the values of
+//     a run decoded whole, which the read answers as arrow-go's own does (step 538).
 func TestCheckedPagesRefuseMalformedDeltaRuns(t *testing.T) {
 	seed := uint64(time.Now().UnixNano())
 	t.Logf("seed %d", seed)
@@ -164,7 +165,7 @@ type genBlock struct {
 // deltaRunOf is vals delta-packed as the format lays them out, in blocks of block
 // values of per values a miniblock, each delta taken as an int64's with wraparound,
 // as arrow-go's writer takes an INT32's too.
-func deltaRunOf(vals []int64, block, per int) genRun {
+func deltaRunOf(vals []int64, block, per int, int32s bool) genRun {
 	r := genRun{block: uint64(block), minis: uint64(block / per), count: uint64(len(vals))}
 	if len(vals) == 0 {
 		return r
@@ -173,7 +174,15 @@ func deltaRunOf(vals []int64, block, per int) genRun {
 	for at := 1; at < len(vals); at += block {
 		var deltas []int64
 		for i := at; i < min(at+block, len(vals)); i++ {
-			deltas = append(deltas, vals[i]-vals[i-1])
+			d := vals[i] - vals[i-1]
+			if int32s {
+				// An INT32's deltas wrap at 32 bits, as the format has a writer wrap
+				// them, and arrow-go's writer does; its reader refuses a minimum delta
+				// past INT32's range and a miniblock wider than 32 bits, as pyarrow
+				// 25.0.1 does (step 538).
+				d = int64(int32(d))
+			}
+			deltas = append(deltas, d)
 		}
 		b := genBlock{least: slices.Min(deltas), widths: make([]byte, block/per)}
 		for m := 0; m*per < len(deltas); m++ {
@@ -345,7 +354,7 @@ func genDeltaPage(rng *rand.Rand, desc *schema.Column, enc parquet.Encoding) *de
 	}
 	for _, v := range runVals {
 		block, per := layout()
-		p.runs = append(p.runs, deltaRunOf(v, block, per))
+		p.runs = append(p.runs, deltaRunOf(v, block, per, desc.PhysicalType() == parquet.Types.Int32))
 	}
 	if rng.IntN(3) == 0 {
 		// The miniblocks holding no value, in each run's last block, give any width.
@@ -409,7 +418,7 @@ func (p *deltaPage) forge(rng *rand.Rand, runVals [][]int64) {
 			if block%128 == 0 {
 				block += 32
 			}
-			*r = deltaRunOf(runVals[p.run], block, 32)
+			*r = deltaRunOf(runVals[p.run], block, 32, p.col.PhysicalType() == parquet.Types.Int32)
 		} else {
 			bad := []uint64{0, uint64(1 + rng.IntN(127)), r.block + uint64(1+rng.IntN(127)), 1 << 32,
 				1<<32 + 128*uint64(rng.IntN(4)), 1 << 40}
@@ -427,7 +436,7 @@ func (p *deltaPage) forge(rng *rand.Rand, runVals [][]int64) {
 		broken("miniblocks")
 	case 2:
 		block := int(r.block)
-		*r = deltaRunOf(runVals[p.run], block, []int{1, 2, 4, 8, 16}[rng.IntN(5)])
+		*r = deltaRunOf(runVals[p.run], block, []int{1, 2, 4, 8, 16}[rng.IntN(5)], p.col.PhysicalType() == parquet.Types.Int32)
 		broken("layout")
 	case 3:
 		var at [][2]int // the miniblocks holding values
@@ -468,6 +477,13 @@ func (p *deltaPage) forge(rng *rand.Rand, runVals [][]int64) {
 		}
 		r.count += uint64(1 + rng.IntN(room))
 		p.forged = "count past the values"
+		if whole {
+			// A run decoded whole has every length the count gives decoded, the one
+			// in the padding among them, and is refused where one is negative or they
+			// pass the page's bytes (step 538): the read answers what arrow-go's own
+			// does.
+			p.reads = false
+		}
 	case 7, 8:
 		h := len(r.header())
 		if size := len(r.bytes()); size > h {
@@ -604,8 +620,8 @@ func readDeltaPage(desc *schema.Column, pr file.PageReader, pool *sync.Pool) (r 
 // ursus's writer is made of (it writes no delta page itself), read batch for batch as
 // the same rows written PLAIN: V1 and V2 pages, pages of a hundred values and of the
 // default size, Zstandard, each under four null patterns. Its u32 column spans
-// INT32's range, and arrow-go packs its deltas 33 bits wide, past what pyarrow
-// reads. No page arrow-go writes is refused by the check.
+// INT32's range, its deltas wrapped at 32 bits, as the format says (step 538), so no
+// page of it is wider than 32 bits. No page arrow-go writes is refused by the check.
 func TestArrowGoDeltaPagesReadAsTheirPlainTwin(t *testing.T) {
 	var deltas []parquet.WriterProperty
 	for _, c := range []string{"i8", "i16", "i32", "u8", "u16", "u32", "i64", "u64", "date", "ts", "tms", "tus",
@@ -654,8 +670,8 @@ func TestArrowGoDeltaPagesReadAsTheirPlainTwin(t *testing.T) {
 			}
 		}
 	}
-	if !wide {
-		t.Error("no page of u32 packs a miniblock wider than 32 bits")
+	if wide {
+		t.Error("a page of u32 packs a miniblock wider than 32 bits")
 	}
 }
 
