@@ -300,6 +300,11 @@ func Schema(f Frame, tables map[string]*model.Table) (*Info, error) {
 			}
 			noisy := !f.MaintainOrder && (agg.Op == Sum || agg.Op == Mean) &&
 				agg.X != nil && agg.X.Type() == model.Float64
+			if !f.MaintainOrder && (agg.Op == Sum || agg.Op == Mean) && agg.X != nil && agg.X.Type() == model.Float32 {
+				// A Float32 Sum or Mean on every thread moves its last bits as a
+				// Float64's does, and no bound beside it covers them (step 539).
+				return nil, fmt.Errorf("GroupBy aggregate %q: a Float32 %s without MaintainOrder", a.Name, agg.Op)
+			}
 			out.Cols = append(out.Cols, Column{Name: a.Name, Type: a.E.Type(), Noisy: noisy})
 		}
 		if len(f.Keys) > 0 {
@@ -455,8 +460,8 @@ func retype(e Expr) error {
 	case *Col:
 		return nil
 	case *Lit:
-		if v, ok := e.V.(int64); ok && !e.Null && !fits(v, e.T) {
-			return fmt.Errorf("a literal %d of %s, which does not hold it", v, e.T)
+		if !LitOK(e) {
+			return fmt.Errorf("a literal %v (%T) of %s, which does not hold it", e.V, e.V, e.T)
 		}
 		return nil
 	case *Bin:
@@ -471,6 +476,8 @@ func retype(e Expr) error {
 		again, err = NewCast(e.X, e.To, e.Lossy)
 	case *Agg:
 		again, err = NewAgg(e.Op, e.X)
+	case *Fn:
+		again, err = NewFn(e.Op, e.X, e.S, e.I, e.B)
 	default:
 		return fmt.Errorf("unknown expression %T", e)
 	}

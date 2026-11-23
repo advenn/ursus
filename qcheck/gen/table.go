@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"slices"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -44,22 +45,41 @@ func size(r *rand.Rand, max int) int {
 var typeTags = map[model.Type]string{
 	model.Int64: "i64", model.Int32: "i32", model.Float64: "f64",
 	model.String: "str", model.Bool: "bool", model.Date: "date",
+	model.Int8: "i8", model.Int16: "i16", model.Uint8: "u8", model.Uint16: "u16", model.Uint32: "u32",
+	model.Uint64: "u64", model.Float32: "f32", model.DatetimeKind: "dt", model.DurationKind: "dur",
+	model.TimeKind: "tm", model.DecimalKind: "dec",
 }
 
-// Table draws a table named name with at most maxRows rows. Its columns are two to
-// six of the base types, an integer always among them, so that a group-by has a
-// key.
+// Table draws a table named name with at most maxRows rows, its columns of the wide
+// types (step 539). Its columns are two to six, an integer always among them, so
+// that a group-by has a key.
 func Table(seed uint64, name string, maxRows int) *model.Table {
+	return table(seed, name, maxRows, true)
+}
+
+// CoreTable draws a table of the base types alone, as step 512's generator drew
+// it: a seed draws the same table to the bit, so a case the core finders found is
+// its seed still.
+func CoreTable(seed uint64, name string, maxRows int) *model.Table {
+	return table(seed, name, maxRows, false)
+}
+
+func table(seed uint64, name string, maxRows int, wide bool) *model.Table {
 	r := rand.New(rand.NewPCG(splitmix(seed), splitmix(seed^0x5eed7ab1e)))
 	t := &model.Table{Name: name, Seed: seed, Rows: size(r, maxRows)}
 	ncols := 2 + r.IntN(5)
 	for i := range ncols {
-		typ := model.Base[r.IntN(len(model.Base))]
+		var typ model.Type
+		if wide {
+			typ = wideType(r)
+		} else {
+			typ = model.Base[r.IntN(len(model.Base))]
+		}
 		if i == 0 {
 			typ = []model.Type{model.Int64, model.Int32}[r.IntN(2)]
 		}
 		c := model.Column{
-			Name:     fmt.Sprintf("%s%c", typeTags[typ], 'a'+i),
+			Name:     fmt.Sprintf("%s%c", typeTags[typ.Kind()], 'a'+i),
 			Type:     typ,
 			Profile:  model.Profile(r.IntN(3)),
 			NullRate: NullRates[r.IntN(len(NullRates))],
@@ -73,12 +93,12 @@ func Table(seed uint64, name string, maxRows int) *model.Table {
 		}
 		t.Cols = append(t.Cols, c)
 	}
-	t.Rec = record(r, t)
+	t.Rec = record(r, t, wide)
 	return t
 }
 
 // record draws t's rows.
-func record(r *rand.Rand, t *model.Table) arrow.RecordBatch {
+func record(r *rand.Rand, t *model.Table, wide bool) arrow.RecordBatch {
 	fields := make([]arrow.Field, len(t.Cols))
 	for i, c := range t.Cols {
 		fields[i] = arrow.Field{Name: c.Name, Type: ArrowType(c.Type), Nullable: true}
@@ -86,12 +106,16 @@ func record(r *rand.Rand, t *model.Table) arrow.RecordBatch {
 	b := array.NewRecordBuilder(memory.NewGoAllocator(), arrow.NewSchema(fields, nil))
 	defer b.Release()
 	for i, c := range t.Cols {
-		v := values{r: r, c: c}
+		v := values{r: r, c: c, wide: wide}
 		v.pool()
 		fb := b.Field(i)
 		for range t.Rows {
 			if c.NullRate > 0 && r.Float64() < c.NullRate {
 				fb.AppendNull()
+				continue
+			}
+			if !slices.Contains(model.Base, c.Type) {
+				v.append(fb)
 				continue
 			}
 			switch fb := fb.(type) {
@@ -129,13 +153,14 @@ func ArrowType(t model.Type) arrow.DataType {
 	case model.Date:
 		return arrow.FixedWidthTypes.Date32
 	}
-	panic("gen: no Arrow type for " + t.String())
+	return wideArrowType(t)
 }
 
 // values draws one column's values by its profile.
 type values struct {
 	r    *rand.Rand
 	c    model.Column
+	wide bool      // a wide table's: text draws Unicode among the wild
 	ints []int64   // a tame column's distinct values, when Card bounds them
 	strs []string  // likewise
 	flts []float64 // likewise
@@ -241,6 +266,8 @@ func (v *values) string() string {
 	case v.pick(5):
 		// A number as text, for the casts from String.
 		return fmt.Sprint(v.r.IntN(2001) - 1000)
+	case v.wide && v.pick(30):
+		return v.wildText()
 	}
 	n := v.r.IntN(21)
 	b := make([]byte, n)

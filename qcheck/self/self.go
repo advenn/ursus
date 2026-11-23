@@ -47,6 +47,9 @@ type Options struct {
 	Cases    int           // stop after this many cases; 0 is no limit
 	Duration time.Duration // stop starting cases after this long; 0 is no limit
 	Variants int           // variants a case runs; 0 is 3
+	// Core draws the core generator's cases (gen.NewCoreCase), step 512's types
+	// and operations alone, each seed the case it was before step 539.
+	Core bool
 	// Limits bound each run: its Wall is how long one query may take before the
 	// watchdog ends the process, 0 for a minute.
 	Limits fuzzcheck.Limits
@@ -74,6 +77,7 @@ type Finding struct {
 	Variant model.Config
 	Factors model.Factor // the fewest factors that reproduce a mismatch
 	Detail  string
+	Core    bool // the case is the core generator's
 }
 
 func (f Finding) String() string {
@@ -125,7 +129,7 @@ func Run(opts Options) *Report {
 			break
 		}
 		seed := opts.Seed + uint64(i)
-		c, err := newCase(seed)
+		c, err := newCase(seed, opts.Core)
 		if err != "" {
 			rep.add(Finding{Kind: KindGenerator, Seed: seed, Detail: err})
 			continue
@@ -150,13 +154,13 @@ func Run(opts Options) *Report {
 }
 
 // newCase draws seed's case, and reports a generator's panic or ill-formed query.
-func newCase(seed uint64) (c *gen.Case, failure string) {
+func newCase(seed uint64, core bool) (c *gen.Case, failure string) {
 	defer func() {
 		if v := recover(); v != nil {
 			failure = fmt.Sprintf("the generator panicked: %v", v)
 		}
 	}()
-	c = gen.NewCase(seed)
+	c = gen.CaseOf(seed, core)
 	if err := ast.Check(c.Query, c.TableMap()); err != nil {
 		return nil, fmt.Sprintf("an ill-formed query: %v\n%s", err, c)
 	}
@@ -462,6 +466,7 @@ func (cr *caseRun) countOps(ref model.Config) {
 
 func (cr *caseRun) finding(f Finding) {
 	f.Seed = cr.c.Seed
+	f.Core = cr.c.Core
 	f.Case = cr.c.String()
 	cr.rep.add(f)
 }
