@@ -102,11 +102,15 @@ var wideRuleCases = map[string]func(t *testing.T, d engine){
 			cast(x, model.Decimal(18, 6)), cast(x, model.Decimal(38, 4)), lossy(x, model.Decimal(12, 0)))})
 	},
 	sqlgen.TDecFloat: func(t *testing.T, d engine) {
-		dt := model.Decimal(12, 4)
-		tab := pairs("t", dt, decs, model.Float64, floats)
-		a, b := c("a", dt), c("b", model.Float64)
-		agree(t, d, []*model.Table{tab}, &ast.Query{Root: sel(scan("t"), bin(ast.Add, a, b), bin(ast.Mul, a, b),
-			bin(ast.Lt, a, b))})
+		// A Decimal becomes a Float64 by a cast (or a promotion sqlgen makes the
+		// same way): its exact value's nearest double, at 12 digits and at 38.
+		dt, wide := model.Decimal(12, 4), model.Decimal(38, 10)
+		tab := table("t", col{"x", dt, decs}, col{"w", wide, []any{"0", "1", "-1", "5", "-5", "33333333333333333333",
+			"10000000000000000000000000000000000000", "-99999999999999999999999999999999999999",
+			"99999999999999999999999999999999999999", "12345678901234567890123456789012345678",
+			"-12345678901234567890123456789012345678", "9007199254740993", nil}})
+		agree(t, d, []*model.Table{tab}, &ast.Query{Root: sel(scan("t"), cast(c("x", dt), model.Float64),
+			cast(c("w", wide), model.Float64))})
 	},
 	sqlgen.TDecText: func(t *testing.T, d engine) {
 		for _, dt := range []model.Type{model.Decimal(12, 4), model.Decimal(5, 2), model.Decimal(9, 0)} {
