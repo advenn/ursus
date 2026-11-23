@@ -6,8 +6,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 **ursus is a dataframe library for Go (Golang), modelled on Polars** — lazy execution with a query optimizer, Apache
-Arrow memory, SIMD kernels, and streaming execution that spills to disk rather than falling over. Pure Go, no cgo;
-experimental: v0.7.2 is the last release, and master holds 0.8's work, for a Go service.
+Arrow memory, SIMD kernels, and streaming execution that spills to disk rather than falling over. Pure Go, no cgo.
+v0.8.0 is the last release: ursus inside a Go service, and a public API that, from it on, only adds.
 
 **Documentation: [advenn.github.io/ursus](https://advenn.github.io/ursus/)** — a quick start, the concepts, a guide for
 Polars users and [one for a Go service](https://advenn.github.io/ursus/dev/guide/services/), versioned by release, with
@@ -43,9 +43,11 @@ core. None of that is visible in the query.
 static binary like any other Go dependency, and `go get` is the whole install.
 
 That is the reason to pick it, and the cost should be just as plain: **ursus is slower than the serious analytical
-engines.** On the h2o.ai benchmark at ten million rows it is about 1.2x Polars over Parquet and over CSV; on
-TPC-H at scale factor 1 it is about 2x. It is not trying to beat Polars or DuckDB, and on current evidence it is not going
-to.
+engines.** Against Polars 2.1, on CI's four-vCPU runners, it takes about 2.3x Polars' time on the h2o.ai benchmark at
+ten million rows over Parquet and 1.6x over CSV, and 2.3x on TPC-H at scale factor 1; against Polars 1.44.1 it took 1.2x
+to 2x. It is not trying to beat Polars or DuckDB, and on current evidence it is not going to. A small query, the kind a
+service runs, is another matter: at 1,000 and 10,000 rows ursus answers in a fraction of the time Polars takes from
+Python.
 
 **Where that trade is a good one**
 
@@ -63,7 +65,8 @@ to.
 - Interactive analytics over hundreds of millions of rows. Use DuckDB or Polars.
 - Anywhere you can link cgo freely: `duckdb-go` is around 2x faster than this on TPC-H and is a binding to a mature
   engine.
-- Anything production-critical today. This is 0.x, the API still moves, and nothing here is promised.
+- Anything production-critical today. This is 0.x, on ZeroVer, a stable 1.0 not expected yet: the public API only adds
+  from v0.8.0 on, but the library is young, and nothing here is promised.
 
 The honest summary is that Go has not had a dataframe library of this shape, and one that is correct and a few times
 slower is more useful than none — for the sizes most services actually handle.
@@ -114,12 +117,11 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 
 ## Status
 
-**v0.7.2** is the last release: 0.7, performance, the Parquet read first
-([`v0.7-scope.md`](./context_files/v0.7-scope.md)), three of 0.8's fixes, and a bug hunt's
-([`v0.7.2-scope.md`](./context_files/v0.7.2-scope.md)), all of them on master too. Master has 0.8's work since, in the
-unreleased section of [`CHANGELOG.md`](./CHANGELOG.md): ursus inside a Go service, queries that share a memory budget
-and threads, stop when they are cancelled, report to a hook and fail with an error a caller reads
-([`v0.8-scope.md`](./context_files/v0.8-scope.md)). What works on master:
+**v0.8.0** is the last release: ursus inside a Go service ([`v0.8-scope.md`](./context_files/v0.8-scope.md)),
+queries that share a memory budget and threads, stop when they are cancelled, report to a hook and fail with an error a
+caller reads; the public API stable, a release only adding; and a bug hunt's guards against input that is corrupt or
+hostile, every reader fuzzed. [`CHANGELOG.md`](./CHANGELOG.md) says what a v0.7 user can trip on. v0.7.3 is the last of
+the 0.7 line, on `release-0.7`: 0.7 with three of 0.8's fixes. What works:
 
 |                 |                                                                                                                                                   |
 |-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -185,7 +187,7 @@ required, and `Explain` shows it. Your function is called from several goroutine
 once, so it must be safe for that.
 
 Not done: built-in object stores, out by decision (the seam above reaches a store today); wanted: SQL in DuckDB's dialect,
-Parquet complete (a List of Lists or of Structs, maps, page indexes and bloom filters) and Apache Iceberg tables; Avro,
+Parquet complete (nesting at any depth, maps, field IDs, page indexes and bloom filters) and Apache Iceberg tables; Avro,
 Excel and Delta Lake; predicate pushdown
 into CSV and Arrow scans; common subexpressions shared across a query's expressions, a join order chosen by
 statistics, and a work-stealing scheduler; `collect_all` and a plan serialized; rolling weights.
@@ -195,8 +197,8 @@ not, and what each step since has built.
 **ursus is on [ZeroVer](https://0ver.org): 0.x, and a stable 1.0 is not expected yet. The public API is stable
 all the same, since 2026-11-05:** a release adds, and never renames, removes or reshapes what an earlier release had; a
 better design goes beside the old one. A tool holds it to that: CI's `make api` fails on any feature of the last
-tag's public API, in [`api/`](./api/), that a change takes away. Up to v0.7.2 a minor could break, and the changelog
-lists each release's breaks with their replacements.
+tag's public API, in [`api/`](./api/), that a change takes away; v0.8.0 is the first release under that rule. Up to
+v0.7.2 a minor could break, and the changelog lists each release's breaks with their replacements.
 
 ---
 
@@ -208,7 +210,7 @@ make race       # the whole suite under -race
 make levels     # import-level invariants
 ```
 
-**3240 test cases**, and the matrix is not decoration. Vector width is a *runtime*
+**14,208 test cases** pass, subtests counted, and the matrix is not decoration. Vector width is a *runtime*
 property, so a single-width run proves very little: 512-bit gives 8 float64 lanes, which happens to be exactly one
 bitmap byte — a coincidence that hides an entire class of sub-byte bitmap bug. The 128-bit leg is where those surface.
 
@@ -221,8 +223,13 @@ compares ursus against them, dtypes checked and floats to the bit, while `make t
 test that types more expected values by hand than its baseline allows. And random queries are checked against
 themselves: [`qcheck/`](./qcheck/), a module of its own, draws tables and a well-typed query from one seed and runs it
 on 1, 4 and 8 threads, in batches of 1 to 65,536 rows, with the optimizer on and off and from tables cut into records,
-requiring one answer to the bit (`cd qcheck && go run ./cmd/qcheck self -seed 1 -duration 20s`; CI runs it for five
-minutes).
+requiring one answer to the bit (`cd qcheck && go run ./cmd/qcheck self -seed 1 -duration 20s`), and against DuckDB
+(`qcheck duck`), whose SQL computes ursus's documented answer; CI runs each for five minutes and shrinks a finding to a
+minimal case. The parsers and readers are fuzzed against oracles, strconv, `time`, `encoding/csv`, `encoding/json`,
+`math/big` and arrow-go's own reading among them: `internal/fuzzcheck` fails an input that hangs, allocates past a
+bound of its size, leaves a goroutine running or panics in ursus's code, `make fuzz FUZZ=<target> PKG=<package>` runs
+one, and CI fuzzes every target on a pull request and nightly. Every crash, hang and wrong answer they found is fixed
+or named in the changelog's known limitations.
 
 ---
 
@@ -243,9 +250,15 @@ See [`bench/README.md`](./bench/README.md) for what is timed and why.
 [`bench/results/REPORT.md`](./bench/results/REPORT.md) is checked in. Every result in it is validated against a duckdb
 reference, and a disagreement is struck through rather than quietly reported as a fast number.
 
+**0.8's report,** [`context_files/v0.8-report.md`](./context_files/v0.8-report.md), ran on CI's four-vCPU runners
+against Polars 2.1.0 and v0.7.2's ursus: ursus takes 2.30x Polars 2.1's time on h2o over Parquet, 1.64x over CSV, 2.32x
+on TPC-H at SF=1 and 1.68x at SF=0.1, where beside Polars 1.44.1 on the same kind of runner it took 1.31x, 1.18x, 1.91x
+and 1.79x: Polars 2.1 is the faster. 0.8 takes 0.92 to 0.99 of v0.7.2's time on the four suites, and a small query, at
+1,000 to 10,000 rows, 0.35 to 0.92 of it. Every answer validates. `REPORT.md` and the table below are 0.7's, the laptop's.
+
 **How current it is, precisely.** ursus and Polars were re-run together, every query of all four suites, on 0.7's
-code, `16e617a`, on 2026-10-29 (step 408), and v0.7.0 is that code with its documents. Master has 0.8's steps on top
-of it, which 0.8's report will time. The other engines' numbers are from an earlier session, every engine together on
+code, `16e617a`, on 2026-10-29 (step 408), and v0.7.0 is that code with its documents; 0.8's report, above, times
+0.8's code. The other engines' numbers are from an earlier session, every engine together on
 `5a721e0` on 2026-10-08 (step 127): their code has not changed, and re-running them would have taken the laptop for an
 hour and more. So ursus is compared with Polars within one session, and with the rest across sessions.
 
@@ -269,8 +282,8 @@ The caveats that apply to *this* run:
 
 Timings come from a laptop under real conditions, so treat small differences as noise and the ordering as the signal.
 
-**Where it stands, in one place.** Against Polars, on the current report, with each earlier release's report for
-comparison:
+**Where it stands, in one place.** Against Polars 1.44.1 on the laptop, on 0.7's report, with each earlier release's
+report for comparison; 0.8's, on CI against Polars 2.1.0, is above:
 
 |                           |    ursus |   Polars |       | at v0.6.4 | at v0.6.3 | at v0.6.2 | at v0.6.1 | at v0.6.0 | at v0.5.0 | at v0.4.0 | at v0.3.0 |
 |---------------------------|---------:|---------:|-------|----------:|----------:|----------:|----------:|----------:|----------:|----------:|----------:|

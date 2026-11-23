@@ -58,16 +58,19 @@ own builds and benchmarks use it; any amd64 machine from the last decade has the
 ## Platforms
 
 ursus runs wherever Go does. Its memory budget, on by default at half the memory the
-machine or the container allows and shared by a process's queries, reads that allowance on Linux (cgroups included),
-macOS and Windows.
+machine or the container allows and shared by a process's queries, reads that
+allowance on Linux (cgroups included), macOS and Windows.
 
 ## Versions
 
 ursus is on [ZeroVer](https://0ver.org), at 0.x, and a stable 1.0 is not expected
-yet. Go's rule for v0 applies: a release may rename, remove or reshape an API, and the
-[changelog](../reference/changelog.md) lists each release's breaks with their
-replacements. Pin a version in your `go.mod`, and read the
-changelog before you move.
+yet. Its public API is stable all the same, from v0.8.0: a release adds, and never
+renames, removes or reshapes what an earlier release had, and CI fails a change that
+takes a feature of the last release's away. Up to v0.7.2, Go's rule for v0 applied,
+and a release could rename, remove or reshape an API. The
+[changelog](../reference/changelog.md) says, for each release, what a user of the one
+before can trip on, with what to do instead. Pin a version in your `go.mod`, and read
+the changelog before you move.
 
 These docs are versioned too: the selector at the top of the page switches between
 releases, and `dev` is the development branch.

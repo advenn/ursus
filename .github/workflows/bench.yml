@@ -1,34 +1,53 @@
 name: bench
 
-# Correctness regression gate for the benchmark suite, not a performance gate.
+# Two uses, both by hand.
 #
-# Timings from a shared GitHub runner are not worth recording — the machine is
-# noisy, its core count varies, and this suite goes to some trouble elsewhere to
-# make measurements comparable. What IS worth checking on a schedule is that
-# every ported query still produces the right answer: 22 PDS-H queries across
-# ursus, polars, pandas and duckdb, all validated against the duckdb reference.
-# A change to the optimiser, a kernel or a join can break one of those without
-# breaking a unit test.
+# A correctness check, by default: every ported query of a suite answers as the
+# duckdb reference does, one iteration each. A change to the optimiser, a kernel or
+# a join can break one of those without breaking a unit test.
 #
-# MANUAL DISPATCH ONLY, and that is deliberate rather than timid.
+# A release's report, since v0.8.0 (step 536): `iterations` above one times the
+# suite, `polars` installs a Polars other than the lock's over it, `baseline` builds
+# an older ursus, a tag, and times it on the same runner after the branch's, and
+# `suite: probe` runs the 0.8 scope's service probe (bench/micro/svcprobe) on the
+# branch, on the baseline and in Polars. A shared runner is noisy and its cores
+# vary, the engines run one after another rather than alternated, and its four
+# threads are not the laptop's eight, so a ratio is read within one run, never
+# across runs or against the laptop's reports.
 #
-# This workflow had a nightly cron and had never executed once — `gh run list
-# --workflow=bench.yml` returned nothing at all. A 45-minute four-engine job that
-# has never been seen to pass is not something to schedule unattended; it would
-# just mail a failure every morning until someone debugged it. Watch it pass by
-# hand a few times, then put a schedule back if it earns one.
+# MANUAL DISPATCH ONLY: it had a nightly cron once and never ran; it does not gate
+# pull requests either way.
 #
-# It does not gate pull requests either way.
+#   gh workflow run bench.yml --ref <branch> -f suite=h2o -f io=csv \
+#     -f engines=ursus,polars,duckdb -f iterations=3 -f polars=2.1.0 -f baseline=v0.7.2
 
 on:
   workflow_dispatch:
     inputs:
+      suite:
+        description: 'pdsh | h2o | probe'
+        default: 'pdsh'
       scale:
         description: 'PDS-H scale factor'
         default: '0.1'
+      rows:
+        description: 'h2o row count'
+        default: '1e7'
+      io:
+        description: 'parquet | csv'
+        default: 'parquet'
       engines:
         description: 'comma-separated engines (empty = all enabled)'
         default: 'ursus,polars,pandas,duckdb'
+      iterations:
+        description: 'timed iterations a query, after one untimed'
+        default: '1'
+      polars:
+        description: 'a Polars version installed over the lock''s 1.44.1, e.g. 2.1.0; empty keeps the lock''s'
+        default: ''
+      baseline:
+        description: 'an older ursus, a tag, timed after the branch on the same runner, e.g. v0.7.2; empty for none'
+        default: ''
 
 env:
   GOEXPERIMENT: simd
@@ -38,16 +57,27 @@ env:
   # runs, and every current ubuntu-latest has AVX2. Noted so the next person does
   # not have to re-derive that.
   GOAMD64: v3
+  SUITE: ${{ inputs.suite || 'pdsh' }}
+  SF: ${{ inputs.scale || '0.1' }}
+  ROWS: ${{ inputs.rows || '1e7' }}
+  IO: ${{ inputs.io || 'parquet' }}
+  ENGINES: ${{ inputs.engines || 'ursus,polars,pandas,duckdb' }}
+  ITERATIONS: ${{ inputs.iterations || '1' }}
+  POLARS: ${{ inputs.polars }}
+  BASELINE: ${{ inputs.baseline }}
 
 jobs:
   correctness:
+    if: ${{ inputs.suite != 'probe' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 150
     defaults:
       run:
         working-directory: bench
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v6
         with:
@@ -61,27 +91,62 @@ jobs:
       - name: setup
         run: make setup
 
-      - name: generate SF${{ inputs.scale || '0.1' }}
-        run: make gen SF=${{ inputs.scale || '0.1' }} FORCE=1
+      # uv run syncs to the lock before it runs, which would put the lock's Polars
+      # back, so the steps after this one run without syncing.
+      - name: polars ${{ inputs.polars }}
+        if: ${{ inputs.polars != '' }}
+        run: |
+          uv pip install "polars==$POLARS"
+          echo UV_NO_SYNC=1 >> "$GITHUB_ENV"
+
+      - name: versions
+        run: |
+          go version
+          uv run python -c 'import polars, duckdb; print("polars", polars.__version__, "duckdb", duckdb.__version__)'
+          nproc; free -g; df -h .
+
+      # The baseline's runner, built from its own tree as bench/Makefile builds one:
+      # the runner's flags and the driver are unchanged since v0.7.2.
+      - name: baseline ${{ inputs.baseline }}
+        if: ${{ inputs.baseline != '' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/base" bin-base
+          git -C "$GITHUB_WORKSPACE" archive "$BASELINE" | tar -x -C "$RUNNER_TEMP/base"
+          (cd "$RUNNER_TEMP/base/bench/engines/go" && go build -o "$GITHUB_WORKSPACE/bench/bin-base/runner" ./cmd/runner)
+
+      - name: generate
+        run: |
+          uv run python -m driver.main gen --suite "$SUITE" --scale "$SF" --rows "$ROWS" --io "$IO" --force
 
       - name: reference answers
-        run: make answers SF=${{ inputs.scale || '0.1' }}
+        run: |
+          uv run python -m driver.main answers --suite "$SUITE" --scale "$SF" --rows "$ROWS" --io "$IO" --force
 
-      # One iteration: this job asks whether the answers are right, not how
-      # fast they arrive. FORCE=1 because the preflight gate is calibrated for
-      # a machine someone is actually benchmarking on.
+      # FORCE because the preflight gate is calibrated for a machine someone is
+      # actually benchmarking on.
       - name: run
         run: |
-          make run \
-            SF=${{ inputs.scale || '0.1' }} \
-            ENGINES=${{ inputs.engines || 'ursus,polars,pandas,duckdb' }} \
-            ITERATIONS=1 FORCE=1
+          make run SUITE="$SUITE" SF="$SF" N="$ROWS" IO="$IO" ENGINES="$ENGINES" ITERATIONS="$ITERATIONS" FORCE=1
+
+      - name: run the baseline
+        if: ${{ inputs.baseline != '' && !cancelled() }}
+        env:
+          PATH_GOBIN: bin-base
+          PATH_RESULTS: results-base
+        run: |
+          uv run python -m driver.main run --suite "$SUITE" --scale "$SF" --rows "$ROWS" --io "$IO" \
+            --engines ursus --iterations "$ITERATIONS" --force
 
       - name: validate
         run: |
-          make validate \
-            SF=${{ inputs.scale || '0.1' }} \
-            ENGINES=${{ inputs.engines || 'ursus,polars,pandas,duckdb' }}
+          make validate SUITE="$SUITE" SF="$SF" N="$ROWS" IO="$IO" ENGINES="$ENGINES"
+
+      - name: validate the baseline
+        if: ${{ inputs.baseline != '' && !cancelled() }}
+        env:
+          PATH_RESULTS: results-base
+        run: |
+          uv run python -m driver.main validate --suite "$SUITE" --scale "$SF" --rows "$ROWS" --io "$IO" --engines ursus
 
       # continue-on-error because this runs even when `run` failed, and in that
       # case results/timings.csv may not exist — so `make report` fails too and
@@ -89,7 +154,9 @@ jobs:
       - name: report
         if: always()
         continue-on-error: true
-        run: make report
+        run: |
+          make report
+          if [ -n "$BASELINE" ]; then PATH_RESULTS=results-base uv run python -m driver.main report; fi
 
       - uses: actions/upload-artifact@v6
         if: always()
@@ -100,3 +167,73 @@ jobs:
             bench/results/timings.csv
             bench/results/validation.csv
             bench/results/dashboard.html
+            bench/results-base/REPORT.md
+            bench/results-base/timings.csv
+            bench/results-base/validation.csv
+
+  # The 0.8 scope's service probe: small queries' latency on all threads and one,
+  # a group-by from 1 to 64 goroutines at once, and what each small query allocates;
+  # Polars' twin of the latency. The baseline's build leaves out the modes that need
+  # 0.8's Engine (-tags ursus07).
+  probe:
+    if: ${{ inputs.suite == 'probe' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # svcprobe reads ROWS as its own sizes: the suites' 1e7 would read as 1.
+    env:
+      ROWS: ''
+    defaults:
+      run:
+        working-directory: bench
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          check-latest: false
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: setup
+        run: |
+          uv sync --inexact
+          if [ -n "$POLARS" ]; then uv pip install "polars==$POLARS"; fi
+          uv run --no-sync python -c 'import polars; print("polars", polars.__version__)'
+          go version; nproc; free -g
+
+      - name: build
+        run: |
+          mkdir -p out
+          (cd micro && go build -o ../out/svcprobe ./svcprobe)
+          if [ -n "$BASELINE" ]; then
+            mkdir -p "$RUNNER_TEMP/base"
+            git -C "$GITHUB_WORKSPACE" archive "$BASELINE" | tar -x -C "$RUNNER_TEMP/base"
+            cp -r micro/svcprobe "$RUNNER_TEMP/base/bench/micro/"
+            (cd "$RUNNER_TEMP/base/bench/micro" && go build -tags ursus07 -o "$GITHUB_WORKSPACE/bench/out/svcprobe-base" ./svcprobe)
+          fi
+
+      # Each mode runs on the branch and then on the baseline, alternated, twice.
+      - name: probe
+        run: |
+          for round in 1 2; do
+            for mode in lat conc alloc; do
+              for bin in svcprobe svcprobe-base; do
+                [ -x "out/$bin" ] || continue
+                echo "== round $round, $bin $mode" | tee -a out/probe.txt
+                "out/$bin" "$mode" | tee -a out/probe.txt
+              done
+            done
+            echo "== round $round, polars lat" | tee -a out/probe.txt
+            uv run --no-sync python micro/svcprobe/pl_lat.py | tee -a out/probe.txt
+          done
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: probe-results
+          path: bench/out/probe.txt
