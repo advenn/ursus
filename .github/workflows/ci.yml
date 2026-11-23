@@ -9,6 +9,12 @@ on:
     branches: [main, master]
   pull_request:
 
+# A newer push to a pull request cancels the run it supersedes (step 540). A push to
+# master is a group of its own, by its commit, so every merge is checked in full.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   # The SIMD kernels, which the test matrix's widths exercise. Optional: without it
   # every kernel falls back to its scalar twin, as the scalar-only job proves.
