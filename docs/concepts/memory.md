@@ -40,7 +40,7 @@ hold for its metrics:
 --8<-- "Example_memoryEngine.md"
 
 Each query looks at the budget as it goes, so at a moment the engine's queries can
-hold more than it, up to about one and a half times it with sixteen large queries at
+hold more than it, 1.4 to 1.8 times it with sixteen large queries at
 once. *Changed in 0.8:* each query had a budget of its own, half the memory each.
 
 A Parquet scan's pages, decompressed and read at once, count on its engine too, up to
