@@ -331,8 +331,16 @@ func (b *builder) wideBin(e *ast.Bin) (string, bool) {
 	switch {
 	case e.T.IsDecimal():
 		b.fire(TDec)
+		l, r := b.asDecimal(e.L), b.asDecimal(e.R)
+		if e.Op == ast.Mul {
+			// DuckDB multiplies two DECIMALs of 18 digits or fewer in an int64, a
+			// DECIMAL(18), and overflowed where ursus's product, of their digits
+			// summed, holds it (#96's TestTranslationRules): each operand widened to
+			// 38 digits at its own scale makes it a HUGEINT, at the same scale.
+			l, r = decimal38(l, e.L.Type()), decimal38(r, e.R.Type())
+		}
 		op := map[ast.BinOp]string{ast.Add: " + ", ast.Sub: " - ", ast.Mul: " * "}[e.Op]
-		return "CAST((" + b.asDecimal(e.L) + op + b.asDecimal(e.R) + ") AS " + Type(e.T) + ")", true
+		return "CAST((" + l + op + r + ") AS " + Type(e.T) + ")", true
 	case e.Op == ast.Div && (lt.IsDecimal() || rt.IsDecimal()):
 		b.refuse(XDecDiv, "a Decimal's quotient")
 	case e.T == model.Float32:
@@ -374,6 +382,16 @@ func (b *builder) asDecimal(e ast.Expr) string {
 	}
 	p, _, _ := model.DecimalDigits(t)
 	return "CAST(" + b.expr(e) + " AS DECIMAL(" + strconv.Itoa(p) + ", 0))"
+}
+
+// decimal38 is s, a DECIMAL of t's scale or an integer's, as a DECIMAL(38) of that
+// scale.
+func decimal38(s string, t model.Type) string {
+	scale := 0
+	if t.IsDecimal() {
+		scale = t.Scale()
+	}
+	return "CAST(" + s + " AS DECIMAL(38, " + strconv.Itoa(scale) + "))"
 }
 
 // temporalBin is tick arithmetic (T-INSTANT-ARITH).
