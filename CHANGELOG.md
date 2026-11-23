@@ -17,9 +17,20 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.8.1
+## v0.8.1 — 2026-11-23
 
-On master after v0.8.0: step 538 so far.
+Everything since `v0.8.0` (2026-11-23): step 538, arrow-go v18.9.0 and a Parquet fix,
+released by step 541. No API is added, changed or removed: `api/v0.8.1.txt` lists
+v0.8.0's 2,481 features. The tag is off master, as v0.8.0's is.
+
+### What a v0.8.0 user can trip on
+
+- **Two malformed Parquet pages are refused** (538), an `ErrIO` with arrow-go's
+  reason, where v0.8.0 read them: an INT32 DELTA_BINARY_PACKED page whose deltas
+  span more than 32 bits, which arrow-go v18.7.0 and older wrote and pyarrow refuses;
+  and an OPTIONAL column's DELTA_LENGTH_BYTE_ARRAY page counting more lengths than
+  its values, which no writer is known to write. `WriteParquet` writes neither: read
+  such a file with v0.8.0, or with pyarrow for the second, and write it again.
 
 ### Changed
 
@@ -42,7 +53,8 @@ On master after v0.8.0: step 538 so far.
   refused the chunk as corrupt, "a page refers to a dictionary the chunk does not
   have". arrow-go v18.9.0, and so `WriteParquet`, writes one for a dictionary-encoded
   column of only nulls whose pages are compressed: such a file of ursus's own would
-  not have read back.
+  not have read back. pyarrow writes one too, and v0.8.0 refuses such a file of
+  pyarrow's (`testdata/oracle/footers/pyarrow-03.parquet`).
 
 ---
 
