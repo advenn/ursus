@@ -167,12 +167,17 @@ var wideMacros = []string{
 		lambda u_c: u_addm2(u_c.y * 12 + (u_c.m - 1) + u_n, u_c.d))[1]`,
 
 	// u_todtext is a time of day of per ticks a second as 15:04:05 and digits of
-	// its fraction; u_tstext a naive Datetime's text (T-INSTANT-TEXT).
+	// its fraction; u_tstext a naive Datetime's text (T-INSTANT-TEXT). per is
+	// multiplied as a BIGINT: DuckDB types the literal 1000000000 an INTEGER, and
+	// 3600 times it overflowed INT32 (#96's qcheck-duckdb, seeds 20261257 and
+	// 20261475).
 	`CREATE OR REPLACE MACRO u_todtext(u_t, u_per, u_digits) AS
-		printf('%02d:%02d:%02d', u_t // (3600 * u_per), (u_t // (60 * u_per)) % 60, (u_t // u_per) % 60)
+		printf('%02d:%02d:%02d', u_t // (3600 * CAST(u_per AS BIGINT)), (u_t // (60 * CAST(u_per AS BIGINT))) % 60,
+			(u_t // u_per) % 60)
 		|| (CASE WHEN u_digits > 0 THEN '.' || lpad(CAST(u_t % u_per AS VARCHAR), u_digits, '0') ELSE '' END)`,
 	`CREATE OR REPLACE MACRO u_tstext(u_x, u_per, u_digits) AS CASE WHEN u_x IS NULL THEN NULL ELSE
-		u_dtext(u_idiv(u_x, 86400 * u_per)) || 'T' || u_todtext(u_imod(u_x, 86400 * u_per), u_per, u_digits) END`,
+		u_dtext(u_idiv(u_x, 86400 * CAST(u_per AS BIGINT))) || 'T' ||
+		u_todtext(u_imod(u_x, 86400 * CAST(u_per AS BIGINT)), u_per, u_digits) END`,
 
 	// u_sslice is Slice's window (T-STR-SLICE): from the offset, a negative one from
 	// the end, a start before the first cutting the length.

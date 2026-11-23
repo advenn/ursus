@@ -7,11 +7,13 @@
 // 8}, batch sizes {1, 2, 3, 7, 64, 1024, 65536}, the optimizer on or off with
 // WithVerify, and 1 against k source records; one variant runs twice as well.
 // Answers compare bit-exact: in order where the query promises one, as multisets
-// where it does not. The one allowance is the float-threads rule: a float Sum or
+// where it does not. The allowances are two. The float-threads rule: a float Sum or
 // Mean of a group-by on several threads may differ from the one-thread answer
 // within the error model of the critic's correction to 437, |Δ| ≤ 2·n·eps·Σ|x|.
 // Each time it fires is counted, and a run that should fire it and does not fails as
-// stale. A mismatch is bisected to the fewest factors that cause it.
+// stale. And a discarded value's refusal (step 542): the optimizer off may refuse a
+// value the reference's plan discarded before computing it (discarded). A mismatch
+// is bisected to the fewest factors that cause it.
 //
 // Every run is inside fuzzcheck.Run, so ErrInternal, a panic, a hang, an allocation
 // past the bound or a goroutine left behind fails the case whatever it answered.
@@ -21,6 +23,7 @@ package self
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand/v2"
@@ -238,6 +241,10 @@ func (cr *caseRun) check(variants []model.Config) {
 			if cr.failed {
 				return
 			}
+			if discarded(ref, v, want, got, factors) {
+				cr.rep.Discarded++
+				continue
+			}
 			cr.finding(Finding{Kind: KindMismatch, Ref: ref, Variant: v, Factors: factors,
 				Detail: verdict.diff + detail})
 			return
@@ -316,6 +323,19 @@ func (cr *caseRun) canary() {
 // comparison is how a run under cfg compares with one under ref.
 func (cr *caseRun) comparison(ref, cfg model.Config) comparison {
 	return comparison{ordered: cr.info.Ordered, bounds: cr.bounds, threads: ref.Threads != cfg.Threads}
+}
+
+// discarded is the one refusal allowed (step 542, the maintainer's rule, documented
+// in "Lazy and eager"): a value the query discards may not be computed, so its error
+// may not be raised. The plan as written, the optimizer off, computes every value it
+// names, so it may refuse with a value error where the reference, whose optimizer
+// moved a filter below the failing expression, answered. Only that: the reference
+// answered, the variant refused with ErrValue, and the difference bisects to the
+// optimizer alone. The other way round, the optimized plan refusing where the plan
+// as written answers, is a finding.
+func discarded(ref, v model.Config, want, got *Answer, factors model.Factor) bool {
+	return want.Err == nil && got.Err != nil && errors.Is(got.Err, ursus.ErrValue) &&
+		factors == model.FOptimizer && !ref.OptOff && v.OptOff
 }
 
 // bisect finds the fewest factors of v that, changed alone in the reference, give a
