@@ -5,7 +5,8 @@
 // and ieee_floating_point_ops on.
 //
 // It registers each model.Table's record with a hidden __rid beside its columns,
-// each row's place, and a Date as an INTEGER of its days (sqlgen's T-DATE-DAYS),
+// each row's place, a Date as an INTEGER of its days (sqlgen's T-DATE-DAYS), and a
+// Datetime, a Duration and a Time as a BIGINT of its ticks (T-TICKS, step 539),
 // copied into a native table, as an Arrow view can be read once. A DB is a
 // compare.Engine.
 //
