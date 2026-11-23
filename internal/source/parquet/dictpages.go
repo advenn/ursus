@@ -19,6 +19,9 @@ import (
 // decodes: a Boolean, INT96 or FIXED_LEN_BYTE_ARRAY column, a nested one, one whose
 // footer lists an encoding the reader's own pages do not read. The reader's own
 // pages check the count (readDictionary), and those chunks cannot reach it.
+// arrow-go v18.9.0 bounds the slice by the page's bytes and reads such a page, as
+// many values as its bytes hold: the walk still refuses it as corrupt, as the own
+// pages do, so a file is refused whichever reader its chunks take (step 538).
 //
 // arrow-go reads a chunk whole, with one read at its first byte, through the file's
 // ReaderAt, which is measured (footer.go): so a read there, once it returns, walks

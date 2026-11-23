@@ -37,14 +37,19 @@ import (
 //     own did, values, levels and error alike;
 //   - for a page not cut short and with no refused header, checkedPages refused it
 //     exactly when an index arrow-go reads, one of the page's values that are not
-//     null, is past the dictionary, which is when arrow-go grew it: no page arrow-go
-//     reads is refused, whatever its padding holds.
+//     null, is past the dictionary: no page arrow-go reads is refused, whatever its
+//     padding holds.
+//
+// Since arrow-go v18.9.0 (step 538) its own read never grows its dictionary: its
+// dictConverter checks an index against the dictionary first, and the read fails,
+// "dict eof exception", for each page an index it reads is past the dictionary, where
+// v18.7.0 grew it by 8 MiB and more for an index of 2^20.
 func TestCheckedPagesRefuseWhereArrowGoGrowsItsDictionary(t *testing.T) {
 	rng := rand.New(rand.NewPCG(517, 9))
 	pool := &sync.Pool{New: func() any { return memory.NewResizableBuffer(memory.DefaultAllocator) }}
 	cols := []*schema.Column{indexColumn(t, parquet.Repetitions.Required, false),
 		indexColumn(t, parquet.Repetitions.Optional, false), indexColumn(t, parquet.Repetitions.Optional, true)}
-	var refused, grown, kept, cases int
+	var refused, grown, farRefused, kept, cases int
 	for i := range 2_000 {
 		desc := cols[rng.IntN(len(cols))]
 		pg := genIndexPage(rng, desc)
@@ -60,6 +65,9 @@ func TestCheckedPagesRefuseWhereArrowGoGrowsItsDictionary(t *testing.T) {
 		if theirs.grew {
 			grown++
 		}
+		if pg.wellFormed && pg.reachableFar && theirs.err != nil {
+			farRefused++
+		}
 		switch {
 		case ours.grew:
 			t.Errorf("%s: read through checkedPages, its dictionary grew by %d bytes", label, ours.alloc)
@@ -72,19 +80,21 @@ func TestCheckedPagesRefuseWhereArrowGoGrowsItsDictionary(t *testing.T) {
 		case pg.wellFormed && past != pg.reachablePast:
 			t.Errorf("%s: an index arrow-go reads is past the dictionary: %v; checkedPages refused it: %v (%v)",
 				label, pg.reachablePast, past, ours.err)
-		case pg.wellFormed && theirs.grew != pg.reachableFar:
-			t.Errorf("%s: an index arrow-go reads is 2^20 or more: %v; arrow-go grew its dictionary: %v (%v)",
-				label, pg.reachableFar, theirs.grew, theirs.err)
+		case theirs.grew:
+			t.Errorf("%s: arrow-go's own read grew its dictionary by %d bytes", label, theirs.alloc)
+		case pg.wellFormed && pg.reachablePast && theirs.err == nil:
+			t.Errorf("%s: an index arrow-go reads is past the dictionary, and its own read answered no error", label)
 		}
 		if pg.wellFormed && !past {
 			kept++
 		}
 	}
 	// The generator's own reach: pages of each outcome.
-	t.Logf("of %d pages, %d refused, %d grew arrow-go's dictionary, %d well formed and read", cases, refused, grown, kept)
-	if refused < cases/10 || grown < cases/10 || kept < cases/4 {
-		t.Errorf("of %d pages, %d refused, %d grew arrow-go's dictionary, %d well formed and read", cases, refused,
-			grown, kept)
+	t.Logf("of %d pages, %d refused, %d grew arrow-go's dictionary, %d of an index 2^20 or more refused by "+
+		"arrow-go's own read, %d well formed and read", cases, refused, grown, farRefused, kept)
+	if refused < cases/10 || farRefused < cases/10 || kept < cases/4 {
+		t.Errorf("of %d pages, %d refused, %d of an index 2^20 or more refused by arrow-go's own read, %d well "+
+			"formed and read", cases, refused, farRefused, kept)
 	}
 }
 

@@ -53,6 +53,12 @@ import (
 // in, so nothing decodes it, and its column reader's Err gives the reason, which
 // arrow-go's ReadBatch drops at a batch's first page and batchErr picks up.
 //
+// arrow-go v18.9.0 checks an index against the dictionary first, and fails the page,
+// "dict eof exception", allocating nothing of it (step 538, over this check's 2,000
+// generated pages and its 14 forged files). The check stays for the error, which
+// names the column, the index and the dictionary's count, and for the 0-bit indices
+// arrow-go still misreads (zeroWidthMisread), the same pass.
+//
 // One pass over the page's definition levels and its indices, for a
 // dictionary-encoded data page only. The reader's state is one column chunk's, read
 // on one goroutine: a parallel scan's workers each make their own, and nothing is

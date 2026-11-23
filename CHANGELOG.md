@@ -17,6 +17,35 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.8.1
+
+On master after v0.8.0: step 538 so far.
+
+### Changed
+
+- **arrow-go v18.9.0** (538): ursus reads and writes Parquet and Arrow IPC with
+  arrow-go v18.9.0, from v18.7.0, and the Thrift v0.25.0, klauspost/compress v1.20.3
+  and golang.org/x/text v0.43.0 it requires. Two Parquet pages ursus read arrow-go
+  now refuses, an `ErrIO` with its reason, and ursus with it: an INT32
+  DELTA_BINARY_PACKED page whose deltas span more than 32 bits, as arrow-go v18.7.0
+  and older wrote one where consecutive values differ by more than 2^31, which
+  pyarrow refuses too; and an OPTIONAL column's DELTA_LENGTH_BYTE_ARRAY page counting
+  more lengths than its values, which the format allows, no writer is known to
+  write, and pyarrow reads. Every guard ursus built against arrow-go's findings
+  stays: v18.9.0 fixes 10 of the 32 and leaves 22, F18's hang and step 522's Null
+  column among them; step 538's record says why each stays.
+
+### Fixed
+
+- **A Parquet column chunk whose dictionary holds no value reads** (538): the reader's
+  own pages took a fixed-width column's dictionary page of no value for none and
+  refused the chunk as corrupt, "a page refers to a dictionary the chunk does not
+  have". arrow-go v18.9.0, and so `WriteParquet`, writes one for a dictionary-encoded
+  column of only nulls whose pages are compressed: such a file of ursus's own would
+  not have read back.
+
+---
+
 ## v0.8.0 — 2026-11-23
 
 Everything since `v0.7.0` (2026-10-29) on master: steps 392–407, 486–534 and 537,
