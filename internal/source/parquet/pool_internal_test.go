@@ -171,8 +171,12 @@ func writePooledFile(t *testing.T, path string, groups, rows int) pooledRows {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The Int64 columns' pages are PLAIN, as DuckDB writes lineitem's: arrow-go's
+	// writer would keep a dictionary of their 50,000 values a chunk, and the file
+	// read so copies the dictionaries (step 538).
 	w := file.NewParquetWriter(f, root, file.WithWriterProps(parquet.NewWriterProperties(
-		parquet.WithCompression(compress.Codecs.Zstd), parquet.WithDataPageSize(64<<20))))
+		parquet.WithCompression(compress.Codecs.Zstd), parquet.WithDataPageSize(64<<20),
+		parquet.WithDictionaryFor("a", false), parquet.WithDictionaryFor("c", false))))
 	var all pooledRows
 	for g := range groups {
 		a, c := make([]int64, rows), make([]int64, rows)

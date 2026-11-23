@@ -16,7 +16,27 @@ DataFusion, chDB, Arrow-Go, Gota and QFrame.
 struck through in the report rather than reported as a fast number. ursus passes all
 22 PDS-H queries and all 15 h2o.ai queries.
 
-## Against Polars
+## Against Polars 2.1, in 0.8's report
+
+*New in 0.8.* Geometric means over each suite's queries, in milliseconds, each suite run
+in one job on a GitHub runner of four vCPUs, ursus, Polars and DuckDB one after another
+on four threads, and again beside Polars 1.44.1 on another runner:
+
+| Suite | ursus | Polars 2.1.0 | ursus / Polars 2.1 | ursus / Polars 1.44.1 | 0.8 / v0.7.2 |
+|---|---:|---:|---:|---:|---:|
+| h2o.ai, 10M rows, Parquet | 446 ms | 194 ms | 2.30× | 1.31× | 0.92 |
+| h2o.ai, 10M rows, CSV | 921 ms | 562 ms | 1.64× | 1.18× | 0.94 |
+| TPC-H, scale factor 1 | 114 ms | 49 ms | 2.32× | 1.91× | 0.99 |
+| TPC-H, scale factor 0.1 | 16 ms | 9.3 ms | 1.68× | 1.79× | 0.98 |
+
+Polars 2.1 is faster than 1.44.1, most of all on h2o over Parquet, and 0.8 is a little
+faster than v0.7.2 on every suite. A small query, as a service runs one, is where ursus is
+ahead: at 1,000 and 10,000 rows a filter, a group-by, a join or a sort's head takes 0.05
+to 0.73 of the time Polars takes from Python, and 0.35 to 0.92 of v0.7.2's. The report,
+with every query, the peaks and the probe of small queries and of many at once, is
+[`context_files/v0.8-report.md`](https://github.com/advenn/ursus/blob/master/context_files/v0.8-report.md).
+
+## Against Polars 1.44.1, in 0.7's report
 
 Geometric means over each suite's queries, ursus and Polars run together in one session
 on 8 threads:
@@ -36,7 +56,8 @@ to about 2× on TPC-H at scale factor 1.
 
 ## How they were taken
 
-The figures are 0.7's, from a laptop under real conditions, so a small difference is
+0.8's figures are from CI's runners, which differ from run to run, so a ratio is read
+within one run. 0.7's are from a laptop under real conditions, so a small difference is
 noise and the ordering is the signal. 0.7's code took 0.91 to 1.00 of v0.6.8's time
 over the four suites, the two alternated query by query. The full report, with every
 engine, every query, the caveats and peak memory, is

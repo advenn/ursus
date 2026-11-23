@@ -101,10 +101,11 @@ func (c *Checker) Check(rec arrow.RecordBatch) error {
 // and array.Validate give a Null array the one buffer the Null layout declares, which
 // must be nil. Validate refused the reader's, "expected at least 1 buffers for null,
 // got 0", and with it every IPC file and stream holding a Null column at any depth,
-// whoever wrote it (step 522). The two shapes hold the same data, so Validate is handed
-// a copy in which each such array holds the nil buffer (nullShaped). Every other
-// array, beside one or above it, is validated as it is: the copy keeps its type,
-// length, null count, offset, buffers, children and dictionary.
+// whoever wrote it (step 522); v18.9.0 builds it with none as well (step 538). The
+// two shapes hold the same data, so Validate is handed a copy in which each such array
+// holds the nil buffer (nullShaped). Every other array, beside one or above it, is
+// validated as it is: the copy keeps its type, length, null count, offset, buffers,
+// children and dictionary.
 func validate(arr arrow.Array) error {
 	// A released arrow-go array keeps its Go value and loses its data; DataType would
 	// dereference nil.
