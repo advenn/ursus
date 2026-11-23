@@ -91,13 +91,17 @@ func float(cell string) float64 {
 // u64 is a Uint64 cell's value.
 func u64(cell string) uint64 { return binary.LittleEndian.Uint64([]byte(cell[1:])) }
 
-// show renders a cell for a report.
+// show renders a cell for a report. A fixed-width cell not of its type's width, as
+// the teeth make one, is shown as it is, not read past its end.
 func show(cell string, dt dtype.DataType) string {
+	w := dt.Physical().BitWidth() / 8
 	switch {
 	case cell == "":
 		return "null"
 	case cell == nanCell:
 		return "NaN"
+	case w > 0 && len(cell) != 1+w:
+		return fmt.Sprintf("%q, not a %s", cell, dt)
 	case dt.ID() == dtype.TypeFloat64:
 		return ast.GoFloat(float(cell))
 	case dt.ID() == dtype.TypeFloat32:

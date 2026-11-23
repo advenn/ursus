@@ -13,29 +13,33 @@ import (
 	"github.com/advenn/ursus/qcheck/model"
 )
 
-// smokeSeed and smokeCases are the smoke test's run: about ten seconds on the
-// laptop, and every ci.yml run.
+// smokeSeed and smokeCases are the smoke test's run, once with each generator:
+// about ten seconds on the laptop, and every ci.yml run.
 const (
 	smokeSeed  = 20261114
 	smokeCases = 400
 )
 
-// TestSelfSmoke runs a fixed stretch of cases, which must find nothing, fire the
-// float-threads rule, and cover every operation.
+// TestSelfSmoke runs a fixed stretch of cases with each generator, which must find
+// nothing and cover every operation. The core generator's must fire the
+// float-threads rule as well: the wide generator (step 539) spreads its cases over
+// more types and functions, and its 400 drew no float sum the rule could fire on.
 func TestSelfSmoke(t *testing.T) {
-	rep := Run(Options{Seed: smokeSeed, Cases: smokeCases})
-	t.Log("\n" + rep.Summary())
-	for _, f := range rep.Findings {
-		t.Error(f)
-	}
-	if rep.Fired == 0 || rep.CanariesFired == 0 {
-		t.Errorf("the float-threads rule fired in %d of %d comparisons and %d of %d canaries",
-			rep.Fired, rep.Eligible, rep.CanariesFired, rep.Canaries)
-	}
-	for _, op := range []string{"Filter", "Select", "WithColumns", "GroupBy", "GroupBy()", "Sort", "Head", "Slice",
-		"JoinInner", "JoinLeft", "JoinSemi", "JoinAnti", "Count"} {
-		if s := rep.Ops[op]; s == nil || s.Seen == 0 {
-			t.Errorf("no query ran %s", op)
+	for _, core := range []bool{false, true} {
+		rep := Run(Options{Seed: smokeSeed, Cases: smokeCases, Core: core})
+		t.Logf("core %v:\n%s", core, rep.Summary())
+		for _, f := range rep.Findings {
+			t.Error(f)
+		}
+		if rep.CanariesFired == 0 || core && rep.Fired == 0 {
+			t.Errorf("core %v: the float-threads rule fired in %d of %d comparisons and %d of %d canaries",
+				core, rep.Fired, rep.Eligible, rep.CanariesFired, rep.Canaries)
+		}
+		for _, op := range []string{"Filter", "Select", "WithColumns", "GroupBy", "GroupBy()", "Sort", "Head", "Slice",
+			"JoinInner", "JoinLeft", "JoinSemi", "JoinAnti", "Count"} {
+			if s := rep.Ops[op]; s == nil || s.Seen == 0 {
+				t.Errorf("core %v: no query ran %s", core, op)
+			}
 		}
 	}
 }
