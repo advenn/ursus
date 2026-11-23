@@ -20,6 +20,9 @@ type Case struct {
 	Tables  []*model.Table
 	Query   *ast.Query
 	Records int // 2 to 5: how many records a variant cuts each table into
+	// Core is a case of the core generator, step 512's: the base types and step
+	// 453's operations alone.
+	Core bool
 }
 
 // Tables are the case's tables by name.
@@ -61,17 +64,28 @@ func splitmix(x uint64) uint64 {
 	return x ^ (x >> 31)
 }
 
-// NewCase draws the case of seed.
-func NewCase(seed uint64) *Case {
+// NewCase draws the case of seed: tables of the wide types and a query of the
+// wide operations (step 539).
+func NewCase(seed uint64) *Case { return newCase(seed, true) }
+
+// NewCoreCase draws the case of seed as step 512's generator drew it, the base types
+// and step 453's operations alone: a seed draws the same case to the character, so
+// a case the core finders found is its seed still.
+func NewCoreCase(seed uint64) *Case { return newCase(seed, false) }
+
+// CaseOf is NewCase, or NewCoreCase when core.
+func CaseOf(seed uint64, core bool) *Case { return newCase(seed, !core) }
+
+func newCase(seed uint64, wide bool) *Case {
 	// Mixed first: PCGs seeded with neighbouring seeds draw alike for a while, and a
 	// run's cases have neighbouring seeds.
 	r := rand.New(rand.NewPCG(splitmix(seed), splitmix(seed^0xca5e)))
-	c := &Case{Seed: seed, Records: 2 + r.IntN(4)}
+	c := &Case{Seed: seed, Records: 2 + r.IntN(4), Core: !wide}
 	ntables := 1 + r.IntN(2)
 	for i := range ntables {
-		c.Tables = append(c.Tables, Table(splitmix(seed+uint64(i)), fmt.Sprintf("t%d", i), 8193))
+		c.Tables = append(c.Tables, table(splitmix(seed+uint64(i)), fmt.Sprintf("t%d", i), 8193, wide))
 	}
-	g := &qgen{r: r, tables: c.TableMap(), order: c.Tables}
+	g := &qgen{r: r, tables: c.TableMap(), order: c.Tables, wide: wide}
 	c.Query = g.query()
 	return c
 }
@@ -84,6 +98,16 @@ type qgen struct {
 	names  int // the next fresh name's number
 	joins  int
 	groups int
+	wide   bool // the wide operations (step 539); else step 512's alone
+}
+
+// n is a draw's count: core's, and extra more in a wide case, so a core case draws
+// as step 512's generator did.
+func (g *qgen) n(core, extra int) int {
+	if g.wide {
+		return core + extra
+	}
+	return core
 }
 
 func (g *qgen) fresh(prefix string) string {
@@ -159,7 +183,7 @@ func (g *qgen) withColumns(f ast.Frame, in *ast.Info) ast.Frame {
 		if slices.ContainsFunc(wc.Cols, func(n ast.Named) bool { return n.Name == name }) {
 			continue
 		}
-		wc.Cols = append(wc.Cols, ast.Named{Name: name, E: g.expr(in, g.anyType(in), 2)})
+		wc.Cols = append(wc.Cols, ast.Named{Name: name, E: g.column(in)})
 		in = g.info(wc)
 	}
 	return wc
@@ -188,7 +212,7 @@ func (g *qgen) select_(f ast.Frame, in *ast.Info) ast.Frame {
 		cols = append(cols, ast.Named{Name: c.Name, E: &ast.Col{Name: c.Name, T: c.Type}})
 	}
 	for range g.r.IntN(3) {
-		cols = append(cols, ast.Named{Name: g.fresh("x"), E: g.expr(in, g.anyType(in), 2)})
+		cols = append(cols, ast.Named{Name: g.fresh("x"), E: g.column(in)})
 	}
 	g.r.Shuffle(len(cols), func(i, j int) { cols[i], cols[j] = cols[j], cols[i] })
 	return &ast.Select{In: f, Cols: cols}
@@ -281,7 +305,7 @@ func (g *qgen) groupBy(f ast.Frame, in *ast.Info) ast.Frame {
 		gb.Keys = append(gb.Keys, key)
 	}
 	for range 1 + g.r.IntN(4) {
-		gb.Aggs = append(gb.Aggs, ast.Named{Name: g.fresh("a"), E: g.agg(in)})
+		gb.Aggs = append(gb.Aggs, ast.Named{Name: g.fresh("a"), E: g.agg(in, gb.MaintainOrder)})
 	}
 	return gb
 }
@@ -290,7 +314,7 @@ func (g *qgen) groupBy(f ast.Frame, in *ast.Info) ast.Frame {
 // only where the rows come in a promised order: over rows in none, a float sum's
 // last bits and the sign of a zero Min would move with the order, which the self
 // check's one allowance, the float-threads rule, does not cover.
-func (g *qgen) agg(in *ast.Info) ast.Expr {
+func (g *qgen) agg(in *ast.Info, maintain bool) ast.Expr {
 	for {
 		op := ast.AggOp(g.r.IntN(7))
 		if op == ast.Len {
@@ -301,14 +325,35 @@ func (g *qgen) agg(in *ast.Info) ast.Expr {
 		var t model.Type
 		switch op {
 		case ast.Sum:
-			t = []model.Type{model.Int64, model.Int32, model.Float64, model.Float64, model.Bool, model.Int16}[g.r.IntN(6)]
+			t = g.pickType([]model.Type{model.Int64, model.Int32, model.Float64, model.Float64, model.Bool, model.Int16},
+				func() []model.Type { return g.sumTypes(in) })
 		case ast.Mean:
-			t = []model.Type{model.Int64, model.Int32, model.Float64, model.Float64}[g.r.IntN(4)]
+			t = g.pickType([]model.Type{model.Int64, model.Int32, model.Float64, model.Float64},
+				func() []model.Type { return g.meanTypes(in) })
 		default:
 			t = g.anyType(in)
 		}
 		if t == model.Float64 && op != ast.Count && op != ast.NUnique && !in.Ordered {
 			continue
+		}
+		if t == model.Float32 && (op == ast.Min || op == ast.Max) && !in.Ordered {
+			continue
+		}
+		if t == model.Float32 && (op == ast.Sum || op == ast.Mean) && !(in.Ordered && maintain) {
+			// A Float32 Sum or Mean on every thread moves its last bits, and no
+			// bound covers them (ast.Schema refuses it).
+			continue
+		}
+		if t.IsDuration() && (op == ast.Sum || op == ast.Mean) {
+			// A Duration's Sum overflows its ticks past a tame column's values.
+			cs := g.boundedCols(in, t, model.Tame)
+			if len(cs) == 0 {
+				continue
+			}
+			c := cs[g.r.IntN(len(cs))]
+			e, err := ast.NewAgg(op, &ast.Col{Name: c.Name, T: c.Type})
+			must(err)
+			return e
 		}
 		depth := 0
 		if g.r.IntN(3) == 0 {
@@ -440,7 +485,7 @@ func (g *qgen) anyType(in *ast.Info) model.Type {
 	if g.r.IntN(5) > 0 {
 		var ts []model.Type
 		for _, c := range in.Cols {
-			if !c.Noisy && c.Type != model.Uint64 && c.Type != model.Int128 {
+			if !c.Noisy && (g.wide || c.Type != model.Uint64) && c.Type != model.Int128 {
 				ts = append(ts, c.Type)
 			}
 		}
@@ -448,8 +493,13 @@ func (g *qgen) anyType(in *ast.Info) model.Type {
 			return ts[g.r.IntN(len(ts))]
 		}
 	}
-	return []model.Type{model.Int64, model.Int32, model.Float64, model.String, model.Bool, model.Date,
-		model.Int8, model.Int16}[g.r.IntN(8)]
+	core := []model.Type{model.Int64, model.Int32, model.Float64, model.String, model.Bool, model.Date,
+		model.Int8, model.Int16}
+	i := g.r.IntN(g.n(len(core), 9))
+	if i < len(core) {
+		return core[i]
+	}
+	return g.wideType(i - len(core))
 }
 
 // cols are in's columns of type t that an expression may read.
@@ -468,18 +518,39 @@ func (g *qgen) expr(in *ast.Info, t model.Type, depth int) ast.Expr {
 	if depth <= 0 || g.r.IntN(4) == 0 {
 		return g.leaf(in, t)
 	}
+	if g.wide && g.r.IntN(3) == 0 {
+		// A namespace's function or a wide type's cast, of type t, a third of the
+		// time: each would be a branch among many below.
+		for range 3 {
+			if e, err := g.wideFor(in, t, depth); err == nil && e != nil && e.Type() == t {
+				return e
+			}
+		}
+	}
 	for range 10 {
 		var e ast.Expr
 		var err error
-		switch t {
-		case model.Bool:
+		switch {
+		case t == model.Bool:
 			e, err = g.boolExpr(in, depth)
-		case model.Int8, model.Int16, model.Int32, model.Int64:
+		case t == model.Int8, t == model.Int16, t == model.Int32, t == model.Int64:
 			e, err = g.intExpr(in, t, depth)
-		case model.Float64:
+		case t == model.Float64:
 			e, err = g.floatExpr(in, depth)
-		case model.String, model.Date:
+		case t == model.String, t == model.Date:
 			e, err = g.otherExpr(in, t, depth)
+		case g.wide && t.IsUnsigned():
+			e, err = g.uintExpr(in, t, depth)
+		case g.wide && t == model.Float32:
+			e, err = g.f32Expr(in, depth)
+		case g.wide && t.IsDecimal():
+			e, err = g.decExpr(in, t, depth)
+		case g.wide && t.IsDatetime():
+			e, err = g.datetimeExpr(in, t, depth)
+		case g.wide && t.IsDuration():
+			e, err = g.durationExpr(in, t, depth)
+		case g.wide && t.IsTime():
+			e, err = g.timeExpr(in, t, depth)
 		default:
 			return g.leaf(in, t)
 		}
@@ -536,7 +607,7 @@ func (g *qgen) sample(c ast.Column) *ast.Lit {
 	case *array.Date32:
 		return &ast.Lit{T: model.Date, V: int32(a.Value(i))}
 	}
-	return nil
+	return wideSample(col, i, c.Type)
 }
 
 // intLit is v as a literal of t, wrapped to t's width as a Go conversion wraps
@@ -573,7 +644,7 @@ func (g *qgen) lit(t model.Type) *ast.Lit {
 	case model.Date:
 		return &ast.Lit{T: t, V: int32(v.date())}
 	}
-	panic("gen: no literal of " + t.String())
+	return wideLit(&v, t)
 }
 
 // wrap is x reduced to a signed integer of bits, two's complement.
@@ -594,7 +665,9 @@ func narrower(t model.Type) []model.Type {
 }
 
 func (g *qgen) boolExpr(in *ast.Info, depth int) (ast.Expr, error) {
-	switch g.r.IntN(9) {
+	switch g.r.IntN(g.n(9, 2)) {
+	case 9, 10:
+		return g.fnExpr(in, model.Bool, depth)
 	case 0, 1, 2:
 		return g.compare(in, depth)
 	case 3:
@@ -629,7 +702,7 @@ func (g *qgen) compare(in *ast.Info, depth int) (ast.Expr, error) {
 	}
 	c := lc[g.r.IntN(len(lc))]
 	l := ast.Expr(&ast.Col{Name: c.Name, T: c.Type})
-	if c.Type == model.Int128 || c.Type == model.Uint64 {
+	if c.Type == model.Int128 || c.Type == model.Uint64 && !g.wide {
 		return ast.NewBin(op, l, &ast.Lit{T: model.Int64, V: int64(g.r.IntN(200)) - 20})
 	}
 	if depth > 1 && g.r.IntN(3) == 0 {
@@ -645,7 +718,10 @@ func (g *qgen) compare(in *ast.Info, depth int) (ast.Expr, error) {
 		fallthrough
 	default:
 		rt := c.Type
-		if c.Type.Arith() && g.r.IntN(3) == 0 {
+		switch {
+		case g.wide && g.r.IntN(3) == 0:
+			rt = g.cmpPartner(c.Type)
+		case !g.wide && c.Type.Arith() && g.r.IntN(3) == 0:
 			rt = []model.Type{model.Int64, model.Int32, model.Float64, model.Int8}[g.r.IntN(4)]
 		}
 		r = g.expr(in, rt, depth-1)
@@ -656,7 +732,16 @@ func (g *qgen) compare(in *ast.Info, depth int) (ast.Expr, error) {
 func (g *qgen) intExpr(in *ast.Info, t model.Type, depth int) (ast.Expr, error) {
 	nar := narrower(t)
 	sub := func() ast.Expr { return g.expr(in, nar[g.r.IntN(len(nar))], depth-1) }
-	switch g.r.IntN(10) {
+	switch g.r.IntN(g.n(10, 3)) {
+	case 10:
+		return g.fnExpr(in, t, depth)
+	case 11:
+		// An unsigned integer and a signed one meet at the least signed type that
+		// holds both (dtype.Promote): Uint8 and Int8 at Int16.
+		return g.mixedSign(in, t, depth)
+	case 12:
+		froms := []model.Type{model.Uint8, model.Uint16, model.Uint32, model.Uint64, model.Float32, g.anyDecimal(in)}
+		return ast.NewCast(g.expr(in, froms[g.r.IntN(len(froms))], depth-1), t, true)
 	case 0, 1:
 		op := []ast.BinOp{ast.Add, ast.Sub, ast.Mul}[g.r.IntN(3)]
 		return ast.NewBin(op, g.expr(in, t, depth-1), sub())
@@ -713,7 +798,14 @@ func (g *qgen) intExpr(in *ast.Info, t model.Type, depth int) (ast.Expr, error) 
 func (g *qgen) floatExpr(in *ast.Info, depth int) (ast.Expr, error) {
 	arith := []model.Type{model.Float64, model.Float64, model.Int64, model.Int32}
 	sub := func() ast.Expr { return g.expr(in, arith[g.r.IntN(len(arith))], depth-1) }
-	switch g.r.IntN(9) {
+	switch g.r.IntN(g.n(9, 2)) {
+	case 9:
+		// A quotient of the wide numbers: Float64, a Decimal's the one nearest.
+		ts := []model.Type{model.Uint8, model.Uint32, model.Uint64, model.Int16, g.anyDecimal(in), model.Float32, model.Int64}
+		return ast.NewBin(ast.Div, g.expr(in, ts[g.r.IntN(len(ts))], depth-1), g.expr(in, ts[g.r.IntN(len(ts))], depth-1))
+	case 10:
+		froms := []model.Type{model.Float32, model.Uint8, model.Uint64, g.anyDecimal(in)}
+		return ast.NewCast(g.expr(in, froms[g.r.IntN(len(froms))], depth-1), model.Float64, false)
 	case 0, 1:
 		op := []ast.BinOp{ast.Add, ast.Sub, ast.Mul, ast.FloorDiv, ast.Mod}[g.r.IntN(5)]
 		l, r := g.expr(in, model.Float64, depth-1), sub()
@@ -743,9 +835,14 @@ func (g *qgen) floatExpr(in *ast.Info, depth int) (ast.Expr, error) {
 	}
 }
 
-// otherExpr is a String or a Date: a conditional, a fill, or a cast to it.
+// otherExpr is a String or a Date: a conditional, a fill, or a cast to it; in a
+// wide case a function of either namespace, or a cast from a wide type.
 func (g *qgen) otherExpr(in *ast.Info, t model.Type, depth int) (ast.Expr, error) {
-	switch g.r.IntN(5) {
+	switch g.r.IntN(g.n(5, 3)) {
+	case 5, 6:
+		return g.fnExpr(in, t, depth)
+	case 7:
+		return g.castTo(in, t, depth)
 	case 0:
 		return ast.NewWhen(g.expr(in, model.Bool, depth-1), g.expr(in, t, depth-1), g.expr(in, t, depth-1))
 	case 1:

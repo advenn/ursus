@@ -38,6 +38,9 @@ type Options struct {
 	Cases    int           // stop after this many cases; 0 is no limit
 	Duration time.Duration // stop starting cases after this long; 0 is no limit
 	Engine   Engine
+	// Core draws the core generator's cases (gen.NewCoreCase), step 512's types
+	// and operations alone, each seed the case it was before step 539.
+	Core bool
 	// Limits bound each ursus run: its Wall is how long one query may take before the
 	// watchdog ends the process, 0 for a minute.
 	Limits fuzzcheck.Limits
@@ -73,6 +76,7 @@ type Finding struct {
 	Case   string       // the tables and the query, as Go
 	SQL    string
 	Detail string
+	Core   bool // the case is the core generator's
 }
 
 func (f Finding) String() string {
@@ -112,7 +116,7 @@ func Run(opts Options) *Report {
 			break
 		}
 		seed := opts.Seed + uint64(i)
-		c, failure := newCase(seed)
+		c, failure := newCase(seed, opts.Core)
 		if failure != "" {
 			rep.add(Finding{Kind: KindGenerator, Seed: seed, Detail: failure})
 			continue
@@ -143,13 +147,13 @@ func ConfigOf(c *gen.Case) model.Config {
 }
 
 // newCase draws seed's case, and reports a generator's panic or ill-formed query.
-func newCase(seed uint64) (c *gen.Case, failure string) {
+func newCase(seed uint64, core bool) (c *gen.Case, failure string) {
 	defer func() {
 		if v := recover(); v != nil {
 			failure = fmt.Sprintf("the generator panicked: %v", v)
 		}
 	}()
-	c = gen.NewCase(seed)
+	c = gen.CaseOf(seed, core)
 	if err := ast.Check(c.Query, c.TableMap()); err != nil {
 		return nil, fmt.Sprintf("an ill-formed query: %v\n%s", err, c)
 	}
@@ -172,7 +176,8 @@ type caseRun struct {
 }
 
 func (cr *caseRun) finding(kind, sql, detail string) {
-	cr.rep.add(Finding{Kind: kind, Seed: cr.c.Seed, Config: cr.cfg, Case: cr.c.String(), SQL: sql, Detail: detail})
+	cr.rep.add(Finding{Kind: kind, Seed: cr.c.Seed, Config: cr.cfg, Case: cr.c.String(), SQL: sql, Detail: detail,
+		Core: cr.c.Core})
 }
 
 func (cr *caseRun) check() {
