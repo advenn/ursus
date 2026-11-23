@@ -14,6 +14,12 @@ on:
       - '.github/workflows/oracle.yml'
   workflow_dispatch:
 
+# A newer push to a pull request cancels the run it supersedes (step 540); a run by
+# hand is a group of its own.
+concurrency:
+  group: oracle-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   recorded:
     runs-on: ubuntu-latest
