@@ -291,3 +291,23 @@ On the bump alone, before any change here, `./internal/...` failed in `readfuzz`
 and the root package in `TestParquetRoundTrip` and
 `TestParquetPruningAgreesWithoutIt` (the dictionary of no value).
 `bench/engines/go` was not built here: it links DuckDB, which is CI's.
+
+## 11. After the v0.8.0 tag (2026-11-23)
+
+The pull request was held as a draft until v0.8.0 was tagged, and then master was
+merged in:
+- **The CHANGELOG.** Its two entries, Changed (arrow-go v18.9.0) and Fixed (a
+  dictionary of no value), moved out of v0.8.0's section, which is released, into
+  a new "Unreleased — toward v0.8.1".
+- **`bench/micro/go.mod`.** It still required arrow-go v18.7.0, which this step had
+  missed. Its `replace` of ursus by the working tree selects the root's v18.9.0, so
+  `go build` there failed with "updates to go.mod needed": `bench.yml`'s probe
+  job would have failed to build svcprobe, and no CI job builds that module
+  otherwise. `go mod tidy` there moved its indirect requirements to the root's
+  versions.
+- **Checks after the merge:**
+  - build and vet in the root, `bench/micro`, `bench/engines/go` and `qcheck`;
+  - levels;
+  - `api -check`: 2,481 features, 0 added and 0 gone since v0.8.0;
+  - testinventory and gofmt;
+  - `go test ./internal/...`: ok, 30 packages; the root package: ok, 206 s.
