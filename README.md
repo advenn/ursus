@@ -7,7 +7,7 @@
 
 **ursus is a dataframe library for Go (Golang), modelled on Polars** — lazy execution with a query optimizer, Apache
 Arrow memory, SIMD kernels, and streaming execution that spills to disk rather than falling over. Pure Go, no cgo.
-v0.8.0 is the last release: ursus inside a Go service, and a public API that, from it on, only adds.
+v0.8.1 is the last release: ursus inside a Go service, and a public API that, from v0.8.0 on, only adds.
 
 **Documentation: [advenn.github.io/ursus](https://advenn.github.io/ursus/)** — a quick start, the concepts, a guide for
 Polars users and [one for a Go service](https://advenn.github.io/ursus/dev/guide/services/), versioned by release, with
@@ -117,7 +117,7 @@ every push, and `make test-all` includes an experiment-off leg locally. The flag
 
 ## Status
 
-**v0.8.0** is the last release: ursus inside a Go service ([`v0.8-scope.md`](./context_files/v0.8-scope.md)),
+**v0.8.1** is the last release, v0.8.0 with arrow-go v18.9.0 and a Parquet fix. v0.8.0 brought ursus inside a Go service ([`v0.8-scope.md`](./context_files/v0.8-scope.md)),
 queries that share a memory budget and threads, stop when they are cancelled, report to a hook and fail with an error a
 caller reads; the public API stable, a release only adding; and a bug hunt's guards against input that is corrupt or
 hostile, every reader fuzzed. [`CHANGELOG.md`](./CHANGELOG.md) says what a v0.7 user can trip on. v0.7.3 is the last of
