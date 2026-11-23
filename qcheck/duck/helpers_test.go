@@ -10,8 +10,10 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/decimal128"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
+	"github.com/advenn/ursus/qcheck/gen"
 	"github.com/advenn/ursus/qcheck/model"
 )
 
@@ -168,7 +170,7 @@ func table(name string, cols ...col) *model.Table {
 	fields := make([]arrow.Field, len(cols))
 	for i, c := range cols {
 		t.Cols = append(t.Cols, model.Column{Name: c.name, Type: c.t, Profile: model.Extreme})
-		fields[i] = arrow.Field{Name: c.name, Type: arrowType(c.t), Nullable: true}
+		fields[i] = arrow.Field{Name: c.name, Type: gen.ArrowType(c.t), Nullable: true}
 	}
 	b := array.NewRecordBuilder(memory.NewGoAllocator(), arrow.NewSchema(fields, nil))
 	defer b.Release()
@@ -192,6 +194,38 @@ func table(name string, cols ...col) *model.Table {
 				fb.Append(v.(bool))
 			case *array.Date32Builder:
 				fb.Append(arrow.Date32(toInt(v)))
+			// The wide types (step 539): an unsigned value a uint64, a Float32 a
+			// float32, a Decimal its unscaled digits, a temporal value its ticks.
+			case *array.Int8Builder:
+				fb.Append(int8(toInt(v)))
+			case *array.Int16Builder:
+				fb.Append(int16(toInt(v)))
+			case *array.Uint8Builder:
+				fb.Append(uint8(v.(uint64)))
+			case *array.Uint16Builder:
+				fb.Append(uint16(v.(uint64)))
+			case *array.Uint32Builder:
+				fb.Append(uint32(v.(uint64)))
+			case *array.Uint64Builder:
+				fb.Append(v.(uint64))
+			case *array.Float32Builder:
+				fb.Append(v.(float32))
+			case *array.Decimal128Builder:
+				u, ok := new(big.Int).SetString(v.(string), 10)
+				if !ok {
+					panic("not a Decimal's unscaled digits: " + v.(string))
+				}
+				fb.Append(decimal128.FromBigInt(u))
+			case *array.TimestampBuilder:
+				fb.Append(arrow.Timestamp(toInt(v)))
+			case *array.DurationBuilder:
+				fb.Append(arrow.Duration(toInt(v)))
+			case *array.Time32Builder:
+				fb.Append(arrow.Time32(toInt(v)))
+			case *array.Time64Builder:
+				fb.Append(arrow.Time64(toInt(v)))
+			default:
+				panic(fmt.Sprintf("no table column of %s", c.t))
 			}
 		}
 	}
@@ -209,22 +243,4 @@ func toInt(v any) int64 {
 		return int64(v)
 	}
 	panic(fmt.Sprintf("not an integer: %T", v))
-}
-
-func arrowType(t model.Type) arrow.DataType {
-	switch t {
-	case model.Int64:
-		return arrow.PrimitiveTypes.Int64
-	case model.Int32:
-		return arrow.PrimitiveTypes.Int32
-	case model.Float64:
-		return arrow.PrimitiveTypes.Float64
-	case model.String:
-		return arrow.BinaryTypes.String
-	case model.Bool:
-		return arrow.FixedWidthTypes.Boolean
-	case model.Date:
-		return arrow.FixedWidthTypes.Date32
-	}
-	panic("no table column of " + t.String())
 }
