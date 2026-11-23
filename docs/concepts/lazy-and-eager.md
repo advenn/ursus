@@ -52,6 +52,14 @@ fence it puts around it: a filter above one use stops there. *New in 0.6.7:*
 `Cache()` asks it of any query, as Polars' `cache` does, a scan read twice or a Go
 function's answer; a query used once is not cached.
 
+The same answer, though not always the same error: **a value the query discards may
+not be computed, so its error may not be raised.** A filter moved below a `Select`
+drops rows before a cast or an operation there reads them, so a strict cast that would
+refuse one of those rows, or arithmetic that would overflow on it, does not fail the
+query, where the plan as written (`WithOptFlags(ursus.NoOptFlags())`) does. Polars'
+optimizer behaves alike. The other way round is a bug to report: an optimized query
+that fails where the plan as written answers.
+
 `Explain` shows the plan. `Optimized(false)` shows it as written:
 
 --8<-- "Example_lazyExplainUnoptimized.md"

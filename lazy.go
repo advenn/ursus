@@ -359,7 +359,10 @@ type OptFlags struct {
 // DefaultOptFlags is every rule on, as a query runs by default.
 func DefaultOptFlags() OptFlags { return OptFlags(plan.DefaultFlags()) }
 
-// NoOptFlags is every rule off: the plan runs as it was written.
+// NoOptFlags is every rule off: the plan runs as it was written. That plan computes
+// every value it names, so it can fail on a value the optimized plan discards before
+// computing it, as a strict cast of a row a later filter drops: the optimizer keeps
+// the answer, not every error (step 542).
 func NoOptFlags() OptFlags { return OptFlags{} }
 
 // WithOptFlags overrides which optimizer rules run. Use it to benchmark a rule's

@@ -20,8 +20,9 @@ Step numbers below point at those records.
 ## v0.8.1 — 2026-11-23
 
 Everything since `v0.8.0` (2026-11-23): step 538, arrow-go v18.9.0 and a Parquet fix,
-released by step 541. No API is added, changed or removed: `api/v0.8.1.txt` lists
-v0.8.0's 2,481 features. The tag is off master, as v0.8.0's is.
+and step 542, a cast's fix and the optimizer's rule for errors documented, released by
+step 541. No API is added, changed or removed: `api/v0.8.1.txt` lists v0.8.0's 2,481
+features. The tag is off master, as v0.8.0's is.
 
 ### What a v0.8.0 user can trip on
 
@@ -55,6 +56,14 @@ v0.8.0's 2,481 features. The tag is off master, as v0.8.0's is.
   column of only nulls whose pages are compressed: such a file of ursus's own would
   not have read back. pyarrow writes one too, and v0.8.0 refuses such a file of
   pyarrow's (`testdata/oracle/footers/pyarrow-03.parquet`).
+- **A Datetime far from 1970 casts to its Time** (542): the cast widened the whole
+  instant to the Time's unit before it took the time of day, so a Datetime(ms) past
+  about the year 294,000, or a Datetime(s) past 2262 cast to a Time(ns), was refused
+  under a strict cast and null under a lossy one, though its time of day exists. It
+  now folds into the day first, which answers the same wherever the cast answered.
+  qcheck's self check found it, refused only with the optimizer off. That an error in
+  a value the query discards may not be raised is the optimizer's rule, now
+  documented ("Lazy and eager"): a filter moved below a cast drops the rows first.
 
 ---
 

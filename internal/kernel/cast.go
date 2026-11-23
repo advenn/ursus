@@ -36,6 +36,19 @@ import (
 // S18). From anything but a Datetime, a value outside the day is refused under a
 // strict cast and null under a lossy one, as Polars does.
 func Cast(name string, to dtype.DataType, strict bool, c *data.Column) (*data.Column, error) {
+	// An instant folds into its day in its own unit BEFORE it is retimed (step
+	// 542): retiming first widened the whole instant, so a Datetime(ms) past about
+	// the year 294,000 overflowed int64 microseconds and a strict cast to Time(us)
+	// refused a time of day that exists. Folding first gives the same answer
+	// wherever retiming first gave one, as a day is a whole number of ticks of
+	// every unit, and a folded tick widens to under a day of nanoseconds.
+	if to.ID() == dtype.TypeTime && c.DType().ID() == dtype.TypeDatetime {
+		folded, err := normaliseTime(c)
+		if err != nil {
+			return nil, err
+		}
+		c = folded
+	}
 	out, err := castTo(name, to, strict, c)
 	if err != nil {
 		return nil, err
