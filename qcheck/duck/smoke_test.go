@@ -189,11 +189,12 @@ var foundSeeds = []uint64{
 	804002697, 804006513, 804011153, 804013588, 804018440, // an integer Mean rounded twice
 }
 
-// TestDuckFound runs the cases the qcheck-duckdb job found, each alone.
+// TestDuckFound runs the cases the qcheck-duckdb job found, each alone. Each was
+// found before step 539, so its case is the core generator's.
 func TestDuckFound(t *testing.T) {
 	d := open(t)
 	for _, seed := range foundSeeds {
-		rep := compare.Run(compare.Options{Seed: seed, Cases: 1, Engine: d})
+		rep := compare.Run(compare.Options{Seed: seed, Cases: 1, Engine: d, Core: true})
 		for _, f := range rep.Findings {
 			if f.Kind != compare.KindVacuous {
 				t.Error(f)

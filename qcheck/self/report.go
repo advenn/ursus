@@ -43,10 +43,13 @@ type Report struct {
 	// bound: the rule's reason to exist.
 	Canaries, CanariesFired int
 	Refused                 int // queries the reference refused
-	Ops                     map[string]*OpStats
-	Refusals                map[string]int // each refusal's first line, counted
-	Findings                []Finding
-	Elapsed                 time.Duration
+	// Discarded counts the refusals allowed (discarded): the optimizer off refused a
+	// value the reference's plan never computed.
+	Discarded int
+	Ops       map[string]*OpStats
+	Refusals  map[string]int // each refusal's first line, counted
+	Findings  []Finding
+	Elapsed   time.Duration
 }
 
 func newReport() *Report {
@@ -147,6 +150,8 @@ func (r *Report) Summary() string {
 	fmt.Fprintf(&b, "float-threads rule: fired in %d of %d comparisons it could (%d cells); "+
 		"%d of %d canaries differed\n", r.Fired, r.Eligible, r.FiredCells, r.CanariesFired, r.Canaries)
 	fmt.Fprintf(&b, "reference refused %d of %d queries\n", r.Refused, r.Cases)
+	fmt.Fprintf(&b, "a discarded value's refusal allowed %d times (the optimizer off refused what the reference never computed)\n",
+		r.Discarded)
 	fmt.Fprintf(&b, "%-12s %6s %8s %10s %10s %8s %10s\n", "op", "nodes", "refused", "fed rows", "ans rows",
 		"queries", "with rows")
 	for _, name := range r.opNames() {
