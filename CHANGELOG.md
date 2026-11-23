@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ---
 
-## v0.8.0 — 2026-11-20
+## v0.8.0 — 2026-11-23
 
 Everything since `v0.7.0` (2026-10-29) on master: steps 392–407, 486–534 and 537,
 and the 0.7 line's fixes since. [`v0.8-scope.md`](./context_files/v0.8-scope.md) set the
