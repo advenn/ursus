@@ -1,19 +1,23 @@
 name: bench
 
-# Two uses, both by hand.
+# Two uses, both by hand, both small.
 #
 # A correctness check, by default: every ported query of a suite answers as the
 # duckdb reference does, one iteration each. A change to the optimiser, a kernel or
 # a join can break one of those without breaking a unit test.
 #
-# A release's report, since v0.8.0 (step 536): `iterations` above one times the
-# suite, `polars` installs a Polars other than the lock's over it, `baseline` builds
+# A comparison at small sizes (step 536): `iterations` above one times the suite, `polars` installs a Polars other than the lock's over it, `baseline` builds
 # an older ursus, a tag, and times it on the same runner after the branch's, and
 # `suite: probe` runs the 0.8 scope's service probe (bench/micro/svcprobe) on the
 # branch, on the baseline and in Polars. A shared runner is noisy and its cores
 # vary, the engines run one after another rather than alternated, and its four
 # threads are not the laptop's eight, so a ratio is read within one run, never
 # across runs or against the laptop's reports.
+#
+# NO FULL-SIZE SUITE ON GITHUB'S RUNNERS (the maintainer, 2026-11-23; step 540): PDS-H
+# at most SF=0.1 and h2o at most 1e6 rows, refused above before anything is built.
+# v0.8.0's report (step 536) ran h2o at 1e7 and PDS-H at SF=1 here, the last that
+# did; where a later report's full sizes run is the maintainer's to say.
 #
 # MANUAL DISPATCH ONLY: it had a nightly cron once and never ran; it does not gate
 # pull requests either way.
@@ -28,11 +32,11 @@ on:
         description: 'pdsh | h2o | probe'
         default: 'pdsh'
       scale:
-        description: 'PDS-H scale factor'
+        description: 'PDS-H scale factor, at most 0.1'
         default: '0.1'
       rows:
-        description: 'h2o row count'
-        default: '1e7'
+        description: 'h2o row count, at most 1e6'
+        default: '1e6'
       io:
         description: 'parquet | csv'
         default: 'parquet'
@@ -59,7 +63,7 @@ env:
   GOAMD64: v3
   SUITE: ${{ inputs.suite || 'pdsh' }}
   SF: ${{ inputs.scale || '0.1' }}
-  ROWS: ${{ inputs.rows || '1e7' }}
+  ROWS: ${{ inputs.rows || '1e6' }}
   IO: ${{ inputs.io || 'parquet' }}
   ENGINES: ${{ inputs.engines || 'ursus,polars,pandas,duckdb' }}
   ITERATIONS: ${{ inputs.iterations || '1' }}
@@ -70,7 +74,7 @@ jobs:
   correctness:
     if: ${{ inputs.suite != 'probe' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: bench
@@ -78,6 +82,15 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
+      # No full-size suite here (step 540). awk reads 1e6 and 0.1 as numbers; a value
+      # that is not one reads as 0 and is refused too.
+      - name: sizes at most SF=0.1 and 1e6 rows
+        run: |
+          if ! awk -v sf="$SF" -v n="$ROWS" 'BEGIN { exit !(sf + 0 > 0 && sf + 0 <= 0.1 && n + 0 >= 1 && n + 0 <= 1e6) }'; then
+            echo "::error title=too large for GitHub's runners::scale $SF, rows $ROWS: at most 0.1 and 1e6 here (step 540)"
+            exit 1
+          fi
 
       - uses: actions/setup-go@v6
         with:
@@ -179,7 +192,7 @@ jobs:
     if: ${{ inputs.suite == 'probe' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # svcprobe reads ROWS as its own sizes: the suites' 1e7 would read as 1.
+    # svcprobe reads ROWS as its own sizes: the suites' 1e6 would read as 1.
     env:
       ROWS: ''
     defaults:
