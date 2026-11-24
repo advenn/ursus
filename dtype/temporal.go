@@ -206,6 +206,9 @@ func FormatTemporal(d DataType, ticks int64) string {
 		return t.Format(timeLayout(d.TimeUnit()))
 
 	case TypeDatetime:
+		if s, far := farDatetimeText(d, ticks); far {
+			return s
+		}
 		t, ok := d.ToTime(ticks)
 		if !ok {
 			return strconv.FormatInt(ticks, 10)
@@ -251,6 +254,55 @@ func timeLayout(u TimeUnit) string { return "15:04:05" + fracLayout(u) }
 // fracLayout is the fractional-seconds part of a layout. Go spells a fixed-width
 // fraction with zeros, so a millisecond column always shows three digits — which
 // makes the unit visible in the output rather than something to infer.
+// farDays bounds the instants whose text Go's calendar writes (step 545), as the
+// kernel's calendarDays bounds those it reads (steps 543, 544): Go computes a date
+// only from about the year -292,277,022,399, which a Datetime(Second) passes near
+// int64's minimum, and its text there named another instant. Past 10^12 days, which
+// only a Datetime(Second) reaches, the text is written from civil in Go's layout: a
+// year of four digits or more after its sign, and a zoned instant in UTC with a "Z",
+// as an offset with seconds is above.
+const farDays = int64(1e12)
+
+// farDatetimeText is the text of a Datetime past farDays, and true, or false.
+func farDatetimeText(d DataType, ticks int64) (string, bool) {
+	npt, ok := d.NanosPerTick()
+	if !ok || npt <= 0 {
+		return "", false
+	}
+	days, tod := divFloor(ticks, int64(24*time.Hour)/npt)
+	if days <= farDays && days >= -farDays {
+		return "", false
+	}
+	y, m, dd := civil(days)
+	ns := tod * npt
+	b := make([]byte, 0, 40)
+	if y < 0 {
+		b = append(b, '-')
+		y = -y
+	}
+	ys := strconv.FormatInt(y, 10)
+	for i := len(ys); i < 4; i++ {
+		b = append(b, '0')
+	}
+	b = append(b, ys...)
+	b = appendDigits(append(b, '-'), m, 2)
+	b = appendDigits(append(b, '-'), dd, 2)
+	b = appendDigits(append(b, 'T'), ns/int64(time.Hour), 2)
+	b = appendDigits(append(b, ':'), ns/int64(time.Minute)%60, 2)
+	b = appendDigits(append(b, ':'), ns/int64(time.Second)%60, 2)
+	if f := len(fracLayout(d.TimeUnit())) - 1; f > 0 {
+		div := int64(1)
+		for range 9 - f {
+			div *= 10
+		}
+		b = appendDigits(append(b, '.'), ns%int64(time.Second)/div, f)
+	}
+	if d.TimeZone() != "" {
+		b = append(b, 'Z')
+	}
+	return string(b), true
+}
+
 func fracLayout(u TimeUnit) string {
 	switch u {
 	case Milli:
