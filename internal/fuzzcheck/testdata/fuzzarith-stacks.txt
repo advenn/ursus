@@ -1,0 +1,68 @@
+goroutine 26360 [running]:
+github.com/advenn/ursus/internal/fuzzcheck.allStacks()
+	/home/runner/work/ursus/ursus/internal/fuzzcheck/fuzzcheck.go:358 +0x9e
+github.com/advenn/ursus/internal/fuzzcheck.Run({0x8e9e20, 0x17ff5e77d448}, {0x17ff5e4a52f0?, 0x17ff5e4a5320?, 0x0?, 0x5?}, 0x17ff5e4e37b0)
+	/home/runner/work/ursus/ursus/internal/fuzzcheck/fuzzcheck.go:150 +0xa5a
+github.com/advenn/ursus/i128_test.FuzzArith.func1(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/runner/work/ursus/ursus/i128/fuzz_test.go:84 +0x65
+reflect.Value.call({0x8a7068?, 0x8ea4c8?, 0x13?}, {0x6a8402, 0x4}, {0x17ff5e771140, 0x5, 0x8?})
+	/opt/hostedtoolcache/go/1.27.0/x64/src/reflect/value.go:586 +0xed9
+reflect.Value.Call({0x8a7068?, 0x8ea4c8?, 0x5620c8?}, {0x17ff5e771140?, 0x8e6b98?, 0x6ea536?})
+	/opt/hostedtoolcache/go/1.27.0/x64/src/reflect/value.go:369 +0xb9
+testing.(*F).Fuzz.func1.1(0x17ff5e77d448?)
+	/opt/hostedtoolcache/go/1.27.0/x64/src/testing/fuzz.go:341 +0x312
+testing.tRunner(0x17ff5e77d448, 0x17ff5e76acf0)
+	/opt/hostedtoolcache/go/1.27.0/x64/src/testing/testing.go:2193 +0xea
+created by testing.(*F).Fuzz.func1 in goroutine 19
+	/opt/hostedtoolcache/go/1.27.0/x64/src/testing/fuzz.go:328 +0x678
+
+goroutine 1 [chan receive]:
+testing.runFuzzing({0x8ea180, 0x9324e0}, {0x90a100, 0x3, 0x4?})
+	/opt/hostedtoolcache/go/1.27.0/x64/src/testing/fuzz.go:624 +0x82c
+testing.(*M).Run(0x17ff5e49a3c0)
+	/opt/hostedtoolcache/go/1.27.0/x64/src/testing/testing.go:2628 +0xb2d
+main.main()
+	_testmain.go:78 +0x9b
+
+goroutine 19 [chan receive]:
+testing.(*F).Fuzz.func1({0x8e82e8, 0x17ff5e604440}, {{0x0, 0x0}, {0x0, 0x0}, {0x0, 0x0, 0x0}, {0x17ff5e71a280, ...}, ...})
+	/opt/hostedtoolcache/go/1.27.0/x64/src/testing/fuzz.go:343 +0x68b
+testing.(*F).Fuzz.func2({{0x0, 0x0}, {0x0, 0x0}, {0x0, 0x0, 0x0}, {0x17ff5e71a280, 0x4, 0x4}, ...})
+	/opt/hostedtoolcache/go/1.27.0/x64/src/testing/fuzz.go:391 +0x9a
+internal/fuzz.RunFuzzWorker.func1({{0x0, 0x0}, {0x0, 0x0}, {0x0, 0x0, 0x0}, {0x17ff5e71a280, 0x4, 0x4}, ...})
+	/opt/hostedtoolcache/go/1.27.0/x64/src/internal/fuzz/worker.go:497 +0xf5
+internal/fuzz.(*workerServer).fuzz.func4({{0x0, 0x0}, {0x0, 0x0}, {0x0, 0x0, 0x0}, {0x17ff5e71a280, 0x4, 0x4}, ...})
+	/opt/hostedtoolcache/go/1.27.0/x64/src/internal/fuzz/worker.go:747 +0x84
+internal/fuzz.(*workerServer).fuzz(0x17ff5e521a70, {0x8e9de8, 0x17ff5e4fe500}, {0x5f5e100, 0x0, 0x0, {0x17ff5e4daa80, 0x2843, 0x2a80}})
+	/opt/hostedtoolcache/go/1.27.0/x64/src/internal/fuzz/worker.go:786 +0x7a2
+internal/fuzz.(*workerServer).serve(0x17ff5e521a70, {0x8e9de8, 0x17ff5e4fe500})
+	/opt/hostedtoolcache/go/1.27.0/x64/src/internal/fuzz/worker.go:669 +0x2af
+internal/fuzz.RunFuzzWorker({0x8e9de8, 0x17ff5e4fe500}, 0x17ff5e4a7190)
+	/opt/hostedtoolcache/go/1.27.0/x64/src/internal/fuzz/worker.go:502 +0x151
+testing/internal/testdeps.TestDeps.RunFuzzWorker({}, 0x17ff5e4a7190)
+	/opt/hostedtoolcache/go/1.27.0/x64/src/testing/internal/testdeps/deps.go:187 +0xa5
+testing.(*F).Fuzz(0x17ff5e4f6288, {0x8a7068, 0x8ea4c8})
+	/opt/hostedtoolcache/go/1.27.0/x64/src/testing/fuzz.go:385 +0x478
+github.com/advenn/ursus/i128_test.FuzzArith(0x17ff5e4f6288)
+	/home/runner/work/ursus/ursus/i128/fuzz_test.go:82 +0x312
+testing.fRunner(0x17ff5e4f6288, 0x8ea380)
+	/opt/hostedtoolcache/go/1.27.0/x64/src/testing/fuzz.go:738 +0xb9
+created by testing.runFuzzing in goroutine 1
+	/opt/hostedtoolcache/go/1.27.0/x64/src/testing/fuzz.go:623 +0x816
+
+goroutine 21 [syscall]:
+os/signal.signal_recv()
+	/opt/hostedtoolcache/go/1.27.0/x64/src/runtime/sigqueue.go:152 +0x98
+os/signal.loop()
+	/opt/hostedtoolcache/go/1.27.0/x64/src/os/signal/signal_unix.go:23 +0x13
+created by os/signal.Notify.func2.1 in goroutine 19
+	/opt/hostedtoolcache/go/1.27.0/x64/src/os/signal/signal.go:164 +0x1f
+
+goroutine 22 [select]:
+os/signal.NotifyContext.func1()
+	/opt/hostedtoolcache/go/1.27.0/x64/src/os/signal/signal.go:304 +0x7c
+created by os/signal.NotifyContext in goroutine 19
+	/opt/hostedtoolcache/go/1.27.0/x64/src/os/signal/signal.go:303 +0x165
+    Failing input written to testdata/fuzz/FuzzArith/7371a6be19e66f3b
+    To re-run:
+    go test -run=FuzzArith/7371a6be19e66f3b
