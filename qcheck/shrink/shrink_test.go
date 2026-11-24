@@ -3,6 +3,7 @@ package shrink
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -80,7 +81,9 @@ func holds(tables map[string]*model.Table, origin string, v int64) bool {
 
 // plantedCases are the first n generated cases from seed on that the planted bug
 // fails, big ones: hundreds of rows or more, two operations or more, and no join,
-// whose right side's columns a shrink step cannot rename back.
+// whose right side's columns a shrink step cannot rename back. A DuckDB case is
+// one sqlgen translates: one it excludes (an X- rule, step 539) the self check
+// alone runs.
 func plantedCases(t *testing.T, seed uint64, n int, mode string) []*Case {
 	t.Helper()
 	var out []*Case
@@ -107,6 +110,12 @@ func plantedCases(t *testing.T, seed uint64, n int, mode string) []*Case {
 		}
 		if joins || size.Rows < 300 || size.Ops < 2 || !filterMeetsPlanted(tables, c.Query) {
 			continue
+		}
+		if mode == ModeDuck {
+			var ex *sqlgen.Excluded
+			if _, err := sqlgen.Translate(c.Query, tables); errors.As(err, &ex) {
+				continue
+			}
 		}
 		out = append(out, c)
 	}

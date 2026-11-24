@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -73,9 +74,23 @@ func (e *ursusEngine) Counts(ctx context.Context, q *ast.Query, s *sqlgen.SQL) (
 }
 
 // duckType is the Arrow type DuckDB exports a model type as: a HUGEINT as a
-// Decimal128(38, 0), a Date, which the SQL holds as its days, as an Int32.
+// Decimal128(38, 0), a Date, which the SQL holds as its days, as an Int32, and a
+// Datetime, a Duration and a Time, which it holds as their ticks (T-TICKS), as an
+// Int64; a DECIMAL as a Decimal128 of its precision and scale.
 func duckType(t model.Type) arrow.DataType {
-	switch t {
+	switch t.Kind() {
+	case model.Uint8:
+		return arrow.PrimitiveTypes.Uint8
+	case model.Uint16:
+		return arrow.PrimitiveTypes.Uint16
+	case model.Uint32:
+		return arrow.PrimitiveTypes.Uint32
+	case model.Float32:
+		return arrow.PrimitiveTypes.Float32
+	case model.DatetimeKind, model.DurationKind, model.TimeKind:
+		return arrow.PrimitiveTypes.Int64
+	case model.DecimalKind:
+		return &arrow.Decimal128Type{Precision: int32(t.Prec()), Scale: int32(t.Scale())}
 	case model.Bool:
 		return arrow.FixedWidthTypes.Boolean
 	case model.Int8:
@@ -135,16 +150,32 @@ func toArrow(a *Answer) (*arrow.Schema, []arrow.RecordBatch, error) {
 				var x int64
 				x, err = strconv.ParseInt(v, 10, 64)
 				fb.Append(x)
+			case *array.Uint8Builder:
+				var x uint64
+				x, err = strconv.ParseUint(v, 10, 8)
+				fb.Append(uint8(x))
+			case *array.Uint16Builder:
+				var x uint64
+				x, err = strconv.ParseUint(v, 10, 16)
+				fb.Append(uint16(x))
+			case *array.Uint32Builder:
+				var x uint64
+				x, err = strconv.ParseUint(v, 10, 32)
+				fb.Append(uint32(x))
 			case *array.Uint64Builder:
 				var x uint64
 				x, err = strconv.ParseUint(v, 10, 64)
 				fb.Append(x)
 			case *array.Decimal128Builder:
-				x, ok := new(big.Int).SetString(v, 10)
+				// An Int128's cell is its integer, a Decimal's its text at its scale
+				// (decimalCell): the unscaled value is the digits without the point.
+				x, ok := new(big.Int).SetString(strings.Replace(v, ".", "", 1), 10)
 				if !ok {
-					err = fmt.Errorf("an Int128 %q", v)
+					err = fmt.Errorf("a %s %q", t, v)
 				}
 				fb.Append(decimal128.FromBigInt(x))
+			case *array.Float32Builder:
+				fb.Append(Float32(c))
 			case *array.Float64Builder:
 				fb.Append(Float(c))
 			case *array.StringBuilder:

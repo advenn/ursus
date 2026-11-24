@@ -36,22 +36,26 @@ func kinds(rep *Report) map[string]int {
 
 // TestRunAgainstUrsus runs the whole loop, sqlgen's translation, ursus under
 // fuzzcheck in its configuration, FromArrow and the comparator, against ursus at the
-// reference through DuckDB's Arrow types: it must find nothing, so a finding against
-// DuckDB is never the comparator's own; and the noisy allowance must fire, as ursus
-// runs on several threads in some cases.
+// reference through DuckDB's Arrow types, once with each generator: it must find
+// nothing, so a finding against DuckDB is never the comparator's own. Among the
+// core generator's cases the noisy allowance must fire, as ursus runs on several
+// threads in some cases; the wide generator's (step 539) drew no float sum it could
+// fire on in a thousand.
 func TestRunAgainstUrsus(t *testing.T) {
-	rep := run(t, 1000, nil, nil)
-	t.Log("\n" + rep.Summary())
-	for _, f := range rep.Findings {
-		if f.Kind != KindVacuous {
-			t.Error(f)
+	for _, core := range []bool{false, true} {
+		rep := Run(Options{Seed: teethSeed, Cases: 1000, Engine: &ursusEngine{}, Core: core})
+		t.Logf("core %v:\n%s", core, rep.Summary())
+		for _, f := range rep.Findings {
+			if f.Kind != KindVacuous {
+				t.Error(f)
+			}
 		}
-	}
-	if rep.Compared < 100 {
-		t.Errorf("only %d of %d cases compared", rep.Compared, rep.Cases)
-	}
-	if rep.Allowed[FiredNoisy] == 0 {
-		t.Errorf("the noisy allowance never fired: %v", rep.Allowed)
+		if rep.Compared < 100 {
+			t.Errorf("core %v: only %d of %d cases compared", core, rep.Compared, rep.Cases)
+		}
+		if core && rep.Allowed[FiredNoisy] == 0 {
+			t.Errorf("the noisy allowance never fired: %v", rep.Allowed)
+		}
 	}
 }
 
@@ -105,10 +109,13 @@ func firstCell(a *Answer, cols []int, ok func(t model.Type, cell string) bool) (
 
 func isFloat(t model.Type, c string) bool { return t == model.Float64 && c != "" }
 
-// A break changes an engine's answer, or reports it does not apply to it.
+// A break changes an engine's answer, or reports it does not apply to it. A core
+// break runs over the core generator's cases: the wide generator's (step 539) hold
+// too few of the cells it breaks.
 type break_ struct {
 	name string
 	fn   func(c *gen.Case, p Plan, a *Answer) bool
+	core bool
 }
 
 var breaks = []break_{
@@ -179,6 +186,9 @@ var breaks = []break_{
 		r, j, ok := firstCell(a, columns(a, p, "exact"), func(t model.Type, c string) bool { return c == nanCell })
 		if ok {
 			a.Cells[j][r] = FloatCell(math.Inf(1))
+			if a.Types[j] == model.Float32 {
+				a.Cells[j][r] = float32Cell(float32(math.Inf(1)))
+			}
 		}
 		return ok
 	}},
@@ -246,7 +256,7 @@ var breaks = []break_{
 			a.Cells[j][r] = FloatCell(math.Nextafter(Float(a.Cells[j][r]), math.Inf(1)))
 		}
 		return ok
-	}},
+	}, core: true},
 }
 
 // TestComparatorTeeth breaks the engine's answers, each break over the run's
@@ -256,11 +266,12 @@ func TestComparatorTeeth(t *testing.T) {
 	for _, br := range breaks {
 		t.Run(strings.ReplaceAll(br.name, " ", "_"), func(t *testing.T) {
 			applied := map[uint64]bool{}
-			rep := run(t, 150, func(c *gen.Case, a *Answer) {
-				if br.fn(c, planOf(c), a) {
-					applied[c.Seed] = true
-				}
-			}, nil)
+			rep := Run(Options{Seed: teethSeed, Cases: 150, Engine: &ursusEngine{}, Core: br.core,
+				Corrupt: func(c *gen.Case, a *Answer) {
+					if br.fn(c, planOf(c), a) {
+						applied[c.Seed] = true
+					}
+				}})
 			found := map[uint64]bool{}
 			for _, f := range rep.Findings {
 				if f.Kind == KindMismatch {

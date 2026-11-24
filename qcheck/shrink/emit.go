@@ -208,7 +208,7 @@ func producerIsNoisy(c *Case, info *ast.Info, name string) bool {
 var allImports = []string{
 	"errors", "math", "runtime", "slices", "testing", "time",
 	"github.com/apache/arrow-go/v18/arrow", "github.com/apache/arrow-go/v18/arrow/array",
-	"github.com/apache/arrow-go/v18/arrow/memory",
+	"github.com/apache/arrow-go/v18/arrow/decimal128", "github.com/apache/arrow-go/v18/arrow/memory",
 	"github.com/advenn/ursus", "github.com/advenn/ursus/dtype", "github.com/advenn/ursus/ursustest",
 }
 
@@ -309,13 +309,22 @@ func writeTable(b *strings.Builder, t *Table, rn string) {
 }
 
 func arrowTypeSrc(t model.Type) string {
+	switch {
+	case t.IsDatetime():
+		return fmt.Sprintf("&arrow.TimestampType{Unit: %s, TimeZone: %q}", arrowUnitSrc(t.Unit()), t.Zone())
+	case t.IsDuration():
+		return fmt.Sprintf("&arrow.DurationType{Unit: %s}", arrowUnitSrc(t.Unit()))
+	case t.IsTime() && t.Unit() <= model.Milli:
+		return fmt.Sprintf("&arrow.Time32Type{Unit: %s}", arrowUnitSrc(t.Unit()))
+	case t.IsTime():
+		return fmt.Sprintf("&arrow.Time64Type{Unit: %s}", arrowUnitSrc(t.Unit()))
+	case t.IsDecimal():
+		return fmt.Sprintf("&arrow.Decimal128Type{Precision: %d, Scale: %d}", t.Prec(), t.Scale())
+	}
 	switch t {
-	case model.Int64:
-		return "arrow.PrimitiveTypes.Int64"
-	case model.Int32:
-		return "arrow.PrimitiveTypes.Int32"
-	case model.Float64:
-		return "arrow.PrimitiveTypes.Float64"
+	case model.Int64, model.Int32, model.Int8, model.Int16, model.Uint8, model.Uint16, model.Uint32, model.Uint64,
+		model.Float32, model.Float64:
+		return "arrow.PrimitiveTypes." + t.String()
 	case model.String:
 		return "arrow.BinaryTypes.String"
 	case model.Bool:
@@ -326,14 +335,27 @@ func arrowTypeSrc(t model.Type) string {
 	panic("shrink: no table column of " + t.String())
 }
 
+func arrowUnitSrc(u model.Unit) string {
+	return [...]string{"arrow.Second", "arrow.Millisecond", "arrow.Microsecond", "arrow.Nanosecond"}[u]
+}
+
 func builderSrc(t model.Type) (builder, elem string) {
+	switch {
+	case t.IsDatetime():
+		return "TimestampBuilder", "arrow.Timestamp"
+	case t.IsDuration():
+		return "DurationBuilder", "arrow.Duration"
+	case t.IsTime() && t.Unit() <= model.Milli:
+		return "Time32Builder", "arrow.Time32"
+	case t.IsTime():
+		return "Time64Builder", "arrow.Time64"
+	case t.IsDecimal():
+		return "Decimal128Builder", "decimal128.Num"
+	}
 	switch t {
-	case model.Int64:
-		return "Int64Builder", "int64"
-	case model.Int32:
-		return "Int32Builder", "int32"
-	case model.Float64:
-		return "Float64Builder", "float64"
+	case model.Int64, model.Int32, model.Int8, model.Int16, model.Uint8, model.Uint16, model.Uint32, model.Uint64,
+		model.Float32, model.Float64:
+		return t.String() + "Builder", strings.ToLower(t.String())
 	case model.String:
 		return "StringBuilder", "string"
 	case model.Bool:
@@ -345,8 +367,18 @@ func builderSrc(t model.Type) (builder, elem string) {
 }
 
 func valueSrc(t model.Type, v Value) string {
+	switch {
+	case t.IsUnsigned():
+		return strconv.FormatUint(uint64(v.I), 10)
+	case t.IsDatetime(), t.IsDuration(), t.IsTime():
+		return strconv.FormatInt(v.I, 10)
+	case t == model.Float32:
+		return ast.GoFloat32(float32(v.F))
+	case t.IsDecimal():
+		return decimalSrc(v)
+	}
 	switch t {
-	case model.Int64, model.Int32, model.Date:
+	case model.Int64, model.Int32, model.Int8, model.Int16, model.Date:
 		return strconv.FormatInt(v.I, 10)
 	case model.Float64:
 		return ast.GoFloat(v.F)

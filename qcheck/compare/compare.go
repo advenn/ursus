@@ -15,6 +15,11 @@ import (
 // cell within its bound, ursus on several threads.
 const FiredNoisy = "noisy"
 
+// FiredDiscarded is the refusal allowance (step 542): ursus with the optimizer off
+// refused with ErrValue a value its optimized plan, which answered DuckDB's answer,
+// discarded first (caseRun.discarded).
+const FiredDiscarded = "discarded"
+
 // Plan is how two answers to one query compare.
 type Plan struct {
 	Ordered bool

@@ -211,6 +211,8 @@ func exprOp(e ast.Expr) string {
 		return "Cast"
 	case *ast.Agg:
 		return e.Op.String()
+	case *ast.Fn:
+		return e.Op.String()
 	}
 	return fmt.Sprintf("%T", e)
 }
