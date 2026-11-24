@@ -331,14 +331,12 @@ func (b *builder) wideBin(e *ast.Bin) (string, bool) {
 	switch {
 	case e.T.IsDecimal():
 		b.fire(TDec)
-		l, r := b.asDecimal(e.L), b.asDecimal(e.R)
-		if e.Op == ast.Mul {
-			// DuckDB multiplies two DECIMALs of 18 digits or fewer in an int64, a
-			// DECIMAL(18), and overflowed where ursus's product, of their digits
-			// summed, holds it (#96's TestTranslationRules): each operand widened to
-			// 38 digits at its own scale makes it a HUGEINT, at the same scale.
-			l, r = decimal38(l, e.L.Type()), decimal38(r, e.R.Type())
-		}
+		// DuckDB adds and multiplies two DECIMALs of 18 digits or fewer in an int64, a
+		// DECIMAL(18), and overflowed where ursus's answer, a digit or their digits
+		// summed wider, holds it (#96: a product in TestTranslationRules, a sum in
+		// the DuckDB run): each operand widened to 38 digits at its own scale makes it
+		// a HUGEINT, at the same scale.
+		l, r := decimal38(b.asDecimal(e.L), e.L.Type()), decimal38(b.asDecimal(e.R), e.R.Type())
 		op := map[ast.BinOp]string{ast.Add: " + ", ast.Sub: " - ", ast.Mul: " * "}[e.Op]
 		return "CAST((" + l + op + r + ") AS " + Type(e.T) + ")", true
 	case e.Op == ast.Div && (lt.IsDecimal() || rt.IsDecimal()):

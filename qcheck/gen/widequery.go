@@ -708,12 +708,27 @@ func (g *qgen) fnExpr(in *ast.Info, t model.Type, depth int) (ast.Expr, error) {
 				ops = append(ops, op)
 			}
 		}
-		return ast.NewFn(ops[g.r.IntN(len(ops))], x, nil, nil, false)
+		op := ops[g.r.IntN(len(ops))]
+		if op == ast.DtYear && x.Type().IsDatetime() {
+			// Year refuses a year past Int32 by design (steps 543, 544), which a far
+			// Datetime(s) has: its receiver is a bounded column, or the part Month.
+			if b := g.boundedOf(in, model.Wild, model.Type.IsDatetime); b != nil {
+				x = b
+			} else {
+				op = ast.DtMonth
+			}
+		}
+		return ast.NewFn(op, x, nil, nil, false)
 	case t == model.Date:
+		// Date refuses a day past int32 by design (step 543), which a far Datetime(s)
+		// or Datetime(ms) has: its receiver is a bounded column, or a move.
 		if g.r.IntN(2) == 0 {
 			return g.moveFn(in, t)
 		}
-		return ast.NewFn(ast.DtDate, g.temporalOf(in, model.Type.IsDatetime), nil, nil, false)
+		if b := g.boundedOf(in, model.Wild, model.Type.IsDatetime); b != nil {
+			return ast.NewFn(ast.DtDate, b, nil, nil, false)
+		}
+		return g.moveFn(in, t)
 	case t.IsTime():
 		z := g.r.IntN(len(model.Zones))
 		return ast.NewFn(ast.DtTime, g.expr(in, model.Datetime(t.Unit(), z), depth-1), nil, nil, false)
