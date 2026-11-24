@@ -123,6 +123,26 @@ a refusal only where the reference answered, the variant refused with ErrValue, 
 the difference bisects to the optimizer alone, the variant's off
 (`discarded`, `TestDiscardedIsNarrow`). Each allowance is counted in the report.
 
+## Against DuckDB, the last rounds (2026-11-24)
+
+The five-minute DuckDB run, on about 21,000 cases a round, found ursus's own bugs:
+far instants' calendars, fixed in ursus by steps 543 and 544 and released in v0.8.1.
+It also found what qcheck needed:
+- **Decimal sums.** sqlgen widens the operands of a DECIMAL sum and difference to
+  DECIMAL(38) too: DuckDB adds two of 18 digits or fewer in an int64, and
+  overflowed, as it did on a product.
+- **Both refused.** `compare.Run` counts ursus's ErrValue beside DuckDB's error as
+  both refused (`Report.BothRefused`), not a finding: a Date or a year past int32
+  is refused by each.
+- **The discarded allowance in duck mode.** ursus with the optimizer off may refuse
+  with ErrValue a value DuckDB's plan skips, the maintainer's rule (step 542). It is
+  allowed (`FiredDiscarded`) only where ursus under the same configuration with the
+  optimizer on answers DuckDB's answer.
+- **Bounded receivers.** The generator draws Year and Date of a bounded column only
+  (wild at most, years 0001 to 9999). Their refusal past int32 is designed, and
+  DuckDB, which skips a column no answer reads, need not raise it. The other parts
+  keep far instants, where DuckDB checks step 544's arithmetic.
+
 ## Checks
 
 - `cd qcheck && go vet ./... && go test ./...`, under `CGO_ENABLED=0`: all seven
