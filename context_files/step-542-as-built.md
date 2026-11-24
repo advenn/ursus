@@ -52,9 +52,9 @@ to the optimizer alone. The other direction stays a finding.
 
 ## Release
 
-The fix joins v0.8.1: its CHANGELOG section's paragraph and a Fixed entry. v0.8.1 is
-tagged on this pull request's merge commit, not on #95's (step 541's commands, with
-this branch's name), and only on the maintainer's word.
+The fix joins v0.8.1: its CHANGELOG section's paragraph and a Fixed entry. Since step
+543, v0.8.1 is tagged on 543's merge commit, not on this one's or #95's (step 541's
+commands, with that branch's name), and only on the maintainer's word.
 
 ## Checks
 
