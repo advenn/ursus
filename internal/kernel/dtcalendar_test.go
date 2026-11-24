@@ -1,20 +1,20 @@
 package kernel_test
 
-// A Datetime's calendar parts are its proleptic Gregorian date's, or refused where
-// ursus has no calendar (step 543). qcheck's DuckDB run found two silent wrong
-// answers there:
+// A Datetime's calendar parts are its proleptic Gregorian date's, at every instant
+// (steps 543 and 544). qcheck's DuckDB run found two silent wrong answers:
 //
 //   - Dt().Date() converted the day count to an int32 unchecked, so a Datetime(s) of
 //     -281474976710655, about 8.9 million years before the epoch, came back as
 //     another date. A day past int32 is now refused, the maintainer's choice.
 //   - Go's time package computes a date only from about the year -292,277,022,399,
 //     so the Month of a Datetime(s) near int64's minimum was another instant's.
-//     An instant whose year is past Int32, which only a Datetime(s) reaches, is
-//     now refused by every calendar part.
+//     Past 10^12 days, which only a Datetime(s) reaches, a naive instant's parts are
+//     now computed by arithmetic, and Year refuses a year past Int32, its type.
 //
 // The oracle is Hinnant's civil_from_days over math/big, which shares no code with
-// time.Time: each part of each instant, one row at a time, answers the oracle's
-// value or is refused with ErrValue exactly where the oracle says it falls outside.
+// time.Time or the kernel's own arithmetic: each part of each instant, one row at a
+// time, answers the oracle's value, or is refused with ErrValue exactly where the
+// answer does not fit its type.
 
 import (
 	"errors"
@@ -79,33 +79,45 @@ func TestCalendarPartsOrRefused(t *testing.T) {
 		-maxDays*perDay - 1, -maxDays * perDay, -784_000_000_000 * perDay, -281474976710655,
 		-(int64(math.MaxInt32)+1)*perDay - 1, -(int64(math.MaxInt32) + 1) * perDay, -62135596800, -1, 0, 1,
 		1_700_000_000, 253402300799, int64(math.MaxInt32) * perDay, (int64(math.MaxInt32) + 1) * perDay,
-		784_000_000_000 * perDay, maxDays * perDay, maxDays*perDay + 1, math.MaxInt64}
+		784_000_000_000 * perDay, maxDays * perDay, maxDays*perDay + 1, maxDays*perDay + 45_296,
+		math.MaxInt64 - 1, math.MaxInt64}
+	type oracle struct {
+		y                   *big.Int
+		m, d, wd, yday, tod int64
+	}
 	parts := []struct {
-		fn  expr.CallFn
-		get func(y *big.Int, m, d, wd, yday int64) int64
+		fn   expr.CallFn
+		year bool // answers in Int32 only where the year fits
+		get  func(o oracle) int64
 	}{
-		{expr.FnDtYear, func(y *big.Int, _, _, _, _ int64) int64 { return y.Int64() }},
-		{expr.FnDtMonth, func(_ *big.Int, m, _, _, _ int64) int64 { return m }},
-		{expr.FnDtDay, func(_ *big.Int, _, d, _, _ int64) int64 { return d }},
-		{expr.FnDtWeekday, func(_ *big.Int, _, _, wd, _ int64) int64 { return wd }},
-		{expr.FnDtOrdinalDay, func(_ *big.Int, _, _, _, yday int64) int64 { return yday }},
+		{expr.FnDtYear, true, func(o oracle) int64 { return o.y.Int64() }},
+		{expr.FnDtMonth, false, func(o oracle) int64 { return o.m }},
+		{expr.FnDtDay, false, func(o oracle) int64 { return o.d }},
+		{expr.FnDtWeekday, false, func(o oracle) int64 { return o.wd }},
+		{expr.FnDtOrdinalDay, false, func(o oracle) int64 { return o.yday }},
+		{expr.FnDtHour, false, func(o oracle) int64 { return o.tod / 3600 }},
+		{expr.FnDtMinute, false, func(o oracle) int64 { return o.tod / 60 % 60 }},
+		{expr.FnDtSecond, false, func(o oracle) int64 { return o.tod % 60 }},
 	}
 	dt := dtype.Datetime(dtype.Second, "")
-	refusals, answers := 0, 0
+	refusals, answers, far := 0, 0, 0
 	for _, s := range instants {
 		col := data.NewFixed("c", dt, []int64{s}, bitmap.AllSet(1))
-		q := s / perDay // the floored day
-		if s%perDay < 0 {
-			q--
+		q, tod := s/perDay, s%perDay // the floored day and the seconds into it
+		if tod < 0 {
+			q, tod = q-1, tod+perDay
 		}
 		z := big.NewInt(q)
 		y, m, d, wd, yday := civil(z)
-		inCalendar := z.CmpAbs(big.NewInt(maxDays)) <= 0 && y.IsInt64() &&
-			y.Int64() >= math.MinInt32 && y.Int64() <= math.MaxInt32
+		o := oracle{y, m, d, wd, yday, tod}
+		yearFits := y.IsInt64() && y.Int64() >= math.MinInt32 && y.Int64() <= math.MaxInt32
+		if q > maxDays || q < -maxDays {
+			far++
+		}
 		for _, p := range parts {
 			got, err := kernel.DtCall(p.fn, "c", dtype.Int32, col, nil)
 			switch {
-			case !inCalendar:
+			case p.year && !yearFits:
 				if !errors.Is(err, uerr.ErrValue) {
 					t.Errorf("%v of %d (year %v): %v, want an ErrValue refusal", p.fn, s, y, err)
 				}
@@ -114,31 +126,46 @@ func TestCalendarPartsOrRefused(t *testing.T) {
 				t.Errorf("%v of %d (year %v): refused: %v", p.fn, s, y, err)
 			default:
 				v, _ := data.Values[int32](got)
-				if want := p.get(y, m, d, wd, yday); int64(v[0]) != want {
-					t.Errorf("%v of %d: %d, want %d", p.fn, s, v[0], want)
+				if want := p.get(o); int64(v[0]) != want {
+					t.Errorf("%v of %d (year %v): %d, want %d", p.fn, s, y, v[0], want)
 				}
 				answers++
 			}
 		}
-		// Date: the day itself, refused past int32 (and past the calendar).
+		// Date: the day itself, refused past int32.
 		got, err := kernel.DtCall(expr.FnDtDate, "c", dtype.Date, col, nil)
-		fits := inCalendar && z.IsInt64() && z.Int64() >= math.MinInt32 && z.Int64() <= math.MaxInt32
-		switch {
-		case !fits:
+		if q < math.MinInt32 || q > math.MaxInt32 {
 			if !errors.Is(err, uerr.ErrValue) {
-				t.Errorf("Date of %d (day %v): %v, want an ErrValue refusal", s, z, err)
+				t.Errorf("Date of %d (day %d): %v, want an ErrValue refusal", s, q, err)
 			}
-		case err != nil:
+		} else if err != nil {
 			t.Errorf("Date of %d: refused: %v", s, err)
-		default:
-			v, _ := data.Values[int32](got)
-			if int64(v[0]) != z.Int64() {
-				t.Errorf("Date of %d: day %d, want %v", s, v[0], z)
-			}
+		} else if v, _ := data.Values[int32](got); int64(v[0]) != q {
+			t.Errorf("Date of %d: day %d, want %d", s, v[0], q)
+		}
+		// Time: the time of day, in seconds, at every instant.
+		got, err = kernel.DtCall(expr.FnDtTime, "c", dtype.Time(dtype.Second), col, nil)
+		if err != nil {
+			t.Errorf("Time of %d: refused: %v", s, err)
+		} else if v, _ := data.Values[int64](got); v[0] != tod {
+			t.Errorf("Time of %d: %d, want %d", s, v[0], tod)
 		}
 	}
-	if refusals == 0 || answers == 0 {
-		t.Fatalf("%d refusals and %d answers: the instants miss an edge", refusals, answers)
+	if refusals == 0 || answers == 0 || far == 0 {
+		t.Fatalf("%d refusals, %d answers, %d far instants: the instants miss an edge", refusals, answers, far)
+	}
+}
+
+// TestFarZonedInstantRefused: past Go's calendar, a zoned instant's wall clock is
+// not read (step 544), so its parts are refused; nearer, they answer.
+func TestFarZonedInstantRefused(t *testing.T) {
+	dt := dtype.Datetime(dtype.Second, "UTC")
+	for _, s := range []int64{math.MinInt64, math.MaxInt64, 1_700_000_000} {
+		col := data.NewFixed("c", dt, []int64{s}, bitmap.AllSet(1))
+		_, err := kernel.DtCall(expr.FnDtMonth, "c", dtype.Int32, col, nil)
+		if far := s != 1_700_000_000; far != errors.Is(err, uerr.ErrValue) {
+			t.Errorf("Month of the zoned %d: %v", s, err)
+		}
 	}
 }
 
