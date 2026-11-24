@@ -17,6 +17,22 @@ Step numbers below point at those records.
 
 ---
 
+## Unreleased — toward v0.8.2
+
+On master after v0.8.1: step 545 so far.
+
+### Fixed
+
+- **A far Datetime's text names its own instant** (545): Cast(String), the frame's
+  display and the CSV and JSON writers wrote a Datetime(s) past 10^12 days from 1970,
+  near int64's ends, through Go's calendar, which ends about the year
+  -292,277,022,399: -9223372036854775807 seconds was written as another instant.
+  It is now written from civil_from_days, in the same layout: a year of four digits
+  or more after its sign, a zoned instant in UTC with a "Z". qcheck's DuckDB run
+  found it, as steps 543 and 544's calendar.
+
+---
+
 ## v0.8.1 — 2026-11-24
 
 Everything since `v0.8.0` (2026-11-23): step 538, arrow-go v18.9.0 and a Parquet fix,
