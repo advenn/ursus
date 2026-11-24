@@ -58,7 +58,9 @@ math/big, which shares no code with `time.Time`.
 
 ## Release
 
-v0.8.1 is tagged on this pull request's merge commit, on the maintainer's word.
+Step 544 replaced the refusal of a far naive instant's parts with arithmetic, as the
+maintainer had approved it. v0.8.1 is tagged on 544's merge commit, on the
+maintainer's word.
 
 ## Checks
 
