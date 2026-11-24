@@ -17,7 +17,7 @@ Step numbers below point at those records.
 
 ---
 
-## v0.8.1 — 2026-11-23
+## v0.8.1 — 2026-11-24
 
 Everything since `v0.8.0` (2026-11-23): step 538, arrow-go v18.9.0 and a Parquet fix,
 step 542, a cast's fix and the optimizer's rule for errors documented, and steps 543
