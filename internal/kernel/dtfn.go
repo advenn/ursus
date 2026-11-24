@@ -548,8 +548,8 @@ func locationOf(dt dtype.DataType) *time.Location {
 // -292,277,022,399, which a Datetime(s) passes in its first 258 years near int64's
 // minimum: a Month read there was another instant's. Within 10^12 days of the epoch,
 // about 2.7 billion years, Go's calendar is exact. Past it, which only a Datetime(s)
-// reaches, a naive instant's calendar is computed here by arithmetic (civilOf, step
-// 544, as the maintainer approved it) and a zoned one's refused.
+// reaches, a naive or UTC instant's calendar is computed here by arithmetic (civilOf,
+// step 544, as the maintainer approved it) and one in another zone refused.
 const calendarDays = int64(1e12)
 
 // civilDate is a naive instant's proleptic Gregorian date, ISO weekday, ordinal day and
@@ -631,8 +631,9 @@ func (c civilDate) part(fn expr.CallFn) (int64, bool) {
 }
 
 // calendarAt is instant t of dt on its zone's wall clock: by Go's calendar within
-// calendarDays of the epoch, and past it, far, a naive instant's civil date. A zoned
-// instant past it is refused: its zone's rules so far out are no one's wall clock.
+// calendarDays of the epoch, and past it, far, a naive or UTC instant's civil date.
+// One in another zone is refused past it: its zone's rules so far out are no one's
+// wall clock.
 func calendarAt(fn expr.CallFn, dt dtype.DataType, loc *time.Location, t int64, row int) (time.Time, civilDate, bool, error) {
 	if perDay, ok := dtype.TicksPerDay(dt); ok && dt.ID() == dtype.TypeDatetime {
 		if d := floorDiv(t, perDay); d > calendarDays || d < -calendarDays {

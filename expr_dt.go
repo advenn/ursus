@@ -25,8 +25,8 @@ import (
 // with ErrValue naming the row (steps 543 and 544). Year refuses a year past Int32,
 // its type: only a Datetime(Second) reaches one, more than about 2.1 billion years
 // from 1970. And past 10^12 days, about 2.7 billion years, where Go's calendar ends
-// and a naive instant's date is computed by arithmetic instead, a zoned instant's
-// wall clock and the ISO week are refused.
+// and a naive or UTC instant's date is computed by arithmetic instead, a wall
+// clock in another zone and the ISO week are refused.
 type DtExpr struct{ e Expr }
 
 // Dt opens the temporal namespace.
