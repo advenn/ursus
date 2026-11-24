@@ -156,9 +156,13 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 			if !valid.Get(i) {
 				continue
 			}
-			tm, err := calendarTime(fn, dt, loc, t, i)
+			tm, c, far, err := calendarAt(fn, dt, loc, t, i)
 			if err != nil {
 				return nil, err
+			}
+			if far {
+				days[i] = int8(monthDays(c.year, c.month))
+				continue
 			}
 			days[i] = int8(time.Date(tm.Year(), tm.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day())
 		}
@@ -172,11 +176,15 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 		for i, t := range ticks {
 			leap := false
 			if valid.Get(i) {
-				tm, err := calendarTime(fn, dt, loc, t, i)
+				tm, c, far, err := calendarAt(fn, dt, loc, t, i)
 				if err != nil {
 					return nil, err
 				}
-				leap = dtype.IsLeapYear(tm.Year())
+				if far {
+					leap = leapYear(c.year)
+				} else {
+					leap = dtype.IsLeapYear(tm.Year())
+				}
 			}
 			bits.Append(leap)
 		}
@@ -189,11 +197,11 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 		if !valid.Get(i) {
 			continue
 		}
-		tm, err := calendarTime(fn, dt, loc, t, i)
+		v, err := componentAt(fn, dt, loc, t, i)
 		if err != nil {
 			return nil, err
 		}
-		vals[i] = component(fn, tm)
+		vals[i] = v
 	}
 	return data.NewFixed(name, out, vals, valid), nil
 }
@@ -535,40 +543,153 @@ func locationOf(dt dtype.DataType) *time.Location {
 	return loc
 }
 
-// calendarDays bounds the instants whose calendar ursus reads (step 543). Go's time
+// calendarDays bounds the instants Go's calendar reads (step 543). Go's time
 // package, this file's source of truth, computes a date only from about the year
 // -292,277,022,399, which a Datetime(s) passes in its first 258 years near int64's
 // minimum: a Month read there was another instant's. Within 10^12 days of the epoch,
-// about 2.7 billion years, Go's calendar is exact, and a year is then held to Int32,
-// the type Year answers in. Only a Datetime(s) reaches past either bound.
+// about 2.7 billion years, Go's calendar is exact. Past it, which only a Datetime(s)
+// reaches, a naive or UTC instant's calendar is computed here by arithmetic (civilOf,
+// step 544, as the maintainer approved it) and one in another zone refused.
 const calendarDays = int64(1e12)
 
-// calendarTime is instant t of dt on its zone's wall clock, or a refusal where its
-// year is past Int32: there ursus has no calendar (step 543).
-func calendarTime(fn expr.CallFn, dt dtype.DataType, loc *time.Location, t int64, row int) (time.Time, error) {
+// civilDate is a naive instant's proleptic Gregorian date, ISO weekday, ordinal day and
+// nanoseconds into its day, where Go's calendar ends (step 544).
+type civilDate struct {
+	year, month, day, wd, yday, nanos int64
+}
+
+// cumDays is the days of a common year before each month.
+var cumDays = [12]int64{0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}
+
+func leapYear(y int64) bool { return y%4 == 0 && (y%100 != 0 || y%400 == 0) }
+
+// monthDays is the length of month m of year y.
+func monthDays(y, m int64) int64 {
+	if m == 2 && leapYear(y) {
+		return 29
+	}
+	return [12]int64{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}[m-1]
+}
+
+// civilOf is the civil date of day days since 1970-01-01, Hinnant's
+// civil_from_days, exact in int64 for every day an int64 of seconds reaches, and
+// nanos the nanoseconds into it.
+func civilOf(days, nanos int64) civilDate {
+	z := days + 719468
+	era := floorDiv(z, 146097)
+	doe := z - era*146097
+	yoe := (doe - doe/1460 + doe/36524 - doe/146096) / 365
+	doy := doe - (365*yoe + yoe/4 - yoe/100)
+	mp := (5*doy + 2) / 153
+	c := civilDate{year: yoe + era*400, month: mp + 3, day: doy - (153*mp+2)/5 + 1, nanos: nanos}
+	if mp >= 10 {
+		c.month = mp - 9
+	}
+	if c.month <= 2 {
+		c.year++
+	}
+	c.wd = (days+3)%7 + 1 // 1970-01-01 was a Thursday, ISO 4
+	if c.wd <= 0 {
+		c.wd += 7
+	}
+	c.yday = cumDays[c.month-1] + c.day
+	if c.month > 2 && leapYear(c.year) {
+		c.yday++
+	}
+	return c
+}
+
+// part is c's component fn, or false for one not computed here, the ISO week.
+func (c civilDate) part(fn expr.CallFn) (int64, bool) {
+	switch fn {
+	case expr.FnDtYear:
+		return c.year, true
+	case expr.FnDtMonth:
+		return c.month, true
+	case expr.FnDtDay:
+		return c.day, true
+	case expr.FnDtHour:
+		return c.nanos / int64(time.Hour), true
+	case expr.FnDtMinute:
+		return c.nanos / int64(time.Minute) % 60, true
+	case expr.FnDtSecond:
+		return c.nanos / int64(time.Second) % 60, true
+	case expr.FnDtMillisecond:
+		return c.nanos % int64(time.Second) / 1e6, true
+	case expr.FnDtMicrosecond:
+		return c.nanos % int64(time.Second) / 1e3, true
+	case expr.FnDtNanosecond:
+		return c.nanos % int64(time.Second), true
+	case expr.FnDtWeekday:
+		return c.wd, true
+	case expr.FnDtOrdinalDay:
+		return c.yday, true
+	case expr.FnDtQuarter:
+		return (c.month-1)/3 + 1, true
+	}
+	return 0, false
+}
+
+// calendarAt is instant t of dt on its zone's wall clock: by Go's calendar within
+// calendarDays of the epoch, and past it, far, a naive or UTC instant's civil date.
+// One in another zone is refused past it: its zone's rules so far out are no one's
+// wall clock.
+func calendarAt(fn expr.CallFn, dt dtype.DataType, loc *time.Location, t int64, row int) (time.Time, civilDate, bool, error) {
 	if perDay, ok := dtype.TicksPerDay(dt); ok && dt.ID() == dtype.TypeDatetime {
 		if d := floorDiv(t, perDay); d > calendarDays || d < -calendarDays {
-			return time.Time{}, outsideCalendar(fn, dt, t, row)
+			if loc != nil {
+				return time.Time{}, civilDate{}, true, outsideCalendar(fn, dt, t, row)
+			}
+			npt, _ := dt.NanosPerTick()
+			tod := t % perDay
+			if tod < 0 {
+				tod += perDay
+			}
+			return time.Time{}, civilOf(d, tod*npt), true, nil
 		}
 	}
 	tm, ok := dt.ToTime(t)
 	if !ok {
-		return time.Time{}, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
+		return time.Time{}, civilDate{}, false, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
 	}
 	if loc != nil {
 		tm = tm.In(loc)
 	}
-	if y := tm.Year(); y < math.MinInt32 || y > math.MaxInt32 {
-		return time.Time{}, outsideCalendar(fn, dt, t, row)
+	return tm, civilDate{}, false, nil
+}
+
+// componentAt is component fn of instant t, or a refusal: a year past Int32, the
+// type Year answers in, and, past Go's calendar, the ISO week or a zoned instant's.
+func componentAt(fn expr.CallFn, dt dtype.DataType, loc *time.Location, t int64, row int) (int32, error) {
+	tm, c, far, err := calendarAt(fn, dt, loc, t, row)
+	if err != nil {
+		return 0, err
 	}
-	return tm, nil
+	v, ok := int64(0), true
+	if far {
+		v, ok = c.part(fn)
+	} else if fn == expr.FnDtYear {
+		v = int64(tm.Year())
+	} else {
+		return component(fn, tm), nil
+	}
+	switch {
+	case !ok:
+		return 0, outsideCalendar(fn, dt, t, row)
+	case fn == expr.FnDtYear && (v < math.MinInt32 || v > math.MaxInt32):
+		return 0, uerr.New(uerr.KindValue, "dt",
+			"%s of the %s instant %d at row %d is the year %d, past Int32, the type it answers in",
+			fn, dt, t, row, v).
+			Hint("Month, Day and the time of day still answer for it")
+	}
+	return int32(v), nil
 }
 
 func outsideCalendar(fn expr.CallFn, dt dtype.DataType, t int64, row int) error {
 	return uerr.New(uerr.KindValue, "dt",
-		"%s of the %s instant %d at row %d: its year is past Int32, outside the calendar ursus reads",
-		fn, dt, t, row).
-		Hint("ursus reads the calendar of years %d to %d", math.MinInt32, math.MaxInt32)
+		"%s of the %s instant %d at row %d: more than 10^12 days from 1970, past Go's calendar, "+
+			"where ursus computes a naive instant's date and time of day but no zone's wall clock or ISO week",
+		fn, dt, t, row)
 }
 
 // localDateTime is an instant's date or time of day on its own zone's wall clock,
@@ -602,7 +723,7 @@ func localDateTime(fn expr.CallFn, name string, out dtype.DataType, c *data.Colu
 		if !valid.Get(i) {
 			continue
 		}
-		tm, err := calendarTime(fn, dt, loc, t, i)
+		tm, c, far, err := calendarAt(fn, dt, loc, t, i)
 		if err != nil {
 			return nil, err
 		}
@@ -610,8 +731,15 @@ func localDateTime(fn expr.CallFn, name string, out dtype.DataType, c *data.Colu
 			// Midnight UTC of the local date is a whole number of days from the epoch.
 			// A Date is an int32 of them, about 5.9 million years each way: a day past
 			// that is refused, where the conversion wrapped it into another date
-			// (step 543, the maintainer's choice of a refusal over a null).
-			d := time.Date(tm.Year(), tm.Month(), tm.Day(), 0, 0, 0, 0, time.UTC).Unix() / 86400
+			// (step 543, the maintainer's choice of a refusal over a null). A far
+			// instant's day is its floored tick count's, past int32 by far.
+			var d int64
+			if far {
+				perDay, _ := dtype.TicksPerDay(dt)
+				d = floorDiv(t, perDay)
+			} else {
+				d = time.Date(tm.Year(), tm.Month(), tm.Day(), 0, 0, 0, 0, time.UTC).Unix() / 86400
+			}
 			if d < math.MinInt32 || d > math.MaxInt32 {
 				return nil, uerr.New(uerr.KindValue, "dt",
 					"%s of the %s instant %d at row %d is day %d, outside a Date's int32 days", fn, dt, t, i, d).
@@ -619,6 +747,10 @@ func localDateTime(fn expr.CallFn, name string, out dtype.DataType, c *data.Colu
 						math.MinInt32, math.MaxInt32)
 			}
 			days[i] = int32(d)
+			continue
+		}
+		if far {
+			tods[i] = c.nanos / per
 			continue
 		}
 		ns := int64(tm.Hour())*int64(time.Hour) + int64(tm.Minute())*int64(time.Minute) +
