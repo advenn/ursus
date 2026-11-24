@@ -20,6 +20,11 @@ import (
 //
 // `.Year()` on a Duration is refused at plan time. A duration is a length, not a
 // point in time; "the year of 90 minutes" has no answer. Use the Total* family.
+//
+// The calendar ursus reads covers the years an Int32 holds, Year's type. An instant
+// past it, which only a Datetime(Second) reaches, more than about 2.1 billion years
+// from 1970, is refused by every calendar part, Date and Time among them, with
+// ErrValue naming the row (step 543).
 type DtExpr struct{ e Expr }
 
 // Dt opens the temporal namespace.
@@ -63,6 +68,11 @@ func (d DtExpr) Week() Expr { return d.call(expr.FnDtWeek) }
 //
 // Where it differs from Cast(ursus.Date): a cast reads the UTC wall clock, as
 // Polars' cast does, so the two agree only for a naive Datetime or one in UTC.
+//
+// A Date is an int32 of days, about 5.9 million years each way from 1970: an
+// instant whose date is past that, a Datetime(Second) or a Datetime(Milli), is
+// refused with ErrValue naming the row, where it wrapped into another date before
+// step 543.
 func (d DtExpr) Date() Expr { return d.call(expr.FnDtDate) }
 
 // Time is each instant's time of day on its own zone's wall clock, Polars' dt.time,
