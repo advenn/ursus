@@ -19,9 +19,12 @@ import (
 
 // Answer is one engine's answer to a query, read into canonical cells by the
 // query's model types, whatever Arrow type the engine gave a column: an integer,
-// whatever its width or an Int128's decimal, and a Date as its decimal text; a
-// float as its bits, any NaN as one NaN, so -0 is not +0; text as it is; a
-// Boolean as 0 or 1. A null is "", any value "v" and its text.
+// whatever its width or an Int128's decimal, a Date as its decimal text, and a
+// Datetime, a Duration and a Time as their ticks' (plan step 471: compared as
+// ticks); a float as its bits, any NaN as one NaN, so -0 is not +0; a Decimal as
+// the exact value at the query's scale (plan step 471: as an exact rational),
+// whatever scale the engine's has; text as it is; a Boolean as 0 or 1. A null is
+// "", any value "v" and its text.
 type Answer struct {
 	Err     error
 	IsCount bool
@@ -58,6 +61,51 @@ func Float(cell string) float64 {
 // FloatCell is f's cell.
 func FloatCell(f float64) string { return floatCell(f) }
 
+// float32Cell is a Float32's cell: its bits, any NaN one NaN.
+func float32Cell(f float32) string {
+	if math.IsNaN(float64(f)) {
+		return nanCell
+	}
+	return "v" + strconv.FormatUint(uint64(math.Float32bits(f)), 16)
+}
+
+// Float32 is a Float32 cell's value.
+func Float32(cell string) float32 {
+	if cell == nanCell {
+		return float32(math.NaN())
+	}
+	u, err := strconv.ParseUint(cell[1:], 16, 32)
+	if err != nil {
+		panic("compare: a Float32 cell " + cell)
+	}
+	return math.Float32frombits(uint32(u))
+}
+
+// decimalCell is an unscaled value of scale from as a Decimal's cell at scale to:
+// exact, or, where to cannot hold it, its own text, which no cell at scale to is.
+func decimalCell(u *big.Int, from, to int) string {
+	switch {
+	case to >= from:
+		u = new(big.Int).Mul(u, pow10(to-from))
+	default:
+		q, r := new(big.Int).QuoRem(u, pow10(from-to), new(big.Int))
+		if r.Sign() != 0 {
+			return "v" + ast.DecimalText(u.String(), from) + " (scale " + strconv.Itoa(from) + ")"
+		}
+		u = q
+	}
+	return "v" + ast.DecimalText(u.String(), to)
+}
+
+func pow10(n int) *big.Int { return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n)), nil) }
+
+// int128 is a little-endian i128.Int128's value, Hi first in memory.
+func int128(b []byte) *big.Int {
+	hi, lo := int64(binary.LittleEndian.Uint64(b)), binary.LittleEndian.Uint64(b[8:])
+	v := new(big.Int).Lsh(big.NewInt(hi), 64)
+	return v.Add(v, new(big.Int).SetUint64(lo))
+}
+
 // FromUrsus reads ursus's frame as the answer of a query whose columns are cols.
 func FromUrsus(df *ursus.DataFrame, cols []ast.Column) (*Answer, error) {
 	a := &Answer{Names: df.Columns(), Rows: df.Height()}
@@ -71,7 +119,7 @@ func FromUrsus(df *ursus.DataFrame, cols []ast.Column) (*Answer, error) {
 		}
 		a.Types = append(a.Types, col.Type)
 		cells := make([]string, c.Len())
-		switch col.Type {
+		switch col.Type.Kind() {
 		case model.Bool:
 			bits := c.Bools()
 			for i := range cells {
@@ -106,22 +154,30 @@ func FromUrsus(df *ursus.DataFrame, cols []ast.Column) (*Answer, error) {
 
 // fixedCell is a fixed-width value's cell, from its little-endian bytes.
 func fixedCell(t model.Type, b []byte) string {
-	switch t {
+	switch t.Kind() {
 	case model.Int8:
 		return intCell(int64(int8(b[0])))
 	case model.Int16:
 		return intCell(int64(int16(binary.LittleEndian.Uint16(b))))
 	case model.Int32, model.Date:
 		return intCell(int64(int32(binary.LittleEndian.Uint32(b))))
-	case model.Int64:
+	case model.Int64, model.DatetimeKind, model.DurationKind, model.TimeKind:
 		return intCell(int64(binary.LittleEndian.Uint64(b)))
+	case model.Uint8:
+		return uintCell(uint64(b[0]))
+	case model.Uint16:
+		return uintCell(uint64(binary.LittleEndian.Uint16(b)))
+	case model.Uint32:
+		return uintCell(uint64(binary.LittleEndian.Uint32(b)))
 	case model.Uint64:
 		return uintCell(binary.LittleEndian.Uint64(b))
 	case model.Int128:
 		// i128.Int128 is struct{ Hi int64; Lo uint64 }, Hi first in memory.
-		hi, lo := int64(binary.LittleEndian.Uint64(b)), binary.LittleEndian.Uint64(b[8:])
-		v := new(big.Int).Lsh(big.NewInt(hi), 64)
-		return "v" + v.Add(v, new(big.Int).SetUint64(lo)).String()
+		return "v" + int128(b).String()
+	case model.DecimalKind:
+		return decimalCell(int128(b), t.Scale(), t.Scale())
+	case model.Float32:
+		return float32Cell(math.Float32frombits(binary.LittleEndian.Uint32(b)))
 	case model.Float64:
 		return floatCell(math.Float64frombits(binary.LittleEndian.Uint64(b)))
 	}
@@ -168,7 +224,28 @@ func FromArrow(schema *arrow.Schema, recs []arrow.RecordBatch, cols []ast.Column
 }
 
 func arrowCell(t model.Type, arr arrow.Array, i int) (string, error) {
-	switch t {
+	switch t.Kind() {
+	case model.Float32:
+		if f, ok := arr.(*array.Float32); ok {
+			return float32Cell(f.Value(i)), nil
+		}
+	case model.DecimalKind:
+		if d, ok := arr.(*array.Decimal128); ok {
+			return decimalCell(d.Value(i).BigInt(), int(d.DataType().(*arrow.Decimal128Type).Scale), t.Scale()), nil
+		}
+	case model.DatetimeKind, model.DurationKind, model.TimeKind:
+		switch v := arr.(type) {
+		case *array.Int64:
+			return intCell(v.Value(i)), nil
+		case *array.Timestamp:
+			return intCell(int64(v.Value(i))), nil
+		case *array.Duration:
+			return intCell(int64(v.Value(i))), nil
+		case *array.Time64:
+			return intCell(int64(v.Value(i))), nil
+		case *array.Time32:
+			return intCell(int64(v.Value(i))), nil
+		}
 	case model.Bool:
 		if b, ok := arr.(*array.Boolean); ok {
 			if b.Value(i) {
@@ -227,6 +304,8 @@ func show(cell string, t model.Type) string {
 		return "NaN"
 	case t == model.Float64:
 		return ast.GoFloat(Float(cell))
+	case t == model.Float32:
+		return ast.GoFloat32(Float32(cell))
 	case t == model.String:
 		s := cell[1:]
 		if len(s) > 40 {

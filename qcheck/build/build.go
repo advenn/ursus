@@ -6,6 +6,7 @@ package build
 import (
 	"fmt"
 	"math/rand/v2"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 
@@ -17,7 +18,7 @@ import (
 
 // DType is ursus's type for t.
 func DType(t model.Type) dtype.DataType {
-	switch t {
+	switch t.Kind() {
 	case model.Bool:
 		return dtype.Bool
 	case model.Int8:
@@ -30,26 +31,47 @@ func DType(t model.Type) dtype.DataType {
 		return dtype.Int64
 	case model.Int128:
 		return dtype.Int128
+	case model.Uint8:
+		return dtype.Uint8
+	case model.Uint16:
+		return dtype.Uint16
+	case model.Uint32:
+		return dtype.Uint32
 	case model.Uint64:
 		return dtype.Uint64
+	case model.Float32:
+		return dtype.Float32
 	case model.Float64:
 		return dtype.Float64
 	case model.String:
 		return dtype.String
 	case model.Date:
 		return dtype.Date
+	case model.DatetimeKind:
+		return dtype.Datetime(Unit(t.Unit()), t.Zone())
+	case model.DurationKind:
+		return dtype.Duration(Unit(t.Unit()))
+	case model.TimeKind:
+		return dtype.Time(Unit(t.Unit()))
+	case model.DecimalKind:
+		return dtype.Decimal(uint8(t.Prec()), uint8(t.Scale()))
 	}
 	panic("build: no ursus type for " + t.String())
 }
 
-// TypeOf is the model type of an ursus type, or Invalid.
+// Unit is ursus's unit for u.
+func Unit(u model.Unit) dtype.TimeUnit {
+	return [...]dtype.TimeUnit{dtype.Second, dtype.Milli, dtype.Micro, dtype.Nano}[u]
+}
+
+// TypeOf is the model type of an ursus type, or Invalid: the model type whose
+// String is ursus's own for it.
 func TypeOf(d dtype.DataType) model.Type {
-	for t := model.Bool; t <= model.Date; t++ {
-		if DType(t).Equal(d) {
-			return t
-		}
+	t, ok := model.ParseType(d.String())
+	if !ok || !DType(t).Equal(d) {
+		return model.Invalid
 	}
-	return model.Invalid
+	return t
 }
 
 // Records cuts t's record into k records, at points drawn from its seed and k, an
@@ -240,6 +262,8 @@ func Expr(e ast.Expr) ursus.Expr {
 			return Expr(e.X).CastLossy(DType(e.To))
 		}
 		return Expr(e.X).Cast(DType(e.To))
+	case *ast.Fn:
+		return fn(e, Expr(e.X))
 	case *ast.Agg:
 		if e.Op == ast.Len {
 			return ursus.Len()
@@ -267,6 +291,18 @@ func lit(e *ast.Lit) ursus.Expr {
 	if e.Null {
 		return ursus.Null(DType(e.T))
 	}
+	switch v := e.V.(type) {
+	case string:
+		if e.T == model.String {
+			return ursus.Lit(v)
+		}
+	case bool:
+		return ursus.Lit(v)
+	case float64:
+		return ursus.Lit(v)
+	case float32:
+		return ursus.Lit(v)
+	}
 	switch e.T {
 	case model.Int8:
 		return ursus.Lit(int8(e.V.(int64)))
@@ -276,38 +312,175 @@ func lit(e *ast.Lit) ursus.Expr {
 		return ursus.Lit(int32(e.V.(int64)))
 	case model.Int64:
 		return ursus.Lit(e.V.(int64))
-	case model.Float64:
-		return ursus.Lit(e.V.(float64))
-	case model.String:
-		return ursus.Lit(e.V.(string))
-	case model.Bool:
-		return ursus.Lit(e.V.(bool))
-	case model.Date:
+	case model.Uint8:
+		return ursus.Lit(uint8(e.V.(uint64)))
+	case model.Uint16:
+		return ursus.Lit(uint16(e.V.(uint64)))
+	case model.Uint32:
+		return ursus.Lit(uint32(e.V.(uint64)))
+	case model.Uint64:
+		return ursus.Lit(e.V.(uint64))
+	}
+	switch {
+	case e.T == model.Date:
 		return ursus.Lit(e.V.(int32)).Cast(dtype.Date)
+	case e.T.IsDatetime(), e.T.IsDuration(), e.T.IsTime():
+		return ursus.Lit(e.V.(int64)).Cast(DType(e.T))
+	case e.T.IsDecimal():
+		return ursus.Lit(ast.DecimalText(e.V.(string), e.T.Scale())).Cast(DType(e.T))
 	}
 	panic("build: no literal of " + e.T.String())
+}
+
+// scalar is a non-null literal as the Go scalar of its type, which ursus types as
+// the literal's own (feature-gaps §9) and a fill lifts to a weak literal; none for a
+// Date, a temporal or a Decimal, which are a scalar cast.
+func scalar(e *ast.Lit) (any, bool) {
+	switch e.T {
+	case model.Int8:
+		return int8(e.V.(int64)), true
+	case model.Int16:
+		return int16(e.V.(int64)), true
+	case model.Int32:
+		return int32(e.V.(int64)), true
+	case model.Int64:
+		return e.V.(int64), true
+	case model.Uint8:
+		return uint8(e.V.(uint64)), true
+	case model.Uint16:
+		return uint16(e.V.(uint64)), true
+	case model.Uint32:
+		return uint32(e.V.(uint64)), true
+	case model.Uint64:
+		return e.V.(uint64), true
+	case model.Float32:
+		return e.V.(float32), true
+	case model.Float64:
+		return e.V.(float64), true
+	case model.String:
+		return e.V.(string), true
+	case model.Bool:
+		return e.V.(bool), true
+	}
+	return nil, false
 }
 
 // fill is x.FillNullWith(with): a non-null literal as a Go scalar, which ursus lifts
 // to a weak literal (fill.go), an expression as written.
 func fill(x ursus.Expr, with ast.Expr) ursus.Expr {
 	if l, ok := with.(*ast.Lit); ok && !l.Null {
-		switch l.T {
-		case model.Int8:
-			return x.FillNullWith(int8(l.V.(int64)))
-		case model.Int16:
-			return x.FillNullWith(int16(l.V.(int64)))
-		case model.Int32:
-			return x.FillNullWith(int32(l.V.(int64)))
-		case model.Int64:
-			return x.FillNullWith(l.V.(int64))
-		case model.Float64:
-			return x.FillNullWith(l.V.(float64))
-		case model.String:
-			return x.FillNullWith(l.V.(string))
-		case model.Bool:
-			return x.FillNullWith(l.V.(bool))
+		if s, ok := scalar(l); ok {
+			switch v := s.(type) {
+			case int8:
+				return x.FillNullWith(v)
+			case int16:
+				return x.FillNullWith(v)
+			case int32:
+				return x.FillNullWith(v)
+			case int64:
+				return x.FillNullWith(v)
+			case uint8:
+				return x.FillNullWith(v)
+			case uint16:
+				return x.FillNullWith(v)
+			case uint32:
+				return x.FillNullWith(v)
+			case uint64:
+				return x.FillNullWith(v)
+			case float32:
+				return x.FillNullWith(v)
+			case float64:
+				return x.FillNullWith(v)
+			case string:
+				return x.FillNullWith(v)
+			case bool:
+				return x.FillNullWith(v)
+			}
 		}
 	}
 	return x.FillNullWith(Expr(with))
+}
+
+// fn is a string or temporal function of x.
+func fn(e *ast.Fn, x ursus.Expr) ursus.Expr {
+	s, d := x.Str(), x.Dt()
+	switch e.Op {
+	case ast.StrContains:
+		return s.Contains(e.S[0], e.B)
+	case ast.StrStartsWith:
+		return s.StartsWith(e.S[0])
+	case ast.StrEndsWith:
+		return s.EndsWith(e.S[0])
+	case ast.StrReplace:
+		return s.Replace(e.S[0], e.S[1], e.B)
+	case ast.StrReplaceAll:
+		return s.ReplaceAll(e.S[0], e.S[1], e.B)
+	case ast.StrLenBytes:
+		return s.LenBytes()
+	case ast.StrLenChars:
+		return s.LenChars()
+	case ast.StrSlice:
+		return s.Slice(int(e.I[0]), int(e.I[1]))
+	case ast.StrToUpper:
+		return s.ToUpper()
+	case ast.StrToLower:
+		return s.ToLower()
+	case ast.StrStripPrefix:
+		return s.StripPrefix(e.S[0])
+	case ast.StrStripSuffix:
+		return s.StripSuffix(e.S[0])
+	case ast.StrSplitLen:
+		return s.Split(e.S[0]).List().Len()
+	case ast.StrToInteger:
+		return s.ToInteger()
+	case ast.DtYear:
+		return d.Year()
+	case ast.DtMonth:
+		return d.Month()
+	case ast.DtDay:
+		return d.Day()
+	case ast.DtHour:
+		return d.Hour()
+	case ast.DtMinute:
+		return d.Minute()
+	case ast.DtSecond:
+		return d.Second()
+	case ast.DtMillisecond:
+		return d.Millisecond()
+	case ast.DtMicrosecond:
+		return d.Microsecond()
+	case ast.DtNanosecond:
+		return d.Nanosecond()
+	case ast.DtWeekday:
+		return d.Weekday()
+	case ast.DtOrdinalDay:
+		return d.OrdinalDay()
+	case ast.DtTruncate:
+		return d.Truncate(time.Duration(e.I[0]))
+	case ast.DtRound:
+		return d.Round(time.Duration(e.I[0]))
+	case ast.DtOffsetBy:
+		return d.OffsetBy(ursus.Every(e.S[0]))
+	case ast.DtDate:
+		return d.Date()
+	case ast.DtTime:
+		return d.Time()
+	case ast.DtConvertTimeZone:
+		return d.ConvertTimeZone(e.S[0])
+	case ast.DtTotalDays:
+		return d.TotalDays()
+	case ast.DtTotalHours:
+		return d.TotalHours()
+	case ast.DtTotalMinutes:
+		return d.TotalMinutes()
+	case ast.DtTotalSeconds:
+		return d.TotalSeconds()
+	case ast.DtTotalMilliseconds:
+		return d.TotalMilliseconds()
+	case ast.DtTotalMicroseconds:
+		return d.TotalMicroseconds()
+	case ast.DtTotalNanoseconds:
+		return d.TotalNanoseconds()
+	}
+	panic(fmt.Sprintf("build: unknown function %s", e.Op))
 }

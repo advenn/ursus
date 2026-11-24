@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -108,8 +107,10 @@ type Table struct {
 	Seed uint64
 	// MaxRows is a generated table's bound; 0 for a table of rows.
 	MaxRows int
-	Rows    int
-	Cols    []Column
+	// Core is a generated table of the core generator's, gen.CoreTable.
+	Core bool
+	Rows int
+	Cols []Column
 
 	m *model.Table // the table, once made
 }
@@ -122,7 +123,8 @@ type Column struct {
 }
 
 // Value is a cell: a null, or the value of its column's type, I for an integer and
-// a Date's days, F for a float, S for text, B for a Boolean.
+// a Date's days, F for a float, S for text, B for a Boolean; a wide type's as
+// shrink/wide.go says.
 type Value struct {
 	Null bool
 	I    int64
@@ -141,6 +143,9 @@ func (t *Table) Model() (*model.Table, error) {
 	}
 	if t.Generated() {
 		m := gen.Table(t.Seed, t.Name, t.MaxRows)
+		if t.Core {
+			m = gen.CoreTable(t.Seed, t.Name, t.MaxRows)
+		}
 		if m.Rows != t.Rows || len(m.Cols) != len(t.Cols) {
 			return nil, fmt.Errorf("table %s: gen.Table draws %d rows of %d columns from seed %d, the case says %d of %d: "+
 				"the generator changed", t.Name, m.Rows, len(m.Cols), t.Seed, t.Rows, len(t.Cols))
@@ -178,25 +183,8 @@ func (t *Table) Model() (*model.Table, error) {
 	for i, c := range t.Cols {
 		fb := b.Field(i)
 		for _, v := range c.Values {
-			if v.Null {
-				fb.AppendNull()
-				continue
-			}
-			switch fb := fb.(type) {
-			case *array.Int64Builder:
-				fb.Append(v.I)
-			case *array.Int32Builder:
-				fb.Append(int32(v.I))
-			case *array.Float64Builder:
-				fb.Append(v.F)
-			case *array.StringBuilder:
-				fb.Append(v.S)
-			case *array.BooleanBuilder:
-				fb.Append(v.B)
-			case *array.Date32Builder:
-				fb.Append(arrow.Date32(v.I))
-			default:
-				return nil, fmt.Errorf("table %s: no column of %s", t.Name, c.Type)
+			if err := appendValue(fb, c.Type, v); err != nil {
+				return nil, fmt.Errorf("table %s: %w", t.Name, err)
 			}
 		}
 	}
@@ -224,26 +212,11 @@ func FromModel(m *model.Table) (*Table, error) {
 		col := m.Rec.Column(j)
 		c := Column{Name: mc.Name, Type: mc.Type, Values: make([]Value, col.Len())}
 		for i := range c.Values {
-			if col.IsNull(i) {
-				c.Values[i].Null = true
-				continue
+			v, err := valueAt(col, i)
+			if err != nil {
+				return nil, fmt.Errorf("table %s column %s: %w", m.Name, mc.Name, err)
 			}
-			switch a := col.(type) {
-			case *array.Int64:
-				c.Values[i].I = a.Value(i)
-			case *array.Int32:
-				c.Values[i].I = int64(a.Value(i))
-			case *array.Float64:
-				c.Values[i].F = a.Value(i)
-			case *array.String:
-				c.Values[i].S = strings.Clone(a.Value(i))
-			case *array.Boolean:
-				c.Values[i].B = a.Value(i)
-			case *array.Date32:
-				c.Values[i].I = int64(a.Value(i))
-			default:
-				return nil, fmt.Errorf("table %s: a column %s of Arrow %s", m.Name, mc.Name, col.DataType())
-			}
+			c.Values[i] = v
 		}
 		t.Cols = append(t.Cols, c)
 	}
@@ -318,17 +291,26 @@ func (c *Case) Name() string { return fmt.Sprintf("%s-%d", c.Source, c.Seed) }
 // FromSeed is the case of seed's generated case, as the finder that found it ran
 // it: mode, and the configurations. Its signature is learnt when it is first run.
 func FromSeed(source string, seed uint64, mode string, ref, cfg model.Config) *Case {
-	g := gen.NewCase(seed)
+	return fromSeed(source, seed, mode, ref, cfg, false)
+}
+
+// FromCoreSeed is FromSeed of the core generator's case of seed.
+func FromCoreSeed(source string, seed uint64, mode string, ref, cfg model.Config) *Case {
+	return fromSeed(source, seed, mode, ref, cfg, true)
+}
+
+func fromSeed(source string, seed uint64, mode string, ref, cfg model.Config, core bool) *Case {
+	g := gen.CaseOf(seed, core)
 	c := &Case{Source: source, Mode: mode, Seed: seed, Reference: ref, Config: cfg, Query: g.Query}
 	for _, t := range g.Tables {
-		c.Tables = append(c.Tables, generated(t))
+		c.Tables = append(c.Tables, generated(t, core))
 	}
 	return c
 }
 
 // generated is m as a generated Table, its shape recorded.
-func generated(m *model.Table) *Table {
-	t := &Table{Name: m.Name, Seed: m.Seed, MaxRows: genMaxRows, Rows: m.Rows, m: m}
+func generated(m *model.Table, core bool) *Table {
+	t := &Table{Name: m.Name, Seed: m.Seed, MaxRows: genMaxRows, Core: core, Rows: m.Rows, m: m}
 	for _, mc := range m.Cols {
 		t.Cols = append(t.Cols, Column{Name: mc.Name, Type: mc.Type})
 	}
@@ -345,17 +327,17 @@ func FromSelf(f self.Finding) (*Case, error) {
 		if f.Detail != "" && strings.HasPrefix(f.Detail, "the canary") {
 			return nil, fmt.Errorf("seed %d: the canary's mismatch is the float-threads rule's, not a query's", f.Seed)
 		}
-		return FromSeed(SourceSelf, f.Seed, ModeDifferential, f.Ref, f.Variant), nil
+		return fromSeed(SourceSelf, f.Seed, ModeDifferential, f.Ref, f.Variant, f.Core), nil
 	case self.KindRerun:
-		return FromSeed(SourceSelf, f.Seed, ModeRerun, ref, f.Variant), nil
+		return fromSeed(SourceSelf, f.Seed, ModeRerun, ref, f.Variant, f.Core), nil
 	case self.KindFuzzcheck:
 		cfg := f.Variant
 		if cfg == (model.Config{}) {
 			cfg = ref
 		}
-		return FromSeed(SourceSelf, f.Seed, ModeRun, ref, cfg), nil
+		return fromSeed(SourceSelf, f.Seed, ModeRun, ref, cfg, f.Core), nil
 	case self.KindSchema:
-		return FromSeed(SourceSelf, f.Seed, ModeSchema, ref, ref), nil
+		return fromSeed(SourceSelf, f.Seed, ModeSchema, ref, ref, f.Core), nil
 	}
 	return nil, fmt.Errorf("a %s finding is not a case to shrink", f.Kind)
 }
@@ -365,11 +347,11 @@ func FromDuck(f compare.Finding) (*Case, error) {
 	ref := model.Reference()
 	switch f.Kind {
 	case compare.KindMismatch, compare.KindRefused, compare.KindSQL:
-		return FromSeed(SourceDuck, f.Seed, ModeDuck, ref, f.Config), nil
+		return fromSeed(SourceDuck, f.Seed, ModeDuck, ref, f.Config, f.Core), nil
 	case compare.KindFuzzcheck:
-		return FromSeed(SourceDuck, f.Seed, ModeRun, ref, f.Config), nil
+		return fromSeed(SourceDuck, f.Seed, ModeRun, ref, f.Config, f.Core), nil
 	case compare.KindSchema:
-		return FromSeed(SourceDuck, f.Seed, ModeSchema, ref, ref), nil
+		return fromSeed(SourceDuck, f.Seed, ModeSchema, ref, ref, f.Core), nil
 	}
 	return nil, fmt.Errorf("a %s finding is not a case to shrink", f.Kind)
 }
@@ -411,6 +393,7 @@ type tableJSON struct {
 	Name    string       `json:"name"`
 	Seed    uint64       `json:"seed"`
 	MaxRows int          `json:"max_rows,omitempty"`
+	Core    bool         `json:"core,omitempty"`
 	Rows    int          `json:"rows"`
 	Columns []columnJSON `json:"columns"`
 }
@@ -434,7 +417,7 @@ func (c *Case) MarshalJSON() ([]byte, error) {
 		j.Reference = &r
 	}
 	for _, t := range c.Tables {
-		tj := tableJSON{Name: t.Name, Seed: t.Seed, MaxRows: t.MaxRows, Rows: t.Rows, Columns: []columnJSON{}}
+		tj := tableJSON{Name: t.Name, Seed: t.Seed, MaxRows: t.MaxRows, Core: t.Core, Rows: t.Rows, Columns: []columnJSON{}}
 		for _, col := range t.Cols {
 			cj := columnJSON{Name: col.Name, Type: col.Type.String()}
 			if !t.Generated() {
@@ -468,10 +451,10 @@ func (c *Case) UnmarshalJSON(b []byte) error {
 		c.Reference = j.Reference.config()
 	}
 	for _, tj := range j.Tables {
-		t := &Table{Name: tj.Name, Seed: tj.Seed, MaxRows: tj.MaxRows, Rows: tj.Rows}
+		t := &Table{Name: tj.Name, Seed: tj.Seed, MaxRows: tj.MaxRows, Core: tj.Core, Rows: tj.Rows}
 		for _, cj := range tj.Columns {
-			typ, ok := typeByName[cj.Type]
-			if !ok || !slices.Contains(model.Base, typ) {
+			typ, ok := model.ParseType(cj.Type)
+			if !ok || !TableType(typ) {
 				return fmt.Errorf("table %s column %s: a table holds no column of %q", tj.Name, cj.Name, cj.Type)
 			}
 			col := Column{Name: cj.Name, Type: typ}
@@ -538,14 +521,6 @@ func Save(c *Case, path string) error {
 	return os.WriteFile(path, b, 0o644)
 }
 
-var typeByName = func() map[string]model.Type {
-	m := map[string]model.Type{}
-	for t := model.Bool; t <= model.Date; t++ {
-		m[t.String()] = t
-	}
-	return m
-}()
-
 // encodeValue is v as JSON: an integer or a Date's days a number; a float its
 // shortest text, "NaN", "+Inf", "-Inf" and "-0" among them, and a NaN of another
 // payload "NaN:" and its bits; text a string, or {"hex": …} where it is not UTF-8;
@@ -553,6 +528,9 @@ var typeByName = func() map[string]model.Type {
 func encodeValue(t model.Type, v Value) (json.RawMessage, error) {
 	if v.Null {
 		return json.RawMessage("null"), nil
+	}
+	if b, ok, err := encodeWide(t, v); ok {
+		return b, err
 	}
 	switch t {
 	case model.Int8, model.Int16, model.Int32, model.Int64, model.Date:
@@ -574,6 +552,9 @@ func decodeValue(t model.Type, raw json.RawMessage) (Value, error) {
 	s := strings.TrimSpace(string(raw))
 	if s == "null" {
 		return Value{Null: true}, nil
+	}
+	if v, ok, err := decodeWide(t, raw); ok {
+		return v, err
 	}
 	switch t {
 	case model.Int8, model.Int16, model.Int32, model.Int64, model.Date:
@@ -640,9 +621,16 @@ func litValue(l *ast.Lit) Value {
 		return Value{I: v}
 	case int32:
 		return Value{I: int64(v)}
+	case uint64:
+		return Value{I: int64(v)}
 	case float64:
 		return Value{F: v}
+	case float32:
+		return Value{F: float64(v)}
 	case string:
+		if l.T.IsDecimal() {
+			return decValue(v)
+		}
 		return Value{S: v}
 	case bool:
 		return Value{B: v}
@@ -654,6 +642,16 @@ func litValue(l *ast.Lit) Value {
 func newLit(t model.Type, v Value) *ast.Lit {
 	if v.Null {
 		return &ast.Lit{T: t, Null: true}
+	}
+	switch {
+	case t.IsUnsigned():
+		return &ast.Lit{T: t, V: uint64(v.I)}
+	case t == model.Float32:
+		return &ast.Lit{T: t, V: float32(v.F)}
+	case t.IsDatetime(), t.IsDuration(), t.IsTime():
+		return &ast.Lit{T: t, V: v.I}
+	case t.IsDecimal():
+		return &ast.Lit{T: t, V: decimalOf(v)}
 	}
 	switch t {
 	case model.Int8, model.Int16, model.Int32, model.Int64:

@@ -30,14 +30,17 @@ type OpStats struct {
 // Report is a run's outcome.
 type Report struct {
 	Cases    int
-	Runs     int            // ursus runs
-	Compared int            // queries both engines answered, compared
-	Excluded map[string]int // queries not translated, by the rule that excludes them
-	Fired    map[string]int // each translation rule's firings, over translated queries
-	Allowed  map[string]int // the comparator's allowances that fired, by kind
-	Ops      map[string]*OpStats
-	Findings []Finding
-	Elapsed  time.Duration
+	Runs     int // ursus runs
+	Compared int // queries both engines answered, compared
+	// BothRefused counts the queries ursus refused with ErrValue where DuckDB raised
+	// an error too (step 543): agreement, neither answered.
+	BothRefused int
+	Excluded    map[string]int // queries not translated, by the rule that excludes them
+	Fired       map[string]int // each translation rule's firings, over translated queries
+	Allowed     map[string]int // the comparator's allowances that fired, by kind
+	Ops         map[string]*OpStats
+	Findings    []Finding
+	Elapsed     time.Duration
 }
 
 func newReport() *Report {
@@ -115,6 +118,9 @@ func (r *Report) Summary() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "qcheck duck: %d cases, %d compared, %d excluded, in %v; %d finding(s)\n",
 		r.Cases, r.Compared, sum(r.Excluded), r.Elapsed.Round(time.Millisecond), len(r.Findings))
+	if r.BothRefused > 0 {
+		fmt.Fprintf(&b, "both refused: %d (ursus with ErrValue, DuckDB with an error)\n", r.BothRefused)
+	}
 	if len(r.Excluded) > 0 {
 		fmt.Fprintf(&b, "excluded: %v\n", r.Excluded)
 	}
