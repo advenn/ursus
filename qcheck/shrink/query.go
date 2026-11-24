@@ -66,6 +66,12 @@ type exprJSON struct {
 	Cast     *exprJSON       `json:"cast,omitempty"`
 	Lossy    bool            `json:"lossy,omitempty"`
 	Agg      string          `json:"agg,omitempty"`
+	// A namespace's function (step 539): its name, its receiver X and its text,
+	// numbers and literal flag.
+	Fn      string   `json:"fn,omitempty"`
+	S       []string `json:"s,omitempty"`
+	I       []int64  `json:"i,omitempty"`
+	Literal bool     `json:"literal,omitempty"`
 }
 
 func encodeQuery(q *ast.Query) (json.RawMessage, error) {
@@ -210,6 +216,8 @@ func encodeExpr(e ast.Expr, err error) (*exprJSON, error) {
 		if e.X != nil {
 			j.X = sub(e.X)
 		}
+	case *ast.Fn:
+		j.Fn, j.X, j.S, j.I, j.Literal = e.Op.String(), sub(e.X), e.S, e.I, e.B
 	default:
 		return nil, fmt.Errorf("unknown expression %T", e)
 	}
@@ -344,7 +352,7 @@ func decodeExpr(j *exprJSON) (ast.Expr, error) {
 	if j == nil {
 		return nil, fmt.Errorf("a missing expression")
 	}
-	t, ok := typeByName[j.Type]
+	t, ok := model.ParseType(j.Type)
 	if !ok {
 		return nil, fmt.Errorf("a type %q", j.Type)
 	}
@@ -418,6 +426,16 @@ func decodeExpr(j *exprJSON) (ast.Expr, error) {
 			}
 		}
 		e, err = ast.NewAgg(op, x)
+	case j.Fn != "":
+		op, ok := fnOps[j.Fn]
+		if !ok {
+			return nil, fmt.Errorf("a function %q", j.Fn)
+		}
+		x, err2 := decodeExpr(j.X)
+		if err2 != nil {
+			return nil, err2
+		}
+		e, err = ast.NewFn(op, x, j.S, j.I, j.Literal)
 	default:
 		return nil, fmt.Errorf("an expression of no kind")
 	}
@@ -441,18 +459,13 @@ func decode2(a, b *exprJSON) (ast.Expr, ast.Expr, error) {
 
 // hasLit is whether a literal of t is a thing qcheck makes: every type a table
 // holds, and the integers casts make.
-func hasLit(t model.Type) bool {
-	switch t {
-	case model.Int8, model.Int16, model.Int32, model.Int64, model.Float64, model.String, model.Bool, model.Date:
-		return true
-	}
-	return false
-}
+func hasLit(t model.Type) bool { return TableType(t) }
 
 var (
 	binOps = map[string]ast.BinOp{}
 	unOps  = map[string]ast.UnOp{}
 	aggOps = map[string]ast.AggOp{}
+	fnOps  = map[string]ast.FnOp{}
 )
 
 func init() {
@@ -464,5 +477,8 @@ func init() {
 	}
 	for op := ast.Sum; op <= ast.NUnique; op++ {
 		aggOps[op.String()] = op
+	}
+	for _, op := range ast.FnOps() {
+		fnOps[op.String()] = op
 	}
 }

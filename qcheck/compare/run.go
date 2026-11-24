@@ -38,6 +38,9 @@ type Options struct {
 	Cases    int           // stop after this many cases; 0 is no limit
 	Duration time.Duration // stop starting cases after this long; 0 is no limit
 	Engine   Engine
+	// Core draws the core generator's cases (gen.NewCoreCase), step 512's types
+	// and operations alone, each seed the case it was before step 539.
+	Core bool
 	// Limits bound each ursus run: its Wall is how long one query may take before the
 	// watchdog ends the process, 0 for a minute.
 	Limits fuzzcheck.Limits
@@ -73,6 +76,7 @@ type Finding struct {
 	Case   string       // the tables and the query, as Go
 	SQL    string
 	Detail string
+	Core   bool // the case is the core generator's
 }
 
 func (f Finding) String() string {
@@ -112,7 +116,7 @@ func Run(opts Options) *Report {
 			break
 		}
 		seed := opts.Seed + uint64(i)
-		c, failure := newCase(seed)
+		c, failure := newCase(seed, opts.Core)
 		if failure != "" {
 			rep.add(Finding{Kind: KindGenerator, Seed: seed, Detail: failure})
 			continue
@@ -143,13 +147,13 @@ func ConfigOf(c *gen.Case) model.Config {
 }
 
 // newCase draws seed's case, and reports a generator's panic or ill-formed query.
-func newCase(seed uint64) (c *gen.Case, failure string) {
+func newCase(seed uint64, core bool) (c *gen.Case, failure string) {
 	defer func() {
 		if v := recover(); v != nil {
 			failure = fmt.Sprintf("the generator panicked: %v", v)
 		}
 	}()
-	c = gen.NewCase(seed)
+	c = gen.CaseOf(seed, core)
 	if err := ast.Check(c.Query, c.TableMap()); err != nil {
 		return nil, fmt.Sprintf("an ill-formed query: %v\n%s", err, c)
 	}
@@ -172,7 +176,8 @@ type caseRun struct {
 }
 
 func (cr *caseRun) finding(kind, sql, detail string) {
-	cr.rep.add(Finding{Kind: kind, Seed: cr.c.Seed, Config: cr.cfg, Case: cr.c.String(), SQL: sql, Detail: detail})
+	cr.rep.add(Finding{Kind: kind, Seed: cr.c.Seed, Config: cr.cfg, Case: cr.c.String(), SQL: sql, Detail: detail,
+		Core: cr.c.Core})
 }
 
 func (cr *caseRun) check() {
@@ -207,6 +212,14 @@ func (cr *caseRun) check() {
 	}
 	want, err := cr.engine(q, s, info)
 	if err != nil {
+		if got.Err != nil && errors.Is(got.Err, ursus.ErrValue) {
+			// Both refused (step 543): ursus with ErrValue, a value its type cannot
+			// hold, a Date or a year past int32's, and DuckDB with its own error, as
+			// its translation computes the same value and its cast to that type
+			// refuses it alike. Counted, not compared.
+			cr.rep.BothRefused++
+			return
+		}
 		cr.finding(KindSQL, s.Text, "DuckDB: "+err.Error())
 		return
 	}
@@ -216,6 +229,9 @@ func (cr *caseRun) check() {
 	cr.rep.Compared++
 	cr.rep.countQuery(q, want)
 	if got.Err != nil {
+		if cr.discarded(q, info, got, want, bounds, tables) {
+			return
+		}
 		cr.finding(KindRefused, s.Text, fmt.Sprintf("ursus refused, %v\nDuckDB answered %s", firstLine(got.Err), want))
 		return
 	}
@@ -264,6 +280,32 @@ func (cr *caseRun) ursus(q *ast.Query, info *ast.Info) (*Answer, string, error) 
 		return nil, failure, nil
 	}
 	return a, "", readErr
+}
+
+// discarded is the maintainer's rule (step 542) in DuckDB's comparison, as self's
+// discarded is in the self check: a value the query discards may not be computed,
+// so its error may not be raised. The plan as written, the optimizer off, may
+// refuse with ErrValue a value an optimized plan discards first. Allowed, and
+// counted, only where ursus under the same configuration with the optimizer on
+// answers DuckDB's answer.
+func (cr *caseRun) discarded(q *ast.Query, info *ast.Info, got, want *Answer,
+	bounds map[string]ast.Bound, tables map[string]*model.Table) bool {
+	if !cr.cfg.OptOff || !errors.Is(got.Err, ursus.ErrValue) {
+		return false
+	}
+	saved := cr.cfg
+	cr.cfg.OptOff = false
+	on, failure, err := cr.ursus(q, info)
+	cr.cfg = saved
+	if failure != "" || err != nil || on == nil || on.Err != nil {
+		return false
+	}
+	plan, err := NewPlan(q, bounds, tables, saved.Threads)
+	if err != nil || Compare(want, on, plan).Diff != "" {
+		return false
+	}
+	cr.rep.Allowed[FiredDiscarded]++
+	return true
 }
 
 // engine is the engine's answer to q.

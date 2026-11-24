@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/big"
 	"strings"
 	"testing"
 
@@ -22,6 +23,9 @@ func recordRows(recs []arrow.RecordBatch) [][]any {
 				v := value(r.Column(j), i)
 				if f, ok := v.(float64); ok {
 					v = math.Float64bits(f) // bit-exact, a NaN's payload too
+				}
+				if b, ok := v.(*big.Int); ok {
+					v = b.String() // a value, where the pointer never compares equal
 				}
 				row[j] = v
 			}

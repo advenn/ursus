@@ -40,6 +40,9 @@ type SQL struct {
 // Type is DuckDB's type for t: a Date is an INTEGER of days (T-DATE-DAYS), an
 // Int128 a HUGEINT, a Uint64 a UBIGINT.
 func Type(t model.Type) string {
+	if s, ok := wideType(t); ok {
+		return s
+	}
 	switch t {
 	case model.Bool:
 		return "BOOLEAN"
@@ -168,6 +171,9 @@ func (b *builder) frame(f ast.Frame) string {
 			if c.Type == model.Date {
 				b.fire(TDateDays)
 			}
+			if c.Type.IsDatetime() || c.Type.IsDuration() || c.Type.IsTime() {
+				b.fire(TTicks)
+			}
 		}
 		name = b.cte("SELECT " + strings.Join(cols, ", ") + " FROM " + Quote(t.Name))
 	case *ast.Filter:
@@ -286,9 +292,14 @@ func (b *builder) sort(f *ast.Sort) string {
 	for _, k := range f.Keys {
 		c := info.Col(k.Col)
 		e := Quote(k.Col)
-		if c.Type == model.Float64 {
+		switch c.Type {
+		case model.Float64:
 			b.fire(TKeyZero)
 			e = "u_fkey(" + e + ")"
+		case model.Float32:
+			b.fire(TKeyZero)
+			b.fire(TF32)
+			e = "u_fkey(CAST(" + e + " AS DOUBLE))"
 		}
 		dir := " ASC"
 		if k.Desc {
@@ -411,37 +422,29 @@ func (b *builder) join(f *ast.Join) string {
 func (b *builder) cast(e ast.Expr, t model.Type) string {
 	s := b.expr(e)
 	from := e.Type()
-	if from == t {
-		return s
-	}
-	switch {
-	case from.IsInt() && t.IsInt(), from.IsInt() && t == model.Float64:
-		b.fire(TPromote)
-		return "CAST(" + s + " AS " + Type(t) + ")"
-	case from == model.Float64 && t.IsSignedInt():
-		// A weak fill's whole float, which fits t (fill.go).
-		b.fire(TFillWeak)
-		return "CAST(" + s + " AS " + Type(t) + ")"
+	if out, ok := b.coerce(s, from, t); ok {
+		return out
 	}
 	b.refuse(RPromote, "%s does not meet %s", from, t)
 	return ""
 }
 
 // cmpType is the type a comparison casts both sides to: Promote's for the types
-// qcheck compares (expr/resolve.go resolveComparison).
+// qcheck compares (expr/resolve.go resolveComparison), an Int128 or a Uint64 beside
+// a signed integer at Int128, Float32 at its exact DOUBLE.
 func cmpType(l, r model.Type) model.Type {
 	switch {
 	case l == r:
 		return l
-	case l == model.Float64 || r == model.Float64:
-		return model.Float64
-	case l == model.Int128 || r == model.Int128 || l == model.Uint64 || r == model.Uint64:
+	case l == model.Int128 || r == model.Int128,
+		(l == model.Uint64 || r == model.Uint64) && (l.IsSignedInt() || r.IsSignedInt()):
 		return model.Int128
-	case l.IsSignedInt() && r.IsSignedInt():
-		t, _ := model.Promote(l, r)
-		return t
 	}
-	return model.Invalid
+	t, ok := model.Promote(l, r)
+	if !ok {
+		return model.Invalid
+	}
+	return t
 }
 
 func (b *builder) expr(e ast.Expr) string {
@@ -463,6 +466,8 @@ func (b *builder) expr(e ast.Expr) string {
 		return "COALESCE(" + b.cast(e.X, e.T) + ", " + b.cast(e.With, e.T) + ")"
 	case *ast.Cast:
 		return b.convert(e)
+	case *ast.Fn:
+		return b.fn(e)
 	case *ast.Agg:
 		panic("sqlgen: an aggregate outside a group-by")
 	}
@@ -476,8 +481,12 @@ func wrapFn(t model.Type) string {
 
 func (b *builder) bin(e *ast.Bin) string {
 	lt, rt := e.L.Type(), e.R.Type()
-	if (e.Op <= ast.Mod) && (lt == model.Int128 || rt == model.Int128 || lt == model.Uint64 || rt == model.Uint64) {
+	if (e.Op <= ast.Mod) && (lt == model.Int128 || rt == model.Int128 || e.T == model.Int128 ||
+		!wideOK(e) && (lt == model.Uint64 || rt == model.Uint64)) {
 		b.refuse(RI128Arith, "%s of %s and %s", e.Op, lt, rt)
+	}
+	if s, ok := b.wideBin(e); ok {
+		return s
 	}
 	switch e.Op {
 	case ast.Add, ast.Sub, ast.Mul:
@@ -520,7 +529,7 @@ func (b *builder) bin(e *ast.Bin) string {
 		b.fire(TCmpPromote)
 	}
 	l, r := b.cmpSide(e.L, ct), b.cmpSide(e.R, ct)
-	if ct == model.Float64 {
+	if ct.IsFloat() {
 		b.fire(TIEEECmp)
 		fn := map[ast.BinOp]string{ast.Eq: "u_feq", ast.Ne: "u_fne", ast.Lt: "u_flt", ast.Le: "u_fle",
 			ast.Gt: "u_fgt", ast.Ge: "u_fge"}[e.Op]
@@ -536,6 +545,9 @@ func (b *builder) cmpSide(e ast.Expr, ct model.Type) string {
 	if e.Type() == ct {
 		return b.expr(e)
 	}
+	if s, ok := b.coerce(b.expr(e), e.Type(), ct); ok {
+		return s
+	}
 	return "CAST(" + b.expr(e) + " AS " + Type(ct) + ")"
 }
 
@@ -550,14 +562,22 @@ func (b *builder) un(e *ast.Un) string {
 	case ast.IsNotNull:
 		return "(" + b.expr(e.X) + " IS NOT NULL)"
 	}
-	if xt == model.Int128 || xt == model.Uint64 {
+	if xt == model.Int128 || xt == model.Uint64 && e.Op == ast.Neg {
 		b.refuse(RI128Arith, "%s of %s", e.Op, xt)
 	}
 	switch {
-	case e.Op == ast.Neg && xt == model.Float64:
+	case e.Op == ast.Neg && (xt.IsFloat() || xt.IsDecimal()):
+		if xt.IsDecimal() {
+			b.fire(TDec)
+		}
 		return "(-(" + b.expr(e.X) + "))"
-	case e.Op == ast.Abs && xt == model.Float64:
+	case e.Op == ast.Abs && (xt.IsFloat() || xt.IsDecimal()):
+		if xt.IsDecimal() {
+			b.fire(TDec)
+		}
 		return "abs(" + b.expr(e.X) + ")"
+	case e.Op == ast.Abs && xt.IsUnsigned():
+		return b.expr(e.X)
 	case e.Op == ast.Neg:
 		b.fire(TIntWrap)
 		return wrapFn(xt) + "(-CAST(" + b.expr(e.X) + " AS HUGEINT))"
@@ -589,6 +609,11 @@ func (b *builder) convert(e *ast.Cast) string {
 	x := b.expr(e.X)
 	if from == to {
 		return x
+	}
+	if !coreType(from) || !coreType(to) {
+		if s, ok := b.wideConvert(e, x); ok {
+			return s
+		}
 	}
 	if e.Lossy {
 		switch {
@@ -655,6 +680,11 @@ func (b *builder) agg(a *ast.Agg) string {
 	}
 	xt := a.X.Type()
 	x := b.expr(a.X)
+	if !coreType(xt) {
+		if s, ok := b.wideAgg(a, x); ok {
+			return s
+		}
+	}
 	switch a.Op {
 	case ast.Count:
 		b.fire(TCount)
@@ -710,6 +740,9 @@ func Lit(l *ast.Lit) string {
 	if l.Null {
 		return "CAST(NULL AS " + Type(l.T) + ")"
 	}
+	if s, ok := wideLit(l); ok {
+		return s
+	}
 	switch l.T {
 	case model.Int8, model.Int16, model.Int32, model.Int64:
 		return "CAST('" + strconv.FormatInt(l.V.(int64), 10) + "' AS " + Type(l.T) + ")"
@@ -750,3 +783,16 @@ func String(s string) string {
 	}
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
+
+// coreType is a type step 512's generator makes, whose translation step 513 wrote.
+func coreType(t model.Type) bool {
+	switch t {
+	case model.Bool, model.Int8, model.Int16, model.Int32, model.Int64, model.Int128, model.Float64, model.String, model.Date:
+		return true
+	}
+	return false
+}
+
+// wideOK is whether a binary node is one the step 539 rules translate: an unsigned
+// integer's arithmetic whose answer is no Int128.
+func wideOK(e *ast.Bin) bool { return e.T != model.Int128 && (e.T.IsUnsigned() || e.T.IsFloat()) }

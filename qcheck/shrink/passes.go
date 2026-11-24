@@ -435,6 +435,8 @@ func replaceAt(e ast.Expr, path []int, repl ast.Expr) ast.Expr {
 		out, err = ast.NewCast(kids[0], e.To, e.Lossy)
 	case *ast.Agg:
 		out, err = ast.NewAgg(e.Op, kids[0])
+	case *ast.Fn:
+		out, err = ast.NewFn(e.Op, kids[0], e.S, e.I, e.B)
 	default:
 		return nil
 	}
@@ -523,6 +525,9 @@ func simpler(e ast.Expr, in *ast.Info) []ast.Expr {
 func simplerValues(t model.Type, v Value) []Value {
 	if v.Null {
 		return nil
+	}
+	if !slices.Contains(model.Base, t) && t != model.Int8 && t != model.Int16 {
+		return simplerWide(t, v)
 	}
 	var out []Value
 	switch t {

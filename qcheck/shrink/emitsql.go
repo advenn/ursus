@@ -105,9 +105,9 @@ func EmitPolars(c *Case) (string, []string, error) {
 			}
 			cols = append(cols, fmt.Sprintf("%s: [%s]", pyString(col.Name), strings.Join(vals, ", ")))
 			pt := pyType(col.Type)
-			if col.Type == model.Date {
-				pt = "pl.Int32"
-				dates = append(dates, fmt.Sprintf("pl.col(%s).cast(pl.Date)", pyString(col.Name)))
+			if held, cast := p.heldAs(col.Type); held != "" {
+				pt = held
+				dates = append(dates, fmt.Sprintf("pl.col(%s).cast(%s)", pyString(col.Name), cast))
 			}
 			schema = append(schema, fmt.Sprintf("%s: %s", pyString(col.Name), pt))
 		}
@@ -212,8 +212,8 @@ func (p *polars) expr(e ast.Expr) string {
 		if e.Null {
 			return "pl.lit(None, dtype=" + pyType(e.T) + ")"
 		}
-		if e.T == model.Date {
-			return fmt.Sprintf("pl.lit(%d, dtype=pl.Int32).cast(pl.Date)", e.V.(int32))
+		if held, cast := p.heldAs(e.T); held != "" {
+			return fmt.Sprintf("pl.lit(%s, dtype=%s).cast(%s)", pyValue(e.T, litValue(e)), held, cast)
 		}
 		return "pl.lit(" + pyValue(e.T, litValue(e)) + ", dtype=" + pyType(e.T) + ")"
 	case *ast.Bin:
@@ -249,12 +249,105 @@ func (p *polars) expr(e ast.Expr) string {
 			return "pl.len()"
 		}
 		return p.expr(e.X) + "." + pyAgg[e.Op] + "()"
+	case *ast.Fn:
+		return p.fn(e)
 	}
 	p.unmapped = append(p.unmapped, fmt.Sprintf("%T", e))
 	return "None"
 }
 
+// heldAs is how a table holds a type Polars reads otherwise, a Date as Int32 days
+// and the temporals as Int64 ticks, a Time's in nanoseconds, a Decimal as text, and
+// the cast that makes it the type; "" for one Polars reads as it is.
+func (p *polars) heldAs(t model.Type) (held, cast string) {
+	switch {
+	case t == model.Date:
+		return "pl.Int32", "pl.Date"
+	case t.IsDatetime(), t.IsDuration(), t.IsTime():
+		if t.Unit() == model.Sec && !t.IsTime() {
+			p.unmapped = append(p.unmapped, t.String()+": Polars has no unit of seconds")
+		}
+		return "pl.Int64", pyType(t)
+	case t.IsDecimal():
+		return "pl.String", pyType(t)
+	}
+	return "", ""
+}
+
+// fn is a namespace's function as Polars', its name and arguments.
+func (p *polars) fn(e *ast.Fn) string {
+	x := p.expr(e.X)
+	q := func(i int) string { return pyString(e.S[i]) }
+	switch e.Op {
+	case ast.StrContains:
+		return fmt.Sprintf("%s.str.contains(%s, literal=%s)", x, q(0), pyBool(e.B))
+	case ast.StrStartsWith:
+		return x + ".str.starts_with(" + q(0) + ")"
+	case ast.StrEndsWith:
+		return x + ".str.ends_with(" + q(0) + ")"
+	case ast.StrReplace:
+		return fmt.Sprintf("%s.str.replace(%s, %s, literal=%s)", x, q(0), q(1), pyBool(e.B))
+	case ast.StrReplaceAll:
+		return fmt.Sprintf("%s.str.replace_all(%s, %s, literal=%s)", x, q(0), q(1), pyBool(e.B))
+	case ast.StrLenBytes:
+		return x + ".str.len_bytes()"
+	case ast.StrLenChars:
+		return x + ".str.len_chars()"
+	case ast.StrSlice:
+		return fmt.Sprintf("%s.str.slice(%d, %d)", x, e.I[0], e.I[1])
+	case ast.StrToUpper:
+		return x + ".str.to_uppercase()"
+	case ast.StrToLower:
+		return x + ".str.to_lowercase()"
+	case ast.StrStripPrefix:
+		return x + ".str.strip_prefix(" + q(0) + ")"
+	case ast.StrStripSuffix:
+		return x + ".str.strip_suffix(" + q(0) + ")"
+	case ast.StrSplitLen:
+		return x + ".str.split(" + q(0) + ").list.len()"
+	case ast.StrToInteger:
+		return x + ".str.to_integer(strict=False)"
+	case ast.DtTruncate, ast.DtRound:
+		return fmt.Sprintf("%s.dt.%s(\"%dns\")", x, strings.ToLower(strings.TrimPrefix(e.Op.String(), "Dt")), e.I[0])
+	case ast.DtOffsetBy:
+		return x + ".dt.offset_by(" + q(0) + ")"
+	case ast.DtConvertTimeZone:
+		return x + ".dt.convert_time_zone(" + q(0) + ")"
+	case ast.DtOrdinalDay:
+		return x + ".dt.ordinal_day()"
+	}
+	name := strings.TrimPrefix(e.Op.String(), "Dt")
+	var snake []rune
+	for i, r := range name {
+		if r >= 'A' && r <= 'Z' {
+			if i > 0 {
+				snake = append(snake, '_')
+			}
+			r += 'a' - 'A'
+		}
+		snake = append(snake, r)
+	}
+	return x + ".dt." + string(snake) + "()"
+}
+
 func pyType(t model.Type) string {
+	switch {
+	case t.IsDatetime():
+		if z := t.Zone(); z != "" {
+			return fmt.Sprintf("pl.Datetime(%q, %q)", t.Unit().String(), z)
+		}
+		return fmt.Sprintf("pl.Datetime(%q)", t.Unit().String())
+	case t.IsDuration():
+		return fmt.Sprintf("pl.Duration(%q)", t.Unit().String())
+	case t.IsTime():
+		return "pl.Time"
+	case t.IsDecimal():
+		return fmt.Sprintf("pl.Decimal(%d, %d)", t.Prec(), t.Scale())
+	case t.IsUnsigned():
+		return "pl.UInt" + strconv.Itoa(t.Bits())
+	case t == model.Float32:
+		return "pl.Float32"
+	}
 	switch t {
 	case model.Bool:
 		return "pl.Boolean"
@@ -283,6 +376,18 @@ func pyType(t model.Type) string {
 func pyValue(t model.Type, v Value) string {
 	if v.Null {
 		return "None"
+	}
+	switch {
+	case t.IsUnsigned():
+		return strconv.FormatUint(uint64(v.I), 10)
+	case t.IsTime():
+		return strconv.FormatInt(v.I*t.Unit().Nanos(), 10)
+	case t.IsDatetime(), t.IsDuration():
+		return strconv.FormatInt(v.I, 10)
+	case t.IsDecimal():
+		return pyString(ast.DecimalText(decimalOf(v), t.Scale()))
+	case t == model.Float32:
+		return pyValue(model.Float64, v)
 	}
 	switch t {
 	case model.Int8, model.Int16, model.Int32, model.Int64, model.Date:

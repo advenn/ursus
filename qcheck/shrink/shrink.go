@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -302,6 +303,9 @@ func tableCost(t *Table) int {
 func valueCost(t model.Type, v Value) int {
 	if v.Null {
 		return 0
+	}
+	if !slices.Contains(model.Base, t) && t != model.Int8 && t != model.Int16 {
+		return wideCost(t, v)
 	}
 	switch t {
 	case model.Int8, model.Int16, model.Int32, model.Int64, model.Date:

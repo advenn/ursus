@@ -8,52 +8,92 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/internal/uerr"
 	"github.com/advenn/ursus/qcheck/gen"
 	"github.com/advenn/ursus/qcheck/model"
 )
 
-// smokeSeed and smokeCases are the smoke test's run: about ten seconds on the
-// laptop, and every ci.yml run.
+// smokeSeed and smokeCases are the smoke test's run, once with each generator:
+// about ten seconds on the laptop, and every ci.yml run.
 const (
 	smokeSeed  = 20261114
 	smokeCases = 400
 )
 
-// TestSelfSmoke runs a fixed stretch of cases, which must find nothing, fire the
-// float-threads rule, and cover every operation.
+// TestSelfSmoke runs a fixed stretch of cases with each generator, which must find
+// nothing and cover every operation. The core generator's must fire the
+// float-threads rule as well: the wide generator (step 539) spreads its cases over
+// more types and functions, and its 400 drew no float sum the rule could fire on.
 func TestSelfSmoke(t *testing.T) {
-	rep := Run(Options{Seed: smokeSeed, Cases: smokeCases})
-	t.Log("\n" + rep.Summary())
-	for _, f := range rep.Findings {
-		t.Error(f)
-	}
-	if rep.Fired == 0 || rep.CanariesFired == 0 {
-		t.Errorf("the float-threads rule fired in %d of %d comparisons and %d of %d canaries",
-			rep.Fired, rep.Eligible, rep.CanariesFired, rep.Canaries)
-	}
-	for _, op := range []string{"Filter", "Select", "WithColumns", "GroupBy", "GroupBy()", "Sort", "Head", "Slice",
-		"JoinInner", "JoinLeft", "JoinSemi", "JoinAnti", "Count"} {
-		if s := rep.Ops[op]; s == nil || s.Seen == 0 {
-			t.Errorf("no query ran %s", op)
+	for _, core := range []bool{false, true} {
+		rep := Run(Options{Seed: smokeSeed, Cases: smokeCases, Core: core})
+		t.Logf("core %v:\n%s", core, rep.Summary())
+		for _, f := range rep.Findings {
+			t.Error(f)
+		}
+		if rep.CanariesFired == 0 || core && rep.Fired == 0 {
+			t.Errorf("core %v: the float-threads rule fired in %d of %d comparisons and %d of %d canaries",
+				core, rep.Fired, rep.Eligible, rep.CanariesFired, rep.Canaries)
+		}
+		for _, op := range []string{"Filter", "Select", "WithColumns", "GroupBy", "GroupBy()", "Sort", "Head", "Slice",
+			"JoinInner", "JoinLeft", "JoinSemi", "JoinAnti", "Count"} {
+			if s := rep.Ops[op]; s == nil || s.Seen == 0 {
+				t.Errorf("core %v: no query ran %s", core, op)
+			}
 		}
 	}
 }
 
 // foundSeeds are cases that found a bug, each run again as it was found: a case's
-// tables and query are drawn from its seed alone.
+// tables and query are drawn from its seed and its generator alone.
 var foundSeeds = []struct {
 	seed uint64
+	core bool // found by the core generator, before step 539
 	why  string
 }{
-	{802018528, "step 523: a float Min on four threads took a later -0's place"},
-	{807010171, "step 523: a float Max, likewise, beside a Mean"},
+	{802018528, true, "step 523: a float Min on four threads took a later -0's place"},
+	{807010171, true, "step 523: a float Max, likewise, beside a Mean"},
+	{874020098, false, "step 539, #96's CI: a Datetime(ms) cast to Time(us) refused with the optimizer off alone, " +
+		"its row filtered away (step 542: the cast fixed, the refusal allowed)"},
+}
+
+// TestDiscardedIsNarrow holds the discarded-value allowance (step 542) to its one
+// case: the reference answered, the variant refused with ErrValue, the difference
+// bisects to the optimizer alone and the variant has it off. Each other way it is
+// not allowed.
+func TestDiscardedIsNarrow(t *testing.T) {
+	ref := model.Reference()
+	off := ref
+	off.OptOff = true
+	answered := &Answer{}
+	valueErr := &Answer{Err: fmt.Errorf("cast: %w", ursus.ErrValue)}
+	internal := &Answer{Err: fmt.Errorf("x: %w", uerr.ErrInternal)}
+	if !discarded(ref, off, answered, valueErr, model.FOptimizer) {
+		t.Fatal("the one allowed case is not allowed")
+	}
+	for name, c := range map[string]struct {
+		ref, v    model.Config
+		want, got *Answer
+		f         model.Factor
+	}{
+		"the reference refused":      {ref, off, valueErr, answered, model.FOptimizer},
+		"both refused":               {ref, off, valueErr, valueErr, model.FOptimizer},
+		"not a value error":          {ref, off, answered, internal, model.FOptimizer},
+		"the optimizer with another": {ref, off, answered, valueErr, model.FOptimizer | model.FBatch},
+		"another factor alone":       {ref, off, answered, valueErr, model.FBatch},
+		"the optimized plan refused": {off, ref, answered, valueErr, model.FOptimizer},
+	} {
+		if discarded(c.ref, c.v, c.want, c.got, c.f) {
+			t.Errorf("%s: allowed", name)
+		}
+	}
 }
 
 // TestFoundSeedsFindNothing runs each found case again, which must find nothing.
 func TestFoundSeedsFindNothing(t *testing.T) {
 	for _, s := range foundSeeds {
-		rep := Run(Options{Seed: s.seed, Cases: 1})
+		rep := Run(Options{Seed: s.seed, Cases: 1, Core: s.core})
 		if rep.Cases != 1 {
 			t.Errorf("seed %d (%s): %d cases ran", s.seed, s.why, rep.Cases)
 		}

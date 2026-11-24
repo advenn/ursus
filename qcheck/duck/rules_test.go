@@ -561,13 +561,17 @@ func TestTranslationRulesAgainstUrsus(t *testing.T) {
 
 // TestTranslationRules runs each rule's queries, chosen to meet its edges, in
 // ursus and in DuckDB, which must agree: the rule's expected answer is ursus's,
-// never a typed table. Every rule but the ones no query reaches has queries.
+// never a typed table. Every rule but the ones no query reaches, and the X- rules,
+// which are not translated, has queries.
 func TestTranslationRules(t *testing.T) {
 	d := open(t)
 	for _, r := range sqlgen.Rules {
 		fn, ok := ruleCases[r.ID]
 		switch {
-		case sqlgen.Unused(r.ID):
+		case sqlgen.Unused(r.ID), strings.HasPrefix(r.ID, "X-"):
+			// An X- rule is not translated: a query holding one is excluded and the
+			// self check alone runs it. DuckDB's dialect is mirrored only for what
+			// ursus has (the maintainer, 2026-11-23), so it has no DuckDB test.
 			continue
 		case !ok:
 			t.Errorf("%s has no test", r.ID)
