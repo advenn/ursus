@@ -552,9 +552,9 @@ func locationOf(dt dtype.DataType) *time.Location {
 // 544, as the maintainer approved it) and a zoned one's refused.
 const calendarDays = int64(1e12)
 
-// civil is a naive instant's proleptic Gregorian date, ISO weekday, ordinal day and
+// civilDate is a naive instant's proleptic Gregorian date, ISO weekday, ordinal day and
 // nanoseconds into its day, where Go's calendar ends (step 544).
-type civil struct {
+type civilDate struct {
 	year, month, day, wd, yday, nanos int64
 }
 
@@ -574,14 +574,14 @@ func monthDays(y, m int64) int64 {
 // civilOf is the civil date of day days since 1970-01-01, Hinnant's
 // civil_from_days, exact in int64 for every day an int64 of seconds reaches, and
 // nanos the nanoseconds into it.
-func civilOf(days, nanos int64) civil {
+func civilOf(days, nanos int64) civilDate {
 	z := days + 719468
 	era := floorDiv(z, 146097)
 	doe := z - era*146097
 	yoe := (doe - doe/1460 + doe/36524 - doe/146096) / 365
 	doy := doe - (365*yoe + yoe/4 - yoe/100)
 	mp := (5*doy + 2) / 153
-	c := civil{year: yoe + era*400, month: mp + 3, day: doy - (153*mp+2)/5 + 1, nanos: nanos}
+	c := civilDate{year: yoe + era*400, month: mp + 3, day: doy - (153*mp+2)/5 + 1, nanos: nanos}
 	if mp >= 10 {
 		c.month = mp - 9
 	}
@@ -600,7 +600,7 @@ func civilOf(days, nanos int64) civil {
 }
 
 // part is c's component fn, or false for one not computed here, the ISO week.
-func (c civil) part(fn expr.CallFn) (int64, bool) {
+func (c civilDate) part(fn expr.CallFn) (int64, bool) {
 	switch fn {
 	case expr.FnDtYear:
 		return c.year, true
@@ -633,11 +633,11 @@ func (c civil) part(fn expr.CallFn) (int64, bool) {
 // calendarAt is instant t of dt on its zone's wall clock: by Go's calendar within
 // calendarDays of the epoch, and past it, far, a naive instant's civil date. A zoned
 // instant past it is refused: its zone's rules so far out are no one's wall clock.
-func calendarAt(fn expr.CallFn, dt dtype.DataType, loc *time.Location, t int64, row int) (time.Time, civil, bool, error) {
+func calendarAt(fn expr.CallFn, dt dtype.DataType, loc *time.Location, t int64, row int) (time.Time, civilDate, bool, error) {
 	if perDay, ok := dtype.TicksPerDay(dt); ok && dt.ID() == dtype.TypeDatetime {
 		if d := floorDiv(t, perDay); d > calendarDays || d < -calendarDays {
 			if loc != nil {
-				return time.Time{}, civil{}, true, outsideCalendar(fn, dt, t, row)
+				return time.Time{}, civilDate{}, true, outsideCalendar(fn, dt, t, row)
 			}
 			npt, _ := dt.NanosPerTick()
 			tod := t % perDay
@@ -649,12 +649,12 @@ func calendarAt(fn expr.CallFn, dt dtype.DataType, loc *time.Location, t int64, 
 	}
 	tm, ok := dt.ToTime(t)
 	if !ok {
-		return time.Time{}, civil{}, false, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
+		return time.Time{}, civilDate{}, false, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
 	}
 	if loc != nil {
 		tm = tm.In(loc)
 	}
-	return tm, civil{}, false, nil
+	return tm, civilDate{}, false, nil
 }
 
 // componentAt is component fn of instant t, or a refusal: a year past Int32, the
