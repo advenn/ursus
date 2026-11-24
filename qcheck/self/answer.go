@@ -59,13 +59,14 @@ func read(df *ursus.DataFrame) (*Answer, error) {
 		case dt.IsFixedWidth():
 			w := dt.Physical().BitWidth() / 8
 			raw := c.RawFixed()
-			float := dt.ID() == dtype.TypeFloat64
+			f64, f32 := dt.ID() == dtype.TypeFloat64, dt.ID() == dtype.TypeFloat32
 			for i := range cells {
 				if !c.IsValid(i) {
 					continue
 				}
 				b := raw[i*w : (i+1)*w]
-				if float && math.IsNaN(math.Float64frombits(binary.LittleEndian.Uint64(b))) {
+				if f64 && math.IsNaN(math.Float64frombits(binary.LittleEndian.Uint64(b))) ||
+					f32 && math.IsNaN(float64(math.Float32frombits(binary.LittleEndian.Uint32(b)))) {
 					cells[i] = nanCell
 					continue
 				}
@@ -90,15 +91,33 @@ func float(cell string) float64 {
 // u64 is a Uint64 cell's value.
 func u64(cell string) uint64 { return binary.LittleEndian.Uint64([]byte(cell[1:])) }
 
-// show renders a cell for a report.
+// show renders a cell for a report. A fixed-width cell not of its type's width, as
+// the teeth make one, is shown as it is, not read past its end.
 func show(cell string, dt dtype.DataType) string {
+	w := dt.Physical().BitWidth() / 8
 	switch {
 	case cell == "":
 		return "null"
 	case cell == nanCell:
 		return "NaN"
+	case w > 0 && len(cell) != 1+w:
+		return fmt.Sprintf("%q, not a %s", cell, dt)
 	case dt.ID() == dtype.TypeFloat64:
 		return ast.GoFloat(float(cell))
+	case dt.ID() == dtype.TypeFloat32:
+		return ast.GoFloat32(math.Float32frombits(binary.LittleEndian.Uint32([]byte(cell[1:]))))
+	case dt.ID() == dtype.TypeDecimal:
+		b := []byte(cell[1:])
+		hi, lo := int64(binary.LittleEndian.Uint64(b)), binary.LittleEndian.Uint64(b[8:])
+		v := new(big.Int).Lsh(big.NewInt(hi), 64)
+		return ast.DecimalText(v.Add(v, new(big.Int).SetUint64(lo)).String(), int(dt.Scale()))
+	case dt.ID() == dtype.TypeUint8 || dt.ID() == dtype.TypeUint16 || dt.ID() == dtype.TypeUint32:
+		b := []byte(cell[1:])
+		var u uint64
+		for k := len(b) - 1; k >= 0; k-- {
+			u = u<<8 | uint64(b[k])
+		}
+		return fmt.Sprint(u)
 	case dt.ID() == dtype.TypeString:
 		s := cell[1:]
 		if len(s) > 40 {

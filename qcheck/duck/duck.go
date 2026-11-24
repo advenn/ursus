@@ -131,7 +131,8 @@ func (d *DB) Register(name string, rec arrow.RecordBatch) error {
 }
 
 // Load makes tables the database's, replacing the last Load's: each record with
-// __rid, its row numbers, first, and a Date as an Int32 of its days.
+// __rid, its row numbers, first, a Date as an Int32 of its days, and a Datetime, a
+// Duration and a Time as an Int64 of its ticks (WithRID).
 func (d *DB) Load(tables []*model.Table) error {
 	ctx := context.Background()
 	for _, name := range d.tables {

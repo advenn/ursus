@@ -74,6 +74,11 @@ func TestEveryRuleFires(t *testing.T) {
 	for _, r := range Rules {
 		known[r.ID] = true
 		switch {
+		case strings.HasPrefix(r.ID, "X-"):
+			// Not translated: a query holding one is excluded, never fired.
+			if fired[r.ID] > 0 {
+				t.Errorf("%s excludes and fired %d times", r.ID, fired[r.ID])
+			}
 		case strings.HasPrefix(r.ID, "R-"):
 			// A refusal fires only on a tree the AST never makes: its test is
 			// TestRefusalsAreRefused. R-SELECT-LIT is no refusal, but gen's Select

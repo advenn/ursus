@@ -18,23 +18,32 @@ const (
 	smokeCases = 400
 )
 
-// TestDuckSmoke runs a fixed stretch of cases against DuckDB, which must find
-// nothing, and cover every operation.
+// TestDuckSmoke runs a fixed stretch of cases against DuckDB with each generator,
+// which must find nothing and cover every operation. Nine in ten of the core
+// generator's cases are compared, and three in four of the wide generator's
+// (step 539): an X- rule excludes a query DuckDB's dialect is not made to mirror,
+// about one in six of them.
 func TestDuckSmoke(t *testing.T) {
 	d := open(t)
-	rep := compare.Run(compare.Options{Seed: smokeSeed, Cases: smokeCases, Engine: d})
-	t.Log("\n" + rep.Summary())
-	for _, f := range rep.Findings {
-		t.Error(f)
-	}
-	for _, op := range []string{"Filter", "Select", "WithColumns", "GroupBy", "GroupBy()", "Sort", "Head", "Slice",
-		"JoinInner", "JoinLeft", "JoinSemi", "JoinAnti", "Count"} {
-		if s := rep.Ops[op]; s == nil || s.Seen == 0 {
-			t.Errorf("no query compared ran %s", op)
+	for _, core := range []bool{false, true} {
+		rep := compare.Run(compare.Options{Seed: smokeSeed, Cases: smokeCases, Engine: d, Core: core})
+		t.Logf("core %v:\n%s", core, rep.Summary())
+		for _, f := range rep.Findings {
+			t.Error(f)
 		}
-	}
-	if rep.Compared < smokeCases*9/10 {
-		t.Errorf("%d of %d cases compared", rep.Compared, rep.Cases)
+		for _, op := range []string{"Filter", "Select", "WithColumns", "GroupBy", "GroupBy()", "Sort", "Head", "Slice",
+			"JoinInner", "JoinLeft", "JoinSemi", "JoinAnti", "Count"} {
+			if s := rep.Ops[op]; s == nil || s.Seen == 0 {
+				t.Errorf("core %v: no query compared ran %s", core, op)
+			}
+		}
+		least := smokeCases * 3 / 4
+		if core {
+			least = smokeCases * 9 / 10
+		}
+		if rep.Compared < least {
+			t.Errorf("core %v: %d of %d cases compared", core, rep.Compared, rep.Cases)
+		}
 	}
 }
 
@@ -189,11 +198,12 @@ var foundSeeds = []uint64{
 	804002697, 804006513, 804011153, 804013588, 804018440, // an integer Mean rounded twice
 }
 
-// TestDuckFound runs the cases the qcheck-duckdb job found, each alone.
+// TestDuckFound runs the cases the qcheck-duckdb job found, each alone. Each was
+// found before step 539, so its case is the core generator's.
 func TestDuckFound(t *testing.T) {
 	d := open(t)
 	for _, seed := range foundSeeds {
-		rep := compare.Run(compare.Options{Seed: seed, Cases: 1, Engine: d})
+		rep := compare.Run(compare.Options{Seed: seed, Cases: 1, Engine: d, Core: true})
 		for _, f := range rep.Findings {
 			if f.Kind != compare.KindVacuous {
 				t.Error(f)
