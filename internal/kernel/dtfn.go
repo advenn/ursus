@@ -156,12 +156,9 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 			if !valid.Get(i) {
 				continue
 			}
-			tm, ok := dt.ToTime(t)
-			if !ok {
-				return nil, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
-			}
-			if loc != nil {
-				tm = tm.In(loc)
+			tm, err := calendarTime(fn, dt, loc, t, i)
+			if err != nil {
+				return nil, err
 			}
 			days[i] = int8(time.Date(tm.Year(), tm.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day())
 		}
@@ -175,12 +172,9 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 		for i, t := range ticks {
 			leap := false
 			if valid.Get(i) {
-				tm, ok := dt.ToTime(t)
-				if !ok {
-					return nil, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
-				}
-				if loc != nil {
-					tm = tm.In(loc)
+				tm, err := calendarTime(fn, dt, loc, t, i)
+				if err != nil {
+					return nil, err
 				}
 				leap = dtype.IsLeapYear(tm.Year())
 			}
@@ -195,12 +189,9 @@ func DtCall(fn expr.CallFn, name string, out dtype.DataType,
 		if !valid.Get(i) {
 			continue
 		}
-		tm, ok := dt.ToTime(t)
-		if !ok {
-			return nil, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
-		}
-		if loc != nil {
-			tm = tm.In(loc)
+		tm, err := calendarTime(fn, dt, loc, t, i)
+		if err != nil {
+			return nil, err
 		}
 		vals[i] = component(fn, tm)
 	}
@@ -544,6 +535,42 @@ func locationOf(dt dtype.DataType) *time.Location {
 	return loc
 }
 
+// calendarDays bounds the instants whose calendar ursus reads (step 543). Go's time
+// package, this file's source of truth, computes a date only from about the year
+// -292,277,022,399, which a Datetime(s) passes in its first 258 years near int64's
+// minimum: a Month read there was another instant's. Within 10^12 days of the epoch,
+// about 2.7 billion years, Go's calendar is exact, and a year is then held to Int32,
+// the type Year answers in. Only a Datetime(s) reaches past either bound.
+const calendarDays = int64(1e12)
+
+// calendarTime is instant t of dt on its zone's wall clock, or a refusal where its
+// year is past Int32: there ursus has no calendar (step 543).
+func calendarTime(fn expr.CallFn, dt dtype.DataType, loc *time.Location, t int64, row int) (time.Time, error) {
+	if perDay, ok := dtype.TicksPerDay(dt); ok && dt.ID() == dtype.TypeDatetime {
+		if d := floorDiv(t, perDay); d > calendarDays || d < -calendarDays {
+			return time.Time{}, outsideCalendar(fn, dt, t, row)
+		}
+	}
+	tm, ok := dt.ToTime(t)
+	if !ok {
+		return time.Time{}, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
+	}
+	if loc != nil {
+		tm = tm.In(loc)
+	}
+	if y := tm.Year(); y < math.MinInt32 || y > math.MaxInt32 {
+		return time.Time{}, outsideCalendar(fn, dt, t, row)
+	}
+	return tm, nil
+}
+
+func outsideCalendar(fn expr.CallFn, dt dtype.DataType, t int64, row int) error {
+	return uerr.New(uerr.KindValue, "dt",
+		"%s of the %s instant %d at row %d: its year is past Int32, outside the calendar ursus reads",
+		fn, dt, t, row).
+		Hint("ursus reads the calendar of years %d to %d", math.MinInt32, math.MaxInt32)
+}
+
 // localDateTime is an instant's date or time of day on its own zone's wall clock,
 // Polars' dt.date and dt.time (step 249). A cast to Date or Time reads the UTC wall
 // clock instead, as Polars' cast does; for a naive Datetime the two agree. A Date's
@@ -575,16 +602,23 @@ func localDateTime(fn expr.CallFn, name string, out dtype.DataType, c *data.Colu
 		if !valid.Get(i) {
 			continue
 		}
-		tm, ok := dt.ToTime(t)
-		if !ok {
-			return nil, uerr.Internalf("kernel: %s cannot read %s as an instant", fn, dt)
-		}
-		if loc != nil {
-			tm = tm.In(loc)
+		tm, err := calendarTime(fn, dt, loc, t, i)
+		if err != nil {
+			return nil, err
 		}
 		if days != nil {
 			// Midnight UTC of the local date is a whole number of days from the epoch.
-			days[i] = int32(time.Date(tm.Year(), tm.Month(), tm.Day(), 0, 0, 0, 0, time.UTC).Unix() / 86400)
+			// A Date is an int32 of them, about 5.9 million years each way: a day past
+			// that is refused, where the conversion wrapped it into another date
+			// (step 543, the maintainer's choice of a refusal over a null).
+			d := time.Date(tm.Year(), tm.Month(), tm.Day(), 0, 0, 0, 0, time.UTC).Unix() / 86400
+			if d < math.MinInt32 || d > math.MaxInt32 {
+				return nil, uerr.New(uerr.KindValue, "dt",
+					"%s of the %s instant %d at row %d is day %d, outside a Date's int32 days", fn, dt, t, i, d).
+					Hint("a Date holds days %d to %d from 1970-01-01, about 5.9 million years each way",
+						math.MinInt32, math.MaxInt32)
+			}
+			days[i] = int32(d)
 			continue
 		}
 		ns := int64(tm.Hour())*int64(time.Hour) + int64(tm.Minute())*int64(time.Minute) +
