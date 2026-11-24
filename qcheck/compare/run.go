@@ -229,6 +229,9 @@ func (cr *caseRun) check() {
 	cr.rep.Compared++
 	cr.rep.countQuery(q, want)
 	if got.Err != nil {
+		if cr.discarded(q, info, got, want, bounds, tables) {
+			return
+		}
 		cr.finding(KindRefused, s.Text, fmt.Sprintf("ursus refused, %v\nDuckDB answered %s", firstLine(got.Err), want))
 		return
 	}
@@ -277,6 +280,32 @@ func (cr *caseRun) ursus(q *ast.Query, info *ast.Info) (*Answer, string, error) 
 		return nil, failure, nil
 	}
 	return a, "", readErr
+}
+
+// discarded is the maintainer's rule (step 542) in DuckDB's comparison, as self's
+// discarded is in the self check: a value the query discards may not be computed,
+// so its error may not be raised. The plan as written, the optimizer off, may
+// refuse with ErrValue a value an optimized plan discards first. Allowed, and
+// counted, only where ursus under the same configuration with the optimizer on
+// answers DuckDB's answer.
+func (cr *caseRun) discarded(q *ast.Query, info *ast.Info, got, want *Answer,
+	bounds map[string]ast.Bound, tables map[string]*model.Table) bool {
+	if !cr.cfg.OptOff || !errors.Is(got.Err, ursus.ErrValue) {
+		return false
+	}
+	saved := cr.cfg
+	cr.cfg.OptOff = false
+	on, failure, err := cr.ursus(q, info)
+	cr.cfg = saved
+	if failure != "" || err != nil || on == nil || on.Err != nil {
+		return false
+	}
+	plan, err := NewPlan(q, bounds, tables, saved.Threads)
+	if err != nil || Compare(want, on, plan).Diff != "" {
+		return false
+	}
+	cr.rep.Allowed[FiredDiscarded]++
+	return true
 }
 
 // engine is the engine's answer to q.
