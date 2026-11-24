@@ -145,9 +145,11 @@ func Run(t TB, lim Limits, fn func() error) {
 		}
 		fail = append(fail, msg)
 	}
-	if n := goroutinesAbove(base); n > 0 {
-		fail = append(fail, fmt.Sprintf("%d goroutine(s) still running %v after the call returned; "+
-			"all goroutines:\n%s", n, settle, allStacks()))
+	if goroutinesAbove(base) > 0 {
+		if stacks := allStacks(); leaks(stacks) > 0 {
+			fail = append(fail, fmt.Sprintf("%d goroutine(s) still running %v after the call returned; "+
+				"all goroutines:\n%s", leaks(stacks), settle, stacks))
+		}
 	}
 
 	if len(fail) > 0 {
@@ -352,6 +354,39 @@ func heapAllocs() int64 {
 }
 
 // allStacks is every goroutine's stack.
+// leaks is how many goroutines of stacks, runtime.Stack's text of all of them, run
+// or were started by ursus's code, the first, the caller's, aside (step 546). One
+// the testing package, the fuzzing engine or os/signal runs or started is theirs:
+// the engine's workers run the fuzz target, and its signal watcher may start during
+// a call, which the bare count read as a leak (#96's FuzzArith, recorded in
+// testdata/fuzzarith-stacks.txt).
+func leaks(stacks []byte) int {
+	n := 0
+	for i, g := range strings.Split(string(stacks), "\n\n") {
+		if i == 0 || strings.TrimSpace(g) == "" {
+			continue
+		}
+		var ursus, harness bool
+		for _, line := range strings.Split(g, "\n") {
+			if strings.HasPrefix(line, "\t") || strings.HasPrefix(line, "goroutine ") {
+				continue // a file:line, or the goroutine's header
+			}
+			fn := strings.TrimPrefix(line, "created by ")
+			switch {
+			case strings.HasPrefix(fn, "testing.") || strings.HasPrefix(fn, "internal/fuzz.") ||
+				strings.HasPrefix(fn, "os/signal."):
+				harness = true
+			case strings.HasPrefix(fn, "github.com/advenn/ursus/"):
+				ursus = true
+			}
+		}
+		if ursus && !harness {
+			n++
+		}
+	}
+	return n
+}
+
 func allStacks() []byte {
 	buf := make([]byte, 1<<20)
 	for {
