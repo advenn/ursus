@@ -21,10 +21,12 @@ import (
 // `.Year()` on a Duration is refused at plan time. A duration is a length, not a
 // point in time; "the year of 90 minutes" has no answer. Use the Total* family.
 //
-// The calendar ursus reads covers the years an Int32 holds, Year's type. An instant
-// past it, which only a Datetime(Second) reaches, more than about 2.1 billion years
-// from 1970, is refused by every calendar part, Date and Time among them, with
-// ErrValue naming the row (step 543).
+// Every calendar part answers at every instant, with two exceptions, each refused
+// with ErrValue naming the row (steps 543 and 544). Year refuses a year past Int32,
+// its type: only a Datetime(Second) reaches one, more than about 2.1 billion years
+// from 1970. And past 10^12 days, about 2.7 billion years, where Go's calendar ends
+// and a naive or UTC instant's date is computed by arithmetic instead, a wall
+// clock in another zone and the ISO week are refused.
 type DtExpr struct{ e Expr }
 
 // Dt opens the temporal namespace.

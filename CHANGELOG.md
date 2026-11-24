@@ -17,12 +17,13 @@ Step numbers below point at those records.
 
 ---
 
-## v0.8.1 — 2026-11-23
+## v0.8.1 — 2026-11-24
 
 Everything since `v0.8.0` (2026-11-23): step 538, arrow-go v18.9.0 and a Parquet fix,
-step 542, a cast's fix and the optimizer's rule for errors documented, and step 543,
-the calendar of far instants refused where it was wrong, released by step 541. No API is added, changed or removed: `api/v0.8.1.txt` lists v0.8.0's 2,481
-features. The tag is off master, as v0.8.0's is.
+step 542, a cast's fix and the optimizer's rule for errors documented, and steps 543
+and 544, the calendar of far instants, released by step 541. No API is added, changed
+or removed: `api/v0.8.1.txt` lists v0.8.0's 2,481 features. The tag is off master, as
+v0.8.0's is.
 
 ### What a v0.8.0 user can trip on
 
@@ -32,13 +33,13 @@ features. The tag is off master, as v0.8.0's is.
   and an OPTIONAL column's DELTA_LENGTH_BYTE_ARRAY page counting more lengths than
   its values, which no writer is known to write. `WriteParquet` writes neither: read
   such a file with v0.8.0, or with pyarrow for the second, and write it again.
-- **The calendar of a far instant is refused, where it was wrong** (543), an
+- **A far instant's Date, and its Year past Int32, are refused** (543, 544), an
   `ErrValue` naming the row. `Dt().Date()` of a Datetime(s) or a Datetime(ms) more
   than about 5.9 million years from 1970 wrapped its day into another date; a Date
-  holds int32 days. Every calendar part of a Datetime(s) whose year is past Int32,
-  about 2.1 billion years out, read Go's calendar where it ends, so a Month near
-  int64's minimum was another instant's. Neither was a date anyone could have meant:
-  keep such instants out of a calendar function.
+  holds int32 days. `Year()` of a Datetime(s) whose year is past Int32, its type,
+  about 2.1 billion years out, is refused too. Past 10^12 days, where Go's calendar
+  ends, a wall clock in a zone other than UTC and the ISO week are refused as well;
+  a naive or UTC instant's other parts answer there, computed by arithmetic.
 
 ### Changed
 
@@ -71,9 +72,11 @@ features. The tag is off master, as v0.8.0's is.
   qcheck's self check found it, refused only with the optimizer off. That an error in
   a value the query discards may not be raised is the optimizer's rule, now
   documented ("Lazy and eager"): a filter moved below a cast drops the rows first.
-- **A far instant's Date and calendar parts no longer answer wrongly** (543): see
-  above. qcheck's DuckDB run found both, as DuckDB's translation computes the
-  calendar in 128-bit integers.
+- **A far instant's Date and calendar parts no longer answer wrongly** (543, 544):
+  Date wrapped past int32 days, see above, and every part of a Datetime(s) near
+  int64's ends read Go's calendar where it ends, so a Month there was another
+  instant's. Past 10^12 days a naive instant's parts are now computed by Hinnant's
+  civil_from_days, as DuckDB's translation in qcheck computes them, which found both.
 
 ---
 
