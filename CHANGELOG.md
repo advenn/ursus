@@ -38,8 +38,8 @@ v0.8.0's is.
   than about 5.9 million years from 1970 wrapped its day into another date; a Date
   holds int32 days. `Year()` of a Datetime(s) whose year is past Int32, its type,
   about 2.1 billion years out, is refused too. Past 10^12 days, where Go's calendar
-  ends, a zoned instant's wall clock and the ISO week are refused as well; a naive
-  instant's other parts answer there, computed by arithmetic.
+  ends, a wall clock in a zone other than UTC and the ISO week are refused as well;
+  a naive or UTC instant's other parts answer there, computed by arithmetic.
 
 ### Changed
 

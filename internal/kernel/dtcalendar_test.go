@@ -156,15 +156,29 @@ func TestCalendarPartsOrRefused(t *testing.T) {
 	}
 }
 
-// TestFarZonedInstantRefused: past Go's calendar, a zoned instant's wall clock is
-// not read (step 544), so its parts are refused; nearer, they answer.
+// TestFarZonedInstantRefused: past Go's calendar, a wall clock in a zone other than
+// UTC's is not read (step 544), so its parts are refused; nearer, they answer. UTC's
+// wall clock is the instant's own, which the arithmetic reads, as a naive one's.
 func TestFarZonedInstantRefused(t *testing.T) {
-	dt := dtype.Datetime(dtype.Second, "UTC")
+	naive, utc, kolkata := dtype.Datetime(dtype.Second, ""), dtype.Datetime(dtype.Second, "UTC"),
+		dtype.Datetime(dtype.Second, "Asia/Kolkata")
 	for _, s := range []int64{math.MinInt64, math.MaxInt64, 1_700_000_000} {
-		col := data.NewFixed("c", dt, []int64{s}, bitmap.AllSet(1))
-		_, err := kernel.DtCall(expr.FnDtMonth, "c", dtype.Int32, col, nil)
-		if far := s != 1_700_000_000; far != errors.Is(err, uerr.ErrValue) {
-			t.Errorf("Month of the zoned %d: %v", s, err)
+		far := s != 1_700_000_000
+		month := func(dt dtype.DataType) (int32, error) {
+			got, err := kernel.DtCall(expr.FnDtMonth, "c", dtype.Int32, data.NewFixed("c", dt, []int64{s}, bitmap.AllSet(1)), nil)
+			if err != nil {
+				return 0, err
+			}
+			v, _ := data.Values[int32](got)
+			return v[0], nil
+		}
+		if _, err := month(kolkata); far != errors.Is(err, uerr.ErrValue) {
+			t.Errorf("Month of %d in Asia/Kolkata: %v", s, err)
+		}
+		n, errN := month(naive)
+		u, errU := month(utc)
+		if errN != nil || errU != nil || n != u {
+			t.Errorf("Month of %d: naive %d (%v), UTC %d (%v)", s, n, errN, u, errU)
 		}
 	}
 }

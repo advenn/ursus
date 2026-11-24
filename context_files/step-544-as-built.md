@@ -21,8 +21,9 @@ answered.
 - **Refused with ErrValue**, naming the row:
   - `Year` past Int32, its type;
   - `Date` past int32 days (step 543);
-  - past 10^12 days, a zoned instant (its zone's rules there are no one's wall clock)
-    and the ISO week.
+  - past 10^12 days, an instant in a zone other than UTC (its zone's rules there are
+    no one's wall clock) and the ISO week. UTC's wall clock is the instant's own, so
+    a UTC instant is read as a naive one.
 
 ## Tests
 
@@ -31,7 +32,9 @@ answered.
   sides of each bound. For each it runs Year, Month, Day, Weekday, OrdinalDay, Hour,
   Minute, Second, Date and Time. Each part answers the oracle's value, or is refused
   exactly where the value does not fit its type.
-- **`TestFarZonedInstantRefused`** holds a far zoned instant to its refusal.
+- **`TestFarZonedInstantRefused`** holds a far instant in Asia/Kolkata to its refusal,
+  and a UTC one to the naive one's answer. Its first version expected UTC to refuse
+  too, and CI failed it: `locationOf` reads UTC as no zone, rightly.
 
 ## Docs
 
