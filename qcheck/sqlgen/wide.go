@@ -514,8 +514,16 @@ func (b *builder) wideConvert(e *ast.Cast, x string) (string, bool) {
 		if !e.Lossy {
 			return "CAST(" + x + " AS " + Type(to) + ")", true
 		}
-		return fmt.Sprintf("(CASE WHEN round(%s, %d) = %s AND CAST(trunc(abs(%s)) AS HUGEINT) < %s THEN CAST(%s AS %s) END)",
-			x, to.Scale(), x, x, pow10(to.Prec()-to.Scale()), x, Type(to)), true
+		// Exact at the target's scale where the digits it drops are zeros, read off the
+		// text, which holds every digit of the source's scale (T-DEC-TEXT). round() at
+		// the target's scale, compared with x, overflowed DECIMAL(38, 10) where x rounds
+		// up past its type (#96: 9999…9.9999999999 to scale 4 is 10^28).
+		exact := "true"
+		if d := from.Scale() - to.Scale(); d > 0 {
+			exact = fmt.Sprintf("right(CAST(%s AS VARCHAR), %d) = '%s'", x, d, strings.Repeat("0", d))
+		}
+		return fmt.Sprintf("(CASE WHEN %s AND CAST(trunc(abs(%s)) AS HUGEINT) < %s THEN CAST(%s AS %s) END)",
+			exact, x, pow10(to.Prec()-to.Scale()), x, Type(to)), true
 	case (from.IsDatetime() || from.IsDuration() || from.IsTime()) && to == model.Int64,
 		from == model.Int64 && (to.IsDatetime() || to.IsDuration()):
 		b.fire(TTicks)
