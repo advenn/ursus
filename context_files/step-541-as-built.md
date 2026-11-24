@@ -32,8 +32,8 @@ measures against it from here on.
   such a file read by v0.8.0 can be written again. The Fixed entry says pyarrow's
   files are refused by v0.8.0 too.
 - **README.** Both "last release" lines name v0.8.1.
-- **Tagging,** after the merge (since step 542, on 542's merge commit, its branch
-  `fix/datetime-time-fold` in the commands below):
+- **Tagging,** after the merge (since step 543, on 543's merge commit, its branch
+  `fix/dt-out-of-range` in the commands below):
 
       git fetch origin
       M=$(gh pr view release/v0.8.1-prep --json mergeCommit --jq .mergeCommit.oid)
