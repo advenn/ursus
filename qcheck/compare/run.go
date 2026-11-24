@@ -212,6 +212,14 @@ func (cr *caseRun) check() {
 	}
 	want, err := cr.engine(q, s, info)
 	if err != nil {
+		if got.Err != nil && errors.Is(got.Err, ursus.ErrValue) {
+			// Both refused (step 543): ursus with ErrValue, a value its type cannot
+			// hold, a Date or a year past int32's, and DuckDB with its own error, as
+			// its translation computes the same value and its cast to that type
+			// refuses it alike. Counted, not compared.
+			cr.rep.BothRefused++
+			return
+		}
 		cr.finding(KindSQL, s.Text, "DuckDB: "+err.Error())
 		return
 	}
