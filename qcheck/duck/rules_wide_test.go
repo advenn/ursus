@@ -100,6 +100,14 @@ var wideRuleCases = map[string]func(t *testing.T, d engine){
 		x = c("x", dt)
 		agree(t, d, []*model.Table{one}, &ast.Query{Root: sel(scan("o"), lossy(x, model.Decimal(5, 2)),
 			cast(x, model.Decimal(18, 6)), cast(x, model.Decimal(38, 4)), lossy(x, model.Decimal(12, 0)))})
+		// A lossy narrowing of Decimal(38, 10)'s ends, which round past their type
+		// (#96's DuckDB run, seeds 894017557 and 894023889).
+		top := model.Decimal(38, 10)
+		ends := table("e", col{"x", top, []any{"99999999999999999999999999999999999999",
+			"-99999999999999999999999999999999999999", "123456789000000000000", "12345", nil}})
+		y := c("x", top)
+		agree(t, d, []*model.Table{ends}, &ast.Query{Root: sel(scan("e"), lossy(y, model.Decimal(38, 4)),
+			lossy(y, model.Decimal(9, 0)), lossy(y, model.Decimal(38, 0)))})
 	},
 	sqlgen.TDecFloat: func(t *testing.T, d engine) {
 		// A Decimal becomes a Float64 by a cast (or a promotion sqlgen makes the
