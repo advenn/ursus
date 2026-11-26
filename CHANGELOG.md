@@ -67,9 +67,8 @@ v0.8.0's is.
   and older wrote one where consecutive values differ by more than 2^31, which
   pyarrow refuses too; and an OPTIONAL column's DELTA_LENGTH_BYTE_ARRAY page counting
   more lengths than its values, which the format allows, no writer is known to
-  write, and pyarrow reads. Every guard ursus built against arrow-go's findings
-  stays: v18.9.0 fixes 10 of the 32 and leaves 22, F18's hang and step 522's Null
-  column among them; step 538's record says why each stays.
+  write, and pyarrow reads. Every guard ursus built against crafted input
+  stays.
 
 ### Fixed
 

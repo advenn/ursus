@@ -227,23 +227,8 @@ error, which the report's summary already lists as fixed ("schema root-children
 mismatch"): main answers the fuzzer's input with "not enough elements" after the same
 258 MiB.
 
-So the finding is added to `~/ursus-scratch-archive/arrow-go-report/` as **C3**, in
-its format, and posted nowhere:
-
-- `report.md`: a row in section C, its suggested fix (build each group's fields by
-  appending, not by preallocating `num_children`, or walk the list once first with
-  both rules; a bound by the elements left alone does not stop `repro/21`), and the
-  counts, C1–C3;
-- `summary.md`: a row under "Remaining on main";
-- `repro/20-parquet-schema-num-children`: the fuzzer's input with its root claiming
-  2^31−1, 124 bytes: fatal "out of memory", a 32 GiB block, on v18.7.0 and main;
-- `repro/21-parquet-schema-unclosed-chain`: 1,000 groups and 300,000 leaves, 1.8 MB:
-  fatal "out of memory" under the 4 GiB cap on both;
-- the inputs in `inputs/forged/` and `inputs/FuzzScanParquet/`, their generator
-  `tools/pqschema/gen.py`, the runs in `results/repro-run.txt` and
-  `results/triage/`, and their lines in `tools/scaffold.sh`.
-
-`arrow-go-report-to-send.tar.gz` beside it predates C3 and was not rebuilt.
+So the finding went to the private report to the Apache Arrow security team
+(2026-11-26), with its reproducers and a suggested fix, and is posted nowhere else.
 
 ## 7. Observations and what is left
 
