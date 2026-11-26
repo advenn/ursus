@@ -8,18 +8,16 @@ v0.8.0 is tagged, into 0.8.1.
 The upgrade is made in the root module, `qcheck` and `bench/engines/go`. Every
 reproducer of the arrow-go audit was run against the release, not the main commit
 the audit checked: the release differs from that commit in two files, and both
-**revert** main's fix of step 522's Null column. Of the 12 findings the audit found
-fixed on main, the release fixes 10; **F18 only in part** (a DELTA_BINARY_PACKED
-page counting fewer values than it holds still hangs arrow-go's column reader, found
-here with ursus's check switched off), and the Null column not at all. The other 20
-reproduce on v18.9.0 as on main.
+**revert** main's fix of step 522's Null column. Each finding's status on the release
+is in the private report to the Apache Arrow security team (2026-11-26), and is not
+recorded here.
 
 **No workaround is retired.** Each of the twelve either still guards something
 v18.9.0 does not fix, or makes a refusal arrow-go does not make, or gives the error
 its finding's test requires, which arrow-go's own refusal does not; each is cheap
 where it stays, and none uses an API the release deprecates beyond what step 517
 already used (`file.NewColumnReader`, still needed by the 0-bit index and delta
-checks). Section 3 has the table.
+checks). The private report has the table.
 
 The upgrade brought one **ursus bug** to light, fixed: the reader's own pages refused
 a fixed-width column chunk whose dictionary page holds no value, which v18.9.0's
@@ -74,50 +72,11 @@ writes, each found by the test suite or the probe of section 6:
 Nothing else in the notes reaches ursus's paths: compute, Flight, Avro, CSV and the
 scalar and cast fixes are packages ursus does not import for reading or writing.
 
-## 3. The 32 findings
+## 3. The findings
 
-The audit's reproducers (`arrow-go-report/repro/`, one module, `go.v189.mod` added
-for the release) and its 64 decoded seeds and 17 forged files through
-`tools/triage`, each under `prlimit --as=4294967296` and a 60 s timeout. The release
-answers every seed and forged file exactly as main did (81 runs, 0 differ), and every
-reproducer as main did (`results/repro-run-v18.9.0.txt`,
-`results/triage-v18.9.0.txt`). F18's count and step 522's Null column were then
-checked against ursus's own tests with its guard switched off (section 7).
-
-| finding | v18.9.0 | ursus's workaround | kept or retired, and why |
-| --- | --- | --- | --- |
-| A1 IPC schema fields count | fatal OOM 188 GB | `arrowmeta` walk | kept: not fixed |
-| A2 IPC field children count | fatal OOM 188 GB | `arrowmeta` walk | kept: not fixed |
-| A3 IPC custom metadata count | fatal OOM 34 GB | `arrowmeta` walk | kept: not fixed |
-| A4 IPC record batch variadic buffers | fatal OOM 8.8 TB | `arrowmeta` walk | kept: not fixed |
-| A5 IPC dictionary batch variadic buffers | fatal OOM 137 GB | `arrowmeta` walk | kept: not fixed |
-| A6 IPC field its own descendant | stack overflow | `arrowmeta` walk | kept: not fixed |
-| A7 IPC schema DAG of shared children | fatal OOM | `arrowmeta` walk | kept: not fixed |
-| A8 IPC footer flatbuffer offset | panic escapes `NewFileReader` | recovers at the entry points | kept: not fixed |
-| A9 Parquet ARROW:schema children | fatal OOM 283 GB | `arrowmeta.SchemaFields` | kept: not fixed |
-| B1 IPC buffer's decompressed length | fatal OOM 1.1 TB | bounded allocator | kept: not fixed |
-| B2 IPC footer listing a block many times | as main, quadratic | bounded allocator | kept: not fixed |
-| B3 IPC big-endian empty Decimal | as main (code unchanged) | recovers | kept: not fixed |
-| C1 Parquet chunk's compressed size | fatal OOM 1.1 TB | `checkChunks` | kept: not fixed |
-| C2 Parquet TIME of no unit | panic escapes `NewParquetReader` | recovers | kept: not fixed |
-| C3 Parquet schema `num_children` | fatal OOM 32 GiB | the schema-tree walk (533) | kept: not fixed |
-| D1 Parquet page bytes missing | silent: 0 rows of 5 | `truncated()` | kept: not fixed |
-| D2 Parquet 0-bit dictionary index | reads "01" for "00" | `zeroWidthMisread` | kept: not fixed |
-| E1 Parquet Snappy length header | fatal OOM 4 GB | `boundedCodec` | kept: not fixed |
-| E2 Parquet zstd frame content size | as main (code unchanged) | `boundedCodec` | kept: not fixed |
-| E3 Parquet gzip or Brotli page of 0 bytes | 4 MiB / 32 MiB decoded | `boundedCodec` | kept: not fixed |
-| F4 dictionary page count (510) | fixed: no allocation, and the page's values read, 5 rows | `countDictionaries` | **kept**: arrow-go reads a forged page ursus refuses, as its own pages refuse it; retiring it would read files ursus refuses, `TestADictionaryPageClaimingMoreValuesThanItsBytesIsRefused` and `TestADictionaryCountInALongVarintIsCountedAsArrowGoReadsIt` fail without it; one header walk a chunk |
-| F9 dictionary index past its dictionary (517) | fixed: "dict eof exception", nothing allocated, over the 14 forged files and 2,000 generated pages | `pastIndex` in `checkedPages` | **kept**: its test wants an error naming the index, which arrow-go's does not; the 14 forged files fail it without the check, refused but as "dict eof exception". The pass cost a dictionary-encoded List arrow-go decodes 5.2% by the median, 3.8% by the least (517) |
-| F11 Thrift varint and stop (520) | fixed | the walk reads varints as Thrift does | **kept**: a fix to ursus's own walk, which F4, F14 and C3 need |
-| F13 footer list counts (521) | fixed by Thrift v0.25.0 | the footer walk's counts | **kept**: the walk stays for C3, and the count is one comparison a list |
-| F14 UNCOMPRESSED page sizes differ (521) | fixed: "said 3072, got 24" | `countDictionaries` | **kept**: the same walk as F4, one comparison a page |
-| F18 DELTA_BINARY_PACKED (531) | **partly**: the block of 31 refused; a REQUIRED page counting fewer values than it holds hangs `ReadBatch`, an OPTIONAL one reads 0 values and no error | `checkDelta` | **kept**: not fixed; `TestAMalformedDeltaPageIsRefusedNotHungOn` hangs without it |
-| F19 row group of fewer chunks (521) | fixed: an index error | the chunk count check | kept: one comparison, and its error names the row group |
-| step 511: IPC stream limits | fixed | `arrowmeta.NewMessageReader` | kept: the walk is A1–A7's, and its limits are the stream's size |
-| step 511: message body of 2^40 | fixed | the same reader | kept: as above |
-| schema root children mismatch | fixed: "malformed schema" | the schema-tree walk (533) | kept: C3's |
-| step 522: IPC Null column of no buffer | **not fixed: reverted in the release** | `nullShaped`, `shapeNulls` | **kept**: every IPC Null column is refused without it |
-| F15: a Null column with no reader (521) | as main | its refusal | kept: one check |
+Withheld on 2026-11-26. Each finding's status on v18.9.0, and why each workaround is
+kept or retired, are in the private report to the Apache Arrow security team. ursus
+keeps every workaround.
 
 ## 4. What changed in ursus
 
@@ -225,7 +184,7 @@ yet.
 | `shapeNulls` answering its input (the Null shaping off) | `TestShapeNullsCopiesOnlyThePathToANullOfNoBuffer`, `TestANullArrayOfNoBuffersReads`, `TestOtherwiseMalformedNullsAreRefused`, and at the root `TestIPCNullColumnsRoundTrip`: "expected at least 1 buffers for null, got 0": v18.9.0 does not fix 522 |
 | `countDictionaries`' count rule off (F4) | `TestADictionaryPageClaimingMoreValuesThanItsBytesIsRefused`, `TestADictionaryCountInALongVarintIsCountedAsArrowGoReadsIt`: "read as 5 rows, and no error" |
 | `pastIndex` off (F9) | `TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt`, 14 of 14: refused, nothing allocated, but "dict eof exception", not naming the index |
-| `checkDelta`'s refusal off (F18) | `TestAMalformedDeltaPageIsRefusedNotHungOn`: "a block of 31 values" and the other header forgeries refused by arrow-go without "corrupt: column"; "a count of 0" of the REQUIRED INT64 hangs, fuzzcheck's 10 s; arrow-go's `RowGroupReader.Column` and `ReadBatch` alone hang 60 s on it (`arrow-go-report/inputs/step538`) |
+| `checkDelta`'s refusal off (F18) | `TestAMalformedDeltaPageIsRefusedNotHungOn`: the header forgeries refused by arrow-go without "corrupt: column", and one input not refused, as the private report says |
 
 Each was put back from a copy (`~/ursus-scratch-archive/s538/teeth/`) and the tests
 pass again.
