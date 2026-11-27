@@ -20,43 +20,25 @@ import (
 )
 
 // An IPC input cut short (step 534). A read error that wraps io.EOF is the engine's
-// end of its input (every consumer tests errors.Is(err, io.EOF)), so an IPC read
-// whose error wrapped io.EOF answered the rows before it, and no error: a compressed
-// buffer whose bytes decompress short, which arrow-go reads with io.ReadFull and
-// panics with its io.EOF; arrow-go's stream reader's error wrapping the same, which it
-// recovered; and a stream ending inside a message, which ursus's message reader
-// (internal/arrowmeta) answered as arrow-go's does, io.EOF where it read none of a
-// part. Step 529's fuzzing found the first two, a file and a stream whose Collect and
-// Count answered 0 rows where arrow-go refuses the bytes.
-
-// The step 529 findings, as the fuzzer saved them, seeds of the IPC targets.
-const ipcCutFinding = "finding-buffer-cut-short-read-as-the-end"
+// end of its input (every consumer tests errors.Is(err, io.EOF)), so a read's error
+// for bytes that are not there must not wrap it, or the read would answer the rows
+// before it, and no error: a compressed buffer whose bytes decompress short, and a
+// stream ending inside a message, its length, metadata or body, are each refused as
+// cut short, an error wrapping io.ErrUnexpectedEOF.
 
 // batchBuffers is the field id of a RecordBatch's buffers (Message.fbs), a vector of
 // structs of two int64s, a buffer's offset in its body and its length.
 const batchBuffers, batchCompression = 2, 3
 
-// TestAnIPCInputCutShortIsRefusedOrReadAsArrowGoReadsIt: the two findings are refused,
-// by Collect and by Count; and every IPC file and stream in testdata/ipc, and the
-// record cutRecord in each codec as arrow-go writes a file and a stream of it, cut
-// after each of its bytes, is refused, or read as arrow-go reads the same bytes
-// (ipcCutRead). A file cut anywhere has lost its footer, and is refused. A stream cut
-// between two messages, where its framing walked (messageStarts) begins one, ends
-// there for arrow-go, which takes a stream's end marker to be optional, as the format
-// does, and so for ursus. A stream cut inside a message, its end marker's among them,
-// is refused, where arrow-go reads one cut where a message's length, metadata or body
-// begins as ending there.
+// TestAnIPCInputCutShortIsRefusedOrReadAsArrowGoReadsIt: every IPC file and stream in
+// testdata/ipc, and the record cutRecord in each codec as arrow-go writes a file and a
+// stream of it, cut after each of its bytes, is refused, by Collect and by Count, or
+// read as arrow-go reads the same bytes (ipcCutRead). A file cut anywhere has lost its
+// footer, and is refused. A stream cut between two messages, where its framing walked
+// (messageStarts) begins one, ends there for arrow-go, which takes a stream's end
+// marker to be optional, as the format does, and so for ursus. A stream cut inside a
+// message, its end marker's among them, is refused.
 func TestAnIPCInputCutShortIsRefusedOrReadAsArrowGoReadsIt(t *testing.T) {
-	for _, file := range []bool{true, false} {
-		target := "FuzzScanIPCStream"
-		if file {
-			target = "FuzzScanIPCFile"
-		}
-		b := corpusInput(t, filepath.Join("testdata", "fuzz", target, ipcCutFinding))
-		if ipcCutRead(t, target+"'s "+ipcCutFinding, b, file) {
-			t.Errorf("%s's %s is read; arrow-go refuses it", target, ipcCutFinding)
-		}
-	}
 	reads, cuts := 0, 0
 	for _, in := range ipcCutInputs(t) {
 		starts := messageStarts(in.b)
@@ -98,9 +80,8 @@ func messageStarts(b []byte) map[int]bool {
 // of each compressed record batch and dictionary batch of each compressed file and
 // stream of ipcCutInputs, its length declared shorter by each of its bytes, is
 // refused, or read as arrow-go reads the same bytes (ipcCutRead). A buffer cut inside
-// its eight bytes of decompressed length is refused by arrow-go, slicing past it; one
-// cut after them decompresses short, which arrow-go reads with io.ReadFull and panics
-// with io.EOF where it decompressed nothing, and io.ErrUnexpectedEOF otherwise; one
+// its eight bytes of decompressed length is refused; one cut after them decompresses
+// short, and is refused as cut short, whether it decompressed nothing or some; one
 // whose cut leaves the codec's frame whole enough for every byte it declares reads.
 func TestAnIPCBufferCutShortIsRefusedOrReadAsArrowGoReadsIt(t *testing.T) {
 	reads, cuts := 0, 0
@@ -200,7 +181,7 @@ func refusal(t *testing.T, what string, err error) {
 func arrowRows(b []byte, file bool) (rows int, err error) {
 	defer func() {
 		if v := recover(); v != nil {
-			err = fmt.Errorf("arrow-go panicked: %v", v)
+			err = fmt.Errorf("the read stopped: %v", v)
 		}
 	}()
 	mem := &fuzzcheck.Allocator{Limit: ipcRequestLimit(len(b))}

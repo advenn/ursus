@@ -115,7 +115,7 @@ type Opener func(ctx context.Context) (parquet.ReaderAtSeeker, io.Closer, error)
 // which is what it used to be, and every later file was then read by the first
 // file's POSITIONS (audit.md §5, I1). A file with its columns in another order had
 // them swapped, silently; one with other names was read as if it had the first
-// file's; one with fewer columns panicked inside arrow-go.
+// file's; one with fewer columns was asked for column chunks it does not have.
 //
 // A column is nullable if it is nullable in ANY file. At read time each file's
 // layout is derived again from the footer actually being read (layoutFor), so a

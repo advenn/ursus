@@ -95,8 +95,8 @@ func TestReadingAllocatesAboutWhatItProduces(t *testing.T) {
 		}
 		t.Logf("%d threads: allocated %.1f MB to produce %.1f MB: %.2f", threads,
 			float64(allocated)/(1<<20), float64(produced)/(1<<20), float64(allocated)/float64(produced))
-		// Not under the race detector, where arrow-go's string decoding allocates
-		// about a third more: 1.49 against 1.21 at step 163. The first batch is
+		// Not under the race detector, where string decoding allocates about a
+		// third more: 1.49 against 1.21 at step 163. The first batch is
 		// checked in every build.
 		if allocated > produced*13/10 && !raceDetector {
 			t.Errorf("%d threads: reading allocated %d bytes to produce %d", threads, allocated, produced)

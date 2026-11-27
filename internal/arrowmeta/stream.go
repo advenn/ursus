@@ -33,10 +33,9 @@ const continuation = 0xFFFFFFFF
 // its limits on a message's metadata and body, maxMeta and maxBody bytes (0 for none),
 // each body allocated from mem. Each message's metadata is walked before its body is
 // allocated, against the schema before it, and refused as corrupt, KindIO, op naming
-// the operation, for what arrow-go would trust: a stream begins with a schema, has a
-// dictionary batch for each of its dictionaries before any record batch, as arrow-go
-// reads the first messages after the schema as dictionary batches whatever their
-// headers say, and holds nothing else.
+// the operation, where the walk finds it so or it is out of its place: a stream
+// begins with a schema, has a dictionary batch for each of its dictionaries before
+// any record batch, and holds nothing else.
 func NewMessageReader(op, name string, r io.Reader, mem memory.Allocator, maxMeta, maxBody int64) ipc.MessageReader {
 	m := &messageReader{op: op, name: name, r: r, mem: mem, maxMeta: maxMeta, maxBody: maxBody}
 	m.refs.Add(1)
@@ -69,15 +68,13 @@ func (m *messageReader) Release() {
 
 // Message reads the next message, which is valid until the one after; io.EOF at the
 // stream's end. An end of the input where a message would begin is an error wrapping
-// io.EOF, as arrow-go's is: its reader takes that for the stream's end, whose end
-// marker the format makes optional, and refuses it where it wants a dictionary.
+// io.EOF, as arrow-go's message reader answers: the format makes a stream's end
+// marker optional, so a stream may end there.
 //
 // An end within a message, once a byte of it is read, is the stream's refusal,
-// KindIO, an error wrapping io.ErrUnexpectedEOF (cut). arrow-go's message reader
-// answers io.EOF for a part of a message none of whose bytes is there, its length
-// after the continuation marker, its metadata or its body, and so did this one, as
-// arrow-go's: its reader took that for the end too, and a stream cut there read as
-// the messages before it, with no error (step 534).
+// KindIO, an error wrapping io.ErrUnexpectedEOF (cut): a stream cut where a part of a
+// message would begin, its length after the continuation marker, its metadata or its
+// body, is refused, not read as the messages before it (step 534).
 func (m *messageReader) Message() (*ipc.Message, error) {
 	msg := m.read + 1
 	if _, err := io.ReadFull(m.r, m.header[:]); err == io.EOF {
@@ -140,9 +137,8 @@ func (m *messageReader) Message() (*ipc.Message, error) {
 // as the read's error. Where the input ends inside the message, io.EOF where none of
 // the part is there and io.ErrUnexpectedEOF otherwise, it is the stream's refusal,
 // KindIO, wrapping io.ErrUnexpectedEOF. Any other error is the input's own, wrapped,
-// any io.EOF in it made io.ErrUnexpectedEOF (uerr.Truncated): arrow-go's reader would
-// take an error wrapping io.EOF for the stream's end, a stream's failing as the next
-// message begins among them.
+// any io.EOF in it made io.ErrUnexpectedEOF (uerr.Truncated), so that it is not taken
+// for the stream's end, which an error wrapping io.EOF where a message begins is.
 func (m *messageReader) cut(err error, msg int, part string) error {
 	if err != io.EOF && err != io.ErrUnexpectedEOF {
 		return fmt.Errorf("reading an IPC message's %s: %w", part, uerr.Truncated(err))

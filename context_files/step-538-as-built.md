@@ -1,36 +1,29 @@
 # Step 538 — as built
 
-**arrow-go v18.9.0, and what it does not fix.** The maintainer decided (2026-11-20)
-to move ursus from arrow-go v18.7.0 to v18.9.0, released 2026-11-16, and to retire
-the workarounds for the findings it fixes, where that is safe. This merges after
-v0.8.0 is tagged, into 0.8.1.
+**arrow-go v18.9.0.** The maintainer decided (2026-11-20) to move ursus from arrow-go
+v18.7.0 to v18.9.0, released 2026-11-16, and to retire any guard the upgrade made
+unnecessary, where that is safe. This merges after v0.8.0 is tagged, into 0.8.1.
 
-The upgrade is made in the root module, `qcheck` and `bench/engines/go`. Every
-reproducer of the arrow-go audit was run against the release, not the main commit
-the audit checked: the release differs from that commit in two files, and both
-**revert** main's fix of step 522's Null column. Each finding's status on the release
-is in the private report to the Apache Arrow security team (2026-11-26), and is not
-recorded here.
+The upgrade is made in the root module, `qcheck` and `bench/engines/go`, and after the
+tag in `bench/micro` (section 11).
 
-**No workaround is retired.** Each of the twelve either still guards something
-v18.9.0 does not fix, or makes a refusal arrow-go does not make, or gives the error
-its finding's test requires, which arrow-go's own refusal does not; each is cheap
-where it stays, and none uses an API the release deprecates beyond what step 517
-already used (`file.NewColumnReader`, still needed by the 0-bit index and delta
-checks). The private report has the table.
+**No guard is retired.** Each is ursus's own check of input it did not write, made
+before the bytes are decoded, whatever the decoder behind it (section 3). Each is
+cheap where it stays, and none uses an API the release deprecates beyond
+`file.NewColumnReader`, which step 517 already used and the 0-bit index and delta
+checks still need.
 
 The upgrade brought one **ursus bug** to light, fixed: the reader's own pages refused
 a fixed-width column chunk whose dictionary page holds no value, which v18.9.0's
 writer, and so `WriteParquet`, writes for a dictionary-encoded column of only nulls
 when its pages are compressed. `TestParquetRoundTrip` failed on the bump alone; and
 pyarrow writes one too, so `testdata/oracle/footers/pyarrow-03.parquet` is refused on
-master and by every release, whatever arrow-go. And
-it brought **two Parquet pages ursus read that arrow-go now refuses**, which ursus
-cannot read without a delta decoder of its own (section 5): an INT32
-DELTA_BINARY_PACKED page whose deltas span more than 32 bits, as arrow-go v18.7.0's
-own writer packed them and pyarrow refuses; and a DELTA_LENGTH_BYTE_ARRAY page of an
-OPTIONAL column counting more lengths than its values, which pyarrow reads. Both are
-behaviour changes; the CHANGELOG lists them under "Changed".
+master and by every release, whatever arrow-go. And **two Parquet pages ursus read are
+now refused**, which ursus cannot read without a delta decoder of its own (section
+5): an INT32 DELTA_BINARY_PACKED page whose deltas span more than 32 bits, which
+pyarrow refuses too; and a DELTA_LENGTH_BYTE_ARRAY page of an OPTIONAL column counting
+more lengths than its values, which pyarrow reads. Both are behaviour changes; the
+CHANGELOG lists them under "Changed".
 
 ## 1. The bump
 
@@ -59,24 +52,26 @@ writes, each found by the test suite or the probe of section 6:
 
 | change | where | effect on ursus |
 | --- | --- | --- |
-| `loadNull` and the C Data import give a Null array no buffer again: main's fix reverted in the release | `arrow/ipc/file_reader.go`, `arrow/cdata/cdata.go` | step 522's Null shaping stays; without it every IPC Null column is refused again (section 7) |
 | the writer keeps a dictionary of no value for a dictionary-encoded chunk of only nulls, where its pages are compressed (v18.7.0 wrote PLAIN) | parquet writer | the own pages refused such a chunk of a fixed-width column: fixed (section 4) |
 | the writer keeps the dictionary of an Int64 chunk of 50,000 distinct values a row group, where v18.7.0 fell back to PLAIN | parquet writer | two allocation tests' fixture pinned to PLAIN, as it was written (section 4) |
-| DELTA_BINARY_PACKED deltas wrap at the physical type's width (#1027); the decoder refuses an INT32 minimum delta past INT32's range and a miniblock wider than 32 bits (#1012) | delta encoding | INT32 delta pages of v18.7.0's writer spanning more than 32 bits refused, as pyarrow refuses them (section 5) |
-| DELTA_LENGTH_BYTE_ARRAY decodes every length its count gives at `SetData` and refuses a negative one or lengths past the payload (#1013, #1014) | delta encoding | a count past an OPTIONAL page's values refused where its padding's length is negative (section 5) |
-| Thrift v0.25.0 holds a container's count to the bytes left at the least an element of its type takes (#1355) | footer, page headers | F11 and F13 fixed; the footer walk's differential premises updated (section 4) |
-| `dictConverter` bounds its dictionary by the page's bytes and checks an index first | dictionary decoding | F4 and F9 fixed: no allocation; ursus's refusals kept (section 3) |
-| ALP encoding for FLOAT and DOUBLE (#1289) | decoding | ursus's `allowedEncodings` leaves it out: such a column is refused as unsupported, as before |
-| `ipc.NewReader` keeps the message limits | IPC stream | step 511's finding fixed; ursus reads streams through `arrowmeta`'s reader, which keeps tighter ones, as before |
+| an INT32's deltas are packed within 32 bits, and a DELTA_BINARY_PACKED page of INT32 deltas wider than 32 bits is refused | delta encoding | such a page refused, as pyarrow refuses it (section 5) |
+| DELTA_LENGTH_BYTE_ARRAY decodes every length its count gives at `SetData` and refuses a negative one | delta encoding | a count past an OPTIONAL page's values refused where its padding's length is negative (section 5) |
+| Thrift v0.25.0 holds a container's count to the bytes left at the least an element of its type takes | footer, page headers | the footer walk's differentials updated (section 4) |
+| ALP encoding for FLOAT and DOUBLE | decoding | ursus's `allowedEncodings` leaves it out: such a column is refused as unsupported, as before |
 
 Nothing else in the notes reaches ursus's paths: compute, Flight, Avro, CSV and the
 scalar and cast fixes are packages ursus does not import for reading or writing.
 
-## 3. The findings
+## 3. The guards
 
-Withheld on 2026-11-26. Each finding's status on v18.9.0, and why each workaround is
-kept or retired, are in the private report to the Apache Arrow security team. ursus
-keeps every workaround.
+Every guard ursus built against crafted input stays, with its tests and inputs: the
+walks of a Parquet footer, schema, page and dictionary and of an Arrow IPC footer,
+message and buffer (steps 510, 511, 517, 519–521, 531 and 533), the bounded allocator
+and codecs (511, 520), the Zstandard window's cap (528), the Null shaping (522), and
+the recovery at every entry point. The walks and bounds refuse input whose counts and
+lengths its bytes cannot hold, before anything is sized by them; the Null shaping
+reads a Null column in either shape a writer gives it; the recovery makes a panic an
+error. None depends on what the decoder behind it does with such input.
 
 ## 4. What changed in ursus
 
@@ -92,21 +87,17 @@ as corrupt, as any past a dictionary. `TestParquetRoundTrip` and
 `TestParquetPruningAgreesWithoutIt` failed on the bump alone, ursus's own writer's
 files; a file from any writer doing the same was refused on master too.
 
-**Tests whose premise was v18.7.0's bug or its writer.** Each keeps its oracle and
-says what v18.9.0 does now:
+**The differentials against arrow-go** take its answers as v18.9.0 gives them, each
+keeping its oracle: `TestCheckedPagesRefuseAnIndexPastTheDictionary` (step 517), and
+`TestFooterWalkReadsAListAsArrowGoDoes` and `TestFooterWalkDifferential` (step 521),
+where a list whose header gives another element type the walk still passes, and
+arrow-go reads it or refuses it by Thrift v0.25.0's container check ("needs at least …
+bytes, only …").
 
-- `TestCheckedPagesRefuseWhereArrowGoGrowsItsDictionary`: arrow-go's own read grew
-  its dictionary for an index of 2^20 and more (F9). Now it must never grow it, 0 of
-  the 2,000 pages did, and must fail each well-formed page where an index it reads is
-  past the dictionary; the generator's reach is held by the 203 pages of an index of
-  2^20 and more arrow-go refuses, where it was held by the 236 it grew.
-- `TestFooterWalkReadsAListAsArrowGoDoes`: arrow-go read a hidden list of 10^5,
-  allocating 4 bytes an element (F13). Now it must refuse it, allocating less.
-- `TestFooterWalkDifferential`: a list whose header gives another element type, the
-  walk passes and arrow-go read. The walk still passes each; arrow-go reads it or
-  refuses it by Thrift v0.25.0's container check ("needs at least … bytes, only …").
-- `TestArrowGoDeltaPagesReadAsTheirPlainTwin`: arrow-go's writer packed `u32`'s
-  deltas 33 bits wide; v18.9.0's wraps them at 32, so no page may be wider.
+**Tests whose premises followed v18.7.0's writer** take v18.9.0's:
+
+- `TestArrowGoDeltaPagesReadAsTheirPlainTwin`: v18.9.0's writer packs `u32`'s deltas
+  within 32 bits, so no page may be wider.
 - `TestCheckedPagesRefuseMalformedDeltaRuns`: its generator packs an INT32's deltas
   wrapped at 32 bits, as the format and the writer do, and a count past the values of
   a run arrow-go decodes whole is held to arrow-go's own read only, not to the
@@ -118,29 +109,25 @@ says what v18.9.0 does now:
   read 1.99 to the byte produced where the bound is 1.6. With the pin: 1.23 and
   0.91, master's 1.23 and 0.84.
 
-**Comments** on each kept guard say what v18.9.0 does (`dictindex.go`,
-`deltapage.go`, `dictpages.go`, `arrowin/record.go`, `colreader.go`, `ipc.go`).
+## 5. The two pages now refused
 
-## 5. The two pages arrow-go now refuses
+Both are refused as an `ErrIO` naming the read, with the decoder's reason.
 
-Both are refused as an `ErrIO` naming the read, with arrow-go's reason.
-
-- **An INT32 DELTA_BINARY_PACKED page whose deltas span more than 32 bits.** arrow-go
-  v18.7.0's writer took an INT32's deltas as an int64's and packed them 33 or 34
-  bits wide where consecutive values differ by more than 2^31 (a UInt32 column of
-  large values); it read them back, and ursus with it (531 tested it). pyarrow
-  25.0.1 fails such a page ("Unexpected end of stream"), and v18.9.0 refuses it
-  ("minimum delta … exceeds INT32 range", "delta bit width 33 exceeds decoder width
-  32"). The pyarrow differential's `an-int32-spanning-its-range--honest.parquet`
-  goes from (ursus S, pyarrow E) to (E, E). Files v18.7.0 and older wrote so no
-  longer read.
+- **An INT32 DELTA_BINARY_PACKED page whose deltas span more than 32 bits**, its
+  deltas taken as an int64's and packed 33 or 34 bits wide where consecutive values
+  differ by more than 2^31 (a UInt32 column of large values). Step 531 read it, and
+  tested it. pyarrow 25.0.1 fails such a page ("Unexpected end of stream"), and now
+  ursus refuses it ("minimum delta … exceeds INT32 range", "delta bit width 33
+  exceeds decoder width 32"). The pyarrow differential's
+  `an-int32-spanning-its-range--honest.parquet` goes from (ursus S, pyarrow E) to
+  (E, E). Files written so no longer read.
 - **A DELTA_LENGTH_BYTE_ARRAY page of an OPTIONAL column whose count is past its
   values**, within its page's values and its last miniblock's padding, which the
-  format allows and no writer is known to write. v18.9.0 decodes every length the
-  count gives and refuses a negative one, here the length in the padding. pyarrow
+  format allows and no writer is known to write. Every length the count gives is
+  decoded, and a negative one, here the length in the padding, refused. pyarrow
   reads it; the differential's
   `an-optional-byte-array-with-nulls-delta-length-byte-array--a-count-one-past-the-values.parquet`
-  goes from (S, S) to (E, S), a known disagreement now (`arrowGoRefuses`).
+  goes from (S, S) to (E, S), a known disagreement now (`decoderRefuses`).
 
 The pyarrow tally of the 208 forged files: master ED 13, EE 140, ES 16, SE 1, SS 38;
 here ED 13, EE 141, ES 17, SS 37.
@@ -181,10 +168,10 @@ yet.
 | --- | --- |
 | the own pages' `!c.hasDict` put back as `dictOffs == nil && dictFixed == nil` | `TestOwnPagesReadADictionaryOfNoValue`, `TestOwnPagesReadAsArrowGoDoes` ("a page refers to a dictionary the chunk does not have"); on the bump alone, `TestParquetRoundTrip` and `TestParquetPruningAgreesWithoutIt` |
 | the pool test's fixture unpinned | `TestPagesAreDecompressedIntoPooledBuffers`, 1.99 to the byte; `TestColumnsBesideATextConjunctAreReadAtItsKeptRows`, 12.78 MB where 4.58 |
-| `shapeNulls` answering its input (the Null shaping off) | `TestShapeNullsCopiesOnlyThePathToANullOfNoBuffer`, `TestANullArrayOfNoBuffersReads`, `TestOtherwiseMalformedNullsAreRefused`, and at the root `TestIPCNullColumnsRoundTrip`: "expected at least 1 buffers for null, got 0": v18.9.0 does not fix 522 |
-| `countDictionaries`' count rule off (F4) | `TestADictionaryPageClaimingMoreValuesThanItsBytesIsRefused`, `TestADictionaryCountInALongVarintIsCountedAsArrowGoReadsIt`: "read as 5 rows, and no error" |
-| `pastIndex` off (F9) | `TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt`, 14 of 14: refused, nothing allocated, but "dict eof exception", not naming the index |
-| `checkDelta`'s refusal off (F18) | `TestAMalformedDeltaPageIsRefusedNotHungOn`: the header forgeries refused by arrow-go without "corrupt: column", and one input not refused, as the private report says |
+| `shapeNulls` answering its input (the Null shaping off) | `TestShapeNullsCopiesOnlyThePathToANullOfNoBuffer`, `TestANullArrayOfNoBuffersReads`, `TestOtherwiseMalformedNullsAreRefused`, and at the root `TestIPCNullColumnsRoundTrip`: "expected at least 1 buffers for null, got 0" |
+| `countDictionaries`' count rule off | `TestADictionaryPageClaimingMoreValuesThanItsBytesIsRefused`, `TestADictionaryCountInALongVarintIsCountedAsThriftReadsIt`: the forged pages not refused |
+| `pastIndex` off | `TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt`, 14 of 14: the refusal does not name the index |
+| `checkDelta`'s refusal off | `TestAMalformedDeltaPageIsRefused`: the header forgeries refused without "corrupt: column", and one forgery not refused |
 
 Each was put back from a copy (`~/ursus-scratch-archive/s538/teeth/`) and the tests
 pass again.
@@ -207,10 +194,9 @@ A first round from binaries built without the instrumentation (plain `go test -c
 mutated blind; in it `FuzzScanIPCFile` lost a worker, "exit status 2", at 4 s, on a
 57,983-byte input. Replayed alone under the same cap it passes, on this branch and on
 `origin/master` alike: its read holds 705 MB at its peak, two blocks of 356 MB that
-the bounded allocator allows a file of its size (32,768 times, step 511), and fails
-"out of memory" under a cap of 2 GiB on both. A worker's heap beside it under the 4
-GiB cap is the fuzzing harness's limit, not the upgrade's; the input is kept in
-`s538/` and not added as a seed.
+the bounded allocator allows a file of its size (32,768 times, step 511). A worker's
+heap beside it under the 4 GiB cap is the fuzzing harness's limit, not the upgrade's;
+the input is kept in `s538/` and not added as a seed.
 
 ## 9. Measurements
 

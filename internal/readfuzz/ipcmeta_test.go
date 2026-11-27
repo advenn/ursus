@@ -11,14 +11,13 @@ import (
 // of, a Struct of none but Null fields, say (oversized). A record of Null columns, or
 // of none, is read in constant space since step 529, and is not skipped.
 //
-// Step 511's walk here also found what arrow-go sized a slice by past its buffer, and
-// a field among its own descendants, which ended the process; step 519 walks every
-// footer and message in ursus before arrow-go reads it (internal/arrowmeta), so the
-// targets read those inputs, and ursus refuses them.
+// Step 519 walks every footer and message in ursus before arrow-go reads it
+// (internal/arrowmeta), and refuses a count past its buffer and a field among its own
+// descendants, so the targets read such inputs, and ursus refuses them.
 
 // fbuf is a flatbuffer: its bytes, every read of them checked. Positions add as
 // flatbuffers' Go accessors add them, in uint32, so an offset past 2^31 points back
-// before itself, as it does for arrow-go: a schema's field can be its own child.
+// before itself: a schema's field can be its own child.
 type fbuf []byte
 
 func (b fbuf) u32(at uint32) (uint32, bool) {
@@ -334,7 +333,7 @@ func blockMessage(b, footer fbuf, at uint32) (fbuf, bool) {
 }
 
 // patchMeta is b, an IPC file or stream, with one length its metadata declares made
-// v, for the seeds of step 511's metadata findings, which step 519's walk refuses:
+// v, for step 511's seeds of metadata past its buffer, which step 519's walk refuses:
 // what is "fields", a schema's fields;
 // "children", the first field with children's; "metadata", the schema's custom
 // metadata; or "variadic", the first record batch's first variadic count; or, v

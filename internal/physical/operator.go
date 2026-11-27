@@ -149,10 +149,10 @@ func (s *scanOp) Next(ctx context.Context) (*data.Batch, error) {
 // A source's end is io.EOF itself (source.BatchSource), and every operator above a
 // scan ends its input on errors.Is(err, io.EOF), as the engine's own errors keep it
 // out of what they wrap, spill's among them. A source's error wrapping io.EOF ended
-// the scan there instead, and the query answered the rows before it with no error: an
-// IPC buffer whose bytes decompress short, which arrow-go panics on with io.EOF. The
-// sources keep io.EOF out of their errors, each where its readers answer one; this is
-// the rule's one place, for any a source misses, and any source added later.
+// the scan there instead, and the query answered the rows before it with no error, as
+// an IPC buffer whose bytes decompress short did (step 534). The sources keep io.EOF
+// out of their errors, each where its readers answer one; this is the rule's one
+// place, for any a source misses, and any source added later.
 func (s *scanOp) cut(err error) error {
 	err = uerr.Truncated(err)
 	if _, ok := err.(*uerr.Error); ok {

@@ -24,7 +24,7 @@ type PanicError struct {
 
 	// Callers are the functions from the panic site outward, the runtime's own left
 	// out. It is how a recover decides whose code panicked: a Parquet read that
-	// panicked inside arrow-go was reading a corrupt file, and one that panicked in
+	// panicked inside its decoder was reading a corrupt file, and one that panicked in
 	// ursus is ursus's bug.
 	Callers []string
 }

@@ -9,7 +9,6 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -284,8 +283,7 @@ func childrenOf(el tval) int64 {
 }
 
 // arrowReads is arrow-go's answer to footer f: what metadata.NewFileMetaData answers,
-// or the panic it raises, as v18.7.0 does on a schema schema.FromParquet refused,
-// whose error it drops, leaving the footer no schema.
+// as an error however the call ends.
 func arrowReads(f []byte) (err error) {
 	defer func() {
 		if v := recover(); v != nil {
@@ -547,17 +545,17 @@ func withHeader(f []byte, h [2]int, et byte, count uint64) []byte {
 // passes it. Each strict prefix of one the walk refuses, as arrow-go does. Each list
 // in one, claiming one element more than the bytes after its header, the walk
 // refuses at its header, as arrow-go does once it has read them; claiming 10^8, the
-// walk refuses, where arrow-go would make a slice of them first. And each list whose header says
-// its elements are of another type the walk passes, as arrow-go reads it, its
-// elements read as parquet.thrift types them; or as arrow-go refuses it since
-// v18.9.0 (step 538), whose Thrift, v0.25.0, holds a list's count to the bytes after
-// its header at the least an element of the type its header gives takes.
+// walk refuses at its header, before anything is sized by the count. And each list
+// whose header says its elements are of another type the walk passes, as arrow-go
+// reads it, its elements read as parquet.thrift types them; or as arrow-go refuses it
+// (step 538), its Thrift holding a list's count to the bytes after its header at the
+// least an element of the type its header gives takes.
 //
 // And its schema's elements (step 533): the footer read back (tparse) and written
 // again, the walk passes it and arrow-go reads it. Each element claiming a child
 // more than it does, the walk refuses, as arrow-go does, its tree no longer closing
 // within the elements; claiming one more than the elements after it, or 2^31−1, the
-// walk refuses at that element, where arrow-go would make a slice of them first.
+// walk refuses at that element, before anything is sized by the claim.
 func TestFooterWalkDifferential(t *testing.T) {
 	stride := 1
 	if raceDetector {
@@ -694,10 +692,7 @@ func hidden(id int16, et byte, el tval, count uint64) []byte {
 // TestFooterWalkReadsAListAsArrowGoDoes (step 521): each list of everyList replaced
 // by one hiding the list again, claiming 10^8 elements, from a walk by the types its
 // header gives (hidden): the walk refuses each, reading the element as arrow-go does.
-// Claiming 10^5, the walk refuses that too. arrow-go v18.7.0 read the hidden list,
-// allocating 4 bytes an element of it at least, its slice, made before it read one
-// (F13); v18.9.0's Thrift, v0.25.0, holds the count to the bytes after the list's
-// header and refuses it, allocating less (step 538).
+// Claiming 10^5, the walk refuses that too.
 func TestFooterWalkReadsAListAsArrowGoDoes(t *testing.T) {
 	foot := everyList()
 	at := map[string][]int16{}
@@ -746,30 +741,15 @@ func TestFooterWalkReadsAListAsArrowGoDoes(t *testing.T) {
 			if _, err := schemaDepth(f); err == nil {
 				t.Errorf("the list at %v hiding itself again, claiming %d: the walk passes it", path, count)
 			}
-			if count > 100_000 {
-				continue
-			}
-			var before, after runtime.MemStats
-			runtime.ReadMemStats(&before)
-			_, errArrow := metadata.NewFileMetaData(f, nil)
-			runtime.ReadMemStats(&after)
-			if got := after.TotalAlloc - before.TotalAlloc; got >= 4*count || errArrow == nil {
-				t.Errorf("the list at %v hiding itself again, claiming %d: arrow-go allocated %d bytes reading it, "+
-					"and answered %v", path, count, got, errArrow)
-			} else {
-				t.Logf("the list at %v hiding itself again, claiming %d: arrow-go allocated %d bytes and answered %v",
-					path, count, got, errArrow)
-			}
 		}
 	}
 }
 
-// TestMeasureFooterWalksEveryFooterArrowGoReads (F13 of step 521): measureFooter
-// walks every footer arrow-go reads, one leaving the leading magic no room too, the
-// footer begun 0 to 3 bytes into its file: the walk passes everyList there, and arrow-go
-// reads it; its row groups claiming 10^8, the walk refuses it, where it left it
-// unread before. A footer longer than its file less 8 bytes is left to arrow-go,
-// which refuses it.
+// TestMeasureFooterWalksEveryFooterArrowGoReads (step 521): measureFooter walks every
+// footer arrow-go reads, one leaving the leading magic no room too, the footer begun
+// 0 to 3 bytes into its file: the walk passes everyList there, and arrow-go reads it;
+// its row groups claiming 10^8, the walk refuses it. A footer longer than its file
+// less 8 bytes is left to arrow-go, which refuses it.
 func TestMeasureFooterWalksEveryFooterArrowGoReads(t *testing.T) {
 	fileOf := func(f []byte, j int) []byte {
 		return append(binary.LittleEndian.AppendUint32(slices.Concat([]byte("PAR1")[:j], f), uint32(len(f))), "PAR1"...)
@@ -799,10 +779,10 @@ func TestMeasureFooterWalksEveryFooterArrowGoReads(t *testing.T) {
 	}
 }
 
-// TestARowGroupOfAnotherCountOfChunksIsRefused (F19 of step 521): a row group holds a
-// chunk of each column of its schema. FuzzScanParquet's input listed none for a
-// schema of one, and the read failed as ursus's own bug, "maps to leaf 0, and the row
-// group has 0"; pyarrow 25.0.1 refuses it ("The file only has 0 columns"). everyList,
+// TestARowGroupOfAnotherCountOfChunksIsRefused (step 521): a row group holds a chunk
+// of each column of its schema. A footer listing none for a schema of one failed the
+// read as ursus's own bug, "maps to leaf 0, and the row group has 0"; pyarrow 25.0.1
+// refuses it ("The file only has 0 columns"). everyList,
 // two columns, its chunks' crypto_metadata left out, which arrow-go reads a chunk's
 // metadata only with a key for, passes the footer's checks; with its row group
 // holding none of their chunks, one, or three, each is refused as corrupt.
@@ -918,32 +898,27 @@ func nodes(n schema.Node) int {
 	return sum
 }
 
-// TestASchemaTreeNotClosingIsRefusedBeforeArrowGoAllocates (step 533): the root and
-// 999 groups each claiming every element after it, then leaves, the last group's.
-// Each claim is within the elements after it, and the tree does not close: the group
-// above the last is owed a child more. arrow-go makes each group its slice of
-// interfaces, 16 bytes a child claimed, before it reads a child, by the square of the
-// elements; it allocated at least that sum, from a footer of 34 KB, and the walk
-// refuses the tree first, as one that does not close: measureFooter as corrupt. With
-// a group more, nested past maxSchemaDepth, it is refused for its depth, as before
-// step 533.
-func TestASchemaTreeNotClosingIsRefusedBeforeArrowGoAllocates(t *testing.T) {
+// TestASchemaTreeNotClosingIsRefusedAsCorrupt (step 533): the root and 999 groups
+// each claiming every element after it, then leaves, the last group's. Each claim is
+// within the elements after it, and the tree does not close: the group above the
+// last is owed a child more. The walk refuses the tree before anything is sized by
+// its claims, as one that does not close: measureFooter as corrupt. With a group
+// more, nested past maxSchemaDepth, it is refused for its depth, as before step 533.
+func TestASchemaTreeNotClosingIsRefusedAsCorrupt(t *testing.T) {
 	const groups, leaves = 1_000, 2_000
-	chain := func(groups int) ([]int64, int64) {
+	chain := func(groups int) []int64 {
 		kids := make([]int64, groups+leaves)
-		var claimed int64
 		for i := range groups {
 			kids[i] = int64(len(kids) - 1 - i)
-			claimed += kids[i]
 		}
-		return kids, claimed
+		return kids
 	}
 	measure := func(f []byte) error {
 		file := binary.LittleEndian.AppendUint32(append([]byte("PAR1"), f...), uint32(len(f)))
 		_, err := measureFooter(bytes.NewReader(append(file, "PAR1"...)))
 		return err
 	}
-	kids, claimed := chain(groups)
+	kids := chain(groups)
 	f := schemaFooter(kids).bytes()
 	depth, err := schemaDepth(f)
 	if !errors.Is(err, errSchemaOpen) || depth != groups {
@@ -952,22 +927,8 @@ func TestASchemaTreeNotClosingIsRefusedBeforeArrowGoAllocates(t *testing.T) {
 	if err := measure(f); !errors.Is(err, uerr.ErrIO) || !errors.Is(err, errSchemaOpen) {
 		t.Errorf("measureFooter answers %v; want the footer refused as corrupt", err)
 	}
-	deeper, _ := chain(groups + 1)
+	deeper := chain(groups + 1)
 	if err := measure(schemaFooter(deeper).bytes()); !errors.Is(err, uerr.ErrUnsupported) {
 		t.Errorf("a group more, %d deep: measureFooter answers %v; want it refused for its depth", groups+1, err)
 	}
-	if raceDetector {
-		return
-	}
-	var before, after runtime.MemStats
-	runtime.ReadMemStats(&before)
-	errArrow := arrowReads(f)
-	runtime.ReadMemStats(&after)
-	got := after.TotalAlloc - before.TotalAlloc
-	if errArrow == nil || got < uint64(16*claimed) {
-		t.Errorf("arrow-go answers %v, allocating %d bytes; want it refused after %d, 16 a child claimed",
-			errArrow, got, 16*claimed)
-	}
-	t.Logf("a footer of %d bytes: arrow-go allocated %d bytes, %d a byte, before it refused it: %v",
-		len(f), got, got/uint64(len(f)), errArrow)
 }

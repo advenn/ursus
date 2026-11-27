@@ -9,8 +9,8 @@ import (
 	"github.com/apache/arrow-go/v18/parquet/file"
 )
 
-// A delta-encoded data page's runs, checked against the Parquet format before
-// arrow-go decodes them (step 531, F18 of step 521's record).
+// A delta-encoded data page's runs, checked against the Parquet format before they
+// are decoded (step 531).
 //
 // DELTA_BINARY_PACKED lays a run of integers out as a header, its block size, its
 // miniblocks a block, its count of values and its first value, then blocks, each a
@@ -20,68 +20,47 @@ import (
 // and then its suffixes' as a DELTA_LENGTH_BYTE_ARRAY. The format requires a block
 // size that is a positive multiple of 128 and miniblocks of a multiple of 32 values
 // each; pyarrow 25.0.1 refuses a run that breaks either (testdata/oracle/delta), and
-// DuckDB 1.5.5 refused F18's block of 31 values.
+// DuckDB 1.5.5 refuses a block of 31 values.
 //
-// arrow-go v18.7.0's deltaBitPackDecoder checks neither, nor the count against its
-// page. Its Decode answers at most the header's count of values, and
-// columnChunkReader.readBatch loops while the page has values: a REQUIRED column's
-// page whose count was short, 0 of its 5 in step 521's input, answered 0 values and
-// no error forever, a hang on one goroutine; an OPTIONAL column's page, or a List's,
-// read the values it did not answer from whatever its buffer held, with no error. A
-// block that is not its miniblocks' whole number of values runs past its bit widths,
-// a panic, as does a miniblock of no value. A block of 2^32 values in four
-// miniblocks made a slice of a miniblock's 2^30 values before decoding one, 8 GiB, a
-// fatal "out of memory" under the fuzz targets' cap. A page that ends inside a
-// miniblock reads as 0s past its end, with no error. A DELTA_LENGTH_BYTE_ARRAY page
-// makes a slice of the header's count of lengths before it decodes one, so a count
-// of 2^40 in a page of 2 KiB was a slice of 4 TiB; and it drops the error of a run it
-// cannot decode, reading the lengths it did not get as 0: a miniblock 65 bits wide
-// read as other strings, with no error.
-//
-// arrow-go v18.9.0 checks the block size and the miniblocks, refusing F18's block of
-// 31, and a count past the page's values, but not a count short of them: a REQUIRED
-// column's page counting 0 of its 5 values still hangs its column reader there, and
-// an OPTIONAL one's reads 0 values and no error (step 538). So the check stays.
-//
-// So checkedPages reads each delta-packed run of a data page arrow-go decodes before
-// arrow-go does, as its decoder reads it, and refuses the page as corrupt where:
-//   - the block size is not a positive multiple of 128 that 32 bits hold, as arrow-go
-//     keeps a block's count (currentBlockVals) and pyarrow reads the header;
+// A run's header is a claim: its block size and miniblocks say how the run is laid
+// out, its count how many values it holds, and each must agree with the format and
+// with its page before a value is decoded. So checkedPages reads each delta-packed
+// run of a data page the column reader decodes before it does, as its decoder reads
+// it, and refuses the page as corrupt where:
+//   - the block size is not a positive multiple of 128 that 32 bits hold, as pyarrow
+//     reads the header;
 //   - the miniblocks do not divide a block into a multiple of 32 values each;
 //   - the count is more than the page's values or its column chunk's, or fewer than
 //     its values that are not null, which its definition levels count
 //     (presentValues);
 //   - a miniblock holds more values than the count and than 65,536 (maxMiniblock);
-//   - a miniblock holding a value is wider than 64 bits, which arrow-go refuses as it
-//     comes to it and pyarrow at once;
+//   - a miniblock holding a value is wider than 64 bits, which pyarrow refuses;
 //   - the page ends inside a block's minimum delta or bit widths, or inside a
 //     miniblock holding a value, its padding counted.
 //
-// The last bounds but one are arrow-go's allocations. Its decoder makes a slice of a
-// miniblock's values for the first miniblock it decodes (unpackNextMini), and decodes
-// every value of each, which a miniblock 0 bits wide holds in no byte: a page of five
-// values in one miniblock of 2^31 asked for 16 GiB. A DELTA_LENGTH_BYTE_ARRAY page's
-// slice of lengths is the count's size. A page's values are its header's claim, and
-// arrow-go takes a page claiming more than its column chunk: the chunk's values, which
+// The last bounds but one bound what decoding the page sizes. A miniblock's values
+// are unpacked whole, which a miniblock 0 bits wide holds in no byte, so its bytes
+// do not bound them; a DELTA_LENGTH_BYTE_ARRAY page's lengths are decoded whole, the
+// count of them. A page's values are its header's claim: the chunk's values, which
 // its footer gives and checkRowCounts holds to its row group's rows, bound the count.
 // Each allocation is then within what the footer declares, or 512 KiB.
 //
 // A miniblock that holds no value, at the end of the last block, may give any bit
 // width, as the format says readers must accept, and its bytes are not there; it is
-// not looked at. An INT32's miniblock up to 64 bits wide is read: arrow-go's writer
-// takes an INT32's deltas as an int64's, and writes 33 bits where they span more
-// than 32, which arrow-go reads back and pyarrow 25.0.1 fails. A count past the
-// page's values pyarrow reads, decoding only the values the page's levels ask for;
-// it is refused here, as arrow-go's decoder of lengths sizes a slice by it, and no
-// writer counts more values than its page holds.
+// not looked at. An INT32's miniblock up to 64 bits wide is read: a writer may take
+// an INT32's deltas as an int64's, and write 33 bits where they span more than 32,
+// which pyarrow 25.0.1 fails. A count past the page's values pyarrow reads, decoding
+// only the values the page's levels ask for; it is refused here, as the lengths are
+// decoded whole, the count of them, and no writer counts more values than its page
+// holds.
 //
-// The runs are read as arrow-go reads them. A DELTA_BINARY_PACKED page's values are
-// decoded as its column reader asks for them, its values that are not null, and only
-// their blocks are read here; the lengths of the other two are decoded whole, the
-// header's count of them, at SetData, and the suffixes' run begins where arrow-go's
-// decoder of the prefixes' stopped, at the end of their last miniblock. A header
-// arrow-go cannot read, a varint the page ends inside, is left to it: it refuses the
-// page.
+// The runs are read as the column reader's decoder reads them. A DELTA_BINARY_PACKED
+// page's values are decoded as the column reader asks for them, its values that are
+// not null, and only their blocks are read here; the lengths of the other two are
+// decoded whole, the header's count of them, at SetData, and the suffixes' run begins
+// where the decoder of the prefixes' stopped, at the end of their last miniblock. A
+// header the decoder cannot read, a varint the page ends inside, is left to it: it
+// refuses the page.
 //
 // One pass over a page's definition levels, which presentValues counts, and over its
 // runs' headers, a varint and a byte a miniblock, a miniblock skipped whole: no
@@ -92,11 +71,10 @@ import (
 // default; the format sets no bound, and this leaves a writer room.
 const maxMiniblock = 1 << 16
 
-// deltaEncoded is whether arrow-go decodes a data page of encoding e, in a column of
-// physical type t, with its delta-packed decoder: DELTA_BINARY_PACKED's integers, and
-// the lengths a DELTA_LENGTH_BYTE_ARRAY or DELTA_BYTE_ARRAY page packs so. Another
-// pairing has no decoder in arrow-go, which panics, and the reader recovers that as
-// corrupt (reader.Next).
+// deltaEncoded is whether the column reader decodes a data page of encoding e, in a
+// column of physical type t, with its delta-packed decoder: DELTA_BINARY_PACKED's
+// integers, and the lengths a DELTA_LENGTH_BYTE_ARRAY or DELTA_BYTE_ARRAY page packs
+// so. Another pairing has no decoder, and its read fails as corrupt (reader.Next).
 func deltaEncoded(e parquet.Encoding, t parquet.Type) bool {
 	switch e {
 	case parquet.Encodings.DeltaBinaryPacked:
@@ -108,8 +86,8 @@ func deltaEncoded(e parquet.Encoding, t parquet.Type) bool {
 }
 
 // checkDelta refuses delta-encoded data page p, of encoding e, where one of its runs
-// breaks the format (deltaRun). A page arrow-go refuses before it decodes a value,
-// levels it cannot read, is left to it.
+// breaks the format (deltaRun). A page the column reader refuses before it decodes a
+// value, levels it cannot read, is left to it.
 func (c *checkedPages) checkDelta(p file.Page, e parquet.Encoding) error {
 	l, ok := c.levels(p)
 	if !ok {
@@ -152,10 +130,10 @@ type deltaBounds struct {
 }
 
 // deltaRun reads the delta-packed run at the start of b, of a page bounded by page,
-// as arrow-go's deltaBitPackDecoder reads it, and returns where the run ends, or why
-// it is refused. It reads the blocks of the header's count of values where whole, as
-// arrow-go decodes a run of lengths at SetData, and of the page's values that are not
-// null otherwise. end is -1, and why empty, for a header arrow-go cannot read and
+// as the column reader's delta decoder reads it, and returns where the run ends, or
+// why it is refused. It reads the blocks of the header's count of values where whole,
+// as a run of lengths is decoded at SetData, and of the page's values that are not
+// null otherwise. end is -1, and why empty, for a header the decoder cannot read and
 // refuses.
 func deltaRun(b []byte, page deltaBounds, whole bool) (end int, why string) {
 	var h [4]uint64 // the block size, the miniblocks a block, the count, the first value

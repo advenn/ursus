@@ -11,8 +11,7 @@ import (
 // A bounded allocator's rule (D21 of v0.7.2-plan.md, as the swarm proposed it): no one
 // request may exceed 16 MiB plus 16 bytes for each byte of input. A reader that takes
 // a length from its input and allocates it before it has seen the data it describes
-// is the bug this finds: a footer claiming a 2^40-byte block, a page header claiming
-// 2^28 bytes in a file of a kilobyte.
+// is the bug this finds.
 const (
 	RequestBase    = 16 << 20
 	RequestPerByte = 16

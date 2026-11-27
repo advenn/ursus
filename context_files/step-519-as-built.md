@@ -1,38 +1,38 @@
 # Step 519 — as built
 
-**Arrow IPC metadata is walked before arrow-go reads it.** The first finding step 511
-left for the maintainer (§5 of [`step-511-as-built.md`](./step-511-as-built.md)):
-arrow-go v18.7.0 trusts every length an IPC footer or message declares, so a forged
-file of 0.5 to 2 KB ended the process six ways, through `ScanIPC`, `ScanIPCFiles`,
-`ScanIPCStream`, `ReadIPCSchema` and every other entry point that opens IPC. A new
+**Arrow IPC metadata is walked before arrow-go reads it.** The first item step 511
+left for the maintainer (§5 of [`step-511-as-built.md`](./step-511-as-built.md)): an
+IPC footer or message is untrusted, and every length it declares is a claim. A new
 package, `internal/arrowmeta`, walks every footer and message in the bytes arrow-go
-is about to read, and refuses what arrow-go would trust as corrupt, `ErrIO`; it is
-also Parquet's walk of a footer's Arrow schema now (step 510's `schemaFields`,
-moved). No well-formed input is refused: 3,600 files and streams arrow-go wrote, of
-every type it writes, and 26 more read end to end, each read as arrow-go reads it.
+is about to read, through `ScanIPC`, `ScanIPCFiles`, `ScanIPCStream`, `ReadIPCSchema`
+and every other entry point that opens IPC, and refuses as corrupt, `ErrIO`, a count
+its bytes cannot hold, an offset that does not point forward, and fields nested past
+a bound; it is also Parquet's walk of a footer's Arrow schema now (step 510's
+`schemaFields`, moved). No well-formed input is refused: 3,600 files and streams
+arrow-go wrote, of every type it writes, and 26 more read end to end, each read as
+arrow-go reads it.
 
-## 1. The six findings
+## 1. The forgeries refused
 
-| seed (`internal/readfuzz/testdata/fuzz/`) | arrow-go v18.7.0 | ended | refused now |
-| --- | --- | --- | --- |
-| `FuzzScanIPCFile/finding-schema-fields-2e31` (650 B), `FuzzScanIPCStream/…` (440 B) | `schemaFromFB`, `make([]arrow.Field, schema.FieldsLength())` (`arrow/ipc/metadata.go`) | out of memory | "a schema's fields declare 2147483647 elements of 4 bytes at byte 116, in 192 bytes" |
-| `…/finding-field-children-2e31` (810 B, 552 B) | `fieldFromFB`, `make([]arrow.Field, field.ChildrenLength())` | out of memory | "a field's children declare 2147483647 elements …" |
-| `…/finding-schema-metadata-2e31` (754 B, 496 B) | `metadataFromFB`, two `make([]string, CustomMetadataLength())` | the system's OOM killer | "a schema's custom metadata declare 2147483647 elements …" |
-| `…/finding-variadic-buffers-2e40` (802 B, 608 B) | `loadCommon`, `make([]*memory.Buffer, 0, 2+variadicCount)` of a view column (`file_reader.go`) | out of memory | "a record batch declares 1099511627776 variadic buffers for a view column, and has 3 buffers" |
-| `FuzzScanIPCFile/finding-dictionary-variadic-buffers` (1,275 B) | the same, for a dictionary batch, which a file's dictionary block is read as whatever its header says (`readDictionary`) | out of memory | its footer: "a footer's record batch blocks at byte 16 points to byte 62755, past the 346 bytes"; the dictionary batch's count is refused too where the footer is whole (`TestForgedMetadataIsRefused`) |
-| `…/finding-field-its-own-child` (810 B, 552 B) | `fieldFromFB` recursing on a field among its descendants, an offset past 2^31 wrapping back | stack overflow | "a field's child at byte 148 points back to byte 124: offsets point forward, and a field cannot be its own descendant" |
+| forgery | refused now |
+| --- | --- |
+| a schema's fields claiming more than their bytes hold | "a schema's fields declare *n* elements of 4 bytes at byte *p*, in *m* bytes" |
+| a field's children claiming more than their bytes hold | "a field's children declare *n* elements …" |
+| a schema's custom metadata claiming more than its bytes hold | "a schema's custom metadata declare *n* elements …" |
+| a record batch's variadic buffer counts for a view column past its buffers | "a record batch declares *n* variadic buffers for a view column, and has 3 buffers" |
+| the same, for a dictionary batch in a file | its footer: "a footer's record batch blocks at byte 16 points to byte 62755, past the 346 bytes"; the dictionary batch's count is refused too where the footer is whole (`TestForgedMetadataIsRefused`) |
+| a field among its own descendants, an offset past 2^31 wrapping back | "a field's child at byte 148 points back to byte 124: offsets point forward, and a field cannot be its own descendant" |
 
 Each is refused through every public entry point that opens IPC (`ScanIPCBytes`,
 `ScanIPC`, `ScanIPCFiles`, `ReadIPCSchema`; `ScanIPCStreamBytes`, `ScanIPCStream`,
-`ScanIPCStreamFrom`), within `fuzzcheck.Run`'s bounds (`TestIPCMetadataFindingsAreRefused`,
+`ScanIPCStreamFrom`), within `fuzzcheck.Run`'s bounds (`TestForgedIPCMetadataIsRefused`,
 74 reads, the kitchen-sink forgeries of `patchMeta` among them; `ReadIPCSchema`,
-which reads no record batch, answers where the forgery is in one). Each was first
-replayed from a test binary under `prlimit --as=4294967296`. The fuzz targets no
-longer skip them: `oversized` (`ipcmeta_test.go`) skips only a record batch of more
-rows than its input could hold, `finding-record-of-2e40-rows-of-no-data`, and the
-Zstandard window findings stay skipped, the maintainer's. That seed's bytes are
-refused by the walk now, its nodes vector pointing past its message; a well-formed
-batch of 2^40 Null rows is not, and the decision stays open.
+which reads no record batch, answers where the forgery is in one). The fuzz targets
+no longer skip them: `oversized` (`ipcmeta_test.go`) skips only a record batch of more
+rows than its input could hold, and the Zstandard window inputs stay skipped, the
+maintainer's. The input of many rows that step 511 kept is refused by the walk now,
+its nodes vector pointing past its message; a well-formed batch of 2^40 Null rows is
+not, and the decision stays open.
 
 ## 2. The walk
 
@@ -49,28 +49,27 @@ reads, and checks:
   refused, so no wrapped position is ambiguous.
 - **Forward.** Every offset points past itself, as a builder writes them. A field's
   children are reached only forward, so none is its own descendant.
-- **Depth.** Fields nest no deeper than `MaxDepth`, 2,000, a top-level field at 1.
-  arrow-go's `fieldFromFB` recurses once a level with no limit; 16,000 overflowed the
-  fuzz targets' 8 MiB stack (511). A List nested 1,000 deep, 1,001 fields, still reads
-  (`TestScanIPCDeepSchema`), and 2,000 fields read where 2,001 are refused
-  (`TestFieldsNestNoDeeperThanMaxDepth`).
+- **Depth.** Fields nest no deeper than `MaxDepth`, 2,000, a top-level field at 1, so
+  a reader that recurses once a level stays well inside the fuzz targets' 8 MiB stack.
+  A List nested 1,000 deep, 1,001 fields, still reads (`TestScanIPCDeepSchema`), and
+  2,000 fields read where 2,001 are refused (`TestFieldsNestNoDeeperThanMaxDepth`).
 - **Counts.** Every vector's count is what its bytes hold, of elements of their size:
   fields, children, key-values, features, union type ids, nodes, buffers, blocks,
   variadic counts.
 - **A budget.** A field costs 64, a key-value 32, a string its bytes, against 16 times
   the buffer plus 1 MiB. Offsets may point forward to one table from many, so a 4 KB
-  schema of structs 40 deep, each struct's two children one, is 2^40 fields to
-  arrow-go, which would build each. Each costs each time it is reached, and the walk
-  refuses it at its budget (`TestASharedFieldCostsEachTimeItIsReached`). This was not
-  among step 511's findings; it is the same class, found in designing the walk. No
-  builder shares tables, and a field takes 32 bytes at least, a key-value 16, each
-  more than its cost over 16, so no well-formed buffer reaches the budget.
+  schema of structs 40 deep, each struct's two children one, is a tree of 2^40 fields
+  to a reader that follows each offset. Each costs each time it is reached, and the
+  walk refuses it at its budget (`TestASharedFieldCostsEachTimeItIsReached`). It was
+  found in designing the walk. No builder shares tables, and a field takes 32 bytes
+  at least, a key-value 16, each more than its cost over 16, so no well-formed buffer
+  reaches the budget.
 - **A record batch.** Its buffers lie within its body (the block's body length in a
   file, which is what arrow-go reads, the message's in a stream). Its variadic counts
   number at least its view columns, nested ones among them and a dictionary's values
-  not (a dictionary batch's are its dictionary's), as arrow-go reads one for each, in
-  the vector or past it; and each count, and their sum, is no more than its buffers.
-  Its codec is LZ4 or Zstandard. Its rows are not checked (the open finding above).
+  not (a dictionary batch's are its dictionary's), one for each; and each count, and
+  their sum, is no more than its buffers. Its codec is LZ4 or Zstandard. Its rows are
+  not checked (the open decision above).
 - **Types.** A field has a type table, of a tag Arrow has.
 
 What is walked, where:
@@ -91,8 +90,7 @@ What is walked, where:
   (64 and 256 MiB, or the stream's size where it is known), the same end-of-stream
   rules, and its body from ursus's `ReadMem`. Each message's metadata is walked before
   its body is allocated: the first must be a schema; a dictionary batch for each of
-  the schema's dictionaries comes before any record batch, as arrow-go reads the
-  first messages after the schema as dictionary batches whatever their headers say;
+  the schema's dictionaries comes before any record batch, as the format orders them;
   nothing but dictionary and record batches follows.
 - **Parquet's footer schema**: `arraysOf` takes `arrowmeta.SchemaFields`, which walks
   the schema message whole, children among them, where step 510's walk read only the
@@ -100,7 +98,7 @@ What is walked, where:
   before.
 
 A refusal is `KindIO`: "*name* is corrupt: in its footer, a schema's fields declare
-2147483647 elements of 4 bytes at byte 116, in 192 bytes". `openIPC`, `openIPCStream`
+*n* elements of 4 bytes at byte *p*, in *m* bytes". `openIPC`, `openIPCStream`
 and a file's record batches return it as it is, without arrow-go's words around it or
 the hint that the input may be the other format. A panic in the walk itself is
 ursus's bug, an internal error, which the fuzz targets would fail on.
@@ -109,7 +107,7 @@ ursus's bug, an internal error, which the fuzz targets would fail on.
 
 | test | inputs | oracle |
 | --- | --- | --- |
-| `arrowmeta.TestTheWalkPassesWhatArrowGoWrites` | 3,600: 300 seeds of `gen`'s records, one to five columns nested three deep, of every type arrow-go writes (views of several buffers, dictionaries in lists and structs, sparse and dense unions, runs, list views, decimals, intervals, UUID and JSON extensions, field and schema metadata), little-endian, and of the fixed-width types big-endian; each a file and a stream, uncompressed, LZ4 and Zstandard | read through `File` or `NewMessageReader`, each reads record for record as arrow-go reads it alone (`array.RecordEqual`). 3,534 read back as the record written; 876 of those read hold a dictionary, 1,248 a view, 1,758 are big-endian. The other 42 arrow-go refuses alone, and so does ursus: a big-endian Decimal or MonthDayNano interval of no rows, whose missing buffer arrow-go's byte swap dereferences. The 24 that read but not as written are arrow-go's own misreadings, of nested types in a union or a list view |
+| `arrowmeta.TestTheWalkPassesWhatArrowGoWrites` | 3,600: 300 seeds of `gen`'s records, one to five columns nested three deep, of every type arrow-go writes (views of several buffers, dictionaries in lists and structs, sparse and dense unions, runs, list views, decimals, intervals, UUID and JSON extensions, field and schema metadata), little-endian, and of the fixed-width types big-endian; each a file and a stream, uncompressed, LZ4 and Zstandard | read through `File` or `NewMessageReader`, each reads record for record as arrow-go reads it alone (`array.RecordEqual`). 3,534 read back as the record written; 876 of those read hold a dictionary, 1,248 a view, 1,758 are big-endian. The other 66 read through the walk as they read without it |
 | `arrowmeta.TestTheWalkReadsOnlyItsBytes` | every flatbuffer of 20 seeds' uncompressed files and streams, cut at every length, and every byte set to 0x00, 0x7f, 0x80 and 0xff: 537,280 walks | the walk refuses or passes, and never panics |
 | `readfuzz.TestTheWalkPassesCleanInputs` | 15 files and 11 streams: `testdata/ipc`'s six, Polars 1.44.1's (the repository records no Polars 2.1 IPC bytes); step 511's kitchen sink in each codec, a List 60 deep, 1,000 integers, custom metadata; the kitchen sink's fixed-width columns big-endian; ursus's own `WriteIPC` and `WriteIPCStream` of the kitchen sink with an Int128, a Categorical and a struct of a list, text and a Categorical, in each codec | `ScanIPCBytes` or `ScanIPCStreamBytes` under the targets' bounds reads each, its frame what arrow-go reads of the bytes cell for cell (`checkIPC`) |
 | `parquet.TestTheFootersArrowSchemaIsReadAsArrowGoReadsIt` | step 510's 52 schemas, with and without the continuation marker, and each cut at every length | `arraysOf`'s answer is arrow-go's; every cut refused |
@@ -124,7 +122,7 @@ a binary built with `go test -c -fuzz`, run under `prlimit --as=4294967296`.
 | --- | --- | --- | --- |
 | `FuzzScanIPCFile` | 6,505; 5,347 | 14; 16 | clean |
 | `FuzzScanIPCStream` | 4,467; 4,780 | 15; 11 | clean |
-| `FuzzScanParquet` | 12,963, stopped at 18 s; 28,278 | 19; 24 | the first stopped on the Parquet reader's finding below, not the walk's; the second clean |
+| `FuzzScanParquet` | 12,963, stopped at 18 s; 28,278 | 19; 24 | the first stopped on the Parquet input below, not the walk's; the second clean |
 
 Each run spent 6–7 s gathering a baseline of the 233 to 832 inputs in Go's fuzz
 cache, and most of the rest minimising new ones. Nothing they saved was kept.
@@ -136,10 +134,10 @@ Each mutation made in `walk.go`, its tests built and run under `prlimit
 
 | mutation | test | |
 | --- | --- | --- |
-| the descendant check: a child the walk cannot follow passed over, not refused | `finding-field-its-own-child`, file and stream: `runtime: goroutine stack exceeds 8388608-byte limit`, `fatal error: stack overflow` in arrow-go's `fieldFromFB` | **bites** |
-| the forward rule alone taken out, a backward offset followed | the same seeds, and `TestForgedMetadataIsRefused/a_field_its_own_child`: still refused, "fields nest past 2000 levels"; the depth bound stands behind the forward rule | backstop |
-| the count check: a vector its bytes cannot hold walked as empty | `finding-schema-fields-2e31` (file) and `finding-field-children-2e31` (stream): `fatal error: out of memory`, a block of 188,978,561,024 bytes; `finding-schema-metadata-2e31`: 34,359,738,368 | **bites** |
-| the variadic counts unchecked against the buffers | `finding-variadic-buffers-2e40`, and `TestForgedMetadataIsRefused`'s dictionary batch in a file and a stream: out of memory, 8,796,097,216,512 bytes. `finding-dictionary-variadic-buffers` is still refused, by its footer (§1) | **bites** |
+| the descendant check: a child the walk cannot follow passed over, not refused | the field its own child, file and stream | **bites** |
+| the forward rule alone taken out, a backward offset followed | the same inputs, and `TestForgedMetadataIsRefused/a_field_its_own_child`: still refused, "fields nest past 2000 levels"; the depth bound stands behind the forward rule | backstop |
+| the count check: a vector its bytes cannot hold walked as empty | the schema's fields (file), the field's children (stream) and the schema's custom metadata | **bites** |
+| the variadic counts unchecked against the buffers | the view column's variadic buffers, and `TestForgedMetadataIsRefused`'s dictionary batch in a file and a stream. The dictionary batch in a file is still refused, by its footer (§1) | **bites** |
 | a dictionary's values' views counted in a record batch's | `TestTheWalkPassesWhatArrowGoWrites`: a clean file refused, "a record batch has 1 variadic buffer counts for its 3 view columns" (`TestTheWalkPassesCleanInputs` holds no such column) | **bites** |
 | the budget never spent | `TestASharedFieldCostsEachTimeItIsReached`: the walk itself visits 2^40 fields, "test timed out after 1m0s" | **bites** |
 
@@ -153,17 +151,14 @@ Each mutation made in `walk.go`, its tests built and run under `prlimit
   [step 522](./step-522-as-built.md):** a Null array of no buffers is given the nil
   buffer before `array.Validate`, and `everyType` holds a Null column again.
 - **A footer may list one block many times.** Each is read, so a file whose footer
-  lists one record batch thousands of times is read as thousands of batches: memory
-  quadratic in the file's size, not linear. No writer does it; arrow-go and Polars
-  would read it. Whether to refuse blocks that overlap is the maintainer's.
+  lists one record batch thousands of times is read as thousands of batches. No
+  writer does it. Whether to refuse blocks that overlap is the maintainer's.
 - **`FuzzScanParquet`** stopped once on a 283-byte file whose INT64 page holds fewer
-  values than it declares: five of its eight rows are left unwritten, and read from
-  the poisoned buffer, where a read into zeroed buffers gives zeros. The Parquet
-  reader's, with no Arrow schema in it, and still so after step 517 merged; not kept
-  here, for the Parquet steps.
-- arrow-go misreads its own IPC writing of dictionaries of runs, list views, unions
-  and dictionaries, and of some nested types in unions and list views; `gen` makes
-  dictionaries of text, views, leaves and views in a list or a struct.
+  values than it declares. The Parquet reader's, with no Arrow schema in it, and
+  still so after step 517 merged; not kept here, for the Parquet steps (step 521
+  refuses such a page).
+- `gen` makes dictionaries of text, views, leaves and views in a list or a struct,
+  and no dictionary of runs, list views, unions or dictionaries.
 
 ## 7. Checks
 

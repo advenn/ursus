@@ -125,9 +125,9 @@ func codecStreams(t testing.TB, c compress.Compression, was compress.Codec, src 
 //   - where it refuses a stream as past its buffer, the stream holds more than the
 //     buffer, its capacity for Zstandard and Snappy and its length for gzip and
 //     Brotli, as each codec reads a buffer, or is corrupt;
-//   - where arrow-go's codec made a buffer of its own, the bounded one refuses, or
-//     decodes as above: as past the buffer, or, a Zstandard block's output past it,
-//     with klauspost's own refusal of the block;
+//   - where arrow-go's codec decodes the stream but not into the buffer, the bounded
+//     one refuses, or decodes as above: as past the buffer, or, a Zstandard block's
+//     output past it, with klauspost's own refusal of the block;
 //   - a nil buffer, from a caller that is not arrow-go's page reader, decodes as
 //     arrow-go's codec decodes it;
 //   - encoding, at each level, and its bound are arrow-go's codec's, byte for byte.
@@ -180,8 +180,8 @@ func TestBoundedCodecsDecodeAsTheCodecsTheyReplace(t *testing.T) {
 				}
 			}
 			t.Logf("%s: %d decoded alike into the buffer, %d refused by both, %d refused as past the buffer "+
-				"where arrow-go's made one of its own, %d refused otherwise there, %d refused as past it where "+
-				"arrow-go's refused too, %d decoded whole where arrow-go's refused or made its own",
+				"where arrow-go's decoded outside it, %d refused otherwise there, %d refused as past it where "+
+				"arrow-go's refused too, %d decoded whole where arrow-go's refused or decoded outside it",
 				c, n.same, n.refused, n.past, n.blockPast, n.pastRefused, n.whole)
 		})
 	}

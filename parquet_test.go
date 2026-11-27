@@ -297,11 +297,10 @@ func TestParquetRefusesUnsupported(t *testing.T) {
 	// FILE needs a writer ursus does not have, and the refusal for those lives in
 	// toDataType, covered by TestTypeRefusals in the parquet package.
 	//
-	// The type here is Duration, which has no Parquet logical type at all —
-	// arrow-go's IntervalLogicalType.toThrift panics — rather than Datetime, which
-	// step 14 made writable. Step 6 hit the same thing from the CSV side and recorded
-	// the lesson: a refusal test pinned to whichever type happens to be unwritable
-	// this month breaks every time the format grows.
+	// The type here is Duration, which has no Parquet logical type at all, rather
+	// than Datetime, which step 14 made writable. Step 6 hit the same thing from the
+	// CSV side and recorded the lesson: a refusal test pinned to whichever type
+	// happens to be unwritable this month breaks every time the format grows.
 	err := ursus.Frame(ursus.Values("x", []int64{1, 2})).
 		Select(ursus.Col("x").Cast(dtype.Duration(dtype.Micro))).
 		SinkParquet(t.Context(), filepath.Join(t.TempDir(), "x.parquet"))
@@ -527,9 +526,9 @@ func TestParquetInt128RoundTrip(t *testing.T) {
 	}
 }
 
-// TestParquetRefusesSecondResolution: arrow-go's createTimeUnit PANICS for anything
-// but milli, micro and nano, and dtype.Second is ursus's zero value — so this is a
-// guard against taking the process down, not a taste refusal.
+// TestParquetRefusesSecondResolution: Parquet has no time unit but milli, micro and
+// nano, and dtype.Second is ursus's zero value — so the refusal is the format's, not
+// a taste refusal.
 func TestParquetRefusesSecondResolution(t *testing.T) {
 	for _, dt := range []dtype.DataType{
 		dtype.Datetime(dtype.Second, ""),
@@ -539,7 +538,7 @@ func TestParquetRefusesSecondResolution(t *testing.T) {
 			Select(ursus.Col("x").CastLossy(dt)).
 			SinkParquet(t.Context(), filepath.Join(t.TempDir(), "x.parquet"))
 		if err == nil {
-			t.Fatalf("%s was accepted; arrow-go panics on a second resolution", dt)
+			t.Fatalf("%s was accepted; Parquet has no second resolution", dt)
 		}
 		if !strings.Contains(err.Error(), "second resolution") {
 			t.Errorf("the message should name the cause:\n%v", err)

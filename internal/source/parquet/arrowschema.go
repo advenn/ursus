@@ -23,14 +23,13 @@ import (
 // ursus writes the key when a column is an Array, so Polars reads one back as it
 // wrote it, and leaves every other file's footer as it was.
 //
-// The key is read here, not by arrow-go's IPC reader (step 510). The footer is the
-// file's, and a file's to forge: arrow-go's ipc.NewReader trusts the lengths in the
-// schema's flatbuffer, and a field claiming 2^32 children had its fieldFromFB make
-// a slice of 283 GB, a fatal "out of memory" no recover catches, from a file of 906
-// bytes. So the schema is walked by arrowmeta, every offset and length checked
-// against its bytes (step 519, which moved step 510's walk there for the IPC readers
-// too), for the two facts wanted of each top-level field: a FixedSizeList's size, and
-// whether it is a dictionary of text.
+// The key is read here, not by an IPC reader (step 510). The footer is the file's,
+// and a file's to forge, and a flatbuffer's offsets and lengths are its claims, which
+// flatbuffers has no verifier in Go to check. So the schema is walked by arrowmeta,
+// every offset and length checked against its bytes, and a count they cannot hold
+// refused (step 519, which moved step 510's walk there for the IPC readers too), for
+// the two facts wanted of each top-level field: a FixedSizeList's size, and whether
+// it is a dictionary of text.
 
 // arrowSchemaKey is the footer key Arrow's writers keep their schema under.
 const arrowSchemaKey = "ARROW:schema"

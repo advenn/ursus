@@ -145,12 +145,12 @@ func corruptInput(err error, op, name, where string) *uerr.Error {
 		return uerr.Wrap(err, uerr.KindInternal, op, "walking %s's Arrow IPC metadata", name)
 	}
 	return uerr.New(uerr.KindIO, op, "%s is corrupt: %s, %s", name, where, c).
-		Hint("ursus walks Arrow IPC metadata before arrow-go reads it, which would trust it")
+		Hint("ursus checks every count and offset of Arrow IPC metadata against its bytes before reading it")
 }
 
 // ReadAt reads p at off: from the tail where it lies within it, and from the file
 // otherwise; and where p is a block's metadata, as arrow-go reads one, it walks it,
-// and refuses it, KindIO, for what arrow-go would trust.
+// and refuses it, KindIO, where the walk finds it corrupt.
 func (f *File) ReadAt(p []byte, off int64) (n int, err error) {
 	if off >= f.tailAt && off <= f.size && int64(len(p)) <= f.size-off {
 		n = copy(p, f.tail[off-f.tailAt:])
@@ -178,9 +178,8 @@ func (f *File) ReadAt(p []byte, off int64) (n int, err error) {
 
 // walkBlock walks p, the metadata of the block b at off: its message, less the length
 // prefix arrow-go takes off it (fileBlock.NewMessage), a dictionary batch for a
-// dictionary block, which arrow-go reads as one whatever its header says, and a
-// record batch for a record block; each of a body of the block's length, which is
-// what arrow-go reads.
+// dictionary block and a record batch for a record block, a message of any other
+// header refused; each of a body of the block's length, which is what arrow-go reads.
 func (f *File) walkBlock(p []byte, b block, off int64) (err error) {
 	what := "a record batch's block"
 	if b.dict {

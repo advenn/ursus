@@ -29,7 +29,7 @@ copies.
   assumes it (`data.CheckTimeRange`). A wrapped value is a plausible wrong answer.
   It renders as a time of day, sorts after 23:00:00, and equals no genuine
   02:00:00.
-- **The Parquet reader refuses one.** Step 510 (F8) made it refuse a TIME past its
+- **The Parquet reader refuses one.** Step 510 made it refuse a TIME past its
   day as a corrupt value, at any nesting depth (`checkTimes`), for exactly that
   reason.
 - **Arrow export refuses one.** `internal/arrowout` refuses a time outside

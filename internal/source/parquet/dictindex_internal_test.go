@@ -18,38 +18,31 @@ import (
 	"github.com/apache/arrow-go/v18/parquet/schema"
 )
 
-// TestCheckedPagesRefuseWhereArrowGoGrowsItsDictionary (step 517): checkedPages
-// against arrow-go's own column reader, its oracle, over generated dictionary-encoded
-// data pages of an INT64 column, REQUIRED, OPTIONAL and the element of a List, V1 and
-// V2, their definition levels RLE or, in V1, BIT_PACKED, their indices in RLE and
+// TestCheckedPagesRefuseAnIndexPastTheDictionary (step 517): checkedPages against
+// arrow-go's own column reader, its oracle, over generated dictionary-encoded data
+// pages of an INT64 column, REQUIRED, OPTIONAL and the element of a List, V1 and V2,
+// their definition levels RLE or, in V1, BIT_PACKED, their indices in RLE and
 // bit-packed runs at bit widths up to 32, some of them 2^20 or more, past a dictionary
 // of at most 50 values, some only in a bit-packed run's padding, and some pages cut
 // short or holding a header arrow-go refuses. Each page is read whole through
-// arrow-go's column reader, once over arrow-go's pages as they are and once through
+// arrow-go's column reader, once over the pages as they are and once through
 // checkedPages, the dictionary page read in turn or, for a fifth of the pages, out of
 // turn through GetDictionaryPage:
 //
-//   - through checkedPages, the read allocates no more than its page needs, the bound
-//     arrow-go's dictConverter.ensure broke: an index of 2^20 grew its dictionary by 8
-//     MiB;
-//   - where arrow-go's own read grew its dictionary, checkedPages refused the page;
+//   - through checkedPages, the read allocates no more than its page needs, an index
+//     past the dictionary refused before anything is sized by it;
 //   - where checkedPages did not refuse a page, the read answered what arrow-go's
 //     own did, values, levels and error alike;
 //   - for a page not cut short and with no refused header, checkedPages refused it
 //     exactly when an index arrow-go reads, one of the page's values that are not
 //     null, is past the dictionary: no page arrow-go reads is refused, whatever its
-//     padding holds.
-//
-// Since arrow-go v18.9.0 (step 538) its own read never grows its dictionary: its
-// dictConverter checks an index against the dictionary first, and the read fails,
-// "dict eof exception", for each page an index it reads is past the dictionary, where
-// v18.7.0 grew it by 8 MiB and more for an index of 2^20.
-func TestCheckedPagesRefuseWhereArrowGoGrowsItsDictionary(t *testing.T) {
+//     padding holds; and arrow-go's own read refuses such a page too (step 538).
+func TestCheckedPagesRefuseAnIndexPastTheDictionary(t *testing.T) {
 	rng := rand.New(rand.NewPCG(517, 9))
 	pool := &sync.Pool{New: func() any { return memory.NewResizableBuffer(memory.DefaultAllocator) }}
 	cols := []*schema.Column{indexColumn(t, parquet.Repetitions.Required, false),
 		indexColumn(t, parquet.Repetitions.Optional, false), indexColumn(t, parquet.Repetitions.Optional, true)}
-	var refused, grown, farRefused, kept, cases int
+	var refused, farRefused, kept, cases int
 	for i := range 2_000 {
 		desc := cols[rng.IntN(len(cols))]
 		pg := genIndexPage(rng, desc)
@@ -62,17 +55,12 @@ func TestCheckedPagesRefuseWhereArrowGoGrowsItsDictionary(t *testing.T) {
 		if past {
 			refused++
 		}
-		if theirs.grew {
-			grown++
-		}
 		if pg.wellFormed && pg.reachableFar && theirs.err != nil {
 			farRefused++
 		}
 		switch {
 		case ours.grew:
-			t.Errorf("%s: read through checkedPages, its dictionary grew by %d bytes", label, ours.alloc)
-		case theirs.grew && !past:
-			t.Errorf("%s: arrow-go grew its dictionary by %d bytes, and checkedPages answered %v", label, theirs.alloc, ours.err)
+			t.Errorf("%s: read through checkedPages, it allocated %d bytes", label, ours.alloc)
 		case !past && (fmt.Sprint(ours.err) != fmt.Sprint(theirs.err) || !slices.Equal(ours.vals, theirs.vals) ||
 			!slices.Equal(ours.defs, theirs.defs) || !slices.Equal(ours.reps, theirs.reps)):
 			t.Errorf("%s: through checkedPages %d values and %v; arrow-go's own %d and %v",
@@ -80,8 +68,6 @@ func TestCheckedPagesRefuseWhereArrowGoGrowsItsDictionary(t *testing.T) {
 		case pg.wellFormed && past != pg.reachablePast:
 			t.Errorf("%s: an index arrow-go reads is past the dictionary: %v; checkedPages refused it: %v (%v)",
 				label, pg.reachablePast, past, ours.err)
-		case theirs.grew:
-			t.Errorf("%s: arrow-go's own read grew its dictionary by %d bytes", label, theirs.alloc)
 		case pg.wellFormed && pg.reachablePast && theirs.err == nil:
 			t.Errorf("%s: an index arrow-go reads is past the dictionary, and its own read answered no error", label)
 		}
@@ -90,8 +76,8 @@ func TestCheckedPagesRefuseWhereArrowGoGrowsItsDictionary(t *testing.T) {
 		}
 	}
 	// The generator's own reach: pages of each outcome.
-	t.Logf("of %d pages, %d refused, %d grew arrow-go's dictionary, %d of an index 2^20 or more refused by "+
-		"arrow-go's own read, %d well formed and read", cases, refused, grown, farRefused, kept)
+	t.Logf("of %d pages, %d refused, %d of an index 2^20 or more refused by arrow-go's own read, "+
+		"%d well formed and read", cases, refused, farRefused, kept)
 	if refused < cases/10 || farRefused < cases/10 || kept < cases/4 {
 		t.Errorf("of %d pages, %d refused, %d of an index 2^20 or more refused by arrow-go's own read, %d well "+
 			"formed and read", cases, refused, farRefused, kept)
@@ -189,7 +175,7 @@ func genIndexPage(rng *rand.Rand, desc *schema.Column) *indexPage {
 	// The indices: half the pages hold some past the dictionary, 2^20 and more, which
 	// takes a width of 21 bits; any page's padding may hold them.
 	// The indices' width: what the dictionary needs, and up to 32; for half the pages
-	// 21 at least, to hold an index of 2^20, by which arrow-go's growth shows.
+	// 21 at least, to hold an index of 2^20, far past any dictionary here.
 	need := bits.Len(uint(p.dictN - 1))
 	if rng.IntN(2) == 0 {
 		need = max(need, 21)
@@ -375,7 +361,7 @@ type indexRead struct {
 	defs, reps []int16
 	err        error
 	alloc      uint64
-	grew       bool // it allocated what a dictionary grown to 2^20 values takes
+	grew       bool // it allocated 4 MiB or more, far past what any page here needs
 }
 
 // readIndexPage reads pr's pages whole through arrow-go's column reader for desc.

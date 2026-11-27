@@ -16,7 +16,7 @@ master with the arrow-go upgrade, and this releases the fix.
 
 | step | what |
 | --- | --- |
-| 538 | arrow-go v18.7.0 → v18.9.0, with Thrift v0.25.0, klauspost/compress v1.20.3 and golang.org/x/text v0.43.0; a column chunk whose dictionary holds no value reads; two malformed Parquet pages arrow-go now refuses, ursus with it |
+| 538 | arrow-go v18.7.0 → v18.9.0, with Thrift v0.25.0, klauspost/compress v1.20.3 and golang.org/x/text v0.43.0; a column chunk whose dictionary holds no value reads; two malformed Parquet pages refused |
 | 540 | CI only: no full-size benchmark on GitHub's runners, and a superseded pull-request run cancelled. Not in the CHANGELOG. |
 
 No API is added, changed or removed. `api/v0.8.1.txt`, written by `make api-tag

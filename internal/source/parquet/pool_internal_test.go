@@ -111,7 +111,7 @@ func TestPagesAreDecompressedIntoPooledBuffers(t *testing.T) {
 		t.Logf("%d threads: allocated %.1f MB to produce %.1f MB: %.2f", threads,
 			float64(allocated)/(1<<20), float64(produced)/(1<<20), float64(allocated)/float64(produced))
 		// One thread read 1.36 with the pool and 2.30 without, the compressed chunks
-		// GetStream reads the 0.36. Four threads, whose workers decode some pages before
+		// read whole the 0.36. Four threads, whose workers decode some pages before
 		// the count starts, read 1.16 and 1.38, so only a gross regression shows there.
 		bound := produced * 16 / 10
 		if threads > 1 {
@@ -171,10 +171,9 @@ func writePooledFile(t *testing.T, path string, groups, rows int) pooledRows {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The Int64 columns' pages are PLAIN, as DuckDB writes lineitem's: arrow-go
-	// v18.9.0's writer keeps a dictionary of their 50,000 values a chunk, where
-	// v18.7.0's fell back to PLAIN, and the file read so copies the dictionaries
-	// (step 538).
+	// The Int64 columns' pages are PLAIN, as DuckDB writes lineitem's: arrow-go's
+	// writer would keep a dictionary of their 50,000 values a chunk, and the file
+	// read so copies the dictionaries (step 538).
 	w := file.NewParquetWriter(f, root, file.WithWriterProps(parquet.NewWriterProperties(
 		parquet.WithCompression(compress.Codecs.Zstd), parquet.WithDataPageSize(64<<20),
 		parquet.WithDictionaryFor("a", false), parquet.WithDictionaryFor("c", false))))

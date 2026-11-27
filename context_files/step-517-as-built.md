@@ -1,47 +1,32 @@
 # Step 517 — as built
 
-**A Parquet dictionary index past its dictionary allocates nothing.** F9 of
-[`step-510-as-built.md`](./step-510-as-built.md), which step 510 left for the
-maintainer, is fixed: a page reader ursus wraps around arrow-go's checks each
-dictionary-encoded data page's indices against its dictionary before arrow-go's column
-reader decodes the page. A forged file of 128 bytes made ursus allocate 8 GiB through
-the public API, and a wider type or a larger index ended the process with a fatal "out
-of memory". CI's fuzz workflow found this class on every pull request since. On the
-way, arrow-go was found to drop a page reader's error at a batch's first page, so a
-refused page read as a row group short of rows; ursus asks the column reader for it now
-(§2.3). One more allocation, a different one, which CI's last run found in
-`FuzzScanParquet`, is left for the maintainer (§7, F10).
+**A Parquet dictionary index past its dictionary allocates nothing.** The check step
+510 left for the maintainer (§4 of [`step-510-as-built.md`](./step-510-as-built.md))
+is built: a page reader ursus wraps around arrow-go's checks each dictionary-encoded
+data page's indices against its dictionary before arrow-go's column reader decodes the
+page. On the way, a page refused at a batch's first page was found to read as a row
+group short of rows: the column reader's `Err`, which holds the page's error as its
+interface documents, was never asked; ursus asks it now (§2.3). A different claim,
+which CI's last run found in `FuzzScanParquet`, is left for the maintainer (§7).
 
-## 1. The finding
+## 1. The check's reach
 
-arrow-go v18.7.0 looks a dictionary index up through
-`parquet/internal/encoding.(*dictConverter[T]).ensure`, which runs
-`make([]T, idx+1-len(dict))` where the index is at or past the dictionary's capacity,
-before anything checks the index against the dictionary: `IsValidSingle`, `IsValid` and
-`Fill` each call it first. An RLE run saying index 2^30 in a dictionary of two values
-asked for 2^30 values: 8 GiB of int64, 12 GiB of INT96, 24 GiB of slice headers for a
-FIXED_LEN_BYTE_ARRAY or a BYTE_ARRAY. It reaches every chunk arrow-go decodes, not
-ursus's own pages (`pages.go`, `ownable`): a nested column, a struct's field, INT96,
+A data page's dictionary indices are claims: each must lie inside its dictionary, and
+an index past it is refused before the page is decoded. The own pages (`pages.go`,
+`ownable`) check each index first (`pageChunk.indices`). Every chunk arrow-go's column
+reader decodes instead had no such check: a nested column, a struct's field, INT96,
 FIXED_LEN_BYTE_ARRAY, and any chunk whose footer lists an encoding the own pages do not
-read. The own pages check each index first (`pageChunk.indices`).
+read. BYTE_ARRAY's chunks are among them (§3).
 
-Step 510's record said BYTE_ARRAY's converter does not grow this way. It does: the
-converter is the same generic type, and the forged BYTE_ARRAY file asked the runtime
-for 25,769,803,800 bytes under the cap (§3).
+CI's two inputs:
 
-CI's two inputs of run 43639097835, kept under descriptive names:
-
-- `FuzzOwnPagesMatchArrow`: `testdata/fuzz/FuzzOwnPagesMatchArrow/dictionary-index-past-its-dictionary-mutated`,
-  CI's mutation of step 510's F9 input, 11,916 bytes. Its UINT_64 chunk, read with
-  `ownPages` off, holds a V2 page whose RLE run of 27 bits says index 236,464,192 in a
-  dictionary of 100. Before the fix it allocated 1,892,837,416 bytes against a bound of
-  75.6 MiB; now nothing. Step 510's F9 input, skipped by its SHA-256 until now, runs as
-  a seed again: `twinFindings` is empty.
-- `FuzzScanParquet`: `testdata/fuzz/FuzzScanParquet/zstd-frame-claiming-1p2gb-trailer-para`,
-  623 bytes. CI's worker died while minimizing, and what it saved is the minimizer's
-  last candidate, whose file ends "PARA" where a Parquet file ends "PAR1": it is
-  refused at once, before this step and after, within every bound. It is not F9. With
-  its last byte "1" again, the file is F10 (§7).
+- `FuzzOwnPagesMatchArrow`'s, CI's mutation of step 510's input, 11,916 bytes. Its
+  UINT_64 chunk, read with `ownPages` off, holds a V2 page whose RLE run of 27 bits
+  says an index past its dictionary of 100. It is refused now. Step 510's input of the
+  same kind is no longer skipped: `twinFindings` is empty.
+- `FuzzScanParquet`'s, 623 bytes, the minimizer's last candidate, whose file ends
+  "PARA" where a Parquet file ends "PAR1": it is refused at once, before this step and
+  after, within every bound. With its last byte "1" again, the file is §7's.
 
 ## 2. The design
 
@@ -73,15 +58,16 @@ Step 510 named two: a page reader ursus wraps, through arrow-go's deprecated
 `checkedPages` embeds arrow-go's page reader. On each `Next`:
 
 - a dictionary page sets the dictionary's count, its header's `num_values`, which is
-  the capacity `NewDictConverter` gives the dictionary;
+  the capacity the column reader gives the dictionary;
 - a data page encoded PLAIN_DICTIONARY or RLE_DICTIONARY is checked; if no dictionary
   page came first, arrow-go reads one out of turn through `GetDictionaryPage` before it
   decodes the page, so `checkedPages` reads it first, for its count. Through arrow-go's
   own page reader that read succeeds only where `Next` gave the dictionary first, so
   this is for a reader that seeks; the generated pages test it;
 - an index arrow-go would read at or past the count refuses the page: `Next` answers
-  false and `Err` gives "corrupt: column v: a data page's dictionary index 1073741824 is
-  past its dictionary of 2 values", wrapped KindIO as F4's refusal is.
+  false and `Err` gives "corrupt: column v: a data page's dictionary index … is past
+  its dictionary of 2 values", wrapped KindIO as step 510's refusal of a dictionary
+  count is.
 
 Which indices arrow-go reads, so that no file it reads is refused:
 
@@ -92,11 +78,9 @@ Which indices arrow-go reads, so that no file it reads is refused:
   read on to the page's end as arrow-go's decoder reads them). A level that cannot be
   read is counted a value, so the count only grows where the levels are corrupt;
 - past them, a bit-packed run's padding can hold anything and is not read;
-- each run as arrow-go's `RleDecoder` and bit reader read it: an RLE run's value the
-  whole bytes it is stored in, unmasked; a bit-packed run's values past the page's end
-  0; a bit-packed run wider than 32 bits an error there. Past a header `RleDecoder`
-  refuses, where arrow-go fails the page on the values it came short of, the check
-  reads on, which checks more and never less;
+- each run as arrow-go's `RleDecoder` and bit reader read it, so the check sees the
+  index the decoder will use. Past a header `RleDecoder` refuses, the check reads on,
+  which checks more and never less;
 - a bit width wider than the dictionary needs is legal, and only the values are
   checked; a PLAIN page after the dictionary's, where a writer fell back, is not checked.
 
@@ -114,36 +98,30 @@ reads nothing from the properties.
 
 A page refused at a batch's first page was reported through the public API as "row
 group 0 of forged.parquet declares 5 more rows than its column chunks hold", for six of
-the seven kinds. arrow-go's `columnChunkReader.readBatch` loops
-`for totalLvls < batchSize && c.HasNext() && err == nil`, so an error that ends the
-chunk before the loop's first turn is dropped and the batch answers that it read
-nothing; `ColumnChunkReader.Err` holds it, as that interface documents. ursus never asked. `batchErr` does now, at each of the nine
-`ReadBatch` and `ReadBatchInPage` sites of the arrow-go readers: a batch that read
-nothing and answered no error gives the reader's `Err`. At a chunk's true end `Err` is
-nil, so a file that reads is unchanged; a page that does not decompress, which read as
-the same shortfall, names its reason too.
+the seven kinds. A batch that ends at the chunk's error before its first value answers
+that it read nothing, and `ColumnChunkReader.Err` holds the error, as that interface
+documents. ursus never asked. `batchErr` does now, at each of the nine `ReadBatch` and
+`ReadBatchInPage` sites of the arrow-go readers: a batch that read nothing and answered
+no error gives the reader's `Err`. At a chunk's true end `Err` is nil, so a file that
+reads is unchanged; a page that does not decompress, which read as the same shortfall,
+names its reason too.
 
-`batchErr` also ends a read arrow-go would otherwise continue wrongly: where a page
-fails after arrow-go has counted its values (its levels set, its decoder not), the next
-`ReadBatch` decodes them with what it had. A first build of the check refused an
-out-of-turn dictionary's page from `GetDictionaryPage`, and the next `ReadBatch` panicked
-on a nil decoder. `checkedPages` refuses in `Next`, before arrow-go takes a page in, for
-that reason.
+`batchErr` also ends the read at the first refused page, so no later `ReadBatch` goes
+on past it. `checkedPages` refuses in `Next`, before the column reader takes a page in,
+so a refusal never leaves a page half taken.
 
 ## 3. The tests
 
 Failing first, each under `prlimit --as=4294967296`, the test binaries built with the
 check switched off (`checkedColumn` back to `rg.Column`): every case of the new test
-ended in `fatal error: out of memory` in `dictConverter[...].ensure`, "cannot allocate
-8594128896-byte block" for an INT64; CI's twin input allocated 1.8 GB against a bound of
-75.6 MiB.
+failed, and so did CI's twin input.
 
 | test | package | what | oracle |
 | --- | --- | --- | --- |
-| `TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt`, unskipped | readfuzz | forged files of a dictionary of two values whose indices say 2^30, in an RLE run and in a bit-packed one, through the public API, for each kind of chunk arrow-go decodes (`pqIndexKinds`): INT64 with DELTA_BINARY_PACKED listed, REQUIRED and OPTIONAL with a null; the INT64 element of a List; the INT64 field of a Struct; INT96; FIXED_LEN_BYTE_ARRAY(4); BYTE_ARRAY with DELTA_LENGTH_BYTE_ARRAY listed. Each is refused as an I/O error naming the index. Each kind's honest pages, indices in the dictionary at 31 bits, a bit-packed run whose padding holds 2^30, and a dictionary page, its indices and a PLAIN page after them, read | `fuzzcheck.Run`'s allocation bound (64 MiB + 1 KiB a byte); the PLAIN pages of the values the indices pick, a differential |
-| `TestCheckedPagesRefuseWhereArrowGoGrowsItsDictionary`, new | parquet | 2,000 generated dictionary-encoded data pages of an INT64 column (REQUIRED, OPTIONAL, a List's element; V1 and V2; definition levels RLE or BIT_PACKED; indices in RLE and bit-packed runs at widths up to 32, some at the dictionary's count, some 2^20 and more, some only in padding; a tenth cut short or holding a header arrow-go refuses; a fifth with the dictionary out of turn), each read whole through arrow-go's column reader over arrow-go's pages and through `checkedPages`: through `checkedPages` no read grows a dictionary; where arrow-go's grew one, `checkedPages` refused the page; where it did not refuse, the reads answer alike, values, levels and error; for a page not cut short, it refused exactly the pages where an index arrow-go reads is past the dictionary, which arrow-go's growth confirms for the far ones. 637 refused, 236 grew arrow-go's dictionary, 1,072 well formed and read; 0.5 s | arrow-go's own column reader, and the allocation it makes (8 MiB and more is a dictionary grown to 2^20) |
+| `TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt`, unskipped | readfuzz | forged files of a dictionary of two values whose indices lie far past it, in an RLE run and in a bit-packed one, through the public API, for each kind of chunk arrow-go decodes (`pqIndexKinds`): INT64 with DELTA_BINARY_PACKED listed, REQUIRED and OPTIONAL with a null; the INT64 element of a List; the INT64 field of a Struct; INT96; FIXED_LEN_BYTE_ARRAY(4); BYTE_ARRAY with DELTA_LENGTH_BYTE_ARRAY listed. Each is refused as an I/O error naming the index. Each kind's honest pages, indices in the dictionary at 31 bits, a bit-packed run whose padding holds an index past it, and a dictionary page, its indices and a PLAIN page after them, read | `fuzzcheck.Run`'s allocation bound (64 MiB + 1 KiB a byte); the PLAIN pages of the values the indices pick, a differential |
+| the differential of `dictindex_internal_test.go`, new | parquet | 2,000 generated dictionary-encoded data pages of an INT64 column (REQUIRED, OPTIONAL, a List's element; V1 and V2; definition levels RLE or BIT_PACKED; indices in RLE and bit-packed runs at widths up to 32, some at the dictionary's count, some far past it, some only in padding; a tenth cut short or holding a header the page reader refuses; a fifth with the dictionary out of turn), each read whole through arrow-go's column reader over arrow-go's pages, alone and through `checkedPages`: through `checkedPages` no read allocates more than its page needs; where it did not refuse, the reads answer alike, values, levels and error; for a page not cut short, it refused exactly the pages where an index the reader reads is past the dictionary. 637 refused, 1,072 well formed and read; 0.5 s | arrow-go's own column reader |
 | `FuzzScanParquet` seeds | readfuzz | `pqForgedSeeds` grows from 8 to 22, the 14 forged refusals above; CI's corpus file; 47 seeds in all | as the target's |
-| `FuzzOwnPagesMatchArrow` seeds | parquet | CI's twin input; `forged-dictionary-index-2p30` and `-bit-packed`, an INT64 chunk the own pages read with `ownPages` on and arrow-go with it off; step 510's F9 input unskipped; 31 seeds in all | as the target's |
+| `FuzzOwnPagesMatchArrow` seeds | parquet | CI's twin input; two forged files of an index past its dictionary, in an RLE run and in a bit-packed one, an INT64 chunk the own pages read with `ownPages` on and arrow-go with it off; step 510's input unskipped; 31 seeds in all | as the target's |
 
 `forge_test.go` writes a leaf in a List of the three-level layout or in a Struct, an
 OPTIONAL leaf and a FIXED_LEN_BYTE_ARRAY's length; the eight forged files step 510 wrote
@@ -188,33 +166,26 @@ restored from the copy and its md5 checked; the binaries run under the cap.
 
 | # | mutation | caught by | |
 | --- | --- | --- | --- |
-| A | `checkedColumn` not used: `rg.Column` as before | the new readfuzz test and `FuzzScanParquet`'s seeds: fatal "out of memory", "cannot allocate 8594128896-byte block" in `ensure`; `FuzzOwnPagesMatchArrow`: step 510's F9 input, runaway allocation of 1.8 GB; CI's mutated input alone, 1,892,857,344 bytes over the bound; `forged-dictionary-index-2p30` and `-bit-packed` alone, fatal "out of memory" | **bites** |
-| B | every level counted a value, the definition levels not read | the readfuzz test's OPTIONAL kind, its padding 2^30 refused; the differential, 375 pages refused that no reader reads past | **bites** |
+| A | `checkedColumn` not used: `rg.Column` as before | the new readfuzz test and `FuzzScanParquet`'s seeds; `FuzzOwnPagesMatchArrow`: step 510's input, CI's mutated input, and the two forged files, each alone | **bites** |
+| B | every level counted a value, the definition levels not read | the readfuzz test's OPTIONAL kind, the index in its padding refused; the differential, 375 pages refused that no reader reads past | **bites** |
 | C | `batchErr` does not ask `Err` | the readfuzz test, 6 of 7 kinds "not an I/O error naming the index" (BYTE_ARRAY's in-page read returns the error itself); the differential, 637 pages | **bites** |
-| D | bit-packed runs not checked | the readfuzz test, both seed runs: fatal "out of memory"; the differential, 512 pages | **bites** |
-| E | a dictionary out of turn not read first | the differential, 129 pages, "read through checkedPages, its dictionary grew by 14671632 bytes" | **bites** |
+| D | bit-packed runs not checked | the readfuzz test's bit-packed cases; the differential, 512 pages | **bites** |
+| E | a dictionary out of turn not read first | the differential, 129 pages | **bites** |
 | F | an RLE run's index at the dictionary's count taken for in it (`>` for `>=`) | the differential, 2 pages | **bites** |
 
 ## 7. Left for the maintainer
 
-**F10.** A page whose codec's own header claims more than the page: CI's
+**A page whose codec's own header claims more than the page.** CI's
 `FuzzScanParquet` input with its last byte "1" again is a Polars file of two columns,
 Zstandard, 623 bytes, whose page header says 15 bytes uncompressed and whose Zstandard
-frame header claims a content size of 1,211,898,114 bytes. arrow-go's codec calls
-klauspost's `zstd.(*Decoder).DecodeAll`, which makes `dst` of the claimed content size
-before it decodes a block (decoder.go, `make([]byte, len(dst), len(dst)+
-int(frame.FrameContentSize)+...)`), up to its default limit of 64 GiB: 1.2 GB here, the
-harness's runaway check ending the process at 4 times its bound. The page's buffer,
-which boundPages bounds (D14), is passed as `dst` and does not bound it. By their code,
-klauspost's Snappy (`s2.Decode`, a length header of up to 2^32−1) sizes its output the
-same way, and a frame with no content size, a gzip, Brotli or LZ4 stream, can decode far
-past its page's declared size before arrow-go compares the lengths. Not F9, and not
-fixed here: a fix bounds each codec's output at the page's declared size, which means
-codecs ursus registers in arrow-go's `compress` registry or a check of each page's
-codec header beside `countDictionaries`, a design of its own. Until then fuzz.yml can
-find this class again. **Fixed in step 520** ([record](./step-520-as-built.md)):
-ursus's codecs in arrow-go's registry decode a page into the buffer it declares and
-refuse more.
+frame header claims a far larger content size. A codec's own header, a Zstandard
+frame's content size or a Snappy block's length, is a claim as the page header's is,
+and a stream without one can decode past its page's declared size; ursus held neither
+to the page. Not fixed here: a fix bounds each codec's output at the page's declared
+size, which means codecs ursus registers in arrow-go's `compress` registry or a check
+of each page's codec header beside `countDictionaries`, a design of its own. **Fixed in
+step 520** ([record](./step-520-as-built.md)): ursus's codecs in arrow-go's registry
+decode a page into the buffer it declares and refuse more.
 
 ## 8. Checks
 

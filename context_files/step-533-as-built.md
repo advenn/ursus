@@ -1,57 +1,23 @@
 # Step 533 — as built
 
-**A Parquet schema element's `num_children` is bounded before arrow-go sizes by it.**
-F20 of [`step-531-as-built.md`](./step-531-as-built.md) §7, left open there, is fixed.
-arrow-go's `schema.FromParquet` makes each group of a footer's schema a slice of the
-children it claims before it reads one, so a file of 125 bytes whose root claimed
-16,909,320 children cost 258 MiB, and a root claiming 2^31−1 ends the process. Step
-521's footer walk now reads the schema's elements as a tree, as `FromParquet` does, and
-refuses as corrupt, an I/O error, before arrow-go reads the footer, an element claiming
-more children than the elements after it and a tree that does not close by the list's
-end. The second rule is the one that matters: groups nested a thousand deep, each
-claiming every element after it, pass the first and cost arrow-go memory by the square
-of the elements (§2.2). Every footer ursus, pyarrow and the fixtures' writers wrote
-passes as before. arrow-go's main does not fix it; it is C3 of the arrow-go report.
+**A Parquet schema element's `num_children` is bounded before anything is sized by
+it.** [`step-531-as-built.md`](./step-531-as-built.md) §7 left a fuzz input open: a
+file of 125 bytes whose root claims 16,909,320 children. Step 521's footer walk now
+reads the schema's elements as a tree, as `FromParquet` does, and refuses as corrupt,
+an I/O error, before arrow-go reads the footer, an element claiming more children than
+the elements after it and a tree that does not close by the list's end. The second rule
+is the one that matters: groups nested a thousand deep, each claiming every element
+after it, pass the first, and their claims add up by the square of the elements
+(§2.2). Every footer ursus, pyarrow and the fixtures' writers wrote passes as before.
 
-## 1. The finding, and where arrow-go allocates
+## 1. The input
 
-The input is `~/ursus-scratch-archive/step531-findings/FuzzScanParquet-4c22d5fafe9eafd7-schema-num-children`,
-a file of 125 bytes, kept now as the seed `FuzzScanParquet/schema-num-children`.
-Replayed on this branch's base under `prlimit --as=4294967296` and `timeout`, with
-`-test.memprofile` and `-test.memprofilerate=1`:
+The fuzzer's file of 125 bytes, found at step 531. The footer is 64 bytes. Its schema
+list's header says one element of compact type 13, which the walk reads as a
+`SchemaElement` whatever the header says, as arrow-go does (step 521). The element is
+the root: its name "schema", and `num_children` 16,909,320. No element follows it.
 
-```
-fuzzcheck: tolerated: a panic in github.com/apache/arrow-go/v18/parquet/schema.(*Schema).NumColumns, ...
-parquet_test.go:131: fuzzcheck: allocated 270561536 bytes (258.0 MiB) in one call, over the bound of 67236864 (64.1 MiB)
-```
-
-The profile puts 258.02 MB, all of it, at one site:
-
-```
-github.com/apache/arrow-go/v18/parquet/schema.FromParquet.func1
-github.com/apache/arrow-go/v18/parquet/schema.FromParquet
-github.com/apache/arrow-go/v18/parquet/metadata.(*FileMetaData).initSchema
-github.com/apache/arrow-go/v18/parquet/metadata.NewFileMetaData
-github.com/apache/arrow-go/v18/parquet/file.(*Reader).parseMetaData
-github.com/apache/arrow-go/v18/parquet/file.NewParquetReader
-github.com/advenn/ursus/internal/source/parquet.(*Source).openFile
-```
-
-`FromParquet.func1` is its `nextNode`, which runs
-`fields := make([]Node, 0, elem.GetNumChildren())` for each group before it reads a
-child, and answers "parquet: malformed schema: not enough elements" only when the list
-runs out. The footer is 64 bytes. Its schema list's header says one element of compact
-type 13, which arrow-go reads as a `SchemaElement` whatever the header says (step 521).
-The element is the root: its name "schema", and `num_children` in a varint of 6 bytes,
-`90 90 90 90 90 00`, which Thrift's `readVarint32` cuts to 32 bits, 33,818,640, zigzag
-16,909,320. A slice of 16,909,320 interfaces is 270,549,120 bytes, 258.0 MiB. v18.7.0's
-`NewFileMetaData` drops the error `initSchema` hands it from `FromParquet`, so the
-footer is left with no schema, and `initColumnOrders` panics on it, the panic
-fuzzcheck tolerated.
-
-pyarrow 25.0.1 refuses the file: "Malformed schema: not enough elements". arrow-go's
-main (v18.9.0-rc0, commit fc5d5ce5) has the same `FromParquet`, byte for byte (§6), so
-it allocates the same 258 MiB, then returns the error, where v18.7.0 panicked.
+pyarrow 25.0.1 refuses the file: "Malformed schema: not enough elements".
 
 Steps 423 and 521's walk kept each element's `num_children`, to measure the schema's
 depth (`schemaDepth`), and held nothing else to them.
@@ -77,19 +43,16 @@ reads it:
 2. does not close by the list's end, a group still owed children when the elements
    run out, `errSchemaOpen`: pyarrow's "not enough elements", and arrow-go's.
 
-A tree that closes holds an element for each child its groups claim, so the slices
-arrow-go makes add up to its elements: linear in the footer, which step 521 already
+A tree that closes holds an element for each child its groups claim, so what its
+groups claim adds up to its elements: linear in the footer, which step 521 already
 bounds against its bytes.
 
 **Rule 1 alone is not enough.** The root and 999 groups, each the next's parent, each
 claiming every element after it, then leaves, pass it: each claim is the elements after
 it exactly. The last group takes the leaves and closes, and the group above it is owed
-one child more, so the tree does not close. arrow-go has made all thousand slices by
-then, each live on its recursion, 16 bytes for each child claimed: by the square of the
-elements, and the depth, 1,000, is within `maxSchemaDepth`. Measured, with rule 2 cut
-out (§5): 324 MiB from a file of 125 KiB (`pqUnclosedSchema(1_000, 20_000)`, leaves of
-6 bytes), 2,657 bytes a byte; 45 MB from a footer of 34 KB in the internal test; and a
-1.8 MB file of 300,000 leaves ends arrow-go under a 4 GiB cap (§6, `repro/21`).
+one child more, so the tree does not close. Their claims add up by the square of the
+elements, and the depth, 1,000, is within `maxSchemaDepth`. Only the list's end shows
+the tree open, so the walk reads to it before the schema is built.
 
 **Rule 1 is implied by rule 2.** An element of the tree claiming more than the elements
 after it leaves the tree open at the end. It is kept because the brief asks for it and
@@ -101,23 +64,23 @@ either way.
 tree for the schema and read no element after it. Probed with footers of nothing but a
 schema:
 
-| schema, each element's `num_children` | pyarrow 25.0.1 | arrow-go v18.7.0 | arrow-go main |
-| --- | --- | --- | --- |
-| root 2, one leaf | not enough elements | panic (error dropped) | not enough elements |
-| root 1, two leaves | reads `a` | reads `a` | reads `a` |
-| root 1, group 1, two leaves | reads `g.a` | reads `g.a` | reads `g.a` |
-| root 2, group 1, one leaf | not enough elements | panic | not enough elements |
-| root 1, group 5, one leaf | not enough elements | panic | not enough elements |
-| root 2^31−1, one leaf | not enough elements | fatal: out of memory, 32 GiB | fatal: out of memory, 32 GiB |
-| root 0, one leaf | root had no children | panic | root had no children |
-| root 2, group 2 of two leaves, a leaf | reads `g.a`, `g.b`, `c` | the same | the same |
+| schema, each element's `num_children` | pyarrow 25.0.1 |
+| --- | --- |
+| root 2, one leaf | not enough elements |
+| root 1, two leaves | reads `a` |
+| root 1, group 1, two leaves | reads `g.a` |
+| root 2, group 1, one leaf | not enough elements |
+| root 1, group 5, one leaf | not enough elements |
+| root 2^31−1, one leaf | not enough elements |
+| root 0, one leaf | root had no children |
+| root 2, group 2 of two leaves, a leaf | reads `g.a`, `g.b`, `c` |
 
 So the walk reads the tree only: once the root's tree has closed, an element after it
 is held to neither rule. That makes it refuse exactly where pyarrow and arrow-go find
 the tree malformed, which the generated differential checks (§3). Refusing the trailing
 elements too would refuse what both read; its mutant (M4) fails that differential. A
-root claiming none with elements after it is arrow-go's own error, which costs nothing,
-and is left to it as before.
+root claiming none with elements after it is refused by arrow-go's own check, and is
+left to it as before.
 
 **A schema nested past `maxSchemaDepth` is refused for its depth first.** `schemaDepth`
 answers the depth with a tree error, and `measureFooter` judges the depth before the
@@ -137,9 +100,8 @@ scan_parquet: corrupt: walking the footer: the schema's elements end before its 
 
 ## 3. The tests and their oracles
 
-- **The seed** `internal/readfuzz/testdata/fuzz/FuzzScanParquet/schema-num-children`,
-  the fuzzer's input as it found it. `FuzzScanParquet` runs it in every `go test`,
-  under fuzzcheck's bounds.
+- **The seed**: §1's input, in `FuzzScanParquet`'s corpus, which runs it in every
+  `go test`, under fuzzcheck's bounds.
 - **`TestFooterWalkDifferential`, extended** (`internal/source/parquet`). The oracle is
   arrow-go itself, over every footer step 521 walks: 25 random files of ursus's writer,
   pyarrow 25.0.1's in `testdata/oracle/footers`, the fixtures in `testdata/parquet`,
@@ -149,10 +111,9 @@ scan_parquet: corrupt: walking the footer: the schema's elements end before its 
   is read back with `tparse`, a reader of the compact protocol into the test's `tval`,
   and written again; the walk passes it and arrow-go reads it. Then, for each element:
   claiming a child more than it does, the walk refuses it, as `errSchemaOpen` or
-  `errSchemaChildren`, and arrow-go refuses it (an error, or v18.7.0's panic on a
-  dropped one); claiming one more than the elements after it, the walk answers
-  `errSchemaChildren` and arrow-go refuses it; claiming 2^31−1, the walk answers
-  `errSchemaChildren`, and arrow-go is not asked. A writer's footer has no element
+  `errSchemaChildren`, and arrow-go refuses it; claiming one more than the elements
+  after it, the walk answers `errSchemaChildren` and arrow-go refuses it; claiming
+  2^31−1, the walk answers `errSchemaChildren`. A writer's footer has no element
   after its tree, so one child more always leaves the tree open: that is a count, not
   a typed answer.
 - **`TestASchemaTreeIsReadAsArrowGoReadsIt`**, a differential over generated inputs:
@@ -163,13 +124,10 @@ scan_parquet: corrupt: walking the footer: the schema's elements end before its 
   1,685 read, 1,354 of those with elements after the root's tree, counted from
   arrow-go's own tree. The probe table in §2.2 is pyarrow's agreement on the shapes; it
   is not a test, since pyarrow is not in the recorded oracle.
-- **`TestASchemaTreeNotClosingIsRefusedBeforeArrowGoAllocates`**: the chain of §2.2,
-  1,000 groups and 2,000 leaves. The walk answers its depth, 1,000, and
-  `errSchemaOpen`; `measureFooter` refuses it as `ErrIO`; with a group more, 1,001
-  deep, as `ErrUnsupported`, for its depth, as before. Off the race detector, arrow-go
-  reads it, and must allocate at least 16 bytes for each child claimed, a Go oracle,
-  the sum of the claims, before it refuses it: it allocated 45,254,928 bytes from
-  33,901, 1,334 a byte.
+- **`TestASchemaTreeNotClosingIsRefusedAsCorrupt`**: the chain of §2.2, 1,000 groups
+  and 2,000 leaves. The walk answers its depth, 1,000, and `errSchemaOpen`;
+  `measureFooter` refuses it as `ErrIO`; with a group more, 1,001 deep, as
+  `ErrUnsupported`, for its depth, as before.
 - **`TestASchemaClaimingMoreChildrenThanItHoldsIsRefused`** (`internal/readfuzz`), through
   the public API: 46 files, each refused within `fuzzcheck.Run`'s bounds, its schema,
   its rows and its `Count` each an `ErrIO` saying corrupt. The fuzzer's input; the
@@ -210,37 +168,25 @@ test (R) and `FuzzScanParquet`'s seeds (S), each under `prlimit --as=8589934592`
 
 | mutation | fails | how |
 | --- | --- | --- |
-| M3, both rules off (the base's behaviour) | D, G, C, R, S | D: "schema element 0 of 11 claiming 2^31-1 children: the walk answers <nil>"; R: "allocated 271048736 bytes (258.5 MiB) in one call, over the bound of 67236864 (64.1 MiB)", the fuzzer's input; S: fatal "out of memory: cannot allocate 34359738368-byte block", the new seeds |
-| M2, rule 2 off | D, G, C, R | D: "claiming 7 children, not 6: the walk answers <nil>, arrow-go a panic"; G: "children [4 3 1 4 3 0 0 0]: the walk answers <nil>"; R: "allocated 340125896 bytes (324.4 MiB) in one call, over the bound of 198205440 (189.0 MiB)", the chain |
+| M3, both rules off (the base's behaviour) | D, G, C, R, S | D: "schema element 0 of 11 claiming 2^31-1 children: the walk answers <nil>"; R: the fuzzer's input not refused; S: the new seeds fail their target |
+| M2, rule 2 off | D, G, C, R | D: "claiming 7 children, not 6: the walk answers <nil>"; G: "children [4 3 1 4 3 0 0 0]: the walk answers <nil>"; R: the chain not refused |
 | M1, rule 1 off | D | "claiming 9 children, one past the elements after it: the walk answers the schema's elements end before its groups' children do", the right refusal under the other name (§2.2) |
 | M4, elements after the tree held to both rules | G | "children [4 2 0 2 0 0 0 0 0 1 3 0]: the walk answers … element 10 of 12 claims 3, arrow-go <nil>" |
 | M6, rule 1 by one too strict (`>=`) | D, G, C, W, R | D: "the walk refuses the footer: … element 6 of 8 claims 1", an honest footer; W: everyList refused |
 | M7, rule 1 by one too loose (`> after+1`) | D | "claiming 7 children, one past the elements after it: the walk answers the schema's elements end before …" |
 | M5, the depth judged after the tree | C | "a group more, 1001 deep: measureFooter answers ursus: scan_parquet: corrupt: walking the footer" |
 
-## 6. arrow-go
-
-`parquet/schema/schema.go` is the same in v18.7.0 and in main (v18.9.0-rc0, commit
-fc5d5ce5): `diff` of the two prints nothing, and `num_children` is read nowhere else
-in either. Main's one change on this path is `initSchema` returning `FromParquet`'s
-error, which the report's summary already lists as fixed ("schema root-children
-mismatch"): main answers the fuzzer's input with "not enough elements" after the same
-258 MiB.
-
-So the finding went to the private report to the Apache Arrow security team
-(2026-11-26), with its reproducers and a suggested fix, and is posted nowhere else.
-
-## 7. Observations and what is left
+## 6. Observations and what is left
 
 - **A schema with elements after its root's tree reads**, as pyarrow and arrow-go read
   it, the elements unread. No writer writes one; it costs nothing.
-- **A root claiming no children with elements after it** is left to arrow-go, which
-  refuses it without allocating (v18.7.0 by a panic ursus recovers, main by an error).
+- **A root claiming no children with elements after it** is left to arrow-go's own
+  check, which refuses it.
 - **The depth is still measured over the whole list**, the elements after the root's
   tree among them, as steps 423 and 521 measured it; such elements nested past 1,000
   levels are refused for their depth, as before.
 
-## 8. Checks
+## 7. Checks
 
 After the last edit, with `GOFLAGS=-p=1 GOMAXPROCS=4 GOEXPERIMENT=simd GOAMD64=v3`:
 

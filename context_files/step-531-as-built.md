@@ -1,64 +1,30 @@
 # Step 531 — as built
 
-**A malformed DELTA_BINARY_PACKED page is refused, not hung on.** F18 of
-[`step-521-as-built.md`](./step-521-as-built.md), left open there, is fixed. A
-DELTA_BINARY_PACKED page whose header counted 0 values, in a REQUIRED column's page of
-5, hung arrow-go's column reader forever, on master too. Each delta-packed run of a
-DELTA_BINARY_PACKED, DELTA_LENGTH_BYTE_ARRAY or DELTA_BYTE_ARRAY data page is now
-checked before arrow-go decodes it, in step 517's `checkedPages`, and a run the format
-does not allow is refused as corrupt, an I/O error. On the way, two runs the format
-allows were found to make arrow-go allocate gigabytes; they are bounded too (§2.3).
-Every delta page pyarrow and arrow-go write reads as before.
+**A malformed delta-packed page is refused as corrupt.** Step 521 left one fuzz input
+open: a DELTA_BINARY_PACKED page whose header counts 0 values, in a REQUIRED column's
+page of 5 (§1). Each delta-packed run of a DELTA_BINARY_PACKED,
+DELTA_LENGTH_BYTE_ARRAY or DELTA_BYTE_ARRAY data page is now checked before arrow-go
+decodes it, in step 517's `checkedPages`, and a run the format does not allow is
+refused as corrupt, an I/O error. A run's counts are claims, so two runs the format
+allows are bounded too, by what the page and its chunk declare (§2.3). Every delta
+page pyarrow and arrow-go write reads as before.
 
-## 1. The finding, and where arrow-go loops
+## 1. The input
 
-The input is `~/ursus-scratch-archive/step521-findings/FuzzOwnPagesMatchArrow-3194fa9b880f15d1-delta-page-hang`,
-425 bytes, kept now as the seed `FuzzOwnPagesMatchArrow/delta-page-hang`. Replayed on
-this branch's base under `prlimit --as=4294967296` and `timeout`, fuzzcheck called it
-a hang after 10 s. Every stack ends in the same loop:
+A fuzz input of 425 bytes from step 521's runs. The file has one REQUIRED INT64 column
+whose footer lists DELTA_BINARY_PACKED, so arrow-go's column reader decodes it, not the
+reader's own pages (`ownable`). Its data page holds 5 values. Its body is 6 bytes:
+block size 31, 10 miniblocks, a count of 0 values, first value 0, and two bytes more.
 
-```
-parquet/file.(*columnChunkReader).readBatchInPage   column_reader.go:764
-parquet/file.(*columnChunkReader).readBatch          column_reader.go:747
-parquet/file.(*Int64ColumnChunkReader).ReadBatch     column_reader_types.gen.go:93
-```
+The format allows neither the block nor the count. A block is a positive multiple of
+128 values, which pyarrow 25.0.1 names first ("the number of values in a block must be
+multiple of 128, but it's 31"). A count of 0 cannot hold the page's 5 values, and a
+REQUIRED column has no definition levels to excuse them. A block of 128 with a count
+of 0 is as wrong (§3, the forged files), so the check must refuse the count, not only
+the block that step 521's record named.
 
-The file has one REQUIRED INT64 column whose footer lists DELTA_BINARY_PACKED, so
-arrow-go's column reader decodes it, not the reader's own pages (`ownable`). Its data
-page holds 5 values. Its body is 6 bytes: block size 31, 10 miniblocks, a count of 0
-values, first value 0, and two bytes more.
-
-arrow-go v18.7.0's `deltaBitPackDecoder.SetData` takes the header's count for its
-values (`d.nvals = int(d.totalValues)`). `Decode` answers `min(len(out), nvals)`, which
-is 0, with no error. `columnChunkReader.readBatch` loops
-`for totalLvls < batchSize && c.HasNext() && err == nil`. A REQUIRED column has no
-definition levels, so each pass reads 0 levels and 0 values, and the page never ends.
-**The hang is the count, not the block of 31** that step 521's record named. The block
-of 31 is wrong too, and it is what pyarrow 25.0.1 names first ("the number of values in
-a block must be multiple of 128, but it's 31"). A block of 128 with a count of 0 hangs
-the same (§3, the forged files).
-
-arrow-go's decoder checks nothing else of a run either. Each forged run of §3 was read
-with the check switched off, each file in its own process under the cap and a 6-second
-timeout. This table is over the nine runs forged: one in each of seven kinds of chunk,
-and both runs of the eighth, a DELTA_BYTE_ARRAY page.
-
-| forgery | arrow-go without the check |
-| --- | --- |
-| a count of 0, a count one short | hang in 3 (REQUIRED INT64, INT32, a Struct's field); other values, no error, in 2 (OPTIONAL INT64, a List's element); a recovered panic in 4 (byte arrays) |
-| a block of 2^32 values | fatal "out of memory" in 9 of 9: 4 or 8 GiB, a slice of a miniblock's 2^30 values (`unpackNextMini`) |
-| a DELTA_LENGTH_BYTE_ARRAY or DELTA_BYTE_ARRAY count of 2^40 | fatal "out of memory" in 4: a slice of 4 TiB of lengths, made at `SetData` before one is decoded |
-| a miniblock 65 bits wide | other values, no error, in 2 (DELTA_LENGTH_BYTE_ARRAY: its `SetData` drops the error of the run of lengths and reads the lengths it did not get as 0); an error or a recovered panic in 7 |
-| the page ending inside a miniblock's values | other values, no error, in 5: arrow-go's bit reader reads past a page's end as 0s; a recovered panic in 4 |
-| the page ending inside a miniblock's padding | read as the PLAIN twin in 5 (pyarrow refuses all 9) |
-| a block of 31, 3 or 256 miniblocks to a block of 128 | a recovered panic: a block runs past its bit widths |
-| a block of 0, no miniblock, a page ending inside a block's bit widths | an error, or a recovered panic |
-| blocks of 64 in 2 miniblocks, 8 miniblocks of 16 | read as the PLAIN twin: arrow-go decodes a layout the format does not allow |
-
-The two runs of §2.3, which the format allows, were probed the same way on a build
-without their bounds. One miniblock of 2^31 values 0 bits wide was a fatal "out of
-memory" in 9 of 9 (16 GiB for an INT64). A page claiming 2^26 values past its chunk's,
-in one such miniblock, allocated 256 or 512 MiB in 6 of 9 and read other values.
+Every other field of a run is a claim of the same kind, a size or a count the bytes
+after it must hold, so the check takes the whole run apart (§2.2).
 
 ## 2. The design
 
@@ -108,39 +74,37 @@ What is not refused:
 
 - **A miniblock holding no value**, in the last block, may give any bit width; the
   format says readers must accept it, and its bytes are absent. It is not looked at.
-- **An INT32's miniblock up to 64 bits wide** is read. arrow-go's writer takes an
-  INT32's deltas as an int64's (`deltaBitPackEncoder.Put`). Where they span more than
-  32 bits it writes miniblocks 33 or 34 bits wide, and arrow-go reads them back.
-  pyarrow fails such a page ("Unexpected end of stream"). The brief's bound is 64.
+- **An INT32's miniblock up to 64 bits wide** is read. A writer that takes an INT32's
+  deltas as an int64's packs them 33 or 34 bits wide where they span more than 32
+  bits, and arrow-go's reader reads them back. pyarrow fails such a page ("Unexpected
+  end of stream"). The brief's bound is 64.
 - **A count past the values that are not null**, within the page's, is read. Its extra
   values are decoded from the padding and not used.
 
 The padding is required because pyarrow requires it: it refuses a run cut inside the
-last miniblock's padding, and arrow-go's run of prefix lengths ends there. arrow-go
-alone reads the cut page as its PLAIN twin (§1).
+last miniblock's padding, and the suffixes' run begins where the prefixes' padding
+ends.
 
 ### 2.3 Two runs the format allows, bounded
 
-Writing the forgeries found two allocations that no rule above stops:
+A run's counts are claims a few bytes can make. Two that no rule above stops are
+bounded by what the page and its chunk declare:
 
-- **A huge miniblock 0 bits wide.** arrow-go makes a slice of a miniblock's values for
-  the first miniblock it decodes (`make([]T, 0, valsPerMini)`), and decodes every value
-  of each miniblock, which a width of 0 holds in no byte. A page of 200 values in one
-  miniblock of 2^31 asked for 16 GiB. The format sets no bound on a block. arrow-go and
-  pyarrow write 32 values a miniblock (a block of 128 in four), as parquet-mr does by
-  default. So a miniblock of more values than both its run's count and 65,536
-  (`maxMiniblock`) is refused. Below that, the slice is at most 512 KiB, or a slice of
-  the count.
+- **A huge miniblock 0 bits wide.** A width of 0 holds a miniblock's values in no byte,
+  so its count is a claim the page's bytes do not bound, and a decoder makes room for a
+  miniblock's values to decode them. A page of 200 values can claim one miniblock of
+  2^31. The format sets no bound on a block. arrow-go and pyarrow write 32 values a
+  miniblock (a block of 128 in four), as parquet-mr does by default. So a miniblock of
+  more values than both its run's count and 65,536 (`maxMiniblock`) is refused. Below
+  that, a miniblock's values are at most 512 KiB, or the count's.
 - **A page claiming more values than its column chunk.** A page's values are its
-  header's claim. arrow-go's page reader takes a page claiming more than its chunk's
-  values (`serializedPageReader.Next` adds them to `rowsSeen`), and a
-  DELTA_LENGTH_BYTE_ARRAY's slice of lengths is the count's size. So the count is
-  bounded by the chunk's values too, which the footer gives and `checkRowCounts` (step
-  416) holds to its row group's rows.
+  header's claim, and a DELTA_LENGTH_BYTE_ARRAY's run of lengths is decoded whole, the
+  count's size. So the count is bounded by the chunk's values too, which the footer
+  gives and `checkRowCounts` (step 416) holds to its row group's rows.
 
-Each allocation of the decoder is then within what the footer declares, or 512 KiB.
-pyarrow reads both runs: it decodes values into its output, and it reads only as many
-values as the levels ask for.
+What a run can claim is then within what the footer declares, or 512 KiB. pyarrow
+reads both runs, which the format allows; the reader refuses them, two of §3's known
+disagreements.
 
 ### 2.4 The error
 
@@ -158,9 +122,8 @@ their bits set, eight bytes a load, which the dictionary check gains too;
 
 ## 3. The tests and their oracles
 
-- **The seed**, `FuzzOwnPagesMatchArrow/delta-page-hang`, F18's input. Without the
-  check it hangs (§6).
-- **`TestAMalformedDeltaPageIsRefusedNotHungOn`** (readfuzz, public API). Nine kinds of
+- **The seed**, §1's input, in `FuzzOwnPagesMatchArrow`'s corpus.
+- **`TestAMalformedDeltaPageIsRefused`** (readfuzz, public API). Nine kinds of
   chunk arrow-go decodes a delta page of (`pqDeltaKinds` in `forge_test.go`): INT64
   REQUIRED and OPTIONAL with a null in seven rows; INT32, and an INT32 whose deltas
   span more than 32 bits, honest only; the INT64 element of a List; the INT64 field of
@@ -172,7 +135,7 @@ their bits set, eight bytes a load, which the dictionary check gains too;
   DELTA_BYTE_ARRAY's. That is 208 files. The forgeries:
   - three honest layouts;
   - an empty miniblock 255 bits wide;
-  - F18's block of 31, and blocks of 0 and of 2^32;
+  - §1's block of 31, and blocks of 0 and of 2^32;
   - blocks of 64 in 2 miniblocks, and 8 miniblocks of 16 values;
   - no miniblock, and 3 or 256 to a block of 128;
   - a miniblock 65 bits wide;
@@ -206,7 +169,7 @@ their bits set, eight bytes a load, which the dictionary check gains too;
   - **ED 13**: §2.3's two runs, which pyarrow reads, as the forged run's values;
   - **SE 1**: the INT32 packed 33 bits wide.
 
-  pyarrow refuses everything else the reader refuses, F18's block of 31 among them, and
+  pyarrow refuses everything else the reader refuses, §1's block of 31 among them, and
   the padding cut.
 - **`TestPyarrowDeltaFilesReadAsTheirPlainTwin`** (readfuzz). pyarrow 25.0.1's delta
   pages, `testdata/parquet/delta/` from `bench/scripts/oracle/write_delta.py`. One table
@@ -221,7 +184,7 @@ their bits set, eight bytes a load, which the dictionary check gains too;
   every integer column under DELTA_BINARY_PACKED and its strings and binaries under the
   two others. V1 and V2, small pages, Zstandard, four null patterns. Each is read batch
   for batch as the same rows written PLAIN. Its `u32` column spans INT32's range, so
-  arrow-go packs it 33 bits wide, which the test requires to happen.
+  its deltas are packed 33 bits wide, which the test requires to happen.
   `checkDeltaRead` requires each delta column to be read through `checkedPages`.
 - **`TestCheckedPagesRefuseMalformedDeltaRuns`** (internal, step 517's pattern).
   3,000 generated pages, 600 under the race detector, seed logged: INT64 and INT32
@@ -229,8 +192,8 @@ their bits set, eight bytes a load, which the dictionary check gains too;
   ones under the two others. V1 and V2, levels RLE or BIT_PACKED. Blocks of 128 to
   1,024 in miniblocks of 32 to 1,024, or one miniblock of 65,536; deltas 0 to 64 bits.
   A third of the pages have empty miniblocks of any width. Most are forged once:
-  - the block size or the miniblocks wrong, a layout arrow-go decodes and the format
-    does not allow, a miniblock 65 bits wide or more, or a huge miniblock;
+  - the block size or the miniblocks wrong, a layout the format does not allow, a
+    miniblock 65 bits wide or more, or a huge miniblock;
   - a count short, or past the page's or the chunk's;
   - a count past the values within the padding;
   - the page cut inside the blocks or the header.
@@ -242,7 +205,7 @@ their bits set, eight bytes a load, which the dictionary check gains too;
   the format allows, it must answer the generator's values and levels too. Each
   forgery must make at least 20 pages; a run makes 100 to 470 of each.
 - **Seeds.** `FuzzScanParquet` starts from each kind's honest page and its count of 0
-  (`pqForgedSeeds`). `FuzzOwnPagesMatchArrow` gains F18's input and six `forged-delta-*`
+  (`pqForgedSeeds`). `FuzzOwnPagesMatchArrow` gains §1's input and six forged delta
   pages.
 - **Polars** writes no delta page. Polars 2.1.0's `write_parquet` takes no encoding,
   and wrote PLAIN and dictionaries for Int64, Int32 and String columns, sorted or not.
@@ -282,12 +245,11 @@ Each target ran alone, under the shared lock, with these settings:
 | run, code | `FuzzOwnPagesMatchArrow` | `FuzzScanParquet` |
 | --- | --- | --- |
 | 1, the check without §2.3's bounds | 343,723 execs, PASS | 206,347 execs, PASS |
-| 2, with them | 254,654 execs, PASS | `4c22d5fafe9eafd7` after 12 s, F20 (§7) |
+| 2, with them | 254,654 execs, PASS | `4c22d5fafe9eafd7` after 12 s, a footer's (§7) |
 | 3, final | 220,937 execs, PASS | 224,279 execs, PASS |
 
-F20 was replayed under the cap. It is not a delta page: arrow-go allocates while
-it builds the footer's schema, before any page is read, on a path this step does not
-touch.
+`4c22d5fafe9eafd7` was replayed under the cap. It is not a delta page: its claim is in
+the footer's schema, read before any page, on a path this step does not touch.
 
 ## 6. The teeth
 
@@ -298,16 +260,16 @@ generated pages (G), arrow-go's files (A) and the seed (S).
 
 | mutation | fails | how |
 | --- | --- | --- |
-| the check off (`deltaEncoded` false) | F, P, G, S | F and P: fatal "out of memory", 8 and 4 GiB; G: fatal "out of memory", 11 GB; S: "hang: no answer after 10s" |
-| no multiple of 128 | F, P, G | F: "blocks of 64 in 2 miniblocks: read as 200 rows, and no error"; P: "the reader answers S, pyarrow E (the number of values in a block must be multiple of 128…)"; G: a "block" page, "checkedPages answered <nil>" |
-| no multiple of 32 a miniblock | F, P, G | F: "8 miniblocks of 16 values: read as 200 rows"; P: "the reader answers S, pyarrow E (the number of values in a miniblock must be multiple of 32…)"; G: a "layout" page not refused |
-| a count short of the values passes | F, P, G | each: "hang: no answer after 10s" |
+| the check off (`deltaEncoded` false) | F, P, G, S | F, P and G: the forged runs not refused; S: the seed fails its target |
+| no multiple of 128 | F, P, G | F: "blocks of 64 in 2 miniblocks" not refused; P: "the reader answers S, pyarrow E (the number of values in a block must be multiple of 128…)"; G: a "block" page, "checkedPages answered <nil>" |
+| no multiple of 32 a miniblock | F, P, G | F: "8 miniblocks of 16 values" not refused; P: "the reader answers S, pyarrow E (the number of values in a miniblock must be multiple of 32…)"; G: a "layout" page not refused |
+| a count short of the values passes | F, P, G | each: the short counts not refused |
 | empty miniblocks' widths checked | F, P, G | F: "honest, a miniblock holding no value 255 bits wide" refused; P: "the reader answers E, pyarrow S"; G: "spare widths" pages refused |
 | widths at most 32 | F, P, Y, G, A | every honest page with a wide miniblock refused, pyarrow's and arrow-go's files among them |
 | the count exactly the values | F, P, G | F: "a count one past the values" refused; P: "the reader answers E, pyarrow S"; G: "count past the values" pages refused |
-| the padding not required | F, P, Y, G | F: "the page ending inside a miniblock's padding: read as 200 rows"; P: "the reader answers S, pyarrow E (Unexpected end of stream)"; Y: pyarrow's DELTA_BYTE_ARRAY pages refused, the suffixes' run misplaced; G: a "cut" page not refused |
-| no chunk bound | F, P, G | F and P: "runaway allocation: 512 MiB and counting", fuzzcheck; G: a "chunk" page not refused |
-| no miniblock bound | F, P, G | F: fatal "out of memory", 16 GiB; P: 8 GiB; G: a "huge miniblock" page not refused |
+| the padding not required | F, P, Y, G | F: "the page ending inside a miniblock's padding" not refused; P: "the reader answers S, pyarrow E (Unexpected end of stream)"; Y: pyarrow's DELTA_BYTE_ARRAY pages refused, the suffixes' run misplaced; G: a "cut" page not refused |
+| no chunk bound | F, P, G | F and P: the page claiming past its chunk not refused; G: a "chunk" page not refused |
+| no miniblock bound | F, P, G | F and P: the huge miniblock not refused; G: a "huge miniblock" page not refused |
 
 | `packedCount`'s popcount dropping the last byte's bits | the brute force, G | `TestPackedCountOfOneBitCountsEachBit` fails; G: "count short" pages not refused, their values not null undercounted |
 
@@ -320,29 +282,24 @@ tighten it wrongly, where pyarrow's or arrow-go's own pages carry what is tighte
 
 ## 7. Observations and what is left
 
-- **F20, a new finding, left: a schema element's `num_children` sizes a slice before
-  it is checked.** The second `FuzzScanParquet` run found `4c22d5fafe9eafd7` after
-  12 s: "runaway allocation: 270,831,592 bytes (258.3 MiB)", a footer of 125 bytes.
-  Its root `SchemaElement` claims some 17 million children, in a 6-byte varint, and
-  arrow-go's `schema.FromParquet` runs `make([]Node, 0, elem.GetNumChildren())` before
-  it finds there are not that many elements. The footer walk (steps 423 and 521) does
-  not hold `num_children` to the elements after it. No page is read, so it is not this
-  step's; the reading path is master's, untouched here. pyarrow 25.0.1 refuses the file
-  ("Malformed schema: not enough elements"). A fix would refuse, in the walk, a
-  schema element claiming more children than elements follow it. The input is kept in
+- **A new finding, left: a schema element's `num_children` is not held to the
+  elements after it.** The second `FuzzScanParquet` run found `4c22d5fafe9eafd7` after
+  12 s, a footer of 125 bytes. Its root `SchemaElement` claims some 17 million
+  children, and the footer walk (steps 423 and 521) does not hold `num_children` to
+  the elements after it, so nothing refuses the claim before the schema is built from
+  it. No page is read, so it is not this step's; the reading path is master's,
+  untouched here. pyarrow 25.0.1 refuses the file ("Malformed schema: not enough
+  elements"). A fix would refuse, in the walk, a schema element claiming more children
+  than elements follow it. The input is kept in
   `~/ursus-scratch-archive/step531-findings/`, not as a seed, so CI's fuzz workflow,
   which is advisory, may report it.
-- **arrow-go's writer packs an INT32's deltas up to 34 bits wide.** Its encoder takes
-  the deltas as an int64's. pyarrow 25.0.1 fails such a page ("Unexpected end of
-  stream: InitBlock EOF"). ursus's writer writes no delta page, so no ursus file is
-  affected; it is arrow-go's to fix.
-- **A page's count of values is trusted up to its chunk's.** A footer declaring a
-  chunk of 2^31 values, with a page of as many in one miniblock of 65,536 values 0 bits
-  wide, still costs arrow-go a slice of 2^31 lengths. That is a file declaring 2^31
-  rows, a question of capacity, as a row count is anywhere.
-- **pyarrow and the reader part on three runs** (§3), each refused here for arrow-go's
-  sake: a count past the page's values, a miniblock past 65,536 values and its count,
-  and a page claiming more values than its chunk. No writer writes them.
+- **ursus's writer writes no delta page,** so an INT32's deltas packed past 32 bits
+  (§2.2), which pyarrow 25.0.1 fails ("Unexpected end of stream: InitBlock EOF"), are
+  in no ursus file.
+- **pyarrow and the reader part on three runs** (§3), each refused here as a claim
+  past what the page or its chunk declares: a count past the page's values, a
+  miniblock past 65,536 values and its count, and a page claiming more values than its
+  chunk. No writer writes them.
 
 ## 8. Checks
 

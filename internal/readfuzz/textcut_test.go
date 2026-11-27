@@ -15,10 +15,10 @@ import (
 	"github.com/advenn/ursus"
 )
 
-// A compressed CSV, NDJSON or JSON text cut short (step 534): step 534's IPC finding
-// was a read error wrapping io.EOF, the engine's end of its input, and the text
-// readers read compressed streams through internal/source.Decompressed, whose
-// decoders answer an error for a stream cut short. This holds them to it.
+// A compressed CSV, NDJSON or JSON text cut short (step 534): a read error wrapping
+// io.EOF is the engine's end of its input, and the text readers read compressed
+// streams through internal/source.Decompressed, whose decoders answer an error for a
+// stream cut short. This holds them to it.
 
 // textFormat is a text format and the public API's read of its bytes.
 type textFormat struct {

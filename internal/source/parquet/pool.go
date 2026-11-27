@@ -53,11 +53,10 @@ func ReadPagesWith(mem memory.Allocator) (restore func()) {
 }
 
 // readProps are the properties a file is opened with: the pool, or a scan's view of
-// it. GetStream still reads each column chunk into a slice of its own, 81 MB of q14's
-// scan a run. arrow-go's buffered stream would read a page straight into its
-// decompression buffer, but with it a file whose row group claims more rows than its
-// chunks hold read as no rows and no error, and a read that failed mid-scan lost the
-// file's name: TestPanicsAreErrors and TestScanParquetFrom caught them (step 376).
+// it. The file reader still reads each column chunk into a slice of its own, 81 MB of
+// q14's scan a run. arrow-go's buffered stream would read a page straight into its
+// decompression buffer; it stays off, as TestPanicsAreErrors and TestScanParquetFrom
+// require (step 376).
 //
 // Its page limits are lowered once the footer is read (boundPages).
 func readProps(mem memory.Allocator) *parquet.ReaderProperties {
@@ -69,15 +68,15 @@ func readProps(mem memory.Allocator) *parquet.ReaderProperties {
 // page's header out (PARQUET-816), and an allocation no file is too small for.
 const minPageBound = 1 << 20
 
-// boundPages lowers the largest page arrow-go reads from a file, compressed and
-// uncompressed, to the largest column chunk its footer declares (D14 of
-// v0.7.2-plan.md, step 510). arrow-go sizes a page's buffer by the page's header
-// before it reads a byte of the page, up to 64 MiB compressed and 256 MiB
-// uncompressed, its defaults: a header claiming 2^28 bytes in a file of 161 asked
-// for 256 MiB, and the pool keeps a buffer that size. A page lies inside its chunk,
-// so no page of a file holds more than its largest chunk; an uncompressed chunk's
-// pages are its bytes as they lie, so its compressed size bounds them too. A footer
-// can lie as well as a header, so this bounds what a forged header alone can ask.
+// boundPages lowers the largest page the page reader reads from a file, compressed
+// and uncompressed, to the largest column chunk its footer declares (D14 of
+// v0.7.2-plan.md, step 510). A page's header declares its sizes, and a page is read
+// and decompressed into buffers of the sizes it declares, up to the reader's limits,
+// 64 MiB compressed and 256 MiB uncompressed by default; the pool keeps a buffer up to
+// that size. A page lies inside its chunk, so no page of a file holds more than its
+// largest chunk; an uncompressed chunk's pages are its bytes as they lie, so its
+// compressed size bounds them too. A footer can lie as well as a header, so this
+// bounds what a forged header alone can ask.
 //
 // The limits are the file's and not each chunk's, because arrow-go takes them from
 // the file's properties as each page reader is made, and a file's row groups are

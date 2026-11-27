@@ -12,13 +12,11 @@ import (
 
 // An Arrow IPC input's allocator (step 511).
 //
-// arrow-go decompresses an IPC buffer into one it sizes by the eight-byte length the
-// buffer declares, before it has decompressed anything (ipcSource.buffer, in
-// arrow/ipc/file_reader.go). The length is the input's to claim: a file of 4.5 KB
-// whose LZ4 buffer declared 2^40 bytes ended the process with "fatal error: runtime:
-// out of memory", which no recover catches, and one declaring 2^35 allocated 32 GiB of
-// address space. The footer's blocks and a stream's messages are checked against the
-// file's size and arrow-go's limits; a decompressed buffer is not.
+// A compressed IPC buffer declares, in its first eight bytes, the length it
+// decompresses to, and the length is the input's to claim. The footer's blocks and a
+// stream's messages are checked against the file's size and the message limits; a
+// declared length is checked here, by the allocator every buffer of the read comes
+// from.
 //
 // So an IPC input is read through a ReadMem, which refuses any one request past what
 // the input could hold: decompressRatio times its bytes, Zstandard's most, a block of

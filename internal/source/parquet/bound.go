@@ -84,8 +84,8 @@ func statBounds(st metadata.TypedStatistics) (lo, hi bound, ok bool) {
 		return bound{kind: boundFloat, f: s.Min()}, bound{kind: boundFloat, f: s.Max()}, true
 	case *metadata.ByteArrayStatistics:
 		// An EMPTY max is no bound at all. A writer drops a max too long to keep —
-		// arrow-go's limit is 4096 bytes — and arrow-go reads an absent max and a real
-		// "" max identically, as nil. So a group holding "" and one long string reads
+		// 4096 bytes by default — and an absent max and a real "" max read back
+		// identically, as nil. So a group holding "" and one long string reads
 		// back as [min "", max ""], a range that holds only "", and every comparison
 		// that excludes "" pruned it (audit.md §5, I4). The min > max check below
 		// cannot catch it: "" > "" is false.

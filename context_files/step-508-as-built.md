@@ -96,9 +96,10 @@ seen, and total allocation is bounded by about 2x the answer + 64 MiB".
   1.2 MiB, the reader's buffers. An input that decompresses past 64 MiB is skipped:
   reading a gigabyte that a ratio of 1,000 makes from a megabyte is a question of
   capacity, not a bug.
-- **D14** is still open: arrow-go's page buffer is sized by the page header. Under 448
-  the bounded allocator refuses it (a page claiming 2^28 bytes is one of 448's
-  seeds). The critic's fix is 448's choice: lower `MaxUncompressedPageSize` in
+- **D14** is still open: ursus leaves the page size limits at their defaults, so a
+  page header may claim a buffer far larger than its file. Under 448 the bounded
+  allocator would refuse such a request (a page claiming more than its file is one of
+  448's seeds). The critic's fix is 448's choice: lower `MaxUncompressedPageSize` in
   `readProps`, or add a ratchet line naming the request.
 
 ## 5. Teeth
@@ -172,7 +173,7 @@ fuzzcheck's teeth take 0.4 s, and 1.4 s under the race detector.
 - **A reader under a bounded pool (448, 450, 451):** `mem := fuzzcheck.NewAllocator(len(b))`,
   with `Poison: true` for 448, passed to the reader. That needs an internal hook for
   Parquet's `pages` var, or `ipc.WithAllocator`, and `Limits{Mem: mem}`.
-- **A twin of arrow-go (449):** `API: false`, so arrow-go's own panics are logged.
+- **A twin of arrow-go (449):** `API: false`, so a tolerated module's panic is logged.
 - **The sweep (468)** runs each file in a child process with its own limits. It can
   call `Run` inside the child, and a hang or a runaway then names the input in the
   child's dying output.

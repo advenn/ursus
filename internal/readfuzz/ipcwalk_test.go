@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -20,36 +19,6 @@ import (
 	"github.com/advenn/ursus"
 	"github.com/advenn/ursus/internal/fuzzcheck"
 )
-
-// The six findings of step 511 that ended the process, which step 519's walk of IPC
-// metadata (internal/arrowmeta) refuses: their inputs, as the fuzzer saved them.
-var metadataFindings = []string{
-	"finding-schema-fields-2e31",
-	"finding-field-children-2e31",
-	"finding-schema-metadata-2e31",
-	"finding-variadic-buffers-2e40",
-	"finding-dictionary-variadic-buffers",
-	"finding-field-its-own-child",
-}
-
-// corpusInput is the []byte of a fuzz corpus file, as go test writes one.
-func corpusInput(t *testing.T, path string) []byte {
-	t.Helper()
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
-	if len(lines) != 2 || lines[0] != "go test fuzz v1" ||
-		!strings.HasPrefix(lines[1], "[]byte(") || !strings.HasSuffix(lines[1], ")") {
-		t.Fatalf("%s is not a corpus file of one []byte", path)
-	}
-	s, err := strconv.Unquote(strings.TrimSuffix(strings.TrimPrefix(lines[1], "[]byte("), ")"))
-	if err != nil {
-		t.Fatalf("%s: %v", path, err)
-	}
-	return []byte(s)
-}
 
 // refusals counts refusedAsCorrupt's reads.
 var refusals int
@@ -102,29 +71,14 @@ func refusedAsCorrupt(t *testing.T, name string, b []byte, file bool) {
 	}
 }
 
-// TestIPCMetadataFindingsAreRefused: step 511's six findings that ended the process,
-// arrow-go sizing slices by IPC metadata past its bytes and recursing on a field its
-// own child, from inputs of 0.5 to 5 KB, are each refused through every public entry
-// point that opens IPC, within fuzzcheck's bounds (step 519); so are the seeds of the
-// same forgeries the IPC targets build from the kitchen sink.
-func TestIPCMetadataFindingsAreRefused(t *testing.T) {
+// TestForgedIPCMetadataIsRefused: IPC metadata declaring a count past its bytes, of
+// a schema's fields, a field's children, a schema's custom metadata or a view
+// column's variadic buffers, and a field its own child, each patched into a file and
+// a stream of the kitchen sink or of custom metadata as the IPC targets' seeds are
+// (patchMeta), is refused through every public entry point that opens IPC, within
+// fuzzcheck's bounds (step 519).
+func TestForgedIPCMetadataIsRefused(t *testing.T) {
 	for _, file := range []bool{true, false} {
-		target := "FuzzScanIPCStream"
-		if file {
-			target = "FuzzScanIPCFile"
-		}
-		found := 0
-		for _, name := range metadataFindings {
-			path := filepath.Join("testdata", "fuzz", target, name)
-			if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) && !file {
-				continue // the dictionary's finding was a file's
-			}
-			refusedAsCorrupt(t, target+"/"+name, corpusInput(t, path), file)
-			found++
-		}
-		if found < len(metadataFindings)-1 {
-			t.Fatalf("%s: %d of the findings' inputs found", target, found)
-		}
 		sink := writeIPC(t, file, kitchenSink(t))
 		withMeta := writeIPC(t, file, metadataRecord(t))
 		for _, p := range []struct {

@@ -303,15 +303,13 @@ func ScanIPCStream(path string) *LazyFrame {
 
 // openIPCStream reads name's IPC stream from rc, which it closes when released: of
 // size bytes, or -1 for a size not known. A message's metadata and body are allocated
-// before they are read, no larger than arrow-go's limits, 64 and 256 MiB, or than the
-// stream where its size is known; and a buffer no larger than the stream could hold
-// decompressed (arrowin.ReadMem).
+// before they are read, no larger than 64 and 256 MiB, or than the stream where its
+// size is known; and a buffer no larger than the stream could hold decompressed
+// (arrowin.ReadMem).
 //
-// The messages are read by arrowmeta's reader, which keeps the limits, as arrow-go's
-// ipc.NewMessageReader does and ipc.NewReader did not (arrow-go v18.7.0's
-// reader.go: an 8 KB stream whose message declared a body of 2^40 bytes ended the
-// process, out of memory, step 511; v18.9.0's keeps them, step 538), and walks each
-// message's metadata before arrow-go reads it (step 519), which v18.9.0 still needs.
+// The messages are read by arrowmeta's reader, which refuses a message declaring more
+// than those limits before anything is sized by it (step 511), and walks each
+// message's metadata before it is decoded (step 519).
 func openIPCStream(name string, rc io.ReadCloser, size int64) (array.RecordReader, error) {
 	const op = "scan_ipc_stream"
 	var in io.Reader = rc
@@ -377,13 +375,12 @@ func openIPCFile(op, path string) (*fileRecords, error) {
 
 // openIPC reads name's IPC file from r, closing c, where it is not nil, when released
 // or refused. A buffer is allocated no larger than the file could hold decompressed
-// (arrowin.ReadMem). arrow-go panics on some corrupt footers, in its flatbuffers'
-// accessors: that is the file's error, and ReadIPCSchema, which no query recovers,
-// let it reach its caller (step 511).
+// (arrowin.ReadMem). A panic reading a corrupt footer is the file's error, and
+// ReadIPCSchema, which no query recovers, let one reach its caller (step 511).
 //
-// arrow-go reads the file through arrowmeta.File, which walks its footer here, and
-// each block's message as arrow-go reads it, before arrow-go trusts what they say
-// (step 519).
+// arrow-go's file reader reads the file through arrowmeta.File, which walks its
+// footer here, and each block's message as it is read, before anything is sized by
+// what they say (step 519).
 func openIPC(op, name string, r ipc.ReadAtSeeker, c io.Closer) (_ *fileRecords, err error) {
 	closeIt := func() {
 		if c != nil {
@@ -419,7 +416,7 @@ func openIPC(op, name string, r ipc.ReadAtSeeker, c io.Closer) (_ *fileRecords, 
 }
 
 // ipcCorrupt is v, a panic recovered opening name's IPC file, as the error of
-// whoever's code raised it, as Parquet's corrupt rules: arrow-go's, reading the
+// whoever's code raised it, as Parquet's corrupt rules: the decoder's, reading the
 // file, KindIO; ursus's own, ursus's bug.
 func ipcCorrupt(v any, op, name string) *uerr.Error {
 	e := uerr.Attributed(v, uerr.KindIO, op, "%s is corrupt, or uses something arrow-go cannot read", name)

@@ -15,26 +15,22 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-// A page decompresses to no more than it declares (step 520, F10 of step 517's
-// record).
+// A page decompresses to no more than it declares (step 520).
 //
-// arrow-go's page reader decompresses each page into a buffer of the size its header
+// The page reader decompresses each page into a buffer of the size its header
 // declares, which boundPages bounds by the file's largest column chunk (D14), and
-// refuses a page whose output is another size only once it has decoded it. Its codecs
-// did not all stop at the buffer:
+// refuses a page whose output is another size. A compressed stream makes claims of
+// its own, and none of them is to size anything:
 //
-//   - Zstandard (klauspost's DecodeAll) made a buffer of the frame's content size
-//     before it decoded a block: 1,211,898,114 bytes for a page of 15, in a file of
-//     623 bytes, up to the decoder's limit of 64 GiB. A frame without a content size
-//     grew its output a block at a time, up to that limit;
-//   - Snappy (klauspost's s2.Decode) made one of the block's length header, up to
-//     2^32−1;
-//   - a page declaring 0 bytes is decompressed into a nil buffer, the buffer of a page
-//     reader that has not grown one, and a nil buffer is a codec's "allocate what the
-//     stream holds": gzip and Brotli read their whole stream, Zstandard and Snappy as
-//     above.
+//   - a Zstandard frame may declare its content size, and klauspost's DecodeAll makes
+//     a buffer of it, up to the decoder's limit of 64 GiB, where the buffer it is
+//     given is short of it; a frame without a content size grows its output a block
+//     at a time, up to that limit;
+//   - a Snappy block declares its length in a header, and klauspost's s2.Decode makes
+//     a buffer of it, up to 2^32−1, where the buffer it is given is short of it;
+//   - a nil buffer is a codec's "allocate what the stream holds", and a page declaring
+//     0 bytes can come with one, the buffer of a page reader that has not grown one.
 //
-// gzip and Brotli read into a buffer that is not nil and refuse a byte past it, and
 // LZ4_RAW decodes into its buffer and no further, nil or not. arrow-go reads neither
 // Codecs.Lz4 nor LZO.
 //
@@ -50,22 +46,22 @@ import (
 // strict tightening of its codec, by the codec's own reading of a buffer:
 //
 //   - Zstandard and Snappy decode into the buffer's capacity, as klauspost's do where
-//     the output fits it, and refuse a stream where klauspost's made a larger buffer:
-//     a frame's content size or a block's length header past the capacity, before
-//     anything is allocated, and a frame without one once a block's output passes it;
-//   - gzip and Brotli read into the buffer's length and refuse a byte past it, as
-//     arrow-go's own did, short streams answered as they answered them;
-//   - a nil buffer from arrow-go's page reader is a page of 0 bytes, so it holds
-//     nothing; from any other caller it is still "allocate", and the codec that was
-//     registered decodes it (calledByPageReader).
+//     the output fits it, and refuse a stream claiming more: a frame's content size or
+//     a block's length header past the capacity, before anything is allocated, and a
+//     frame without one once a block's output passes it;
+//   - gzip and Brotli read into the buffer's length and refuse a byte past it, short
+//     streams answered as the codec that was registered answers them;
+//   - a nil buffer from the page reader is a page of 0 bytes, so it holds nothing;
+//     from any other caller it is still "allocate", and the codec that was registered
+//     decodes it (calledByPageReader).
 //
-// One answer is not a tightening: arrow-go's Brotli codec took the end of a stream for
-// a byte more when its reader answered a read of nothing first, and refused an empty
-// page whose buffer was not nil, one after a page of bytes; past reads again.
+// One answer differs: a Brotli reader may answer a read of nothing at its stream's
+// end, before io.EOF, and past reads again, so an empty page after a page of bytes,
+// its buffer not nil, reads as empty.
 //
 // Encoding, its bound, and a streaming reader or writer are the codec that was
 // registered, so every file written is as before, ursus's own writer's among them.
-// arrow-go's page reader requires a page's output to fill its buffer, so a page it read
+// The page reader requires a page's output to fill its buffer, so a page it read
 // before is read now: TestEveryParquetFileReadsAsWithArrowGosCodecs holds the
 // fixtures and the files pyarrow, Polars and ursus wrote to that, and
 // TestBoundedCodecsDecodeAsTheCodecsTheyReplace each codec on generated streams.
@@ -79,9 +75,9 @@ import (
 // klauspost checks a Zstandard frame without a content size against the buffer once a
 // raw or RLE block is appended, so a corrupt one can append one block, at most 128
 // KiB, past the buffer's capacity before it is refused, the slice grown once to hold
-// it: at most about a quarter more than the page's buffer, and that block, where the
-// frame's own claim had been the bound. A compressed block whose output passes the
-// capacity is refused by klauspost's own check, "output bigger than max block size".
+// it: at most about a quarter more than the page's buffer, and that block. A
+// compressed block whose output passes the capacity is refused by klauspost's own
+// check, "output bigger than max block size".
 // A codec's working memory is its own, bounded by its format: gzip's window of 32 KiB,
 // Brotli's Huffman tables, some megabytes at most, and its ring buffer, the window
 // brotliWindow lowers.
@@ -264,9 +260,9 @@ func decodeBrotli(s compress.StreamingCodec, dst, src []byte) ([]byte, error) {
 // brotliWindow is b, a Brotli stream's first byte, its window lowered to the least of
 // its code's length that holds n bytes: a window of 2^w bytes holds 2^w−16. The
 // decoder makes a ring buffer of the window, or less where the stream's first
-// meta-block says it holds less, so a stream of 14 bytes claiming a meta-block of 16
-// MiB in a window of 16 MiB made one of 16 MiB for a page of none. Lowered, it is at
-// most 256 KiB, or the page's size where that is more.
+// meta-block says it holds less, and the window is the stream's claim: a few bytes
+// can claim the format's largest, 16 MiB, for a page of none. Lowered, it is at most
+// 256 KiB, or the page's size where that is more.
 //
 // The window's code is the stream's first 1, 4 or 7 bits, the least significant first
 // (RFC 7932, 9.1): 0 for 16; 1 and 3 bits n, not 0, for 17+n, 18 to 24; 1, 000 and 3
@@ -310,9 +306,8 @@ func brotliWindow(b byte, n int) byte {
 
 // past is errPast if r, read to its buffer's end, holds another byte, or the error
 // reading one. A read of no byte and no error is read again: Brotli's reader answers
-// one at its stream's end, where arrow-go's own codec took it for a byte more and
-// refused an empty page whose buffer was not nil. A reader that answers nothing else
-// is taken, after a few, for one that holds more.
+// one at its stream's end, which is not a byte more. A reader that answers nothing
+// else is taken, after a few, for one that holds more.
 func past(r io.Reader) error {
 	var one [1]byte
 	for range 4 {

@@ -45,10 +45,10 @@ v0.8.0's is.
 
 - **Two malformed Parquet pages are refused** (538), an `ErrIO` with arrow-go's
   reason, where v0.8.0 read them: an INT32 DELTA_BINARY_PACKED page whose deltas
-  span more than 32 bits, which arrow-go v18.7.0 and older wrote and pyarrow refuses;
-  and an OPTIONAL column's DELTA_LENGTH_BYTE_ARRAY page counting more lengths than
-  its values, which no writer is known to write. `WriteParquet` writes neither: read
-  such a file with v0.8.0, or with pyarrow for the second, and write it again.
+  span more than 32 bits, which pyarrow refuses; and an OPTIONAL column's
+  DELTA_LENGTH_BYTE_ARRAY page counting more lengths than its values, which no writer
+  is known to write. `WriteParquet` writes neither: read such a file with v0.8.0, or
+  with pyarrow for the second, and write it again.
 - **A far instant's Date, and its Year past Int32, are refused** (543, 544), an
   `ErrValue` naming the row. `Dt().Date()` of a Datetime(s) or a Datetime(ms) more
   than about 5.9 million years from 1970 wrapped its day into another date; a Date
@@ -63,12 +63,11 @@ v0.8.0's is.
   arrow-go v18.9.0, from v18.7.0, and the Thrift v0.25.0, klauspost/compress v1.20.3
   and golang.org/x/text v0.43.0 it requires. Two Parquet pages ursus read arrow-go
   now refuses, an `ErrIO` with its reason, and ursus with it: an INT32
-  DELTA_BINARY_PACKED page whose deltas span more than 32 bits, as arrow-go v18.7.0
-  and older wrote one where consecutive values differ by more than 2^31, which
-  pyarrow refuses too; and an OPTIONAL column's DELTA_LENGTH_BYTE_ARRAY page counting
-  more lengths than its values, which the format allows, no writer is known to
-  write, and pyarrow reads. Every guard ursus built against crafted input
-  stays.
+  DELTA_BINARY_PACKED page whose deltas span more than 32 bits, where consecutive
+  values differ by more than 2^31, which pyarrow refuses too; and an OPTIONAL
+  column's DELTA_LENGTH_BYTE_ARRAY page counting more lengths than its values, which
+  the format allows, no writer is known to write, and pyarrow reads. ursus's own
+  checks of crafted input are as they were.
 
 ### Fixed
 
@@ -164,13 +163,12 @@ From v0.7.0 or v0.7.1, read v0.7.2's list below too. Each entry says what to do.
   answering `io.EOF` inside a column chunk, an NDJSON, lines or CSV stream failing
   with an error that wraps `io.EOF`. A `ReaderAt` or stream of yours ends with
   `io.EOF` itself, not an error wrapping it.
-- **Input that answered wrongly, or ended the process, is refused as corrupt** (510,
-  511, 517, 519–521, 531, 533), an `ErrIO`: a Parquet footer, schema, page or
-  dictionary, or an Arrow IPC footer, message or buffer, whose counts and lengths
-  disagree with its bytes. A well-formed file is not refused: one that is, is damaged,
-  and is written again from its source. An IPC stream
-  whose size is not known holds a message to 64 MiB of metadata and 256 MiB of body
-  (511), arrow-go's own limits: write record batches of fewer rows.
+- **Crafted Parquet and Arrow IPC input is refused as corrupt** (510, 511, 517,
+  519–521, 531, 533), an `ErrIO`: a Parquet footer, schema, page or dictionary, or an
+  Arrow IPC footer, message or buffer, whose counts and lengths disagree with its
+  bytes. A well-formed file is not refused: one that is, is damaged, and is written
+  again from its source. An IPC stream whose size is not known holds a message to
+  64 MiB of metadata and 256 MiB of body (511): write record batches of fewer rows.
 - **Answers that were wrong are corrected:**
   - `Clip`, `ClipLower` and `ClipUpper` are named after their value, where they were
     named after the bound, `literal` or the bound's column (496): select the column
@@ -215,12 +213,12 @@ From v0.7.0 or v0.7.1, read v0.7.2's list below too. Each entry says what to do.
   through it: a CSV, NDJSON or JSON stream, or an Arrow IPC buffer, whose frame
   declares a larger window is refused, an `ErrIO` naming the limit. klauspost's
   decoder made the whole window a frame declares, up to 512 MiB, before it decoded a
-  block, so 17 bytes cost 514 MiB, and a 4.7 KB IPC file 513 MiB; an IPC window past
-  512 MiB was arrow-go's panic. This refuses files ursus read before, which Polars
-  refuses: those zstd writes in its `--long` modes past 27, of a file larger than 128
-  MiB or of its standard input. Decompress one first, with `zstd -d --long=31`. A
-  Parquet page is not held to it: Polars 2.1 and pyarrow read any window there, and
-  ursus decodes a page into its own buffer, making no window.
+  block, so 17 bytes cost 514 MiB, and a 4.7 KB IPC file 513 MiB. This refuses files
+  ursus read before, which Polars refuses: those zstd writes in its `--long` modes
+  past 27, of a file larger than 128 MiB or of its standard input. Decompress one
+  first, with `zstd -d --long=31`. A Parquet page is not held to it: Polars 2.1 and
+  pyarrow read any window there, and ursus decodes a page into its own buffer, making
+  no window.
 - **A float aggregate that is NaN is the one NaN** (530): `Sum`, `Mean`, `Var`,
   `Std`, `Skew`, `Kurtosis`, `Product`, `Entropy`, `Corr`, `Cov` and `CorrSpearman`,
   their rolling, cumulative and exponentially weighted kin, the list and horizontal
@@ -375,39 +373,52 @@ and its section lists them; v0.7.3's three are steps 518, 522 and 525 below.
   and a null Struct is kept apart from a Struct of nulls (`ExtractGroups`, 499);
   Polars 2.1 reads a null too. `ScanJSON`, which reads each object as a line, follows.
   The recorded oracle found it (`ndjsonread/ignored_in_a_struct`).
-- **A forged Arrow IPC file or stream can no longer end the process through its
-  metadata** (519): arrow-go trusts every length an IPC footer or message declares,
-  so a file of 0.5 to 2 KB ended `ScanIPC`, `ScanIPCStream`, `ReadIPCSchema` and their
-  kin six ways, with "fatal error: runtime: out of memory" or "stack overflow": a
-  schema's fields, a field's children or a list of key-values declaring 2^31−1, a view
-  column's variadic buffers 2^40 in a record batch or a dictionary batch, and a field
-  its own child. ursus walks every footer and message before arrow-go reads it, each
-  offset, length and count against its bytes, and fields no deeper than 2,000, and
-  refuses what arrow-go would trust with an `ErrIO` naming the input as corrupt. No
-  well-formed file is refused. A Parquet footer's Arrow schema is read by the same
-  walk.
-- **A Parquet dictionary index past its dictionary no longer ends the process**
-  (517): arrow-go made a slice of a data page's dictionary index before it checked the
-  index against the dictionary, 8 GiB for index 2^30 in a file of 128 bytes and a fatal
-  "out of memory" for a wider value or a larger index, in every chunk it decodes: a
-  nested column or a struct's field, INT96, a fixed-length or byte-array column, or one
-  whose footer lists an encoding ursus's own pages do not read. Such a page is refused
-  as corrupt before arrow-go decodes it, as ursus's own pages refused it, and the error
-  names the index, where a page of such a chunk that failed was reported as its row
-  group short of rows. CI's fuzz runs found it.
-- **A Parquet page decompresses to no more than it declares** (520): a page's codec
-  could allocate what its own header claimed before arrow-go compared the output with
-  the page, 1.2 GB for a Zstandard frame in a page of 15 bytes, 1 GiB for a Snappy
-  length header, and a page declaring no bytes had gzip or Brotli read its whole
-  stream; a Brotli stream of 14 bytes made a ring buffer of 16 MiB for a page of 40.
-  Such a page is refused as corrupt, an I/O error, before anything past it is
-  allocated. To do it, importing ursus replaces arrow-go's Snappy, gzip, Brotli and
-  Zstandard codecs, in arrow-go's registry, with ones that refuse only what a page does
-  not declare and otherwise decode and encode as before; an empty Brotli page after a
-  page of bytes, which arrow-go refused, reads. CI's fuzz run found it. And a
-  dictionary page's count in a varint of 10 bytes, which ursus read otherwise than
-  arrow-go and so did not check, no longer makes arrow-go allocate 21.5 GB; the fuzz
-  target found it.
+- **Arrow IPC input is checked against its bytes before it is read** (511, 519):
+  ursus walks every footer and message of a file or stream before arrow-go's reader
+  has it, each offset and length within its bytes, each count no more than the bytes
+  after it can hold, offsets forward, fields no deeper than 2,000, a record batch's
+  buffers within its body and its variadic buffers against its view columns; a
+  stream's message is no larger than 64 MiB of metadata and 256 MiB of body, or than
+  the stream where its size is known; and a compressed buffer is decompressed through
+  an allocator that grants none past 32,768 times the input's size, Zstandard's most.
+  Input that breaks them is refused by `ScanIPC`, `ScanIPCStream`, `ReadIPCSchema` and
+  their kin, an `ErrIO` naming it as corrupt. No well-formed file is refused. A
+  Parquet footer's Arrow schema is read by the same walk.
+- **A Parquet footer is checked against its file before it is read** (510, 521, 533):
+  a column chunk lies within its file; every footer is walked, one leaving no room
+  for the file's leading magic too, and each of its lists, at any depth and by the
+  element type the format gives, claims no more elements than the bytes after its
+  header hold; the schema is read as a tree, and an element claiming more children
+  than the elements after it, or a tree that does not close by its last element, as
+  pyarrow says "not enough elements", is refused; a row group holds a column chunk
+  for each of the schema's columns, no fewer and no more, by the read and by `Count`;
+  and the footer's Arrow schema is walked as an IPC message is (519). A footer that
+  breaks them is refused as corrupt, an `ErrIO`. Every footer ursus, pyarrow and the
+  fixtures' writers wrote reads as before. The fuzz targets found each.
+- **A Parquet page is checked against its header and its chunk before it is decoded**
+  (510, 517, 520, 521, 531), and one that breaks a check is refused as corrupt, an
+  `ErrIO`. Every page pyarrow, Polars, arrow-go and ursus write reads as before, and
+  an empty Brotli page after a page of bytes now reads. CI's fuzz runs found each:
+  - a page's declared size is no larger than the largest column chunk the footer
+    declares (510, as D14 predicted), and a page header that does not parse is looked
+    at no further than its chunk, at least 16 KiB (521);
+  - a dictionary page claims no more values than its bytes hold (510), its count read
+    as Thrift reads a varint, of up to 10 bytes (520);
+  - each dictionary index of a data page lies within its dictionary, and the error
+    names the index, where it named a row group short of rows (517);
+  - a page decompresses into the size its header declares and no further: a codec's
+    own claim, a Snappy length header or a Zstandard frame's size, is checked before
+    anything past the page is allocated, a page declaring no bytes is decoded as
+    none, and Brotli's window is held to the page (520);
+  - an UNCOMPRESSED page holds the bytes its header declares, as DuckDB requires
+    (521);
+  - a page of 0-bit dictionary indices with a byte after a run's header is read as
+    pyarrow and DuckDB read it, each row the dictionary's first value, by ursus's own
+    pages, and refused where they do not read its chunk (521);
+  - each delta-packed run of a DELTA_BINARY_PACKED, DELTA_LENGTH_BYTE_ARRAY or
+    DELTA_BYTE_ARRAY page is checked against the format, its block size, miniblocks,
+    count, bit widths and length, and refused where pyarrow refuses it, and where its
+    count is past the page's values, which no writer writes and pyarrow reads (531).
 - **An Arrow IPC file or stream with a Null column reads** (522): the format writes a
   Null column as no buffer, arrow-go's IPC reader builds it as a Null array of no
   buffers, and arrow-go's own validation, which ursus runs on every array it imports,
@@ -442,45 +453,13 @@ and its section lists them; v0.7.3's three are steps 518, 522 and 525 below.
   grew its keys to the group count exactly before each batch, copying them all, so a
   `NUnique` by 8,193 keys in batches of one row allocated 842 MB; 30 MB now, the keys
   growing to twice what they held, as a slice's append does. Found by `qcheck self`.
-- **An Arrow IPC buffer declaring more than its input could hold is refused, not the
-  end of the process** (511): arrow-go sizes a compressed buffer's decompression by
-  the length the buffer declares, so a 1.7 KB LZ4 file declaring 2^40 bytes ended the
-  program with "fatal error: runtime: out of memory". `ScanIPC`, `ScanIPCStream` and
-  their kin read through an allocator that grants no buffer past 32,768 times the
-  input's size, Zstandard's most, and refuse past it with an `ErrIO`.
-- **An IPC stream's message is held to arrow-go's limits** (511): arrow-go's
-  `ipc.NewReader` drops them, so a 2.7 KB stream declaring a 2^40-byte body ended the
-  program, and an IPC file read as a stream allocated 1.3 GB for the length its magic
-  spells. A message is no larger than 64 MiB of metadata and 256 MiB of body, or than
-  the stream where its size is known.
-- **`ReadIPCSchema` of a corrupt file is an error** (511): a panic in arrow-go's
-  reading of the footer reached the caller; it is an `ErrIO` naming the file.
 - **An NDJSON or JSON line nested deep is read in memory proportional to it** (511):
   a 6 KB line of objects 999 deep allocated 4 GB and took 1.2 s, each level's type
   written as text and built again; 4 MB and 13 ms now.
-- **A Parquet page's header can no longer size its buffer past its column chunk**
-  (510): a page claiming 2^28 bytes in a file of 161 made arrow-go ask for 256 MiB
-  before reading a byte of it, and one claiming 2^26 compressed 64 MiB. A page is
-  bounded now by the largest column chunk the footer declares, and such a file is
-  refused as corrupt. The fuzz target found it, as D14 predicted.
-- **A Parquet column chunk claiming more bytes than its file no longer ends the
-  process** (510): arrow-go made a slice of the chunk's declared size before reading
-  it, and a claim of 2^40 bytes was a fatal "out of memory" that no recover catches.
-  The footer is refused as corrupt.
-- **A Parquet dictionary page claiming more values than its bytes hold no longer
-  ends the process** (510): arrow-go made a slice of the claim before decoding a
-  value, 48 GB for 2^31−1 in a page of 12 bytes, fatally, in every chunk it decodes:
-  a Boolean, INT96 or fixed-length column, a nested one, or one whose footer lists an
-  encoding ursus's own pages do not read. Such a page is refused as corrupt, as
-  ursus's own pages already refused it.
 - **A Parquet TIME past its day is refused** (510): a TIME holding a tick outside
   [0, 24h) was read as a Time as it lay, which renders as another time of day and
   sorts and compares as none; it is refused now as a corrupt value, inside a List or
   a Struct as well, as the writer refuses one. CI's fuzz run found it.
-- **A Parquet footer's Arrow schema can no longer end the process** (510): it was read
-  by arrow-go's IPC reader, which made a slice of the children a field claims, 283 GB
-  from a file of 906 bytes, fatally. It is read now by a walk that checks every
-  offset and length against its bytes. The fuzz target found it.
 - **`"-nan"` and `"+nan"` read as NaN** (509), as `ParseFloat`'s grammar says and
   Polars' cast reads them: Go's strconv takes a sign before inf only, so a cast to a
   float was a null, a CSV Float64 column refused one, and inference read it as text.
@@ -515,46 +494,14 @@ and its section lists them; v0.7.3's three are steps 518, 522 and 525 below.
   and `ScanNDJSON` found it.
 - **A Parquet page whose bytes are missing is refused, not read as the end** (521): a
   page whose header was whole and whose bytes were not in its column chunk ended the
-  read there with no error, so a file whose `Count` said 5 rows read as 0. arrow-go
-  answers `io.EOF` for such a page, and the engine took the error for the end of the
-  input. The read is refused as corrupt now, through arrow-go's column reader and
-  ursus's own pages alike; `Count`, which reads only the footer, still answers its
-  rows, as pyarrow and DuckDB count them and refuse the read. CI's fuzz runs found it.
-- **A Parquet footer's lists are sized before arrow-go reads them** (521): arrow-go
-  makes a slice of the count each list of a footer claims before it reads an element,
-  and a footer of 78 bytes claiming 10^8 row groups made it allocate 763 MiB before
-  refusing the file. Step 423's walk of the footer did not reach a footer that left no
-  room for the file's leading magic, which arrow-go reads, and read a list by the type
-  its header gives, where arrow-go reads the type the format gives, so a list of row
-  groups said to hold a binary hid a list of 10^8 column chunks. Every footer arrow-go
-  reads is walked now, its lists read as arrow-go reads them, and a list claiming more
-  elements than the bytes after it is refused as corrupt, at any depth. CI's fuzz runs
-  found it.
-- **An uncompressed Parquet page whose two sizes differ is refused** (521): an
-  UNCOMPRESSED page holding fewer bytes than its header declares was read with the rest
-  taken from whatever its buffer held before, an earlier page's bytes or fresh memory,
-  and no error. Such a page is refused as corrupt, as DuckDB refuses it; no writer
-  writes one. The fuzz runs of step 521 found it.
+  read there with no error, so a file whose `Count` said 5 rows read as 0: the engine
+  took the page's error for the end of the input. The read is refused as corrupt now,
+  whichever reader decodes the chunk; `Count`, which reads only the footer, still
+  answers its rows, as pyarrow and DuckDB count them and refuse the read. CI's fuzz
+  runs found it.
 - **A corrupt Parquet Null column is refused, not an internal error** (521): a footer
-  giving a Null column a physical type arrow-go does not know made the read fail with
-  "this is a bug in ursus"; it is refused as unsupported, as a column of any other type
-  is.
-- **A Parquet dictionary index of 0 bits is no longer read as another value** (521):
-  through arrow-go's column reader, a page whose dictionary indices are 0 bits wide,
-  each index 0, followed by any byte after a run's header read every row of the run
-  as the dictionary value that byte numbered, with no error, where pyarrow and DuckDB
-  read the first value. Such a page is refused there now; ursus's own pages read it
-  as pyarrow does. The fuzz runs of step 521 found it.
-- **A Parquet page header that does not parse costs no more than its chunk to
-  refuse** (521): arrow-go looks at a page header with a buffer it doubles at each
-  failure up to 4 MiB, so a 102-byte file whose dictionary header did not parse cost
-  8 MiB each time it was read. The looks stop at the column chunk's size now, at
-  least 16 KiB. The fuzz runs of step 521 found it.
-- **A Parquet row group missing a column chunk is refused as corrupt** (521): a
-  footer whose row group listed fewer column chunks than its schema has columns failed
-  the read with "this is a bug in ursus", and one listing more could panic; both are
-  refused as corrupt now, by the read and by `Count`. The fuzz runs of step 521 found
-  it.
+  giving a Null column a physical type no reader takes made the read fail with "this
+  is a bug in ursus"; it is refused as unsupported, as a column of any other type is.
 - **An Arrow time past its day is refused, not wrapped** (525): a Time32 or Time64
   outside [0, 24h) was wrapped into the day by `ScanArrowRecords`, `ScanArrow` and
   every `ScanIPC` reader, so 26:00 read as 02:00, which sorts after 23:00 and equals
@@ -574,41 +521,18 @@ and its section lists them; v0.7.3's three are steps 518, 522 and 525 below.
   the row's NaN in a batch of many rows and the literal's in a batch of one, as a
   constant on the left was added as the right operand. A NaN constant is broadcast
   now, as in a batch of one.
-- **A malformed delta-encoded Parquet page is refused, not hung on** (531): through
-  arrow-go's column reader, a DELTA_BINARY_PACKED page whose header counted fewer
-  values than a REQUIRED column's page holds hung the read forever, and an OPTIONAL
-  column's or a List's page read the values it was short of from whatever its buffer
-  held, with no error; a block of 2^32 values, or a DELTA_LENGTH_BYTE_ARRAY page counting
-  2^40 lengths, ended the process asking for gigabytes; a page cut short read as 0s.
-  Each delta-packed run of a DELTA_BINARY_PACKED, DELTA_LENGTH_BYTE_ARRAY or
-  DELTA_BYTE_ARRAY page is checked against the format before arrow-go decodes it, its
-  block size, miniblocks, count, bit widths and length, and a page that breaks it is
-  refused as corrupt, an `ErrIO`, as pyarrow refuses it, but for a count past the
-  page's values, which no writer writes and pyarrow reads; every delta page pyarrow
-  and arrow-go write reads as before. The fuzz runs of step 521 found it.
 - **A read cut short is refused, not read as the end of its input** (534): every
   operator ends its input on an error that wraps `io.EOF`, and a source's error that
   wrapped it ended the query there, with the rows before it and no error. An Arrow IPC
-  file or stream whose compressed buffer decompresses short, which arrow-go panics on
-  with `io.EOF`, read as 0 rows, by `Collect` and by `Count`; so did a stream cut
-  where a message's length, metadata or body begins, a Parquet file whose `ReaderAt`
-  answers `io.EOF` inside a column chunk (its row groups before it read), and an
-  NDJSON, lines or CSV stream whose read fails with an error wrapping `io.EOF`. Each
-  is refused now, an `ErrIO` wrapping `io.ErrUnexpectedEOF`: a source's end is
-  `io.EOF` itself, and a scan reads any other error wrapping it as the source's. A
-  stream that ends between two messages, without its end marker, still reads, as
-  arrow-go and the format have it. Step 529's fuzzing found it.
-- **A Parquet schema claiming more children than it holds is refused before arrow-go
-  sizes by it** (533): arrow-go makes each group of a footer's schema a slice of the
-  children it claims before it reads one, so a file of 125 bytes whose root claimed
-  16,909,320 children allocated 258 MiB, and one claiming 2^31−1 ended the process.
-  The footer's walk reads the schema as a tree first, and a schema with an element
-  claiming more children than the elements after it, or whose tree does not close by
-  its last element, as pyarrow says "not enough elements", is refused as corrupt, an
-  `ErrIO`; groups nested a thousand deep, each claiming every element after it, cost
-  arrow-go memory by the square of the elements and are refused too. Every footer
-  ursus, pyarrow and the fixtures' writers wrote reads as before. The fuzz runs of
-  step 531 found it.
+  file or stream whose compressed buffer decompresses short read as 0 rows, by
+  `Collect` and by `Count`; so did a stream cut where a message's length, metadata or
+  body begins, a Parquet file whose `ReaderAt` answers `io.EOF` inside a column chunk
+  (its row groups before it read), and an NDJSON, lines or CSV stream whose read
+  fails with an error wrapping `io.EOF`. Each is refused now, an `ErrIO` wrapping
+  `io.ErrUnexpectedEOF`: a source's end is `io.EOF` itself, and a scan reads any other
+  error wrapping it as the source's. A stream that ends between two messages, without
+  its end marker, still reads, as arrow-go and the format have it. Step 529's fuzzing
+  found it.
 - **A cancelled query no longer answers part of its input as the whole** (394): a
   query cancelled while it read could return the rows read before the cancel, and no
   error: a count of a CSV file cancelled partway was an empty frame. A query whose
@@ -731,8 +655,8 @@ and its section lists them; v0.7.3's three are steps 518, 522 and 525 below.
   which the fuzzer records), allocates past a bound (the change in
   `/gc/heap/allocs:bytes`), leaves goroutines running a second after, answers
   `ErrInternal`, or panics in ursus's own code whatever the error's kind; a panic in
-  arrow-go, Thrift or klauspost is logged. Its bounded allocator refuses one request
-  over 16 MiB plus 16 bytes a byte of input. `internal/readfuzz` holds the public
+  a dependency's code is logged. Its bounded allocator refuses one request over
+  16 MiB plus 16 bytes a byte of input. `internal/readfuzz` holds the public
   readers' targets, `FuzzScanCSV` first, with internal/data's boundary checks on.
   `make fuzz FUZZ=<target> PKG=<package> FUZZTIME=<d>` fuzzes one; `fuzz.yml` lists
   every target and fuzzes each for 30 s on a pull request touching Go code, by hand
@@ -817,12 +741,11 @@ and its section lists them; v0.7.3's three are steps 518, 522 and 525 below.
   each row read to `encoding/json`, by its column's type; `FuzzScanIPCFile` and
   `FuzzScanIPCStream` read through a bounded allocator and hold each cell to arrow-go's
   own arrays. readfuzz's targets run on an 8 MiB stack. Left for the maintainer, each
-  skipped by name and kept as a seed: arrow-go sizes slices by an IPC schema's and a
-  record batch's declared lengths and recurses on a field among its descendants, each a
-  fatal error from an input of 2 KB; a record of 2^40 rows of Null; klauspost's
-  Zstandard decoder allocates the window a frame declares, up to 512 MiB, from 17
-  bytes; NDJSON inference types `[1, true]` and `[1, [2]]` as the reader then refuses,
-  and an integer past Int128 as an Int128.
+  skipped by name: IPC metadata whose counts and offsets disagree with its bytes,
+  refused since step 519; a record of 2^40 rows of Null (529); klauspost's Zstandard
+  decoder allocates the window a frame declares, up to 512 MiB, from 17 bytes (528);
+  NDJSON inference types `[1, true]` and `[1, [2]]` as the reader then refuses, and an
+  integer past Int128 as an Int128.
 - **Fuzz targets for the Parquet reader, and a byte-flip sweep** (510):
   `FuzzScanParquet` reads any bytes through the public API with every page buffer
   from a bounded, poisoned allocator, and checks four threads, a read into zeroed

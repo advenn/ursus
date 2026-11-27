@@ -7,21 +7,20 @@
 // up to its MaxWindowSize of 512 MiB, at the frame's first block, whatever the frame
 // holds: (*frameDec).reset sizes the frame's history from the declared window alone,
 // and (*history).ensureBlock, or the stream's executing goroutine, makes it. So 17
-// bytes made the CSV, NDJSON and JSON readers allocate 514 MiB (step 511), and a 4.7
-// KB Arrow IPC file 513 MiB.
+// bytes made the CSV, NDJSON and JSON readers allocate 514 MiB (step 511).
 //
 // The reference decoder, libzstd, refuses a window past 128 MiB in its streaming API
 // unless told otherwise (ZSTD_WINDOWLOG_LIMIT_DEFAULT, 27; `zstd -d` answers "Window
 // size larger than maximum"), and Polars, which decompresses CSV, NDJSON, JSON and an
 // Arrow IPC file's buffers through it, refuses such a frame too. zstd writes one only
-// in its --long modes past 27. So ursus refuses it wherever klauspost's decoder streams,
-// before the decoder reads the frame's header:
+// in its --long modes past 27. So ursus refuses it before a decoder reads the frame's
+// header:
 //
 //   - NewReader, the text readers' decoder (internal/source.Decompressed), walks the
 //     stream's frames as the decoder reads them (checking), and the decoder is told the
 //     limit too;
-//   - Check walks an Arrow IPC buffer's frames before arrow-go's decoder, which ursus
-//     cannot configure, reads them (internal/arrowmeta).
+//   - Check walks an Arrow IPC buffer's frames once the body holding them is read,
+//     before arrow-go has it (internal/arrowmeta).
 //
 // Not a Parquet page's: klauspost's DecodeAll decodes a page into the buffer its header
 // declares and keeps no window apart from it (step 520 holds it to that buffer), and

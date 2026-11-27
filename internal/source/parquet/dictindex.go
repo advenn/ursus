@@ -17,47 +17,37 @@ import (
 	"github.com/apache/arrow-go/v18/parquet/schema"
 )
 
-// A data page's dictionary indices, checked against its dictionary before arrow-go
-// decodes them (step 517, F9 of step 510's record).
+// A data page's dictionary indices, checked against its dictionary before they are
+// decoded (step 517).
 //
-// arrow-go's column reader looks a dictionary index up through
-// encoding.(*dictConverter[T]).ensure, which makes a slice of index+1 values before
-// anything checks the index against the dictionary: IsValidSingle, IsValid and Fill
-// each call it first. An RLE run saying index 2^30 in a dictionary of two INT64
-// values made a slice of 8 GiB, from a file of 128 bytes, and a
-// FIXED_LEN_BYTE_ARRAY's or a BYTE_ARRAY's slice headers three times that, a fatal
-// "out of memory" no recover catches. It reached every chunk arrow-go decodes: a
-// nested column or a struct's field, INT96 and FIXED_LEN_BYTE_ARRAY, a chunk whose
-// footer lists an encoding the reader's own pages do not read. The own pages check
-// each index first (pageChunk.indices), and those chunks do not come here.
+// A dictionary index is a claim: an RLE run of a few bytes can say any index, in a
+// dictionary of two values. The reader's own pages check each index first
+// (pageChunk.indices); the chunks arrow-go's column reader decodes, a nested column
+// or a struct's field, INT96 and FIXED_LEN_BYTE_ARRAY, a chunk whose footer lists an
+// encoding the own pages do not read, are checked here, so an index is checked
+// against its dictionary's count whichever reader its chunk takes.
 //
-// So such a chunk is read through checkedPages, a page reader around arrow-go's own.
-// Each page arrow-go's column reader takes from it has been decompressed already, by
-// arrow-go, into the buffer arrow-go decodes, and a dictionary-encoded data page's
-// indices are checked there, before the column reader sees the page: an index at or
-// past the dictionary's count fails the read as corrupt. The other way in, step
-// 510's measured reads, would have meant decompressing each such page a second time,
-// with a page header and level parser of ursus's own beside arrow-go's, which could
-// disagree with it; here the page is the one arrow-go reads, as arrow-go parsed it.
+// Such a chunk is read through checkedPages, a page reader around arrow-go's own.
+// Each page the column reader takes from it has been decompressed already, into the
+// buffer the column reader decodes, and a dictionary-encoded data page's indices are
+// checked there, before the column reader sees the page: an index at or past the
+// dictionary's count fails the read as corrupt. The other way in, step 510's
+// measured reads, would have meant decompressing each such page a second time, with
+// a page header and level parser of ursus's own beside arrow-go's, which could
+// disagree with it; here the page is the one the column reader reads, as it parsed it.
 //
-// Only the indices arrow-go would read are checked, so no file it reads is refused:
-// a page's first n, n its values that are not null, which its definition levels
-// count; past them, a bit-packed run's padding can hold anything. A bit width wider
-// than the dictionary needs is legal and checked by value. A PLAIN page after the
-// dictionary's, where a writer fell back, is not checked. Each run is read as
-// arrow-go's RleDecoder and bit reader read it, so an index arrow-go reaches is one
-// this reaches; past a header RleDecoder refuses, where arrow-go fails the page, this
-// reads on, which checks more and never less.
+// Only the indices the column reader would read are checked, so no file it reads is
+// refused: a page's first n, n its values that are not null, which its definition
+// levels count; past them, a bit-packed run's padding can hold anything. A bit width
+// wider than the dictionary needs is legal and checked by value. A PLAIN page after
+// the dictionary's, where a writer fell back, is not checked. Each run is read as the
+// hybrid encoding's decoder reads it, so an index it reaches is one this reaches;
+// past a header the decoder refuses, this reads on, which checks more and never less.
 //
-// A page is refused by the reader's Next answering false: arrow-go has not taken it
-// in, so nothing decodes it, and its column reader's Err gives the reason, which
-// arrow-go's ReadBatch drops at a batch's first page and batchErr picks up.
-//
-// arrow-go v18.9.0 checks an index against the dictionary first, and fails the page,
-// "dict eof exception", allocating nothing of it (step 538, over this check's 2,000
-// generated pages and its 14 forged files). The check stays for the error, which
-// names the column, the index and the dictionary's count, and for the 0-bit indices
-// arrow-go still misreads (zeroWidthMisread), the same pass.
+// A page is refused by the reader's Next answering false: the column reader has not
+// taken it in, so nothing decodes it, and its Err gives the reason, which batchErr
+// picks up. The error names the column, the index and the dictionary's count (step
+// 538), and the same pass checks a page of 0-bit indices (zeroWidthMisread).
 //
 // One pass over the page's definition levels and its indices, for a
 // dictionary-encoded data page only. The reader's state is one column chunk's, read
@@ -87,15 +77,13 @@ func checkedColumn(rg *file.RowGroupReader, ci int, desc *schema.Column, mem mem
 }
 
 // boundHeaders lowers the largest page header pr reads to its chunk's bytes, and to
-// no less than arrow-go's first look at a header, 16 KiB (F17 of step 521). arrow-go
-// reads a header by looking at 16 KiB of the chunk and, where the header does not
-// parse, at twice as much, up to 4 MiB, each look a buffer of its size: a dictionary
-// header that did not parse, which arrow-go reads out of turn at each read of the
-// file, cost 8 MiB a read in a file of 102 bytes, past the fuzz targets' bound over
-// their eight reads. A header lies inside its chunk, so a look past the chunk's bytes
-// finds nothing more, and the header is refused at the first look that holds them.
+// no less than the page reader's first look at a header, 16 KiB (step 521). The page
+// reader reads a header by looking at 16 KiB of the chunk and, where the header does
+// not parse, at twice as much, up to 4 MiB, each look a buffer of its size. A header
+// lies inside its chunk, so a look past the chunk's bytes finds nothing more, and a
+// header that does not parse is refused at the first look that holds them.
 func boundHeaders(pr file.PageReader, rg *metadata.RowGroupMetaData, ci int) {
-	const firstLook, mostLook = 16 << 10, 4 << 20 // arrow-go's defaultPageHeaderSize and defaultMaxPageHeaderSize
+	const firstLook, mostLook = 16 << 10, 4 << 20 // the page reader's defaultPageHeaderSize and defaultMaxPageHeaderSize
 	cc, err := rg.ColumnChunk(ci)
 	if err != nil {
 		return
@@ -110,7 +98,7 @@ type checkedPages struct {
 	file.PageReader
 	maxDef, maxRep int16
 	name           string
-	phys           parquet.Type // the column's physical type, which picks arrow-go's decoder
+	phys           parquet.Type // the column's physical type, which picks the column reader's decoder
 	chunkValues    int64        // the column chunk's values, as its footer gives them
 
 	dictN int64 // the dictionary's values, once dict
@@ -118,10 +106,9 @@ type checkedPages struct {
 	err   error
 }
 
-// Next refuses a page by answering false, with the reason in Err. arrow-go then
-// reads no more of the chunk, and its count of the last page's values stands: a
-// refusal from anywhere later, once arrow-go has taken the page in, leaves it
-// counting the page's values and decoding them with what it had (batchErr).
+// Next refuses a page by answering false, with the reason in Err, before the column
+// reader takes the page in: it then reads no more of the chunk, and none of the
+// page's values is counted or decoded (batchErr).
 func (c *checkedPages) Next() bool {
 	if c.err != nil || !c.PageReader.Next() {
 		return false
@@ -141,9 +128,9 @@ func (c *checkedPages) Next() bool {
 			break
 		}
 		if !c.dict {
-			// No dictionary page came first: arrow-go reads one out of turn, through
-			// GetDictionaryPage, before it decodes this page, so it is read here first.
-			// Where there is none, arrow-go refuses the page itself.
+			// No dictionary page came first: the column reader reads one out of turn,
+			// through GetDictionaryPage, before it decodes this page, so it is read here
+			// first. Where there is none, the column reader refuses the page itself.
 			d, err := c.PageReader.GetDictionaryPage()
 			if err != nil || d == nil {
 				break
@@ -170,12 +157,10 @@ func (c *checkedPages) Reset(r parquet.BufferedReader, nrows int64, codec compre
 }
 
 // batchErr is a ReadBatch's error, or, where the batch read nothing and answered
-// none, the error the chunk's reader stopped on. arrow-go's ReadBatch drops an error
-// that ends the chunk before the batch reads a level, a page checkedPages refuses or
-// one that does not decompress, and answers that it read nothing
-// (columnChunkReader.readBatch); ColumnChunkReader.Err holds it, as that interface
-// says. Read again, a reader whose page failed once arrow-go had counted its values
-// would decode them with what it had: the read ends here instead.
+// none, the error the chunk's reader stopped on, which ColumnChunkReader.Err holds,
+// as that interface says: a page checkedPages refuses, or one that does not
+// decompress, ends the chunk before the batch reads a level. The read ends at that
+// error, and the chunk's reader is not read again.
 func batchErr(cr interface{ Err() error }, total int64, err error) error {
 	if err == nil && total == 0 {
 		err = cr.Err()
@@ -184,13 +169,11 @@ func batchErr(cr interface{ Err() error }, total int64, err error) error {
 }
 
 // truncated is a page reader's error as a scan may return it, io.EOF made
-// io.ErrUnexpectedEOF (F12 of step 521). arrow-go's page reader answers io.EOF for a
-// page whose header is whole and none of whose bytes is in its chunk
-// (serializedPageReader.decompress, io.ReadFull), the chunk ending there; and a scan
-// answers io.EOF at its end, which the engine takes an error wrapping for. The read
-// ended at the rows before the page, with no error: a dictionary page none of whose
-// bytes was there read as 0 rows of a row group of 5, and step 416's count of them,
-// which comes after, was never asked.
+// io.ErrUnexpectedEOF (step 521). A page whose header is whole and none of whose
+// bytes is in its chunk is cut short, and io.ReadFull answers io.EOF for it, no byte
+// read; a scan answers io.EOF at its end, which the engine takes an error wrapping
+// for. Made io.ErrUnexpectedEOF, the error fails the read as cut short, where io.EOF
+// would end it at the rows before the page.
 func truncated(err error) error {
 	if errors.Is(err, io.EOF) {
 		return io.ErrUnexpectedEOF
@@ -207,17 +190,18 @@ func dictEncoded(e parquet.Encoding) bool {
 	return false
 }
 
-// pageLevels is a data page as arrow-go's column reader takes it apart: its values'
-// bytes, after its levels, and its definition levels' runs, to the page's end.
+// pageLevels is a data page as the column reader takes it apart: its values' bytes,
+// after its levels, and its definition levels' runs, to the page's end.
 type pageLevels struct {
 	data   []byte // the values' bytes
 	n      int    // the page's levels, its NumValues
-	defs   []byte // the definition levels' runs, to their page's end, as arrow-go reads them
+	defs   []byte // the definition levels' runs, to their page's end, as the column reader reads them
 	packed bool   // defs are the deprecated BIT_PACKED
 }
 
-// levels takes data page p apart as arrow-go does. ok is false where arrow-go refuses
-// the page's levels before it decodes a value; such a page is left to it.
+// levels takes data page p apart as the column reader does. ok is false where the
+// column reader refuses the page's levels before it decodes a value; such a page is
+// left to it.
 func (c *checkedPages) levels(p file.Page) (l pageLevels, ok bool) {
 	l.data, l.n = p.Data(), int(p.NumValues())
 	switch q := p.(type) {
@@ -252,8 +236,8 @@ func (c *checkedPages) levels(p file.Page) (l pageLevels, ok bool) {
 	return l, true
 }
 
-// present bounds the values of page l that are not null, the values arrow-go decodes
-// of it (presentValues): its levels, where its column has no definition level.
+// present bounds the values of page l that are not null, the values the column reader
+// decodes of it (presentValues): its levels, where its column has no definition level.
 func (c *checkedPages) present(l pageLevels) int {
 	if c.maxDef == 0 {
 		return l.n
@@ -261,9 +245,9 @@ func (c *checkedPages) present(l pageLevels) int {
 	return presentValues(l.defs, l.packed, bits.Len16(uint16(c.maxDef)), c.maxDef, l.n)
 }
 
-// check refuses data page p if an index arrow-go would read of it is at or past the
-// dictionary's count. A page arrow-go refuses before it decodes a value, levels it
-// cannot read, is left to it.
+// check refuses data page p if an index the column reader would read of it is at or
+// past the dictionary's count. A page the column reader refuses before it decodes a
+// value, levels it cannot read, is left to it.
 func (c *checkedPages) check(p file.Page) error {
 	l, ok := c.levels(p)
 	if !ok {
@@ -271,17 +255,17 @@ func (c *checkedPages) check(p file.Page) error {
 	}
 	data := l.data
 	if len(data) == 0 {
-		return nil // no indices: arrow-go reads none
+		return nil // no indices: the column reader reads none
 	}
 	width := int(data[0])
 	if width >= 64 {
-		return nil // arrow-go refuses the width
+		return nil // the column reader refuses the width
 	}
 	values := c.present(l)
 	if width == 0 {
 		if b, ok := zeroWidthMisread(data[1:], values); ok {
-			return fmt.Errorf("corrupt: column %s: a data page's dictionary indices are 0 bits wide, each 0, and "+
-				"arrow-go would read the byte after a run's header, %d, as the run's index", c.name, b)
+			return fmt.Errorf("corrupt: column %s: a data page's dictionary indices are 0 bits wide, each 0, "+
+				"but a run of them is followed by a byte, %d, that it does not hold", c.name, b)
 		}
 		return nil
 	}
@@ -294,9 +278,9 @@ func (c *checkedPages) check(p file.Page) error {
 }
 
 // levelsV1 finds a V1 page's levels of one kind at the start of data, n of them, as
-// arrow-go's LevelDecoder.SetData does: their bytes in the page, and the runs its
-// decoder reads, which go on past those bytes. ok is false where arrow-go refuses
-// the page.
+// the column reader's LevelDecoder.SetData does: their bytes in the page, and the
+// runs its decoder reads, which go on past those bytes. ok is false where the column
+// reader refuses the page.
 func levelsV1(enc parquet.Encoding, maxLvl int16, n int, data []byte) (size int, runs []byte, packed, ok bool) {
 	switch enc {
 	case parquet.Encodings.RLE:
@@ -321,10 +305,10 @@ func levelsV1(enc parquet.Encoding, maxLvl int16, n int, data []byte) (size int,
 
 // presentValues bounds the values of a page of n levels that are not null, those whose
 // definition level is maxDef, from its definition levels: the runs of the hybrid
-// encoding, or bit-packed values where packed, the deprecated BIT_PACKED as arrow-go
-// reads it. A level it cannot read is counted present: arrow-go stops at the first
-// run it cannot read, so a level past there yields it no value, and counting one
-// costs only a check of an index arrow-go would not have read.
+// encoding, or bit-packed values where packed, the deprecated BIT_PACKED as the
+// column reader reads it. A level it cannot read is counted present: the column
+// reader stops at the first run it cannot read, so a level past there yields it no
+// value, and counting one costs only a check of an index it would not have read.
 func presentValues(runs []byte, packed bool, width int, maxDef int16, n int) int {
 	if packed {
 		hits, read := packedCount(runs, width, n, maxDef)
@@ -366,17 +350,15 @@ func presentValues(runs []byte, packed bool, width int, maxDef int16, n int) int
 	return hits + n - read
 }
 
-// zeroWidthMisread reports a run of a page's dictionary indices of 0 bits that
-// arrow-go reads as another index than 0, for the page's first n values, and the
-// byte it reads (F16 of step 521). An index of 0 bits is 0, as pyarrow 25.0.1 and
-// DuckDB 1.5.5 read it, and an RLE run of them stores its value in no byte; arrow-go's
-// RleDecoder.Next reads it with BitReader.getAlignedUint8(0, …), which reads nothing
-// and answers raw[0], the byte its buffer holds after the header, 0 past the page's
-// end. So a run followed by a byte that is not 0, a stray byte or the header of a
-// run after it, read every value of the run as that index: a page whose indices were
-// all 0 read the dictionary's second value, with no error, where the reader's own
-// pages read its first. Runs are walked as pastIndex walks them; a bit-packed run of
-// 0 bits holds no byte and reads as 0s.
+// zeroWidthMisread reports a run of a page's dictionary indices of 0 bits, among
+// those of the page's first n values, followed by a byte that is not 0, and that
+// byte (step 521). An index of 0 bits is 0, as pyarrow 25.0.1, DuckDB 1.5.5 and the
+// reader's own pages read it, and an RLE run of them stores its value in no byte. A
+// byte after the run's header that is not 0, a stray byte or the header of a run
+// after it, is one a decoder could take for the run's value, every value of the run
+// then another index than 0; the page is refused rather than read two ways. Runs are
+// walked as pastIndex walks them; a bit-packed run of 0 bits holds no byte and reads
+// as 0s.
 func zeroWidthMisread(b []byte, n int) (byte, bool) {
 	r := hybridRuns{b: b}
 	for at := 0; at < n; {
@@ -407,16 +389,14 @@ func zeroWidthMisread(b []byte, n int) (byte, bool) {
 }
 
 // pastIndex reads the dictionary indices of a page, runs of the hybrid encoding of
-// width bits, as arrow-go's dictionary decoder takes them for the page's first n
-// values, and returns the first at or past dictN.
+// width bits, as the column reader's dictionary decoder takes them for the page's
+// first n values, and returns the first at or past dictN.
 //
-// Past a header arrow-go's RleDecoder.Next refuses, a zero count or one past what an
-// int32 holds, arrow-go fails the page on the values it came short of; this reads on
-// from where RleDecoder would, which checks more and never less. An RLE run's value
-// is the whole bytes it is stored in, unmasked, as arrow-go takes it; width 0 is
-// zeroWidthMisread's. A bit-packed run's values past the page's end are
-// 0, as arrow-go's bit reader gives them, and a bit-packed run wider than 32 bits is
-// an error there.
+// Past a header the decoder refuses, a zero count or one past what an int32 holds,
+// this reads on from where the decoder would, which checks more and never less. An
+// RLE run's value is taken as the whole bytes it is stored in, unmasked; width 0 is
+// zeroWidthMisread's. A bit-packed run's values past the page's end are taken as 0,
+// and a bit-packed run wider than 32 bits is refused by the decoder.
 func pastIndex(b []byte, width, n int, dictN int64) (idx uint64, past bool) {
 	r := hybridRuns{b: b}
 	for at := 0; at < n; {
@@ -425,7 +405,7 @@ func pastIndex(b []byte, width, n int, dictN int64) (idx uint64, past bool) {
 			if r.pos >= len(r.b) {
 				return 0, false
 			}
-			continue // an overlong header: RleDecoder's next read starts after what it took
+			continue // an overlong header: the decoder's next read starts after what it took
 		}
 		count := uint32(h >> 1)
 		if h&1 == 0 {
@@ -434,7 +414,7 @@ func pastIndex(b []byte, width, n int, dictN int64) (idx uint64, past bool) {
 			}
 			v, ok := r.value(width)
 			if !ok {
-				continue // arrow-go does not take the bytes of a value that is not there
+				continue // the bytes of a value that is not there are not taken
 			}
 			if v >= uint64(dictN) {
 				return v, true
@@ -460,8 +440,8 @@ func pastIndex(b []byte, width, n int, dictN int64) (idx uint64, past bool) {
 	return 0, false
 }
 
-// hybridRuns walks the runs of Parquet's RLE / bit-packed hybrid encoding as
-// arrow-go's RleDecoder and BitReader read them.
+// hybridRuns walks the runs of Parquet's RLE / bit-packed hybrid encoding as the
+// column reader's RleDecoder and BitReader read them.
 type hybridRuns struct {
 	b   []byte
 	pos int

@@ -98,11 +98,11 @@ func (s *Source) Schema(ctx context.Context) (*dtype.Schema, error) {
 
 // corrupt turns a panic recovered while reading a file into an error.
 //
-// arrow-go's decoders panic on input they cannot parse — an index past a buffer, a
-// length that is not there — and a file that makes them do that is corrupt, which
-// is the file's problem: KindIO. The frame that decides is the innermost one in
-// arrow-go or in ursus. If it is ursus's own, the bug is ursus's, and the result is
-// ErrInternal as anywhere else; so is ursus's own assertion, an internal *Error.
+// A decoder's panic on input it cannot parse — an index past a buffer, a length that
+// is not there — is the file's problem: the file is corrupt, KindIO. The frame that
+// decides is the innermost one in arrow-go or in ursus. If it is ursus's own, the bug
+// is ursus's, and the result is ErrInternal as anywhere else; so is ursus's own
+// assertion, an internal *Error.
 func corrupt(v any, name string) *uerr.Error {
 	e := uerr.Attributed(v, uerr.KindIO, "scan_parquet",
 		"%s is corrupt, or uses something the decoder cannot read", name)
@@ -489,8 +489,8 @@ func (s *Source) openFile(ctx context.Context, i int, mem memory.Allocator) (_ *
 		return nil, nil, uerr.Wrap(err, uerr.KindIO, "scan_parquet",
 			"opening %s", s.partName(i))
 	}
-	// A corrupt footer can panic inside arrow-go. Recovered here as well as by every
-	// caller, because only here is the file still this function's to close.
+	// A panic reading a corrupt footer is recovered here as well as by every caller,
+	// because only here is the file still this function's to close.
 	defer func() {
 		if v := recover(); v != nil {
 			if closer != nil {
@@ -499,9 +499,9 @@ func (s *Source) openFile(ctx context.Context, i int, mem memory.Allocator) (_ *
 			err = corrupt(v, s.partName(i))
 		}
 	}()
-	// The footer is walked before arrow-go reads it: its schema's depth before arrow-go
-	// recurses on it (step 423), and its lists' counts before it makes their slices
-	// (step 521).
+	// The footer is walked before the file reader reads it: its schema's depth (step
+	// 423), its lists' counts (step 521) and its schema's children (step 533) are
+	// checked against its bytes first.
 	if ra, err = measureFooter(ra); err != nil {
 		if closer != nil {
 			closer.Close()
@@ -545,7 +545,7 @@ func (s *Source) openFile(ctx context.Context, i int, mem memory.Allocator) (_ *
 // A read takes a row group's count for its rows, and a count its sum, so a count
 // short of the columns' read short, with no error, and one past them counted rows
 // that are not there. It refuses a row group that does not hold a chunk of each
-// column of the schema too (F19 of step 521).
+// column of the schema too (step 521).
 func checkRowCounts(md *metadata.FileMetaData) error {
 	var total int64
 	for g := range md.NumRowGroups() {
@@ -556,8 +556,8 @@ func checkRowCounts(md *metadata.FileMetaData) error {
 		}
 		total += rows
 		if n := rg.NumColumns(); n != md.Schema.NumColumns() {
-			// A row group holds a chunk of each column (F19 of step 521): one short of
-			// them failed the read later as ursus's own bug, and one past them asked the
+			// A row group holds a chunk of each column (step 521): one short of them
+			// failed the read later as ursus's own bug, and one past them asked the
 			// schema for a column it does not have.
 			return fmt.Errorf("corrupt: row group %d holds %d column chunks, and the schema has %d columns",
 				g, n, md.Schema.NumColumns())
@@ -581,11 +581,10 @@ func checkRowCounts(md *metadata.FileMetaData) error {
 }
 
 // checkChunks refuses a footer that places a column chunk outside the file (step
-// 510): arrow-go reads a chunk into a slice of its declared size, made before the
-// read finds the bytes missing (ReaderProperties.GetStream), so a chunk claiming
-// 2^40 bytes in a file of 162 asked the runtime for a terabyte, a fatal "out of
-// memory" no recover catches. A chunk begins at its first page, its dictionary's
-// where it has one, as arrow-go takes it.
+// 510): a chunk's offset and size are the footer's claims, and a chunk is read whole,
+// into a buffer of its declared size, so a size the file's bytes after its offset
+// cannot hold is refused before anything is sized by it. A chunk begins at its first
+// page, its dictionary's where it has one, as arrow-go takes it.
 func checkChunks(md *metadata.FileMetaData) error {
 	size := md.GetSourceFileSize()
 	for g := range md.NumRowGroups() {

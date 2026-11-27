@@ -479,8 +479,7 @@ func pqFooterOf(b []byte) []byte {
 
 // pqMagicless is a file of footer f after the first j bytes of the leading magic, f's
 // length and the magic after it. Below 4, j leaves the magic no room, as no writer
-// does, and arrow-go reads the footer all the same: its length is within the file's
-// less 8 (step 521).
+// does, and the footer's length is still within the file's less 8 (step 521).
 func pqMagicless(f []byte, j int) []byte {
 	b := append([]byte("PAR1")[:j:j], f...)
 	b = binary.LittleEndian.AppendUint32(b, uint32(len(f)))
@@ -489,10 +488,9 @@ func pqMagicless(f []byte, j int) []byte {
 
 // pqHiddenGroups is a file of no column chunk whose footer's list of row groups says
 // it holds a binary (step 521). To a walk by the types a list's header gives, its one
-// element is a binary of 25 bytes; arrow-go reads a list's elements as the types
-// parquet.thrift gives them, and to it the element is a row group whose first byte,
-// 0x19, the binary's length, begins its field 1, its list of column chunks, claiming
-// 10^8.
+// element is a binary of 25 bytes; to a decoder that reads a list's elements as the
+// types parquet.thrift gives them, the element is a row group whose first byte, 0x19,
+// the binary's length, begins its field 1, its list of column chunks, claiming 10^8.
 func pqHiddenGroups() []byte {
 	var w thriftCompact
 	w.begin()
@@ -518,10 +516,8 @@ func pqHiddenGroups() []byte {
 // pqUnclosedSchema is a file of no row groups whose schema does not close (step 533):
 // the root and groups−1 groups each claiming every element after it, each the next's
 // parent, then leaves REQUIRED INT64 leaves, the last group's children. Each claim is
-// within the elements after it, and the group above the last is owed a child more.
-// arrow-go makes each group a slice of the children it claims before it reads one,
-// 16 bytes a child, by the square of the elements, and refuses the schema only when it
-// runs out of them.
+// within the elements after it, and the group above the last is owed a child more,
+// which only a walk to the schema's end finds.
 func pqUnclosedSchema(groups, leaves int) []byte {
 	n := groups + leaves
 	var w thriftCompact
@@ -547,10 +543,10 @@ func pqUnclosedSchema(groups, leaves int) []byte {
 }
 
 // pqForgedSeeds are the forged files the Parquet target starts from, each honest
-// version among them: a data page claiming 2^28 bytes uncompressed, and one
-// claiming 2^26 compressed, arrow-go's limits (D14 of v0.7.2-plan.md); a dictionary
-// page claiming 2^31−1 values, read by the reader's own pages and, its footer listing
-// an encoding they do not read, by arrow-go's; a footer whose list of row groups
+// version among them: a data page claiming 2^28 bytes uncompressed, and one claiming
+// 2^26 compressed (D14 of v0.7.2-plan.md); a dictionary page claiming 2^31−1 values,
+// read by the reader's own pages and, its footer listing an encoding they do not
+// read, by arrow-go's; a footer whose list of row groups
 // claims 10^8; a column chunk claiming 2^40 bytes; step 517's, a dictionary index
 // of 2^30 in an RLE run and in a bit-packed one, in each kind of chunk arrow-go
 // decodes (pqIndexKinds); step 520's, a dictionary page's count in a varint of 10
@@ -558,7 +554,7 @@ func pqUnclosedSchema(groups, leaves int) []byte {
 // hold more than they declare, and honest pages under each codec (pqCodecSeeds); and
 // step 521's, the footer of 10^8 row groups leaving the leading magic no room, and a
 // list of row groups said to hold a binary, hiding a list of 10^8 column chunks in it
-// (pqHiddenGroups); step 531's, each kind of delta-encoded page honest and with F18's
+// (pqHiddenGroups); step 531's, each kind of delta-encoded page honest and with a
 // count of 0 (pqDeltaKinds); and step 533's, a schema's root claiming 2^31−1
 // children, a Struct claiming as many, and a List whose root claims a child more than
 // its tree holds.
@@ -742,8 +738,8 @@ type pqDeltaKind struct {
 }
 
 // pqDeltaKinds are an INT64, REQUIRED and OPTIONAL with a null in seven rows; an
-// INT32, and one whose rows 40 and 41 are its least and greatest, so its deltas span
-// more than 32 bits, as arrow-go's writer packs them (deltapage.go); the INT64
+// INT32, and one whose rows 40 and 41 are its least and greatest, so its deltas, taken
+// as an int64's, span more than 32 bits (deltapage.go); the INT64
 // element of a List; the INT64 field of a Struct; a BYTE_ARRAY under
 // DELTA_LENGTH_BYTE_ARRAY, REQUIRED and OPTIONAL; and one under DELTA_BYTE_ARRAY,
 // whose values share prefixes. Each footer lists its page's encoding, as a writer's
@@ -897,14 +893,14 @@ type pqDeltaForgery struct {
 
 // pqDeltaForgeries are the changes: layouts the format allows; a miniblock past the
 // last value giving a width of 255, which the format says readers must accept; each
-// field of the header wrong, F18's block of 31 values among them; a block in
-// miniblocks of 16 values and one of 64 values, which arrow-go would decode and the
-// format does not allow; a miniblock holding values 65 bits wide; a count of 0,
-// short by one, past the values by one, past the page's values, and 2^40; and the page
-// ending inside a block's bit widths, inside a miniblock's values, and inside its
-// padding. Then two runs the format allows and arrow-go would allocate gigabytes for:
-// one miniblock of 2^31 values 0 bits wide, and a page claiming 2^26 values, past its
-// column chunk's, its run one such miniblock of them all.
+// field of the header wrong, a block of 31 values among them; a block in miniblocks
+// of 16 values and one of 64 values, which the format does not allow; a miniblock
+// holding values 65 bits wide; a count of 0, short by one, past the values by one,
+// past the page's values, and 2^40; and the page ending inside a block's bit widths,
+// inside a miniblock's values, and inside its padding. Then two runs the format allows
+// whose claims no page's bytes bound, which the reader refuses: one miniblock of 2^31
+// values 0 bits wide, and a page claiming 2^26 values, past its column chunk's, its
+// run one such miniblock of them all.
 func pqDeltaForgeries() []pqDeltaForgery {
 	yes := func(int, int) bool { return true }
 	no := func(int, int) bool { return false }

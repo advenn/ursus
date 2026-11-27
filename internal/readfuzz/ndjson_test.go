@@ -200,7 +200,7 @@ func skipZstdWindowsIn(t *testing.T, b []byte) {
 		}
 	}
 	if sum > maxZstdWindow {
-		t.Skipf("Zstandard frames declaring windows of %d bytes, which arrow-go's decoder makes whole", sum)
+		t.Skipf("Zstandard frames declaring windows of %d bytes, which klauspost's decoder makes whole", sum)
 	}
 }
 

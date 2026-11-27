@@ -275,12 +275,10 @@ func (r *reader) Next(ctx context.Context) (*data.Batch, error) {
 		}
 		if !more {
 			// The end is no error, or io.EOF itself, which a reader of the caller's
-			// may answer. An error wrapping io.EOF is the read's failure: arrow-go's
-			// IPC stream reader answers one for a panic it recovered, a buffer whose
-			// bytes decompress short among them, and for a stream ending where it
-			// wants a dictionary; its file reader, for a block whose bytes a ReaderAt
-			// does not give. It was taken for the end, and the rows before it read
-			// as the whole (step 534).
+			// may answer. An error wrapping io.EOF is the read's failure, an input cut
+			// short: a buffer whose bytes decompress short, a stream ending where a
+			// dictionary is due, a block whose bytes a ReaderAt does not give. It was
+			// taken for the end, and the rows before it read as the whole (step 534).
 			if readErr != nil && readErr != io.EOF {
 				return nil, r.finish(uerr.Wrap(readErr, uerr.KindIO, op, "reading the Arrow stream"))
 			}
@@ -326,7 +324,7 @@ func callerCode(what string, f func() error) (err error) {
 // attributed is a panic recovered around the caller's code as the error of whoever's
 // code raised it (step 428), as Parquet's corrupt is. The innermost frame outside Go's
 // standard library decides:
-//   - the caller's, or arrow-go's reading the stream, is an I/O failure of the
+//   - the caller's, or another module's reading the stream, is an I/O failure of the
 //     stream: KindIO;
 //   - ursus's own is ursus's bug, ErrInternal, as anywhere else.
 //
@@ -401,8 +399,8 @@ func (r *reader) start(ctx context.Context) error {
 // finish ends the stream, releasing the reader as soon as it is not needed rather
 // than waiting for Close. It returns io.EOF when err is nil, and err otherwise, any
 // io.EOF in it made io.ErrUnexpectedEOF (uerr.Truncated): the stream's end is io.EOF
-// itself, and none of its errors is its end, a panic arrow-go raised with io.EOF from
-// its io.ReadFull of a buffer whose bytes decompress short among them (step 534).
+// itself, and none of its errors is its end, one wrapping io.EOF for a buffer whose
+// bytes decompress short among them (step 534).
 func (r *reader) finish(err error) error {
 	r.done = true
 	r.rec = nil

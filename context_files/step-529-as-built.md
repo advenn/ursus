@@ -149,14 +149,13 @@ the IPC targets' bounds (64 MiB and 1 KiB a byte of input allocated, ten seconds
 same bytes: the sum of its records' rows, its fields' names, Null. Every frame's
 columns are Null and all null (`allNull`, a column's null count against its length).
 
-The 2^40 input as the fuzzer saved it (`finding-record-of-2e40-rows-of-no-data`) is a
-record of no columns and 2^40 + 18,432 rows whose field nodes' offset points past its
-metadata: arrow-go, reading no column, never follows it, and step 519's walk refuses
-the record as corrupt before a row is read ("in its message 2, a record batch's nodes
-at byte 60 points to byte 5300, past the 168 bytes"). The targets skipped it, with
-every record of so many rows, so the refusal went unseen since step 519; the test
-holds `Count`, `Collect` and `Head` of it to that refusal, an `ErrIO`, inside the
-bounds, and reads the record it declares as arrow-go writes it.
+The 2^40 input as the fuzzer saved it is a record of no columns and 2^40 + 18,432 rows
+whose field nodes' offset points past its metadata: step 519's walk refuses the record
+as corrupt before a row is read ("in its message 2, a record batch's nodes at byte 60
+points to byte 5300, past the 168 bytes"). The targets skipped it, with every record of
+so many rows, so the refusal went unseen since step 519; the test holds `Count`,
+`Collect` and `Head` of it to that refusal, an `ErrIO`, inside the bounds, and reads
+the record it declares as arrow-go writes it.
 
 **The fuzz targets run the class.** `oversized` no longer skips a record whose
 schema is only Null columns, or none (above). The targets' oracle compared a frame
@@ -256,26 +255,19 @@ Nothing it saved was kept.
 ## 6. A new finding, not this step's: an IPC buffer cut short reads as the end
 
 The first fuzz run of each target found, in 4 to 5 s, an input that ursus reads as an
-empty frame, no error, where arrow-go fails; both fail so on `origin/master`, and
-neither is of this step's class:
-
-```
-FuzzScanIPCFile:   ursus reads 0 rows of 2160 bytes arrow-go reads as: arrow-go panicked: EOF
-FuzzScanIPCStream: ursus reads 0 rows of 1608 bytes arrow-go reads as: arrow/ipc: unknown error while reading: EOF
-```
+empty frame, no error, where arrow-go refuses the bytes: a file of 2,160 bytes and a
+stream of 1,608. Both read so on `origin/master`, and neither is of this step's class.
 
 The file is one of Polars' compressed `polars_null` files, mutated: a buffer whose body
-is shorter than it declares, so arrow-go's `ipcSource.buffer` panics with `io.EOF`
-from its `io.ReadFull`. The stream's reader returns an error wrapping `io.EOF`. Each
-reaches the engine as an error that `errors.Is(err, io.EOF)`, which it takes for the
-end of the stream: `arrowsrc` checks `!errors.Is(readErr, io.EOF)` on the reader's
-error, and the file's panic is recovered as an error wrapping its value. `Collect`
-and `Count` of either answer 0 rows and no error. It is the IPC twin of step 521's
-F12, a Parquet page short of its bytes, fixed there by `truncated` making such an
-error `io.ErrUnexpectedEOF`; the same few lines in `arrowsrc`, its reader's error and
-a recovered panic, would fix it here. Not this step's scope, so left: the inputs are
-at `/home/beck/ursus-scratch-archive/step529-findings/`, not committed, and the fuzz
-runs below set this class aside to fuzz past it.
+is shorter than it declares, so the error of its read wraps `io.EOF`, as the stream's
+does. Each reaches the engine as an error that `errors.Is(err, io.EOF)`, which it
+takes for the end of the stream: `arrowsrc` checks `!errors.Is(readErr, io.EOF)` on
+the reader's error. `Collect` and `Count` of either answer 0 rows and no error. It is
+the IPC twin of step 521's Parquet page short of its bytes, fixed there by `truncated`
+making such an error `io.ErrUnexpectedEOF`; the same few lines in `arrowsrc` would fix
+it here. Not this step's scope, so left: the inputs are at
+`/home/beck/ursus-scratch-archive/step529-findings/`, not committed, and the fuzz runs
+below set this class aside to fuzz past it.
 
 ## 7. Teeth
 

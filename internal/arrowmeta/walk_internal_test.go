@@ -24,7 +24,7 @@ var codecs = []struct {
 }{{"uncompressed", nil}, {"LZ4", []ipc.Option{ipc.WithLZ4()}}, {"Zstandard", []ipc.Option{ipc.WithZstd()}}}
 
 // readArrow reads b as arrow-go does alone, every record of a file or a stream,
-// retained; a panic in arrow-go is its error.
+// retained; a panic is its error.
 func readArrow(b []byte, file bool) ([]arrow.RecordBatch, error) {
 	if file {
 		return readFile(bytes.NewReader(b))
@@ -50,7 +50,7 @@ func readWalked(b []byte, file bool) ([]arrow.RecordBatch, int64, error) {
 func readFile(r ipc.ReadAtSeeker) (recs []arrow.RecordBatch, err error) {
 	defer func() {
 		if v := recover(); v != nil {
-			err = fmt.Errorf("arrow-go panicked: %v", v)
+			err = fmt.Errorf("the read panicked: %v", v)
 		}
 	}()
 	fr, err := ipc.NewFileReader(r, ipc.WithAllocator(memory.NewGoAllocator()))
@@ -71,7 +71,7 @@ func readFile(r ipc.ReadAtSeeker) (recs []arrow.RecordBatch, err error) {
 func readStream(mr ipc.MessageReader) (recs []arrow.RecordBatch, err error) {
 	defer func() {
 		if v := recover(); v != nil {
-			err = fmt.Errorf("arrow-go panicked: %v", v)
+			err = fmt.Errorf("the read panicked: %v", v)
 		}
 	}()
 	sr, err := ipc.NewReaderFromMessageReader(mr, ipc.WithAllocator(memory.NewGoAllocator()))
@@ -131,13 +131,9 @@ func generated(t *testing.T, n int, each func(name string, b []byte, file bool, 
 // extensions among them, or of the fixed-width types, big-endian, written by arrow-go
 // as a file and as a stream, uncompressed, LZ4 and Zstandard: read through File or
 // NewMessageReader, every message walked, each reads as arrow-go reads it alone,
-// record for record, where arrow-go reads it; and where arrow-go refuses it, so does
-// ursus. Most read back as the record written, which says the input is well-formed;
-// the rest are arrow-go's misreadings of its own writing, of nested types in a union
-// or a list view, and its refusals, a big-endian Decimal or MonthDayNano interval of
-// no rows, whose missing buffer its byte swap dereferences, counted apart. Null
-// columns, which the format writes as a field node and no buffer, are among those read
-// (step 522), files and streams both.
+// record for record, or is refused by both. Most read back as the record written,
+// which says the inputs are well-formed. Null columns, which the format writes as a
+// field node and no buffer, are among those read (step 522), files and streams both.
 func TestTheWalkPassesWhatArrowGoWrites(t *testing.T) {
 	inputs, asWritten, unread, dicts, views, bigEndian := 0, 0, 0, 0, 0, 0
 	nullFiles, nullStreams := 0, 0
@@ -188,7 +184,7 @@ func TestTheWalkPassesWhatArrowGoWrites(t *testing.T) {
 			}
 		}
 	})
-	t.Logf("%d inputs: %d read back as written, %d refused by arrow-go alone; of those read, %d with a "+
+	t.Logf("%d inputs: %d read back as written, %d refused by both; of those read, %d with a "+
 		"dictionary, %d with a view, %d big-endian, %d files and %d streams with a Null column",
 		inputs, asWritten, unread, dicts, views, bigEndian, nullFiles, nullStreams)
 	if dicts == 0 || views == 0 || bigEndian == 0 || nullFiles == 0 || nullStreams == 0 || asWritten < inputs/2 {

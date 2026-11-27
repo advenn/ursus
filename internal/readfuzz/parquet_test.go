@@ -271,13 +271,11 @@ func rowsWithin(t *testing.T, got, want *ursus.DataFrame) {
 
 // TestAPageClaimingMoreThanItsChunkIsRefusedBeforeItsBuffer (D14 of v0.7.2-plan.md,
 // step 510): a data page whose header claims 2^28 bytes uncompressed, or 2^26
-// compressed, arrow-go's own limits, in a file of 161 bytes. arrow-go sized the
-// page's buffer by the claim before reading a byte of the page, and asked ursus's
-// pool for 256 MiB, or 64 MiB. A page lies inside its column chunk, so the claim is
-// refused now against the largest chunk the footer declares, as corrupt, with no
-// request past the bounded allocator's limit for the file's size. The honest file,
-// its header's sizes its page's, reads as the values its page holds, on one thread
-// and on four.
+// compressed, in a file of 161 bytes. A page lies inside its column chunk, so the
+// claim is refused against the largest chunk the footer declares, as corrupt, before
+// a buffer is sized by it, with no request past the bounded allocator's limit for the
+// file's size. The honest file, its header's sizes its page's, reads as the values
+// its page holds, on one thread and on four.
 func TestAPageClaimingMoreThanItsChunkIsRefusedBeforeItsBuffer(t *testing.T) {
 	vals := []int64{3, 1, 4, 1, 5, 9, 2, 6}
 	page := pqInt64Page(vals)
@@ -321,11 +319,9 @@ func TestAPageClaimingMoreThanItsChunkIsRefusedBeforeItsBuffer(t *testing.T) {
 }
 
 // TestAChunkClaimingMoreThanItsFileIsRefused (step 510): a footer whose column chunk
-// claims 2^40 bytes, or as many as the whole file from where it begins, or -1.
-// arrow-go read a chunk into a slice made of its claim before the read came up short,
-// and 2^40, a seed of FuzzScanParquet, asked the runtime for a terabyte: a fatal "out
-// of memory", no error. The footer is refused now as corrupt, within the harness's
-// bounds.
+// claims 2^40 bytes, or as many as the whole file from where it begins, or -1. A
+// chunk lies inside its file, so the footer is refused as corrupt before anything is
+// sized by the claim, within the harness's bounds.
 func TestAChunkClaimingMoreThanItsFileIsRefused(t *testing.T) {
 	vals := []int64{3, 1, 4, 1, 5, 9, 2, 6}
 	size := int64(len(pqForged{phys: pqInt64, rows: int64(len(vals)), pages: []pqPage{pqInt64Page(vals)}}.bytes()))
@@ -344,10 +340,9 @@ func TestAChunkClaimingMoreThanItsFileIsRefused(t *testing.T) {
 // TestADictionaryPageClaimingMoreValuesThanItsBytesIsRefused (step 510): a
 // dictionary page of 12 bytes, two strings, whose header claims 2^31−1 values, read
 // by the reader's own pages and, the footer listing an encoding they do not read, by
-// arrow-go's column reader. arrow-go made a slice of the claim before decoding a
-// value, 48 GB, a fatal "out of memory"; the reader's own pages refused it (step
-// 417). Both refuse it now, within the harness's bounds, and the honest page reads
-// the same both ways.
+// arrow-go's column reader. A dictionary's count is a claim its page's bytes must
+// hold, so both refuse it before anything is sized by it (the own pages since step
+// 417), within the harness's bounds, and the honest page reads the same both ways.
 func TestADictionaryPageClaimingMoreValuesThanItsBytesIsRefused(t *testing.T) {
 	honest := pqDictPages([]string{"ab", "cd"}, 5)
 	claims := append([]pqPage(nil), honest...)
@@ -440,16 +435,12 @@ func TestATimePastItsDayIsRefused(t *testing.T) {
 	})
 }
 
-// TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt (step 517, F9 of step
-// 510's record): a data page of a dictionary of two values whose indices say 2^30,
-// in an RLE run and in a bit-packed one, in each kind of column chunk arrow-go's
-// column reader decodes (pqIndexKinds). arrow-go's
-// encoding.(*dictConverter[T]).ensure made a slice of index+1 values before it
-// checked the index against the dictionary: 8 GiB of a file of some 150 bytes for an
-// INT64, 12 GiB for an INT96, 24 GiB of slice headers for a FIXED_LEN_BYTE_ARRAY or a
-// BYTE_ARRAY, a fatal "out of memory". Each is refused now as corrupt, an I/O error,
-// before arrow-go decodes the page, within the harness's bounds, and the error says
-// so.
+// TestADictionaryIndexPastItsDictionaryAllocatesNothingOfIt (step 517): a data page
+// of a dictionary of two values whose indices say 2^30, in an RLE run and in a
+// bit-packed one, in each kind of column chunk arrow-go's column reader decodes
+// (pqIndexKinds). An index is checked against its dictionary before anything is sized
+// by it: each is refused as corrupt, an I/O error naming the index past its
+// dictionary, before the page is decoded, within the harness's bounds.
 //
 // What no reader refuses, each read as the PLAIN pages of the values its indices
 // pick: indices in the dictionary at a bit width wider than two values need; a

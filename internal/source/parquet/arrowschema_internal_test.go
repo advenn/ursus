@@ -16,7 +16,7 @@ import (
 
 // sizesByArrow is arraysOf's answer as arrow-go's IPC reader gives it, as arraysOf
 // read the key before step 510: the oracle of the walk that replaced it, on schemas
-// arrow-go writes, which its reader can be trusted with.
+// arrow-go writes.
 func sizesByArrow(t *testing.T, raw []byte) map[string]int {
 	t.Helper()
 	r, err := ipc.NewReader(bytes.NewReader(raw))
@@ -140,12 +140,10 @@ func TestTheFootersArrowSchemaIsReadAsArrowGoReadsIt(t *testing.T) {
 }
 
 // TestAFieldClaimingBillionsOfChildrenAllocatesNoneOfThem: an Arrow schema in a
-// footer whose field claims 3,221,225,472 children, as the Parquet target's fuzzer
-// forged one (step 510). arrow-go's IPC reader made a slice of them, 283 GB, and the
-// process died of "out of memory", which no recover catches. Step 510's walk read no
-// field's children, and answered for the honest schema; arrowmeta's walks them, as
-// arrow-go would, and refuses the claim (step 519), so the Parquet types stand, and
-// it allocates about nothing.
+// footer whose field claims 3,221,225,472 children (step 510). A count is a claim:
+// arrowmeta's walk reads a field's children and refuses a count their bytes cannot
+// hold before anything is sized by it (step 519), so the Parquet types stand, and it
+// allocates about nothing.
 func TestAFieldClaimingBillionsOfChildrenAllocatesNoneOfThem(t *testing.T) {
 	s := arrow.NewSchema([]arrow.Field{
 		{Name: "a", Type: arrow.FixedSizeListOf(3, arrow.PrimitiveTypes.Int64)},

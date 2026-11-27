@@ -22,18 +22,11 @@ import (
 	"github.com/advenn/ursus/ursustest"
 )
 
-// Step 520 (F10 of step 517's record): a page whose codec's stream claims or holds
-// more than the page declares. arrow-go's page reader decompresses a page into a
-// buffer of the size its header declares, and klauspost's Zstandard made a buffer of
-// the frame's content size first, 1,211,898,114 bytes for CI's page of 15; its Snappy
-// one of the block's length header; a Zstandard frame without a content size grew a
-// block at a time; and a page declaring 0 bytes, decompressed into a nil buffer, had
-// every codec but LZ4_RAW allocate what its stream held.
-
-// pqCodecRepro is CI's FuzzScanParquet input of run 43639097835 with its last byte
-// "1" again (step 517's record, §1 and §7): a Polars file of two columns,
-// Zstandard, whose page declares 15 bytes and whose frame claims 1,211,898,114.
-const pqCodecRepro = "zstd-frame-claiming-1p2gb"
+// Step 520: a page whose codec's stream claims or holds more than the page declares.
+// A page's header declares its bytes uncompressed, and a stream's own sizes are
+// claims, so the reader's codecs decode a page into a buffer of the size its header
+// declares and no further: a stream claiming or holding more, a page declaring 0
+// bytes among them, is refused as corrupt before anything is sized by its claim.
 
 // corpusFile is the bytes of a fuzz corpus entry of one []byte, as go test writes it.
 func corpusFile(t *testing.T, target, name string) []byte {
@@ -87,8 +80,7 @@ func (k pqCodecKind) vals() []byte {
 
 // Where pages puts an empty data page, of no values and no bytes, for a column
 // without levels: nowhere; first, its buffer nil; or between two data pages, its
-// buffer the first's. arrow-go's column reader takes a page of no values for its
-// chunk's end, whatever its codec, so it reads none.
+// buffer the first's. Only a column the reader's own pages read is given one.
 const (
 	pqNoEmpty = iota
 	pqEmptyFirst
@@ -253,8 +245,8 @@ var pqBrotli64 = sync.OnceValue(func() []byte {
 
 // pqBrotliWindow is a Brotli stream of 16 MiB of zeros in one meta-block, its window
 // 16 MiB, as andybalholm/brotli v1.2.2 writes it at quality 5 and a window of 2^24
-// (WriterOptions{Quality: 5, LGWin: 24}): 14 bytes. Its decoder makes a ring buffer
-// of 16 MiB for the meta-block before it decodes a byte.
+// (WriterOptions{Quality: 5, LGWin: 24}): 14 bytes, which declare a window that a
+// decoder holds as a ring buffer.
 var pqBrotliWindow = []byte{0xcf, 0xff, 0xff, 0x7f, 0x00, 0x24, 0x00, 0xe2, 0xb1, 0x40, 0x72, 0xef, 0xff, 0x07}
 
 // pqCodecBombs are the streams, each of a page holding body:
@@ -338,17 +330,14 @@ func (k pqCodecKind) bombFile(bomb pqCodecBomb, dict, none bool) []byte {
 	return f.bytes()
 }
 
-// TestAPageDecompressingPastItsSizeAllocatesNothingOfIt (step 520, F10 of step 517's
-// record): a page whose codec's stream claims or holds far more than the page's
-// header declares, for each codec ursus reads (pqCodecBombs), its header declaring
-// the page's bytes or none, as a data page and as a dictionary page, read by the
-// reader's own pages and by arrow-go's column reader; and CI's file. Each read
-// allocated what the stream claimed or held, up to a gigabyte, before arrow-go
-// compared the output with the page; a page declaring none, every codec's stream but
-// LZ4_RAW's whole; a Brotli stream, a ring buffer of its window. Each is refused now
-// as corrupt, an I/O error, read every way FuzzScanParquet reads an input, within the
-// harness's bounds and with no request past the bounded allocator's, the error naming
-// the page's declared bytes; LZ4_RAW's is refused as before.
+// TestAPageDecompressingPastItsSizeAllocatesNothingOfIt (step 520): a page whose
+// codec's stream claims or holds far more than the page's header declares, for each
+// codec ursus reads (pqCodecBombs), its header declaring the page's bytes or none, as
+// a data page and as a dictionary page, read by the reader's own pages and by
+// arrow-go's column reader. Each is refused as corrupt, an I/O error, read every way
+// FuzzScanParquet reads an input, within the harness's bounds and with no request
+// past the bounded allocator's, the error naming the page's declared bytes, but for
+// LZ4_RAW's, which its decoder refuses itself.
 //
 // What no reader refuses, each read as the same pages uncompressed: a page under each
 // codec as arrow-go's codecs encode it, and Zstandard without a content size and as
@@ -393,9 +382,6 @@ func TestAPageDecompressingPastItsSizeAllocatesNothingOfIt(t *testing.T) {
 		}
 	}
 
-	t.Run("CI's file", func(t *testing.T) {
-		refused(t, corpusFile(t, "FuzzScanParquet", pqCodecRepro), pqcompress.Codecs.Zstd)
-	})
 	for _, k := range pqCodecKinds() {
 		t.Run(k.name, func(t *testing.T) {
 			for _, dict := range []bool{false, true} {
@@ -437,9 +423,9 @@ func TestAPageDecompressingPastItsSizeAllocatesNothingOfIt(t *testing.T) {
 
 // pqLongCounts are a dictionary page's count written as varints of 10 bytes, each as
 // Thrift reads it, cut to 32 bits and zigzagged, and as binary.Uvarint does not:
-// FuzzOwnPagesMatchArrow's input of step 520 (F11), which Thrift reads as 896,532,479
-// and binary.Uvarint calls an overflow; and 2^31−1 and 2, each padded to 10 bytes
-// with bits past 32 that Thrift drops.
+// a count of step 520's fuzzing, which Thrift reads as 896,532,479 and
+// binary.Uvarint calls an overflow; and 2^31−1 and 2, each padded to 10 bytes with
+// bits past 32 that Thrift drops.
 func pqLongCounts() (past [][]byte, two []byte) {
 	pad := func(v uint64) []byte {
 		b := binary.AppendUvarint(nil, v)
@@ -456,16 +442,15 @@ func pqLongCounts() (past [][]byte, two []byte) {
 	}, pad(zz(2) | 0x5a5a5a5a<<32)
 }
 
-// TestADictionaryCountInALongVarintIsCountedAsArrowGoReadsIt (step 520, F11 of its
-// record): a dictionary page of 12 bytes, two strings, whose header's count is written
-// in a varint of 10 bytes (pqLongCounts), read by the reader's own pages and, the
-// footer listing an encoding they do not read, by arrow-go's column reader. Step 510's
-// walk of a chunk's page headers (countDictionaries) read such a count otherwise than
-// Thrift, which arrow-go reads it with, or not at all, and did not count it: arrow-go
-// made a slice of 896,532,479 slice headers, 21.5 GB, a fatal "out of memory". Each is
-// refused now within the harness's bounds; the count of 2 so written reads as the
+// TestADictionaryCountInALongVarintIsCountedAsThriftReadsIt (step 520): a dictionary
+// page of 12 bytes, two strings, whose header's count is written in a varint of 10
+// bytes (pqLongCounts), read by the reader's own pages and, the footer listing an
+// encoding they do not read, by arrow-go's column reader. Step 510's walk of a
+// chunk's page headers (countDictionaries) reads such a count as Thrift's compact
+// protocol does, cut to 32 bits, and holds it to the page's bytes: each count past
+// them is refused within the harness's bounds; the count of 2 so written reads as the
 // count of 2 written plainly.
-func TestADictionaryCountInALongVarintIsCountedAsArrowGoReadsIt(t *testing.T) {
+func TestADictionaryCountInALongVarintIsCountedAsThriftReadsIt(t *testing.T) {
 	past, two := pqLongCounts()
 	honest := pqDictPages([]string{"ab", "cd"}, 5)
 	for _, encs := range [][]int32{nil, {pqDeltaLength}} {

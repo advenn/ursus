@@ -3,12 +3,10 @@ package readfuzz_test
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -21,46 +19,18 @@ import (
 
 // A record of Null columns, or of none, holds nothing a row, and Arrow IPC writes it
 // as its field nodes and no buffer, so a few hundred bytes declare 2^40 rows (step
-// 511's finding-record-of-2e40-rows-of-no-data). ursus holds such a column as its
-// type and its length since step 529, a scan whose result is collected or counted
-// hands its records on whole, and Collect, Count, Head, Select, Slice and Concat of
-// them run in constant space: here, inside the IPC targets' bounds, the 2^40 input's
-// record, well-formed, and generated inputs of 2^20 to 2^40 rows a record, a file or a
-// stream, in each codec. The oracle is arrow-go's reading of the same bytes: its
+// 511). ursus holds such a column as its type and its length since step 529, a scan
+// whose result is collected or counted hands its records on whole, and Collect,
+// Count, Head, Select, Slice and Concat of them run in constant space: here, inside
+// the IPC targets' bounds, generated inputs of 2^20 to 2^40 rows a record, a file or
+// a stream, in each codec. The oracle is arrow-go's reading of the same bytes: its
 // records' rows, summed, and its fields.
-//
-// The 2^40 input as the fuzzer saved it is a record of no columns and 2^40 + 18,432
-// rows whose field nodes' offset points past its metadata: arrow-go, reading no
-// column, never follows it, and step 519's walk refuses it as corrupt before a row is
-// read. The targets skipped it with every other record of so many rows, so the
-// refusal went unseen; it is held here, and arrow-go's writing of the record it
-// declares is read.
 
 // nullInput is an IPC input of records of Null columns, or of none.
 type nullInput struct {
 	name string
 	b    []byte
 	file bool
-}
-
-// seed2e40 is the 2^40 input as the fuzzer saved it.
-func seed2e40(t *testing.T) []byte {
-	return corpusInput(t, filepath.Join("testdata", "fuzz", "FuzzScanIPCStream", "finding-record-of-2e40-rows-of-no-data"))
-}
-
-// declared is the rows of each record arrow-go reads of a stream.
-func declared(t *testing.T, b []byte) []int64 {
-	t.Helper()
-	sr, err := ipc.NewReader(bytes.NewReader(b))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer sr.Release()
-	var rows []int64
-	for sr.Next() {
-		rows = append(rows, sr.RecordBatch().NumRows())
-	}
-	return rows
 }
 
 // nullRecords writes a file or a stream of len(rows) records of cols Null columns,
@@ -102,16 +72,12 @@ func nullRecords(t testing.TB, file bool, cols int, rows []int64, opts ...ipc.Op
 	return buf.Bytes()
 }
 
-// nullInputs are the 2^40 input's record, and generated files and streams of up to
-// three Null columns, or none, in one to four records of 2^20 to 2^40 rows, the last
-// of two of them exactly 2^40, in each codec.
+// nullInputs are generated files and streams of up to three Null columns, or none, in
+// one to four records of 2^20 to 2^40 rows, the last of two of them exactly 2^40, in
+// each codec.
 func nullInputs(t *testing.T) []nullInput {
 	t.Helper()
-	seed := declared(t, seed2e40(t))
-	ins := []nullInput{{
-		name: fmt.Sprintf("the 2^40 input's record of %v rows, as arrow-go writes it", seed),
-		b:    nullRecords(t, false, 0, seed),
-	}}
+	var ins []nullInput
 	rng := rand.New(rand.NewPCG(529, 3))
 	codecs := []struct {
 		name string
@@ -195,29 +161,10 @@ func arrowNulls(t *testing.T, b []byte, file bool) (rows int64, names []string, 
 // the frame concatenated with itself, each the rows arrow-go reads and every column
 // Null and all null; the frame collected is counted in memory, concatenated with the
 // scan, and exported to an Arrow record that is counted again; all of it inside the
-// IPC targets' bounds, 64 MiB allocated and ten seconds, at 2^40 rows a record. Before step 529 the 2^40 input allocated until
-// the harness ended the process.
+// IPC targets' bounds, 64 MiB allocated and ten seconds, at 2^40 rows a record. Before
+// step 529 such a record allocated until the harness ended the process.
 func TestNullRecordsReadInConstantSpace(t *testing.T) {
 	ctx := context.Background()
-	t.Run("the 2^40 input", func(t *testing.T) {
-		// Refused at its record, which step 519's walk finds corrupt, whatever is
-		// asked of it.
-		b := seed2e40(t)
-		mem := &fuzzcheck.Allocator{Limit: ipcRequestLimit(len(b))}
-		defer readBase(mem)()
-		var count, collect, head error
-		fuzzcheck.Run(t, ipcLimits(len(b), mem), func() error {
-			_, count = ursus.ScanIPCStreamBytes(b, "seed").Count(ctx)
-			_, collect = ursus.ScanIPCStreamBytes(b, "seed").Collect(ctx)
-			_, head = ursus.ScanIPCStreamBytes(b, "seed").Head(1000).Collect(ctx)
-			return nil
-		})
-		for name, err := range map[string]error{"Count": count, "Collect": collect, "Head": head} {
-			if !errors.Is(err, ursus.ErrIO) || !strings.Contains(err.Error(), "is corrupt") {
-				t.Fatalf("%s of the 2^40 input: %v, want it refused as corrupt", name, err)
-			}
-		}
-	})
 	for _, in := range nullInputs(t) {
 		t.Run(in.name, func(t *testing.T) {
 			want, names, recs := arrowNulls(t, in.b, in.file)

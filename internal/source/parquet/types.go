@@ -345,9 +345,10 @@ func toNode(f dtype.Field) (schema.Node, error) {
 			schema.NewTimeLogicalType(false, u), phys, -1, -1)
 
 	default:
-		// Duration stays refused ON PURPOSE rather than for lack of work: arrow-go's
-		// IntervalLogicalType.toThrift panics outright, so there is no route through
-		// this library at all. Enum is simply not written yet.
+		// Duration stays refused ON PURPOSE rather than for lack of work: Parquet has
+		// no Duration logical type, and its INTERVAL, of months, days and
+		// milliseconds, is another type, so there is no faithful route. Enum is simply
+		// not written yet.
 		return nil, uerr.New(uerr.KindUnsupported, "sink_parquet",
 			"cannot write column %q of type %s to Parquet", f.Name, f.Type).
 			Hint("supported: Bool, the integer and float types, Int128, Decimal, " +
@@ -442,10 +443,10 @@ func holdsEmptyStruct(dt dtype.DataType) bool {
 
 // parquetTimeUnit maps a ursus TimeUnit onto Parquet's three.
 //
-// Parquet has no SECOND resolution, and arrow-go's createTimeUnit does not return an
-// error for one — it PANICS. dtype.Second is ursus's zero value, so
-// `Datetime(Second, "")` is trivially constructible and would take the sink down.
-// This is the guard; the refusal below it is what the user sees instead.
+// Parquet has no SECOND resolution, and a unit it does not have must not reach the
+// schema builder. dtype.Second is ursus's zero value, so `Datetime(Second, "")` is
+// trivially constructible. This is the guard; the refusal below it is what the user
+// sees instead.
 func parquetTimeUnit(u dtype.TimeUnit) (schema.TimeUnitType, bool) {
 	switch u {
 	case dtype.Milli:

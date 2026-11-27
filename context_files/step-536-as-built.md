@@ -39,7 +39,8 @@ what a v0.7.x user can trip on, Breaks, Changed (its two sections made one, 528 
   Duration;
 - a read cut short is an error (534): a reader of one's own ends with `io.EOF` itself;
 - corrupt Parquet and IPC refused (510, 511, 517, 519–521, 531, 533), and an IPC
-  stream's message held to arrow-go's limits (511): write smaller record batches;
+  stream's message held to 64 MiB of metadata and 256 MiB of body (511): write smaller
+  record batches;
 - answers corrected (496–499, 507, 509): `Clip`'s name, a subnormal's log, a Float32's
   text, a digraph's title case, a null Struct where a Struct of nulls was, an inclusive
   split's last part, `"-nan"` inferred a float, a CSV's last `\r`;

@@ -32,9 +32,9 @@ import (
 // then one miniblock of 65,536, the most past a run's count, its deltas 0 to 64 bits
 // wide, an INT32's wrapped at 32 bits (step 538), and in a third of the
 // pages the miniblocks holding no value giving any width. Most pages are then forged
-// once, in one run: its block size or its miniblocks wrong, or a layout arrow-go
-// would decode and the format does not allow, blocks of a multiple of 32 values not
-// one of 128 or miniblocks of fewer than 32; a miniblock holding values 65 bits wide
+// once, in one run: its block size or its miniblocks wrong, or a layout the format
+// does not allow, blocks of a multiple of 32 values not one of 128 or miniblocks of
+// fewer than 32; a miniblock holding values 65 bits wide
 // or more; one miniblock of 2^17 to 2^31 values 0 bits wide; its count short of the
 // values, past the page's or its column chunk's, or, in a page with nulls, past the
 // values within the page's and the last miniblock's padding; the page cut short
@@ -47,8 +47,7 @@ import (
 //     answers, values, levels and error alike;
 //   - where the page is honest, or forged only where the format allows, the read
 //     answers the generator's values and levels; but for a count past the values of
-//     a run arrow-go decodes whole, which it reads or refuses by what the padding
-//     holds (step 538).
+//     a run decoded whole, which the read answers as arrow-go's own does (step 538).
 func TestCheckedPagesRefuseMalformedDeltaRuns(t *testing.T) {
 	seed := uint64(time.Now().UnixNano())
 	t.Logf("seed %d", seed)
@@ -178,10 +177,9 @@ func deltaRunOf(vals []int64, block, per int, int32s bool) genRun {
 			d := vals[i] - vals[i-1]
 			if int32s {
 				// An INT32's deltas wrap at 32 bits, as the format has a writer wrap
-				// them, and arrow-go v18.9.0's writer does; its reader refuses a
-				// minimum delta past INT32's range and a miniblock wider than 32 bits,
-				// as pyarrow 25.0.1 does, where v18.7.0's writer took the deltas as an
-				// INT64's and packed them 33 bits wide (step 538).
+				// them, and arrow-go's writer does; its reader refuses a minimum delta
+				// past INT32's range and a miniblock wider than 32 bits, as pyarrow
+				// 25.0.1 does (step 538).
 				d = int64(int32(d))
 			}
 			deltas = append(deltas, d)
@@ -414,8 +412,8 @@ func (p *deltaPage) forge(rng *rand.Rand, runVals [][]int64) {
 		broken("chunk")
 	case 0:
 		if rng.IntN(2) == 0 {
-			// A layout arrow-go would decode: blocks of a multiple of 32 values that is
-			// not one of 128, in miniblocks of 32.
+			// A layout the format does not allow: blocks of a multiple of 32 values
+			// that is not one of 128, in miniblocks of 32.
 			block := 32 * (1 + rng.IntN(40))
 			if block%128 == 0 {
 				block += 32
@@ -480,10 +478,10 @@ func (p *deltaPage) forge(rng *rand.Rand, runVals [][]int64) {
 		r.count += uint64(1 + rng.IntN(room))
 		p.forged = "count past the values"
 		if whole {
-			// arrow-go v18.9.0 decodes every length the count gives at SetData and
-			// refuses one that is negative, or lengths past the page's bytes, the one
-			// in the padding among them (step 538): the read answers what arrow-go's
-			// own does, which pyarrow 25.0.1 reads.
+			// A run decoded whole has every length the count gives decoded, the one
+			// in the padding among them, and is refused where one is negative or they
+			// pass the page's bytes (step 538): the read answers what arrow-go's own
+			// does.
 			p.reads = false
 		}
 	case 7, 8:
@@ -622,10 +620,8 @@ func readDeltaPage(desc *schema.Column, pr file.PageReader, pool *sync.Pool) (r 
 // ursus's writer is made of (it writes no delta page itself), read batch for batch as
 // the same rows written PLAIN: V1 and V2 pages, pages of a hundred values and of the
 // default size, Zstandard, each under four null patterns. Its u32 column spans
-// INT32's range: arrow-go v18.7.0 packed its deltas 33 bits wide, past what pyarrow
-// reads, and v18.9.0 wraps them at 32 bits, as the format says, and refuses 33
-// (step 538), so no page of it is wider than 32 bits. No page arrow-go writes is
-// refused by the check.
+// INT32's range, its deltas wrapped at 32 bits, as the format says (step 538), so no
+// page of it is wider than 32 bits. No page arrow-go writes is refused by the check.
 func TestArrowGoDeltaPagesReadAsTheirPlainTwin(t *testing.T) {
 	var deltas []parquet.WriterProperty
 	for _, c := range []string{"i8", "i16", "i32", "u8", "u16", "u32", "i64", "u64", "date", "ts", "tms", "tus",

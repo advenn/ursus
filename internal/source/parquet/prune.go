@@ -24,9 +24,9 @@ import (
 // That asymmetry is why every unknown — a missing statistic, an unfamiliar
 // expression node, a type the comparison does not handle — returns "maybe".
 //
-// # Three ways arrow-go's statistics will mislead a naive pruner
+// # Three ways a file's statistics will mislead a naive pruner
 //
-// All three are reachable with files arrow-go itself writes.
+// All three are reachable with files ursus itself writes.
 //
 //  1. Statistics().NumValues() is the NON-NULL count, not the row count
 //     (metadata/column_chunk.go computes nvalues = NumValues - NullCount). So the
@@ -66,7 +66,7 @@ import (
 //     nulls, and IsNull would skip groups that hold them.
 //  7. A one-sided integer or float min or max reads its absent side as 0.
 //
-// Nothing in arrow-go's read API tells either from the real thing. So the pruner
+// Nothing in the statistics as read tells either from the real thing. So the pruner
 // trusts a null count, and a number's bounds, only in a file whose writer always
 // writes them (knownWriter, from the footer's created_by). A file from any other
 // writer is read whole wherever either would decide.
@@ -258,8 +258,8 @@ func mayMatch(rg *metadata.RowGroupMetaData, leaf leafOf, e expr.Node, full bool
 // statsFor returns the statistics for a column chunk, or nil if there are none to
 // trust.
 func statsFor(rg *metadata.RowGroupMetaData, col int) (metadata.TypedStatistics, *metadata.ColumnChunkMetaData, error) {
-	// arrow-go's ColumnChunk PANICS on an index past the last column, and a pruner
-	// with a wrong mapping would reach it. No statistics is the safe answer.
+	// An index past the last column has no chunk to ask ColumnChunk for, and a pruner
+	// with a wrong mapping would ask. No statistics is the safe answer.
 	if col < 0 || col >= rg.NumColumns() {
 		return nil, nil, nil
 	}
@@ -337,8 +337,8 @@ func compareToStats(rg *metadata.RowGroupMetaData, col int, op expr.BinaryOp, li
 	if !full && (lo.kind == boundInt || lo.kind == boundUint || lo.kind == boundFloat) {
 		return true, nil
 	}
-	// The sanity check that defends against arrow-go dropping one bound and leaving
-	// HasMinMax true. If min > max the pair is not a range, so it tells us nothing.
+	// The sanity check for statistics with one bound dropped and HasMinMax still true.
+	// If min > max the pair is not a range, so it tells us nothing.
 	if lo.cmp(hi) > 0 {
 		return true, nil
 	}

@@ -277,7 +277,7 @@ func TestOwnPagesReadAsArrowGoDoes(t *testing.T) {
 
 // TestOwnPagesReadADictionaryOfNoValue (step 538): a dictionary-encoded chunk of only
 // nulls whose dictionary page holds no value and whose data page no index, as
-// arrow-go v18.9.0's writer writes one where its pages are compressed, and pyarrow
+// arrow-go's writer writes one where its pages are compressed, and pyarrow
 // 25.0.1's in testdata/oracle/footers/pyarrow-03.parquet, a Float64 of two nulls. The
 // own pages took a fixed-width column's dictionary of no value for none, its copy a
 // nil slice, and refused the chunk as referring to a dictionary it does not have;

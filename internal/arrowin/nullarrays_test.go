@@ -148,8 +148,8 @@ func TestANullArrayOfNoBuffersReads(t *testing.T) {
 			if err := w.Close(); err != nil {
 				t.Fatal(err)
 			}
-			// arrow-go's FileReader keeps a dictionary batch's message past its Close,
-			// 256 bytes of a file of an Int32 dictionary, so the reader allocates apart.
+			// The reader allocates apart from mem, which counts the record and the
+			// writer alone.
 			got := readBack(t, buf.Bytes(), file, memory.NewGoAllocator())
 			for i := range int(got.NumCols()) {
 				if emptyNulls(got.Column(i).Data()) == 0 {

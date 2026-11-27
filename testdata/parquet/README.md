@@ -32,8 +32,8 @@ encoding arrow-go decodes for integers; and `f`, FIXED_LEN_BYTE_ARRAY(4), plain.
 
 `pyarrow_flba_delta.parquet` — pyarrow 25, `compression='none', use_dictionary=False,
 column_encoding={"f": "DELTA_BYTE_ARRAY"}`: `f`, FIXED_LEN_BYTE_ARRAY(4), "abcd",
-"efgh", "ijkl", "mnop", under an encoding arrow-go does not decode for that type and
-panics on. `parquetaudit_test.go` reads both (step 119).
+"efgh", "ijkl", "mnop", under an encoding arrow-go does not decode for that type.
+`parquetaudit_test.go` reads both (step 119).
 
 `pyarrow_small_pages.parquet` — pyarrow 25, `compression='none', data_page_size=256,
 use_dictionary=['dict'], write_batch_size=50`: 3,000 rows of two String columns, `dict`

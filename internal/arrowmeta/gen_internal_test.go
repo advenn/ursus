@@ -63,8 +63,7 @@ func (g *gen) leaf() arrow.DataType {
 // typ is a type nested at most depth deep.
 //
 // A big-endian record's types are leaves without offsets: arrow-go's writer reads a
-// column's offsets to rebase them, which a swapped column's are not, and its reader
-// does not swap a nested column's children back as written.
+// column's offsets to rebase them, which a swapped column's are not.
 func (g *gen) typ(depth int) arrow.DataType {
 	if g.be || depth <= 0 || g.pick(3) == 0 {
 		return g.leaf()
@@ -120,8 +119,7 @@ func (g *gen) typ(depth int) arrow.DataType {
 
 // dictValues is a dictionary's value type: text and binary of every layout, views
 // most often, so that dictionary batches hold variadic counts, a leaf, or views in a
-// list or a struct. arrow-go's IPC reader misreads its own dictionaries of runs, list
-// views, unions and dictionaries.
+// list or a struct.
 func (g *gen) dictValues() arrow.DataType {
 	switch g.pick(8) {
 	case 0:

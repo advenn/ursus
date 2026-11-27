@@ -117,9 +117,9 @@ func declarePast(frame []byte) {
 
 // TestAZstdWindowPastTheLimitIsRefusedBeforeArrowGo: a Zstandard buffer whose frame
 // declares a window past 128 MiB, in a dictionary or a record batch, of a file or a
-// stream, is refused before arrow-go's decoder, made with klauspost's defaults, makes
-// the window: KindIO, a *zstdframe.WindowError its cause, within a few megabytes of
-// allocation. The first and the last buffer of each record gen makes from 20 seeds.
+// stream, is refused before arrow-go has the body: KindIO, a *zstdframe.WindowError
+// its cause, within a few megabytes of allocation. The first and the last buffer of
+// each record gen makes from 20 seeds.
 func TestAZstdWindowPastTheLimitIsRefusedBeforeArrowGo(t *testing.T) {
 	refusedFiles, refusedStreams := 0, 0
 	generated(t, 20, func(name string, b []byte, file bool, _ arrow.RecordBatch) {

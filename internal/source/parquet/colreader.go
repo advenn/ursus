@@ -18,19 +18,17 @@ import (
 
 // --- encodings ------------------------------------------------------------------
 
-// allowedEncodings is the set arrow-go can actually decode.
+// allowedEncodings is the set the column reader can actually decode.
 //
-// # This list prevents a PANIC, not an error
+// # This list is checked before a page is read
 //
-// arrow-go's typed_encoder.go ends in `panic("unimplemented encoding ...")` at
-// eleven sites, and the panic is reachable from HasNext() inside ReadBatch. A
-// BYTE_ARRAY column encoded with BYTE_STREAM_SPLIT is legal Parquet 2.11 and has
-// no decoder in arrow-go, so a file someone else wrote can take down the process
-// of anyone who reads it.
+// An encoding is the file's claim about its pages, and a file someone else wrote can
+// claim any: a BYTE_ARRAY column encoded with BYTE_STREAM_SPLIT is legal Parquet 2.11
+// and has no decoder here.
 //
-// Checking the column chunk's declared encodings before touching a page turns that
-// into an error naming the column and the encoding. A panic in a library is never
-// the right answer to a malformed or merely newer input file.
+// Checking the column chunk's declared encodings before touching a page turns an
+// encoding the column reader cannot decode into an error naming the column and the
+// encoding, the right answer to a malformed or merely newer input file.
 var allowedEncodings = map[parquet.Encoding]bool{
 	parquet.Encodings.Plain:                true,
 	parquet.Encodings.PlainDict:            true,
@@ -43,8 +41,9 @@ var allowedEncodings = map[parquet.Encoding]bool{
 }
 
 func checkEncodings(rg *metadata.RowGroupMetaData, col int, name string) error {
-	// arrow-go's ColumnChunk panics past the last column. A wrong layout reached it:
-	// a later file with fewer columns, laid out as the first (audit.md §5, I1).
+	// A column past the row group's last has no chunk to ask ColumnChunk for. A wrong
+	// layout asked: a later file with fewer columns, laid out as the first (audit.md
+	// §5, I1).
 	if col < 0 || col >= rg.NumColumns() {
 		return uerr.Internalf("scan_parquet: column %q maps to leaf %d, and the row "+
 			"group has %d", name, col, rg.NumColumns())
@@ -58,28 +57,28 @@ func checkEncodings(rg *metadata.RowGroupMetaData, col int, name string) error {
 		if !allowedEncodings[e] {
 			return uerr.New(uerr.KindUnsupported, "scan_parquet",
 				"column %q uses the %s encoding, which cannot be decoded", name, e).
-				Hint("this is checked up front because the decoder panics rather " +
-					"than returning an error")
+				Hint("a column chunk's encodings are checked before any of its pages " +
+					"is read")
 		}
 		if !decodable(cc.Type(), e) {
 			return uerr.New(uerr.KindUnsupported, "scan_parquet",
 				"column %q uses the %s encoding on a %s column, which cannot be decoded",
 				name, e, cc.Type()).
-				Hint("this is checked up front because the decoder panics rather " +
-					"than returning an error")
+				Hint("a column chunk's encodings are checked before any of its pages " +
+					"is read")
 		}
 	}
 	return nil
 }
 
-// decodable is whether arrow-go v18.7.0 decodes encoding e on physical type t
-// (parquet/internal/encoding/typed_encoder.go). Every other pairing reaches a panic.
-// v18.9.0 decodes the same, and ALP on FLOAT and DOUBLE besides, which
-// allowedEncodings leaves out: such a column is refused as before (step 538).
+// decodable is whether the column reader decodes encoding e on physical type t
+// (parquet/internal/encoding/typed_encoder.go); every other pairing is refused here.
+// ALP on FLOAT and DOUBLE, which a newer arrow-go decodes, allowedEncodings leaves
+// out: such a column is refused as before (step 538).
 //
 // It used to check one pairing, BYTE_STREAM_SPLIT, and that one wrongly: the
 // integers decode it. FIXED_LEN_BYTE_ARRAY under DELTA_BYTE_ARRAY, which
-// parquet-mr's v2 writer produces, got through to the panic.
+// parquet-mr's v2 writer produces, got through unchecked, with no decoder for it.
 //
 // RLE is allowed on every type because the levels are RLE-encoded, and a chunk's
 // list of encodings does not say which pages used which.
@@ -272,7 +271,7 @@ func newColReader(cr file.ColumnChunkReader, desc *schema.Column, dt dtype.DataT
 		}
 		// No reader at all: arrow-go makes none for a physical type it does not know,
 		// which only a corrupt footer gives a column. It is refused below as a column
-		// of any other type is; it was an internal error (F15 of step 521).
+		// of any other type is; it was an internal error (step 521).
 	}
 
 	switch t := cr.(type) {

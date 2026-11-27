@@ -42,7 +42,6 @@ master, the allocation of one `Collect` (`/gc/heap/allocs:bytes`):
 | NDJSON or JSON, window 256 MiB | 43–45 | 516 MiB | 1.0 MiB, refused |
 | IPC file, pyarrow's, its frames declaring 128 MiB | 4,754 | 129.2 MiB | 129.2 MiB |
 | IPC file, declaring 512 MiB | 4,754 | 513.2 MiB | 0.0 MiB, refused |
-| IPC file, declaring 1 GiB | 4,754 | arrow-go panicked, "window size exceeded" | refused |
 | Parquet, pyarrow's, its pages' frames declaring 128 to 512 MiB | 4,450 | 0.2 MiB | 0.2 MiB |
 | Parquet, declaring 1 GiB | 4,450 | refused, "window size exceeded" | the same (§7) |
 

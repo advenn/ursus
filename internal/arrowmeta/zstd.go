@@ -9,19 +9,16 @@ import (
 
 // A Zstandard buffer's window (step 528).
 //
-// arrow-go decompresses each Zstandard buffer of a record batch through klauspost's
-// streaming decoder, made with its defaults (getDecompressor, arrow/ipc/compression.go),
-// which ursus cannot reach: that decoder makes the whole window a frame declares, up to
-// 512 MiB, before it decodes a block, so a 4.7 KB file allocated 513 MiB, and a window
-// past 512 MiB panicked arrow-go's reader. Polars refuses a frame declaring a window
-// past 128 MiB, as the reference decoder does by default (internal/zstdframe), and so
-// does ursus now: each Zstandard buffer's frames are walked once the body holding them
-// is read, before arrow-go has it.
+// A Zstandard frame's header declares the window its decoder keeps, a claim as cheap
+// to make as any length. Polars refuses a frame declaring a window past 128 MiB, as
+// the reference decoder does by default (internal/zstdframe), and so does ursus: each
+// Zstandard buffer's frames are walked once the body holding them is read, before
+// arrow-go has it.
 //
-// A buffer is arrow-go's length of what it decompresses to, 8 bytes, then its frames;
-// arrow-go decodes nothing of a buffer of length -1, which is not compressed, or of 0.
-// Every frame of the buffer is walked, though arrow-go stops decoding once it has the
-// length: a frame after the length's end, which no writer writes, is refused too.
+// A compressed buffer is the length of what it decompresses to, 8 bytes, then its
+// frames; a buffer of length -1 is not compressed, and one of 0 holds nothing. Every
+// frame of the buffer is walked, though decoding stops once it has the length: a
+// frame after the length's end, which no writer writes, is refused too.
 
 // checkZstd walks the frames of each Zstandard buffer of body, as z places them, and
 // refuses the first declaring a window past zstdframe.MaxWindow, KindIO, as name's, the

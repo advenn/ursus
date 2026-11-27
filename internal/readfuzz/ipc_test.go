@@ -27,8 +27,8 @@ import (
 
 // FuzzScanIPCFile: any bytes, read as an Arrow IPC file through ScanIPCBytes, are a
 // frame or an error within fuzzcheck's limits (step 511, the plan's 450), every
-// buffer arrow-go allocates for the read asked of a bounded allocator, which may
-// grant no request past what the input could hold decompressed (arrowin.ReadLimit).
+// buffer of the read asked of a bounded allocator, which may grant no request past
+// what the input could hold decompressed (arrowin.ReadLimit).
 // A frame read is held to arrow-go's own reading of the bytes: the same columns, the
 // same rows, each cell the value arrow-go's arrays hold (checkIPC). One input in
 // eight is also written to a file and read by ScanIPC and ScanIPCFiles, which must
@@ -132,11 +132,10 @@ func TestScanIPCDeepSchema(t *testing.T) {
 	t.Run("stream", func(t *testing.T) { scanIPCStreamOne(t, writeIPC(t, false, rec)) })
 }
 
-// TestReadIPCSchemaRecovers: a footer one byte of whose schema is changed makes
-// arrow-go's flatbuffers accessors panic, and ReadIPCSchema, which no query's
-// recovery wraps, let the panic reach its caller (step 511, found by
-// FuzzScanIPCFile). It is an error, the file's, now.
-func TestReadIPCSchemaRecovers(t *testing.T) {
+// TestReadIPCSchemaRefusesACorruptFooter: a footer one byte of whose schema is
+// changed, in its field's name, is refused by ReadIPCSchema, which no query's
+// recovery wraps, with an ErrIO, the file's (step 511, found by FuzzScanIPCFile).
+func TestReadIPCSchemaRefusesACorruptFooter(t *testing.T) {
 	b := array.NewInt8Builder(memory.NewGoAllocator())
 	b.Append(1)
 	col := b.NewArray()
@@ -388,12 +387,12 @@ func firstNonEmpty(s ...string) string {
 
 // arrowRead reads b as arrow-go does, through the bounds ursus reads it under: an
 // allocator granting no request past arrowin.ReadLimit, and a stream's messages no
-// larger than the stream. A panic in arrow-go, reading or in an array's accessor, is
+// larger than the stream. A read that stops, reading or in an array's accessor, is
 // its error.
 func arrowRead(b []byte, file bool) (out arrowed, err error) {
 	defer func() {
 		if v := recover(); v != nil {
-			err = fmt.Errorf("arrow-go panicked: %v", v)
+			err = fmt.Errorf("the read stopped: %v", v)
 		}
 	}()
 	mem := &fuzzcheck.Allocator{Limit: ipcRequestLimit(len(b))}
@@ -598,8 +597,8 @@ func cellOf(arr arrow.Array, i int) any {
 	return uncompared{}
 }
 
-// half is an IEEE 754 binary16's value, by the standard's definition: arrow-go's
-// float16.Num.Float32 reads a subnormal's fraction as a float32 subnormal's.
+// half is an IEEE 754 binary16's value, by the standard's definition, a subnormal's
+// among them.
 func half(h uint16) float32 {
 	sign := float64(1)
 	if h>>15 == 1 {
@@ -732,10 +731,9 @@ func ipcSeeds(f *testing.F, file bool) [][]byte {
 		// A compressed buffer's first eight bytes are its decompressed length.
 		seeds = append(seeds, patchNth(writeIPC(f, file, ints, codec), body, 0, huge))
 	}
-	// Lengths the metadata declares past its buffer, which ended the process until
-	// step 519's walk refused them: a schema's fields, a struct's children, the
-	// custom metadata of a schema, and a view column's variadic buffers; and a field
-	// its own child.
+	// Lengths the metadata declares past its buffer, which step 519's walk refuses:
+	// a schema's fields, a struct's children, the custom metadata of a schema, and a
+	// view column's variadic buffers; and a field its own child.
 	withMeta := writeIPC(f, file, metadataRecord(f))
 	sink0 := writeIPC(f, file, sink)
 	for _, p := range [][]byte{
@@ -780,8 +778,8 @@ func patchLast(b []byte, old, new int64) []byte {
 	return out
 }
 
-// writeIPC is rec written as an IPC file or stream, twice, two batches. (arrow-go's
-// writer refuses a slice of a ListView column, so the batches are not halves.)
+// writeIPC is rec written as an IPC file or stream, twice, two batches, each whole
+// rather than a half, as a slice of a ListView column is not written.
 func writeIPC(f testing.TB, file bool, rec arrow.RecordBatch, opts ...ipc.Option) []byte {
 	var buf bytes.Buffer
 	opts = append(opts, ipc.WithSchema(rec.Schema()))
@@ -898,8 +896,8 @@ func kitchenSink(f testing.TB) arrow.RecordBatch {
 		var a arrow.Array
 		var err error
 		if c.js == "" {
-			// Halves by their bits, subnormals among them, which arrow-go's
-			// float16.New flushes to zero.
+			// Halves by their bits, subnormals among them, so that no conversion
+			// from a float32 rounds them.
 			b := array.NewFloat16Builder(mem)
 			b.AppendValues([]float16.Num{float16.FromBits(0x0001), float16.FromBits(0), float16.FromBits(0x83ff), float16.FromBits(0x7bff)},
 				[]bool{true, false, true, true})

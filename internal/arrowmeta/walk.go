@@ -1,23 +1,10 @@
 // Package arrowmeta walks Arrow IPC metadata, its flatbuffers, before arrow-go reads
 // it (step 519).
 //
-// arrow-go v18.7.0 trusts every length an IPC footer or message declares: Go's
-// flatbuffers has no verifier, and arrow-go sizes slices by what the metadata says
-// before it reads what the slices would hold. A forged file of 0.5 to 2 KB ended the
-// process six ways (step 511, §5), with "fatal error: runtime: out of memory" or
-// "stack overflow", which no recover catches:
-//
-//   - schemaFromFB, make([]arrow.Field, schema.FieldsLength()) (arrow/ipc/metadata.go);
-//   - fieldFromFB, make([]arrow.Field, field.ChildrenLength());
-//   - metadataFromFB, two make([]string, CustomMetadataLength()), of a schema's, a
-//     field's or a message's key-values;
-//   - loadCommon, make([]*memory.Buffer, 0, 2+variadicCount) of a view column
-//     (arrow/ipc/file_reader.go), in a record batch and in a dictionary batch;
-//   - fieldFromFB recursing once a level, on a field among its own descendants, which
-//     an offset past 2^31 makes, since flatbuffers' positions add in uint32.
-//
-// So every footer and message is walked here first, in the bytes arrow-go is about to
-// read, and refused as corrupt, KindIO, if the walk finds what arrow-go would trust:
+// An IPC footer or message is untrusted input, and every length, count and offset it
+// declares is a claim. Go's flatbuffers has no verifier, so the walk is the
+// verification: every footer and message is walked here first, in the bytes arrow-go
+// is about to read, and refused as corrupt, KindIO, unless:
 //
 //   - every table, its vtable, every field's bytes, and every offset to a table, a
 //     vector or a string lies within the bytes, positions added as flatbuffers' Go
@@ -27,7 +14,7 @@
 //   - every vector's count is what its bytes can hold, elements of their size;
 //   - the fields, key-values and strings a walk visits, which a shared table can
 //     visit more than once, cost no more than a bound linear in the bytes, so a few
-//     kilobytes cannot make arrow-go build millions;
+//     kilobytes cannot stand for millions;
 //   - a record batch's buffers lie within its body, and its variadic counts, one for
 //     each view column it holds, are no more than its buffers.
 //
@@ -42,10 +29,9 @@ import (
 	"fmt"
 )
 
-// MaxDepth is how deeply fields may nest, a top-level field at 1: arrow-go's
-// fieldFromFB recurses once a level, with no limit of its own, and a schema 16,000
-// deep overflowed the 8 MiB stack the fuzz targets run on (step 511). A List nested
-// 1,000 deep is 1,001 fields; ursus reads one (TestScanIPCDeepSchema).
+// MaxDepth is how deeply fields may nest, a top-level field at 1: nesting in
+// untrusted input is capped, far above what a schema needs. A List nested 1,000 deep
+// is 1,001 fields; ursus reads one (TestScanIPCDeepSchema).
 const MaxDepth = 2_000
 
 // maxBuffer bounds the bytes one walk takes: IPC lengths are 32-bit, and below 2^31
@@ -57,7 +43,7 @@ const maxBuffer = 1<<31 - 1
 // its bytes, against budgetPerByte times the bytes walked plus budgetSlack. Each is
 // several times what one costs in the bytes, which flatbuffers' builders never
 // share, so no well-formed metadata comes near it; a field reached twice, which a
-// forged offset makes, costs twice, as it costs arrow-go twice.
+// forged offset makes, costs twice, as it is read twice.
 const (
 	fieldCost     = 64
 	keyValueCost  = 32
@@ -159,7 +145,7 @@ type Schema struct {
 
 	// views is how many view columns a record batch of the schema holds, nested
 	// ones among them, but none of a dictionary's values, which a dictionary batch
-	// holds: arrow-go reads a variadic count for each.
+	// holds: a batch has a variadic count for each.
 	views int
 
 	// dicts is how many view columns each dictionary's values hold, by id. Its
@@ -417,7 +403,7 @@ func (w *walker) schema(at uint32) (*Schema, error) {
 // holds; those are its dictionary's, in s.
 func (w *walker) field(at uint32, depth int, s *Schema) (int, error) {
 	if depth > MaxDepth {
-		return 0, w.fail("fields nest past %d levels, which arrow-go's fieldFromFB recurses on", MaxDepth)
+		return 0, w.fail("fields nest past %d levels", MaxDepth)
 	}
 	if err := w.spend(fieldCost, "fields"); err != nil {
 		return 0, err
@@ -605,9 +591,9 @@ func (w *walker) message() (kind messageType, header uint32, body int64, err err
 
 // batch walks the RecordBatch table at at, of a body of body bytes, holding views
 // view columns: its nodes, its buffers, each within the body, its compression, and
-// its variadic counts. arrow-go reads a count for each view column, in the vector
-// or past its end, and makes a slice of that many buffers, before it finds them
-// missing; so the vector holds one for each, and none is more than the buffers.
+// its variadic counts. A batch has a count for each view column, each a claim on its
+// buffers; so the vector holds one for each, and none, nor their sum, is more than
+// the buffers.
 func (w *walker) batch(at uint32, views int, body int64, what string) error {
 	t, err := w.table(at, what)
 	if err != nil {
@@ -657,7 +643,7 @@ func (w *walker) batch(at uint32, views int, body int64, what string) error {
 	}
 	vs, vn, ok, err := w.vector(t, 4, 8, what+"'s variadic buffer counts")
 	if err != nil || !ok {
-		// Without the vector arrow-go reads each count as 0.
+		// Without the vector each count is 0.
 		return err
 	}
 	if int(vn) < views {

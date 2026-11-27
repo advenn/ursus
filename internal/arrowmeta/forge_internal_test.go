@@ -54,13 +54,13 @@ func (f *forged) batch(dict bool) (at, table) {
 // offsetIn is where sub, a slice of b, begins in b.
 func offsetIn(b, sub []byte) int { return cap(b) - cap(sub) }
 
-// TestForgedMetadataIsRefused: what arrow-go would trust, in a stream and a file of
-// forgeRecord's, forged as step 511's findings forged it and more, is refused by the
-// walk, KindIO, before arrow-go reads it: a count past what its bytes hold, of fields,
-// children and key-values; a field its own child; a variadic count past the buffers,
-// in a record batch and a dictionary batch, and fewer counts than view columns; a
-// buffer outside the body; a codec and a type Arrow does not have; a stream's
-// messages out of order; and a file's dictionary block holding a record batch.
+// TestForgedMetadataIsRefused: metadata forged in a stream and a file of
+// forgeRecord's is refused by the walk, KindIO, before arrow-go reads it: a count
+// past what its bytes hold, of fields, children and key-values; a field its own
+// child; a variadic count past the buffers, in a record batch and a dictionary batch,
+// and fewer counts than view columns; a buffer outside the body; a codec and a type
+// Arrow does not have; a stream's messages out of order; and a file's dictionary
+// block holding a record batch.
 func TestForgedMetadataIsRefused(t *testing.T) {
 	const huge = 0x7fffffff
 	cases := []struct {
@@ -191,8 +191,7 @@ func schemaOnly(t *testing.T, file bool, s *arrow.Schema) []byte {
 }
 
 // TestFieldsNestNoDeeperThanMaxDepth: a List nested so that its fields are MaxDepth
-// deep is read, as arrow-go reads it; one a level deeper is refused, before arrow-go's
-// fieldFromFB recurses on it.
+// deep is read, as arrow-go reads it; one a level deeper is refused.
 func TestFieldsNestNoDeeperThanMaxDepth(t *testing.T) {
 	for _, depth := range []int{MaxDepth, MaxDepth + 1} {
 		typ := arrow.DataType(arrow.PrimitiveTypes.Int8)
@@ -218,10 +217,9 @@ func TestFieldsNestNoDeeperThanMaxDepth(t *testing.T) {
 
 // TestASharedFieldCostsEachTimeItIsReached: a schema of structs 40 deep, each holding
 // a struct and an integer, forged so that each struct's second child is its first: a
-// field reached 2^40 times from a few kilobytes, which arrow-go's fieldFromFB would
-// build each time, the process ending before it finished. The walk counts a field
-// each time it reaches it, and refuses the schema at its budget, having allocated
-// about nothing.
+// few kilobytes in which each level's field is reached twice as often as the one
+// above. The walk counts a field each time it reaches it, and refuses the schema at
+// its budget, having allocated about nothing.
 func TestASharedFieldCostsEachTimeItIsReached(t *testing.T) {
 	typ := arrow.DataType(arrow.PrimitiveTypes.Int8)
 	for range 40 {
@@ -255,6 +253,6 @@ func TestASharedFieldCostsEachTimeItIsReached(t *testing.T) {
 		if grew := heapAllocs() - before; grew > 1<<20 {
 			t.Errorf("file %v: walking the shared fields allocated %d bytes", file, grew)
 		}
-		refused(t, fmt.Sprintf("a field reached 2^40 times, file %v", file), err)
+		refused(t, fmt.Sprintf("a field shared at 40 levels, file %v", file), err)
 	}
 }

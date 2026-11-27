@@ -91,15 +91,13 @@ func (w *noisyThrift) unknown(last *int16, id int16) {
 	}
 }
 
-// TestPageHeadersAreReadAsArrowGoReadsThem (step 520, F11 of its record): a
-// dictionary page's header, generated in Thrift's compact protocol as a writer may
-// write it and none does (noisyThrift), is read by readPageHeader, which
-// countDictionaries walks a chunk with (step 510), as arrow-go's page reader reads it:
-// wherever arrow-go reads the page, readPageHeader reads its type, its sizes, its
-// count of values and its own length alike. A count readPageHeader read otherwise was
-// one it did not check, and arrow-go made a slice of it: FuzzOwnPagesMatchArrow found
-// a count of 896,532,479 in a varint of 10 bytes, which arrow-go's column reader
-// asked 21.5 GB for (testdata/fuzz/FuzzOwnPagesMatchArrow/dictionary-count-in-a-10-byte-varint).
+// TestPageHeadersAreReadAsArrowGoReadsThem (step 520): a dictionary page's header,
+// generated in Thrift's compact protocol as a writer may write it and none does
+// (noisyThrift), is read by readPageHeader, which countDictionaries walks a chunk with
+// (step 510), as arrow-go's page reader reads it: wherever arrow-go reads the page,
+// readPageHeader reads its type, its sizes, its count of values and its own length
+// alike. A count readPageHeader read otherwise would leave the count the page is read
+// by unchecked against the page's bytes.
 func TestPageHeadersAreReadAsArrowGoReadsThem(t *testing.T) {
 	rng := rand.New(rand.NewPCG(520, 11))
 	body := []byte("\x02\x00\x00\x00ab\x02\x00\x00\x00cd")

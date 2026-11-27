@@ -100,10 +100,9 @@ func deepThrift(depth int) []byte {
 
 // TestAParquetSchemaNestedPastTheLimitIsRefused: two million levels, a 1.6 MB footer,
 // overflowed a 64 MB stack naming the column's type and ended the test binary; it is
-// an ErrUnsupported naming the limit, measured from the footer before arrow-go, which
-// overflowed there too, recursed on it. A column of 1,000 levels, its leaf counted,
-// has a schema, and one of 1,001 is refused. A footer holding a million structs deep
-// is refused as corrupt.
+// an ErrUnsupported naming the limit, measured from the footer before anything
+// recurses on it. A column of 1,000 levels, its leaf counted, has a schema, and one of
+// 1,001 is refused. A footer holding a million structs deep is refused as corrupt.
 func TestAParquetSchemaNestedPastTheLimitIsRefused(t *testing.T) {
 	defer debug.SetMaxStack(debug.SetMaxStack(64 << 20))
 	for _, c := range []struct {

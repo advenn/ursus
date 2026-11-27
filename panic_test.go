@@ -257,8 +257,7 @@ func panicCases() []panicCase {
 			return "no error", nil
 		}, udfErr("boom")},
 
-		// The known causes: each panicked inside ursus, or arrow-go, on input a
-		// caller can write.
+		// The known causes: each panicked on input a caller can write.
 		{"Str().Slice to MaxInt64", func(t *testing.T) (string, error) {
 			ctx := t.Context()
 			return collectCells(ctx, ursus.Frame(ursus.Values("s", []string{"abc", "x"})).
@@ -469,8 +468,7 @@ func corruptSweep(ctx context.Context) (string, error) {
 
 // wantCorruptIsIO: a corrupt file is the file's problem, never ursus's bug — so no
 // flipped byte may panic, hang, or be an internal error. And at least one must
-// reach a decoder's panic, or the sweep no longer tests the recovers at all: 17
-// did when this was written, in the footer, in opening a column and in a page.
+// reach a decoder's panic, or the sweep no longer tests the recovers at all.
 func wantCorruptIsIO(r probeReport) string {
 	if r.Err != "" {
 		return "the sweep failed: " + r.Err
