@@ -71,8 +71,8 @@ func NewWriter(w io.Writer, s *dtype.Schema, o WriteOptions) (*Writer, error) {
 	o = o.normalise()
 
 	// arrow-go declares LZ4 (the deprecated Hadoop framing) and LZO and implements
-	// neither, and it panicked on them as the first row group started — after the
-	// whole query had run. Asked here, it is a refusal before any work.
+	// neither, and a codec is first used as the first row group starts, after the
+	// whole query has run. Asked here, it is a refusal before any work.
 	if _, err := compress.GetCodec(o.Compression); err != nil {
 		return nil, uerr.Wrap(err, uerr.KindUnsupported, "sink_parquet",
 			"cannot write %s compression", o.Compression).
@@ -153,7 +153,7 @@ func (w *Writer) WriteBatch(b *data.Batch) error {
 	// anything in — which is most of the reason to use Parquet at all.
 	for off := 0; off < b.Rows(); {
 		if w.rg == nil {
-			// The Checked form: the other one panics where this returns an error.
+			// The Checked form, which returns an error.
 			rg, err := w.w.AppendBufferedRowGroupChecked()
 			if err != nil {
 				return uerr.Wrap(err, uerr.KindIO, "sink_parquet", "starting a row group")

@@ -1,9 +1,9 @@
 package ursus_test
 
 // Step 179, audit row I23: a null count, and a number's bounds, are trusted only in
-// a file from a writer known to write them in full. arrow-go cannot tell an absent
-// null_count from zero, nor an absent bound from 0, so a file from any other writer
-// is read whole where either would decide.
+// a file from a writer known to write them in full. An absent null_count reads as
+// zero, and an absent bound as 0, so a file from any other writer is read whole where
+// either would decide.
 
 import (
 	"os"

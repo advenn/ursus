@@ -51,10 +51,10 @@ func TestNullFieldsInNestedColumns(t *testing.T) {
 	}
 }
 
-// TestParquetEncodingsByPhysicalType: the up-front check that keeps arrow-go's
-// decoder from panicking knew one pairing, BYTE_STREAM_SPLIT, and refused it on
-// the integers, which decode it. A FIXED_LEN_BYTE_ARRAY under DELTA_BYTE_ARRAY,
-// which does not decode, reached the panic and was reported as a corrupt file.
+// TestParquetEncodingsByPhysicalType: the up-front check of an encoding against its
+// physical type knew one pairing, BYTE_STREAM_SPLIT, and refused it on the integers,
+// which decode it. A FIXED_LEN_BYTE_ARRAY under DELTA_BYTE_ARRAY, which does not
+// decode, passed it and was reported as a corrupt file.
 func TestParquetEncodingsByPhysicalType(t *testing.T) {
 	df, err := ursus.ScanParquet("testdata/parquet/pyarrow_bss_int.parquet").Collect(t.Context())
 	if err != nil {
