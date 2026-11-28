@@ -41,6 +41,15 @@ jobs:
       # internal/gen/testinventory/baseline.txt allows (step 504): make testinventory.
       - name: no new hand-typed test values
         run: go run ./internal/gen/testinventory -check
+      # The zip a version is fetched as refuses a path Windows cannot hold: a fuzz
+      # seed named nul made v0.8.0 and v0.8.1 unfetchable (step 550). go mod download
+      # builds this commit's zip from GitHub, as the module proxy does.
+      - name: the module zip
+        env:
+          REV: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          cd "$(mktemp -d)"
+          GOPRIVATE=github.com/advenn/ursus GOPROXY=direct go mod download -json "github.com/advenn/ursus@$REV"
 
   test:
     runs-on: ubuntu-latest
