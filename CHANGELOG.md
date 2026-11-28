@@ -19,10 +19,16 @@ Step numbers below point at those records.
 
 ## Unreleased — toward v0.8.2
 
-On master after v0.8.1: step 545 so far.
+On master after v0.8.1: steps 545 and 550 so far.
 
 ### Fixed
 
+- **v0.8.0 and v0.8.1 cannot be fetched as modules; v0.8.2 can** (550): a fuzz seed
+  named `nul`, a name Windows reserves, made the zip a version is fetched as
+  invalid, so `go get github.com/advenn/ursus@v0.8.1` failed, through the module
+  proxy and directly, with "malformed file path ... disallowed as path element
+  component on Windows". The seed is `nul-byte` now. CI builds each commit's zip as
+  the proxy does, so a name the zip refuses fails a pull request.
 - **A far Datetime's text names its own instant** (545): Cast(String), the frame's
   display and the CSV and JSON writers wrote a Datetime(s) past 10^12 days from 1970,
   near int64's ends, through Go's calendar, which ends about the year
