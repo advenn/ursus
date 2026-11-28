@@ -1,0 +1,2177 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="ursus for Polars users: the Polars API mapped to Go, method by method, and the places where the Go dataframe library deliberately answers differently.">
+      
+      
+      
+        <link rel="canonical" href="https://advenn.github.io/ursus/latest/getting-started/coming-from-polars/">
+      
+      
+        <link rel="prev" href="../quickstart/">
+      
+      
+        <link rel="next" href="../../concepts/lazy-and-eager/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/favicon.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+  
+    <title>Coming from Polars - ursus: DataFrames for Go</title>
+  
+
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  
+  
+  
+  
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="ursus">
+  <meta property="og:title" content="Coming from Polars - ursus">
+  <meta property="og:description" content="ursus for Polars users: the Polars API mapped to Go, method by method, and the places where the Go dataframe library deliberately answers differently.">
+  
+    <meta property="og:url" content="https://advenn.github.io/ursus/latest/getting-started/coming-from-polars/">
+  
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Coming from Polars - ursus">
+  <meta name="twitter:description" content="ursus for Polars users: the Polars API mapped to Go, method by method, and the places where the Go dataframe library deliberately answers differently.">
+  
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#coming-from-polars" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  
+    This is an older release's documentation.
+  
+  <a href="../../.."><strong>Read the latest release's.</strong></a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../.."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="ursus" class="md-header__button md-logo" aria-label="ursus" data-md-component="logo">
+      
+  <img src="../../assets/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ursus
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Coming from Polars
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/advenn/ursus" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    advenn/ursus
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../installation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../concepts/lazy-and-eager/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Concepts
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guide/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  User guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../benchmarks/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Benchmarks
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/api/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ursus" class="md-nav__button md-logo" aria-label="ursus" data-md-component="logo">
+      
+  <img src="../../assets/logo.svg" alt="logo">
+
+    </a>
+    ursus
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/advenn/ursus" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    advenn/ursus
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coming from Polars
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coming from Polars
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-go-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Go changes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-api-side-by-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The API, side by side
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-ursus-answers-differently" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where ursus answers differently
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/lazy-and-eager/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lazy and eager
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/expressions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expressions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/types-and-nulls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Types and nulls
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory and spilling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../guide/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User guide
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/selecting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Selecting and filtering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/aggregation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aggregation and group-by
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/windows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Window functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/joins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Joins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/reshaping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reshaping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/strings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/lists-and-structs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lists and structs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/dates-and-times/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dates and times
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/missing-data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Missing data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/go-values/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Go values in and out
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/go-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Go functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CSV, Parquet and Arrow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-go-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Go changes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-api-side-by-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The API, side by side
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-ursus-answers-differently" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where ursus answers differently
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/advenn/ursus/edit/master/docs/getting-started/coming-from-polars.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="coming-from-polars">Coming from Polars<a class="headerlink" href="#coming-from-polars" title="Permanent link">&para;</a></h1>
+<p>ursus is modelled on Polars: the same expressions, the same contexts, mostly the same
+names, and its answers are tested against Polars 1.44's on the same inputs. What
+changes is what Go asks for.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Polars (Python)</label><label for="__tabbed_1_2">ursus (Go)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">polars</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pl</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">df</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">pl</span><span class="o">.</span><span class="n">scan_csv</span><span class="p">(</span><span class="s2">"sales.csv"</span><span class="p">)</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"qty"</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">3</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="o">.</span><span class="n">group_by</span><span class="p">(</span><span class="s2">"region"</span><span class="p">)</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"qty"</span><span class="p">)</span> <span class="o">*</span> <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"price"</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">"revenue"</span><span class="p">),</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        <span class="n">pl</span><span class="o">.</span><span class="n">len</span><span class="p">()</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">"orders"</span><span class="p">),</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="p">)</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="s2">"revenue"</span><span class="p">,</span> <span class="n">descending</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="o">.</span><span class="n">collect</span><span class="p">()</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">)</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-go highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nx">df</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">ScanCSV</span><span class="p">(</span><span class="s">"sales.csv"</span><span class="p">).</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="nx">Filter</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"qty"</span><span class="p">).</span><span class="nx">Gt</span><span class="p">(</span><span class="mi">3</span><span class="p">)).</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nx">GroupBy</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"region"</span><span class="p">)).</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="nx">Agg</span><span class="p">(</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"qty"</span><span class="p">).</span><span class="nx">Mul</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"price"</span><span class="p">)).</span><span class="nx">Sum</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"revenue"</span><span class="p">),</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">        </span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Len</span><span class="p">().</span><span class="nx">Alias</span><span class="p">(</span><span class="s">"orders"</span><span class="p">),</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="p">).</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="nx">Sort</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Desc</span><span class="p">(</span><span class="nx">ursus</span><span class="p">.</span><span class="nx">Col</span><span class="p">(</span><span class="s">"revenue"</span><span class="p">))).</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="nx">Collect</span><span class="p">(</span><span class="nx">ctx</span><span class="p">)</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<h2 id="what-go-changes">What Go changes<a class="headerlink" href="#what-go-changes" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Methods, not operators.</strong> Go has no operator overloading, so <code>pl.col("a") &gt; 3</code> is
+  <code>Col("a").Gt(3)</code>, and <code>a * b</code> is <code>a.Mul(b)</code>.</li>
+<li><strong>Lazy is the real API.</strong> A <code>LazyFrame</code> is a query and <code>Collect</code> runs it. A
+  <code>DataFrame</code>'s methods are a lazy query collected at once, so each takes a
+  <code>context.Context</code>: <code>df.Filter(ctx, pred)</code>.</li>
+<li><strong>Errors come at the end.</strong> A query being built never fails: an unknown column or a
+  type mismatch is kept and returned by <code>Collect</code>, with a hint, so a chain stays a
+  chain.</li>
+<li><strong>Values come back typed.</strong> <code>df.Column[int64]("qty")</code> is a <code>Series[int64]</code>, and
+  <code>df.Rows[Sale]()</code> a <code>[]Sale</code>, through Go 1.27's generic methods.</li>
+<li><strong>Options are functions.</strong> <code>Join(other, JoinOn(Col("k")), JoinHow(JoinLeft))</code> where
+  Polars takes keyword arguments.</li>
+</ul>
+<h2 id="the-api-side-by-side">The API, side by side<a class="headerlink" href="#the-api-side-by-side" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Polars</th>
+<th>ursus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pl.DataFrame({"a": [1, 2]})</code></td>
+<td><code>ursus.Frame(ursus.Values("a", []int64{1, 2}))</code></td>
+</tr>
+<tr>
+<td><code>pl.scan_csv(path)</code>, <code>pl.read_csv(path)</code></td>
+<td><code>ursus.ScanCSV(path)</code>, then <code>Collect(ctx)</code></td>
+</tr>
+<tr>
+<td><code>pl.scan_parquet(path)</code></td>
+<td><code>ursus.ScanParquet(path)</code></td>
+</tr>
+<tr>
+<td><code>lf.collect()</code></td>
+<td><code>lf.Collect(ctx)</code></td>
+</tr>
+<tr>
+<td><code>lf.collect(engine="streaming")</code></td>
+<td><code>lf.CollectBatches(ctx)</code>, an iterator of frames</td>
+</tr>
+<tr>
+<td><code>lf.explain()</code></td>
+<td><code>lf.Explain(ctx)</code></td>
+</tr>
+<tr>
+<td><code>pl.col("a")</code>, <code>pl.col("a", "b")</code></td>
+<td><code>ursus.Col("a")</code>, <code>ursus.Col("a", "b")</code></td>
+</tr>
+<tr>
+<td><code>pl.all()</code>, <code>pl.exclude("a")</code></td>
+<td><code>ursus.All()</code>, <code>ursus.Exclude("a")</code></td>
+</tr>
+<tr>
+<td><code>pl.lit(1)</code></td>
+<td><code>ursus.Lit(1)</code>; a Go value is a literal wherever an expression goes</td>
+</tr>
+<tr>
+<td><code>pl.len()</code></td>
+<td><code>ursus.Len()</code></td>
+</tr>
+<tr>
+<td><code>pl.when(p).then(a).otherwise(b)</code></td>
+<td><code>ursus.When(p).Then(a).Otherwise(b)</code></td>
+</tr>
+<tr>
+<td><code>.alias("x")</code></td>
+<td><code>.Alias("x")</code></td>
+</tr>
+<tr>
+<td><code>.cast(pl.Int64)</code></td>
+<td><code>.Cast(ursus.Int64)</code>, strict; <code>.CastLossy(ursus.Int64)</code> turns failures into nulls</td>
+</tr>
+<tr>
+<td><code>df.sum()</code>, <code>df.mean()</code>, <code>df.null_count()</code> and the other frame aggregates</td>
+<td><code>lf.Sum()</code>, <code>lf.Mean()</code>, <code>lf.NullCount()</code> (new in 0.6.7); <code>df.Sum(ctx)</code> eagerly</td>
+</tr>
+<tr>
+<td><code>df.match_to_schema(schema, ...)</code></td>
+<td><code>lf.MatchToSchema(schema, ursus.MatchOptions{...})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.cast({"a": pl.Int32})</code>, <code>df.cast(pl.String)</code></td>
+<td><code>lf.Cast(map[string]ursus.DataType{"a": ursus.Int32})</code>, <code>lf.CastAll(ursus.String)</code>; <code>CastTypes</code> by type (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.filter(p)</code>, <code>.select(...)</code>, <code>.with_columns(...)</code></td>
+<td><code>.Filter(p)</code>, <code>.Select(...)</code>, <code>.WithColumns(...)</code></td>
+</tr>
+<tr>
+<td><code>.sort("a", descending=True)</code></td>
+<td><code>.Sort(ursus.Desc(ursus.Col("a")))</code></td>
+</tr>
+<tr>
+<td><code>.group_by("k").agg(...)</code></td>
+<td><code>.GroupBy(ursus.Col("k")).Agg(...)</code></td>
+</tr>
+<tr>
+<td><code>.group_by("k").agg(pl.col("x"), pl.col("x").cum_sum())</code>, a list a group</td>
+<td><code>.GroupBy(ursus.Col("k")).Agg(ursus.Col("x"), ursus.Col("x").CumSum(false))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.group_by("k", maintain_order=True)</code></td>
+<td><code>.GroupBy(ursus.Col("k")).MaintainOrder()</code></td>
+</tr>
+<tr>
+<td><code>.join(other, on="k", how="left")</code></td>
+<td><code>.Join(other, ursus.JoinOn(ursus.Col("k")), ursus.JoinHow(ursus.JoinLeft))</code></td>
+</tr>
+<tr>
+<td><code>import polars.selectors as cs</code>; <code>cs.numeric() - cs.by_name("id")</code>; <code>~cs.string()</code></td>
+<td><code>import "github.com/advenn/ursus/selector"</code>; <code>selector.Numeric().Difference(selector.ByName("id")).Expr()</code>; <code>selector.String().Complement()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.join_asof(...)</code>, <code>.join_where(...)</code></td>
+<td><code>.JoinAsOf(...)</code>, <code>.JoinWhere(...)</code></td>
+</tr>
+<tr>
+<td><code>.join_asof(other, on="k", tolerance=5, coalesce=False)</code></td>
+<td><code>.JoinAsOf(other, ursus.AsOfOn(ursus.Col("k")), ursus.AsOfTolerance(5), ursus.AsOfCoalesce(false))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.join_where(other, *preds, suffix="_r")</code></td>
+<td><code>.JoinWhereSuffix(other, "_r", preds...)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.update(other, on="k", how="full")</code></td>
+<td><code>lf.Update(other, ursus.UpdateOptions{On: []string{"k"}, How: ursus.UpdateFull})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.rows_by_key("k", named=True)</code>, <code>df.to_dicts()</code>, <code>df.iter_rows(named=True)</code></td>
+<td><code>df.RowsByKey[K, T]("k")</code>, <code>df.ToMaps()</code>, <code>lf.IterRows[T](ctx)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>s.sort()</code>, <code>s.unique()</code>, <code>s.mean()</code>, <code>s.cast(pl.Float64)</code></td>
+<td><code>s.Sort(ctx)</code>, <code>s.Unique(ctx)</code>, <code>s.Mean(ctx)</code>, <code>s.Cast[float64](ctx, ursus.Float64)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.DataFrame(list_of_dataclasses)</code></td>
+<td><code>ursus.FromRows(structs)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.join(other, on="k", maintain_order="right")</code></td>
+<td><code>.Join(other, ursus.JoinOn(ursus.Col("k")), ursus.JoinMaintainOrder(ursus.JoinOrderRight))</code> (changed in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.over("k")</code></td>
+<td><code>.Over(ursus.Col("k"))</code></td>
+</tr>
+<tr>
+<td><code>.unique(subset)</code>, <code>.drop_nulls()</code></td>
+<td><code>.Unique(names...)</code>, <code>.DropNulls(names...)</code></td>
+</tr>
+<tr>
+<td><code>.fill_null(0)</code>, <code>.fill_null(strategy="forward")</code></td>
+<td><code>.FillNullWith(0)</code>, <code>.FillNull(strategy)</code></td>
+</tr>
+<tr>
+<td><code>.fill_null(strategy="forward", limit=1)</code></td>
+<td><code>.FillNull(ursus.FillForward.Limit(1))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.drop_nans()</code>, <code>df.interpolate()</code></td>
+<td><code>lf.DropNans()</code>, <code>lf.Interpolate()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.col("x").interpolate_by("t")</code></td>
+<td><code>ursus.Col("x").InterpolateBy(ursus.Col("t"))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.col("p").top_k_by("sales", 3)</code>, <code>.bottom_k_by(...)</code></td>
+<td><code>ursus.Col("p").TopKBy(ursus.Col("sales"), 3)</code>, <code>.BottomKBy(...)</code>, a List (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.head(n)</code>, <code>.tail(n)</code>, <code>.slice(o, n)</code></td>
+<td><code>.Head(n)</code>, <code>.Tail(n)</code>, <code>.Slice(o, n)</code></td>
+</tr>
+<tr>
+<td><code>.drop("a")</code>, <code>.rename({"a": "b"})</code></td>
+<td><code>.Drop("a")</code>, <code>.Rename(map[string]string{"a": "b"})</code></td>
+</tr>
+<tr>
+<td><code>.with_row_index()</code></td>
+<td><code>.WithRowIndex("index", 0)</code></td>
+</tr>
+<tr>
+<td><code>df.insert_column(1, s)</code>, <code>df.hash_rows()</code></td>
+<td><code>lf.InsertColumn(1, s)</code>, <code>df.HashRows(ctx, 0)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.explode("a")</code>, <code>.unnest("s")</code></td>
+<td><code>.Explode("a")</code>, <code>.Unnest("s")</code></td>
+</tr>
+<tr>
+<td><code>.unpivot(...)</code>, <code>df.pivot(...)</code></td>
+<td><code>.Unpivot(ursus.UnpivotOptions{...})</code>, <code>df.Pivot(ctx, ursus.PivotOptions{...})</code></td>
+</tr>
+<tr>
+<td><code>lf.pivot(on, on_columns=[...])</code></td>
+<td><code>lf.Pivot(ursus.PivotOptions{On: ..., OnColumns: ...})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.concat(frames, how="vertical_relaxed")</code>, <code>"diagonal_relaxed"</code>, <code>"horizontal_extend"</code>, <code>"align"</code></td>
+<td><code>ursus.Concat(frames, ursus.WithConcatMode(ursus.ConcatRelaxed))</code>, <code>ConcatDiagonalRelaxed</code>, <code>ConcatHorizontalExtend</code>, <code>ConcatAlign</code> (new in 0.6.7); <code>ursus.ConcatFrames</code> for <code>DataFrame</code>s</td>
+</tr>
+<tr>
+<td><code>pl.col("x").first(ignore_nulls=True)</code>, <code>.last(...)</code>; <code>df.group_by("k").all()</code></td>
+<td><code>ursus.Col("x").FirstNonNull()</code>, <code>LastNonNull()</code>; <code>lf.GroupBy(ursus.Col("k")).All()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>for key, g in df.group_by("k")</code>, <code>.map_groups(fn)</code></td>
+<td><code>for p, err := range lf.GroupBy(ursus.Col("k")).Groups(ctx)</code>, <code>.MapGroups(ctx, fn)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.extend(other)</code>, <code>df.glimpse()</code>, <code>df.estimated_size()</code></td>
+<td><code>df.Extend(ctx, other)</code>, <code>df.Glimpse()</code>, <code>df.EstimatedSize()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.gather([2, 0])</code>, <code>df.row(1)</code>, <code>df.row(by_predicate=p)</code>, <code>df.item()</code>, <code>df.item(1, "b")</code></td>
+<td><code>df.Gather(ctx, []int{2, 0}, false)</code>, <code>df.Row(1)</code>, <code>df.RowWhere(ctx, p)</code>, <code>df.Item()</code>, <code>df.ItemAt(1, "b")</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.replace_column(0, s)</code>, <code>df.drop_in_place("b")</code>, <code>df.get_column_index("b")</code>, <code>df.to_series(0)</code>, <code>df.to_struct()</code></td>
+<td><code>df.ReplaceColumn(0, s)</code>, <code>df.DropInPlace("b")</code>, <code>df.GetColumnIndex("b")</code>, <code>df.ToSeries(0)</code>, <code>df.ToStruct("")</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.corr()</code>, <code>df.sum_horizontal()</code>, <code>df.fold(lambda a, b: a + b)</code></td>
+<td><code>df.Corr(ctx)</code>, <code>df.SumHorizontal(ctx, true)</code>, <code>df.Fold(ctx, func(a, b ursus.Expr) ursus.Expr { return a.Add(b) })</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>lf.collect_schema().names()</code>, <code>.dtypes()</code>, <code>.len()</code></td>
+<td><code>lf.Columns(ctx)</code>, <code>lf.DTypes(ctx)</code>, <code>lf.Width(ctx)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.group_by("k").having(pl.len() &gt; 1).agg(...)</code></td>
+<td><code>lf.GroupBy(ursus.Col("k")).Having(ursus.Len().Gt(1)).Agg(...)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.group_by("k", maintain_order=True).head(2)</code>, <code>.tail(2)</code></td>
+<td><code>lf.GroupBy(ursus.Col("k")).Head(2)</code>, <code>.Tail(2)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.upsample("t", every="1d", group_by="g")</code></td>
+<td><code>lf.Upsample("t", ursus.Every("1d"), "g")</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.to_dummies(["c"], drop_first=True)</code>, <code>df.unstack(step=3)</code></td>
+<td><code>df.ToDummies(ctx, ursus.DummiesOptions{Columns: []string{"c"}, DropFirst: true})</code>, <code>df.Unstack(ctx, ursus.UnstackOptions{Step: 3})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.transpose(column_names="id")</code></td>
+<td><code>df.Transpose(ctx, ursus.TransposeOptions{ColumnNamesFrom: "id"})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.partition_by("k", include_key=False)</code></td>
+<td><code>df.PartitionBy(ctx, ursus.PartitionOptions{By: []string{"k"}, DropKey: true})</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.concat([a, b])</code></td>
+<td><code>ursus.Concat([]*ursus.LazyFrame{a, b})</code></td>
+</tr>
+<tr>
+<td><code>.group_by_dynamic(...)</code>, <code>.rolling(...)</code></td>
+<td><code>.GroupByDynamic(index, ursus.DynamicOptions{...})</code>, <code>.Rolling(index, ursus.RollingOptions{...})</code></td>
+</tr>
+<tr>
+<td><code>.rolling("t", period="7d", offset="0d")</code></td>
+<td><code>.Rolling(ursus.Col("t"), ursus.RollingOptions{Period: ursus.Every("7d"), Offset: ursus.NoOffset()})</code>, the next seven days (changed in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.rolling_rank_by("t", "3d")</code>, <code>.rolling_map(f, 5)</code></td>
+<td><code>.RollingRankBy(ursus.Col("t"), ursus.Every("3d"), ursus.RankAverage)</code>, <code>.RollingMap[float64, float64]("f", ursus.Float64, 5, f)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.col("x").sum().rolling("t", period="2d")</code>, <code>....over("g")</code></td>
+<td><code>ursus.Col("x").Sum().Rolling(ursus.Col("t"), ursus.RollingOptions{Period: ursus.Every("2d")})</code>, <code>....Over(ursus.Col("g"))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.group_by_dynamic("step", every="5i")</code>, <code>.rolling_sum_by("step", "3i")</code></td>
+<td><code>ursus.DynamicOptions{Every: ursus.Every("5i")}</code>, <code>.RollingSumBy(ursus.Col("step"), ursus.Every("3i"))</code>, over an integer index (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.str.contains(p)</code>, <code>.dt.year()</code>, <code>.list.len()</code></td>
+<td><code>.Str().Contains(p, false)</code>, <code>.Dt().Year()</code>, <code>.List().Len()</code></td>
+</tr>
+<tr>
+<td><code>.struct.field("f")</code></td>
+<td><code>.Struct().Field("f")</code></td>
+</tr>
+<tr>
+<td><code>pl.Array(pl.Float64, 3)</code>, <code>.list.to_array(3)</code>, <code>.arr.to_list()</code></td>
+<td><code>ursus.Array(ursus.Float64, 3)</code>, <code>.List().ToArray(3)</code>, <code>.Arr().ToList()</code>; a Go <code>[3]float64</code> in rows (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.arr.sum()</code>, <code>.arr.sort()</code>, <code>.arr.eval(pl.element() * 2)</code>, <code>.arr.to_struct()</code>, <code>.arr.dot(b)</code></td>
+<td><code>.Arr().Sum()</code>, <code>.Arr().Sort()</code>, <code>.Arr().Eval(ursus.Element().Mul(2), false)</code>, <code>.Arr().ToStruct()</code>, <code>.Arr().Dot(b)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.reshape((-1, 3))</code>, <code>pl.concat_arr(a, b)</code></td>
+<td><code>.Reshape(-1, 3)</code>, <code>ursus.ConcatArr(a, b)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.arctan2(y, x)</code>, <code>.truediv(v)</code>, <code>.limit(n)</code>, <code>.pipe(f)</code></td>
+<td><code>ursus.Arctan2(y, x)</code>, <code>.TrueDiv(v)</code>, <code>.Limit(n)</code>, <code>.Pipe(f)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.item()</code>, <code>.lower_bound()</code>, <code>.upper_bound()</code>, <code>.is_sorted()</code></td>
+<td><code>.Item(false)</code>, <code>.LowerBound()</code>, <code>.UpperBound()</code>, <code>.IsSorted(false, false)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.str.to_time("%H:%M")</code>, <code>.str.to_decimal(scale=2)</code>, <code>.dt.cast_time_unit("ms")</code></td>
+<td><code>.Str().ToTime("%H:%M", true)</code>, <code>.Str().ToDecimal(2)</code>, <code>.Dt().CastTimeUnit(ursus.Milli)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.meta.root_names()</code>, <code>.meta.output_name()</code>, <code>.meta.undo_aliases()</code>, <code>.meta.tree_format()</code></td>
+<td><code>.Meta().RootNames()</code>, <code>.Meta().OutputName()</code>, <code>.Meta().UndoAliases()</code>, <code>.Meta().TreeFormat()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.to_physical()</code>, <code>.reinterpret(signed=True)</code></td>
+<td><code>.ToPhysical()</code>, <code>.Reinterpret(true)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.name.keep()</code>, <code>.name.to_uppercase()</code>, <code>.name.replace(p, v)</code>, <code>.name.prefix_fields("p_")</code>; <code>.struct.drop(["f"])</code></td>
+<td><code>.Name().Keep()</code>, <code>.Name().ToUpper()</code>, <code>.Name().Replace(p, v, false)</code>, <code>.Name().PrefixFields("p_")</code>; <code>.Struct().Drop("f")</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>.map_elements(f)</code>, <code>.map_batches(f)</code></td>
+<td><code>.MapElements(name, type, f)</code>, <code>.MapBatches(name, type, f)</code>, with a Go function</td>
+</tr>
+<tr>
+<td><code>df.map_rows(f)</code>, <code>df.map_columns(["a"], f)</code></td>
+<td><code>df.MapRows(ctx, f)</code>, <code>df.MapColumns(ctx, []string{"a"}, f)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.show(20)</code>, <code>lf.cache()</code></td>
+<td><code>df.Show(20)</code>, <code>lf.Cache()</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.write_parquet(f)</code>, <code>df.write_csv(f)</code></td>
+<td><code>lf.WriteParquet(ctx, w)</code>, <code>lf.WriteCSV(ctx, w)</code>, to any <code>io.Writer</code></td>
+</tr>
+<tr>
+<td><code>pl.read_ndjson(p)</code>, <code>pl.scan_ndjson([p, q], infer_schema_length=n, ignore_errors=True)</code></td>
+<td><code>ursus.ScanNDJSON(p)</code>, <code>ursus.ScanNDJSONFiles([]string{p, q}, ursus.WithInferSchemaLines(n), ursus.WithNDJSONIgnoreErrors(true))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.scan_parquet("ds/", hive_schema={"g": pl.Int8}, include_file_paths="path")</code></td>
+<td><code>ursus.ScanParquet("ds", ursus.WithHiveSchema(s), ursus.WithIncludeFilePaths("path"))</code>, a hive dataset's keys read from its directories (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.scan_parquet(files, missing_columns="insert", extra_columns="ignore", cast_options=pl.ScanCastOptions(integer_cast="upcast"))</code></td>
+<td><code>ursus.ScanParquetFiles(files, ursus.WithInsertMissingColumns(true), ursus.WithIgnoreExtraColumns(true), ursus.WithUpcastIntegers(true))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.read_csv(p, try_parse_dates=True)</code></td>
+<td><code>ursus.ScanCSV(p, ursus.WithTryParseDates(true))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.read_csv(p, ignore_errors=True, infer_schema=False, raise_if_empty=False, decimal_comma=True, encoding="utf8-lossy")</code></td>
+<td><code>ursus.ScanCSV(p, ursus.WithIgnoreErrors(true), ursus.WithInferSchema(false), ursus.WithRaiseIfEmpty(false), ursus.WithDecimalComma(true), ursus.WithEncoding(ursus.UTF8Lossy))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.read_csv(p, skip_lines=2, skip_rows_after_header=1, quote_char=None)</code></td>
+<td><code>ursus.ScanCSV(p, ursus.WithSkipLines(2), ursus.WithSkipRowsAfterHeader(1), ursus.WithQuoting(false))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.scan_csv("logs/*.csv", include_file_paths="path")</code>, <code>pl.scan_ndjson(p, include_file_paths="path")</code></td>
+<td><code>ursus.ScanCSVGlob("logs/*.csv", ursus.WithCSVIncludeFilePaths("path"))</code>, <code>ursus.ScanNDJSON(p, ursus.WithNDJSONIncludeFilePaths("path"))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.scan_ipc("ds/", hive_schema={"k": pl.Int8}, include_file_paths="path")</code>, <code>pl.scan_ipc("p*.arrow")</code></td>
+<td><code>ursus.ScanIPC("ds", ursus.WithIPCHiveSchema(s), ursus.WithIPCIncludeFilePaths("path"))</code>, <code>ursus.ScanIPCGlob("p*.arrow")</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.read_csv("sales.csv.gz")</code>, a zlib or Zstandard file too</td>
+<td><code>ursus.ScanCSV("sales.csv.gz")</code>, known by its first bytes (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.read_json(p, schema_overrides={"a": pl.Float32})</code></td>
+<td><code>ursus.ScanJSON(p, ursus.WithNDJSONSchemaOverrides(map[string]dtype.DataType{"a": ursus.Float32}))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.write_csv(f, quote_style="always", datetime_format="%Y-%m-%d %H:%M", float_precision=2, compression="gzip")</code></td>
+<td><code>lf.WriteCSV(ctx, w, ursus.WithQuoteStyle(ursus.QuoteAlways), ursus.WithDatetimeFormat("%Y-%m-%d %H:%M"), ursus.WithFloatPrecision(2), ursus.WithCSVCompression(ursus.CSVGzip))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.write_ndjson(f)</code>, <code>df.write_json(f)</code>, <code>lf.sink_ndjson(p)</code></td>
+<td><code>lf.WriteNDJSON(ctx, w)</code>, <code>lf.WriteJSON(ctx, w)</code>, <code>lf.SinkNDJSON(ctx, p)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.scan_ipc(p)</code>, <code>pl.read_ipc_stream(p)</code>, <code>df.write_ipc(f, compression="zstd")</code>, <code>lf.sink_ipc(p)</code>, <code>pl.read_ipc_schema(p)</code></td>
+<td><code>ursus.ScanIPC(p)</code>, <code>ursus.ScanIPCStream(p)</code>, <code>lf.WriteIPC(ctx, w, ursus.WithIPCCompression(ursus.IPCZstd))</code>, <code>lf.SinkIPC(ctx, p)</code>, <code>ursus.ReadIPCSchema(p)</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>pl.read_database("SELECT * FROM t WHERE a &gt; ?", conn, execute_options={"parameters": [5]}, schema_overrides={"a": pl.Int32})</code></td>
+<td><code>ursus.ReadDatabase(ctx, db, "SELECT * FROM t WHERE a &gt; ?", 5)</code>, any <code>database/sql</code> driver; <code>ursus.ReadDatabaseRows(rows, ursus.WithDatabaseSchemaOverrides(m))</code> (new in 0.6.7)</td>
+</tr>
+<tr>
+<td><code>df.to_arrow()</code></td>
+<td><code>df.Record()</code>, zero-copy</td>
+</tr>
+<tr>
+<td><code>df["a"].to_list()</code></td>
+<td><code>df.Column[int64]("a")</code>, then <code>.Values()</code></td>
+</tr>
+<tr>
+<td><code>df.rows(named=True)</code></td>
+<td><code>df.Rows[T]()</code>, into Go structs</td>
+</tr>
+<tr>
+<td><code>pl.Config.set_streaming_chunk_size(n)</code></td>
+<td><code>ursus.WithBatchSize(n)</code>, an option of <code>Collect</code></td>
+</tr>
+</tbody>
+</table>
+<p>The <a href="../../reference/api/">API reference</a> documents every method.</p>
+<h2 id="where-ursus-answers-differently">Where ursus answers differently<a class="headerlink" href="#where-ursus-answers-differently" title="Permanent link">&para;</a></h2>
+<p>These are deliberate, and each is documented beside the method:</p>
+<ul>
+<li><strong>An integer sum is an <code>Int128</code>,</strong> as DuckDB's is, so it cannot overflow. Polars'
+  sum of <code>Int64</code> is an <code>Int64</code>.</li>
+<li><strong>The sum of an all-null group is null,</strong> not 0, and its product null, not 1: a
+  null can be filled with 0 afterwards, but a 0 cannot be told from a real one.</li>
+<li><strong><code>Count(ctx)</code> of a frame is its number of rows.</strong> Polars' frame <code>count()</code> is each
+  column's non-null count; in ursus that is <code>Select(ursus.All().Count())</code>.</li>
+<li><strong><code>NUnique</code> does not count null</strong> as a value; Polars counts it.</li>
+<li><strong><code>Round</code> rounds half away from zero;</strong> Polars rounds half to even, which
+  <code>RoundHalfToEven</code> selects.</li>
+<li><strong><code>Max</code> and <code>Min</code> propagate NaN;</strong> Polars' <code>max</code> ignores it, and its <code>nan_max</code>
+  propagates it, as <code>NanMax</code> does here.</li>
+<li><strong>A literal has its Go value's type:</strong> <code>Col("a").Add(3)</code> of an <code>Int32</code> column is an
+  <code>Int64</code>, since a Go integer constant is an <code>int</code>; write <code>int32(3)</code> to keep <code>Int32</code>.
+  Polars' literals take the column's type, as a fill value's does here.</li>
+<li><strong>A cast is exact or refused:</strong> a float with a fraction cast to an integer is an
+  error, or null when lossy, where Polars truncates it toward zero. <code>Truncate(0)</code> first
+  for Polars' answer.</li>
+<li><strong><code>Div</code> and <code>Pow</code> always give a float.</strong></li>
+<li><strong>An expression is named after its leftmost column.</strong> <code>Col("a").Alias("x").Add(1)</code>
+  is <code>x</code> in Polars and <code>a</code> here: put the alias last.</li>
+<li><strong><code>Remove</code> drops a row whose condition is null,</strong> as <code>Filter</code> does; Polars'
+  <code>remove</code> keeps it.</li>
+<li><strong><code>GroupByDynamic</code> keeps empty windows,</strong> a row of <code>Len</code> 0 for a period with no
+  rows; Polars leaves them out.</li>
+<li><strong><code>ToInteger</code>, <code>ToDate</code> and <code>ToDatetime</code> give null for what does not parse;</strong>
+  Polars' fail by default.</li>
+<li><strong><code>Cut</code> gives an Enum of its labels,</strong> and <code>QCut</code> and <code>Hist</code>'s category a Categorical,
+  as Polars' do (new in 0.6.7).</li>
+<li><strong>A <code>Categorical</code> is stored as its text</strong> (new in 0.6.7): it costs what a String does,
+  and its codes, <code>Cat().Physical()</code>, are computed over the frame, the order its values
+  first appear in, where Polars' are a process's string cache.</li>
+<li><strong>A <code>Time</code> takes a unit,</strong> where Polars' is nanoseconds.</li>
+</ul>
+<p>The full list, with the step that made each choice, is in
+<a href="https://github.com/advenn/ursus/blob/master/context_files/feature-gaps.md#9-where-ursus-differs-from-polars-on-purpose"><code>feature-gaps.md</code> §9</a>,
+and what Polars has that ursus does not yet is in the rest of that file.</p>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../quickstart/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Quick start">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Quick start
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../../concepts/lazy-and-eager/" class="md-footer__link md-footer__link--next" aria-label="Next: Lazy and eager">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Lazy and eager
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 advenn · MIT licence
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/advenn/ursus" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://pkg.go.dev/github.com/advenn/ursus" target="_blank" rel="noopener" title="pkg.go.dev" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M400.1 194.8c-10.9 2.8-19.9 4.3-29.1 7.6-7.3 1.9-14.7 3.9-23.2 6.1l-.6.1c-4.2 1.2-4.6 1.3-8.5-3.2-4.7-5.3-8.1-8.7-14.6-11.9-19.7-9.6-38.7-6.8-56.4 4.7-21.2 13.7-32.1 34-31.8 59.2.3 25 17.4 45.5 41.2 48.9 22 2.8 39.8-4.6 53.8-20.5 2.1-2.6 4-5.3 6.1-8.3.8-1 1.5-2.1 2.3-3.3h-60.1c-6.5 0-8.1-4-5.9-9.3 4-9.7 11.5-25.9 15.9-34 .9-1.8 3.1-5.8 6.9-5.8h101.1c4.5-13.4 11.8-26.9 21.6-39.7 22.7-29.9 49.3-45.5 87.2-52 31.8-5.6 61.7-2.5 88.9 15.9 24.6 16.8 39.8 39.6 43.9 69.5 5.3 42.1-6.9 76.3-36.7 105.6-19.7 20.9-44.9 34-73.9 39.9-5.6 1-11.1 1.5-16.5 2-2.9.2-5.7.5-8.5.8-28.3-.6-54.2-8.7-76-27.4-15.3-13.3-25.9-29.6-31.1-48.5-3.7 7.3-8 14.4-14 21.1-21.6 29.6-50.9 48-87.9 52.9-30.6 4.1-58.9-1.8-83.9-20.5-23-17.5-36.1-40.5-39.5-69.2-4.1-34 5.9-65.4 26.4-91.3 22.2-29 51.5-47.4 87.3-53.9 29.3-6.2 57.3-1.9 82.6 15.3 16.5 10.9 28.3 25.8 36.1 43.9 1.9 2.8.6 4.4-3.1 5.3m-351.8 5.6c-1.3 0-1.6-.6-.9-1.6l6.6-8.4c.6-.9 2.2-1.5 3.4-1.5h111.3c1.2 0 1.5.9.9 1.8l-5.3 8.1c-.6 1-2.2 1.9-3.1 1.9l-112.8-.3zM1.2 229.1c-1.2 0-1.6-.7-.9-1.6l6.5-8.4c.6-.9 2.2-1.6 3.4-1.6h142.1c1.2 0 1.8 1 1.5 1.9l-2.5 7.5c-.3 1.2-1.5 1.9-2.8 1.9zm74.5 26.8c-.6.9-.3 1.8.9 1.8l68 .3c.9 0 2.2-.9 2.2-2.1l.6-7.5c0-1.3-.6-2.2-1.9-2.2H83.2c-1.2 0-2.5.9-3.1 1.9zm501.5-18c-.2-2.6-.3-4.8-.7-7-5.6-30.8-34-48.3-63.6-41.4-29 6.5-47.7 24.9-54.5 54.2-5.6 24.3 6.2 48.9 28.6 58.9 17.2 7.5 34.3 6.6 50.8-1.9 24.6-13.6 38-32.7 39.6-59.5-.1-1.2-.1-2.3-.2-3.3"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.tracking", "search.suggest", "search.highlight", "content.code.copy", "content.action.edit", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
