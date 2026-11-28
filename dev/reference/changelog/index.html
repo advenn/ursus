@@ -3996,9 +3996,15 @@ rule and are the last.</p>
 Step numbers below point at those records.</p>
 <hr />
 <h2 id="unreleased-toward-v082">Unreleased — toward v0.8.2<a class="headerlink" href="#unreleased-toward-v082" title="Permanent link">&para;</a></h2>
-<p>On master after v0.8.1: step 545 so far.</p>
+<p>On master after v0.8.1: steps 545 and 550 so far.</p>
 <h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong>v0.8.0 and v0.8.1 cannot be fetched as modules; v0.8.2 can</strong> (550): a fuzz seed
+  named <code>nul</code>, a name Windows reserves, made the zip a version is fetched as
+  invalid, so <code>go get github.com/advenn/ursus@v0.8.1</code> failed, through the module
+  proxy and directly, with "malformed file path ... disallowed as path element
+  component on Windows". The seed is <code>nul-byte</code> now. CI builds each commit's zip as
+  the proxy does, so a name the zip refuses fails a pull request.</li>
 <li><strong>A far Datetime's text names its own instant</strong> (545): Cast(String), the frame's
   display and the CSV and JSON writers wrote a Datetime(s) past 10^12 days from 1970,
   near int64's ends, through Go's calendar, which ends about the year
