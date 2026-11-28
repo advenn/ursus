@@ -17,9 +17,27 @@ Step numbers below point at those records.
 
 ---
 
-## Unreleased — toward v0.8.2
+## v0.8.2 — 2026-11-28
 
-On master after v0.8.1: steps 545 and 550 so far.
+Everything since `v0.8.1` (2026-11-24): step 545, a far Datetime's text, and step
+550, the module zip, released by step 551. **v0.8.2 is the first 0.8 release `go get`
+can fetch:** v0.8.0's and v0.8.1's zips are invalid (550), so a user of v0.7.x moving
+to v0.8.2 reads what v0.8.0 and v0.8.1 say a user can trip on as well. No API is
+added, changed or removed: `api/v0.8.2.txt` lists v0.8.1's 2,481 features. The tag is
+off master, as v0.8.1's is.
+
+### What a v0.8.1 user can trip on
+
+- **A Datetime(s) more than 10^12 days from 1970 is written as its own instant**
+  (545): its text differs from v0.8.1's, which named another instant. No other text
+  changes.
+
+### Changed
+
+- **Five messages of corrupt-input errors are worded differently** (549): an Arrow
+  IPC schema nested too deep, the hint of a corrupt Arrow IPC input, a Parquet page
+  of 0-bit dictionary indices followed by a byte its run does not hold, and the two
+  hints of a column chunk whose encodings are refused. Their kinds are as before.
 
 ### Fixed
 
